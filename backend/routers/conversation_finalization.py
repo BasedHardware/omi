@@ -35,6 +35,8 @@ from utils.observability.journeys import (
     record_conversation_finalization_client_terminal,
 )
 from utils.observability.finalization import finalization_diagnostic_id
+from utils.observability.reasons import RetryReason
+from utils.workers.retry import retry_response
 
 logger = logging.getLogger(__name__)
 
@@ -127,8 +129,22 @@ async def run_listen_finalization_job(
             return JSONResponse(status_code=200, content={'status': status})
         except (ValueError, TypeError):
             return JSONResponse(status_code=400, content={'status': 'invalid_enrichment_task'})
-        except Exception:
-            return JSONResponse(status_code=503, content={'status': 'retry'})
+        except Exception as error:
+            # Same mapping as routers.batch_pipeline.enrichment_response: an expected retry (for example a
+            # first summary whose callback is still pending) answers 409; only an unexpected failure is 500.
+            # Never 503 (contract (d)): Cloud Tasks system-throttles the whole queue on it.
+            from routers.batch_pipeline import expected_retry_reason
+
+            reason = expected_retry_reason(error)
+            if reason is None:
+                logger.error(
+                    'event=conversation_finalization_sync_reprocess outcome=retry retry_class=unexpected '
+                    'exception_type=%s',
+                    type(error).__name__,
+                )
+                return JSONResponse(status_code=500, content={'status': 'retry'})
+            logger.warning('event=conversation_finalization_sync_reprocess outcome=retry retry_class=%s', reason)
+            return retry_response(RetryReason(reason))
     parsed = _parse_task_payload(payload)
     if parsed is None:
         logger.warning('listen finalization handler dropped invalid opaque task payload')

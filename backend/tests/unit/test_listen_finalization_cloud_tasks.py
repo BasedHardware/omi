@@ -613,6 +613,41 @@ async def test_sync_reprocess_response_preserves_status_and_logs_busy_without_id
 
 
 @pytest.mark.anyio
+async def test_sync_reprocess_expected_retry_answers_409_never_503(monkeypatch):
+    # Contract (d): a pending first summary is an expected retry. 503 would make Cloud Tasks
+    # system-throttle the whole queue; the route must answer the 409 retry shape instead.
+    from utils.batch_pipeline import enrichment
+    from utils.enrichment.outbox import FirstSummaryCallbackPending
+
+    monkeypatch.setattr(finalization_router, 'run_blocking', _inline_run_blocking)
+    monkeypatch.setattr(enrichment, 'run_enrichment', MagicMock(side_effect=FirstSummaryCallbackPending()))
+
+    response = await finalization_router.run_listen_finalization_job(
+        _Request({'kind': 'sync_reprocess', 'key': 'a' * 64, 'task_token': 'b' * 32}),
+        task_retry_count=0,
+    )
+
+    assert response.status_code == 409
+    assert json.loads(response.body) == {'status': 'retry', 'reason': 'callback_pending'}
+
+
+@pytest.mark.anyio
+async def test_sync_reprocess_unexpected_failure_answers_500(monkeypatch):
+    from utils.batch_pipeline import enrichment
+
+    monkeypatch.setattr(finalization_router, 'run_blocking', _inline_run_blocking)
+    monkeypatch.setattr(enrichment, 'run_enrichment', MagicMock(side_effect=RuntimeError('boom')))
+
+    response = await finalization_router.run_listen_finalization_job(
+        _Request({'kind': 'sync_reprocess', 'key': 'a' * 64, 'task_token': 'b' * 32}),
+        task_retry_count=0,
+    )
+
+    assert response.status_code == 500
+    assert json.loads(response.body) == {'status': 'retry'}
+
+
+@pytest.mark.anyio
 async def test_worker_acknowledges_owner_contention_without_spending_retry_budget(monkeypatch):
     monkeypatch.setattr(finalization_router, 'run_blocking', _inline_run_blocking)
     monkeypatch.setattr(finalization_router, 'try_acquire_job_run_lock', lambda key: 'lock-token')

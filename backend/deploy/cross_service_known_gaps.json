@@ -102,10 +102,6 @@
       "why": "Contract (d) audit-only target (listen slot). Ratchet: no new keys."
     },
     {
-      "key": "task-target-retry-semantics|code|listen-finalization/routers/conversation_finalization.py:run_listen_finalization_job/503",
-      "why": "Contract (d) audit-only target (listen slot). Ratchet: no new keys."
-    },
-    {
       "key": "task-target-retry-semantics|code|sync-backfill/routers/sync.py:_run_sync_job_attempt/500",
       "why": "Contract (d): legacy sync route, ratcheted not fixed; leaves with lane 10 deletion (C11). (#21932 moved part of the runner into _run_sync_job_attempt.)"
     },
