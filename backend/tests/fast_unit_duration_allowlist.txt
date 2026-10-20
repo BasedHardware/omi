@@ -1,4 +1,4 @@
-# Backend unit-test node IDs grandfathered against BACKEND_FAST_UNIT_FAIL_SECONDS (default 0.12s locally).
+# Backend unit-test node IDs grandfathered against BACKEND_FAST_UNIT_FAIL_SECONDS (default 1.0s, local and CI).
 #
 # The duration guard measures per-test CPU time (call phase). CPU time is load-independent, so the
 # guard is deterministic regardless of parallelism. The entries below are genuine unit tests whose
