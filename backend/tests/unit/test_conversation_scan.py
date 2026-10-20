@@ -1019,3 +1019,20 @@ def test_speaker_browse_route_sets_truncated_header_on_budget_exhaustion(monkeyp
     assert resp.status_code == 200
     assert resp.headers[OMI_LIST_TRUNCATED_HEADER] == 'true'
     assert budget.exhaustion_reason == 'documents'
+
+
+def test_people_stats_scan_hides_dream_duplicate_captures():
+    """A Dream duplicate stays discarded == False, so only dream_duplicate_of hides it.
+
+    The People-stats scan reads a field mask. A field the mask drops comes back
+    absent, and is_visible_conversation reads an absent hide flag as visible, so
+    the duplicate would be counted. The scan must select dream_duplicate_of.
+    """
+    docs = [
+        _stored('kept', 0),
+        _stored('folded', 1, dream_duplicate_of='kept'),
+    ]
+    client, conversations = _scan(docs, field_paths=PEOPLE_STATS_FIELD_PATHS, limit=10, batch=10)
+    assert [conversation['id'] for conversation in conversations] == ['kept']
+    assert client.queries[0]['projection'] is not None
+    assert 'dream_duplicate_of' in client.queries[0]['projection']
