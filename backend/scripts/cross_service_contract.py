@@ -155,26 +155,31 @@ TASK_EDGES: tuple[TaskEdge, ...] = (
         audience_fallback=True,  # _account_deletion_oidc_audience(): audience or handler URL
         deadline_seconds=1500,
     ),
-    # Legacy-sync retirement (contracts (a)/(d)): outbox wakes for the workers role. Dispatch keys are
-    # declared by lane 7's ops file; until then they are known edge-declared gaps.
+    # Legacy-sync retirement (contracts (a)/(d)): outbox wakes for the workers role. dispatch_when names the real
+    # runtime switch (M1 Grok L01-2); the ops file (lane 7) declares the queue wiring.
     TaskEdge(
         id='enrichment',
         route='/v2/enrichment/run',
-        dispatch_when={'ENRICHMENT_DISPATCH_MODE': 'cloud_tasks'},
+        # config/enrichment.py: new sr- obligations bind to this queue only when ENRICHMENT_ROUTE=enrichment_queue.
+        dispatch_when={'ENRICHMENT_ROUTE': 'enrichment_queue'},
         target_env='ENRICHMENT_TASKS_HANDLER_URL',
         dispatch_audience_env='ENRICHMENT_TASKS_OIDC_AUDIENCE',
         verify_audience_env='ENRICHMENT_TASKS_OIDC_AUDIENCE',
         verify_audience_fallback_env='ENRICHMENT_TASKS_HANDLER_URL',
+        audience_fallback=True,  # dispatch_binding() and routers/enrichment.py: audience or handler URL
         deadline_seconds=1500,
     ),
     TaskEdge(
         id='provider-stt',
         route='/v2/batch-pipeline/provider-stt/run',
-        dispatch_when={'PROVIDER_STT_DISPATCH_MODE': 'cloud_tasks'},
+        # utils/provider_stt_tasks.py wakes whenever the handler URL and queue are set; no mode switch exists.
+        dispatch_when={},
         target_env='PROVIDER_STT_TASKS_HANDLER_URL',
         dispatch_audience_env='PROVIDER_STT_TASKS_OIDC_AUDIENCE',
         verify_audience_env='PROVIDER_STT_TASKS_OIDC_AUDIENCE',
         verify_audience_fallback_env='PROVIDER_STT_TASKS_HANDLER_URL',
+        audience_fallback=True,  # create_wake(): PROVIDER_STT_TASKS_OIDC_AUDIENCE or handler URL
+        empty_target_ok=True,  # unset handler = provider-STT dispatch not configured on that host
         deadline_seconds=1500,
     ),
 )

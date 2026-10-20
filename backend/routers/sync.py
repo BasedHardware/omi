@@ -734,7 +734,10 @@ async def sync_local_files_v2(
         # C9 (legacy-retire): legacy admission is gone. Content legacy already
         # owns is answered by the fence; anything else keeps its audio (409).
         ledger_row = await run_blocking(db_executor, legacy_dark.read_ledger_row, uid, content_id)
-        decision = legacy_dark.fence_decision(ledger_row, legacy_dark.LegacySyncMode.DARK)
+        owner_job_present = await run_blocking(db_executor, legacy_dark.legacy_owner_job_present, ledger_row)
+        decision = legacy_dark.fence_decision(
+            ledger_row, legacy_dark.LegacySyncMode.DARK, owner_job_present=owner_job_present
+        )
         await run_blocking(sync_executor, shutil.rmtree, job_dir, True)
         return (
             legacy_dark.fence_response(decision, total_files=len(files), lane=lane_decision.lane.value)

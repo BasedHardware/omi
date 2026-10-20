@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import re
 import sys
 from pathlib import Path
 from typing import Any, Sequence
@@ -649,3 +650,51 @@ def test_unnamed_template_container_matches_the_revision_cloud_run_named():
     assert ops_train.template_drift(template, serving, set()) == ['#0.image']
     renamed = {'containers': [{'name': 'x', 'image': 'i'}]}
     assert ops_train.template_drift(renamed, {'containers': [{'name': 'y', 'image': 'i'}]}, set())
+
+
+@pytest.mark.parametrize(
+    'field, value',
+    [
+        ('serviceAccountName', 'other@sa'),
+        ('containerConcurrency', 6),
+        ('timeoutSeconds', 60),
+        ('volumes', [{'name': 'v'}]),
+    ],
+)
+def test_revision_level_template_drift_blocks(field, value):
+    """M1 L07-2: an env apply ships the whole template, so revision-level fields count too."""
+
+    container = {'name': 'c', 'image': 'i', 'env': [{'name': 'OPS', 'value': '1'}]}
+    serving = {'serviceAccountName': 'sa', 'containerConcurrency': 80, 'timeoutSeconds': 300, 'containers': [container]}
+    template = {**serving, field: value, 'containers': [{**container, 'env': [{'name': 'OPS', 'value': '2'}]}]}
+    assert ops_train.template_drift(template, serving, {'OPS'}) == [field]
+
+
+def test_container_probe_and_mount_drift_blocks():
+    serving = {'containers': [{'name': 'c', 'image': 'i'}]}
+    template = {'containers': [{'name': 'c', 'image': 'i', 'volumeMounts': [{'name': 'v', 'mountPath': '/m'}]}]}
+    assert ops_train.template_drift(template, serving, set()) == ['c.volumeMounts']
+
+
+@pytest.mark.parametrize('env', ['prod', 'staging'])
+def test_sync_queues_carry_the_five_attempt_contract(env):
+    """M1 L07-4: sync's 409 leaves the retry to the queue, and utils/cloud_tasks.py
+    get_sync_tasks_max_attempts mirrors 5. The config-train is the only writer of that cap."""
+
+    source = (BACKEND / 'utils/cloud_tasks.py').read_text()
+    default = re.search(r"os\.getenv\('SYNC_TASKS_MAX_ATTEMPTS', '(\d+)'\)", source)
+    assert default, 'get_sync_tasks_max_attempts default moved'
+    queues = yaml.safe_load((BACKEND / f'deploy/ops/{env}.yaml').read_text())['cloud_tasks']
+    sync_queues = {name: q for name, q in queues.items() if 'sync-' in name}
+    assert len(sync_queues) == 2
+    for name, queue in sync_queues.items():
+        assert queue.get('max_attempts') == int(default.group(1)) == 5, name
+
+
+def test_staging_enrichment_stays_off_until_prod_turns_it_on():
+    """M1 L07-5: a missing `enabled` defaults to true, which would create an unlimited-retry queue."""
+
+    prod = yaml.safe_load((BACKEND / 'deploy/ops/prod.yaml').read_text())['cloud_tasks']
+    staging = yaml.safe_load((BACKEND / 'deploy/ops/staging.yaml').read_text())['cloud_tasks']
+    for name, queue in prod.items():
+        assert staging[f'staging-{name}'].get('enabled', True) == queue.get('enabled', True), name

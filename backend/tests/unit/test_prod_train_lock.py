@@ -11,7 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'scripts'))
 
 import prod_train_lock as lock  # noqa: E402
 
-RUNS = '/repos/BasedHardware/omi/actions/runs'
+WORKFLOWS = '/repos/BasedHardware/omi/actions/workflows'
 
 
 def _run(run_id, workflow, status='in_progress', event='workflow_dispatch', created='2026-10-19T06:00:00Z'):
@@ -27,16 +27,32 @@ def _run(run_id, workflow, status='in_progress', event='workflow_dispatch', crea
 
 
 class FakeApi:
-    def __init__(self, runs, deployments=None, pending=None):
+    def __init__(self, runs, deployments=None, pending=None, registered=None):
         self.runs = runs
+        self.registered = registered
         self.deployments = deployments or {}  # env -> [(id, created_at, run_id)]
         self.pending = pending or {}
         self.calls = []
 
     def __call__(self, path, params):
         self.calls.append((path, dict(params)))
-        if path == RUNS:
-            return {'workflow_runs': [r for r in self.runs if r['status'] == params['status']]}
+        if path == WORKFLOWS:
+            paths = (
+                sorted(lock.PROD_TRAIN_WORKFLOWS | {r['path'] for r in self.runs})
+                if self.registered is None
+                else self.registered
+            )
+            return {'total_count': len(paths), 'workflows': [{'id': i, 'path': p} for i, p in enumerate(paths)]}
+        if path.startswith(WORKFLOWS + '/') and path.endswith('/runs'):
+            paths = (
+                sorted(lock.PROD_TRAIN_WORKFLOWS | {r['path'] for r in self.runs})
+                if self.registered is None
+                else self.registered
+            )
+            workflow = paths[int(path[len(WORKFLOWS) + 1 :].split('/')[0])]
+            matched = [r for r in self.runs if r['status'] == params['status'] and r['path'] == workflow]
+            size, page = params['per_page'], params['page']
+            return {'total_count': len(matched), 'workflow_runs': matched[(page - 1) * size : page * size]}
         if path == '/repos/BasedHardware/omi/deployments':
             return [{'id': d, 'created_at': c} for d, c, _ in self.deployments.get(params['environment'], [])]
         if path.endswith('/statuses'):
@@ -118,3 +134,29 @@ def test_lock_workflow_list_matches_the_concurrency_policy():
     policy = (Path(__file__).resolve().parents[3] / '.github/scripts/check-deployment-concurrency.py').read_text()
     for path in lock.PROD_TRAIN_WORKFLOWS:
         assert f'"{path.rsplit("/", 1)[-1]}":' in policy.split('PROD_TRAIN_WRITERS = {', 1)[1].split('}', 1)[0]
+
+
+def test_an_old_prod_train_behind_a_full_page_still_holds_it():
+    """M1 L07-1: a long train must not age off the first page of active runs."""
+    newer = [_run(1000 + i, 'gcp_backend.yml', event='push') for i in range(150)]
+    old = _run(7, 'gcp_backend.yml', created='2026-10-19T01:00:00Z')
+    api = FakeApi(newer + [old], {'prod': [(70, '2026-10-19T01:01:00Z', 7)]})
+    status = lock.read_status(api)
+    assert status.held and [h.run_id for h in status.holders] == [7]
+
+
+def test_a_listing_short_of_its_total_count_is_unknown():
+    def truncated(path, params):
+        if path.endswith('/workflows'):
+            return {'total_count': 1, 'workflows': [{'id': 1, 'path': '.github/workflows/gcp_backend.yml'}]}
+        if path.endswith('/runs'):
+            return {'total_count': 5, 'workflow_runs': []}
+        return []
+
+    assert lock.main(['status'], api=truncated) == lock.EXIT_UNKNOWN
+
+
+def test_a_prod_train_workflow_github_does_not_list_has_no_runs():
+    api = FakeApi([], registered=['.github/workflows/gcp_backend.yml'])
+    assert lock.read_status(api).held is False
+    assert not any('/workflows/' in path and path.endswith('/runs') and 'config_train' in path for path, _ in api.calls)

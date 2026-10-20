@@ -112,6 +112,40 @@ def test_ack_retires_or_rearms_by_version(rows):
     assert KEY not in state_rows
 
 
+def test_a_wake_token_rotated_under_a_live_lease_does_not_strand_the_holder(rows):
+    """M1 L09-3: a producer (mark_update / mark_effects) may rotate task_token mid-lease; invariant 1 fences
+    on lease_token only, so the live holder still records its summary and settles."""
+    state_rows, _tasks = rows
+    _enqueue(1.0)
+    claim = _claim(rows, now=10)
+    state_rows[KEY]['task_token'] = 'e' * 32  # mark_effects merges a new token and keeps the lease
+    assert outbox.heartbeat(claim, 120, now=20)
+    assert outbox.record_summary(claim)
+    assert outbox.ack(claim, 'processed', now=21)
+    assert state_rows[KEY]['dormant'] and state_rows[KEY]['summary_seen']
+
+
+def test_release_after_a_rotation_rearms_under_a_fresh_wake(rows):
+    """The queue retries the released (now stale) task, and the rotated wake may have been answered BUSY."""
+    state_rows, tasks = rows
+    _enqueue(1.0)
+    claim = _claim(rows, now=10)
+    state_rows[KEY]['task_token'] = 'e' * 32
+    assert outbox.release(claim, 'dependency', now=20)
+    fresh = state_rows[KEY]['task_token']
+    assert fresh not in ('e' * 32, claim.wake_token) and tasks[-1]['task_token'] == fresh
+    assert state_rows[KEY]['lease_until'] == 0 and state_rows[KEY]['owner'] is None
+
+
+def test_release_without_a_rotation_keeps_the_wake_for_the_queue_retry(rows):
+    state_rows, tasks = rows
+    _enqueue(1.0)
+    claim = _claim(rows, now=10)
+    woken = len(tasks)
+    assert outbox.release(claim, 'dependency', now=20)
+    assert state_rows[KEY]['task_token'] == claim.wake_token and len(tasks) == woken
+
+
 def test_record_summary_keeps_a_dormant_receipt(rows):
     state_rows, _tasks = rows
     _enqueue(1.0)
@@ -181,7 +215,7 @@ def test_transactional_enqueue_defers_the_wake_to_the_caller(rows, monkeypatch):
     assert len(tasks) == before + 1 and tasks[-1]['task_token'] == result.wake_token
 
 
-def test_sweep_discards_privacy_fenced_rows_instead_of_rewaking(rows, monkeypatch, sweep_query):
+def test_sweep_discards_privacy_fenced_rows_instead_of_rewaking(rows, monkeypatch, sweep_query):  # noqa: F811
     _enqueue(1.0)
     monkeypatch.setattr(custody, 'discard_blocked', lambda _row_id: True)
     counts = outbox.sweep(now=10_000)
@@ -219,15 +253,21 @@ def test_not_due_deferral_is_not_a_processing_attempt(rows):
 def test_conformance_factory_uses_the_injected_privacy_check_and_wake(rows, monkeypatch):
     from database.outbox_firestore import FirestoreOutbox
 
+    # Contract (b) seams, as testing/store_fixtures.py injects them: privacy_blocked(owner_id, payload) and
+    # create_wake(row_id, wake_token, available_at). The injected creator stands in for the queue binding.
     wakes, blocked = [], set()
     injected = FirestoreOutbox(
-        OutboxKind.ENRICHMENT, privacy_blocked=lambda row_id: row_id in blocked, create_wake=wakes.append
+        OutboxKind.ENRICHMENT,
+        privacy_blocked=lambda owner_id, payload: (owner_id, payload['conversation_id']) in blocked,
+        create_wake=lambda row_id, token, at: wakes.append((row_id, token, at)),
     )
     monkeypatch.setattr(custody, 'discard_blocked', Mock(side_effect=AssertionError('default fence used')))
     result = injected.enqueue(KEY, 'u', PAYLOAD, 1.0, now=0.0)
-    assert [wake['task_token'] for wake in wakes] == [result.wake_token]
-    blocked.add(KEY)
+    assert [(row_id, token) for row_id, token, _ in wakes] == [(KEY, result.wake_token)]
+    blocked.add(('u', PAYLOAD['conversation_id']))
     assert injected.claim_key(KEY, result.wake_token, 120, now=10) is Outcome.DISCARDED
+    assert injected.claim_key(KEY, result.wake_token, 120, now=11) is Outcome.STALE  # the row was discarded
+    assert injected.claim_key('not-a-row', result.wake_token, 120, now=12) is Outcome.STALE
     with pytest.raises(NotImplementedError):
         FirestoreOutbox(OutboxKind.CAP_HOLD_REDRIVE)
 

@@ -151,6 +151,28 @@ async def test_a_second_run_sees_the_first_runs_reservation_until_projection(har
     assert harness.processed == ['hold-2', 'hold-2', 'hold-1']
 
 
+@pytest.mark.asyncio
+async def test_a_projection_between_the_allowance_read_and_settling_is_still_charged(harness, monkeypatch):
+    # M1 review L06-1: an earlier run's 40-unit hold projects (usage +40, reservation released) after the
+    # worker's first allowance read and before open_units settles it. Only an allowance read after settling
+    # sees that spend; without it the next 40-unit hold is admitted against 60 with 40 already spent.
+    spend = {'units': 0.0}
+    monkeypatch.setattr(
+        worker.funded_processing, 'allowance', lambda uid: SimpleNamespace(managed=True, spent=spend['units'])
+    )
+    monkeypatch.setattr(worker.funded_processing, 'capacity', lambda current: (60.0 - current.spent, 60.0))
+    reservations.reserve(UID, 'earlier-hold', units=40, period=PERIOD, batch_job_id='bp_earlier')
+
+    def status(uid, job_id):
+        if job_id == 'bp_earlier' and not spend['units']:
+            spend['units'] = 40.0  # the projection transaction commits usage and its completion together
+        return 'projected' if job_id == 'bp_earlier' else 'pending'
+
+    monkeypatch.setattr(reservations, 'batch_status', status)
+    await worker.run(UID, continuation=True)
+    assert harness.processed == []  # 60 - 40 spent = 20 < 40 for every candidate
+
+
 def test_real_job_lease_serializes_two_workers_for_one_owner(monkeypatch):
     db = StrictFirestore(
         {('users', UID, backlog_store.SUMMARY, 'current'): {'state': 'processing', 'token': 't', 'period': PERIOD}}
