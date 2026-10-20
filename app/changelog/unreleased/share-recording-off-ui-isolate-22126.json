@@ -1,0 +1,3 @@
+{
+  "change": "Decode Offline Sync recording audio in a background isolate when sharing WAV exports so long recordings do not freeze the UI."
+}
