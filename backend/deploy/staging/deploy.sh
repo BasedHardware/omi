@@ -323,7 +323,7 @@ PYEOF
   no_traffic=()
   current="$(gcloud run services describe "$name" --region="$REGION" --project="$PROJECT" \
     --format='value(status.latestReadyRevisionName)' 2>/dev/null || true)"
-  if [[ -n "$current" ]]; then
+  if [[ "$GMP" == 1 && -n "$current" ]]; then
     # Prod's order: a zero-traffic candidate, the collector attached as the final revision, then traffic.
     gcloud run services update-traffic "$name" --to-revisions="${current}=100" \
       --region="$REGION" --project="$PROJECT" --quiet >/dev/null
