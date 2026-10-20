@@ -4,6 +4,7 @@ import asyncio
 import json
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
+from threading import Event
 from unittest.mock import AsyncMock
 
 import pytest
@@ -347,6 +348,55 @@ def test_retry_timeout_is_reported_as_gate_contention_and_releases_lease(runtime
     release = dream_capacity.release
     assert isinstance(release, AsyncMock)
     release.assert_awaited_once()
+
+
+def test_timeout_during_retried_executor_apply_keeps_lease_and_capacity(runtime, monkeypatch):
+    real_timeout = asyncio.timeout
+    deadlines = []
+    attempts = []
+    release_worker = Event()
+    worker_finished = Event()
+
+    def controlled_timeout(seconds):
+        if seconds != 333:
+            return real_timeout(seconds)
+        deadline = real_timeout(None)
+        deadlines.append(deadline)
+        return deadline
+
+    async def no_wait(_seconds):
+        pass
+
+    async def scenario():
+        loop = asyncio.get_running_loop()
+
+        def apply(*args, **kwargs):
+            attempts.append(kwargs.get('gate_retry', False))
+            if len(attempts) == 1:
+                raise DestructiveOperationInProgress('canonical mutation blocked by destructive operation')
+            loop.call_soon_threadsafe(deadlines[0].reschedule, loop.time())
+            try:
+                release_worker.wait()
+            finally:
+                worker_finished.set()
+            return 'applied'
+
+        monkeypatch.setattr(dream_tools, 'apply_verified_edit', apply)
+        try:
+            report = await dream_agent.run_pass(UID, turn=scripted([True, True]), timeout_seconds=333)
+            assert not worker_finished.is_set()
+            assert report['status'] == 'failed' and report['error_type'] == 'TimeoutError', report
+            assert runtime.rows[('dream_users', UID)]['lease'] is not None
+            dream_capacity.release.assert_not_awaited()
+            assert attempts == [False, True]
+        finally:
+            release_worker.set()
+            if len(attempts) == 2:
+                await dream_agent.run_blocking(dream_agent.db_executor, worker_finished.wait)
+
+    monkeypatch.setattr(dream_agent.asyncio, 'timeout', controlled_timeout)
+    monkeypatch.setattr(dream_agent, '_sleep_gate_retry', no_wait)
+    asyncio.run(scenario())
 
 
 def test_persistent_gate_contention_has_bounded_failure_code(runtime, monkeypatch, caplog):

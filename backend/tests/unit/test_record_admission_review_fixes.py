@@ -209,3 +209,69 @@ async def test_finalizer_reloads_contention_inside_attempt_and_defers_without_bu
         assert model.record_lane_owner == 'batch_live_v1'
         assert read.call_count == claim.call_count == 2
         defer.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    'conversation_language,user_language,source,live_record,expected',
+    [
+        # Blank conversation language falls back to the user's, as the escape does.
+        ('', 'en', 'desktop', True, True),
+        (None, 'de-DE', 'desktop', True, True),
+        ('en', None, 'desktop', True, True),
+        ('', '', 'desktop', True, None),  # no language at all keeps the legacy route
+        ('', 'vi', 'desktop', True, None),
+        ('vi', 'en', 'desktop', True, None),  # a set conversation language wins over the user's
+        ('', 'en', 'omi', True, False),  # only desktop uploads are record-origin
+        ('', 'en', 'desktop', False, False),  # and only with the live record lane on
+    ],
+)
+async def test_desktop_record_origin_uses_the_escape_language(
+    monkeypatch, conversation_language, user_language, source, live_record, expected
+):
+    from utils.batch_pipeline import intake
+    from utils.batch_pipeline.artifacts import ProtectionContext
+    from utils.batch_pipeline.audio import audio_unit
+
+    bindings = []
+    store = MemoryStore()
+    store.namespace = 'batch_pipeline_dev'
+
+    def authorize(store_, seed, snapshots):
+        snapshots['user'] = {'language': user_language} if user_language else {}
+        snapshots['conversations'] = {'record': {'id': 'record', 'language': conversation_language}}
+        return ProtectionContext('standard', 0)
+
+    def capture_admit(store_, items, binding, now, **kwargs):
+        bindings.append(binding)
+        return {'outcome': 'in_progress', 'job_id': 'job'}
+
+    def decode_units(paths, max_seconds):
+        yield audio_unit(100, b'\x00\x00' * 1600)
+
+    monkeypatch.setattr(intake, 'FirestoreStore', lambda *a, **kw: store)
+    monkeypatch.setattr(intake, 'current_stage', lambda: 'dev')
+    monkeypatch.setattr(intake, 'batch_artifact_authorize', authorize)
+    monkeypatch.setattr(
+        intake, 'provider_config', lambda: SimpleNamespace(pool_kind='dedicated_batch', max_unit_seconds=600)
+    )
+    monkeypatch.setattr(intake, 'decode_units', decode_units)
+    monkeypatch.setattr(intake, 'artifacts_for', lambda store_: SimpleNamespace(stage_audio=lambda w, b: 'uri'))
+    monkeypatch.setattr(intake, 'admit', capture_admit)
+    outcome = await intake.accept_upload(
+        uid='synthetic-owner',
+        job_id='job',
+        content_id='content',
+        paths=['a.bin'],
+        lane='fresh',
+        recording_age_seconds=60,
+        source=source,
+        should_lock=False,
+        conversation_id='record',
+        client_device_id='mac-1',
+        client_platform='macos',
+        policy=SimpleNamespace(live_record_enabled=live_record),
+    )
+    if expected is None:
+        assert outcome is None and not bindings
+    else:
+        assert outcome is not None and len(bindings) == 1 and bindings[0].record_origin is expected
