@@ -1,0 +1,7 @@
+tests/unit/test_firestore_query_shapes.py
+tests/unit/test_firestore_outside_query_contract.py
+tests/unit/test_firestore_caller_witnesses.py
+tests/unit/test_firestore_runtime_witnesses.py
+tests/unit/test_firestore_index_rules.py
+tests/unit/test_firestore_query_contract.py
+tests/unit/test_firestore_field_indexes.py
