@@ -572,7 +572,7 @@ async def test_coordinator_forwards_stamp_fallback_to_assignment(coordinator, mo
     paths = {f"/tmp/job-lineage/seg_{chunk['started_at'].timestamp():.0f}.wav": chunk for chunk in chunks}
     pipeline.decode_files_to_wav = MagicMock(return_value=['/tmp/job-lineage/w.wav'])
     pipeline._cleanup_files = MagicMock()
-    pipeline.retrieve_vad_segments = lambda _path, segmented, _errors: segmented.update(paths)
+    pipeline.retrieve_vad_segments = lambda _path, segmented, _errors, **_kwargs: segmented.update(paths)
     pipeline.get_timestamp_from_path = lambda path: paths[path]['started_at'].timestamp()
     pipeline.get_wav_duration = lambda path: (paths[path]['finished_at'] - paths[path]['started_at']).total_seconds()
     pipeline.users_db = MagicMock()

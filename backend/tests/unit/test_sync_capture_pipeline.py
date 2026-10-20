@@ -488,7 +488,7 @@ def test_assignment_outcomes_through_process_segment(pipeline, condition, monkey
         cid = 'live'
         target = 'donor'
         store.rows[('users', 'u', 'conversations', 'donor')] = dict(
-            row, id='donor', deleted=True, sync_merged_into='live'
+            row, id='donor', deleted=True, sync_merged_into='live', smart_merge={'role': 'donor'}
         )
     store.rows[('users', 'u', 'conversations', cid)] = row
     before = deepcopy(store.rows)

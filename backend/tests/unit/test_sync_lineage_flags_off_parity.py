@@ -41,6 +41,11 @@ def _load(name, source, monkeypatch, namespace=None):
     if namespace is not None:
         module.__dict__.update(namespace)
     monkeypatch.setitem(sys.modules, name, module)
+    # The immutable snapshot predates graduation. Pin its removed recovery
+    # switch to the shipped ON behavior without restoring a production API.
+    source = source.replace('from config.sync_assignment_recovery import sync_assignment_recovery_enabled\n', '')
+    module.sync_assignment_recovery_enabled = lambda: True
+    module.capture_evidence_dark_write_enabled = lambda: True
     exec(compile(source, name, 'exec', flags=0x1000000), module.__dict__)
     return module
 
@@ -274,7 +279,6 @@ def test_process_segment_saved_rows_results_finish_and_log_bytes_match_main(
     for name in ('bounded_envelope', 'merge_track_receipts', 'sync_segment_receipt', 'unknown_envelope'):
         module.__dict__[name] = getattr(capture_evidence, name)
     module.OMI_CAPTURE_EVIDENCE_ENVELOPES_TOTAL = metrics.OMI_CAPTURE_EVIDENCE_ENVELOPES_TOTAL
-    module.capture_evidence_dark_write_enabled = lambda: True
     original = module.process_segment
 
     def old_process(*args, lineage_binding=None, **kwargs):

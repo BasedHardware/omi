@@ -6,7 +6,6 @@ ones; only a genuine difference is a mismatch.
 """
 
 from copy import deepcopy
-from pathlib import Path
 import json
 import sys
 from unittest.mock import MagicMock
@@ -15,7 +14,6 @@ from starlette.datastructures import UploadFile
 
 from google.api_core.exceptions import InvalidArgument
 import pytest
-import yaml
 
 from database import sync_ledger
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
