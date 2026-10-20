@@ -50,11 +50,46 @@
       "why": "lease-renewal heartbeat for the awaited wipe worker; stopped in finally"
     },
     {
+      "path": "utils/batch_pipeline/projection.py",
+      "function": "Projector._start_candidate",
+      "kind": "executor.submit",
+      "count": 1,
+      "why": "reviewed safe: read-only candidate hint lookup awaited by the same assignment via _parallel_candidate; if lost or unused the assignment redoes it inline, and the transaction rereads every candidate"
+    },
+    {
+      "path": "utils/batch_pipeline/projection.py",
+      "function": "Projector.schedule_index_flush",
+      "kind": "start_background_task",
+      "count": 1,
+      "why": "reviewed fail-open: deferred Typesense/people-stats convergence after durable commits; losing it at SIGKILL is the same search staleness as a Typesense outage, and any later write to the conversation reconverges it"
+    },
+    {
+      "path": "utils/batch_pipeline/projection_drain.py",
+      "function": "OwnerDrains.launch",
+      "kind": "start_background_task",
+      "count": 1,
+      "why": "reviewed recoverable: an owner drain is only a wakeup; every row it walks commits in its own fenced transaction, and unprojected rows stay pending in the durable result log for the next serving sweep after restart"
+    },
+    {
       "path": "utils/batch_pipeline/projection_followup.py",
       "function": "ProjectionFollowups.launch",
       "kind": "start_background_task",
       "count": 1,
       "why": "reviewed recoverable: unfinished follow-ups stay in the durable projection_pending query and are re-launched by the next serving pass after restart"
+    },
+    {
+      "path": "utils/batch_pipeline/projection_prefetch.py",
+      "function": "ChainPrefetch._scout",
+      "kind": "executor.submit",
+      "count": 1,
+      "why": "reviewed safe: read-only read-ahead of immutable row inputs; the walk awaits it via take() or reads inline on any miss, and close() cancels the rest"
+    },
+    {
+      "path": "utils/batch_pipeline/projection_prefetch.py",
+      "function": "ChainPrefetch.advance",
+      "kind": "executor.submit",
+      "count": 1,
+      "why": "reviewed safe: read-only successor-link scout; nothing is written, and a lost scout only means the walk reads its own successor"
     },
     {
       "path": "utils/batch_pipeline/serving.py",
@@ -195,13 +230,6 @@
       "kind": "threading.Thread",
       "count": 1,
       "why": "reviewed safe: circuit gauge refresh daemon; telemetry only"
-    },
-    {
-      "path": "utils/stt/soniox_runway.py",
-      "function": "meter_audio_seconds",
-      "kind": "loop.create_task",
-      "count": 1,
-      "why": "pre-existing; unreviewed"
     },
     {
       "path": "utils/sync/pipeline.py",

@@ -42,6 +42,14 @@ class MemoryTransaction:
         ]
         return min(jobs, key=lambda v: (v['capture_at'], v['segment_id'])) if jobs else None
 
+    def first_ready_pending(self, owner_key):
+        jobs = [
+            v
+            for (table, _), v in self.rows.items()
+            if table == 'jobs' and v['owner_key'] == owner_key and v['merge_pending'] and v['state'] == 'result_ready'
+        ]
+        return min(jobs, key=lambda v: (v['capture_at'], v['segment_id'])) if jobs else None
+
     def ready_predecessor(self, owner_key, priority, segment_id):
         jobs = [
             v
@@ -105,6 +113,18 @@ class MemoryStore:
 
     def quarantine_fenced(self, segment_id, now):
         raise AssertionError('privacy isolation must use real emulator transactions')
+
+    def longest_ready_pending(self, owner_key):
+        jobs = [
+            v
+            for (table, _), v in self.rows.items()
+            if table == 'jobs'
+            and v['owner_key'] == owner_key
+            and v['merge_pending']
+            and v['state'] == 'result_ready'
+            and 'ready_at' in v
+        ]
+        return deepcopy(min(jobs, key=lambda v: (v['ready_at'], v['segment_id']))) if jobs else None
 
 
 def colliding_owner(owner):
@@ -290,7 +310,8 @@ def test_dead_letter_redrive_preserves_order_and_identity():
             queue.fail('a', lease.token, 1)
     # A historical terminal job from the previous implementation.
     store.rows['jobs', 'a'].update(state='dead', available_at=0)
-    merge = OrderedMerge(store)
+    # Strict order: the bounded head wait would release b past the dead head.
+    merge = OrderedMerge(store, head_wait_seconds=0)
     assert merge.commit_next('heavy', 9999) is None
     assert queue.redrive_dead('a', 9999)
     assert not queue.redrive_dead('a', 9999)
@@ -705,3 +726,89 @@ def test_ready_predecessor_ignores_stale_leased_links(monkeypatch):
     assert queue.pull(4)[0].item.segment_id == 'head'
     assert store.rows['jobs', 'leased']['next'] == 'head'
     assert queue.pull(4)[0].item.segment_id == 'fifo'
+
+
+def _fail_on_call(queue, monkeypatch, failing_call, error):
+    original, calls = queue._pull_one, [0]
+
+    def pull_one(*args, **kwargs):
+        calls[0] += 1
+        if calls[0] == failing_call:
+            raise error
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(queue, '_pull_one', pull_one)
+
+
+def test_partial_pull_failure_hands_back_committed_leases_instead_of_stranding_them(monkeypatch):
+    store = MemoryStore()
+    queue = Scheduler(store)
+    for n, owner in enumerate(('a', 'b', 'c')):
+        queue.enqueue(item(owner, owner=owner, capture=n), 0)
+    _fail_on_call(queue, monkeypatch, 3, RuntimeError('synthetic Aborted on lease 3'))
+    pulled = queue.pull(1, 3)
+    assert len(pulled) == 2
+    for lease in pulled:
+        job = store.rows['jobs', lease.item.segment_id]
+        assert job['state'] == 'leased' and job['token'] == lease.token and job['attempt'] == 1
+        assert queue.complete(WorkResult(lease.item.segment_id, 'gs://results/x'), lease.token, 2)
+    # Lease 3 never committed: its job is still ready and claimable at once.
+    (rest,) = [v for v in ('a', 'b', 'c') if v not in {lease.item.segment_id for lease in pulled}]
+    assert store.rows['jobs', rest]['state'] == 'ready'
+    monkeypatch.undo()
+    assert [v.item.segment_id for v in queue.pull(2, 3)] == [rest]
+
+
+def test_first_lease_failure_still_raises_with_nothing_leased(monkeypatch):
+    store = MemoryStore()
+    queue = Scheduler(store)
+    queue.enqueue(item('a'), 0)
+    _fail_on_call(queue, monkeypatch, 1, ValueError('synthetic'))
+    with pytest.raises(ValueError):
+        queue.pull(1, 3)
+    assert store.rows['jobs', 'a']['state'] == 'ready'
+
+
+def test_post_commit_telemetry_failure_never_drops_an_issued_lease(monkeypatch):
+    from utils.batch_pipeline import scheduler as module
+
+    class BrokenMetrics:
+        def record(self, *args, **kwargs):
+            raise RuntimeError('metrics down')
+
+        def record_head(self, *args, **kwargs):
+            raise RuntimeError('metrics down')
+
+    def broken_observations(observations):
+        raise RuntimeError('policy telemetry down')
+
+    monkeypatch.setattr(module, 'record_policy_observations', broken_observations)
+    store = MemoryStore()
+    queue = Scheduler(store, metrics=BrokenMetrics())
+    queue.enqueue(item('a'), 0)
+    queue.enqueue(item('b', capture=2), 0)
+    pulled = queue.pull(1, 2)
+    assert [v.item.segment_id for v in pulled] == ['a', 'b']
+    assert all(store.rows['jobs', v.item.segment_id]['token'] == v.token for v in pulled)
+
+
+def test_release_expires_lease_now_with_expiry_semantics_and_fences_stale_tokens():
+    store = MemoryStore()
+    queue = Scheduler(store)
+    queue.enqueue(item('a'), 0)
+    first = queue.pull(1)[0]
+    assert not queue.release('a', 'stale-token', 2)
+    assert queue.release('a', first.token, 2)
+    job = store.rows['jobs', 'a']
+    # Same transition recover() applies after LEASE_SECONDS, without the wait.
+    assert job['state'] == 'retry' and job['attempt'] == 1 and job['token'] == ''
+    assert job['available_at'] == 2 + 5 < 1 + LEASE_SECONDS
+    assert not queue.release('a', first.token, 3)
+    assert queue.recover(7) == 1
+    second = queue.pull(7)[0]
+    assert second.attempt == 2 and second.token != first.token
+    assert not queue.release('a', first.token, 8)
+    assert not queue.complete(WorkResult('a', 'gs://results/stale'), first.token, 8)
+    assert queue.complete(WorkResult('a', 'gs://results/a'), second.token, 8)
+    assert not queue.release('a', second.token, 9)  # Published work is never released.
+    assert store.rows['jobs', 'a']['state'] == 'result_ready'

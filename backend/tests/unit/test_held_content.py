@@ -1,6 +1,6 @@
 """At-cap contract: retries, period reset, stale races, legacy capability, and entitlement safety."""
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -8,6 +8,11 @@ from config.held_content import budget_period, capture_state, current_choice
 from database import budget_choice
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from utils import held_content_flags
+
+
+@pytest.fixture(autouse=True)
+def choice_clock(monkeypatch):
+    monkeypatch.setattr(budget_choice, 'budget_period', lambda: '2026-10')
 
 
 def test_flags_default_off_and_explicit_capability(monkeypatch):
@@ -28,6 +33,9 @@ def test_malformed_flags_do_not_enable(monkeypatch, value):
 def test_budget_period_uses_utc_month():
     assert budget_period(datetime(2026, 12, 31, 23, 59, tzinfo=timezone.utc)) == '2026-12'
     assert budget_period(datetime(2027, 1, 1, tzinfo=timezone.utc)) == '2027-01'
+    # Local dates on either side of midnight must still use the UTC month.
+    assert budget_period(datetime(2026, 11, 1, 0, 30, tzinfo=timezone(timedelta(hours=7)))) == '2026-10'
+    assert budget_period(datetime(2026, 10, 31, 23, 30, tzinfo=timezone(timedelta(hours=-7)))) == '2026-11'
 
 
 @pytest.mark.parametrize('choice', [None, {'choice': 'upgrade'}, {'choice': 'on_device'}])
@@ -42,7 +50,7 @@ def test_at_cap_states_and_upgrade_is_not_entitlement():
     assert capture_state(managed=False, exhausted=True, choice={'choice': 'on_device'}) == 'on_device'
 
 
-def test_transactional_choice_is_idempotent_and_bounded():
+def test_transactional_choice_is_idempotent_and_bounded(monkeypatch):
     db = StrictFirestore()
     expected = {'period': '2026-10', 'choice': 'on_device', 'dont_ask_again': True}
     for _ in range(2):
@@ -52,6 +60,7 @@ def test_transactional_choice_is_idempotent_and_bounded():
     assert len(db.transactions[1].sets) == 0
     assert budget_choice.get_choice('test-user', '2026-10', firestore_client=db) == expected
     assert budget_choice.get_choice('test-user', '2026-11', firestore_client=db) is None
+    monkeypatch.setattr(budget_choice, 'budget_period', lambda: '2026-11')
     assert (
         budget_choice.set_choice('test-user', '2026-11', 'upgrade', False, firestore_client=db)['choice'] == 'upgrade'
     )
@@ -66,7 +75,8 @@ def test_conflicting_retry_cannot_overwrite_first_choice():
     assert budget_choice.get_choice('test-user', '2026-10', firestore_client=db)['choice'] == 'on_device'
 
 
-def test_delayed_previous_period_cannot_overwrite_reset_choice():
+def test_delayed_previous_period_cannot_overwrite_reset_choice(monkeypatch):
+    monkeypatch.setattr(budget_choice, 'budget_period', lambda: '2026-11')
     db = StrictFirestore()
     budget_choice.set_choice('test-user', '2026-11', 'upgrade', False, firestore_client=db)
     with pytest.raises(budget_choice.BudgetChoiceConflict):
@@ -86,4 +96,29 @@ def test_invalid_choice_does_not_write(choice, dont_ask):
     db = StrictFirestore()
     with pytest.raises(ValueError):
         budget_choice.set_choice('test-user', '2026-10', choice, dont_ask, firestore_client=db)
+    assert not db.rows
+
+
+@pytest.mark.parametrize('period', ['2026-09', '2026-11'])
+def test_choice_transaction_rejects_noncurrent_month_without_writing(period):
+    db = StrictFirestore()
+    with pytest.raises(budget_choice.BudgetChoiceConflict, match='budget_period_changed'):
+        budget_choice.set_choice('test-user', period, 'upgrade', False, firestore_client=db)
+    assert not db.rows
+    assert all(not tx.sets for tx in db.transactions)
+
+
+def test_transaction_attempt_rechecks_month_after_its_read(monkeypatch):
+    db = StrictFirestore()
+    ref = db.collection('users').document('test-user').collection('budget_choice').document('current')
+    get = ref.get
+
+    def read_then_rollover(*args, **kwargs):
+        result = get(*args, **kwargs)
+        monkeypatch.setattr(budget_choice, 'budget_period', lambda: '2026-11')
+        return result
+
+    monkeypatch.setattr(ref, 'get', read_then_rollover)
+    with pytest.raises(budget_choice.BudgetChoiceConflict, match='budget_period_changed'):
+        budget_choice._store(db.transaction(), ref, '2026-10', 'on_device', False)
     assert not db.rows

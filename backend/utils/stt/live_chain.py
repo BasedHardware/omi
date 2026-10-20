@@ -384,9 +384,29 @@ async def connect_configured_chain(
     def backup(service: STTService, target) -> bool:
         return target.id != policy_primary if active and target is not None else active or service != primary_service
 
+    def note_skip(service: STTService, cause: str) -> None:
+        nonlocal origin_skip
+        token = f'{service.value}:{cause}'
+        if token not in skips and len(skips) < 12:
+            skips.append(token)
+        if origin_skip is None and prior_outcome is None and service.value == origin:
+            origin_skip = cause
+
+    def hop_reason() -> str:
+        # A dialed failure owns the hop (origin moved to it); otherwise the
+        # origin's own skip cause explains why it is not serving.
+        return prior_reason if prior_outcome is not None or origin_skip is None else origin_skip
+
     prior_reason = 'circuit_open'
     prior_capacity_subtype: str | None = None
     prior_outcome: LiveLegOutcome | None = None
+    # Why the origin route never served when it was never dialed. Without it
+    # the hop inherits the 'circuit_open' sentinel, which the live reason
+    # vocabulary normalized to connection_lost: a recovery chain that skipped
+    # a session-excluded Soniox logged an untyped Soniox death (prod
+    # 2026-10-20: 454 of 489 such lines had no Soniox dial).
+    origin_skip: str | None = None if any(service.value == origin for service, _ in routes) else 'policy'
+    skips: list[str] = []
     attempted = False
     primary_open = False
     probes = max(1, int(listen_value('circuit_half_open_probes', 'STT_CIRCUIT_HALF_OPEN_PROBES', '1')))
@@ -467,6 +487,7 @@ async def connect_configured_chain(
                 backoff_skipped.append((service, connect, target, rescue))
             primary_open |= not backup(service, target)
             prior_reason, prior_capacity_subtype = 'circuit_open', None
+            note_skip(service, 'circuit_open')
             record_fallback(
                 component='stt_selection',
                 from_mode=origin,
@@ -483,6 +504,7 @@ async def connect_configured_chain(
             episode = current_recovery.get()
             if episode is not None and episode.dial_budget() <= 0:
                 on_close()
+                note_skip(service, 'recovery_budget')
                 return None
             if _paid_spillover_scope(service) and not await paid_admission.admit(service.value):
                 # Release any half-open probe acquired for this attempt.
@@ -684,7 +706,7 @@ async def connect_configured_chain(
                 component='stt_selection',
                 from_mode=origin,
                 to_mode=service.value,
-                reason=prior_reason,
+                reason=hop_reason(),
                 capacity_subtype=prior_capacity_subtype,
                 source_outcome=prior_outcome,
             )
@@ -722,10 +744,12 @@ async def connect_configured_chain(
             if recovery is not None and dial_budget is not None and dial_budget <= 0:
                 on_close()
                 backoff_lease.finish()
+                note_skip(service, 'recovery_budget')
                 return None
             if recovery is not None and not recovery.reserve(attempt_identity(service, target), service.value):
                 on_close()
                 backoff_lease.finish()
+                note_skip(service, 'recovery_budget')
                 return None
             token = connecting_target.set(target)
             try:
@@ -933,7 +957,7 @@ async def connect_configured_chain(
                 component='stt_selection',
                 from_mode=origin,
                 to_mode=service.value,
-                reason=prior_reason,
+                reason=hop_reason(),
                 capacity_subtype=prior_capacity_subtype,
                 source_outcome=prior_outcome,
             )
@@ -957,9 +981,14 @@ async def connect_configured_chain(
                 else DEFAULT_IDS.get(service.value)
             )
         )
-        if connect is None or provider_for_service(service) in failed or identity in failed_targets:
+        if connect is None:
+            note_skip(service, 'unconfigured')
+            continue
+        if provider_for_service(service) in failed or identity in failed_targets:
+            note_skip(service, 'session_excluded')
             continue
         if recovery is not None and identity is not None and not recovery.can_attempt(identity):
+            note_skip(service, 'recovery_budget')
             continue
         capacity_target = target if target is not None else capacity_targets.get(identity or '')
         if (routing_models or {}).get(service.value) == 'parakeet-window':
@@ -967,6 +996,7 @@ async def connect_configured_chain(
                 WINDOW_ADMISSION.labels(outcome='overflow').inc()
                 capacity_blocked.add(service)
                 prior_reason, prior_capacity_subtype = 'capacity_full', 'admission'
+                note_skip(service, 'capacity_full')
                 record_fallback(
                     component='stt_selection',
                     from_mode=origin,
@@ -980,9 +1010,11 @@ async def connect_configured_chain(
             capacity_blocked.add(service)
             capacity_resorts.append((service, target, capacity_target))
             COST_DECISION.labels(target=capacity_target.id, reason='capacity_skip').inc()
+            note_skip(service, 'capacity_full')
             continue
         circuit = target_circuit(target, _circuit_for_primary(service))
         if not circuit.allow_request(max_probes=probes):
+            note_skip(service, 'circuit_open')
             primary_open |= not backup(service, target)
             if backup(service, target):
                 record_fallback(
@@ -1087,9 +1119,17 @@ async def connect_configured_chain(
         component='stt_selection',
         from_mode=origin,
         to_mode='unavailable',
-        reason=prior_reason,
+        reason=hop_reason(),
         capacity_subtype=prior_capacity_subtype,
         source_outcome=prior_outcome,
+    )
+    # Bounded tokens only (family:cause): why no successor was available. The
+    # reason is the hop's own, so a claimed dial death wins over a later skip.
+    logger.warning(
+        'live_stt_chain_exhausted origin=%s reason=%s skips=%s',
+        origin,
+        fallback_metric_reason(pending.reason),
+        ','.join(skips) or 'none',
     )
     pending.note_failure(None)
     if recovery_on:

@@ -171,6 +171,8 @@ ALLOWED_REASONS = LIVE_STT_REASONS | frozenset(
         'config_incomplete',
         'circuit_open',
         'last_resort',
+        'session_excluded',
+        'recovery_budget',
         'connection_lost',
         'modulate_serve_error',
         'capability_mismatch',
@@ -409,6 +411,16 @@ def initialize_live_stt_exhausted_children() -> None:
                 from_mode=provider,
                 to_mode='unavailable',
                 reason=reason,
+                outcome='exhausted',
+            )
+    # Undialed selection origins report their skip (live_chain.note_skip).
+    for skip in ('session_excluded', 'recovery_budget', 'circuit_open', 'policy', 'unconfigured'):
+        for provider in providers:
+            OMI_FALLBACK_TOTAL.labels(
+                component='stt_selection',
+                from_mode=provider,
+                to_mode='unavailable',
+                reason=skip,
                 outcome='exhausted',
             )
 

@@ -225,7 +225,7 @@ their deployment environment; no UID env binding is required. Existing
 conversation/memory/task post-write hooks signal the hourly backend-sync sweep.
 Shadow writes only admission state and encrypted reports, preserving finalization, user records, questions and vocabulary. See [the dream runbook](runbooks/dream-agent.md).
 Dream vocabulary is optional capture context: `DREAM_AGENT_VOCABULARY_STT=true` combines encrypted per-user vocabulary spellings with existing live and offline-sync keyterms;
-Soniox also retains its `SONIOX_CONTEXT_TERMS` gate. Read failure uses existing terms with fallback telemetry.
+read failure uses existing terms with fallback telemetry.
 Vocabulary and STT gate defaults remain off.
 
 Conversation processing adds a shared **Known spellings** block from Dream vocabulary
@@ -1632,6 +1632,17 @@ The lag probe is a process-wide task started from an empty `contextvars.Context`
 
 D0b gate: `histogram_quantile(0.99, sum by (le) (rate(omi_listen_event_loop_lag_seconds_bucket[5m])))` must stay under 50 ms for 24h before the HPA retune proceeds.
 
+### Listen websocket close metrics
+
+Each session that reaches teardown counts once in `omi_listen_ws_close_total{code_class, initiator, held}` (`utils/observability/listen_close.py`). The labels record the **first** close the server observed; a later close-frame echo of the same end doesn't change them.
+
+- `initiator=client`: a `websocket.disconnect` frame read by the receive loop, or by teardown's bounded drain, carrying the client's code. ASGI reports a peer that left without a close frame as `1006`. A send-side `WebSocketDisconnect` (heartbeat, events, segments) is not an observation, because Starlette reports every send failure as `1006` whatever the peer sent. When nothing has been observed and the receive loop has exited, teardown reads queued messages, discarding data frames, until a disconnect arrives or `CLOSE_FRAME_DRAIN_SECONDS` (0.25 s) runs out. Only then does it close.
+- `initiator=server`: a `websocket.close` returned, either teardown's `close(code=close_code)` or the terminal STT close in `utils/stt/live_failure.py` (teardown then skips its own close).
+- `initiator=unknown`: no frame was read and no server close returned. `code_class` is then the server's intended `close_code`.
+- `code_class` is one of `1000`, `1001`, `1006`, `1011` or `other` (application codes such as `1008` and `4xxx` count as `other`). `held` is `true` when the session was cap-held at teardown start (`receiver.cap_paused` or `live_hold.paused`).
+
+`omi_listen_ws_close_finalize_seconds{initiator, held}` measures the time from that first observed close (or teardown start, if none was observed) to the end of teardown. Pre-session rejections in `_admit`/`_bootstrap` and the decoder-initialisation close never reach teardown, so they aren't counted. No series carries uid, session or conversation labels, and every series is zero-initialised at import.
+
 ### Dev-only parity-pack capture
 
 For local conformance debugging only, the listen runtime may write a restricted
@@ -1979,7 +1990,11 @@ adds a SCREEN MOMENTS line to BACKGROUND CONTEXT; up to four frames (≤1024 px 
 6 s total GCS read budget) ride the notes call as image parts. Frame docs record
 `storage_bucket`; every host reads only docs whose bucket equals its own
 `BUCKET_SCREEN_FRAMES` (legacy docs belong to `based-hardware-dev-screen-frames`),
-so a notes host without that env reads no frame evidence at all.
+so a notes host without that env reads no frame evidence at all. The bucket follows
+the customer data plane: dev hosts serve production Firestore and use
+`based-hardware-prod-screen-frames`. Skipped docs count
+`screen_frames_foreign_bucket_dropped_total{reason}`; older dev-bucket docs move with
+`scripts/migrate_screen_frames_to_data_plane_bucket.py`.
 
 The Mac closes the listen socket before that evidence pass lands, and teardown
 admits finalization at once. So the shared finalizer (pusher, Cloud Tasks, and
@@ -3162,7 +3177,19 @@ no output (`has_pending_provider_output()`: no Soniox non-final or unflushed
 token, no buffered Modulate partial), and the last speech or replayed send
 before the horizon is at least 15 s old. Speech inside the horizon stays pending.
 Kill switch `LISTEN_NONWINDOW_REPLAY_SETTLE_ENABLED` (default on); counter
-`omi_stt_nonwindow_replay_settles_total{provider}`. Its overflow diagnostics add
+`omi_stt_nonwindow_replay_settles_total{provider}`. On a Soniox leg, final
+text also accounts every tracked speech send older than that 15 s grace,
+whether or not the text was placed on the capture axis, so a provider that is
+actively transcribing does not overflow the ring
+(`LISTEN_NONWINDOW_EMITTED_TEXT_ACCOUNTING_ENABLED`, default on). A provider
+that left the session only for `replay_ring_overflow` is excluded from that
+one replacement selection and re-admitted once a successor is adopted
+(`LISTEN_SESSION_LOCAL_EXCLUSION_RELEASE_ENABLED`, default on; counter
+`omi_stt_session_local_exclusion_releases_total{provider}`). A selection hop
+whose origin route was never dialed names its skip as the fallback `reason`
+(`session_excluded|recovery_budget|circuit_open|capacity_full|policy|unconfigured|last_resort`)
+instead of `connection_lost`, and an exhausted chain logs
+`live_stt_chain_exhausted origin= reason= skips=family:cause,...`. Its overflow diagnostics add
 `leg=nonwindow speech_unemitted_seconds text_segments placed_text_segments
 provider_output_pending`. A `connection_lost` fallback log line from a Soniox or
 Modulate socket also carries a bounded transport `cause`
@@ -3976,7 +4003,7 @@ not enabled by this producer alone; deploying the producer requires the backend-
 
 After connect preferences load, `TranscriptProcessor` construction binds the
 existing `LiveLanguageProfile.expected` to the coordinator. These are spoken-language
-priors, not reading preferences. `TRANSLATION_PROFILE_GATE_ENABLED=true` defers short
+priors, not reading preferences. The permanent profile gate defers short
 out-of-profile detections locally. Expected foreign detections require agreement
 between raw and filler-cleaned local reads; expected foreign clauses can still
 override an English-dominant mixed turn. A >=40-letter, >=0.95-confidence sample
@@ -3989,12 +4016,12 @@ unchanged foreign source text. Conversation changes discard queued work and prio
 The phone-call interpreter bypasses the profile admission gate to preserve short
 foreign replies; it still applies the output guard before writing a badge.
 
-`TRANSLATION_OUTPUT_GUARD_ENABLED=true` rejects empty/case-only rewrites and conservative
+The permanent output guard rejects empty/case-only rewrites and conservative
 near-copies before cache publication and segment persistence, including legacy cache hits.
 Token-multiset Dice >=0.80 requires independent target-output evidence and either English
 grammatical edits or separately confirmed target-language lexical edit spans. Foreign
 edits in mostly English text remain translatable. This is a bounded heuristic, not a
-semantic guarantee; either flag can be disabled independently for recall rollback.
+semantic guarantee; the live demand gate does not disable these quality filters.
 `omi_translation_decisions_total{target_lang,decision,reason}` records admission/guard
 decisions; `omi_translation_skip_total` counts skip, defer and rejection reasons. Neither
 counter measures shown badges or fleet correctness. No user text enters labels or logs.
@@ -4833,7 +4860,12 @@ subscriptions). One metadata-only document at
 and `dont_ask_again`. Identical writes are idempotent; conflicting writes in the
 same period return 409. A new period logically expires the old choice and
 replaces the same document, avoiding unbounded history. Delayed older-period
-writes cannot overwrite a newer choice. `upgrade` records intent only; managed
+writes cannot overwrite a newer choice. Each transaction attempt also checks the
+current UTC month after its read, so a request delayed by allowance resolution or
+a transaction retry returns `409 budget_period_changed`, including identical
+replays of an expired choice. The [hermetic custody acceptance and proposed
+graduation ramp](runbooks/held-content-acceptance.md) covers this boundary.
+`upgrade` records intent only; managed
 processing still requires a positive answer from the existing allowance resolver.
 A lookup failure or platform trial paywall is `unavailable`, never a cap hit.
 `X-App-Platform` reaches the allowance resolver. Drifted BYOK recovery clears
@@ -6126,3 +6158,7 @@ remain off; this source change does not activate the cap cohort.
 ## Operator minimal sync redrive
 
 Operator redrive payloads may carry `redrive_mode: 'minimal'` to re-transcribe preserved legacy sync audio at minimum cost: Parakeet-only pre-recorded STT with no Modulate recovery, attach-first assignment to a compatible row within 10 minutes through the normal lifecycle owner, and one gpt-5-nano title per newly created row instead of conversation processing. Details and the kill switch live in `backend/utils/sync/ARCHITECTURE.md`.
+
+Runtime STT-cap and ladder execution scope shares the 60-second, environment-fenced
+Firestore token cache; session admission does not wait for it. Existing live sessions
+retain admitted state until reconnect. See [runtime ramp and rollback](stt-cap-dispatch.md#runtime-cohort-no-restart).

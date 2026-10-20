@@ -393,3 +393,38 @@ def test_indexed_reverse_upload_head_survives_competing_pulls(store, monkeypatch
     assert queue.complete(WorkResult('reverse-000', 'gs://synthetic/head'), by_id['reverse-000'].token, 3)
     assert merge.commit_next('synthetic-owner', 3)['segment_id'] == 'reverse-000'
     assert queue.pull(4)[0].item.segment_id == 'reverse-001'
+
+
+def test_partial_pull_failure_keeps_committed_leases_and_release_is_fenced(store, monkeypatch):
+    from utils.batch_pipeline import scheduler as module
+
+    queue = Scheduler(store)
+    for n, owner in enumerate(('a', 'b', 'light')):
+        assert queue.enqueue(work(owner, n, owner=owner), 0)
+    built = [0]
+
+    class FailingWorkItem(WorkItem):
+        def __post_init__(self):
+            built[0] += 1
+            if built[0] == 3:
+                raise ValueError('synthetic validation failure inside lease 3')
+            super().__post_init__()
+
+    # Raised inside the third lease transaction, so Firestore rolls it back.
+    monkeypatch.setattr(module, 'WorkItem', FailingWorkItem)
+    pulled = queue.pull(1, 3)
+    monkeypatch.undo()
+    assert len(pulled) == 2
+    claimed = {v.item.segment_id for v in pulled}
+    (rest,) = {'a', 'b', 'light'} - claimed
+    assert [v.item.segment_id for v in queue.pull(2, 3)] == [rest]
+    first, second = pulled
+    assert queue.complete(WorkResult(first.item.segment_id, 'gs://results/x'), first.token, 3)
+    assert not queue.release(second.item.segment_id, 'stale-token', 3)
+    assert queue.release(second.item.segment_id, second.token, 3)
+    assert not queue.release(first.item.segment_id, first.token, 3)
+    assert queue.recover(8) == 1
+    retried = queue.pull(8)[0]
+    assert retried.item.segment_id == second.item.segment_id and retried.attempt == 2
+    assert not queue.complete(WorkResult(second.item.segment_id, 'gs://results/stale'), second.token, 9)
+    assert queue.complete(WorkResult(second.item.segment_id, 'gs://results/y'), retried.token, 9)

@@ -494,7 +494,54 @@ owner claim. Its atomic persist advances the projection watermark; a later
 unit can become visible only after every committed predecessor has persisted
 (or its privacy erasure receipt permits progress). Captures admitted after a
 later commit retain the existing explicit `late_capture` behavior. No disjoint
-segment independence or change to transcript visibility order is assumed.
+segment independence is assumed.
+
+### Bounded merge head wait
+
+David ruled on 2026-10-20 that catch-up uploads may publish newer parts of a
+recording first and fold older parts in late, with a bounded wait. The app
+uploads its pending backlog newest-first, so capture order and arrival order
+are reversed for every catch-up owner.
+
+`BATCH_PIPELINE_MERGE_HEAD_WAIT_SECONDS` (default `60`; `off` or `<= 0`
+restores strict capture order) bounds how long a ready result waits behind an
+unready earlier-captured merge head. `complete` and every recovery re-entry
+stamp `ready_at`. When the owner's longest-waiting ready row has waited at
+least W, the merge commits the owner's ready rows in capture order past the
+head. The head later appends at the log tail as `late_capture`, exactly like a
+recovered quarantine. Rows without `ready_at` (written before this change)
+never start a bypass. A bypass commit carries `head_wait_bypass: true` and logs
+`event=batch_merge outcome=head_wait_bypass` with the head state and a wait
+bucket, never an ID.
+
+The strict commit transaction issues no new query. When it finds the head
+unready, a non-transactional probe (`merge_ready_age` index) reads the owner's
+longest waiter, so a still-waiting owner takes no extra transactional query
+lock. Only an expired wait opens a second transaction, which re-reads the
+waiter, selects the earliest-captured ready row (`merge_ready` index) and runs
+the unchanged commit body. Without either index the merge records a
+`firestore_read` fallback, logs `outcome=head_wait_unavailable` and keeps strict
+order for five minutes. An owner-wide privacy fence that refuses the released
+row leaves the owner blocked exactly as strict order would.
+
+The commit body is unchanged: the append-only log chain, `log_sequence`,
+watermark and late marking, owner revision fence, owner-serial projection in
+log order, sibling completion, billing and privacy fences all hold. Fresh
+traffic keeps capture order because attempt-1 compute finishes well inside W.
+Log order can differ from capture order (bypassed heads are `late_capture`);
+the committed result set, the final watermark and the projected conversations
+converge to the strict-order state. Only intermediate states change:
+
+- a conversation can appear with its newest part first, then grow backwards
+  (earlier start, more transcript at the top) as older units land;
+- a late bridging unit can briefly leave two conversations that later merge
+  through the existing donor redirect;
+- a summary generated on the partial conversation is regenerated through the
+  coalesced reprocess outbox, and a short early fragment marked for review is
+  promoted when meaningful content arrives;
+- no visible first-summary push exists on the batch path; action items found
+  in the partial transcript can sync silently and keep their identity across
+  the regeneration.
 
 The serving supervisor, explicit reconcile RPC, and metrics reconciliation all
 use the same async coordinator. Their pass persists the bounded pending page,
@@ -575,6 +622,156 @@ goes first. The four-slot bound, segment claims and all-sibling completion
 fence are unchanged. The successor lookup is two equality filters ordered by
 `__name__` on `{namespace}_results`, which automatic single-field indexes serve.
 Two matches fail closed.
+
+### Sweep owner-chain continuation and pending-only assignment page
+
+`BATCH_PIPELINE_SWEEP_OWNER_CHAIN_ENABLED` defaults to `true` (kill switch:
+`false` restores one attempt per page row). Rows from one owner's ordered chain
+used to advance only while a sweep page held that owner's head. During the
+2026-10-20 run 10, one owner's 190-segment burst sat idle about 60% of the time
+between pages (3.2 rows/min). When the sweep now persists a row that was
+`pending` when read, it calls the same walk the recovery wake uses, from that
+owner's `projection_watermark`. Bounds: one walk per owner per sweep, 64 rows
+and 30 seconds per walk, and 30 seconds of walking per sweep across all owners, starting with the
+first walk. Page rows the walk persisted are skipped without a read and are
+left out of the sweep's counts; the chain summary reports them. Every other page row,
+including rows past a walk that stopped at its bound, is attempted in page
+order as before. Each walked row still takes the Redis owner claim and the
+transactional predecessor, privacy and receipt fences one at a time, so no
+owner gains concurrency. Every async row the sweep persists is owed a follow-up, the page's own rows as
+well as the walk's. The page row seeds its owner's walk. Later page rows of
+an owner already walked, and rows reached once the shared budget is spent, get
+a seed-only hand-off: one watermark read, no sibling scan, nothing persisted.
+A walk's scan for a content's persisted, not-ready siblings stops at the walk
+deadline; unscanned siblings stay durable and are rediscovered. A seed is owed only
+if the watermark shows it advanced (a partial multipart did not), or if the
+watermark cannot be read. Owed rows do not use the wake's priority
+queue. They are held (at most 256, durable either way) until the next
+follow-up discovery pass and queued behind its page, without moving its
+rotation. Serving keeps scheduling follow-ups while any are owed, and a pass whose
+queue drains on launch runs discovery at once. An overflow past the bound
+restarts follow-up discovery at the head. So owed rows are never stranded
+behind the discovery cursor, and they never jump discovered work or keep
+discovery from running. A read failure inside a walk ends it with the rows it
+already persisted still handed off. The finish page skips rows
+this sweep already assigned or finished. The log line is `event=batch_projection action=sweep_chain
+outcome=summary owners=N advanced=N`.
+
+`BATCH_PIPELINE_PROJECTION_PENDING_PAGE_ENABLED` defaults to `true` (kill
+switch: `false` restores the single mixed assignment page). The assignment page
+asks only for `pending` results, so persisted and ready receipts no longer fill
+its 100 rows with replays (1,640 `ProjectionReplay` during run 10). A second
+bounded page with its own cursor over `persisted`/`ready` results replaces
+what the mixed page did for those rows:
+- synchronous-policy rows replay assignment and finish exactly as before;
+- async-policy rows are not touched there, but seeing any of them keeps
+  follow-ups scheduled.
+
+Async follow-up discovery keeps its own mixed page and cursor unchanged. All
+three pages use the same `in` filter on the declared results composite index
+(`projection_state, committed_at, __name__`), so no index changes are needed.
+
+### Per-owner projection drain (Phase 1)
+
+The sweep-shared 30 s walk budget gave each heavy owner a shrinking share of
+each 20 s serving tick. With tens of catch-up owners on an instance, each
+owner's duty cycle collapsed. Three switches change that, all on by default.
+None relaxes ordering: the assignment transaction's predecessor, privacy,
+binding and receipt fences decide every row exactly as before.
+
+`BATCH_PIPELINE_OWNER_DRAIN_ENABLED` (kill switch; `false` restores the sweep
+owner-chain walk above with every pre-check. Read-ahead and the deferred index
+below have their own switches; all three off is the pre-drain behaviour):
+- The sweep only discovers owners. When it persists an owner's pending head
+  row, it hands the owner to this process's drain, not a budgeted walk. It
+  leaves that owner's later rows on the same page to the drain, and it skips
+  owners whose drain is already running here. An owner still waiting for a
+  drain slot keeps its one-row-per-pass page progress. The page row's own
+  follow-up hand-off is unchanged.
+- `OwnerDrains` (`utils/batch_pipeline/projection_drain.py`) keeps a FIFO of
+  owners and runs at most 8 at once per process. Each turn walks the owner's
+  chain in blocking steps of at most 15 s on `sync_executor`, until the chain
+  ends, blocks, or 120 s pass. An owner with rows left re-queues behind every
+  waiting owner. Every turn takes at least one step.
+- A drain step (and a recovery wake) holds the advisory Redis owner claim for
+  the whole step instead of taking it per row. So one owner has one walker
+  across processes, and a busy claim ends the step before any read. Firestore
+  stays the authority.
+- Rows the step reaches as the watermark's successor skip the two read-only
+  pre-check transactions (`predecessor` and the per-part check). The step's own
+  fresh read of the result row must show no receipt; a row or part that
+  already has one still replays through the check. If a receipt races in, the
+  assignment transaction replays it exactly as the check would have.
+- A recovery wake that stops at its 64-row or 30 s bound hands the owner to
+  the drain. Owed follow-ups join behind follow-up discovery, as before.
+- Log lines: `event=batch_projection action=owner_drain outcome=turn steps=
+  advanced= more= elapsed_ms=` per turn, and `action=owner_chain
+  outcome=claim_busy`.
+
+`BATCH_PIPELINE_PROJECTION_PREFETCH` (default `4`; `0` is the kill switch;
+malformed or above 8 keeps 4). A budgeted walk reads the next N rows ahead on
+`storage_executor`: their successor links, job bindings, result payloads and
+audio manifests. All of these are immutable once committed. The walk still
+reads each result row fresh, so receipt state is never taken from the
+read-ahead. A read-ahead miss or failed load falls back to the walk's own read.
+A load still running when the step's budget is spent ends the step (`more`)
+and stays queued for the next step, so a slow read never runs again inline on
+the sync slot. A drain turn keeps one read-ahead across its steps. The step
+deadline is also checked between the parts of a multipart row; a row stopped
+there resumes at its first unpersisted part on the next step. The candidate
+hint lookup starts beside context and build, after the predecessor committed,
+for the span the words predict. Its wait is capped by what is left of the step.
+It is used only when it returns a conversation for exactly the built span;
+otherwise (no match, a different span, an error or the cap) the lookup runs
+inline as before.
+
+`BATCH_PIPELINE_PROJECTION_INDEX_DEFERRED_ENABLED` (kill switch; `false`
+restores the inline index step). Budgeted walks no longer run the people-stats
+invalidation and Typesense step inside each assignment. That step re-deleted
+the canonical's whole `sync_merged_from` on every row, which made `index_ms`
+grow with donors. Walks now record the canonical and its lineage (cumulative
+`sync_merged_from` plus this commit's new donors from
+`assign_in_transaction(absorbed=...)`). `ProjectionIndex` coalesces them and
+converges each touched conversation once per flush, from durable state, through
+`conversations.index_sync_assignment`. Re-deleting the lineage once per flush
+keeps today's repair of a donor delete that failed or was lost. A flush runs
+after each drain step and on each serving tick, one flusher at a time:
+`event=batch_projection_index outcome=flushed owners= conversations= donors=
+lag_ms=`. It stays fail-open. Pending work is in memory, so a process exit
+loses it until the conversation's next deferral, as a Typesense outage does
+today. On the drain path `sync_assignment_timing` reports `index_ms=0` and
+`donors=` new donors.
+
+`python -m testing.pipeline_sim projection-drain` runs the real walk, sweep and
+drain on virtual time with modelled run-14 latencies. One 1,200-row owner:
+today's sweep walk 36.7 rows/min, drain with no cuts 44.4, Phase 1 118.2. Twelve
+300-row owners on one instance: 3.0 rows/min each today, 61.5-99.4 with the drain.
+Every mode makes the same assignment calls and ends with the same index. The
+model has no Firestore hot-document contention, so live rates stay below these.
+
+### Assignment sub-phase timing
+
+With `BATCH_PIPELINE_PROJECTION_TIMING_ENABLED`, projection also times
+`load_result`, `manifest`, `context`, `build` and `candidate` (the
+`get_closest_conversation_to_timestamps` query) as `batch_projection_phase`
+phases. `assign_sync_conversation(timing=True)` emits one line per call:
+
+`event=sync_assignment_timing outcome=completed|error attempts= live_overlap_ms=
+fence_ms= plan_ms= encode_ms= persist_ms= body_ms= commit_ms= retry_ms=
+index_ms= donors= total_ms= [exception_type=]`
+
+- `attempts` counts transaction bodies, including SDK commit retries, the
+  outer contention retry and size-limit retries.
+- `plan_ms` is the in-transaction planner excluding `encode_ms`. Lock waits on
+  transactional reads show up in `fence_ms` or `plan_ms`.
+- `commit_ms` is the final commit after the last body. `retry_ms` is the rest
+  of the transaction time: failed commits, rollbacks and backoff.
+- `index_ms` covers the post-commit people-stats invalidation and the Typesense
+  upsert plus one delete per `sync_merged_from` donor. `donors` counts those
+  donors.
+
+Fields hold durations, counts and static tokens only, never IDs. Legacy sync
+callers do not pass `timing` and log nothing new.
 
 ## Per-unit policy snapshots
 

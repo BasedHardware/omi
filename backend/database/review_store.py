@@ -35,6 +35,10 @@ class ReviewConflict(ValueError):
     pass
 
 
+class ReviewStale(ReviewConflict):
+    """The offered question no longer applies; retrying cannot repair it."""
+
+
 def client():
     return get_firestore_client()
 
@@ -280,7 +284,7 @@ def begin_answer(uid: str, item_id: str, answer_hash: str, now: datetime | None 
 
 
 def finish_answer(
-    uid: str, item_id: str, *, applied: bool, uncertain: bool, offered_version: str
+    uid: str, item_id: str, *, applied: bool, uncertain: bool, offered_version: str, stale: bool = False
 ) -> ReviewAnswerReceipt:
     ref = user(uid).collection('review_answers').document(safe_id(item_id))
 
@@ -294,15 +298,20 @@ def finish_answer(
 
         proposal_ref = None
         proposal = None
-        if item_id.startswith(('same_person:', 'spelling:', 'agent_proposal:')) and not uncertain:
+        if (stale or item_id.startswith(('same_person:', 'spelling:', 'agent_proposal:'))) and not uncertain:
             proposal_ref = user(uid).collection('review_proposals').document(safe_id(item_id))
             proposal = decode_doc(uid, proposal_ref.get(transaction=tx).to_dict())
 
+        budget_ref = user(uid).collection('review_attention').document(answer['day']) if stale else None
+        budget = (budget_ref.get(transaction=tx).to_dict() or {}) if budget_ref is not None else {}
+
         tx.update(ref, {'state': 'uncertain' if uncertain else 'answered', 'applied': applied})
+        if budget_ref is not None:
+            tx.set(budget_ref, {'used': max(0, budget.get('used', 0) - 1)}, merge=True)
         # A producer may refresh the stable item id while this answer is
         # applying. Resolve only the exact evidence version the user saw.
         if proposal_ref is not None and proposal and proposal.get('evidence_version') == offered_version:
-            tx.update(proposal_ref, {'status': 'resolved'})
+            tx.update(proposal_ref, {'status': 'resolved', **({'resolution': 'stale'} if stale else {})})
 
     finish(client().transaction())
     return ReviewAnswerReceipt(item_id=item_id, applied=applied, remaining_today=remaining_today(uid))

@@ -147,3 +147,24 @@ registry-checked ops_kill allowlist also includes #22514's live `PARAKEET_WINDOW
 ignores the additive Redis namespace and state fields; sessions without a usable
 record fall back to deterministic resolution. No env or deployment changes are
 part of E2; the lead owns the canary/deploy train.
+
+## Generated policy invariants (E3)
+
+`generator.py` builds immutable `BatchUnitPolicy` and `ListenSessionPolicy`
+objects directly. The policy modules own the relationships that constrain
+generation, including nested batch/live-STT retirement and listen routing,
+allocation and demand dependencies. `covering_array.py` creates a seeded,
+constrained all-pairs array without a third-party dependency.
+
+The normal backend unit test runs a fixed-seed slice through
+`testing.pipeline_sim` with policy objects, then checks owner result ordering,
+single paid recovery, privacy/deletion fences, stale-target spend and equality
+between the used and recorded policy. Its listen harness reuses the E2 Redis
+boundary to prove reconnect stability and that `policy_source=fallback` appears
+only when Redis fails. The `policy_window` characterization is also replayed
+from its stored policy part and policy ID.
+
+Run the complete matrix from `backend/` with
+`python scripts/policy_pairwise_sweep.py --seed 1`. The script prints factor,
+feasible-pair, row, simulation, spend and runtime totals. Scheduling that sweep
+nightly remains pending David; E3 adds no workflow.

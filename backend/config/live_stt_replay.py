@@ -37,6 +37,27 @@ def nonwindow_replay_settle_enabled() -> bool:
     return os.getenv(NONWINDOW_REPLAY_SETTLE_ENV, 'true').strip().lower() not in {'false', '0', 'off'}
 
 
+SESSION_LOCAL_EXCLUSION_RELEASE_ENV = 'LISTEN_SESSION_LOCAL_EXCLUSION_RELEASE_ENABLED'
+NONWINDOW_EMITTED_TEXT_ACCOUNTING_ENV = 'LISTEN_NONWINDOW_EMITTED_TEXT_ACCOUNTING_ENABLED'
+
+
+def _default_on(name: str) -> bool:
+    return os.getenv(name, 'true').strip().lower() not in {'false', '0', 'off'}
+
+
+def session_local_exclusion_release_enabled() -> bool:
+    """Kill switch, default on: a provider that left the session only for a
+    session-local replay overflow becomes selectable again once a successor
+    is adopted, instead of staying excluded for the rest of the session."""
+    return _default_on(SESSION_LOCAL_EXCLUSION_RELEASE_ENV)
+
+
+def nonwindow_emitted_text_accounting_enabled() -> bool:
+    """Kill switch, default on: final Soniox text, placed or not, accounts
+    tracked speech sends older than the settle grace."""
+    return _default_on(NONWINDOW_EMITTED_TEXT_ACCOUNTING_ENV)
+
+
 def parse_replay_limits(value: Any) -> ReplayLimits:
     """Validate an optional registry ``replay`` mapping; unknown fields reject."""
     if value is None:

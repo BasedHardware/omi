@@ -86,6 +86,26 @@ fixture is absent here, so this is a minimal virtual-time equivalent.
 - Recovery provider latency is paid before the synchronous `recover()` call, so `running` has zero
   duration.
 
+## Owner-chain projection throughput (`projection-drain`)
+
+```bash
+python -m testing.pipeline_sim projection-drain --rows 1200            # one heavy owner, every mode
+python -m testing.pipeline_sim projection-drain --rows 300 --owners 12 # many heavy owners, one instance
+```
+
+Unlike the scenarios above, `projection_drain.py` runs the **real** `Projector`
+walk, sweep and `OwnerDrains` scheduler. The modelled parts are the result log,
+the owner claim, sync assignment (sessions of contiguous rows, with bridges
+that absorb a donor) and the Typesense index. Every store, GCS, Typesense and
+transaction call charges a fixed run-14 p50 latency (`LATENCY`) to the lane
+that made it. A read-ahead or parallel lookup is its own lane, so overlap is
+modelled. Firestore hot-document contention and retries are not. Modes:
+`sweep_walk` (today), `drain_only` (scheduling only) and `drain` (Phase 1). It
+reports rows/min per owner, pre-check transactions and result loads. The
+assignment calls (candidate hints and new donors included) and the final index
+must match `sweep_walk` exactly. `tests/unit/test_pipeline_sim_projection_drain.py`
+pins this; its 1.2k-row and many-owner cases are marked `slow`.
+
 ## Characterization goldens
 
 `trace.py` turns one seeded run into a normalized trace of what a caller or operator could observe.
@@ -176,3 +196,17 @@ modeled paid calls (at most one per segment), recover 131 pieces and retain one
 `GATE_FAIL unrecovered_quarantine`; clearing the scheduling tail does not turn
 unrecovered audio into a successful gate. No shipping flag is pinned to the old
 rate to preserve a stale expectation.
+
+### Generated policy sweep (E3)
+
+`tests/unit/test_pipeline_sim_policy_invariants.py` runs a fixed-seed pairwise
+slice with injected `BatchUnitPolicy` and `ListenSessionPolicy` objects. The
+suite checks the durable per-owner result chain, no duplicate paid calls,
+privacy/deletion and stale-target fences, recorded-policy equality, and listen
+arm stability across reconnect. It also seeds a double vendor charge and
+asserts the invariant rejects it. The E1 `policy_window` golden is replayed
+from its recorded policy ID and stage inputs.
+
+Run all pairwise rows with `python scripts/policy_pairwise_sweep.py --seed 1`.
+The script prints array size, feasible and covered pair counts, simulated rows,
+and elapsed time. Nightly scheduling is pending David; no workflow is added.

@@ -628,13 +628,10 @@ export function retentionFrames(
 function mrrTotal(day: Record<string, number> | undefined) {
   return day ? Object.values(day).reduce((s, v) => s + v, 0) : null;
 }
-/** FinOps book at or just before a day (snapshots are daily, may lag a day). */
+/** FinOps book snapshotted on a day (by `snapshot_date`, as the MRR chart and
+ * margin read it). A day without a snapshot is a gap, never a neighbour's book. */
 function finopsMrr(f: FinopsHistory | undefined, day: Date) {
-  for (const back of [0, 1]) {
-    const v = mrrTotal(f?.mrr[isoDay(shiftDay(day, -back))]);
-    if (v != null) return v;
-  }
-  return null;
+  return mrrTotal(f?.mrr[isoDay(day)]);
 }
 
 export function revenueFrames(
@@ -668,7 +665,7 @@ export function revenueFrames(
   const arpmau: Row[] = [];
   for (let k = UNIT_DAYS - 1; k >= 0; k--) {
     const mau = k === 0 ? mauNow?.value ?? null : mauAt(legs, k) ?? null;
-    const book = finopsMrr(legs.finops, shiftDay(end, -k));
+    const book = finopsMrr(legs.finops, shiftDay(end, -k - 1));
     const finopsArp = mau && book != null ? book / mau : null;
     const value = k === 0 && arpLive ? arpLive.value : finopsArp;
     if (value == null) continue;
@@ -721,7 +718,7 @@ export function healthFrames(
     (net?.trend || []).map((t) => [t.date, t.value])
   );
   const cost = days.slice(-60).map((d) => {
-    const book = finopsMrr(legs.finops, shiftDay(new Date(ts(d.date)), 1));
+    const book = finopsMrr(legs.finops, new Date(ts(d.date)));
     return {
       date: ts(d.date),
       gcp: d.gcp,
@@ -898,6 +895,13 @@ const HEADLINE: [string, MetricId][] = [
   ["hardware", "revenue.hardware_usd_week"],
   ["netCost", "cost.net_day"],
 ];
+/** Every snapshot metric a headline stat draws (live MRR, per-user stats too). */
+const HEADLINE_IDS = new Set<string>([
+  ...HEADLINE.map(([, id]) => id),
+  "revenue.mrr",
+  "revenue.arpmau",
+  "cost.per_mau_month",
+]);
 /** Sourceless wall metrics: one-line TV labels (contract audit 2026-10-15); the
  * route's full classified reason stays in the hidden `reason` column. */
 export const COVERAGE_GAPS: [MetricId, string, string][] = [
@@ -1567,7 +1571,9 @@ export async function seriesPayload(
   if (wall && wall.metrics.every((m) => m.value == null)) {
     refreshing = true;
     gaps.snapshot = wall.refreshError || "Snapshot refresh running";
-  } else if (wall?.refreshing) refreshing = true;
+  } else if (wall?.refreshing || wall?.retryableFailures) refreshing = true;
+  // A finished partial snapshot is retried in 30s: keep it unsettled so the
+  // proxy does not pin the gap (or a retained stat) for its settled TTL.
   const frames = assembleSeries(name, legs, wall, now);
   let status: SeriesPayload["status"] = null;
   if (name === "headline") {
@@ -1583,7 +1589,17 @@ export async function seriesPayload(
     );
     // The TV's one freshness line (no diagnostics table on the wall); the
     // rollup detail below stays in the API's status and gaps.
-    frames.through = [{ text: `Data through ${status.text}` }];
+    // A headline stat the cache kept from an earlier read is not current.
+    const retained = (wall?.metrics || []).filter(
+      (m) => m.retainedSince && HEADLINE_IDS.has(m.id)
+    ).length;
+    frames.through = [
+      {
+        text: `Data through ${status.text}${
+          retained ? ` · ${retained} stat${retained > 1 ? "s" : ""} stale` : ""
+        }`,
+      },
+    ];
     const rollup = await sources
       .rollupStatus?.()
       .catch(() => ({ through: null, reason: "unavailable" }));
