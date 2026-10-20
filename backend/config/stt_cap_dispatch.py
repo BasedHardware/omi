@@ -1,8 +1,9 @@
-"""Environment-owned funded dispatch rollout; scope is evaluated at each call."""
+"""Funded dispatch rollout; runtime cohort resolution is injected by the host."""
 
 import logging
 import os
 from threading import Lock
+from typing import Callable
 
 from config.rollout_cohorts import cohort_admits
 
@@ -13,6 +14,17 @@ _BATCH_LANE_READY = False
 _logger = logging.getLogger(__name__)
 _batch_warning_lock = Lock()
 _batch_warning_emitted = False
+_cohort_resolver: Callable[[], str] | None = None
+
+
+def configure_cohort_resolver(resolver: Callable[[], str]) -> None:
+    global _cohort_resolver
+    _cohort_resolver = resolver
+
+
+def cohort_tokens() -> str:
+    """Pure env fallback before composition; configured resolvers never wait for IO."""
+    return _cohort_resolver() if _cohort_resolver is not None else os.getenv('STT_CAP_DISPATCH_COHORT', '')
 
 
 def _warn_batch_not_ready() -> None:
@@ -50,7 +62,7 @@ def selected(uid: str, lane: str) -> bool:
         lane in LANES
         and (lane != 'batch' or _BATCH_LANE_READY)
         and lane in lanes
-        and cohort_admits(uid, os.getenv('STT_CAP_DISPATCH_COHORT', ''))
+        and cohort_admits(uid, cohort_tokens())
     )
 
 
