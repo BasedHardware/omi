@@ -301,3 +301,18 @@ def test_worker_post_render_refuses_redefinition_and_inline_mappings(tmp_path):
     bad.write_text("X_PW:\n  value: inline\n")
     with pytest.raises(SystemExit):
         render._env_entries(bad, [])
+
+
+def test_worker_post_render_sets_on_demand_replicas():
+    render = _post_render_module()
+    entries = render._env_entries(None, [])
+    (doc,) = render.patch([_worker_doc()], entries, replicas=0)
+    assert doc['spec']['replicas'] == 0
+    (doc,) = render.patch([_worker_doc()], entries, replicas=2)
+    assert doc['spec']['replicas'] == 2
+    (doc,) = render.patch([_worker_doc()], entries)
+    assert 'replicas' not in doc['spec']
+    with pytest.raises(SystemExit):
+        render.patch([_worker_doc()], entries, replicas=-1)
+    with pytest.raises(SystemExit):
+        render.patch([{'kind': 'HorizontalPodAutoscaler'}, _worker_doc()], entries, replicas=0)

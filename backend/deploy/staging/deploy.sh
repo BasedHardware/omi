@@ -13,6 +13,8 @@
 #     --no-gmp  skip the Managed Prometheus 'collector' sidecar (default: attached like prod).
 #     --worker-probe FILE     run the worker through a staging-only measurement wrapper (ConfigMap
 #                             staging-asrctx-probe from FILE); observation only.
+#     --worker-replicas N     batch worker replicas to apply (default 0: GPUs on demand, parakeet-pool
+#                             min 0). Replay windows pass 2, or scale up before traffic and back to 0 after.
 #   Committed worker config: backend/deploy/staging/worker_env.yaml (plain values or secretKeyRef).
 #   backend/deploy/staging/deploy.sh --teardown        # delete the *-staging Cloud Run services and the batch worker
 #
@@ -84,6 +86,8 @@ OVERRIDES=()
 WARM=()
 WORKER_SETS=()
 WORKER_PROBE=""
+# GPU on demand (approved 2026-10-20): the worker idles at 0 so parakeet-pool's L4s scale to 0.
+WORKER_REPLICAS=0
 GMP=1
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -102,6 +106,11 @@ while [[ $# -gt 0 ]]; do
       WORKER_SETS+=("$2")
       shift
       ;;
+    --worker-replicas)
+      [[ "$2" =~ ^[0-2]$ ]] || die "--worker-replicas expects 0..2 (parakeet-pool: max 1 L4 per zone, 2 zones)"
+      WORKER_REPLICAS="$2"
+      shift
+      ;;
     --worker-probe)
       [[ -f "$2" ]] || die "--worker-probe file not found: $2"
       WORKER_PROBE="$(cd "$(dirname "$2")" && pwd)/$(basename "$2")"
@@ -117,7 +126,7 @@ while [[ $# -gt 0 ]]; do
     --break-lock) BREAK_LOCK=1 ;;
     --teardown) TEARDOWN=1 ;;
     -h | --help)
-      sed -n '2,24p' "$0"
+      sed -n '2,26p' "$0"
       exit 0
       ;;
     -*)
@@ -363,8 +372,8 @@ if [[ "$WITH_WORKER" == true ]]; then
   WORKER_IMAGE="${IMAGE_REPO}/batch-pipeline-worker:${SHA}"
   WORKER_DIGEST="$(image_digest batch-pipeline-worker)"
   [[ "$WORKER_DIGEST" == sha256:* ]] || die "worker image $WORKER_IMAGE not found (build with --with-worker)"
-  log "worker: render + apply staging-batch-pipeline-worker @ ${WORKER_DIGEST:0:19}"
-  post_args=(--env-file "$WORK/src/backend/deploy/staging/worker_env.yaml")
+  log "worker: render + apply staging-batch-pipeline-worker @ ${WORKER_DIGEST:0:19} replicas=${WORKER_REPLICAS}"
+  post_args=(--env-file "$WORK/src/backend/deploy/staging/worker_env.yaml" --replicas "$WORKER_REPLICAS")
   for item in "${WORKER_SETS[@]}"; do post_args+=(--set "$item"); done
   if [[ -n "$WORKER_PROBE" ]]; then
     kubectl_staging create configmap staging-asrctx-probe --from-file="asrctx_probe.py=${WORKER_PROBE}" \

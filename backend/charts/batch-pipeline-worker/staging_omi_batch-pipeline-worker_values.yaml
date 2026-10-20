@@ -15,7 +15,9 @@ namespace: batch_pipeline_prod
 # k8s Secret in namespace staging with ENCRYPTION_SECRET and HUGGINGFACE_TOKEN (bootstrap_iam.sh).
 secretName: staging-batch-worker
 # Prod runs 2 replicas, one L4 each. Staging uses dev's two idle parakeet-pool L4s
-# (us-central1-a and -b) until lane 3/S7a provide others; never engine-pool.
+# (us-central1-a and -b) until lane 3/S7a provide others; never engine-pool. replicaCount is the
+# replay-window size: deploy.sh applies --worker-replicas (default 0) because staging GPUs are on
+# demand (2026-10-20; parakeet-pool autoscaling min 0), so scale up before replay traffic.
 replicaCount: 2
 autoscaling:
   enabled: false
