@@ -797,7 +797,7 @@ def test_recovery_batch_config_is_bounded(monkeypatch, value, expected):
     assert recovery_dispatch_batch_size() == expected
 
 
-def test_default_sweep_dispatches_sixteen_and_resumes_cursor(setup, monkeypatch):
+def test_default_sweep_dispatches_sixteen_resumes_cursor_and_wraps_after_short_page(setup, monkeypatch):
     from utils.batch_pipeline import quarantine_recovery as module
 
     _, _, binding, _, _, recovery = setup
@@ -819,8 +819,63 @@ def test_default_sweep_dispatches_sixteen_and_resumes_cursor(setup, monkeypatch)
     assert recovery.sweep() == {'queued': 1}
     assert recovery.dispatch.call_count == 33
     assert query.call_count == 3
-    assert recovery.sweep() == {}
+    # The short page ended the scan: the next pass restarts at the first
+    # candidate instead of spending a whole pass on an empty page.
     assert recovery.sweep() == {'queued': 16}
+    assert query.call_args.kwargs['after_id'] is None
+    assert query.call_count == 4
+
+
+def test_short_page_restarts_scan_so_new_quarantines_dispatch_next_pass(setup, monkeypatch):
+    from utils.batch_pipeline import quarantine_recovery as module
+
+    _, _, binding, _, _, recovery = setup
+    monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_ALL_ADMITTED', 'true')
+    candidates = [('seg-m', binding.owner_id)]
+    monkeypatch.setattr(
+        module, 'load_stage_policy', lambda *args: ({}, resolve_stage_policy(binding.owner_id, 'recovery'))
+    )
+    monkeypatch.setattr(
+        module,
+        'recovery_candidates',
+        lambda client, namespace, owner, limit, *, after_id: [
+            (sid, uid) for sid, uid in sorted(candidates) if after_id is None or sid > after_id
+        ][:limit],
+    )
+    recovery.dispatch = Mock(return_value='queued')
+    assert recovery.sweep() == {'queued': 1}
+    candidates.append(('seg-a', binding.owner_id))  # A new quarantine sorting before the last ID.
+    assert recovery.sweep() == {'queued': 2}
+    assert [call.args[0] for call in recovery.dispatch.call_args_list] == ['seg-m', 'seg-a', 'seg-m']
+
+
+def test_overlapping_sweeps_on_one_instance_do_not_double_dispatch(setup, monkeypatch):
+    from utils.batch_pipeline import quarantine_recovery as module
+
+    _, _, binding, _, _, recovery = setup
+    query = Mock(return_value=[])
+    monkeypatch.setattr(module, 'recovery_candidates', query)
+    assert recovery._sweeping.acquire(blocking=False)  # The serving pass is mid-scan.
+    try:
+        assert recovery.sweep() == {}
+        query.assert_not_called()
+    finally:
+        recovery._sweeping.release()
+    assert recovery.sweep() == {}
+    query.assert_called_once()
+
+
+@pytest.mark.parametrize(
+    'value,expected',
+    [(None, 5.0), ('off', 0.0), ('0', 0.0), ('-1', 0.0), ('2', 2.0), ('0.5', 5.0), ('61', 5.0), ('x', 5.0)],
+)
+def test_recovery_dispatch_interval_is_bounded(monkeypatch, value, expected):
+    from config.batch_pipeline import recovery_dispatch_interval_seconds
+
+    monkeypatch.delenv('BATCH_PIPELINE_RECOVERY_DISPATCH_INTERVAL_SECONDS', raising=False)
+    if value is not None:
+        monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_DISPATCH_INTERVAL_SECONDS', value)
+    assert recovery_dispatch_interval_seconds() == expected
 
 
 def test_sweep_bounds_held_errors_and_advances_global_cursor(setup, monkeypatch):
@@ -1100,3 +1155,66 @@ def test_extend_never_overrides_a_concurrent_held_rearm(setup, monkeypatch):
     assert row(client)['recovery_wake']['wake_until'] == 821.0
     assert recovery.protocol.extend_wake('bad', token, 1, 701.0, 600) is False
     assert row(client)['recovery_wake']['wake_until'] == 821.0
+
+
+def _freeze_disabled_snapshot(monkeypatch, recovery, binding):
+    """Admit the unit's recovery part while recovery is off for its owner."""
+    monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST', '')
+    assert recovery.recover('bad', binding.owner_id) == 'disabled'
+
+
+def test_disabled_snapshot_with_no_paid_intent_refreshes_once_enabled(setup, monkeypatch):
+    client, _, binding, _, stt, recovery = setup
+    monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_POLICY_REFRESH_ENABLED', 'false')
+    _freeze_disabled_snapshot(monkeypatch, recovery, binding)
+    assert row(client)['policy_parts']['recovery']['recovery_enabled'] is False
+    monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_ALL_ADMITTED', 'true')
+    # Kill switch off: the frozen verdict stands even though recovery is now on.
+    assert recovery.recover('bad', binding.owner_id) == 'disabled'
+    stt.assert_not_called()
+    monkeypatch.delenv('BATCH_PIPELINE_RECOVERY_POLICY_REFRESH_ENABLED')
+    assert recovery.recover('bad', binding.owner_id) == 'recovered'
+    assert stt.call_count == 1
+    assert row(client)['policy_parts']['recovery']['recovery_enabled'] is True
+    assert row(client)['policy_part_sources']['recovery'] == 'refreshed'
+    assert recovery.recover('bad', binding.owner_id) == 'held'
+    assert stt.call_count == 1
+
+
+def test_refresh_never_adopts_a_still_disabled_setting(setup, monkeypatch):
+    client, _, binding, artifacts, stt, recovery = setup
+    _freeze_disabled_snapshot(monkeypatch, recovery, binding)
+    recorded = dict(row(client)['policy_parts']['recovery'])
+    assert recovery.recover('bad', binding.owner_id) == 'disabled'
+    assert row(client)['policy_parts']['recovery'] == recorded
+    assert 'policy_part_sources' not in row(client) or row(client)['policy_part_sources'].get('recovery') != 'refreshed'
+    stt.assert_not_called()
+    artifacts.fetch_audio.assert_not_called()
+
+
+@pytest.mark.parametrize('change', ['intent', 'failed_held', 'foreign'])
+def test_refresh_never_touches_spent_or_foreign_units(setup, monkeypatch, change):
+    from database.batch_pipeline_policy import refresh_disabled_recovery
+
+    client, store, binding, _, stt, recovery = setup
+    _freeze_disabled_snapshot(monkeypatch, recovery, binding)
+    if change == 'intent':
+        row(client)['recovery'] = {'token': 'spent', 'epoch': 1, 'privacy_generation': 0}
+    elif change == 'failed_held':
+        row(client)['recovery_state'] = 'failed_held'
+    monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_ALL_ADMITTED', 'true')
+    owner = 'other-owner' if change == 'foreign' else binding.owner_id
+    before = dict(row(client))
+    assert refresh_disabled_recovery(store, 'bad', owner) is None
+    assert row(client) == before
+    stt.assert_not_called()
+
+
+def test_dispatch_refreshes_disabled_snapshot_before_enqueue(setup, monkeypatch):
+    client, _, binding, _, stt, recovery = setup
+    _freeze_disabled_snapshot(monkeypatch, recovery, binding)
+    monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST', binding.owner_id)
+    monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_TASK_AUDIENCE', '')
+    outcome = recovery.dispatch('bad', binding.owner_id)
+    assert outcome != 'disabled'
+    assert row(client)['policy_parts']['recovery']['recovery_enabled'] is True

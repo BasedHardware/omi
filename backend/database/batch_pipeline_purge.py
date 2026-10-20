@@ -204,15 +204,20 @@ def _purge_owner_fairness(client: Any, namespace: str, key: str) -> None:
         for queue_key in queue_keys:
             transaction.delete(client.collection(f'{namespace}_queues').document(queue_key))
         transaction.delete(client.collection(f'{namespace}_owners').document(key))
+        transaction.delete(client.collection(f'{namespace}_merge_holds').document(key))
 
     remove(client.transaction())
 
 
 def _write_erased_result(transaction: Any, result_ref: Any, result: dict, owner_ref: Any, owner: dict) -> None:
-    """Retain only the ordering edge; no body, source identity, or reference."""
+    """Retain only the ordering edge; no body, source identity, or reference.
+
+    ``log_sequence`` (a log position) keeps an erased projection watermark
+    usable for the merge's catch-up depth.
+    """
     erased = {
         field: result[field]
-        for field in ('segment_id', 'owner_key', 'capture_at', 'protocol_version')
+        for field in ('segment_id', 'owner_key', 'capture_at', 'protocol_version', 'log_sequence')
         if field in result
     }
     erased.update(projection_state='erased', previous_segment_id=result.get('previous_segment_id'))

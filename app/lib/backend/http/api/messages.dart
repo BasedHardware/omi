@@ -7,9 +7,11 @@ import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/schema/gen/messages_wire.g.dart' as wire;
 import 'package:omi/backend/schema/message.dart';
 import 'package:omi/env/env.dart';
+import 'package:omi/services/chat_video_sampler.dart';
 import 'package:omi/services/device_tools/device_tool_dispatcher.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/string_utils.dart';
+import 'package:path/path.dart' as p;
 
 /// Hard-scope payload for POST /v2/messages `context` (#4515).
 class ChatPageContext {
@@ -333,11 +335,74 @@ Stream<ServerMessageChunk> sendVoiceMessageStreamServer(List<File> files,
   }
 }
 
-Future<List<MessageFile>?> uploadFilesServer(List<File> files, {String? appId}) async {
-  var url = '${Env.apiBaseUrl}v2/files?app_id=$appId';
+String _filesUrl(String path, String? appId) {
   if (appId == null || appId.isEmpty || appId == 'null' || appId == 'no_selected') {
-    url = '${Env.apiBaseUrl}v2/files';
+    return '${Env.apiBaseUrl}$path';
   }
+  return '${Env.apiBaseUrl}$path?app_id=$appId';
+}
+
+/// Uploads chat attachments; one result per file, in the order given.
+///
+/// Videos are sampled on device (frames + audio → `/v2/files/video`) so the clip itself is
+/// not uploaded; when the platform can't sample one, the clip goes to `/v2/files` and the
+/// server samples it.
+Future<List<MessageFile>?> uploadFilesServer(List<File> files, {String? appId}) async {
+  if (!files.any((f) => isChatVideo(f.path))) return _uploadFilesBatch(files, appId: appId);
+  final results = List<MessageFile?>.filled(files.length, null);
+  final others = [
+    for (var i = 0; i < files.length; i++)
+      if (!isChatVideo(files[i].path)) i
+  ];
+  // The quick batch first: if it fails, no video has been stored yet.
+  if (others.isNotEmpty) {
+    final uploaded = await _uploadFilesBatch([for (final i in others) files[i]], appId: appId);
+    if (uploaded == null || uploaded.length != others.length) {
+      throw Exception('Failed to upload file');
+    }
+    for (var k = 0; k < others.length; k++) {
+      results[others[k]] = uploaded[k];
+    }
+  }
+  for (var i = 0; i < files.length; i++) {
+    if (results[i] == null) results[i] = await uploadVideoServer(files[i], appId: appId);
+  }
+  return results.cast<MessageFile>();
+}
+
+Future<MessageFile> uploadVideoServer(File video, {String? appId}) async {
+  final sampled = await ChatVideoSampler.sample(video);
+  if (sampled == null) {
+    final whole = await _uploadFilesBatch([video], appId: appId);
+    if (whole == null || whole.isEmpty) throw Exception('Failed to upload video');
+    return whole.first;
+  }
+  try {
+    final response = await makeMultipartApiCall(
+      url: _filesUrl('v2/files/video', appId),
+      files: sampled.frames,
+      fileFieldName: 'frames',
+      fields: {
+        'frame_times': jsonEncode(sampled.times),
+        'duration_seconds': sampled.duration.toString(),
+        'name': p.basename(video.path),
+      },
+      namedFiles: {if (sampled.audio != null) 'audio': sampled.audio!},
+    );
+    if (response.statusCode != 200) {
+      Logger.debug('Failed to upload video frames. Status code: ${response.statusCode}');
+      throw Exception('Failed to upload video. Status code: ${response.statusCode}');
+    }
+    return (jsonDecode(response.body) as List<dynamic>)
+        .map((file) => MessageFile.fromGenerated(wire.GeneratedFileChat.fromJson(file as Map<String, dynamic>)))
+        .first;
+  } finally {
+    await sampled.dispose();
+  }
+}
+
+Future<List<MessageFile>?> _uploadFilesBatch(List<File> files, {String? appId}) async {
+  final url = _filesUrl('v2/files', appId);
 
   try {
     var response = await makeMultipartApiCall(url: url, files: files);

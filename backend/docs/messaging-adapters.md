@@ -65,6 +65,11 @@ accepts only HTTPS `cdn.linqapp.com`. Redirects and credentials in URLs fail. Fi
 bounded at 20 MB. Voice bytes enter Omi's existing prerecorded STT before the turn.
 Photos/documents enter `FileChatTool.upload` and the existing per-user chat file collection;
 file IDs join the channel session so `search_files_tool` can find them.
+Videos (including Telegram video notes) are read as stills plus speech, in parallel
+(`utils/media/video_frames.py`): up to six distinct frames become one numbered contact
+sheet stored as the chat file, every sampled frame is kept in a filmstrip for
+`search_files_tool(start_seconds=, end_seconds=)`, and the clip itself is not stored.
+A muted clip still answers from its frames; a picture-less clip falls back to its transcript.
 
 Outbound files are looked up under the current principal UID; metadata and size must match.
 A model-supplied path or URL is never accepted. Telegram chooses document/photo/voice.

@@ -377,6 +377,16 @@ void main() {
       expect(find.text('Transcribing…'), findsOneWidget, reason: 'the recording only, not the job again');
     });
 
+    testWidgets('a refused recording does not hide a server sync job', (tester) async {
+      final store = await serverWork([
+        const PendingWorkItem(id: 'sync:j', kind: 'sync_job', state: 'transcribing', conversationIds: []),
+      ]);
+      await pumpWithServerWork(tester, _FakeSync(wals: [_wal('too-old', 3, WalStatus.outsideRecoveryWindow)]), store);
+
+      expect(find.text('1 recording need attention'), findsOneWidget);
+      expect(find.text('Transcribing…'), findsOneWidget, reason: 'nothing on the phone is uploading the job');
+    });
+
     testWidgets('shows how close each recording is to done', (tester) async {
       final device = _wal('device', 2, WalStatus.miss)..storage = WalStorage.sdcard;
       await _pumpPage(tester, _FakeSync(wals: [_wal('processing', 4, WalStatus.uploaded), device]));

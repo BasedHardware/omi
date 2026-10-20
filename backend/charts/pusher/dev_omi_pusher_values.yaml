@@ -262,8 +262,6 @@ env:
     value: "true"
   - name: AUDIO_TIMELINE_SPANS
     value: "false"
-  - name: LIVE_SPEAKER_SPAN_RESOLUTION
-    value: "false"
   - name: LIVE_CAPTURE_WINDOW_RETENTION
     value: 'false'
   - name: LIVE_CAPTURE_WINDOW_STRICT_PROJECTION

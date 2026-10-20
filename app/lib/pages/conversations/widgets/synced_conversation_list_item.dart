@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';
 
+import 'package:omi/utils/conversations/conversation_title.dart';
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
@@ -88,7 +89,7 @@ class _SyncedConversationListItemState extends State<SyncedConversationListItem>
                               maxLines: 1,
                             )
                           : Text(
-                              conversation.structured.title.decodeString,
+                              presentableConversationTitleOrFallback(conversation, context.l10n),
                               style: Theme.of(context).textTheme.titleLarge,
                               maxLines: 1,
                             ),

@@ -793,12 +793,15 @@ class CaptureController extends ChangeNotifier
 
   /// Elapsed seconds of the *current* recording for the capture-card timer:
   /// frozen while muted, and reset on each cut (manual or the 15-min rotation).
+  ///
+  /// Read-only: the freeze point is stamped by the mute transition itself
+  /// (`_setCaptureMuted`, the cut/finalize handlers, streaming start). Writing
+  /// it from here would let a `build()` that runs between a mute landing and
+  /// the next recording pin a timestamp that then shifts that recording's
+  /// timer, because every transition assigns with `??=`.
   int? get offlineRecordingElapsedSeconds {
     if (_offlineSessionStartSeconds == 0) return null;
-    if (offlineMuted && _offlineMuteStartedAt == null) {
-      _offlineMuteStartedAt = _nowSeconds;
-    }
-    final end = _offlineMuteStartedAt ?? (_now().millisecondsSinceEpoch ~/ 1000);
+    final end = _offlineMuteStartedAt ?? _nowSeconds;
     final secs = end - _offlineSessionStartSeconds;
     return secs < 0 ? 0 : secs;
   }
