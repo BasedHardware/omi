@@ -129,6 +129,36 @@ def test_operator_reuses_a_pinned_policy_without_server_flags(setup, monkeypatch
     alternate.assert_called_once()
 
 
+@pytest.mark.parametrize('server_flags', [None, SERVER])
+def test_operator_copies_a_stored_sibling_part_without_resolving(setup, monkeypatch, legacy_dependencies, server_flags):
+    client, store, *_ = enabled(setup, monkeypatch, legacy_dependencies)
+    laptop_env(monkeypatch, enabled_locally=True)
+    stored = {**SERVER, 'K_SERVICE': 'anchor-serving-role'}
+    from config.policy import resolve_stage_policy
+
+    pinned = resolve_stage_policy(OWNER, 'recovery', flags=stored).to_dict()
+    sibling = client.rows[('batch_pipeline_prod_jobs', 'good')]
+    sibling.update(policy_parts={'recovery': pinned}, policy_part_sources={'recovery': 'fallback'})
+    row(client)['projection_binding']['segment_ids'] = ['good', 'bad']
+    unpinned(client)
+    _, policy = load_stage_policy(store, 'bad', 'recovery', server_flags=server_flags)
+    assert policy.to_dict() == pinned and policy.source_role == 'anchor-serving-role'
+    job = row(client)
+    assert job['policy_parts']['recovery'] == pinned
+    assert job['policy_part_sources']['recovery'] == 'fallback'
+    assert client.rows[('batch_pipeline_prod_jobs', 'good')]['policy_parts']['recovery'] == pinned
+
+
+def test_inherited_recovery_prepare_uses_the_operator_choice(setup, monkeypatch, legacy_dependencies):
+    client, store, binding, *_ = enabled(setup, monkeypatch, legacy_dependencies)
+    laptop_env(monkeypatch, enabled_locally=True)
+    unpinned(client)
+    before = deepcopy(client.rows)
+    with pytest.raises(UnpinnedPolicyRefused):
+        SilenceDispositionStore(store, server_flags=None).prepare('bad', binding.owner_id, 100)
+    assert client.rows == before
+
+
 def test_serving_path_still_resolves_its_own_environment(setup, monkeypatch, legacy_dependencies):
     client, store, *_ = enabled(setup, monkeypatch, legacy_dependencies)
     monkeypatch.setenv('K_SERVICE', 'backend-integration')

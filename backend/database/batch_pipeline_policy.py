@@ -181,7 +181,8 @@ def stage_in_transaction(tx, job, stage, *, observations=None, candidates=None, 
     serving = server_flags is PROCESS_ENVIRONMENT
     if raw is None and server_flags is None:
         raise UnpinnedPolicyRefused(stage)
-    flags = None if serving else dict(server_flags)
+    # Only a resolution reads server_flags; copying a stored sibling part never does.
+    flags = dict(server_flags) if raw is None and not serving else None
     policy = (
         cls.from_dict(raw)
         if raw is not None
@@ -195,7 +196,13 @@ def stage_in_transaction(tx, job, stage, *, observations=None, candidates=None, 
             ),
         )
     )
-    source = 'fallback' if serving else 'operator_server_flags'
+    if serving:
+        source = 'fallback'
+    elif raw is not None:
+        # A copied part keeps its anchor's provenance (only `job` is written).
+        source = (anchor.get('policy_part_sources') or {}).get(stage, 'fallback')
+    else:
+        source = 'operator_server_flags'
     for sibling in ([job] if raw is not None or anchor['segment_id'] == job['segment_id'] else [anchor, job]):
         # Copy only this part; retain every concurrent/previous owner's receipt.
         sibling['policy_parts'] = {**(sibling.get('policy_parts') or {}), stage: policy.to_dict()}
