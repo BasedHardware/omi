@@ -197,17 +197,20 @@ def from_segments(
             message="Invalid language",
             detail="Language code cannot be empty.",
         )
-    if not segments_file.exists():
-        raise UsageError(message=f"File not found: {segments_file}")
-    if segments_file.is_dir():
+    # Open directly. ``Path.exists()`` re-raises ``PermissionError`` (an
+    # unsearchable parent) and swallows ``ENOTDIR`` as "missing", so a stat
+    # pre-check either escapes as an unexpected error or hides the real one.
+    try:
+        data = segments_file.read_bytes()
+    except IsADirectoryError as exc:
         raise UsageError(
             message=f"Expected a file, but found a directory: {segments_file}",
             detail="Provide the path to a JSON file containing transcript_segments.",
-        )
-    try:
-        data = segments_file.read_bytes()
+        ) from exc
+    except FileNotFoundError as exc:
+        raise UsageError(message=f"File not found: {segments_file}") from exc
     except OSError as exc:
-        raise UsageError(message=f"Cannot read file {segments_file}", detail=str(exc))
+        raise UsageError(message=f"Cannot read file {segments_file}", detail=str(exc)) from exc
 
     try:
         payload = load_json_input(data)

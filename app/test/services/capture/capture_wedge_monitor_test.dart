@@ -1103,6 +1103,24 @@ void main() {
       monitor.dispose();
     });
 
+    test('the row ends once nothing waiting is old enough to be stalled', () async {
+      final monitor = makeMonitor(transferRetry: () async {});
+      monitor.observeWalBacklog(
+          pendingCount: 5, oldestPendingAt: now.subtract(const Duration(hours: 3)), pendingSeconds: 47 * 60);
+      await pumpEventQueue();
+      expect(monitor.uploadStall?.pendingCount, 5);
+
+      // The stalled recordings were deleted or ran out of retries; one new recording is waiting.
+      now = now.add(const Duration(minutes: 20));
+      monitor.observeWalBacklog(
+          pendingCount: 1, oldestPendingAt: now.subtract(const Duration(minutes: 10)), pendingSeconds: 60);
+      await pumpEventQueue();
+
+      expect(monitor.uploadStall, isNull);
+      expect(monitor.hasCaptureAttention, isFalse);
+      monitor.dispose();
+    });
+
     test('a backlog under the silence threshold never engages the row', () async {
       final monitor = makeMonitor(transferRetry: () async {});
       monitor.observeWalBacklog(

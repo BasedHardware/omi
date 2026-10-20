@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 
+import 'package:omi/utils/conversations/conversation_title.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/http/api/conversations.dart';
@@ -770,7 +771,7 @@ class _GlobalSearchPageState extends State<GlobalSearchPage> {
             _Row(
               key: ValueKey('search_conversation_${conversation.id}'),
               leading: _Emoji(conversation.structured.emoji),
-              title: conversation.structured.title,
+              title: presentableConversationTitleOrFallback(conversation, l10n),
               subtitle: [
                 dates.timestamp(conversation.startedAt ?? conversation.createdAt),
                 if (conversation.matchSnippets.isNotEmpty) conversation.matchSnippets.first.text,
@@ -836,7 +837,7 @@ class _GlobalSearchPageState extends State<GlobalSearchPage> {
                 for (final conversation in _scopeConversations)
                   _Row(
                     leading: _Emoji(conversation.structured.emoji),
-                    title: conversation.structured.title,
+                    title: presentableConversationTitleOrFallback(conversation, context.l10n),
                     subtitle: dates.timestamp(conversation.startedAt ?? conversation.createdAt),
                     onTap: () => _openConversation(conversation),
                   ),
