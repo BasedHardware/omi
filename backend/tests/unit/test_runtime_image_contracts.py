@@ -178,6 +178,7 @@ def test_pusher_dependency_probe_includes_jsonschema(contracts_module):
     assert 'utils.sync.speaker_identity' in closure
     assert 'utils.sync.pipeline' not in closure
     assert not {dependency.split('.', 1)[0] for dependency in dependencies} & {
+        'imageio_ffmpeg',
         'onnxruntime',
         'torch',
         'pyannote',
@@ -434,6 +435,27 @@ def test_pusher_installs_typesense_because_finalization_indexes_conversations():
     assert _requirement_pin(pusher, 'typesense') == _requirement_pin(backend, 'typesense')
     pylock = (BACKEND_DIR / 'pusher' / 'pylock.toml').read_text(encoding='utf-8')
     assert 'name = "typesense"' in pylock
+
+
+def test_pusher_imageio_ffmpeg_exclusion_keeps_its_system_ffmpeg_fallback():
+    """PR #22839 made chat_file lazily reach the messaging FFmpeg decoder from pusher.main.
+
+    The pusher image excludes imageio_ffmpeg from its dependency probe instead of
+    installing the wheel. That holds only while the wheel import stays inside a
+    function (with the system fallback) and the pusher image installs ffmpeg.
+    """
+    import ast
+
+    decoder = BACKEND_DIR / 'utils' / 'messaging' / 'adapters' / 'decoder.py'
+    tree = ast.parse(decoder.read_text(encoding='utf-8'))
+    top_level_imports = {alias.name for node in tree.body if isinstance(node, ast.Import) for alias in node.names} | {
+        node.module for node in tree.body if isinstance(node, ast.ImportFrom) and node.module
+    }
+    assert 'imageio_ffmpeg' not in top_level_imports
+    assert "shutil.which('ffmpeg')" in decoder.read_text(encoding='utf-8')
+
+    dockerfile = (BACKEND_DIR / 'pusher' / 'Dockerfile').read_text(encoding='utf-8')
+    assert 'install --no-install-recommends ffmpeg' in dockerfile
 
 
 def test_pusher_posthog_pin_matches_backend_cohort_flag_client():

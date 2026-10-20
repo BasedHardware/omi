@@ -961,7 +961,6 @@ def _segment_snapshot(conv):
 
 def _inventory_base(mp):
     store, diarizer = stagemod.env.__wrapped__(mp)
-    mp.setenv('AUDIO_TIMELINE_SPANS', 'true')
 
     mp.setenv('AUDIO_TIMELINE_V2', 'false')
     client = f.FakeStorageClient()
@@ -1301,7 +1300,6 @@ async def test_unbound_runs_freeze_to_acceptance_conversation(monkeypatch):
 @pytest.mark.parametrize('cache_state', ['missing', 'corrupt'])
 def test_saved_sync_cache_rebuild_resolves(env, monkeypatch, round4_stage, cache_state):
     store, diarizer = env
-    monkeypatch.setenv('AUDIO_TIMELINE_SPANS', 'false')
 
     monkeypatch.setenv('AUDIO_TIMELINE_V2', 'false')
     target = round4_stage if round4_stage else stagemod.stage
@@ -1336,7 +1334,6 @@ def test_saved_sync_cache_rebuild_resolves(env, monkeypatch, round4_stage, cache
 @pytest.mark.parametrize('capture_covered', [False, True])
 def test_capture_history_requires_saved_sync_or_validated_spans(env, monkeypatch, damage, capture_covered):
     store, diarizer = env
-    monkeypatch.setenv('AUDIO_TIMELINE_SPANS', 'false')
 
     monkeypatch.setenv('AUDIO_TIMELINE_V2', 'false')
     conv = stagemod._conversation([0, 1] * 4)
@@ -1389,7 +1386,6 @@ def test_off_own_capture_cache_loss_parity_with_main(env, monkeypatch, round4_st
         mp = pytest.MonkeyPatch()
         store, diarizer = stagemod.env.__wrapped__(mp)
         stagemod._patch_stage_deps(mp, module, store, diarizer)
-        mp.setenv('AUDIO_TIMELINE_SPANS', 'false')
 
         mp.setenv('AUDIO_TIMELINE_V2', 'false')
         audio = stagemod.FakeAudio([0, 1] * 4)

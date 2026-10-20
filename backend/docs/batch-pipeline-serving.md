@@ -706,6 +706,25 @@ receipts) in chain order. It stops at the first row whose assignment does not
 advance the watermark, or after 64 rows or 30 seconds. The generic sweep runs
 afterwards as before, and any error in the wake falls back to it.
 
+`BATCH_PIPELINE_RECOVERED_MERGE_RELEASE_ENABLED` defaults to `true` (kill
+switch: `false`). The wake's merge drain releases the recovered unit at once.
+Without it, a recovered unit whose owner had an unready, earlier-captured
+head waited out the head wait from its settle time (`ready_at`) plus a
+maintenance tick. In the 2026-10-20 5% run 18, 46 of 54 wakes advanced no row
+and held recovered units took 65–86 s from settle to commit; projection then
+waited for the next 20 s sweep. The wake passes a release set: the recovered
+unit, then up to 32 of its content's other units. When strict order,
+fresh-first and the head wait commit nothing, the first row in the set that is
+still the owner's pending, ready job commits past the head wait; the commit
+transaction re-verifies the row. Only the recovered unit itself also passes
+the catch-up depth hold; its siblings keep it, so a wake cannot push a burst
+of catch-up rows past the cap ahead of a later fresh row. The
+commit body, late marking, log chain and projection order are unchanged, and
+an unready or fenced row is dropped from the set. Release commits carry
+`recovered_release: true` and log `event=batch_merge outcome=recovered_release
+source= head_state=` (closed labels only). `python -m
+testing.recovered_release_scenario` replays the run 18 shape.
+
 The walk is only a wakeup. Each row still passes the transactional predecessor,
 privacy, receipt-replay and owner-claim fences, so ordering is unchanged. For
 async projection, the persisted rows and their contents' persisted, not-ready

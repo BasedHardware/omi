@@ -157,6 +157,7 @@ from utils.executors import start_background_task
 from utils.batch_pipeline.serving import start_serving_from_env, stop_serving
 from utils.cloud_tasks import validate_account_deletion_dispatch_configuration
 from utils.stt.streaming import validate_streaming_stt_env
+from utils.stt.soniox_usage import start_if_configured as start_soniox_usage_if_configured
 from utils.stt.live_health import health as live_stt_health
 from utils.stt.parakeet_window import batch_pressure
 from utils.llm.managed_spend_ledger import shutdown_managed_spend_ledger
@@ -417,8 +418,12 @@ async def startup_event():
     start_metrics_sidecar_server()
     start_background_task(refresh_stt_cap_cohort_forever(), name='stt_cap_cohort_refresh')
     start_background_task(live_stt_health.refresh_forever(), name='live_stt_fleet_health')
+    from utils.held_content_cohort import refresh_held_content_cohort_forever
+
+    start_background_task(refresh_held_content_cohort_forever(), name='held_content_cohort_refresh')
     batch_pressure.start_from_env()
     app.state.batch_pipeline_serving = start_serving_from_env()
+    start_soniox_usage_if_configured(start_background_task)
     validate_account_deletion_dispatch_configuration()
     validate_streaming_stt_env()
     start_background_task(log_executor_health(), name='executor_health')

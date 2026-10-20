@@ -18,8 +18,6 @@ overlay:
           value: '0'
         AUDIO_ARCHIVE_UID_ALLOWLIST:
           value: vi7SA9ckQCe4ccobWNxlbdcNdC23
-        AUDIO_TIMELINE_SPANS:
-          value: 'false'
         LIVE_CAPTURE_WINDOW_MERGE_UNION:
           value: 'false'
         LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS:
@@ -90,8 +88,6 @@ overlay:
           value: '0'
         AUDIO_ARCHIVE_UID_ALLOWLIST:
           value: vi7SA9ckQCe4ccobWNxlbdcNdC23
-        AUDIO_TIMELINE_SPANS:
-          value: 'false'
         LIVE_CAPTURE_WINDOW_MERGE_UNION:
           value: 'false'
         LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS:

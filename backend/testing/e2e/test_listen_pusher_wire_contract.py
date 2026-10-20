@@ -156,6 +156,7 @@ def test_listen_pusher_wire_contract_native_happy_path_and_explicit_parakeet_rou
         assert pusher.paths[0].startswith('/v1/trigger/listen?')
         assert 'uid=123' in pusher.paths[0]
         assert 'sample_rate=8000' in pusher.paths[0]
+        assert 'audio_timeline=2' in pusher.paths[0]
         assert transcript.connection == 1
         assert transcript.payload['memory_id'] == session['conversation_id']
         assert transcript.payload['segments'][0]['id'] == 'parakeet-wire-1'
