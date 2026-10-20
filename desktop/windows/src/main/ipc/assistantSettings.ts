@@ -68,8 +68,8 @@ let registered = false
 let currentOwnerUid: string | null = null
 
 /** Bind or clear the active authenticated owner UID for assistant-settings writes.
- *  When set, an incoming `assistants:setSettings` patch that carries a mismatched
- *  `ownerUid` / `expectedOwnerUid` from before a reauth/account switch is dropped. */
+ *  An incoming `assistants:setSettings` patch carrying an old `ownerUid` /
+ *  `expectedOwnerUid` is dropped after account replacement or sign-out. */
 export function setAssistantSettingsOwner(uid: string | null): void {
   const trimmed = typeof uid === 'string' ? uid.trim() : ''
   currentOwnerUid = trimmed.length > 0 ? trimmed : null
@@ -80,7 +80,6 @@ export function getAssistantSettingsOwner(): string | null {
 }
 
 function isStaleOwnerWrite(patch: unknown, expectedOwnerUid?: unknown): boolean {
-  if (currentOwnerUid === null) return false
   const candidate =
     typeof expectedOwnerUid === 'string'
       ? expectedOwnerUid.trim()

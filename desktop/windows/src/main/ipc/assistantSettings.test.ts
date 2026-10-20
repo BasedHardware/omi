@@ -168,11 +168,7 @@ describe('assistantSettings IPC', () => {
       registerAuthStoreHandlers()
 
       // User A persists auth session via Firebase persistence
-      invoke(
-        'authStore:set',
-        'firebase:authUser:key:[DEFAULT]',
-        JSON.stringify({ uid: 'user-a' })
-      )
+      invoke('authStore:set', 'firebase:authUser:key:[DEFAULT]', JSON.stringify({ uid: 'user-a' }))
       expect(getAssistantSettingsOwner()).toBe('user-a')
 
       // User A writes settings
@@ -185,11 +181,7 @@ describe('assistantSettings IPC', () => {
       expect(userAWrite.notificationFrequency).toBe(3)
 
       // User switches accounts to User B
-      invoke(
-        'authStore:set',
-        'firebase:authUser:key:[DEFAULT]',
-        JSON.stringify({ uid: 'user-b' })
-      )
+      invoke('authStore:set', 'firebase:authUser:key:[DEFAULT]', JSON.stringify({ uid: 'user-b' }))
       expect(getAssistantSettingsOwner()).toBe('user-b')
 
       // In-flight write from user-a is rejected
@@ -210,9 +202,34 @@ describe('assistantSettings IPC', () => {
       expect(userBWrite.memoryEnabled).toBe(false)
       expect(userBWrite.notificationFrequency).toBe(2)
 
-      // Sign out clears the fence
+      // Sign out revokes the old owner's pending writes, even before a new login.
       invoke('authStore:remove', 'firebase:authUser:key:[DEFAULT]')
       expect(getAssistantSettingsOwner()).toBeNull()
+      const signedOutWrite = invoke(
+        'assistants:setSettings',
+        { memoryEnabled: true, notificationFrequency: 4 },
+        'user-b'
+      ) as AssistantSettingsView
+      expect(signedOutWrite.memoryEnabled).toBe(false)
+      expect(signedOutWrite.notificationFrequency).toBe(2)
+    })
+
+    it('rejects owner-tagged writes without an owner while keeping local untagged settings usable', () => {
+      const rejected = invoke(
+        'assistants:setSettings',
+        { memoryEnabled: true },
+        'signed-out-user'
+      ) as AssistantSettingsView
+      expect(rejected.memoryEnabled).toBe(false)
+      const embeddedOwner = invoke('assistants:setSettings', {
+        memoryEnabled: true,
+        ownerUid: 'signed-out-user'
+      }) as AssistantSettingsView
+      expect(embeddedOwner.memoryEnabled).toBe(false)
+      const local = invoke('assistants:setSettings', {
+        memoryEnabled: true
+      }) as AssistantSettingsView
+      expect(local.memoryEnabled).toBe(true)
     })
   })
 
