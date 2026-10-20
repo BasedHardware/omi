@@ -36,7 +36,7 @@ Future<void> _loadFonts() async {
     'CupertinoSystemText',
     'CupertinoSystemDisplay',
     'FlutterTest',
-    'Roboto'
+    'Roboto',
   ]) {
     final loader = FontLoader(family);
     for (final font in ['REGULAR', 'MEDIUM', 'BOLD']) {
@@ -67,14 +67,14 @@ ThemeData _evidenceTheme() {
 }
 
 ServerConversation _conversation() => ServerConversation.fromJson({
-      'id': 'conv-weekly-sync',
-      'created_at': DateTime(2026, 10, 15, 10, 0).toUtc().toIso8601String(),
-      'started_at': DateTime(2026, 10, 15, 10, 0).toUtc().toIso8601String(),
-      'finished_at': DateTime(2026, 10, 15, 10, 42).toUtc().toIso8601String(),
-      'structured': {'title': 'Weekly product sync', 'overview': '', 'emoji': '', 'category': 'work'},
-      'status': 'completed',
-      'transcript_segments': [],
-    });
+  'id': 'conv-weekly-sync',
+  'created_at': DateTime(2026, 10, 15, 10, 0).toUtc().toIso8601String(),
+  'started_at': DateTime(2026, 10, 15, 10, 0).toUtc().toIso8601String(),
+  'finished_at': DateTime(2026, 10, 15, 10, 42).toUtc().toIso8601String(),
+  'structured': {'title': 'Weekly product sync', 'overview': '', 'emoji': '', 'category': 'work'},
+  'status': 'completed',
+  'transcript_segments': [],
+});
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -107,16 +107,18 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     OmiColors.active = OmiColors.forBrightness(Brightness.dark);
-    await tester.pumpWidget(RepaintBoundary(
-      key: boundary,
-      child: MaterialApp(
-        debugShowCheckedModeBanner: false,
-        theme: _evidenceTheme(),
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        home: home ?? ConnectAgentPage(service: backend.service()),
+    await tester.pumpWidget(
+      RepaintBoundary(
+        key: boundary,
+        child: MaterialApp(
+          debugShowCheckedModeBanner: false,
+          theme: _evidenceTheme(),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: home ?? ConnectAgentPage(service: backend.service()),
+        ),
       ),
-    ));
+    );
     await settle(tester);
     return backend;
   }
@@ -141,6 +143,14 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('connect_agent_chatgpt')));
     await settle(tester);
     await shoot(tester, '3-chatgpt-connected');
+  });
+
+  testWidgets('3b partial ChatGPT grant: reconnect sheet offers Disconnect', (tester) async {
+    await pump(tester, FakeAgentBackend(chatGptConnected: true, chatGptScopes: ['memories.read']));
+    await tester.tap(find.text('Reconnect'));
+    await settle(tester);
+    expect(find.byKey(const ValueKey('connect_chatgpt_disconnect')), findsOneWidget);
+    await shoot(tester, '3b-chatgpt-reconnect-sheet-disconnect');
   });
 
   testWidgets('4 agent prompt before copy', (tester) async {

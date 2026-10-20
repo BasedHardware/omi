@@ -55,10 +55,14 @@
       return ids.isNotEmpty && ids.every(valid.contains)
           ? remove(ids)
           : value.replaceAllMapped(
-              RegExp(r'\[[^\[\]\n]*\]\([^\n)]*\)|[\[［【][^\[\]［］【】\n]*[\]］】]'), (match) => unit(match[0]!));
+              RegExp(r'\[[^\[\]\n]*\]\([^\n)]*\)|[\[［【][^\[\]［］【】\n]*[\]］】]'),
+              (match) => unit(match[0]!),
+            );
     }
-    final content =
-        value.substring(1, value.length - 1).replaceAll(RegExp('[\u200b\u200c\u200d\u2060\ufeff]'), '').trim();
+    final content = value
+        .substring(1, value.length - 1)
+        .replaceAll(RegExp('[\u200b\u200c\u200d\u2060\ufeff]'), '')
+        .trim();
     final tokens = content.split(RegExp(r'[\s,;]+')).where((token) => token.isNotEmpty).toList();
     if (tokens.isNotEmpty && tokens.every(valid.contains)) return remove(tokens);
     final header = content.split(RegExp(r'\s+'));
@@ -69,10 +73,11 @@
     if (mixedIDs.isNotEmpty) {
       recovered.addAll(mixedIDs);
       return cleanSeparators(
-          content.replaceAllMapped(RegExp(r'[^\s,;]+'), (match) => valid.contains(match[0]) ? '' : match[0]!));
+        content.replaceAllMapped(RegExp(r'[^\s,;]+'), (match) => valid.contains(match[0]) ? '' : match[0]!),
+      );
     }
     if (tokens.isEmpty ||
-        RegExp(r'^(?:spk|speaker)[ _]\d+:?$', caseSensitive: false).hasMatch(content) ||
+        RegExp(r'^(?:spk|speaker)[ _]\p{Nd}+:?$', caseSensitive: false, unicode: true).hasMatch(content) ||
         RegExp(r'^(?:[A-Za-z0-9][A-Za-z0-9._:-]{0,95}|\^\d+)$').hasMatch(content)) {
       return remove();
     }
@@ -80,13 +85,26 @@
   }
 
   text = text.replaceAllMapped(
-      RegExp(r'\[[^\[\]\n]*\]\([^\n)]*\)|(?<!\])\(((?:[^()\n]|\([^()\n]*\))+)\)|[\[［【][^\[\]［］【】\n]*[\]］】]'),
-      (match) => unit(match[0]!));
+    RegExp(r'\[[^\[\]\n]*\]\([^\n)]*\)|(?<!\])\(((?:[^()\n]|\([^()\n]*\))+)\)|[\[［【][^\[\]［］【】\n]*[\]］】]'),
+    (match) => unit(match[0]!),
+  );
   final sorted = valid.toList()..sort((a, b) => b.length.compareTo(a.length));
   for (final id in sorted) {
-    text = text.replaceAll(RegExp('(?<![\\w-])${RegExp.escape(id)}(?![\\w-])'), marker);
+    text = text.replaceAll(
+      RegExp('(?<![\\p{L}\\p{N}_-])${RegExp.escape(id)}(?![\\p{L}\\p{N}_-])', unicode: true),
+      marker,
+    );
   }
-  text = text.replaceAll(RegExp(r'\b(?:spk|speaker)[ _]\d+\b:?[ \t]*', caseSensitive: false), marker);
+  // Word boundaries and digits are Unicode, as in Python generation and Swift (ICU): an ID or
+  // speaker label glued to CJK text is part of a word, not a citation, and `Speaker_١٢` is a label.
+  text = text.replaceAll(
+    RegExp(
+      r'(?<![\p{L}\p{N}_])(?:spk|speaker)[ _]\p{Nd}+(?![\p{L}\p{N}_]):?[ \t]*',
+      caseSensitive: false,
+      unicode: true,
+    ),
+    marker,
+  );
   while (true) {
     final cleaned = text.replaceAllMapped(RegExp(r'\([^()\n]*\)'), (match) {
       final value = match[0]!;

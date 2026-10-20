@@ -10,7 +10,8 @@ import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 import 'package:omi/backend/http/api/audio.dart';
 import 'package:omi/backend/http/api/conversations.dart'
     hide unlinkCalendarEvent, autoLinkCalendarEvent, linkCalendarEvent;
-import 'package:omi/backend/http/api/conversations.dart' as conv_api
+import 'package:omi/backend/http/api/conversations.dart'
+    as conv_api
     show unlinkCalendarEvent, autoLinkCalendarEvent, linkCalendarEvent;
 import 'package:omi/backend/http/api/speaker_labels.dart';
 import 'package:omi/backend/http/api/users.dart';
@@ -30,10 +31,10 @@ export 'package:omi/pages/conversation_detail/conversation_summary_generation.da
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
-typedef SpeakerAssignmentCall = Future<bool> Function(String, List<String>,
-    {bool? isUser, String? personId, int? speakerId});
-typedef ConversationReprocessCall = Future<ReprocessResult> Function(String,
-    {String? appId, bool requireSpeakerReceipt});
+typedef SpeakerAssignmentCall =
+    Future<bool> Function(String, List<String>, {bool? isUser, String? personId, int? speakerId});
+typedef ConversationReprocessCall =
+    Future<ReprocessResult> Function(String, {String? appId, bool requireSpeakerReceipt, bool forceOmi});
 typedef ConversationDetailFetchCall = Future<ServerConversation?> Function(String);
 
 /// Where the open conversation's full detail fetch stands. The page renders the list's copy first;
@@ -50,18 +51,22 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     SpeakerRejectionCall? rejectSpeaker,
     EnabledSummaryAppsFetch? fetchEnabledSummaryApps,
     SuggestedSummaryAppsFetch? fetchSuggestedSummaryApps,
-  })  : _assignSpeaker = assignSpeaker ?? assignBulkConversationTranscriptSegments,
-        _rejectSpeaker = rejectSpeaker ?? rejectConversationSpeaker,
-        _reprocess = reprocess ?? reProcessConversationServer,
-        _fetchConversation = fetchConversation ?? getConversationById,
-        enabledSummaryAppsFetch = fetchEnabledSummaryApps ?? fetchInstalledSummaryApps,
-        suggestedSummaryAppsFetch = fetchSuggestedSummaryApps ?? fetchConversationSuggestedSummaryApps;
+    PreferredSummaryAppWrite? writePreferredSummaryApp,
+  }) : _assignSpeaker = assignSpeaker ?? assignBulkConversationTranscriptSegments,
+       _rejectSpeaker = rejectSpeaker ?? rejectConversationSpeaker,
+       _reprocess = reprocess ?? reProcessConversationServer,
+       _fetchConversation = fetchConversation ?? getConversationById,
+       enabledSummaryAppsFetch = fetchEnabledSummaryApps ?? fetchInstalledSummaryApps,
+       suggestedSummaryAppsFetch = fetchSuggestedSummaryApps ?? fetchConversationSuggestedSummaryApps,
+       preferredSummaryAppWrite = writePreferredSummaryApp ?? writeServerPreferredSummaryApp;
   final SpeakerAssignmentCall _assignSpeaker;
   final ConversationReprocessCall _reprocess;
   @override
   final EnabledSummaryAppsFetch enabledSummaryAppsFetch;
   @override
   final SuggestedSummaryAppsFetch suggestedSummaryAppsFetch;
+  @override
+  final PreferredSummaryAppWrite preferredSummaryAppWrite;
   final ConversationDetailFetchCall _fetchConversation;
   final SpeakerRejectionCall _rejectSpeaker;
   String? _speakerSummaryConversationId;
@@ -99,12 +104,12 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
 
   @visibleForTesting
   Set<String> get trackedSpeakerConversationIds => {
-        ..._speakerEditGenerationByConversation.keys,
-        ..._pendingSpeakerSavesByConversation.keys,
-        ..._automaticSpeakerSummaryRefreshIds,
-        ..._endedSpeakerLabelingSessionIds,
-        ..._confirmedSpeakerLabelingSessionIds,
-      };
+    ..._speakerEditGenerationByConversation.keys,
+    ..._pendingSpeakerSavesByConversation.keys,
+    ..._automaticSpeakerSummaryRefreshIds,
+    ..._endedSpeakerLabelingSessionIds,
+    ..._confirmedSpeakerLabelingSessionIds,
+  };
 
   bool get speakerLabelingSessionActive => _labelingSessionId != null && _labelingSessionId == conversationOrNull?.id;
 
@@ -323,14 +328,16 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     final generation = ++_speakerEditGeneration;
     _speakerEditGenerationByConversation[target.id] = generation;
     if (changed && _labelingSessionId == target.id) {
-      _labelingUndo.add(_SpeakerLabelUndo(
-        generation: generation,
-        before: {for (final MapEntry(key: segment, value: original) in before.entries) segment.id: original},
-        changedIds: {
-          for (final segment in selected)
-            if (segment.isUser != self || segment.personId != person) segment.id,
-        },
-      ));
+      _labelingUndo.add(
+        _SpeakerLabelUndo(
+          generation: generation,
+          before: {for (final MapEntry(key: segment, value: original) in before.entries) segment.id: original},
+          changedIds: {
+            for (final segment in selected)
+              if (segment.isUser != self || segment.personId != person) segment.id,
+          },
+        ),
+      );
     }
     _pendingSpeakerSaves++;
     _pendingSpeakerSavesByConversation.update(target.id, (count) => count + 1, ifAbsent: () => 1);
@@ -1040,7 +1047,10 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
   /// hourly limit (429), the template returning nothing — including a 200 whose conversation still
   /// has no summary for the request, which an older backend sends when another writer held the
   /// claim — or anything else.
-  Future<bool> reprocessConversation({String? appId}) async {
+  ///
+  /// [forceOmi] (with a null [appId]) asks for Omi's own notes only: the server runs neither the
+  /// preferred template nor a suggestion. Without it a null [appId] keeps the legacy meaning.
+  Future<bool> reprocessConversation({String? appId, bool forceOmi = false}) async {
     if (conversation.id.startsWith('ondevice-') || loadingReprocessConversation || _savingSpeaker) return false;
     _speakerSummaryRefreshTimer?.cancel();
     _speakerSummaryRefreshTimer = null;
@@ -1060,21 +1070,22 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     reprocessConversationId = target.id;
     notifyListeners();
     try {
-      final result = await _reprocess(target.id, appId: appId, requireSpeakerReceipt: requireSpeakerReceipt);
+      final result = await _reprocess(
+        target.id,
+        appId: appId,
+        requireSpeakerReceipt: requireSpeakerReceipt,
+        forceOmi: forceOmi && appId == null,
+      );
       if (_isDisposed) return false;
       PlatformManager.instance.analytics.reProcessConversation(target);
       final updatedConversation = result.conversation;
       if (updatedConversation == null || !conversationHasRequestedSummary(updatedConversation, appId)) {
-        _failReprocess(
-          target,
-          appId,
-          switch (result) {
-            ReprocessBusy() => SummaryFailureKind.busy,
-            ReprocessRateLimited() => SummaryFailureKind.rateLimited,
-            _ when appId != null => SummaryFailureKind.template,
-            _ => SummaryFailureKind.generic,
-          },
-        );
+        _failReprocess(target, appId, switch (result) {
+          ReprocessBusy() => SummaryFailureKind.busy,
+          ReprocessRateLimited() => SummaryFailureKind.rateLimited,
+          _ when appId != null => SummaryFailureKind.template,
+          _ => SummaryFailureKind.generic,
+        });
         return false;
       }
 

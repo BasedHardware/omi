@@ -30,7 +30,8 @@ String? resolvedDefaultSummaryTemplateId(ConversationDetailProvider provider) {
   return id;
 }
 
-/// Starts a summary with [appId]'s template (null: Omi), remembering a template as last used.
+/// Starts a summary with [appId]'s template, remembering a template as last used. Null is Omi:
+/// the request forces Omi's own notes, so a server preferred template never runs in its place.
 Future<void> startSummary(ConversationDetailProvider provider, String? appId) async {
   if (provider.loadingReprocessConversation) return;
   if (appId != null) {
@@ -38,7 +39,7 @@ Future<void> startSummary(ConversationDetailProvider provider, String? appId) as
     if (app != null) provider.setSelectedAppForReprocessing(app);
     provider.trackLastUsedSummarizationApp(appId);
   }
-  await provider.reprocessConversation(appId: appId);
+  await provider.reprocessConversation(appId: appId, forceOmi: appId == null);
 }
 
 /// The Omi mark drawn on the primary pill, in the pill's label colour.
@@ -165,8 +166,11 @@ class SummaryTranscriptExcerpt extends StatelessWidget {
       children: [
         Text(
           l10n.summaryFromTheTranscript.toUpperCase(),
-          style:
-              OmiType.caption.copyWith(color: OmiColors.textTertiary, fontWeight: FontWeight.w600, letterSpacing: 0.6),
+          style: OmiType.caption.copyWith(
+            color: OmiColors.textTertiary,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 0.6,
+          ),
         ),
         const SizedBox(height: OmiSpacing.sm),
         Semantics(
@@ -222,16 +226,17 @@ class SummaryGeneratingState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<ConversationDetailProvider>();
-    final label =
-        context.l10n.summarySummarizingWith(summarySourceName(provider, provider.reprocessingAppId, context.l10n));
+    final label = context.l10n.summarySummarizingWith(
+      summarySourceName(provider, provider.reprocessingAppId, context.l10n),
+    );
     Widget bar(double widthFactor, {double height = 14}) => FractionallySizedBox(
-          widthFactor: widthFactor,
-          alignment: Alignment.centerLeft,
-          child: Container(
-            height: height,
-            decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.smAll),
-          ),
-        );
+      widthFactor: widthFactor,
+      alignment: Alignment.centerLeft,
+      child: Container(
+        height: height,
+        decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.smAll),
+      ),
+    );
 
     return Semantics(
       key: const Key('summary_generating_state'),
@@ -291,46 +296,46 @@ class SummaryFailureCard extends StatelessWidget {
       String primaryLabel,
       Future<void> Function() primary,
       String? secondaryLabel,
-      Future<void> Function()? secondary
+      Future<void> Function()? secondary,
     ) = switch (failure.kind) {
       SummaryFailureKind.template => (
-          l10n.summaryTemplateFailedTitle(summarySourceName(provider, failure.appId, l10n)),
-          l10n.summaryTemplateFailedBody,
-          l10n.tryAgain,
-          () => startSummary(provider, failure.appId),
-          l10n.summaryWithOmiInstead,
-          () => startSummary(provider, null),
-        ),
+        l10n.summaryTemplateFailedTitle(summarySourceName(provider, failure.appId, l10n)),
+        l10n.summaryTemplateFailedBody,
+        l10n.tryAgain,
+        () => startSummary(provider, failure.appId),
+        l10n.summaryWithOmiInstead,
+        () => startSummary(provider, null),
+      ),
       SummaryFailureKind.busy => (
-          l10n.summaryBusyTitle,
-          l10n.summaryBusyBody,
-          l10n.summaryCheckAgain,
-          () async {
-            // Keep the busy card (its retry action) unless a fresh read actually landed;
-            // a failed or superseded refresh must not silently dismiss it.
-            if (await provider.refreshConversation()) {
-              provider.dismissSummaryFailure();
-            }
-          },
-          null,
-          null,
-        ),
+        l10n.summaryBusyTitle,
+        l10n.summaryBusyBody,
+        l10n.summaryCheckAgain,
+        () async {
+          // Keep the busy card (its retry action) unless a fresh read actually landed;
+          // a failed or superseded refresh must not silently dismiss it.
+          if (await provider.refreshConversation()) {
+            provider.dismissSummaryFailure();
+          }
+        },
+        null,
+        null,
+      ),
       SummaryFailureKind.rateLimited => (
-          l10n.summaryLimitTitle,
-          l10n.summaryLimitBody,
-          l10n.ok,
-          () async => provider.dismissSummaryFailure(),
-          null,
-          null,
-        ),
+        l10n.summaryLimitTitle,
+        l10n.summaryLimitBody,
+        l10n.ok,
+        () async => provider.dismissSummaryFailure(),
+        null,
+        null,
+      ),
       SummaryFailureKind.generic => (
-          l10n.summaryFailedTitle,
-          l10n.summaryFailedBody,
-          l10n.tryAgain,
-          () => startSummary(provider, failure.appId),
-          l10n.summaryUseDifferentTemplate,
-          () => showSummarizedAppsSheet(context),
-        ),
+        l10n.summaryFailedTitle,
+        l10n.summaryFailedBody,
+        l10n.tryAgain,
+        () => startSummary(provider, failure.appId),
+        l10n.summaryUseDifferentTemplate,
+        () => showSummarizedAppsSheet(context),
+      ),
     };
     // Retrying is pointless while another reprocess runs; acknowledging never is.
     final blocked = busy && failure.kind != SummaryFailureKind.rateLimited;

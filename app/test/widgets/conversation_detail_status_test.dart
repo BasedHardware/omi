@@ -20,15 +20,15 @@ import 'package:omi/ui/ui.dart';
 import '../helpers/reprocess_fakes.dart';
 
 TranscriptSegment _segment(String text) => TranscriptSegment(
-      id: 'seg-1',
-      text: text,
-      speaker: 'SPEAKER_00',
-      isUser: false,
-      personId: null,
-      start: 0,
-      end: 1,
-      translations: [],
-    );
+  id: 'seg-1',
+  text: text,
+  speaker: 'SPEAKER_00',
+  isUser: false,
+  personId: null,
+  start: 0,
+  end: 1,
+  translations: [],
+);
 
 ServerConversation _conversation({
   List<TranscriptSegment> segments = const [],
@@ -138,7 +138,7 @@ void main() {
       final gate = Completer<ServerConversation?>();
       final detail = _detail(
         _conversation(status: ConversationStatus.failed),
-        reprocess: conversationReprocess((id, {appId, requireSpeakerReceipt = false}) {
+        reprocess: conversationReprocess((id, {appId, requireSpeakerReceipt = false, forceOmi = false}) {
           calls.add(id);
           return gate.future;
         }),
@@ -160,12 +160,13 @@ void main() {
   });
 
   group('Activity strip', () {
-    testWidgets('stays hidden while the reader reprocesses: the Summary tab is the one progress surface',
-        (tester) async {
+    testWidgets('stays hidden while the reader reprocesses: the Summary tab is the one progress surface', (
+      tester,
+    ) async {
       final gate = Completer<ServerConversation?>();
       final detail = _detail(
         _conversation(segments: [_segment('Hi')], overview: 'Old summary'),
-        reprocess: conversationReprocess((id, {appId, requireSpeakerReceipt = false}) => gate.future),
+        reprocess: conversationReprocess((id, {appId, requireSpeakerReceipt = false, forceOmi = false}) => gate.future),
       );
       addTearDown(detail.dispose);
 
@@ -220,7 +221,7 @@ void main() {
     final gate = Completer<ServerConversation?>();
     final detail = _detail(
       _conversation(segments: [_segment('Hi')]),
-      reprocess: conversationReprocess((id, {appId, requireSpeakerReceipt = false}) => gate.future),
+      reprocess: conversationReprocess((id, {appId, requireSpeakerReceipt = false, forceOmi = false}) => gate.future),
     );
     addTearDown(detail.dispose);
 
@@ -302,7 +303,7 @@ void main() {
       final gate = Completer<ServerConversation?>();
       final detail = _detail(
         _conversation(segments: [_segment('Hi')]),
-        reprocess: conversationReprocess((id, {appId, requireSpeakerReceipt = false}) => gate.future),
+        reprocess: conversationReprocess((id, {appId, requireSpeakerReceipt = false, forceOmi = false}) => gate.future),
       );
       addTearDown(detail.dispose);
 

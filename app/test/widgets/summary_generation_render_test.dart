@@ -83,7 +83,8 @@ final _cases = <_Case>[
   _Case(
     '11-empty-state-long-title',
     (p, f) async {},
-    title: 'Turn right at the next one, not this one, then the second left after the bakery on Valencia '
+    title:
+        'Turn right at the next one, not this one, then the second left after the bakery on Valencia '
         'and park behind the blue building near the old theater',
   ),
 ];
@@ -129,7 +130,7 @@ void main() {
         conversation,
         fetches: fetches,
         catalog: [_pgApp],
-        reprocess: (id, {appId, requireSpeakerReceipt = false}) {
+        reprocess: (id, {appId, requireSpeakerReceipt = false, forceOmi = false}) {
           final result = _results[item.slug];
           return result == null ? gate.future : Future.value(result);
         },
@@ -157,10 +158,7 @@ void main() {
               supportedLocales: AppLocalizations.supportedLocales,
               home: Scaffold(
                 backgroundColor: OmiPalette.dark.surface0,
-                appBar: AppBar(
-                  automaticallyImplyLeading: false,
-                  leading: const Center(child: OmiBackButton.circled()),
-                ),
+                appBar: AppBar(automaticallyImplyLeading: false, leading: const Center(child: OmiBackButton.circled())),
                 body: Column(
                   children: [
                     ConversationDetailHeader(onOpenRecordings: (_) {}),
@@ -185,10 +183,9 @@ void main() {
       await tester.pump();
       if (_evidence.isNotEmpty) {
         // Decode the Omi mark before capture; test image decoding is asynchronous.
-        await tester.runAsync(() => precacheImage(
-              AssetImage(Assets.images.herologo.path),
-              tester.element(find.byType(GetAppsWidgets)),
-            ));
+        await tester.runAsync(
+          () => precacheImage(AssetImage(Assets.images.herologo.path), tester.element(find.byType(GetAppsWidgets))),
+        );
         await tester.pump();
       }
 

@@ -56,9 +56,11 @@ void main() {
     });
 
     test('409 conversation_processing_in_progress is busy', () {
-      final result = reprocessResultFromResponse(_json(409, {
-        'detail': {'code': 'conversation_processing_in_progress', 'message': 'Already processing'},
-      }));
+      final result = reprocessResultFromResponse(
+        _json(409, {
+          'detail': {'code': 'conversation_processing_in_progress', 'message': 'Already processing'},
+        }),
+      );
       expect(result, isA<ReprocessBusy>());
     });
 
@@ -78,9 +80,11 @@ void main() {
 
     test('502 app_result_failed and 500 are failures', () {
       expect(
-        reprocessResultFromResponse(_json(502, {
-          'detail': {'code': 'app_result_failed', 'message': 'no content'},
-        })),
+        reprocessResultFromResponse(
+          _json(502, {
+            'detail': {'code': 'app_result_failed', 'message': 'no content'},
+          }),
+        ),
         isA<ReprocessFailed>(),
       );
       expect(reprocessResultFromResponse(http.Response('', 500)), isA<ReprocessFailed>());
@@ -91,7 +95,7 @@ void main() {
     Future<(ConversationDetailProvider, bool)> run(ReprocessResult result, {String? appId}) async {
       final provider = summaryProvider(
         summaryConversation(),
-        reprocess: (id, {appId, requireSpeakerReceipt = false}) async => result,
+        reprocess: (id, {appId, requireSpeakerReceipt = false, forceOmi = false}) async => result,
         catalog: [summaryApp('pg', 'Paul Graham')],
       );
       addTearDown(provider.dispose);
@@ -120,6 +124,17 @@ void main() {
       expect(provider.reprocessedConversationId, isNull);
     });
 
+    test('an Omi request answered 200 with an empty overview and a stale template result is a failure', () async {
+      // summary-v2 F1: a busy echo from an older backend carries the stored row; a template result
+      // already on it is not the Omi summary that was asked for.
+      final (provider, ok) = await run(
+        ReprocessSuccess(summaryConversation(appResults: [AppResponse('Stale Paul Graham essay', appId: 'pg')])),
+      );
+      expect(ok, isFalse);
+      expect(provider.summaryFailure!.kind, SummaryFailureKind.generic);
+      expect(provider.reprocessedConversationId, isNull);
+    });
+
     test('a 200 without the requested template result is that template failing', () async {
       final (provider, ok) = await run(ReprocessSuccess(summaryConversation(overview: 'Omi wrote this')), appId: 'pg');
       expect(ok, isFalse);
@@ -134,10 +149,14 @@ void main() {
     });
 
     test('success shows the summary that was asked for, even when another template result comes first', () async {
-      final (provider, ok) = await run(ReprocessSuccess(summaryConversation(
-        overview: 'Omi overview',
-        appResults: [AppResponse('Paul Graham essay', appId: 'pg')],
-      )));
+      final (provider, ok) = await run(
+        ReprocessSuccess(
+          summaryConversation(
+            overview: 'Omi overview',
+            appResults: [AppResponse('Paul Graham essay', appId: 'pg')],
+          ),
+        ),
+      );
       expect(ok, isTrue);
       expect(provider.summaryFailure, isNull);
       expect(provider.getSummarySelection().appId, 'pg', reason: 'the stored order still leads with the app');
@@ -146,11 +165,13 @@ void main() {
 
     test('a throwing reprocess settles the page even when crash reporting throws too', () async {
       final conversation = summaryConversation();
-      final provider = _ThrowingReporterProvider(
-        reprocess: (id, {appId, requireSpeakerReceipt = false}) async => throw StateError('transport'),
-      )
-        ..selectedDate = conversationLocalDayKey(conversation.startedAt ?? conversation.createdAt)
-        ..setCachedConversation(conversation);
+      final provider =
+          _ThrowingReporterProvider(
+              reprocess: (id, {appId, requireSpeakerReceipt = false, forceOmi = false}) async =>
+                  throw StateError('transport'),
+            )
+            ..selectedDate = conversationLocalDayKey(conversation.startedAt ?? conversation.createdAt)
+            ..setCachedConversation(conversation);
       addTearDown(provider.dispose);
 
       expect(await provider.reprocessConversation(appId: 'pg'), isFalse);
@@ -161,12 +182,28 @@ void main() {
       expect(provider.lastFailedReprocessAppId, 'pg');
     });
 
+    test('forceOmi reaches the request only for Omi; a template request never forces Omi', () async {
+      final seen = <(String?, bool)>[];
+      final provider = summaryProvider(
+        summaryConversation(),
+        reprocess: (id, {appId, requireSpeakerReceipt = false, forceOmi = false}) async {
+          seen.add((appId, forceOmi));
+          return ReprocessSuccess(summaryConversation(overview: 'Done'));
+        },
+      );
+      addTearDown(provider.dispose);
+      await provider.reprocessConversation(forceOmi: true);
+      await provider.reprocessConversation(appId: 'pg', forceOmi: true);
+      await provider.reprocessConversation();
+      expect(seen, [(null, true), ('pg', false), (null, false)]);
+    });
+
     test('a second request while one runs does nothing', () async {
       final gate = Completer<ReprocessResult>();
       var calls = 0;
       final provider = summaryProvider(
         summaryConversation(),
-        reprocess: (id, {appId, requireSpeakerReceipt = false}) {
+        reprocess: (id, {appId, requireSpeakerReceipt = false, forceOmi = false}) {
           calls++;
           return gate.future;
         },
@@ -246,6 +283,38 @@ void main() {
       await pending;
       expect(provider.cachedSuggestedApps, isEmpty);
     });
+  });
+
+  test('reprocessQuery: a template sends app_id, Omi sends source=omi, legacy regenerate sends nothing', () {
+    expect(reprocessQuery(appId: 'pg'), '?app_id=pg');
+    expect(reprocessQuery(appId: 'pg', forceOmi: true), '?app_id=pg');
+    expect(reprocessQuery(forceOmi: true), '?source=omi');
+    expect(reprocessQuery(), '');
+  });
+
+  test('"Make this my default" writes the server preference: a template sets it, Omi clears it', () async {
+    final writes = <String?>[];
+    final provider = summaryProvider(
+      summaryConversation(),
+      writePreferredSummaryApp: (appId) async {
+        writes.add(appId);
+        return true;
+      },
+    );
+    addTearDown(provider.dispose);
+    expect(await provider.setDefaultSummaryTemplateAppId('pg'), isTrue);
+    expect(await provider.setDefaultSummaryTemplateAppId(null), isTrue);
+    expect(writes, ['pg', null]);
+  });
+
+  test('a failed server preference write keeps the local default and reports false', () async {
+    final provider = summaryProvider(
+      summaryConversation(),
+      writePreferredSummaryApp: (_) async => throw StateError('offline'),
+    );
+    addTearDown(provider.dispose);
+    expect(await provider.setDefaultSummaryTemplateAppId('pg'), isFalse);
+    expect(provider.defaultSummaryTemplateAppId, 'pg');
   });
 
   test('the default summary template is saved locally; null is Omi', () {

@@ -17,6 +17,11 @@ _BATCH_PIPELINE_INDEXES = tuple(
     for namespace in ('batch_pipeline_prod', 'batch_pipeline_dev')
     for name, fields in (
         ('merge', (_asc('owner_key'), _asc('merge_pending'), _asc('capture_at'), _asc('segment_id'))),
+        (
+            'merge_ready',
+            (_asc('owner_key'), _asc('merge_pending'), _asc('state'), _asc('capture_at'), _asc('segment_id')),
+        ),
+        ('merge_ready_age', (_asc('owner_key'), _asc('merge_pending'), _asc('state'), _asc('ready_at'))),
         ('recovery', (_asc('owner_id'), _asc('recovery_state'))),
         ('lease', (_asc('state'), _asc('lease_until'))),
         ('retry', (_asc('state'), _asc('available_at'))),

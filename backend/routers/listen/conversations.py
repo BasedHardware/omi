@@ -599,13 +599,28 @@ class LiveConversationController:
         payload = omit_null_processing_state(conversation.model_dump())
         if carry:
             payload['manual_speaker_assignments'] = carry
+        idempotent_create = bool(
+            self.host.client_conversation_id and conversation_id == self.host.client_conversation_id
+        )
         created = await self.host.persistence.call(
             lifecycle_service.create_in_progress_conversation,
             request.uid,
             payload,
-            idempotent=bool(self.host.client_conversation_id and conversation_id == self.host.client_conversation_id),
+            idempotent=idempotent_create,
         )
-        self.host.batch_record_capture = capture_snapshot(payload) if created else None
+        if created or not idempotent_create:
+            self.host.batch_record_capture = capture_snapshot(payload)
+        else:
+            # An idempotent hit: another writer created this client id between the
+            # probe above and this create. Snapshot the stored row like the resume
+            # paths do; pinning None would hold a batch-owned recording ineligible.
+            stored = await self.host.persistence.call(
+                conversations_db.get_conversation,
+                request.uid,
+                conversation_id,
+                read_site=FirestoreReadSite.LISTEN_CLIENT_ID_PROBE,
+            )
+            self.host.batch_record_capture = capture_snapshot(stored) if stored else None
         if rollover:
             proposed = {'conversation_id': conversation_id, 'recording_session_id': self.host.recording_session_id}
             adopted = await self._continuation(proposed)

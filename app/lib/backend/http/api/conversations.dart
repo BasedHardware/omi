@@ -119,10 +119,11 @@ Future<({List<ServerConversation> items, bool ok, bool truncated})> getConversat
     // Unlocked rows carry full transcripts, so a page can be megabytes; parse
     // it off the UI isolate (this runs on resume, right as the user scrolls).
     final memories = await offUiIsolate(
-        () => parseConversationListBody(jsonDecode(utf8.decode(bodyBytes)) as List<dynamic>),
-        size: bodyBytes.length,
-        threshold: conversationListBackgroundParseBytes,
-        debugName: 'conversation_list_parse');
+      () => parseConversationListBody(jsonDecode(utf8.decode(bodyBytes)) as List<dynamic>),
+      size: bodyBytes.length,
+      threshold: conversationListBackgroundParseBytes,
+      debugName: 'conversation_list_parse',
+    );
     Logger.debug('getConversations length: ${memories.length}');
     return (items: memories, ok: true, truncated: isOmiListTruncated(response));
   }
@@ -188,13 +189,25 @@ final class ReprocessFailed extends ReprocessResult {
 /// pool must never retry it (a timeout or 5xx retry starts a second, duplicate reprocess).
 const Duration reprocessRequestTimeout = Duration(seconds: 180);
 
+/// The reprocess query: `app_id` for a template, `source=omi` for Omi's own notes ([forceOmi]),
+/// nothing for the legacy "regenerate" (Omi notes plus the user's server preferred template).
+/// A backend that predates `source` ignores the unknown parameter.
+@visibleForTesting
+String reprocessQuery({String? appId, bool forceOmi = false}) {
+  if (appId != null) return '?app_id=${Uri.encodeQueryComponent(appId)}';
+  if (forceOmi) return '?source=omi';
+  return '';
+}
+
 Future<ReprocessResult> reProcessConversationServer(
   String conversationId, {
   String? appId,
   bool requireSpeakerReceipt = false,
+  bool forceOmi = false,
 }) async {
+  final route = '${Env.apiBaseUrl}v1/conversations/$conversationId/reprocess';
   final response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/conversations/$conversationId/reprocess${appId != null ? '?app_id=$appId' : ''}',
+    url: '$route${reprocessQuery(appId: appId, forceOmi: forceOmi)}',
     headers: {},
     method: 'POST',
     body: '',
@@ -424,8 +437,8 @@ String conversationCollectionUrl(
 /// stay for unmigrated callers; 403/503/missing are distinct here instead of null.
 class ConversationApi {
   ConversationApi({required String baseUrl, ApiSend? send})
-      : _baseUrl = baseUrl.endsWith('/') ? baseUrl : '$baseUrl/',
-        _send = send;
+    : _baseUrl = baseUrl.endsWith('/') ? baseUrl : '$baseUrl/',
+      _send = send;
 
   final String _baseUrl;
   final ApiSend? _send;
@@ -461,17 +474,17 @@ class ConversationApi {
     return switch (sent) {
       ApiFailure(:final problem) => ApiFailure(problem),
       ApiSuccess(:final data, :final truncated) => switch (decodeApiRows<ServerConversation>(
+        data,
+        ServerConversation.fromJson,
+        fallback: recordFallback,
+      )) {
+        ApiSuccess(:final data, :final rejectedRows) => ApiSuccess(
           data,
-          ServerConversation.fromJson,
-          fallback: recordFallback,
-        )) {
-          ApiSuccess(:final data, :final rejectedRows) => ApiSuccess(
-              data,
-              rejectedRows: rejectedRows,
-              truncated: truncated,
-            ),
-          ApiFailure(:final problem) => ApiFailure(problem),
-        },
+          rejectedRows: rejectedRows,
+          truncated: truncated,
+        ),
+        ApiFailure(:final problem) => ApiFailure(problem),
+      },
     };
   }
 
@@ -619,10 +632,7 @@ Future<bool> assignBulkConversationTranscriptSegments(
   var response = await makeApiCall(
     url: speakerId == null
         ? '${Env.apiBaseUrl}v1/conversations/$conversationId/segments/assign-bulk'
-        : '${Env.apiBaseUrl}v1/conversations/$conversationId/assign-speaker/$speakerId?${Uri(queryParameters: {
-                'assign_type': assignType,
-                'value': value ?? 'null'
-              }).query}',
+        : '${Env.apiBaseUrl}v1/conversations/$conversationId/assign-speaker/$speakerId?${Uri(queryParameters: {'assign_type': assignType, 'value': value ?? 'null'}).query}',
     headers: {},
     method: 'PATCH',
     body: jsonEncode({'segment_ids': segmentIds, 'assign_type': assignType, 'value': value}),
@@ -912,14 +922,14 @@ bool isSyncContentInProgressResponse(http.Response response) {
 @visibleForTesting
 UploadFilesResult? syncContentInProgressResult(http.Response response) {
   if (!isSyncContentInProgressResponse(response)) return null;
-  final body = wire.GeneratedSyncContentInProgressResponse.fromJson(
-    jsonDecode(response.body) as Map<String, dynamic>,
-  );
+  final body = wire.GeneratedSyncContentInProgressResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
   final id = body.jobId;
   if (id == null || id.trim().isEmpty) return null;
   final pollAfterMs = body.pollAfterMs ?? 20000;
-  return UploadFilesResult.queued(id,
-      pollAfterMs: max(20000, max(pollAfterMs, (_parseRetryAfterSeconds(response) ?? 10) * 1000)));
+  return UploadFilesResult.queued(
+    id,
+    pollAfterMs: max(20000, max(pollAfterMs, (_parseRetryAfterSeconds(response) ?? 10) * 1000)),
+  );
 }
 
 /// Upload-only: POST files and return as soon as the server acknowledges
@@ -1041,9 +1051,7 @@ class SyncJobFetch {
   final SyncJobStatusResponse? status;
   final SyncRateLimitedException? rateLimit;
   const SyncJobFetch(this.outcome, [this.status]) : rateLimit = null;
-  const SyncJobFetch.throttled(this.rateLimit)
-      : outcome = SyncJobFetchOutcome.throttled,
-        status = null;
+  const SyncJobFetch.throttled(this.rateLimit) : outcome = SyncJobFetchOutcome.throttled, status = null;
 }
 
 /// Single GET of a sync job's status — no polling loop. The reconciler owns
@@ -1061,11 +1069,13 @@ Future<SyncJobFetch> fetchSyncJobStatus(String jobId) async {
   }
   final outcome = syncJobFetchOutcomeForStatusCode(response.statusCode);
   if (outcome == SyncJobFetchOutcome.throttled) {
-    return SyncJobFetch.throttled(SyncRateLimitedException(
-      kind: syncRateLimitKindForResponse(response),
-      retryAfterSeconds: _parseRetryAfterSeconds(response),
-      reasonCode: syncRateLimitReasonCode(response),
-    ));
+    return SyncJobFetch.throttled(
+      SyncRateLimitedException(
+        kind: syncRateLimitKindForResponse(response),
+        retryAfterSeconds: _parseRetryAfterSeconds(response),
+        reasonCode: syncRateLimitReasonCode(response),
+      ),
+    );
   }
   if (outcome == SyncJobFetchOutcome.notFound) {
     DebugLogManager.logEvent('fetch_sync_job_status', {
@@ -1122,10 +1132,10 @@ class ConversationSearchResult {
   });
 
   const ConversationSearchResult.failure({this.statusCode})
-      : items = const [],
-        currentPage = 0,
-        totalPages = 0,
-        outcome = ConversationSearchResultOutcome.failure;
+    : items = const [],
+      currentPage = 0,
+      totalPages = 0,
+      outcome = ConversationSearchResultOutcome.failure;
 
   bool get isSuccess => outcome == ConversationSearchResultOutcome.success;
 }

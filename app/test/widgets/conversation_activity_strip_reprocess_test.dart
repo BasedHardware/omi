@@ -17,15 +17,15 @@ import 'package:omi/providers/conversation_provider.dart';
 import '../helpers/reprocess_fakes.dart';
 
 TranscriptSegment _segment(String text) => TranscriptSegment(
-      id: 'seg-1',
-      text: text,
-      speaker: 'SPEAKER_00',
-      isUser: false,
-      personId: null,
-      start: 0,
-      end: 1,
-      translations: [],
-    );
+  id: 'seg-1',
+  text: text,
+  speaker: 'SPEAKER_00',
+  isUser: false,
+  personId: null,
+  start: 0,
+  end: 1,
+  translations: [],
+);
 
 ServerConversation _conversation({String overview = 'Old summary'}) {
   return ServerConversation(
@@ -37,10 +37,7 @@ ServerConversation _conversation({String overview = 'Old summary'}) {
   );
 }
 
-ConversationDetailProvider _detail(
-  ServerConversation conversation, {
-  ConversationReprocessCall? reprocess,
-}) {
+ConversationDetailProvider _detail(ServerConversation conversation, {ConversationReprocessCall? reprocess}) {
   return ConversationDetailProvider(reprocess: reprocess)
     ..selectedDate = conversationLocalDayKey(conversation.createdAt)
     ..setCachedConversation(conversation)
@@ -70,13 +67,11 @@ void main() {
       final gate = Completer<ServerConversation?>();
       final detail = _detail(
         _conversation(),
-        reprocess: conversationReprocess((id, {appId, requireSpeakerReceipt = false}) => gate.future),
+        reprocess: conversationReprocess((id, {appId, requireSpeakerReceipt = false, forceOmi = false}) => gate.future),
       );
       addTearDown(detail.dispose);
 
-      await tester.pumpWidget(
-        _app(detail, const ConversationActivityStrip(summaryTabVisible: false)),
-      );
+      await tester.pumpWidget(_app(detail, const ConversationActivityStrip(summaryTabVisible: false)));
       expect(find.byKey(const Key('conversation_activity_strip')), findsNothing);
 
       unawaited(detail.reprocessConversation(appId: null));
@@ -90,7 +85,7 @@ void main() {
       final gate = Completer<ServerConversation?>();
       final detail = _detail(
         _conversation(),
-        reprocess: conversationReprocess((id, {appId, requireSpeakerReceipt = false}) => gate.future),
+        reprocess: conversationReprocess((id, {appId, requireSpeakerReceipt = false, forceOmi = false}) => gate.future),
       );
       addTearDown(detail.dispose);
 

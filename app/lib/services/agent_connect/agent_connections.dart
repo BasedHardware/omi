@@ -5,14 +5,16 @@ import 'package:omi/backend/schema/mcp_api_key.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/services/agent_connect/agent_prompts.dart';
 import 'package:omi/services/agent_connect/zkr_share.dart';
+import 'package:omi/utils/logger.dart';
 
 /// Product name; never translated.
 const chatGptBrandName = 'ChatGPT';
 
 /// The approved ChatGPT directory listing: the one-tap ChatGPT path (same link as the macOS app's
 /// `MemoryExportDestination.chatGPTDirectoryInstallURL`).
-final chatGptDirectoryUrl =
-    Uri.parse('https://chatgpt.com/plugins/plugin_asdk_app_6a1490df4c588191b9339ae21978c873?q=omi');
+final chatGptDirectoryUrl = Uri.parse(
+  'https://chatgpt.com/plugins/plugin_asdk_app_6a1490df4c588191b9339ae21978c873?q=omi',
+);
 
 /// Opens ChatGPT with [prompt] typed in the composer.
 Uri chatGptPromptUrl(String prompt) => Uri.https('chatgpt.com', '/', {'q': prompt});
@@ -81,10 +83,10 @@ class AgentConnections {
   AgentConnections withoutChatGpt() => AgentConnections(chatGptGrantIds: const [], agentKeys: agentKeys);
 
   AgentConnections withoutAgentKey(ComputerAgent agent) => AgentConnections(
-        chatGptGrantIds: chatGptGrantIds,
-        agentKeys: {...agentKeys}..remove(agent),
-        chatGptMissingScopes: chatGptMissingScopes,
-      );
+    chatGptGrantIds: chatGptGrantIds,
+    agentKeys: {...agentKeys}..remove(agent),
+    chatGptMissingScopes: chatGptMissingScopes,
+  );
 
   static AgentConnections from({required List<Map<String, dynamic>> grants, required List<McpApiKey> keys}) {
     final live = [
@@ -119,13 +121,13 @@ class AgentConnectService {
     Future<void> Function(String keyId)? deleteKey,
     Future<ZkrShare> Function(String secret)? share,
     String? apiBase,
-  })  : _loadGrants = loadGrants ?? McpApi.getOauthGrants,
-        _revokeGrant = revokeGrant ?? McpApi.revokeOauthGrant,
-        _loadKeys = loadKeys ?? McpApi.getMcpApiKeys,
-        _createKey = createKey ?? McpApi.createMcpApiKey,
-        _deleteKey = deleteKey ?? McpApi.deleteMcpApiKey,
-        _share = share ?? ((secret) => createZkrShare(secret, name: 'omi-mcp-key.txt')),
-        _apiBase = apiBase;
+  }) : _loadGrants = loadGrants ?? McpApi.getOauthGrants,
+       _revokeGrant = revokeGrant ?? McpApi.revokeOauthGrant,
+       _loadKeys = loadKeys ?? McpApi.getMcpApiKeys,
+       _createKey = createKey ?? McpApi.createMcpApiKey,
+       _deleteKey = deleteKey ?? McpApi.deleteMcpApiKey,
+       _share = share ?? ((secret) => createZkrShare(secret, name: 'omi-mcp-key.txt')),
+       _apiBase = apiBase;
 
   final Future<List<Map<String, dynamic>>> Function() _loadGrants;
   final Future<void> Function(String grantId) _revokeGrant;
@@ -137,10 +139,7 @@ class AgentConnectService {
 
   Future<AgentConnections> load() async {
     final results = await Future.wait([_loadGrants(), _loadKeys()]);
-    return AgentConnections.from(
-      grants: results[0] as List<Map<String, dynamic>>,
-      keys: results[1] as List<McpApiKey>,
-    );
+    return AgentConnections.from(grants: results[0] as List<Map<String, dynamic>>, keys: results[1] as List<McpApiKey>);
   }
 
   /// Whether ChatGPT can look up a conversation; grants only, for surfaces that do not show keys.
@@ -176,12 +175,37 @@ class AgentConnectService {
     try {
       final older = (await _loadKeys()).where((key) => key.name == agent.keyName && key.id != keepKeyId);
       await Future.wait(older.map((key) => _deleteKey(key.id)));
-    } catch (_) {}
+    } catch (e) {
+      // Still best effort, but no longer silent: revokeAgent sweeps any key left behind.
+      Logger.debug('retireOlderKeys failed for ${agent.keyName}: $e');
+    }
   }
 
   String get _base => _apiBase ?? Env.apiBaseUrl ?? 'https://api.omi.me/';
 
   Future<void> revokeKey(String keyId) => _deleteKey(keyId);
+
+  /// Revokes every key [agent] holds, not only the one on screen: a failed [retireOlderKeys] can
+  /// leave an older key alive under the same name. Reloads the list first, so a stale screen cannot
+  /// miss one, and throws if any delete fails so the agent is never shown gone while a key works.
+  ///
+  /// If the list itself cannot load, the shown key is still revoked and the call throws, so the
+  /// sheet says it failed and a retry (with a working list) sweeps the rest. A key the list no
+  /// longer has is already gone and is not deleted twice.
+  Future<void> revokeAgent(ComputerAgent agent, {required String shownKeyId}) async {
+    final List<McpApiKey> listed;
+    try {
+      listed = await _loadKeys();
+    } catch (_) {
+      await _deleteKey(shownKeyId);
+      rethrow;
+    }
+    final ids = [
+      for (final key in listed)
+        if (key.name == agent.keyName) key.id,
+    ];
+    await Future.wait(ids.map(_deleteKey));
+  }
 }
 
 @immutable

@@ -83,7 +83,12 @@ class _ConnectAgentPageState extends State<ConnectAgentPage> with WidgetsBinding
         await _load();
       }
     } else {
-      await showChatGptConnectSheet(context);
+      // A partial grant (needs reconnect) is still live: the sheet offers Disconnect for it.
+      final disconnected = await showChatGptConnectSheet(context, service: _service, connections: connections);
+      if (disconnected == true) {
+        if (mounted) setState(() => _connections = _connections?.withoutChatGpt());
+        await _load();
+      }
     }
   }
 
@@ -121,8 +126,8 @@ class _ConnectAgentPageState extends State<ConnectAgentPage> with WidgetsBinding
       appBar: AppBar(leading: const OmiBackButton(), title: Text(l10n.connectAnAgent)),
       body: connections == null
           ? (_failed
-              ? OmiErrorState(message: l10n.connectAgentLoadFailed, onRetry: _load, retryLabel: l10n.tryAgain)
-              : const OmiLoadingState())
+                ? OmiErrorState(message: l10n.connectAgentLoadFailed, onRetry: _load, retryLabel: l10n.tryAgain)
+                : const OmiLoadingState())
           : RefreshIndicator(
               onRefresh: _load,
               child: ListView(
@@ -153,9 +158,7 @@ class _ConnectAgentPageState extends State<ConnectAgentPage> with WidgetsBinding
                   OmiSettingsGroup(
                     header: l10n.connectAgentComputerAgents,
                     headerSubtitle: l10n.connectAgentComputerAgentsSubtitle,
-                    children: [
-                      for (final agent in ComputerAgent.values) _agentRow(context, agent, connections),
-                    ],
+                    children: [for (final agent in ComputerAgent.values) _agentRow(context, agent, connections)],
                   ),
                   const SizedBox(height: OmiSpacing.xl),
                   Center(

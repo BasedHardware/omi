@@ -80,6 +80,12 @@ class Serving:
         owes = getattr(self.projector, 'owes_followups', False) is True
         if self.projector and (priority or self.projector.has_async_followups or owes):
             await self.projector.start_followups(priority or ())
+        # Owners the sweep or a wake discovered drain continuously in this process.
+        if self.projector and getattr(self.projector, 'owes_drains', False) is True:
+            self.projector.start_drains()
+        # Deferred search/people-stats work left by walks converges off the chain.
+        if self.projector and getattr(self.projector, 'owes_index', False) is True:
+            self.projector.schedule_index_flush()
 
     def _leads(self, periodic: bool) -> bool:
         # Explicit RPC callers (POST /reconcile, post-recovery drain) always

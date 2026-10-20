@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'package:cached_network_image/cached_network_image.dart';
@@ -131,7 +133,8 @@ class _SummaryTemplateSheetState extends State<SummaryTemplateSheet> {
       selectedAppId: appId ?? _omiAnalyticsId,
       previousAppId: previous.isApp ? previous.appId : null,
     );
-    if (_useForNewConversations) provider.setDefaultSummaryTemplateAppId(appId);
+    // The server preference write runs alongside the summary; this request names its source itself.
+    if (_useForNewConversations) unawaited(provider.setDefaultSummaryTemplateAppId(appId));
     if (mounted) Navigator.of(context).pop();
     await startSummary(provider, appId);
   }
@@ -199,7 +202,9 @@ class _SummaryTemplateSheetState extends State<SummaryTemplateSheet> {
             ),
           ),
           Container(
-            decoration: BoxDecoration(border: Border(top: BorderSide(color: OmiColors.border, width: 0.5))),
+            decoration: BoxDecoration(
+              border: Border(top: BorderSide(color: OmiColors.border, width: 0.5)),
+            ),
             padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.xs, OmiSpacing.md, OmiSpacing.xs),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -268,7 +273,10 @@ class _SectionHeader extends StatelessWidget {
       header: true,
       child: Padding(
         padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.lg, OmiSpacing.md, OmiSpacing.xs),
-        child: Text(text, style: OmiType.footnote.copyWith(color: OmiColors.textTertiary, fontWeight: FontWeight.w600)),
+        child: Text(
+          text,
+          style: OmiType.footnote.copyWith(color: OmiColors.textTertiary, fontWeight: FontWeight.w600),
+        ),
       ),
     );
   }
@@ -361,8 +369,8 @@ class _TemplateRow extends StatelessWidget {
                 child: installing
                     ? const OmiSpinner(size: OmiSpinnerSize.small)
                     : selected
-                        ? Icon(Icons.check_circle_rounded, color: OmiColors.textPrimary, size: 22)
-                        : Icon(Icons.circle_outlined, color: OmiColors.textTertiary, size: 22),
+                    ? Icon(Icons.check_circle_rounded, color: OmiColors.textPrimary, size: 22)
+                    : Icon(Icons.circle_outlined, color: OmiColors.textTertiary, size: 22),
               ),
             ],
           ),
@@ -542,7 +550,9 @@ class _LinkRow extends StatelessWidget {
                   child: Icon(icon, size: 18, color: OmiColors.textPrimary),
                 ),
                 const SizedBox(width: OmiSpacing.sm),
-                Expanded(child: Text(label, style: OmiType.callout.copyWith(fontWeight: FontWeight.w500))),
+                Expanded(
+                  child: Text(label, style: OmiType.callout.copyWith(fontWeight: FontWeight.w500)),
+                ),
                 Icon(Icons.chevron_right_rounded, color: OmiColors.textTertiary, size: 22),
               ],
             ),

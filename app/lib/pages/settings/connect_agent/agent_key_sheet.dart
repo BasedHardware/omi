@@ -223,7 +223,7 @@ class _ActiveAgentSheetState extends State<ActiveAgentSheet> {
     if (!confirmed || !mounted) return;
     setState(() => _revoking = true);
     try {
-      await widget.service.revokeKey(widget.keyId);
+      await widget.service.revokeAgent(widget.agent, shownKeyId: widget.keyId);
       if (mounted) Navigator.of(context).pop(true);
     } catch (_) {
       if (!mounted) return;

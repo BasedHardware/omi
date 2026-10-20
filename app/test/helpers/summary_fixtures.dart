@@ -18,21 +18,21 @@ import 'package:omi/ui/ui.dart';
 const summaryFixtureTitle = 'Turn right at the next one, not this one.';
 
 App summaryApp(String id, String name, {bool enabled = true}) => App(
-      id: id,
-      name: name,
-      author: 'tester',
-      description: 'A summary template',
-      image: '',
-      capabilities: {'memories'},
-      status: 'approved',
-      category: 'productivity',
-      approved: true,
-      ratingCount: 0,
-      enabled: enabled,
-      deleted: false,
-      isPaid: false,
-      isUserPaid: false,
-    );
+  id: id,
+  name: name,
+  author: 'tester',
+  description: 'A summary template',
+  image: '',
+  capabilities: {'memories'},
+  status: 'approved',
+  category: 'productivity',
+  approved: true,
+  ratingCount: 0,
+  enabled: enabled,
+  deleted: false,
+  isPaid: false,
+  isUserPaid: false,
+);
 
 TranscriptSegment summarySegment(
   String text, {
@@ -41,17 +41,16 @@ TranscriptSegment summarySegment(
   String id = 's0',
   double start = 0,
   double end = 4,
-}) =>
-    TranscriptSegment(
-      id: id,
-      text: text,
-      speaker: 'SPEAKER_0$speaker',
-      isUser: isUser,
-      personId: null,
-      translations: [],
-      start: start,
-      end: end,
-    );
+}) => TranscriptSegment(
+  id: id,
+  text: text,
+  speaker: 'SPEAKER_0$speaker',
+  isUser: isUser,
+  personId: null,
+  translations: [],
+  start: start,
+  end: end,
+);
 
 ServerConversation summaryConversation({
   String id = 'conv-summary',
@@ -59,24 +58,24 @@ ServerConversation summaryConversation({
   String overview = '',
   List<AppResponse> appResults = const [],
   List<TranscriptSegment>? segments,
-}) =>
-    ServerConversation(
-      id: id,
-      createdAt: DateTime(2026, 10, 17, 9, 30),
-      startedAt: DateTime(2026, 10, 17, 9, 30),
-      finishedAt: DateTime(2026, 10, 17, 9, 44),
-      structured: Structured(title, overview, emoji: '🚗'),
-      appResults: appResults,
-      status: ConversationStatus.completed,
-      transcriptSegments: segments ??
-          [
-            summarySegment(
-              "Okay, so after the gas station it's the second light. Not the first one, the first one "
-              'is a dead end into the parking garage. Then left on Valencia and the place is on the right.',
-            ),
-            summarySegment('Got it, second light.', isUser: true, id: 's1', start: 820, end: 840),
-          ],
-    );
+}) => ServerConversation(
+  id: id,
+  createdAt: DateTime(2026, 10, 17, 9, 30),
+  startedAt: DateTime(2026, 10, 17, 9, 30),
+  finishedAt: DateTime(2026, 10, 17, 9, 44),
+  structured: Structured(title, overview, emoji: '🚗'),
+  appResults: appResults,
+  status: ConversationStatus.completed,
+  transcriptSegments:
+      segments ??
+      [
+        summarySegment(
+          "Okay, so after the gas station it's the second light. Not the first one, the first one "
+          'is a dead end into the parking garage. Then left on Valencia and the place is on the right.',
+        ),
+        summarySegment('Got it, second light.', isUser: true, id: 's1', start: 820, end: 840),
+      ],
+);
 
 /// Template list fetches a test controls: each call waits on a fresh completer.
 class SummaryTemplateFetches {
@@ -102,17 +101,22 @@ ConversationDetailProvider summaryProvider(
   ConversationReprocessCall? reprocess,
   SummaryTemplateFetches? fetches,
   List<App> catalog = const [],
+  PreferredSummaryAppWrite? writePreferredSummaryApp,
 }) {
   final fakes = fetches ?? SummaryTemplateFetches();
-  final provider = ConversationDetailProvider(
-    reprocess: reprocess ?? (id, {appId, requireSpeakerReceipt = false}) async => const ReprocessFailed(),
-    fetchConversation: (_) async => conversation,
-    fetchEnabledSummaryApps: fakes.fetchEnabled,
-    fetchSuggestedSummaryApps: fakes.fetchSuggested,
-  )
-    ..selectedDate = conversationLocalDayKey(conversation.startedAt ?? conversation.createdAt)
-    ..titleController = TextEditingController(text: conversation.structured.title)
-    ..titleFocusNode = FocusNode();
+  final provider =
+      ConversationDetailProvider(
+          reprocess:
+              reprocess ??
+              (id, {appId, requireSpeakerReceipt = false, forceOmi = false}) async => const ReprocessFailed(),
+          fetchConversation: (_) async => conversation,
+          fetchEnabledSummaryApps: fakes.fetchEnabled,
+          fetchSuggestedSummaryApps: fakes.fetchSuggested,
+          writePreferredSummaryApp: writePreferredSummaryApp ?? (_) async => true,
+        )
+        ..selectedDate = conversationLocalDayKey(conversation.startedAt ?? conversation.createdAt)
+        ..titleController = TextEditingController(text: conversation.structured.title)
+        ..titleFocusNode = FocusNode();
   provider.appProvider = AppProvider()..apps = List.of(catalog);
   provider.setCachedConversation(conversation);
   return provider;

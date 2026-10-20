@@ -4,6 +4,7 @@ import 'package:collection/collection.dart';
 
 import 'package:omi/backend/http/api/apps.dart';
 import 'package:omi/backend/http/api/conversations.dart';
+import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
@@ -17,6 +18,10 @@ typedef EnabledSummaryAppsFetch = Future<List<App>> Function();
 
 /// Templates suggested for one conversation; throws when the list could not be read.
 typedef SuggestedSummaryAppsFetch = Future<List<App>> Function(String conversationId);
+
+/// Saves [appId] as the server preferred template, or clears it (null: Omi's own summary).
+/// Resolves false when the server did not store it.
+typedef PreferredSummaryAppWrite = Future<bool> Function(String? appId);
 
 /// Where a template list fetch stands. [failed] is distinct from an empty [loaded] list.
 enum SummaryTemplatesLoad { idle, loading, loaded, failed }
@@ -50,24 +55,28 @@ class SummaryFailure {
 
 /// Whether [conversation] carries the summary a reprocess asked for: the template's non-empty
 /// result when [appId] is set, otherwise a non-empty Omi summary — the compatibility overview or
-/// the rendered sections, which is exactly what [ConversationSummarySelection.firstParty] accepts —
-/// or any non-empty result.
+/// the rendered sections, which is exactly what [ConversationSummarySelection.firstParty] accepts.
+/// A template result never stands in for Omi's own: a stale stored one would read as success.
 bool conversationHasRequestedSummary(ServerConversation conversation, String? appId) {
   if (appId != null) {
     return conversation.appResults.any((result) => result.appId == appId && result.content.trim().isNotEmpty);
   }
-  return ConversationSummarySelection.firstParty(conversation).kind != ConversationSummaryKind.empty ||
-      conversation.appResults.any((result) => result.content.trim().isNotEmpty);
+  return ConversationSummarySelection.firstParty(conversation).kind != ConversationSummaryKind.empty;
 }
+
+/// The production [PreferredSummaryAppWrite]: `PUT` for a template, `DELETE` for Omi.
+Future<bool> writeServerPreferredSummaryApp(String? appId) =>
+    appId == null ? clearPreferredSummarizationAppServer() : setPreferredSummarizationAppServer(appId);
 
 /// Installed summary templates that work on conversations; throws when the list cannot be read.
 Future<List<App>> fetchInstalledSummaryApps() async {
   final result = await retrieveInstalledChatApps(limit: 100);
   return switch (result) {
-    ApiSuccess(:final data) => (data.data ?? const [])
-        .map(App.fromGeneratedCatalogItem)
-        .where((app) => !app.deleted && app.worksWithMemories() && app.enabled)
-        .toList(),
+    ApiSuccess(:final data) =>
+      (data.data ?? const [])
+          .map(App.fromGeneratedCatalogItem)
+          .where((app) => !app.deleted && app.worksWithMemories() && app.enabled)
+          .toList(),
     ApiFailure(:final problem) => throw StateError('installed apps unavailable: ${problem.kind.name}'),
   };
 }
@@ -88,6 +97,7 @@ mixin ConversationSummaryGeneration on ChangeNotifier {
   AppProvider? get appProvider;
   EnabledSummaryAppsFetch get enabledSummaryAppsFetch;
   SuggestedSummaryAppsFetch get suggestedSummaryAppsFetch;
+  PreferredSummaryAppWrite get preferredSummaryAppWrite;
 
   /// Whether the provider is disposed; late responses must not notify.
   bool get summaryGenerationDisposed;
@@ -131,8 +141,8 @@ mixin ConversationSummaryGeneration on ChangeNotifier {
   /// Returns cached suggested apps for the open conversation (empty for any other).
   List<App> get cachedSuggestedApps =>
       _cachedSuggestedAppsConversationId != null && _cachedSuggestedAppsConversationId == conversationOrNull?.id
-          ? _cachedSuggestedApps
-          : const [];
+      ? _cachedSuggestedApps
+      : const [];
 
   /// Forgets the open conversation's suggestions (another conversation is now open).
   @protected
@@ -154,8 +164,9 @@ mixin ConversationSummaryGeneration on ChangeNotifier {
     final target = conversation;
     final key = _summaryViewConversationId == target.id ? _summaryViewKey : null;
     if (key != null) {
-      final picked =
-          ConversationSummarySelection.available(target).firstWhereOrNull((selection) => selection.sourceKey == key);
+      final picked = ConversationSummarySelection.available(
+        target,
+      ).firstWhereOrNull((selection) => selection.sourceKey == key);
       if (picked != null) return picked;
     }
     return ConversationSummarySelection.select(target);
@@ -198,8 +209,9 @@ mixin ConversationSummaryGeneration on ChangeNotifier {
     if (summaryGenerationDisposed || generation != _enabledAppsGeneration) return;
 
     // Preserve locally added apps that aren't in the API response yet
-    final locallyAddedApps =
-        _cachedEnabledConversationApps.where((app) => _locallyAddedAppIds.contains(app.id)).toList();
+    final locallyAddedApps = _cachedEnabledConversationApps
+        .where((app) => _locallyAddedAppIds.contains(app.id))
+        .toList();
 
     _cachedEnabledConversationApps.clear();
     _cachedEnabledConversationApps.addAll(apps);
@@ -319,8 +331,19 @@ mixin ConversationSummaryGeneration on ChangeNotifier {
     return id.isEmpty ? null : id;
   }
 
-  void setDefaultSummaryTemplateAppId(String? appId) {
+  /// Saves the default locally (the sheet's initial choice on this device) and on the server, which
+  /// owns what automatic processing runs: a template is set as the preferred app, Omi clears it.
+  /// Resolves whether the server stored it; the local choice is kept either way.
+  Future<bool> setDefaultSummaryTemplateAppId(String? appId) async {
     SharedPreferencesUtil().saveString(_defaultTemplateKey(), appId ?? '');
     notifyListeners();
+    try {
+      final stored = await preferredSummaryAppWrite(appId);
+      if (!stored) Logger.debug('preferred summary app was not stored on the server');
+      return stored;
+    } catch (e) {
+      Logger.debug('preferred summary app write failed: ${e.runtimeType}');
+      return false;
+    }
   }
 }

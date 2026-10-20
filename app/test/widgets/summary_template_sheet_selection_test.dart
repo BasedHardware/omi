@@ -16,19 +16,19 @@ import '../helpers/summary_fixtures.dart';
 class _RecordingReprocess {
   final List<String?> appIds = [];
 
-  Future<ReprocessResult> call(String id, {String? appId, bool requireSpeakerReceipt = false}) {
+  Future<ReprocessResult> call(String id, {String? appId, bool requireSpeakerReceipt = false, bool forceOmi = false}) {
     appIds.add(appId);
     return Future.value(const ReprocessFailed());
   }
 }
 
 Widget _sheetLauncher() => Scaffold(
-      body: Builder(
-        builder: (context) => Center(
-          child: TextButton(onPressed: () => showSummarizedAppsSheet(context), child: const Text('open')),
-        ),
-      ),
-    );
+  body: Builder(
+    builder: (context) => Center(
+      child: TextButton(onPressed: () => showSummarizedAppsSheet(context), child: const Text('open')),
+    ),
+  ),
+);
 
 Future<void> _openSheet(WidgetTester tester) async {
   await tester.tap(find.text('open'));
@@ -53,7 +53,10 @@ void main() {
       final fetches = SummaryTemplateFetches();
       final reprocess = _RecordingReprocess();
       final provider = summaryProvider(
-        summaryConversation(overview: 'Template wrote this', appResults: [AppResponse('Gone template', appId: 'gone')]),
+        summaryConversation(
+          overview: 'Template wrote this',
+          appResults: [AppResponse('Gone template', appId: 'gone')],
+        ),
         reprocess: reprocess.call,
         fetches: fetches,
       );
@@ -83,7 +86,10 @@ void main() {
       final fetches = SummaryTemplateFetches();
       final reprocess = _RecordingReprocess();
       final provider = summaryProvider(
-        summaryConversation(overview: 'Old', appResults: [AppResponse('Template text', appId: 'pg')]),
+        summaryConversation(
+          overview: 'Old',
+          appResults: [AppResponse('Template text', appId: 'pg')],
+        ),
         reprocess: reprocess.call,
         fetches: fetches,
         catalog: [summaryApp('pg', 'Paul Graham')],
@@ -109,7 +115,10 @@ void main() {
       final fetches = SummaryTemplateFetches();
       final reprocess = _RecordingReprocess();
       final provider = summaryProvider(
-        summaryConversation(overview: 'Old', appResults: [AppResponse('Template text', appId: 'pg')]),
+        summaryConversation(
+          overview: 'Old',
+          appResults: [AppResponse('Template text', appId: 'pg')],
+        ),
         reprocess: reprocess.call,
         fetches: fetches,
         catalog: [summaryApp('pg', 'Paul Graham')],

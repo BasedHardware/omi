@@ -18,8 +18,13 @@ class ConversationSummarySelection {
   /// Renderable first-party sections; app outputs and edited overviews keep their flat path.
   final List<Section> sections;
 
-  const ConversationSummarySelection(
-      {required this.content, required this.kind, this.appId, this.resultIndex, this.sections = const []});
+  const ConversationSummarySelection({
+    required this.content,
+    required this.kind,
+    this.appId,
+    this.resultIndex,
+    this.sections = const [],
+  });
 
   bool get isApp => kind == ConversationSummaryKind.app;
 
@@ -88,23 +93,39 @@ class ConversationSummarySelection {
     final validIDs = knownIDs.toSet();
     final sections = conversation.structured.sections
         .where((section) => section.bodyMarkdown.trim().isNotEmpty)
-        .map((section) => Section(
-              heading: presentable(section.heading),
-              bodyMarkdown: presentable(section.bodyMarkdown),
-              kind: section.kind,
-              sourceSegmentIds: (section.sourceSegmentIds ?? []).where(validIDs.contains).toSet().toList(),
-            ))
+        .map((section) {
+          final heading = repairNoteCitations(section.heading, knownIDs);
+          final body = repairNoteCitations(section.bodyMarkdown, knownIDs);
+          // Inline citations the repair removes join the typed provenance (macOS presentableSection),
+          // so a legacy note whose only evidence was `[s01234]` keeps its transcript pointer.
+          return Section(
+            heading: heading.text,
+            bodyMarkdown: body.text,
+            kind: section.kind,
+            sourceSegmentIds: [
+              ...?section.sourceSegmentIds,
+              ...heading.sourceIDs,
+              ...body.sourceIDs,
+            ].where(validIDs.contains).toSet().toList(),
+          );
+        })
         .toList(growable: false);
     if (projectedSections.isNotEmpty && overview == projectedSections) {
       return ConversationSummarySelection(
-          content: presentable(projectedSections), kind: ConversationSummaryKind.sections, sections: sections);
+        content: presentable(projectedSections),
+        kind: ConversationSummaryKind.sections,
+        sections: sections,
+      );
     }
     if (overview.isNotEmpty) {
       return ConversationSummarySelection(content: presentable(overview), kind: ConversationSummaryKind.overview);
     }
     if (projectedSections.isNotEmpty) {
       return ConversationSummarySelection(
-          content: presentable(projectedSections), kind: ConversationSummaryKind.sections, sections: sections);
+        content: presentable(projectedSections),
+        kind: ConversationSummaryKind.sections,
+        sections: sections,
+      );
     }
     return const ConversationSummarySelection(content: '', kind: ConversationSummaryKind.empty);
   }
