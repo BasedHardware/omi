@@ -20,5 +20,5 @@ def chunk_identity(
         identity.append(capture_partition)
     if clock_run is not None:
         # Two estimated runs can share an invented timestamp; never one anchor.
-        identity.append({'clock_run': clock_run})
+        identity.append(f'clock_run:{clock_run}')
     return str(uuid5(NAMESPACE_URL, json.dumps(identity)))
