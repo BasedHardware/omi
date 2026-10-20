@@ -147,7 +147,14 @@ class Serving:
             job = self.store.run(lambda tx: tx.get('jobs', segment))
             if job and job['owner_id'] not in owners:
                 owners.add(job['owner_id'])
-                self.drain_owner(job['owner_id'])
+                try:
+                    self.drain_owner(job['owner_id'])
+                except Exception as error:
+                    # One fenced head must not stop the other owners or the held re-offer.
+                    logging.getLogger(__name__).warning(
+                        'event=batch_merge action=ready_drain outcome=retry exception_type=%s count=1',
+                        type(error).__name__,
+                    )
         # Held owners by durable marker: the page above can be all one held backlog.
         self.merge.reoffer_marked(self.drain_owner)
 

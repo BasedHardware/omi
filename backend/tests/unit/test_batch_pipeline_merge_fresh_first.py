@@ -509,3 +509,52 @@ def test_a_stale_marker_without_pending_rows_is_cleared_without_a_drain():
     drain_calls = []
     merge_for(store).reoffer_marked(drain_calls.append)
     assert drain_calls == [] and store.rows['merge_holds', OWNER]['held'] is False
+
+
+def test_a_fenced_unclassified_head_updates_hold_bookkeeping_before_raising():
+    rows = {'c0': (1000, None)}  # No fresh_capture stamp: the strict fence re-raises.
+    store, queue, leases = admitted(rows, _FencedHeadStore())
+    complete(queue, leases, 'c0')
+    merge = merge_for(store)
+    merge.held_owners.add('heavy')
+    with pytest.raises(BatchPrivacyBlocked):
+        merge.commit_next('heavy', NOW)
+    assert merge.held_owners == set()
+
+
+def test_marker_re_offer_survives_a_failing_owner():
+    store = MemoryStore()
+    for key in ('a', 'b'):
+        store.rows['merge_holds', key] = {'held': True, 'held_at': NOW}
+    merge = merge_for(store)
+    merge.marked_page = lambda limit: [('a', 'bad-owner'), ('b', 'good-owner')]
+    drained = []
+
+    def drain_owner(owner_id):
+        if owner_id == 'bad-owner':
+            raise BatchPrivacyBlocked('fenced')
+        drained.append(owner_id)
+
+    merge.reoffer_marked(drain_owner)
+    assert drained == ['good-owner']
+
+
+@pytest.mark.asyncio
+async def test_pump_held_re_offer_isolates_each_owner():
+    pump = Pump(Scheduler(MemoryStore()), Mock(), leader=_Leader(True), publish_concurrency=1, inline_metrics=False)
+    pump.scheduler.store.due = Mock(return_value=[])
+    pump._drain_ready_owners = AsyncMock(side_effect=BatchPrivacyBlocked('fenced page owner'))
+    pump.merge.marked_page = lambda limit: [('a', 'bad-owner'), ('b', 'good-owner')]
+    pump.merge.release_hold = Mock()
+    pump.merge.held_owners.update({'bad-owner', 'good-owner'})
+    drained = []
+
+    async def drain_owner(owner_id):
+        drained.append(owner_id)
+        if owner_id == 'bad-owner':
+            raise BatchPrivacyBlocked('fenced')
+
+    pump.drain_owner = drain_owner
+    await pump._maintain()
+    assert drained.count('good-owner') == 2  # Marker page and in-memory set both reached it.
+    pump.merge.release_hold.assert_called_once_with('b', force=False)

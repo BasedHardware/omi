@@ -202,21 +202,39 @@ class Pump:
                     await run_blocking(sync_executor, self.project_pending)
                 await run_blocking(db_executor, self.scheduler.recover, time.time())
                 ready = await run_blocking(db_executor, self.scheduler.store.due, 'result_ready', time.time(), 100)
-                await self._drain_ready_owners(ready)
+                try:
+                    await self._drain_ready_owners(ready)
+                except Exception as error:
+                    # A fenced head on the page must not stop the held-owner re-offer below.
+                    self._log_held_retry('ready_page', error)
                 # Durable hold markers outlive the in-memory set below (restarts).
                 marked = await run_blocking(db_executor, self.merge.marked_page, 50)
                 for key, owner_id in marked:
-                    if owner_id:
-                        await self.drain_owner(owner_id)
-                    await run_blocking(db_executor, self.merge.release_hold, key, force=not owner_id)
+                    try:
+                        if owner_id:
+                            await self.drain_owner(owner_id)
+                        await run_blocking(db_executor, self.merge.release_hold, key, force=not owner_id)
+                    except Exception as error:
+                        self._log_held_retry('marker', error)
             # Every pump re-offers the owners its merge held for projection
             # depth; their rows may never surface in the 100-row page above.
             for owner_id in list(self.merge.held_owners):
-                await self.drain_owner(owner_id)
+                try:
+                    await self.drain_owner(owner_id)
+                except Exception as error:
+                    self._log_held_retry('held', error)
             self._last_recovery = sampled_at
         if self.inline_metrics and self.metrics and sampled_at - self._last_metrics >= 15:
             await self.sample_metrics()
             self._last_metrics = sampled_at
+
+    @staticmethod
+    def _log_held_retry(scope: str, error: Exception) -> None:
+        logger.warning(
+            'event=batch_merge action=held_reoffer outcome=retry scope=%s exception_type=%s count=1',
+            scope,
+            type(error).__name__,
+        )
 
     async def _flight(self, stop_event: asyncio.Event | None) -> int:
         now = time.time()

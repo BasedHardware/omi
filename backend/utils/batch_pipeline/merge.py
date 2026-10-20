@@ -120,9 +120,17 @@ class OrderedMerge:
         """Leader maintenance: re-offer owners holding durable markers, which an
         in-memory set loses on restart and the global ready page can hide."""
         for key, owner_id in self.marked_page(limit):
-            if owner_id:
-                drain(owner_id)
-            self.release_hold(key, force=not owner_id)
+            try:
+                if owner_id:
+                    drain(owner_id)
+                self.release_hold(key, force=not owner_id)
+            except Exception as error:
+                # One fenced or failing owner must not starve the rest of the page.
+                logger.warning(
+                    'event=batch_merge action=held_reoffer outcome=retry source=%s exception_type=%s count=1',
+                    self.commit_source,
+                    type(error).__name__,
+                )
 
     def _head_wait_unavailable(self) -> None:
         self._head_wait_retry_at = time.monotonic() + HEAD_WAIT_UNAVAILABLE_RETRY_SECONDS
@@ -266,16 +274,16 @@ class OrderedMerge:
         try:
             entry = self.store.run(commit)
         except BatchPrivacyBlocked as error:
-            # A fenced catch-up head must not hide the owner's ready fresh rows;
-            # any other fence keeps its strict-order behaviour.
-            if not (depth and head.get('catch_up')):
-                raise
             entry, fenced = None, error
         strict_blocked, strict_catch_up = dict(blocked), bool(held.get('catch_up'))
         if held.get('over_cap'):
             self.held_owners.add(owner_id)
         else:
             self.held_owners.discard(owner_id)
+        if fenced is not None and not (depth and head.get('catch_up')):
+            # A fenced catch-up head must not hide the owner's ready fresh rows;
+            # any other fence keeps its strict-order behaviour.
+            raise fenced
         if entry is None and depth and (strict_catch_up or strict_blocked.get('catch_up') or fenced):
             # A catch-up row heads the owner. Probe for a ready fresh row
             # outside the strict transaction (no transactional query lock);
