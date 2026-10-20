@@ -9,7 +9,8 @@ import time
 from fastapi import HTTPException
 from fastapi.responses import JSONResponse
 
-from config.batch_pipeline import priority_for, live_record_enabled_for
+from config.batch_pipeline import priority_for
+from config.policy import BatchUnitPolicy, resolve_batch_policy
 from config.batch_pipeline_providers import provider_config
 from config.stt_provider_policy import normalized_stt_language, PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL
 from database.batch_pipeline_intake import admit, cache_completed
@@ -65,7 +66,14 @@ def durable_status(store, uid: str, job_id: str) -> dict | None:
         if not completed:
             for job in jobs:
                 Scheduler.redrive_in_transaction(tx, job, time.time())
-        failed = sum(job.get('state') == 'quarantined' for job in jobs)
+        recovering = any(
+            job.get('state') == 'quarantined' and job.get('recovery_state') in {'held', 'prepared', 'running'}
+            for job in jobs
+        )
+        failed = sum(
+            job.get('state') == 'quarantined' and job.get('recovery_state') not in {'held', 'prepared', 'running'}
+            for job in jobs
+        )
         status = (
             'failed'
             if failed
@@ -74,7 +82,7 @@ def durable_status(store, uid: str, job_id: str) -> dict | None:
                 if completed
                 else (
                     'processing'
-                    if any(job.get('state') in {'leased', 'result_ready', 'committed'} for job in jobs)
+                    if recovering or any(job.get('state') in {'leased', 'result_ready', 'committed'} for job in jobs)
                     else 'queued'
                 )
             )
@@ -121,8 +129,10 @@ async def accept_upload(
     byok_enabled: bool = False,
     intake_context: dict | None = None,
     record_router=None,
+    policy: BatchUnitPolicy | None = None,
 ) -> JSONResponse | None:
     """None preserves a prior legacy receipt; batch outcomes never fall through."""
+    policy = policy or resolve_batch_policy(uid)
     public_job_id = JOB_PREFIX + job_id
     iterator = None
     try:
@@ -193,11 +203,12 @@ async def accept_upload(
                 client_device_id=client_device_id,
                 byok_enabled=byok_enabled,
                 loaded_conversation=target,
+                policy=policy,
             )
         if target.get('record_lane_owner') == 'legacy_final_pass_v1':
             return None
         language = normalized_stt_language(target.get('language') or user.get('language'))
-        if live_record_enabled_for(uid) and language not in (
+        if policy.live_record_enabled and language not in (
             PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL['nvidia/parakeet-tdt-0.6b-v3'] - {'multi'}
         ):
             # Keep the supported existing provider route. Never silently send
@@ -209,11 +220,12 @@ async def accept_upload(
         record_origin = bool(
             target
             and source == 'desktop'
-            and live_record_enabled_for(uid)
+            and policy.live_record_enabled
             and not target.get('uses_custom_stt')
             and user.get('private_cloud_sync_enabled', True)
-            and normalized_stt_language(target.get('language'))
-            in PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL['nvidia/parakeet-tdt-0.6b-v3']
+            # The same conversation-or-user language as the escape above: a blank
+            # conversation language must replace, not append beside provisional text.
+            and language in PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL['nvidia/parakeet-tdt-0.6b-v3']
         )
         artifacts = await run_blocking(storage_executor, artifacts_for, store)
         config = provider_config()
@@ -250,6 +262,9 @@ async def accept_upload(
                     'client_device_id': client_device_id,
                     'client_platform': client_platform,
                     'conversation_id': conversation_id,
+                    # Resolved conversation/user STT language ('' when unknown).
+                    # The worker skips a Parakeet-only retry for other languages.
+                    'stt_language': language,
                 },
             )
             uri = await run_blocking(storage_executor, artifacts.stage_audio, item, frozen)
@@ -278,6 +293,7 @@ async def accept_upload(
             binding,
             time.time(),
             namespace=store.namespace,
+            policy=policy,
             require_artifacts=True,
             intake={
                 'owner_id': uid,
@@ -295,13 +311,7 @@ async def accept_upload(
             return start_response(status) if status else sync_content_in_progress_response(outcome['job_id'])
         return sync_content_in_progress_response(outcome.get('job_id'))
     except BatchPrivacyBlocked:
-        return JSONResponse(
-            status_code=409,
-            content={
-                'code': 'sync_batch_privacy_blocked',
-                'detail': 'Capture is unavailable for server processing',
-            },
-        )
+        return privacy_blocked_response()
     except Exception as error:
         # A transaction may have committed even when its reply was lost. Keep
         # the staging outbox for reconciliation; never release/re-route content.
@@ -317,6 +327,16 @@ async def accept_upload(
     finally:
         if iterator is not None:
             await run_blocking(sync_executor, iterator.close)
+
+
+def privacy_blocked_response() -> JSONResponse:
+    return JSONResponse(
+        status_code=409,
+        content={
+            'code': 'sync_batch_privacy_blocked',
+            'detail': 'Capture is unavailable for server processing',
+        },
+    )
 
 
 def get_durable_job_status(job_id: str, uid: str) -> dict | None:

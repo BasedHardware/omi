@@ -12,8 +12,8 @@ final class ScreenTaskPipelineTests: XCTestCase {
       }, processedAt: Date(timeIntervalSince1970: 0))
   }
 
-  @MainActor func testFlagDefaultsOffWithoutPostHogAdmission() {
-    XCTAssertFalse(ScreenTaskFeature.isEnabled)
+  func testMissingFlagValueDoesNotTurnTheGateOff() {
+    XCTAssertFalse(ScreenTaskFeature.isKillSwitchOff(flagValue: nil))
   }
 
   func testMainPaneDedupeIgnoresSidebarAndLayoutJitterButPassesNovelTask() {

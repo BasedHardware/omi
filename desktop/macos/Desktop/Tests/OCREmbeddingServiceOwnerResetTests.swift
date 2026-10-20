@@ -10,46 +10,61 @@ import XCTest
 /// so its 60s flush (or the next semantic search) wrote the previous owner's
 /// embeddings into the next owner's Rewind database. `reset()` must drop all
 /// queued owner-bound state at the transition boundary.
+@MainActor
 final class OCREmbeddingServiceOwnerResetTests: XCTestCase {
+  private var userDir: URL?
+  private var service: OCREmbeddingService?
+
   override func setUp() async throws {
-    try await super.setUp()
-    await OCREmbeddingService.shared.reset()
+    userDir = try await RewindStorageTestIsolation.setUp(userIdPrefix: "ocr-owner-reset").userDir
+    service = OCREmbeddingService(
+      ownerAuthorityForTesting: EmbeddingTestAuthorization().source,
+      batchEmbedderForTesting: { _, _, _ in
+        XCTFail("reset fixture must never dispatch cloud work")
+        throw CancellationError()
+      },
+      embeddingWriterForTesting: { _, _ in XCTFail("reset fixture must never write embeddings") },
+      missingEmbeddingIDsForTesting: { $0 },
+      flushSleeperForTesting: { _ in throw CancellationError() })
   }
 
   override func tearDown() async throws {
-    await OCREmbeddingService.shared.reset()
-    try await super.tearDown()
+    await service?.reset()
+    service = nil
+    await RewindStorageTestIsolation.tearDown(userDir: userDir)
   }
 
-  func testResetDropsPendingQueueAndDedupHashes() async {
+  func testResetDropsPendingQueueAndDedupHashes() async throws {
+    let service = try XCTUnwrap(service)
     let text = "sensitive on-screen text from the previous account, long enough to queue"
-    await OCREmbeddingService.shared.embedScreenshot(
+    await service.embedScreenshot(
       id: 41, ocrText: text, appName: "Notes", windowTitle: "Draft")
-    var pending = await OCREmbeddingService.shared.pendingCount
+    var pending = await service.pendingCount
     XCTAssertEqual(pending, 1, "enqueue should buffer the screenshot")
 
-    await OCREmbeddingService.shared.reset()
-    pending = await OCREmbeddingService.shared.pendingCount
+    await service.reset()
+    pending = await service.pendingCount
     XCTAssertEqual(pending, 0, "owner-boundary reset must drop the previous owner's queue")
 
     // The dedup hash set is also owner-bound state: identical text from the
     // next owner must be embeddable again after reset.
-    await OCREmbeddingService.shared.embedScreenshot(
+    await service.embedScreenshot(
       id: 7, ocrText: text, appName: "Notes", windowTitle: "Draft")
-    pending = await OCREmbeddingService.shared.pendingCount
+    pending = await service.pendingCount
     XCTAssertEqual(pending, 1, "reset must clear recent-hash dedup state")
 
-    await OCREmbeddingService.shared.reset()
+    await service.reset()
   }
 
-  func testFlushAfterResetIsANoOp() async {
-    await OCREmbeddingService.shared.embedScreenshot(
+  func testFlushAfterResetIsANoOp() async throws {
+    let service = try XCTUnwrap(service)
+    await service.embedScreenshot(
       id: 99, ocrText: String(repeating: "previous owner screen text ", count: 3),
       appName: "Safari", windowTitle: nil)
-    await OCREmbeddingService.shared.reset()
+    await service.reset()
     // Must return without touching the (new owner's) database or network.
-    await OCREmbeddingService.shared.flushPendingEmbeddings()
-    let pending = await OCREmbeddingService.shared.pendingCount
+    await service.flushPendingEmbeddings()
+    let pending = await service.pendingCount
     XCTAssertEqual(pending, 0)
   }
 
@@ -69,7 +84,8 @@ final class OCREmbeddingServiceOwnerResetTests: XCTestCase {
     let writes = WriteSpy()
 
     let service = OCREmbeddingService(
-      batchEmbedderForTesting: { texts, _ in
+      ownerAuthorityForTesting: EmbeddingTestAuthorization().source,
+      batchEmbedderForTesting: { texts, _, _ in
         // Signal that the flush is now parked inside the embed await, then wait
         // until the test has run reset() before returning results.
         await flushSuspended.open()
@@ -78,7 +94,7 @@ final class OCREmbeddingServiceOwnerResetTests: XCTestCase {
       },
       embeddingWriterForTesting: { screenshotId, _ in
         await writes.record(screenshotId)
-      }
+      }, missingEmbeddingIDsForTesting: { $0 }
     )
 
     await service.embedScreenshot(

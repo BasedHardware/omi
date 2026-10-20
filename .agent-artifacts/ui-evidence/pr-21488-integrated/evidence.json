@@ -1,0 +1,110 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-at-cap-choice.png",
+      "platform": "mobile-ios",
+      "description": "Integrated ladder cap: backend copy, monthly preference and on-device choice",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-yearly-confirmation.png",
+      "platform": "mobile-ios",
+      "description": "Actual mobile annual confirmation: backend lines and CTA before billing",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-web-yearly-confirmation-390.png",
+      "platform": "web",
+      "description": "Web annual confirmation at 390px, actual StorefrontPanel using backend golden",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "004-web-pro-budget-eighty.png",
+      "platform": "web",
+      "description": "Pro 80% backend golden, Architect absent",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "005-desktop-macos-pro-budget-eighty.png",
+      "platform": "desktop-macos",
+      "description": "SwiftUI ImageRenderer of Pro 80% with Architect absent",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "006-desktop-macos-yearly-confirmation.png",
+      "platform": "desktop-macos",
+      "description": "Shared shell confirmation captured through a real NSHostingView in a hidden test-owned window; backend annual lines and CTA",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "007-mobile-ios-chat-at-cap-basic.png",
+      "platform": "mobile-ios",
+      "description": "Actual production composer pause component with backend basic cap golden; capture continues, reset date, upgrade path",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "008-mobile-ios-chat-at-cap-plus.png",
+      "platform": "mobile-ios",
+      "description": "Actual production composer pause component with backend plus cap golden; capture continues, reset date, upgrade path",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "009-mobile-ios-chat-at-cap-operator.png",
+      "platform": "mobile-ios",
+      "description": "Actual production composer pause component with backend operator cap golden; capture continues, reset date, upgrade path",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "010-mobile-ios-chat-at-cap-architect.png",
+      "platform": "mobile-ios",
+      "description": "Actual production composer pause component with backend architect cap golden; capture continues, reset date, upgrade path",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "011-desktop-macos-chat-at-cap-basic.png",
+      "platform": "desktop-macos",
+      "description": "Actual production composer pause component with backend basic cap golden; capture continues, reset date, upgrade path",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "012-desktop-macos-chat-at-cap-plus.png",
+      "platform": "desktop-macos",
+      "description": "Actual production composer pause component with backend plus cap golden; capture continues, reset date, upgrade path",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "013-desktop-macos-chat-at-cap-operator.png",
+      "platform": "desktop-macos",
+      "description": "Actual production composer pause component with backend operator cap golden; capture continues, reset date, upgrade path",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "014-desktop-macos-chat-at-cap-architect.png",
+      "platform": "desktop-macos",
+      "description": "Actual production composer pause component with backend architect cap golden; capture continues, reset date, upgrade path",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "015-mobile-ios-home-mixed-processing.png",
+      "platform": "mobile-ios",
+      "description": "Actual queue components together: 30m phone-only waiting to transcribe and 45m cloud-ready; phone-only WAL excluded from cloud amount",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

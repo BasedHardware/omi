@@ -10,7 +10,7 @@ from types import SimpleNamespace
 import httpx
 import pytest
 
-from config.translation import TranslationProvider, translation_output_guard_enabled, translation_profile_gate_enabled
+from config.translation import TranslationProvider
 from models.transcript_segment import TranscriptSegment
 from tests.unit.translation_test_support import DictTranslationStore, profile
 from utils.stt.language_policy import LiveLanguageProfile
@@ -174,8 +174,7 @@ async def evaluate(texts, expected, outputs, target='en', realtime_interpreter=F
 
 
 @pytest.mark.parametrize('texts', [(text,) for text in ENGLISH])
-async def test_adversarial_english_catalog_zero_false_badges(monkeypatch, texts):
-    monkeypatch.setenv('TRANSLATION_PROFILE_GATE_ENABLED', 'true')
+async def test_adversarial_english_catalog_zero_false_badges(texts):
     baseline = sum(classify_translation_need(text, 'en', True) == TranslationNeed.TRANSLATE for text in texts)
     assert len(ENGLISH) >= 36
     ready, calls = await evaluate(texts, LiveLanguageProfile.create('en', multi=True, uid=None).expected, {})
@@ -230,7 +229,7 @@ def test_overlap_does_not_discard_foreign_edits(source, output, target):
     assert should_persist_translation(source, output, 'untrusted', target)
 
 
-def test_profile_prior_escape_hatches_and_rollback(monkeypatch):
+def test_profile_prior_escape_hatches():
     state = ConversationLanguageState('en')
     unexpected = 'Precisamos terminar o trabalho.'
     assert not state.source_is_plausible(unexpected, ('en',))
@@ -240,19 +239,13 @@ def test_profile_prior_escape_hatches_and_rollback(monkeypatch):
         'Precisamos terminar todo este trabalho antes de começar a próxima reunião.', ('en',)
     )
     assert state.source_is_plausible(unexpected, ('en',))
-    monkeypatch.setenv('TRANSLATION_PROFILE_GATE_ENABLED', 'false')
-    assert ConversationLanguageState('en').source_is_plausible(unexpected, ('en',))
 
 
-def test_flags_default_on_and_read_at_call_boundary(monkeypatch):
-    for key in ('TRANSLATION_PROFILE_GATE_ENABLED', 'TRANSLATION_OUTPUT_GUARD_ENABLED'):
-        monkeypatch.delenv(key, raising=False)
-    assert translation_profile_gate_enabled() and translation_output_guard_enabled()
+def test_output_guard_always_rejects_near_copy_rewrites():
     source, output = 'The device is working correctly.', 'The device is not working correctly.'
     assert lexical_overlap(source, output) >= 0.80
     assert output_rejection_reason(source, output, 'en') == 'near_copy'
-    monkeypatch.setenv('TRANSLATION_OUTPUT_GUARD_ENABLED', 'false')
-    assert should_persist_translation(source, output, 'af', 'en')
+    assert not should_persist_translation(source, output, 'af', 'en')
 
 
 def test_decision_metrics_wire_existing_skip_counter_with_bounded_reasons():
@@ -331,15 +324,6 @@ async def test_conversation_evidence_resets_and_expected_switch_exits_monolingua
     assert 'da' not in coordinator.language_state.established_languages
     await coordinator.flush()
     client.close()
-
-
-async def test_profile_flag_off_restores_legacy_admissions(monkeypatch):
-    monkeypatch.setenv('TRANSLATION_PROFILE_GATE_ENABLED', 'false')
-    # Substantial output edit deliberately outside the lexical guard's scope.
-    ready, calls = await evaluate(ENGLISH, ('en',), {})
-    baseline = sum(classify_translation_need(text, 'en', True) == TranslationNeed.TRANSLATE for text in ENGLISH)
-    assert len(ready) == baseline and calls
-    print(f'EVAL English: baseline false admissions/badges={baseline}/{len(ENGLISH)}; profile gate on=0/{len(ENGLISH)}')
 
 
 async def test_no_profile_english_catalog_has_no_false_admissions():

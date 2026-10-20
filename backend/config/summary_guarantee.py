@@ -4,6 +4,8 @@ from contextvars import ContextVar
 from collections.abc import Mapping
 import math
 import os
+
+from config.rollout_cohorts import in_rollout_cohort
 from typing import Any
 
 from config.batch_pipeline import in_percent_cohort
@@ -16,13 +18,12 @@ def enabled(uid: str | None = None, *, include_admitted_context: bool = True) ->
         return False
     if include_admitted_context and uid is not None and ADMITTED_OWNER.get() == uid:
         return True
-    owners = {v.strip() for v in os.getenv('FIRST_SUMMARY_UID_ALLOWLIST', '').split(',') if v.strip()}
-    if uid is None or uid in owners:
-        return True
     try:
         percent = float(os.getenv('FIRST_SUMMARY_DEADLINE_PERCENT', '0'))
     except ValueError:
-        return False
+        percent = float('nan')
+    if uid is None or in_rollout_cohort(uid, 'first-summary'):
+        return True
     if not math.isfinite(percent) or not 0 <= percent <= 100:
         return False
     return in_percent_cohort(uid, percent)
@@ -60,6 +61,14 @@ def preserves_admitted(row: Mapping[str, Any]) -> bool:
 
 
 def first_summary_pending(row: Mapping[str, Any]) -> bool:
+    if row.get('first_summary_policy') is not None:
+        from config.policy import FirstSummaryPolicy
+
+        return bool(
+            not row.get('effects_only')
+            and not row.get('summary_seen')
+            and FirstSummaryPolicy.from_dict(row['first_summary_policy']).first_summary_enabled
+        )
     return (
         not row.get('effects_only')
         and not row.get('summary_seen')

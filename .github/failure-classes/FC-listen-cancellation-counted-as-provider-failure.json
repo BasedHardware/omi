@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "id": "FC-listen-cancellation-counted-as-provider-failure",
+  "violated_contract": "A live STT leg that listen itself cancels (owner close, recovery switch, teardown) is not evidence about the provider. Its death reason must be a bounded, censored token. If it falls outside the bounded reason vocabulary, normalization defaults it to connection_lost, a provider failure that feeds the routing disruption gate and the serving circuit. Since 2026-10-14 Parakeet-window connection_lost at peak rose from about 2% to about 10% of successes, above the 0.08 gate, which benched Parakeet for 10-16 h/day and moved English sessions to Soniox.",
+  "canonical_prevention": "Every death token a serving socket latches must be a member of LIVE_STT_REASONS, and a listen-initiated cause must be classified as censored by provider_observation. Cover it with a behavioral test that cancels a real window leg mid-POST, settles the failover, and asserts a censored observation with no gate state, alongside tests that a self-ended pump and an unknown free-text reason still count as connection_lost.",
+  "canonical_prevention_artifact": [
+    "backend/utils/stt/live_reason.py",
+    "backend/tests/unit/test_live_health_reason_reconciliation.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/stt/live_reason.py",
+    "backend/utils/stt/live_signal.py",
+    "backend/utils/stt/parakeet_window.py",
+    "backend/tests/unit/test_live_health_reason_reconciliation.py"
+  ],
+  "status": "open"
+}

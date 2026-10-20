@@ -1,13 +1,11 @@
 """Account-gate contention is a 409 with Retry-After, never a 500."""
 
-from datetime import datetime, timezone
 from types import SimpleNamespace
 
 import pytest
 from fastapi import HTTPException
 
 from database.legal_holds import DestructiveGateTakeover, DestructiveOperationInProgress, LegalHoldAuthorityUnavailable
-from models.feedback import MemoryUseFeedback
 from utils.other.account_gate_http import (
     ACCOUNT_GATE_BUSY_DETAIL,
     ACCOUNT_GATE_BUSY_RETRY_AFTER_SECONDS,
@@ -55,34 +53,6 @@ def test_canonical_write_maps_destructive_gate_to_account_gate_busy(monkeypatch)
 
     with pytest.raises(HTTPException) as caught:
         canonical_adapter.write_canonical_extraction_memory("uid", {"content": "hello"}, db_client=object())
-
-    _assert_gate_busy(caught.value, fence)
-
-
-def test_memory_use_replay_maps_destructive_gate_to_account_gate_busy(monkeypatch):
-    fence = _fence()
-
-    def blocked(*args, **kwargs):
-        raise fence
-
-    monkeypatch.setattr(canonical_adapter, "read_memory_use_feedback_replay", blocked)
-    feedback = MemoryUseFeedback(
-        uid="uid",
-        feedback_id="use-1",
-        target_memory_id="mem",
-        action="suppress",
-        created_at=datetime.now(timezone.utc),
-    )
-
-    with pytest.raises(HTTPException) as caught:
-        canonical_adapter._apply_canonical_user_mutation(
-            "uid",
-            "mem",
-            mutation_kind="memory_use",
-            build_patch=lambda item, now: None,
-            memory_use_feedback=feedback,
-            db_client=object(),
-        )
 
     _assert_gate_busy(caught.value, fence)
 

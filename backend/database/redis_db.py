@@ -1,7 +1,6 @@
 import ast
 import base64
 import json
-import os
 from typing import Any, Callable, Dict, List, Optional, TypeVar, Union, cast
 from datetime import datetime, timedelta, timezone
 
@@ -19,35 +18,12 @@ from database.api_key_metadata import (
 logger = logging.getLogger(__name__)
 
 
-# redis.Redis is untyped under strict Pyright; treat the client as Any at this
-# SDK boundary. Downstream callers narrow results via the adapter pattern.
-def _redis_connection_kwargs(*, health_check_interval: int = 30) -> dict[str, Any]:
-    """Connection settings shared by the default and bounded Redis clients."""
-    port_env = os.getenv('REDIS_DB_PORT')
-    return {
-        'host': cast(str, os.getenv('REDIS_DB_HOST')),
-        'port': int(port_env) if port_env is not None else 6379,
-        'username': 'default',
-        'password': os.getenv('REDIS_DB_PASSWORD'),
-        'health_check_interval': health_check_interval,
-    }
-
+from database.redis_connection import (
+    redis_connection_kwargs as _redis_connection_kwargs,
+    create_bounded_redis_client as create_bounded_redis_client,
+)
 
 r: Any = redis.Redis(**_redis_connection_kwargs())
-
-
-def create_bounded_redis_client(timeout_seconds: float) -> Any:
-    """Create a client for the shared Redis deployment with bounded socket I/O.
-
-    A few best-effort writer-side caches need stricter timeouts than ``r`` so
-    cache outages cannot hold durable writes open. Keep their connection
-    configuration at this shared boundary so Redis settings and harness
-    overrides stay consistent with the rest of the backend.
-    """
-    kwargs = _redis_connection_kwargs()
-    kwargs['socket_connect_timeout'] = timeout_seconds
-    kwargs['socket_timeout'] = timeout_seconds
-    return redis.Redis(**kwargs)
 
 
 # Longer than the 10-minute max approval TTL (contract §5) plus clock-skew
@@ -782,6 +758,12 @@ def get_user_preferred_app(uid: str) -> Optional[str]:
     key = f'user:{uid}:preferred_app'
     app_id = r.get(key)
     return app_id.decode() if app_id else None
+
+
+def clear_user_preferred_app(uid: str) -> None:
+    """Removes the user's preferred app, so automatic processing runs Omi's own summary."""
+    key = f'user:{uid}:preferred_app'
+    r.delete(key)
 
 
 @try_catch_decorator

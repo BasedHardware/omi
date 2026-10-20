@@ -11,10 +11,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from config.dream_agent import Caps, mode
 from database import dream_store, dream_feedback
+from utils.rollout_cohorts import configure_rollout_runtime
 from utils.dream_agent import run_pass, drain
 
 
 def main():
+    configure_rollout_runtime()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--uid')
     parser.add_argument('--seed-ref', action='append', default=[], help='collection/id of authorized dev data')

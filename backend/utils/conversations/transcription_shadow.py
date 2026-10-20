@@ -12,6 +12,8 @@ import asyncio
 import hashlib
 import logging
 import os
+
+from config.rollout_cohorts import in_rollout_cohort
 import re
 import threading
 import time
@@ -23,8 +25,8 @@ from google.cloud import firestore
 from prometheus_client import Counter, Histogram
 
 from database import conversations as conversations_db
-from config.batch_pipeline import RecordOwnerContention, live_record_admission_enabled
-from config.transcription_final_pass import enabled_for, authoritative_for
+from config.batch_pipeline import RecordOwnerContention
+from config.policy import resolve_batch_policy
 from utils.manual_speaker_assignments import manual_owner_reserved
 from database._client import db
 from database.redis_db import r as redis_client
@@ -110,10 +112,7 @@ def _enabled(uid: str, conversation: Conversation) -> bool:
         return False
     if not conversation.private_cloud_sync_enabled or conversation.discarded or conversation.uses_custom_stt:
         return False
-    allowlist = {
-        item.strip() for item in os.getenv('TRANSCRIPTION_SHADOW_UID_ALLOWLIST', '').split(',') if item.strip()
-    }
-    if uid in allowlist:
+    if in_rollout_cohort(uid, 'transcription-shadow'):
         return True
     percent = max(0.0, min(100.0, float(os.getenv('TRANSCRIPTION_SHADOW_PERCENT', '0'))))
     bucket = int.from_bytes(hashlib.sha256(uid.encode()).digest()[:4], 'big') / 2**32 * 100
@@ -462,12 +461,13 @@ def _record_comparison_metrics(result: dict[str, Any], outcome: str) -> None:
     SHADOW_REMAP_SAFE.labels(outcome=outcome, safe='true' if result['remap_safe'] else 'false').inc()
 
 
-def _claim_shadow_owner(uid: str, conversation_id: str, raw: dict) -> dict | None:
+def _claim_shadow_owner(uid: str, conversation_id: str, raw: dict, *, policy=None) -> dict | None:
+    policy = policy or resolve_batch_policy(uid)
     for _ in range(3):
         owner = raw.get('record_lane_owner')
         if owner in {'batch_live_v1', 'batch_sync_v1'}:
             return None
-        if owner == 'legacy_final_pass_v1' or not live_record_admission_enabled():
+        if owner == 'legacy_final_pass_v1' or not policy.live_admission_enabled:
             return raw
         revision = conversations_db.claim_record_lane_owner(
             uid, conversation_id, 'legacy_final_pass_v1', raw.get('updated_at')
@@ -486,6 +486,7 @@ def _claim_shadow_owner(uid: str, conversation_id: str, raw: dict) -> dict | Non
 
 
 def _run_shadow(uid: str, conversation_id: str) -> None:
+    policy = resolve_batch_policy(uid)
     began = time.monotonic()
     outcome = 'failed'
     result: dict[str, Any] = {}
@@ -496,7 +497,7 @@ def _run_shadow(uid: str, conversation_id: str) -> None:
             return
         if not _enabled(uid, deserialize_conversation(raw)):
             return
-        raw = _claim_shadow_owner(uid, conversation_id, raw)
+        raw = _claim_shadow_owner(uid, conversation_id, raw, policy=policy)
         if raw is None:
             return
         conversation = deserialize_conversation(raw)
@@ -525,7 +526,7 @@ def _run_shadow(uid: str, conversation_id: str) -> None:
                 receipt = conversations_db.get_manual_speaker_receipt(uid, conversation_id)
                 live_conversation = conversation.model_copy(deep=True)
                 final_result: dict[str, Any] | None = (
-                    {'owner_reserved': manual_owner_reserved(receipt)} if enabled_for(uid) else None
+                    {'owner_reserved': manual_owner_reserved(receipt)} if policy.final_pass_enabled else None
                 )
                 kwargs = {'final_result': final_result} if final_result is not None else {}
                 passed, audio = _make_pass(uid, conversation, deadline=deadline, reserved_seconds=estimated, **kwargs)
@@ -541,7 +542,11 @@ def _run_shadow(uid: str, conversation_id: str) -> None:
                         candidate = final_result.get('segments')
                         if candidate is not None:
                             metadata['comparison'] = _compare(live_conversation, candidate, audio, receipt)
-                            if outcome == 'ok' and metadata['comparison']['remap_safe'] and authoritative_for(uid):
+                            if (
+                                outcome == 'ok'
+                                and metadata['comparison']['remap_safe']
+                                and policy.final_pass_authoritative
+                            ):
                                 metadata['promoted'] = conversations_db.promote_final_pass_if_current(
                                     uid,
                                     conversation_id,

@@ -33,6 +33,23 @@ are served at `/metrics`. C's legacy result projection and D's deletion outbox
 maintenance run separately on the backend, with durable restart sweeps; importing
 legacy provider clients into the GPU image is unnecessary.
 
+### Pump pipelining
+
+`BATCH_PIPELINE_WORKER_PIPELINE_DEPTH` (Helm `worker.pipelineDepth`, default
+`2`, range 1-4) runs that many pump lanes in one process. Lease claim, compute
+admission, completion and ordered merge of one lane overlap another lane's GPU
+chain; the chain itself (fetch/decode, VAD, ASR, diarization, persist and CUDA
+quiescence) stays exclusive behind one asyncio lock, so device and host memory
+remain one flight. Each lane renews its own leases while it waits for the GPU.
+On SIGTERM or a fatal GPU error a lane still waiting refunds its leases without
+an attempt charge instead of starting another chain. Periodic recovery,
+result-ready drains and queue metrics run in their own task on the same 5s/15s
+cadence instead of inside a lane between flights. Publication is unchanged: the transactional
+ordered merge remains the per-owner ordering authority across lanes, exactly as
+it already is across replicas and the serving reconciler. `1` restores the serial
+pump. A waiting lane may hold one already-claimed flight ahead of later fresh
+arrivals, so fresh work can wait up to one extra chain.
+
 ## Encrypted staging and results
 
 `utils.batch_pipeline.artifact_policy.create_artifact_store(store, storage_client,
@@ -110,8 +127,13 @@ embedding or Parakeet release. Dedicated bucket lifecycle must preserve pending
 accepted work; D arms cleanup only after successful projection.
 
 HPA uses A's **ready** age, separately targeting fresh 30s, recent 300s and deep
-3600s, with 300s downscale stabilization. Minimum one worker keeps the queue
-sampler alive; zero is rejected until an independent sampler exists. Enable
+3600s, with 300s downscale stabilization. Each worker samples queue age every
+15s on its own supervised task, independent of the GPU batch, so series stay
+fresh while every replica is busy. Minimum one worker keeps the queue
+sampler alive; zero is rejected until an independent sampler exists. With
+several replicas, lease recovery and the result-ready drain run on one replica
+per 30-second lease (`pump_recovery` in `{namespace}_leases`); each pump still
+drains the owners of its own completions, and a lease-store error fails open. Enable
 PodMonitoring only where its CRD is installed (it defaults on). The worker exports
 `worker_release`; a different collector must preserve the same label plus
 namespace and pod. Merge `prometheus-adapter-rules.yaml` into the existing
@@ -175,6 +197,80 @@ fatal CUDA still fences the entire chain. Remaining empties never become silence
 or bypass accepted content claims. The scheduler's attempt ceiling and the
 separate default-off, owner-allowlisted legacy path are documented in
 [serving settings](../docs/batch-pipeline-serving.md).
+
+`BATCH_PIPELINE_WORKER_VALIDATION_DISPOSITION_ENABLED` ships **true** (Helm
+`worker.workerValidationDispositionEnabled`). A closed `BatchValidationError`
+ends this GPU chain on the first attempt. `ValidationFailureWork` carries only
+its stage and reason; the scheduler retains them in `worker_failure`, removes
+the ordered pending span and creates the existing held recovery obligation.
+This is terminal for GPU retries, not a success or permission to delete audio.
+The old lease cannot publish a late result. Empty-ASR handoffs also preserve
+`empty_asr` versus `no_owned_words` along with their padded-retry evidence.
+Unclassified provider/transport faults retain exponential backoff and the
+existing bounded attempt policy; fatal CUDA retains the restart protocol.
+
+If Pyannote rejects a frame wholly beyond EOF, the worker first checks the
+canonical real buffer with independent strict local VAD, including its partial
+final window. A valid empty strict-VAD result commits a truthful `silence`
+payload through ordinary persistence and projection. This fixes tiny captures
+(observed: 320 samples / 20ms) without treating invalid VAD as silence. Positive,
+malformed, unavailable or noncanonical evidence takes the held recovery route.
+The worker never calls an external provider for this silence check. Rollback:
+set the worker validation disposition flag to `false`, restoring bounded GPU
+retries; existing held intents and receipts remain authoritative.
+
+## GPU skips that cannot change the transcript
+
+Diarization was the dominant per-unit GPU cost (pyannote RTF ~0.04 versus
+Parakeet ~0.0025) and ran over the whole unit, silence included, while ASR
+already saw only padded VAD windows. Two Helm switches decide whether and on
+what audio diarization runs; batching is unchanged.
+
+- `worker.diarizeSpeechOnlyEnabled` (`BATCH_PIPELINE_DIARIZE_SPEECH_ONLY_ENABLED`,
+  **on**; unset is on, only `false` disables): evidence is unpadded VAD speech
+  plus every emitted word clock (so a word in ASR context outside VAD is never
+  withheld). Each region is padded 1 s, regions under 4 s apart keep their
+  in-between audio, and pieces are joined with 0.5 s of zeros. Turns and
+  overlaps map back to capture clocks; seam audio maps to nothing. The full
+  unit is diarized when:
+  - over 80% of samples would be kept: `omi_fallback_total{component="vad",
+    from="batch_speech_only_diarization",reason="kept_over_80pct",outcome="recovered"}`;
+  - compaction or mapping raises, or compacted output has no turns while words
+    exist: same series with `reason="other",outcome="degraded"`.
+  Every decision increments `omi_batch_pipeline_diarization_decisions_total{decision}`
+  (`compacted`, `full_flag_off`, `full_no_evidence`, `full_kept_over_80pct`,
+  `full_compaction_error`, `full_compacted_empty`, `skipped_short`), and
+  `omi_batch_pipeline_diarization_audio_seconds_total{kind="unit"|"diarized"}`
+  gives the measured retained fraction. A persisted compacted result with any
+  word outside every turn (a diarizer gap inside a retained piece) increments
+  `omi_batch_pipeline_compacted_unassigned_units_total` and `..._words_total`;
+  such words abstain exactly as they do in full-unit gaps. The persisted
+  diarization adds `speech_compaction.diarized_seconds`.
+- `worker.shortSpeechSingleEnabled` (`BATCH_PIPELINE_SHORT_SPEECH_SINGLE_ENABLED`,
+  **off**; only `true` enables): one evidence region of at most 2 s, where
+  pauses of at most 0.5 s (inclusive) join and a longer pause splits, takes the
+  existing `skipped_single` `SPEAKER_00` result with `single_evidence:
+  short_speech` and no model check. **Enablement precondition:** a paired run on
+  the prod pyannote revision `3533c8cf8e369892e6b79ff1bf80f7b0286a54ee`
+  showing the full diarizer returns a single speaker on the gate's own evidence
+  (VAD plus words), including two bursts separated by at most 0.5 s. The AMI
+  bench used other weights and only single continuous slices.
+
+ASR inputs and words are identical with either switch on or off. Rollback:
+set `worker.diarizeSpeechOnlyEnabled=false`.
+
+Quarantine events are cumulative transitions, not current debt. For read-only
+Firestore aggregation, count `batch_pipeline_prod_jobs` with `state ==
+quarantined` AND `quarantine_reason == worker_failed`, then partition by
+`recovery_state`, `worker_failure.stage/reason` and `recovery.failure.stage/reason`.
+Use `count()` only. A `quarantined_at >= cutoff` count includes jobs subsequently
+recovered, committed or terminally disposed; never label it "held". Legacy jobs
+without `worker_failure` need an aggregate join to content-free worker logs;
+absence of a code is not evidence of corrupt audio. An `abandoned_running`
+recovery is an uncertain paid intent: do not automatically reset it or classify
+it as silence. Reconcile its durable result or obtain a separately authorized,
+idempotent recovery decision.
+
 For qualification run a synthetic one-hour unit with the intended model batch
 size and retain the GPU model/VRAM, exact image digest/config and receipt.
 Set the chart **host RAM** limit from the larger measured process/container peak
@@ -230,3 +326,55 @@ Silero inspection after empty ASR, before quarantine; ONNX and the VAD asset
 are packaged in this image. Enable only with an approved worker image rollout
 and worker flag change; setting it back to false restores empty-ASR quarantine.
 See `docs/listen_pusher_pipeline.mdx` for payload and recovery semantics.
+
+
+### Paid quarantine recovery request lifetime
+
+`BATCH_PIPELINE_RECOVERY_TASKS_ENABLED` defaults to `true`. The 20-second
+serving reconciliation loop prepares the existing fenced recovery intent and
+queues a named HTTP task on `BATCH_PIPELINE_RECOVERY_TASKS_QUEUE`, falling back
+to `SYNC_TASKS_QUEUE` when unset, using `SYNC_TASKS_INVOKER_SA`. Production
+integration uses the isolated `batch-quarantine-recovery` queue (16 concurrent
+dispatches, eight/second, five attempts), provisioned by the existing deploy
+action before the integration revision. Four slots left recovery p95 above five
+minutes at the 5% ramp (10-19), so production runs 16/8. This prevents shared legacy sync
+retries from consuming recovery dispatch slots; it does not grant another paid
+intent. Clear the queue override to roll back isolation.
+The target is `BATCH_PIPELINE_RECOVERY_TASK_AUDIENCE` (integration's own HTTPS
+origin, declared separately from the worker audience in dev and prod) plus
+`/v2/batch-pipeline/recover-quarantine`; the audience must be an HTTPS origin.
+The handler awaits the sole provider call and result persistence before replying,
+so ordinary Cloud Run revision draining sees an active request. Background sweeps
+enqueue prepared work or reconcile running artifacts. Any dispatch failure
+(including missing configuration or a lost enqueue acknowledgement) falls back
+to inline recovery with the same token. The task and inline path race through
+the same transactional start fence, so at most one can invoke paid STT. The
+shared fallback metric records this degraded inline execution. A disabled
+handler host or owner cohort returns retryable HTTP 503, never a successful ack.
+Each prepared intent has at most one outstanding wake task: the sweep leases a
+wake (`recovery_wake`, default 600s, `BATCH_PIPELINE_RECOVERY_WAKE_LEASE_SECONDS`)
+and names the task by intent token and wake sequence, so a backlog no longer
+adds a new task per unit on every sweep. At lease expiry the previous task is
+probed; it keeps its lease while it exists, and only NotFound (or three failed
+probes) mints the next sequence; a delivery of that same wake that leaves the
+intent prepared, or a failed enqueue, re-arms a 120-second wake, and a stale
+delivery never shortens a newer wake. `0` restores the legacy two-minute wake-name
+generation on every sweep. Neither path authorizes a second provider call. Existing privacy, lease, content ownership and intent-token
+fences apply to every delivery, including duplicates and admission rollback.
+
+Integration declares a 3,600-second Cloud Run request timeout in both manifests,
+above the 1,500-second task dispatch deadline and application path timeout.
+Modulate has a 300-second client budget. If the application returns 504,
+cancelling the ASGI await does not stop its executor thread: that thread may
+still persist the result while its instance survives. A retry adopts the same
+`running` token and only reconciles artifacts; it never starts a second paid
+call. Ordinary drain protection ends with the request; a timeout followed by
+instance death can still leave uncertain work held (including the existing
+900-second abandonment fence). This is not permission to reset the token.
+
+Kill switch: set `BATCH_PIPELINE_RECOVERY_TASKS_ENABLED=false` to restore inline
+sweeping. Already enqueued tasks still use the same intent fence. No historical
+`failed_held` intent is reset. An exceptional instance kill can still leave an
+uncertain paid call held; this requires provider result reconciliation or an
+explicit new epoch, never blind retry. Do not weaken the quarantine-to-completion
+gate or exclude censored held work to hide this residual obligation.

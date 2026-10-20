@@ -9,6 +9,19 @@ def entries():
     namespaces = ['batch_pipeline_prod', 'batch_pipeline_dev']
     return (
         CoveredByEntry(
+            'database.batch_pipeline_store.FirestoreTransaction.ready_predecessor',
+            covered_by=('database.batch_pipeline_store.ready_predecessor',),
+            reason='thin adapter forwards the transaction-bound predecessor query unchanged',
+            expect_observed=False,
+            body_digest='345662386754d78758580d321467fcd012838fc0a9ae8194eeb7b3e6ede54f14',
+        ),
+        DriverEntry(
+            'database.batch_pipeline_store.ready_predecessor',
+            base={'owner_key': 'owner-hash', 'segment_id': 'segment-head'},
+            domains={'namespace': namespaces, 'priority': [0, 1, 2]},
+            neutrals={'transaction': (None, 'transaction binding only')},
+        ),
+        CoveredByEntry(
             'database.batch_pipeline_store.FirestoreTransaction.service_frontier',
             covered_by=('database.batch_pipeline_store.service_frontier',),
             reason='thin adapter forwards the transaction-bound frontier query unchanged',
@@ -40,13 +53,43 @@ def entries():
             neutrals={'limit': (10, 'bounded page size')},
         ),
         DriverEntry(
-            'database.batch_pipeline_store.projection_pending',
-            domains={'namespace': namespaces},
+            'database.batch_pipeline_store.projection_page',
+            domains={
+                'namespace': namespaces,
+                'after': [None, (2.0, 'result-100')],
+                'states': [('pending', 'persisted', 'ready'), ('pending',), ('persisted', 'ready')],
+            },
             neutrals={'limit': (100, 'bounded page size only')},
+        ),
+        DriverEntry(
+            'database.batch_pipeline_store.projection_successor',
+            base={'owner_key': 'owner-hash'},
+            domains={'namespace': namespaces, 'previous': [None, 'segment-head']},
+        ),
+        CoveredByEntry(
+            'database.batch_pipeline_store.FirestoreStore.projection_successor',
+            covered_by=('database.batch_pipeline_store.projection_successor',),
+            reason='store adapter forwards namespace, owner and predecessor unchanged',
+            expect_observed=False,
+            body_digest='96adabf372104327c5a8065ef2ff06621648ee242b3415d04b047d50ded9e6b1',
+        ),
+        CoveredByEntry(
+            'database.batch_pipeline_store.projection_pending',
+            covered_by=('database.batch_pipeline_store.projection_page',),
+            reason='legacy first-page adapter discards the cursor only',
+            expect_observed=False,
+            body_digest='52cc913cca9086557133a8f7118b9980ce5f13649897207fafcfa221513a5629',
+        ),
+        CoveredByEntry(
+            'database.batch_pipeline_store.FirestoreStore.projection_page',
+            covered_by=('database.batch_pipeline_store.projection_page',),
+            reason='store adapter forwards namespace, limit, keyset cursor and drain states unchanged',
+            expect_observed=False,
+            body_digest='bc9fe5cd08a05748eaa118af15031abdcb1a68d91d7f0b74bf177a27eb980a94',
         ),
         CoveredByEntry(
             'database.batch_pipeline_store.FirestoreStore.projection_pending',
-            covered_by=('database.batch_pipeline_store.projection_pending',),
+            covered_by=('database.batch_pipeline_store.projection_page',),
             reason='thin store adapter forwards namespace and bounded page size unchanged',
             expect_observed=False,
             body_digest='351a3ea949d6033cf3f2003805681af4af223cd0db4a12dc2869e70fb2a74d59',
@@ -105,6 +148,56 @@ def entries():
             base={'owner_key': 'owner-hash'},
             domains={'namespace': namespaces},
             neutrals={'transaction': (None, 'transaction binding only, no shape change')},
+        ),
+        CoveredByEntry(
+            'database.batch_pipeline_store.FirestoreTransaction.first_ready_pending',
+            covered_by=('database.batch_pipeline_store.first_ready_pending',),
+            reason='thin store adapter delegates unchanged query arguments to the named query builder',
+            expect_observed=False,
+            body_digest='9999bc14a1c88206f5d98e34284f7895c179c73ab563bf813b179faa417076ba',
+        ),
+        DriverEntry(
+            'database.batch_pipeline_store.first_ready_pending',
+            base={'owner_key': 'owner-hash'},
+            domains={'namespace': namespaces},
+            neutrals={'transaction': (None, 'transaction binding only, no shape change')},
+        ),
+        CoveredByEntry(
+            'database.batch_pipeline_store.FirestoreStore.longest_ready_pending',
+            covered_by=('database.batch_pipeline_store.longest_ready_pending',),
+            reason='thin store adapter delegates unchanged query arguments to the named query builder',
+            expect_observed=False,
+            body_digest='c36f3f2504728cdf4473b0443f0371b3c15e124eb1a2f740fab411eee14f6337',
+        ),
+        DriverEntry(
+            'database.batch_pipeline_store.longest_ready_pending',
+            base={'owner_key': 'owner-hash'},
+            domains={'namespace': namespaces},
+        ),
+        CoveredByEntry(
+            'database.batch_pipeline_store.FirestoreStore.fresh_pending',
+            covered_by=('database.batch_pipeline_store.fresh_pending',),
+            reason='thin store adapter delegates unchanged query arguments to the named query builder',
+            expect_observed=False,
+            body_digest='d9b3d9c6a869efec2ed3ff0379930dbe43de3cadc01bba28c96051986be058c2',
+        ),
+        DriverEntry(
+            'database.batch_pipeline_store.fresh_pending',
+            base={'owner_key': 'owner-hash'},
+            domains={'namespace': namespaces},
+            neutrals={'limit': (8, 'bounded page size')},
+        ),
+        CoveredByEntry(
+            'database.batch_pipeline_store.FirestoreStore.held_merge_owners',
+            covered_by=('database.batch_pipeline_store.held_merge_owners',),
+            reason='thin store adapter delegates unchanged query arguments to the named query builder',
+            expect_observed=False,
+            body_digest='55ac8d67e8e3e3fb689c9e9e086084a6acbcd7f5bb3b0b3f6186f5014cafc143',
+        ),
+        DriverEntry(
+            'database.batch_pipeline_store.held_merge_owners',
+            domains={'namespace': namespaces, 'after': [None, 'owner-hash']},
+            neutrals={'limit': (50, 'bounded page size')},
         ),
         DriverEntry(
             'database.batch_pipeline_store.due',

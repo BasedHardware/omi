@@ -33,11 +33,6 @@ from utils.metrics import OMI_CHAT_SEARCH_TOOL_OUTCOMES_TOTAL
 from utils.observability.fallback import record_fallback
 from utils.retrieval.chat_scope import apply_chat_scope_dates, chat_scope_from_config
 from utils.retrieval.turn_refs import register_record_ref
-from utils.retrieval.tools.conversation_jit import (
-    MAX_JIT_CONVERSATIONS,
-    format_active_jit_conversations,
-    is_jit_conversation_retrieval_enabled,
-)
 import logging
 from utils.model_text import (
     DisplayClock,
@@ -124,47 +119,9 @@ def _scoped_conversation_fetch(
 # information to process at once" (#4927). Bound both the count and the raw size of what we return.
 MAX_CONVERSATIONS_FOR_LLM = 100
 MAX_RESULT_CHARS = 60000
-MAX_JIT_SUMMARY_SEARCHES = 4
-_JIT_SEARCH_BUDGET_COUNT_ATTR = '_jit_conversation_summary_search_count'
-_JIT_SEARCH_BUDGET_EXHAUSTED = (
-    'JIT conversation summary search budget exhausted: at most 4 summary searches are allowed per request. '
-    'Use the candidates already returned or hydrate a bounded transcript window for one candidate.'
-)
-_jit_search_budget_lock = threading.Lock()
 
 
-def _consume_jit_summary_search_budget(configurable: Dict[str, Any]) -> Optional[str]:
-    """Atomically reserve one of the request's four JIT summary searches.
-
-    AgentSafetyGuard is already request-scoped and survives LangChain's shallow
-    config copies. Missing or malformed request state fails closed so alternate
-    callers and concurrent tool dispatch cannot silently bypass the bound.
-    """
-    with _jit_search_budget_lock:
-        safety_guard = configurable.get('safety_guard')
-        if safety_guard is None:
-            return _JIT_SEARCH_BUDGET_EXHAUSTED
-        current = getattr(safety_guard, _JIT_SEARCH_BUDGET_COUNT_ATTR, 0)
-        if type(current) is not int or current < 0 or current > MAX_JIT_SUMMARY_SEARCHES:
-            return _JIT_SEARCH_BUDGET_EXHAUSTED
-        if current >= MAX_JIT_SUMMARY_SEARCHES:
-            return _JIT_SEARCH_BUDGET_EXHAUSTED
-        try:
-            setattr(safety_guard, _JIT_SEARCH_BUDGET_COUNT_ATTR, current + 1)
-        except (AttributeError, TypeError):
-            return _JIT_SEARCH_BUDGET_EXHAUSTED
-    return None
-
-
-def _parse_exact_search_reference(query: str, *, jit_enabled: bool) -> Optional[str]:
-    """Keep owner-scoped card refs additive to the gated JIT retrieval path.
-
-    Bare UUIDs and released share URLs remain exact references regardless of the
-    JIT gate. ``conversation:<id>`` is emitted by JIT cards, so gate-off requests
-    must continue treating that shape as an ordinary semantic-search query.
-    """
-    if not jit_enabled and query.startswith('conversation:'):
-        return None
+def _parse_exact_search_reference(query: str) -> Optional[str]:
     return parse_exact_conversation_reference(query)
 
 
@@ -201,26 +158,6 @@ def _withheld_conversation_notes(locked: int = 0, discarded: int = 0) -> str:
         withheld_note(count=discarded, subject='conversations', reason='discarded'),
     ]
     return '\n'.join(note for note in notes if note)
-
-
-def _jit_speaker_names(
-    uid: str, conversations: List[Dict[str, Any]], include_transcript: bool
-) -> Tuple[str, Dict[str, str]]:
-    if not include_transcript:
-        return 'User', {}
-    user_name = get_user_name(uid, use_default=False) or 'User'
-    person_ids = {
-        str(segment.get('person_id'))
-        for conversation in conversations
-        for segment in conversation.get('transcript_segments', [])
-        if isinstance(segment, dict) and segment.get('person_id')
-    }
-    if not person_ids:
-        return user_name, {}
-    people = users_db.get_people_by_ids(uid, list(person_ids))
-    return user_name, {
-        str(person['id']): str(person['name']) for person in people if person.get('id') and person.get('name')
-    }
 
 
 def _owner_safe_conversation_rows(
@@ -265,53 +202,67 @@ def _bounded_result(result: str, total_found: int, truncated: bool, *, already_b
     return result
 
 
+# Citation [k] resolves to conversations_collected[k - 1]. Tool calls in one model turn run on
+# executor threads that share that list, so numbering a record and appending its card is one step.
+_collected_conversations_lock = threading.Lock()
+
+
 def _render_addressable_conversations(conversations, *, configurable, admitted_ids=None, **render_options) -> str:
-    """Publish cards and refs only for records actually admitted to the model's budget."""
+    """Publish cards and refs only for records actually admitted to the model's budget.
+
+    A conversation already collected this turn keeps its citation number instead of gaining a
+    duplicate card.
+    """
     collected = configurable.get('conversations_collected', [])
     blocks = []
     used = 0
     elapsed_legend_emitted = False
     untrusted_legend_emitted = False
-    for conversation in conversations:
-        block = conversations_to_string(
-            [conversation], include_refs=True, index_start=len(collected) + 1, **render_options
-        )
-        if ELAPSED_LEGEND in block:
-            if elapsed_legend_emitted:
-                block = block.replace(ELAPSED_LEGEND + '\n', '', 1)
-            else:
-                elapsed_legend_emitted = True
-        if UNTRUSTED_LEGEND in block:
-            if untrusted_legend_emitted:
-                block = block.replace(UNTRUSTED_LEGEND + '\n', '', 1)
-            else:
-                untrusted_legend_emitted = True
-        size = len(block) + (len('\n\n---------------------\n\n') if blocks else 0)
-        if used + size > MAX_RESULT_CHARS:
-            if not blocks:
-                blocks.append(
-                    'Error: Conversation exceeds the chat read budget; request fewer transcript segments '
-                    'or omit the transcript.'
-                )
-            else:
-                blocks.append(
-                    truncation_note(
-                        shown=len(blocks),
-                        total=len(conversations),
-                        unit='conversations',
-                        how_to_get_more='Narrow the read for more detail.',
+    with _collected_conversations_lock:
+        numbers = {card.get('id'): number for number, card in enumerate(collected, start=1)}
+        for conversation in conversations:
+            number = numbers.get(conversation.id)
+            block = conversations_to_string(
+                [conversation], include_refs=True, index_start=number or len(collected) + 1, **render_options
+            )
+            if ELAPSED_LEGEND in block:
+                if elapsed_legend_emitted:
+                    block = block.replace(ELAPSED_LEGEND + '\n', '', 1)
+                else:
+                    elapsed_legend_emitted = True
+            if UNTRUSTED_LEGEND in block:
+                if untrusted_legend_emitted:
+                    block = block.replace(UNTRUSTED_LEGEND + '\n', '', 1)
+                else:
+                    untrusted_legend_emitted = True
+            size = len(block) + (len('\n\n---------------------\n\n') if blocks else 0)
+            if used + size > MAX_RESULT_CHARS:
+                if not blocks:
+                    blocks.append(
+                        'Error: Conversation exceeds the chat read budget; request fewer transcript segments '
+                        'or omit the transcript.'
                     )
-                )
-            break
-        blocks.append(block)
-        used += size
-        collected.append(conversation_to_citation_card(conversation))
-        register_record_ref(configurable, 'conversations', conversation.id)
-        if admitted_ids is not None:
-            admitted_ids.add(conversation.id)
-        for person in render_options.get('people') or ():
-            if person.id in conversation.get_person_ids():
-                register_record_ref(configurable, 'people', person.id)
+                else:
+                    blocks.append(
+                        truncation_note(
+                            shown=len(blocks),
+                            total=len(conversations),
+                            unit='conversations',
+                            how_to_get_more='Narrow the read for more detail.',
+                        )
+                    )
+                break
+            blocks.append(block)
+            used += size
+            if number is None:
+                collected.append(conversation_to_citation_card(conversation))
+                numbers[conversation.id] = len(collected)
+            register_record_ref(configurable, 'conversations', conversation.id)
+            if admitted_ids is not None:
+                admitted_ids.add(conversation.id)
+            for person in render_options.get('people') or ():
+                if person.id in conversation.get_person_ids():
+                    register_record_ref(configurable, 'people', person.id)
     return '\n\n---------------------\n\n'.join(blocks)
 
 
@@ -396,7 +347,6 @@ def get_conversations_tool(
         return "Error: User ID not found in configuration"
     logger.info(f"✅ get_conversations_tool - uid: {uid}")
     display_clock = clock_for_turn(configurable, str(uid))
-    jit_enabled = is_jit_conversation_retrieval_enabled(cast(Optional[Dict[str, Any]], configurable))
 
     scope = chat_scope_from_config(configurable)
     start_date, end_date, scope_err = apply_chat_scope_dates(scope, start_date, end_date)
@@ -432,15 +382,7 @@ def get_conversations_tool(
         except ValueError as e:
             return f"Error: Invalid end_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {end_date} - {str(e)}"
 
-    # JIT renders at most MAX_JIT_CONVERSATIONS, so do not read rows that can never
-    # reach the result. The legacy path intentionally retains its existing limit.
-    limit = min(limit, MAX_JIT_CONVERSATIONS if jit_enabled else 5000)
-
-    if jit_enabled:
-        budget_error = _consume_jit_summary_search_budget(cast(Dict[str, Any], configurable))
-        if budget_error:
-            logger.warning("get_conversations_tool rejected by JIT summary-search budget")
-            return budget_error
+    limit = min(limit, 5000)
 
     # Parse statuses if provided
     status_list: List[str] = []
@@ -502,20 +444,6 @@ def get_conversations_tool(
             msg += '\n' + withheld
         logger.info(f"⚠️ get_conversations_tool - {msg}")
         return msg
-
-    if jit_enabled:
-        logger.info("🔧 get_conversations_tool - using explicitly enabled JIT retrieval contract")
-        jit_user_name, jit_people_names = _jit_speaker_names(str(uid), conversations_data, include_transcript)
-        result = format_active_jit_conversations(
-            conversations_data,
-            configurable=cast(Dict[str, Any], configurable),
-            max_transcript_segments=max_transcript_segments if include_transcript else 0,
-            clock=display_clock,
-            user_name=jit_user_name,
-            people_names=jit_people_names,
-        )
-        withheld = _withheld_conversation_notes(locked=locked_count)
-        return f"{withheld}\n{result}" if withheld else result
 
     try:
         # Only load people if transcripts will be included (people are used for speaker names in transcripts)
@@ -689,8 +617,7 @@ def search_conversations_tool(
         uid,
         limit,
     )
-    jit_enabled = is_jit_conversation_retrieval_enabled(cast(Optional[Dict[str, Any]], configurable))
-    exact_conversation_id = _parse_exact_search_reference(query, jit_enabled=jit_enabled)
+    exact_conversation_id = _parse_exact_search_reference(query)
 
     scope = chat_scope_from_config(configurable)
     start_date, end_date, scope_err = apply_chat_scope_dates(scope, start_date, end_date)
@@ -736,12 +663,6 @@ def search_conversations_tool(
     scoped_id = (scope or {}).get("conversation_id") if scope else None
     if scoped_id and exact_conversation_id and exact_conversation_id != str(scoped_id):
         return f"Error: Chat is scoped to conversation {scoped_id}; " f"cannot load a different conversation reference."
-
-    if jit_enabled and not exact_conversation_id and not scoped_id:
-        budget_error = _consume_jit_summary_search_budget(cast(Dict[str, Any], configurable))
-        if budget_error:
-            logger.warning("search_conversations_tool rejected by JIT summary-search budget")
-            return budget_error
 
     conversations_data: List[Dict[str, Any]] = []
     withheld_locked = 0
@@ -841,9 +762,6 @@ def search_conversations_tool(
 
         if scoped_id or exact_conversation_id:
             record_path('firestore', len(conversations_data))
-        if jit_enabled:
-            conversation_ids = conversation_ids[:MAX_JIT_CONVERSATIONS]
-
         logger.info(
             "📊 search_conversations_tool - found %s results (%s keyword, %s vector) query_mode=%s",
             len(conversation_ids),
@@ -899,26 +817,6 @@ def search_conversations_tool(
                 )
 
         logger.info(f"🔍 search_conversations_tool - Loaded {len(conversations_data)} full conversations")
-
-        if jit_enabled:
-            logger.info("🔧 search_conversations_tool - using explicitly enabled JIT retrieval contract")
-            jit_user_name, jit_people_names = _jit_speaker_names(str(uid), conversations_data, include_transcript)
-            result = format_active_jit_conversations(
-                conversations_data,
-                configurable=cast(Dict[str, Any], configurable),
-                query=None if exact_conversation_id else query,
-                max_transcript_segments=max_transcript_segments if include_transcript else 0,
-                coverage_note=(
-                    chat_transcript_coverage_note(False)
-                    if not exact_conversation_id and not scoped_id and not transcript_search.searched
-                    else None
-                ),
-                clock=display_clock,
-                user_name=jit_user_name,
-                people_names=jit_people_names,
-            )
-            withheld = _withheld_conversation_notes(withheld_locked, withheld_discarded)
-            return with_keyword_note(f"{withheld}\n{result}" if withheld else result)
 
         # Only load people if transcripts will be included
         people: List[Person] = []

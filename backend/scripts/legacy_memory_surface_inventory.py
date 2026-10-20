@@ -7,7 +7,7 @@
 This is deliberately a source/resource inventory, not a runtime probe.  It
 reads only checked-in files, emits paths/lines/classifications (never source
 text), and has no database, network, model, or user-data dependency.  The
-baseline records the current debt while the JIT-processing migration is in
+baseline records the current debt while the legacy memory-surface retirement is in
 flight: a class may shrink, but a new reference in a tracked class fails the
 ratchet.
 """

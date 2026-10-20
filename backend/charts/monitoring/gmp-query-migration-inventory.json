@@ -349,62 +349,6 @@
       "scope": "normalized-omi-consumer-source-review"
     },
     {
-      "expression": "max(omi_soniox_month_ceiling_usd{job=\"backend-listen-metrics\"}) * (max(time() - omi_soniox_usage_sample_timestamp_seconds{job=\"backend-listen-metrics\"}) < bool 7200)",
-      "file": "alerts/live-stt.json",
-      "issues": [],
-      "metrics": [
-        "omi_soniox_month_ceiling_usd",
-        "omi_soniox_usage_sample_timestamp_seconds"
-      ],
-      "owner_title": "Soniox monthly spend at 70% \u2014 top up Soniox",
-      "owner_uid": "omi-soniox-runway-70",
-      "panel": null,
-      "pointer": "/data/0/model/expr",
-      "scope": "normalized-omi-consumer-source-review"
-    },
-    {
-      "expression": "max(omi_soniox_month_spend_usd{job=\"backend-listen-metrics\"}) / clamp_min(max(omi_soniox_month_ceiling_usd{job=\"backend-listen-metrics\"}), 1)",
-      "file": "alerts/live-stt.json",
-      "issues": [],
-      "metrics": [
-        "omi_soniox_month_ceiling_usd",
-        "omi_soniox_month_spend_usd"
-      ],
-      "owner_title": "Soniox monthly spend at 70% \u2014 top up Soniox",
-      "owner_uid": "omi-soniox-runway-70",
-      "panel": null,
-      "pointer": "/data/1/model/expr",
-      "scope": "normalized-omi-consumer-source-review"
-    },
-    {
-      "expression": "max(omi_soniox_month_ceiling_usd{job=\"backend-listen-metrics\"}) * (max(time() - omi_soniox_usage_sample_timestamp_seconds{job=\"backend-listen-metrics\"}) < bool 7200)",
-      "file": "alerts/live-stt.json",
-      "issues": [],
-      "metrics": [
-        "omi_soniox_month_ceiling_usd",
-        "omi_soniox_usage_sample_timestamp_seconds"
-      ],
-      "owner_title": "Soniox monthly spend at 90% \u2014 top up Soniox",
-      "owner_uid": "omi-soniox-runway-90",
-      "panel": null,
-      "pointer": "/data/0/model/expr",
-      "scope": "normalized-omi-consumer-source-review"
-    },
-    {
-      "expression": "max(omi_soniox_month_spend_usd{job=\"backend-listen-metrics\"}) / clamp_min(max(omi_soniox_month_ceiling_usd{job=\"backend-listen-metrics\"}), 1)",
-      "file": "alerts/live-stt.json",
-      "issues": [],
-      "metrics": [
-        "omi_soniox_month_ceiling_usd",
-        "omi_soniox_month_spend_usd"
-      ],
-      "owner_title": "Soniox monthly spend at 90% \u2014 top up Soniox",
-      "owner_uid": "omi-soniox-runway-90",
-      "panel": null,
-      "pointer": "/data/1/model/expr",
-      "scope": "normalized-omi-consumer-source-review"
-    },
-    {
       "expression": "sum(increase(omi_stt_stream_close_total{job=\"backend-listen-metrics\",provider=\"soniox\",reason=\"provider_budget_exhausted\"}[5m]))",
       "file": "alerts/live-stt.json",
       "issues": [],
@@ -657,20 +601,20 @@
       "scope": "normalized-omi-consumer-source-review"
     },
     {
-      "expression": "sum(increase(omi_stt_cost_routing_settlements_total{job=\"backend-listen-metrics\"}[5m]))",
+      "expression": "sum(increase(omi_stt_cost_routing_settlements_total{job=\"backend-listen-metrics\"}[15m]))",
       "file": "alerts/live-stt.json",
       "issues": [],
       "metrics": [
         "omi_stt_cost_routing_settlements_total"
       ],
-      "owner_title": "Live STT - health evidence persistence gaps",
+      "owner_title": "Live STT - health evidence persistence gaps (settlement-normalized proxy)",
       "owner_uid": "omi-stt-evidence-loss",
       "panel": null,
       "pointer": "/data/0/model/expr",
       "scope": "normalized-omi-consumer-source-review"
     },
     {
-      "expression": "(sum(increase(omi_stt_cost_routing_emission_ack_errors_total{job=\"backend-listen-metrics\"}[5m])) + sum(increase(omi_stt_cost_routing_evidence_errors_total{job=\"backend-listen-metrics\"}[5m])) + sum(increase(omi_stt_fleet_health_write_dropped_total{job=\"backend-listen-metrics\"}[5m]))) / clamp_min(sum(increase(omi_stt_cost_routing_settlements_total{job=\"backend-listen-metrics\"}[5m])), 1)",
+      "expression": "(sum(increase(omi_stt_fleet_health_write_dropped_total{job=\"backend-listen-metrics\"}[15m])) + sum(increase(omi_stt_cost_routing_evidence_errors_total{job=\"backend-listen-metrics\"}[15m])) + sum(increase(omi_stt_cost_routing_emission_ack_errors_total{job=\"backend-listen-metrics\"}[15m]))) / clamp_min(sum(increase(omi_stt_cost_routing_settlements_total{job=\"backend-listen-metrics\"}[15m])), 1)",
       "file": "alerts/live-stt.json",
       "issues": [],
       "metrics": [
@@ -679,8 +623,37 @@
         "omi_stt_cost_routing_settlements_total",
         "omi_stt_fleet_health_write_dropped_total"
       ],
-      "owner_title": "Live STT - health evidence persistence gaps",
+      "owner_title": "Live STT - health evidence persistence gaps (settlement-normalized proxy)",
       "owner_uid": "omi-stt-evidence-loss",
+      "panel": null,
+      "pointer": "/data/1/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum(increase(omi_stt_cost_routing_settlements_total{job=\"backend-listen-metrics\"}[15m]))",
+      "file": "alerts/live-stt.json",
+      "issues": [],
+      "metrics": [
+        "omi_stt_cost_routing_settlements_total"
+      ],
+      "owner_title": "Live STT - health evidence persistence gaps (critical proxy)",
+      "owner_uid": "omi-stt-evidence-loss-critical",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "(sum(increase(omi_stt_fleet_health_write_dropped_total{job=\"backend-listen-metrics\"}[15m])) + sum(increase(omi_stt_cost_routing_evidence_errors_total{job=\"backend-listen-metrics\"}[15m])) + sum(increase(omi_stt_cost_routing_emission_ack_errors_total{job=\"backend-listen-metrics\"}[15m]))) / clamp_min(sum(increase(omi_stt_cost_routing_settlements_total{job=\"backend-listen-metrics\"}[15m])), 1)",
+      "file": "alerts/live-stt.json",
+      "issues": [],
+      "metrics": [
+        "omi_stt_cost_routing_emission_ack_errors_total",
+        "omi_stt_cost_routing_evidence_errors_total",
+        "omi_stt_cost_routing_settlements_total",
+        "omi_stt_fleet_health_write_dropped_total"
+      ],
+      "owner_title": "Live STT - health evidence persistence gaps (critical proxy)",
+      "owner_uid": "omi-stt-evidence-loss-critical",
       "panel": null,
       "pointer": "/data/1/model/expr",
       "scope": "normalized-omi-consumer-source-review"
@@ -692,14 +665,28 @@
       "metrics": [
         "omi_stt_managed_legs_opened_total"
       ],
-      "owner_title": "Live STT - managed leg lifecycle gap",
+      "owner_title": "Live STT - managed leg duplicate settlement",
       "owner_uid": "omi-stt-leg-lifecycle-gap",
       "panel": null,
       "pointer": "/data/0/model/expr",
       "scope": "normalized-omi-consumer-source-review"
     },
     {
-      "expression": "abs(omi_stt_managed_legs_opened_total{job=\"backend-listen-metrics\"} - omi_stt_managed_legs_settled_total{job=\"backend-listen-metrics\"} - omi_stt_managed_legs_open{job=\"backend-listen-metrics\"}) / clamp_min(omi_stt_managed_legs_opened_total{job=\"backend-listen-metrics\"}, 1)",
+      "expression": "omi_stt_managed_legs_settled_total{job=\"backend-listen-metrics\"} - omi_stt_managed_legs_opened_total{job=\"backend-listen-metrics\"}",
+      "file": "alerts/live-stt.json",
+      "issues": [],
+      "metrics": [
+        "omi_stt_managed_legs_opened_total",
+        "omi_stt_managed_legs_settled_total"
+      ],
+      "owner_title": "Live STT - managed leg duplicate settlement",
+      "owner_uid": "omi-stt-leg-lifecycle-gap",
+      "panel": null,
+      "pointer": "/data/1/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "omi_stt_managed_legs_opened_total{job=\"backend-listen-metrics\"} - omi_stt_managed_legs_settled_total{job=\"backend-listen-metrics\"} - omi_stt_managed_legs_open{job=\"backend-listen-metrics\"}",
       "file": "alerts/live-stt.json",
       "issues": [],
       "metrics": [
@@ -707,8 +694,23 @@
         "omi_stt_managed_legs_opened_total",
         "omi_stt_managed_legs_settled_total"
       ],
-      "owner_title": "Live STT - managed leg lifecycle gap",
-      "owner_uid": "omi-stt-leg-lifecycle-gap",
+      "owner_title": "Live STT - sustained new managed leg settlement gap",
+      "owner_uid": "omi-stt-leg-settlement-omission",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "clamp_min((omi_stt_managed_legs_opened_total{job=\"backend-listen-metrics\"} offset 1h - omi_stt_managed_legs_settled_total{job=\"backend-listen-metrics\"} offset 1h - omi_stt_managed_legs_open{job=\"backend-listen-metrics\"} offset 1h) or (0 * omi_stt_managed_legs_opened_total{job=\"backend-listen-metrics\"}), 0)",
+      "file": "alerts/live-stt.json",
+      "issues": [],
+      "metrics": [
+        "omi_stt_managed_legs_open",
+        "omi_stt_managed_legs_opened_total",
+        "omi_stt_managed_legs_settled_total"
+      ],
+      "owner_title": "Live STT - sustained new managed leg settlement gap",
+      "owner_uid": "omi-stt-leg-settlement-omission",
       "panel": null,
       "pointer": "/data/1/model/expr",
       "scope": "normalized-omi-consumer-source-review"
@@ -792,6 +794,60 @@
       "scope": "normalized-omi-consumer-source-review"
     },
     {
+      "expression": "sum(increase(omi_listen_accepted_total{job=\"backend-listen-metrics\"}[15m]))",
+      "file": "alerts/live-stt.json",
+      "issues": [],
+      "metrics": [
+        "omi_listen_accepted_total"
+      ],
+      "owner_title": "Live STT - capacity_full exhausting live sessions",
+      "owner_uid": "omi-stt-capacity-full-exhausted",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum by (to_mode) (increase(omi_fallback_total{job=\"backend-listen-metrics\",reason=\"capacity_full\",outcome=\"exhausted\"}[15m])) / on () group_left () clamp_min(sum(increase(omi_listen_accepted_total{job=\"backend-listen-metrics\"}[15m])), 1)",
+      "file": "alerts/live-stt.json",
+      "issues": [],
+      "metrics": [
+        "omi_fallback_total",
+        "omi_listen_accepted_total"
+      ],
+      "owner_title": "Live STT - capacity_full exhausting live sessions",
+      "owner_uid": "omi-stt-capacity-full-exhausted",
+      "panel": null,
+      "pointer": "/data/1/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum by (provider) (increase(omi_stt_provider_connect_total{job=\"backend-listen-metrics\",outcome=\"success\"}[15m]))",
+      "file": "alerts/live-stt.json",
+      "issues": [],
+      "metrics": [
+        "omi_stt_provider_connect_total"
+      ],
+      "owner_title": "Live STT - provider terminal failures per leg are high",
+      "owner_uid": "omi-stt-provider-terminal-failure-ratio",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum by (provider) (increase(omi_live_stt_terminal_failures_total{job=\"backend-listen-metrics\"}[15m])) / clamp_min(sum by (provider) (increase(omi_stt_provider_connect_total{job=\"backend-listen-metrics\",outcome=\"success\"}[15m])), 1)",
+      "file": "alerts/live-stt.json",
+      "issues": [],
+      "metrics": [
+        "omi_live_stt_terminal_failures_total",
+        "omi_stt_provider_connect_total"
+      ],
+      "owner_title": "Live STT - provider terminal failures per leg are high",
+      "owner_uid": "omi-stt-provider-terminal-failure-ratio",
+      "panel": null,
+      "pointer": "/data/1/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
       "expression": "sum(increase(omi_owner_recognition_conversations_total{job=~\"pusher-metrics|cloud-run-application-metrics\",surface=~\"live|sync\",outcome=~\"owner_identified|owner_not_identified|single_speaker_all_owner|no_owner_profile\"}[2h]))",
       "file": "alerts/owner-recognition.json",
       "issues": [],
@@ -854,6 +910,19 @@
       "owner_uid": "omi-journey-chat-fail",
       "panel": null,
       "pointer": "/data/1/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum(increase(omi_journey_terminal_total{journey=\"chat_response\",outcome=\"failure\"}[30m]))",
+      "file": "alerts/resilience.json",
+      "issues": [],
+      "metrics": [
+        "omi_journey_terminal_total"
+      ],
+      "owner_title": "Chat response - terminal failure rate elevated",
+      "owner_uid": "omi-journey-chat-fail",
+      "panel": null,
+      "pointer": "/data/4/model/expr",
       "scope": "normalized-omi-consumer-source-review"
     },
     {
@@ -1014,6 +1083,19 @@
       "scope": "normalized-omi-consumer-source-review"
     },
     {
+      "expression": "sum(increase(omi_journey_terminal_total{journey=\"chat_response\",outcome=\"failure\"}[30m]))",
+      "file": "alerts/resilience.json",
+      "issues": [],
+      "metrics": [
+        "omi_journey_terminal_total"
+      ],
+      "owner_title": "Chat response - success rate below paging floor",
+      "owner_uid": "omi-journey-chat-success-critical",
+      "panel": null,
+      "pointer": "/data/4/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
       "expression": "sum(increase(omi_journey_accepted_total{journey=\"capture_finalization\"}[1h]))",
       "file": "alerts/resilience.json",
       "issues": [],
@@ -1149,7 +1231,21 @@
       "scope": "normalized-omi-consumer-source-review"
     },
     {
-      "expression": "sum by (to_mode) (increase(omi_fallback_total{job=\"backend-listen-metrics\",component=~\"stt_selection|stt_live_session\",to_mode!=\"unavailable\"}[6h])) unless on(to_mode) label_replace(max by (provider) (omi_stt_provider_retired{job=\"backend-listen-metrics\"} == 1), \"to_mode\", \"$1\", \"provider\", \"(.*)\")",
+      "expression": "(sum by (family) (rate(omi_reason_unknown_total[30m])) / clamp_min(sum by (family) (rate(omi_reason_total[30m])), 1e-9)) and on (family) (sum by (family) (increase(omi_reason_total[30m])) > 50)",
+      "file": "alerts/resilience.json",
+      "issues": [],
+      "metrics": [
+        "omi_reason_total",
+        "omi_reason_unknown_total"
+      ],
+      "owner_title": "Reason enums - unknown reason ratio elevated",
+      "owner_uid": "omi-reason-unknown-ratio",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum by (to_mode) (increase(omi_fallback_total{job=\"backend-listen-metrics\",component=~\"stt_selection|stt_live_session\",to_mode!=\"unavailable\",to_mode!=\"vendor\"}[6h])) unless on(to_mode) label_replace(max by (provider) (omi_stt_provider_retired{job=\"backend-listen-metrics\"} == 1), \"to_mode\", \"$1\", \"provider\", \"(.*)\")",
       "file": "alerts/transcription-services.json",
       "issues": [
         "dashboard variables/macros require explicit expansion before shadow"
@@ -1165,7 +1261,7 @@
       "scope": "normalized-omi-consumer-source-review"
     },
     {
-      "expression": "sum by (to_mode) (increase(omi_fallback_total{job=\"backend-listen-metrics\",component=~\"stt_selection|stt_live_session\",to_mode!=\"unavailable\",outcome=\"recovered\"}[6h])) or sum by (to_mode) (increase(omi_fallback_total{job=\"backend-listen-metrics\",component=~\"stt_selection|stt_live_session\",to_mode!=\"unavailable\"}[6h])) * 0",
+      "expression": "sum by (to_mode) (increase(omi_fallback_total{job=\"backend-listen-metrics\",component=~\"stt_selection|stt_live_session\",to_mode!=\"unavailable\",to_mode!=\"vendor\",outcome=\"recovered\"}[6h])) or sum by (to_mode) (increase(omi_fallback_total{job=\"backend-listen-metrics\",component=~\"stt_selection|stt_live_session\",to_mode!=\"unavailable\",to_mode!=\"vendor\"}[6h])) * 0",
       "file": "alerts/transcription-services.json",
       "issues": [],
       "metrics": [
@@ -1201,6 +1297,62 @@
       ],
       "owner_title": "Transcription Service Error Rate: undecodable audio frames",
       "owner_uid": "omi-listen-audio-decode-failures",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "label_replace(((sum(increase(omi_listen_demand_failure_detail_total{job=\"backend-listen-metrics\",demand_cohort=\"admitted\",reason=\"gate_unavailable\",outcome=\"degraded\"}[15m])) / clamp_min(sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",demand_cohort=\"admitted\"}[15m])), 1)) > 0.1) and on () (sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",demand_cohort=\"admitted\"}[15m])) >= 50), \"gate_scope\", \"admitted\", \"\", \"\") or label_replace(((sum(increase(omi_fallback_total{job=\"backend-listen-metrics\",component=~\"stt_selection|stt_live_session\",to_mode=\"vendor\",reason=\"gate_unavailable\",outcome=\"degraded\"}[15m])) / clamp_min(sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\"}[15m])), 1)) > 0.6) and on () (sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\"}[15m])) >= 100), \"gate_scope\", \"all_sessions_guard\", \"\", \"\")",
+      "file": "alerts/transcription-services.json",
+      "issues": [],
+      "metrics": [
+        "omi_fallback_total",
+        "omi_listen_demand_failure_detail_total",
+        "omi_live_session_transcript_outcome_total"
+      ],
+      "owner_title": "Live STT - demand gate unavailable",
+      "owner_uid": "omi-stt-gate-unavailable",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "(sum by (zone) (omi_listen_lb_attached_ready_endpoints) / on (zone) sum by (zone) (omi_listen_lb_ready_pods) < bool 0.8) and on (zone) (sum by (zone) (omi_listen_lb_ready_pods) >= bool 5)",
+      "file": "alerts/transcription-services.json",
+      "issues": [],
+      "metrics": [
+        "omi_listen_lb_attached_ready_endpoints",
+        "omi_listen_lb_ready_pods"
+      ],
+      "owner_title": "Backend-listen - attached Ready endpoint coverage is below 80%",
+      "owner_uid": "omi-listen-neg-endpoint-coverage",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "(sum by (zone) (omi_listen_lb_neg_attached) == bool 0) and on (zone) (sum by (zone) (omi_listen_lb_neg_endpoints) > bool 0)",
+      "file": "alerts/transcription-services.json",
+      "issues": [],
+      "metrics": [
+        "omi_listen_lb_neg_attached",
+        "omi_listen_lb_neg_endpoints"
+      ],
+      "owner_title": "Backend-listen - zonal NEG endpoints are not attached",
+      "owner_uid": "omi-listen-neg-endpoints-unattached",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "(time() - max(omi_listen_lb_exporter_last_success_timestamp_seconds) > bool 300) or on () absent(omi_listen_lb_exporter_last_success_timestamp_seconds)",
+      "file": "alerts/transcription-services.json",
+      "issues": [],
+      "metrics": [
+        "omi_listen_lb_exporter_last_success_timestamp_seconds"
+      ],
+      "owner_title": "Backend-listen - NEG coverage exporter is stale",
+      "owner_uid": "omi-listen-neg-exporter-stale",
       "panel": null,
       "pointer": "/data/0/model/expr",
       "scope": "normalized-omi-consumer-source-review"
@@ -2761,11 +2913,65 @@
       },
       "pointer": "/panels/17/targets/0/expr",
       "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum by (write_path, kind) (increase(omi_stt_fleet_health_write_attempted_total{job=\"backend-listen-metrics\"}[$__rate_interval]))",
+      "file": "dashboards/omi-services/resilience-fallbacks.json",
+      "issues": [
+        "dashboard variables/macros require explicit expansion before shadow"
+      ],
+      "metrics": [
+        "omi_stt_fleet_health_write_attempted_total"
+      ],
+      "owner_title": "Resilience / Fallbacks",
+      "owner_uid": "omi-resilience-fallbacks",
+      "panel": {
+        "id": 20,
+        "title": "Live STT fleet-health writes by path, kind, and drop reason"
+      },
+      "pointer": "/panels/19/targets/0/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum by (write_path, kind) (increase(omi_stt_fleet_health_write_written_total{job=\"backend-listen-metrics\"}[$__rate_interval]))",
+      "file": "dashboards/omi-services/resilience-fallbacks.json",
+      "issues": [
+        "dashboard variables/macros require explicit expansion before shadow"
+      ],
+      "metrics": [
+        "omi_stt_fleet_health_write_written_total"
+      ],
+      "owner_title": "Resilience / Fallbacks",
+      "owner_uid": "omi-resilience-fallbacks",
+      "panel": {
+        "id": 20,
+        "title": "Live STT fleet-health writes by path, kind, and drop reason"
+      },
+      "pointer": "/panels/19/targets/1/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum by (write_path, kind, reason) (increase(omi_stt_fleet_health_write_dropped_total{job=\"backend-listen-metrics\"}[$__rate_interval]))",
+      "file": "dashboards/omi-services/resilience-fallbacks.json",
+      "issues": [
+        "dashboard variables/macros require explicit expansion before shadow"
+      ],
+      "metrics": [
+        "omi_stt_fleet_health_write_dropped_total"
+      ],
+      "owner_title": "Resilience / Fallbacks",
+      "owner_uid": "omi-resilience-fallbacks",
+      "panel": {
+        "id": 20,
+        "title": "Live STT fleet-health writes by path, kind, and drop reason"
+      },
+      "pointer": "/panels/19/targets/2/expr",
+      "scope": "normalized-omi-consumer-source-review"
     }
   ],
   "counts": {
     "explicit_bridge": 21,
-    "query_consumers": 180
+    "query_consumers": 194
   },
   "schema_version": 1,
   "source": "repository, not live Grafana export"

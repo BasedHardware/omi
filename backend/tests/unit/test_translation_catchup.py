@@ -9,8 +9,6 @@ from utils.translation_demand import DemandPolicy
 
 def test_viewed_catchup_skips_current_persisted_translation(monkeypatch):
     monkeypatch.setenv('TRANSLATION_DEMAND_GATE_ENABLED', 'true')
-    monkeypatch.setenv('TRANSLATION_ONDEMAND_UID_ALLOWLIST', 'u')
-    monkeypatch.setenv('TRANSLATION_ONDEMAND_GEMINI_ENABLED', 'true')
     checked = []
 
     def is_current(uid, conversation, segment, target, policy, source_hint):

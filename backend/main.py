@@ -25,11 +25,14 @@ from starlette.middleware.cors import CORSMiddleware
 from starlette.staticfiles import StaticFiles
 
 from database.google_credentials import prepare_google_credentials
+from utils.rollout_cohorts import configure_rollout_runtime
+from utils.stt_cap_cohort import refresh_stt_cap_cohort_forever
 
 prepare_google_credentials()
 install_firebase_auth_mutation_guard()
 
 from utils.observability.sync_upload import SyncUploadMetricsMiddleware
+from utils.observability.external_lists import ExternalListMetricsMiddleware
 from routers import messaging
 from routers import (
     fleet_telemetry,
@@ -65,7 +68,6 @@ from routers import (
     conversations,
     conversation_mutations,
     memories,
-    memory_use,
     api_key_management,
     mcp,
     mcp_sse,
@@ -115,6 +117,7 @@ from routers import (
     desktop_realtime,
     desktop_screen_crisp,
     frame_requests,
+    retired_app_client_contracts,
     referrals,
     desktop_tts_updates,
     scores,
@@ -128,9 +131,7 @@ from routers import (
     commitment_followup,
     public_shared_conversation_chat,
     screen_frames,
-    jit_ledger_snapshot,
     csat,
-    jit_rollout,
     email_preferences,
     mobile_feedback,
     device_diagnostics,
@@ -142,10 +143,9 @@ from utils.other.timeout import TimeoutMiddleware
 from utils.observability import log_langsmith_status
 from utils.subscription import validate_stripe_price_ids
 from utils.http_client import close_all_clients
-from utils.jit_rollout import close_posthog_control_plane
-from utils.free_tier_cohort import close_free_tier_control_plane
 from utils.metrics import start_metrics_sidecar_server, stop_metrics_sidecar_server
 from utils.observability.sync_phases import shutdown_sync_metrics
+from utils.sync.cap_hold_lifecycle import flush_active
 from utils.executors import (
     drain_background_tasks,
     log_executor_health,
@@ -156,7 +156,6 @@ from utils.executors import start_background_task
 from utils.batch_pipeline.serving import start_serving_from_env, stop_serving
 from utils.cloud_tasks import validate_account_deletion_dispatch_configuration
 from utils.stt.streaming import validate_streaming_stt_env
-from utils.stt.soniox_runway import poll_forever
 from utils.stt.live_health import health as live_stt_health
 from utils.stt.parakeet_window import batch_pressure
 from utils.llm.managed_spend_ledger import shutdown_managed_spend_ledger
@@ -193,6 +192,8 @@ elif os.environ.get("SERVICE_ACCOUNT_JSON"):
 else:
     firebase_admin.initialize_app(options=_firebase_admin_options)  # type: ignore[reportUnknownMemberType]  # firebase_admin untyped
 
+# Bind private cohort resolution once at the serving composition root.
+configure_rollout_runtime()
 app = FastAPI()
 
 _local_storage_root = local_storage_root_from_env()
@@ -222,8 +223,6 @@ app.add_middleware(
         'X-Omi-Next-Cursor',
         'X-Next-Cursor',
         'X-Scan-Truncated',
-        'X-Omi-Memory-As-Of',
-        'X-Omi-Memory-Belief-Enabled',
         'X-Omi-Memory-Canonical-Lifecycle-Exposed',
         'X-Omi-Memory-Default-Delete-Supported',
         'X-Omi-Memory-Device-Scope-Supported',
@@ -262,7 +261,6 @@ app.include_router(task_integrations.router)
 app.include_router(integrations.router)
 app.include_router(x_connector.router)
 app.include_router(memories.router)
-app.include_router(memory_use.router)
 app.include_router(chat.router)
 app.include_router(chat_receipts.router)
 app.include_router(speech_profile.router)
@@ -334,8 +332,6 @@ app.include_router(tts.router)
 app.include_router(memory_admin.router)
 app.include_router(memory_product.router)
 app.include_router(task_recommendations.router)
-app.include_router(jit_ledger_snapshot.router)
-app.include_router(jit_rollout.router)
 app.include_router(desktop_core.router)
 app.include_router(desktop_agent_vm.router)
 app.include_router(desktop_chat.router)
@@ -344,10 +340,10 @@ app.include_router(desktop_task_gate.router)
 app.include_router(desktop_realtime.router)
 app.include_router(desktop_screen_crisp.router)
 app.include_router(frame_requests.router)
+app.include_router(retired_app_client_contracts.router)
 app.include_router(desktop_tts_updates.router)
 app.include_router(screen_frames.router)
 app.include_router(review.router)
-jit_rollout.validate_jit_rollout_contract(app)
 
 methods_timeout = {
     "GET": os.environ.get('HTTP_GET_TIMEOUT'),
@@ -359,6 +355,8 @@ methods_timeout = {
 
 # Keep the in-request Cloud Tasks pipeline cap below its 1800s lock TTL so no lock expires under live work.
 paths_timeout = {
+    "/v2/cap-hold-recovery/sweep": 1710,  # Await bounded redrive under Scheduler's 1740s deadline.
+    "/v2/batch-pipeline/recover-quarantine": 1500,  # Await paid STT and durable settlement within the task request.
     "/v2/sync-jobs/run": os.environ.get('HTTP_SYNC_JOBS_RUN_TIMEOUT', 1500),
     "/v2/dream-agent/sweep": 150,  # Drain has its own 120s bound; Scheduler allows 180s.
     "/v2/candidate-integrations/sweep": 90,  # Sweep stops at 50s; Scheduler allows 120s.
@@ -385,6 +383,7 @@ from database.firestore_tier_context import FirestoreTierMiddleware
 
 app.add_middleware(FirestoreTierMiddleware)
 app.add_middleware(SyncUploadMetricsMiddleware)
+app.add_middleware(ExternalListMetricsMiddleware)
 app.add_middleware(DesktopProxyDeadlineMiddleware)
 
 
@@ -402,17 +401,22 @@ def _run_fsr_loop(loop_name, callback, interval_seconds):
     return loop_lease(loop_name).run(attributed, interval_seconds, on_skip=on_skip) or {}
 
 
+# Install while importing on the main thread, after the server's signal setup.
+from utils.other.fsr_leader_lease import install_loop_lease_sigterm_handler
+
+install_loop_lease_sigterm_handler()
+
+
 @app.on_event("startup")  # type: ignore[reportDeprecated]  # FastAPI on_event still functional; lifespan migration would change app wiring
 async def startup_event():
     from utils.messaging.adapters.runtime import start_adapters
 
     app.state.messaging_runtime = await start_adapters(messaging.register_adapter)
     start_metrics_sidecar_server()
+    start_background_task(refresh_stt_cap_cohort_forever(), name='stt_cap_cohort_refresh')
     start_background_task(live_stt_health.refresh_forever(), name='live_stt_fleet_health')
     batch_pressure.start_from_env()
     app.state.batch_pipeline_serving = start_serving_from_env()
-    if os.getenv('SONIOX_MONTHLY_CEILING_USD', '0') not in ('', '0'):
-        start_background_task(poll_forever(), name='soniox_runway')
     validate_account_deletion_dispatch_configuration()
     validate_streaming_stt_env()
     start_background_task(log_executor_health(), name='executor_health')
@@ -671,13 +675,17 @@ async def shutdown_event():
     if (serving_task := getattr(app.state, 'batch_pipeline_serving', None)) is not None:
         await stop_serving(serving_task)
     await batch_pressure.stop()
+    await flush_active(timeout=30.0)
     await drain_background_tasks(timeout=10.0)
     from utils.other.fsr_leader_lease import release_loop_leases
     from utils.other.fsr_leader_lease import singleton_loops_enabled
     from database.durable_queue_age import withdraw_queue_oldest_ready_ages
 
     try:
-        await run_blocking(db_executor, release_loop_leases)
+        if singleton_loops_enabled():
+            await asyncio.to_thread(release_loop_leases)
+        else:
+            await run_blocking(db_executor, release_loop_leases)
     except Exception:
         logging.getLogger(__name__).warning('fsr_leader_lease release scheduling failed; leases will expire')
     if singleton_loops_enabled():
@@ -685,8 +693,7 @@ async def shutdown_event():
     await shutdown_managed_spend_ledger()
     await shutdown_sync_metrics()
     await close_all_clients()
-    close_posthog_control_plane()
-    close_free_tier_control_plane()
+
     stop_metrics_sidecar_server()
 
 

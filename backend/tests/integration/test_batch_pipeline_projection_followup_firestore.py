@@ -171,3 +171,101 @@ async def test_followup_timeout_replays_enrichment_without_duplicate_debt_or_usa
     assert sync_jobs.get_sync_job(batch.binding.job_id) == client_job
     assert lane.loads == loads
     assert active_rows(lane)[0]['sync_content_revision'] == 1
+
+
+@pytest.mark.asyncio
+async def test_projection_discovery_drains_beyond_101_ready_rows_without_reprojection(lane, monkeypatch):
+    """The old first page pins forever; both real scanners must escape it."""
+    import asyncio
+    from database import batch_pipeline_projection_claim as claims
+    from utils.batch_pipeline import projection_followup
+    import fakeredis
+
+    monkeypatch.setenv('BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED', 'true')
+    monkeypatch.setattr(claims, '_redis_client', lambda: fakeredis.FakeRedis())
+    # All commit timestamps tie. Document-ID ordering must still cross pages.
+    batch = lane.seed(tuple(f'a{i:03}' for i in range(101)) + ('z-sibling',))
+    for i in range(len(batch.ids)):
+        assert lane.finish(batch, i, outcome='silence')['segment_id'] == batch.ids[i]
+    for sid in batch.ids[:-1]:
+        lane.projector.persist(sid)
+        lane.projector.store.ready(sid, batch.binding, lane.clock())
+    assert lane.projector.store.prepare_accounting(batch.binding, lane.clock()) is None
+    assert batch.ledger.get().to_dict()['status'] == 'processing'
+    later = lane.seed(('zz-actionable',), capture_at=10000, owner_id=lane.uid + '-other')
+    lane.finish(later, outcome='silence')
+    legacy = lane.store.projection_pending()
+    assert len(legacy) == 100 and all(sid in batch.ids[:-1] for sid in legacy)
+    assert batch.ids[-1] not in legacy and later.ids[0] not in legacy
+    # Rollback reproduces the original stall without changing a fence.
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED', 'false')
+    for _ in range(2):
+        lane.projector.sweep()
+    assert not lane.projector.store.ref('results', batch.ids[-1]).get().to_dict().get('projection')
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED', 'true')
+    lane.projector.sweep()
+    lane.projector.sweep()
+    assert lane.projector.store.ref('results', batch.ids[-1]).get().to_dict()['projection']
+    assert lane.projector.store.ref('results', later.ids[0]).get().to_dict()['projection']
+    # The follow-up cursor starts independently at the blocked head. Its first
+    # page cannot complete content while the final sibling is only persisted.
+    runner = projection_followup.ProjectionFollowups(lane.projector)
+    await runner.schedule()
+    while runner.tasks:
+        await asyncio.gather(*list(runner.tasks.values()))
+        await asyncio.sleep(0)
+    assert batch.ledger.get().to_dict()['status'] == 'processing'
+    assert later.ledger.get().to_dict()['status'] == 'processing'
+    await runner.schedule()
+    while runner.tasks:
+        await asyncio.gather(*list(runner.tasks.values()))
+        await asyncio.sleep(0)
+    assert later.ledger.get().to_dict()['status'] == 'completed'
+    # Restart resets only hints. Completed rows have left the discovery query.
+    restarted = projection_followup.ProjectionFollowups(lane.projector)
+    await restarted.schedule()
+    while restarted.tasks:
+        await asyncio.gather(*list(restarted.tasks.values()))
+        await asyncio.sleep(0)
+    completed = batch.ledger.get().to_dict()
+    assert completed['status'] == 'completed'
+    assert not lane.loads  # No STT/result reload, including across replay/restart.
+    assert not lane.tasks  # Silence creates no enrichment obligation.
+    published = len(lane.published)
+    assert published >= 2
+    for _ in range(3):
+        lane.projector.sweep()
+        await restarted.schedule()
+        while restarted.tasks:
+            await asyncio.gather(*list(restarted.tasks.values()))
+    assert batch.ledger.get().to_dict() == completed
+    assert len(lane.published) == published
+
+
+@pytest.mark.asyncio
+async def test_async_assignment_supersession_drains_all_sibling_receipts(lane, monkeypatch):
+    from tests.integration.test_batch_pipeline_projection_firestore import superseded_anchor
+    from database import batch_pipeline_projection_claim as claims
+    from utils.batch_pipeline.projection_followup import ProjectionFollowups
+    import fakeredis
+
+    monkeypatch.setenv('BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED', 'true')
+    redis = fakeredis.FakeRedis()
+    monkeypatch.setattr(claims, '_redis_client', lambda: redis)
+    batch = lane.seed(('head', 'sibling'))
+    for item in batch.items:
+        superseded_anchor(lane, item, merged=True)
+    lane.finish(batch, 0)
+    lane.finish(batch, 1)
+    for sid in batch.ids:
+        lane.projector.persist(sid)
+    assert batch.ledger.get().to_dict()['status'] == 'processing'
+    runner = ProjectionFollowups(lane.projector)
+    await runner.run(batch.ids[0])
+    assert batch.ledger.get().to_dict()['status'] == 'completed'
+    assert lane.published[0]['superseded_segments'] == 2
+    assert not lane.tasks and not list(lane.user.collection('hourly_usage').stream())
+    assert all(
+        lane.projector.store.ref('results', sid).get().to_dict()['projection_state'] == 'completed' for sid in batch.ids
+    )

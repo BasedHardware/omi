@@ -3,6 +3,7 @@
 import asyncio
 from contextlib import contextmanager
 from dataclasses import asdict
+from config.policy import BatchUnitPolicy, ProjectionPolicy, resolve_batch_policy, resolve_stage_policy
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
@@ -41,7 +42,13 @@ def test_owner_claim_covers_assignment_but_not_slow_followup_when_enabled(monkey
     monkeypatch.setenv('BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED', str(enabled).lower())
     projector = projection.Projector(Mock(namespace='synthetic'), Mock())
     binding = ProjectionBinding('owner', 'job', 'content', ('head', 'later'))
-    projector.store.read = Mock(return_value=({}, {}, binding))
+    projector.store.read = Mock(
+        return_value=(
+            {'policy_parts': {'projection': resolve_stage_policy('owner', 'projection').to_dict()}},
+            {},
+            binding,
+        )
+    )
     projector._assign = Mock(side_effect=lambda *a, **k: assert_claim())
 
     def assert_claim():
@@ -68,7 +75,10 @@ def followup(monkeypatch, owner_claim):
     projector = projection.Projector(Mock(namespace='synthetic'), Mock())
     binding = ProjectionBinding('owner', 'job', 'content', ('head', 'later'), native_record=True)
     jobs = {
-        sid: asdict(WorkItem(sid, 'owner', i, 'gs://synthetic/audio', 1, Priority.DEEP))
+        sid: {
+            **asdict(WorkItem(sid, 'owner', i, 'gs://synthetic/audio', 1, Priority.DEEP)),
+            'policy_parts': {'projection': ProjectionPolicy(async_projection=True).to_dict()},
+        }
         for i, sid in enumerate(binding.segment_ids)
     }
     receipts = {
@@ -81,6 +91,7 @@ def followup(monkeypatch, owner_claim):
         }
         for sid in jobs
     }
+    projector.store.policy = Mock(return_value=ProjectionPolicy(async_projection=True))
     projector.store.mark_enrichment = Mock()
     projector.store.ready = Mock()
     projector.store.read = Mock(side_effect=lambda sid: (jobs[sid], {'projection': receipts[sid]}, binding))
@@ -89,6 +100,9 @@ def followup(monkeypatch, owner_claim):
     )
     projector.store.check = Mock(side_effect=ProjectionReplay({'state': 'persisted'}))
     projector.store.store.projection_pending = Mock(return_value=list(jobs))
+    projector.store.store.projection_page = Mock(
+        side_effect=lambda **kw: (projector.store.store.projection_pending(), None)
+    )
     projector.store.ref = Mock(
         side_effect=lambda _, sid: SimpleNamespace(
             get=lambda: SimpleNamespace(to_dict=lambda: {'projection': receipts[sid]})
@@ -188,7 +202,7 @@ async def test_followups_are_bounded_and_duplicate_sweeps_coalesce(followup, mon
 @pytest.mark.asyncio
 async def test_async_flag_off_preserves_synchronous_serving_without_followup_task(monkeypatch):
     monkeypatch.delenv('BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED', raising=False)
-    projector = Mock()
+    projector = Mock(has_async_followups=False)
     projector.start_followups = AsyncMock(side_effect=AssertionError('dark async task launched'))
     await Serving(MemoryStore(), projector=projector).reconcile_async()
     projector.sweep.assert_called_once()
@@ -212,7 +226,12 @@ async def test_private_playback_follows_concurrent_bridge_before_enrichment(foll
     monkeypatch.setattr(bridge, 'finish_sync_bridges', finish)
     f.projector.playback = lambda _, cid: calls.append(('playback', cid))
     f.projector.store.mark_enrichment.side_effect = lambda *args, **kwargs: calls.append(('enrichment', args[3]))
-    await f.runner.finish_part(WorkItem(**f.jobs['head']), binding, receipt, None)
+    await f.runner.finish_part(
+        WorkItem(**{k: v for k, v in f.jobs['head'].items() if k in WorkItem.__dataclass_fields__}),
+        binding,
+        receipt,
+        None,
+    )
     assert calls == [
         ('bridge', 'head', {}),
         ('playback', 'head'),
@@ -376,3 +395,60 @@ async def test_four_stuck_followups_timeout_without_closing_process_drain(follow
     await f.runner.schedule()
     await asyncio.wait_for(drain(), 1)
     assert {call.args[0] for call in f.runner._run.await_args_list} == set(segments)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('after_playback', [False, True])
+async def test_deleted_bridge_keeps_existing_supersession_contract(followup, monkeypatch, after_playback):
+    from dataclasses import replace
+    from utils.sync import bridge
+    from utils.sync.assignment_errors import SyncAssignmentSuperseded
+
+    f = followup
+    binding = replace(f.binding, native_record=False, private_cloud_sync_enabled=True)
+    receipt = {**f.receipts['head'], 'audio_required': True}
+    failure = SyncAssignmentSuperseded('deleted fixture target')
+    finish = Mock(side_effect=['head', failure] if after_playback else failure)
+    monkeypatch.setattr(bridge, 'finish_sync_bridges', finish)
+    f.projector.playback = Mock()
+    with pytest.raises(SyncAssignmentSuperseded):
+        await f.runner.finish_part(
+            WorkItem(**{k: v for k, v in f.jobs['head'].items() if k in WorkItem.__dataclass_fields__}),
+            binding,
+            receipt,
+            None,
+        )
+    assert f.projector.playback.call_count == int(after_playback)
+    f.projector.store.mark_enrichment.assert_not_called()
+    f.projector.store.ready.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_slow_followup_keeps_unlaunched_page_before_advancing(followup, monkeypatch):
+    f = followup
+    monkeypatch.setattr(projection_followup, 'MAX_FOLLOWUPS', 1)
+    release = asyncio.Event()
+    launched = []
+    f.runner.candidates = Mock(side_effect=[['head', 'later'], ['next-page']])
+
+    async def run(sid):
+        launched.append(sid)
+        await release.wait()
+
+    f.runner.run = run
+    await f.runner.schedule()
+    await asyncio.sleep(0)
+    await f.runner.schedule()
+    assert launched == ['head']
+    assert list(f.runner.pending) == ['later']
+    f.runner.candidates.assert_called_once()
+    release.set()
+    while f.runner.tasks:
+        await asyncio.gather(*list(f.runner.tasks.values()))
+        await asyncio.sleep(0)
+    assert launched == ['head', 'later']
+    await f.runner.schedule()
+    while f.runner.tasks:
+        await asyncio.gather(*list(f.runner.tasks.values()))
+        await asyncio.sleep(0)
+    assert launched == ['head', 'later', 'next-page']

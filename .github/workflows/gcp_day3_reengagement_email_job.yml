@@ -1,7 +1,6 @@
 name: Deploy Day 3 Re-engagement Email Job to Cloud RUN
 
-# Mirrors gcp_daily_memory_sweep_job.yml, minus the LLM-gateway serving gate and
-# VPC lane probe: this job composes a fixed template and calls Resend, so it
+# This job composes a fixed template and calls Resend, so it
 # makes no model call and has no gateway lane to prove.
 
 on:

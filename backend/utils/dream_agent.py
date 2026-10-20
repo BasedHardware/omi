@@ -1,5 +1,7 @@
 """One owner session, two independent verifiers, one reversible effect boundary."""
 
+from utils.generated_compute import generated_compute_allowed, generated_compute_configured
+
 import asyncio
 from datetime import datetime, timezone
 from collections import Counter
@@ -19,6 +21,7 @@ from config.dream_agent import (
     DRAIN_TIMEOUT_SECONDS,
 )
 from database import dream_scheduler, dream_store, dream_turns, legal_holds, review_store
+from config.rollout_cohorts import warm_rollout_cohorts
 from database.dream_dirty import dream_writing
 from database.legal_holds import DestructiveOperationInProgress, LegalHoldActive
 from models.agent_tools import HarnessQuestion
@@ -252,8 +255,8 @@ async def run_session(
             cached_tokens_estimate=cached_estimate,
             completion_limit=completion,
         )
-        # The shared minute ceiling counts reserved-capacity burndown (cached input 0.1, output 5x), not raw
-        # tokens: counting every resent cached prefix in full stopped fast passes after a few minutes.
+        # Hold uncached input plus output burndown: the previous turn's cache hit
+        # cannot guarantee this call's hit. Settlement refunds reported cache savings.
         reserve = minute_burndown_tokens(
             'gemini',
             'gemini-3.8-flash',
@@ -261,9 +264,7 @@ async def run_session(
                 'gemini',
                 'gemini-3.8-flash',
                 prompt_tokens=estimate,
-                cached_tokens=(
-                    min(cached_estimate, estimate) if type(cached_estimate) is int and cached_estimate >= 0 else None
-                ),
+                cached_tokens=0,
                 completion_tokens=completion_room,
             ),
             completion_tokens=completion_room,
@@ -346,10 +347,10 @@ async def run_session(
         return await run_blocking(db_executor, partial(fn, uid, *args, **kwargs))
 
     gate_retry_deadline = None
-    gate_retry_in_progress = False
+    gate_retry_sleeping = False
 
     async def effect_with_gate_retry(fn, *args, **kwargs):
-        nonlocal gate_retry_deadline, gate_retry_in_progress
+        nonlocal gate_retry_deadline, gate_retry_sleeping
         loop = asyncio.get_running_loop()
         delay_index = 0
         attempt = 0
@@ -365,18 +366,15 @@ async def run_session(
                 }
             try:
                 result = await effect(fn, *args, **effect_kwargs)
-                gate_retry_in_progress = False
                 return result
             except Exception as exc:
                 if not _retryable_gate_contention(exc):
                     raise
-                gate_retry_in_progress = True
                 now = loop.time()
                 if gate_retry_deadline is None:
                     gate_retry_deadline = min(deadline, now + GATE_CONTENTION_RETRY_BUDGET_SECONDS)
                 retry_allowed = await run_blocking(db_executor, legal_holds.dream_gate_contention_retry_allowed, uid)
                 if not retry_allowed:
-                    gate_retry_in_progress = False
                     raise
                 now = loop.time()
                 if delay_index >= len(GATE_CONTENTION_BACKOFF_SECONDS):
@@ -386,7 +384,16 @@ async def run_session(
                 retry_deadline = min(deadline, gate_retry_deadline)
                 if now + delay + GATE_CONTENTION_APPLY_HEADROOM_SECONDS >= retry_deadline:
                     raise ValueError('dream_gate_contention') from exc
-                await _sleep_gate_retry(delay)
+                gate_retry_sleeping = True
+                try:
+                    await _sleep_gate_retry(delay)
+                except (asyncio.CancelledError, TimeoutError):
+                    # A pass timeout during the sleep leaves no apply in flight; keep the flag for the outer rewrite.
+                    raise
+                except BaseException:
+                    gate_retry_sleeping = False
+                    raise
+                gate_retry_sleeping = False
                 if loop.time() + GATE_CONTENTION_APPLY_HEADROOM_SECONDS >= retry_deadline:
                     raise ValueError('dream_gate_contention') from exc
                 await active()
@@ -565,7 +572,7 @@ async def run_session(
                 summary=session.finish.summary if session.finish else '',
             )
     except Exception as exc:
-        if isinstance(exc, TimeoutError) and gate_retry_in_progress:
+        if isinstance(exc, TimeoutError) and gate_retry_sleeping:
             exc = ValueError('dream_gate_contention')
         code = error_code(exc)
         report.update(status='failed', error_type=type(exc).__name__, error_code=code)
@@ -601,6 +608,10 @@ async def run_pass(
     dry_run=False,
     bootstrap_tools=None,
 ):
+    if generated_compute_configured() and not await run_blocking(
+        db_executor, generated_compute_allowed, uid, 'dream', allow_byok=False
+    ):
+        return {'status': 'not_admitted', 'reason': 'usage_budget_exhausted'}
     if not enabled():
         report = {'status': 'not_admitted', 'reason': 'disabled'}
         if not dry_run:
@@ -609,6 +620,7 @@ async def run_pass(
     caps = caps or Caps.from_env()
     if bootstrap_tools is not None and not canary:
         raise ValueError('dream_bootstrap_requires_synthetic_canary')
+    await warm_rollout_cohorts(uid)
     # Reject stale queue entries before capacity waits or owner-data loading.
     # Synthetic canaries have separate, authoritative admission in acquire().
     if not canary and not may_be_eligible(uid):

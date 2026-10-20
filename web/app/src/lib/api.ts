@@ -2,6 +2,11 @@ import { getIdToken } from './firebase';
 import { version as webAppVersion } from '../../package.json';
 import { getWebDeviceIdHash } from './clientDevice';
 import {
+  parseStorefront,
+  type PlanStorefront,
+  type StorefrontTrigger,
+} from './planStorefront';
+import {
   invalidateCache,
   invalidationPatterns,
   fetchWithCache,
@@ -168,6 +173,7 @@ export interface GetConversationsParams {
   startDate?: Date;
   endDate?: Date;
   folderId?: string;
+  starred?: boolean;
 }
 
 export async function getConversations(
@@ -181,6 +187,7 @@ export async function getConversations(
     startDate,
     endDate,
     folderId,
+    starred,
   } = params;
 
   const queryParams = new URLSearchParams({
@@ -200,6 +207,10 @@ export async function getConversations(
 
   if (folderId) {
     queryParams.set('folder_id', folderId);
+  }
+
+  if (starred !== undefined) {
+    queryParams.set('starred', starred.toString());
   }
 
   return fetchWithAuth<Conversation[]>(`/v1/conversations?${queryParams}`);
@@ -520,40 +531,25 @@ export interface GetMemoriesParams {
   offset?: number;
   categories?: MemoryCategory[];
   cursor?: string;
-  view?: MemoryView;
 }
-
-/** Server-selected memory presentation. The server remains authoritative for
- * ordering and eligibility; the web client only selects the read surface. */
-export type MemoryView = 'useful_now' | 'history' | 'all';
 
 export interface MemoriesPage {
   memories: Memory[];
   nextCursor: string | null;
   truncated: boolean;
-  /** `null` means this server predates the beta capability header. */
-  beliefEnabled: boolean | null;
-}
-
-function headerBoolean(response: Response, name: string): boolean | null {
-  const value = response.headers.get(name)?.trim().toLowerCase();
-  if (value === 'true') return true;
-  if (value === 'false') return false;
-  return null;
 }
 
 /** Read one server-ordered page and retain pagination/capability receipts. */
 export async function getMemoriesPage(
   params: GetMemoriesParams = {},
 ): Promise<MemoriesPage> {
-  const { limit = 100, offset = 0, cursor, view } = params;
+  const { limit = 100, offset = 0, cursor } = params;
 
   const queryParams = new URLSearchParams({
     limit: limit.toString(),
     offset: cursor ? '0' : offset.toString(),
   });
   if (cursor) queryParams.set('cursor', cursor);
-  if (view) queryParams.set('view', view);
 
   const { data: raw, response } = await fetchWithAuthResponse<unknown>(
     `/v3/memories?${queryParams}`,
@@ -562,7 +558,6 @@ export async function getMemoriesPage(
     memories: normalizeKnowledgeLedgerMemories(raw),
     nextCursor: response.headers.get('X-Omi-Memory-Next-Cursor'),
     truncated: response.headers.get('X-Omi-List-Truncated')?.toLowerCase() === 'true',
-    beliefEnabled: headerBoolean(response, 'X-Omi-Memory-Belief-Enabled'),
   };
 }
 
@@ -581,7 +576,7 @@ export async function getMemories(params: GetMemoriesParams = {}): Promise<Memor
 
 /**
  * Find memories by id. The backend has no memory-by-id read, so this walks the
- * owner-wide `all` view and stops once every id is found. `complete` is false
+ * owner-wide list and stops once every id is found. `complete` is false
  * when the walk stopped early (page cap, truncated read): an id missing then
  * may still exist and must not be reported as deleted.
  */
@@ -598,7 +593,7 @@ export async function findMemoriesByIds(
   let cursor: string | undefined;
   const seenCursors = new Set<string>();
   for (let page = 0; page < maxPages; page++) {
-    const result = await fetchPage({ limit, offset, cursor, view: 'all' });
+    const result = await fetchPage({ limit, offset, cursor });
     for (const memory of result.memories) {
       if (wanted.has(memory.id)) found.set(memory.id, memory);
     }
@@ -694,21 +689,6 @@ export async function reviewMemory(id: string, accept: boolean): Promise<void> {
   await fetchWithAuth(`/v3/memories/${id}/review?value=${accept}`, {
     method: 'POST',
   });
-}
-
-export type MemoryUseAction = 'suppress' | 'allow' | 'useful';
-
-/** Record an owner's use preference without deleting or rewriting the memory. */
-export async function setMemoryUse(
-  id: string,
-  action: MemoryUseAction,
-  feedbackId: string,
-): Promise<void> {
-  await fetchWithAuth(`/v3/memories/${id}/use`, {
-    method: 'POST',
-    body: JSON.stringify({ action, feedback_id: feedbackId }),
-  });
-  invalidateCache(invalidationPatterns.memories);
 }
 
 // ============================================================================
@@ -1127,6 +1107,17 @@ export async function sendMessageStream(
 
   if (!response.ok) {
     const errorText = await response.text().catch(() => 'No error body');
+    if (response.status === 402) {
+      try {
+        const pause = JSON.parse(errorText)?.detail?.chat_at_cap;
+        if (pause?.state === 'paused' && pause.trigger === 'usage_budget') {
+          window.dispatchEvent(new CustomEvent('omi-chat-paused', { detail: pause }));
+          throw new Error(pause.title);
+        }
+      } catch (error) {
+        if (error instanceof Error && !(error instanceof SyntaxError)) throw error;
+      }
+    }
     console.error('Send message error:', response.status, errorText);
     throw new Error(`Failed to send message: ${response.status}`);
   }
@@ -1975,6 +1966,22 @@ export async function getAvailablePlans(): Promise<AvailablePlansResponse | null
     console.error('getAvailablePlans error:', error);
     return null;
   }
+}
+
+/**
+ * Ladder-v1 plans sheet payload (`GET /v2/payments/plans`). Throws on any
+ * failure so the sheet shows its error state; there is no fallback catalog.
+ */
+export async function getStorefront(params: {
+  source: string;
+  trigger?: StorefrontTrigger | null;
+  locale?: string;
+}): Promise<PlanStorefront> {
+  const query = new URLSearchParams({ source: params.source });
+  if (params.trigger) query.set('trigger', params.trigger);
+  if (params.locale) query.set('locale', params.locale);
+  const raw = await fetchWithAuth<unknown>(`/v2/payments/plans?${query.toString()}`);
+  return parseStorefront(raw);
 }
 
 /**

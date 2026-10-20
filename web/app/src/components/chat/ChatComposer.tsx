@@ -1,5 +1,6 @@
 'use client';
 
+import { ChatBudgetPause, useChatBudgetPause } from './ChatBudgetPause';
 import { useRef, useState, useEffect, useImperativeHandle } from 'react';
 import { ArrowUp, Paperclip } from 'lucide-react';
 import { FilePreview, ALLOWED_EXTENSIONS, MAX_FILES } from './FilePreview';
@@ -68,6 +69,8 @@ export function ChatComposer({
   recording,
   ref,
 }: ChatComposerProps) {
+  const budget = useChatBudgetPause();
+  const chatDisabled = disabled || budget.state !== null;
   const [input, setInput] = useState('');
   const [selectedFiles, setSelectedFiles] = useState<FilePreviewItem[]>([]);
   const [pendingUploadCount, setPendingUploadCount] = useState(0);
@@ -166,7 +169,7 @@ export function ChatComposer({
     const text = input;
     if (
       (!text.trim() && !selectedFiles.some((item) => item.uploadedId)) ||
-      disabled ||
+      chatDisabled ||
       isStreaming ||
       pendingUploadCountRef.current > 0
     )
@@ -195,7 +198,7 @@ export function ChatComposer({
 
   const canSend =
     (input.trim() || selectedFiles.some((f) => f.uploadedFile)) &&
-    !disabled &&
+    !chatDisabled &&
     !isStreaming &&
     !isUploading;
 
@@ -212,13 +215,14 @@ export function ChatComposer({
         'transition-colors focus-within:border-white/25',
       )}
     >
+      <ChatBudgetPause budget={budget} />
       {/* File preview bar */}
       {selectedFiles.length > 0 && (
         <div className="px-3 pt-3">
           <FilePreview
             files={selectedFiles}
             onRemove={handleRemoveFile}
-            disabled={disabled || isStreaming}
+            disabled={chatDisabled || isStreaming}
           />
         </div>
       )}
@@ -231,7 +235,7 @@ export function ChatComposer({
         onChange={(e) => setInput(e.target.value)}
         onKeyDown={handleKeyDown}
         placeholder={placeholder}
-        disabled={disabled || isStreaming}
+        disabled={chatDisabled || isStreaming}
         rows={1}
         className={cn(
           'no-scrollbar w-full resize-none bg-transparent px-5 pt-4',
@@ -247,7 +251,10 @@ export function ChatComposer({
         <button
           onClick={() => fileInputRef.current?.click()}
           disabled={
-            disabled || isStreaming || isUploading || selectedFiles.length >= MAX_FILES
+            chatDisabled ||
+            isStreaming ||
+            isUploading ||
+            selectedFiles.length >= MAX_FILES
           }
           className={iconButton}
           title={
@@ -269,7 +276,7 @@ export function ChatComposer({
         {/* Dictation: types for you. */}
         <InlineVoiceRecorder
           onTranscript={handleVoiceTranscript}
-          disabled={disabled || isStreaming}
+          disabled={chatDisabled || isStreaming}
         />
 
         <div className="flex-1" />

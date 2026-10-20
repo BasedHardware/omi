@@ -1,6 +1,6 @@
 """Independent Cloud Run Job entrypoint for EXP-001's day-3 re-engagement email.
 
-Modeled on ``daily_memory_sweep_job.py``: a thin entrypoint that resolves its
+This thin entrypoint resolves its
 own authority before touching any user data, then delegates every decision to
 ``utils.email.day3_reengagement``. See
 ``backend/docs/experiments/EXP-001-day3-reengagement.md`` for the experiment

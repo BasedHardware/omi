@@ -79,6 +79,13 @@ sdist = { url = "https://files.pythonhosted.org/packages/25/1e/faf0f247f6f881b98
 wheels = [{ url = "https://files.pythonhosted.org/packages/d4/2b/04b8a15f3a1c77bc79ddf5c73875327f34b4fa75982df2b76e45e402d364/asttokens-3.0.2-py3-none-any.whl", upload-time = 2026-07-12T03:31:47Z, size = 28702, hashes = { sha256 = "9da13157f5b28becde0bd374fc677dcd3c290614264eff096f167c469cd9f933" } }]
 
 [[packages]]
+name = "async-timeout"
+version = "5.0.1"
+marker = "python_full_version < '3.11.3'"
+sdist = { url = "https://files.pythonhosted.org/packages/a5/ae/136395dfbfe00dfc94da3f3e136d0b13f394cba8f4841120e34226265780/async_timeout-5.0.1.tar.gz", upload-time = 2024-11-06T16:41:39Z, size = 9274, hashes = { sha256 = "d9321a7a3d5a6a5e187e824d2fa0793ce379a202935782d555d6e9d2735677d3" } }
+wheels = [{ url = "https://files.pythonhosted.org/packages/fe/ba/e2081de779ca30d473f21f5b30e0e737c438205440784c7dfc81efc2b029/async_timeout-5.0.1-py3-none-any.whl", upload-time = 2024-11-06T16:41:37Z, size = 6233, hashes = { sha256 = "39e3809566ff85354557ec2398b55e096c8364bacac9405a7a1fa429e77fe76c" } }]
+
+[[packages]]
 name = "attrs"
 version = "26.1.0"
 sdist = { url = "https://files.pythonhosted.org/packages/9a/8e/82a0fe20a541c03148528be8cac2408564a6c9a0cc7e9171802bc1d26985/attrs-26.1.0.tar.gz", upload-time = 2026-03-19T14:22:25Z, size = 952055, hashes = { sha256 = "d03ceb89cb322a8fd706d4fb91940737b6642aa36998fe130a9bc96c985eff32" } }
@@ -1104,6 +1111,12 @@ name = "rapidfuzz"
 version = "3.14.6"
 sdist = { url = "https://files.pythonhosted.org/packages/18/97/226c43b7b5d957bc3840ed52ea99eed261f99834c4619be7a4742cbaeafa/rapidfuzz-3.14.6.tar.gz", upload-time = 2026-08-30T21:45:51Z, size = 57955060, hashes = { sha256 = "e13a8160d017b499ec7a2fa9d0ce1ae2e7377080815785819f966fb235d4eb60" } }
 wheels = [{ url = "https://files.pythonhosted.org/packages/11/ae/a781ec62825990319483c82ef962b509e9ce22a67a9f97d63d70b2b175b9/rapidfuzz-3.14.6-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", upload-time = 2026-08-30T21:42:03Z, size = 3180952, hashes = { sha256 = "3d5d90bae3c6fb7ea34da968c9f23070e8440edb827a28b242580e0108110b14" } }]
+
+[[packages]]
+name = "redis"
+version = "5.0.8"
+sdist = { url = "https://files.pythonhosted.org/packages/48/10/defc227d65ea9c2ff5244645870859865cba34da7373477c8376629746ec/redis-5.0.8.tar.gz", upload-time = 2024-07-30T14:11:52Z, size = 4595651, hashes = { sha256 = "0c5b10d387568dfe0698c6fad6615750c24170e548ca2deac10c649d463e9870" } }
+wheels = [{ url = "https://files.pythonhosted.org/packages/c5/d1/19a9c76811757684a0f74adc25765c8a901d67f9f6472ac9d57c844a23c8/redis-5.0.8-py3-none-any.whl", upload-time = 2024-07-30T14:11:49Z, size = 255608, hashes = { sha256 = "56134ee08ea909106090934adc36f65c9bcbbaecea5b21ba704ba6fb561f8eb4" } }]
 
 [[packages]]
 name = "regex"

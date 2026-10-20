@@ -56,6 +56,9 @@ def test_default_chart_has_no_resources_or_admission():
     assert values['podMonitoring']['enabled'] is True
     assert values['worker']['batchSize'] == 8
     assert values['worker']['workerSilenceDispositionEnabled'] is False
+    assert values['worker']['workerValidationDispositionEnabled'] is True
+    assert values['worker']['diarizeSpeechOnlyEnabled'] is True
+    assert values['worker']['shortSpeechSingleEnabled'] is False
     assert values['resources']['requests']['memory'] == '12Gi'
     assert values['resources']['limits']['memory'] == '14Gi'
     result = render()
@@ -84,9 +87,14 @@ def test_enabled_chart_pins_gpu_pool_image_and_age_autoscaling():
     assert container['resources']['limits']['nvidia.com/gpu'] == '1'
     env = {v['name']: v.get('value') for v in container['env']}
     assert env['BATCH_PIPELINE_MODEL_BATCH_SIZE'] == '8'
+    assert env['BATCH_PIPELINE_FLIGHT_BATCHING_ENABLED'] == 'false'
+    assert env['BATCH_PIPELINE_FLIGHT_BATCH_SECONDS'] == '1800'
     assert env['BATCH_PIPELINE_ENABLED'] == 'false' and env['BATCH_PIPELINE_PERCENT'] == '0'
     assert env['BATCH_PIPELINE_POOL_KIND'] == 'dedicated_batch'
     assert env['BATCH_PIPELINE_SHARED_LIVE_ENABLED'] == 'false'
+    assert env['BATCH_PIPELINE_WORKER_VALIDATION_DISPOSITION_ENABLED'] == 'true'
+    assert env['BATCH_PIPELINE_DIARIZE_SPEECH_ONLY_ENABLED'] == 'true'
+    assert env['BATCH_PIPELINE_SHORT_SPEECH_SINGLE_ENABLED'] == 'false'
     hpa = manifests['HorizontalPodAutoscaler']['spec']
     assert hpa['minReplicas'] == 1 and hpa['behavior']['scaleDown']['stabilizationWindowSeconds'] == 300
     assert {m['external']['metric']['selector']['matchLabels']['priority'] for m in hpa['metrics']} == {
@@ -158,7 +166,8 @@ def test_environment_values_render_worker_identity_and_gpu_pool(
     deployment = manifests['Deployment']
     assert deployment['spec']['progressDeadlineSeconds'] == 1800
     pod = deployment['spec']['template']['spec']
-    assert deployment['spec']['replicas'] == 1
+    # Prod runs a fixed two-worker floor (one L4 node each); dev stays at one.
+    assert deployment['spec']['replicas'] == (2 if environment == 'prod' else 1)
     assert pod['serviceAccountName'] == 'batch-pipeline-worker'
     assert pod['nodeSelector'] == {
         'cloud.google.com/gke-nodepool': 'batch-pipeline-pool',
@@ -274,3 +283,68 @@ def test_worker_silence_disposition_flag_renders_explicitly(enabled):
     deployment = next(doc for doc in yaml.safe_load_all(result.stdout) if doc and doc['kind'] == 'Deployment')
     env = {v['name']: v.get('value') for v in deployment['spec']['template']['spec']['containers'][0]['env']}
     assert env['BATCH_PIPELINE_WORKER_SILENCE_DISPOSITION_ENABLED'] == str(enabled).lower()
+
+
+def test_worker_validation_disposition_kill_switch_renders_false():
+    result = render(*enabled_arguments(), '--set', 'worker.workerValidationDispositionEnabled=false')
+    assert result.returncode == 0, result.stderr
+    deployment = next(doc for doc in yaml.safe_load_all(result.stdout) if doc and doc['kind'] == 'Deployment')
+    env = {v['name']: v.get('value') for v in deployment['spec']['template']['spec']['containers'][0]['env']}
+    assert env['BATCH_PIPELINE_WORKER_VALIDATION_DISPOSITION_ENABLED'] == 'false'
+
+
+@pytest.mark.parametrize('arguments,expected', [((), '2'), (('--set', 'worker.pipelineDepth=1'), '1')])
+def test_worker_pipeline_depth_ships_on_with_serial_kill_switch(arguments, expected):
+    result = render(*enabled_arguments(), *arguments)
+    assert result.returncode == 0, result.stderr
+    deployment = next(doc for doc in yaml.safe_load_all(result.stdout) if doc and doc['kind'] == 'Deployment')
+    env = {v['name']: v.get('value') for v in deployment['spec']['template']['spec']['containers'][0]['env']}
+    assert env['BATCH_PIPELINE_WORKER_PIPELINE_DEPTH'] == expected
+
+
+def test_gpu_skip_switches_render_overrides():
+    result = render(
+        *enabled_arguments(),
+        '--set',
+        'worker.diarizeSpeechOnlyEnabled=false',
+        '--set',
+        'worker.shortSpeechSingleEnabled=true',
+    )
+    assert result.returncode == 0, result.stderr
+    deployment = next(doc for doc in yaml.safe_load_all(result.stdout) if doc and doc['kind'] == 'Deployment')
+    env = {v['name']: v.get('value') for v in deployment['spec']['template']['spec']['containers'][0]['env']}
+    assert env['BATCH_PIPELINE_DIARIZE_SPEECH_ONLY_ENABLED'] == 'false'
+    assert env['BATCH_PIPELINE_SHORT_SPEECH_SINGLE_ENABLED'] == 'true'
+
+
+@pytest.mark.parametrize('environment', ['dev', 'prod'])
+def test_worker_dispatch_rollout_defaults_are_dark_and_live_only(environment):
+    values = CHART / f'{environment}_omi_batch-pipeline-worker_values.yaml'
+    result = render('-f', str(values), '--set-string', 'image.digest=sha256:' + 'd' * 64)
+    assert result.returncode == 0, result.stderr
+    deployment = next(doc for doc in yaml.safe_load_all(result.stdout) if doc and doc['kind'] == 'Deployment')
+    env = {row['name']: row.get('value') for row in deployment['spec']['template']['spec']['containers'][0]['env']}
+    assert env['STT_CAP_DISPATCH_ENFORCEMENT'] == env['LADDER_V1_BUDGET_ENFORCEMENT_ENABLED'] == 'false'
+    assert env['STT_CAP_DISPATCH_COHORT'] == ''
+    assert env['STT_CAP_DISPATCH_LANES'] == 'live'
+
+
+def test_worker_dispatch_scope_can_be_bound_without_changing_other_admission():
+    result = render(
+        *enabled_arguments(),
+        '--set',
+        'worker.capDispatchEnforcement=true',
+        '--set-string',
+        'worker.capDispatchCohort=uid:synthetic',
+        '--set-string',
+        'worker.capDispatchLanes=batch',
+        '--set',
+        'worker.ladderBudgetEnforcement=true',
+    )
+    assert result.returncode == 0, result.stderr
+    deployment = next(doc for doc in yaml.safe_load_all(result.stdout) if doc and doc['kind'] == 'Deployment')
+    env = {row['name']: row.get('value') for row in deployment['spec']['template']['spec']['containers'][0]['env']}
+    assert env['STT_CAP_DISPATCH_ENFORCEMENT'] == env['LADDER_V1_BUDGET_ENFORCEMENT_ENABLED'] == 'true'
+    assert env['STT_CAP_DISPATCH_COHORT'] == 'uid:synthetic'
+    assert env['STT_CAP_DISPATCH_LANES'] == 'batch'
+    assert env['BATCH_PIPELINE_ENABLED'] == 'false'

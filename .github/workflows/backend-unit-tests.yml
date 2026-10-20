@@ -52,7 +52,6 @@ on:
       - 'scripts/install-git-hooks.sh'
       - 'scripts/pre-push'
       - 'scripts/pre-push-singleflight'
-      - 'scripts/dev-harness/dev_harness/jit_vertex_gateway.py'
       - 'scripts/voice-provider-probe.sh'
   pull_request:
     paths:
@@ -103,7 +102,6 @@ on:
       - 'scripts/install-git-hooks.sh'
       - 'scripts/pre-push'
       - 'scripts/pre-push-singleflight'
-      - 'scripts/dev-harness/dev_harness/jit_vertex_gateway.py'
       - 'scripts/voice-provider-probe.sh'
   workflow_dispatch:
 

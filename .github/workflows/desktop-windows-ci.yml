@@ -17,12 +17,16 @@ on:
     branches: [main]
     paths:
       - 'desktop/windows/**'
+      - 'web/packages/note-shared/**'
+      - 'contracts/note_citation_contract.json'
       - '.github/workflows/desktop-windows-ci.yml'
       - '.github/workflows/desktop_windows_release.yml'
   pull_request:
     branches: [main]
     paths:
       - 'desktop/windows/**'
+      - 'web/packages/note-shared/**'
+      - 'contracts/note_citation_contract.json'
       - '.github/workflows/desktop-windows-ci.yml'
       - '.github/workflows/desktop_windows_release.yml'
 

@@ -114,26 +114,6 @@ def test_gateway_flex_client_has_no_sdk_retry(monkeypatch):
     ]
 
 
-def test_conflict_flex_client_binds_explicit_prefix_cache(monkeypatch):
-    class _Bindable:
-        def bind(self, **kwargs):
-            self.bound = kwargs
-            return self
-
-    created = _Bindable()
-    monkeypatch.setattr(
-        promotion_flex,
-        "get_or_create_omi_gateway_llm",
-        lambda *args, **kwargs: created,
-    )
-
-    llm = promotion_flex._get_gateway_flex_llm("memory_conflict_flex", request_timeout=900.0)
-
-    assert llm is created
-    assert created.bound["prompt_cache_key"] == promotion_flex.CONSOLIDATION_FLEX_CACHE_KEY
-    assert created.bound["extra_body"] == {"prompt_cache_options": promotion_flex.EXPLICIT_CACHE_OPTIONS}
-
-
 @pytest.mark.parametrize(
     "payload",
     [None, {}, _flex_payload(enabled="yes"), _flex_payload(generation=0), {**_flex_payload(), "unexpected": True}],
@@ -148,7 +128,6 @@ def test_missing_or_invalid_live_control_fails_to_standard(monkeypatch, payload)
 @pytest.mark.parametrize(
     ("standard_feature", "flex_feature", "workload"),
     [
-        ("memory_conflict", "memory_conflict_flex", "memory_promotion"),
         ("memory_l2", "memory_l2_flex", "memory_l2"),
         ("memories", "x_memory_extraction_flex", "x_memory_extraction"),
     ],
@@ -193,7 +172,6 @@ def test_disabled_control_selects_no_flex_model(monkeypatch):
         )
         is None
     )
-    assert router.llm_invoke_for_uid("uid-a") is None
 
 
 def test_router_discards_result_when_live_generation_changes(monkeypatch):
@@ -210,11 +188,16 @@ def test_router_discards_result_when_live_generation_changes(monkeypatch):
         db_client=db,
         flex_llm_factory=lambda *_args, **_kwargs: _ChangingModel([]),
     )
-    invoke = router.llm_invoke_for_uid("uid-a")
-    assert invoke is not None
+    model = router.llm_for_uid(
+        "uid-a",
+        standard_feature="memory_l2",
+        flex_feature="memory_l2_flex",
+        workload="memory_l2",
+    )
+    assert model is not None
 
     with pytest.raises(promotion_flex.PromotionFlexControlChanged):
-        invoke("prompt")
+        model.invoke("prompt")
 
 
 def test_router_only_defers_transient_flex_errors():
@@ -236,20 +219,24 @@ def test_router_only_defers_transient_flex_errors():
         control_reader=lambda **_kwargs: control,
         flex_llm_factory=lambda *_args, **_kwargs: _FailingModel(_CapacityError()),
     )
-    transient_invoke = transient.llm_invoke_for_uid("uid-a")
-    assert transient_invoke is not None
+    transient_model = transient.llm_for_uid(
+        "uid-a", standard_feature="memory_l2", flex_feature="memory_l2_flex", workload="memory_l2"
+    )
+    assert transient_model is not None
     with pytest.raises(promotion_flex.PromotionFlexDeferred):
-        transient_invoke("prompt")
+        transient_model.invoke("prompt")
 
     permanent = promotion_flex.PromotionFlexRunRouter(
         db_client=object(),
         control_reader=lambda **_kwargs: control,
         flex_llm_factory=lambda *_args, **_kwargs: _FailingModel(ValueError("bad request")),
     )
-    permanent_invoke = permanent.llm_invoke_for_uid("uid-a")
-    assert permanent_invoke is not None
+    permanent_model = permanent.llm_for_uid(
+        "uid-a", standard_feature="memory_l2", flex_feature="memory_l2_flex", workload="memory_l2"
+    )
+    assert permanent_model is not None
     with pytest.raises(ValueError, match="bad request"):
-        permanent_invoke("prompt")
+        permanent_model.invoke("prompt")
 
 
 def test_force_enabled_routes_flex_and_skips_control_drift(monkeypatch):

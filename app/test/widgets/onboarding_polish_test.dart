@@ -232,27 +232,25 @@ void main() {
     }
   });
 
-  testWidgets('Watch action stays at the sibling bottom inset and state guidance is retained', (tester) async {
+  testWidgets('device-first step: Connect is the primary at the bottom inset, store and skip sit under it',
+      (tester) async {
     viewport(tester);
     final l10n = AppLocalizationsEn();
-    for (final state in [(true, true), (false, true), (true, false)]) {
-      await tester
-          .pumpWidget(host(FirstCaptureWatchInstructions(paired: state.$1, installed: state.$2, onComplete: () {})));
-      expect(tester.getRect(find.byKey(const Key('watch_capture_continue'))).bottom, closeTo(802, 1));
-      if (!state.$1) {
-        expect(find.text(l10n.firstCaptureWatchPair), findsOneWidget);
-      } else if (!state.$2) {
-        expect(find.text(l10n.firstCaptureWatchInstall), findsOneWidget);
-      } else {
-        final text = tester.widget<Text>(find.text(l10n.watchCaptureRecord));
-        expect(text.style!.fontWeight, OmiType.body.fontWeight);
-        expect(find.text(l10n.watchCaptureSync), findsOneWidget);
-      }
-      expect(tester.takeException(), isNull);
-    }
+    await tester.pumpWidget(host(OnboardingCompleteScreen(onComplete: () {}, emit: (_) {}, setProperty: (_, __) {})));
+    expect(find.text(l10n.firstCaptureConnectTitle), findsOneWidget);
+    expect(find.text(l10n.firstCaptureConnect), findsOneWidget);
+    expect(find.text(l10n.firstCaptureNoDevice), findsOneWidget);
+    expect(find.text(l10n.firstCaptureSkip), findsOneWidget);
+    final connect = tester.getRect(find.byKey(const Key('first_capture_omi')));
+    final shop = tester.getRect(find.byKey(const Key('first_capture_shop')));
+    final skip = tester.getRect(find.byKey(const Key('onboarding_complete_start')));
+    expect(connect.bottom, lessThan(shop.top));
+    expect(shop.bottom, lessThan(skip.top));
+    expect(skip.bottom, closeTo(802, 1));
+    expect(tester.takeException(), isNull);
     await tester
-        .pumpWidget(host(FirstCaptureWatchInstructions(paired: true, installed: true, onComplete: () {}), scale: 2));
-    expect(find.byKey(const Key('watch_capture_continue')).hitTestable(), findsOneWidget);
+        .pumpWidget(host(OnboardingCompleteScreen(onComplete: () {}, emit: (_) {}, setProperty: (_, __) {}), scale: 2));
+    expect(find.byKey(const Key('onboarding_complete_start')).hitTestable(), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -332,7 +330,7 @@ void main() {
         await tester.runAsync(() async {
           final image = tester.element(find.byKey(boundary)).renderObject! as RenderRepaintBoundary;
           final png = await (await image.toImage(pixelRatio: 3)).toByteData(format: ui.ImageByteFormat.png);
-          final ordinal = name == 'watch'
+          final ordinal = name == 'device-first'
               ? 1
               : name.startsWith('connect-')
                   ? Reason.values.indexWhere((reason) => name == 'connect-${reason.wireName}') +
@@ -347,7 +345,8 @@ void main() {
       }
 
       if (platform == TargetPlatform.iOS) {
-        await render('watch', FirstCaptureWatchInstructions(paired: true, installed: true, onComplete: () {}));
+        await render(
+            'device-first', OnboardingCompleteScreen(onComplete: () {}, emit: (_) {}, setProperty: (_, __) {}));
       }
       for (final reason in Reason.values) {
         final pairing = PairingProvider()..pairingFailureReason = reason;

@@ -148,6 +148,20 @@ void main() {
     }
   }
 
+  test('import repair retains an existing local conversation and phone-only custody', () {
+    final wal = Wal(
+        timerStart: 1,
+        seconds: 1,
+        originalStorage: WalStorage.sdcard,
+        codec: BleAudioCodec.opus,
+        storage: WalStorage.sdcard,
+        onDeviceOnly: true,
+        onDeviceConversation: {'id': 'local-result'});
+    final restored = Wal.fromJson(wal.toJson());
+    expect(restored.onDeviceOnly, isTrue);
+    expect(restored.onDeviceConversation?['id'], 'local-result');
+  });
+
   group('onFrameCaptured', () {
     test('adds frame with synced=false', () {
       final frame = WalFrame(payload: [0xAA, 0xBB], syncKey: FrameSyncKey([1]));
@@ -2421,7 +2435,9 @@ void main() {
   group('syncWal — orphan WAL guard', () {
     // A WAL the user taps "sync" on may already be gone from `_wals` (a
     // concurrent delete/reload). Previously `.first` on the empty match list
-    // threw an uncaught StateError; the guard now bails out to null instead.
+    // threw an uncaught StateError. The local guard bails out to null; the
+    // flash-page guard throws a readable error instead, because Transfer to
+    // Phone shows any normal return as a finished transfer.
     test('LocalWalSyncImpl.syncWal returns null when the WAL is not tracked', () async {
       final orphan = Wal(timerStart: 123, codec: BleAudioCodec.opus, seconds: 10);
 
@@ -2430,13 +2446,11 @@ void main() {
       expect(result, isNull);
     });
 
-    test('FlashPageWalSyncImpl.syncWal returns null when the WAL is not tracked', () async {
+    test('FlashPageWalSyncImpl.syncWal fails when the WAL is not tracked', () async {
       final flashSync = FlashPageWalSyncImpl(listener);
       final orphan = Wal(timerStart: 456, codec: BleAudioCodec.opus, seconds: 10);
 
-      final result = await flashSync.syncWal(wal: orphan);
-
-      expect(result, isNull);
+      await expectLater(flashSync.syncWal(wal: orphan), throwsException);
     });
   });
 
