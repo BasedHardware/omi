@@ -27,6 +27,21 @@
 #include "../include/hal/hal_timer.h"
 #include "../include/os/os_trace_api.h"
 
+
+#include "stats/stats.h"
+
+STATS_SECT_START(hal_timer_stats)
+    STATS_SECT_ENTRY(timer_isrs)
+STATS_SECT_END
+
+STATS_SECT_DECL(hal_timer_stats) hal_timer_stats;
+
+STATS_NAME_START(hal_timer_stats)
+    STATS_NAME(hal_timer_stats, timer_isrs)
+STATS_NAME_END(hal_timer_stats)
+
+static uint8_t hal_timer_stats_initialized = 0;
+
 /* IRQ prototype */
 typedef void (*hal_timer_irq_handler_t)(void);
 
@@ -49,7 +64,6 @@ struct nrf52_hal_timer {
     uint8_t tmr_rtc;
     uint8_t tmr_pad;
     uint32_t tmr_cntr;
-    uint32_t timer_isrs;
     uint32_t tmr_freq;
     void *tmr_reg;
     TAILQ_HEAD(hal_timer_qhead, hal_timer) hal_timer_q;
@@ -332,9 +346,7 @@ hal_timer_irq_handler(struct nrf52_hal_timer *bsptimer)
         hwtimer->EVENTS_COMPARE[NRF_TIMER_CC_INT] = 0;
     }
 
-    /* XXX: make these stats? */
-    /* Count # of timer isrs */
-    ++bsptimer->timer_isrs;
+    STATS_INC(hal_timer_stats, timer_isrs);
 
     /*
      * NOTE: we dont check the 'compare' variable here due to how the timer
@@ -384,8 +396,7 @@ hal_rtc_timer_irq_handler(struct nrf52_hal_timer *bsptimer)
         bsptimer->tmr_cntr += (1UL << 24);
     }
 
-    /* Count # of timer isrs */
-    ++bsptimer->timer_isrs;
+    STATS_INC(hal_timer_stats, timer_isrs);
 
     /*
      * NOTE: we dont check the 'compare' variable here due to how the timer
@@ -479,6 +490,16 @@ hal_timer_init(int timer_num, void *cfg)
         rc = EINVAL;
         goto err;
     }
+
+    if (!hal_timer_stats_initialized) {
+        rc = stats_init_and_reg(STATS_HDR(hal_timer_stats),
+                                STATS_SIZE_INIT_PARMS(hal_timer_stats, STATS_SIZE_32),
+                                STATS_NAME_INIT_PARMS(hal_timer_stats),
+                                "hal_timer");
+        assert(rc == 0);
+        hal_timer_stats_initialized = 1;
+    }
+
 
     switch (timer_num) {
 #if MYNEWT_VAL(TIMER_0)
