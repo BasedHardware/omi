@@ -106,15 +106,20 @@ def _settle(consumer: QueueConsumer, outbox: Outbox, claim: Claim, result: Resul
 
 
 def _process(consumer: QueueConsumer, outbox: Outbox, claim: Claim, now: float) -> Result:
+    # One clock for the lease: settle no earlier than the last heartbeat. A settle at the entry ``now`` after a
+    # long, heartbeated run would place the outbox's settle/coalesce window in the past (M1 Grok L01-1).
+    latest = [now]
+
     def heartbeat() -> bool:
-        return outbox.heartbeat(claim, consumer.lease_seconds, now=time.time())
+        latest[0] = max(latest[0], time.time())
+        return outbox.heartbeat(claim, consumer.lease_seconds, now=latest[0])
 
     try:
         result = consumer.process(claim, heartbeat)
     except Exception:
         CONSUMER_UNEXPECTED_TOTAL.labels(kind=consumer.kind.value).inc()
         raise
-    return _settle(consumer, outbox, claim, result, now)
+    return _settle(consumer, outbox, claim, result, latest[0])
 
 
 def _count(consumer: QueueConsumer, result: Result) -> Result:
