@@ -191,6 +191,45 @@ def load_stage_policy(store, segment_id, stage):
     return job, policy
 
 
+def refresh_disabled_recovery(store, segment_id, owner_id):
+    """Re-resolve a recovery-disabled snapshot while no paid intent exists.
+
+    A unit admitted during a recovery-off window otherwise holds that verdict
+    forever: its upload reads `processing` and only a prod write could release
+    it. Only a `held` unit with no `recovery` intent (so no provider call was
+    ever authorized) and a disabled recorded part is rewritten, and only to an
+    enabled policy. An enabled snapshot is never re-resolved or downgraded.
+    Returns the refreshed (job, policy), or None when nothing changed.
+    """
+    fresh = resolve_stage_policy(owner_id, 'recovery')
+    if not fresh.recovery_enabled:
+        return None
+
+    def commit(tx):
+        job = tx.get('jobs', segment_id)
+        if (
+            not job
+            or job.get('owner_id') != owner_id
+            or job.get('state') != 'quarantined'
+            or job.get('recovery_state') != 'held'
+            or job.get('recovery')
+        ):
+            return None
+        raw = (job.get('policy_parts') or {}).get('recovery')
+        if not isinstance(raw, dict) or RecoveryPolicy.from_dict(raw).recovery_enabled:
+            return None
+        check_unit_privacy(tx, job)
+        job['policy_parts'] = {**(job.get('policy_parts') or {}), 'recovery': fresh.to_dict()}
+        job['policy_part_sources'] = {**(job.get('policy_part_sources') or {}), 'recovery': 'refreshed'}
+        tx.put('jobs', segment_id, job)
+        return job, fresh
+
+    refreshed = store.run(commit)
+    if refreshed is not None:
+        logger.info('event=batch_recovery_policy outcome=refreshed policy_id=%s', fresh.policy_id)
+    return refreshed
+
+
 def record_policy_observations(observations: Iterable[tuple[str, Any]]) -> None:
     from config.policy.telemetry import record_policy_source
 

@@ -158,10 +158,14 @@ void main() {
       expect(harness.drainPasses, 1);
     });
 
-    test('a hung pass is abandoned at its time limit, releasing the capture fence and later wakes', () async {
+    test('a hung pass is abandoned at its time limit: the fence drops, nothing drains beside it', () async {
       final hang = Completer<void>();
       final timedOut = <WakeTrigger>[];
       var discoveries = 0;
+      var drains = 0;
+      var holds = 0;
+      var releases = 0;
+      final retries = <void Function()>[];
       final coordinator = RecordingTransferCoordinator(
         reconcile: () async {},
         discover: () {
@@ -169,12 +173,17 @@ void main() {
           return discoveries == 1 ? hang.future : Future<void>.value();
         },
         refreshPending: () async {},
-        drain: () async => const RecordingTransferDrainResult.skipped(),
+        drain: () async {
+          drains++;
+          return const RecordingTransferDrainResult.skipped();
+        },
         autoUploadEnabled: () => true,
-        passTimeLimit: const Duration(milliseconds: 40),
+        passTimeLimit: const Duration(seconds: 30),
         fencedPassTimeLimit: const Duration(milliseconds: 20),
         onPassTimedOut: (trigger, _) => timedOut.add(trigger),
-        scheduleCooldown: (_, __) {},
+        scheduleCooldown: (_, callback) => retries.add(callback),
+        onTransferStarted: () async => holds++,
+        onTransferFinished: () async => releases++,
       );
       addTearDown(coordinator.dispose);
 
@@ -183,11 +192,22 @@ void main() {
       expect(SyncWakeScope.syncOnly, true);
       expect(coordinator.wake(WakeTrigger.userRetry), same(fenced), reason: 'later wakes join the stuck pass');
       await fenced;
-      expect(timedOut, [WakeTrigger.periodic]);
-      expect(SyncWakeScope.syncOnly, false);
       await coordinator.waitUntilIdle();
-      expect(discoveries, 2, reason: 'the joined user retry runs once the stuck pass is abandoned');
-      expect(coordinator.hasInFlight, false);
+      expect(timedOut, [WakeTrigger.periodic]);
+      expect(SyncWakeScope.syncOnly, false, reason: 'the capture fence is released');
+      expect(coordinator.hasInFlight, false, reason: 'later wakes no longer join the stuck pass');
+      expect(discoveries, 1, reason: 'no second discovery runs beside the still-running body');
+      expect(drains, 0);
+      expect(holds - releases, 1, reason: 'the keep-alive is held while the abandoned body runs');
+
+      hang.complete();
+      await _settle();
+      expect(drains, 0, reason: 'the stale body stops at its next stage boundary');
+      expect(holds, releases);
+
+      await coordinator.wake(WakeTrigger.userRetry);
+      expect(discoveries, 2);
+      expect(drains, 1);
     });
 
     test('only the OS periodic window fences live capture', () async {

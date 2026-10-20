@@ -154,6 +154,9 @@ class OnDeviceAppleProvider implements ISttProvider, RecoverableLocalSttProvider
         }
       }
     } catch (e) {
+      // Keep the native domain/code before translating setup failures for the
+      // recovery UI. Polling otherwise only sees the bounded LocalSttFailure.
+      CustomSttLogService.instance.error('OnDeviceApple', 'Transcription error: $e');
       if (e is PlatformException && useSpeechAnalyzer == null && await OnDeviceOverflowGate.read()) {
         final state = await readiness(language ?? this.language);
         if (!state.ready) throw LocalSttFailure(state.status, canProbeRecovery: true);
@@ -163,7 +166,6 @@ class OnDeviceAppleProvider implements ISttProvider, RecoverableLocalSttProvider
         final status = details is Map ? details['status'] as String? : null;
         throw LocalSttFailure(status ?? e.code.toLowerCase(), canProbeRecovery: e.code != 'INVALID_ARGS');
       }
-      CustomSttLogService.instance.error('OnDeviceApple', 'Transcription error: $e');
       rethrow; // Keep failed/timed-out audio in the polling buffer for retry.
     }
   }

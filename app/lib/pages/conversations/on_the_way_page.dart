@@ -89,9 +89,12 @@ class _OnTheWayPageState extends State<OnTheWayPage> {
         // syncing): group every pending fragment first, then a block is only as far along as
         // its least advanced part. A live capture's uploaded audio carries the id of the conversation
         // already listed as processing, so it is not repeated.
-        final pending = [
+        final inFlight = [
           for (final w in [...SyncPendingWork.uploaded(p), ...SyncPendingWork.syncing(p)])
             if (w.conversationId == null || !processingIds.contains(w.conversationId)) w,
+        ];
+        final pending = [
+          ...inFlight,
           // Refused fragments of the same recording join the same grouping: a block
           // selects its worst state, so a recording mid-upload with one refused
           // fragment reads once — as refused — instead of twice, as both. The three
@@ -115,8 +118,9 @@ class _OnTheWayPageState extends State<OnTheWayPage> {
         // Server work the phone did not start (another device, or a relaunch mid-job) is what Home's
         // row stands for when nothing local is pending: list it by the same rule, so the row never
         // opens on "all synced". A conversation already listed as processing is not repeated, and a
-        // sync job the phone is itself running is covered by its recordings or its status line.
-        final phoneSyncing = pending.isNotEmpty || SyncPendingWork.hasServerJobs(p);
+        // sync job the phone is itself running is covered by its recordings or its status line;
+        // a refused recording is not one the phone is running.
+        final phoneSyncing = inFlight.isNotEmpty || SyncPendingWork.hasServerJobs(p);
         for (final work in _store.pending) {
           if (work.conversationIds.any(processingIds.contains)) continue;
           if (work.kind == 'sync_job' && phoneSyncing) continue;

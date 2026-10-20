@@ -178,6 +178,27 @@ void main() {
       coordinator.dispose();
     });
 
+    test('a start swallowed while a phone recording owns capture resumes the pendant after it', () async {
+      await disconnect();
+      final pass = await holdFencedPass();
+      await connect();
+      pass.release.complete();
+      // The phone takes capture before the fence drops; the replayed start must
+      // still register the pendant so the phone stop hands capture back.
+      await world.startLiveCapture();
+      await pass.wake;
+      await world.settle();
+      await world.controller.pendingSourceSwitch;
+      await world.settle();
+      expect(world.deviceConnection!.openAudioSubscriptions, 0, reason: 'one source at a time');
+      await world.stopLiveCapture();
+      await world.controller.pendingSourceSwitch;
+      await world.settle();
+      expect(world.controller.recordingState, RecordingState.deviceRecord);
+      expect(world.deviceConnection!.openAudioSubscriptions, 1);
+      pass.coordinator.dispose();
+    });
+
     test('a reconnect pass no longer fences capture at all', () async {
       await disconnect();
       final pass = await holdFencedPass(trigger: WakeTrigger.deviceConnected);

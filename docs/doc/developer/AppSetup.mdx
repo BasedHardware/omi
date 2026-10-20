@@ -446,3 +446,16 @@ and [transport contract](https://github.com/BasedHardware/omi/blob/main/backend/
 Aggregate locally, normally over 15 minutes, and coalesce background flushes within
 the per-account budget. Use only registered events, outcomes and histogram edges;
 do not include recording content, user/device identifiers, or free-text errors.
+
+## Testing transcription settings and connectivity
+
+From `app/`, run the hermetic connection, credential and retention regressions:
+
+```bash
+flutter test test/unit/connectivity_service_test.dart test/unit/stt_request_credentials_test.dart test/widgets/transcription_settings_recovery_test.dart test/services/capture/transcription_settings_retention_test.dart
+```
+
+These exercise network handovers and settings saves without a live provider.
+Physical CV1 testing must separately verify Wi-Fi/cellular transcription and
+Offline Sync. Preserve local recordings while investigating; do not clear app
+data or reset a device to change transcription providers.
