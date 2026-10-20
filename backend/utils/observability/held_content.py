@@ -4,6 +4,10 @@ Counters are armed at import so a quiet process still exports zero. Fleet gauges
 stay absent until the redrive scheduler publishes one snapshot. Read each gauge
 from the replica whose snapshot timestamp is newest. Do not sum() them, and do
 not max() the gauge itself: a previous replica can still export an older value.
+
+When pending holds exist and none has a positive listed_at, oldest age is the
+sentinel -1 and omi_held_content_undated_pending_count carries the count. Age 0
+is an empty population, or a dated hold listed at the snapshot clock.
 """
 
 import logging
@@ -32,9 +36,13 @@ CHOICE_LATENCY = Histogram(
     ['method'],
     buckets=(0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10),
 )
+# Pending holds exist, but none has a positive listed_at. Not an age.
+UNDATED_OLDEST_AGE_SENTINEL = -1.0
 OLDEST_AGE = Gauge(
     'omi_held_content_oldest_age_seconds',
-    'Age of the oldest pending hold in the redrive fleet snapshot. Read the replica '
+    'Age of the oldest dated pending hold in the redrive fleet snapshot. '
+    'Publishes -1 when pending holds exist and none has a positive listed_at; never 0 in that case. '
+    'Age 0 is an empty population or a hold listed at the snapshot clock. Read the replica '
     'whose omi_held_content_fleet_snapshot_timestamp_seconds is newest; do not sum() or max() this gauge',
 )
 PENDING_COUNT = Gauge(
@@ -45,6 +53,12 @@ PENDING_COUNT = Gauge(
 PENDING_SECONDS = Gauge(
     'omi_held_content_pending_seconds',
     'Pending held seconds in the redrive fleet snapshot. Read the replica whose '
+    'omi_held_content_fleet_snapshot_timestamp_seconds is newest; do not sum() or max() this gauge',
+)
+UNDATED_PENDING = Gauge(
+    'omi_held_content_undated_pending_count',
+    'Pending holds with no positive listed_at in the redrive fleet snapshot. '
+    'Zero when every pending hold is dated, or when the population is empty. Read the replica whose '
     'omi_held_content_fleet_snapshot_timestamp_seconds is newest; do not sum() or max() this gauge',
 )
 RECOVERY = Counter('omi_held_content_recovery', 'Held recovery attempts and completions', ['result'])
@@ -131,20 +145,32 @@ def _gauge_number(value, *, whole: bool) -> float:
 
 
 def publish_fleet(snapshot: dict, *, now: float | None = None) -> None:
-    """Publish one scheduler snapshot. An empty population clears the previous value."""
+    """Publish one scheduler snapshot.
+
+    An empty population clears every fleet gauge, including undated pending, to 0.
+    When pending holds remain and none has a positive ``listed_at``, oldest age
+    is ``UNDATED_OLDEST_AGE_SENTINEL`` (-1), never 0. A dated hold listed at or
+    after ``now`` is a real age of 0.
+    """
     moment = time.time() if now is None else now
-    pending_count = _gauge_number((snapshot or {}).get('pending_count'), whole=True)
-    pending_seconds = _gauge_number((snapshot or {}).get('pending_seconds'), whole=False)
-    backlog = _gauge_number((snapshot or {}).get('backlog_items'), whole=True)
-    listed = (snapshot or {}).get('oldest_listed_at')
-    if pending_count <= 0 or isinstance(listed, bool) or not isinstance(listed, (int, float)) or listed <= 0:
+    body = snapshot or {}
+    pending_count = _gauge_number(body.get('pending_count'), whole=True)
+    pending_seconds = _gauge_number(body.get('pending_seconds'), whole=False)
+    backlog = _gauge_number(body.get('backlog_items'), whole=True)
+    undated = _gauge_number(body.get('undated_pending'), whole=True)
+    listed = body.get('oldest_listed_at')
+    dated = not isinstance(listed, bool) and isinstance(listed, (int, float)) and listed > 0
+    if pending_count <= 0:
         age = 0.0
-    else:
+    elif dated:
         age = max(0.0, moment - float(listed))
+    else:
+        age = UNDATED_OLDEST_AGE_SENTINEL
     try:
         OLDEST_AGE.set(age)
         PENDING_COUNT.set(pending_count)
         PENDING_SECONDS.set(pending_seconds)
+        UNDATED_PENDING.set(undated)
         BACKLOG.set(backlog)
         FLEET_SNAPSHOT_TIMESTAMP.set(moment)
     except Exception:

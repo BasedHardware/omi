@@ -64,14 +64,24 @@ def _nonnegative(value) -> float:
 def fleet_snapshot(firestore_client=None) -> dict:
     """Authoritative held and backlog totals for one redrive cadence.
 
-    One holds aggregation (count and sum of seconds), one oldest ``limit(1)``,
-    and one backlog sum. The scheduler sweep is the only caller. An empty
-    population is a real zero, not a missing sample.
+    One holds aggregation (count and sum of seconds), one dated-hold count
+    (``listed_at`` > 0, same index as the oldest row), one oldest ``limit(1)``,
+    and one backlog sum. ``undated_pending`` is the pending count minus that
+    dated count: holds with a missing, non-numeric, or non-positive
+    ``listed_at``. The scheduler sweep is the only caller. An empty population
+    is a real zero, not a missing sample.
     """
     client = firestore_client or get_firestore_client()
     pending = list(PENDING_STATES)
     holds = client.collection_group('stt_cap_holds').where(filter=firestore.FieldFilter('state', 'in', pending))
     totals = _aggregation_map(holds.count(alias='count').sum('seconds', alias='seconds').get(timeout=10))
+    dated_totals = _aggregation_map(
+        client.collection_group('stt_cap_holds')
+        .where(filter=firestore.FieldFilter('state', 'in', pending))
+        .where(filter=firestore.FieldFilter('listed_at', '>', 0))
+        .count(alias='dated')
+        .get(timeout=10)
+    )
     oldest_rows = list(
         client.collection_group('stt_cap_holds')
         .where(filter=firestore.FieldFilter('state', 'in', pending))
@@ -91,9 +101,14 @@ def fleet_snapshot(firestore_client=None) -> dict:
         .sum('count', alias='items')
         .get(timeout=10)
     )
+    pending_count = int(_nonnegative(totals.get('count')))
+    dated_count = int(_nonnegative(dated_totals.get('dated')))
     return {
-        'pending_count': int(_nonnegative(totals.get('count'))),
+        'pending_count': pending_count,
         'pending_seconds': _nonnegative(totals.get('seconds')),
         'oldest_listed_at': oldest,
+        # Two aggregations are not one transaction. A hold that appears only in
+        # the dated count cannot make this gauge negative.
+        'undated_pending': max(0, pending_count - dated_count),
         'backlog_items': int(_nonnegative(backlog.get('items'))),
     }

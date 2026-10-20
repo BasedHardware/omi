@@ -18,6 +18,7 @@ _EMPTY_FLEET = {
     'pending_count': 0,
     'pending_seconds': 0.0,
     'oldest_listed_at': None,
+    'undated_pending': 0,
     'backlog_items': 0,
 }
 
@@ -198,11 +199,13 @@ async def test_sweep_publishes_one_fleet_snapshot_and_clears_an_empty_backlog(mo
 
     monkeypatch.setattr(cap_hold_redrive.store, 'fleet_snapshot', snapshot)
     held_metrics.OLDEST_AGE.set(9)
+    held_metrics.UNDATED_PENDING.set(9)
     held_metrics.BACKLOG.set(9)
     await cap_hold_redrive.sweep()
     assert calls == [None]
     assert held_metrics.OLDEST_AGE._value.get() == 0
     assert held_metrics.PENDING_COUNT._value.get() == 0
+    assert held_metrics.UNDATED_PENDING._value.get() == 0
     assert held_metrics.BACKLOG._value.get() == 0
 
 

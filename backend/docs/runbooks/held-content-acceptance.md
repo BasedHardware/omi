@@ -98,13 +98,20 @@ David's approval; this plan supplies no such approval.
 Use the previous 24 hours and a concurrent capability-matched control as baseline.
 Separate capped/waiting/no-consent audio from explicitly consented, funded,
 original-lane-eligible recovery; an intentionally waiting item is not a stall.
-The operator must have the following dashboard/alerts before starting the watch:
+The operator must have the following dashboard/alerts before starting the watch.
+Every promotion gate below requires a fresh fleet snapshot:
+`max(omi_held_content_fleet_snapshot_timestamp_seconds) > time() - 300`.
+Read each fleet gauge from the newest snapshot:
+
+`max(<gauge> and on (instance) (omi_held_content_fleet_snapshot_timestamp_seconds == on () group_left() max(omi_held_content_fleet_snapshot_timestamp_seconds)))`
+
+Do not `sum()` these gauges, and do not `max()` the gauge itself.
 
 | Signal | Promotion gate at **every** step, over a complete 24 h watch |
 | --- | --- |
 | Lost capture | `omi_held_content_capture_total{kind="lost"}`, `{kind="byte_mismatch"}`, `{kind="frame_mismatch"}`, and `{kind="ack_without_authority"}` stay at zero new events. Any loss stops immediately. Track volatile PCM separately: the last unpublished <=15 seconds is not an acknowledged custody guarantee. |
 | Choice API and capability | `omi_held_content_choice_5xx_total` no more than baseline +0.1 percentage point. p95 of `omi_held_content_choice_latency_seconds` no more than 1.2x baseline (`histogram_quantile(0.95, sum by (le, method) (rate(omi_held_content_choice_latency_seconds_bucket[5m])))`). `omi_held_content_choice_total{outcome="no_capability"}` is the dark/excluded 404 path, not a 200. `{outcome="stale_period_409"}` may be non-zero at the UTC boundary and must not accompany a write. `{outcome="intent_only"}` counts upgrade writes; `{outcome="ok"}` is the other success. A managed grant from an upgrade choice increments `{outcome="intent_only"}` on the read and stops the step. Expected other 409/429 outcomes are not this series. |
-| Recovery completion and held age | `omi_held_content_recovery_total{result="completed"}` / `{result="attempt"}` >= 99% within the predeclared visit/lease/discovery budget. `omi_held_content_oldest_age_seconds`, `omi_held_content_pending_count`, `omi_held_content_pending_seconds`, and `omi_held_content_backlog_items` are one fleet snapshot from the `cap-hold-durable-redrive` scheduler (holds count + seconds sum, oldest `listed_at` via `limit(1)`, and the sum of `processing_backlog.count` where `state="processing"`). Read each gauge from the replica whose `omi_held_content_fleet_snapshot_timestamp_seconds` equals `max(omi_held_content_fleet_snapshot_timestamp_seconds)`: `max(<gauge> and on(instance) (omi_held_content_fleet_snapshot_timestamp_seconds == on() group_left() max(omi_held_content_fleet_snapshot_timestamp_seconds)))`. Do not `sum()` these gauges, and do not `max()` the gauge itself. An empty population is 0 on that snapshot. No unexplained oldest-age growth; no progress for two discovery rotations after lease expiry pages the owner. Hold the step if the denominator is too small; synthetic completion is mandatory. |
+| Recovery completion and held age | `omi_held_content_recovery_total{result="completed"}` / `{result="attempt"}` >= 99% within the predeclared visit/lease/discovery budget. `omi_held_content_oldest_age_seconds`, `omi_held_content_pending_count`, `omi_held_content_pending_seconds`, `omi_held_content_undated_pending_count`, and `omi_held_content_backlog_items` are one fleet snapshot from the `cap-hold-durable-redrive` scheduler (holds count + seconds sum, dated-hold count where `listed_at` > 0, oldest `listed_at` via `limit(1)`, and the sum of `processing_backlog.count` where `state="processing"`). Read each with the newest-snapshot expression above. An empty population is 0. `omi_held_content_undated_pending_count` > 0 fails the gate. If pending is above zero and no dated hold exists, `omi_held_content_oldest_age_seconds` is the sentinel -1, not 0; age 0 is an empty population or a hold listed at the snapshot clock. No unexplained oldest-age growth; no progress for two discovery rotations after lease expiry pages the owner. Hold the step if the denominator is too small; synthetic completion is mandatory. |
 | Spend and reconciliation | Zero unexplained duplicate usage keys or repeat provider dispatch, no increase in `omi_stt_cap_recovery_reconciliation_total{outcome="redispatched"}` / `failed`; any lost or doubly funded probe audio stops immediately. Preserve receipts/audio for investigation. Compare vendor usage with internal accepted seconds; internal counters alone are not invoice proof. |
 | Custody maintenance and deletion | `omi_held_content_erasure_total{outcome="failure"}` stays at zero new events after the retry budget. `{outcome="post_delete_publication"}` stays at zero: it increments only when a publish observes a `purged` receipt and returns before any manifest commit or upload. `event=cap_hold_redrive` progresses with no repeated `worker_deferred`, `seal_deferred`, `cleanup_deferred`, or `fleet_snapshot_deferred`. No launch-config errors; stable live STT and sync/client 5xx. |
 
@@ -112,10 +119,13 @@ Existing signals include `omi_stt_cap_provider_audio_seconds_total`,
 `omi_stt_cap_recovery_reconciliation_total`,
 `omi_stt_cap_launch_config_errors_total`, and structured `event=cap_hold_redrive`
 logs. Held-content series above are armed without UID, hold ID, content, or
-session labels. Age and backlog gauges come from that one scheduler snapshot,
-not from sweep pages or recovery. A missing
-`omi_held_content_fleet_snapshot_timestamp_seconds` means the snapshot has not
-run; do not promote on absent gauges. Do not scan held manifests on a request.
+session labels. Age, undated-pending, and backlog gauges come from that one
+scheduler snapshot, not from sweep pages or recovery. Expected fleet-snapshot cost is about one aggregation read per 1000 index entries, on a small held population, every 2 minutes; revisit a hard ceiling if pending count stays above 100k.
+A missing
+`omi_held_content_fleet_snapshot_timestamp_seconds`, or
+`max(omi_held_content_fleet_snapshot_timestamp_seconds)` that is not greater
+than `time() - 300`, fails every promotion gate. Do not promote on absent
+gauges. Do not scan held manifests on a request.
 Cohort source is `omi_held_content_cohort_source` (`doc`, `env`, or `none`) and
 `omi_held_content_cohort_percent`. Refresh failures are
 `omi_held_content_cohort_refresh_failures_total{reason="read|schedule"}`.

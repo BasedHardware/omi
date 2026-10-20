@@ -213,22 +213,38 @@ def test_fleet_snapshot_clears_when_empty_and_publishes_authoritative_totals():
     metrics.OLDEST_AGE.set(4)
     metrics.PENDING_COUNT.set(4)
     metrics.PENDING_SECONDS.set(4)
+    metrics.UNDATED_PENDING.set(4)
     metrics.BACKLOG.set(4)
     metrics.publish_fleet(
-        {'pending_count': 0, 'pending_seconds': 0, 'oldest_listed_at': None, 'backlog_items': 0}, now=1_700_000_000
+        {
+            'pending_count': 0,
+            'pending_seconds': 0,
+            'oldest_listed_at': None,
+            'undated_pending': 0,
+            'backlog_items': 0,
+        },
+        now=1_700_000_000,
     )
     assert metrics.OLDEST_AGE._value.get() == 0
     assert metrics.PENDING_COUNT._value.get() == 0
     assert metrics.PENDING_SECONDS._value.get() == 0
+    assert metrics.UNDATED_PENDING._value.get() == 0
     assert metrics.BACKLOG._value.get() == 0
     assert metrics.FLEET_SNAPSHOT_TIMESTAMP._value.get() == 1_700_000_000
     metrics.publish_fleet(
-        {'pending_count': 2, 'pending_seconds': 3.5, 'oldest_listed_at': 1_700_000_000, 'backlog_items': 7},
+        {
+            'pending_count': 2,
+            'pending_seconds': 3.5,
+            'oldest_listed_at': 1_700_000_000,
+            'undated_pending': 0,
+            'backlog_items': 7,
+        },
         now=1_700_000_010,
     )
     assert metrics.PENDING_COUNT._value.get() == 2
     assert metrics.PENDING_SECONDS._value.get() == 3.5
     assert metrics.OLDEST_AGE._value.get() == 10
+    assert metrics.UNDATED_PENDING._value.get() == 0
     assert metrics.BACKLOG._value.get() == 7
     assert metrics.FLEET_SNAPSHOT_TIMESTAMP._value.get() == 1_700_000_010
     metrics.record_erasure('failure')
@@ -236,7 +252,39 @@ def test_fleet_snapshot_clears_when_empty_and_publishes_authoritative_totals():
     assert metrics.ERASURE.labels(outcome='post_delete_publication')._value.get() >= 1
 
 
-def test_fleet_snapshot_is_one_count_sum_one_oldest_row_and_one_backlog_sum():
+def test_undated_pending_publishes_its_count_and_never_age_zero():
+    metrics.OLDEST_AGE.set(0)
+    metrics.publish_fleet(
+        {'pending_count': 3, 'pending_seconds': 9, 'oldest_listed_at': None, 'undated_pending': 3, 'backlog_items': 0},
+        now=1_700_000_000,
+    )
+    assert metrics.OLDEST_AGE._value.get() == metrics.UNDATED_OLDEST_AGE_SENTINEL
+    assert metrics.UNDATED_PENDING._value.get() == 3
+    assert metrics.PENDING_COUNT._value.get() == 3
+
+    metrics.OLDEST_AGE.set(0)
+    metrics.publish_fleet(
+        {'pending_count': 3, 'pending_seconds': 9, 'oldest_listed_at': 0, 'undated_pending': 0, 'backlog_items': 0},
+        now=1_700_000_000,
+    )
+    assert metrics.OLDEST_AGE._value.get() == metrics.UNDATED_OLDEST_AGE_SENTINEL
+
+    metrics.publish_fleet(
+        {
+            'pending_count': 5,
+            'pending_seconds': 9,
+            'oldest_listed_at': 1_700_000_000,
+            'undated_pending': 2,
+            'backlog_items': 1,
+        },
+        now=1_700_000_000,
+    )
+    assert metrics.OLDEST_AGE._value.get() == 0
+    assert metrics.UNDATED_PENDING._value.get() == 2
+    assert metrics.PENDING_COUNT._value.get() == 5
+
+
+def _snapshot_client(*, pending, dated, oldest, backlog):
     from database import cap_hold_redrive as store
 
     class Aggregate:
@@ -255,8 +303,10 @@ def test_fleet_snapshot_is_one_count_sum_one_oldest_row_and_one_backlog_sum():
     class Query:
         def __init__(self, name):
             self.name = name
+            self.filters = []
 
         def where(self, *args, **kwargs):
+            self.filters.append(kwargs.get('filter'))
             return self
 
         def order_by(self, *args, **kwargs):
@@ -266,27 +316,61 @@ def test_fleet_snapshot_is_one_count_sum_one_oldest_row_and_one_backlog_sum():
             return self
 
         def count(self, alias=None):
-            return Aggregate({'count': 4, 'seconds': 8.5})
+            if len(self.filters) > 1:
+                return Aggregate({'dated': dated})
+            return Aggregate({'count': pending[0], 'seconds': pending[1]})
 
         def sum(self, field, alias=None):
-            return Aggregate({'items': 3})
+            return Aggregate({'items': backlog})
 
         def stream(self, timeout=None):
-            return iter([SimpleNamespace(to_dict=lambda: {'listed_at': 50, 'state': 'held'})])
+            if oldest is None:
+                return iter(())
+            return iter([SimpleNamespace(to_dict=lambda: {'listed_at': oldest, 'state': 'held'})])
 
     class Client:
         def __init__(self):
-            self.groups = []
+            self.queries = []
 
         def collection_group(self, name):
-            self.groups.append(name)
-            return Query(name)
+            query = Query(name)
+            self.queries.append(query)
+            return query
 
-    client = Client()
+    return store, Client()
+
+
+def test_fleet_snapshot_counts_undated_holds_apart_from_the_oldest_dated_row():
+    store, client = _snapshot_client(pending=(4, 8.5), dated=1, oldest=50, backlog=3)
     assert store.fleet_snapshot(client) == {
         'pending_count': 4,
         'pending_seconds': 8.5,
         'oldest_listed_at': 50.0,
+        'undated_pending': 3,
         'backlog_items': 3,
     }
-    assert client.groups == ['stt_cap_holds', 'stt_cap_holds', 'processing_backlog']
+    assert [query.name for query in client.queries] == [
+        'stt_cap_holds',
+        'stt_cap_holds',
+        'stt_cap_holds',
+        'processing_backlog',
+    ]
+    dated = client.queries[1]
+    assert len(dated.filters) == 2
+    assert dated.filters[1].field_path == 'listed_at'
+    assert dated.filters[1].op_string == '>'
+    assert dated.filters[1].value == 0
+    assert len(client.queries[0].filters) == 1
+
+    _, empty = _snapshot_client(pending=(0, 0), dated=0, oldest=None, backlog=0)
+    assert store.fleet_snapshot(empty)['undated_pending'] == 0
+    assert store.fleet_snapshot(empty)['oldest_listed_at'] is None
+
+    _, undated_only = _snapshot_client(pending=(4, 8.5), dated=0, oldest=None, backlog=0)
+    snapshot = store.fleet_snapshot(undated_only)
+    assert snapshot['pending_count'] == 4
+    assert snapshot['oldest_listed_at'] is None
+    assert snapshot['undated_pending'] == 4
+
+    _, raced = _snapshot_client(pending=(1, 1), dated=3, oldest=50, backlog=0)
+    assert store.fleet_snapshot(raced)['undated_pending'] == 0
