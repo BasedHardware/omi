@@ -411,14 +411,27 @@ def test_redirect_topology_fence_defers_and_keeps_the_unit(world, monkeypatch):
     assert vendor.calls == 0 and job(store, 'p1')['state'] == PENDING and job(store, 'p1')['merge_pending']
 
 
-def test_erasure_fence_is_left_to_the_privacy_purge(world, monkeypatch):
-    """A deletion fence never writes the fenced job; purge_batch_owner deletes it with the owner's state."""
+def test_erasure_fence_releases_the_unit_before_the_row_is_acked(world, monkeypatch):
+    """A deletion fence revokes the unit through the fence-bypass store write (no purge is assumed)."""
     customer, store = world
     admit(monkeypatch, store, [item('p1', 10)], 'content-p', JA)
     customer.delete_conversation(OWNER, 'conv-1')
-    before = job(store, 'p1')
+    vendor = Vendor()
+    assert stage(store, Artifacts(), vendor).run('p1').reason == 'privacy_blocked'
+    row = job(store, 'p1')
+    assert row['state'] == 'privacy_blocked' and row['merge_pending'] is False and vendor.calls == 0
+
+
+def test_deleted_merge_survivor_releases_the_donor_unit(world, monkeypatch):
+    """M1 re-review L08-4: deleting the survivor tombstones only the survivor, so no purge reaches a job that
+    still names the donor; the walk donor -> survivor raises conversation_deleted at the stage."""
+    customer, store = world
+    admit(monkeypatch, store, [item('p1', 10)], 'content-p', JA)
+    customer.merge_conversation(OWNER, 'conv-1', 'conv-2')
+    customer.delete_conversation(OWNER, 'conv-2')
     assert stage(store, Artifacts(), Vendor()).run('p1').reason == 'privacy_blocked'
-    assert job(store, 'p1') == before
+    row = job(store, 'p1')
+    assert row['state'] == 'privacy_blocked' and row['merge_pending'] is False
 
 
 def test_gpu_units_are_never_taken_by_the_provider_stage(world, monkeypatch):

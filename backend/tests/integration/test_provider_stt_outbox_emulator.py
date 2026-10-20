@@ -83,3 +83,41 @@ def test_default_privacy_fence_runs_inside_the_sweep(emulator):
     customer.delete_account(deleted)
     counts = outbox.sweep(now=5000.0)
     assert (counts.discarded, counts.errors) == (1, 0)
+
+
+def test_provider_running_intent_may_register_its_one_result(emulator):
+    """M1 re-review L08-3: register_batch_artifact accepted results only for leased GPU jobs and quarantine
+    writes, so a paid provider result raised result_lease_lost and stranded the unit in provider_running."""
+    from database.batch_pipeline_privacy import BatchPrivacyBlocked
+    from database.batch_pipeline_store import FirestoreStore
+    from utils.batch_pipeline.retention import register_batch_artifact
+
+    client, collection = emulator
+    namespace = collection.removesuffix('_provider_stt_outbox')
+    store = FirestoreStore(namespace, firestore_client=client)
+    customer = ClientCustomerData(client)
+    owner = f'provider-{uuid.uuid4().hex[:8]}'
+    customer.add_user(owner)
+    customer.add_conversation(owner, 'conv-1')
+    segment, token = _segment('result'), uuid.uuid4().hex
+    jobs = client.collection(f'{namespace}_jobs')
+    jobs.document(segment).set(
+        {
+            'owner_id': owner,
+            'conversation_id': 'conv-1',
+            'state': 'provider_running',
+            'provider_intent': {'token': token, 'service': 'modulate', 'privacy_generation': 0},
+        }
+    )
+    try:
+        prefix = f'gs://synthetic/{owner}/results/{segment}'
+        assert register_batch_artifact(store, owner, segment, f'{prefix}/{token}.enc', 'results', 0)
+        with pytest.raises(BatchPrivacyBlocked):
+            register_batch_artifact(store, owner, segment, f'{prefix}/{uuid.uuid4().hex}.enc', 'results', 0)
+        jobs.document(segment).update({'state': 'provider_pending'})
+        with pytest.raises(BatchPrivacyBlocked):
+            register_batch_artifact(store, owner, segment, f'{prefix}/{token}.enc', 'results', 0)
+    finally:
+        jobs.document(segment).delete()
+        for doc in client.collection(f'{namespace}_artifacts').stream():
+            doc.reference.delete()

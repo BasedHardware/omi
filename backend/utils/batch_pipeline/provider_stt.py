@@ -49,14 +49,16 @@ PENDING = 'provider_pending'
 RUNNING = 'provider_running'
 # Terminal: the content ledger no longer belongs to this unit's run, so its result can never project.
 SUPERSEDED = 'provider_superseded'
-# Invalid redirect topology is not evidence of deletion (utils/enrichment/custody.discard_blocked): keep the
-# unit and its wake. Every other fence is an erasure fence whose privacy purge deletes this job
-# (database/batch_pipeline_purge.purge_batch_owner), which also releases the owner's ordered merge.
+# Invalid redirect topology is not evidence of deletion (utils/enrichment/custody.discard_blocked), and a
+# lost result-write race is not privacy: keep the unit and its wake. Every other fence releases the unit
+# terminally through the store's fence-bypass revoke (quarantine_fenced), because no purge is guaranteed to
+# follow (a deleted merge survivor tombstones only the survivor, never the donor this job may name).
 _TRANSIENT_FENCES = frozenset(
     {
         BatchPrivacyReason.CONVERSATION_REDIRECT_CYCLE,
         BatchPrivacyReason.CONVERSATION_REDIRECT_MISSING,
         BatchPrivacyReason.CONVERSATION_FENCE_BUDGET,
+        BatchPrivacyReason.RESULT_LEASE_LOST,
     }
 )
 # A running intent older than this without a persisted result is settled as
@@ -377,7 +379,11 @@ class ProviderSttStage:
             if error.reason in _TRANSIENT_FENCES:
                 # Keep the row: the GPU ring likewise re-checks a blocked head on every pull.
                 return UnitOutcome('deferred', 'not_due', self.clock() + FUNDING_RETRY_SECONDS)
-            # Erasure fence: the privacy purge deletes this job; never write a fenced owner's job here.
+            # Ack the row only once the job no longer holds the owner's merge (the revoke rechecks the fence).
+            try:
+                self.protocol.store.quarantine_fenced(segment_id, self.clock())
+            except Exception:
+                return UnitOutcome('retry', 'dependency_warming')
             return UnitOutcome('discarded', 'privacy_blocked')
         except ProjectionBlocked:
             # Closing the row alone would leave merge_pending set and stall the owner's later units.
