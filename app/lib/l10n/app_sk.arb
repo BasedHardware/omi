@@ -4023,6 +4023,7 @@
     "reviewProposalGeneric": "Použiť túto navrhovanú opravu?",
     "reviewProposalApply": "Použiť",
     "reviewProposalSuggested": "Navrhnuté",
+    "reviewQuestionOutOfDate": "Táto otázka je zastaraná, takže sa nič nezmenilo.",
     "reviewProposalConflict": "Od návrhu Dream sa to zmenilo, takže sa nič nepoužilo.",
     "itemLinkListTitle": "{count, plural, =0{Žiadne položky} =1{1 položka} other{{count} položiek}}",
     "paywallRecommended": "Odporúčané",

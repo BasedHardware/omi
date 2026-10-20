@@ -56,15 +56,6 @@ def scoped_modules() -> list[Path]:
     return sorted(found)
 
 
-def _is_os_environ(node: ast.AST) -> bool:
-    return (
-        isinstance(node, ast.Attribute)
-        and node.attr == 'environ'
-        and isinstance(node.value, ast.Name)
-        and node.value.id == 'os'
-    )
-
-
 def _literal_key(node: ast.expr | None) -> str:
     return node.value if isinstance(node, ast.Constant) and isinstance(node.value, str) else DYNAMIC
 
@@ -75,18 +66,38 @@ class _Visitor(ast.NodeVisitor):
     def __init__(self) -> None:
         self.scope: list[str] = []
         self.sites: Counter[tuple[str, str]] = Counter()
-        self.imported_getenv = False
-        self.imported_environ = False
+        # Local names bound to the os module, os.getenv and os.environ (import aliases included).
+        self.os_names = {'os'}
+        self.getenv_names: set[str] = set()
+        self.environ_names: set[str] = set()
         self._claimed: set[int] = set()
 
     def _add(self, key: str) -> None:
         self.sites[('.'.join(self.scope) or '<module>', key)] += 1
 
+    def visit_Import(self, node: ast.Import) -> None:
+        for alias in node.names:
+            if alias.name == 'os':
+                self.os_names.add(alias.asname or 'os')
+
     def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
         if node.module == 'os':
             for alias in node.names:
-                self.imported_getenv |= alias.name == 'getenv'
-                self.imported_environ |= alias.name == 'environ'
+                if alias.name == '*':
+                    self.getenv_names.add('getenv')
+                    self.environ_names.add('environ')
+                elif alias.name == 'getenv':
+                    self.getenv_names.add(alias.asname or alias.name)
+                elif alias.name == 'environ':
+                    self.environ_names.add(alias.asname or alias.name)
+
+    def _is_os_attr(self, node: ast.AST, attr: str) -> bool:
+        return (
+            isinstance(node, ast.Attribute)
+            and node.attr == attr
+            and isinstance(node.value, ast.Name)
+            and node.value.id in self.os_names
+        )
 
     def _enter(self, node: ast.AST) -> None:
         self.scope.append(node.name)  # type: ignore[attr-defined]
@@ -96,16 +107,11 @@ class _Visitor(ast.NodeVisitor):
     visit_ClassDef = visit_FunctionDef = visit_AsyncFunctionDef = _enter
 
     def _environ_expr(self, node: ast.AST) -> bool:
-        return _is_os_environ(node) or (self.imported_environ and isinstance(node, ast.Name) and node.id == 'environ')
+        return self._is_os_attr(node, 'environ') or (isinstance(node, ast.Name) and node.id in self.environ_names)
 
     def visit_Call(self, node: ast.Call) -> None:
         func = node.func
-        is_getenv = (
-            isinstance(func, ast.Attribute)
-            and func.attr == 'getenv'
-            and isinstance(func.value, ast.Name)
-            and func.value.id == 'os'
-        ) or (self.imported_getenv and isinstance(func, ast.Name) and func.id == 'getenv')
+        is_getenv = self._is_os_attr(func, 'getenv') or (isinstance(func, ast.Name) and func.id in self.getenv_names)
         if is_getenv:
             self._add(_literal_key(node.args[0] if node.args else None))
         elif (
@@ -132,10 +138,16 @@ class _Visitor(ast.NodeVisitor):
 
     def visit_Attribute(self, node: ast.Attribute) -> None:
         # A bare `os.environ` that is passed around or iterated (copy, items(), ...).
-        if _is_os_environ(node) and id(node) not in self._claimed:
+        if self._is_os_attr(node, 'environ') and id(node) not in self._claimed:
             self._claimed.add(id(node))
             self._add(DYNAMIC)
         self.generic_visit(node)
+
+    def visit_Name(self, node: ast.Name) -> None:
+        # A bare imported `environ` (or alias) used as a mapping: dict(env), env.items(), {**env}, ...
+        if node.id in self.environ_names and isinstance(node.ctx, ast.Load) and id(node) not in self._claimed:
+            self._claimed.add(id(node))
+            self._add(DYNAMIC)
 
 
 def scan_source(source: str) -> Counter[tuple[str, str]]:
@@ -258,6 +270,40 @@ def f(name):
         ('f', 'F'): 1,
         ('f', 'S'): 1,
     }
+
+
+def test_scanner_follows_import_aliases():
+    """L14-3: an aliased import must not hide a read."""
+    source = '''
+import os as operating_system
+from os import getenv as read_env, environ as env
+
+def f():
+    read_env('BATCH_PIPELINE_PERCENT')
+    operating_system.getenv('A')
+    operating_system.environ['B']
+    env.get('C')
+    'D' in env
+'''
+    assert dict(scan_source(source)) == {
+        ('f', 'BATCH_PIPELINE_PERCENT'): 1,
+        ('f', 'A'): 1,
+        ('f', 'B'): 1,
+        ('f', 'C'): 1,
+        ('f', 'D'): 1,
+    }
+    mappings = '''
+from os import environ as env
+from os import *
+
+def g():
+    dict(env)
+    env.items()
+    {**env}
+    getenv('E')
+    environ.copy()
+'''
+    assert dict(scan_source(mappings)) == {('g', DYNAMIC): 4, ('g', 'E'): 1}
 
 
 def _write_baseline() -> None:

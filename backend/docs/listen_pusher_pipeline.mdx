@@ -3152,7 +3152,34 @@ its anchor would wait for a repost no quiet span selects and overflow the
 ring (`PARAKEET_WINDOW_STRANDED_DRIFT_SETTLE_ENABLED`, default on, is the kill
 switch). Other empty context-cap slides retain their existing pending-speech
 protection. Retaining replay gives the replacement leg an opportunity to recover
-words that Parakeet never emitted. Ownership of recent
+words that Parakeet never emitted.
+
+A non-window replacement leg (Soniox, Modulate) tracks the same obligation by
+VAD speech end versus the capture end of its placed text. When the ring would
+overflow, capture older than the ring horizon settles like an answered-empty
+window, instead of failing over, only if the leg is serving, the provider owes
+no output (`has_pending_provider_output()`: no Soniox non-final or unflushed
+token, no buffered Modulate partial), and the last speech or replayed send
+before the horizon is at least 15 s old. Speech inside the horizon stays pending.
+Kill switch `LISTEN_NONWINDOW_REPLAY_SETTLE_ENABLED` (default on); counter
+`omi_stt_nonwindow_replay_settles_total{provider}`. On a Soniox leg, final
+text also accounts every tracked speech send older than that 15 s grace,
+whether or not the text was placed on the capture axis, so a provider that is
+actively transcribing does not overflow the ring
+(`LISTEN_NONWINDOW_EMITTED_TEXT_ACCOUNTING_ENABLED`, default on). A provider
+that left the session only for `replay_ring_overflow` is excluded from that
+one replacement selection and re-admitted once a successor is adopted
+(`LISTEN_SESSION_LOCAL_EXCLUSION_RELEASE_ENABLED`, default on; counter
+`omi_stt_session_local_exclusion_releases_total{provider}`). A selection hop
+whose origin route was never dialed names its skip as the fallback `reason`
+(`session_excluded|recovery_budget|circuit_open|capacity_full|policy|unconfigured|last_resort`)
+instead of `connection_lost`, and an exhausted chain logs
+`live_stt_chain_exhausted origin= reason= skips=family:cause,...`. Its overflow diagnostics add
+`leg=nonwindow speech_unemitted_seconds text_segments placed_text_segments
+provider_output_pending`. A `connection_lost` fallback log line from a Soniox or
+Modulate socket also carries a bounded transport `cause`
+(`remote_close_normal|remote_close_error|keepalive_timeout|abnormal_close|clean_eof|reset|timeout|tls|dns|other`),
+log-only, including selection hops whose rejected leg died untyped. Ownership of recent
 capture ranges is retained as coalesced same-conversation *runs* for 120 s of
 capture time (a hard run cap is a pathological bound, not the working limit),
 so a provider final trailing its audio by tens of seconds still resolves its

@@ -13045,6 +13045,9 @@ class AppLocalizationsAr extends AppLocalizations {
   String get reviewProposalSuggested => 'مقترح';
 
   @override
+  String get reviewQuestionOutOfDate => 'هذا السؤال لم يعد محدثًا، لذا لم يتغير شيء.';
+
+  @override
   String get reviewProposalConflict => 'تغيّر هذا منذ أن اقترحه Dream، لذا لم يُطبَّق أي شيء.';
 
   @override

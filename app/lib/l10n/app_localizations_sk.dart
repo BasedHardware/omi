@@ -13114,6 +13114,9 @@ class AppLocalizationsSk extends AppLocalizations {
   String get reviewProposalSuggested => 'Navrhnuté';
 
   @override
+  String get reviewQuestionOutOfDate => 'Táto otázka je zastaraná, takže sa nič nezmenilo.';
+
+  @override
   String get reviewProposalConflict => 'Od návrhu Dream sa to zmenilo, takže sa nič nepoužilo.';
 
   @override

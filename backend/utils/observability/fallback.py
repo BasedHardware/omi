@@ -19,6 +19,7 @@ from utils.observability.demand_cohort import record_metric
 from utils.observability.demand_cohort import DEMAND_COHORTS, FAILURE_DETAIL, current_demand
 from utils.observability.routing_cohort import current_routing_cohort
 from utils.observability.reasons import FallbackReason, reason_values
+from utils.stt.failure_diagnostics import CONNECTION_LOSS_CAUSES
 from utils.stt.live_reason import LIVE_STT_REASONS
 
 logger = logging.getLogger(__name__)
@@ -39,6 +40,13 @@ class ReplayLagDiagnostics:
     empty_streak: int
     cut_pending: bool
     pacing_wait: bool
+    # Non-window (Soniox/Modulate) replacement legs have no POST state; they
+    # report why emitted text did not reach their VAD speech instead.
+    leg: Literal['window', 'nonwindow'] = 'window'
+    speech_unemitted_seconds: float = -1.0
+    text_segments: int = 0
+    placed_text_segments: int = 0
+    provider_output_pending: bool | None = None
 
     def log_fields(self) -> str:
         # Bounds apply to log values, never metric labels. -1 means no text yet.
@@ -48,7 +56,7 @@ class ReplayLagDiagnostics:
         def count(value: int) -> int:
             return min(1000000, max(0, value))
 
-        return (
+        fields = (
             f' un_emitted_capture_seconds={seconds(self.capture_seconds):.3f}'
             f' vad_admitted_seconds={seconds(self.admitted_seconds):.3f}'
             f' seconds_since_text={seconds(self.seconds_since_text):.3f}'
@@ -58,6 +66,16 @@ class ReplayLagDiagnostics:
             f' empty_streak={count(self.empty_streak)}'
             f' cut_pending={int(bool(self.cut_pending))}'
             f' pacing_wait={int(bool(self.pacing_wait))}'
+        )
+        if self.leg != 'nonwindow':
+            return fields
+        pending = -1 if self.provider_output_pending is None else int(self.provider_output_pending)
+        return (
+            fields + ' leg=nonwindow'
+            f' speech_unemitted_seconds={seconds(self.speech_unemitted_seconds):.3f}'
+            f' text_segments={count(self.text_segments)}'
+            f' placed_text_segments={count(self.placed_text_segments)}'
+            f' provider_output_pending={pending}'
         )
 
 
@@ -200,6 +218,7 @@ def record_fallback(
     first_text_diagnostics: FirstTextDeadlineDiagnostics | None = None,
     failure_subtype: str | None = None,
     demand_cohort: str | None = None,
+    connection_cause: str | None = None,
 ) -> None:
     """Increment ``omi_fallback_total`` and emit a matching warning log.
 
@@ -275,6 +294,10 @@ def record_fallback(
         elif reason_label == 'other' and failure_subtype is not None:
             subtype = failure_subtype if failure_subtype in ALLOWED_STT_FAILURE_SUBTYPES else 'unknown'
             emit_log.warning('%s component=%s from=%s to=%s reason=%s outcome=%s subtype=%s', *fields, subtype)
+        elif reason_label == 'connection_lost' and connection_cause is not None:
+            # Log-only: the untyped connection_lost bucket gains its transport cause.
+            cause = connection_cause if connection_cause in CONNECTION_LOSS_CAUSES else 'other'
+            emit_log.warning('%s component=%s from=%s to=%s reason=%s outcome=%s cause=%s', *fields, cause)
         else:
             emit_log.warning('%s component=%s from=%s to=%s reason=%s outcome=%s', *fields)
     except Exception:
@@ -337,6 +360,16 @@ def initialize_live_stt_exhausted_children() -> None:
                 from_mode=provider,
                 to_mode='unavailable',
                 reason=reason,
+                outcome='exhausted',
+            )
+    # Undialed selection origins report their skip (live_chain.note_skip).
+    for skip in ('session_excluded', 'recovery_budget', 'circuit_open', 'policy', 'unconfigured'):
+        for provider in providers:
+            OMI_FALLBACK_TOTAL.labels(
+                component='stt_selection',
+                from_mode=provider,
+                to_mode='unavailable',
+                reason=skip,
                 outcome='exhausted',
             )
 

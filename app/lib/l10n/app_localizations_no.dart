@@ -13119,6 +13119,9 @@ class AppLocalizationsNo extends AppLocalizations {
   String get reviewProposalSuggested => 'Foreslått';
 
   @override
+  String get reviewQuestionOutOfDate => 'Dette spørsmålet er utdatert, så ingenting ble endret.';
+
+  @override
   String get reviewProposalConflict => 'Dette er endret siden Dream foreslo det, så ingenting ble brukt.';
 
   @override

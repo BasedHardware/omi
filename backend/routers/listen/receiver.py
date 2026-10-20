@@ -84,7 +84,7 @@ from utils.stt.live_failure import (
     terminate_live_stt_backoff,
 )
 from utils.stt.live_chain import LiveChainExhausted, ProviderChainUnavailable
-from utils.stt.live_recovery import select_live_replacement
+from utils.stt.live_recovery import release_session_local_exclusions, select_live_replacement
 from config.live_stt_recovery import current_recovery_enabled, session_recovery_enabled
 from utils.stt.soniox_capture_axis import validation_detail
 from utils.stt.soniox_idle import SonioxIdleBudget
@@ -1570,12 +1570,12 @@ class ListenReceiver(ReplayFilterMixin):
         serves: its family dialled, connected, and passed the serving gate
         after this session condemned it. Keeping it failed would pair the
         controller ledger with a receiver-side veto and exhaust the walk on
-        the next ordinary death. Providers that never re-dialled here keep
-        their session exclusion — this releases only the family now serving,
-        and the provider-level circuit breaker still owns cross-session
-        health.
+        the next ordinary death. Other providers keep their session exclusion
+        unless replay overflow alone excluded them; the provider-level circuit
+        breaker still owns cross-session health.
         """
         family = provider_for_service(serving_provider) or serving_provider
+        release_session_local_exclusions(self, family)
         released = family in self._stt_failed_providers
         self._stt_failed_providers.discard(family)
         identity = self.recovery._serving_identity if self.recovery is not None else None
