@@ -153,6 +153,7 @@ from utils.transcribe_decisions import (
 from utils.log_sanitizer import sanitize
 from utils.listen_audio import ChannelConfig, mix_n_channel_buffers, resample_pcm
 from utils.observability.fallback import record_fallback
+from utils.observability.listen_close import note_ws_close
 from utils.observability.listen_loop import FrameTimer
 from utils.observability.transcription import (
     emit_listen_vad_gate_metrics,
@@ -2392,6 +2393,7 @@ class ListenReceiver(ReplayFilterMixin):
                 self.host.state.last_activity_time = time.time()
                 if message.get('type') == 'websocket.disconnect':
                     self.host.state.close_code = message.get('code', 1000)
+                    note_ws_close(self.host.state, 'client', self.host.state.close_code)
                     if self.recovery is not None:
                         self.client_closing = True
                         if self.shutdown_deadline is None:
@@ -2505,8 +2507,8 @@ class ListenReceiver(ReplayFilterMixin):
                         self.host.audio_bytes_send(decoded, now)
                 elif message.get('text') is not None:
                     await self._handle_text(message['text'])
-        except WebSocketDisconnect:
-            pass
+        except WebSocketDisconnect as error:
+            note_ws_close(self.host.state, 'client', error.code)
         except Exception as error:
             logger.error('Listen receive failure type=%s', type(error).__name__)
             self.host.state.close_code = 1011

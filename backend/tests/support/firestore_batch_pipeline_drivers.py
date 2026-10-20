@@ -149,6 +149,31 @@ def entries():
             domains={'namespace': namespaces},
             neutrals={'transaction': (None, 'transaction binding only, no shape change')},
         ),
+        CoveredByEntry(
+            'database.batch_pipeline_store.FirestoreTransaction.first_ready_pending',
+            covered_by=('database.batch_pipeline_store.first_ready_pending',),
+            reason='thin store adapter delegates unchanged query arguments to the named query builder',
+            expect_observed=False,
+            body_digest='9999bc14a1c88206f5d98e34284f7895c179c73ab563bf813b179faa417076ba',
+        ),
+        DriverEntry(
+            'database.batch_pipeline_store.first_ready_pending',
+            base={'owner_key': 'owner-hash'},
+            domains={'namespace': namespaces},
+            neutrals={'transaction': (None, 'transaction binding only, no shape change')},
+        ),
+        CoveredByEntry(
+            'database.batch_pipeline_store.FirestoreStore.longest_ready_pending',
+            covered_by=('database.batch_pipeline_store.longest_ready_pending',),
+            reason='thin store adapter delegates unchanged query arguments to the named query builder',
+            expect_observed=False,
+            body_digest='c36f3f2504728cdf4473b0443f0371b3c15e124eb1a2f740fab411eee14f6337',
+        ),
+        DriverEntry(
+            'database.batch_pipeline_store.longest_ready_pending',
+            base={'owner_key': 'owner-hash'},
+            domains={'namespace': namespaces},
+        ),
         DriverEntry(
             'database.batch_pipeline_store.due',
             domains={'namespace': namespaces, 'state': ['leased', 'retry', 'result_ready', 'record_pending']},

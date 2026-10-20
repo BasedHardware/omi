@@ -30,6 +30,7 @@ class Transaction(Protocol):
     def put(self, table: str, key: str, value: dict) -> None: ...
     def patch(self, table: str, key: str, fields: dict) -> None: ...
     def first_pending(self, owner_key: str) -> dict | None: ...
+    def first_ready_pending(self, owner_key: str) -> dict | None: ...
     def ready_predecessor(self, owner_key: str, priority: int, segment_id: str) -> dict | None: ...
     def service_frontier(self, priority: int) -> float: ...
     def check_privacy(self, uid: str, conversation_ids=(), expected_generation: int | None = None) -> int: ...
@@ -42,6 +43,7 @@ class Store(Protocol):
     def oldest_retry(self, priority: int) -> float | None: ...
     def control_candidate(self, priority: int, pool: str, now: float) -> str | None: ...
     def quarantine_fenced(self, segment_id: str, now: float) -> bool: ...
+    def longest_ready_pending(self, owner_key: str) -> dict | None: ...
 
 
 class FirestoreTransaction:
@@ -86,6 +88,9 @@ class FirestoreTransaction:
 
     def first_pending(self, owner_key: str) -> dict | None:
         return first_pending(self.client, self.namespace, owner_key, transaction=self.transaction)
+
+    def first_ready_pending(self, owner_key: str) -> dict | None:
+        return first_ready_pending(self.client, self.namespace, owner_key, transaction=self.transaction)
 
     def ready_predecessor(self, owner_key: str, priority: int, segment_id: str) -> dict | None:
         return ready_predecessor(
@@ -184,6 +189,10 @@ class FirestoreStore:
     def quarantine_fenced(self, segment_id: str, now: float) -> bool:
         return quarantine_fenced(self.client, self.namespace, segment_id, now)
 
+    def longest_ready_pending(self, owner_key: str) -> dict | None:
+        # A hint read outside any transaction; the bypass transaction re-verifies it.
+        return longest_ready_pending(self.client, self.namespace, owner_key)
+
     def projection_pending(self, limit: int = 100) -> list[str]:
         return projection_pending(self.client, self.namespace, limit)
 
@@ -254,6 +263,38 @@ def first_pending(client: Any, namespace: str, owner_key: str, *, transaction: A
         .order_by('segment_id')
         .limit(1)
         .stream(transaction=transaction)
+    )
+    return docs[0].to_dict() if docs else None
+
+
+def first_ready_pending(client: Any, namespace: str, owner_key: str, *, transaction: Any = None) -> dict | None:
+    """The owner's earliest-captured pending row that already has a result (bounded head wait)."""
+    docs = list(
+        client.collection(f'{namespace}_jobs')
+        .where('owner_key', '==', owner_key)
+        .where('merge_pending', '==', True)
+        .where('state', '==', 'result_ready')
+        .order_by('capture_at')
+        .order_by('segment_id')
+        .limit(1)
+        .stream(transaction=transaction)
+    )
+    return docs[0].to_dict() if docs else None
+
+
+def longest_ready_pending(client: Any, namespace: str, owner_key: str) -> dict | None:
+    """The owner's pending result that has waited longest; rows without ``ready_at`` never match.
+
+    Non-transactional discovery hint: it takes no transactional query lock.
+    """
+    docs = list(
+        client.collection(f'{namespace}_jobs')
+        .where('owner_key', '==', owner_key)
+        .where('merge_pending', '==', True)
+        .where('state', '==', 'result_ready')
+        .order_by('ready_at')
+        .limit(1)
+        .stream()
     )
     return docs[0].to_dict() if docs else None
 

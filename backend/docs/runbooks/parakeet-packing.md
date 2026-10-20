@@ -96,6 +96,22 @@ Never increase admission from 2/35 merely because an average GPU is low.
 
 ## Daily train and rollback
 
+Two open blockers (swarm review 2026-10-18, still present 2026-10-20):
+
+- **Caller timeout (blocks step 3).** A packed >120s file is N serial quanta,
+  each waiting behind any queued live work, then whole-file v2 diarization, all
+  inside one HTTP response. The production pre-recorded client reads for 120s
+  (`_PARAKEET_TIMEOUT` in `utils/stt/pre_recorded.py`), retries the whole file
+  once, and completed quanta are not checkpointed. Before any caller reaches a
+  packing pod, either its read timeout covers worst-case quanta plus v2
+  diarization, or completed quanta are checkpointed. The 360s probe uses its
+  own client and is not evidence for this.
+- **Queue-age signal (blocks step 4).** The demand HPA takes each pod's max
+  queue age and then averages it across pods (`Pods`/`AverageValue`). On the
+  min3 floor, one pod at 60s backfill age and two at 0 read 20s, under the 30s
+  target. Before `autoscaling.demand.enabled=true`, use a fleet-max (External)
+  signal, or show in dev that one hot pod scales.
+
 1. Merge dark, then deploy the immutable image through the normal Parakeet
    workflow. Preserve every existing caller, HPA limit and floor. Capture the
    actual served digest and route probes for /v1, /v2, /v3 and health.

@@ -183,6 +183,7 @@ def test_lost_storage_reply_reconciles_artifact_without_repeating_stt(setup):
     artifacts.find_recovery_result.return_value = 'gs://synthetic/recovered'
     assert recovery.recover('bad', binding.owner_id) == 'reconciled'
     assert stt.call_count == 1 and row(client)['state'] == 'result_ready'
+    assert row(client)['ready_at'] > 0  # Re-entry restarts the bounded merge head wait.
 
 
 def test_lost_settle_reply_is_reread_without_stt(setup, monkeypatch):
