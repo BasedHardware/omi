@@ -46,6 +46,10 @@ are constrained; ordinary legacy-file growth stays unblocked. Diagnostics name
 the request interface to use. Run `TZ=UTC bash app/test.sh` for the protected contracts. Pending tests
 execute and fail on unexpected success; builders remove only their pending marker.
 
+For native BLE changes, distinguish a connected radio from device audio setup.
+The [device lifecycle architecture](https://github.com/BasedHardware/omi/blob/main/app/lib/services/devices/ARCHITECTURE.md)
+describes late readiness after a launch timeout and the Limitless regression path.
+
 ## Pull Request Quality
 
 Good PRs are easy to review and come with evidence that the change works.
@@ -76,7 +80,7 @@ Good PRs are easy to review and come with evidence that the change works.
 - **Large or ambiguous features** should start as a GitHub issue so maintainers can align on scope and direction before major implementation work begins.
 - **Show your verification.** List the commands you ran and what they showed in the PR description. "It compiles" is not evidence — exercising the real user-facing path is.
 - **Tests that run in CI must be hermetic** — no live services, no network. Validation against a live service is welcome as extra evidence, but it can never be the only proof a PR works.
-- **CI on fork PRs** — fork PRs run the cheap checks (Hygiene, Formatting, metadata, affected backend/Python units, Static Contracts, and OpenAPI). Slow backend guardrails and the Windows Python ACL check wait for full CI. When a contribution is ready for full review, ask a maintainer to add the `ci:full` label, then use **Re-run all jobs** on the PR's latest commit. CI reads the current labels on rerun; adding a label alone does not start new workflows or cancel an in-flight run. The label persists across new commits, which then get full CI automatically. Heavy aggregate checks name this flow when coverage is deferred.
+- **CI on fork PRs** — fork PRs run the cheap checks (Hygiene, Formatting, metadata, affected backend/Python units, Static Contracts, and OpenAPI). App PRs also run `Dart Analyze & Tests` (the analyzer ratchet and regular Flutter tests), including forks without `ci:full`. `Mobile Release Eligibility` fails if selected Flutter coverage did not run and pass. Once maintainers require that status on main, app PRs cannot merge without passing Flutter coverage. Generated-file checks, iOS compile, Android compile and JVM tests, emulator acceptance, seeded journeys, slow backend guardrails, and the Windows Python ACL check still wait for full CI on fork PRs. When a contribution is ready for full review, ask a maintainer to add the `ci:full` label, then use **Re-run all jobs** on the PR's latest commit. CI reads the current labels on rerun; adding a label alone does not start new workflows or cancel an in-flight run. The label persists across new commits, which then get full CI automatically. Heavy aggregate checks name this flow when coverage is deferred.
 - **Backend hermetic gate** — every PR reports `Backend Hermetic Merge Gate`. Affected full-tier PRs run the backend E2E harness; emulator gauntlets run for their integration inputs, main, and nightly. A cheap-tier fork reports deferral instead of a green heavy-check verdict.
 - **Behavioral tests execute production behavior.** Source-string assertions are
   static tripwires only; they do not prove lifecycle, concurrency, or integration

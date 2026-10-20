@@ -3,8 +3,10 @@ package com.friend.ios
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.Context
+import android.os.Build
 import android.os.BatteryManager
 import android.os.PowerManager
+import android.os.SystemClock
 import com.friend.ios.ble.BleHostApiImpl
 import com.friend.ios.phonecalls.PhoneCallsPlugin
 import com.friend.ios.ble.OmiBleForegroundService
@@ -34,35 +36,17 @@ class MainActivity: FlutterActivity() {
 
     override fun configureFlutterEngine(@NonNull flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
-
-        // Read the sticky battery snapshot without registering a receiver.
-        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "com.omi/phone_battery").setMethodCallHandler {
-            call, result ->
-            if (call.method != "read") {
-                result.notImplemented()
-                return@setMethodCallHandler
-            }
-            try {
-                val battery = registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
-                val level = battery?.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) ?: -1
-                val scale = battery?.getIntExtra(BatteryManager.EXTRA_SCALE, -1) ?: -1
-                val status = battery?.getIntExtra(BatteryManager.EXTRA_STATUS, -1) ?: -1
-                val plugged = battery?.getIntExtra(BatteryManager.EXTRA_PLUGGED, -1) ?: -1
-                if (level < 0 || scale <= 0 || level > scale || plugged < 0 ||
-                    status <= BatteryManager.BATTERY_STATUS_UNKNOWN) {
-                    result.error("battery_unavailable", "Phone battery unavailable", null)
-                } else {
-                    val power = getSystemService(Context.POWER_SERVICE) as PowerManager
-                    result.success(mapOf(
-                        "battery_level" to ((level.toDouble() / scale) * 100).toInt(),
-                        "battery_charging" to (plugged != 0),
-                        "os_battery_saver" to power.isPowerSaveMode
-                    ))
-                }
-            } catch (_: Exception) {
-                result.error("battery_unavailable", "Phone battery read failed", null)
+        com.friend.ios.ondevice.OnDeviceBackgroundWorker.attach(this, flutterEngine)
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "com.omi/device_health_policy").setMethodCallHandler { call, result ->
+            if (call.method != "setPolicy") { result.notImplemented() } else {
+                com.friend.ios.ble.DeviceHealthPersistence.setPolicy(applicationContext,
+                    call.argument<Boolean>("enabled") == true, call.argument<Number>("epoch")!!.toLong(), call.argument<Boolean>("retire") == true)
+                result.success(null)
             }
         }
+
+
+        com.friend.ios.ondevice.PhoneBatteryChannel.register(this, flutterEngine)
 
         // Register Phone Calls Plugin
         PhoneCallsPlugin.registerWith(flutterEngine, this)

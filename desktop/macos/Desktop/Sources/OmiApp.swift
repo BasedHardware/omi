@@ -327,6 +327,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuItemVa
     ScreenFrameQuickLook.purgeStaleScratch()
     log("AppDelegate: applicationDidFinishLaunching started (mode: \(OMIApp.launchMode.rawValue))")
     log("AppDelegate: AuthState.isSignedIn=\(AuthState.shared.isSignedIn)")
+    ListenClientState.startSurfaceReporting()
     let pendingUpdateRelaunch = UpdateRelaunchWindowPolicy.consumePendingRelaunch()
     CaptureLaunchContext.setPendingRelaunch(pendingUpdateRelaunch)
     let restoreMainWindowAfterUpdateRelaunch = pendingUpdateRelaunch?.restoreMainWindow
@@ -1466,6 +1467,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuItemVa
     NSLog("OMI AppDelegate: Received URL event: %@", urlString)
 
     Task { @MainActor in
+      if ItemLinkPresenter.shared.receive(url) { return }  // only items/conversation/task/memory hosts
       if !ThreeDoorsDemoPage.handleReturnURL(url) { AuthService.shared.handleOAuthCallback(url: url) }
       // Bring app to foreground after OAuth redirect — Safari stays in front otherwise.
       // NSApp.activate() alone doesn't switch macOS Spaces; ordering a window front does.

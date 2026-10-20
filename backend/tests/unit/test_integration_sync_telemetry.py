@@ -3,13 +3,15 @@ from pathlib import Path
 
 import httpx
 import pytest
+
+from utils.product_telemetry import set_product_telemetry_client_for_tests as set_posthog_client_for_tests
+from utils import product_telemetry
 from utils.integration_telemetry import (
     GOOGLE_CALENDAR,
     X,
     IntegrationTelemetryContext,
     emit_sync_failed,
     emit_sync_succeeded,
-    set_posthog_client_for_tests,
 )
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
@@ -76,6 +78,9 @@ def test_sync_success_telemetry_emits_bounded_posthog_payload(monkeypatch):
                 'app_version': '1.2.3',
                 'app_build': '456',
                 'item_count': '11_100',
+                'source_platform': 'macos',
+                'emitter': 'server',
+                'test': False,
             },
         }
     ]

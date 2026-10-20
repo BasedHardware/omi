@@ -27,6 +27,7 @@ from pydantic import BaseModel, Field, field_validator
 import database.vector_db as vector_db
 from utils.other.endpoints import get_current_user_uid, with_rate_limit
 from utils.conversations.transcript_chunks import hydrate_chunk_texts
+from utils.user_clock import clock_for_uid
 from utils.retrieval.safety import safe_isoformat
 from utils.retrieval.tool_services.conversations import get_conversations_text, search_conversations_text
 from utils.retrieval.tool_services.memories import get_memories_text, search_memories_text
@@ -223,7 +224,7 @@ def search_conversation_chunks(
     cite verbatim evidence the same way they cite summary results.
     """
     rows = vector_db.search_transcript_chunks(uid, body.query, limit=body.limit)
-    rows = hydrate_chunk_texts(uid, rows)
+    rows = hydrate_chunk_texts(uid, rows, clock=clock_for_uid(uid))
     if not rows:
         return _ok("search_conversation_chunks", f"No transcript excerpts found matching '{body.query}'.")
     parts = []

@@ -27,7 +27,7 @@ EXP_002_ARMS: tuple[tuple[str, float], ...] = (
 EXP_002_TREATMENT_ARM = 'memory_v1'
 
 # Kill switch, following the production PostHog flag pattern (server-side,
-# keyed on Firebase uid, tri-state fail-closed — see ``utils/jit_rollout``).
+# keyed on Firebase uid, tri-state fail-closed).
 # Both flags absent/unknown/error ⇒ no enrollment and control chrome.
 EXP_002_FLAG_KEY = 'exp-002-desktop-identity-v1'
 EXP_002_KILL_SWITCH_FLAG_KEY = 'exp-002-desktop-identity-kill-v1'

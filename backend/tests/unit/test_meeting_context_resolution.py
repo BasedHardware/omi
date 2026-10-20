@@ -16,7 +16,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from models.calendar_context import CalendarMeetingContext, MeetingParticipant
+from models.calendar_context import CalendarMeetingContext, DevCalendarMeetingContext, MeetingParticipant
 from utils.conversations.meeting_context import (
     MIN_OVERLAP_PERCENTAGE,
     MIN_OVERLAP_SECONDS,
@@ -279,6 +279,42 @@ class TestResolveMeetingContextOrdering:
             screen=lambda: _context('screen', names=['OCR Person'], source='screen_activity'),
         )
         assert context.calendar_source == 'screen_activity'
+
+    def test_developer_api_context_merges_with_a_stored_meeting(self):
+        # from-segments sends its calendar context as the direct source. A stored meeting for the same window still
+        # wins the scalar fields, and the uploaded invitees it did not have are kept, deduplicated by name and email.
+        uploaded = DevCalendarMeetingContext(
+            calendar_event_id='evt-42',
+            title='Weekly sync with Acme',
+            participants=[MeetingParticipant(name='Ash'), MeetingParticipant(name='Ana', email='ana@acme.com')],
+            start_time=CONVERSATION_START,
+            duration_minutes=30,
+        ).to_context()
+        context = resolve_meeting_context(
+            direct=uploaded,
+            stored=lambda: _context('stored', names=['Ash'], source='macos_calendar'),
+        )
+
+        assert context.calendar_event_id == 'stored'
+        assert context.calendar_source == 'macos_calendar'
+        assert [(p.name, p.email) for p in context.participants] == [('Ash', None), ('Ana', 'ana@acme.com')]
+        assert [p.name for p in context.participants_by_source().expected_calendar] == ['Ash', 'Ana']
+
+    def test_developer_api_context_is_used_when_no_stored_meeting_exists(self):
+        uploaded = DevCalendarMeetingContext(
+            calendar_event_id='evt-42',
+            title='Weekly sync with Acme',
+            participants=[MeetingParticipant(name='Ana', email='ana@acme.com')],
+            start_time=CONVERSATION_START,
+            duration_minutes=30,
+        ).to_context()
+        context = resolve_meeting_context(direct=uploaded, stored=lambda: None)
+
+        assert context.calendar_event_id == 'evt-42'
+        assert context.title == 'Weekly sync with Acme'
+        assert context.calendar_source == 'developer_api'
+        # developer_api is calendar data, never a screen listing.
+        assert context.participants_by_source().observed_screen_listing is None
 
     def test_a_disabled_layer_is_never_called(self):
         calls: list[str] = []

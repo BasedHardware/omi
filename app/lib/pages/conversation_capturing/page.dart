@@ -1,3 +1,6 @@
+import 'package:omi/utils/other/temp.dart';
+import 'package:omi/ui/components/local_stt_recovery_notice.dart';
+import 'package:omi/pages/settings/transcription_settings_page.dart';
 import 'dart:async';
 
 import 'package:omi/utils/platform/platform_manager.dart';
@@ -13,9 +16,9 @@ import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/message_event.dart';
 import 'package:omi/backend/schema/person.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
+import 'package:omi/pages/held_audio/held_audio_views.dart';
 import 'package:omi/pages/capture/widgets/widgets.dart';
 import 'package:omi/pages/conversation_detail/widgets/name_speaker_sheet.dart';
-import 'package:omi/pages/conversations/widgets/capture_recovery_banner.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/device_provider.dart';
@@ -23,6 +26,7 @@ import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/people_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/utils/enums.dart';
+import 'package:omi/utils/constants.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/widgets/conversation_photo_image.dart';
@@ -36,11 +40,10 @@ import 'package:omi/widgets/photos_grid.dart';
 
 import 'package:omi/pages/conversations/capture_state_labels.dart';
 
-import 'capture_state_header.dart';
+import 'capture_recovery_status.dart';
 import 'package:omi/backend/http/api/speaker_labels.dart';
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/widgets/speaker_label_badge.dart';
-import 'widgets/carried_speaker_banner.dart';
 import 'widgets/speaker_suggestion_chip.dart';
 
 /// Switch the home IndexedStack to Home (the conversation list) *before* popping the capturing
@@ -66,7 +69,6 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
   final scaffoldKey = GlobalKey<ScaffoldState>();
   bool _mutePending = false;
   bool _rejectingSuggestion = false;
-  final Set<String> _closedCarriedSpeakers = {};
 
   @override
   void initState() {
@@ -110,9 +112,20 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
   /// Finish: the one stop. No confirmation: Finish is explicit, and it processes the conversation
   /// (a phone recording stops first; a pendant it paused resumes afterwards).
   Future<void> _stopConversation(CaptureProvider provider) async {
-    await provider.finishCapture();
+    final hadContent = provider.segments.isNotEmpty || provider.photos.isNotEmpty;
+    if (hadContent) {
+      await provider.finishCapture();
+      if (!mounted) return;
+      switchHomeToConversationsTab(context);
+    } else {
+      final source = provider.liveCaptureSource;
+      if (source == null || source == ConversationSource.phone.name) {
+        await provider.stopStreamRecording();
+      } else if (LiveCaptureCard.canPause(provider.recordingDevice, source: source) && !provider.isPaused) {
+        await provider.pauseCapture();
+      }
+    }
     if (!mounted) return;
-    switchHomeToConversationsTab(context);
     // A swipe back during the finish has already popped this route; it only stays mounted while it
     // animates out, and a pop then would take Home with it and leave the navigator empty.
     final route = ModalRoute.of(context);
@@ -124,6 +137,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
   /// is Paused, capture recovering on its own (a dropped socket, a mic stall) is Reconnecting, a
   /// terminal transcription failure or offline buffering is named as such, otherwise Listening.
   CaptureDisplayState _displayState(CaptureProvider provider, {required bool capturingPhotos}) {
+    if (provider.localSttFailure != null) return CaptureDisplayState.recording;
     final interruption = captureInterruption(
       interrupted: provider.recordingState == RecordingState.interrupted,
       readerPaused: provider.isPaused,
@@ -133,7 +147,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
       audioInterrupted: interruption == CaptureInterruption.micTaken,
       reconnecting: interruption == CaptureInterruption.recovering,
       paused: provider.isPaused || provider.isCallActive,
-      transcriptionUnavailable: provider.terminalTranscriptionFailure != null,
+      transcriptionUnavailable: provider.terminalTranscriptionFailure != null || provider.localSttFailure != null,
       bufferingFor: provider.customSttBufferingDuration,
       capturingPhotos: capturingPhotos,
     );
@@ -154,7 +168,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
         return Scaffold(
           key: scaffoldKey,
           backgroundColor: OmiColors.surface0,
-          appBar: ConversationStateAppBar(
+          appBar: CaptureWedgeAppBar(
             showStatus: effectivelyMuted || provider.pendantCaptureVerified,
             state: _displayState(provider, capturingPhotos: provider.photos.isNotEmpty),
             bufferingFor: provider.customSttBufferingDuration,
@@ -166,9 +180,14 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
           ),
           body: Column(
             children: [
-              const CaptureRecoveryBanner(),
+              const CaptureRecoveryStatus(),
+              const HeldAudioLiveBanner(),
+              if (provider.localSttFailure case final failure?)
+                LocalSttRecoveryNotice(
+                    failure: failure,
+                    onRetry: provider.retryLocalTranscription,
+                    onSetup: () => routeToPage(context, const TranscriptionSettingsPage())),
               _buildUnsyncedWalIndicator(provider),
-              ..._buildCarriedSpeakerBanner(provider),
               Expanded(
                 child: provider.segments.isEmpty && provider.photos.isEmpty
                     ? Center(
@@ -488,25 +507,6 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
   void _editSegmentSpeaker(TranscriptSegment segment, CaptureProvider provider) =>
       _nameSpeaker(segment.id, segment.speakerId, provider);
 
-  /// The first label Omi carried into this conversation from the user's answer earlier in the
-  /// same recording, until the user changes it or closes the note.
-  List<Widget> _buildCarriedSpeakerBanner(CaptureProvider provider) {
-    final people = context.watch<PeopleProvider?>()?.people ?? SharedPreferencesUtil().cachedPeople;
-    for (final segment in carriedSpeakerSegments(provider.segments)) {
-      final key = '${segment.speakerId}:${segment.personId}';
-      final person = personById(people, segment.personId);
-      if (person == null || _closedCarriedSpeakers.contains(key)) continue;
-      return [
-        CarriedSpeakerBanner(
-          name: person.name,
-          onChange: () => _editSegmentSpeaker(segment, provider),
-          onClose: () => setState(() => _closedCarriedSpeakers.add(key)),
-        ),
-      ];
-    }
-    return const [];
-  }
-
   /// "Someone Else…" on a suggestion is an answer too: tell Omi this voice is not that person,
   /// then let the user say who it is.
   Future<void> _rejectSuggestion(TranscriptSegment segment, Person person, CaptureProvider provider) async {
@@ -614,7 +614,19 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(name, style: OmiType.caption.copyWith(color: OmiColors.textSecondary)),
+                    if (!isUser &&
+                        segment.speakerId != omiSpeakerId &&
+                        (SpeakerLabelSource.isConfirmed(segment.speakerLabelSource) ||
+                            segment.speakerLabelSource == SpeakerLabelSource.auto))
+                      OmiButton.tertiary(
+                        key: ValueKey('edit_speaker_label_${segment.id}'),
+                        label: name,
+                        leading: SpeakerLabelBadge(source: segment.speakerLabelSource),
+                        size: OmiButtonSize.compact,
+                        onPressed: () => _editSegmentSpeaker(segment, provider),
+                      )
+                    else
+                      Text(name, style: OmiType.caption.copyWith(color: OmiColors.textSecondary)),
                     if (_pinnedSuggestion(segment, provider, people) case final suggested?)
                       SpeakerSuggestionChip(
                         key: ValueKey('suggestion_${segment.id}'),
@@ -644,13 +656,13 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
   }
 
   /// The live-capture empty state names only what this session can actually
-  /// produce, and swaps in a truthful state line when the transcript pipeline
-  /// is degraded instead of promising "waiting" forever (#14473): an
-  /// out-of-credits plan can never produce a transcript while waiting, a
-  /// terminal STT failure means the audio is only being saved (the shared
-  /// outage sentence — the app bar names the same moment the same way), an
-  /// offline device is waiting on the network, and `interrupted` means the
-  /// transcription socket dropped and is reconnecting.
+  /// produce. A transcription outage is stated once, by the recovery banner
+  /// (and the LocalSttRecoveryNotice, whose buttons are the point of it): an
+  /// out-of-credits plan, a terminal STT failure and a local STT failure all
+  /// get the truthful unavailable line here instead of copy that promises a
+  /// transcript while none can appear (#14473). An offline device is waiting
+  /// on the network, and `interrupted` means the transcription socket dropped
+  /// and is reconnecting.
   String _liveCaptureEmptyStateText(
     CaptureProvider provider, {
     required ConnectivityProvider connectivity,
@@ -659,6 +671,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
     required bool transcriptionInterrupted,
   }) {
     if (!provider.pendantCaptureVerified) return '';
+    if (provider.localSttFailure != null) return context.l10n.transcriptionUnavailableRecordingSaved;
     if (usage.isOutOfCredits) return context.l10n.transcriptionUnavailableRecordingSaved;
     if (provider.terminalTranscriptionFailure != null) {
       return context.l10n.transcriptionUnavailableRecordingContinues;

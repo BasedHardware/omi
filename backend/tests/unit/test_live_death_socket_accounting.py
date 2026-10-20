@@ -132,14 +132,14 @@ async def test_connected_terminal_soniox_death_uses_terminal_metric_not_connect_
     before = observed('soniox', 'provider_failure', 'connection_lost')
     terminal_before = terminal_count('soniox')
     fallback_before = fallback_count('soniox', 'connection_lost')
-    exhausted_before = CHAIN_EXHAUSTED._value.get()
+    exhausted_before = CHAIN_EXHAUSTED.labels(demand_cohort='ineligible')._value.get()
     assert receiver.host.request.websocket.client_state == WebSocketState.CONNECTED
     await receiver._monitor_stt_death()
     leg.finish()
     assert observed('soniox', 'provider_failure', 'connection_lost') == before + 1
     assert terminal_count('soniox') == terminal_before + 1
     assert fallback_count('soniox', 'connection_lost') == fallback_before
-    assert CHAIN_EXHAUSTED._value.get() == exhausted_before
+    assert CHAIN_EXHAUSTED.labels(demand_cohort='ineligible')._value.get() == exhausted_before
     # With reconnect disabled, ordinary terminal handling owns this leg.
     assert (
         RECONNECT.labels(provider='soniox', reason='connection_lost', outcome='connected')._value.get()

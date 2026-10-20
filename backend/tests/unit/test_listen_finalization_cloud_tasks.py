@@ -582,6 +582,82 @@ async def _inline_run_blocking(_executor, func, *args, **kwargs):
 
 
 @pytest.mark.anyio
+@pytest.mark.parametrize(('status', 'expected_code'), [('busy', 409), ('completed', 200)])
+@pytest.mark.parametrize('deadline', ['false', 'true'])
+async def test_sync_reprocess_response_preserves_status_and_logs_busy_without_ids(
+    monkeypatch, caplog, status, expected_code, deadline
+):
+    from utils.batch_pipeline import enrichment
+
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', deadline)
+
+    async def run(executor, func, *args, **kwargs):
+        expected = finalization_router.postprocess_executor if deadline == 'true' else finalization_router.sync_executor
+        assert executor is expected
+        return func(*args, **kwargs)
+
+    monkeypatch.setattr(finalization_router, 'run_blocking', run)
+    monkeypatch.setattr(enrichment, 'run_enrichment', MagicMock(return_value=status))
+    caplog.set_level(logging.INFO, logger=finalization_router.__name__)
+
+    response = await finalization_router.run_listen_finalization_job(
+        _Request({'kind': 'sync_reprocess', 'key': 'a' * 64, 'task_token': 'b' * 32}),
+        task_retry_count=0,
+    )
+
+    assert response.status_code == expected_code
+    assert json.loads(response.body) == {'status': status}
+    if status == 'busy':
+        messages = [record.getMessage() for record in caplog.records if record.levelno == logging.INFO]
+        assert messages == ['event=conversation_finalization_sync_reprocess outcome=busy']
+
+
+@pytest.mark.anyio
+async def test_worker_acknowledges_owner_contention_without_spending_retry_budget(monkeypatch):
+    monkeypatch.setattr(finalization_router, 'run_blocking', _inline_run_blocking)
+    monkeypatch.setattr(finalization_router, 'try_acquire_job_run_lock', lambda key: 'lock-token')
+    monkeypatch.setattr(finalization_router, 'release_job_run_lock', lambda key, token: None)
+    monkeypatch.setattr(finalization_router, 'should_skip_background_account_mutation', lambda uid: False)
+    monkeypatch.setattr(
+        jobs_db,
+        'claim_finalization_job',
+        lambda *a, **kw: {
+            'status': 'claimed',
+            'lease_epoch': 1,
+            'attempt_count': 4,
+        },
+    )
+    monkeypatch.setattr(
+        jobs_db,
+        'get_finalization_job',
+        lambda job_id: {
+            'uid': 'uid-1',
+            'conversation_id': 'conversation-1',
+            'attempt_count': 4,
+        },
+    )
+    monkeypatch.setattr(finalization_router, 'get_listen_finalization_tasks_max_attempts_for_worker', lambda: 5)
+    monkeypatch.setattr(
+        finalization_router,
+        'finalize_persisted_conversation',
+        AsyncMock(
+            return_value=ConversationFinalizationDisposition.deferred,
+        ),
+    )
+    retry, complete = AsyncMock(), MagicMock()
+    monkeypatch.setattr(finalization_router, '_retry_or_dead_letter', retry)
+    monkeypatch.setattr(jobs_db, 'mark_finalization_completed', complete)
+    response = await finalization_router.run_listen_finalization_job(
+        _Request({'job_id': 'job-1', 'dispatch_generation': 1}),
+        task_retry_count=99,
+    )
+    assert response.status_code == 200
+    assert json.loads(response.body) == {'status': 'deferred'}
+    retry.assert_not_called()
+    complete.assert_not_called()
+
+
+@pytest.mark.anyio
 async def test_worker_retries_processing_failure_before_final_attempt(monkeypatch):
     monkeypatch.setattr(finalization_router, 'run_blocking', _inline_run_blocking)
     monkeypatch.setattr(finalization_router, 'try_acquire_job_run_lock', lambda key: 'lock-token')
@@ -2182,7 +2258,10 @@ async def test_finalizer_completes_when_an_app_permanently_rejects_the_delivery(
         ('claimed', False, True, True, False),
         ('claimed', False, False, False, False),
         ('fenced', False, False, True, False),
-        ('completed', False, False, True, False),
+        ('completed', False, False, True, True),
+        ('completed', True, False, True, False),
+        ('completed', False, True, True, False),
+        ('completed', False, False, False, False),
     ],
 )
 @pytest.mark.parametrize('terminal', [False, True])
@@ -2210,6 +2289,7 @@ async def test_finalizer_summary_vector_requires_visible_structure_and_winning_c
 
     outcome = 'skipped_stale' if vector_case == 'stale' else 'error'
     before = counter.labels(outcome=outcome)._value.get()
+    before_error = counter.labels(outcome='error')._value.get()
     latest = SimpleNamespace(**vars(conversation))
     if vector_case == 'stale' and structured:
         latest.structured = SimpleNamespace(title='New summary revision')
@@ -2270,13 +2350,24 @@ async def test_finalizer_summary_vector_requires_visible_structure_and_winning_c
         if claim_status == 'fenced'
         else ConversationFinalizationDisposition.completed
     )
-    if emits and vector_case != 'stale':
+    if claim_status == 'completed':
+        # Re-finalization path: guards only (no stale compare). The fail-soft
+        # wrapper swallows embedding failures, so vector_case='stale' (unpatched
+        # real embedding under the hermetic stub) ends in outcome='error' with
+        # no vector call, and the disposition still completes.
+        if emits and vector_case != 'stale':
+            vector.assert_called_once_with('uid-1', latest)
+            if vector_case != 'success':
+                assert counter.labels(outcome='error')._value.get() == before_error + 1
+        else:
+            vector.assert_not_called()
+    elif emits and vector_case != 'stale':
         vector.assert_called_once_with('uid-1', latest)
         assert events == ['claim', 'vector']
     else:
         vector.assert_not_called()
 
-    if emits and vector_case != 'success':
+    if emits and vector_case != 'success' and not (claim_status == 'completed' and vector_case == 'stale'):
         assert counter.labels(outcome=outcome)._value.get() == before + 1
     assert 'processing_failed' not in caplog.text
     assert 'private provider detail' not in caplog.text

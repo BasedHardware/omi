@@ -181,7 +181,10 @@ NOW = datetime(2026, 6, 11, tzinfo=timezone.utc)
 UID = "user-1"
 
 
-def test_memory_list_has_one_auth_dependency_and_uses_its_authorized_uid():
+@pytest.mark.parametrize('budget_enabled', [True, False])
+@pytest.mark.parametrize('sort', ['created_desc', 'scoring_desc'])
+def test_memory_list_has_one_auth_dependency_and_uses_its_authorized_uid(monkeypatch, budget_enabled, sort):
+    monkeypatch.setenv('OMI_MCP_MEMORY_LIST_BUDGET_ENABLED', 'true' if budget_enabled else 'false')
     route = next(
         route
         for route in rest.router.routes
@@ -195,16 +198,31 @@ def test_memory_list_has_one_auth_dependency_and_uses_its_authorized_uid():
     authorization = SimpleNamespace(allowed=True)
     memory_service = MagicMock()
     memory_service.read.return_value = []
+    shared_budget = rest.list_read_budget_for_request(None, route='mcp-memories')
     with (
+        patch.object(rest, 'list_read_budget_for_request', return_value=shared_budget) as make_budget,
         patch.object(rest, "authorize_memory_external_default_memory_read", return_value=authorization) as authorize,
         # The list now reads through the shared handler core, which binds
         # MemoryService in the handler module rather than the router.
         patch.object(sse_memories, "MemoryService", return_value=memory_service),
     ):
-        assert rest.get_memories(SimpleNamespace(headers={}), auth_context=auth_context) == []
+        assert (
+            rest.get_memories(
+                SimpleNamespace(headers={}),
+                auth_context=auth_context,
+                sort=sort,
+                offset=1 if sort == 'scoring_desc' else 0,
+            )
+            == []
+        )
 
     authorize.assert_called_once_with(auth_context, db_client=rest.db)
-    memory_service.read.assert_called_once_with("auth-user", limit=100, offset=0)
+    if budget_enabled and sort != 'scoring_desc':
+        make_budget.assert_called_once_with(None, route='mcp-memories', owner_uid='auth-user', context=auth_context)
+        memory_service.read.assert_called_once_with('auth-user', limit=5000, offset=0, budget=shared_budget)
+    else:
+        make_budget.assert_not_called()
+        memory_service.read.assert_called_once_with('auth-user', limit=100, offset=0)
 
 
 async def _run_blocking_inline(_executor, func, *args, **kwargs):
@@ -776,37 +794,6 @@ def test_authorize_request_rejects_legacy_omi_client_id():
                 'a' * 64,
                 'S256',
             )
-
-
-def test_mcp_oauth_authorize_rejects_non_qa_uid_before_grant_write(monkeypatch):
-    monkeypatch.setenv('OMI_JIT_QA_AUTH_ONLY', 'true')
-    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
-    monkeypatch.setenv('GOOGLE_CLOUD_PROJECT', 'based-hardware-dev')
-    monkeypatch.setenv('OMI_JIT_QA_UID_ALLOWLIST', 'qa-user')
-
-    async def inline_run_blocking(_executor, function, *args, **kwargs):
-        return function(*args, **kwargs)
-
-    with (
-        patch.object(sse_oauth, '_validate_authorize_request', return_value=({}, ['memories.read'])),
-        patch.object(sse.firebase_admin.auth, 'verify_id_token', return_value={'uid': 'other-user'}),
-        patch.object(sse_oauth, 'run_blocking', inline_run_blocking),
-    ):
-        with pytest.raises(HTTPException) as exc:
-            asyncio.run(
-                sse.mcp_authorize_consent(
-                    response_type='code',
-                    client_id='omi-chatgpt-prod',
-                    redirect_uri='https://chatgpt.com/connector_platform_oauth_redirect',
-                    resource=sse.MCP_RESOURCE_URL,
-                    firebase_id_token='token',
-                    state='state',
-                    scope='memories.read',
-                    code_challenge='a' * 64,
-                    code_challenge_method='S256',
-                )
-            )
-        assert exc.value.status_code == 403
 
 
 def test_legacy_api_key_helper_rejects_oauth_tokens():

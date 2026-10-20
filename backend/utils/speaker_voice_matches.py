@@ -20,6 +20,7 @@ from utils.executors import db_executor, run_blocking, storage_executor
 from utils.manual_speaker_assignments import manual_rejected_speakers
 from utils.other.storage import download_speaker_embedding_cache
 from utils.speaker_permissions import named_speaker_prompts_allowed
+from utils.speaker_tag_prompts.keys import ignored_voice_key
 from utils.speaker_tag_prompts.selection import MAX_CLIP_SECONDS, speaker_id_of
 from utils.stt.conversation_speakers import (
     MIN_EMBED_SECONDS,
@@ -104,7 +105,7 @@ def _conversation_matches(
         if speaker_id >= 0
         and speaker_id != OMI_SPEAKER_ID_SENTINEL
         and str(speaker_id) not in decided_speakers
-        and voice_profiles_db.ignored_voice_key(conversation_id, speaker_id) not in ignored
+        and ignored_voice_key(conversation_id, speaker_id) not in ignored
         and all(
             not segment.get('is_user') and segment.get('person_id') is None and segment['id'] not in decided_segments
             for segment in segments

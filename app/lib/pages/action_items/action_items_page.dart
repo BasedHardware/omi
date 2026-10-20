@@ -354,7 +354,11 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       destructive: true,
     );
     if (!shouldClear) return;
-    await Future.wait(items.map((item) => provider.deleteActionItem(item)));
+    final deleted = await Future.wait(items.map(provider.deleteActionItem));
+    if (!mounted || deleted.every((ok) => ok)) return;
+    // The provider has already put each rejected row back; say so, as a single delete does
+    // (task_delete_undo.dart), instead of letting the rows reappear in silence.
+    OmiFeedback.error(context, l10n.failedToDeleteActionItem);
   }
 
   int _getIndentLevel(ActionItemWithMetadata item) {
@@ -1084,8 +1088,9 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
 
   Future<void> _toggleCompleted(ActionItemsProvider provider, ActionItemWithMetadata item) async {
     OmiHaptics.light();
-    await provider.updateActionItemState(item, !item.completed);
-    if (!item.completed) _onActionItemCompleted();
+    final saved = await provider.updateActionItemState(item, !item.completed);
+    if (!saved && mounted) OmiFeedback.error(context, context.l10n.failedToUpdateActionItem);
+    if (saved && !item.completed) _onActionItemCompleted();
   }
 
   /// Long-press menu: the same shape as memories and conversations, with Select for multi-select

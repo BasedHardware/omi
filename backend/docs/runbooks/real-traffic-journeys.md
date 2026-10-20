@@ -194,7 +194,7 @@ deployment health, not read as zero traffic.
 Both Pusher release workflows verify the live Grafana provisioning contract
 before any image publication or promotion. This requires the protected
 `MONITOR_GRAFANA_TOKEN` secret (dest repo secret for `monitor.omiapi.com`,
-prod environment secret for `monitor.omi.me`; never the TV `GRAFANA_TOKEN`)
+prod environment secret for `monitor.omi.me`; never the retired TV-instance credential)
 and proves the exact memory-admission and capture-outcome
 rule identities and expressions, unpaused state, healthy Prometheus datasource,
 current healthy Pusher/backend-listen scrape targets, and Telegram contact-point
@@ -266,3 +266,25 @@ Known blind spots: a server can only observe the SSE/WS boundary it controls,
 not client rendering; process restarts may defer a terminal metric until the
 durable worker/reconciler resumes; and a durable job still within its bounded
 reconcile delay is deliberately nonterminal rather than an immediate failure.
+
+## Durable queue age sampling
+
+The periodic sampler reads metadata only, at most five pages of 200 documents
+(1,000 rows) per declared ready status, in implicit document-name order. Other
+event types and future retries/live leases are skipped in process. Reaching
+the cap makes the sample unknown, including when skipped rows could hide due
+work beyond the cap. An empty result proves zero only after all statuses are
+exhausted without metadata failures. A positive uncapped sample can still be
+a lower bound when another document could not be inspected.
+
+Unknown samples remove that queue's previous age series and set
+`omi_queue_oldest_ready_sample_unknown{queue}` to 1; known samples reset it to
+0. The companion has one zero-initialized series per declared queue.
+`omi-queue-oldest-ready` alerts after five minutes of age over six hours,
+missing age telemetry, or an unknown sample.
+
+Memory outbox rows prefer `created_at`, then `queued_at` (vector repair),
+`lease_expires_at`, `claimed_at`, and `available_at`. Canonical memory events
+lack `created_at`; lease expiry, claim time, or current availability therefore
+provide a conservative lower bound on their original age. Live leases and
+future availability are still excluded before age selection.

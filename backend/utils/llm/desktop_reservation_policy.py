@@ -5,13 +5,22 @@ import logging
 import os
 import re
 from collections.abc import Mapping, Callable, Awaitable
+from typing import Any
 
 from fastapi import Response
 
 from prometheus_client import Counter
 
-from config.vertex_reservations import State, policy, RESERVATIONS, ENFORCEMENT_ENV
+from config.vertex_reservations import (
+    State,
+    policy,
+    RESERVATIONS,
+    ENFORCEMENT_ENV,
+    INACTIVE_DESTINATIONS,
+    product_policy_lane,
+)
 from utils.llm.vertex_reservation_state import effective_states
+from utils.llm.vertex_policy_metrics import observe_decision
 from utils.llm.desktop_gemini_gateway import _sanitize  # pyright: ignore[reportPrivateUsage]
 
 logger = logging.getLogger(__name__)
@@ -96,8 +105,14 @@ def desktop_lane(headers: Mapping[str, str], payload: object) -> str:
         declarations = tool.get('functionDeclarations', tool.get('function_declarations', []))
         if isinstance(declarations, list):
             names.update(d.get('name') for d in declarations if isinstance(d, dict) and isinstance(d.get('name'), str))
-    platform = headers.get('x-app-platform', '').lower()
-    tagged = headers.get('x-omi-lane', '')
+    platform = headers.get('x-app-platform', headers.get('x-omi-client-platform', '')).lower()
+    if not platform:
+        platform = (
+            'windows'
+            if headers.get('user-agent', '').lower().startswith('omi-windows/')
+            else 'macos' if identified_macos_build(headers) is not None else ''
+        )
+    tagged = headers.get('x-omi-lane', '').strip().lower()
     # Shipped Windows has the same tools, but no workload header. Do not infer
     # its feature from a screenshot alone. A future lane tag refines the row.
     if TASK_TOOLS <= names:
@@ -109,33 +124,26 @@ def desktop_lane(headers: Mapping[str, str], payload: object) -> str:
             headers.get('x-omi-workload', '') == 'extraction' or tagged == 'task_extraction'
         ):
             return 'macos_legacy_tasks'
-        return 'desktop_other'
-    tags = {'focus': 'windows_focus', 'dictation': 'macos_dictation', 'suggestions': 'macos_suggestions'}
-    return tags.get(tagged, 'desktop_other')
+        return product_policy_lane(platform, tagged)
+    # Older clients did not send a platform header on these three tagged paths.
+    if not platform:
+        platform = 'windows' if tagged == 'focus' else 'macos' if tagged in {'dictation', 'suggestions'} else ''
+    return product_policy_lane(platform, tagged)
 
 
 def admission(model: str, state: State, lane: str, mode: str, *, bucket: str = 'unidentified') -> str:
     action = policy(model, state, lane=lane).kind
-    if action == 'refuse' and (
-        mode.strip().lower() == 'observe' or positive_build(os.getenv(MIN_CAPABLE_BUILD_ENV, '').strip()) is None
+    if (
+        action == 'refuse'
+        and state != State.INACTIVE
+        and (mode.strip().lower() == 'observe' or positive_build(os.getenv(MIN_CAPABLE_BUILD_ENV, '').strip()) is None)
     ):
         action = 'would_refuse'
+    observe_decision(lane, action)
     POLICY_ACTIONS.labels(
         model if model in {'gemini-2.5-flash', 'gemini-3.8-flash'} else 'other',
         state.value,
-        (
-            lane
-            if lane
-            in {
-                'macos_legacy_tasks',
-                'windows_tasks',
-                'windows_focus',
-                'macos_dictation',
-                'macos_suggestions',
-                'desktop_other',
-            }
-            else 'other'
-        ),
+        (lane if lane in INACTIVE_DESTINATIONS else 'other'),
         action,
         bucket,
     ).inc()
@@ -143,19 +151,7 @@ def admission(model: str, state: State, lane: str, mode: str, *, bucket: str = '
         'vertex_reservation_policy model=%s state=%s lane=%s action=%s build_bucket=%s',
         model if model in {'gemini-2.5-flash', 'gemini-3.8-flash'} else 'other',
         state.value,
-        (
-            lane
-            if lane
-            in {
-                'macos_legacy_tasks',
-                'windows_tasks',
-                'windows_focus',
-                'macos_dictation',
-                'macos_suggestions',
-                'desktop_other',
-            }
-            else 'other'
-        ),
+        (lane if lane in INACTIVE_DESTINATIONS else 'other'),
         action,
         bucket,
     )
@@ -176,7 +172,14 @@ def refusal_body(*, streaming: bool) -> bytes:
                                 'name': 'no_task_found',
                                 'args': {'context_summary': '', 'current_activity': ''},
                             }
-                        }
+                        },
+                        # New screen-task clients decode text JSON, while old
+                        # tool-loop clients consume the terminal function call.
+                        {
+                            'text': json.dumps(
+                                {'screen_kind': 'other', 'context_summary': '', 'current_activity': '', 'tasks': []}
+                            )
+                        },
                     ],
                 },
                 'finishReason': 'STOP',
@@ -185,6 +188,63 @@ def refusal_body(*, streaming: bool) -> bytes:
     }
     raw = json.dumps(payload, separators=(',', ':'))
     return (f'data: {raw}\n\n' if streaming else raw).encode()
+
+
+def luna_unsupported_shape(payload: Mapping[str, Any]) -> bool:
+    """Reject Gemini-only media/tools instead of silently dropping their meaning.
+
+    The shipped screen extractor's JPEG + text + JSON schema is supported.
+    This is a wire-shape check, not a model quality or live-availability claim.
+    """
+    config = payload.get('generationConfig') or payload.get('generation_config') or {}
+    if isinstance(config, Mapping):
+        modalities = config.get('responseModalities', config.get('response_modalities', ['TEXT']))
+        if modalities != ['TEXT']:
+            return True
+    tools = payload.get('tools', [])
+    if not isinstance(tools, list):
+        return True
+    for tool in tools:
+        if not isinstance(tool, Mapping) or not any(
+            k in tool for k in ('functionDeclarations', 'function_declarations')
+        ):
+            return True
+        if set(tool) - {'functionDeclarations', 'function_declarations'}:
+            return True
+    contents = payload.get('contents', [])
+    if not isinstance(contents, list):
+        return True
+    instruction = payload.get('systemInstruction') or payload.get('system_instruction')
+    if isinstance(instruction, Mapping):
+        parts = instruction.get('parts', [])
+        if not isinstance(parts, list) or any(not isinstance(p, Mapping) or 'text' not in p for p in parts):
+            return True
+        contents = [*contents, instruction]
+    for content in contents:
+        if not isinstance(content, Mapping):
+            return True
+        parts = content.get('parts', [])
+        if not isinstance(parts, list):
+            return True
+        for part in parts:
+            if not isinstance(part, Mapping):
+                return True
+            if 'fileData' in part or 'file_data' in part:
+                return True
+            for key in ('inlineData', 'inline_data'):
+                if key not in part:
+                    continue
+                inline = part[key]
+                if not isinstance(inline, Mapping) or inline.get('mimeType', inline.get('mime_type', '')) not in {
+                    'image/jpeg',
+                    'image/png',
+                    'image/webp',
+                    'image/gif',
+                }:
+                    return True
+            if not any(k in part for k in ('text', 'functionCall', 'functionResponse', 'inlineData', 'inline_data')):
+                return True
+    return False
 
 
 async def should_refuse(
@@ -198,13 +258,24 @@ async def should_refuse(
 ) -> bool:
     if byok or model not in RESERVATIONS or action not in {'generateContent', 'streamGenerateContent'}:
         return False
+    # Inspect the original wire before the bridge drops Gemini-only fields.
     payload = json.loads(_sanitize(body, action))
-    states = effective_states(await refresh(), os.environ, admission=True)
+    observed = await refresh()
+    cutover = observed.get('gemini-2.5-flash') == State.INACTIVE or (
+        observed.get('gemini-3.8-flash') == State.ACTIVE and observed.get('gemini-2.5-flash') != State.ACTIVE
+    )
+    if cutover and luna_unsupported_shape(json.loads(body)):
+        observe_decision(desktop_lane(headers, payload), 'refuse')
+        return True
+    states = effective_states(observed, os.environ, admission=True)
+    if cutover:
+        states['gemini-2.5-flash'] = State.INACTIVE
     lane = desktop_lane(headers, payload)
+    policy_model = 'gemini-2.5-flash' if cutover else model
     return (
         admission(
-            model,
-            states.get(model, State.UNKNOWN),
+            policy_model,
+            states.get(policy_model, State.UNKNOWN),
             lane,
             os.getenv(ENFORCEMENT_ENV, 'enforce'),
             bucket=build_bucket(identified_macos_build(headers)),

@@ -82,6 +82,10 @@ ingress:
   #      - chart-example.local
 
 env:
+  - name: PARAKEET_PACKING_ENABLED
+    value: "false"
+  - name: PARAKEET_EXPLICIT_CUDA_GRAPHS
+    value: "false"
   - name: HUGGINGFACE_TOKEN
     valueFrom:
       secretKeyRef:
@@ -128,7 +132,7 @@ env:
     # of newly arrived live work in the worker's FIFO queue.
     value: "1"
   - name: HOSTED_SPEAKER_EMBEDDING_API_URL
-    value: "http://prod-omi-diarizer.prod-omi-backend.svc.cluster.local:8080"
+    value: "http://172.16.160.20/diarizer"
 
 terminationGracePeriodSeconds: 150
 
@@ -186,9 +190,14 @@ prometheus-adapter:
 # This section is for setting up autoscaling more information can be found here: https://kubernetes.io/docs/concepts/workloads/autoscaling/
 autoscaling:
   enabled: true
+  # Dark: one-line activation after mixed-load live-latency qualification.
+  # Roll back to false to restore the existing External Value latency guard.
+  workloadOnly: false
+  # The ratified 2 active requests / 35% GPU targets trigger scale-out;
+  # they are not hard per-pod capacity. Five to seven pods carry the 7-day peak.
+  # Floor 3 controls idle cost; cap 12 gives the demand-routing ramp headroom.
   minReplicas: 3
-  # 7 = the two L4 pools' combined node ceiling (parakeet-pool 4 + parakeet-pool-b 3).
-  maxReplicas: 7
+  maxReplicas: 12
   behavior:
     scaleUp:
       stabilizationWindowSeconds: 0
@@ -196,14 +205,14 @@ autoscaling:
       - type: Pods
         value: 1
         # Request the next replica sooner. A new GPU pod is not serving until
-        # startup succeeds. Cold starts still need the three-pod floor and fallback.
+        # startup succeeds. Cold starts still need the qualified floor and fallback.
         periodSeconds: 60
     scaleDown:
-      stabilizationWindowSeconds: 600
+      stabilizationWindowSeconds: 900
       policies:
       - type: Pods
         value: 1
-        periodSeconds: 600
+        periodSeconds: 900
   # Live window admission refuses new sessions at ~3 active requests per pod and ~27% GPU
   # (measured 2026-10-01 evening peak: 6.7% refusals while the old 20 / 70 targets never
   # fired). Scale before the live gate refuses, not after.
@@ -212,6 +221,9 @@ autoscaling:
   # Retain these targets until delivery and GPU telemetry qualify higher ones.
   requestsPerPod: 2
   targetGPUUtilization: 35
+  # Adapter exports seconds. HPA takes the highest metric recommendation.
+  # This is a scale-out guard; lead must separately qualify POST p95 <3s.
+  requestLatencyP99: 3
 
 # Additional volumes on the output Deployment definition.
 volumes: []
@@ -255,3 +267,8 @@ strategy:
   rollingUpdate:
     maxUnavailable: 1
     maxSurge: 0
+
+# Route activation does not switch callers. Install the shared Gateway first.
+gateway:
+  enabled: true
+  name: prod-omi-internal-gateway

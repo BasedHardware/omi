@@ -117,5 +117,60 @@ rules:
       resources:
         overrides:
           namespace: { resource: "namespace" }
+  custom:
+  - seriesQuery: parakeet_active_streams{namespace!="",pod!=""}
+    resources:
+      overrides:
+        namespace:
+          resource: namespace
+        pod:
+          resource: pod
+    name:
+      as: parakeet_active_streams
+    metricsQuery: sum(parakeet_active_streams{<<.LabelMatchers>>}) by (<<.GroupBy>>)
+  - seriesQuery: parakeet_active_batch_requests{namespace!="",pod!=""}
+    resources:
+      overrides:
+        namespace:
+          resource: namespace
+        pod:
+          resource: pod
+    name:
+      as: parakeet_active_batch_requests
+    metricsQuery: sum(parakeet_active_batch_requests{<<.LabelMatchers>>}) by (<<.GroupBy>>)
+  - seriesQuery: parakeet_active_streams{namespace!="",pod!=""}
+    resources:
+      overrides:
+        namespace:
+          resource: namespace
+        pod:
+          resource: pod
+    name:
+      as: parakeet_active_requests_total
+    metricsQuery: (sum(parakeet_active_streams{<<.LabelMatchers>>}) by (<<.GroupBy>>)
+      + sum(parakeet_active_batch_requests{<<.LabelMatchers>>}) by (<<.GroupBy>>))
+  - seriesQuery: parakeet_batch_lane_oldest_pending_seconds{namespace!="",pod!="",lane="live"}
+    resources:
+      overrides:
+        namespace:
+          resource: namespace
+        pod:
+          resource: pod
+    name:
+      as: parakeet_live_queue_age_seconds
+    metricsQuery: max(parakeet_batch_lane_oldest_pending_seconds{<<.LabelMatchers>>,lane="live"})
+      by (<<.GroupBy>>)
+  - seriesQuery: parakeet_batch_lane_oldest_pending_seconds{namespace!="",pod!="",lane="backfill"}
+    resources:
+      overrides:
+        namespace:
+          resource: namespace
+        pod:
+          resource: pod
+    name:
+      as: parakeet_backfill_queue_age_seconds
+    metricsQuery: max(parakeet_batch_lane_oldest_pending_seconds{<<.LabelMatchers>>,lane="backfill"})
+      by (<<.GroupBy>>)
+
 extraArguments:
   - --metrics-max-age=5m

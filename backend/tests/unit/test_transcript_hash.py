@@ -643,3 +643,33 @@ def test_from_segments_persists_canonical_segment_not_raw_request_fields() -> No
     assert 'stored_transcript_segment(' in source
     assert 'person_id=seg.person_id' not in source
     assert "speaker=seg.speaker or 'SPEAKER_00'" not in source
+
+
+def test_phone_engine_provenance_survives_from_segments_storage():
+    segment = stored_transcript_segment(
+        {
+            'text': 'A synthetic example.',
+            'speaker': 'SPEAKER_00',
+            'speaker_id': 0,
+            'is_user': False,
+            'person_id': None,
+            'start': 0.0,
+            'end': 2.0,
+            'stt_provider': 'on_device:speech_analyzer',
+        }
+    )
+    assert segment is not None
+    assert segment.stt_provider == 'on_device:speech_analyzer'
+    assert segment.is_user is False
+    assert segment.person_id is None
+    assert transcript_sha256([segment]) == transcript_sha256(
+        [
+            {
+                'text': 'A synthetic example.',
+                'speaker': 'SPEAKER_00',
+                'speaker_id': 0,
+                'is_user': False,
+                'person_id': None,
+            }
+        ]
+    )

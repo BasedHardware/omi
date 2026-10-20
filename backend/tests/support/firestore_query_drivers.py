@@ -220,6 +220,13 @@ def _redis_patches(stack: ExitStack) -> None:
         name = getattr(module, '__name__', '') or ''
         if not (name == 'database' or name.startswith('database.') or name.startswith('utils')):
             continue
+        if name == 'database.redis_db':
+            # Lazy best-effort caches now construct bounded clients at call time.
+            # Keep those clients on the same cache-miss seam as the global client;
+            # the socket blocker below must continue to reject every real attempt.
+            stack.enter_context(
+                unittest.mock.patch.object(module, 'create_bounded_redis_client', return_value=_MissRedis())
+            )
         for attr, value in list(vars(module).items()):
             module_name = type(value).__module__ or ''
             if module_name.startswith('redis'):
@@ -343,12 +350,20 @@ class DriverResult:
 
 
 def import_function(dotted: str) -> Callable[..., Any]:
-    module_name, attr_path = dotted.rsplit('.', 1)
-    module = importlib.import_module(module_name)
-    target: Any = module
-    for part in attr_path.split('.'):
-        target = getattr(target, part)
-    return target
+    # Query owners may be repository classes as well as module functions.
+    parts = dotted.split('.')
+    for split in range(len(parts) - 1, 0, -1):
+        module_name = '.'.join(parts[:split])
+        try:
+            target = importlib.import_module(module_name)
+        except ModuleNotFoundError as error:
+            if error.name != module_name:
+                raise
+            continue
+        for part in parts[split:]:
+            target = getattr(target, part)
+        return target
+    raise ImportError(dotted)
 
 
 def _function_module(dotted: str) -> str:

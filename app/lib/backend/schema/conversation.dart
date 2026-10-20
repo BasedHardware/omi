@@ -366,6 +366,8 @@ class ConversationAudioInfo {
 
 class ServerConversation {
   final String id;
+  final Map<String, dynamic>? onDeviceProvenance;
+  final Map<String, dynamic>? clientProcessing;
   final DateTime createdAt;
   final DateTime? startedAt;
   final DateTime? finishedAt;
@@ -413,6 +415,7 @@ class ServerConversation {
   /// reprocess can still succeed. Absent (false) on every other row, including rows where the
   /// model ran and found nothing to summarize.
   final bool summaryRetryable;
+  final bool processingDeferred;
 
   /// Coverage projected from the server capture receipt; absent on legacy rows.
   final String? captureCoverage;
@@ -423,6 +426,8 @@ class ServerConversation {
   ServerConversation({
     required this.id,
     required this.createdAt,
+    this.onDeviceProvenance,
+    this.clientProcessing,
     required this.structured,
     this.startedAt,
     this.finishedAt,
@@ -449,6 +454,7 @@ class ServerConversation {
     this.captureGroup,
     this.speakerResolution,
     this.summaryRetryable = false,
+    this.processingDeferred = false,
     this.captureCoverage,
   });
 
@@ -489,6 +495,10 @@ class ServerConversation {
       siriVisibilityValid: json['siri_visibility_valid'] != false &&
           (json['visibility'] == null || const ['private', 'shared', 'public'].contains(json['visibility'])),
       matchSnippets: snippets,
+      processingDeferred: json['processing_deferred'] == true,
+      onDeviceProvenance:
+          json['on_device_provenance'] is Map ? Map<String, dynamic>.from(json['on_device_provenance']) : null,
+      clientProcessing: json['client_processing'] is Map ? Map<String, dynamic>.from(json['client_processing']) : null,
     );
   }
 
@@ -498,11 +508,16 @@ class ServerConversation {
     Geolocation? geolocation,
     bool deleted = false,
     bool siriVisibilityValid = true,
+    bool? processingDeferred,
     List<TranscriptMatchSnippet>? matchSnippets,
+    Map<String, dynamic>? onDeviceProvenance,
+    Map<String, dynamic>? clientProcessing,
   }) {
     final snippets = matchSnippets ?? const <TranscriptMatchSnippet>[];
     return ServerConversation(
       id: generated.id,
+      onDeviceProvenance: onDeviceProvenance,
+      clientProcessing: clientProcessing ?? generated.clientProcessing?.toJson(),
       createdAt: generated.createdAt,
       structured: structured ?? Structured.fromGenerated(generated.structured),
       startedAt: generated.startedAt,
@@ -540,6 +555,7 @@ class ServerConversation {
       speakerResolution:
           generated.speakerResolution == null ? null : ConversationSpeakers.fromGenerated(generated.speakerResolution!),
       summaryRetryable: generated.summaryRetryable == true,
+      processingDeferred: processingDeferred ?? generated.toJson()['processing_deferred'] == true,
       captureCoverage: generated.captureCoverage,
     );
   }
@@ -547,6 +563,8 @@ class ServerConversation {
   Map<String, dynamic> toJson() {
     return {
       'id': id,
+      if (onDeviceProvenance != null) 'on_device_provenance': onDeviceProvenance,
+      if (clientProcessing != null) 'client_processing': clientProcessing,
       'created_at': createdAt.toUtc().toIso8601String(),
       'structured': structured.toJson(),
       'started_at': startedAt?.toUtc().toIso8601String(),
@@ -576,6 +594,7 @@ class ServerConversation {
       'capture_group': captureGroup?.toJson(),
       'speaker_resolution': speakerResolution?.toJson(),
       if (summaryRetryable) 'summary_retryable': true,
+      if (processingDeferred) 'processing_deferred': true,
       if (captureCoverage != null) 'capture_coverage': captureCoverage,
     };
   }
@@ -813,6 +832,7 @@ class SyncJobStatusResponse {
   final String? lane;
   final String? reasonCode;
   final int? retryAfter;
+  final int? pollAfterMs;
 
   SyncJobStatusResponse({
     required this.jobId,
@@ -826,28 +846,15 @@ class SyncJobStatusResponse {
     this.lane,
     this.reasonCode,
     this.retryAfter,
+    this.pollAfterMs,
   });
 
   bool get isTerminal => status == 'completed' || status == 'partial_failure' || status == 'failed';
   bool get isSuccess => status == 'completed';
   bool get isPartialFailure => status == 'partial_failure';
 
-  factory SyncJobStatusResponse.fromJson(Map<String, dynamic> json) {
-    final generated = wire.GeneratedSyncJobStatusResponse.fromJson(json);
-    return SyncJobStatusResponse(
-      jobId: generated.jobId,
-      status: generated.status,
-      totalSegments: generated.totalSegments,
-      processedSegments: generated.processedSegments,
-      successfulSegments: generated.successfulSegments,
-      failedSegments: generated.failedSegments,
-      result: generated.result == null ? null : SyncLocalFilesResponse.fromGenerated(generated.result!),
-      error: generated.error,
-      lane: json['lane'] as String?,
-      reasonCode: json['reason_code'] as String?,
-      retryAfter: (json['retry_after'] as num?)?.toInt(),
-    );
-  }
+  factory SyncJobStatusResponse.fromJson(Map<String, dynamic> json) =>
+      SyncJobStatusResponse.fromGenerated(wire.GeneratedSyncJobStatusResponse.fromJson(json));
 
   factory SyncJobStatusResponse.fromGenerated(wire.GeneratedSyncJobStatusResponse generated) {
     return SyncJobStatusResponse(
@@ -859,6 +866,10 @@ class SyncJobStatusResponse {
       failedSegments: generated.failedSegments,
       result: generated.result == null ? null : SyncLocalFilesResponse.fromGenerated(generated.result!),
       error: generated.error,
+      lane: generated.lane,
+      reasonCode: generated.reasonCode,
+      retryAfter: generated.retryAfter,
+      pollAfterMs: generated.pollAfterMs,
     );
   }
 }

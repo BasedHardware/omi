@@ -343,6 +343,7 @@ async def test_size_rejection_naming_another_document_is_not_a_close(caplog):
         (ValueError('Failed to commit transaction in 5 attempts.'), 'contention'),
         (Aborted('Too much contention on these documents. Please try again.'), 'contention'),
         (InvalidArgument('The referenced transaction has expired or is no longer valid.'), 'expired_transaction'),
+        (Aborted('409 The referenced transaction has expired or is no longer valid.'), 'expired_transaction'),
         (ValueError('something else'), 'other'),
     ],
 )
@@ -630,7 +631,9 @@ class _CreateConversationHost:
             return self._existing
         if fn.__name__ == 'resolve_live_continuation':
             return None
-        if fn.__name__ in ('set_in_progress_conversation_id', 'update_conversation', 'create_in_progress_conversation'):
+        if fn.__name__ == 'create_in_progress_conversation':
+            return True  # the real lifecycle returns whether this call created the row
+        if fn.__name__ in ('set_in_progress_conversation_id', 'update_conversation'):
             return None
         return None
 

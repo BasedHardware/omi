@@ -4,17 +4,19 @@ from __future__ import annotations
 
 import json
 import re
+import unicodedata
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Iterable, List, Optional
-from zoneinfo import ZoneInfo
 
 from models.calendar_context import CalendarMeetingContext
 from models.conversation_photo import ConversationPhoto
 from utils.conversations.meeting_participants import MeetingRoster, is_silent_recorder, bind_speakers_with_roster
+from utils.llm.meeting_notes_validation import strip_speaker_placeholders
 from utils.llm.prompt_cache import EXPLICIT_CACHE_BREAKPOINT, has_cacheable_prefix
 from utils.llm.shaped_agent import route_for_uid
+from utils.model_text import DisplayClock, format_instant
 
 from utils.llm.conversation_notes_prompts import SHARED_CONVERSATION_PREAMBLE
 
@@ -37,6 +39,18 @@ class ConversationPromptPrefix:
     has_usable_content: bool = True
     shaped_context: Optional[str] = None
 
+    # Non-owner people bound to a speaker cluster who said enough to name in the
+    # title (#3602), most-spoken first, plus the account owner's bound name(s).
+    # Neither is rendered into ``context``, so the shared prefix bytes and cache
+    # key are unchanged; the notes task carries them in its volatile suffix.
+    title_people: tuple[str, ...] = ()
+    owner_names: tuple[str, ...] = ()
+    # Task-specific ownership metadata, including rich notes where title naming
+    # uses a roster. Never render it into the shared prefix or capture evidence.
+    account_owner_name: Optional[str] = None
+    # Account vocabulary is volatile context, outside the shared cache boundary.
+    known_spellings: str = ''
+
     @property
     def cache_key(self) -> str:
         return f'omi-conv-{self.conversation_id}'
@@ -49,10 +63,13 @@ class ConversationPromptPrefix:
         context_block: dict[str, Any] = {'type': 'text', 'text': self.context}
         if cache_enabled and self.cache_eligible:
             context_block['prompt_cache_breakpoint'] = EXPLICIT_CACHE_BREAKPOINT
-        return [
+        messages = [
             {'role': 'system', 'content': SHARED_CONVERSATION_PREAMBLE},
             {'role': 'system', 'content': [context_block]},
         ]
+        if self.known_spellings:
+            messages.append({'role': 'system', 'content': self.known_spellings})
+        return messages
 
 
 def _transcript_has_source_content(transcript: str, source_ids: frozenset[str]) -> bool:
@@ -74,6 +91,78 @@ def _transcript_has_source_content(transcript: str, source_ids: frozenset[str]) 
 
 
 _ROSTER_KIND_LABELS = {'owner': 'owner', 'human': 'human', 'ai_agent': 'ai agent'}
+
+
+# A bound person must have spoken at least this share of the conversation's talk
+# to be named in its title; a one-word greeting is not what the conversation was.
+TITLE_PERSON_MIN_TALK_SHARE = 0.1
+
+# Identity key for the account owner; no casefolded name can equal it.
+_OWNER_IDENTITY = '\x00owner'
+
+
+def _one_line(name: str) -> str:
+    """A stored name as one line of plain text, so it cannot add a line to the prompt."""
+    return ' '.join(''.join(' ' if unicodedata.category(ch) == 'Cc' else ch for ch in name).split())
+
+
+def _title_people(source_map: Optional[Mapping[int, Optional[str]]]) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """Return ``(title_people, owner_names)`` for the general notes path.
+
+    Only the hard voice/tag bindings an owner-aware ``SpeakerMap`` (from
+    ``conversation_transcript_and_speaker_map``) records can name someone: a bare
+    mapping names nobody rather than risk titling a note with its owner's name,
+    and a calendar name bound by elimination never reaches the title.
+
+    ``owner_names`` is the real profile name whenever one is known, even with no
+    ``is_user`` cluster: the owner can be addressed by name in any transcript.
+    The profile holds only a first name, so a person record whose name or first
+    token matches it is the owner's own record (a namesake is left unnamed too).
+
+    The rendered ``spk`` lines key on ``speaker_id`` alone while clusters are
+    ``(speaker_id_scope, speaker_id)``: an id that is the owner anywhere, or whose
+    clusters name different people, is never named; other ids still are. Talk
+    share is speech time, or words when no segment carries timing.
+    """
+    clusters = getattr(source_map, 'clusters', None)
+    if clusters is None:
+        return (), ()
+    owner_name = _one_line(getattr(source_map, 'owner_name', None) or '')
+    owner_fold = unicodedata.normalize('NFC', owner_name).casefold()
+    owner_first = owner_fold.split()[0] if owner_fold else ''
+
+    def identity(name: str) -> str:
+        fold = unicodedata.normalize('NFC', name).casefold()
+        return _OWNER_IDENTITY if owner_first and (fold == owner_fold or fold.split()[0] == owner_first) else fold
+
+    identities: dict[int, set[str]] = {}
+    for cluster in clusters:
+        folds = identities.setdefault(cluster.speaker_id, set())
+        folds.update(identity(name) for name in cluster.names)
+        if cluster.owner:
+            folds.add(_OWNER_IDENTITY)
+    nameable = {key for key, folds in identities.items() if len(folds) == 1 and _OWNER_IDENTITY not in folds}
+    timed = any(cluster.speech_seconds > 0 for cluster in clusters)
+
+    def talk(cluster: Any) -> float:
+        return cluster.speech_seconds if timed else cluster.words
+
+    total = sum(talk(cluster) for cluster in clusters)
+    spoken: dict[str, float] = {}
+    display: dict[str, str] = {}
+    for cluster in clusters:
+        if cluster.speaker_id not in nameable or not cluster.names:
+            continue
+        name = _one_line(cluster.names[0])
+        if not name or strip_speaker_placeholders(name) != name:
+            continue
+        fold = unicodedata.normalize('NFC', name).casefold()
+        display.setdefault(fold, name)
+        spoken[fold] = spoken.get(fold, 0) + talk(cluster)
+    # No talk at all names nobody: a share of nothing is no evidence of who spoke.
+    people = [fold for fold in spoken if total and spoken[fold] / total >= TITLE_PERSON_MIN_TALK_SHARE]
+    people.sort(key=lambda fold: -spoken[fold])  # stable: ties keep first-appearance order
+    return tuple(display[fold] for fold in people), (owner_name,) if owner_name else ()
 
 
 def _speaker_metadata_lines(
@@ -118,6 +207,7 @@ def build_conversation_prompt_prefix(
     roster: Optional[MeetingRoster] = None,
     desktop_meeting_capture: bool = False,
     uid: Optional[str] = None,
+    known_spellings: str = '',
 ) -> ConversationPromptPrefix:
     """Render the shared context prefix for conversation-wide LLM tasks.
 
@@ -133,16 +223,14 @@ def build_conversation_prompt_prefix(
     audio channel as mixed, so a bound cluster is demoted to ``?`` when several
     remote participants could share it.
     """
-    try:
-        user_tz = ZoneInfo(timezone_name) if timezone_name else timezone.utc
-    except Exception:
-        user_tz = timezone.utc
+    display_clock = DisplayClock.from_name(timezone_name)
     aware_started_at = started_at if started_at.tzinfo else started_at.replace(tzinfo=timezone.utc)
-    started_at_local = aware_started_at.astimezone(user_tz).replace(tzinfo=None).isoformat()
+    started_at_local = format_instant(aware_started_at, display_clock)
     speaker_names: dict[int, Optional[str]] = dict(speaker_map) if speaker_map else {}
     metadata_lines = [
-        f'- Captured at: {started_at_local} ({timezone_name or "UTC"})',
+        f'- Captured at: {started_at_local}',
     ]
+    account_owner_name = _one_line(getattr(speaker_map, 'owner_name', None) or '')
     if roster is not None:
         if roster.display_title:
             metadata_lines.append(f'- Meeting title: {roster.display_title}')
@@ -204,7 +292,9 @@ def build_conversation_prompt_prefix(
         metadata_lines.extend(f'spk {key} {name}' if name else f'spk {key} ?' for key, name in speaker_names.items())
 
     context_parts = ['CONVERSATION METADATA\n' + '\n'.join(metadata_lines), f'FULL TRANSCRIPT\n{transcript.strip()}']
-    photo_descriptions = ConversationPhoto.photos_as_string(photos, include_timestamps=True) if photos else ''
+    photo_descriptions = (
+        ConversationPhoto.photos_as_string(photos, include_timestamps=True, clock=display_clock) if photos else ''
+    )
     if photo_descriptions and photo_descriptions != 'None':
         context_parts.append(f'CAPTURED PHOTO DESCRIPTIONS\n{photo_descriptions}')
 
@@ -214,7 +304,7 @@ def build_conversation_prompt_prefix(
         # Calendar invitees are expected; screen listings are observed UI data.
         # Neither listing establishes attendance or speaker identity.
         evidence: dict[str, Any] = {
-            'started_at': started_at.isoformat(),
+            'started_at': format_instant(started_at, display_clock),
             'timezone': timezone_name,
             'language': language_code,
             'speaker_map': dict(speaker_map or {}),
@@ -247,6 +337,8 @@ def build_conversation_prompt_prefix(
         shaped_context = json.dumps(evidence, ensure_ascii=False) + f'\nFULL TRANSCRIPT\n{transcript.strip()}'
 
     source_ids = frozenset(segment_id for segment_id in (transcript_segment_ids or ()) if segment_id)
+    # Rich meeting notes name people through their roster rules instead.
+    title_people, owner_names = _title_people(speaker_map) if roster is None else ((), ())
     return ConversationPromptPrefix(
         conversation_id=conversation_id,
         context='\n\n'.join(context_parts),
@@ -254,4 +346,8 @@ def build_conversation_prompt_prefix(
         has_usable_content=_transcript_has_source_content(transcript, source_ids)
         or bool(photo_descriptions and photo_descriptions != 'None'),
         shaped_context=shaped_context,
+        title_people=title_people,
+        owner_names=owner_names,
+        account_owner_name=account_owner_name or None,
+        known_spellings=known_spellings,
     )

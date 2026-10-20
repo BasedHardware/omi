@@ -1,7 +1,7 @@
 """Regression: a malformed stored timestamp string must not abort a long-term memory patch.
 
-apply_long_term_patch_transaction coerces four optional timestamp fields
-(last_corroborated_at, captured_at, updated_at, expires_at) from ISO strings via
+apply_long_term_patch_transaction coerces three optional timestamp fields
+(captured_at, updated_at, expires_at) from ISO strings via
 datetime.fromisoformat. A single drifted value (a non-ISO string left by an older writer)
 used to raise ValueError and abort the whole patch apply for that item. The guard drops just
 the malformed field, so the item keeps its existing (update path) or materialized (create

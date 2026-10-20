@@ -291,15 +291,24 @@ def _paragraph_cues(block: Sequence[str]) -> List[TranscriptCue]:
     stands as its own cue before the first label (a title).
     """
     labeled = [_LABEL_RE.match(line) is not None for line in block]
-    if sum(labeled) < 2:
+    # A non-label line before the first label stands as its own cue (a title)
+    # regardless of how many labels follow — joining it into the first turn
+    # glues the title onto the first speaker's name ("Meeting notes Alice").
+    first_label = labeled.index(True) if any(labeled) else len(block)
+    cues = [TranscriptCue(text=' '.join(block[:first_label]))] if first_label else []
+    rest = block[first_label:]
+    if sum(labeled[first_label:]) < 1:
+        # No labels at all — the whole block is free text.
         return [TranscriptCue(text=' '.join(block))]
     turns: List[List[str]] = []
-    for line, is_label in zip(block, labeled):
+    for line in rest:
+        is_label = _LABEL_RE.match(line) is not None
         if is_label or not turns:
             turns.append([line])
         else:
             turns[-1].append(line)
-    return [TranscriptCue(text=' '.join(turn)) for turn in turns]
+    cues.extend(TranscriptCue(text=' '.join(turn)) for turn in turns)
+    return cues
 
 
 def parse_srt(text: str) -> List[TranscriptCue]:
@@ -515,13 +524,16 @@ def _zone(tz: Optional[str]) -> ZoneInfo:
 
 
 def started_at_from_filename(filename: str, tz: Optional[str] = 'UTC') -> Optional[datetime]:
-    """Recording start from a date-time in the file name, read in the user's timezone."""
-    match = _filename_datetime_match(PurePosixPath(filename).stem)
+    """Recording start from a date-time in the file name, read in the user's timezone unless marked GMT."""
+    stem = PurePosixPath(filename).stem
+    match = _filename_datetime_match(stem)
     if not match:
         return None
     parts = match.groupdict()
     if int(parts['y']) < MIN_FILENAME_YEAR:
         return None
+    # Zoom names a cloud recording by its start in GMT ("GMT20240508-213012_Recording..."), not the user's time.
+    zone = _zone('UTC' if stem[: match.start()].endswith('GMT') else tz)
     try:
         local = datetime(
             int(parts['y']),
@@ -530,7 +542,7 @@ def started_at_from_filename(filename: str, tz: Optional[str] = 'UTC') -> Option
             int(parts['h']),
             int(parts['mi']),
             int(parts['s'] or 0),
-            tzinfo=_zone(tz),
+            tzinfo=zone,
         )
         # A date in the future is a wrong device clock; it would sort above every real conversation.
         return min(local.astimezone(timezone.utc), datetime.now(timezone.utc))

@@ -2,10 +2,13 @@
 
 from typing import Any, Callable
 
+from config.live_stt_replay import session_local_exclusion_release_enabled
+
 from config.stt_provider_policy import provider_for_service
 from utils.stt import streaming as st
 from utils.stt.live_rollout import window_selection_kwargs
 from utils.stt.live_failure import MAX_STT_FAILOVERS, live_stt_terminal_reason, note_typed_provider_death
+from utils.stt.live_metrics import SESSION_LOCAL_EXCLUSION_RELEASES
 from utils.stt.live_router import note_failed_route
 from utils.stt.recovery_state import RecoveryState
 from utils.stt.recovery_state import MAX_RECOVERY_TARGETS
@@ -21,6 +24,56 @@ def _router_active(managed: bool, receiver: Any) -> bool:
         return routing_on(receiver.host.request.uid)
     except ValueError:
         return False
+
+
+# Deaths that are evidence about this session's replay bookkeeping, not about
+# the provider: the leg was serving and transcribing when the ring overflowed.
+SESSION_LOCAL_DEATHS = frozenset({'replay_ring_overflow'})
+
+
+def note_session_local_exclusion(receiver: Any, dead_provider: str | None, reason: str) -> None:
+    """Remember an exclusion that only a session-local death justified.
+
+    The replacement must still differ from the leg that just overflowed, so the
+    exclusion stands for this selection. Any later provider-evidence death of
+    the same family keeps it excluded.
+    """
+    if not dead_provider:
+        return
+    held = getattr(receiver, '_stt_session_local_exclusions', None)
+    if not isinstance(held, dict):
+        held = receiver._stt_session_local_exclusions = {}
+    if reason in SESSION_LOCAL_DEATHS and session_local_exclusion_release_enabled():
+        held[dead_provider] = getattr(receiver.stt_socket, 'routing_target', None)
+    else:
+        held.pop(dead_provider, None)
+
+
+def release_session_local_exclusions(receiver: Any, serving_family: str) -> None:
+    """Re-admit families excluded only by replay overflow once a successor serves.
+
+    Without this, a healthy Soniox leg that overflowed its replay ring stayed
+    excluded for the whole session, so the successor's next ordinary death
+    found no candidate and exhausted (prod 2026-10-20: about 40 per 10 min,
+    logged as selection soniox->unavailable). The recovery controller's dial
+    ledger still bounds re-dials within an unproven episode.
+    """
+    held = getattr(receiver, '_stt_session_local_exclusions', None)
+    if not isinstance(held, dict) or not held or not session_local_exclusion_release_enabled():
+        return
+    for family, target in list(held.items()):
+        if family == serving_family:
+            continue
+        del held[family]
+        released = family in receiver._stt_failed_providers
+        receiver._stt_failed_providers.discard(family)
+        if isinstance(target, str) and target in receiver._stt_failed_targets:
+            receiver._stt_failed_targets.discard(target)
+            released = True
+        if receiver._stt_failed_reasons.get(family) in SESSION_LOCAL_DEATHS:
+            receiver._stt_failed_reasons.pop(family, None)
+        if released:
+            SESSION_LOCAL_EXCLUSION_RELEASES.labels(provider=family).inc()
 
 
 def allow_healthy_soniox_rescue(receiver: Any, *, managed: bool) -> None:
@@ -53,6 +106,7 @@ def _select_live_replacement_legacy(
     receiver._stt_rebuild_attempts += 1
     if dead_provider:
         receiver._stt_failed_reasons[dead_provider] = live_stt_terminal_reason(receiver.stt_socket, 'connection_lost')
+        note_session_local_exclusion(receiver, dead_provider, receiver._stt_failed_reasons[dead_provider])
     router_active = _router_active(managed, receiver)
     cap = MAX_RECOVERY_TARGETS if router_active else (3 if managed else MAX_STT_FAILOVERS)
     if max(failures, receiver._stt_rebuild_attempts) > cap:
@@ -110,6 +164,7 @@ def select_live_replacement(
     receiver._stt_rebuild_attempts += 1
     if dead_provider:
         receiver._stt_failed_reasons[dead_provider] = live_stt_terminal_reason(receiver.stt_socket, 'connection_lost')
+        note_session_local_exclusion(receiver, dead_provider, receiver._stt_failed_reasons[dead_provider])
     note_typed_provider_death(receiver.stt_socket, dead_provider)
     allow_healthy_soniox_rescue(receiver, managed=managed)
     service, language, model = select(

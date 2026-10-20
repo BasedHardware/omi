@@ -220,6 +220,11 @@ def window_replay_action(
     _, capture_end = ring.capture_bounds
     projected_end = max(capture_end, (start_sample or 0) + len(data) // 2)
     age_floor = max(0, projected_end - ring.ring_seconds * ring.sample_rate)
+    settle = getattr(socket, 'window_replay_settle_through', None)
+    if speech_pending and callable(settle) and callable(has_untranscribed_speech) and settle(age_floor):
+        # A non-window provider answered horizon-aged quiet capture with
+        # nothing and owes no output: account it like an empty window answer.
+        speech_pending = bool(has_untranscribed_speech())
     pending_boundary = getattr(socket, 'window_replay_pending_sample', None)
     pending_sample = pending_boundary() if callable(pending_boundary) else None
     if callable(has_untranscribed_speech) and not speech_pending:
@@ -265,7 +270,9 @@ def window_replay_action(
             first, end = ring.capture_bounds
             raw.replay_lag_diagnostics = snapshot(first, end, ring.projected_span_samples(data, start_sample))
         fail = getattr(socket, 'fail', None) or raw.fail
-        fail('capacity_full', capacity_subtype='replay_ring_cap')
+        # Session-local replay lag, not provider capacity: alerts that read
+        # capacity_full must not count it, and it never benches a target.
+        fail('replay_ring_overflow')
     return 'failover'
 
 

@@ -12,6 +12,8 @@ from typing import Any
 from enum import Enum
 
 from fastapi import HTTPException
+from config.batch_pipeline import RecordOwnerContention
+from config.rollout_cohorts import warm_rollout_cohorts
 
 from database import conversations as conversations_db
 from database import conversation_finalization_jobs as finalization_jobs_db
@@ -37,9 +39,9 @@ from utils.conversations.process_conversation import (
     save_structured_vector,
 )
 from utils.conversations import lifecycle as lifecycle_service
+from utils.conversations.summary_delivery import finalization_pending
 from utils.executors import db_executor, postprocess_executor, run_blocking
 from utils.metrics import OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL
-from utils.jit_rollout import JITDecisionStage
 from utils.llm.gateway_error_contract import GENERIC_CONVERSATION_PROCESSING_ERROR_DETAIL
 from utils.observability.finalization import (
     classify_finalization_failure,
@@ -50,6 +52,7 @@ from utils.speaker_learning_jobs import schedule_person_voice_learning_retry
 from services.conversation_keyframes import ensure_conversation_keyframe_job, reconcile_conversation_keyframe_jobs
 from utils.retrieval.frame_request_authority import resolve_frame_request_authority
 from utils.observability.fallback import record_fallback
+from utils.batch_pipeline.live import register_recording, reserve_recording
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +74,9 @@ def _maybe_start_shadow(uid: str, conversation) -> None:
 
 def _save_summary_vector_fail_soft(uid: str, conversation) -> None:
     """Provider errors are counted by the writer; never propagate to finalization."""
+    if getattr(conversation, 'processing_deferred', False) is True:
+        OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL.labels(outcome='skipped_processing_deferred').inc()
+        return
     try:
         if save_structured_vector(uid, conversation) is False:
             # The writer counts a missing index as error. Keep that bounded outcome.
@@ -106,6 +112,7 @@ class ConversationFinalizationError(RuntimeError):
 class ConversationFinalizationDisposition(str, Enum):
     completed = 'completed'
     fenced = 'fenced'
+    deferred = 'deferred'
 
 
 async def finalize_persisted_conversation(
@@ -227,11 +234,14 @@ async def finalize_persisted_conversation(
         # STT or metric persistence and cannot alter this processing input.
         stage = 'processing'
         if conversation.status != ConversationStatus.completed:
+            await warm_rollout_cohorts(uid)
             _maybe_start_shadow(uid, conversation)
         persistence: dict[str, bool] = {'owned': True}
         derived_effects: list = []
         derived_disposition: list[DerivedEffectsDisposition] = [DerivedEffectsDisposition.RUN]
-        if conversation.status != ConversationStatus.completed:
+        if conversation.status != ConversationStatus.completed or finalization_pending(
+            conversation_data, uid, finalization_job_id
+        ):
             conversation = await run_blocking(
                 postprocess_executor,
                 process_with_episode_budget,
@@ -248,7 +258,7 @@ async def finalize_persisted_conversation(
                 derived_effects_disposition_observer=lambda d: derived_disposition.__setitem__(0, d),
             )
         elif conversation_data.get(TERMINAL_NO_DERIVED_EFFECTS_FIELD):
-            # The coordinator already persisted a free-tier terminal minimum.
+            # The coordinator persisted a no-effects result (including budget waiting).
             # That write is durable; this request-scoped default is not. A
             # completed replay skips process_conversation, so restore the
             # disposition from the unmodeled marker before the empty-bundle
@@ -265,6 +275,11 @@ async def finalize_persisted_conversation(
                 conversation_id,
             )
             return ConversationFinalizationDisposition.fenced
+
+        # Producer rollback never abandons an already reserved retained recording.
+        # Persist its obligation before the finalization job can complete.
+        if conversation_data.get('record_lane_owner') == 'batch_live_v1':
+            await run_blocking(db_executor, register_recording, uid, {**conversation_data, **conversation.model_dump()})
 
         # Ownership fence before any canonical side effect.  The lifecycle
         # transaction re-reads the durable conversation together with the job
@@ -303,6 +318,28 @@ async def finalize_persisted_conversation(
             await run_blocking(db_executor, link_duplicate_captures, uid, conversation)
         if fanout['status'] == 'completed':
             schedule_person_voice_learning_retry(uid, conversation_id)
+            # Re-finalization of a row whose fanout already completed (e.g.
+            # server_recovery picking up a row finalized elsewhere). The
+            # summary-vector emission below the claim branch is unreachable on
+            # this path, so run the same fail-soft freshness guard here; a
+            # summary-vector failure never fails finalization (#21111 gap).
+            try:
+                latest_data = await run_blocking(db_executor, conversations_db.get_conversation, uid, conversation_id)
+                latest = deserialize_conversation(latest_data) if latest_data else None
+                if (
+                    latest
+                    and latest_data is not None
+                    and not latest_data.get('deleted', False)
+                    and not getattr(latest, 'discarded', False)
+                    and getattr(latest, 'structured', None)
+                    and latest.structured == getattr(conversation, 'structured', None)
+                ):
+                    await run_blocking(postprocess_executor, _save_summary_vector_fail_soft, uid, latest)
+                else:
+                    OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL.labels(outcome='skipped_no_structured').inc()
+            except Exception as error:
+                OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL.labels(outcome='error').inc()
+                logger.warning('summary_vector outcome=error exception_type=%s', type(error).__name__)
             return ConversationFinalizationDisposition.completed
         if fanout['status'] == 'fenced':
             logger.info(
@@ -327,8 +364,15 @@ async def finalize_persisted_conversation(
         # (§1.7) and must still run so a free-tier desktop meeting wakes Chat.
         skip_derived_effects = derived_disposition[0] == DerivedEffectsDisposition.TERMINAL_NO_DERIVED_EFFECTS
         stage = 'derived_effects'
+        from utils.conversations.demand_processing import lazy_enrichment_enabled
+
+        lazy_effects = lazy_enrichment_enabled(uid) and not skip_derived_effects and not conversation.discarded
+        if lazy_effects:
+            from utils.sync.reprocess import mark_effects
+
+            await run_blocking(db_executor, mark_effects, uid, conversation_id, resolved_language)
         # Completed-row replays have no coordinator bundle. Summary indexing is
-        # independent of JIT folder/apps receipts and terminal intelligence
+        # independent of folder/apps receipts and terminal intelligence
         # suppression, but must share the same winning fanout claim.
         # Await inside a fail-soft boundary rather than detach a provider pipeline:
         # the worker can exit after completion, so awaiting preserves write observability.
@@ -350,7 +394,7 @@ async def finalize_persisted_conversation(
                     'smart_merge'
                 ) != conversation_data.get('smart_merge'):
                     OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL.labels(outcome='skipped_stale').inc()
-                else:
+                elif not lazy_effects:
                     await run_blocking(postprocess_executor, _save_summary_vector_fail_soft, uid, latest)
         except Exception as error:
             OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL.labels(outcome='error').inc()
@@ -371,7 +415,7 @@ async def finalize_persisted_conversation(
             )
         elif derived_effects:
             await run_blocking(postprocess_executor, derived_effects[0])
-        elif not getattr(conversation, 'discarded', False):
+        elif not lazy_effects and not getattr(conversation, 'discarded', False):
             # A finalization job owns a durable lease. Keep canonical memory
             # extraction inside that lease so a temporary fail-closed gate
             # leaves the job retryable instead of dropping the source.
@@ -386,10 +430,7 @@ async def finalize_persisted_conversation(
                 require_delivery=True,
                 last_delivery_attempt=final_attempt,
             )
-        # Publish the content-free capture-arrival intent before marking the
-        # durable fanout projection completed. Desktop waits on that projection
-        # before waking Chat; ordering the marker first closes the small window
-        # where a completed projection existed without a notes-ready intent.
+        # Record the meeting treatment verdict; automatic Chat intents are retired.
         stage = 'meeting_receipt'
         await run_blocking(
             db_executor,
@@ -402,11 +443,7 @@ async def finalize_persisted_conversation(
         # an offline desktop can satisfy it on a later screen-sync recovery.
         stage = 'keyframes'
         if not getattr(conversation, 'discarded', False):
-            decision = await resolve_frame_request_authority(
-                uid,
-                stage=JITDecisionStage.INGRESS,
-                force_refresh=True,
-            )
+            decision = await resolve_frame_request_authority(uid)
             if decision.enabled and decision.account_generation is not None:
                 keyframe_eligible = await run_blocking(
                     db_executor,
@@ -519,7 +556,39 @@ async def _load_admitted_conversation(
         )
         return ConversationFinalizationDisposition.fenced, None, None
 
+    for _ in range(3):
+        try:
+            owner = await run_blocking(db_executor, reserve_recording, uid, conversation_data)
+            break
+        except RecordOwnerContention:
+            # Listen may append between the existing read and CAS. Refresh in
+            # this attempt, rather than spending a processing-failure slot.
+            conversation_data = await run_blocking(
+                db_executor,
+                conversations_db.get_conversation,
+                uid,
+                conversation_id,
+                read_site=FirestoreReadSite.FINALIZER_JOB_REPLAY,
+                include_transcript_decode_status=trigger is ProcessingTrigger.SERVER_RECOVERY,
+            )
+            if not conversation_data:
+                return ConversationFinalizationDisposition.fenced, None, None
+    else:
+        deferred = await run_blocking(
+            db_executor,
+            finalization_jobs_db.mark_finalization_retryable,
+            finalization_job_id,
+            dispatch_generation,
+            lease_epoch,
+            'record_owner_contention',
+            count_attempt=False,
+        )
+        if not deferred:
+            return ConversationFinalizationDisposition.fenced, None, None
+        return ConversationFinalizationDisposition.deferred, None, None
     conversation = deserialize_conversation(conversation_data)
+    if owner:
+        conversation.record_lane_owner = owner
     if conversation.status != ConversationStatus.completed and conversation.status != ConversationStatus.processing:
         admitted = await run_blocking(db_executor, lifecycle_service.ensure_processing, uid, conversation.id)
         if not admitted:

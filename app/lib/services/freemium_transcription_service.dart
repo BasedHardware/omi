@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 
 import 'package:path_provider/path_provider.dart';
 
@@ -8,6 +9,8 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/models/custom_stt_config.dart';
 import 'package:omi/models/stt_provider.dart';
 import 'package:omi/utils/logger.dart';
+import 'package:omi/services/sockets/on_device_apple_provider.dart';
+import 'package:omi/services/sockets/apple_speech_readiness.dart';
 
 /// Enum representing the current freemium transcription state
 enum FreemiumTranscriptionState {
@@ -36,6 +39,11 @@ class FreemiumTranscriptionService extends ChangeNotifier {
   static final FreemiumTranscriptionService _instance = FreemiumTranscriptionService._internal();
   factory FreemiumTranscriptionService() => _instance;
   FreemiumTranscriptionService._internal();
+  @visibleForTesting
+  FreemiumTranscriptionService.testing({this.iosOverride, this.appleReadinessReader});
+  bool? iosOverride;
+  Future<AppleSpeechReadiness> Function(String)? appleReadinessReader;
+  AppleSpeechReadiness? appleReadiness;
 
   FreemiumTranscriptionState _state = FreemiumTranscriptionState.premium;
   FreemiumReadiness _readiness = FreemiumReadiness.requiresSetup;
@@ -60,10 +68,21 @@ class FreemiumTranscriptionService extends ChangeNotifier {
   }
 
   /// Check if freemium (on-device) STT is ready to use
-  Future<FreemiumReadiness> checkReadiness() async {
-    // iOS: Native Apple Speech Recognition is always available
-    if (Platform.isIOS) {
-      _readiness = FreemiumReadiness.ready;
+  static String effectiveLanguage({String? language}) {
+    final preferences = SharedPreferencesUtil();
+    final config = preferences.customSttConfig;
+    final selected = language ??
+        (config.isEnabled && config.provider == SttProvider.onDeviceWhisper
+            ? (config.language ?? 'en')
+            : preferences.userPrimaryLanguage);
+    return selected.isEmpty ? 'multi' : selected;
+  }
+
+  Future<FreemiumReadiness> checkReadiness({String? language}) async {
+    if (iosOverride ?? Platform.isIOS) {
+      appleReadiness =
+          await (appleReadinessReader ?? OnDeviceAppleProvider.readiness)(effectiveLanguage(language: language));
+      _readiness = appleReadiness!.ready ? FreemiumReadiness.ready : FreemiumReadiness.requiresSetup;
       notifyListeners();
       return _readiness;
     }
@@ -84,6 +103,12 @@ class FreemiumTranscriptionService extends ChangeNotifier {
     _readiness = FreemiumReadiness.requiresSetup;
     notifyListeners();
     return _readiness;
+  }
+
+  void reportLocalFailure(String status) {
+    _readiness = FreemiumReadiness.requiresSetup;
+    if (Platform.isIOS) appleReadiness = AppleSpeechReadiness('sfspeech', status);
+    notifyListeners();
   }
 
   /// Find any downloaded Whisper model in the models directory

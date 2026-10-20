@@ -16,6 +16,7 @@ import 'package:omi/pages/conversation_detail/widgets/conversation_detail_header
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/folder_provider.dart';
 import 'package:omi/ui/ui.dart';
+import '../helpers/reprocess_fakes.dart';
 
 TranscriptSegment _segment(String text) => TranscriptSegment(
       id: 'seg',
@@ -76,10 +77,10 @@ void main() {
     final calls = <String>[];
     final detail = _detail(
       _conversation(),
-      reprocess: (id, {appId, requireSpeakerReceipt = false}) {
+      reprocess: conversationReprocess((id, {appId, requireSpeakerReceipt = false, forceOmi = false}) {
         calls.add(id);
         return gate.future;
-      },
+      }),
     );
     addTearDown(detail.dispose);
 
@@ -93,7 +94,7 @@ void main() {
     await tester.tap(find.text(l10n.retry));
     await tester.pump();
     expect(calls, ['detail-retry']);
-    expect(find.text(l10n.summarizingConversation), findsOneWidget);
+    expect(find.text(l10n.summarySummarizingWith(l10n.omiAppName)), findsOneWidget);
 
     gate.complete(_conversation(title: 'Venue planning', overview: 'Picked Friday.', summaryRetryable: false));
     await tester.pump();

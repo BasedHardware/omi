@@ -63,6 +63,15 @@
             "title": "Outcome",
             "type": "string"
           },
+          "policy": {
+            "default": "suggest",
+            "enum": [
+              "auto",
+              "suggest"
+            ],
+            "title": "Policy",
+            "type": "string"
+          },
           "reason": {
             "title": "Reason",
             "type": "string"
@@ -154,6 +163,15 @@
           },
           "kind": {
             "title": "Kind",
+            "type": "string"
+          },
+          "policy": {
+            "default": "auto",
+            "enum": [
+              "auto",
+              "suggest"
+            ],
+            "title": "Policy",
             "type": "string"
           },
           "spelling": {

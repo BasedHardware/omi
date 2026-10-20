@@ -96,5 +96,5 @@ jobs:
         run: |
           firebase emulators:exec \
             --only firestore \
-            --project demo-omi-jit-qa \
+            --project demo-omi-isolated-tests \
             'bash backend/scripts/run-emulator-proofs.sh'

@@ -5,6 +5,7 @@ line-count ratchet, and so this provider's token-delta protocol stays readable o
 its own. Imports flow one way: this module never imports from ``streaming.py``.
 """
 
+from utils.stt_cap_dispatch import live_provider
 import asyncio
 import json
 import logging
@@ -21,6 +22,7 @@ from utils.metrics import OMI_LIVE_STT_MISALIGNED_FRAMES_TOTAL
 from utils.log_sanitizer import sanitize_provider_error
 from utils.observability.fallback import record_fallback
 from utils.stt.committed_words import remember_provider_word
+from utils.stt.failure_diagnostics import connection_loss_cause, transport_failure_fields
 from config.live_stt_replay import ReplayLimits
 from config.live_stt_recovery import recovery_enabled
 from utils.stt.socket import STTSocket
@@ -35,6 +37,7 @@ from utils.stt.soniox_capture_axis import (
 from utils.stt.soniox_idle import IdleSonioxSocket, SonioxIdleBudget
 from utils.stt.replay_delivery import AudioDeliveryExpired, RecoveryWriterPace, clock
 from utils.stt.send_queue import AudioSendQueue
+from utils.observability.demand_cohort import create_connected_meter, create_wire_meter, telemetry_call
 from utils.stt.resilient_stream import enabled as resilient_reconnect_enabled
 from utils.stt.language_policy import LiveLanguageProfile, soniox_hints
 from utils.stt.stream_close import (
@@ -194,6 +197,9 @@ class SafeSonioxSocket(STTSocket):
         *,
         sample_rate: int = 16000,
     ) -> None:
+        self._demand_wire = create_wire_meter('soniox', sample_rate)
+        # The websocket is already open and billed from here until _recv_loop ends.
+        self._connected_meter = create_connected_meter()
         self._wire_ledger_enabled = soniox_wire_ledger_enabled()
         self._wire_epoch: Any = None
         self._wire_samples = 0
@@ -217,6 +223,7 @@ class SafeSonioxSocket(STTSocket):
         except Exception:
             self.disable_capture_axis_diagnostics()
         self._ws: Any = ws
+        self._opened_at = time.monotonic()
         self._stream_transcript = stream_transcript
         self._loop = loop
         self._preseconds = preseconds
@@ -239,6 +246,10 @@ class SafeSonioxSocket(STTSocket):
         # A response can end in the middle of a word. Downstream joins distinct
         # segments with spaces, so retain the last word until its boundary is known.
         self._pending_segment: Optional[Dict[str, Any]] = None
+        # Each response carries every current non-final token; any text there
+        # is output the provider still owes for audio it already received.
+        self._nonfinal_pending = False
+        self._connection_cause: Optional[str] = None
         self._done_event = asyncio.Event()
         # Odd-length s16le frames would split a sample across messages; carry the
         # trailing byte rather than emit a half sample.
@@ -259,14 +270,42 @@ class SafeSonioxSocket(STTSocket):
         """Bounded reason for the terminal-failure vocabulary (None = untyped)."""
         return self._typed_death_reason
 
-    def _mark_dead(self, reason: str, typed_reason: Optional[str] = None) -> None:
+    @property
+    def connection_cause(self) -> Optional[str]:
+        """Content-free transport cause behind an untyped death, if one was seen."""
+        return self._connection_cause
+
+    def has_pending_provider_output(self) -> bool:
+        """Whether received audio still has non-final or unflushed final text."""
+        return self._nonfinal_pending or self._pending_segment is not None
+
+    def _mark_dead(
+        self,
+        reason: str,
+        typed_reason: Optional[str] = None,
+        *,
+        transport_error: BaseException | None = None,
+        operation: str = 'unknown',
+    ) -> None:
         with self._lock:
             if self._planned_close and reason.startswith(('ws send closed:', 'ws recv closed:')):
                 return
             if not self._dead:
                 self._death_reason = reason
                 self._typed_death_reason = typed_reason
+                if transport_error is not None:
+                    self._connection_cause = connection_loss_cause(transport_error)
                 self._dead = True  # Publish cause before any observer sees death.
+            else:
+                return
+        if transport_error is not None:
+            fields = transport_failure_fields(transport_error, time.monotonic() - self._opened_at)
+            logger.warning(
+                'STT provider transport failure provider=soniox operation=%s exception_class=%s '
+                'received_close_code=%s sent_close_code=%s close_cause=%s session_age_bucket=%s',
+                operation if operation in {'send', 'recv'} else 'unknown',
+                *fields,
+            )
 
     def send(self, data: bytes) -> bool:
         with self._lock:
@@ -389,6 +428,8 @@ class SafeSonioxSocket(STTSocket):
             await self._ws.close()
         except Exception:
             pass
+        # Idempotent: covers a receive task cancelled before it ever started.
+        telemetry_call(self, '_connected_meter', 'flush', close=True)
 
     def disable_capture_axis_diagnostics(self) -> None:
         self._capture_axis = None
@@ -468,6 +509,7 @@ class SafeSonioxSocket(STTSocket):
         try:
             await self._ws.send(data)
             written = True
+            telemetry_call(self, '_demand_wire', 'written', data)
             if provider_clock is not None and finalize:
                 provider_clock.finalize_written()
             if provider_clock is not None and isinstance(data, bytes):
@@ -492,6 +534,7 @@ class SafeSonioxSocket(STTSocket):
     async def _send_loop(self) -> None:
         try:
             while not self._closed and not self._dead:
+                telemetry_call(self, '_connected_meter', 'flush')
                 try:
                     data = await asyncio.wait_for(self._send_queue.get(), timeout=SONIOX_KEEPALIVE_SECONDS)
                 except asyncio.TimeoutError:
@@ -548,11 +591,17 @@ class SafeSonioxSocket(STTSocket):
             self._mark_dead('live audio delivery expired', typed_reason='capacity_full')
         except websockets.exceptions.ConnectionClosed as e:
             self._mark_dead(
-                f'ws send closed: {e}', typed_reason='connection_lost' if resilient_reconnect_enabled() else None
+                f'ws send closed: {e}',
+                typed_reason='connection_lost' if resilient_reconnect_enabled() else None,
+                transport_error=e,
+                operation='send',
             )
         except Exception as e:
             self._mark_dead(
-                f'ws send error: {e}', typed_reason='connection_lost' if resilient_reconnect_enabled() else None
+                f'ws send error: {e}',
+                typed_reason='connection_lost' if resilient_reconnect_enabled() else None,
+                transport_error=e,
+                operation='send',
             )
 
     async def _recv_loop(self) -> None:
@@ -613,6 +662,10 @@ class SafeSonioxSocket(STTSocket):
                     self._sync_ordered_clock()
                 self._diagnostic(lambda diagnostic: diagnostic.response(msg))
                 tokens: List[Any] = msg.get('tokens') or []
+                self._nonfinal_pending = any(
+                    isinstance(token, dict) and not token.get('is_final') and str(token.get('text') or '').strip()
+                    for token in tokens
+                )
                 if tokens:
                     self._handle_tokens(tokens)
 
@@ -621,15 +674,22 @@ class SafeSonioxSocket(STTSocket):
                     break
         except websockets.exceptions.ConnectionClosed as e:
             self._mark_dead(
-                f'ws recv closed: {e}', typed_reason='connection_lost' if resilient_reconnect_enabled() else None
+                f'ws recv closed: {e}',
+                typed_reason='connection_lost' if resilient_reconnect_enabled() else None,
+                transport_error=e,
+                operation='recv',
             )
         except asyncio.CancelledError:
             raise
         except Exception as e:
             self._mark_dead(
-                f'ws recv error: {e}', typed_reason='connection_lost' if resilient_reconnect_enabled() else None
+                f'ws recv error: {e}',
+                typed_reason='connection_lost' if resilient_reconnect_enabled() else None,
+                transport_error=e,
+                operation='recv',
             )
         finally:
+            telemetry_call(self, '_connected_meter', 'flush', close=True)
             if self._provider_clock is not None:
                 self._provider_clock.close()
                 self._sync_ordered_clock()
@@ -712,6 +772,7 @@ class SafeSonioxSocket(STTSocket):
             self._stream_transcript(ready)
 
 
+@live_provider('soniox', 1)
 async def process_audio_soniox(
     stream_transcript: Callable[[List[Dict[str, Any]]], None],
     sample_rate: int,
@@ -719,7 +780,6 @@ async def process_audio_soniox(
     preseconds: int = 0,
     *,
     profile: LiveLanguageProfile | None = None,
-    keywords: list[str] | None = None,
     idle_budget: SonioxIdleBudget | None = None,
 ) -> STTSocket:
     api_key = os.getenv('SONIOX_API_KEY')
@@ -747,13 +807,6 @@ async def process_audio_soniox(
     hints = soniox_hints(language, profile)
     if hints:
         config['language_hints'] = hints
-    # Keep context terms off until a dev session proves this config frame is accepted;
-    # an invalid frame kills the live session with 400 after the WebSocket upgrade.
-    if os.getenv('SONIOX_CONTEXT_TERMS', 'false').lower() == 'true' and keywords:
-        terms = list(dict.fromkeys(term.strip() for term in keywords if term.strip()))
-        terms = [term for term in terms if len(term) <= 50][:100]
-        if terms:
-            config['context'] = {'terms': terms}
     rejected = (
         profile.primary
         if profile

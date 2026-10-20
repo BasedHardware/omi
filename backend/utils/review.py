@@ -1,34 +1,47 @@
 """Unified Review orchestration; source lifecycles retain their existing owners."""
 
 from datetime import datetime, timedelta, timezone
+from typing import Sequence
 
 from database import candidates, conversations, review_changes, review_store as store
 from models.action_item import TaskCreatePayload
+from models.review_context import enrich_spelling
 from models.candidate import CandidateAction, CandidateStatus, CandidateSubjectKind
 from models.review import (
     ChangeRef,
     ReviewEvidence,
     PersonRef,
     ReviewAnswer,
+    ReviewAnswerV2,
     ReviewAnswerReceipt,
     ReviewChange,
     ReviewItem,
+    ReviewItemV2,
     ReviewItemsResponse,
+    ReviewItemsResponseV2,
+    SamePersonItem,
     SpeakerItem,
     TaskItem,
     TranscriptLine,
 )
 from models.speaker_tag_prompts import SpeakerTagPrompt, SpeakerTagPromptAnswer, SpeakerTagPromptAnswerRequest
+from utils import entity_pages
 from utils.speaker_tag_prompts import service as speakers
 from utils.task_intelligence import candidate_service
+from config.dream_agent import eligible
 from utils.task_intelligence.task_links import TaskLinkValidationError
+
+
+def dream_visible(uid: str) -> bool:
+    user = store.user(uid).get().to_dict() or {}
+    return eligible(uid, user)
 
 
 def one_line(text: str | None, limit: int = 180) -> str | None:
     return ' '.join(text.split())[:limit] if text else None
 
 
-def rank_review_items(items: list[ReviewItem], remaining: int) -> list[ReviewItem]:
+def rank_review_items(items: Sequence[ReviewItem | ReviewItemV2], remaining: int) -> list[ReviewItem | ReviewItemV2]:
     """Phase 1 heuristic: identity resolution wins by number of conversations unlocked.
 
     Speaker: 4 × affected conversations, identity merge: 3 × combined conversations,
@@ -127,7 +140,7 @@ def _task_item(uid: str, candidate) -> ReviewItem:
     )
 
 
-def _sources(uid: str) -> list[tuple[ReviewItem, dict, str]]:
+def _sources(uid: str) -> list[tuple[ReviewItem | ReviewItemV2, dict, str]]:
     from database.task_intelligence_control import get_task_workflow_control
     from utils.task_intelligence.chat_first_eligibility import resolve_task_intelligence_for_user
 
@@ -155,40 +168,72 @@ def _sources(uid: str) -> list[tuple[ReviewItem, dict, str]]:
                 continue
             source = candidate.model_dump(mode='python')
             result.append((_task_item(uid, candidate), source, store.fingerprint(source)))
+    show_dream = dream_visible(uid)
     for proposal in store.list_proposals(uid):
-        item = ReviewItem.model_validate(proposal['item'])
-        result.append((item, {}, proposal['evidence_version']))
+        item = ReviewItemV2.model_validate(proposal['item'])
+        if store.proposal_record_is_dream_origin(uid, proposal) and not show_dream:
+            continue
+        if (item.kind == 'agent_proposal' or item.agent_proposal) and not show_dream:
+            continue
+        if item.agent_proposal and not review_changes.agent_change_allowed(uid, proposal['source']['edit_key']):
+            continue
+        result.append((item, proposal.get('source', {}), proposal['evidence_version']))
     return result
 
 
-def get_items(uid: str) -> ReviewItemsResponse:
+def get_items(uid: str, *, include_agent_proposals: bool = False):
     remaining = store.remaining_today(uid)
-    if not remaining:
-        return ReviewItemsResponse(items=[], remaining_today=0)
     eligible = []
-    for item, source, version in _sources(uid):
-        if store.offer_item(uid, item, source, version):
-            eligible.append(item)
-    return ReviewItemsResponse(items=rank_review_items(eligible, remaining), remaining_today=remaining)
+    if remaining:
+        for item, source, version in _sources(uid):
+            if item.kind == 'agent_proposal' and not include_agent_proposals:
+                continue
+            item = enrich_spelling(item, source, load_conversation=lambda key: conversations.get_conversation(uid, key))
+            if store.offer_item(uid, item, source, version):
+                eligible.append(item)
+    ranked = rank_review_items(eligible, remaining)
+    if include_agent_proposals:
+        return ReviewItemsResponseV2(
+            items=[ReviewItemV2.model_validate(item.model_dump()) for item in ranked], remaining_today=remaining
+        )
+    return ReviewItemsResponse(
+        items=[ReviewItem.model_validate(item.model_dump(exclude={'agent_proposal'})) for item in ranked],
+        remaining_today=remaining,
+    )
 
 
-def answer_item(uid: str, item_id: str, answer: ReviewAnswer, *, schedule=None) -> ReviewAnswerReceipt:
-    kind = item_id.partition(':')[0]
-    if not answer.not_sure and getattr(answer, kind, None) is None:
-        raise store.ReviewConflict('Answer kind does not match item')
-    state = store.begin_answer(uid, item_id, store.fingerprint(answer.model_dump(mode='json')))
+def answer_item(uid: str, item_id: str, answer: ReviewAnswer | ReviewAnswerV2, *, schedule=None) -> ReviewAnswerReceipt:
+    answer_data = answer.model_dump(mode='json')
+    if answer_data.get('agent_proposal') is None:
+        answer_data.pop('agent_proposal', None)
+    state = store.begin_answer(uid, item_id, store.fingerprint(answer_data))
     if state['retry']:
         return ReviewAnswerReceipt(
             item_id=item_id, applied=state['applied'], remaining_today=store.remaining_today(uid)
         )
-    item = ReviewItem.model_validate(state['item'])
+    item = ReviewItemV2.model_validate(state['item'])
     uncertain = answer.not_sure or bool(answer.same_person and answer.same_person.decision == 'not_sure')
     applied = False
     try:
+        if item_id.partition(':')[0] != item.kind:
+            raise store.ReviewStale('Answer kind does not match stale item')
+        if not answer.not_sure and getattr(answer, item.kind, None) is None:
+            raise store.ReviewConflict('Answer kind does not match item')
+        if store.proposal_is_dream_origin(uid, item_id) and not dream_visible(uid):
+            raise store.ReviewConflict('Dream proposals are not available for this account')
         if uncertain:
             # Do not call speaker skip: it permanently marks that source answered.
             # Review stores an evidence version, permitting a new-evidence question.
             pass
+        elif item.agent_proposal:
+            if not dream_visible(uid):
+                raise store.ReviewConflict('Dream proposals are not available for this account')
+            from utils.agent_capabilities.tools import answer_proposal
+
+            payload = getattr(answer, 'agent_proposal', None)
+            if payload is None:
+                raise store.ReviewConflict('Agent proposal answer required')
+            applied = answer_proposal(uid, item.agent_proposal, state['source'], payload.decision)
         elif item.speaker:
             prompt = SpeakerTagPrompt.model_validate(state['source'])
             payload = answer.speaker
@@ -240,32 +285,8 @@ def answer_item(uid: str, item_id: str, answer: ReviewAnswer, *, schedule=None) 
                     uid, item.task.candidate_id, reason=payload.dismiss_reason, account_generation=generation
                 )
             applied = True
-        elif item.same_person and answer.same_person and answer.same_person.decision == 'yes':
-            from utils.entity_pages import resolve_entity
-
-            left = resolve_entity(uid, item.same_person.left.entity_id)
-            right = resolve_entity(uid, item.same_person.right.entity_id)
-            if left['type'] != right['type']:
-                raise store.ReviewConflict('Entity types differ')
-            change = ReviewChange(
-                change_id=f'review:{store.safe_id(item_id)}',
-                kind='other',
-                title=f"Merge {left['name']} and {right['name']}",
-                reason=item.same_person.reason,
-                refs=[
-                    ChangeRef(type=left['type'], id=left['entity_id'], label=left['name']),
-                    ChangeRef(type=right['type'], id=right['entity_id'], label=right['name']),
-                ],
-                created_at=datetime.now(timezone.utc),
-            )
-            review_changes.merge_review_entities(
-                uid,
-                change,
-                left['entity_id'],
-                right['entity_id'],
-                edit_key='merge:' + ':'.join(sorted([left['entity_id'], right['entity_id']])),
-            )
-            applied = True
+        elif item.same_person and answer.same_person:
+            applied = _answer_same_person(uid, item_id, item.same_person, answer.same_person.decision)
         elif item.spelling:
             from utils.entity_pages import save_user_fact
 
@@ -274,17 +295,27 @@ def answer_item(uid: str, item_id: str, answer: ReviewAnswer, *, schedule=None) 
             value = answer.spelling.value.strip()
             if not value or (not item.spelling.allow_custom and value not in item.spelling.options):
                 raise store.ReviewConflict('Spelling is not an allowed option')
-            save_user_fact(
-                uid,
-                f'vocabulary:{item.spelling.term_id}',
-                value,
-                action_id=f'review:{store.safe_id(item_id)}',
-                predicate='vocabulary',
-            )
-            applied = True
+            if state['source'].get('spelling_edit'):
+                from utils.agent_capabilities.tools import answer_spelling
+
+                applied = answer_spelling(uid, state['source'], value)
+            else:
+                save_user_fact(
+                    uid,
+                    f'vocabulary:{item.spelling.term_id}',
+                    value,
+                    action_id=f'review:{store.safe_id(item_id)}',
+                    predicate='vocabulary',
+                )
+                applied = True
+    except store.ReviewNotFound as exc:
+        store.release_failed_answer(uid, item_id)
+        raise store.ReviewConflict(str(exc)) from exc
+    except store.ReviewStale as exc:
+        store.finish_answer(uid, item_id, applied=False, uncertain=False, offered_version=state['version'], stale=True)
+        raise store.ReviewStale(str(exc)) from exc
     except (
         store.ReviewConflict,
-        store.ReviewNotFound,
         speakers.TagPromptInvalid,
         candidates.CandidateStoreError,
         TaskLinkValidationError,
@@ -295,3 +326,36 @@ def answer_item(uid: str, item_id: str, answer: ReviewAnswer, *, schedule=None) 
         store.release_failed_answer(uid, item_id)
         raise store.ReviewNotFound('Person not found') from exc
     return store.finish_answer(uid, item_id, applied=applied, uncertain=uncertain, offered_version=state['version'])
+
+
+def _answer_same_person(uid: str, item_id: str, pair: SamePersonItem, decision: str) -> bool:
+    left = entity_pages.resolve_entity(uid, pair.left.entity_id)
+    right = entity_pages.resolve_entity(uid, pair.right.entity_id)
+    if left['type'] != right['type']:
+        raise store.ReviewStale('Entity types differ')
+    if left['entity_id'] == right['entity_id']:
+        if decision == 'yes':
+            # The requested identity is already true. Resolve without a second merge.
+            return False
+        raise store.ReviewStale('People are already the same entity')
+    if decision != 'yes':
+        return False
+    change = ReviewChange(
+        change_id=f'review:{store.safe_id(item_id)}',
+        kind='other',
+        title=f"Merge {left['name']} and {right['name']}",
+        reason=pair.reason,
+        refs=[
+            ChangeRef(type=left['type'], id=left['entity_id'], label=left['name']),
+            ChangeRef(type=right['type'], id=right['entity_id'], label=right['name']),
+        ],
+        created_at=datetime.now(timezone.utc),
+    )
+    review_changes.merge_review_entities(
+        uid,
+        change,
+        left['entity_id'],
+        right['entity_id'],
+        edit_key='merge:' + ':'.join(sorted([left['entity_id'], right['entity_id']])),
+    )
+    return True

@@ -9,6 +9,8 @@ from datetime import datetime, timezone
 import pytest
 
 from database import conversations as conversations_db
+from tests.support.transcript_correction_store import install_store, target_updates, read
+from models.transcript_segment import legacy_conversation_segment_id
 
 UID = 'summary-user'
 CONVERSATION_ID = 'summary-conversation'
@@ -130,8 +132,10 @@ def test_missing_app_edit_does_not_write(monkeypatch):
 
 
 def test_segment_edit_invalidates_affected_summary_evidence_in_same_transaction(monkeypatch):
-    ref = _install_db(
+    database = install_store(
         monkeypatch,
+        UID,
+        CONVERSATION_ID,
         {
             'data_protection_level': 'standard',
             'transcript_segments': [
@@ -171,9 +175,12 @@ def test_segment_edit_invalidates_affected_summary_evidence_in_same_transaction(
 
     assert conversations_db.update_conversation_segment_text(UID, CONVERSATION_ID, 's1', 'New source text') == 'ok'
 
-    assert ref.get_transactions == [conversations_db.db.tx]
-    assert len(ref.update_calls) == 1
-    payload = ref.update_calls[0]
+    assert len(database.transactions) == 1
+    patches = target_updates(database, UID, CONVERSATION_ID)
+    assert len(patches) == 1
+    payload = patches[0]
+    assert 'transcript_segments' not in payload
+    assert read(database, UID, CONVERSATION_ID)['transcript_segments'][0]['text'] == 'New source text'
     assert payload['updated_at'].tzinfo == timezone.utc
     assert payload['structured.sections'] == [
         {
@@ -203,11 +210,44 @@ def test_segment_edit_invalidates_affected_summary_evidence_in_same_transaction(
     assert 'structured.overview' not in payload
     assert 'structured.events' not in payload
 
-    stored_segments = json.loads(zlib.decompress(payload['transcript_segments']).decode('utf-8'))
-    assert stored_segments == [
-        {'id': 's1', 'text': 'New source text'},
-        {'id': 's2', 'text': 'Unaffected source text'},
-    ]
+    raw = database.rows[('users', UID, 'conversations', CONVERSATION_ID)]
+    captured = conversations_db.decode_transcript_segments_verified(UID, raw['transcript_segments'], True)
+    assert {segment['id']: segment['text'] for segment in captured} == {
+        's1': 'Old source text',
+        's2': 'Unaffected source text',
+    }
+    projected = read(database, UID, CONVERSATION_ID)['transcript_segments']
+    assert {segment['id']: segment['text'] for segment in projected} == {
+        's1': 'New source text',
+        's2': 'Unaffected source text',
+    }
+
+
+def test_segment_edit_resolves_legacy_segment_with_no_stored_id(monkeypatch):
+    legacy_id = legacy_conversation_segment_id(CONVERSATION_ID, 1)
+    database = install_store(
+        monkeypatch,
+        UID,
+        CONVERSATION_ID,
+        {
+            'data_protection_level': 'standard',
+            'transcript_segments': [{'text': 'First segment, no id'}, {'text': 'Old source text'}],
+            'structured': {'overview': 'Keep this user-visible overview'},
+        },
+    )
+    path = ('users', UID, 'conversations', CONVERSATION_ID)
+    captured = database.rows[path]['transcript_segments']
+    assert conversations_db.update_conversation_segment_text(UID, CONVERSATION_ID, legacy_id, 'New source text') == 'ok'
+    assert database.rows[path]['transcript_segments'] == captured
+    projected = read(database, UID, CONVERSATION_ID)['transcript_segments']
+    assert [segment['text'] for segment in projected] == ['First segment, no id', 'New source text']
+    assert projected[1]['original_text'] == 'Old source text'
+    # A second edit uses the same virtual ID and preserves the original capture.
+    assert (
+        conversations_db.update_conversation_segment_text(UID, CONVERSATION_ID, legacy_id, 'Later source text') == 'ok'
+    )
+    assert database.rows[path]['transcript_segments'] == captured
+    assert read(database, UID, CONVERSATION_ID)['transcript_segments'][1]['text'] == 'Later source text'
 
 
 def test_missing_conversation_summary_edit_does_not_write(monkeypatch):
@@ -245,3 +285,17 @@ def test_duplicate_app_id_is_rejected_by_summary_endpoint_without_mutation(monke
     )
     assert response.status_code == 409
     assert ref.update_calls == []
+
+
+@pytest.mark.parametrize('result,status', [('conflict', 409), ('correction_limit', 409), ('unexpected', 500)])
+def test_failed_transcript_mutation_cannot_be_confirmed_as_success(monkeypatch, summary_client, result, status):
+    from routers import conversations as routes
+
+    monkeypatch.setattr(routes, '_get_valid_conversation_by_id', lambda *_, **__: object())
+    monkeypatch.setattr(conversations_db, 'update_conversation_segment_text', lambda *_, **__: result)
+    response = summary_client.patch(
+        f'/v1/conversations/{CONVERSATION_ID}/segments/text',
+        json={'segment_id': 'synthetic-segment', 'text': 'Synthetic owner correction'},
+    )
+    assert response.status_code == status
+    assert response.json().get('status') != 'Ok'

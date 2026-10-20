@@ -7,7 +7,6 @@ particular, foreign edits in a mostly target-language sentence must survive.
 from collections import Counter
 import re
 
-from config.translation import translation_output_guard_enabled
 from utils.translation_language import detect_language_with_confidence
 
 # Dice >= .80 permits one insertion into four tokens (including a negation).
@@ -57,8 +56,6 @@ def output_rejection_reason(source: str, output: str, target: str) -> str | None
         return 'empty'
     if ' '.join(source.split()) == ' '.join(output.split()):
         return 'unchanged'
-    if not translation_output_guard_enabled():
-        return None
     if ' '.join(source.casefold().split()) == ' '.join(output.casefold().split()):
         return 'near_copy'
     if lexical_overlap(source, output) < NEAR_COPY_DICE:

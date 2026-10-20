@@ -7,7 +7,7 @@ import pytest
 
 from database import review_changes, review_memory_changes, review_memory_merges as merges, review_store
 from models.product_memory import MemoryItem, MemoryTier
-from utils import dream_reads
+from utils.agent_capabilities import reads as dream_reads
 from models.review import ReviewChange
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 
@@ -134,8 +134,8 @@ def test_review_change_routes_duplicate_fact_edit_to_merge_journal(monkeypatch):
         memory_id='one', duplicate_memory_id='two', content='Synthetic combined fact'
     )
     captured = []
-    monkeypatch.setattr(review_changes.store, 'require_enabled', lambda: None)
-    monkeypatch.setattr(merges, 'record_merge', lambda *args: captured.append(args) or change)
+    monkeypatch.setattr(review_changes.store, 'require_enabled', lambda uid=None: None)
+    monkeypatch.setattr(merges, 'record_merge', lambda *args, **kwargs: captured.append(args) or change)
 
     assert review_changes.record_agent_change(UID, change, [], edit_key='stable-merge', memory_edit=edit) == change
     assert captured == [(UID, change, edit, 'stable-merge')]
@@ -143,7 +143,12 @@ def test_review_change_routes_duplicate_fact_edit_to_merge_journal(monkeypatch):
 
 def test_review_change_routes_merge_undo_to_merge_journal(monkeypatch):
     change = ReviewChange(change_id='synthetic-change', kind='merge_memories', title='Merge duplicates', created_at=NOW)
-    data = {'created_at': NOW, 'memory_edit': {'memory_id': 'one'}, 'memory_merge': True}
+    data = {
+        'created_at': NOW,
+        'change': change.model_dump(mode='python'),
+        'memory_edit': {'memory_id': 'one'},
+        'memory_merge': True,
+    }
 
     class Ref:
         def get(self):
@@ -155,7 +160,7 @@ def test_review_change_routes_merge_undo_to_merge_journal(monkeypatch):
         lambda _uid: SimpleNamespace(collection=lambda _name: SimpleNamespace(document=lambda _key: Ref())),
     )
     captured = []
-    monkeypatch.setattr(merges, 'set_undone', lambda *args: captured.append(args) or change)
+    monkeypatch.setattr(merges, 'set_undone', lambda *args, **kwargs: captured.append(args) or change)
 
     assert review_changes.set_undone(UID, change.change_id, True, now=NOW) == change
     assert captured == [(UID, change.change_id, True, data)]

@@ -184,7 +184,17 @@ def test_delete_conversation_without_children_still_deletes_the_document(store):
     conversations_db.delete_conversation('uid-1', 'conv-1')
 
     assert not conversation.exists
-    assert store.deleted == ['users/uid-1/conversations/conv-1']
+    assert store.deleted == ['users/uid-1/conversations/conv-1', 'users/uid-1/transcript_corrections/conv-1']
+
+
+def test_delete_conversation_purges_only_its_owner_scoped_correction_overlay(store):
+    user = store.collection('users').document('uid-1')
+    own = user.collection('transcript_corrections').document('conv-1')
+    other = user.collection('transcript_corrections').document('conv-2')
+    another_owner = store.collection('users').document('uid-2').collection('transcript_corrections').document('conv-1')
+    _seed_conversation(store)
+    conversations_db.delete_conversation('uid-1', 'conv-1')
+    assert not own.exists and other.exists and another_owner.exists
 
 
 def test_delete_capture_cascades_retained_bridge_sources(store, monkeypatch):

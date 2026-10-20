@@ -206,16 +206,34 @@ def export_conversations(
         base_name = f"{date_prefix}_{slug}_{short_id}"
         filepath = output_dir / f"{base_name}.md"
 
-        if not overwrite:
-            counter = 1
-            while filepath in used_paths or filepath.exists():
-                counter += 1
-                filepath = output_dir / f"{base_name}_{counter}.md"
-
-        used_paths.add(filepath)
-
         md_content = conversation_to_markdown(conv)
-        filepath.write_text(md_content, encoding="utf-8")
+
+        if overwrite:
+            used_paths.add(filepath)
+            filepath.write_text(md_content, encoding="utf-8")
+        else:
+            # Claim the path with an atomic exclusive create. Checking
+            # exists() first and writing afterwards leaves a window in which a
+            # concurrent export (or the user) can create that file, and the
+            # subsequent write_text() would then truncate it despite
+            # overwrite=False. Opening with "x" is atomic: if the path already
+            # exists we get FileExistsError and can pick a fresh name instead
+            # of destroying what is there.
+            counter = 1
+            while True:
+                try:
+                    with filepath.open("x", encoding="utf-8") as fh:
+                        fh.write(md_content)
+                    break
+                except FileExistsError:
+                    counter += 1
+                    filepath = output_dir / f"{base_name}_{counter}.md"
+                    # Never hand out a name we already used in this batch.
+                    while filepath in used_paths:
+                        counter += 1
+                        filepath = output_dir / f"{base_name}_{counter}.md"
+            used_paths.add(filepath)
+
         print(f"Exported: {filepath}")
         exported_paths.append(filepath)
 
@@ -270,9 +288,13 @@ def main() -> None:
     )
     args = parser.parse_args()
 
+    # Progress messages include filenames, which may contain non-ASCII text.
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
+
     # Read input with UTF-8 BOM protection
     if args.input == "-":
-        raw_data = sys.stdin.read().lstrip("\ufeff")
+        raw_data = sys.stdin.buffer.read().decode("utf-8-sig")
     else:
         raw_data = Path(args.input).read_text(encoding="utf-8-sig")
 

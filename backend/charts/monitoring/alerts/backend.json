@@ -109,7 +109,7 @@
             {
               "evaluator": {
                 "params": [
-                  5
+                  20
                 ],
                 "type": "gt"
               },
@@ -142,13 +142,13 @@
     ],
     "updated": "2026-06-23T01:27:10Z",
     "noDataState": "OK",
-    "execErrState": "Error",
-    "for": "5m",
+    "execErrState": "KeepLast",
+    "for": "10m",
     "keep_firing_for": "0s",
     "annotations": {
       "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
       "__panelId__": "4",
-      "threshold": "5 RPS 4xx",
+      "threshold": ">20 rps for 10m. Direct Cloud Monitoring 1m RPS, 2026-10-04 07:25Z..2026-10-07 12:00Z (sync-poll-storm days excluded): p50 4.23 / p99 14.33 / max 36.28; longest run >20 was 1m.",
       "summary": "Omi API alert: Backend - 4XX error rate is high.",
       "user_impact": "Users may see this Omi capability fail, slow down, or become unavailable.",
       "scope": "The Omi API production service path.",
@@ -157,7 +157,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null,
     "labels": {
@@ -314,7 +315,7 @@
     ],
     "updated": "2026-06-23T01:27:10Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "3m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -336,321 +337,10 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
-    },
-    "record": null
-  },
-  {
-    "id": 46,
-    "uid": "fewwk2goqfklcf",
-    "orgID": 1,
-    "folderUID": "betdycdziadc0e",
-    "ruleGroup": "Backend",
-    "title": "Backend - API Quota Exceeded (429)",
-    "condition": "C",
-    "data": [
-      {
-        "refId": "A",
-        "queryType": "range",
-        "relativeTimeRange": {
-          "from": 900,
-          "to": 0
-        },
-        "datasourceUid": "aet29e27cgmwwc",
-        "model": {
-          "datasource": {
-            "type": "loki",
-            "uid": "aet29e27cgmwwc"
-          },
-          "direction": "backward",
-          "editorMode": "code",
-          "expr": "count(rate({service_name=~\"backend-listen\"} |~ `429.*(quota)` [5m])) or vector(0)",
-          "instant": true,
-          "intervalMs": 60000,
-          "maxDataPoints": 43200,
-          "queryType": "range",
-          "range": false,
-          "refId": "A"
-        }
-      },
-      {
-        "refId": "B",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 0,
-          "to": 0
-        },
-        "datasourceUid": "__expr__",
-        "model": {
-          "conditions": [
-            {
-              "evaluator": {
-                "params": [],
-                "type": "gt"
-              },
-              "operator": {
-                "type": "and"
-              },
-              "query": {
-                "params": [
-                  "B"
-                ]
-              },
-              "reducer": {
-                "params": [],
-                "type": "max"
-              },
-              "type": "query"
-            }
-          ],
-          "datasource": {
-            "type": "__expr__",
-            "uid": "__expr__"
-          },
-          "expression": "A",
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "reducer": "max",
-          "refId": "B",
-          "type": "reduce"
-        }
-      },
-      {
-        "refId": "C",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 0,
-          "to": 0
-        },
-        "datasourceUid": "__expr__",
-        "model": {
-          "conditions": [
-            {
-              "evaluator": {
-                "params": [
-                  10
-                ],
-                "type": "gte"
-              },
-              "operator": {
-                "type": "and"
-              },
-              "query": {
-                "params": [
-                  "C"
-                ]
-              },
-              "reducer": {
-                "params": [],
-                "type": "last"
-              },
-              "type": "query"
-            }
-          ],
-          "datasource": {
-            "type": "__expr__",
-            "uid": "__expr__"
-          },
-          "expression": "B",
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "refId": "C",
-          "type": "threshold"
-        }
-      }
-    ],
-    "updated": "2026-06-20T02:27:33Z",
-    "noDataState": "OK",
-    "execErrState": "OK",
-    "for": "5m",
-    "keep_firing_for": "0s",
-    "annotations": {
-      "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
-      "__panelId__": "62",
-      "summary": "Omi API alert: Backend - API Quota Exceeded (429).",
-      "user_impact": "Users may see this Omi capability fail, slow down, or become unavailable.",
-      "scope": "The Omi API production service path.",
-      "verification": "Verify the condition in the linked Grafana panel and correlate it with production traffic before intervention.",
-      "safe_next_action": "Inspect the linked dashboard and service readiness; use the documented rollback or capacity path only after verification."
-    },
-    "labels": {
-      "instatus_component": "api",
-      "severity": "warning",
-      "alert_identity": "fewwk2goqfklcf",
-      "component": "api",
-      "impact": "product"
-    },
-    "isPaused": false,
-    "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_wait": "30s",
-      "group_interval": "5m",
-      "repeat_interval": "5m"
+      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
     },
     "record": null
-  },
-  {
-    "id": 14,
-    "uid": "cew4a2kdopb0ga",
-    "orgID": 1,
-    "folderUID": "betdycdziadc0e",
-    "ruleGroup": "Backend",
-    "title": "Backend RPS is high",
-    "condition": "C",
-    "data": [
-      {
-        "refId": "A",
-        "queryType": "timeSeriesList",
-        "relativeTimeRange": {
-          "from": 21600,
-          "to": 0
-        },
-        "datasourceUid": "beuxmaq8oxhq8e",
-        "model": {
-          "aliasBy": "RPS",
-          "datasource": {
-            "type": "stackdriver",
-            "uid": "beuxmaq8oxhq8e"
-          },
-          "instant": false,
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "queryType": "timeSeriesList",
-          "range": true,
-          "refId": "A",
-          "timeSeriesList": {
-            "alignmentPeriod": "cloud-monitoring-auto",
-            "crossSeriesReducer": "REDUCE_SUM",
-            "filters": [
-              "resource.label.backend_target_name",
-              "=",
-              "custom-domains-api-omi-me-backend-49a4-be",
-              "AND",
-              "metric.type",
-              "=",
-              "loadbalancing.googleapis.com/https/backend_request_count"
-            ],
-            "groupBys": [],
-            "perSeriesAligner": "ALIGN_NONE",
-            "preprocessor": "rate",
-            "projectName": "based-hardware",
-            "view": "FULL"
-          }
-        }
-      },
-      {
-        "refId": "B",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 0,
-          "to": 0
-        },
-        "datasourceUid": "__expr__",
-        "model": {
-          "conditions": [
-            {
-              "evaluator": {
-                "params": [],
-                "type": "gt"
-              },
-              "operator": {
-                "type": "and"
-              },
-              "query": {
-                "params": [
-                  "B"
-                ]
-              },
-              "reducer": {
-                "params": [],
-                "type": "last"
-              },
-              "type": "query"
-            }
-          ],
-          "datasource": {
-            "type": "__expr__",
-            "uid": "__expr__"
-          },
-          "expression": "A",
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "reducer": "last",
-          "refId": "B",
-          "type": "reduce"
-        }
-      },
-      {
-        "refId": "C",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 0,
-          "to": 0
-        },
-        "datasourceUid": "__expr__",
-        "model": {
-          "conditions": [
-            {
-              "evaluator": {
-                "params": [
-                  150
-                ],
-                "type": "gt"
-              },
-              "operator": {
-                "type": "and"
-              },
-              "query": {
-                "params": [
-                  "C"
-                ]
-              },
-              "reducer": {
-                "params": [],
-                "type": "last"
-              },
-              "type": "query"
-            }
-          ],
-          "datasource": {
-            "type": "__expr__",
-            "uid": "__expr__"
-          },
-          "expression": "B",
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "refId": "C",
-          "type": "threshold"
-        }
-      }
-    ],
-    "updated": "2026-06-23T01:20:15Z",
-    "noDataState": "OK",
-    "execErrState": "Error",
-    "for": "5m",
-    "keep_firing_for": "0s",
-    "annotations": {
-      "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
-      "__panelId__": "3",
-      "threshold": "150",
-      "summary": "Omi API alert: Backend RPS is high.",
-      "user_impact": "No confirmed user impact yet; Omi capacity or reliability headroom is reduced.",
-      "scope": "The Omi API production service path.",
-      "verification": "Verify the condition in the linked Grafana panel and check service readiness before intervention.",
-      "safe_next_action": "Inspect readiness and capacity first; use the documented scaling or rollback path only if the condition persists."
-    },
-    "isPaused": false,
-    "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
-    },
-    "record": null,
-    "labels": {
-      "severity": "ticket",
-      "instatus_component": "api",
-      "alert_identity": "cew4a2kdopb0ga",
-      "component": "api",
-      "impact": "infrastructure"
-    }
   },
   {
     "id": 18,
@@ -791,7 +481,7 @@
     ],
     "updated": "2026-06-20T02:27:34Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "5m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -806,7 +496,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null,
     "labels": {
@@ -964,7 +655,7 @@
     ],
     "updated": "2026-06-20T02:27:34Z",
     "noDataState": "OK",
-    "execErrState": "Error",
+    "execErrState": "KeepLast",
     "for": "5m",
     "keep_firing_for": "0s",
     "annotations": {
@@ -979,7 +670,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null,
     "labels": {
@@ -989,155 +681,6 @@
       "component": "api",
       "impact": "infrastructure"
     }
-  },
-  {
-    "id": 48,
-    "uid": "afd0krbk1bugwf",
-    "orgID": 1,
-    "folderUID": "betdycdziadc0e",
-    "ruleGroup": "Backend",
-    "title": "OpenAI - Quota Exceeded",
-    "condition": "C",
-    "data": [
-      {
-        "refId": "A",
-        "queryType": "range",
-        "relativeTimeRange": {
-          "from": 900,
-          "to": 0
-        },
-        "datasourceUid": "aet29e27cgmwwc",
-        "model": {
-          "datasource": {
-            "type": "loki",
-            "uid": "aet29e27cgmwwc"
-          },
-          "direction": "backward",
-          "editorMode": "code",
-          "expr": "count(rate({namespace=\"prod-omi-backend\"} |~ \"openai.RateLimitError|insufficient_quota\" [5m])) or vector(0)",
-          "instant": true,
-          "intervalMs": 60000,
-          "maxDataPoints": 43200,
-          "queryType": "range",
-          "range": false,
-          "refId": "A"
-        }
-      },
-      {
-        "refId": "B",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 0,
-          "to": 0
-        },
-        "datasourceUid": "__expr__",
-        "model": {
-          "conditions": [
-            {
-              "evaluator": {
-                "params": [],
-                "type": "gt"
-              },
-              "operator": {
-                "type": "and"
-              },
-              "query": {
-                "params": [
-                  "B"
-                ]
-              },
-              "reducer": {
-                "params": [],
-                "type": "max"
-              },
-              "type": "query"
-            }
-          ],
-          "datasource": {
-            "type": "__expr__",
-            "uid": "__expr__"
-          },
-          "expression": "A",
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "reducer": "max",
-          "refId": "B",
-          "type": "reduce"
-        }
-      },
-      {
-        "refId": "C",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 0,
-          "to": 0
-        },
-        "datasourceUid": "__expr__",
-        "model": {
-          "conditions": [
-            {
-              "evaluator": {
-                "params": [
-                  10
-                ],
-                "type": "gte"
-              },
-              "operator": {
-                "type": "and"
-              },
-              "query": {
-                "params": [
-                  "C"
-                ]
-              },
-              "reducer": {
-                "params": [],
-                "type": "last"
-              },
-              "type": "query"
-            }
-          ],
-          "datasource": {
-            "type": "__expr__",
-            "uid": "__expr__"
-          },
-          "expression": "B",
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "refId": "C",
-          "type": "threshold"
-        }
-      }
-    ],
-    "updated": "2026-06-20T02:27:33Z",
-    "noDataState": "OK",
-    "execErrState": "OK",
-    "for": "5m",
-    "keep_firing_for": "5m",
-    "annotations": {
-      "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
-      "__panelId__": "62",
-      "summary": "Omi API alert: OpenAI - Quota Exceeded.",
-      "user_impact": "Users may see this Omi capability fail, slow down, or become unavailable.",
-      "scope": "The Omi API production service path.",
-      "verification": "Verify the condition in the linked Grafana panel and correlate it with production traffic before intervention.",
-      "safe_next_action": "Inspect the linked dashboard and service readiness; use the documented rollback or capacity path only after verification."
-    },
-    "labels": {
-      "instatus_component": "api",
-      "severity": "ticket",
-      "alert_identity": "afd0krbk1bugwf",
-      "component": "api",
-      "impact": "product"
-    },
-    "isPaused": false,
-    "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)",
-      "group_wait": "30s",
-      "group_interval": "5m",
-      "repeat_interval": "5m"
-    },
-    "record": null
   },
   {
     "id": 85,
@@ -1247,6 +790,7 @@
       "severity": "critical"
     },
     "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/d2d782ef-f537-46b8-969d-f73561ec7d07",
       "safe_next_action": "Do not deploy a new Cloud Run revision (starts will fail). Check GCP status for us-central1. Wait for instance starts to succeed.",
       "scope": "Cloud Run revisions in based-hardware matching STARTUP TCP probe failed or instance could not start successfully.",
       "summary": "Cloud Run instances are failing to start (STARTUP TCP probe / instance could not start).",
@@ -1255,7 +799,8 @@
       "verification": "Cloud Logging: resource.type=cloud_run_revision AND textPayload:STARTUP TCP probe failed. Contrast api.omi.me vs a warm instance."
     },
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
     },
     "record": null
   }

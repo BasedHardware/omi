@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import io
 import logging
-from typing import Optional
+from typing import Optional, Callable
 
 logger = logging.getLogger(__name__)
 
@@ -71,3 +71,55 @@ def store_partial_merge_survivor_audio(
         logger.warning(
             f'sync: failed to store partial merge survivor audio for {conversation_id}@{file_timestamp}: {e}'
         )
+
+
+def store_sync_audio_chunk(
+    uid: str,
+    conversation_id: str,
+    timestamp: float,
+    audio_bytes: Optional[bytes],
+    data_protection_level: Optional[str],
+    *,
+    decode_audio: Callable[[Optional[bytes]], Optional[bytes]] | None = None,
+    upload_audio: Callable[[bytes, str, str, float, Optional[str]], str] | None = None,
+) -> None:
+    """Legacy best-effort full chunk persistence with stable replay naming."""
+    try:
+        if upload_audio is None:
+            from utils.other.storage import upload_audio_chunk
+
+            upload_audio = upload_audio_chunk
+        pcm = (decode_audio or _wav_bytes_to_pcm16_16k)(audio_bytes)
+        if not pcm:
+            return
+        upload_audio(pcm, uid, conversation_id, float(timestamp), data_protection_level)
+    except Exception as error:
+        logger.warning('sync: failed to store audio chunk for %s@%s: %s', conversation_id, timestamp, error)
+
+
+def store_intake_audio(
+    uid: str,
+    timestamp: float,
+    audio_bytes: Optional[bytes],
+    data_protection_level: str,
+    survivors: list,
+    transcript_segment_count: int,
+    private_cloud_sync_enabled: bool,
+    conversation_id: str,
+    *,
+    store_full: Callable[[str, str, float, Optional[bytes], Optional[str]], None] | None = None,
+    store_partial: Callable[..., None] | None = None,
+) -> None:
+    """One shared legacy/batch full-vs-partial retained-audio policy."""
+    if private_cloud_sync_enabled and survivors:
+        if len(survivors) == transcript_segment_count:
+            (store_full or store_sync_audio_chunk)(uid, conversation_id, timestamp, audio_bytes, data_protection_level)
+        else:
+            (store_partial or store_partial_merge_survivor_audio)(
+                uid=uid,
+                conversation_id=conversation_id,
+                file_timestamp=timestamp,
+                audio_bytes=audio_bytes,
+                data_protection_level=data_protection_level,
+                survivors=survivors,
+            )

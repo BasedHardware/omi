@@ -35,7 +35,7 @@ def resolve_entity(uid: str, entity_id: str) -> dict:
     seen = set()
     while node.get('redirect_entity_id'):
         if entity_id in seen or len(seen) >= 8:
-            raise store.ReviewConflict('Entity redirect cycle')
+            raise store.ReviewStale('Entity redirect cycle')
         seen.add(entity_id)
         entity_id = _id(node['redirect_entity_id'])
         node = knowledge_graph.get_knowledge_node(uid, entity_id) or {}
@@ -344,6 +344,8 @@ def get_entity_page(uid: str, entity_id: str) -> EntityPage:
             )
     pending = None
     for proposal in store.list_proposals(uid):
+        if proposal['item']['kind'] == 'agent_proposal':
+            continue
         item = ReviewItem.model_validate(proposal['item'])
         if item.same_person and {item.same_person.left.entity_id, item.same_person.right.entity_id}.intersection(
             identities
@@ -371,7 +373,7 @@ def get_entity_page(uid: str, entity_id: str) -> EntityPage:
 
 def write_entity_summary(uid: str, entity_id: str, summary: str, *, updated_at: datetime | None = None) -> None:
     """Dream writer: the cache never replaces authoritative facts."""
-    store.require_enabled()
+    store.require_enabled(uid)
     entity_id = resolve_entity(uid, entity_id)['entity_id']
     if len(summary) > 16000:
         raise ValueError('Entity summary is too long')

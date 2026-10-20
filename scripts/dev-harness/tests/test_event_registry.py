@@ -130,3 +130,60 @@ def test_record_reference_cannot_be_repurposed_to_arbitrary_content():
     event = next(e for e in doc['events'] if e['id'] == 'productValueEvent')
     event['properties']['objectId']['wire_name'] = 'transcript'
     assert registry.validate(doc)
+
+
+def test_billing_registry_lists_every_emitter_property_without_portable_strings():
+    import ast
+
+    doc = source()
+    tree = ast.parse((ROOT / 'backend/utils/observability/subscription_events.py').read_text())
+    functions = {node.name: node for node in tree.body if isinstance(node, ast.FunctionDef)}
+    for event in doc['events']:
+        if event['id'] not in registry.BILLING_EVENT_IDS:
+            continue
+        function = functions[
+            'emit_billing_plan_changed' if event['id'] == 'billingSubscriptionPlanChanged'
+            else 'emit_billing_product_event'
+        ]
+        properties = next(
+            kw.value for node in ast.walk(function) if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name) and node.func.id == 'emit_product_event'
+            for kw in node.keywords if kw.arg == 'properties'
+        )
+        emitted = {
+            key.value for node in ast.walk(properties) if isinstance(node, ast.Dict)
+            for key in node.keys if isinstance(key, ast.Constant) and isinstance(key.value, str)
+        }
+        registered = {spec['wire_name'] for spec in event['properties'].values()} | set(event['backend_properties'])
+        assert registered == emitted, event['id']
+        assert all(spec['type'] in {'bool', 'int', 'enum'} for spec in event['properties'].values())
+        _, plan = registry.render(doc)
+        row = next(line for line in plan.splitlines() if line.startswith(f"| {event['id']} |"))
+        assert all(wire in row for wire in emitted)
+
+
+def test_backend_payload_inventory_cannot_admit_arbitrary_fields_or_other_events():
+    doc = source()
+    billing = next(e for e in doc['events'] if e['id'] == 'billingSubscriptionStarted')
+    billing['backend_properties']['email'] = {'type': 'bounded_string', 'max_length': 128}
+    assert registry.validate(doc)
+    doc = source()
+    doc['events'][0]['backend_properties'] = registry.BILLING_BACKEND_PROPERTIES
+    assert registry.validate(doc)
+
+
+def test_saved_reconnect_query_separates_attempts_outcomes_and_zero_denominators():
+    import sqlite3
+    consumer = json.loads((ROOT / 'contracts/analytics/consumers/saved-pendant-reconnect.json').read_text())
+    query = (ROOT / consumer['outcomes_query']).read_text()
+    with sqlite3.connect(':memory:') as db:
+        db.execute('CREATE TABLE events(event TEXT, app_namespace TEXT, build_number TEXT, trigger TEXT, result TEXT)')
+        rows = [('launch', 'attempted'), ('launch', 'failed_timeout'), ('launch', 'connected'),
+                ('resume', 'attempted'), ('native_retry', 'connected')]
+        db.executemany('INSERT INTO events VALUES (?, ?, ?, ?, ?)',
+                       [('Saved Pendant Reconnect', 'mobile-test', '1', trigger, result) for trigger, result in rows])
+        db.execute("INSERT INTO events VALUES ('Saved Pendant Reconnect', 'desktop-test', '1', 'launch', 'attempted')")
+        result = db.execute(query, {'app_namespace': 'mobile-test', 'build_number': '1'}).fetchall()
+        assert result == [('dart', 2, 1, 0.5), ('native', 0, 1, None)]
+        db.execute('DELETE FROM events')
+        assert db.execute(query, {'app_namespace': 'mobile-test', 'build_number': '1'}).fetchall() == []

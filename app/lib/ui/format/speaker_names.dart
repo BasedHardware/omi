@@ -55,11 +55,19 @@ class SpeakerNames {
   /// The name for [segment]'s speaker. [person] overrides the people lookup (callers that already
   /// resolved it).
   String forSegment(TranscriptSegment segment, {Person? person}) {
+    if (segment.sttProvider?.startsWith('on_device:') == true) return '';
     if (segment.isUser) return _ownerName ?? _l10n.you;
     if (segment.speakerId == omiSpeakerId) return _l10n.omiAppName;
     final assigned = person ?? (segment.personId == null ? null : _peopleById[segment.personId]);
     if (assigned != null && assigned.name.trim().isNotEmpty) return assigned.name;
     return anonymousName(segment.speakerId);
+  }
+
+  /// Server-projected Review excerpts have resolved names, but no complete diarization map.
+  /// Localize the owner and unnamed speaker through the same speaker naming authority.
+  static String excerptLabel({required bool isUser, String? speakerLabel, required AppLocalizations l10n}) {
+    if (isUser) return l10n.you;
+    return speakerLabel == null || speakerLabel.trim().isEmpty ? l10n.unnamedSpeakerLabel : speakerLabel;
   }
 
   /// "Speaker N" for a diarized [speakerId], with N from [ordinalFor].

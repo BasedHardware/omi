@@ -239,7 +239,6 @@ def _clients_subprocess_script(assertion: str) -> str:
         "    'langchain_anthropic',",
         "    'langchain_openai',",
         "    'tiktoken',",
-        "    'database',",
         "    'database._client',",
         "    'database.llm_usage',",
         "    'models.structured_extraction',",
@@ -341,8 +340,6 @@ class TestModelQosProfiles:
             'memories',
             'x_memory_extraction_flex',
             'learnings',
-            'memory_conflict',
-            'memory_conflict_flex',
             'knowledge_graph',
             'memory_l1',
             'memory_l2',
@@ -379,6 +376,7 @@ class TestModelQosProfiles:
             'memory_category',
             'smart_glasses',
             'persona_chat',
+            'sync_redrive_title',
         }
         expected_openai = {
             **{feature: (LUNA_MODEL, 'openai') for feature in luna_features},
@@ -871,10 +869,10 @@ class TestExpandedCallsiteCoverage:
 
         source = self._read_source("utils/llm/memories.py")
         calls = re.findall(r"get_llm\(\s*'(\w+)'", source)
-        for key in ['memories', 'learnings', 'memory_category', 'memory_conflict']:
+        for key in ['memories', 'learnings', 'memory_category']:
             assert key in calls, f"Missing get_llm('{key}') in memories.py"
-        # 4th call site: the daily-sweep summary agent reuses the same memories QoS route.
-        assert calls.count('memories') == 4, "memories should appear exactly four times"
+        # The daily-sweep summary agent was retired with the daily memory sweep.
+        assert calls.count('memories') == 3, "memories should appear exactly three times"
 
     def test_knowledge_graph_all_keys(self):
         import re

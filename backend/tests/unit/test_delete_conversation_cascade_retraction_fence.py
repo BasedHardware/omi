@@ -84,7 +84,7 @@ def test_gate_contention_maps_to_409_with_retry_after():
     """Static checker: importing routers.conversations is too heavy for unit isolation.
 
     Concurrent account-gated deletes used to escape as 500. The retract path
-    must map DestructiveOperationInProgress to the shared 409 helper — same
+    must map contention and unavailable authority to the shared 409 helper — same
     structural-regex approach as the 503 test above, so a regression that maps
     it to anything else (500/503) or moves the mapping to an unrelated handler
     fails this guard.
@@ -96,7 +96,7 @@ def test_gate_contention_maps_to_409_with_retry_after():
     mapped = re.search(
         r"except RuntimeError as error:\s*\n"
         r"\s+#.*\n"
-        r'\s+if type\(error\)\.__name__ != "DestructiveOperationInProgress":\s*\n'
+        r'\s+if type\(error\)\.__name__ not in \{[^}]*"DestructiveGateTakeover"[^}]*\}:\s*\n'
         r"\s+raise\s*\n"
         r"\s+from utils\.other\.account_gate_http import account_gate_busy_http_exception\s*\n"
         r"\s+raise account_gate_busy_http_exception\(\) from error",

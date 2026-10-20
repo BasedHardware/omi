@@ -18,6 +18,8 @@ import pytest
 from pydantic import BaseModel
 
 from models.transcript_segment import SpeakerIdentityStatus
+from utils import dream_vocabulary  # noqa: F401 - retain shared keyterms before legacy database stubs
+from utils.observability import speaker_identification  # noqa: F401 - retain telemetry across legacy sanitizer stubs
 
 
 def _read_text(path):
@@ -531,12 +533,14 @@ class TestSegmentDeduplication:
             'store_partial_merge_survivor_audio(' not in source
         ), "Chunk storage stays in pipeline; assignment returns survivors instead"
         pipeline_source = self._read_pipeline_source()
+        assert 'store_intake_audio(' in pipeline_source, "Sync must delegate retained audio to the shared policy"
         assert (
-            'store_partial_merge_survivor_audio(' in pipeline_source
-        ), "Partial dedupe must store sliced private-cloud audio for survivors"
+            'store_partial=store_partial_merge_survivor_audio' in pipeline_source
+        ), "The shared policy must retain the legacy partial-audio callback"
+        audio_source = _read_text(Path(__file__).parents[2] / 'utils/sync/merge_audio.py')
         assert (
-            'if private_cloud_sync_enabled and survivors:' in pipeline_source
-        ), "Chunk upload must be skipped when dedupe eliminated every segment"
+            'if private_cloud_sync_enabled and survivors:' in audio_source
+        ), "Shared chunk policy must skip upload when dedupe eliminated every segment"
 
     def test_dedupe_helper_uses_rounding(self):
         """Shared helper must round timestamps for reliable comparison."""
@@ -696,6 +700,7 @@ class TestMergeSurvivorAudio:
         mock_upload = MagicMock()
         mock_storage = ModuleType('utils.other.storage')
         mock_storage.upload_audio_chunk = mock_upload
+        mock_storage.link_archive_captures = MagicMock()
 
         with (
             patch.object(merge_audio, '_wav_bytes_to_pcm16_16k', return_value=pcm),
@@ -762,6 +767,7 @@ _STUB_MODULES = [
     'utils.subscription',
     'utils.cloud_tasks',
     'utils.sync.content_id',
+    'utils.sync.empty_recovery_intent',
     'utils.sync.assignment',
     'utils.sync.merge_audio',
     'utils.sync.merge_dedupe',
@@ -815,6 +821,14 @@ class TestProcessSegmentReal:
 
         sys.modules['database.redis_db'].r = MagicMock()
         sys.modules['database._client'].db = MagicMock()
+        sys.modules['database._client'].get_firestore_client = MagicMock(
+            side_effect=AssertionError('flag-off segment processing must not claim a first-summary owner')
+        )
+        # Held-result custody imports the real privacy fence. Both client views
+        # must remain the same no-IO fake, including the deletion marker plane.
+        sys.modules['database._client'].get_data_plane_firestore_client = sys.modules[
+            'database._client'
+        ].get_firestore_client
         # Segment error handling is isolated from enrollment/voiceprint loading.
         sys.modules['utils.stt.owner_profile'].load_owner_embedding = MagicMock(return_value=None)
         sys.modules['utils.stt.owner_profile'].validated_embedding = MagicMock(return_value=None)
@@ -845,6 +859,7 @@ class TestProcessSegmentReal:
         sys.modules['utils.other.storage'].mark_playback_unavailable = MagicMock()
         sys.modules['utils.other.storage'].is_playback_unavailable = MagicMock(return_value=False)
         sys.modules['utils.other.storage'].enqueue_conversation_audio_merge = MagicMock()
+        sys.modules['utils.other.storage'].link_archive_captures = MagicMock()
         sys.modules['utils.other.storage'].delete_syncing_temporal_file = MagicMock()
         sys.modules['utils.other.storage'].download_audio_chunks_and_merge = MagicMock()
         sys.modules['utils.other.storage'].get_or_create_merged_audio = MagicMock()
@@ -857,6 +872,7 @@ class TestProcessSegmentReal:
         sys.modules['utils.other.storage'].upload_syncing_temporal_file = MagicMock()
         sys.modules['utils.other.storage'].download_syncing_temporal_file = MagicMock(return_value=True)
         sys.modules['utils.other.storage'].compute_audio_files_fingerprint = MagicMock(return_value='fp')
+        sys.modules['utils.other.storage'].list_audio_chunks = MagicMock(return_value=[])
         sys.modules['utils.other.storage'].enqueue_conversation_artifact_build = MagicMock()
         sys.modules['utils.other.storage'].get_conversation_playback_signed_url = MagicMock(return_value=None)
         sys.modules['utils.other.storage'].upload_conversation_playback_artifact = MagicMock()
@@ -869,6 +885,7 @@ class TestProcessSegmentReal:
         sys.modules['utils.cloud_tasks'].is_cloud_tasks_dispatch_enabled = MagicMock(return_value=False)
         sys.modules['utils.cloud_tasks'].is_audio_merge_dispatch_enabled = MagicMock(return_value=False)
         sys.modules['utils.cloud_tasks'].enqueue_audio_merge_job = MagicMock()
+        sys.modules['utils.cloud_tasks'].enqueue_audio_merge_job_deferred = MagicMock()
         sys.modules['utils.cloud_tasks'].verify_audio_merge_cloud_tasks_oidc = MagicMock()
         sys.modules['utils.cloud_tasks'].verify_cloud_tasks_oidc = MagicMock()
         sys.modules['database.sync_ledger'].add_processed_sync_segment_id = MagicMock(return_value=True)
@@ -888,8 +905,20 @@ class TestProcessSegmentReal:
         sys.modules['utils.sync.content_id'].compute_sync_segment_id = MagicMock(return_value='segment-id')
         sys.modules['utils.log_sanitizer'].sanitize = lambda value: value
         sys.modules['utils.encryption'].encrypt = MagicMock()
+        sys.modules['utils.encryption'].decrypt = MagicMock(
+            side_effect=AssertionError('flag-off processing must not read held provider results')
+        )
+        sys.modules['utils.stt.pre_recorded'].held_single_attempt = MagicMock(
+            side_effect=AssertionError('flag-off processing must not enter held provider dispatch')
+        )
         sys.modules['utils.stt.pre_recorded'].deepgram_prerecorded = MagicMock()
         sys.modules['utils.stt.pre_recorded'].prerecorded = MagicMock()
+        sys.modules['utils.stt.pre_recorded'].modulate_prerecorded_from_bytes = MagicMock(
+            side_effect=AssertionError('flag-off processing must not dispatch multilingual recovery')
+        )
+        sys.modules['utils.sync.empty_recovery_intent'].dispatch_once = MagicMock(
+            side_effect=AssertionError('flag-off processing must not claim recovery')
+        )
         sys.modules['utils.stt.pre_recorded'].postprocess_words = MagicMock()
         sys.modules['utils.stt.pre_recorded'].get_prerecorded_service = MagicMock(
             return_value=('deepgram', 'multi', 'nova-3')
@@ -1017,6 +1046,7 @@ class TestProcessSegmentReal:
         sync_pkg.__path__ = [os.path.join(os.path.dirname(__file__), '..', '..', 'utils', 'sync')]
         sys.modules['utils.sync'] = sync_pkg
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
 
         sys.modules['utils.sync.bridge'].finish_sync_segment = lambda *a, **kw: None
 
@@ -1031,6 +1061,7 @@ class TestProcessSegmentReal:
     @classmethod
     def teardown_class(cls):
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         # Restore original modules
         for name, orig in cls._saved_modules.items():
             if orig is None:
@@ -1591,6 +1622,7 @@ class TestVoiceMessageRuntimeErrorHandling:
         sys.modules['utils.other.storage'].mark_playback_unavailable = MagicMock()
         sys.modules['utils.other.storage'].is_playback_unavailable = MagicMock(return_value=False)
         sys.modules['utils.other.storage'].enqueue_conversation_audio_merge = MagicMock()
+        sys.modules['utils.other.storage'].link_archive_captures = MagicMock()
         sys.modules['utils.other.storage'].delete_syncing_temporal_file = MagicMock()
         sys.modules['utils.other.storage'].upload_audio_chunk = MagicMock()
         sys.modules['utils.other.storage'].precache_conversation_audio = MagicMock()
