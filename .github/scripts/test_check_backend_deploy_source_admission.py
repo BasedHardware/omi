@@ -632,6 +632,35 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertIn("build-only must check out exactly the admitted SHA", errors)
         self.assertIn("build-only must build the admitted SHA, never the raw release_sha input", errors)
 
+    def test_build_only_keeps_admitted_smoked_and_uncancelled_publication(self) -> None:
+        cases = (
+            (
+                "    if: >-\n      always() && !cancelled() &&\n      github.ref == 'refs/heads/main' &&\n      github.event.inputs.mode == 'build-only' &&",
+                "    if: >-\n      always() &&\n      github.ref == 'refs/heads/main' &&\n      github.event.inputs.mode == 'build-only' &&",
+                "build-only must use exactly the admitted, audited main-ref build condition",
+            ),
+            (
+                'if [[ -z "$ADMITTED_SHA" || "$head_sha" != "$ADMITTED_SHA" ]]; then',
+                'if [[ -z "$ADMITTED_SHA" ]]; then',
+                "build-only must verify the checked-out HEAD is the admitted SHA",
+            ),
+            (
+                "      - name: Google Auth (WIF)\n        uses: google-github-actions/auth@v3\n        with:\n          workload_identity_provider: ${{ github.event.inputs.environment == 'prod' && 'projects/208440318997",
+                "      - name: Replace admitted tree\n        uses: actions/checkout@v7\n\n"
+                "      - name: Google Auth (WIF)\n        uses: google-github-actions/auth@v3\n        with:\n          workload_identity_provider: ${{ github.event.inputs.environment == 'prod' && 'projects/208440318997",
+                "build-only must check out exactly one root source tree",
+            ),
+            (
+                "          python3 .deploy-control/backend/scripts/runtime_image_contracts.py smoke --dockerfile backend/Dockerfile --image \"$IMAGE\"\n",
+                "          docker push \"$IMAGE\"\n          python3 .deploy-control/backend/scripts/runtime_image_contracts.py smoke --dockerfile backend/Dockerfile --image \"$IMAGE\"\n",
+                "build-only must smoke the built image before pushing its exact tag",
+            ),
+        )
+        for old, new, message in cases:
+            root = self.fixture_root()
+            self.mutate(root, CHECKER.MANUAL_WORKFLOW_PATH, old, new)
+            self.assertIn(message, CHECKER.validate(root))
+
     def test_build_only_never_reaches_a_serving_surface(self) -> None:
         for injected in (
             "uses: ./.github/actions/deploy-backend-stack",
@@ -639,6 +668,8 @@ class WorkflowContractTests(unittest.TestCase):
             "uses: google-github-actions/get-gke-credentials@v3",
             "helm upgrade --install backend-listen",
             "docker push gcr.io/p/backend:latest",
+            "echo cache-to: type=registry",
+            "python3 .github/scripts/ensure_backend_route_5xx_alert.py",
         ):
             root = self.fixture_root()
             self.mutate(

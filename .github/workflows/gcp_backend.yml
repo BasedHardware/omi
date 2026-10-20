@@ -395,7 +395,7 @@ jobs:
   build-image:
     needs: [validate-production-boundary, firestore_readiness, record_break_glass]
     if: >-
-      always() &&
+      always() && !cancelled() &&
       github.ref == 'refs/heads/main' &&
       github.event.inputs.mode == 'build-only' &&
       needs.validate-production-boundary.result == 'success' &&
@@ -458,11 +458,12 @@ jobs:
           fi
           short_sha="$(git rev-parse --short=7 HEAD)"
           image="gcr.io/${PROJECT_ID}/${SERVICE}:${short_sha}"
-          # Fail closed: only a definite not-found means the tag is free. Any
-          # other describe error must not be read as absence and overwrite a tag.
+          # Fail closed: only gcloud's not-found diagnostic for this exact image
+          # means the tag is free. Any other describe error must not be read as
+          # absence and overwrite a tag.
           if existing_digest="$(gcloud container images describe "$image" --format='value(image_summary.digest)' 2>"$RUNNER_TEMP/describe.err")" && [[ -n "$existing_digest" ]]; then
             exists=true
-          elif grep -qiE 'not found|manifest unknown|MANIFEST_UNKNOWN|does not exist' "$RUNNER_TEMP/describe.err"; then
+          elif grep -qF "[${image}] is not found or is not a valid name" "$RUNNER_TEMP/describe.err"; then
             exists=false
           else
             echo "ERROR: could not determine whether ${image} already exists:" >&2
@@ -475,6 +476,13 @@ jobs:
             printf 'exists=%s\n' "$exists"
           } >> "$GITHUB_OUTPUT"
           if [[ "$exists" == "true" ]]; then
+            # build-only labels its images with the admitted revision; deploy-mode
+            # images carry no label, so provenance then rests on the SHA tag.
+            revision="$(docker buildx imagetools inspect "$image" --format '{{ index .Image.Config.Labels "org.opencontainers.image.revision" }}' 2>/dev/null || true)"
+            if [[ -n "$revision" && "$revision" != "<no value>" && "$revision" != "$ADMITTED_SHA" ]]; then
+              echo "ERROR: ${image} is labelled revision ${revision}, not the admitted SHA ${ADMITTED_SHA}." >&2
+              exit 1
+            fi
             echo "::notice::${image} already exists (${existing_digest}); build-only will not rebuild or re-push it."
           fi
 
@@ -492,8 +500,10 @@ jobs:
           load: true
           tags: |
             ${{ steps.image-tag.outputs.image }}
+          labels: |
+            org.opencontainers.image.revision=${{ needs.firestore_readiness.outputs.admitted_sha }}
+          # Read the shared cache but never write it: build-only moves no mutable tag.
           cache-from: type=registry,ref=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:buildcache
-          cache-to: type=registry,ref=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:buildcache,mode=max
 
       - name: Verify built runtime image before publish
         if: steps.image-tag.outputs.exists == 'false'
@@ -527,9 +537,9 @@ jobs:
             exit 1
           fi
           if [[ "$EXISTED" == "false" ]]; then
-            pushed="$(docker inspect --format='{{range .RepoDigests}}{{println .}}{{end}}' "$IMAGE" | sed -n 's/^.*@//p' | head -n 1)"
-            if [[ "$pushed" != "$digest" ]]; then
-              echo "ERROR: registry digest ${digest} does not match the pushed digest '${pushed}'." >&2
+            repo_digests="$(docker inspect --format='{{range .RepoDigests}}{{println .}}{{end}}' "$IMAGE")"
+            if ! grep -qF "@${digest}" <<< "$repo_digests"; then
+              echo "ERROR: registry digest ${digest} is not among the pushed digests: ${repo_digests}" >&2
               exit 1
             fi
           fi

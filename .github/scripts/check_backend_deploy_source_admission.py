@@ -62,7 +62,10 @@ MANUAL_DEPLOY_JOB_CONDITION = "\n".join(
 )
 MANUAL_BUILD_ONLY_JOB_CONDITION = MANUAL_DEPLOY_JOB_CONDITION.replace(
     "github.event.inputs.mode == 'deploy' &&", "github.event.inputs.mode == 'build-only' &&"
-)
+).replace("always() &&", "always() && !cancelled() &&", 1)
+MANUAL_BUILD_ONLY_HEAD_CHECK = '"$head_sha" != "$ADMITTED_SHA"'
+MANUAL_BUILD_ONLY_SMOKE = "runtime_image_contracts.py smoke"
+MANUAL_BUILD_ONLY_PUSH = 'docker push "$IMAGE"'
 MANUAL_BUILD_ONLY_ADMITTED_CHECKOUT = "ref: ${{ needs.firestore_readiness.outputs.admitted_sha }}"
 # build-only publishes an image and must never reach a serving surface.
 MANUAL_BUILD_ONLY_FORBIDDEN = (
@@ -82,6 +85,8 @@ MANUAL_BUILD_ONLY_FORBIDDEN = (
     "update-env-vars",
     ":latest",
     "push: true",
+    "cache-to:",
+    "ensure_",
 )
 
 
@@ -664,8 +669,19 @@ def validate_manual_build_only_job(text: str) -> list[str]:
         errors.append("build-only must check out exactly the admitted SHA")
     if "github.event.inputs.release_sha" in build_job:
         errors.append("build-only must build the admitted SHA, never the raw release_sha input")
-    if 'docker push "$IMAGE"' not in build_job or "runtime_image_contracts.py smoke" not in build_job:
+    smoke_at = build_job.find(MANUAL_BUILD_ONLY_SMOKE)
+    push_at = build_job.find(MANUAL_BUILD_ONLY_PUSH)
+    if smoke_at < 0 or push_at < 0 or smoke_at > push_at or build_job.count(MANUAL_BUILD_ONLY_PUSH) != 1:
         errors.append("build-only must smoke the built image before pushing its exact tag")
+    if MANUAL_BUILD_ONLY_HEAD_CHECK not in build_job:
+        errors.append("build-only must verify the checked-out HEAD is the admitted SHA")
+    root_checkouts = [
+        step
+        for step in re.split(r"(?m)^      - ", build_job)
+        if "uses: actions/checkout@" in step and not re.search(r"(?m)^          path: ", step)
+    ]
+    if len(root_checkouts) != 1:
+        errors.append("build-only must check out exactly one root source tree")
     for forbidden in MANUAL_BUILD_ONLY_FORBIDDEN:
         if forbidden in build_job:
             errors.append(f"build-only must not touch a serving surface or mutable tag ({forbidden!r})")
