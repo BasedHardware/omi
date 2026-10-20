@@ -371,7 +371,6 @@ class TestDatabaseGetFocusSessionsStreamResilience(unittest.TestCase):
         self.assertNotIn("user_resilience_test", log_text)
 
 
-
 class _PagingQuery:
     """Firestore query stand-in that honours offset/limit against a snapshot list."""
 
@@ -433,6 +432,39 @@ class TestFocusSessionPaginationFill(unittest.TestCase):
 
         # The caller asked for two readable rows and gets two, not one.
         self.assertEqual([r["id"] for r in results], ["s1", "s2"])
+
+    def test_all_poison_collection_stops_at_the_scan_cap(self):
+        """A collection that is entirely poison must end at the scan cap, not run forever."""
+
+        class _EndlessPoisonQuery:
+            def __init__(self) -> None:
+                self.calls = 0
+
+            def order_by(self, *args: Any, **kwargs: Any) -> "_EndlessPoisonQuery":
+                return self
+
+            def where(self, *args: Any, **kwargs: Any) -> "_EndlessPoisonQuery":
+                return self
+
+            def offset(self, value: int) -> "_EndlessPoisonQuery":
+                return self
+
+            def limit(self, value: int) -> "_EndlessPoisonQuery":
+                return self
+
+            def stream(self) -> list[Any]:
+                self.calls += 1
+                return [_FakeSnapshot(f"bad-{self.calls}-{index}", None) for index in range(100)]
+
+        query = _EndlessPoisonQuery()
+        col = MagicMock()
+        col.order_by.return_value = query
+
+        with patch.object(focus_sessions_db, "_user_col", return_value=col):
+            results = focus_sessions_db.get_focus_sessions("uid", limit=100)
+
+        self.assertEqual(results, [])
+        self.assertEqual(query.calls, focus_sessions_db._MAX_FOCUS_SESSION_SCAN_ROWS // 100)
 
     def test_offset_still_counts_stored_rows(self):
         now = datetime(2026, 10, 3, 10, 0, tzinfo=timezone.utc)
