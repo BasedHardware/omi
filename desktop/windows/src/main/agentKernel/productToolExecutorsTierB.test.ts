@@ -415,7 +415,9 @@ describe('get_daily_recap', () => {
       actionItem({ description: 'old task', createdAt: 100 })
     ]),
     focusSessions: vi.fn(() => [] as FocusSessionRecord[]),
-    memories: vi.fn(() => [{ content: 'likes tea', category: 'preference', createdAt: now - 1000 }]),
+    memories: vi.fn((_from: number, _to: number, _limit: number) => [
+      { content: 'likes tea', category: 'preference', createdAt: now - 1000 }
+    ]),
     insights: vi.fn(() => [] as InsightRecord[])
   })
 
@@ -436,7 +438,7 @@ describe('get_daily_recap', () => {
 
   it('lists memories from the requested day, not the newest overall', async () => {
     const d = deps()
-    d.memories.mockImplementation((from: number, to: number) =>
+    d.memories.mockImplementation((from: number, to: number, _limit: number) =>
       [
         { content: 'today fact', category: 'system', createdAt: now - 1000 },
         { content: 'yesterday fact', category: 'system', createdAt: yesterdayMorning }
