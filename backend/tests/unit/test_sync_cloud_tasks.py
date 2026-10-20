@@ -6663,8 +6663,7 @@ async def test_terminal_cleanup_deferral_inherits_the_recovery_deadline():
     base_payload = await request.json()
     request.json = AsyncMock(return_value={**base_payload, 'sequencer_epoch': 1})
 
-    async def _pipeline_never_returns_then_terminal(*args, **kwargs):
-        await asyncio.sleep(30)
+    _pipeline_never_returns_then_terminal = _pipeline_expiring_the_handler_budget(module)
 
     def _strict_release(job_id, token):
         return 0
@@ -6680,7 +6679,8 @@ async def test_terminal_cleanup_deferral_inherits_the_recovery_deadline():
         await asyncio.sleep(30)
 
     try:
-        module.SYNC_JOB_HANDLER_BUDGET_SECONDS = 0.05
+        # The recovery's deadline (now + cleanup timeout) is what the deferral inherits; the attempt's budget keeps
+        # its production size and expires inside the pipeline stub, so runner speed can't move the expiry.
         module.SYNC_JOB_POST_ATTEMPT_CLEANUP_TIMEOUT_SECONDS = 0.2
         module._run_full_pipeline_background_async = _pipeline_never_returns_then_terminal
         module.release_job_run_lock_strict = MagicMock(side_effect=_strict_release)
