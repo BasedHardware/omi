@@ -8,9 +8,9 @@ import XCTest
 
   private func meetingProbeSnapshot(detected: Bool) -> CallAudioSnapshot {
     CallAudioSnapshot(
-      processes: [],
+      processes: detected ? [.init(bundleID: "us.zoom.xos", pid: 1, isRunningInput: true, isRunningOutput: false)] : [],
       defaultInputDeviceID: 0,
-      browserWindowTitles: detected ? ["Meet - abc-defg-hij"] : [])
+      browserWindows: [])
   }
 
   private final class Box<T>: @unchecked Sendable {
@@ -214,7 +214,7 @@ import XCTest
       )
     }
 
-    func testTurnsOnImmediatelyWhenMeetingDetected() {
+    func testProvisionalCaptureTurnsOnImmediatelyWhenMeetingDetected() {
       var changes = [Bool]()
       let detector = makeDetector(onChange: { changes.append($0) })
 
@@ -223,6 +223,7 @@ import XCTest
 
       XCTAssertTrue(detector.hasObservedState)
       XCTAssertTrue(detector.isMeetingActive)
+      XCTAssertFalse(detector.isMeetingConfirmed)
       XCTAssertEqual(changes, [true])
     }
 
@@ -511,6 +512,7 @@ import XCTest
           meetingStateReady: true,
           shouldCapture: false,
           segmentCount: 12,
+          conversationRole: .meeting,
           hasSpeakerSegments: false
         )
       )
@@ -523,6 +525,7 @@ import XCTest
           meetingStateReady: true,
           shouldCapture: false,
           segmentCount: 0,
+          conversationRole: .meeting,
           hasSpeakerSegments: true
         )
       )
@@ -535,6 +538,7 @@ import XCTest
           meetingStateReady: true,
           shouldCapture: false,
           segmentCount: 0,
+          conversationRole: .meeting,
           hasSpeakerSegments: false
         )
       )
@@ -547,6 +551,7 @@ import XCTest
           meetingStateReady: true,
           shouldCapture: false,
           segmentCount: 12,
+          conversationRole: .meeting,
           hasSpeakerSegments: true
         )
       )
@@ -556,6 +561,7 @@ import XCTest
           meetingStateReady: true,
           shouldCapture: false,
           segmentCount: 12,
+          conversationRole: .meeting,
           hasSpeakerSegments: true
         )
       )
@@ -568,6 +574,7 @@ import XCTest
           meetingStateReady: true,
           shouldCapture: true,
           segmentCount: 12,
+          conversationRole: .meeting,
           hasSpeakerSegments: true
         )
       )
@@ -580,6 +587,7 @@ import XCTest
           meetingStateReady: false,
           shouldCapture: false,
           segmentCount: 12,
+          conversationRole: .meeting,
           hasSpeakerSegments: true
         )
       )
