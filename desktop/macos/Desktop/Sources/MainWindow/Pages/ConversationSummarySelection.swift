@@ -110,6 +110,13 @@ enum ConversationSummarySelection {
   /// comparing the stored description.
   static func presentableText(_ text: String, segments: [TranscriptSegment]) -> String {
     let valid = Set(segments.flatMap { [$0.id, $0.backendId].compactMap { $0 } }.filter { !$0.isEmpty })
+    // Titles render on every list row: skip the regex passes when nothing can match. Without a
+    // bracket, a speaker label or a known ID the repair returns the text unchanged.
+    let lowered = text.lowercased()
+    let mayCarryDebris =
+      text.contains(where: { "[(［【".contains($0) }) || lowered.contains("spk") || lowered.contains("speaker")
+      || valid.contains(where: { text.contains($0) })
+    guard mayCarryDebris else { return text }
     return NoteCitationContract.repair(text, valid: valid).text
   }
 
