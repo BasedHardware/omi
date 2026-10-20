@@ -5,13 +5,28 @@ import 'package:flutter/material.dart';
 import 'package:omi/ui/omi_tokens.dart';
 
 /// A thin arc that circles [child] while background work runs (offline sync, processing). Quiet
-/// by design: no text, no colour, just motion around a glyph that already has a label. Under
-/// Reduce Motion it is a still, partial ring.
+/// by design: no text, no colour, just motion around a glyph that already has a label. The arc
+/// turns on a faint full track, so every frame reads as a ring. Under Reduce Motion it is still.
 class OmiActivityRing extends StatefulWidget {
-  const OmiActivityRing({super.key, required this.active, required this.child, this.diameter = 22, this.color});
+  const OmiActivityRing({
+    super.key,
+    required this.active,
+    required this.child,
+    this.diameter = 22,
+    this.color,
+    this.strokeWidth = 1.5,
+  });
+
+  /// The same ring on its own, sized to sit inline with a line of footnote text (a row that offline
+  /// sync is still filling).
+  const OmiActivityRing.inline({super.key, this.diameter = 12, this.color})
+      : active = true,
+        child = const SizedBox.shrink(),
+        strokeWidth = 1.5;
 
   final bool active;
   final Widget child;
+  final double strokeWidth;
 
   /// Outer size of the ring; the child is centred inside it.
   final double diameter;
@@ -55,7 +70,9 @@ class _OmiActivityRingState extends State<OmiActivityRing> with SingleTickerProv
               child: ExcludeSemantics(
                 child: RotationTransition(
                   turns: _spin,
-                  child: CustomPaint(painter: _ArcPainter(widget.color ?? OmiColors.textSecondary)),
+                  child: CustomPaint(
+                    painter: _ArcPainter(widget.color ?? OmiColors.textSecondary, widget.strokeWidth),
+                  ),
                 ),
               ),
             ),
@@ -66,23 +83,29 @@ class _OmiActivityRingState extends State<OmiActivityRing> with SingleTickerProv
 }
 
 class _ArcPainter extends CustomPainter {
-  _ArcPainter(this.color);
+  _ArcPainter(this.color, this.strokeWidth);
 
   final Color color;
+  final double strokeWidth;
 
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()
+    final rect = (Offset.zero & size).deflate(strokeWidth / 2);
+    final track = Paint()
+      ..color = color.withValues(alpha: 0.25)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth;
+    final arc = Paint()
       ..color = color
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.5
+      ..strokeWidth = strokeWidth
       ..strokeCap = StrokeCap.round;
-    final rect = Offset.zero & size;
-    canvas.drawArc(rect.deflate(1), -math.pi / 2, math.pi * 0.6, false, paint);
+    canvas.drawArc(rect, 0, math.pi * 2, false, track);
+    canvas.drawArc(rect, -math.pi / 2, math.pi * 0.6, false, arc);
   }
 
   @override
-  bool shouldRepaint(_ArcPainter oldDelegate) => oldDelegate.color != color;
+  bool shouldRepaint(_ArcPainter oldDelegate) => oldDelegate.color != color || oldDelegate.strokeWidth != strokeWidth;
 }
 
 /// The live dot: green, gently pulsing while [live]; grey and still otherwise (paused, waiting).

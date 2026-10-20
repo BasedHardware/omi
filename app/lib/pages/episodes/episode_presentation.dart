@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import 'package:omi/backend/schema/episode.dart';
+import 'package:omi/backend/schema/person.dart';
+import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/pages/conversations/capture_state_labels.dart';
 import 'package:omi/pages/conversations/widgets/live_capture_card.dart';
 import 'package:omi/providers/capture_provider.dart';
@@ -8,6 +10,7 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/enums.dart';
+import 'package:omi/widgets/speaker_label.dart';
 
 /// Shared rules for how a live episode reads on Home, its page and the device page.
 abstract final class EpisodePresentation {
@@ -36,6 +39,27 @@ abstract final class EpisodePresentation {
     ];
     final recent = headings.length > 2 ? headings.sublist(headings.length - 2) : headings;
     return recent.join(', ');
+  }
+
+  /// Who is in the conversation, named exactly as the transcript names them: the owner, then each
+  /// speaker resolved to one of the user's people, in order of first appearance. An unresolved
+  /// speaker ("Speaker 1") is not named here, so the header never knows more than the transcript.
+  static List<String> participants(List<TranscriptSegment> segments, List<Person> people, AppLocalizations l10n) {
+    final names = SpeakerNames.forSegments(segments, people: people, l10n: l10n);
+    final owner = <String>{};
+    final others = <String>{};
+    for (final segment in segments) {
+      if (segment.isUser) {
+        final name = names.forSegment(segment);
+        if (name.isNotEmpty) owner.add(name);
+        continue;
+      }
+      final person = personById(people, segment.personId);
+      if (person == null) continue;
+      final name = names.forSegment(segment, person: person);
+      if (name.isNotEmpty) others.add(name);
+    }
+    return [...owner, ...others];
   }
 
   /// The source capturing right now, or null when nothing is streaming live (Transcribe Later,

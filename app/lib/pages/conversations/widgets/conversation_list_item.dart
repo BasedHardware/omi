@@ -454,9 +454,10 @@ class _ConversationListItemState extends State<ConversationListItem> {
         ),
         if (duration.isNotEmpty) ...[Text(' • ', style: _metaStyle), Text(duration, style: _metaStyle, maxLines: 1)],
         if (widget.fillingSeconds case final seconds?) ...[
-          Text(' • ', style: _metaStyle),
-          const OmiSpinner(size: OmiSpinnerSize.small),
-          const SizedBox(width: OmiSpacing.xxs),
+          // The ring is the separator here: "34m  ◌ adding 12m from your Omi".
+          const SizedBox(width: 6),
+          OmiActivityRing.inline(color: _metaStyle.color),
+          const SizedBox(width: 6),
           // Wins the free space over the Spacer below, so the line truncates only when it must.
           Flexible(
             flex: 1000,

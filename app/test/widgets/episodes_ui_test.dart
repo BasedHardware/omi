@@ -236,6 +236,9 @@ void main() {
       expect(find.byKey(const Key('episode_wrap_up_button')), findsOneWidget);
       expect(find.text('Omi wraps this up when you move on'), findsOneWidget);
       expect(find.byKey(const Key('process_now_button')), findsNothing);
+      // The episode's model state mentions Maya, but no transcript line is resolved to her: the
+      // header names only who the transcript names.
+      expect(find.text('You, Maya'), findsNothing);
 
       // Undo on a captured task hides it and tells the server; a refusal brings it back.
       await tester.tap(find.byKey(const ValueKey('episode_item_dismiss_i1')));

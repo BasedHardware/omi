@@ -119,7 +119,8 @@ class EpisodeMomentsList extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Padding(
-            padding: const EdgeInsets.only(left: OmiSpacing.xxs, bottom: OmiSpacing.xs),
+            // Flush with the summary text above it, like the page's other section titles.
+            padding: const EdgeInsets.only(bottom: OmiSpacing.xs),
             child: Text(l10n.episodeMoments, style: OmiType.headline),
           ),
           Container(
@@ -151,7 +152,13 @@ class EpisodeMomentsList extends StatelessWidget {
             EpisodePresentation.runningLength(moment.duration, context.l10n),
             style: OmiType.footnote.copyWith(color: OmiColors.textTertiary),
           ),
-          if (elsewhere) Icon(Icons.chevron_right_rounded, size: 18, color: OmiColors.textDisabled),
+          // Every row keeps the chevron's slot, so the lengths line up whether or not a row opens.
+          SizedBox(
+            width: 22,
+            child: elsewhere
+                ? Icon(Icons.chevron_right_rounded, size: 18, color: OmiColors.textDisabled)
+                : const SizedBox.shrink(),
+          ),
         ],
       ),
     );

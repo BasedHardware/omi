@@ -294,7 +294,13 @@ class LiveEpisodePageState extends State<LiveEpisodePage> with SingleTickerProvi
     final elapsed = EpisodePresentation.runningLength(EpisodePresentation.elapsed(episode, provider, now), l10n);
     final started = episode?.startedAt ?? now.subtract(EpisodePresentation.elapsed(null, provider, now));
     final title = (episode?.title ?? '').trim().isEmpty ? l10n.episodeListeningNow : episode!.title;
-    final people = [l10n.you, ...?episode?.people];
+    // Named from the transcript's own speaker resolution, so the header and the lines agree.
+    final people = EpisodePresentation.participants(
+      provider.segments,
+      context.watch<PeopleProvider?>()?.people ?? SharedPreferencesUtil().cachedPeople,
+      l10n,
+    );
+    final namesOthers = people.length > (provider.segments.any((s) => s.isUser) ? 1 : 0);
     final moments = episode?.moments.length ?? 0;
     final meta = OmiType.subhead.copyWith(color: OmiColors.textSecondary);
     final liveLabel = listening ? l10n.episodeLiveFor(elapsed) : captureStateLabel(l10n, state);
@@ -329,7 +335,7 @@ class LiveEpisodePageState extends State<LiveEpisodePage> with SingleTickerProvi
                 ),
               ),
               Text('${dates.dayHeader(started)} · ${dates.time(started)}', style: meta),
-              if (people.length > 1) Text(people.join(', '), style: meta),
+              if (namesOthers) Text(people.join(', '), style: meta),
               if (moments > 1) Text(l10n.episodeMomentsCount(moments), style: meta),
             ],
           ),
