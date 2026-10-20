@@ -26,22 +26,34 @@ _GENERIC = {
 }
 
 
-def _datetime(value: str | None) -> datetime | None:
-    try:
-        dt = datetime.fromisoformat(value or '')
-        return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
-    except ValueError:
+def _datetime(value: datetime | str | None) -> datetime | None:
+    if isinstance(value, datetime):
+        dt = value
+    elif isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return None
+        if text.endswith(('Z', 'z')):
+            text = f'{text[:-1]}+00:00'
+        try:
+            dt = datetime.fromisoformat(text)
+        except ValueError:
+            return None
+    else:
         return None
+    if dt.tzinfo is None or dt.tzinfo.utcoffset(dt) is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
 
 
-def after_capture(item: Any, finished_at: str | None) -> bool:
+def after_capture(item: Any, finished_at: datetime | str | None) -> bool:
     if item.source_kind in {'calendar', 'open_task'}:
         return False  # Scheduled/due times are expectations, not observation clocks.
     observed, finish = _datetime(item.time), _datetime(finished_at)
     return bool(observed and finish and observed > finish)
 
 
-def deterministic_episode_selection(items: Sequence[Any], *, finished_at: str | None = None) -> list[Any]:
+def deterministic_episode_selection(items: Sequence[Any], *, finished_at: datetime | str | None = None) -> list[Any]:
     """Conservative independent links, not names/co-occurrence alone. Speech is intact."""
     speech = [item for item in items if item.source_kind == 'speech']
     words = episode_words(' '.join(item.content for item in speech)) - _GENERIC

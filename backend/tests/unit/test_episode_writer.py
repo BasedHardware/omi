@@ -245,6 +245,7 @@ def test_capture_finish_matches_start_convention_for_naive_utc():
     assert episode_finish_local_iso(captured.replace(tzinfo=timezone.utc), local) == episode_finish_local_iso(
         captured, local
     )
+    assert episode_finish_local_iso('2026-01-01T10:00:00Z', local) == '2026-01-01T17:00:00+07:00'
     assert episode_finish_local_iso(None, local) is None
 
 
@@ -260,3 +261,9 @@ def test_future_expectations_are_distinct_from_post_capture_observations():
     ]
     selected = deterministic_episode_selection(items, finished_at='2026-01-01T10:00:00Z')
     assert [item.id for item in selected] == ['s', 'cal', 'task']
+    from datetime import datetime, timezone
+
+    selected_dt = deterministic_episode_selection(items, finished_at=datetime(2026, 1, 1, 10, tzinfo=timezone.utc))
+    assert [item.id for item in selected_dt] == ['s', 'cal', 'task']
+    selected_naive = deterministic_episode_selection(items, finished_at=datetime(2026, 1, 1, 10))
+    assert [item.id for item in selected_naive] == ['s', 'cal', 'task']

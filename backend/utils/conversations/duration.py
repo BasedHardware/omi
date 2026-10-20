@@ -66,25 +66,32 @@ def transcript_span_seconds(segments: Any) -> Optional[float]:
 
 
 def _wall_duration_seconds(conversation: Any) -> Optional[float]:
-    started_at = _value(conversation, 'started_at')
-    finished_at = _value(conversation, 'finished_at')
-    if not isinstance(started_at, datetime) or not isinstance(finished_at, datetime):
+    started_at = _as_utc(_value(conversation, 'started_at'))
+    finished_at = _as_utc(_value(conversation, 'finished_at'))
+    if started_at is None or finished_at is None:
         return None
-    # A naive timestamp on either side of the subtraction raises TypeError
-    # against an aware one (naive Firestore reads vs aware model defaults), so
-    # normalize both to UTC before measuring the wall window.
-    started_at = _as_utc(started_at)
-    finished_at = _as_utc(finished_at)
     try:
         return max(0.0, (finished_at - started_at).total_seconds())
     except TypeError:
         return None
 
 
-def _as_utc(value: datetime) -> datetime:
-    if value.tzinfo is None:
+def _as_utc(value: Any) -> Optional[datetime]:
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return None
+        if text.endswith(('Z', 'z')):
+            text = f'{text[:-1]}+00:00'
+        try:
+            value = datetime.fromisoformat(text)
+        except ValueError:
+            return None
+    elif not isinstance(value, datetime):
+        return None
+    if value.tzinfo is None or value.tzinfo.utcoffset(value) is None:
         return value.replace(tzinfo=timezone.utc)
-    return value
+    return value.astimezone(timezone.utc)
 
 
 def conversation_duration_seconds(conversation: Any) -> Optional[float]:

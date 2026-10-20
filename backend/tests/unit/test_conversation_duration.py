@@ -161,3 +161,11 @@ class TestWallWindowFallback:
 
         assert conversation_duration_seconds(_conversation([_segment('', 0.0, 8.0)], started_at=None)) is None
         assert recorded[0]['outcome'] == 'exhausted'
+
+    def test_dict_conversation_with_iso_string_timestamps_measures_the_wall_window(self):
+        raw_dict = {
+            'transcript_segments': [],
+            'started_at': '2026-09-07T23:32:33Z',
+            'finished_at': '2026-09-07T23:33:18+00:00',
+        }
+        assert conversation_duration_seconds(raw_dict) == 45.0

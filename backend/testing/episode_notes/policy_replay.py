@@ -4,19 +4,19 @@ from datetime import datetime
 from statistics import mean
 
 from testing.episode_notes.prompts import fixture_evidence_items
-from utils.conversations.episode_selection import deterministic_episode_selection
+from utils.conversations.episode_selection import _datetime, deterministic_episode_selection
 
 
 def episode_route_signals(episode):
     items = deterministic_episode_selection(fixture_evidence_items(episode), finished_at=episode.evidence.finished_at)
-    times = [datetime.fromisoformat(i.time) for i in items if i.source_kind == 'speech' and i.time]
+    times = [dt for i in items if i.source_kind == 'speech' and (dt := _datetime(i.time)) is not None]
+    started_at = _datetime(episode.evidence.started_at)
+    finished_at = _datetime(episode.evidence.finished_at)
     return {
         'words': sum(len(i.content.split()) for i in items if i.source_kind == 'speech'),
         'source_kinds': len({i.source_kind for i in items}),
         'speech_timestamp_span_seconds': (max(times) - min(times)).total_seconds() if len(times) > 1 else 0,
-        'capture_seconds': (
-            datetime.fromisoformat(episode.evidence.finished_at) - datetime.fromisoformat(episode.evidence.started_at)
-        ).total_seconds(),
+        'capture_seconds': (finished_at - started_at).total_seconds() if started_at and finished_at else 0,
     }
 
 
