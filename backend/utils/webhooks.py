@@ -366,22 +366,36 @@ async def _post_dev_webhook(
         )
         return last_response
 
-    if last_exception is None:
-        raise RuntimeError(f'{webhook_name}: delivery failed without a response or exception')
-    attempts_sent = max(dial_attempts, 1)
-    logger.error(f'{webhook_name}: delivery failed error={type(last_exception).__name__} attempts={attempts_sent}')
-    await run_blocking(
-        db_executor,
-        enqueue_dev_webhook_dlq,
-        webhook_name=webhook_name,
-        webhook_url=webhook_url,
-        status_code=0,
-        error=type(last_exception).__name__,
-        idempotency_key=headers.get('Idempotency-Key'),
-        uid=dlq_uid,
-        payload=request_kwargs.get('json'),
-    )
-    raise last_exception
+    if last_response is None:
+        if last_exception is None:
+            raise RuntimeError(f'{webhook_name}: delivery failed without a response or exception')
+        # Every attempt of the schedule failed to connect: the destination is
+        # unreachable right now, and the next delivery at this endpoint's
+        # cadence would replay the identical 4-dial walk against it — the
+        # prod pusher 2026-10 shape where one unreachable developer endpoint
+        # produced `delivery failed error=ConnectTimeout attempts=4` x30/30m
+        # plus the ConnectError sibling x27/30m, each delivery parking a
+        # webhook-semaphore slot for ~44s of schedule and writing one DLQ
+        # entry. Arm the short transport holddown so the next delivery is a
+        # counted, logged breaker skip and one real schedule per holddown
+        # window keeps recovery observable. This delivery's own terminal
+        # evidence still lands below: the one ERROR line, the DLQ write, and
+        # the raise the caller counts against the per-uid disable ladder.
+        cb.record_transport_holddown()
+        attempts_sent = max(dial_attempts, 1)
+        logger.error(f'{webhook_name}: delivery failed error={type(last_exception).__name__} attempts={attempts_sent}')
+        await run_blocking(
+            db_executor,
+            enqueue_dev_webhook_dlq,
+            webhook_name=webhook_name,
+            webhook_url=webhook_url,
+            status_code=0,
+            error=type(last_exception).__name__,
+            idempotency_key=headers.get('Idempotency-Key'),
+            uid=dlq_uid,
+            payload=request_kwargs.get('json'),
+        )
+        raise last_exception
 
 
 def _log_dev_webhook_transport_failure(webhook_name: str, error: BaseException, uid: Optional[str] = None) -> None:

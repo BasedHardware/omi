@@ -33,6 +33,15 @@ def _stub_webhook_db_helpers(monkeypatch):
     monkeypatch.setattr(webhooks_module, "enable_user_webhook_db", MagicMock())
     monkeypatch.setattr(webhooks_module, "record_dev_webhook_success", MagicMock())
     monkeypatch.setattr(webhooks_module, "record_dev_webhook_failure", MagicMock(return_value=False))
+    # Every test here delivers through the process-global per-URL breaker
+    # registry (one shared `https://example.com/webhook` entry), so a delivery
+    # that latches state on that breaker — an outage-latch opening or a
+    # transport holddown arming after a timeout test — would otherwise leak
+    # into every later test that delivers to the same URL. Start each test
+    # from an empty registry.
+    from utils import http_client as _http_client
+
+    monkeypatch.setattr(_http_client, "_webhook_circuit_breakers", {})
 
 
 class TestRealtimeTranscriptWebhook:

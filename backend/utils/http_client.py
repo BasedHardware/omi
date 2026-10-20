@@ -203,6 +203,25 @@ _CIRCUIT_BREAKER_HALF_OPEN_MAX = 1  # probes allowed in half-open
 # expiring to one real probe per window so recovery stays observable while the
 # per-uid disable ladder keeps converging through the counted skips.
 _WEBHOOK_DETERMINISTIC_REJECTION_COOLDOWN_SECONDS = 900.0
+# A transport-dead endpoint (connect timeout, connection refused, DNS failure)
+# answers every dial with the same failure inside one delivery AND across
+# deliveries — the same payload re-posted 30 seconds later times out the same
+# way. The rejection hold above never arms for it: no HTTP response exists, so
+# the delivery layer's deterministic-response classification cannot fire, and
+# the outage latch is the wrong shape for the same reason it was wrong for 4xx —
+# 5 failures to open, one 30-second half-open probe, then the latch re-arms from
+# the probe's own failure, so the endpoint re-dialed the FULL 4-attempt
+# (1+5+30)s schedule on every delivery forever (prod pusher 2026-10:
+# `delivery failed error=ConnectTimeout attempts=4` ×30/30m plus
+# `...error=ConnectError attempts=4` ×27/30m against one unreachable developer
+# endpoint). Each walk also parked a webhook-semaphore slot for ~44 seconds and
+# wrote one DLQ entry per delivery. The transport holddown is the rejection
+# hold's short sibling: armed when a delivery's schedule exhausts on a transport
+# failure, cleared by any success, expiring to one real schedule per window so
+# recovery stays observable while the per-uid disable ladder keeps converging
+# through the counted failures each blocked delivery records. It never
+# lengthens the deterministic hold: arming takes the max of the two expiries.
+_WEBHOOK_TRANSPORT_HOLDDOWN_SECONDS = 120.0
 
 
 class WebhookCircuitBreaker:
@@ -266,6 +285,24 @@ class WebhookCircuitBreaker:
         outage should still open the breaker on its own evidence.
         """
         self._rejection_until = time.monotonic() + _WEBHOOK_DETERMINISTIC_REJECTION_COOLDOWN_SECONDS
+
+    def record_transport_holddown(self) -> None:
+        """Arm the short transport holddown after a schedule exhausted on transport failures.
+
+        Called by the delivery layer when every attempt of one delivery's
+        schedule failed to connect (connect timeout, connection refused, DNS
+        failure) — evidence that the destination is unreachable right now and
+        no repeat post can change that within the next delivery's cadence.
+        The hold expires to one real schedule per holddown window so recovery
+        stays observable, and the per-uid disable ladder keeps converging
+        through the counted failures each blocked delivery records. It shares
+        the rejection latch with the deterministic hold and never shortens it:
+        arming takes the max of the existing and new expiries, so a 15-minute
+        deterministic hold is never cut to the transport window.
+        """
+        armed = time.monotonic() + _WEBHOOK_TRANSPORT_HOLDDOWN_SECONDS
+        if armed > self._rejection_until:
+            self._rejection_until = armed
 
     def allow_request(self) -> bool:
         self._last_access_time = time.monotonic()

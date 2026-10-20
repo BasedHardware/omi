@@ -5041,6 +5041,30 @@ terminal `delivery failed status=3xx` ERROR. The per-uid disable ladder keeps
 counting the real 3xx status — redirect handling changes dial behavior only,
 not the auto-disable policy.
 
+Since 2026-10-20 the transport-failure sibling gets the same bounded treatment.
+A delivery whose whole schedule exhausted without ever reaching HTTP — connect
+timeout, connection refused, DNS failure — arms a short transport holddown on
+the destination's breaker (`record_transport_holddown`,
+`_WEBHOOK_TRANSPORT_HOLDDOWN_SECONDS`, 120 seconds): the next delivery is a
+counted breaker skip instead of another identical 4-dial walk, and at most one
+real schedule per holddown window runs, so a transport-dead endpoint is
+re-probed once per two minutes instead of once per delivery (~44 seconds of
+webhook-semaphore occupancy, four dials, one `delivery failed
+error=ConnectTimeout attempts=4` ERROR and one DLQ write each). The holddown
+shares the rejection latch with the deterministic hold and never shortens it
+(max semantics), clears on the first success, expires to one real schedule per
+window so recovery stays observable, and never arms from a receiver answer or
+the SSRF invalid-target refusal. The arming delivery's own terminal evidence is
+unchanged — the one ERROR, the DLQ write, and the counted per-uid ladder
+failure its caller records — so auto-disable still converges during the hold.
+
+Failure-Class: FC-deterministic-provider-rejection-burns-connect-retries —
+transport-failure sibling in `backend/utils/webhooks.py` /
+`backend/utils/http_client.py` (developer-webhook delivery, schedule-exhaustion
+boundary): a transport-dead destination answered every dial identically but
+armed no admission control, so each delivery replayed the full connect-retry
+schedule against it forever.
+
 ### Realtime app-integration webhook transport resilience
 
 The app (third-party developer) realtime lanes — transcript segments
