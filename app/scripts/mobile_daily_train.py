@@ -446,11 +446,11 @@ def ios_version_build_number(version_id: str) -> str | None:
         request = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}"})
         with urllib.request.urlopen(request, timeout=60) as response:
             payload = json.load(response)
-    except Exception as exc:  # noqa: BLE001 - any failure means "unknown build", which holds
+        data = payload.get("data") if isinstance(payload, dict) else None
+        number = _attributes(data).get("version") if isinstance(data, dict) else None
+    except Exception as exc:  # noqa: BLE001 - any failure, including a malformed body, means "unknown build", which holds
         log(f"App Store Connect build lookup failed for {version_id}: {exc}")
         return None
-    data = payload.get("data") if isinstance(payload, dict) else None
-    number = _attributes(data).get("version") if isinstance(data, dict) else None
     return str(number) if isinstance(number, (str, int)) and str(number).isdigit() else None
 
 

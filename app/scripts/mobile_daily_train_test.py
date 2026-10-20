@@ -1413,6 +1413,12 @@ class CaptureHealthWiringTests(unittest.TestCase):
         self.assertTrue(urlopen.call_args.args[0].full_url.endswith("/v1/appStoreVersions/v-1/build"))
         with patch.object(train, "_asc_rest_token", side_effect=train.TrainError("no key")), redirect_stdout(io.StringIO()):
             self.assertIsNone(train.ios_version_build_number("v-1"))
+        for body in ({"data": {"type": "builds", "id": "b"}}, {"data": {"attributes": "x"}}, {"data": None}, ["x"]):
+            response = io.BytesIO(json.dumps(body).encode())
+            with patch.object(train, "_asc_rest_token", return_value="jwt"), patch.object(
+                train.urllib.request, "urlopen", return_value=response
+            ), redirect_stdout(io.StringIO()):
+                self.assertIsNone(train.ios_version_build_number("v-1"), body)
 
     def test_an_android_hop_holds_in_place_on_capture_health(self):
         client = Mock()
