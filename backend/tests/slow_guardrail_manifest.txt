@@ -47,6 +47,7 @@ tests/unit/test_plan_quota_env_retirement.py
 tests/unit/test_pusher_circuit_breaker.py
 tests/unit/test_pusher_ghost_connections.py
 tests/unit/test_pusher_heartbeat.py
+tests/unit/test_real_clock_budget_ratchet.py
 tests/unit/test_storage_fanout_limits.py
 tests/unit/test_streaming_deepgram_backoff.py
 tests/unit/test_subscription_import_cycle.py

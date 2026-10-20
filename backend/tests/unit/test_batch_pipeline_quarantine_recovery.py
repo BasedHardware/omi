@@ -183,6 +183,7 @@ def test_lost_storage_reply_reconciles_artifact_without_repeating_stt(setup):
     artifacts.find_recovery_result.return_value = 'gs://synthetic/recovered'
     assert recovery.recover('bad', binding.owner_id) == 'reconciled'
     assert stt.call_count == 1 and row(client)['state'] == 'result_ready'
+    assert row(client)['ready_at'] > 0  # Re-entry restarts the bounded merge head wait.
 
 
 def test_lost_settle_reply_is_reread_without_stt(setup, monkeypatch):
@@ -796,7 +797,7 @@ def test_recovery_batch_config_is_bounded(monkeypatch, value, expected):
     assert recovery_dispatch_batch_size() == expected
 
 
-def test_default_sweep_dispatches_sixteen_and_resumes_cursor(setup, monkeypatch):
+def test_default_sweep_dispatches_sixteen_resumes_cursor_and_wraps_after_short_page(setup, monkeypatch):
     from utils.batch_pipeline import quarantine_recovery as module
 
     _, _, binding, _, _, recovery = setup
@@ -818,8 +819,63 @@ def test_default_sweep_dispatches_sixteen_and_resumes_cursor(setup, monkeypatch)
     assert recovery.sweep() == {'queued': 1}
     assert recovery.dispatch.call_count == 33
     assert query.call_count == 3
-    assert recovery.sweep() == {}
+    # The short page ended the scan: the next pass restarts at the first
+    # candidate instead of spending a whole pass on an empty page.
     assert recovery.sweep() == {'queued': 16}
+    assert query.call_args.kwargs['after_id'] is None
+    assert query.call_count == 4
+
+
+def test_short_page_restarts_scan_so_new_quarantines_dispatch_next_pass(setup, monkeypatch):
+    from utils.batch_pipeline import quarantine_recovery as module
+
+    _, _, binding, _, _, recovery = setup
+    monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_ALL_ADMITTED', 'true')
+    candidates = [('seg-m', binding.owner_id)]
+    monkeypatch.setattr(
+        module, 'load_stage_policy', lambda *args: ({}, resolve_stage_policy(binding.owner_id, 'recovery'))
+    )
+    monkeypatch.setattr(
+        module,
+        'recovery_candidates',
+        lambda client, namespace, owner, limit, *, after_id: [
+            (sid, uid) for sid, uid in sorted(candidates) if after_id is None or sid > after_id
+        ][:limit],
+    )
+    recovery.dispatch = Mock(return_value='queued')
+    assert recovery.sweep() == {'queued': 1}
+    candidates.append(('seg-a', binding.owner_id))  # A new quarantine sorting before the last ID.
+    assert recovery.sweep() == {'queued': 2}
+    assert [call.args[0] for call in recovery.dispatch.call_args_list] == ['seg-m', 'seg-a', 'seg-m']
+
+
+def test_overlapping_sweeps_on_one_instance_do_not_double_dispatch(setup, monkeypatch):
+    from utils.batch_pipeline import quarantine_recovery as module
+
+    _, _, binding, _, _, recovery = setup
+    query = Mock(return_value=[])
+    monkeypatch.setattr(module, 'recovery_candidates', query)
+    assert recovery._sweeping.acquire(blocking=False)  # The serving pass is mid-scan.
+    try:
+        assert recovery.sweep() == {}
+        query.assert_not_called()
+    finally:
+        recovery._sweeping.release()
+    assert recovery.sweep() == {}
+    query.assert_called_once()
+
+
+@pytest.mark.parametrize(
+    'value,expected',
+    [(None, 5.0), ('off', 0.0), ('0', 0.0), ('-1', 0.0), ('2', 2.0), ('0.5', 5.0), ('61', 5.0), ('x', 5.0)],
+)
+def test_recovery_dispatch_interval_is_bounded(monkeypatch, value, expected):
+    from config.batch_pipeline import recovery_dispatch_interval_seconds
+
+    monkeypatch.delenv('BATCH_PIPELINE_RECOVERY_DISPATCH_INTERVAL_SECONDS', raising=False)
+    if value is not None:
+        monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_DISPATCH_INTERVAL_SECONDS', value)
+    assert recovery_dispatch_interval_seconds() == expected
 
 
 def test_sweep_bounds_held_errors_and_advances_global_cursor(setup, monkeypatch):

@@ -196,14 +196,15 @@ void main() {
     ];
     final selection = ConversationSummarySelection.select(conversation);
     expect(selection.sections[0].sourceSegmentIds, ['s1']);
-    expect(selection.sections[1].sourceSegmentIds, isEmpty);
+    // The legacy section's only evidence was the inline citation the repair removed; it stays its source.
+    expect(selection.sections[1].sourceSegmentIds, ['s1']);
     final controller = ConversationPlaybackController(segments: conversation.transcriptSegments);
     addTearDown(controller.dispose);
     await _pumpSummary(tester, conversation, onOpenSource: (id) {
       final segment = conversation.transcriptSegments.singleWhere((segment) => segment.id == id);
       controller.seek(segment.start, strict: true);
     });
-    expect(find.byKey(const ValueKey('section-sources')), findsOneWidget);
+    expect(find.byKey(const ValueKey('section-sources')), findsNWidgets(2));
     await openSources(tester);
     expect(find.byKey(const ValueKey('section-source-s1')), findsOneWidget);
     expect(find.byKey(const ValueKey('section-source-missing')), findsNothing);

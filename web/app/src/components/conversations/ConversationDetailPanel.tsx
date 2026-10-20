@@ -330,7 +330,7 @@ export function SummaryTab({
       )}
 
       {isStructuredNote && actionItems && actionItems.length > 0 && (
-        <NextStepsList items={actionItems} />
+        <NextStepsList items={actionItems} transcriptIDs={transcriptIDs} />
       )}
 
       {/* App Summaries Section */}
@@ -1036,7 +1036,12 @@ export function ConversationDetailPanel({
             )}
 
             {activeTab === 'actions' && hasActionItems && (
-              <ActionItemsTab items={actionItems} />
+              <ActionItemsTab
+                items={actionItems}
+                transcriptIDs={(transcript_segments ?? []).flatMap((segment) =>
+                  segment.id ? [segment.id] : [],
+                )}
+              />
             )}
 
             {activeTab === 'transcript' && hasTranscript && (

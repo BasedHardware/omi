@@ -4,7 +4,7 @@ from typing import Any
 
 from google.cloud import firestore
 
-from config.held_content import CHOICES, current_choice
+from config.held_content import CHOICES, budget_period, current_choice
 from database._client import get_firestore_client, run_transactional
 
 
@@ -24,6 +24,10 @@ def get_choice(uid: str, period: str, *, firestore_client: Any = None) -> dict[s
 @firestore.transactional
 def _store(transaction: Any, ref: Any, period: str, choice: str, dont_ask_again: bool) -> dict[str, Any]:
     raw = ref.get(transaction=transaction).to_dict() or {}
+    # Allowance reads and transaction retries can cross midnight after HTTP admission.
+    # Even an idempotent replay must not acknowledge an expired budget period.
+    if period != budget_period():
+        raise BudgetChoiceConflict('budget_period_changed')
     if isinstance(raw.get('period'), str) and raw['period'] > period:
         raise BudgetChoiceConflict('budget_period_changed')
     existing = current_choice(raw, period)

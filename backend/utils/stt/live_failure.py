@@ -11,6 +11,7 @@ from starlette.websockets import WebSocketState
 from models.message_event import MessageServiceStatusEvent
 from utils.metrics import OMI_LIVE_STT_MISALIGNED_FRAMES_TOTAL
 from utils.metrics import OMI_LISTEN_STT_UNAVAILABLE_TOTAL
+from utils.observability.listen_close import note_ws_close
 from utils.observability.transcription import record_live_stt_failure, record_live_stt_pre_audio_failure
 from utils.stt.outcomes import (
     TranscriptionFailure,
@@ -353,6 +354,7 @@ async def terminate_live_stt_backoff(
         logger.warning('Unable to deliver terminal live STT status error_type=%s', type(error).__name__)
     try:
         await websocket.close(code=LIVE_STT_FAILURE_CLOSE_CODE, reason=LIVE_STT_FAILURE_CLOSE_REASON)
+        note_ws_close(session, 'server', LIVE_STT_FAILURE_CLOSE_CODE)
     except Exception as error:
         logger.info('Unable to close client after terminal live STT backoff error_type=%s', type(error).__name__)
     return sent
@@ -572,6 +574,7 @@ async def terminate_live_stt_session(
             code=LIVE_STT_FAILURE_CLOSE_CODE,
             reason=LIVE_STT_FAILURE_CLOSE_REASON,
         )
+        note_ws_close(session, 'server', LIVE_STT_FAILURE_CLOSE_CODE)
     except Exception as error:
         logger.info(
             'Unable to close client after terminal live STT failure error_type=%s',
