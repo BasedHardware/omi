@@ -52,6 +52,58 @@ def test_staging_composes_and_passes_the_fence(composer):
     assert composer.staging_fence_errors(staging) == []
 
 
+def test_staging_sync_services_dispatch_through_cloud_tasks(composer):
+    # Prod sets these per service outside runtime_env.yaml. Inline sync dispatch makes the backfill
+    # lane fail closed (sync_backfill_dispatch_unavailable, upload 503) for owners not on batch.
+    services = composer.compose_staging(inputs=INPUTS)['cloud_run']['services']
+    mode = {name: config['env'].get('SYNC_DISPATCH_MODE', {}).get('value') for name, config in services.items()}
+    assert mode == {
+        'backend': None,
+        'backend-sync': 'cloud_tasks',
+        'backend-sync-backfill': 'cloud_tasks',
+        'backend-integration': None,
+    }
+    for config in services.values():
+        assert config['env']['ACCOUNT_DELETION_DISPATCH_MODE']['value'] == 'cloud_tasks'
+        assert config['env']['ACCOUNT_DELETION_TASKS_QUEUE']['value'].startswith('staging-')
+
+
+def test_staging_services_run_the_a2_jobstore_shadow_as_their_own_identity(composer):
+    for config in composer.compose_staging(inputs=INPUTS)['cloud_run']['services'].values():
+        env = {key: entry['value'] for key, entry in config['env'].items()}
+        assert env['BATCH_JOBSTORE_MODE'] == 'shadow'
+        assert env['JOBSTORE_SHADOW_WRITES'] == 'on'
+        assert env['JOBSTORE_PG_DATABASE'] == 'jobstore_staging'
+        assert env['JOBSTORE_PG_USER'] == config['service_account'].removesuffix('.gserviceaccount.com')
+
+
+def test_staging_hosted_speech_endpoints_never_reach_prod(composer):
+    services = composer.compose_staging(inputs=INPUTS)['cloud_run']['services']
+    for config in services.values():
+        for name in ('HOSTED_PARAKEET_API_URL', 'HOSTED_DIARIZATION_API_URL', 'HOSTED_SPEAKER_EMBEDDING_API_URL'):
+            if name in config['env']:
+                assert config['env'][name]['value'] == 'http://127.0.0.1:9', name
+        assert not any(
+            'omi.me' in str(entry.get('value', '')) or '172.16.160.' in str(entry.get('value', ''))
+            for entry in config['env'].values()
+        )
+
+
+def test_prod_speech_endpoint_left_in_place_fails_compose(tmp_path):
+    root = _copy_tree(tmp_path)
+
+    def mutate(doc):
+        for env in doc['overlay']['cloud_run']['services'].values():
+            env['env'].pop('HOSTED_PARAKEET_API_URL')
+            env['env'].pop('HOSTED_SPEAKER_EMBEDDING_API_URL')
+
+    _edit_staging_overlay(root, mutate)
+    problems = staging_check.staging_diff(root)
+    assert problems and all(scope == 'compose' for scope, _, _ in problems)
+    assert any('HOSTED_PARAKEET_API_URL' in problem for _, _, problem in problems)
+    assert any('HOSTED_SPEAKER_EMBEDDING_API_URL' in problem for _, _, problem in problems)
+
+
 def test_staging_requires_the_redis_input(composer):
     with pytest.raises(composer.StagingComposeError, match='STAGING_REDIS_HOST'):
         composer.compose_staging(inputs={})
@@ -69,7 +121,7 @@ def test_non_allowlisted_difference_is_reported(tmp_path):
     root = _copy_tree(tmp_path)
 
     def mutate(doc):
-        doc['overlay'] = {'cloud_run': {'services': {'backend': {'env': {'BATCH_PIPELINE_PERCENT': {'value': '7'}}}}}}
+        doc['overlay']['cloud_run']['services']['backend']['env']['BATCH_PIPELINE_PERCENT'] = {'value': '7'}
 
     _edit_staging_overlay(root, mutate)
     problems = staging_check.staging_diff(root)
