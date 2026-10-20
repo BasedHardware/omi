@@ -582,6 +582,13 @@ def test_rollback_never_lowers_the_first_summary_floor():
     assert out[1].detail == 'quality_floor_kept' and not out[1].page
 
 
+def test_first_summary_below_the_lead_pages_on_every_lead_action():
+    s = snap(percents={'batch-pipeline': 25.0, 'first-summary': 5.0})
+    for v in (verdict(percent=25.0, hold=2 * H), verdict('FAIL', 'http_5xx_regression', percent=25.0)):
+        follower = rc.decide_all(s, v, now=0.0)[1]
+        assert (follower.action, follower.detail, follower.page) == (rc.Action.HOLD, 'follower_diverged', True)
+
+
 def test_first_summary_above_the_lead_holds_quietly():
     s = snap(percents={'batch-pipeline': 5.0, 'first-summary': 100.0})
     for v in (verdict(percent=5.0, hold=3 * H), verdict('FAIL', 'projection_error', percent=5.0)):
@@ -662,7 +669,7 @@ class _FailingClient:
         raise RuntimeError('firestore unavailable')
 
 
-def _loop_main(tmp_path, monkeypatch, stop):
+def _loop_main(tmp_path, monkeypatch, stop, apply=True):
     notes = []
 
     def runner(argv, timeout):
@@ -679,7 +686,8 @@ def _loop_main(tmp_path, monkeypatch, stop):
 
     monkeypatch.setattr(rc, '_sleep', fake_sleep)
     monkeypatch.setenv('GCP_AGENT_TIER', 'dev-operator')
-    argv = ['--env', 'staging', '--gate-cmd', 'true', '--loop', '--apply', '--interval', '0']
+    argv = ['--env', 'staging', '--gate-cmd', 'true', '--loop', '--interval', '0']
+    argv += ['--apply'] if apply else []
     argv += ['--state-file', str(tmp_path / 'STATE.md')]
     code = rc.main(argv, client_factory=lambda **kw: _FailingClient(), runner=runner)
     return code, notes
@@ -693,6 +701,14 @@ def test_loop_pages_after_three_failed_ticks_and_when_interrupted(tmp_path, monk
     assert code == 130
     assert [n for n in notes if 'tick failed 3 consecutive times (RuntimeError)' in n]
     assert notes[-1].startswith('PAGE lead: ramp-controller staging stopped (interrupted)')
+
+
+def test_dry_run_loop_never_pages(tmp_path, monkeypatch):
+    def interrupt():
+        raise KeyboardInterrupt
+
+    code, notes = _loop_main(tmp_path, monkeypatch, interrupt, apply=False)
+    assert code == 130 and notes == []
 
 
 def test_loop_pages_when_terminated_and_restores_the_handler(tmp_path, monkeypatch):

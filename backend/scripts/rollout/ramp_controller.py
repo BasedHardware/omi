@@ -284,7 +284,7 @@ def _align_follower(item: Decision, lead: Decision, current: float | None) -> De
         if current is None:
             # Absent from `_ramp`, serving reads the env default (prod: 100). Writing the lead's value would lower it.
             return hold(lead.reason, 'quality_floor_unseeded')
-        if lead.action in ROLLBACK_ACTIONS:
+        if lead.action in ROLLBACK_ACTIONS and current >= lead.from_percent:
             return hold(lead.reason, 'quality_floor_kept')
         if current > lead.from_percent:
             return hold(lead.reason, 'quality_floor_above_lead')
@@ -825,12 +825,15 @@ def main(
             except Exception as error:  # noqa: BLE001 - a failed tick writes nothing; log the class only
                 errors += 1
                 logger.warning('event=ramp_controller_tick outcome=error error=%s', type(error).__name__)
-                if should_escalate_unavailable(errors):
-                    effects.notify(
-                        f'PAGE lead: ramp-controller {args.env} tick failed {errors} consecutive times '
-                        f'({type(error).__name__}); the ramp is unsupervised at its current step',
-                        True,
-                    )
+                if args.apply and should_escalate_unavailable(errors):
+                    try:
+                        effects.notify(
+                            f'PAGE lead: ramp-controller {args.env} tick failed {errors} consecutive times '
+                            f'({type(error).__name__}); the ramp is unsupervised at its current step',
+                            True,
+                        )
+                    except Exception:  # noqa: BLE001 - a failed page must not end the loop
+                        logger.warning('event=ramp_controller_error_page outcome=failed')
             _sleep(args.interval)
     except KeyboardInterrupt:
         cause = 'interrupted'
