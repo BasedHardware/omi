@@ -1,0 +1,4 @@
+{
+  "change": "Show local transcription recovery when Apple speech becomes unavailable during recording, while preserving saved audio for retry.",
+  "platforms": ["ios"]
+}

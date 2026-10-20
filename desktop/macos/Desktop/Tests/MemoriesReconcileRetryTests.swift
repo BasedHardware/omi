@@ -203,9 +203,10 @@ final class MemoriesReconcileRetryTests: XCTestCase {
   }
 
   /// Truncated on every attempt (initial pull + 3 retries at 30/60/120s): no
-  /// prune, no latch — the next launch retries — and the terminal telemetry
+  /// prune, and the user is latched as attempted so only the next launch
+  /// retries — and the terminal telemetry
   /// reports truncated_exhausted with the full attempt count.
-  func testTruncatedOnEveryAttemptExhaustsUnlatchedWithoutPruning() async throws {
+  func testTruncatedOnEveryAttemptExhaustsWithoutPruningAndHoldsUntilNextLaunch() async throws {
     let present = makeMemory(id: "exhausted-present", tier: .longTerm)
     let unseen = makeMemory(id: "exhausted-unseen", tier: .longTerm)
     try await MemoryStorage.shared.syncServerMemories([present, unseen])
@@ -238,19 +239,21 @@ final class MemoriesReconcileRetryTests: XCTestCase {
     XCTAssertEqual(events[0]["truncated"] as? Bool, true)
     XCTAssertEqual(events[0]["pruned"] as? Int, 0)
 
-    // Unlatched: the next reconcile runs again instead of returning early.
+    // Exhausted means "next launch": a later reload in this process (filter
+    // change, tag edit) must not start another full retry budget.
     viewModel.reconcilePageFetch = { [self] _, _, _ in
       fetches += 1
       return page([])
     }
-    let completed = expectation(description: "follow-up reconcile run completed")
-    MemoryCacheReconcileTelemetry.captureForTests = { _, properties in
-      events.append(properties)
-      if events.count == 2 { completed.fulfill() }
-    }
     await viewModel.reconcileCacheIfNeeded()
-    await fulfillment(of: [completed], timeout: 5)
-    XCTAssertEqual(fetches, 5, "an exhausted run must not latch its user")
+    let reloaded = MemoriesViewModel(reconcileRetrySleeper: { _ in })
+    reloaded.reconcilePageFetch = viewModel.reconcilePageFetch
+    await reloaded.reconcileCacheIfNeeded()
+    XCTAssertEqual(fetches, 4, "an exhausted run latches its user for the rest of the launch")
+    XCTAssertEqual(events.count, 1, "no second run starts, so no second terminal event")
+    XCTAssertFalse(viewModel.reconcileRetry.hasPendingRetry)
+    let stillPresent = try await MemoryStorage.shared.getMemoryByBackendId("exhausted-unseen")
+    XCTAssertEqual(stillPresent?.deleted, false, "the exhausted latch never prunes")
 
     // Each truncated attempt that scheduled a retry degraded the reconcile
     // (attempts 1–3); the fourth exhausted it to next launch.

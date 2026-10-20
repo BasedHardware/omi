@@ -161,7 +161,9 @@ class TerminalEmptyStore:
             owner = tx.get('owners', owner_key(binding.owner_id))
             owner['revision'] = owner.get('revision', 0) + 1
             marker.update(state='completed', completed_at=now)
-            job.update(state='result_ready', merge_pending=True, recovery_state='recovered', result=result)
+            job.update(
+                state='result_ready', merge_pending=True, recovery_state='recovered', result=result, ready_at=now
+            )
             tx.put('owners', owner_key(binding.owner_id), owner)
             tx.put('jobs', sid, job)
             return True, job['duration_seconds'], outcome

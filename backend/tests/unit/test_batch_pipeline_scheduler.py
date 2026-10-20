@@ -42,6 +42,14 @@ class MemoryTransaction:
         ]
         return min(jobs, key=lambda v: (v['capture_at'], v['segment_id'])) if jobs else None
 
+    def first_ready_pending(self, owner_key):
+        jobs = [
+            v
+            for (table, _), v in self.rows.items()
+            if table == 'jobs' and v['owner_key'] == owner_key and v['merge_pending'] and v['state'] == 'result_ready'
+        ]
+        return min(jobs, key=lambda v: (v['capture_at'], v['segment_id'])) if jobs else None
+
     def ready_predecessor(self, owner_key, priority, segment_id):
         jobs = [
             v
@@ -105,6 +113,36 @@ class MemoryStore:
 
     def quarantine_fenced(self, segment_id, now):
         raise AssertionError('privacy isolation must use real emulator transactions')
+
+    def longest_ready_pending(self, owner_key):
+        jobs = [
+            v
+            for (table, _), v in self.rows.items()
+            if table == 'jobs'
+            and v['owner_key'] == owner_key
+            and v['merge_pending']
+            and v['state'] == 'result_ready'
+            and 'ready_at' in v
+        ]
+        return deepcopy(min(jobs, key=lambda v: (v['ready_at'], v['segment_id']))) if jobs else None
+
+    def fresh_pending(self, owner_key, limit):
+        jobs = [
+            v
+            for (table, _), v in self.rows.items()
+            if table == 'jobs' and v['owner_key'] == owner_key and v['merge_pending'] and v.get('fresh_capture') is True
+        ]
+        return deepcopy(sorted(jobs, key=lambda v: (v['capture_at'], v['segment_id']))[:limit])
+
+    def held_merge_owners(self, limit, *, after=None):
+        owners = []
+        for (table, key), row in sorted(self.rows.items()):
+            if table == 'merge_holds' and row.get('held') and (after is None or key > after) and len(owners) < limit:
+                pending = [
+                    v for (t, _), v in self.rows.items() if t == 'jobs' and v['owner_key'] == key and v['merge_pending']
+                ]
+                owners.append((key, pending[0]['owner_id'] if pending else None))
+        return owners
 
 
 def colliding_owner(owner):
@@ -263,6 +301,34 @@ def test_priority_respects_existing_lane():
         priority_for('unknown', 1)
 
 
+def test_catch_up_inside_the_fresh_lane_leases_after_fresh_uploads(monkeypatch):
+    monkeypatch.delenv('BATCH_PIPELINE_FRESH_GPU_PRIORITY_ENABLED', raising=False)
+    assert priority_for('fresh', 600) == Priority.FRESH
+    assert priority_for('fresh', 601) == Priority.RECENT
+    assert priority_for('fresh', 5 * 3600) == Priority.RECENT
+    assert priority_for('fresh', float('nan')) == Priority.FRESH
+    monkeypatch.setenv('BATCH_PIPELINE_FRESH_GPU_PRIORITY_ENABLED', 'false')
+    assert priority_for('fresh', 5 * 3600) == Priority.FRESH
+
+
+def test_fresh_upload_leases_ahead_of_the_same_owners_catch_up_fifo(monkeypatch):
+    monkeypatch.delenv('BATCH_PIPELINE_FRESH_GPU_PRIORITY_ENABLED', raising=False)
+    queue = Scheduler(MemoryStore())
+    for n in range(20):
+        queue.enqueue(item(f'c{n}', priority=priority_for('fresh', 3600)), 0)
+    queue.enqueue(item('fresh', capture=2, priority=priority_for('fresh', 60)), 0)
+    assert queue.pull(1, 1)[0].item.segment_id == 'fresh'
+
+
+def test_admission_classifies_fresh_capture_by_capture_end():
+    store = MemoryStore()
+    queue = Scheduler(store)
+    queue.enqueue(item('fresh', capture=1000, duration=60), 1000 + 60 + 600)
+    queue.enqueue(item('catch_up', capture=1000, duration=60), 1000 + 60 + 601)
+    assert store.rows['jobs', 'fresh']['fresh_capture'] is True
+    assert store.rows['jobs', 'catch_up']['fresh_capture'] is False
+
+
 def test_expired_leases_never_terminal_state_ordered_head():
     store = MemoryStore()
     queue = Scheduler(store)
@@ -290,7 +356,8 @@ def test_dead_letter_redrive_preserves_order_and_identity():
             queue.fail('a', lease.token, 1)
     # A historical terminal job from the previous implementation.
     store.rows['jobs', 'a'].update(state='dead', available_at=0)
-    merge = OrderedMerge(store)
+    # Strict order: the bounded head wait would release b past the dead head.
+    merge = OrderedMerge(store, head_wait_seconds=0)
     assert merge.commit_next('heavy', 9999) is None
     assert queue.redrive_dead('a', 9999)
     assert not queue.redrive_dead('a', 9999)

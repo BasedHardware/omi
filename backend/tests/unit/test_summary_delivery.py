@@ -38,12 +38,29 @@ def test_dark_defaults_and_no_shape_change(monkeypatch):
     delivery.prepare(row, 'u', now=100)
     assert row == before
     assert not flags.enabled('u') and not flags.repair_enabled()
-    result = build_deterministic_minimum_structured(SimpleNamespace(transcript_segments=[]))
+    result = build_deterministic_minimum_structured(SimpleNamespace(transcript_segments=[]), uid='u')
     assert 'title_provenance' not in result.model_dump()
 
 
+def test_server_title_provenance_is_stamped_only_for_cohort_owners(monkeypatch):
+    """PFS-F1: the gate being on somewhere must not stamp every owner's minimum."""
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '0')
+    monkeypatch.delenv('FIRST_SUMMARY_UID_ALLOWLIST', raising=False)
+    row = SimpleNamespace(transcript_segments=[])
+    assert flags.enabled() and not flags.enabled('outside-owner')
+    assert 'title_provenance' not in build_deterministic_minimum_structured(row, uid='outside-owner').model_dump()
+    assert 'title_provenance' not in build_deterministic_minimum_structured(row, uid=None).model_dump()
+    assert 'title_provenance' not in build_deterministic_minimum_structured(row).model_dump()
+
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '100')
+    assert build_deterministic_minimum_structured(row, uid='outside-owner').model_dump()['title_provenance'] == (
+        'server_minimum'
+    )
+
+
 def test_server_title_provenance_is_not_a_model_or_manual_title(enabled):
-    result = build_deterministic_minimum_structured(SimpleNamespace(transcript_segments=[]))
+    result = build_deterministic_minimum_structured(SimpleNamespace(transcript_segments=[]), uid='u')
     assert result.model_dump()['title_provenance'] == 'server_minimum'
     assert 'title_provenance' not in result.model_json_schema()['properties']
     assert delivery.refusal(debt()) is None

@@ -37,7 +37,6 @@ import numpy as np
 import database.speaker_resolution_updates as identity_updates_db
 import database.conversations as conversations_db
 import database.users as users_db
-from config.audio_timeline import live_speaker_span_resolution_enabled
 from database.audio_timeline import COVERAGE_TOLERANCE_SECONDS, chunk_span_bounds
 from models.conversation import Conversation, ConversationSpeakers
 from models.transcript_segment import SpeakerIdentityStatus, TranscriptSegment
@@ -46,7 +45,6 @@ from utils.conversations.audio_placement import (
     PreparedAudioCoverage,
     locate,
     prepare_audio_coverage,
-    saved_sync_window,
     text_window_refusal,
 )
 from utils.conversations.speaker_grouping_shadow import compare_and_select
@@ -107,7 +105,6 @@ MIN_RESOLVED_COVERAGE = 0.9
 CAPTURE_SPAN_KEY_PREFIX = 'capture-span:'
 MAX_ADVISORY_PLACEMENTS = 1500
 MAX_PLACEMENT_SPANS = 10000
-ADVISORY_PLACEMENT_SECONDS = 0.25
 
 
 def resolver_reason(reason: str) -> None:
@@ -697,25 +694,6 @@ def _capture_trusted(segments: List[TranscriptSegment]) -> bool:
     return len(scopes) <= 1
 
 
-def _audio_aligned(conversation: Conversation) -> bool:
-    """Whether segment times address the stored audio: every capture scope is a sync chunk.
-
-    Sync segments are timed from the uploaded file that also becomes the stored
-    chunk, so they line up exactly. Live ``started_at`` can drift minutes from the
-    arrival-stamped chunks until the capture-position clock lands
-    (``omi-knowledge-base/projects/audio-timeline``); embedding misplaced audio
-    would merge the wrong voices, so live scopes are not resolved yet. A
-    ``conversation:`` scope is this stage's own output, written only after an
-    aligned resolution.
-    """
-    own = f'conversation:{conversation.id}'
-    return all(
-        (s.speaker_id_scope or '').startswith(('sync:', 'legacy-conversation:')) or s.speaker_id_scope == own
-        for s in conversation.transcript_segments
-        if s.speaker_id != OMI_SPEAKER_ID_SENTINEL
-    )
-
-
 def _without_resolution(
     conversation: Conversation,
     outcome: str,
@@ -1237,7 +1215,6 @@ def _resolve(
         )
         _without_resolution(conversation, 'no_audio')
         return
-    spans_on = live_speaker_span_resolution_enabled()
 
     invalid_text = [s for s in segments if text_window_refusal(s.start, s.end) is not None]
     invalid_text_ids = {s.id for s in invalid_text if s.id is not None}
@@ -1252,7 +1229,6 @@ def _resolve(
     placements: Dict[str, AudioPlacement] = {}
     inventory_files: List[Any] = []
     index = PreparedAudioCoverage(validated=False)
-    advisory_began = time.monotonic()
     if embeddable:
         raw_files = conversation.audio_files or []
         audio_timeline = conversation.audio_timeline
@@ -1279,103 +1255,52 @@ def _resolve(
             OMI_AUDIO_PLACEMENT_TOTAL.labels(reason=placement.reason).inc()
             return placement
 
-        if spans_on:
-            index = PreparedAudioCoverage(validated=False)
-            mapping: Dict[str, Any] = {}
-            span_total = 0
-            for audio_file in raw_files:
-                span_total += 1 + _manifest_span_load(audio_file)
-                if span_total > MAX_PLACEMENT_SPANS:
-                    break
-            if span_total <= MAX_PLACEMENT_SPANS:
-                dumped_files = [f.model_dump(mode='python') if hasattr(f, 'model_dump') else f for f in raw_files]
-                inventory_files = dumped_files
-                mapping = placement_mapping(dumped_files)
-                index = prepare_audio_coverage(dumped_files, deadline=deadline, max_spans=MAX_PLACEMENT_SPANS)
-            for segment in segments:
-                if time.monotonic() >= deadline:
-                    resolver_reason('placement_deadline')
-                    _without_resolution(conversation, 'unaligned_audio', reason='unplaced', force_unavailable=True)
-                    return
-                if segment.id is None or segment.id in invalid_text_ids:
-                    continue
-                placements[segment.id] = place_segment(segment, mapping, index)
-        else:
-            span_total = 0
-            bounded = True
-            for audio_file in raw_files:
-                span_total += 1 + _manifest_span_load(audio_file)
-                if span_total > MAX_PLACEMENT_SPANS or time.monotonic() - advisory_began >= ADVISORY_PLACEMENT_SECONDS:
-                    bounded = False
-                    break
-            if bounded and time.monotonic() - advisory_began >= ADVISORY_PLACEMENT_SECONDS:
-                bounded = False
-            if bounded:
-                dumped_files = [f.model_dump(mode='python') if hasattr(f, 'model_dump') else f for f in raw_files]
-                index = prepare_audio_coverage(
-                    dumped_files,
-                    deadline=advisory_began + ADVISORY_PLACEMENT_SECONDS,
-                    max_spans=MAX_PLACEMENT_SPANS,
-                )
-                mapping = placement_mapping(dumped_files)
-                measured = 0
-                for segment in embeddable:
-                    if (
-                        measured >= MAX_ADVISORY_PLACEMENTS
-                        or time.monotonic() - advisory_began >= ADVISORY_PLACEMENT_SECONDS
-                    ):
-                        break
-                    if segment.id is None or segment.id in invalid_text_ids:
-                        continue
-                    placements[segment.id] = place_segment(segment, mapping, index)
-                    measured += 1
-            deadline += time.monotonic() - advisory_began
-
-    if not spans_on:
-        if not _audio_aligned(conversation):
-            refusal = next(
-                (p.reason for p in placements.values() if p.window is None),
-                'legacy',
-            )
-            resolver_reason('no_proven_window')
-            _without_resolution(conversation, 'unaligned_audio', reason=refusal)
-            return
+        index = PreparedAudioCoverage(validated=False)
+        mapping: Dict[str, Any] = {}
+        span_total = 0
+        for audio_file in raw_files:
+            span_total += 1 + _manifest_span_load(audio_file)
+            if span_total > MAX_PLACEMENT_SPANS:
+                break
+        if span_total <= MAX_PLACEMENT_SPANS:
+            dumped_files = [f.model_dump(mode='python') if hasattr(f, 'model_dump') else f for f in raw_files]
+            inventory_files = dumped_files
+            mapping = placement_mapping(dumped_files)
+            index = prepare_audio_coverage(dumped_files, deadline=deadline, max_spans=MAX_PLACEMENT_SPANS)
+        for segment in segments:
+            if time.monotonic() >= deadline:
+                resolver_reason('placement_deadline')
+                _without_resolution(conversation, 'unaligned_audio', reason='unplaced', force_unavailable=True)
+                return
+            if segment.id is None or segment.id in invalid_text_ids:
+                continue
+            placements[segment.id] = place_segment(segment, mapping, index)
 
     clip_seconds: Dict[str, float] = {}
     cache = decode_cache(download_speaker_embedding_cache(uid, conversation.id), clip_seconds)
-    if not spans_on and any(key.startswith(CAPTURE_SPAN_KEY_PREFIX) for key in cache):
-        resolver_reason('no_proven_window')
-        _without_resolution(conversation, 'unaligned_audio', reason='capture_span')
-        return
-
-    keys: Optional[Dict[str, str]] = None
-    if spans_on:
-        keys = {}
-        for segment in segments:
-            if not segment.id or segment.id in invalid_text_ids:
-                continue
-            placement = placements.get(segment.id)
-            if placement is not None and placement.reason == 'capture_span' and placement.window is not None:
-                scope = segment.speaker_id_scope or ''
-                historical = scope == f'conversation:{conversation.id}' or scope.startswith('legacy-conversation:')
-                cached = cache.get(segment.id)
-                if (
-                    historical
-                    and cached is not None
-                    and abs(cached[0] - _duration(segment)) <= 0.25 * max(_duration(segment), 1e-3)
-                ):
-                    keys[segment.id] = segment.id
-                else:
-                    keys[segment.id] = (
-                        f'{CAPTURE_SPAN_KEY_PREFIX}{segment.id}:{placement.window[0]!r}:{placement.window[1]!r}'
-                    )
-            else:
+    keys: Dict[str, str] = {}
+    for segment in segments:
+        if not segment.id or segment.id in invalid_text_ids:
+            continue
+        placement = placements.get(segment.id)
+        if placement is not None and placement.reason == 'capture_span' and placement.window is not None:
+            scope = segment.speaker_id_scope or ''
+            historical = scope == f'conversation:{conversation.id}' or scope.startswith('legacy-conversation:')
+            cached = cache.get(segment.id)
+            if (
+                historical
+                and cached is not None
+                and abs(cached[0] - _duration(segment)) <= 0.25 * max(_duration(segment), 1e-3)
+            ):
                 keys[segment.id] = segment.id
-        selected = set(keys.values())
-        stale = [sid for sid in cache if sid not in selected]
-    else:
-        live_ids = {s.id for s in segments if s.id not in invalid_text_ids}
-        stale = [sid for sid in cache if sid not in live_ids]
+            else:
+                keys[segment.id] = (
+                    f'{CAPTURE_SPAN_KEY_PREFIX}{segment.id}:{placement.window[0]!r}:{placement.window[1]!r}'
+                )
+        else:
+            keys[segment.id] = segment.id
+    selected = set(keys.values())
+    stale = [sid for sid in cache if sid not in selected]
     for sid in stale:
         del cache[sid]
 
@@ -1388,8 +1313,6 @@ def _resolve(
         def cache_hit(key: str) -> bool:
             return key in cache and abs(cache[key][0] - _duration(segment)) <= 0.25 * max(_duration(segment), 1e-3)
 
-        if keys is None:
-            return not (segment.id is not None and cache_hit(segment.id))
         sid = segment.id
         if not sid:
             return True
@@ -1415,7 +1338,7 @@ def _resolve(
 
     pending = [s for s in segments if needs_embedding(s)]
     abstained = set(invalid_text_ids)
-    if spans_on and embeddable:
+    if embeddable:
         # One missing provider window does not invalidate other proven windows.
         # It must never borrow the nearest voice or a bare legacy cache entry.
         # Manifest contradictions and known coverage holes still refuse globally.
@@ -1457,83 +1380,46 @@ def _resolve(
             resolver_reason('manifest_unvalidated' if not index.validated else 'no_proven_window')
             _without_resolution(conversation, 'unaligned_audio', reason='unplaced', force_unavailable=True)
             return
-    else:
-        own_scope = f'conversation:{conversation.id}'
-        origin = _started_at(conversation)
-        for segment in pending:
-            if segment.speaker_id_scope == own_scope and (
-                segment.audio_capture_start is not None or segment.audio_capture_end is not None
-            ):
-                placed = (
-                    segment.audio_alignment != 'unplaced'
-                    and math.isfinite(segment.start)
-                    and math.isfinite(segment.end)
-                    and 0 <= segment.start < segment.end
-                )
-                proof = {
-                    'start': segment.start,
-                    'end': segment.end,
-                    'audio_source': segment.audio_source,
-                }
-                if not placed or origin is None or not saved_sync_window(proof, origin):
-                    resolver_reason('no_proven_window')
-                    _without_resolution(conversation, 'unaligned_audio', reason='capture_span')
-                    return
     read_session = None
-    if spans_on and pending:
+    if pending:
         read_session = _verified_read_session(uid, conversation, inventory_files, pending, placements, deadline)
         if read_session is None:
             _without_resolution(conversation, 'unaligned_audio', reason='unverified_inventory', force_unavailable=True)
             return
     diagnostics = EmbeddingDiagnostics()
-    if spans_on:
-        new_embeddings, stop = _embed_missing(
-            uid,
-            conversation,
-            pending,
-            cache,
-            deadline,
-            placements=placements,
-            keys=keys,
-            session=read_session,
-            diagnostics=diagnostics,
-            evidence_seconds=clip_seconds,
-            max_attempts=max_embedding_attempts,
-        )
-        owner_diagnostics.resolver_counts(
-            attempted=diagnostics.attempted,
-            successful=new_embeddings,
-            failed=diagnostics.embed_failures,
-            embeddable=len(embeddable),
-            pending=len(pending),
-            stop=stop,
-        )
-        if read_session is not None and read_session.limit_hit:
-            resolver_reason('read_budget')
-            _without_resolution(conversation, 'unaligned_audio', reason='unverified_inventory', force_unavailable=True)
-            return
-    else:
-        new_embeddings, stop = _embed_missing(
-            uid,
-            conversation,
-            pending,
-            cache,
-            deadline,
-            diagnostics=diagnostics,
-            evidence_seconds=clip_seconds,
-            max_attempts=max_embedding_attempts,
-        )
+    new_embeddings, stop = _embed_missing(
+        uid,
+        conversation,
+        pending,
+        cache,
+        deadline,
+        placements=placements,
+        keys=keys,
+        session=read_session,
+        diagnostics=diagnostics,
+        evidence_seconds=clip_seconds,
+        max_attempts=max_embedding_attempts,
+    )
+    owner_diagnostics.resolver_counts(
+        attempted=diagnostics.attempted,
+        successful=new_embeddings,
+        failed=diagnostics.embed_failures,
+        embeddable=len(embeddable),
+        pending=len(pending),
+        stop=stop,
+    )
+    if read_session is not None and read_session.limit_hit:
+        resolver_reason('read_budget')
+        _without_resolution(conversation, 'unaligned_audio', reason='unverified_inventory', force_unavailable=True)
+        return
     if new_embeddings or stale:
         upload_speaker_embedding_cache(uid, conversation.id, encode_cache(cache, clip_seconds))
 
-    if keys is not None:
-        vectors = {
-            segment.id: cache[keys[segment.id]][1]
-            for segment in segments
-            if segment.id in keys and keys[segment.id] in cache and segment.id not in abstained
-        }
-    else:
-        vectors = {sid: vector for sid, (_, vector) in cache.items() if sid not in abstained}
+    vectors = {
+        segment.id: cache[keys[segment.id]][1]
+        for segment in segments
+        if segment.id in keys and keys[segment.id] in cache and segment.id not in abstained
+    }
     # Evidence duration is identity policy, independent of score instrumentation.
     # Older v1 entries remain useful for grouping; without clip metadata they
     # contribute no claimed owner evidence until new verified audio is embedded.
@@ -1543,13 +1429,13 @@ def _resolve(
         sid = segment.id
         if sid not in vectors:
             continue
-        key = keys.get(sid, sid) if keys is not None else sid
+        key = keys.get(sid, sid)
         seconds = clip_seconds.get(key, 0.0)
         if not math.isfinite(seconds) or seconds < 0:
             seconds = 0.0
         seconds = min(seconds, _duration(segment), MAX_CLIP_SECONDS)
         window = placements[sid].window if sid in placements else None
-        if spans_on and window is not None:
+        if window is not None:
             low, high = window
             if high - low > MAX_CLIP_SECONDS:
                 center = (low + high) / 2
@@ -1639,13 +1525,10 @@ def _resolve(
         conversation.speaker_resolution = ConversationSpeakers(status='unavailable', version=RESOLUTION_VERSION)
     resolver_reason('resolved' if resolution.coverage >= MIN_RESOLVED_COVERAGE else 'partial')
     outcome = 'resolved' if resolution.coverage >= MIN_RESOLVED_COVERAGE else f'partial_{stop}'
-    if spans_on:
-        if not pending and embeddable:
-            outcome_reason = 'cached'
-        else:
-            outcome_reason = _resolution_reason([placements[s.id].reason for s in pending if s.id in placements])
+    if not pending and embeddable:
+        outcome_reason = 'cached'
     else:
-        outcome_reason = 'legacy'
+        outcome_reason = _resolution_reason([placements[s.id].reason for s in pending if s.id in placements])
     OMI_CONVERSATION_SPEAKER_RESOLUTION_TOTAL.labels(outcome=outcome).inc()
     OMI_CONVERSATION_SPEAKER_RESOLUTION_REASONS_TOTAL.labels(outcome=outcome, reason=outcome_reason).inc()
     OMI_CONVERSATION_SPEAKER_RESOLUTION_VOICES.labels(stage='input').observe(input_ids)

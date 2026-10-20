@@ -6,6 +6,8 @@ live here. The optional ``extra_field_paths`` widens the projection for the
 REST surface (``apps_results``) without inflating the hosted tool reads.
 """
 
+import logging
+import os
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
@@ -13,6 +15,9 @@ from utils.other.list_budget import ListReadBudget, ListReadBudgetExhausted, bud
 
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
+from fastapi import HTTPException
+
+from config.firestore_read_levers import lever_enabled
 
 from ._client import get_firestore_client
 from .conversations import (
@@ -29,6 +34,28 @@ from .helpers import prepare_for_read
 # soft-deleted tombstones between visible rows (an offset page counts the rows
 # past its first window).
 MCP_CARD_PAGE_SCAN_BUDGET = 500
+logger = logging.getLogger(__name__)
+
+
+def _bounded_read_cap(uid: str) -> Optional[int]:
+    # The rollout name is shared with the experiment brief; this lever bounds
+    # queries, without caching user data or needing write-side invalidation.
+    if not lever_enabled('mcp_conversation_cards_cache', uid):
+        return None
+    try:
+        return max(2, int(os.getenv('FSR_MCP_CARDS_MAX_READS', '1501')))
+    except ValueError:
+        return 1501
+
+
+def _require_cursor() -> None:
+    # Both hosted surfaces already translate this shared typed error. Never
+    # disguise an over-budget offset page as the end of a user's collection.
+    logger.warning('mcp_conversation_cards_read_cap: rejected request; use a smaller limit and cursor')
+    raise HTTPException(
+        status_code=400,
+        detail='Conversation read limit exceeded. Use a smaller limit and page with cursor instead of offset.',
+    )
 
 
 def _card_field_paths(extra_field_paths: Optional[Sequence[str]]) -> List[str]:
@@ -62,8 +89,13 @@ def get_mcp_conversation_cards(
     and are dropped in Python, so a full window that loses rows to them keeps
     reading after its last row in keyset order until ``limit`` visible rows,
     stream exhaustion, or the scan budget. Callers read a short result as the
-    end of the list.
+    end of the list. With the WQ6 lever, billed offset skips count toward a
+    hard per-call cap and an incomplete capped window raises instead of
+    claiming exhaustion. Refill windows request only the missing slots.
     """
+    read_cap = _bounded_read_cap(uid)
+    if read_cap is not None and (limit < 1 or offset < 0 or offset + limit > read_cap):
+        _require_cursor()
     client = firestore_client if firestore_client is not None else get_firestore_client()
     collection = client.collection('users').document(uid).collection(conversations_collection)
     query_spec = MCP_CONVERSATION_CARD_QUERY_SPECS[(bool(categories), start_date is not None, end_date is not None)]
@@ -84,6 +116,7 @@ def get_mcp_conversation_cards(
     window = query.limit(limit).offset(offset)
     conversations: List[Dict[str, Any]] = []
     scanned = 0
+    window_size = limit
     try:
         if budget is not None and offset > 0:
             # Refuse a too-expensive offset before issuing its billed skip.
@@ -103,8 +136,16 @@ def get_mcp_conversation_cards(
                 conversations.append(conversation)
             scanned += fetched
             if (
+                read_cap is not None
+                and len(conversations) < limit
+                and fetched == window_size
+                and last_doc is not None
+                and scanned >= limit + MCP_CARD_PAGE_SCAN_BUDGET
+            ):
+                _require_cursor()
+            if (
                 len(conversations) >= limit
-                or fetched < limit
+                or fetched < window_size
                 or last_doc is None
                 or scanned >= limit + MCP_CARD_PAGE_SCAN_BUDGET
             ):
@@ -113,9 +154,16 @@ def get_mcp_conversation_cards(
             if last_created_at is None:
                 # Same stop as the keyset page: no resumable position past this row.
                 break
+            if read_cap is not None:
+                remaining = read_cap - offset - scanned
+                if remaining <= 0:
+                    _require_cursor()
+                # Refill only missing slots, rather than discarding an entire
+                # second page's surplus visible cards after paying for them.
+                window_size = min(limit - len(conversations), remaining)
             window = (
                 query.order_by('__name__', direction=firestore.Query.DESCENDING)
-                .limit(limit)
+                .limit(window_size)
                 .start_after({'created_at': last_created_at, '__name__': collection.document(last_doc.id)})
             )
     except ListReadBudgetExhausted:
@@ -144,7 +192,15 @@ def get_mcp_conversation_cards_page(
     the last emitted row when a visible lookahead row exists (the lookahead
     itself must not be skipped), the last scanned row when the budget stopped
     the scan before the stream did, or ``None`` at the end of the stream.
+    With the WQ6 lever, every window fits the remaining raw-read budget and
+    requests only the visible slots still missing (including lookahead).
     """
+    read_cap = _bounded_read_cap(uid)
+    if read_cap is not None and (limit < 1 or limit + 1 > read_cap):
+        _require_cursor()
+    scan_cap = (
+        min(read_cap, max(limit + 1, MCP_CARD_PAGE_SCAN_BUDGET)) if read_cap is not None else MCP_CARD_PAGE_SCAN_BUDGET
+    )
     client = firestore_client if firestore_client is not None else get_firestore_client()
     collection = client.collection('users').document(uid).collection(conversations_collection)
     query_spec = MCP_CONVERSATION_CARD_QUERY_SPECS[(bool(categories), start_date is not None, end_date is not None)]
@@ -154,7 +210,8 @@ def get_mcp_conversation_cards_page(
     scanned = 0
     last_position = after
     exhausted = False
-    while len(visible) < limit + 1 and scanned < MCP_CARD_PAGE_SCAN_BUDGET:
+    while len(visible) < limit + 1 and scanned < scan_cap:
+        window_size = min(limit + 1 - len(visible), scan_cap - scanned) if read_cap is not None else limit + 1
         query = query_spec.build(
             collection,
             {
@@ -170,7 +227,7 @@ def get_mcp_conversation_cards_page(
             query.order_by('created_at', direction=firestore.Query.DESCENDING)
             .order_by('__name__', direction=firestore.Query.DESCENDING)
             .select(field_paths)
-            .limit(limit + 1)
+            .limit(window_size)
         )
         if last_position is not None:
             after_ts, after_id = last_position
@@ -205,7 +262,7 @@ def get_mcp_conversation_cards_page(
             visible_positions.append(last_position)
         if exhausted:
             break
-        if len(raw_docs) < limit + 1:
+        if len(raw_docs) < window_size:
             exhausted = True
             break
     page = visible[:limit]

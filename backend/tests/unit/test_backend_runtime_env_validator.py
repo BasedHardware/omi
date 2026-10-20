@@ -182,7 +182,7 @@ def with_conversation_notes_v2_env(payload: str) -> str:
         r'("backend-sync":\s*\{.*?"env":\s*\[\s*\{"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"\},)',
         # backend-sync finalizes conversations, so it reads this environment's frame docs.
         flags + r'\n        {"name": "OMI_VERTEX_RESERVATION_PROJECT", "value": "based-hardware-dev"},'
-        r'\n        {"name": "BUCKET_SCREEN_FRAMES", "value": "based-hardware-dev-screen-frames"},'
+        r'\n        {"name": "BUCKET_SCREEN_FRAMES", "value": "based-hardware-prod-screen-frames"},'
         r'\n        {"name": "TYPESENSE_HOST_PORT", "value": "443"},'
         r'\n        {"name": "TYPESENSE_HOST", "valueFrom": {"secretKeyRef": {"name": "TYPESENSE_HOST", "key": "latest"}}},'
         r'\n        {"name": "TYPESENSE_API_KEY", "valueFrom": {"secretKeyRef": {"name": "TYPESENSE_API_KEY", "key": "latest"}}},',
@@ -226,7 +226,6 @@ def with_audio_timeline_span_env(payload: str) -> str:
         '        {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},',
         '        {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},\n'
         '        {"name": "AUDIO_TIMELINE_SPANS", "value": "false"},\n'
-        '        {"name": "LIVE_SPEAKER_SPAN_RESOLUTION", "value": "false"},\n'
         '        {"name": "LIVE_CAPTURE_WINDOW_RETENTION", "value": "false"},\n'
         '        {"name": "LIVE_CAPTURE_WINDOW_STRICT_PROJECTION", "value": "false"},\n'
         '        {"name": "LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION", "value": "false"},\n'
@@ -370,7 +369,7 @@ def with_backend_storage_env(payload: str) -> str:
     return re.sub(
         r'("backend":\s*\{.*?"env":\s*\[\s*\{"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"\},)',
         r'\1\n        {"name": "BUCKET_TEMPORAL_SYNC_LOCAL", "value": "syncing-local-development"},'
-        r'\n        {"name": "BUCKET_SCREEN_FRAMES", "value": "based-hardware-dev-screen-frames"},'
+        r'\n        {"name": "BUCKET_SCREEN_FRAMES", "value": "based-hardware-prod-screen-frames"},'
         r'\n        {"name": "SCREEN_FRAME_SIGNING_SECRET", "valueFrom": {"secretKeyRef": {"name": "SCREEN_FRAME_SIGNING_SECRET", "key": "latest"}}},',
         payload,
         count=1,

@@ -2,7 +2,9 @@
 
 Runs the real ``Projector.sweep``, discovery cursors, follow-up scheduler and
 ``Serving.reconcile_async`` on the ``ResultLog`` contract model. Ordering
-fences (predecessor check, owner claim, watermark) stay authoritative.
+fences (predecessor check, owner claim, watermark) stay authoritative. This is
+the owner-drain kill-switch path (``BATCH_PIPELINE_OWNER_DRAIN_ENABLED=false``);
+``test_batch_pipeline_owner_drain.py`` covers the drain.
 """
 
 import asyncio
@@ -51,6 +53,7 @@ def claims(monkeypatch):
         'BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED',
     ):
         monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv('BATCH_PIPELINE_OWNER_DRAIN_ENABLED', 'false')
     return state
 
 

@@ -163,6 +163,40 @@ void main() {
       expect(deleted, ['k9']);
     });
 
+    test('revoking an agent revokes every key with its name, not only the one shown', () async {
+      final deleted = <String>[];
+      final service = AgentConnectService(
+        loadKeys: () async => [
+          key('k-shown', 'Muse (Omi app)'),
+          key('k-left-by-failed-retire', 'Muse (Omi app)'),
+          key('k-other', 'Instinct (Omi app)'),
+        ],
+        deleteKey: (id) async => deleted.add(id),
+      );
+      await service.revokeAgent(ComputerAgent.muse, shownKeyId: 'k-shown');
+      expect(deleted..sort(), ['k-left-by-failed-retire', 'k-shown']);
+    });
+
+    test('a revoke that cannot delete every key fails instead of looking done', () async {
+      final service = AgentConnectService(
+        loadKeys: () async => [key('k-shown', 'Muse (Omi app)'), key('k-stuck', 'Muse (Omi app)')],
+        deleteKey: (id) async {
+          if (id == 'k-stuck') throw Exception('500');
+        },
+      );
+      await expectLater(service.revokeAgent(ComputerAgent.muse, shownKeyId: 'k-shown'), throwsException);
+    });
+
+    test('a revoke whose key list fails still revokes the shown key, then says it failed', () async {
+      final deleted = <String>[];
+      final service = AgentConnectService(
+        loadKeys: () async => throw Exception('offline'),
+        deleteKey: (id) async => deleted.add(id),
+      );
+      await expectLater(service.revokeAgent(ComputerAgent.muse, shownKeyId: 'k-shown'), throwsException);
+      expect(deleted, ['k-shown']);
+    });
+
     test('disconnecting ChatGPT revokes every live ChatGPT grant', () async {
       final revoked = <String>[];
       final service = AgentConnectService(revokeGrant: (id) async => revoked.add(id));
