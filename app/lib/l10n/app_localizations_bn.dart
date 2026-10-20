@@ -13115,6 +13115,9 @@ class AppLocalizationsBn extends AppLocalizations {
   String get reviewProposalSuggested => 'প্রস্তাবিত';
 
   @override
+  String get reviewQuestionOutOfDate => 'এই প্রশ্নটি পুরোনো হয়ে গেছে, তাই কিছুই পরিবর্তন হয়নি।';
+
+  @override
   String get reviewProposalConflict => 'Dream প্রস্তাব দেওয়ার পর এটি বদলে গেছে, তাই কিছুই প্রয়োগ করা হয়নি।';
 
   @override

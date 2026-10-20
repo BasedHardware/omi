@@ -6,6 +6,8 @@ latency optimization for each listener process, not a fleet-wide coordinator.
 
 from __future__ import annotations
 
+from config.policy.listen import fallback_liveness_grace
+
 import asyncio
 import logging
 import os
@@ -49,7 +51,7 @@ async def fallback_socket_is_serving(socket: Any) -> bool:
     that dies moments afterwards, so the outage never reaches ops (#11752).
     """
     loop = asyncio.get_running_loop()
-    deadline = loop.time() + STT_FALLBACK_LIVENESS_GRACE_SECONDS
+    deadline = loop.time() + fallback_liveness_grace(STT_FALLBACK_LIVENESS_GRACE_SECONDS)
     while True:
         if getattr(socket, 'is_connection_dead', False):
             return False

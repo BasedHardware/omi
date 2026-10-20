@@ -279,6 +279,10 @@ def _preamble() -> list[str]:
         "`runtime_env` remain the live levers. This file is a catalog of *which* lever",
         "owns each gate, not the switch itself.",
         "",
+        "`terminal` records the reviewed end state: `on` graduates a feature, `off`",
+        "kills it, `keep` retains an ops kill or config switch, and `undecided` means",
+        "no terminal ruling is recorded yet.",
+        "",
         "This is **not** a second classification of deployment wiring. Secret vs config",
         "vs `public_build` still lives only in",
         "[`config/deployment-setting-classification.json`](../../config/deployment-setting-classification.json)",
@@ -385,8 +389,8 @@ def render(root: Path, registry: dict[str, list[dict[str, Any]]], as_of: date) -
             "Every running experiment links its preregistration doc. `decision: kill`",
             "entries are exempt: they are queued for removal, not running.",
             "",
-            "| key | owner | prereg | review_by |",
-            "| --- | --- | --- | --- |",
+            "| key | terminal | owner | prereg | review_by |",
+            "| --- | --- | --- | --- | --- |",
         ]
         for entry in experiments:
             prereg = entry.get("prereg")
@@ -394,7 +398,9 @@ def render(root: Path, registry: dict[str, list[dict[str, Any]]], as_of: date) -
             review_by = entry.get("review_by", "—")
             if entry.get("review_by") and date.fromisoformat(entry["review_by"]) < as_of:
                 review_by += " OVERDUE"
-            lines.append(f"| `{entry['key']}` | {_md(entry['owner'])} | {prereg_cell} | {review_by} |")
+            lines.append(
+                f"| `{entry['key']}` | {entry['terminal']} | {_md(entry['owner'])} | {prereg_cell} | {review_by} |"
+            )
     else:
         lines.append("(none)")
     lines.append("")
@@ -409,8 +415,9 @@ def render(root: Path, registry: dict[str, list[dict[str, Any]]], as_of: date) -
     ]
     if overdue:
         lines += [
-            "These rollout/experiment entries passed `review_by` without a recorded",
-            "decision. Overdue is a warning, not a failure.",
+            "These rollout/experiment entries passed `review_by`. The checker warns",
+            "during the seven-day grace, then fails unless a dated `review_overdue`",
+            "exception is recorded for David.",
             "",
         ]
         for entry in overdue:
@@ -438,8 +445,8 @@ def render(root: Path, registry: dict[str, list[dict[str, Any]]], as_of: date) -
             lines += ["(none)", ""]
             continue
         lines += [
-            "| key | summary | surfaces | kind | fail | _base | dev | prod | PostHog row | decision | review_by | owner |",
-            "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+            "| key | summary | surfaces | kind | fail | _base | dev | prod | PostHog row | decision | terminal | review_by | owner |",
+            "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
         ]
         for entry in rows:
             surfaces = ", ".join(entry.get("surfaces", []))
@@ -459,6 +466,7 @@ def render(root: Path, registry: dict[str, list[dict[str, Any]]], as_of: date) -
                         _md(prod),
                         _posthog_cell(entry),
                         entry["decision"],
+                        entry["terminal"],
                         review_by,
                         _md(entry["owner"]),
                     ]

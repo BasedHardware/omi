@@ -22,7 +22,7 @@ from utils.metrics import OMI_LIVE_STT_MISALIGNED_FRAMES_TOTAL
 from utils.log_sanitizer import sanitize_provider_error
 from utils.observability.fallback import record_fallback
 from utils.stt.committed_words import remember_provider_word
-from utils.stt.failure_diagnostics import transport_failure_fields
+from utils.stt.failure_diagnostics import connection_loss_cause, transport_failure_fields
 from config.live_stt_replay import ReplayLimits
 from config.live_stt_recovery import recovery_enabled
 from utils.stt.socket import STTSocket
@@ -246,6 +246,10 @@ class SafeSonioxSocket(STTSocket):
         # A response can end in the middle of a word. Downstream joins distinct
         # segments with spaces, so retain the last word until its boundary is known.
         self._pending_segment: Optional[Dict[str, Any]] = None
+        # Each response carries every current non-final token; any text there
+        # is output the provider still owes for audio it already received.
+        self._nonfinal_pending = False
+        self._connection_cause: Optional[str] = None
         self._done_event = asyncio.Event()
         # Odd-length s16le frames would split a sample across messages; carry the
         # trailing byte rather than emit a half sample.
@@ -266,6 +270,15 @@ class SafeSonioxSocket(STTSocket):
         """Bounded reason for the terminal-failure vocabulary (None = untyped)."""
         return self._typed_death_reason
 
+    @property
+    def connection_cause(self) -> Optional[str]:
+        """Content-free transport cause behind an untyped death, if one was seen."""
+        return self._connection_cause
+
+    def has_pending_provider_output(self) -> bool:
+        """Whether received audio still has non-final or unflushed final text."""
+        return self._nonfinal_pending or self._pending_segment is not None
+
     def _mark_dead(
         self,
         reason: str,
@@ -280,6 +293,8 @@ class SafeSonioxSocket(STTSocket):
             if not self._dead:
                 self._death_reason = reason
                 self._typed_death_reason = typed_reason
+                if transport_error is not None:
+                    self._connection_cause = connection_loss_cause(transport_error)
                 self._dead = True  # Publish cause before any observer sees death.
             else:
                 return
@@ -647,6 +662,10 @@ class SafeSonioxSocket(STTSocket):
                     self._sync_ordered_clock()
                 self._diagnostic(lambda diagnostic: diagnostic.response(msg))
                 tokens: List[Any] = msg.get('tokens') or []
+                self._nonfinal_pending = any(
+                    isinstance(token, dict) and not token.get('is_final') and str(token.get('text') or '').strip()
+                    for token in tokens
+                )
                 if tokens:
                     self._handle_tokens(tokens)
 

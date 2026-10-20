@@ -13132,6 +13132,9 @@ class AppLocalizationsUr extends AppLocalizations {
   String get reviewProposalSuggested => 'تجویز کردہ';
 
   @override
+  String get reviewQuestionOutOfDate => 'یہ سوال پرانا ہو گیا ہے، اس لیے کچھ بھی تبدیل نہیں ہوا۔';
+
+  @override
   String get reviewProposalConflict => 'Dream کی تجویز کے بعد یہ بدل گیا، اس لیے کچھ بھی لاگو نہیں کیا گیا۔';
 
   @override

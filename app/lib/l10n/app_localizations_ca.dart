@@ -13186,6 +13186,9 @@ class AppLocalizationsCa extends AppLocalizations {
   String get reviewProposalSuggested => 'Suggerit';
 
   @override
+  String get reviewQuestionOutOfDate => 'Aquesta pregunta ha quedat desactualitzada, així que no ha canviat res.';
+
+  @override
   String get reviewProposalConflict => 'Això ha canviat des que Dream ho va suggerir, així que no s\'ha aplicat res.';
 
   @override

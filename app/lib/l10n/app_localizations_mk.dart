@@ -13179,6 +13179,9 @@ class AppLocalizationsMk extends AppLocalizations {
   String get reviewProposalSuggested => 'Предложено';
 
   @override
+  String get reviewQuestionOutOfDate => 'Ова прашање е застарено, па ништо не се промени.';
+
+  @override
   String get reviewProposalConflict => 'Ова се промени откако Dream го предложи, па ништо не е применето.';
 
   @override

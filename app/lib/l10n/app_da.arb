@@ -4065,6 +4065,7 @@
     "reviewProposalGeneric": "Anvend denne foreslåede rettelse?",
     "reviewProposalApply": "Anvend",
     "reviewProposalSuggested": "Foreslået",
+    "reviewQuestionOutOfDate": "Dette spørgsmål er forældet, så intet blev ændret.",
     "reviewProposalConflict": "Dette er ændret, siden Dream foreslog det, så intet blev anvendt.",
     "itemLinkListTitle": "{count, plural, =0{Ingen elementer} =1{1 element} other{{count} elementer}}",
     "paywallRecommended": "Anbefalet",

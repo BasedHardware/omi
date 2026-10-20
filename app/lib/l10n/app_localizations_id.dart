@@ -13128,6 +13128,9 @@ class AppLocalizationsId extends AppLocalizations {
   String get reviewProposalSuggested => 'Disarankan';
 
   @override
+  String get reviewQuestionOutOfDate => 'Pertanyaan ini sudah tidak relevan, jadi tidak ada yang berubah.';
+
+  @override
   String get reviewProposalConflict => 'Ini berubah sejak Dream menyarankannya, jadi tidak ada yang diterapkan.';
 
   @override

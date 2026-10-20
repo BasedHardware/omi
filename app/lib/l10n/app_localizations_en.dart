@@ -13103,6 +13103,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get reviewProposalSuggested => 'Suggested';
 
   @override
+  String get reviewQuestionOutOfDate => 'This question is out of date, so nothing changed.';
+
+  @override
   String get reviewProposalConflict => 'This changed since Dream suggested it, so nothing was applied.';
 
   @override

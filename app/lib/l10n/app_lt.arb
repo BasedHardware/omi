@@ -4023,6 +4023,7 @@
     "reviewProposalGeneric": "Pritaikyti šį siūlomą pataisymą?",
     "reviewProposalApply": "Pritaikyti",
     "reviewProposalSuggested": "Siūloma",
+    "reviewQuestionOutOfDate": "Šis klausimas paseno, todėl niekas nepasikeitė.",
     "reviewProposalConflict": "Tai pasikeitė po Dream pasiūlymo, todėl nieko nepritaikyta.",
     "itemLinkListTitle": "{count, plural, =0{Nėra elementų} =1{1 elementas} other{{count} elementai}}",
     "paywallRecommended": "Rekomenduojama",
