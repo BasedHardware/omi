@@ -12,6 +12,34 @@ owns each gate, not the switch itself.
 kills it, `keep` retains an ops kill or config switch, and `undecided` means
 no terminal ruling is recorded yet.
 
+## Contributing registry rows
+
+Edit `config/feature-flags.yaml`, then regenerate this document with
+`python3 scripts/render_feature_flag_registry.py`. A `ramp` object is optional
+for existing rows. It is required for `lifecycle: rollout` rows that are
+pending (`decision: pending` or `terminal: undecided`) and created on or after
+2026-10-21. Include every field below; `done_by` must be on or before
+`review_by`.
+
+- `cohorts`: ordered rollout steps, ending in the full intended cohort;
+  a single-user step such as `David-only` cannot be terminal.
+- `clean_metric`: the metric that must stay clean before expansion.
+- `expander`: the session, role, or person responsible for each expansion.
+- `done_by`: the date the ramp reaches its final cohort.
+
+Example:
+
+```yaml
+ramp:
+  cohorts: ["release-probe", "1%", "5% 3h", "25%", "100%"]
+  clean_metric: "checkout_error_rate"
+  expander: "release-owner session"
+  done_by: "2026-11-15"
+```
+
+Rows created before the cutoff stay grandfathered when `ramp` is absent;
+the checker warns and reports their count. Do not backfill plans into them.
+
 This is **not** a second classification of deployment wiring. Secret vs config
 vs `public_build` still lives only in
 [`config/deployment-setting-classification.json`](../../config/deployment-setting-classification.json)
@@ -215,15 +243,13 @@ and an explicit empty literal renders as `''`.
 | `REPEAT_WORK_REVISION_ENABLED` | Reuse existing sync outbox with 60min ceiling and exact successful snapshot-based notes/L1 dedupe; content-free call/final joins | backend | env | closed | {value: 'false', category: rollout} | false (backend-listen (chart), pusher (chart)); {value: 'false', category: rollout} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher) | false (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, pusher (chart)); {value: 'false', category: rollout} (gke/backend-listen, gke/pusher) | — | pending | undecided | 2026-11-04 | dazheng |
 | `REVIEW_SURFACE_MODE` | Review queue, reversible agent changes and entity pages; off by default, on enables authenticated routes | backend | env | closed | on | on (backend-listen (chart), cloud_run/backend, gke/backend-listen) | on (backend-listen (chart), cloud_run/backend, cloud_run/backend-sync, gke/backend-listen) | — | pending | undecided | 2026-11-07 | dazheng |
 | `SONIOX_CAPTURE_AXIS_DIAGNOSTICS` | Measure raw Soniox token clocks against wire PCM and the managed send ledger; default off, no placement changes | backend | env | closed | declared (gke/backend-listen, gke/pusher); false (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill) | false (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher, pusher (chart)) | false (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill); true (backend-listen (chart), gke/backend-listen, gke/pusher, pusher (chart)) | — | pending | undecided | 2026-11-04 | dazheng |
-| `SONIOX_CONTEXT_TERMS` | Send session vocabulary (Omi first) as Soniox context terms after dev config-frame validation | backend | env | closed | false | false (backend-listen (chart), gke/backend-listen) | false (backend-listen (chart), gke/backend-listen) | — | pending | undecided | 2026-10-29 | dazheng |
 | `SONIOX_ELAPSED_AXIS` | Measure Soniox elapsed timestamps before enabling speaker windows | backend | env | closed | — | — | — | — | pending | undecided | 2026-10-27 | dazheng |
-| `SONIOX_MONTHLY_CEILING_USD` | Enable Soniox monthly spend runway against a configured USD ceiling | backend | env | closed | declared | 0 (backend-listen (chart), gke/backend-listen) | 10000 (backend-listen (chart), gke/backend-listen) | — | pending | undecided | 2026-10-28 | dazheng |
 | `SONIOX_ORDERED_FINALIZE` | Reserve strict next-120ms finalize padding on ordered 16kHz Soniox writes; verify FIFO acknowledgments before capture admission; mismatch refuses the suffix until a clean checkpoint; default off | backend | env | closed | false | false (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher, pusher (chart)) | false (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher, pusher (chart)) | — | pending | undecided | 2026-11-05 | dazheng |
 | `SONIOX_WIRE_LEDGER` | Account every emitted managed Soniox sample on the compact axis; unknown capture origins reserve unplaceable intervals; reserve reported finalize padding as provider-only holes and refuse raced intervals; preserve every control frame; default off | backend | env | closed | declared (gke/backend-listen, gke/pusher); false (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill) | false (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher, pusher (chart)) | false (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill); true (backend-listen (chart), gke/backend-listen, gke/pusher, pusher (chart)) | — | pending | undecided | 2026-11-04 | dazheng |
 | `SPEAKER_GROUPING_MODE` | incumbent\|provider_strict\|provider_cannot_link; owner_link is shadow-only and rejected; default incumbent everywhere; David gates promotion | backend | env | open | — | — | incumbent (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher, pusher (chart)) | — | pending | undecided | 2026-11-08 | dazheng |
 | `SPEAKER_MATCH_SCORES_ENABLED` | Persist bounded internal voice-match evidence on existing conversation writes; dev/local/offline default on; production hosts explicitly on | backend | env | closed | — | — | true (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher, pusher (chart)) | — | pending | undecided | 2026-11-04 | dazheng |
 | `STOREFRONT_LADDER_V1_ENABLED` | Default-off versioned unified plans presentation; exact true admits v2 only; installed-client endpoints unchanged | backend | env | closed | — | — | — | — | pending | undecided | 2026-11-13 | dazheng |
-| `STT_CAP_DISPATCH_COHORT` | Environment cohort tokens uid:<uid>,pct:<0-100> or explicit all; empty/unset/malformed admits nobody for either dispatch or ladder execution | backend | env | closed | {value: '', category: rollout} | '' (backend-listen (chart), pusher (chart)); {value: '', category: rollout} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, desktop-backend, gke/backend-listen, gke/pusher) | '' (backend-listen (chart), pusher (chart)); {value: '', category: rollout} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, desktop-backend, gke/backend-listen, gke/pusher) | — | pending | undecided | 2026-10-27 | dazheng |
+| `STT_CAP_DISPATCH_COHORT` | Fallback environment cohort tokens uid:<uid>,pct:<0-100> or explicit all; empty/unset/malformed admits nobody for either dispatch or ladder execution | backend | env | closed | {value: '', category: rollout} | '' (backend-listen (chart), pusher (chart)); {value: '', category: rollout} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, desktop-backend, gke/backend-listen, gke/pusher) | '' (backend-listen (chart), pusher (chart)); {value: '', category: rollout} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, desktop-backend, gke/backend-listen, gke/pusher) | — | pending | undecided | 2026-10-27 | dazheng |
 | `STT_CAP_DISPATCH_ENFORCEMENT` | Default-off funded STT dispatch admission; requires explicit cohort membership and original lane selection | backend | env | closed | {value: 'false', category: rollout} | false (backend-listen (chart), pusher (chart)); {value: 'false', category: rollout} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, desktop-backend, gke/backend-listen, gke/pusher) | false (backend-listen (chart), pusher (chart)); {value: 'false', category: rollout} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, desktop-backend, gke/backend-listen, gke/pusher) | — | pending | undecided | 2026-10-27 | dazheng |
 | `STT_CAP_DISPATCH_LANES` | Comma-separated live,sync,batch; unset/blank defaults live only; unknown/empty list tokens deny all; batch code-fenced until lane8 writes provider_reason=byok into binding.policy at batch admission; recovery retains original encrypted custody origin | backend | env | closed | {value: 'live', category: rollout} | live (backend-listen (chart), pusher (chart)); {value: 'live', category: rollout} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, desktop-backend, gke/backend-listen, gke/pusher) | live (backend-listen (chart), pusher (chart)); {value: 'live', category: rollout} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, desktop-backend, gke/backend-listen, gke/pusher) | — | pending | undecided | 2026-10-27 | dazheng |
 | `STT_FAILOVER_RECOVERY_ENABLED` | Enable live-STT failover recovery on prod listen | backend | env | closed | declared | false (backend-listen (chart), gke/backend-listen) | true (backend-listen (chart), gke/backend-listen) | — | pending | undecided | 2026-11-03 | backend |
@@ -271,14 +297,6 @@ and an explicit empty literal renders as `''`.
 | `TRANSCRIPTION_SHADOW_ENABLED` | Run the stored-audio Parakeet final pass in shadow | backend | env | closed | — | false (backend-listen (chart), cloud_run/backend-sync, gke/backend-listen); true (gke/pusher, pusher (chart)) | true (cloud_run/backend, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/pusher, pusher (chart)) | — | pending | undecided | 2026-10-26 | dazheng |
 | `TRANSCRIPTION_SHADOW_PERCENT` | Allocate UIDs to the Parakeet final-pass shadow | backend | env | closed | — | 0 (backend-listen (chart), cloud_run/backend-sync, gke/backend-listen, gke/pusher, pusher (chart)) | 5 (cloud_run/backend, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/pusher, pusher (chart)) | — | pending | undecided | 2026-10-26 | dazheng |
 | `TRANSCRIPTION_SHADOW_UID_ALLOWLIST` | Explicit UIDs admitted to the Parakeet final-pass shadow; empty by default | backend | env | closed | — | '' (backend-listen (chart), gke/backend-listen); omi-release-probe (gke/pusher, pusher (chart)) | vi7SA9ckQCe4ccobWNxlbdcNdC23 (gke/pusher, pusher (chart)) | — | pending | undecided | 2026-10-26 | dazheng |
-| `TRANSLATION_DEMAND_LEASE_V1_ENABLED` | Accept lease-v1 demand semantics from opted-in clients | backend | env | closed | true | true (backend-listen (chart), cloud_run/backend, gke/backend-listen) | true (backend-listen (chart), cloud_run/backend, gke/backend-listen) | — | pending | undecided | 2026-10-29 | dazheng |
-| `TRANSLATION_DEMAND_SHADOW_ENABLED` | Measure would-be demand admission without changing translation behavior | backend | env | closed | false | false (backend-listen (chart), cloud_run/backend, gke/backend-listen) | false (backend-listen (chart), cloud_run/backend, gke/backend-listen) | — | pending | undecided | 2026-10-29 | dazheng |
-| `TRANSLATION_ONDEMAND_COHORT_PERCENT` | Percentage of eligible UIDs admitted to on-demand translation (100 = all eligible) | backend | env | closed | 100 | 100 (backend-listen (chart), cloud_run/backend, gke/backend-listen) | 100 (backend-listen (chart), cloud_run/backend, gke/backend-listen) | — | pending | undecided | 2026-10-29 | dazheng |
-| `TRANSLATION_ONDEMAND_GEMINI_ENABLED` | Select Gemini-only viewed_v1 policy for admitted demand traffic | backend | env | closed | true | true (backend-listen (chart), cloud_run/backend, gke/backend-listen) | true (backend-listen (chart), cloud_run/backend, gke/backend-listen) | — | pending | undecided | 2026-10-29 | dazheng |
-| `TRANSLATION_ONDEMAND_UID_ALLOWLIST` | Explicit UIDs admitted to on-demand translation; empty by default | backend | env | closed | '' | '' (backend-listen (chart), gke/backend-listen) | '' (backend-listen (chart), gke/backend-listen) | — | pending | undecided | 2026-10-29 | dazheng |
-| `TRANSLATION_ONOPEN_ENABLED` | Serve bounded on-open translation for opt-in detail GETs | backend | env | closed | true | true (backend-listen (chart), cloud_run/backend, gke/backend-listen) | true (backend-listen (chart), cloud_run/backend, gke/backend-listen) | — | pending | undecided | 2026-10-29 | dazheng |
-| `TRANSLATION_OUTPUT_GUARD_ENABLED` | Reject conservative same-language translation rewrites | backend | env | open | — | — | — | — | pending | undecided | 2026-10-28 | dazheng |
-| `TRANSLATION_PROFILE_GATE_ENABLED` | Defer short out-of-profile translation guesses | backend | env | open | — | — | — | — | pending | undecided | 2026-10-28 | dazheng |
 | `X-Omi-Memory-Canonical-Lifecycle-Exposed` | Compatibility header for older macOS and Windows memory clients | backend, macos, windows | server_capability | closed | — | — | — | — | kill | off | 2026-11-08 | dazheng |
 | `client_telemetry_transport_shadow` | Default-off shadow transport mirroring client reliability telemetry to the frozen backend collector; PostHog stays the source of record until parity | macos | posthog | closed | — | — | — | absent (enable) | pending | undecided | 2026-11-12 | dazheng |
 | `desktop-contextual-upsells` | macOS 80% budget nudge and exhausted-budget entry to the plans sheet (trigger=usage_budget); default off; requires desktop-plan-storefront | macos | posthog | closed | — | — | — | absent (enable) | pending | undecided | 2026-11-13 | dazheng |
@@ -379,6 +397,7 @@ and an explicit empty literal renders as `''`.
 | `SYNC_RETIRED_HANDLE_ACK_ENABLED` | Default on; legacy sync polling acknowledges Oct 15-17 expiry-retired handles held in custody as completed (empty, reason sync_retired_preserved) for owners admitted in sync_retired_handle_owners | backend | env | closed | — | — | — | — | keep | keep | — | dazheng |
 | `TRANSCRIPTION_SHADOW_KILL_SWITCH` | Stop Parakeet final-pass shadow admission | backend | env | inverted | — | false (backend-listen (chart), cloud_run/backend-sync, gke/backend-listen, gke/pusher, pusher (chart)) | false (cloud_run/backend, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/pusher, pusher (chart)) | — | keep | keep | — | dazheng |
 | `TRANSLATION_DEMAND_GATE_ENABLED` | Gate live translation on transcript-view demand (on-demand rollout; false restores legacy always-translate) | backend | env | closed | true | true (backend-listen (chart), cloud_run/backend, gke/backend-listen) | true (backend-listen (chart), cloud_run/backend, gke/backend-listen) | — | keep | keep | — | dazheng |
+| `TRANSLATION_ONOPEN_ENABLED` | Serve bounded on-open translation for opt-in detail GETs | backend | env | closed | true | true (backend-listen (chart), cloud_run/backend, gke/backend-listen) | true (backend-listen (chart), cloud_run/backend, gke/backend-listen) | — | keep | keep | — | dazheng |
 | `WAKE_WORD_ADJUDICATION_ENABLED` | Incident stop for wake-word adjudication | backend | env | open | true | true (backend-listen (chart), cloud_run/backend, gke/backend-listen) | true (backend-listen (chart), cloud_run/backend, gke/backend-listen) | — | keep | keep | — | unowned |
 | `client_telemetry_posthog_retirement` | Kill switch that stops moved infrastructure telemetry on PostHog after parity; desktop_health_event and connection-balance events are structurally exempt | macos | posthog | inverted | — | — | — | absent (enable) | pending | keep | — | dazheng |
 | `desktop-rating-prompt-disabled` | Stop the rating prompt | macos | posthog | inverted | — | — | — | expected (kill) | keep | keep | — | unowned |
@@ -457,7 +476,6 @@ and an explicit empty literal renders as `''`.
 | `SCREEN_TASK_JEV_THRESHOLD` | Screen gate threshold, default 0.5 | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `SCREEN_TASK_MIN_MACOS_BUILD` | Minimum identified macOS build admitted to the screen-task gate, admission, and flagged extraction; default 12435; invalid values use the default | backend | env | closed | — | — | — | — | keep | keep | — | dazheng |
 | `SELFHEAL_MODE` | Conversation self-heal sweeper mode: off/detect-only/nudge/heal | backend | env | closed | — | — | — | — | keep | keep | — | backend runtime_env (PR #18855) |
-| `SONIOX_ESTIMATED_USD_PER_HOUR` | Metered-audio fallback price for Soniox runway | backend | env | closed | 0.07537 | 0.07537 (backend-listen (chart), gke/backend-listen) | 0.07537 (backend-listen (chart), gke/backend-listen) | — | pending | keep | — | dazheng |
 | `SPEAKER_GROUPING_CROSS_SCOPE_THRESHOLD` | G2 cross-scope cosine-distance threshold; default 0.60; invalid configuration uses 0.60 | backend | env | closed | — | — | — | — | pending | keep | — | dazheng |
 | `SPEAKER_GROUPING_SHADOW` | off\|owner\|cohort; default off; prod cached-evidence comparison at 10 percent; never changes transcript labels | backend | env | closed | — | — | cohort (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher, pusher (chart)) | — | pending | keep | — | dazheng |
 | `SPEAKER_GROUPING_SHADOW_PERCENT` | Stable EXP-004 salted UID slice; default 10 percent; invalid configuration admits nobody by percentage | backend | env | closed | — | — | 10 (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher, pusher (chart)) | — | pending | keep | — | dazheng |
@@ -486,6 +504,10 @@ and an explicit empty literal renders as `''`.
 | `VITE_ENABLE_GMAIL_SESSION` | Keep shipped Gmail session integration enabled | windows | build_define | open | — | — | — | — | keep | keep | — | unowned |
 | `X-Omi-Memory-Default-Delete-Supported` | Indicate default-memory deletion support | backend, macos | server_capability | closed | — | — | — | — | keep | keep | — | unowned |
 | `X-Omi-Memory-Device-Scope-Supported` | Indicate device-scoped memory query support | backend, macos, windows | server_capability | closed | — | — | — | — | keep | keep | — | unowned |
+
+## Rollout ramp plans
+
+(none)
 
 ## Undeclared env flags
 
@@ -623,8 +645,6 @@ their code default (`fail` tells you which way a missing value resolves).
 - `SYNC_MINIMAL_REDRIVE_ENABLED` — Default on unless false; operator sync payloads with redrive_mode=minimal run Parakeet-only STT, attach-first targeting and one gpt-5-nano title per new row (fail: closed)
 - `SYNC_RETIRED_HANDLE_ACK_ENABLED` — Default on; legacy sync polling acknowledges Oct 15-17 expiry-retired handles held in custody as completed (empty, reason sync_retired_preserved) for owners admitted in sync_retired_handle_owners (fail: closed)
 - `TRANSCRIPTION_FINAL_PASS_VAD_COMPACTION_ENABLED` — Default-off local speech VAD compaction for stored-audio ASR and pyannote final passes; sample-exact original clocks; failures retain original audio (fail: closed)
-- `TRANSLATION_OUTPUT_GUARD_ENABLED` — Reject conservative same-language translation rewrites (fail: open)
-- `TRANSLATION_PROFILE_GATE_ENABLED` — Defer short out-of-profile translation guesses (fail: open)
 - `TYPESENSE_CONVERSATION_INDEX_WRITES` — Write conversations to Typesense index (fail: closed)
 
 ## Not feature flags
@@ -703,6 +723,13 @@ admission.
 
 | Key | Retired | Reason |
 | --- | --- | --- |
+| `TRANSLATION_PROFILE_GATE_ENABLED` | 2026-10-20 | David 2026-10-20, DEC-TRN-001 graduate: translation behavior is unconditional. |
+| `TRANSLATION_OUTPUT_GUARD_ENABLED` | 2026-10-20 | David 2026-10-20, DEC-TRN-001 graduate: translation behavior is unconditional. |
+| `TRANSLATION_DEMAND_SHADOW_ENABLED` | 2026-10-20 | David 2026-10-20, DEC-TRN-002 kill: translation behavior is unconditional. |
+| `TRANSLATION_DEMAND_LEASE_V1_ENABLED` | 2026-10-20 | David 2026-10-20, DEC-TRN-005 graduate: translation behavior is unconditional. |
+| `TRANSLATION_ONDEMAND_GEMINI_ENABLED` | 2026-10-20 | David 2026-10-20, DEC-TRN-004 graduate: translation behavior is unconditional. |
+| `TRANSLATION_ONDEMAND_COHORT_PERCENT` | 2026-10-20 | David 2026-10-20, DEC-TRN-003 graduate: translation behavior is unconditional. |
+| `TRANSLATION_ONDEMAND_UID_ALLOWLIST` | 2026-10-20 | David 2026-10-20, DEC-TRN-003 graduate: translation behavior is unconditional. |
 | `FREE_TIER_EMERGENCY_STOP` | 2026-10-19 | No surviving backend consumer after memory-suppression retirement and ladder/client processing fold. |
 | `negative_feedback_remediation` | 2026-10-18 | David 2026-10-18, DEC-MEM-003: graduate negative-feedback remediation for all macOS users; retain only the permanent kill switch. |
 | `MEMORY_BELIEF_AUTOMATION_PAUSED` | 2026-10-18 | David 2026-10-18, DEC-MEM-001: remove belief-model admission, currency, and automation controls. |

@@ -116,7 +116,8 @@ def redrive_one(
         return 'failed_held'
     if payload is None:
         raise RecoveryFailure('payload_validation', 'invalid_payload')
-    if cap_enabled(uid, 'batch'):
+    # Terminal-empty meters zero speech, as on the automatic recovery path.
+    if cap_enabled(uid, 'batch') and result_outcome(payload) != 'no_recoverable_speech':
         record_audio(
             'sync',
             'accepted',
