@@ -17,8 +17,9 @@ use hyper::body::Incoming;
 use hyper::header::{self, HeaderMap, HeaderName, HeaderValue};
 use hyper::service::service_fn;
 use hyper::{Method, Request, Response, StatusCode};
-use hyper_util::rt::TokioIo;
+use hyper_util::rt::{TokioIo, TokioTimer};
 use tokio::net::TcpListener;
+use tokio::sync::{watch, Semaphore};
 use tokio::task::JoinHandle;
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 use tokio_tungstenite::tungstenite::handshake::derive_accept_key;
@@ -60,9 +61,14 @@ struct Shared {
     ws_config: WebSocketConfig,
     /// True from the moment drain starts: `/readyz` answers 503.
     draining: AtomicBool,
+    /// Cancelled when the listener closes: idle HTTP connections shut down.
+    stop_accepting: CancellationToken,
     /// Cancelled when open sessions should start closing.
     close_sessions: CancellationToken,
+    /// Every accepted connection (through its handshake) and every relayed
+    /// session, so drain also waits for upgrades that were mid-handshake.
     sessions: TaskTracker,
+    handshake_slots: Arc<Semaphore>,
     next_id: AtomicU64,
 }
 
@@ -88,17 +94,19 @@ pub fn start_with_listener(listener: TcpListener, cfg: Config, metrics: Metrics)
         .write_buffer_size(0)
         .max_message_size(Some(cfg.ws_max_message_bytes))
         .max_frame_size(Some(cfg.ws_max_message_bytes));
+    let stop_accepting = CancellationToken::new();
     let shared = Arc::new(Shared {
+        handshake_slots: Arc::new(Semaphore::new(cfg.max_pending_handshakes)),
         cfg,
         metrics: Arc::new(metrics),
         ws_config,
         draining: AtomicBool::new(false),
+        stop_accepting: stop_accepting.clone(),
         close_sessions: CancellationToken::new(),
         sessions: TaskTracker::new(),
         next_id: AtomicU64::new(1),
     });
-    let stop_accepting = CancellationToken::new();
-    let accept_loop = tokio::spawn(accept_loop(listener, shared.clone(), stop_accepting.clone()));
+    let accept_loop = tokio::spawn(accept_loop(listener, shared.clone()));
     Edge {
         shared,
         addr,
@@ -143,10 +151,10 @@ impl Edge {
     }
 }
 
-async fn accept_loop(listener: TcpListener, shared: Arc<Shared>, stop: CancellationToken) {
+async fn accept_loop(listener: TcpListener, shared: Arc<Shared>) {
     loop {
         let (stream, peer) = tokio::select! {
-            _ = stop.cancelled() => return,
+            _ = shared.stop_accepting.cancelled() => return,
             r = listener.accept() => match r {
                 Ok(x) => x,
                 Err(err) => {
@@ -157,12 +165,44 @@ async fn accept_loop(listener: TcpListener, shared: Arc<Shared>, stop: Cancellat
             },
         };
         let _ = stream.set_nodelay(true);
-        let shared = shared.clone();
-        tokio::spawn(async move {
-            let svc = service_fn(move |req| handle(req, peer, shared.clone()));
+        let conn_shared = shared.clone();
+        shared.sessions.spawn(async move {
+            let stop = conn_shared.stop_accepting.clone();
+            let header_read_timeout = conn_shared.cfg.header_read_timeout;
+            // True while a request is being handled, and from a 101 onwards
+            // (the connection then ends by itself when it becomes a session).
+            let (busy_tx, mut busy_rx) = watch::channel(false);
+            let busy_tx = Arc::new(busy_tx);
+            let svc = service_fn(move |req| {
+                let shared = conn_shared.clone();
+                let busy = busy_tx.clone();
+                async move {
+                    busy.send_replace(true);
+                    let resp = handle(req, peer, shared).await;
+                    if !matches!(&resp, Ok(r) if r.status() == StatusCode::SWITCHING_PROTOCOLS) {
+                        busy.send_replace(false);
+                    }
+                    resp
+                }
+            });
             let conn = hyper::server::conn::http1::Builder::new()
+                .timer(TokioTimer::new())
+                .header_read_timeout(header_read_timeout)
                 .serve_connection(TokioIo::new(stream), svc)
                 .with_upgrades();
+            tokio::pin!(conn);
+            tokio::select! {
+                _ = conn.as_mut() => return,
+                _ = stop.cancelled() => {}
+            }
+            // Listener closed. Let an in-flight request finish first: hyper's
+            // graceful shutdown would add `Connection: close` to a 101 and
+            // break the upgrade. Then close the idle keep-alive socket.
+            tokio::select! {
+                _ = conn.as_mut() => return,
+                _ = busy_rx.wait_for(|busy| !busy) => {}
+            }
+            conn.as_mut().graceful_shutdown();
             let _ = conn.await;
         });
     }
@@ -232,6 +272,13 @@ pub fn upstream_headers(client: &HeaderMap, peer: SocketAddr) -> HeaderMap {
     out
 }
 
+fn overloaded() -> Response<Body> {
+    let mut resp = text(StatusCode::SERVICE_UNAVAILABLE, "edge overloaded\n");
+    resp.headers_mut()
+        .insert(header::RETRY_AFTER, HeaderValue::from_static("1"));
+    resp
+}
+
 async fn proxy(mut req: Request<Incoming>, peer: SocketAddr, shared: Arc<Shared>) -> Response<Body> {
     let metrics = &shared.metrics;
     let headers = req.headers();
@@ -259,6 +306,17 @@ async fn proxy(mut req: Request<Incoming>, peer: SocketAddr, shared: Arc<Shared>
     for (name, value) in upstream_headers(req.headers(), peer).iter() {
         up_req.headers_mut().append(name.clone(), value.clone());
     }
+
+    // Load shedding before any upstream work: a soft cap on open sessions
+    // and a hard cap on handshakes in flight.
+    if shared.metrics.sessions_active.get() >= shared.cfg.max_sessions as i64 {
+        metrics.handshake(HandshakeResult::Overloaded);
+        return overloaded();
+    }
+    let Ok(_slot) = shared.handshake_slots.clone().try_acquire_owned() else {
+        metrics.handshake(HandshakeResult::Overloaded);
+        return overloaded();
+    };
 
     let connect_started = Instant::now();
     let connect = tokio_tungstenite::connect_async_with_config(up_req, Some(shared.ws_config), true);

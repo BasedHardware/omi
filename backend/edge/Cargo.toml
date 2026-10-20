@@ -2,7 +2,7 @@
 name = "omi-edge"
 version = "0.1.0"
 edition = "2021"
-rust-version = "1.85"
+rust-version = "1.99"
 publish = false
 description = "listen-edge: Rust websocket edge in front of backend-listen (D1: passthrough only, not deployed)"
 

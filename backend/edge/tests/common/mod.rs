@@ -5,12 +5,15 @@
 //! serves every scenario:
 //! - `conn=<id>` (required): key under which the connection is recorded;
 //! - `reject=<status>`: fail the handshake with that HTTP status;
+//! - `slow_handshake_ms=<ms>`: delay the handshake response;
 //! - `flood=<n>`: send `n` text messages `u0..u{n-1}` right after accept;
 //! - `echo=0`: do not echo data messages (default echoes each one back);
 //! - `close_after=<n>&code=<c>&reason=<r>`: after `n` data messages, start a
 //!   close handshake with that code and reason;
 //! - `drop_after=<n>`: after `n` data messages, drop TCP without a close frame;
 //! - `mute=1`: complete the handshake, then never read or write again;
+//! - `blob=<n>`: send `n` 64 KiB binary messages from a separate writer
+//!   while still reading (fills the path to a client that stops reading);
 //! - `linger=1`: after the close handshake, keep the TCP socket open for 30s
 //!   (listen holds its socket while it finalizes).
 #![allow(dead_code)]
@@ -153,6 +156,21 @@ async fn serve_conn(stream: TcpStream, state: Arc<State>) {
         }
         Ok(resp)
     };
+    // `slow_handshake_ms`: peek at the request line and wait before answering
+    // (the handshake callback itself is synchronous and must not block).
+    let mut head = [0u8; 512];
+    let n = stream.peek(&mut head).await.unwrap_or(0);
+    let line = String::from_utf8_lossy(&head[..n])
+        .lines()
+        .next()
+        .unwrap_or("")
+        .to_string();
+    if let Some(ms) = query_map(line.split(' ').nth(1).unwrap_or(""))
+        .get("slow_handshake_ms")
+        .and_then(|v| v.parse::<u64>().ok())
+    {
+        tokio::time::sleep(Duration::from_millis(ms)).await;
+    }
     let ws = tokio_tungstenite::accept_hdr_async(stream, callback).await;
     let Some((pq, headers)) = captured.lock().unwrap().take() else {
         return;
@@ -180,6 +198,29 @@ async fn serve_conn(stream: TcpStream, state: Arc<State>) {
     }
 
     let num = |k: &str| q.get(k).and_then(|v| v.parse::<usize>().ok());
+
+    if let Some(n) = num("blob") {
+        // Write n x 64 KiB from a separate task (it blocks once the path
+        // back to a non-reading client is full) while still reading, so a
+        // close from the edge is recorded.
+        let (mut tx, mut rx) = ws.split();
+        let writer = tokio::spawn(async move {
+            for _ in 0..n {
+                if tx.send(Message::binary(vec![0u8; 64 * 1024])).await.is_err() {
+                    break;
+                }
+            }
+        });
+        while let Some(Ok(msg)) = rx.next().await {
+            if let Message::Close(f) = msg {
+                update(&state, &conn, |r| r.close = Some(f.clone())).await;
+            }
+        }
+        writer.abort();
+        update(&state, &conn, |r| r.ended = true).await;
+        return;
+    }
+
     let echo = q.get("echo").map(String::as_str) != Some("0");
     let close_after = num("close_after");
     let drop_after = num("drop_after");
@@ -235,8 +276,15 @@ async fn serve_conn(stream: TcpStream, state: Arc<State>) {
 
 /// Edge config for tests: fast drain, short timeouts.
 pub fn test_config(upstream_url: &str) -> Config {
+    test_config_with(upstream_url, &[])
+}
+
+/// `test_config` plus env overrides.
+pub fn test_config_with(upstream_url: &str, extra: &[(&str, &str)]) -> Config {
     let upstream_url = upstream_url.to_string();
+    let extra: HashMap<String, String> = extra.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect();
     Config::from_lookup(|k| match k {
+        _ if extra.contains_key(k) => extra.get(k).cloned(),
         "EDGE_UPSTREAM_URL" => Some(upstream_url.clone()),
         "EDGE_LISTEN_ADDR" => Some("127.0.0.1:0".into()),
         "EDGE_UPSTREAM_CONNECT_TIMEOUT_MS" => Some("2000".into()),
@@ -288,6 +336,21 @@ pub async fn wait_metric(edge_metrics: &Metrics, series: &str, want: f64) {
         }
         if tokio::time::Instant::now() > deadline {
             panic!("{series} = {v}, wanted >= {want}");
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+}
+
+/// Wait until `series` is exactly `want` (for gauges that go down).
+pub async fn wait_metric_eq(edge_metrics: &Metrics, series: &str, want: f64) {
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+    loop {
+        let v = sample(&edge_metrics.render(), series);
+        if v == want {
+            return;
+        }
+        if tokio::time::Instant::now() > deadline {
+            panic!("{series} = {v}, wanted {want}");
         }
         tokio::time::sleep(Duration::from_millis(10)).await;
     }

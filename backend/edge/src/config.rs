@@ -33,6 +33,14 @@ pub struct Config {
     pub ws_read_buffer_bytes: usize,
     /// `EDGE_WS_MAX_MESSAGE_BYTES`.
     pub ws_max_message_bytes: usize,
+    /// `EDGE_MAX_SESSIONS`: open relayed sessions above which new upgrades get 503.
+    pub max_sessions: usize,
+    /// `EDGE_MAX_PENDING_HANDSHAKES`: concurrent upstream handshakes above
+    /// which new upgrades get 503 (bounds connect storms against listen).
+    pub max_pending_handshakes: usize,
+    /// `EDGE_HEADER_READ_TIMEOUT_MS`: time a client has to send its request
+    /// headers (slow-header protection).
+    pub header_read_timeout: Duration,
     /// `EDGE_WORKER_THREADS`: tokio worker threads; unset means one per CPU.
     pub worker_threads: Option<usize>,
     /// `OMI_RELEASE_SHA`: release identity exported on `omi_edge_build_info`.
@@ -99,6 +107,14 @@ impl Config {
             )));
         }
 
+        let count = |key: &str, default: u64, max: u64| -> Result<usize, ConfigError> {
+            let v = parse_u64(key, get(key), default)?;
+            if v == 0 || v > max {
+                return Err(ConfigError(format!("{key}: {v} outside [1, {max}]")));
+            }
+            Ok(v as usize)
+        };
+
         let worker_threads = match get("EDGE_WORKER_THREADS") {
             None => None,
             Some(v) => match v.parse::<usize>() {
@@ -117,15 +133,20 @@ impl Config {
             close_timeout: ms("EDGE_CLOSE_TIMEOUT_MS", 5_000, 100, 60_000)?,
             ws_read_buffer_bytes: ws_read_buffer_bytes as usize,
             ws_max_message_bytes: ws_max_message_bytes as usize,
+            max_sessions: count("EDGE_MAX_SESSIONS", 5_000, 100_000)?,
+            max_pending_handshakes: count("EDGE_MAX_PENDING_HANDSHAKES", 512, 10_000)?,
+            header_read_timeout: ms("EDGE_HEADER_READ_TIMEOUT_MS", 10_000, 100, 120_000)?,
             worker_threads,
             release_sha: get("OMI_RELEASE_SHA").unwrap_or_default(),
         })
     }
 
-    /// Upper bound on the whole drain: deregistration delay, the close
-    /// spread, one close handshake, plus one second of slack.
+    /// Upper bound on the whole drain. The last session's close starts at
+    /// ready delay + spread; its handshake may take the close timeout, then
+    /// up to one second for its own abort close and one for the final flush
+    /// (`session::ABORT_GRACE` each), plus one second of scheduling slack.
     pub fn drain_deadline(&self) -> Duration {
-        self.drain_ready_delay + self.drain_spread + self.close_timeout + Duration::from_secs(1)
+        self.drain_ready_delay + self.drain_spread + self.close_timeout + Duration::from_secs(3)
     }
 }
 
@@ -188,7 +209,9 @@ mod tests {
         assert_eq!(c.listen_addr, "0.0.0.0:8080".parse().unwrap());
         assert_eq!(c.ws_read_buffer_bytes, 4096);
         assert_eq!(c.ws_max_message_bytes, DEFAULT_MAX_MESSAGE_BYTES);
-        assert_eq!(c.drain_deadline(), Duration::from_secs(21));
+        assert_eq!(c.drain_deadline(), Duration::from_secs(23));
+        assert_eq!(c.max_sessions, 5_000);
+        assert_eq!(c.max_pending_handshakes, 512);
         assert_eq!(c.worker_threads, None);
     }
 
@@ -224,6 +247,7 @@ mod tests {
         assert!(cfg(&[("EDGE_UPSTREAM_URL", "ws://x"), ("EDGE_CLOSE_TIMEOUT_MS", "5")]).is_err());
         assert!(cfg(&[("EDGE_UPSTREAM_URL", "ws://x"), ("EDGE_DRAIN_SPREAD_MS", "abc")]).is_err());
         assert!(cfg(&[("EDGE_UPSTREAM_URL", "ws://x"), ("EDGE_WORKER_THREADS", "0")]).is_err());
+        assert!(cfg(&[("EDGE_UPSTREAM_URL", "ws://x"), ("EDGE_MAX_SESSIONS", "0")]).is_err());
         assert!(cfg(&[("EDGE_UPSTREAM_URL", "ws://x"), ("EDGE_WS_READ_BUFFER_BYTES", "10")]).is_err());
     }
 }

@@ -13,7 +13,7 @@ use tokio_tungstenite::tungstenite::{Error as WsError, Message};
 const WAIT: Duration = Duration::from_secs(10);
 
 fn sent_message(i: usize) -> Message {
-    if i % 10 == 0 {
+    if i.is_multiple_of(10) {
         Message::text(format!("t{i}"))
     } else {
         Message::binary(payload(i))
@@ -124,7 +124,7 @@ async fn concurrent_sessions_do_not_interleave() {
         32.0,
     )
     .await;
-    wait_metric(&edge.metrics(), "omi_edge_sessions_active", 0.0).await;
+    wait_metric_eq(&edge.metrics(), "omi_edge_sessions_active", 0.0).await;
     assert_eq!(sample(&edge.metrics().render(), "omi_edge_sessions_active"), 0.0);
 }
 
@@ -342,7 +342,7 @@ async fn close_handshake_timeout_tears_down() {
         1.0,
     )
     .await;
-    assert_eq!(sample(&edge.metrics().render(), "omi_edge_sessions_active"), 0.0);
+    wait_metric_eq(&edge.metrics(), "omi_edge_sessions_active", 0.0).await;
 }
 
 /// Found by the real-listen smoke: listen keeps its TCP socket open after
@@ -389,6 +389,44 @@ async fn close_completes_while_upstream_keeps_tcp_open() {
         fake.record("lc").await.unwrap().close.unwrap().unwrap().reason.as_str(),
         "done"
     );
+}
+
+/// Review finding: no unbounded sessions or handshakes.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn session_cap_sheds_with_503() {
+    let fake = FakeListen::start().await;
+    let edge = start_edge(test_config_with(&fake.url(), &[("EDGE_MAX_SESSIONS", "1")])).await;
+    let mut first = connect(&edge, "conn=cap1").await;
+    wait_metric(&edge.metrics(), "omi_edge_sessions_active", 1.0).await;
+    let url = format!("ws://{}/v4/listen?conn=cap2", edge.local_addr());
+    match tokio_tungstenite::connect_async(url).await {
+        Err(WsError::Http(resp)) => assert_eq!(resp.status().as_u16(), 503),
+        other => panic!("expected HTTP 503, got {other:?}"),
+    }
+    assert!(fake.record("cap2").await.is_none(), "shed request reached upstream");
+    assert_eq!(
+        sample(
+            &edge.metrics().render(),
+            "omi_edge_handshakes_total{result=\"overloaded\"}"
+        ),
+        1.0
+    );
+    first.close(None).await.unwrap();
+}
+
+/// Review finding: a client that never finishes its request headers is cut
+/// off by the header read timeout instead of holding a task forever.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn slow_headers_are_timed_out() {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let fake = FakeListen::start().await;
+    let edge = start_edge(test_config_with(&fake.url(), &[("EDGE_HEADER_READ_TIMEOUT_MS", "300")])).await;
+    let mut s = tokio::net::TcpStream::connect(edge.local_addr()).await.unwrap();
+    s.write_all(b"GET /v4/listen HTTP/1.1\r\nHost: edge\r\n").await.unwrap();
+    let mut buf = Vec::new();
+    // The edge closes the socket (with or without a 408) well before 5s.
+    let read = tokio::time::timeout(Duration::from_secs(5), s.read_to_end(&mut buf)).await;
+    assert!(read.is_ok(), "slow-header connection was not closed");
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]

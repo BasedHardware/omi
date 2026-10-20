@@ -66,16 +66,19 @@ pub enum HandshakeResult {
     InvalidRequest,
     /// Upstream accepted but the client's upgrade did not complete.
     ClientUpgradeFailed,
+    /// `EDGE_MAX_SESSIONS` or `EDGE_MAX_PENDING_HANDSHAKES` reached; the client got 503.
+    Overloaded,
 }
 
 impl HandshakeResult {
-    pub const ALL: [HandshakeResult; 6] = [
+    pub const ALL: [HandshakeResult; 7] = [
         HandshakeResult::Accepted,
         HandshakeResult::UpstreamRejected,
         HandshakeResult::UpstreamUnavailable,
         HandshakeResult::UpstreamTimeout,
         HandshakeResult::InvalidRequest,
         HandshakeResult::ClientUpgradeFailed,
+        HandshakeResult::Overloaded,
     ];
     pub fn as_str(self) -> &'static str {
         match self {
@@ -85,6 +88,7 @@ impl HandshakeResult {
             HandshakeResult::UpstreamTimeout => "upstream_timeout",
             HandshakeResult::InvalidRequest => "invalid_request",
             HandshakeResult::ClientUpgradeFailed => "client_upgrade_failed",
+            HandshakeResult::Overloaded => "overloaded",
         }
     }
 }

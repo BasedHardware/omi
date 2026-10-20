@@ -15,9 +15,12 @@
 //!   is dropped without a close frame too, so listen sees exactly what it
 //!   sees today when a client vanishes.
 //! - Drain: the edge sends the client 1012 (service restart). Frames the
-//!   client sent before it saw that close are still relayed upstream; the
-//!   client's close reply is relayed upstream so listen finalizes as on a
-//!   normal client close.
+//!   client sent before it saw that close are still relayed upstream. Listen
+//!   then gets **1001** (going away), whether the client echoes the 1012 or
+//!   vanishes: listen treats 1000 and 1001 as ordinary closes, but only 1000
+//!   finalizes a desktop conversation. 1001 keeps the conversation in
+//!   progress for the client's reconnect, exactly as a dropped client does
+//!   today. Any other close code the client sends is relayed unchanged.
 use std::future::Future;
 use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::sync::Arc;
@@ -77,8 +80,8 @@ struct SessionFlags {
     close_initiator: AtomicU8,
     /// The edge sent the client its drain close.
     drain_sent: AtomicBool,
-    /// Cancelled once the drain close was attempted (starts the close timer).
-    drain_close_sent: CancellationToken,
+    /// Bound on any close write (a client that stops reading cannot stall drain).
+    close_timeout: Duration,
 }
 
 /// Deterministic spread of drain closes across `spread`, by session id.
@@ -122,9 +125,12 @@ where
     let (c_tx, c_rx) = client.split();
     let (u_tx, u_rx) = upstream.split();
     let abort = CancellationToken::new();
-    let flags = Arc::new(SessionFlags::default());
+    let flags = Arc::new(SessionFlags {
+        close_timeout: ctx.close_timeout,
+        ..Default::default()
+    });
 
-    let drain_fire = {
+    let drain_fire = || {
         let drain = ctx.drain.clone();
         let jitter = ctx.drain_jitter;
         async move {
@@ -132,6 +138,12 @@ where
             tokio::time::sleep(jitter).await;
         }
     };
+    // The session's own copy of the drain timer starts the close deadline
+    // even if the upstream -> client pump is stuck writing to a client that
+    // stopped reading.
+    let session_drain = drain_fire();
+    tokio::pin!(session_drain);
+    let mut session_drain_fired = false;
 
     let c2u = pump(
         c_rx,
@@ -147,7 +159,7 @@ where
         c_tx,
         metrics.direction(Direction::UpstreamToClient),
         UPSTREAM,
-        Some(drain_fire),
+        Some(drain_fire()),
         abort.clone(),
         flags.clone(),
     );
@@ -182,8 +194,9 @@ where
                 }
                 deadline.get_or_insert_with(|| tokio::time::Instant::now() + ctx.close_timeout);
             }
-            _ = flags.drain_close_sent.cancelled(), if deadline.is_none() => {
-                deadline = Some(tokio::time::Instant::now() + ctx.close_timeout);
+            _ = &mut session_drain, if !session_drain_fired => {
+                session_drain_fired = true;
+                deadline.get_or_insert_with(|| tokio::time::Instant::now() + ctx.close_timeout);
             }
             _ = tokio::time::sleep_until(deadline.unwrap_or_else(far)), if deadline.is_some() => {
                 timed_out = true;
@@ -297,18 +310,19 @@ where
                 }
                 return PumpResult { end: PumpEnd::Aborted, stats, dst };
             }
+            // Relay what upstream already sent before the drain close.
+            m = src.next() => m,
             _ = &mut drain, if !drain_done => {
                 drain_done = true;
                 if dst_open {
                     dst_open = false;
-                    if dst.send(Message::Close(Some(drain_frame()))).await.is_ok() {
+                    let close = dst.send(Message::Close(Some(client_drain_frame())));
+                    if let Ok(Ok(())) = tokio::time::timeout(flags.close_timeout, close).await {
                         flags.drain_sent.store(true, Ordering::SeqCst);
                     }
-                    flags.drain_close_sent.cancel();
                 }
                 continue;
             }
-            m = src.next() => m,
         };
 
         let msg = match next {
@@ -319,7 +333,8 @@ where
                     // without echoing it. The edge caused this end, so give
                     // listen a clean close instead of mirroring a drop.
                     if dst_open {
-                        let _ = dst.send(Message::Close(Some(drain_frame()))).await;
+                        let close = dst.send(Message::Close(Some(upstream_drain_frame())));
+                        let _ = tokio::time::timeout(flags.close_timeout, close).await;
                     }
                     return PumpResult {
                         end: PumpEnd::Closed,
@@ -343,7 +358,18 @@ where
                     .close_initiator
                     .compare_exchange(NOBODY, me, Ordering::SeqCst, Ordering::SeqCst);
                 if dst_open {
-                    let _ = dst.send(Message::Close(frame)).await;
+                    // The client's echo of the edge's drain close becomes 1001
+                    // for listen (see the module docs); every other close is
+                    // relayed as received.
+                    let echoes_drain = me == CLIENT
+                        && flags.drain_sent.load(Ordering::SeqCst)
+                        && frame.as_ref().is_none_or(|f| f.code == CloseCode::Restart);
+                    let frame = if echoes_drain {
+                        Some(upstream_drain_frame())
+                    } else {
+                        frame
+                    };
+                    let _ = tokio::time::timeout(flags.close_timeout, dst.send(Message::Close(frame))).await;
                 }
                 // tungstenite queued the close echo to `src`; it is written
                 // on the next poll of that socket. Poll once without waiting
@@ -372,9 +398,19 @@ where
     }
 }
 
-fn drain_frame() -> CloseFrame {
+/// What the client gets on drain: 1012, reconnect.
+fn client_drain_frame() -> CloseFrame {
     CloseFrame {
         code: CloseCode::Restart,
+        reason: DRAIN_CLOSE_REASON.into(),
+    }
+}
+
+/// What listen gets for a drained session: 1001, an ordinary close that
+/// keeps the conversation in progress for the reconnect.
+fn upstream_drain_frame() -> CloseFrame {
+    CloseFrame {
+        code: CloseCode::Away,
         reason: DRAIN_CLOSE_REASON.into(),
     }
 }

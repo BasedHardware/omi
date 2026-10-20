@@ -118,10 +118,10 @@ async fn drain_closes_with_1012_and_relays_every_inflight_frame() {
             (0..sent).collect::<Vec<_>>(),
             "{conn}: upstream missed or reordered frames"
         );
-        // Listen sees a normal client close carrying the edge's 1012.
+        // Listen sees an ordinary 1001, never the 1012 meant for the client.
         assert_eq!(
             rec.close,
-            Some(Some(expected_close.clone())),
+            Some(Some(upstream_drain_close())),
             "{conn}: upstream close frame"
         );
     }
@@ -140,7 +140,7 @@ async fn drain_closes_with_1012_and_relays_every_inflight_frame() {
 }
 
 /// Found by the real-listen smoke: some clients drop TCP on the drain close
-/// without echoing it. Listen must still get a clean 1012 close, not a drop.
+/// without echoing it. Listen must still get a clean 1001 close, not a drop.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn drain_gives_listen_a_clean_close_when_client_vanishes() {
     let fake = FakeListen::start().await;
@@ -162,18 +162,90 @@ async fn drain_gives_listen_a_clean_close_when_client_vanishes() {
     // Drop without polling again, so the queued close echo is never sent.
     drop(ws);
     let rec = fake.wait_ended("gone", Duration::from_secs(10)).await;
-    assert_eq!(
-        rec.close,
-        Some(Some(CloseFrame {
-            code: CloseCode::Restart,
-            reason: DRAIN_CLOSE_REASON.into()
-        }))
-    );
+    assert_eq!(rec.close, Some(Some(upstream_drain_close())));
     assert_eq!(
         rec.received,
         (0..3u8).map(|i| Message::binary(vec![i])).collect::<Vec<_>>()
     );
     drain.await.unwrap();
+    assert_eq!(
+        sample(&metrics.render(), "omi_edge_sessions_total{outcome=\"drained\"}"),
+        1.0
+    );
+}
+
+/// Listen treats only 1000/1001 as ordinary and finalizes desktop
+/// conversations only on 1000, so the drain must reach it as 1001.
+fn upstream_drain_close() -> CloseFrame {
+    CloseFrame {
+        code: CloseCode::Away,
+        reason: DRAIN_CLOSE_REASON.into(),
+    }
+}
+
+/// Review finding: a client that stops reading must not stall drain. The
+/// upstream floods the session while the client never reads, so the edge's
+/// writes to the client block; drain still finishes in time and listen gets
+/// a clean 1001.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn drain_is_bounded_when_client_stops_reading() {
+    let fake = FakeListen::start().await;
+    let cfg = test_config(&fake.url());
+    let deadline = cfg.drain_deadline();
+    let edge = start_edge(cfg).await;
+    let metrics = edge.metrics();
+    let url = format!("ws://{}/v4/listen?conn=stuck&blob=400", edge.local_addr());
+    let (ws, _) = tokio_tungstenite::connect_async(url).await.unwrap();
+    // Let the socket buffers between edge and client fill up.
+    tokio::time::sleep(Duration::from_millis(500)).await;
+
+    let started = Instant::now();
+    edge.drain().await;
+    assert!(started.elapsed() < deadline, "drain took {:?}", started.elapsed());
+    let rec = fake.wait_ended("stuck", Duration::from_secs(10)).await;
+    assert_eq!(
+        rec.close.flatten().map(|f| f.code),
+        Some(CloseCode::Away),
+        "listen must get a clean 1001"
+    );
+    assert_eq!(
+        sample(&metrics.render(), "omi_edge_sessions_total{outcome=\"close_timeout\"}"),
+        1.0
+    );
+    assert_eq!(sample(&metrics.render(), "omi_edge_sessions_active"), 0.0);
+    drop(ws);
+}
+
+/// Review finding: a connection accepted before the listener closed but
+/// still in its upstream handshake must be waited for, then drained like
+/// any other session (client 1012, listen 1001), not cut off.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn drain_waits_for_handshakes_in_flight() {
+    let fake = FakeListen::start().await;
+    let edge = start_edge(test_config_with(&fake.url(), &[("EDGE_DRAIN_READY_DELAY_MS", "100")])).await;
+    let metrics = edge.metrics();
+    // Upstream takes 1 s to answer; the listener closes at 100 ms.
+    let url = format!("ws://{}/v4/listen?conn=slow&slow_handshake_ms=1000", edge.local_addr());
+    let client = tokio::spawn(async move {
+        let (mut ws, _) = tokio_tungstenite::connect_async(url)
+            .await
+            .expect("handshake completes during drain");
+        let mut close = None;
+        while let Some(Ok(m)) = ws.next().await {
+            if let Message::Close(f) = m {
+                close = f;
+            }
+        }
+        close
+    });
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    edge.drain().await;
+    // drain() returned only after the late session finished.
+    let rec = fake.record("slow").await.expect("upstream saw the connection");
+    assert!(rec.ended, "drain returned before the in-flight session ended");
+    assert_eq!(rec.close, Some(Some(upstream_drain_close())));
+    let close = client.await.unwrap();
+    assert_eq!(close.map(|f| f.code), Some(CloseCode::Restart));
     assert_eq!(
         sample(&metrics.render(), "omi_edge_sessions_total{outcome=\"drained\"}"),
         1.0
