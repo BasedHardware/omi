@@ -280,7 +280,7 @@ def find_person_by_name(db_client: Any, uid: str, name: str) -> dict[str, Any] |
     so only a miss scans the owner's people, comparing names the way renames dedupe aliases.
     """
 
-    if not name or not isinstance(name, str) or not name.strip():
+    if not name or not name.strip():
         return None
 
     people_ref = db_client.collection('users').document(uid).collection('people')
