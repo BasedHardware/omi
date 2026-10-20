@@ -537,6 +537,10 @@ def _registry():
     return json.loads((BACKEND_DIR / 'runtime_images.json').read_text(encoding='utf-8'))
 
 
+def _image_entry(payload, name):
+    return next(image for image in payload['images'] if image['name'] == name)
+
+
 def _registry_variant(tmp_path, mutate):
     payload = _registry()
     mutate(payload)
@@ -618,8 +622,8 @@ def test_role_pusher_target_copies_the_pusher_source_surface(contracts_module):
             'belongs to both',
         ),
         (lambda p: p['services']['backend'].update({'image': 'backend-workers'}), 'is not a role image of api'),
-        (lambda p: p['outside_role_split'].pop('plugins'), 'plugins is neither a role image'),
-        (lambda p: p['outside_role_split'].update({'backend-api': 'x'}), 'both a role image and outside'),
+        (lambda p: _image_entry(p, 'plugins').pop('outside_role_split'), 'plugins is neither a role image'),
+        (lambda p: _image_entry(p, 'backend-api').update({'outside_role_split': 'x'}), 'both a role image and outside'),
         (
             lambda p: p['roles']['gateway']['images'].update({'backend-gateway': 'backend/pusher/pylock.toml'}),
             'does not install its declared lock',

@@ -805,18 +805,22 @@ def role_map_errors(contracts: Iterable[ImageContract], registry_path: Path = RE
 
     Every service the registry declares (the ``services`` map and every chart in
     ``logging_chart_images``) maps to exactly one role image; every registered
-    image is a role image of exactly one role or is named outside the split.
+    image is a role image of exactly one role or carries an ``outside_role_split``
+    reason on its own entry (kept per entry so the map never repeats image names
+    that other inventories count).
     """
     payload = json.loads(registry_path.read_text(encoding="utf-8"))
     roles = payload.get("roles")
     services = payload.get("services")
-    outside = payload.get("outside_role_split")
     if not isinstance(roles, dict) or not roles:
         return ["runtime-image registry must declare a non-empty roles map"]
     if not isinstance(services, dict) or not services:
         return ["runtime-image registry must declare a non-empty services map"]
-    if not isinstance(outside, dict):
-        return ["runtime-image registry must declare outside_role_split (image -> reason)"]
+    outside = {
+        entry["name"]: entry["outside_role_split"]
+        for entry in payload.get("images", [])
+        if isinstance(entry, dict) and "outside_role_split" in entry
+    }
 
     by_name = {contract.name: contract for contract in contracts}
     errors: list[str] = []
@@ -856,11 +860,9 @@ def role_map_errors(contracts: Iterable[ImageContract], registry_path: Path = RE
         if name in image_role and name in outside:
             errors.append(f"image {name} is both a role image and outside the role split")
         elif name not in image_role and name not in outside:
-            errors.append(f"image {name} is neither a role image nor named in outside_role_split")
+            errors.append(f"image {name} is neither a role image nor carries an outside_role_split reason")
     for name, reason in outside.items():
-        if name not in by_name:
-            errors.append(f"outside_role_split names unregistered image {name}")
-        elif not isinstance(reason, str) or not reason:
+        if not isinstance(reason, str) or not reason:
             errors.append(f"outside_role_split {name}: reason must be a non-empty string")
 
     served: set[str] = set()
