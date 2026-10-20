@@ -3194,6 +3194,7 @@ _add(
 _add(
     DriverEntry(
         'utils.enrichment.outbox.sweep',
+        domains={'cursor': [True, False]},  # legacy checkpointed pass vs contract (b) pass from the oldest due row
         neutrals={
             'now': (T0.timestamp(), 'operand clock only'),
             'limit': _LIMIT,
@@ -3221,8 +3222,8 @@ _add(
 from database.outbox_provider_stt import FirestoreProviderSttOutbox
 
 _provider_stt_outbox = FirestoreProviderSttOutbox(
-    privacy_blocked=lambda row_id: False,
-    create_wake=lambda row: None,
+    privacy_blocked=lambda owner_id, payload: False,
+    create_wake=lambda row_id, token, available_at: None,
     collection='batch_pipeline_prod_provider_stt_outbox',
 )
 for _method in ('claim', 'sweep'):
