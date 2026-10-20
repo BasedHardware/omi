@@ -149,3 +149,60 @@ def test_batch_opt_in_retries_without_enabling_legacy_assignment(sdk_assignment)
     assert created and result['id'] == 'canonical'
     assert len(store.transactions) == len(reads) == 2
     assert len(store.commits) == 1
+
+
+def timing_lines(caplog):
+    return [r.getMessage() for r in caplog.records if r.getMessage().startswith('event=sync_assignment_timing ')]
+
+
+def test_timing_counts_sdk_commit_retry_attempts_without_ids(sdk_assignment, monkeypatch, caplog):
+    store, reads = sdk_assignment(commit_errors=[Aborted('commit contention')])
+    fences = []
+    with caplog.at_level('INFO', logger=conversations_db.logger.name):
+        conversations_db.assign_sync_conversation(
+            'synthetic-unit',
+            chunk('canonical', 1000),
+            firestore_client=store,
+            retry_contention=True,
+            before_assign=fences.append,
+            timing=True,
+        )
+    assert len(store.commits) == 1 and len(fences) == len(reads) == 2
+    [line] = timing_lines(caplog)
+    fields = dict(token.split('=', 1) for token in line.split())
+    assert fields['outcome'] == 'completed' and fields['attempts'] == '2'
+    assert set(fields) == {
+        'event',
+        'outcome',
+        'attempts',
+        'live_overlap_ms',
+        'fence_ms',
+        'plan_ms',
+        'encode_ms',
+        'persist_ms',
+        'body_ms',
+        'commit_ms',
+        'retry_ms',
+        'index_ms',
+        'donors',
+        'total_ms',
+    }
+    assert all(value.isdigit() for key, value in fields.items() if key.endswith('_ms') or key == 'donors')
+    assert 'synthetic-unit' not in line and 'canonical' not in line
+
+
+def test_timing_reports_bounded_error_and_off_is_silent(sdk_assignment, caplog):
+    store, _ = sdk_assignment(read_errors=[InvalidArgument('bad payload')])
+    with caplog.at_level('INFO', logger=conversations_db.logger.name):
+        with pytest.raises(InvalidArgument):
+            conversations_db.assign_sync_conversation(
+                'synthetic-unit', chunk('canonical', 1000), firestore_client=store, timing=True
+            )
+    [line] = timing_lines(caplog)
+    assert ' outcome=error ' in line and line.endswith(' exception_type=InvalidArgument')
+    assert 'bad payload' not in line
+    caplog.clear()
+    store, _ = sdk_assignment()
+    with caplog.at_level('INFO', logger=conversations_db.logger.name):
+        persist(store)
+    assert timing_lines(caplog) == []

@@ -576,6 +576,63 @@ fence are unchanged. The successor lookup is two equality filters ordered by
 `__name__` on `{namespace}_results`, which automatic single-field indexes serve.
 Two matches fail closed.
 
+### Sweep owner-chain continuation and pending-only assignment page
+
+`BATCH_PIPELINE_SWEEP_OWNER_CHAIN_ENABLED` defaults to `true` (kill switch:
+`false` restores one attempt per page row). Rows from one owner's ordered chain
+used to advance only while a sweep page held that owner's head. During the
+2026-10-20 run 10, one owner's 190-segment burst sat idle about 60% of the time
+between pages (3.2 rows/min). When the sweep now persists a row that was
+`pending` when read, it calls the same walk the recovery wake uses, from that
+owner's `projection_watermark`. Bounds: one walk per owner per sweep, 64 rows
+and 30 seconds per walk, and 30 seconds of walking per sweep across all owners.
+Page rows the walk persisted are skipped without a read. Every other page row,
+including rows past a walk that stopped at its bound, is attempted in page
+order as before. Each walked row still takes the Redis owner claim and the
+transactional predecessor, privacy and receipt fences one at a time, so no
+owner gains concurrency. Walked rows reach follow-ups through ordinary
+discovery, not the wake's priority queue, so they cannot starve other owners'
+follow-ups. The log line is `event=batch_projection action=sweep_chain
+outcome=summary owners=N advanced=N`.
+
+`BATCH_PIPELINE_PROJECTION_PENDING_PAGE_ENABLED` defaults to `true` (kill
+switch: `false` restores the single mixed assignment page). The assignment page
+asks only for `pending` results, so persisted and ready receipts no longer fill
+its 100 rows with replays (1,640 `ProjectionReplay` during run 10). A second
+bounded page with its own cursor over `persisted`/`ready` results replaces
+what the mixed page did for those rows:
+- synchronous-policy rows replay assignment and finish exactly as before;
+- async-policy rows are not touched there, but seeing any of them keeps
+  follow-ups scheduled.
+
+Async follow-up discovery keeps its own mixed page and cursor unchanged. All
+three pages use the same `in` filter on the declared results composite index
+(`projection_state, committed_at, __name__`), so no index changes are needed.
+
+### Assignment sub-phase timing
+
+With `BATCH_PIPELINE_PROJECTION_TIMING_ENABLED`, projection also times
+`load_result`, `manifest`, `context`, `build` and `candidate` (the
+`get_closest_conversation_to_timestamps` query) as `batch_projection_phase`
+phases. `assign_sync_conversation(timing=True)` emits one line per call:
+
+`event=sync_assignment_timing outcome=completed|error attempts= live_overlap_ms=
+fence_ms= plan_ms= encode_ms= persist_ms= body_ms= commit_ms= retry_ms=
+index_ms= donors= total_ms= [exception_type=]`
+
+- `attempts` counts transaction bodies, including SDK commit retries, the
+  outer contention retry and size-limit retries.
+- `plan_ms` is the in-transaction planner excluding `encode_ms`. Lock waits on
+  transactional reads show up in `fence_ms` or `plan_ms`.
+- `commit_ms` is the final commit after the last body. `retry_ms` is the rest
+  of the transaction time: failed commits, rollbacks and backoff.
+- `index_ms` covers the post-commit people-stats invalidation and the Typesense
+  upsert plus one delete per `sync_merged_from` donor. `donors` counts those
+  donors.
+
+Fields hold durations, counts and static tokens only, never IDs. Legacy sync
+callers do not pass `timing` and log nothing new.
+
 ## Per-unit policy snapshots
 
 E1 records admission decisions on the job, outside the unchanged immutable binding. Projection,
