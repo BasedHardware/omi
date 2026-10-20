@@ -28,7 +28,6 @@ from utils.conversations.factory import deserialize_conversation
 from utils.conversations.duplicate_capture import link_duplicate_captures
 from utils.conversations.location import async_resolve_geolocation
 from utils.conversations.episode_runtime import process_with_episode_budget
-from utils.episodes.service import on_conversation_finalized as record_episode_finalized
 from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.conversations.smart_merge import smart_merge_step
 from utils.conversations.smart_merge_policy import is_donor
@@ -105,6 +104,14 @@ def _save_summary_vector_fail_soft(uid: str, conversation) -> None:
 
 
 EPISODE_FINALIZE_TIMEOUT_SECONDS = 30.0
+
+
+def record_episode_finalized(uid: str, conversation_id: str, row: Any, **kwargs: Any) -> str:
+    """Deferred import: the episodes overlay (and its Firestore transaction helpers) loads only
+    when a conversation actually finalizes, never at finalizer import."""
+    from utils.episodes.service import on_conversation_finalized
+
+    return on_conversation_finalized(uid, conversation_id, row, **kwargs)
 
 
 async def _episode_after_finalization(
