@@ -12,7 +12,7 @@ Global flags:
 * ``-v/--verbose``   Log HTTP traffic to stderr.
 * ``--no-color``     Disable colored output (also honors ``NO_COLOR`` env var).
 * ``--timeout SECONDS`` Per-operation HTTP timeout in seconds (default: 30). Applies to
-  Developer API requests; retries/backoff may exceed this limit.
+  Developer API and local Desktop API requests; retries/backoff may exceed this limit.
 """
 
 from __future__ import annotations
@@ -23,6 +23,7 @@ from dataclasses import dataclass, field
 from typing import Mapping, Optional
 
 import click
+import httpx
 import typer
 
 from omi_cli import __version__
@@ -87,24 +88,32 @@ class AppContext:
             profile.api_base = env_base
         return profile
 
+    def httpx_timeout(self) -> Optional[httpx.Timeout]:
+        """Per-operation timeout from ``--timeout``, or None for the client default."""
+        if self.timeout is None:
+            return None
+        return httpx.Timeout(self.timeout, connect=min(self.timeout, 10.0))
+
     def make_client(self) -> OmiClient:
         profile = self.get_profile()
-        # Apply the per-command key only to cloud API requests. Local Desktop
-        # commands and saved-profile management use their own credentials.
+        # Apply the per-command key only to cloud API requests. Saved-profile
+        # management uses its own credentials.
         env_key = os.environ.get(cfg.ENV_API_KEY)
         if env_key:
             profile.api_key = validate_api_key_format(env_key)
             profile.auth_method = "api_key"
-        import httpx as _httpx
-
-        timeout = _httpx.Timeout(self.timeout, connect=min(self.timeout, 10.0)) if self.timeout is not None else None
-        return OmiClient(profile, verbose=self.verbose, timeout=timeout)
+        return OmiClient(profile, verbose=self.verbose, timeout=self.httpx_timeout())
 
     def make_local_client(self) -> LocalOmiClient:
         profile = self.get_profile()
         local_api_url = os.environ.get(cfg.ENV_LOCAL_API_URL) or profile.local_api_url
         local_token = os.environ.get(cfg.ENV_LOCAL_TOKEN) or profile.local_token
-        return LocalOmiClient(api_url=local_api_url or "", token=local_token or "", verbose=self.verbose)
+        return LocalOmiClient(
+            api_url=local_api_url or "",
+            token=local_token or "",
+            timeout=self.httpx_timeout(),
+            verbose=self.verbose,
+        )
 
 
 def _version_callback(value: bool) -> None:
@@ -140,7 +149,7 @@ def _root(
     timeout: Optional[float] = typer.Option(
         None,
         "--timeout",
-        help="Per-operation HTTP timeout in seconds (default: 30). Applies to Developer API requests; retries/backoff may exceed this limit.",
+        help="Per-operation HTTP timeout in seconds (default: 30). Applies to Developer API and local Desktop API requests; retries/backoff may exceed this limit.",
         min=0.001,
         max=600.0,
     ),

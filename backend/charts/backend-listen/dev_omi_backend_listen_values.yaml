@@ -487,14 +487,8 @@ env:
     value: "0.08"
   - name: STT_NO_TEXT_SECONDS
     value: "30"
-  - name: SONIOX_MONTHLY_CEILING_USD
-    value: "0"
-  - name: SONIOX_ESTIMATED_USD_PER_HOUR
-    value: "0.07537"
   - name: STT_MULTI_LANGUAGE_HINTS
     value: "true"
-  - name: SONIOX_CONTEXT_TERMS
-    value: "false"
   - name: STT_LEARNED_LANGUAGE_PROFILE
     value: "true"
   - name: STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT

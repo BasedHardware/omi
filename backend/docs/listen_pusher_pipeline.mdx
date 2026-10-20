@@ -225,7 +225,7 @@ their deployment environment; no UID env binding is required. Existing
 conversation/memory/task post-write hooks signal the hourly backend-sync sweep.
 Shadow writes only admission state and encrypted reports, preserving finalization, user records, questions and vocabulary. See [the dream runbook](runbooks/dream-agent.md).
 Dream vocabulary is optional capture context: `DREAM_AGENT_VOCABULARY_STT=true` combines encrypted per-user vocabulary spellings with existing live and offline-sync keyterms;
-Soniox also retains its `SONIOX_CONTEXT_TERMS` gate. Read failure uses existing terms with fallback telemetry.
+read failure uses existing terms with fallback telemetry.
 Vocabulary and STT gate defaults remain off.
 
 Conversation processing adds a shared **Known spellings** block from Dream vocabulary
@@ -4845,7 +4845,12 @@ subscriptions). One metadata-only document at
 and `dont_ask_again`. Identical writes are idempotent; conflicting writes in the
 same period return 409. A new period logically expires the old choice and
 replaces the same document, avoiding unbounded history. Delayed older-period
-writes cannot overwrite a newer choice. `upgrade` records intent only; managed
+writes cannot overwrite a newer choice. Each transaction attempt also checks the
+current UTC month after its read, so a request delayed by allowance resolution or
+a transaction retry returns `409 budget_period_changed`, including identical
+replays of an expired choice. The [hermetic custody acceptance and proposed
+graduation ramp](runbooks/held-content-acceptance.md) covers this boundary.
+`upgrade` records intent only; managed
 processing still requires a positive answer from the existing allowance resolver.
 A lookup failure or platform trial paywall is `unavailable`, never a cap hit.
 `X-App-Platform` reaches the allowance resolver. Drifted BYOK recovery clears
@@ -6134,3 +6139,7 @@ The [durability runbook](runbooks/cap-hold-durability.md) owns the two-attempt b
 retained uncertainty, kill switches, three new group indexes, deployment order,
 15-second SIGKILL residual window and measured cost increase. Enforcement flags
 remain off; this source change does not activate the cap cohort.
+
+Runtime STT-cap and ladder execution scope shares the 60-second, environment-fenced
+Firestore token cache; session admission does not wait for it. Existing live sessions
+retain admitted state until reconnect. See [runtime ramp and rollback](stt-cap-dispatch.md#runtime-cohort-no-restart).

@@ -1297,6 +1297,14 @@
       "why": "pre-existing; unreviewed"
     },
     {
+      "path": "utils/stt_cap_cohort.py",
+      "function": "RuntimeCohort._failure",
+      "label": "reason",
+      "shape": "name",
+      "count": 1,
+      "why": "main #22810 via sync 12 (2026-10-20); reason passed as a name, owner lane 14 to bound"
+    },
+    {
       "path": "utils/sync/bridge.py",
       "function": "_record_bridge_retraction",
       "label": "outcome",
