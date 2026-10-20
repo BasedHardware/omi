@@ -119,6 +119,7 @@ final class QuickActionsIconPatcher: NSObject {
 
   var session: WCSession?
     var flutterWatchAPI: WatchRecorderFlutterAPI?
+    private var watchRecoveryFlutterAPI: BleFlutterApi?
     var rayBanMetaHostApi: RayBanMetaHostApiImpl?
   private var isRecordingActive: Bool = false // Track recording state to handle app restarts
 
@@ -310,7 +311,8 @@ final class QuickActionsIconPatcher: NSObject {
           watchSession.activate()
 
             flutterWatchAPI = WatchRecorderFlutterAPI(binaryMessenger: messenger)
-            let api: WatchRecorderHostAPI = RecorderHostApiImpl(session: watchSession, flutterWatchAPI: flutterWatchAPI)
+            let api = RecorderHostApiImpl(session: watchSession, flutterWatchAPI: flutterWatchAPI)
+            api.refreshWatchAccountContext()
 
             WatchRecorderHostAPISetup.setUp(binaryMessenger: messenger, api: api)
       }
@@ -320,6 +322,7 @@ final class QuickActionsIconPatcher: NSObject {
       do {
           let messenger = messenger
           let bleFlutterApi = BleFlutterApi(binaryMessenger: messenger)
+          watchRecoveryFlutterAPI = bleFlutterApi
           OmiBleManager.shared.setFlutterApi(bleFlutterApi)
           let bleHostApi = BleHostApiImpl(bleManager: OmiBleManager.shared)
           BleHostApiSetup.setUp(binaryMessenger: messenger, api: bleHostApi)
@@ -805,7 +808,9 @@ func registerPlugins(registry: FlutterPluginRegistry) {
 
 extension AppDelegate: WCSessionDelegate {
     
-    func session(_ session: WCSession, activationDidCompleteWith activationState: WCSessionActivationState, error: Error?) { }
+    func session(_ session: WCSession, activationDidCompleteWith activationState: WCSessionActivationState, error: Error?) {
+        if activationState == .activated { RecorderHostApiImpl(session: session).refreshWatchAccountContext() }
+    }
     
     func sessionDidBecomeInactive(_ session: WCSession) {
         print("Session Watch Become Inactive")
@@ -815,6 +820,28 @@ extension AppDelegate: WCSessionDelegate {
         print("Session Watch Deactivate")
     }
     
+    func session(_ session: WCSession, didReceive file: WCSessionFile) {
+        guard file.metadata?["method"] as? String == "watchRecordingFile",
+              let encoded = file.metadata?["recording"] as? Data,
+              let metadata = try? JSONDecoder().decode(WatchRecordingMetadata.self, from: encoded),
+              let owner = UserDefaults.standard.string(forKey: "flutter.uid"), !owner.isEmpty else { return }
+        let configuredDirectory = UserDefaults.standard.string(forKey: "flutter.batchAudioDir") ?? ""
+        let directory = configuredDirectory.isEmpty
+            ? FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].path : configuredDirectory
+        do {
+            // Must finish synchronously: WCSession removes file.fileURL on return.
+            let digest = try WatchRecordingInbox.receive(file.fileURL, metadata: metadata,
+                directory: URL(fileURLWithPath: directory, isDirectory: true), ownerUID: owner)
+            session.transferUserInfo(["method": "watchRecordingReceipt", "fileName": metadata.fileName, "digest": digest])
+            DispatchQueue.main.async {
+                self.watchRecoveryFlutterAPI?.onBatchRecordingFinalized(fileName: metadata.fileName) { _ in }
+            }
+        } catch {
+            // No receipt: the Watch retains its source and retries. Never log audio or account IDs.
+            NSLog("[WatchRecovery] File not accepted; retained on Watch")
+        }
+    }
+
     // Receive a message from watch (foreground/active)
     func session(_ session: WCSession, didReceiveMessage message: [String : Any]) {
         Task {
