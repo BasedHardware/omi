@@ -435,13 +435,8 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
         flags=re.MULTILINE,
     )
     translation_defaults = {
-        'TRANSLATION_DEMAND_SHADOW_ENABLED': 'false',
         'TRANSLATION_DEMAND_GATE_ENABLED': 'true',
-        'TRANSLATION_DEMAND_LEASE_V1_ENABLED': 'true',
-        'TRANSLATION_ONDEMAND_GEMINI_ENABLED': 'true',
         'TRANSLATION_ONOPEN_ENABLED': 'true',
-        'TRANSLATION_ONDEMAND_COHORT_PERCENT': '100',
-        'TRANSLATION_ONDEMAND_UID_ALLOWLIST': '',
         'TRANSLATION_ONDEMAND_MAX_SEGMENTS': '50',
         'TRANSLATION_ONDEMAND_MAX_CHARS': '12000',
         'TRANSLATION_ONDEMAND_DEADLINE_SECONDS': '3',

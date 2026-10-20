@@ -54,8 +54,6 @@ DUPLICATE_DECLARATION_ALLOWLIST = {
     "TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST",
     "TRANSCRIPTION_SHADOW_PERCENT",
     "TRANSCRIPTION_SHADOW_UID_ALLOWLIST",
-    "TRANSLATION_ONDEMAND_COHORT_PERCENT",
-    "TRANSLATION_ONDEMAND_UID_ALLOWLIST",
 }
 # Empty on 2026-10-20: no row is beyond its seven-day grace. Add only an
 # already-overdue row with an expiry and reason; the checker prints it as a

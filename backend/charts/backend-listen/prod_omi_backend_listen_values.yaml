@@ -641,20 +641,10 @@ env:
     value: "86400"
   - name: TRANSLATION_NEGATIVE_CACHE_TTL
     value: "21600"
-  - name: TRANSLATION_DEMAND_SHADOW_ENABLED
-    value: "false"
   - name: TRANSLATION_DEMAND_GATE_ENABLED
-    value: "true"
-  - name: TRANSLATION_DEMAND_LEASE_V1_ENABLED
-    value: "true"
-  - name: TRANSLATION_ONDEMAND_GEMINI_ENABLED
     value: "true"
   - name: TRANSLATION_ONOPEN_ENABLED
     value: "true"
-  - name: TRANSLATION_ONDEMAND_COHORT_PERCENT
-    value: "100"
-  - name: TRANSLATION_ONDEMAND_UID_ALLOWLIST
-    value: ""
   - name: TRANSLATION_ONDEMAND_MAX_SEGMENTS
     value: "50"
   - name: TRANSLATION_ONDEMAND_MAX_CHARS

@@ -2280,14 +2280,14 @@ class ListenReceiver(ReplayFilterMixin):
             if not self.host.state.realtime_demand.observe(payload):
                 logger.debug('Ignored malformed or over-budget client_state')
             config = resolve_ondemand_config()
-            if config.shadow_enabled or config.gate_enabled:
-                if self.translation_demand.observe(payload, lease_v1_enabled=config.lease_v1_enabled):
+            if config.gate_enabled:
+                if self.translation_demand.observe(payload):
                     if self._translation_expiry_task is not None:
                         self._translation_expiry_task.cancel()
-                    snapshot = self.translation_demand.snapshot(lease_v1_enabled=config.lease_v1_enabled)
+                    snapshot = self.translation_demand.snapshot()
                     get_translation_metrics().demand(
                         snapshot.policy.value,
-                        'enforced' if config.gate_enabled else 'shadow',
+                        'enforced',
                         self._telemetry_platform(),
                     )
                     if snapshot.expires_at is not None:
@@ -2321,10 +2321,9 @@ class ListenReceiver(ReplayFilterMixin):
     async def _expire_translation_demand(self, expires_at: float) -> None:
         interrupted = await self.host.wait(max(0.0, expires_at - time.monotonic()))
         if not interrupted and self.host.transcripts is not None:
-            config = resolve_ondemand_config()
             get_translation_metrics().demand(
-                self.translation_demand.snapshot(lease_v1_enabled=config.lease_v1_enabled).policy.value,
-                'enforced' if config.gate_enabled else 'shadow',
+                self.translation_demand.snapshot().policy.value,
+                'enforced',
                 self._telemetry_platform(),
             )
             coordinator = getattr(self.host.transcripts, 'translation_coordinator', None)
