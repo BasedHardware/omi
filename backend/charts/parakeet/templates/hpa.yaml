@@ -60,7 +60,7 @@ spec:
           type: Value
           value: "{{ .Values.autoscaling.targetGPUUtilization }}"
     {{- end }}
-    {{- if and .Values.autoscaling.requestLatencyP99 (not .Values.autoscaling.demand.enabled) }}
+    {{- if and .Values.autoscaling.requestLatencyP99 (not .Values.autoscaling.workloadOnly) (not .Values.autoscaling.demand.enabled) }}
     - type: External
       external:
         metric:

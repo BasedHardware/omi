@@ -424,13 +424,12 @@ class TestImagesReachTheProvider:
             assert _image_urls(provider_request['messages'][-1]) == [frame.data_url for frame in FRAMES], provider_ref
 
 
-class TestWiringFlags:
-    """Screen text evidence is unconditional; image attachment keeps its own gate."""
+class TestWiring:
+    """Approved frame images attach unconditionally when evidence is available."""
 
-    def _run(self, monkeypatch, *, screen_text, frames):
+    def _run(self, monkeypatch, *, screen_text):
         from utils.conversations import meeting_notes_wiring as wiring
 
-        monkeypatch.setenv('MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED', 'true' if frames else 'false')
         evidence = (_evidence('a', 2, ['Jordan Rivera'], 'Google Meet call'),)
         loaded: list[str] = []
         monkeypatch.setattr(wiring, 'load_screen_frame_evidence', lambda uid, cid: loaded.append(cid) or evidence)
@@ -461,16 +460,11 @@ class TestWiringFlags:
         names = [entry.display_name for entry in roster.entries if entry.kind == 'human']
         return names, images, captured.get('screen_moments'), loaded
 
-    def test_screen_text_evidence_still_loads_without_images(self, monkeypatch):
-        names, images, moments, loaded = self._run(monkeypatch, screen_text=False, frames=False)
-        assert (names, images, moments, loaded) == (['Jordan Rivera'], (), (), ['conv-1'])
+    def test_images_attach_when_screen_text_is_not_requested(self, monkeypatch):
+        names, images, moments, loaded = self._run(monkeypatch, screen_text=False)
+        assert (names, images, moments, loaded) == (['Jordan Rivera'], FRAMES, (), ['conv-1'])
 
-    def test_screen_text_flag_adds_names_and_moments_but_no_images(self, monkeypatch):
-        names, images, moments, _loaded = self._run(monkeypatch, screen_text=True, frames=False)
-        assert names == ['Jordan Rivera'] and images == ()
+    def test_screen_text_and_images_are_attached_together(self, monkeypatch):
+        names, images, moments, _loaded = self._run(monkeypatch, screen_text=True)
+        assert names == ['Jordan Rivera'] and images == FRAMES
         assert moments == ('- [+02:00] Google Meet call (on screen: Jordan Rivera)',)
-
-    def test_frames_flag_alone_attaches_images_only(self, monkeypatch):
-        names, images, moments, _loaded = self._run(monkeypatch, screen_text=False, frames=True)
-        # The image-derived names still reach the roster, so the notes validator keeps them.
-        assert names == ['Jordan Rivera'] and images == FRAMES and moments == ()

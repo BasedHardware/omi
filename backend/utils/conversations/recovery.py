@@ -10,10 +10,12 @@ from __future__ import annotations
 
 import json
 import os
+import unicodedata
 from collections.abc import Mapping
 from typing import Any
 
 RECOVERY_MAX_AUDIO_FILE_IDS = 256
+RECOVERY_QUIET_MINIMUM_MAX_WORDS = 12
 
 _RICH_STRUCTURED_FIELDS = ('overview', 'sections', 'action_items', 'events')
 _PROTECTED_STRUCTURED_TEXT_FIELDS = ('title', 'overview')
@@ -36,6 +38,44 @@ def _field(structured: Any, name: str) -> Any:
     if isinstance(structured, Mapping):
         return structured.get(name)
     return getattr(structured, name, None)
+
+
+def recovery_transcript_word_count(conversation: Any) -> int:
+    """Count decoded transcript words without logging or retaining transcript text."""
+    segments = _field(conversation, 'transcript_segments') or []
+    parts = []
+    for segment in segments:
+        text = _field(segment, 'text')
+        if isinstance(text, str) and text.strip():
+            parts.append(text.strip())
+    text = ' '.join(parts)
+    if not text:
+        return 0
+    # Match the relevance floor's CJK approximation: two wide characters per
+    # word. Other scripts use whitespace tokens, which errs toward retaining
+    # a short transcript rather than discarding a real utterance.
+    wide_chars = sum(unicodedata.east_asian_width(char) in ('W', 'F', 'H') for char in text)
+    if wide_chars > len(text) * 0.3:
+        return wide_chars // 2
+    return len(text.split())
+
+
+def recovery_transcript_below_content_floor(conversation: Any) -> bool:
+    """Whether a non-empty recovery transcript is short enough for a quiet minimum.
+
+    This never discards. The existing deterministic relevance rules run first
+    and remain the only path that may discard; short contentful speech is kept
+    with a minimum title rather than requiring an enriched summary.
+    """
+    words = recovery_transcript_word_count(conversation)
+    return 0 < words <= RECOVERY_QUIET_MINIMUM_MAX_WORDS
+
+
+def recovery_terminal_minimum_output(conversation: Any) -> bool:
+    """Whether recovery durably kept a non-empty terminal minimum title."""
+    structured = _field(conversation, 'structured')
+    title = _field(structured, 'title')
+    return bool(_field(conversation, 'terminal_no_derived_effects')) and isinstance(title, str) and bool(title.strip())
 
 
 _RECOVERY_SKIP_RULES = frozenset({'empty_transcript', 'filler_only', 'mic_check', 'no_content_words'})

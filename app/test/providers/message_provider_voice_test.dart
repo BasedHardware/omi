@@ -9,8 +9,22 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/message.dart';
 import 'package:omi/env/env.dart';
+import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/message_provider.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
+
+ServerMessage _voiceRow(String id, MessageSender sender, String text) =>
+    ServerMessage(id, DateTime.now(), text, sender, MessageType.text, null, false, [], [], []);
+
+/// What `/v2/voice-messages` streams for an answered pendant question: the transcribed
+/// question, the answer text, then the saved answer.
+Stream<ServerMessageChunk> _answeredVoiceQuestion() async* {
+  yield ServerMessageChunk('question', '', MessageChunkType.message,
+      message: _voiceRow('question', MessageSender.human, 'What did I promise Sam?'));
+  yield ServerMessageChunk('answer', 'Call him on Friday.', MessageChunkType.data);
+  yield ServerMessageChunk('answer', '', MessageChunkType.done,
+      message: _voiceRow('answer', MessageSender.ai, 'Call him on Friday.'));
+}
 
 class _TestEnvFields implements EnvFields {
   @override
@@ -100,6 +114,54 @@ void main() {
     expect(provider.messages.single.text, 'Past thread');
     expect(provider.canSwitchChat, isTrue);
     provider.dispose();
+  });
+
+  test('pendant voice turn stays out of an open app thread such as Mentor', () async {
+    // A Mentor notification opens chat on app 'mentor'. The voice endpoint has no app field, so
+    // the backend saves the pendant question and its answer to the main Omi chat instead.
+    final appProvider = AppProvider();
+    addTearDown(appProvider.dispose);
+    appProvider.setSelectedChatAppId('mentor');
+    final provider = MessageProvider(
+      voiceAudioFileSaver: (_, __, ___) async => File('/tmp/unused-voice-question.opus'),
+      voiceReplyStreamer: (_, {language}) => _answeredVoiceQuestion(),
+    );
+    addTearDown(provider.dispose);
+    provider.updateAppProvider(appProvider);
+    final mentorTip = ServerMessage.empty(appId: 'mentor')..text = 'Mentor tip';
+    provider.messages = [mentorTip];
+
+    await provider.sendVoiceMessageStreamToServer([
+      <int>[1]
+    ], codec: BleAudioCodec.opus);
+
+    expect(provider.messages, [mentorTip]);
+    expect(provider.showTypingIndicator, isFalse);
+    expect(provider.canSwitchChat, isTrue);
+  });
+
+  test('pendant voice turn still lands in the main chat after Omi is picked in the drawer', () async {
+    final appProvider = AppProvider();
+    addTearDown(appProvider.dispose);
+    // The chat drawer's Omi row selects 'no_selected', which is the main chat.
+    appProvider.setSelectedChatAppId('no_selected');
+    final provider = MessageProvider(
+      voiceAudioFileSaver: (_, __, ___) async => File('/tmp/unused-voice-question.opus'),
+      voiceReplyStreamer: (_, {language}) => _answeredVoiceQuestion(),
+    );
+    addTearDown(provider.dispose);
+    provider.updateAppProvider(appProvider);
+    final earlier = ServerMessage.empty()..text = 'Earlier answer';
+    provider.messages = [earlier];
+
+    await provider.sendVoiceMessageStreamToServer([
+      <int>[1]
+    ], codec: BleAudioCodec.opus);
+
+    expect(
+      provider.messages.map((m) => m.text).toList(),
+      ['Earlier answer', 'What did I promise Sam?', 'Call him on Friday.'],
+    );
   });
 
   test('voice reply timeout clears the re-entry guard for the next question', () async {

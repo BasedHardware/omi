@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-trial-paywall-after-signup.png",
+      "platform": "mobile-ios",
+      "description": "Trial paywall opened by the after-sign-up placement (trial arm): headline, first carousel card, timeline, Start for $0.00 enabled with the real catalog loaded",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-trial-paywall-carousel.png",
+      "platform": "mobile-ios",
+      "description": "Fourth carousel card (Ask questions across conversations) with width-adaptive bubbles after the FittedBox layout fix",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-mobile-ios-trial-paywall-plans.png",
+      "platform": "mobile-ios",
+      "description": "Scrolled to the bottom: timeline (Today / +7 days free / In 7 days charged unless cancelled, no reminder row), feature list, Monthly $29.99 and Yearly $269.91 (save $89.97) from the live catalog",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "004-mobile-ios-trial-paywall-dismiss-to-name.png",
+      "platform": "mobile-ios",
+      "description": "Continue with the free plan returns to the next onboarding step (What's your name?)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

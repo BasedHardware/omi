@@ -1,3 +1,4 @@
+from utils.generated_compute import require_generated_compute, generated_compute_allowed, generated_compute_scope
 import asyncio
 import hashlib
 import os
@@ -29,6 +30,7 @@ from utils.other.storage import (
 )
 from utils.screen_frames.store import delete_conversation_screen_frames
 from models.calendar_context import CalendarMeetingContext
+from utils.free_tier_processing_policy import client_summaries_at_cap_enabled
 from models.client_processing import PROJECTION_FAMILY_FIELDS, ClientProcessing
 from models.conversation import (
     BulkAssignSegmentsRequest,
@@ -81,7 +83,6 @@ from utils.conversations.process_conversation import (
     AppUsageAttribution,
     DerivedEffectsDisposition,
     process_conversation,
-    run_first_open_derived_work,
     retrieve_in_progress_conversation,
 )
 from utils.conversations import lifecycle as lifecycle_service
@@ -279,40 +280,6 @@ def _enrich_deferred_conversation(uid: str, conversation: dict) -> dict:
     return conversation
 
 
-def _dispatch_first_open_work(uid: str, conversation: dict) -> None:
-    """Claim once and run in the background; failure remains retryable."""
-    conversation_id = conversation.get('id')
-    if not conversation_id or not conversation.get('jit_first_open'):
-        return
-    try:
-        token = conversations_db.claim_authorized_first_open_work(uid, conversation_id, conversation.get('source'))
-    except Exception as error:
-        logger.warning('JIT first-open claim failed uid=%s conv=%s: %s', uid, conversation_id, error)
-        return
-    if token is None:
-        return
-
-    def _run() -> None:
-        succeeded = False
-        try:
-            latest = conversations_db.get_conversation(uid, conversation_id)
-            if latest is None:
-                raise RuntimeError('conversation disappeared before first-open work')
-            run_first_open_derived_work(uid, latest, token)
-            succeeded = True
-        except Exception as error:
-            logger.exception('JIT first-open worker failed uid=%s conv=%s: %s', uid, conversation_id, error)
-        finally:
-            try:
-                conversations_db.finish_first_open_work(uid, conversation_id, token, succeeded=succeeded)
-            except Exception as error:
-                logger.exception(
-                    'JIT first-open lease finalization failed uid=%s conv=%s: %s', uid, conversation_id, error
-                )
-
-    submit_with_context(postprocess_executor, _run)
-
-
 class ProcessConversationRequest(BaseModel):
     calendar_meeting_context: Optional[CalendarMeetingContext] = None
     # Unvalidated on purpose: a malformed projection must not 422 a finished recording.
@@ -375,10 +342,10 @@ def _accepted_client_projection(raw: Any, segments: Any) -> Optional[ClientProce
     """Bind a client projection to the persisted transcript, or drop it.
 
     Schema failures and hash mismatch are not request errors: the conversation
-    still finalizes on the deterministic minimum. Warnings are content-free
+    still finalizes under the funded processing policy. Warnings are content-free
     (reason plus provenance only — never transcript or body).
     """
-    if raw is None:
+    if raw is None or not client_summaries_at_cap_enabled():
         return None
     try:
         projection = ClientProcessing.model_validate(raw)
@@ -1081,12 +1048,10 @@ def get_conversation_by_id(
         raise HTTPException(status_code=404, detail="Conversation not found")
     if not conversations_db.is_visible_conversation(conversation, include_discarded=show_discarded):
         raise HTTPException(status_code=404, detail="Conversation not found")
-    # Lazy processing: a desktop conversation stored raw (deferred) for a freemium/Neo user is
+    # A desktop conversation stored raw (deferred) for a freemium/Neo user is
     # enriched on first open. Other conversations are returned unchanged.
-    if conversation.get('deferred'):
+    if conversation.get('deferred') and not conversation.get('processing_deferred'):
         conversation = _enrich_deferred_conversation(uid, conversation)
-    else:
-        _dispatch_first_open_work(uid, conversation)
     if include_translations is True:
         try:
             conversation, translation_status, next_cursor = translate_open_page(uid, conversation, translation_cursor)
@@ -2317,10 +2282,12 @@ def test_prompt(
         raise HTTPException(status_code=400, detail="Conversation has no text content to summarize.")
 
     # Pass language code from conversation to match app behavior
+    require_generated_compute(uid, 'daily_summary')
     try:
-        summary = generate_summary_with_prompt(
-            full_transcript, request.prompt, language_code=conversation.language or 'en'
-        )
+        with generated_compute_scope(uid):
+            summary = generate_summary_with_prompt(
+                full_transcript, request.prompt, language_code=conversation.language or 'en'
+            )
     except SummaryProviderError as exc:
         # The provider failed on its own account, so this is an upstream failure and not a fault
         # of the request: report it as one instead of as a 500 the client cannot act on.

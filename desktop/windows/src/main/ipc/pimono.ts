@@ -12,8 +12,7 @@ import { configurePiMonoSession, getPiMonoSession } from '../codingAgent/piMonoS
 import {
   ensurePiMonoAdapterRegistered,
   setControlPlaneOwner,
-  controlPlaneOwnerId,
-  hasKnownControlPlaneOwner
+  controlPlaneOwnerId
 } from '../agentKernel/controlPlane'
 import { verifyFirebaseIdToken } from '../auth/firebaseIdToken'
 import {
@@ -64,21 +63,13 @@ export function registerPiMonoHandlers(): void {
     ensurePiMonoAdapterRegistered()
   })
 
-  // The renderer reports selection independently of sending. This is the only
-  // writer for the JIT -> renderer deletion association; main-chat turns must
-  // never update a process-global "last chat" value.
-  ipcMain.handle('jit:rendererSelectionChanged', (_e, key: unknown): boolean => {
-    if (!hasKnownControlPlaneOwner()) {
-      // Keep a cold-start selection pending until the verified auth relay wires
-      // the owner. It is only a renderer deletion key (not an authority claim),
-      // and sign-out clears it before another account can adopt it.
-      setRendererConversationSelection(null, typeof key === 'string' ? key : null)
-      return false
-    }
-    setRendererConversationSelection(
-      controlPlaneOwnerId(),
-      typeof key === 'string' || key === null ? key : null
-    )
-    return true
-  })
+  // JIT conversation-binding IPCs. The renderer broadcasts which chat is
+  // currently on-screen, but main retains ultimate control: it records the
+  // selection only when an authenticated host owner is present, and rejects
+  // changes once signed out.
+  ipcMain.handle(
+    'jit:rendererSelectionChanged',
+    (_e, conversationId: unknown): boolean =>
+      setRendererConversationSelection(typeof conversationId === 'string' ? conversationId : null)
+  )
 }

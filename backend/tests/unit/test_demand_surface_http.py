@@ -72,8 +72,7 @@ def test_surface_auth_retains_security_fences_without_registration_or_recovery(e
     _, users, _ = endpoint
     auth = users.auth
     monkeypatch.setattr(auth, 'verify_token', lambda _: 'synthetic-owner')
-    admission, deletion, cutover, byok = Mock(), Mock(), Mock(), Mock()
-    monkeypatch.setattr(auth, 'enforce_jit_qa_uid', admission)
+    deletion, cutover, byok = Mock(), Mock(), Mock()
     monkeypatch.setattr(auth, 'enforce_account_deletion_http_access', deletion)
     monkeypatch.setattr(auth, '_enforce_cutover_http_if_request', cutover)
     monkeypatch.setattr(auth, 'validate_byok_request', byok)
@@ -83,7 +82,6 @@ def test_surface_auth_retains_security_fences_without_registration_or_recovery(e
     monkeypatch.setattr(auth, '_recover_locked_content_if_request', recovery)
     request = SimpleNamespace(url=SimpleNamespace(path='/v1/users/client-state'))
     assert auth.get_current_user_uid(authorization='Bearer synthetic-token', request=request) == 'synthetic-owner'
-    admission.assert_called_once_with('synthetic-owner')
     deletion.assert_called_once_with('synthetic-owner')
     cutover.assert_called_once_with('synthetic-owner', request)
     byok.assert_called_once_with('synthetic-owner')

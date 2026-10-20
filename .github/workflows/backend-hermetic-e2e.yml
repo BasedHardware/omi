@@ -105,7 +105,7 @@ jobs:
           else
             echo "run_listen=false" >> "$GITHUB_OUTPUT"
           fi
-          if [[ "$EVENT_NAME" == 'merge_group' || "$EVENT_NAME" == 'push' ]] || grep -Eq '^(backend/(utils/cloud_tasks|routers/.*(task|sync)|testing/e2e/|scripts/.*(cloud_tasks|sync)|pylock)|package(-lock)?\.json$|\.github/workflows/backend-hermetic-e2e\.yml$)' <<<"$changed_files"; then
+          if [[ "$EVENT_NAME" == 'merge_group' || "$EVENT_NAME" == 'push' ]] || grep -Eq '^(backend/(utils/cloud_tasks|utils/batch_pipeline/|diarizer/|routers/.*(task|sync)|testing/(e2e|sync_cloud_tasks_stack)/|scripts/.*(cloud_tasks|sync)|pylock)|package(-lock)?\.json$|\.github/workflows/backend-hermetic-e2e\.yml$)' <<<"$changed_files"; then
             echo "run_sync=true" >> "$GITHUB_OUTPUT"
           else
             echo "run_sync=false" >> "$GITHUB_OUTPUT"

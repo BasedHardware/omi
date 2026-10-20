@@ -71,13 +71,15 @@ def test_only_user_actions_skip_assessment():
     # SERVER_RECOVERY is not a user action, but it repairs a stale row the
     # pipeline never successfully finished; letting relevance discard the only
     # recovered copy would defeat the recovery itself. SMART_MERGE refreshes a
-    # survivor whose fragments were each already assessed and kept.
+    # survivor whose fragments were each already assessed and kept. BACKLOG_CHOICE
+    # carries an explicit user/upgrade choice to process a retained recording.
     assert keep == {
         ProcessingTrigger.FIRST_OPEN,
         ProcessingTrigger.USER_REPROCESS,
         ProcessingTrigger.MERGE,
         ProcessingTrigger.SMART_MERGE,
         ProcessingTrigger.SERVER_RECOVERY,
+        ProcessingTrigger.BACKLOG_CHOICE,
     }
 
 

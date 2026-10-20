@@ -103,6 +103,7 @@ import { nextJournalPumpDelayMs } from "./runtime/journal-pump-backoff.js";
 import { pumpJournalOutboxDeliveries } from "./runtime/journal-outbox-pump.js";
 import { JsonlTransport, type McpServerBuildContext } from "./runtime/jsonl-transport.js";
 import { AgentRuntimeKernel } from "./runtime/kernel.js";
+import { OMI_TOOLS_MCP_SERVER_NAME } from "./runtime/kernel-support.js";
 import {
   adapterActivationError,
   adapterIdForHarnessMode,
@@ -1486,12 +1487,6 @@ function buildMcpServers(
     if (context?.screenContext === true) {
       omiToolsEnv.push({ name: "OMI_SCREEN_CONTEXT", value: "true" });
     }
-    if (context?.jitKnowledgeToolsEnabled === true) {
-      omiToolsEnv.push({ name: "OMI_JIT_KNOWLEDGE_TOOLS_ENABLED", value: "true" });
-    }
-    if (context?.jitProactivity === true) {
-      omiToolsEnv.push({ name: "OMI_JIT_PROACTIVITY_MODE", value: "true" });
-    }
     // Keep the exact surface marker for every typed chat run. Legacy typed
     // chat uses it to project coordinator-only writes (such as create_memory),
     // while the optional chat-first flags remain main-chat rollout-gated below.
@@ -1509,7 +1504,7 @@ function buildMcpServers(
       value: context?.executionRole === "leaf" ? "leaf" : "coordinator",
     });
     servers.push({
-      name: "omi-tools",
+      name: OMI_TOOLS_MCP_SERVER_NAME,
       command: process.execPath,
       args: [omiToolsStdioScript],
       env: omiToolsEnv,

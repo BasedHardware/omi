@@ -47,7 +47,7 @@ def coordinator():
 @pytest.fixture(autouse=True)
 def env(monkeypatch):
     monkeypatch.delenv('SYNC_LINEAGE_RESOLVE_ENABLED', raising=False)
-    monkeypatch.delenv('SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST', raising=False)
+    monkeypatch.setenv('SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST', '')  # Explicit legacy global policy.
     monkeypatch.setenv('SYNC_LINEAGE_S1_REQUIRED', 'true')
     monkeypatch.setenv('CAPTURE_EVIDENCE_V1_DARK_WRITE', 'true')
 

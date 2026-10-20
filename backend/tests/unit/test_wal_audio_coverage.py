@@ -523,7 +523,7 @@ def test_flag_parse_default_on_tokens_and_typo_off(monkeypatch):
     )
 
     monkeypatch.delenv(SYNC_WAL_AUDIO_COVERAGE_ENV, raising=False)
-    monkeypatch.delenv('SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST', raising=False)
+    monkeypatch.setenv('SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST', '')  # Explicit legacy global policy.
     monkeypatch.delenv('SYNC_LINEAGE_RESOLVE_ENABLED', raising=False)
     assert sync_wal_audio_coverage_enabled() is True
     monkeypatch.setenv(SYNC_WAL_AUDIO_COVERAGE_ENV, '  ')
@@ -547,7 +547,12 @@ def runtime_env_manifest():
     import yaml
     from pathlib import Path
 
-    return yaml.safe_load((Path(__file__).resolve().parents[2] / 'deploy' / 'runtime_env.yaml').read_text())
+    # CSafeLoader: the manifest is ~4.8k lines and the pure-Python SafeLoader
+    # spends ~0.23s CPU on it; same safe schema, ~1/7 the cost.
+    return yaml.load(
+        (Path(__file__).resolve().parents[2] / 'deploy' / 'runtime_env.yaml').read_text(),
+        Loader=getattr(yaml, 'CSafeLoader', yaml.SafeLoader),
+    )
 
 
 def test_registered_runtime_env_on_four_services_both_envs(runtime_env_manifest):

@@ -105,6 +105,8 @@ def test_cloud_run_render_and_desktop_workflow_bind_plain_token(stage, monkeypat
     source = deployment_manifest
     config = source['environments'][stage]
     # Resolve provisional deploy inputs without cloud credentials or live services.
+    # The fixture supplies ladder prices below; desktop requires a matching read-key resource reference.
+    monkeypatch.setenv('SCREEN_VECTOR_STRIPE_READ_SECRET', 'fixture-subscription-reader')
     for host in config['cloud_run']['services'].values():
         for entry in host['env'].values():
             if 'env_var' in entry:

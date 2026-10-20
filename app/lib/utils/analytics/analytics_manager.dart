@@ -566,20 +566,44 @@ class AnalyticsManager {
   }
 
   /// One fenced read per flag value: no adapter/identity, tracking off or an identity switch mid-read → null.
-  Future<T?> _readFlag<T>(Future<T> Function(AnalyticsFeatureFlagAdapter adapter) read) async {
+  Future<T?> _readFlag<T>(Future<T> Function(AnalyticsFeatureFlagAdapter adapter) read,
+      {Duration timeout = _initTimeout}) async {
     final adapter = _adapter;
     if (adapter == null || !adapter.isInitialized || !_trackingEnabled || _settledDistinctId == null) return null;
     if (adapter is! AnalyticsFeatureFlagAdapter) return null;
     final epoch = _identityEpoch;
     final identity = _settledDistinctId;
     try {
-      final value = await read(adapter as AnalyticsFeatureFlagAdapter).timeout(_initTimeout);
+      final value = await read(adapter as AnalyticsFeatureFlagAdapter).timeout(timeout);
       if (epoch != _identityEpoch || !identical(identity, _settledDistinctId) || !_trackingEnabled) return null;
       return value;
     } catch (_) {
       return null;
     }
   }
+
+  /// Off-path refresh allows the adapter's four-second request to settle.
+  Future<bool> refreshBooleanFeatureFlag(String key) async =>
+      await _readFlag((a) async {
+        await a.reloadFeatureFlags();
+        return a is AnalyticsBooleanFlagAdapter &&
+            (a as AnalyticsBooleanFlagAdapter).isBooleanFeatureEnabledCached(key);
+      }, timeout: const Duration(seconds: 6)) ??
+      false;
+
+  bool isBooleanFeatureEnabledCached(String key) {
+    final adapter = _adapter;
+    return _trackingEnabled &&
+        _settledDistinctId != null &&
+        adapter is AnalyticsBooleanFlagAdapter &&
+        (adapter as AnalyticsBooleanFlagAdapter).isBooleanFeatureEnabledCached(key);
+  }
+
+  Future<bool> isBooleanFeatureEnabled(String key) async =>
+      await _readFlag((a) => a is AnalyticsBooleanFlagAdapter
+          ? (a as AnalyticsBooleanFlagAdapter).isBooleanFeatureEnabled(key)
+          : Future.value(false)) ??
+      false;
 
   Future<bool> isFeatureEnabled(String key) async => await _readFlag((a) => a.isFeatureEnabled(key)) ?? false;
   Future<Object?> getFeatureFlagPayload(String key) => _readFlag<Object?>((a) => a.getFeatureFlagPayload(key));

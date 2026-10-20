@@ -145,7 +145,7 @@ def test_http_denial_and_redirect_are_sanitized(mercury, monkeypatch):
 def test_exclusion_map_and_alias_boundaries(mercury):
     costs = load('mercury_costs')
     config = costs.load_map()
-    tx = {'kind': 'outgoingPayment', 'counterpartyName': 'OpenAI LLC'}
+    tx = {'kind': 'debitCardTransaction', 'counterpartyName': 'OpenAI LLC'}
     assert costs.classify(tx, config) == ('openai', 'llm_vendor')
     tx['counterpartyName'] = 'OpenAInotreally'
     assert costs.classify(tx, config) == ('unmapped', 'unmapped')
@@ -165,6 +165,101 @@ def test_exclusion_map_and_alias_boundaries(mercury):
     assert costs.classify(tx, config) == ('stripe_fees', 'infra_non_gcp')
     tx['counterpartyName'] = 'Google Cloud'
     assert costs.classify(tx, config) == ('gcp', 'gcp')
+
+
+def test_category_rules_precedence_and_safe_aliases(mercury):
+    costs = load('mercury_costs')
+    config = costs.load_map()
+
+    tx = {
+        'kind': 'outgoingPayment',
+        'counterpartyName': 'Shopify Payments',
+        'mercuryCategory': 'Shipping',
+        'categoryData': {'name': 'Software & Subscriptions'},
+    }
+    assert costs.classify(tx, config) == ('shopify', 'saas')  # aliases take precedence over both rules
+
+    tx['counterpartyName'] = 'Google Ads'
+    tx['mercuryCategory'] = 'Advertising'
+    assert costs.classify(tx, config) == ('mercury_category', 'marketing')  # Google ads stay marketing
+
+    tx['mercuryCategory'] = None
+    assert costs.classify(tx, config) == ('category_data', 'saas')
+
+    tx['counterpartyName'] = 'Google Payment Corp'
+    assert costs.classify(tx, config) == ('gcp', 'gcp')  # avoid counting the GCP invoice as SaaS
+
+    tx['counterpartyName'] = 'Facebook Ads Card'
+    tx['mercuryCategory'] = 'Software'
+    assert costs.classify(tx, config) == ('facebook', 'marketing')
+    tx['counterpartyName'] = 'X Ads'
+    assert costs.classify(tx, config) == ('x_ads', 'marketing')
+    tx['counterpartyName'] = 'Twitter'
+    tx['mercuryCategory'] = None
+    tx['categoryData'] = None
+    tx['kind'] = 'debitCardTransaction'
+    assert costs.classify(tx, config) == ('unmapped', 'unmapped')  # x ads does not claim another alias
+    tx['kind'] = 'outgoingPayment'
+
+    tx['counterpartyName'] = 'Unlisted Manufacturer'
+    tx['mercuryCategory'] = None
+    tx['categoryData'] = {'name': 'Manufacturing'}
+    assert costs.classify(tx, config) == ('category_data', 'hardware_cogs')
+    tx['mercuryCategory'] = 'Airlines'
+    tx['categoryData'] = {'name': 'Software & Subscriptions'}
+    assert costs.classify(tx, config) == ('mercury_category', 'travel_meals')
+    tx['mercuryCategory'] = None
+    tx['categoryData'] = {'name': 'Transfer'}
+    assert costs.classify(tx, config) == ('excluded', 'excluded')
+
+
+def test_unlabelled_transfers_are_other_opex_but_unlabelled_cards_stay_uncategorized(mercury):
+    costs = load('mercury_costs')
+    config = costs.load_map()
+    wire = {
+        'kind': 'outgoingPayment',
+        'counterpartyName': 'Unlisted Supplier',
+        'mercuryCategory': None,
+        'categoryData': None,
+    }
+    assert costs.classify(wire, config) == ('uncategorized_payment', 'other_opex')
+    card = dict(wire, kind='debitCardTransaction')
+    assert costs.classify(card, config) == ('unmapped', 'unmapped')
+    named = dict(wire, counterpartyName='Upstash')  # a SaaS paid by ACH is caught by its alias first
+    assert costs.classify(named, config) == ('upstash', 'saas')
+    labelled = dict(wire, categoryData={'name': 'Software & Subscriptions'})
+    assert costs.classify(labelled, config) == ('category_data', 'saas')
+
+
+def test_v1_map_compatibility_and_unknown_category_rejected(mercury, tmp_path):
+    costs = load('mercury_costs')
+    config = costs.load_map()
+    config['schema_version'] = 1
+    config.pop('mercury_category_rules')
+    config.pop('category_data_rules')
+    config.pop('max_uncategorized_usd')
+    config.pop('uncategorized_kind_rules')
+    path = tmp_path / 'legacy-map.json'
+    path.write_text(json.dumps(config))
+    legacy = costs.load_map(path)
+    assert legacy['mercury_category_rules'] == {}
+    assert legacy['category_data_rules'] == {}
+    assert legacy['uncategorized_kind_rules'] == {}
+    assert costs.classify(
+        {
+            'kind': 'outgoingPayment',
+            'counterpartyName': 'Unlisted',
+            'categoryData': {'name': 'Software & Subscriptions'},
+        },
+        legacy,
+    ) == ('unmapped', 'unmapped')
+
+    config['schema_version'] = 2
+    config['mercury_category_rules'] = {'unlisted': 'not_a_category'}
+    config['category_data_rules'] = {}
+    path.write_text(json.dumps(config))
+    with pytest.raises(costs.MercuryError, match='category rule'):
+        costs.load_map(path)
 
 
 def cash(day, vendor, amount, category='saas', count=1):
@@ -195,7 +290,7 @@ def test_saas_30_day_boundaries_annual_amortization_and_no_double_count(mercury)
     assert Decimal(expired['annual_monthly_usd']) == 0
 
 
-def test_partial_history_and_unmapped_never_look_complete(mercury):
+def test_partial_history_and_uncategorized_threshold(mercury):
     costs = load('mercury_costs')
     config = costs.load_map()
     rows = coverage(costs, '2026-07-20', '2026-10-17')
@@ -207,12 +302,51 @@ def test_partial_history_and_unmapped_never_look_complete(mercury):
     full_year = [r for r in full_year if r['date'] != '2026-01-01'] + [
         cash('2026-01-01', 'unmapped', 1200, 'unmapped', 1)
     ]
-    # An old unknown payment could be an annual bill even if the recent month is mapped.
+    # Small unknown spend is tolerated; an annual unknown above the configured threshold blocks history.
+    assert costs.saas_rows(full_year, ['2026-10-17'], config)[0]['annual_history_complete'] is True
+    full_year = [r for r in full_year if r['date'] != '2026-01-01'] + [
+        cash('2026-01-01', 'unmapped', '2500.01', 'unmapped', 1)
+    ]
     assert costs.saas_rows(full_year, ['2026-10-17'], config)[0]['annual_history_complete'] is False
     config['vendors']['github']['annual'] = False
     rows = [r for r in rows if r['date'] != '2026-10-17'] + [cash('2026-10-17', 'unmapped', 2, 'unmapped', 1)]
     result = costs.saas_rows(rows, ['2026-10-17'], config)[0]
-    assert result['unmapped_count'] == 1 and result['inputs_complete'] is False
+    assert result['unmapped_count'] == 1 and result['inputs_complete'] is True
+
+
+def test_uncategorized_threshold_boundary_and_large_wire_window(mercury):
+    costs = load('mercury_costs')
+    config = costs.load_map()
+    rows = coverage(costs, '2026-09-18', '2026-10-17') + [cash('2026-10-17', 'unmapped', '2500', 'unmapped', 1)]
+    at_limit = costs.saas_rows(rows, ['2026-10-17'], config)[0]
+    assert at_limit['unmapped_usd'] == '2500'
+    assert at_limit['unmapped_count'] == 1
+    assert at_limit['inputs_complete'] is True
+
+    rows[-1] = cash('2026-10-17', 'unmapped', '2500.01', 'unmapped', 1)
+    above_limit = costs.saas_rows(rows, ['2026-10-17'], config)[0]
+    assert above_limit['inputs_complete'] is False
+
+    # A large one-off remains blocking while it is in the rolling 30-day window.
+    rows = coverage(costs, '2026-09-18', '2026-10-18') + [cash('2026-09-18', 'unmapped', 50000, 'unmapped', 1)]
+    assert costs.saas_rows(rows, ['2026-10-17'], config)[0]['inputs_complete'] is False
+    assert costs.saas_rows(rows, ['2026-10-18'], config)[0]['inputs_complete'] is True
+
+
+def test_reconciliation_categories_do_not_enter_the_saas_line(mercury):
+    costs = load('mercury_costs')
+    config = costs.load_map()
+    rows = coverage(costs, '2026-09-18', '2026-10-17') + [
+        cash('2026-10-17', 'category_data', 304.375, 'saas'),
+        cash('2026-10-17', 'category_data', 50000, 'travel_meals'),
+        cash('2026-10-17', 'category_data', 50000, 'fulfillment'),
+        cash('2026-10-17', 'category_data', 50000, 'hardware_cogs'),
+        cash('2026-10-17', 'category_data', 50000, 'professional_services'),
+        cash('2026-10-17', 'category_data', 50000, 'other_opex'),
+    ]
+    result = costs.saas_rows(rows, ['2026-10-17'], config)[0]
+    assert Decimal(result['amount_usd']) == Decimal('10')
+    assert result['inputs_complete'] is True
 
 
 def test_annual_leap_day_expiry(mercury):
@@ -256,6 +390,41 @@ def test_loader_keeps_old_annuals_and_replaces_the_whole_refresh_window(mercury,
     rows[0]['note'] = 'PRIVATE'
     path.write_text(json.dumps({'status': 'ready', 'start': '2026-07-20', 'end': '2026-10-17', 'rows': rows}))
     with pytest.raises(loader.MercuryError, match='aggregates only'):
+        loader.ready_snapshot(tmp_path, config)
+
+
+def test_rule_classified_aggregates_survive_the_loader(mercury, tmp_path):
+    # Classifier output must round-trip through the BigQuery loader's key validation.
+    loader = load('load_mercury')
+    costs = load('mercury_costs')
+    config = costs.load_map()
+    base = {'status': 'sent', 'postedAt': '2026-10-17T12:00:00Z', 'counterpartyName': 'Unlisted'}
+    transactions = [
+        dict(base, id='a', kind='debitCardTransaction', amount='-12.50', mercuryCategory='Software'),
+        dict(base, id='b', kind='outgoingPayment', amount='-900', categoryData={'name': 'Manufacturing'}),
+        dict(base, id='c', kind='outgoingPayment', amount='-5000'),
+        dict(base, id='d', kind='debitCardTransaction', amount='-7'),
+        dict(base, id='e', kind='debitCardTransaction', amount='-20', counterpartyName='Vercel'),
+    ]
+    totals = {}
+    costs.aggregate_page(transactions, config, '2026-10-17', '2026-10-17', totals, set())
+    rows = costs.aggregate_rows(totals, '2026-10-17', '2026-10-17')
+    assert {(r['vendor'], r['category']) for r in rows} == {
+        ('mercury_category', 'saas'),
+        ('category_data', 'hardware_cogs'),
+        ('uncategorized_payment', 'other_opex'),
+        ('unmapped', 'unmapped'),
+        ('vercel', 'saas'),
+    }
+    (tmp_path / mercury.FILENAME).write_text(
+        json.dumps({'status': 'ready', 'start': '2026-10-17', 'end': '2026-10-17', 'rows': rows})
+    )
+    assert loader.ready_snapshot(tmp_path, config)['rows'] == rows
+    rows[0]['vendor'] = 'Some Raw Name'
+    (tmp_path / mercury.FILENAME).write_text(
+        json.dumps({'status': 'ready', 'start': '2026-10-17', 'end': '2026-10-17', 'rows': rows})
+    )
+    with pytest.raises(loader.MercuryError, match='unknown Mercury aggregate key'):
         loader.ready_snapshot(tmp_path, config)
 
 

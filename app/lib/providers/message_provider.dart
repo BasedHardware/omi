@@ -1,3 +1,4 @@
+import 'package:omi/models/plan_storefront.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -138,6 +139,12 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
   // Chat quota exceeded — set transiently when backend returns 402
   bool _chatQuotaExceeded = false;
   bool get isChatQuotaExceeded => _chatQuotaExceeded;
+  ChatAtCap? _chatAtCap;
+  ChatAtCap? get chatAtCap => _chatAtCap?.active == true ? _chatAtCap : null;
+  void applyChatAtCap(ChatAtCap? state) {
+    _chatAtCap = state;
+    notifyListeners();
+  }
 
   // Replies that failed (network or server error), keyed by the placeholder message object —
   // placeholders share the id '0000', so the id cannot tell two failures apart.
@@ -491,6 +498,8 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
   }
 
   void clearUserData() {
+    _chatAtCap = null;
+    _chatQuotaExceeded = false;
     _readAloud.revoke();
     messages = [];
     chatApps = [];
@@ -606,6 +615,7 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
     BleAudioCodec? codec,
     bool playResponseAudio = false,
   }) async {
+    if (chatAtCap != null) return;
     // Re-entry guard so a duplicated end-of-session signal from the device
     // button can't kick off two parallel voice replies.
     if (_voiceSendInFlight || sendingMessage || showTypingIndicator) {
@@ -620,9 +630,16 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
     _readAloud.newQuery();
     final readAloudGeneration = _readAloud.generation;
     var readAloudDelivered = false;
-    // Pendant voice addresses the server-current conversation. Its playback may continue while
-    // Past chats is open, but its transient reply must never become a row in an archived thread.
-    final voiceMessages = chatSessionId == null && !isFreshChat ? messages : <ServerMessage>[];
+    var currentAppId = appProvider?.selectedChatAppId;
+    if (currentAppId == 'no_selected') {
+      currentAppId = null;
+    }
+    // Pendant voice addresses the server-current main conversation: the voice endpoint carries no
+    // app or session, so the backend saves the question and answer to the main Omi chat. Its
+    // playback may continue while Past chats or an app's thread (Mentor included) is open, but its
+    // transient reply must never become a row in that other thread.
+    final voiceMessages =
+        chatSessionId == null && !isFreshChat && (currentAppId ?? '').isEmpty ? messages : <ServerMessage>[];
     final visibleVoice = identical(voiceMessages, messages);
     final chatAttempt = ProductTelemetry.instance.start(ProductJourney.chatVoice, surface: ProductSurface.chat);
     var chatAttemptCompleted = false;
@@ -648,10 +665,6 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
       return;
     }
 
-    var currentAppId = appProvider?.selectedChatAppId;
-    if (currentAppId == 'no_selected') {
-      currentAppId = null;
-    }
     String chatTargetId = currentAppId ?? 'omi';
     // The voice endpoint has no app field and the backend voice pipeline runs
     // without an app persona (`app = None`), so a voice turn never uses the
@@ -757,10 +770,11 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
             notifyListeners();
             return;
           }
-          if (chunk.errorCode == 'quota_exceeded' || _tryParseQuotaError(chunk.text)) {
+          if (_tryParseQuotaError(chunk.text) || chunk.errorCode == 'quota_exceeded') {
             _chatQuotaExceeded = true;
             final l10n = globalNavigatorKey.currentContext?.l10n;
-            message.text = l10n?.chatQuotaExceededReply ??
+            message.text = chatAtCap?.title ??
+                l10n?.chatQuotaExceededReply ??
                 "You've hit your monthly limit. Upgrade to keep chatting with Omi without restrictions.";
             if (playResponseAudio) {
               await OmiVoicePlaybackService.instance.interrupt(source: VoiceReplyPlaybackInterruptSource.quotaError);
@@ -809,6 +823,7 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
   /// Streams the reply to [text]. [retryFileIds] resends a failed message's attachments without
   /// touching the files currently selected in the composer (see [retryFailedReply]).
   Future<void> _streamReply(String text, {ChatPageContext? context, List<String>? retryFileIds}) async {
+    if (chatAtCap != null) return;
     _chatQuotaExceeded = false; // Clear stale quota state from previous sends
     aiStreamProgress = 0.0;
     beginChatTurn();
@@ -930,11 +945,12 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
         }
 
         if (chunk.type == MessageChunkType.error) {
-          if (chunk.errorCode == 'quota_exceeded' || _tryParseQuotaError(chunk.text)) {
+          if (_tryParseQuotaError(chunk.text) || chunk.errorCode == 'quota_exceeded') {
             // Keep the user's message visible; replace AI placeholder with quota message
             _chatQuotaExceeded = true;
             final l10n = globalNavigatorKey.currentContext?.l10n;
-            message.text = l10n?.chatQuotaExceededReply ??
+            message.text = chatAtCap?.title ??
+                l10n?.chatQuotaExceededReply ??
                 "You've hit your monthly limit. Upgrade to keep chatting with Omi without restrictions.";
             _logChatFailure(ChatStreamFailureClass.quota, stage: 'stream');
             completeChat(ProductOutcome.failure, failure: ProductFailure.quota);
@@ -1017,6 +1033,12 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
       if (json is! Map) return false;
       // FastAPI wraps HTTPException detail in {"detail": {...}}
       var detail = json['detail'] is Map ? json['detail'] as Map<String, dynamic> : json;
+      if (detail['chat_at_cap'] is Map) {
+        _chatAtCap = ChatAtCap.fromJson(Map<String, dynamic>.from(detail['chat_at_cap'] as Map));
+        _chatQuotaExceeded = true;
+        notifyListeners();
+        return true;
+      }
       if (detail['error'] == 'quota_exceeded') {
         detail['allowed'] = false;
         _chatQuotaExceeded = true;

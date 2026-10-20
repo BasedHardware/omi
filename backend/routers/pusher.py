@@ -67,6 +67,8 @@ from utils.observability.journeys import JourneyAttempt
 from utils.speaker_learning_jobs import run_authorized_person_learning, schedule_person_voice_learning_retry
 import logging
 
+from config.rollout_cohorts import warm_rollout_cohorts
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
@@ -189,6 +191,7 @@ async def _websocket_util_trigger(
         await websocket.close(code=1001)
         return
 
+    await warm_rollout_cohorts(uid)
     journey_attempt = JourneyAttempt('pusher_session')
     websocket_active = True
     shutdown_event = asyncio.Event()

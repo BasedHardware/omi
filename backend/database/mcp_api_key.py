@@ -2,7 +2,7 @@ import re
 import uuid
 from datetime import datetime, timezone
 import logging
-from typing import Any, Dict, Optional, Tuple, cast
+from typing import Any, Dict, Optional, Sequence, Tuple, cast
 
 from google.api_core.exceptions import NotFound
 from google.cloud import firestore
@@ -37,15 +37,29 @@ from utils.mcp_scopes import (
     MCP_MEMORY_CONTROL_COLLECTION,
     MCP_MEMORY_GRANT_SCOPES,
     normalize_mcp_scopes,
+    validate_mcp_scopes,
 )
 
 logger = logging.getLogger(__name__)
 
 _MCP_API_KEY_PATTERN = re.compile(r"omi_mcp_[0-9a-f]{32}")
+MCP_EXPLICIT_SCOPES_FIELD = "explicit_scopes"
 
 
 def _db() -> Any:
     return get_firestore_client()
+
+
+def _has_explicit_mcp_scopes(data: Dict[str, Any]) -> bool:
+    return data.get(MCP_EXPLICIT_SCOPES_FIELD) is True
+
+
+def _memory_grant_spec(scopes: Optional[Sequence[str]] = None) -> tuple[list[str], bool, bool]:
+    effective = set(MCP_MEMORY_GRANT_SCOPES if scopes is None else scopes)
+    default_read = "memories.read" in effective
+    write = "memories.write" in effective
+    grant_scopes = [scope for scope in MCP_MEMORY_GRANT_SCOPES if scope in effective]
+    return grant_scopes, default_read, write
 
 
 def _seed_mcp_memory_grant(
@@ -54,7 +68,12 @@ def _seed_mcp_memory_grant(
     app_id: str = MCP_DEFAULT_APP_ID,
     firestore_client: Any = None,
     batch: Any = None,
+    *,
+    scopes: Optional[Sequence[str]] = None,
 ) -> None:
+    grant_scopes, default_read, write = _memory_grant_spec(scopes)
+    if scopes is not None and not grant_scopes and batch is None:
+        return
     firestore_client = firestore_client or _db()
     grant_ref = (
         firestore_client.collection("users")
@@ -70,10 +89,10 @@ def _seed_mcp_memory_grant(
                         "keys": {
                             key_id: {
                                 "enabled": True,
-                                "scopes": MCP_MEMORY_GRANT_SCOPES,
-                                "default_read": True,
+                                "scopes": grant_scopes,
+                                "default_read": default_read,
                                 "archive_read": False,
-                                "write": True,
+                                "write": write,
                             }
                         }
                     }
@@ -94,7 +113,10 @@ def _ensure_mcp_memory_grant(
     app_id: str,
     firestore_client: Any,
     batch: Any,
+    *,
+    key_scopes: Optional[Sequence[str]] = None,
 ) -> bool:
+    expected_scopes, expected_default_read, expected_write = _memory_grant_spec(key_scopes)
     grant_ref = (
         firestore_client.collection("users")
         .document(user_id)
@@ -106,20 +128,29 @@ def _ensure_mcp_memory_grant(
     grant: object = raw
     for field in ("grants", "mcp", "apps", app_id, "keys", key_id):
         grant = grant.get(field, {}) if isinstance(grant, dict) else {}
+    if not expected_scopes and not grant:
+        return False
     scopes = grant.get("scopes") if isinstance(grant, dict) else None
     is_current = (
         isinstance(grant, dict)
         and grant.get("enabled") is True
-        and grant.get("default_read") is True
+        and grant.get("default_read") is expected_default_read
         and grant.get("archive_read") is False
-        and grant.get("write") is True
+        and grant.get("write") is expected_write
         and isinstance(scopes, list)
         and all(isinstance(scope, str) for scope in scopes)
-        and set(scopes) == set(MCP_MEMORY_GRANT_SCOPES)
+        and set(scopes) == set(expected_scopes)
     )
     if is_current:
         return False
-    _seed_mcp_memory_grant(user_id, key_id, app_id, firestore_client=firestore_client, batch=batch)
+    _seed_mcp_memory_grant(
+        user_id,
+        key_id,
+        app_id,
+        firestore_client=firestore_client,
+        batch=batch,
+        scopes=expected_scopes,
+    )
     return True
 
 
@@ -148,7 +179,7 @@ def _delete_mcp_memory_grant(
 
 
 def _valid_cached_auth_context(cached_data: Dict[str, Any]) -> bool:
-    scopes = normalize_mcp_scopes(cached_data.get("scopes"))
+    scopes = normalize_mcp_scopes(cached_data.get("scopes"), explicit_scopes=True)
     return (
         cached_data.get("auth_context_version") == MCP_API_KEY_AUTH_CONTEXT_VERSION
         and api_key_auth_user_id(cached_data) is not None
@@ -156,6 +187,7 @@ def _valid_cached_auth_context(cached_data: Dict[str, Any]) -> bool:
         and bool(cached_data["key_id"])
         and isinstance(cached_data.get("app_id"), str)
         and valid_api_key_app_id(cached_data["app_id"]) == cached_data["app_id"]
+        and bool(scopes)
         and not api_key_scopes_need_repair(
             cached_data.get("scopes"),
             scopes,
@@ -183,13 +215,16 @@ def create_mcp_key(
         resolved_app_id = valid_api_key_app_id(app_id)
         if resolved_app_id is None:
             raise ApiKeyValidationError("Invalid MCP API key app_id")
+    explicit_scopes = scopes is not None
+    if explicit_scopes and not validate_mcp_scopes(scopes):
+        raise ApiKeyValidationError("Invalid MCP API key scopes")
     raw_key, hashed_key, key_prefix = generate_api_key()
     key_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc)
-    resolved_scopes = normalize_mcp_scopes(scopes)
+    resolved_scopes = normalize_mcp_scopes(scopes, explicit_scopes=explicit_scopes)
     firestore_client = _db()
 
-    api_key_doc = {
+    api_key_doc: Dict[str, Any] = {
         "id": key_id,
         "user_id": user_id,
         "name": name,
@@ -200,8 +235,16 @@ def create_mcp_key(
         "app_id": resolved_app_id,
         "scopes": resolved_scopes,
     }
+    if explicit_scopes:
+        api_key_doc[MCP_EXPLICIT_SCOPES_FIELD] = True
     firestore_client.collection("mcp_api_keys").document(key_id).set(api_key_doc)
-    _seed_mcp_memory_grant(user_id, key_id, resolved_app_id, firestore_client=firestore_client)
+    _seed_mcp_memory_grant(
+        user_id,
+        key_id,
+        resolved_app_id,
+        firestore_client=firestore_client,
+        scopes=resolved_scopes,
+    )
 
     api_key_data = McpApiKey(
         id=key_id,
@@ -239,7 +282,8 @@ def get_mcp_keys_for_user_with_repair_info(
         projected["app_id"] = normalize_api_key_app_id(data.get("app_id"), default=MCP_DEFAULT_APP_ID)
         if data.get("app_id") != projected["app_id"]:
             repairs.add(ApiKeyMetadataRepair.APP_ID)
-        projected["scopes"] = normalize_mcp_scopes(data.get("scopes"))
+        explicit_scopes = _has_explicit_mcp_scopes(data)
+        projected["scopes"] = normalize_mcp_scopes(data.get("scopes"), explicit_scopes=explicit_scopes)
         if api_key_scopes_need_repair(
             data.get("scopes"),
             projected["scopes"],
@@ -354,7 +398,7 @@ def _get_api_key_auth_result(hashed_key: str, *, cache_available: bool = True) -
             return ApiKeyAuthLookupResult(
                 context={
                     "user_id": cached_data["user_id"],
-                    "scopes": normalize_mcp_scopes(cached_data.get("scopes")),
+                    "scopes": normalize_mcp_scopes(cached_data.get("scopes"), explicit_scopes=True),
                     "key_id": cached_data["key_id"],
                     "app_id": cached_data["app_id"],
                 }
@@ -397,7 +441,8 @@ def _get_api_key_auth_result(hashed_key: str, *, cache_available: bool = True) -
         app_id = valid_api_key_app_id(key_data.get("app_id"))
         if app_id is None:
             return ApiKeyAuthLookupResult(context=None, repairs=frozenset(repairs))
-    scopes = normalize_mcp_scopes(key_data.get("scopes"))
+    explicit_scopes = _has_explicit_mcp_scopes(key_data)
+    scopes = normalize_mcp_scopes(key_data.get("scopes"), explicit_scopes=explicit_scopes)
     if api_key_scopes_need_repair(
         key_data.get("scopes"),
         scopes,
@@ -411,10 +456,16 @@ def _get_api_key_auth_result(hashed_key: str, *, cache_available: bool = True) -
     # If revoke deletes it before commit, the grant SET cannot commit either.
     # If this batch wins, revoke deletes the key before removing that grant.
     batch = firestore_client.batch()
-    batch.update(
-        key_ref, {"id": key_id, "last_used_at": datetime.now(timezone.utc), "app_id": app_id, "scopes": scopes}
-    )
-    if _ensure_mcp_memory_grant(user_id, key_id, app_id, firestore_client, batch):
+    update_payload: Dict[str, Any] = {
+        "id": key_id,
+        "last_used_at": datetime.now(timezone.utc),
+        "app_id": app_id,
+        "scopes": scopes,
+    }
+    if explicit_scopes:
+        update_payload[MCP_EXPLICIT_SCOPES_FIELD] = True
+    batch.update(key_ref, update_payload)
+    if _ensure_mcp_memory_grant(user_id, key_id, app_id, firestore_client, batch, key_scopes=scopes):
         repairs.add(ApiKeyAuthRepair.MEMORY_GRANT)
     try:
         batch.commit()

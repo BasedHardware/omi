@@ -3,13 +3,9 @@
 from dataclasses import fields
 import time
 
-from config.batch_pipeline import (
-    recovery_enabled_for,
-    speech_empty_multilingual_enabled,
-    terminal_empty_disposition_enabled,
-)
+from database.batch_pipeline_policy import load_stage_policy
 from config.prerecorded_stt import require_provider_environment, PrerecordedSTTService
-from config.stt_cap_dispatch import enabled as cap_enabled
+from config.stt_cap_dispatch import execution_admission_enabled as cap_enabled
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from database.batch_pipeline_projection_protocol import normalized_binding
 from database.batch_pipeline_speech_redrive import SpeechRedriveStore
@@ -23,6 +19,7 @@ from utils.batch_pipeline.recovery_disposition import (
     MultilingualEmpty,
     terminal_empty_payload,
     padded_empty,
+    padded_skipped,
 )
 from utils.stt_cap_dispatch import sync_allowed, funded_allowance
 from utils.observability.fallback import record_fallback
@@ -42,7 +39,8 @@ def redrive_one(
     gpu_padded_retry_empty=False
 ):
     """No automatic retry after dispatch, even on uncertain network/process loss."""
-    if not speech_empty_multilingual_enabled() or not recovery_enabled_for(uid):
+    _, policy = load_stage_policy(store, sid, 'recovery')
+    if policy is None or not policy.speech_empty_multilingual or not policy.recovery_enabled:
         return 'disabled'
     protocol = SpeechRedriveStore(store)
     job = protocol.prepare(
@@ -79,7 +77,7 @@ def redrive_one(
     _, _, spans = inspect_audio(item, audio)
     if not spans:
         raise RecoveryFailure('strict_vad', 'no_speech')
-    if not sync_allowed(uid, item.duration_seconds, 'modulate'):
+    if not sync_allowed(uid, item.duration_seconds, 'modulate', lane='batch'):
         return 'allowance_held'
     # Check deployment dependencies before spending the sole intent. No fallback
     # to Parakeet is permitted if the alternate provider is unconfigured.
@@ -103,8 +101,9 @@ def redrive_one(
             else {'stage': 'provider', 'reason': 'operation_failed'}
         )
         if (
-            terminal_empty_disposition_enabled()
+            policy.terminal_empty_disposition
             and isinstance(error, MultilingualEmpty)
+            and not padded_skipped(job)
             and (padded_empty(job) or marker.get('gpu_padded_retry_empty') is True)
         ):
             payload = terminal_empty_payload(error.duration, error.spans)
@@ -117,13 +116,13 @@ def redrive_one(
         return 'failed_held'
     if payload is None:
         raise RecoveryFailure('payload_validation', 'invalid_payload')
-    if cap_enabled():
+    if cap_enabled(uid, 'batch'):
         record_audio(
             'sync',
             'accepted',
             'modulate',
             item.duration_seconds,
-            funded_allowance(uid).reason == 'plan_allowance_exhausted',
+            funded_allowance(uid, lane='batch').reason == 'plan_allowance_exhausted',
         )
     # A storage/commit exception intentionally leaves running intact. A later
     # invocation may reconcile the object, but can never call the provider again.

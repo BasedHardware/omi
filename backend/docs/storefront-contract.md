@@ -19,8 +19,24 @@ subscription, usage or price reads. Hidden callers receive
 `show_subscription_ui: false`, no tiers and no current plan. A lookup error does
 not expose the sheet.
 
-`locale` is accepted and falls back to `en`. Copy lives in
-`backend/config/storefront_copy_v1.json`.
+`locale` is a BCP 47 tag. Matching is exact, then the language subtag
+(`pt-BR` → `pt`, `zh-Hans` → `zh`). `nb` and `nn` use `no`. An unknown tag
+uses `en`. Each locale is merged key-by-key over `en`, so a missing key keeps
+the English string. Copy for every app locale lives in
+`backend/config/storefront_copy_v1.json`. `pro_gates` stay the identifiers
+`proactive_agent` and `screen_context`.
+
+Dates use Babel's `MMMd` skeleton (`1. Nov.` in German, `11月1日` in Japanese).
+English stays the shipped abbreviation (`Nov 1`). `resets {date}`, `/mo`, and
+`/yr` are catalog strings (`dates.resets`, `dates.period_month`,
+`dates.period_year`) and follow the locale. Counted phrases (months free, the
+under-6 per-day line, and the hours meter line) use Babel's CLDR plural
+category when that locale has a category map; otherwise they keep the one/many
+pair. `{per_day}` inside `hours_lines.plus` is still a bare integer, and that
+one sentence carries the hour-word for the count the plan actually shows.
+Currency and number formatting are unchanged: USD `$`, a trailing ISO code
+otherwise, thousands separators, and a trailing `.00` is dropped. Babel
+(`babel==2.18.0`) is the date and plural dependency.
 
 ## Schema
 
@@ -31,7 +47,11 @@ not expose the sheet.
   when the sheet is hidden.
 - `usage`: `kind` (`usage_budget`, `transcription`, `unavailable`), nullable
   `percent`, nullable `period_id`, nullable `reset_label`, nullable
-  `meter_line`, nullable `nudge_line`, `pro_gates`. Never raw unit amounts.
+  `meter_line`, nullable `hours_left`, nullable `nudge_line`, nullable `more_label`, `pro_gates`.
+  Never raw unit amounts. `more_label` is present only for `usage_budget`
+  when `meter_line` is set; it is the words that open this sheet with
+  `trigger=usage_budget`. It is omitted for legacy transcription usage and
+  whenever there is no meter line.
 - `tiers[]` in display order (recommended first, then ascending rank; while a
   cancellation is scheduled, the current tier is first, then the other ladder
   tiers by rank, and nothing is recommended): `tier_id`, `plan_id`, `name`,
@@ -113,7 +133,8 @@ current card offers no prices, so a yearly subscriber is not shown a monthly
 price.
 
 `months_free` copy uses `1 month free` when the count is 1 and `{n} months free`
-otherwise, in both the yearly subline and `yearly_toggle_label`.
+otherwise, in both the yearly subline and `yearly_toggle_label`. A locale with
+`months_free_plural` selects the CLDR category for that count instead.
 
 Pro-only triggers recommend Pro, including for Free. Free budget and MCP-cap
 callers recommend Plus. Other paid callers below Pro recommend Pro. Architect
@@ -150,6 +171,8 @@ Budgets are the plan-catalog usage units when the catalog declares them, and
 otherwise the rate card in the copy config (Plus 16360, Pro 44090, Architect
 189463). `units_per_recorded_hour` is provisional; replace it with the shadow
 ledger p50 (#21369). Meter hours apply that definition to remaining units.
+Hours appear only from 80% to below 100%.
+`hours_left` is set only in that band when the estimate is positive, so a client can localize the wording while the backend stays authoritative for the number; it is omitted otherwise, including at the cap.
 The client does not hardcode hours.
 
 Price reads use `stripe_price:{price_id}` with a 24-hour TTL. Cache failures
@@ -163,3 +186,41 @@ than a speech cap labelled as the shared budget.
 
 The v1 payment endpoints are unchanged. This route does not write Stripe or
 grant entitlements.
+
+## Flagged ladder cutover additions
+
+The configuration-backed six lookup-key bindings and additive `at_cap` copy
+payload are defined in [ladder-v1-cutover.md](ladder-v1-cutover.md). The field is
+absent on the dark path. Clients render it verbatim and continue using the
+existing `usage_budget` trigger at 80% and 100%. Daily API nudge/reset metadata
+uses `mcp_daily_cap`; no new trigger enum is required.
+
+Integrated ladder additions remain optional in schema 2: `prices[].confirm_lines`
+contains backend-owned monthly→yearly confirmation lines (only for a valid same-tier
+switch with known period end). All first-party clients show them before any billing call.
+`usage.pro_gates` is empty unless backend Pro enforcement applies to this account;
+`usage.mcp_cap_reached=true` is emitted only after a read of the daily cap for a
+ladder account with daily enforcement on. Settings visits never consume a request.
+Mobile's 80% banner sends `trigger=usage_budget`; `budget_80` remains a source/key only.
+The `pro_budget80` golden pins Architect's absence at 80% across clients.
+Mobile renders `at_cap` strings verbatim, reads/writes the capability-gated monthly
+choice, then enables on-device processing or opens the usage-budget upgrade surface.
+
+With `LADDER_V1_BUDGET_ENFORCEMENT_ENABLED`, exhausted Free and ladder-v1
+accounts receive additive `chat_at_cap` in the v2 storefront and chat-quota
+payloads. Chat admission returns the same state in a 402 detail. It contains
+`state=paused`, backend-owned `title`, `body`, `reset_line`, Unix-seconds
+`reset_at`, `trigger=usage_budget`, and nullable `upgrade_plan`/`upgrade_label`.
+Free offers Plus, Plus offers Pro, Pro offers Architect only at the cap, and
+Architect waits for reset. Clients render these strings at the composer and
+open the contextual plans sheet with `usage_budget`. Expiry or a fresh payload
+without this state releases the composer; the server independently admits every
+send. Legacy prices and disabled enforcement do not emit the storefront state.
+Capture, held content and on-device transcription/summaries continue. There is
+no fallback chat model or capped fallback allowance (David's October 14 evening
+ruling supersedes ladder decision 7).
+
+The chat-quota response sets `uses_shared_budget=true` for flagged ladder/Free
+accounts at every percentage. Clients use the server `allowed` value there;
+legacy question counters and optimistic question deltas do not decide admission.
+The marker and pause state are omitted on the legacy/flag-off quota response.

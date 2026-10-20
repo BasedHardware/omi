@@ -16,6 +16,9 @@ import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/speaker_tag_prompts_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/widgets/speaker_picker.dart';
+
+export 'package:omi/widgets/speaker_picker.dart' show SpeakerPickerCandidate, SpeakerPickerChoice, showSpeakerPicker;
 
 /// "Help Omi recognize voices": a small daily set of short clips from the last 48 hours. Each clip
 /// plays with its words and when it was said; candidates are ranked by voice match; every answer
@@ -232,9 +235,11 @@ class _Question extends StatelessWidget {
     Future<void> someoneElse() async {
       final choice = await showSpeakerPicker(
         context,
-        prompt: prompt,
-        candidates: candidates,
-        people: people,
+        candidates: [
+          for (final c in candidates)
+            SpeakerPickerCandidate(personId: c.personId, name: c.name, matchLevel: c.matchLevel, pinned: c.pinned),
+        ],
+        people: people.where((p) => !p.id.startsWith('optimistic-person:')).toList(),
         excludePersonId: prompt.suggestedPersonId,
         allowUnknown: prompt.kind != 'owner_check',
         offerMeAndNotAPerson: prompt.kind != 'owner_check',
@@ -706,259 +711,6 @@ class _Answered extends StatelessWidget {
           if (pending.committed) Icon(Icons.check_circle, size: 22, color: OmiColors.success),
         ],
       ),
-    );
-  }
-}
-
-/// What the No… / Someone Else… picker returned: an existing person, a new name, "someone I don't
-/// know", the owner ("That's Me") or not a person at all (a TV, a voice assistant).
-class SpeakerPickerChoice {
-  const SpeakerPickerChoice.person(String this.personId, this.displayName)
-      : name = null,
-        unknown = false,
-        me = false,
-        notAPerson = false;
-  const SpeakerPickerChoice.newPerson(String this.name)
-      : personId = null,
-        displayName = null,
-        unknown = false,
-        me = false,
-        notAPerson = false;
-  const SpeakerPickerChoice.unknown()
-      : personId = null,
-        name = null,
-        displayName = null,
-        unknown = true,
-        me = false,
-        notAPerson = false;
-  const SpeakerPickerChoice.me()
-      : personId = null,
-        name = null,
-        displayName = null,
-        unknown = false,
-        me = true,
-        notAPerson = false;
-  const SpeakerPickerChoice.notAPerson()
-      : personId = null,
-        name = null,
-        displayName = null,
-        unknown = false,
-        me = false,
-        notAPerson = true;
-
-  final String? personId;
-  final String? name;
-  final String? displayName;
-  final bool unknown;
-  final bool me;
-  final bool notAPerson;
-}
-
-/// "Who Is It?": search; That's Me and Not a Person when [offerMeAndNotAPerson]; a new person; the
-/// closest voices (without the person just ruled out), then everyone A to Z.
-Future<SpeakerPickerChoice?> showSpeakerPicker(
-  BuildContext context, {
-  required GeneratedSpeakerTagPrompt prompt,
-  required List<GeneratedSpeakerTagCandidate> candidates,
-  required List<Person> people,
-  String? excludePersonId,
-  bool allowUnknown = true,
-  bool offerMeAndNotAPerson = false,
-}) {
-  return showOmiSheet<SpeakerPickerChoice>(
-    context: context,
-    title: context.l10n.whoIsItTitle,
-    builder: (sheetContext) => _SpeakerPicker(
-      candidates: candidates.where((c) => c.personId != excludePersonId).toList(),
-      people: people.where((p) => p.id != excludePersonId && !p.id.startsWith('optimistic-person:')).toList(),
-      allowUnknown: allowUnknown,
-      offerMeAndNotAPerson: offerMeAndNotAPerson,
-    ),
-  );
-}
-
-class _SpeakerPicker extends StatefulWidget {
-  const _SpeakerPicker({
-    required this.candidates,
-    required this.people,
-    required this.allowUnknown,
-    required this.offerMeAndNotAPerson,
-  });
-
-  final List<GeneratedSpeakerTagCandidate> candidates;
-  final List<Person> people;
-  final bool allowUnknown;
-  final bool offerMeAndNotAPerson;
-
-  @override
-  State<_SpeakerPicker> createState() => _SpeakerPickerState();
-}
-
-class _SpeakerPickerState extends State<_SpeakerPicker> {
-  final _search = TextEditingController();
-  String _query = '';
-
-  @override
-  void dispose() {
-    _search.dispose();
-    super.dispose();
-  }
-
-  void _pick(SpeakerPickerChoice choice) => Navigator.of(context).pop(choice);
-
-  Future<void> _newPerson() async {
-    final name = await showDialog<String>(context: context, builder: (_) => const _NameDialog());
-    if (name != null && mounted) _pick(SpeakerPickerChoice.newPerson(name));
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = context.l10n;
-    final q = _query.trim();
-    final lower = q.toLowerCase();
-    bool matches(String name) => lower.isEmpty || name.toLowerCase().contains(lower);
-    final closest = widget.candidates.where((c) => matches(c.name)).toList();
-    final closestIds = {for (final c in closest) c.personId};
-    final everyone = widget.people.where((p) => matches(p.name) && !closestIds.contains(p.id)).toList()
-      ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
-    final exact = widget.people.any((p) => p.name.toLowerCase() == lower);
-    final canAdd = q.length >= 2 && q.length <= 40 && !exact;
-    return ConstrainedBox(
-      constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.7),
-      child: ListView(
-        shrinkWrap: true,
-        padding: const EdgeInsets.only(bottom: OmiSpacing.lg),
-        children: [
-          OmiSearchField(
-            placeholder: l10n.peopleSearchPlaceholder,
-            controller: _search,
-            onChanged: (value) => setState(() => _query = value),
-            onCleared: () => setState(() => _query = ''),
-          ),
-          const SizedBox(height: OmiSpacing.sm),
-          if (widget.offerMeAndNotAPerson && q.isEmpty) ...[
-            OmiSettingsGroup(
-              children: [
-                OmiSettingsRow(
-                  key: const Key('speaker_picker_me'),
-                  leading: const Icon(Icons.person_outline),
-                  title: l10n.speakerTagPromptThatsMeAction,
-                  onTap: () => _pick(const SpeakerPickerChoice.me()),
-                ),
-                OmiSettingsRow(
-                  key: const Key('speaker_picker_not_a_person'),
-                  leading: const Icon(Icons.tv_outlined),
-                  title: l10n.speakerTagPromptNotAPerson,
-                  onTap: () => _pick(const SpeakerPickerChoice.notAPerson()),
-                ),
-              ],
-            ),
-            const SizedBox(height: OmiSpacing.md),
-          ],
-          OmiSettingsGroup(
-            children: [
-              OmiSettingsRow(
-                key: const Key('speaker_picker_new_person'),
-                leading: const Icon(Icons.person_add_alt_outlined),
-                title: canAdd ? l10n.addNamedPersonAction(q) : l10n.newPersonEllipsis,
-                onTap: canAdd ? () => _pick(SpeakerPickerChoice.newPerson(q)) : _newPerson,
-              ),
-              if (widget.allowUnknown)
-                OmiSettingsRow(
-                  key: const Key('speaker_picker_unknown'),
-                  leading: const Icon(Icons.help_outline),
-                  title: l10n.speakerTagPromptDontKnow,
-                  onTap: () => _pick(const SpeakerPickerChoice.unknown()),
-                ),
-            ],
-          ),
-          if (closest.isNotEmpty) ...[
-            const SizedBox(height: OmiSpacing.md),
-            OmiSettingsGroup(
-              header: l10n.speakerTagPromptClosestVoices,
-              children: [
-                for (final c in closest)
-                  OmiSettingsRow(
-                    key: Key('speaker_picker_person_${c.personId}'),
-                    title: c.name,
-                    leading: c.pinned ? const Icon(Icons.push_pin) : const Icon(Icons.person_outline),
-                    trailing: c.matchLevel == null ? null : VoiceMatchMeter(level: c.matchLevel!),
-                    onTap: () => _pick(SpeakerPickerChoice.person(c.personId, c.name)),
-                  ),
-              ],
-            ),
-          ],
-          if (everyone.isNotEmpty) ...[
-            const SizedBox(height: OmiSpacing.md),
-            OmiSettingsGroup(
-              header: l10n.everyoneHeader,
-              children: [
-                for (final p in everyone)
-                  OmiSettingsRow(
-                    key: Key('speaker_picker_person_${p.id}'),
-                    title: p.name,
-                    leading: PersonAvatar(person: p, size: 32, showVoiceBadge: false),
-                    onTap: () => _pick(SpeakerPickerChoice.person(p.id, p.name)),
-                  ),
-              ],
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-class _NameDialog extends StatefulWidget {
-  const _NameDialog();
-
-  @override
-  State<_NameDialog> createState() => _NameDialogState();
-}
-
-class _NameDialogState extends State<_NameDialog> {
-  final _controller = TextEditingController();
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  bool get _valid {
-    final length = _controller.text.trim().length;
-    return length >= 2 && length <= 40;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return OmiAlertDialog(
-      title: context.l10n.speakerTagPromptWhoIsThis,
-      // The Cupertino dialog has no Material ancestor; the text field needs one.
-      content: Material(
-        type: MaterialType.transparency,
-        child: TextField(
-          key: const Key('speaker_tag_prompt_name_field'),
-          controller: _controller,
-          autofocus: true,
-          maxLength: 40,
-          textCapitalization: TextCapitalization.words,
-          decoration: InputDecoration(hintText: context.l10n.speakerTagPromptNameHint),
-          onChanged: (_) => setState(() {}),
-          onSubmitted: (_) {
-            if (_valid) Navigator.of(context).pop(_controller.text.trim());
-          },
-        ),
-      ),
-      actions: [
-        OmiDialogAction(label: context.l10n.cancel, onPressed: () => Navigator.of(context).pop()),
-        OmiDialogAction(
-          key: const Key('speaker_tag_prompt_name_save'),
-          label: context.l10n.save,
-          isDefault: true,
-          onPressed: _valid ? () => Navigator.of(context).pop(_controller.text.trim()) : null,
-        ),
-      ],
     );
   }
 }

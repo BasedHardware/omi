@@ -114,7 +114,10 @@
 }
 
 ({String text, List<String> sourceIDs}) repairNoteCitations(String input, Iterable<String> knownIDs) {
-  final ids = knownIDs.toList();
+  // An id-less segment reaches here as '' (TranscriptSegment.fromGenerated); as a pattern it would
+  // match between every two non-word characters and the cleanup would then eat the whitespace
+  // around each match. Web and macOS drop empty ids before calling their repair; do the same.
+  final ids = knownIDs.where((id) => id.isNotEmpty).toList();
   final recovered = <String>[];
   var text = input;
   while (true) {

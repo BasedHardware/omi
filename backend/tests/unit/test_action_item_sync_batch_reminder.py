@@ -75,6 +75,28 @@ def test_moving_a_due_date_through_the_sync_batch_reschedules_the_reminder(remin
     assert [(call['completed'], call['due_at']) for call in reminders] == [(False, new_due_at)]
 
 
+def test_renaming_a_task_through_the_sync_batch_rearms_the_reminder_with_the_new_title(reminders):
+    due_at = datetime.now(timezone.utc) + timedelta(days=1)
+    with patch.object(action_items_router, 'action_items_db') as mock_db:
+        before = {'id': 't1', 'description': 'Call back', 'due_at': due_at, 'completed': False, 'status': 'active'}
+        mock_db.get_action_item.side_effect = [before, {**before, 'description': 'Call back Sam'}]
+        mock_db.batch_sync_update_action_items = MagicMock(return_value=_batch_result(['t1']))
+
+        sync_batch_update(SyncBatchRequest(items=[SyncBatchItem(id='t1', description='Call back Sam')]), uid='u1')
+
+    assert reminders == [
+        {
+            'user_id': 'u1',
+            'action_item_id': 't1',
+            'description': 'Call back Sam',
+            'completed': False,
+            'due_at': due_at,
+            'status': 'active',
+            'deleted': False,
+        }
+    ]
+
+
 def test_an_export_only_sync_leaves_the_reminder_alone(reminders):
     with patch.object(action_items_router, 'action_items_db') as mock_db:
         mock_db.get_action_item.return_value = {'id': 't1', 'description': 'Call back', 'completed': False}
