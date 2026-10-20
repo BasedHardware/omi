@@ -18,7 +18,11 @@ os.environ['HUGGINGFACE_TOKEN'] = ''
 
 
 def get_speaker_embedding(audio_path: str) -> Any:
-    processed_signal, _fs = _torchaudio.load(audio_path)
+    processed_signal, fs = _torchaudio.load(audio_path)
+    if fs != 16000:
+        processed_signal = _torchaudio.functional.resample(processed_signal, fs, 16000)
+    if processed_signal.shape[0] > 1:
+        processed_signal = processed_signal.mean(dim=0, keepdim=True)
     embedding = verification.encode_batch(processed_signal)
     return embedding.squeeze()
 
@@ -73,5 +77,3 @@ if __name__ == '__main__':
     models_configs.append([f'models/cleaned_{len(cleaned_files)}_samples.pt', cleaned_files])
     for path, samples in models_configs:
         train(path, samples)
-
-    # TODO: tweak different preprocessing too
