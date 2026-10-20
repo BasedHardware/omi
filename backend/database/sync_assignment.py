@@ -68,7 +68,7 @@ class SyncAssignmentClock:
     def __init__(self, logger, *, enabled: bool):
         self.logger, self.enabled = logger, enabled
         self.started = time.monotonic()
-        self.ms = dict.fromkeys(self.PHASES, 0.0)
+        self.ms: dict[str, float] = dict.fromkeys(self.PHASES, 0.0)
         self.attempts = 0
         self.body_ms = 0.0
         self.attempt_started = None
