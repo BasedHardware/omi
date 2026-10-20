@@ -1115,13 +1115,6 @@ async def connect_configured_chain(
     if optional_handover:
         raise RejectedStream(prior_reason)
     record_metric(CHAIN_EXHAUSTED, {'demand_cohort': demand_cohort()}, 1)
-    # Bounded tokens only (family:cause): why no successor was available.
-    logger.warning(
-        'live_stt_chain_exhausted origin=%s reason=%s skips=%s',
-        origin,
-        fallback_metric_reason(hop_reason()),
-        ','.join(skips) or 'none',
-    )
     pending = PendingLiveFailover(
         component='stt_selection',
         from_mode=origin,
@@ -1129,6 +1122,14 @@ async def connect_configured_chain(
         reason=hop_reason(),
         capacity_subtype=prior_capacity_subtype,
         source_outcome=prior_outcome,
+    )
+    # Bounded tokens only (family:cause): why no successor was available. The
+    # reason is the hop's own, so a claimed dial death wins over a later skip.
+    logger.warning(
+        'live_stt_chain_exhausted origin=%s reason=%s skips=%s',
+        origin,
+        fallback_metric_reason(pending.reason),
+        ','.join(skips) or 'none',
     )
     pending.note_failure(None)
     if recovery_on:

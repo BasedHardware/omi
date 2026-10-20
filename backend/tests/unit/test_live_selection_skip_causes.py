@@ -245,3 +245,48 @@ async def test_text_right_after_a_replay_burst_accounts_nothing_inside_the_grace
     clock[0] = 16.0
     leg.note_selection_transcript([{'text': 'replayed', 'start': 1.0, 'end': 2.0}])
     assert not leg.has_untranscribed_speech()
+
+
+@pytest.mark.asyncio
+async def test_exhaustion_log_keeps_a_dialed_death_over_a_later_skip(monkeypatch, hops, caplog):
+    dead = socket()
+    dead.is_connection_dead = True
+    dead.death_reason = dead.typed_death_reason = None
+    args = _soniox_first(soniox=AsyncMock(return_value=dead))
+    shared = live_chain.connect_backoff()
+
+    class ModulateCooling:
+        # Modulate loses its backoff lease after Soniox's dialed death, which
+        # rewrites prior_reason to circuit_open without a dial of its own.
+        def acquire(self, identity, *, provider, force=False):
+            return None if provider == 'modulate' else shared.acquire(identity, provider=provider, force=force)
+
+        def __getattr__(self, name):
+            return getattr(shared, name)
+
+    monkeypatch.setattr(live_chain, 'connect_backoff', lambda: ModulateCooling())
+    with caplog.at_level(logging.WARNING, logger='utils.stt.live_chain'):
+        with pytest.raises(live_chain.LiveChainExhausted):
+            await live_chain.connect_configured_chain(**args)
+
+    [hop] = [event for event in hops if event['outcome'] == 'exhausted']
+    assert (hop['from_mode'], hop['reason']) == ('soniox', 'connection_lost')
+    [line] = [r.getMessage() for r in caplog.records if 'live_stt_chain_exhausted' in r.getMessage()]
+    assert ' reason=connection_lost ' in line and 'modulate:circuit_open' in line
+
+
+def test_skip_series_are_exposed_before_the_first_exhaustion():
+    sample = fallback.OMI_FALLBACK_TOTAL.labels(
+        component='stt_selection',
+        from_mode='soniox',
+        to_mode='unavailable',
+        reason='session_excluded',
+        outcome='exhausted',
+    )
+    assert sample._value.get() >= 0
+    names = {
+        (s.labels['component'], s.labels['reason'])
+        for metric in fallback.OMI_FALLBACK_TOTAL.collect()
+        for s in metric.samples
+    }
+    assert ('stt_selection', 'recovery_budget') in names

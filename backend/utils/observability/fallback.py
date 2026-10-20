@@ -413,6 +413,16 @@ def initialize_live_stt_exhausted_children() -> None:
                 reason=reason,
                 outcome='exhausted',
             )
+    # Undialed selection origins report their skip (live_chain.note_skip).
+    for skip in ('session_excluded', 'recovery_budget', 'circuit_open', 'policy', 'unconfigured'):
+        for provider in providers:
+            OMI_FALLBACK_TOTAL.labels(
+                component='stt_selection',
+                from_mode=provider,
+                to_mode='unavailable',
+                reason=skip,
+                outcome='exhausted',
+            )
 
 
 def initialize_cache_write_fail_open_children() -> None:
