@@ -10,6 +10,8 @@ from pathlib import Path
 
 import pytest
 
+from llm_gateway.gateway.accounting import rate_card_for
+
 from utils.conversations import notes_agent_tools as tools
 from utils.llm import conversation_processing as notes
 from utils.llm import notes_agent as agent
@@ -90,6 +92,13 @@ def test_percent_cohort_is_stable_and_allowlist_always_in(monkeypatch):
 def test_cost_estimate_uses_luna_card():
     # 15k uncached at $0.10/M, 5k cached at $0.01/M, 1.5k output at $0.60/M.
     assert policy.estimate_cost_usd(20000, 5000, 1500) == pytest.approx(0.00245)
+
+
+def test_mirrored_prices_match_the_gateway_rate_card():
+    rates = rate_card_for(policy.PRICE_PROVIDER, policy.PRICE_MODEL).effective_rates(1000)
+    assert rates.input_micro_usd_per_million == round(policy.INPUT_USD_PER_MILLION * 1_000_000)
+    assert rates.cached_input_micro_usd_per_million == round(policy.CACHED_INPUT_USD_PER_MILLION * 1_000_000)
+    assert rates.output_micro_usd_per_million == round(policy.OUTPUT_USD_PER_MILLION * 1_000_000)
 
 
 # ---------------------------------------------------------------- tool scoping

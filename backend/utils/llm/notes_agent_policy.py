@@ -19,8 +19,6 @@ import os
 from dataclasses import dataclass
 from typing import Optional
 
-from llm_gateway.gateway.accounting import rate_card_for
-
 FLAG = 'CONVERSATION_NOTES_AGENT_ENABLED'
 PERCENT = 'CONVERSATION_NOTES_AGENT_PERCENT'
 UID_ALLOWLIST = 'CONVERSATION_NOTES_AGENT_UID_ALLOWLIST'
@@ -37,10 +35,14 @@ DEADLINE_SECONDS = 120.0
 # leaves room for the final call inside the deadline.
 FORCE_SUBMIT_AFTER_SECONDS = 75.0
 
-# Price the budget with the conv-structure model's card (gpt-6-luna, per million tokens).
+# Budget pricing: the gateway's gpt-6-luna card (openai.gpt-6-luna.2026-09-22), in USD per
+# million tokens. Images without llm_gateway (pusher) import this module, so the card is
+# mirrored here and pinned to cost_rate_cards.yaml by tests/unit/test_notes_agent.py.
 PRICE_PROVIDER = 'openai'
 PRICE_MODEL = 'gpt-6-luna'
-_FALLBACK_INPUT, _FALLBACK_CACHED, _FALLBACK_OUTPUT = 0.10, 0.01, 0.60
+INPUT_USD_PER_MILLION = 0.10
+CACHED_INPUT_USD_PER_MILLION = 0.01
+OUTPUT_USD_PER_MILLION = 0.60
 
 
 @dataclass(frozen=True)
@@ -129,20 +131,12 @@ def plan_notes_agent(
 
 
 def estimate_cost_usd(prompt_tokens: int, cached_tokens: int, completion_tokens: int) -> float:
-    """Marginal token cost from the gateway rate card; an estimate, not an invoice."""
+    """Marginal token cost at the conv-structure model's card; an estimate, not an invoice."""
     prompt = max(0, prompt_tokens)
     cached = max(0, min(cached_tokens, prompt))
     output = max(0, completion_tokens)
-    try:
-        card = rate_card_for(PRICE_PROVIDER, PRICE_MODEL)
-    except Exception:  # noqa: BLE001 - the estimate falls back to the documented card
-        card = None
-    if card is not None:
-        rates = card.effective_rates(prompt)
-        micro = (
-            (prompt - cached) * rates.input_micro_usd_per_million
-            + cached * rates.cached_input_micro_usd_per_million
-            + output * rates.output_micro_usd_per_million
-        ) / 1_000_000
-        return micro / 1_000_000
-    return ((prompt - cached) * _FALLBACK_INPUT + cached * _FALLBACK_CACHED + output * _FALLBACK_OUTPUT) / 1_000_000
+    return (
+        (prompt - cached) * INPUT_USD_PER_MILLION
+        + cached * CACHED_INPUT_USD_PER_MILLION
+        + output * OUTPUT_USD_PER_MILLION
+    ) / 1_000_000
