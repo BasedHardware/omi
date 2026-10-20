@@ -188,14 +188,12 @@ def _facts(
 def _coerce_utc_datetime(val) -> datetime:
     if isinstance(val, str):
         try:
-            val = isoparse(val)
+            return isoparse(val).replace(tzinfo=timezone.utc) if 'Z' in val or '+' in val else isoparse(val).replace(tzinfo=timezone.utc)
         except (ValueError, TypeError, OverflowError):
             return datetime.now(timezone.utc)
-    if not isinstance(val, datetime):
-        return datetime.now(timezone.utc)
-    if val.tzinfo is None:
-        val = val.replace(tzinfo=timezone.utc)
-    return val
+    if isinstance(val, datetime):
+        return val.replace(tzinfo=timezone.utc) if val.tzinfo is None else val
+    return datetime.now(timezone.utc)
 
 
 def _title(conversation: dict) -> str:
