@@ -838,6 +838,7 @@ def _runtime_env_manifest(tmp_path: Path, name: str, mutate: Callable[[dict[str,
                         "env": {"PUSHER_FLAG": {"value": "false", "category": "rollout"}},
                     },
                     "backend-listen": {"env": {"LISTEN_FLAG": {"value": "false", "category": "rollout"}}},
+                    "config_map": {"entries": {"REDIS_DB_HOST": {"source": "environment"}}},
                 },
                 "cloud_run": {"backend": {"env": {"API_FLAG": {"value": "false", "category": "rollout"}}}},
             }
@@ -857,6 +858,7 @@ def test_real_runtime_env_manifest_has_a_pusher_projection(verifier: SimpleNames
     assert set(projection) == {"schema_version", "dev", "prod"}
     for environment in ("dev", "prod"):
         assert projection[environment]["pusher"]["values_file"].endswith(f"{environment}_omi_pusher_values.yaml")
+        assert projection[environment]["config_map"]
 
 
 @pytest.mark.parametrize(
@@ -876,21 +878,34 @@ def test_unrelated_runtime_env_flag_change_keeps_the_promotion_contract(
             node = node[key]
         node["value"] = "true"
 
-    baseline = verifier.pusher_runtime_env_projection(_runtime_env_manifest(tmp_path, "baseline.yaml"))
-    moved = verifier.pusher_runtime_env_projection(_runtime_env_manifest(tmp_path, "moved.yaml", flip))
+    baseline = verifier.contract_fingerprint(_runtime_env_manifest(tmp_path, "baseline.yaml"))
+    moved = verifier.contract_fingerprint(_runtime_env_manifest(tmp_path, "moved.yaml", flip))
 
     assert moved == baseline
 
 
-@pytest.mark.parametrize("environment", ["dev", "prod"])
-def test_pusher_runtime_env_change_breaks_the_promotion_contract(
-    verifier: SimpleNamespace, tmp_path: Path, environment: str
-) -> None:
-    def flip(manifest: dict[str, Any]) -> None:
-        manifest["environments"][environment]["gke"]["pusher"]["env"]["PUSHER_FLAG"]["value"] = "true"
+def _flip_pusher_env(manifest: dict[str, Any], environment: str) -> None:
+    manifest["environments"][environment]["gke"]["pusher"]["env"]["PUSHER_FLAG"]["value"] = "true"
 
-    baseline = verifier.pusher_runtime_env_projection(_runtime_env_manifest(tmp_path, "baseline.yaml"))
-    moved = verifier.pusher_runtime_env_projection(_runtime_env_manifest(tmp_path, "moved.yaml", flip))
+
+def _flip_shared_config_map(manifest: dict[str, Any], environment: str) -> None:
+    # The Pusher pod envFroms this ConfigMap, so a literal host change reaches it.
+    entry = manifest["environments"][environment]["gke"]["config_map"]["entries"]["REDIS_DB_HOST"]
+    entry.update({"source": "literal", "value": "redis.example.internal"})
+
+
+@pytest.mark.parametrize("environment", ["dev", "prod"])
+@pytest.mark.parametrize("mutate", [_flip_pusher_env, _flip_shared_config_map])
+def test_pusher_runtime_env_change_breaks_the_promotion_contract(
+    verifier: SimpleNamespace,
+    tmp_path: Path,
+    environment: str,
+    mutate: Callable[[dict[str, Any], str], None],
+) -> None:
+    baseline = verifier.contract_fingerprint(_runtime_env_manifest(tmp_path, "baseline.yaml"))
+    moved = verifier.contract_fingerprint(
+        _runtime_env_manifest(tmp_path, "moved.yaml", lambda manifest: mutate(manifest, environment))
+    )
 
     assert moved != baseline
 

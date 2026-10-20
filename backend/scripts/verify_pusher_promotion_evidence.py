@@ -69,11 +69,11 @@ def canonical_sha256(value: Any) -> str:
     return "sha256:" + hashlib.sha256(payload).hexdigest()
 
 
-@functools.lru_cache(maxsize=4)
 def pusher_runtime_env_projection(manifest_path: Path = RUNTIME_ENV_MANIFEST) -> dict[str, Any]:
     """Return the slice of the composed runtime env that Pusher deploys with.
 
-    Cached because the registry is large; callers must not mutate the result.
+    That is the Pusher service block plus the shared backend ConfigMap, which
+    the prod job writes before Helm and the Pusher pod envFroms wholesale.
     """
 
     import yaml  # Lazy: the workflow installs PyYAML before it runs this verifier.
@@ -89,20 +89,29 @@ def pusher_runtime_env_projection(manifest_path: Path = RUNTIME_ENV_MANIFEST) ->
         gke = environment.get("gke") if isinstance(environment, dict) else None
         if not isinstance(gke, dict) or not isinstance(gke.get("pusher"), dict):
             raise EvidenceError(f"{manifest_path}: environments.{name}.gke.pusher is missing")
+        if not isinstance(gke.get("config_map"), dict):
+            raise EvidenceError(f"{manifest_path}: environments.{name}.gke.config_map is missing")
         projection[name] = {
             "pusher": gke["pusher"],
+            "config_map": gke["config_map"],
             **{key: environment.get(key) for key in RUNTIME_ENV_SCALAR_KEYS},
         }
     return projection
 
 
-def contract_fingerprint() -> str:
+@functools.lru_cache(maxsize=4)
+def _pusher_runtime_env_sha256(manifest_path: Path) -> str:
+    # Cached as an immutable digest: the registry is large and validate() runs per phase.
+    return canonical_sha256(pusher_runtime_env_projection(manifest_path))
+
+
+def contract_fingerprint(manifest_path: Path = RUNTIME_ENV_MANIFEST) -> str:
     return canonical_sha256(
         {
             "files": {
                 str(path.relative_to(ROOT)): hashlib.sha256(path.read_bytes()).hexdigest() for path in CONTRACT_FILES
             },
-            "pusher_runtime_env": pusher_runtime_env_projection(),
+            "pusher_runtime_env": _pusher_runtime_env_sha256(manifest_path),
         }
     )
 
