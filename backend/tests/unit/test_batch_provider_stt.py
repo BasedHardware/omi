@@ -366,6 +366,61 @@ def test_privacy_fence_discards_before_any_spend(world, monkeypatch):
     assert artifacts.fetches == 0 and vendor.calls == 0
 
 
+def _gpu_sibling_ready(store, monkeypatch):
+    """A later GPU capture for the same owner, completed and waiting behind the provider unit."""
+    admit(monkeypatch, store, [item('g1', 20, compute=True)], 'content-g')
+    gpu = Scheduler(store)
+    lease = gpu.pull(150.0)[0]
+    store.run(lambda tx: tx.put('jobs', 'g1', {**tx.get('jobs', 'g1'), 'compute_admission_token': lease.token}))
+    from utils.batch_pipeline.contracts import WorkResult
+
+    assert gpu.complete(WorkResult('g1', 'gs://synthetic/results/g1'), lease.token, 151.0)
+    merge = OrderedMerge(store)
+    assert merge.commit_next(OWNER, 152.0) is None  # held behind p1
+    return merge
+
+
+def test_superseded_provider_unit_releases_the_owner_merge(world, monkeypatch):
+    """M1 L08-1: a ProjectionBlocked unit used to close its outbox row and keep merge_pending forever."""
+    _, store = world
+    admit(monkeypatch, store, [item('p1', 10)], 'content-p', JA)
+    merge = _gpu_sibling_ready(store, monkeypatch)
+    ledger_key = f'{OWNER}/content-p'
+    store.run(lambda tx: tx.put('content', ledger_key, {**tx.get('content', ledger_key), 'dispatch_protocol': 'v2'}))
+    artifacts, vendor = Artifacts(), Vendor()
+    outcome = stage(store, artifacts, vendor).run('p1')
+    assert (outcome.outcome, outcome.reason) == ('discarded', 'superseded')
+    assert artifacts.fetches == 0 and vendor.calls == 0
+    row = job(store, 'p1')
+    assert row['state'] == provider_stt.SUPERSEDED and row['merge_pending'] is False
+    assert merge.commit_next(OWNER, 210.0)['segment_id'] == 'g1'  # the later sibling now commits
+
+
+def test_redirect_topology_fence_defers_and_keeps_the_unit(world, monkeypatch):
+    """Invalid redirect topology is not deletion (custody precedent): keep the row and the job."""
+    customer, store = world
+    admit(monkeypatch, store, [item('p1', 10)], 'content-p', JA)
+    customer.client.rows[('users', OWNER, 'conversations', 'conv-1')] = {'deleted': True, 'sync_merged_into': 'gone'}
+    artifacts, vendor = Artifacts(), Vendor()
+    outcome = stage(store, artifacts, vendor).run('p1')
+    assert (outcome.outcome, outcome.reason, outcome.available_at) == (
+        'deferred',
+        'not_due',
+        200.0 + provider_stt.FUNDING_RETRY_SECONDS,
+    )
+    assert vendor.calls == 0 and job(store, 'p1')['state'] == PENDING and job(store, 'p1')['merge_pending']
+
+
+def test_erasure_fence_is_left_to_the_privacy_purge(world, monkeypatch):
+    """A deletion fence never writes the fenced job; purge_batch_owner deletes it with the owner's state."""
+    customer, store = world
+    admit(monkeypatch, store, [item('p1', 10)], 'content-p', JA)
+    customer.delete_conversation(OWNER, 'conv-1')
+    before = job(store, 'p1')
+    assert stage(store, Artifacts(), Vendor()).run('p1').reason == 'privacy_blocked'
+    assert job(store, 'p1') == before
+
+
 def test_gpu_units_are_never_taken_by_the_provider_stage(world, monkeypatch):
     _, store = world
     admit(monkeypatch, store, [item('g1', 20, compute=True)], 'content-g')
