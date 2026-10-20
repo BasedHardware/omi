@@ -9,6 +9,10 @@ from utils.memory.index_window_cursor import decode_cursor, encode_cursor, query
 class MemoryIndexWindowLimit(Exception):
     """A resumable raw window ended before the visible page filled."""
 
+    def __init__(self, lower_bound: tuple[int, str] | None = None):
+        super().__init__()
+        self.lower_bound = lower_bound
+
 
 def position_cursor(uid: str, kind: str, position: tuple) -> str:
     field = 'updated_at' if kind == 'updated' else 'created_at'

@@ -1562,25 +1562,25 @@ class _HistoricalRawStream:
                     device_scope_request=self._device_scope_request,
                     budget=self._rpc_budget,
                 )
+            self._slots = [
+                (
+                    record,
+                    (
+                        StreamKeyset(
+                            updated_at_us=self._service.scan_cursor_to_stream_keyset(scan_cursor).updated_at_us,
+                            memory_id=scan_cursor[1],
+                            index_window_cursor=position_cursor(self._uid, self._kind, scan_cursor),
+                        )
+                        if self.index_window_enabled
+                        else self._service.scan_cursor_to_stream_keyset(scan_cursor)
+                    ),
+                )
+                for record, scan_cursor in raw_slots
+            ]
         except (HTTPException, ListReadBudgetExhausted):
             raise
         except Exception as exc:
             raise MemoryBackingStoreUnavailable("Historical memory unavailable", stream="historical") from exc
-        self._slots = [
-            (
-                record,
-                (
-                    StreamKeyset(
-                        updated_at_us=self._service.scan_cursor_to_stream_keyset(scan_cursor).updated_at_us,
-                        memory_id=scan_cursor[1],
-                        index_window_cursor=position_cursor(self._uid, self._kind, scan_cursor),
-                    )
-                    if self.index_window_enabled
-                    else self._service.scan_cursor_to_stream_keyset(scan_cursor)
-                ),
-            )
-            for record, scan_cursor in raw_slots
-        ]
         self._slot_index = 0
         self._slots_exhausted = stream_exhausted
         # Batch canonical status suppression once per chunk, never per row.
@@ -1730,14 +1730,15 @@ class _HistoricalCursorStream:
         if self._updated.index_window_enabled:
             updated_memory, updated_bound = peek_index_window(self._updated)
             created_memory, created_bound = peek_index_window(self._created)
+            bounds = [bound for bound in (updated_bound, created_bound) if bound is not None]
             if updated_bound is not None and (
                 created_memory is None or window_sort_key(created_memory) > updated_bound
             ):
-                raise MemoryIndexWindowLimit()
+                raise MemoryIndexWindowLimit(lower_bound=min(bounds))
             if created_bound is not None and (
                 updated_memory is None or window_sort_key(updated_memory) > created_bound
             ):
-                raise MemoryIndexWindowLimit()
+                raise MemoryIndexWindowLimit(lower_bound=min(bounds))
         else:
             updated_memory = self._updated.peek()
             created_memory = self._created.peek()
@@ -3240,6 +3241,17 @@ class MemoryService:
                             )
                     try:
                         historical_memory = historical.peek()
+                    except MemoryIndexWindowLimit as exc:
+                        # Canonical heads newer than every unseen historical
+                        # row remain safe after this request's raw windows end.
+                        if (
+                            canonical_memory is None
+                            or exc.lower_bound is None
+                            or window_sort_key(canonical_memory) > exc.lower_bound
+                        ):
+                            window_limited = True
+                            break
+                        historical_memory = None
                     except ListReadBudgetExhausted:
                         truncated = True
                         break
@@ -3272,8 +3284,6 @@ class MemoryService:
                     historical.consume()
                     if accepted:
                         historical_kept += 1
-            except MemoryIndexWindowLimit:
-                window_limited = True
             except ListReadBudgetExhausted:
                 # The request budget ended the scan mid-merge. Items already
                 # merged are an honest newest-first prefix, but the cursor

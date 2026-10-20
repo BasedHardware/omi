@@ -11,7 +11,7 @@ from google.cloud.firestore_v1 import Client
 
 from database import memories
 from tests.unit.test_external_list_nested_budget import Query, Ref, Snapshot, Store
-from tests.unit.test_memory_service_parity import _load_memory_service
+from tests.unit.test_memory_service_parity import _load_memory_service, _sample_memory_dict
 from utils.memory import read_resilience
 from utils.memory.index_window import validate_window_cursors
 from utils.memory.universal_list_cursor import StreamKeyset
@@ -267,3 +267,102 @@ def test_public_window_seam_clamps_route_max_without_claiming_exhaustion(monkeyp
     )
     assert len(payloads) == len(positions) == db.physical == 500
     assert not exhausted
+
+
+def test_suppressed_historical_windows_emit_full_canonical_pages(monkeypatch):
+    monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{"memory_list_index_window":100}')
+    monkeypatch.setenv('MEMORY_ENABLED', 'on')
+    monkeypatch.setenv('OMI_MEMORY_READ_RETRY_BURST', '64')
+    monkeypatch.setattr(read_resilience, '_retry_allowance', read_resilience.RetryAllowance())
+    mod = _load_memory_service(monkeypatch)
+    monkeypatch.setattr(memories, 'prepare_memory_for_read', lambda raw, uid: raw)
+    historical_rows = rows(40)
+    canonical = [
+        mod.MemoryDB.model_validate({**_sample_memory_dict(raw['id']), **raw}) for raw in historical_rows.values()
+    ]
+
+    def canonical_page(uid, *, limit, start_after=None, **kw):
+        remaining = canonical
+        if start_after is not None:
+            stamp, memory_id = start_after
+            remaining = [m for m in canonical if (-m.updated_at.timestamp(), m.id) > (-stamp.timestamp(), memory_id)]
+        chunk = remaining[:limit]
+        return [(m, (m.updated_at, m.id)) for m in chunk], len(remaining) <= limit
+
+    monkeypatch.setattr(mod, 'read_canonical_scan_page', canonical_page)
+    db = KeysetStore(historical_rows)
+    service = mod.MemoryService(db_client=db)
+    monkeypatch.setattr(
+        service, 'canonical_statuses', lambda uid, ids, **kw: dict.fromkeys(ids, mod.MemoryItemStatus.active)
+    )
+    ids, token = [], None
+    for offset in range(0, 40, 5):
+        before = db.physical
+        page = service.read_page(UID, limit=5, cursor=token)
+        assert [m.id for m in page.memories] == [f'm-{i:05}' for i in range(offset, offset + 5)]
+        assert db.physical - before <= 10
+        ids.extend(m.id for m in page.memories)
+        token = page.next_cursor
+        if offset < 35:
+            assert token is not None
+    # An exactly full raw window may need one final empty read to prove exhaustion.
+    if token is not None:
+        final = service.read_page(UID, limit=5, cursor=token)
+        assert final.memories == []
+        assert final.next_cursor is None
+    assert len(ids) == len(set(ids)) == 40
+
+
+def test_historical_window_bound_blocks_older_canonical_head(monkeypatch):
+    monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{"memory_list_index_window":100}')
+    monkeypatch.setenv('MEMORY_ENABLED', 'on')
+    mod = _load_memory_service(monkeypatch)
+    monkeypatch.setattr(memories, 'prepare_memory_for_read', lambda raw, uid: raw)
+    canonical = mod.MemoryDB.model_validate({**_sample_memory_dict('older'), 'updated_at': NOW - timedelta(minutes=30)})
+    monkeypatch.setattr(
+        mod, 'read_canonical_scan_page', lambda *a, **kw: ([(canonical, (canonical.updated_at, canonical.id))], True)
+    )
+    historical_rows = rows(4)
+    for raw in historical_rows.values():
+        raw['created_at'] -= timedelta(hours=1)
+    # The canonical head lies between the two exhausted bounds. Only the
+    # minimum bound is safe; using the older created bound would emit it early.
+    service = mod.MemoryService(db_client=KeysetStore(historical_rows))
+    monkeypatch.setattr(
+        service, 'canonical_statuses', lambda uid, ids, **kw: dict.fromkeys(ids, mod.MemoryItemStatus.active)
+    )
+    monkeypatch.setattr(read_resilience, '_retry_allowance', read_resilience.RetryAllowance())
+    page = service.read_page(UID, limit=2)
+    assert page.memories == []
+    assert page.next_cursor is not None
+
+
+@pytest.mark.parametrize('order_field', ['updated_at', 'created_at'])
+def test_malformed_historical_order_returns_normal_page(monkeypatch, order_field):
+    monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{"memory_list_index_window":100}')
+    monkeypatch.setenv('MEMORY_ENABLED', 'on')
+    mod = _load_memory_service(monkeypatch)
+    monkeypatch.setattr(mod, 'read_canonical_scan_page', lambda *a, **kw: ([], True))
+    monkeypatch.setattr(memories, 'prepare_memory_for_read', lambda raw, uid: raw)
+    raw = {'id': 'bad-order', 'content': 'fact', 'category': 'interesting', order_field: 'malformed'}
+    if order_field == 'updated_at':
+        raw['created_at'] = datetime.fromtimestamp(0, tz=timezone.utc)
+    good = {'id': 'good', 'content': 'fact', 'category': 'interesting', 'created_at': NOW, 'updated_at': NOW}
+    # Inject storage snapshots so the timestamp-only query fake need not sort mixed Firestore types.
+    monkeypatch.setattr(
+        memories,
+        '_stream_memory_list_index_window',
+        lambda *a, **kw: [Snapshot(f'users/{UID}/memories/{row["id"]}', row) for row in [raw, good] if a[1] in row],
+    )
+    db = KeysetStore({})
+    service = mod.MemoryService(db_client=db)
+    monkeypatch.setattr(service, 'canonical_statuses', lambda *a, **kw: {})
+    monkeypatch.setattr(read_resilience, '_retry_allowance', read_resilience.RetryAllowance())
+    page = service.read_page(UID, limit=5)
+    assert [m.id for m in page.memories] == ['good']
+    assert not page.truncated
+    assert page.next_cursor is None
+    _, positions, _ = memories.scan_memory_list_index_window(
+        UID, order_field=order_field, limit=5, cursor='', firestore_client=db
+    )
+    assert positions[0] == (datetime.fromtimestamp(0, tz=timezone.utc), 'bad-order')

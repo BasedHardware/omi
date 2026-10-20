@@ -580,7 +580,9 @@ def scan_memory_list_index_window(
         raw = _typed_doc(doc)
         raw['id'] = doc.id
         payloads.append(raw)
-        positions.append((raw[order_field], doc.id))
+        order_raw = raw.get(order_field)
+        order_time = order_raw if isinstance(order_raw, datetime) else datetime.fromtimestamp(0, tz=timezone.utc)
+        positions.append((order_time, doc.id))
     return payloads, positions, len(docs) < bounded_limit
 
 
