@@ -6138,3 +6138,7 @@ remain off; this source change does not activate the cap cohort.
 ## Operator minimal sync redrive
 
 Operator redrive payloads may carry `redrive_mode: 'minimal'` to re-transcribe preserved legacy sync audio at minimum cost: Parakeet-only pre-recorded STT with no Modulate recovery, attach-first assignment to a compatible row within 10 minutes through the normal lifecycle owner, and one gpt-5-nano title per newly created row instead of conversation processing. Details and the kill switch live in `backend/utils/sync/ARCHITECTURE.md`.
+
+Runtime STT-cap and ladder execution scope shares the 60-second, environment-fenced
+Firestore token cache; session admission does not wait for it. Existing live sessions
+retain admitted state until reconnect. See [runtime ramp and rollback](stt-cap-dispatch.md#runtime-cohort-no-restart).
