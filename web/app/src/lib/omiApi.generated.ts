@@ -835,6 +835,14 @@ export interface Body_upload_profile_v3_upload_audio_post {
   file: string;
 }
 
+export interface Body_upload_video_frames_chat_v2_files_video_post {
+  audio?: string | null;
+  duration_seconds: number;
+  frame_times: string;
+  frames: Array<string>;
+  name?: string;
+}
+
 export interface BudgetChoiceRecord {
   choice: "on_device" | "upgrade";
   dont_ask_again?: boolean;
@@ -1217,6 +1225,17 @@ export interface ChatEvidenceReference {
   state: string;
   summary?: string | null;
   title?: string | null;
+}
+
+export interface ChatFileVideo {
+  duration_seconds: number;
+  frame_times?: Array<number>;
+  strip_cell_height?: number;
+  strip_cell_width?: number;
+  strip_columns?: number;
+  strip_file_id?: string;
+  strip_times?: Array<number>;
+  transcript?: string;
 }
 
 export interface ChatFirstSubject {
@@ -2583,6 +2602,7 @@ export interface FileChat {
   openai_file_id: string;
   thumb_name?: string | null;
   thumbnail?: string | null;
+  video?: ChatFileVideo | null;
 }
 
 export interface FirmwareVersionResponse {
@@ -6231,6 +6251,7 @@ export interface OmiApiSchemas {
   "Body_upload_file_chat_v2_files_post": Body_upload_file_chat_v2_files_post;
   "Body_upload_frame_request_v1_frame_requests__request_id__upload_post": Body_upload_frame_request_v1_frame_requests__request_id__upload_post;
   "Body_upload_profile_v3_upload_audio_post": Body_upload_profile_v3_upload_audio_post;
+  "Body_upload_video_frames_chat_v2_files_video_post": Body_upload_video_frames_chat_v2_files_video_post;
   "BudgetChoiceRecord": BudgetChoiceRecord;
   "BudgetChoiceRequest": BudgetChoiceRequest;
   "BudgetChoiceResponse": BudgetChoiceResponse;
@@ -6281,6 +6302,7 @@ export interface OmiApiSchemas {
   "ChatAtCap": ChatAtCap;
   "ChatEvidenceEnvelope": ChatEvidenceEnvelope;
   "ChatEvidenceReference": ChatEvidenceReference;
+  "ChatFileVideo": ChatFileVideo;
   "ChatFirstSubject": ChatFirstSubject;
   "ChatMessageCountResponse": ChatMessageCountResponse;
   "ChatQuotaUnit": ChatQuotaUnit;
@@ -11670,6 +11692,16 @@ export interface OmiApiPaths {
   "/v2/files": {
     post: {
       operationId: "upload_file_chat_v2_files_post";
+      responses: {
+        "200": Array<FileChat>;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v2/files/video": {
+    post: {
+      operationId: "upload_video_frames_chat_v2_files_video_post";
       responses: {
         "200": Array<FileChat>;
         "401": void;
@@ -21493,6 +21525,26 @@ export async function upload_file_chat_v2_files_post(header: { authorization?: s
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function upload_video_frames_chat_v2_files_video_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: FormData, init?: OmiApiClientInit): Promise<Array<FileChat>> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v2/files/video`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+    body: body,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function get_latest_version_v2_firmware_latest_get(query: { device_model: string, firmware_revision: string, hardware_revision: string, manufacturer_name: string }, init?: OmiApiClientInit): Promise<FirmwareVersionResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v2/firmware/latest`;
@@ -22393,4 +22445,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 516 client methods generated.
+// Total: 517 client methods generated.

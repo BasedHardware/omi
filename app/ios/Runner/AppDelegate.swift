@@ -111,6 +111,7 @@ final class QuickActionsIconPatcher: NSObject {
   private let appleRemindersService = AppleRemindersService()
   private let appleHealthService = AppleHealthService()
   private var deviceToolsChannel: FlutterMethodChannel?
+  private var chatVideoSampler: ChatVideoSampler?
   private let deviceToolsService = DeviceToolsService()
   private var phoneMicController: PhoneMicController?
   private var notificationTitleOnKill: String?
@@ -447,6 +448,9 @@ final class QuickActionsIconPatcher: NSObject {
     deviceToolsChannel?.setMethodCallHandler { [weak self] (call, result) in
       self?.deviceToolsService.handleMethodCall(call, result: result)
     }
+
+    // Chat video attachments: sample frames + audio on device instead of uploading the clip
+    chatVideoSampler = ChatVideoSampler(messenger: messenger)
 
     // Create Speech Recognition method channel
     _ = OnDeviceOverflowPlugin(messenger: messenger)

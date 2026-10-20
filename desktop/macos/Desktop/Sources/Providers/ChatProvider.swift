@@ -3682,6 +3682,11 @@ class ChatProvider: ObservableObject {
         })
       else { return }
 
+      if attachment.isVideo, let videoURL = attachment.localFileURL {
+        await self.uploadVideoAttachment(id: id, url: videoURL, fileName: attachment.fileName, appId: appId)
+        return
+      }
+
       // For non-image files we still need bytes — load them lazily here
       // (we skipped this at add-time to keep the UI responsive).
       let data: Data? =

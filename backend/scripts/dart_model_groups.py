@@ -210,6 +210,7 @@ SCHEMA_GROUPS = {
             'UndoChatReceiptResponse',
             'MessageConversationStructured',
             'MessageConversation',
+            'ChatFileVideo',
             'FileChat',
             'ChartDataPoint',
             'ChartDataset',
