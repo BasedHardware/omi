@@ -76,6 +76,14 @@ def test_moving_clip_yields_numbered_sheet_and_filmstrip(tmp_path):
         assert strip.size == (8 * digest.strip.cell_width, 3 * digest.strip.cell_height)
 
 
+def test_short_clip_candidates_reach_the_end_at_most_four_per_second(tmp_path):
+    digest = digest_video(_clip(tmp_path, 'testsrc=size=160x90:rate=30', 2), executable=_ffmpeg())
+    times = digest.strip.times
+    assert times[0] == 0 and times[-1] == pytest.approx(1.9, abs=0.05)
+    assert min(b - a for a, b in zip(times, times[1:])) >= 0.25 - 0.01
+    assert [video_frames.candidate_count(d) for d in (0, 0.1, 1.01, 2, 12.1, 600)] == [1, 1, 4, 8, 48, 48]
+
+
 def test_static_clip_stops_at_three_frames(tmp_path):
     data = _clip(tmp_path, 'color=c=gray:size=320x320:rate=30', 5)
     digest = digest_video(data, executable=_ffmpeg())
@@ -86,9 +94,10 @@ def test_long_clip_keeps_candidate_cap(tmp_path):
     # Long clips decode keyframes only; -g 20 is a phone-like keyframe every 2 s.
     data = _clip(tmp_path, 'testsrc2=size=320x180:rate=10', 200, '-g', '20')
     digest = digest_video(data, executable=_ffmpeg())
-    assert len(digest.strip.times) == MAX_CANDIDATES
-    # The filmstrip reaches the end of the clip, not one sample interval short of it.
-    assert 195 <= digest.strip.times[-1] <= 200
+    # Keyframes at least one step (199.9 / 47 s) apart on a 2 s grid: bounded, and the tail
+    # falls short of the end by at most one step plus one keyframe interval.
+    assert 30 <= len(digest.strip.times) <= MAX_CANDIDATES
+    assert 200 - 199.9 / 47 - 2 <= digest.strip.times[-1] <= 200
     # Labels are the keyframes' own timestamps (every 2 s), never interpolated guesses.
     assert all(abs(t / 2 - round(t / 2)) < 0.01 for t in digest.strip.times)
 
@@ -356,7 +365,7 @@ def test_device_frames_route_validates_and_hides_private_fields(monkeypatch, tmp
     assert (uid, name, count, times, duration, audio) == ('u', 'clip.mov', 2, [0, 1.5], 2.0, b'aac')
     assert not list(Path(tempfile.gettempdir()).glob('*_audio'))  # temp audio removed
 
-    for bad in ('[0]', '{"a": 1}', 'nope', '[0, true]'):
+    for bad in ('[0]', '{"a": 1}', 'nope', '[0, true]', '[NaN, 1]', '[0, 1e999]', '[0, 1' + '0' * 400 + ']', '[-1, 1]'):
         response = client.post('/v2/files/video', files=frames, data={**form, 'frame_times': bad})
         assert response.status_code == 400, bad
     too_many = [('frames', (f'f{i}.jpg', b'x', 'image/jpeg')) for i in range(MAX_CANDIDATES + 1)]

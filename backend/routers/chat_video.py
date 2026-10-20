@@ -4,6 +4,7 @@ A video is read as stills plus speech (utils/media/video_frames.py); the clip is
 """
 
 import json
+import math
 import tempfile
 import uuid
 from pathlib import Path
@@ -39,6 +40,20 @@ def store_uploaded_clip(uid: str, path: Path, name: str) -> FileChat:
         raise HTTPException(status_code=400, detail=video_upload.VIDEO_UNREADABLE)
 
 
+def _frame_times(raw: str, count: int) -> List[float]:
+    """One finite, non-negative number of seconds per frame, or a 400."""
+    try:
+        values = json.loads(raw)
+        times = [float(t) for t in values if isinstance(t, (int, float)) and not isinstance(t, bool)]
+    except (ValueError, TypeError, OverflowError, RecursionError):
+        raise HTTPException(status_code=400, detail='frame_times must be a JSON array of seconds')
+    if not isinstance(values, list) or len(times) != len(values) or len(times) != count:
+        raise HTTPException(status_code=400, detail='frame_times must list one time per frame')
+    if not all(math.isfinite(t) and 0 <= t <= 36000 for t in times):
+        raise HTTPException(status_code=400, detail='frame_times must be seconds within the clip')
+    return times
+
+
 @router.post('/v2/files/video', response_model=List[FileChat], tags=['chat'])
 @max_part_size(MAX_VIDEO_AUDIO_BYTES)
 @multipart_limits(VIDEO_FRAMES_LIMITS)
@@ -46,7 +61,7 @@ def upload_video_frames_chat(
     frames: List[UploadFile] = File(
         ..., description='JPEG or PNG stills sampled from the clip, in time order (at most 48).'
     ),
-    frame_times: str = Form(..., description="JSON array of each frame's time in seconds."),
+    frame_times: str = Form(..., max_length=4096, description="JSON array of each frame's time in seconds."),
     duration_seconds: float = Form(..., ge=0, le=36000),
     name: str = Form('video.mov', max_length=255),
     audio: Optional[UploadFile] = File(None, description="The clip's audio track (m4a/aac/ogg), for its transcript."),
@@ -57,16 +72,7 @@ def upload_video_frames_chat(
     Same result as uploading the clip to /v2/files: one chat file whose image is a numbered
     contact sheet of the clip's most distinct frames.
     """
-    try:
-        times = json.loads(frame_times)
-    except ValueError:
-        raise HTTPException(status_code=400, detail='frame_times must be a JSON array of seconds')
-    if (
-        not isinstance(times, list)
-        or len(times) != len(frames)
-        or not all(isinstance(t, (int, float)) and not isinstance(t, bool) for t in times)
-    ):
-        raise HTTPException(status_code=400, detail='frame_times must list one time per frame')
+    times = _frame_times(frame_times, len(frames))
     if len(frames) > video_upload.MAX_CANDIDATES:
         raise HTTPException(status_code=400, detail=f'Send at most {video_upload.MAX_CANDIDATES} frames')
     blobs = []

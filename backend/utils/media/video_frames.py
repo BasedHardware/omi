@@ -29,16 +29,16 @@ MAX_CANDIDATES = 48
 MAX_CANDIDATE_FPS = 4.0
 CELL_EDGE = 384
 STRIP_COLUMNS = 8
-# Above this length, decode keyframes only (with their real timestamps), so a
-# ten-minute clip stays inside the timeout.
+# Above this length, decode keyframes only, so a ten-minute clip stays inside the timeout.
 KEYFRAME_SAMPLING_SECONDS = 120
 DECODE_TIMEOUT_SECONDS = 60
 # Mean absolute luma difference (0-255) below which another frame adds nothing new.
 MIN_FRAME_CHANGE = 6.0
 # A client frame is a downscaled still; anything larger is refused before decoding.
 MAX_CLIENT_FRAME_PIXELS = 2048 * 2048
-# Last sample sits this far before the end so a final frame always decodes.
-END_MARGIN_SECONDS = 0.05
+# Last sample sits this far before the end so a real frame exists there (a 10 fps clip's
+# last frame is 0.1 s before its duration).
+END_MARGIN_SECONDS = 0.1
 _VIDEO_FORMATS = 'mov,matroska,webm,avi'
 _DURATION = re.compile(rb'Duration: (\d+):(\d\d):(\d\d(?:\.\d+)?)')
 _VIDEO_STREAM = re.compile(rb'Stream #\d+:\d+[^\n]*: Video: ')
@@ -100,7 +100,7 @@ def _probe(executable: str, source: Path) -> tuple[float, bool]:
         timeout=10,
         check=False,
     )
-    banner = result.stderr[:65536]
+    banner = result.stderr[: 1024 * 1024]
     match = _DURATION.search(banner)
     duration = 0.0
     if match:
@@ -140,14 +140,30 @@ def _load(paths: Sequence[Path]) -> list[Image.Image]:
 def _candidates(
     executable: str, source: Path, duration: float, directory: Path
 ) -> tuple[list[Image.Image], list[float]]:
-    """Up to MAX_CANDIDATES frames from 0 to just before the end, with their times."""
+    """Up to MAX_CANDIDATES frames from 0 to just before the end, each with its real time.
+
+    One pass; the select filter decides which frames are scaled, logged and written, so the
+    output is bounded however the clip is encoded, and showinfo reports each written
+    frame's own presentation time.
+
+    - Up to KEYFRAME_SAMPLING_SECONDS: every frame is decoded and the first frame at or
+      after each of ``count`` evenly spaced targets (0 … duration - 0.05) is taken.
+    - Longer: only keyframes are decoded (fast for a ten-minute clip), taking a keyframe
+      once ``step`` seconds have passed since the last one taken; the tail can fall short
+      of the end by up to one step plus one keyframe interval.
+    """
     span = duration if duration > 0 else 10.0
+    count = candidate_count(span) if duration <= KEYFRAME_SAMPLING_SECONDS else MAX_CANDIDATES
+    step = max(span - END_MARGIN_SECONDS, 0.0) / max(count - 1, 1)
+    command = _base_command(executable)
+    command[command.index('-v') + 1] = 'info'  # showinfo reports at info level
+    command.append('-hide_banner')
     if duration > KEYFRAME_SAMPLING_SECONDS:
-        return _keyframe_candidates(executable, source, duration, directory)
-    # Frame k of the fps filter sits at k / rate; the last of MAX_CANDIDATES lands just
-    # before the end rather than one sample interval short of it.
-    rate = min(MAX_CANDIDATE_FPS, (MAX_CANDIDATES - 1) / max(span - END_MARGIN_SECONDS, 0.25))
-    command = _base_command(executable) + [
+        command += ['-skip_frame', 'nokey']
+        chooser = f'isnan(prev_selected_t)+gte(t-prev_selected_t\\,{step:.3f})'
+    else:
+        chooser = f'gte(t\\,selected_n*{step:.4f})'
+    command += [
         '-i',
         str(source),
         '-map',
@@ -155,9 +171,11 @@ def _candidates(
         '-an',
         '-sn',
         '-vf',
-        f'fps={rate:.6f},{_SCALE}',
+        f'select={chooser},{_SCALE},showinfo',
+        '-fps_mode',
+        'passthrough',
         '-frames:v',
-        str(MAX_CANDIDATES),
+        str(count),
         '-q:v',
         '5',
         '-f',
@@ -165,59 +183,23 @@ def _candidates(
         '-y',
         str(directory / 'c%03d.jpg'),
     ]
-    subprocess.run(
-        command, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=DECODE_TIMEOUT_SECONDS
-    )
-    frames = _load(sorted(directory.glob('c*.jpg'))[:MAX_CANDIDATES])
-    times = [i / rate for i in range(len(frames))]
-    if duration > 0:
-        times = [min(t, duration) for t in times]
-    return frames, times
-
-
-def _keyframe_candidates(
-    executable: str, source: Path, duration: float, directory: Path
-) -> tuple[list[Image.Image], list[float]]:
-    """Keyframes only, one pass, each with its own presentation time (from showinfo).
-
-    Decoding only keyframes keeps a ten-minute clip fast; the times are the frames' real
-    timestamps, so a window search never shows a frame under the wrong label. Up to
-    MAX_CANDIDATES keyframes are kept, the ones closest to evenly spaced targets.
-    """
-    command = _base_command(executable)
-    command[command.index('-v') + 1] = 'info'  # showinfo reports at info level
-    command += [
-        '-hide_banner',
-        '-skip_frame',
-        'nokey',
-        '-i',
-        str(source),
-        '-map',
-        '0:v:0',
-        '-an',
-        '-sn',
-        '-vf',
-        f'{_SCALE},showinfo',
-        '-fps_mode',
-        'passthrough',
-        '-q:v',
-        '5',
-        '-f',
-        'image2',
-        '-y',
-        str(directory / 'k%05d.jpg'),
-    ]
     result = subprocess.run(
         command, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, timeout=DECODE_TIMEOUT_SECONDS
     )
-    stamps = [float(t) for t in _PTS_TIME.findall(result.stderr[: 4 * 1024 * 1024])]
-    paths = sorted(directory.glob('k*.jpg'))
-    keyframes = list(zip(stamps, paths))  # showinfo and the muxer see frames in the same order
-    if not keyframes:
-        return [], []
-    targets = [i * (duration - END_MARGIN_SECONDS) / (MAX_CANDIDATES - 1) for i in range(MAX_CANDIDATES)]
-    chosen = sorted({min(range(len(keyframes)), key=lambda k: abs(keyframes[k][0] - t)) for t in targets})
-    return _load([keyframes[k][1] for k in chosen]), [max(0.0, keyframes[k][0]) for k in chosen]
+    stamps = [max(0.0, float(t)) for t in _PTS_TIME.findall(result.stderr[: 1024 * 1024])]
+    paths = sorted(directory.glob('c*.jpg'))[:count]
+    if len(stamps) != len(paths):  # showinfo and the muxer see the same frames in order
+        raise VideoFramesError('frame times unavailable')
+    if duration > 0:
+        stamps = [min(t, duration) for t in stamps]
+    return _load(paths), stamps
+
+
+def candidate_count(duration: float) -> int:
+    """Frames from 0 to just before the end, at most 4 per second, at most MAX_CANDIDATES."""
+    if not math.isfinite(duration) or duration <= END_MARGIN_SECONDS:
+        return 1
+    return min(MAX_CANDIDATES, int((duration - END_MARGIN_SECONDS) * MAX_CANDIDATE_FPS) + 1)
 
 
 def _signature(image: Image.Image) -> bytes:

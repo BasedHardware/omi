@@ -9,6 +9,17 @@ final class ChatVideoSamplerTests: XCTestCase {
     XCTAssertEqual(ChatVideoSampler.sampleTimes(duration: 2), [0, 0.28, 0.56, 0.84, 1.11, 1.39, 1.67, 1.95])
   }
 
+  func testSamplesNeverCloserThanAQuarterSecond() {
+    for duration in [0.31, 1.01, 1.3, 2.0, 11.99, 12.06, 30.0] {
+      let times = ChatVideoSampler.sampleTimes(duration: duration)
+      for (a, b) in zip(times, times.dropFirst()) {
+        XCTAssertGreaterThanOrEqual(b - a, 0.24, "\(duration)")  // rounding to 0.01
+      }
+      XCTAssertEqual(times.last ?? 0, max(0, duration - 0.05), accuracy: 0.01, "\(duration)")
+    }
+    XCTAssertEqual(ChatVideoSampler.sampleTimes(duration: 1.01).count, 4)
+  }
+
   func testLongClipCapsAtFortyEightFramesCoveringTheEnd() {
     let times = ChatVideoSampler.sampleTimes(duration: 600)
     XCTAssertEqual(times.count, 48)

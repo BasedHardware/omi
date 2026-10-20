@@ -15,7 +15,7 @@ import java.io.File
 import java.nio.ByteBuffer
 import java.util.UUID
 import kotlin.concurrent.thread
-import kotlin.math.ceil
+import kotlin.math.floor
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
@@ -54,10 +54,11 @@ object ChatVideoSamplerPlugin {
 
     fun sampleTimes(durationSeconds: Double): List<Double> {
         if (!durationSeconds.isFinite() || durationSeconds <= 0) return listOf(0.0)
-        val count = min(MAX_FRAMES, max(1, ceil(durationSeconds * MAX_FPS).toInt()))
+        // As many frames as fit at most 4 per second from 0 to just before the end, spread to the end.
+        val reach = max(0.0, durationSeconds - 0.05)
+        val count = min(MAX_FRAMES, floor(reach * MAX_FPS).toInt() + 1)
         if (count == 1) return listOf(0.0)
-        // First frame at 0, last just before the end, so the whole clip is covered.
-        val step = max(0.0, durationSeconds - 0.05) / (count - 1)
+        val step = reach / (count - 1)
         return (0 until count).map { (it * step * 100).roundToInt() / 100.0 }
     }
 

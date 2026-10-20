@@ -53,20 +53,24 @@ class ChatVideoSampler {
     try {
       final result = await _channel.invokeMapMethod<String, dynamic>('sample', {'path': video.path});
       if (result == null || result['audio_unsupported'] == true) return null;
-      final frames = (result['frames'] as List).cast<String>().map(File.new).toList();
-      final times = (result['times'] as List).map((t) => (t as num).toDouble()).toList();
-      final audio = result['audio'] as String?;
-      if (frames.isEmpty || frames.length != times.length) {
-        await _deleteQuietly(result['directory'] as String?);
+      final directory = result['directory'];
+      try {
+        final frames = (result['frames'] as List).cast<String>().map(File.new).toList();
+        final times = (result['times'] as List).map((t) => (t as num).toDouble()).toList();
+        final audio = result['audio'] as String?;
+        if (frames.isEmpty || frames.length != times.length) throw const FormatException('frames/times');
+        return SampledChatVideo(
+          frames: frames,
+          times: times,
+          duration: (result['duration'] as num).toDouble(),
+          audio: audio == null ? null : File(audio),
+          directory: Directory(directory as String),
+        );
+      } catch (_) {
+        // A malformed native result: drop its temp files and upload the clip instead.
+        await _deleteQuietly(directory is String ? directory : null);
         return null;
       }
-      return SampledChatVideo(
-        frames: frames,
-        times: times,
-        duration: (result['duration'] as num).toDouble(),
-        audio: audio == null ? null : File(audio),
-        directory: Directory(result['directory'] as String),
-      );
     } on MissingPluginException {
       return null;
     } on PlatformException catch (e) {

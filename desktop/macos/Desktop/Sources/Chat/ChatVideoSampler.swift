@@ -38,10 +38,11 @@ enum ChatVideoSampler {
   /// Evenly spaced sample times from 0 to the end: at most `maxFramesPerSecond`, at most `maxFrames`.
   static func sampleTimes(duration: Double) -> [Double] {
     guard duration.isFinite, duration > 0 else { return [0] }
-    let count = min(maxFrames, max(1, Int((duration * maxFramesPerSecond).rounded(.up))))
+    // As many frames as fit at most 4 per second from 0 to just before the end, spread to the end.
+    let reach = max(0, duration - 0.05)
+    let count = min(maxFrames, Int(reach * maxFramesPerSecond) + 1)
     guard count > 1 else { return [0] }
-    // First frame at 0, last just before the end, so the whole clip is covered.
-    let step = max(0, duration - 0.05) / Double(count - 1)
+    let step = reach / Double(count - 1)
     return (0..<count).map { (Double($0) * step * 100).rounded() / 100 }
   }
 
