@@ -6,6 +6,7 @@ their explicit processing choice.
 """
 
 import logging
+from typing import Any
 
 from database import conversations as conversations_db, users as users_db, redis_db
 from database.legal_holds import external_write_fence
@@ -42,22 +43,26 @@ def eligible(uid: str) -> bool:
         raise RecoveryUnavailable('Entitlement unavailable') from error
 
 
-def heal_conversations(uid: str, rows: list[dict]) -> None:
+def heal_conversations(uid: str, rows: list[dict[str, Any]]) -> None:
     locked = [row for row in rows if row.get('is_locked') and not row.get('processing_deferred')]
     if not locked or not eligible(uid):
         return
-    for row in locked:
-        try:
-            # Never use the URL's old ID when a sync redirect resolved a survivor.
-            cid = row['id']
-            with external_write_fence(uid):
+    try:
+        # Fence this bounded response page once, matching the upgrade batch
+        # owner, rather than adding two authority reads per historical row.
+        with external_write_fence(uid):
+            for row in locked:
+                # Never use the URL's old ID when a sync redirect resolved a survivor.
+                cid = row['id']
+                if not isinstance(cid, str) or not cid:
+                    raise RecoveryUnavailable('Conversation identity unavailable')
                 saved = conversations_db.update_conversation(uid, cid, {'is_locked': False})
-            if saved is not True:
-                raise RecoveryUnavailable('Conversation unavailable')
-            row['is_locked'] = False
-        except Exception as error:
-            logger.warning('paid_lock_recovery write deferred error_type=%s', type(error).__name__)
-            raise RecoveryUnavailable('Access recovery unavailable') from error
+                if saved is not True:
+                    raise RecoveryUnavailable('Conversation unavailable')
+                row['is_locked'] = False
+    except Exception as error:
+        logger.warning('paid_lock_recovery write deferred error_type=%s', type(error).__name__)
+        raise RecoveryUnavailable('Access recovery unavailable') from error
     # Each update preserves the database owner's people/search invalidations.
     # The signal also makes older mobile clients refresh their allowance state.
     try:
