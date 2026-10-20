@@ -861,8 +861,10 @@ def _names_deploy_target(text: str, name: str) -> bool:
     """True when ``text`` names ``name`` as a deploy target, not as a path segment or prose.
 
     Accepted forms: a ``service:``/``SERVICE=``-style key whose value is the name, a
-    deploy flag (``--service``, ``--gke-service``, ...), a YAML list item, a quoted
-    token, or a final path segment (``jobs/<name>"``, ``/<name>:``).
+    deploy flag (``--service``, ``--gke-service``, ...), a YAML list item, a Cloud Run
+    job ``jobId`` assignment or ``/jobs/<name>`` resource, or a ``deploy-<name>.sh``
+    script. A bare quoted token or path tail (an image tag, a log filter, a test
+    assertion) is not a deploy.
     """
     token = re.escape(name)
     end = r"(?![\w.-])"
@@ -870,8 +872,9 @@ def _names_deploy_target(text: str, name: str) -> bool:
         rf"(?im)^[ \t-]*[\w.-]*service[\w.-]*[ \t]*[:=][ \t]*[\"']?{token}[\"']?[ \t]*(?:#.*)?$",
         rf"--(?:service|gke-service|cloud-run-service|migrate-legacy-public-binding)(?:=|[ \t]+)[\"']?{token}{end}",
         rf"(?m)^[ \t]*-[ \t]+[\"']?{token}[\"']?[ \t]*$",
-        rf"[\"']{token}[\"']",
-        rf"/{token}(?=[\"':\s]|$)",
+        rf"(?<![\w.-])jobId[\"']?\]?\s*(?<![=!<>])=\s*[\"']{token}[\"']",
+        rf"/jobs/{token}[\"']",
+        rf"deploy-{token}\.sh",
     )
     return any(re.search(pattern, text) for pattern in patterns)
 

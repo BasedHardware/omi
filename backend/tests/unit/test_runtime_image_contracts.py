@@ -665,6 +665,25 @@ def test_role_pusher_target_copies_the_pusher_source_surface(contracts_module):
             lambda p: p['services']['backend'].update({'image_built_elsewhere': ''}),
             'image_built_elsewhere must be a non-empty reason',
         ),
+        # Third-pass false passes: a quoted assertion, a log filter and an image tag.
+        (
+            lambda p: p['services']['messaging-maintenance'].update(
+                {'current_deploy': ['backend/tests/unit/test_messaging_operations.py']}
+            ),
+            'test_messaging_operations.py never names the service as a deploy target',
+        ),
+        (
+            lambda p: p['services']['backend-sync']['current_deploy'].append(
+                '.github/actions/sync-backfill-lifecycle/action.yml'
+            ),
+            'sync-backfill-lifecycle/action.yml never names the service as a deploy target',
+        ),
+        (
+            lambda p: p['services']['backend']['current_deploy'].append(
+                '.github/workflows/gcp_backend_listen_helm.yml'
+            ),
+            'gcp_backend_listen_helm.yml never names the service as a deploy target',
+        ),
     ],
 )
 def test_role_map_rejects_incomplete_or_ambiguous_maps(contracts_module, tmp_path, mutate, expected):
@@ -704,6 +723,11 @@ def test_dockerfile_and_deploy_target_matches_are_bounded(contracts_module):
     assert names('"name": "projects/p/locations/l/jobs/messaging-maintenance-job",', 'messaging-maintenance-job')
     assert not names('python backend/scripts/x.py backend/charts/backend-listen/values.yaml', 'backend-listen')
     assert not names('# owns the full backend mutation domain', 'backend')
+    assert names("params['jobId'] = 'messaging-maintenance-job'", 'messaging-maintenance-job')
+    assert not names("assert params['jobId'] == 'messaging-maintenance-job'", 'messaging-maintenance-job')
+    assert names('IMAGE_TAG="$TAG" backend/scripts/deploy-llm-gateway.sh', 'llm-gateway')
+    assert not names('gcloud container images describe "gcr.io/p/backend:${TAG}"', 'backend')
+    assert not names('filter: service_name="backend-sync"', 'backend-sync')
 
 
 def _role_errors_for_dockerfile(contracts_module, tmp_path, text, image='backend-api'):
