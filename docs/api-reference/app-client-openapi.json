@@ -3244,6 +3244,19 @@
         "title": "AppPromptsGenerationResponse",
         "type": "object"
       },
+      "AppRejectRequest": {
+        "properties": {
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "title": "AppRejectRequest",
+        "type": "object"
+      },
       "AppResult": {
         "properties": {
           "app_id": {
@@ -43345,6 +43358,16 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AppRejectRequest"
+              }
+            }
+          },
+          "required": true
+        },
         "responses": {
           "200": {
             "content": {
