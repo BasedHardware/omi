@@ -217,6 +217,21 @@ function deferred<T>() {
 }
 
 beforeEach(() => {
+  // The toolbar's TextSwap reads prefers-reduced-motion when its label changes as
+  // selection mode opens; jsdom does not implement matchMedia.
+  vi.stubGlobal(
+    'matchMedia',
+    vi.fn(() => ({
+      matches: false,
+      media: '',
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })),
+  );
   harness.query = '';
   harness.conversations = [];
   harness.conversationsLoading = false;
@@ -232,6 +247,10 @@ beforeEach(() => {
   harness.clearSearch.mockReset();
   harness.setContext.mockReset();
   harness.getFolders.mockReset().mockResolvedValue([]);
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
 });
 
 describe('ConversationSplitView review regressions', () => {
