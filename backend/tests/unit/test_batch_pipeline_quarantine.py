@@ -12,6 +12,7 @@ from prometheus_client import CollectorRegistry
 import pytest
 
 from config.batch_pipeline import max_worker_attempts
+from config.policy import ProjectionPolicy
 from database.batch_pipeline_projection import ProjectionStore
 from database.batch_pipeline_projection_protocol import ProjectionBlocked
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
@@ -136,8 +137,14 @@ def projection_fixture():
             },
         },
     }
+    for (collection, *_), value in rows.items():
+        if collection == 'batch_pipeline_dev_jobs':
+            value['policy_parts'] = {'projection': ProjectionPolicy().to_dict()}
     client = StrictFirestore(rows)
     store = ProjectionStore(SimpleNamespace(client=client, namespace='batch_pipeline_dev'))
+    store.policy = lambda sid: ProjectionPolicy.from_dict(
+        client.rows[('batch_pipeline_dev_jobs', sid)]['policy_parts']['projection']
+    )
     return client, store, binding
 
 

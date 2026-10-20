@@ -147,8 +147,14 @@ def record_agent_change(
                 raise store.ReviewConflict('Entity changed while preparing merge')
             if data is None and edit.collection in {'entity_pages', 'dream_vocabulary'}:
                 data = {}
+            if (data is None or data.get('deleted')) and edit.collection in {
+                'conversations',
+                'memory_items',
+                'memories',
+            }:
+                raise store.ReviewStale('Edit target deleted')
             if data is None or data.get('deleted') or data.get('is_dismissed') or data.get('discarded'):
-                raise store.ReviewNotFound('Edit target not found')
+                raise store.ReviewConflict('Edit target unavailable')
             records.append(
                 {
                     'collection': edit.collection,
@@ -256,8 +262,10 @@ def merge_review_entities(
         # Only the node this transaction minted may replace its missing
         # witness. Never bless a fresh reread or discard unrelated null fences.
         fences[path] = nodes[entity_id]
-    if left == right or not a or not b or a.get('redirect_entity_id') or b.get('redirect_entity_id'):
-        raise store.ReviewConflict('Two current distinct entity nodes are required')
+    if left == right:
+        raise store.ReviewStale('Two current distinct entity nodes are required')
+    if not a or not b or a.get('redirect_entity_id') or b.get('redirect_entity_id'):
+        raise store.ReviewConflict('Entity changed while preparing merge')
     merged = entities.apply_entity_mutations({left: a, right: b}, [memory_ledger.merge_entities(left, right)])[left]
     aliases = merged.get('aliases', [])
     return record_agent_change(

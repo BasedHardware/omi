@@ -1473,8 +1473,8 @@ def test_firestore_gate_lane_source_and_target_bindings():
     assert 'BACKEND_LISTEN_SOURCE_SHA=$SELECTED_SHA' not in listen
     # Rollback replays the operator's requested Helm revision verbatim; there is
     # no resolver step and no source-sha derivation on that lane.
-    assert 'helm -n "$NS" rollback "$RELEASE" "$TARGET_REVISION" --wait --timeout 50m' in listen
-    assert 'helm -n "$NS" rollback "$RELEASE" --wait --timeout 50m' in listen
+    assert 'helm -n "$NS" rollback "$RELEASE" "$TARGET_REVISION" --wait --timeout 70m' in listen
+    assert 'helm -n "$NS" rollback "$RELEASE" --wait --timeout 70m' in listen
     assert 'TARGET_REVISION: ${{ github.event.inputs.helm_revision }}' in listen
     assert 'BACKEND_LISTEN_ROLLBACK_REVISION' not in listen
     # A listen rollback must not roll back or uninstall the NEG coverage

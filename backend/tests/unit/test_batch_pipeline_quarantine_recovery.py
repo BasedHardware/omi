@@ -8,10 +8,12 @@ from types import SimpleNamespace
 import pytest
 
 from config.batch_pipeline import recovery_owners
+from config.policy import resolve_batch_policy, resolve_stage_policy
 from database.batch_pipeline_privacy import privacy_owner_key
 from database.batch_pipeline_projection import ProjectionStore
 from database.batch_pipeline_projection_protocol import ProjectionReplay
 from database.batch_pipeline_store import FirestoreStore
+from tests.unit.fixtures.cap_rollout import full_cap_dispatch_rollout  # noqa: F401
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from utils.batch_pipeline.contracts import ProjectionBinding, Priority, WorkItem
 from utils.batch_pipeline.merge import OrderedMerge
@@ -263,6 +265,7 @@ def test_crash_after_assignment_replays_receipt_and_meters_once(setup):
         'projection_state': 'pending',
     }
     projection = ProjectionStore(store)
+    binding = projection.read('bad')[2]
     session = projection.session('bad', binding, 101)
 
     def assign(transaction):
@@ -500,7 +503,9 @@ def test_authoritative_projection_preserves_pyannote_groups_and_gap_abstention(m
             ]
         },
     }
-    row = build_incoming(item, binding, payload, batch_segment_id='unit')
+    row = build_incoming(
+        item, binding, payload, batch_segment_id='unit', policy=resolve_stage_policy(binding.owner_id, 'projection')
+    )
     segments = row['transcript_segments']
     assert [s['speaker'] for s in segments] == ['SPEAKER_00', 'BATCH_UNASSIGNED_part_1', 'SPEAKER_01']
     assert {s['speaker_id_scope'] for s in segments} == {'final:batch:unit'}
@@ -653,7 +658,7 @@ def test_asgi_recovery_delivery_spends_one_fenced_intent(setup, monkeypatch):
     from utils.batch_pipeline.serving import Serving
     from unittest.mock import AsyncMock
 
-    _, store, _, _, stt, recovery = setup
+    _, store, binding, _, stt, recovery = setup
     service = Serving(store, recovery=recovery)
     service.reconcile_async = AsyncMock()
     monkeypatch.setattr(routes, 'serving_for_stage', lambda stage: service)
@@ -665,7 +670,7 @@ def test_asgi_recovery_delivery_spends_one_fenced_intent(setup, monkeypatch):
     assert client.post('/v2/batch-pipeline/recover-quarantine', json=payload).json() == {'status': 'recovered'}
     assert client.post('/v2/batch-pipeline/recover-quarantine', json=payload).json() == {'status': 'held'}
     assert stt.call_count == 1
-    service.reconcile_async.assert_awaited_once_with()
+    service.reconcile_async.assert_awaited_once_with(owner_id=binding.owner_id, recovered='bad')
 
 
 @pytest.mark.parametrize('delivery_wins', [False, True])
@@ -701,11 +706,11 @@ def test_asgi_disabled_recovery_is_retryable_without_spending_intent(setup, monk
     from utils.batch_pipeline.serving import Serving
 
     client, store, binding, artifacts, stt, recovery = setup
-    recovery.protocol.prepare('bad', binding.owner_id, 100)
     if disabled == 'host':
         monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_MODE', 'off')
     elif disabled == 'cohort':
         monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST', '')
+    recovery.protocol.prepare('bad', binding.owner_id, 100)
     service = Serving(store, recovery=None if disabled == 'missing_recovery' else recovery)
     monkeypatch.setattr(routes, 'serving_for_stage', lambda stage: service)
     app = FastAPI()
@@ -797,6 +802,9 @@ def test_default_sweep_dispatches_sixteen_and_resumes_cursor(setup, monkeypatch)
     _, _, binding, _, _, recovery = setup
     monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_ALL_ADMITTED', 'true')
     candidates = [(f'bad-{i:02}', binding.owner_id) for i in range(33)]
+    monkeypatch.setattr(
+        module, 'load_stage_policy', lambda *args: ({}, resolve_stage_policy(binding.owner_id, 'recovery'))
+    )
 
     def page(client, namespace, owner, limit, *, after_id):
         assert limit == 16
@@ -814,18 +822,31 @@ def test_default_sweep_dispatches_sixteen_and_resumes_cursor(setup, monkeypatch)
     assert recovery.sweep() == {'queued': 16}
 
 
-def test_sweep_bounds_held_errors_and_rotates_allowlisted_owners(setup, monkeypatch):
+def test_sweep_bounds_held_errors_and_advances_global_cursor(setup, monkeypatch):
     from utils.batch_pipeline import quarantine_recovery as module
 
-    _, _, _, _, _, recovery = setup
+    _, _, binding, _, _, recovery = setup
     monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_DISPATCH_BATCH_SIZE', '2')
-    monkeypatch.setattr(module, 'recovery_owners', lambda: ('first', 'second'))
-    query = Mock(side_effect=lambda client, namespace, owner, limit: [(f'{owner}-{i}', owner) for i in range(limit)])
+    monkeypatch.setattr(
+        module, 'load_stage_policy', lambda *args: ({}, resolve_stage_policy(binding.owner_id, 'recovery'))
+    )
+    query = Mock(side_effect=[[("a", "first"), ("b", "first")], [("c", "second")]])
     monkeypatch.setattr(module, 'recovery_candidates', query)
-    recovery.dispatch = Mock(side_effect=[RuntimeError('synthetic'), 'held', 'queued', 'queued'])
+    recovery.dispatch = Mock(side_effect=["held", RuntimeError("private"), "queued"])
     assert recovery.sweep() == {'held': 2}
-    assert recovery.sweep() == {'queued': 2}
-    assert [call.args[2] for call in query.call_args_list] == ['first', 'second']
+    assert recovery.sweep() == {'queued': 1}
+    assert query.call_args_list[1].kwargs['after_id'] == 'b'
+
+
+def test_prepared_recovery_uses_its_owner_stamp_after_env_rollback(setup, monkeypatch):
+    client, store, binding, artifacts, stt, recovery = setup
+    recovery.protocol.prepare('bad', binding.owner_id, 100)
+    recorded = row(client)['policy_parts']['recovery']
+    monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_MODE', 'off')
+    monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST', '')
+    assert recovery.recover('bad', binding.owner_id) == 'recovered'
+    assert row(client)['policy_parts']['recovery'] == recorded
+    stt.assert_called_once()
 
 
 def _wake_env(monkeypatch, lease=None):
@@ -1049,7 +1070,7 @@ def test_asgi_held_delivery_rearms_only_its_named_wake(setup, monkeypatch):
     module, enqueue = _wake_env(monkeypatch)
     client, store, binding, _, stt, recovery = setup
     assert recovery.dispatch('bad', binding.owner_id) == 'queued'
-    monkeypatch.setattr(module, 'sync_allowed', lambda *args: False)  # Allowance refuses the start.
+    monkeypatch.setattr(module, 'sync_allowed', lambda *args, **kwargs: False)  # Allowance refuses the start.
     service = Serving(store, recovery=recovery)
     monkeypatch.setattr(routes, 'serving_for_stage', lambda stage: service)
     app = FastAPI()

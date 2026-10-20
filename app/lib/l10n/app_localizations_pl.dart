@@ -9346,9 +9346,7 @@ class AppLocalizationsPl extends AppLocalizations {
   }
 
   @override
-  String quoteMoreTimestamps(int count) {
-    return '+$count więcej';
-  }
+  String get quoteShowSources => 'Pokaż źródła';
 
   @override
   String get jumpToLatestMessage => 'Przejdź do najnowszej wiadomości';
@@ -11100,7 +11098,7 @@ class AppLocalizationsPl extends AppLocalizations {
   String get openCall => 'Otwórz połączenie';
 
   @override
-  String get captureRecoveryBanner => 'Omi nie wysyła dźwięku — dotknij, aby połączyć ponownie';
+  String get captureRecoveryBannerTitle => 'Omi nie wysyła dźwięku';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11111,6 +11109,23 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get captureAudioSavedTranscribesLater => 'Dźwięk zapisany, transkrypcja później';
+
+  @override
+  String get captureBannerTryReconnect => 'Spróbuj ponownie połączyć';
+
+  @override
+  String get captureBannerRetrySync => 'Ponów synchronizację';
+
+  @override
+  String get captureWedgeBleExplanation =>
+      'Połączenie Bluetooth z urządzeniem Omi się zawiesiło, więc dźwięk nie dociera do aplikacji. Omi nadal nagrywa na urządzeniu i zsynchronizuje się, gdy połączenie wróci. Ponowienie próby ponownie nawiązuje połączenie; jeśli nadal się nie udaje, sprawdź urządzenie w Ustawienia > Urządzenie.';
+
+  @override
+  String get captureIngressNeedsReconnect => 'Dźwięk nie dociera do aplikacji — połącz ponownie urządzenie Omi';
+
+  @override
+  String get captureIngressNeedsReconnectExplanation =>
+      'Aplikacja nie może już odbierać dźwięku z urządzenia Omi i nie udało się automatycznie przywrócić połączenia. Odłącz i ponownie podłącz urządzenie — w ustawieniach urządzenia lub wyłączając i włączając je. Dźwięk zapisany na urządzeniu zostanie zsynchronizowany później.';
 
   @override
   String get captureStillRecording => 'Nagrywanie trwa';
@@ -13142,6 +13157,9 @@ class AppLocalizationsPl extends AppLocalizations {
   String get reviewProposalSuggested => 'Sugerowane';
 
   @override
+  String get reviewQuestionOutOfDate => 'To pytanie jest nieaktualne, więc nic się nie zmieniło.';
+
+  @override
   String get reviewProposalConflict => 'To się zmieniło od czasu sugestii Dream, więc nic nie zostało zastosowane.';
 
   @override
@@ -13697,7 +13715,30 @@ class AppLocalizationsPl extends AppLocalizations {
   String get activityRetryAll => 'Ponów wszystkie';
 
   @override
+  String get activityAttentionStorageUnknownTitle => 'Nie można sprawdzić pamięci';
+
+  @override
+  String get activityAttentionStorageSubtitle => 'Nagrania wstrzymane';
+
+  @override
+  String get activityAttentionUploadStalledTitle => 'Przesyłanie wstrzymane';
+
+  @override
+  String activityAttentionUploadRecordings(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Czekają $count nagrania',
+      one: 'Czeka 1 nagranie',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get attentionSummaryFailed => 'Nie udało się podsumować tej rozmowy';
+
+  @override
+  String get activityAttentionSemantics => 'Aktywność, wymaga uwagi';
 
   @override
   String get connectAgentHeadline => 'Korzystaj z pamięci Omi w ChatGPT i swoich agentach AI';
@@ -14383,4 +14424,7 @@ class AppLocalizationsPl extends AppLocalizations {
   String playbackPartialAudioSaved(String saved, String total) {
     return 'Zapisano $saved z $total dźwięku';
   }
+
+  @override
+  String get activityAttentionLinkStalledSubtitle => 'Omi nadal nagrywa';
 }

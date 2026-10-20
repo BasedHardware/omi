@@ -60,6 +60,44 @@ def transport_failure_fields(error: BaseException, age_seconds: float) -> Transp
     )
 
 
+# Content-free cause behind an otherwise untyped connection_lost death.
+CONNECTION_LOSS_CAUSES = frozenset(
+    {
+        'remote_close_normal',
+        'remote_close_error',
+        'keepalive_timeout',
+        'abnormal_close',
+        'clean_eof',
+        'reset',
+        'timeout',
+        'tls',
+        'dns',
+        'other',
+    }
+)
+
+
+def connection_loss_cause(error: BaseException) -> str:
+    """Bucket a transport exception by close frames and class, never by text."""
+    code = getattr(getattr(error, 'rcvd', None), 'code', None)
+    if isinstance(code, int) and not isinstance(code, bool):
+        return 'remote_close_normal' if code in (1000, 1001) else 'remote_close_error'
+    if getattr(getattr(error, 'sent', None), 'reason', None) == 'keepalive ping timeout':
+        return 'keepalive_timeout'
+    name = type(error).__name__
+    if name.startswith('ConnectionClosed'):
+        return 'abnormal_close'
+    if name in {'ConnectionResetError', 'ConnectionAbortedError', 'BrokenPipeError'}:
+        return 'reset'
+    if name == 'TimeoutError':
+        return 'timeout'
+    if name.startswith('SSL'):
+        return 'tls'
+    if name == 'gaierror':
+        return 'dns'
+    return 'other'
+
+
 _STAGES = {
     '_save_wav': 'upload_save',
     '_prepare_voice_message_url': 'storage_prepare',

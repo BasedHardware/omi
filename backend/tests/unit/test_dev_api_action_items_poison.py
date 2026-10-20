@@ -247,7 +247,17 @@ def test_developer_patch_omitted_due_date_preserves_existing_value():
 
     assert response.status_code == 200
     assert update.call_args.args[2] == {'description': 'Updated task'}
-    sync.assert_not_called()
+    # The due date is left alone, and the phone reminder is re-armed at that same time with the
+    # new title instead of firing with the old one.
+    sync.assert_called_once_with(
+        user_id='uid1',
+        action_item_id='a1',
+        description='Updated task',
+        completed=False,
+        due_at=due,
+        status=None,
+        deleted=False,
+    )
     assert response.json()['due_at'] == due.isoformat().replace('+00:00', 'Z')
 
 

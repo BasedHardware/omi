@@ -8,6 +8,7 @@ from typing import Any
 from database import cap_hold_redrive as store
 from utils.executors import db_executor, storage_executor, run_blocking
 from utils import funded_processing, processing_backlog_worker
+from config.stt_cap_dispatch import execution_admission_configured
 from utils.sync import live_cap_staging
 
 logger = logging.getLogger(__name__)
@@ -48,12 +49,12 @@ async def sweep() -> dict:
             await run_blocking(storage_executor, live_cap_staging.cleanup, uid, snap.reference)
         except Exception as error:
             logger.warning('event=cap_hold_redrive outcome=cleanup_deferred exception_type=%s', type(error).__name__)
-    if not funded_processing.enabled():
+    if not execution_admission_configured():
         return counts
 
     async def visit(snap: Any):
         uid = owner(snap, 'processing_backlog')
-        if uid is None:
+        if uid is None or not funded_processing.enabled(uid):
             return
         try:
             # Five concurrent owners share existing executors. Stop before the

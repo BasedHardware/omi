@@ -4,6 +4,7 @@ Do not import the existing Parakeet GPUWorker here: it owns a second GPU thread
 and loads unrelated embedding models. This chain is the sole model owner.
 """
 
+from collections import OrderedDict
 import io
 from copy import deepcopy
 from contextlib import nullcontext
@@ -30,7 +31,9 @@ from diarizer.batch_pipeline import (
     padded_retry_seconds,
     validate_words,
 )
+from diarizer.batch_pipeline_context import capture_stream
 from diarizer.batch_pipeline_flight import FlightPyannote, diarization_payload
+from utils.batch_pipeline.audio import read_context
 
 
 def pin_parakeet_decoding(model):
@@ -152,6 +155,49 @@ class PyannoteVAD:
         )
 
 
+class StagedAudio:
+    """Fetch+decode staged audio once, keeping each unit's capture-stream identity.
+
+    The authenticated intake context frozen in the staged WAV names the source,
+    device and lock the per-unit chunk identity was built from. Record-lane
+    audio carries no intake context; its conversation is its stream.
+    """
+
+    MAX_PENDING = 256
+
+    def __init__(self, fetch_audio):
+        self.fetch_audio = fetch_audio
+        self._streams: OrderedDict[str, str | None] = OrderedDict()
+        self._languages: OrderedDict[str, str | None] = OrderedDict()
+
+    def decode(self, item):
+        body = self.fetch_audio(item)
+        try:
+            context = read_context(body)
+        except Exception:
+            context = None
+        self._streams[item.segment_id] = capture_stream(item, context)
+        self._languages[item.segment_id] = stt_language(context)
+        for pending in (self._streams, self._languages):
+            while len(pending) > self.MAX_PENDING:
+                pending.popitem(last=False)
+        return decode_pcm16_wav(body)
+
+    def stream(self, item):
+        return self._streams.pop(item.segment_id, None)
+
+    def language(self, item):
+        """Intake's resolved STT language ('' unknown); None when intake did not record one."""
+        return self._languages.pop(item.segment_id, None)
+
+
+def stt_language(context):
+    if not isinstance(context, dict) or 'stt_language' not in context:
+        return None
+    value = context['stt_language']
+    return value if isinstance(value, str) else None
+
+
 def decode_pcm16_wav(body):
     """Bounded canonical staging format; callers decrypt/fetch before this step."""
     with wave.open(io.BytesIO(body), 'rb') as handle:
@@ -195,8 +241,9 @@ def create_local_worker(
         if config.flight_batching
         else None
     )
+    staged = StagedAudio(fetch_audio)
     return PipelineWorker(
-        decode=lambda item: decode_pcm16_wav(fetch_audio(item)),
+        decode=staged.decode,
         vad=PyannoteVAD(vad_model),
         words_providers={'parakeet': words},
         recover_words=words.recover_empty,
@@ -207,4 +254,6 @@ def create_local_worker(
         single_speaker=single_speaker,
         on_failure=on_failure,
         flight_models=flight,
+        stream_of=staged.stream,
+        language_of=staged.language,
     )

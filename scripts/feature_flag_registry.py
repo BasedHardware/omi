@@ -6,7 +6,7 @@ import re
 import subprocess
 import sys
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -19,6 +19,8 @@ LIFECYCLES = {"experiment", "rollout", "ops_kill", "config_switch"}
 SURFACES = {"backend", "macos", "windows", "web-app", "web-admin", "web-frontend", "mobile", "llm-gateway"}
 FAILS = {"open", "closed", "inverted"}
 DECISIONS = {"pending", "graduate", "ship", "kill", "keep"}
+TERMINALS = {"on", "off", "keep", "undecided"}
+REVIEW_GRACE_DAYS = 7
 POSTHOG_ROLES = {"enable", "kill", "exposure", "payload"}
 FLAG_SUFFIX = re.compile(r"(?:_ENABLED|_MODE|_KILL_SWITCH|_COHORT|_PERCENT|_PAUSED|_STOP|_SHADOW(?:_[A-Z0-9]+)?)$")
 SWIFT_FLAG = re.compile(
@@ -44,6 +46,8 @@ TS_POSTHOG_FLAG = re.compile(r"\b(?:enabledFlag|killSwitchFlag)\s*=\s*['\"]([^'\
 NODE_RUNTIME_ENV = re.compile(r"\bprocess\.env\.((?!NEXT_PUBLIC_)[A-Z][A-Z0-9_]*)")
 CHART_KEY = re.compile(r"^\s*-\s*name:\s*['\"]?([A-Z][A-Z0-9_]+)")
 MANIFEST_KEY = re.compile(r"^\s*([A-Z][A-Z0-9_]+):(?:\s|$)")
+ACTION_ENV_ARG = re.compile(r"--(?:update|set)-env-vars(?:=|\s+)(?:\"([^\"]*)\"|'([^']*)'|([^\s\\]+))", re.S)
+ACTION_ASSIGNMENT = re.compile(r"^\s*([A-Z][A-Z0-9_]+)=([^,\s]+)")
 
 
 @dataclass(frozen=True)
@@ -85,6 +89,20 @@ def validate_registry(registry: dict[str, list[dict[str, Any]]], *, root: Path =
                 ):
                     if entry.get(field) not in allowed:
                         errors.append(f"{label}: invalid {field}: {entry.get(field)!r}")
+                lifecycle = entry.get("lifecycle")
+                decision = entry.get("decision")
+                terminal = entry.get("terminal")
+                if "terminal" not in entry:
+                    errors.append(f"{label}: terminal is required")
+                elif terminal not in TERMINALS:
+                    errors.append(f"{label}: invalid terminal: {terminal!r}")
+                if lifecycle in {"ops_kill", "config_switch"} and terminal != "keep":
+                    errors.append(f"{label}: {lifecycle} terminal must be keep")
+                if lifecycle in {"rollout", "experiment"} and entry.get("owner") == "unowned":
+                    errors.append(f"{label}: {lifecycle} owner must not be unowned")
+                terminal_for_decision = {"graduate": "on", "ship": "on", "kill": "off", "keep": "keep"}
+                if decision in terminal_for_decision and terminal != terminal_for_decision[decision]:
+                    errors.append(f"{label}: decision {decision} requires terminal {terminal_for_decision[decision]}")
                 surfaces = entry.get("surfaces")
                 if not isinstance(surfaces, list) or not surfaces or any(s not in SURFACES for s in surfaces):
                     errors.append(f"{label}: invalid surfaces")
@@ -188,7 +206,8 @@ def relevant_code(path: str) -> bool:
 
 def python_reads(path: str, text: str, known: set[str]) -> list[tuple[str, int]]:
     if not any(
-        token in text for token in ("getenv", "environ", "_FLAG_KEY", "_ENV", "_COHORT", "_HEADER", "enabled_env_var")
+        token in text
+        for token in ("getenv", "environ", "_FLAG_KEY", "_ENV", "_COHORT", "_HEADER", "enabled_env_var", "kill_switch")
     ):
         return []
     tree = ast.parse(text, filename=path)
@@ -288,7 +307,11 @@ def extract_code_reads(root: Path, known: set[str]) -> list[Read]:
             patterns = (
                 (SWIFT_FLAG, SWIFT_LITERAL, SWIFT_HEADER)
                 if path.endswith(".swift")
-                else (DART_DEFINITION, DART_MASTER) if path.endswith(".dart") else (BUILD_DEFINE, TS_POSTHOG_FLAG, NODE_RUNTIME_ENV)
+                else (
+                    (DART_DEFINITION, DART_MASTER)
+                    if path.endswith(".dart")
+                    else (BUILD_DEFINE, TS_POSTHOG_FLAG, NODE_RUNTIME_ENV)
+                )
             )
             for pattern in patterns:
                 for match in pattern.finditer(text):
@@ -337,9 +360,50 @@ def extract_deploy_declarations(root: Path) -> list[Read]:
         for lineno, line in enumerate(file.read_text(encoding="utf-8").splitlines(), 1):
             pattern = CHART_KEY if "/charts/" in file.as_posix() else MANIFEST_KEY
             match = pattern.match(line)
-            if match and FLAG_SUFFIX.search(match[1]):
+            if match and (FLAG_SUFFIX.search(match[1]) or "ALLOWLIST" in match[1]):
                 reads.append(Read(match[1], file.relative_to(root).as_posix(), lineno))
     return reads
+
+
+def extract_action_declarations(root: Path) -> list[Read]:
+    """Find ramp-percent/allowlist values emitted by deploy actions and prod workflows."""
+    files = list((root / ".github/actions").rglob("action.yml"))
+    files.extend((root / ".github/workflows").glob("*prod*.y*ml"))
+    reads: list[Read] = []
+    for file in files:
+        if not file.is_file():
+            continue
+        text = file.read_text(encoding="utf-8")
+        for match in ACTION_ENV_ARG.finditer(text):
+            payload = next((value for value in match.groups() if value is not None), "")
+            line = text.count("\n", 0, match.start()) + 1
+            for item in payload.replace("\\\n", "").split(","):
+                key, separator, _ = item.partition("=")
+                key = key.strip()
+                if separator and ("PERCENT" in key or "ALLOWLIST" in key):
+                    reads.append(Read(key, file.relative_to(root).as_posix(), line))
+        if file.as_posix().endswith(".github/actions/sync-backfill-lifecycle/action.yml"):
+            in_output = False
+            for lineno, raw in enumerate(text.splitlines(), 1):
+                if 'echo "sync_backfill_env_vars<<EOF"' in raw:
+                    in_output = True
+                    continue
+                if in_output and 'echo "EOF"' in raw:
+                    break
+                if in_output:
+                    assignment = ACTION_ASSIGNMENT.match(raw.strip().removeprefix('echo "').removesuffix('"'))
+                    if assignment and ("PERCENT" in assignment[1] or "ALLOWLIST" in assignment[1]):
+                        reads.append(Read(assignment[1], file.relative_to(root).as_posix(), lineno))
+    return reads
+
+
+def duplicate_declaration_sources(declarations: list[Read]) -> dict[str, list[str]]:
+    """Return ramp-percent/allowlist keys declared in multiple source files."""
+    sources: dict[str, set[str]] = {}
+    for declaration in declarations:
+        if "PERCENT" in declaration.key or "ALLOWLIST" in declaration.key:
+            sources.setdefault(declaration.key, set()).add(declaration.path)
+    return {key: sorted(paths) for key, paths in sorted(sources.items()) if len(paths) > 1}
 
 
 def overdue(registry: dict[str, list[dict[str, Any]]], as_of: date) -> list[str]:
@@ -349,4 +413,15 @@ def overdue(registry: dict[str, list[dict[str, Any]]], as_of: date) -> list[str]
         if entry.get("lifecycle") in {"rollout", "experiment"}
         and entry.get("review_by")
         and date.fromisoformat(entry["review_by"]) < as_of
+    )
+
+
+def overdue_beyond_grace(registry: dict[str, list[dict[str, Any]]], as_of: date) -> list[str]:
+    """Return rollout/experiment rows whose review date plus the grace has passed."""
+    return sorted(
+        entry["key"]
+        for entry in registry.get("flags", [])
+        if entry.get("lifecycle") in {"rollout", "experiment"}
+        and entry.get("review_by")
+        and date.fromisoformat(entry["review_by"]) + timedelta(days=REVIEW_GRACE_DAYS) < as_of
     )
