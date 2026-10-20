@@ -13166,6 +13166,9 @@ class AppLocalizationsBg extends AppLocalizations {
   String get reviewProposalSuggested => 'Предложено';
 
   @override
+  String get reviewQuestionOutOfDate => 'Този въпрос е остарял, затова нищо не се промени.';
+
+  @override
   String get reviewProposalConflict => 'Това се промени, след като Dream го предложи, затова нищо не беше приложено.';
 
   @override

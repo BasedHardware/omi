@@ -68,7 +68,7 @@ def env_reads(source):
             and node.args
         ):
             key = node.args[0]
-        elif isinstance(node, ast.Subscript) and name(node.value) == 'os.environ':
+        elif isinstance(node, ast.Subscript) and isinstance(node.ctx, ast.Load) and name(node.value) == 'os.environ':
             key = node.slice
         if isinstance(key, ast.Constant):
             yield key.value
@@ -92,6 +92,7 @@ RESOLUTION_EDGES = {
     # First-summary outbox CAS callbacks (moved from utils/sync/reprocess.py by C2; reprocess.py is an alias).
     'utils/enrichment/outbox.py': {'update', 'stamp_claim_policy'},
     'routers/sync.py': {'sync_local_files_v2'},
+    'routers/listen/policy.py': {'initialize_session_policy'},
 }
 SNAPSHOT_GETTERS = {
     'enabled_for',
@@ -144,7 +145,9 @@ def stage_policy_reads(source, relative):
                 continue  # E2's pre-unit live/listen route admission.
             out.append(f'{relative}:{node.lineno}: {called} must use the recorded policy')
             continue
-        if called in {'resolve_batch_policy', 'resolve_stage_policy'} and target.startswith('config.policy'):
+        if called in {'resolve_batch_policy', 'resolve_stage_policy', 'resolve_listen_policy'} and target.startswith(
+            'config.policy'
+        ):
             allowed = RESOLUTION_EDGES.get(relative, set())
             owners = [f for f in functions if f.lineno <= node.lineno <= (f.end_lineno or f.lineno)]
             owner = min(owners, key=lambda f: (f.end_lineno or f.lineno) - f.lineno) if owners else None
@@ -166,7 +169,10 @@ def scan(root: Path):
             source = path.read_text()
             errors.extend(stage_policy_reads(source, relative))
             for key in env_reads(source):
-                if key in protected:
+                if key in protected or (
+                    isinstance(key, str)
+                    and (key.startswith('STT_ROUTING_') or key == 'PARAKEET_WINDOW_ALLOCATION_PERCENT')
+                ):
                     errors.append(f'{relative}: {key} must be resolved in config/policy/')
                 elif isinstance(key, str) and key.startswith('BATCH_PIPELINE_'):
                     warnings.add(f'{relative}: {key} is outside E1 policy ownership (E1b candidate)')
@@ -208,7 +214,7 @@ def main():
     if errors:
         print('\n'.join(errors), file=sys.stderr)
         return 1
-    print('Batch policy env boundary and live-switch registry: OK')
+    print('Batch/listen policy env boundary and live-switch registry: OK')
     return 0
 
 

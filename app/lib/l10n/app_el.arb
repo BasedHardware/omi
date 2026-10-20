@@ -4023,6 +4023,7 @@
     "reviewProposalGeneric": "Να εφαρμοστεί αυτή η προτεινόμενη διόρθωση;",
     "reviewProposalApply": "Εφαρμογή",
     "reviewProposalSuggested": "Προτεινόμενο",
+    "reviewQuestionOutOfDate": "Αυτή η ερώτηση δεν είναι πλέον επίκαιρη, οπότε δεν άλλαξε τίποτα.",
     "reviewProposalConflict": "Αυτό άλλαξε αφότου το πρότεινε το Dream, οπότε δεν εφαρμόστηκε τίποτα.",
     "itemLinkListTitle": "{count, plural, =0{Κανένα στοιχείο} =1{1 στοιχείο} other{{count} στοιχεία}}",
     "paywallRecommended": "Προτεινόμενο",

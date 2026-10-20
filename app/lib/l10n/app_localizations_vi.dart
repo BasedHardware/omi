@@ -13116,6 +13116,9 @@ class AppLocalizationsVi extends AppLocalizations {
   String get reviewProposalSuggested => 'Đề xuất';
 
   @override
+  String get reviewQuestionOutOfDate => 'Câu hỏi này đã lỗi thời nên không có gì thay đổi.';
+
+  @override
   String get reviewProposalConflict => 'Mục này đã thay đổi sau khi Dream đề xuất nên không có gì được áp dụng.';
 
   @override

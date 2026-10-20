@@ -25,7 +25,7 @@ environments:
           REPEAT_WORK_REVISION_ENABLED: {value: 'false', category: rollout}
           REPEAT_WORK_LLM_VERSION: {value: 2026-10-16-v1, category: rollout}
           SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
-          FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":0,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":0,"ledger_purge_coalesce":0,"people_scan_dedupe":0,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":0,"subscription_cache":100,"usage_month_cache":0}',
+          FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":5,"ledger_purge_coalesce":5,"people_scan_dedupe":0,"queue_age_sample_budget":5,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":5,"subscription_cache":100,"usage_month_cache":5}',
             category: rollout}
           FSR_QUEUE_AGE_PUBLISHER: {value: '1', category: rollout}
           FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -365,7 +365,7 @@ environments:
           REPEAT_WORK_REVISION_ENABLED: {value: 'false', category: rollout}
           REPEAT_WORK_LLM_VERSION: {value: 2026-10-16-v1, category: rollout}
           SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
-          FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":0,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":0,"ledger_purge_coalesce":0,"people_scan_dedupe":0,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":0,"subscription_cache":100,"usage_month_cache":0}',
+          FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":5,"ledger_purge_coalesce":5,"people_scan_dedupe":0,"queue_age_sample_budget":5,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":5,"subscription_cache":100,"usage_month_cache":5}',
             category: rollout}
           FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
           FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -668,7 +668,7 @@ environments:
         LLM_GATEWAY_ACCOUNTING_ENABLED: {value: 'true', category: rollout}
         FIRESTORE_READ_LEDGER:
           value: '1'
-        FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":0,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":0,"ledger_purge_coalesce":0,"people_scan_dedupe":0,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":0,"subscription_cache":100,"usage_month_cache":0}',
+        FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":5,"ledger_purge_coalesce":5,"people_scan_dedupe":0,"queue_age_sample_budget":5,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":5,"subscription_cache":100,"usage_month_cache":5}',
           category: rollout}
         FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
         FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -816,7 +816,7 @@ environments:
               category: service_discovery
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":0,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":0,"ledger_purge_coalesce":0,"people_scan_dedupe":0,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":0,"subscription_cache":100,"usage_month_cache":0}',
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":5,"ledger_purge_coalesce":5,"people_scan_dedupe":0,"queue_age_sample_budget":5,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":5,"subscription_cache":100,"usage_month_cache":5}',
               category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -1085,7 +1085,7 @@ environments:
               category: service_discovery
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":0,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":0,"ledger_purge_coalesce":0,"people_scan_dedupe":0,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":0,"subscription_cache":100,"usage_month_cache":0}',
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":5,"ledger_purge_coalesce":5,"people_scan_dedupe":0,"queue_age_sample_budget":5,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":5,"subscription_cache":100,"usage_month_cache":5}',
               category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -1358,7 +1358,7 @@ environments:
               category: service_discovery
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":0,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":0,"ledger_purge_coalesce":0,"people_scan_dedupe":0,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":0,"subscription_cache":100,"usage_month_cache":0}',
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":5,"ledger_purge_coalesce":5,"people_scan_dedupe":0,"queue_age_sample_budget":5,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":5,"subscription_cache":100,"usage_month_cache":5}',
               category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -1618,7 +1618,7 @@ environments:
               category: service_discovery
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":0,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":0,"ledger_purge_coalesce":0,"people_scan_dedupe":0,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":0,"subscription_cache":100,"usage_month_cache":0}',
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":5,"ledger_purge_coalesce":5,"people_scan_dedupe":0,"queue_age_sample_budget":5,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":5,"subscription_cache":100,"usage_month_cache":5}',
               category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -1792,7 +1792,7 @@ environments:
           env:
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":0,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":0,"ledger_purge_coalesce":0,"people_scan_dedupe":0,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":0,"subscription_cache":100,"usage_month_cache":0}',
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":5,"ledger_purge_coalesce":5,"people_scan_dedupe":0,"queue_age_sample_budget":5,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":5,"subscription_cache":100,"usage_month_cache":5}',
               category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -1858,7 +1858,7 @@ environments:
               secret: REDIS_DB_PASSWORD
               version: latest
           env:
-            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":0,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":0,"ledger_purge_coalesce":0,"people_scan_dedupe":0,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":0,"subscription_cache":100,"usage_month_cache":0}',
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":5,"ledger_purge_coalesce":5,"people_scan_dedupe":0,"queue_age_sample_budget":5,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":5,"subscription_cache":100,"usage_month_cache":5}',
               category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -1934,7 +1934,7 @@ environments:
           env:
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":0,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":0,"ledger_purge_coalesce":0,"people_scan_dedupe":0,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":0,"subscription_cache":100,"usage_month_cache":0}',
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":5,"ledger_purge_coalesce":5,"people_scan_dedupe":0,"queue_age_sample_budget":5,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":5,"subscription_cache":100,"usage_month_cache":5}',
               category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -1999,7 +1999,7 @@ environments:
           env:
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":0,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":0,"ledger_purge_coalesce":0,"people_scan_dedupe":0,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":0,"subscription_cache":100,"usage_month_cache":0}',
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":5,"ledger_purge_coalesce":5,"people_scan_dedupe":0,"queue_age_sample_budget":5,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":5,"subscription_cache":100,"usage_month_cache":5}',
               category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -2055,7 +2055,7 @@ environments:
           env:
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":0,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":0,"ledger_purge_coalesce":0,"people_scan_dedupe":0,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":0,"subscription_cache":100,"usage_month_cache":0}',
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":5,"ledger_purge_coalesce":5,"people_scan_dedupe":0,"queue_age_sample_budget":5,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":5,"subscription_cache":100,"usage_month_cache":5}',
               category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -2142,7 +2142,7 @@ environments:
           REPEAT_WORK_REVISION_ENABLED: {value: 'false', category: rollout}
           REPEAT_WORK_LLM_VERSION: {value: 2026-10-16-v1, category: rollout}
           SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
-          FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":0,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":0,"ledger_purge_coalesce":0,"people_scan_dedupe":0,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":0,"subscription_cache":100,"usage_month_cache":0}',
+          FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":5,"ledger_purge_coalesce":5,"people_scan_dedupe":0,"queue_age_sample_budget":5,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":5,"subscription_cache":100,"usage_month_cache":5}',
             category: rollout}
           FSR_QUEUE_AGE_PUBLISHER: {value: '1', category: rollout}
           FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -2561,7 +2561,7 @@ environments:
           REPEAT_WORK_REVISION_ENABLED: {value: 'false', category: rollout}
           REPEAT_WORK_LLM_VERSION: {value: 2026-10-16-v1, category: rollout}
           SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
-          FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":0,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":0,"ledger_purge_coalesce":0,"people_scan_dedupe":0,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":0,"subscription_cache":100,"usage_month_cache":0}',
+          FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":5,"ledger_purge_coalesce":5,"people_scan_dedupe":0,"queue_age_sample_budget":5,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":5,"subscription_cache":100,"usage_month_cache":5}',
             category: rollout}
           FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
           FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -2806,7 +2806,7 @@ environments:
         LLM_GATEWAY_ACCOUNTING_ENABLED: {value: 'true', category: rollout}
         FIRESTORE_READ_LEDGER:
           value: '1'
-        FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":0,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":0,"ledger_purge_coalesce":0,"people_scan_dedupe":0,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":0,"subscription_cache":100,"usage_month_cache":0}',
+        FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":5,"ledger_purge_coalesce":5,"people_scan_dedupe":0,"queue_age_sample_budget":5,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":5,"subscription_cache":100,"usage_month_cache":5}',
           category: rollout}
         FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
         FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -2984,7 +2984,7 @@ environments:
               category: service_discovery
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":0,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":0,"ledger_purge_coalesce":0,"people_scan_dedupe":0,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":0,"subscription_cache":100,"usage_month_cache":0}',
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":5,"ledger_purge_coalesce":5,"people_scan_dedupe":0,"queue_age_sample_budget":5,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":5,"subscription_cache":100,"usage_month_cache":5}',
               category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -3342,7 +3342,7 @@ environments:
               category: service_discovery
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":0,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":0,"ledger_purge_coalesce":0,"people_scan_dedupe":0,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":0,"subscription_cache":100,"usage_month_cache":0}',
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":5,"ledger_purge_coalesce":5,"people_scan_dedupe":0,"queue_age_sample_budget":5,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":5,"subscription_cache":100,"usage_month_cache":5}',
               category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -3697,7 +3697,7 @@ environments:
               category: service_discovery
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":0,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":0,"ledger_purge_coalesce":0,"people_scan_dedupe":0,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":0,"subscription_cache":100,"usage_month_cache":0}',
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":5,"ledger_purge_coalesce":5,"people_scan_dedupe":0,"queue_age_sample_budget":5,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":5,"subscription_cache":100,"usage_month_cache":5}',
               category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -4034,7 +4034,7 @@ environments:
               category: service_discovery
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":0,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":0,"ledger_purge_coalesce":0,"people_scan_dedupe":0,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":0,"subscription_cache":100,"usage_month_cache":0}',
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":5,"ledger_purge_coalesce":5,"people_scan_dedupe":0,"queue_age_sample_budget":5,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":5,"subscription_cache":100,"usage_month_cache":5}',
               category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -4238,7 +4238,7 @@ environments:
           env:
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":0,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":0,"ledger_purge_coalesce":0,"people_scan_dedupe":0,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":0,"subscription_cache":100,"usage_month_cache":0}',
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":5,"ledger_purge_coalesce":5,"people_scan_dedupe":0,"queue_age_sample_budget":5,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":5,"subscription_cache":100,"usage_month_cache":5}',
               category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -4299,7 +4299,7 @@ environments:
               secret: REDIS_DB_PASSWORD
               version: latest
           env:
-            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":0,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":0,"ledger_purge_coalesce":0,"people_scan_dedupe":0,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":0,"subscription_cache":100,"usage_month_cache":0}',
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":5,"ledger_purge_coalesce":5,"people_scan_dedupe":0,"queue_age_sample_budget":5,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":5,"subscription_cache":100,"usage_month_cache":5}',
               category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -4373,7 +4373,7 @@ environments:
           env:
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":0,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":0,"ledger_purge_coalesce":0,"people_scan_dedupe":0,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":0,"subscription_cache":100,"usage_month_cache":0}',
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":5,"ledger_purge_coalesce":5,"people_scan_dedupe":0,"queue_age_sample_budget":5,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":5,"subscription_cache":100,"usage_month_cache":5}',
               category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -4438,7 +4438,7 @@ environments:
           env:
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":0,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":0,"ledger_purge_coalesce":0,"people_scan_dedupe":0,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":0,"subscription_cache":100,"usage_month_cache":0}',
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":5,"ledger_purge_coalesce":5,"people_scan_dedupe":0,"queue_age_sample_budget":5,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":5,"subscription_cache":100,"usage_month_cache":5}',
               category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -4493,7 +4493,7 @@ environments:
           env:
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":0,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":0,"ledger_purge_coalesce":0,"people_scan_dedupe":0,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":0,"subscription_cache":100,"usage_month_cache":0}',
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":5,"ledger_purge_coalesce":5,"people_scan_dedupe":0,"queue_age_sample_budget":5,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":5,"subscription_cache":100,"usage_month_cache":5}',
               category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}

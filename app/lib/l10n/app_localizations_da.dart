@@ -13105,6 +13105,9 @@ class AppLocalizationsDa extends AppLocalizations {
   String get reviewProposalSuggested => 'Foreslået';
 
   @override
+  String get reviewQuestionOutOfDate => 'Dette spørgsmål er forældet, så intet blev ændret.';
+
+  @override
   String get reviewProposalConflict => 'Dette er ændret, siden Dream foreslog det, så intet blev anvendt.';
 
   @override
