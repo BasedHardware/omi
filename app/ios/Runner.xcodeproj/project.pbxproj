@@ -7,6 +7,10 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		A2047914A2047914A2047914 /* SafeFoundationSinks.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5F00001A5F00001A5F00001 /* SafeFoundationSinks.swift */; };
+		A2047913A2047913A2047913 /* WatchRecordingStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2047910A2047910A2047910 /* WatchRecordingStore.swift */; };
+		A2047912A2047912A2047912 /* WatchRecordingStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2047910A2047910A2047910 /* WatchRecordingStore.swift */; };
+		A2047911A2047911A2047911 /* WatchRecordingStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2047910A2047910A2047910 /* WatchRecordingStore.swift */; };
 		0162ECA35ABCBED5D21250E7 /* prodRelease.xcconfig in Resources */ = {isa = PBXBuildFile; fileRef = 35656BCB5CBAA7C0BB162EE0 /* prodRelease.xcconfig */; };
 		056C8F8B6E91AEA3B8868E99 /* SiriSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 037C2E4049E0EF06EF66231A /* SiriSession.swift */; };
 		0658C1BEFC86B56785C10A69 /* BatchAudioWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAADF00DF00DF00DF00DF0D1 /* BatchAudioWriter.swift */; };
@@ -172,6 +176,8 @@
 		CF2F518D2EC08EA60025B331 /* Base.xcconfig in Resources */ = {isa = PBXBuildFile; fileRef = CF2F518C2EC08EA60025B331 /* Base.xcconfig */; };
 		D4DB62EA3B33E082C7D4E197 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 31D5B906D56C4FDBBCCFF403 /* Foundation.framework */; };
 		D71C4A0B2F0A11E700DE7001 /* DeviceToolsService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D71C4A0A2F0A11E700DE7000 /* DeviceToolsService.swift */; };
+		C4A7D0E1C4A7D0E1C4A7D0E1 /* ChatVideoSampler.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4A7D0E0C4A7D0E0C4A7D0E0 /* ChatVideoSampler.swift */; };
+		C4A7D0E2C4A7D0E2C4A7D0E2 /* ChatVideoSampler.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4A7D0E0C4A7D0E0C4A7D0E0 /* ChatVideoSampler.swift */; };
 		D71C4A0C2F0A11E700DE7002 /* DeviceToolsService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D71C4A0A2F0A11E700DE7000 /* DeviceToolsService.swift */; };
 		D988BCB88D5D696871753297 /* SiriSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 037C2E4049E0EF06EF66231A /* SiriSession.swift */; };
 		DAD10002DAD10002DAD10002 /* OmiBleConnectionPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAD10001DAD10001DAD10001 /* OmiBleConnectionPolicy.swift */; };
@@ -278,6 +284,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		A2047910A2047910A2047910 /* WatchRecordingStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchRecordingStore.swift; sourceTree = "<group>"; };
 		037C2E4049E0EF06EF66231A /* SiriSession.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SiriSession.swift; sourceTree = "<group>"; };
 		03BA73541F37D6361DCF18DC /* Pods-Runner.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.release.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.release.xcconfig"; sourceTree = "<group>"; };
 		04725A34C6451C370260A182 /* SiriBridge.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SiriBridge.swift; sourceTree = "<group>"; };
@@ -401,6 +408,7 @@
 		CF0FE6142D61FDC10072C10D /* Custom.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = Custom.xcconfig; path = Flutter/Custom.xcconfig; sourceTree = "<group>"; };
 		CF2F518C2EC08EA60025B331 /* Base.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = Base.xcconfig; path = Flutter/Base.xcconfig; sourceTree = "<group>"; };
 		D289F7085D97C1A955A86231 /* SiriDebugProbe.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SiriDebugProbe.swift; sourceTree = "<group>"; };
+		C4A7D0E0C4A7D0E0C4A7D0E0 /* ChatVideoSampler.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ChatVideoSampler.swift; sourceTree = "<group>"; };
 		D71C4A0A2F0A11E700DE7000 /* DeviceToolsService.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = DeviceToolsService.swift; sourceTree = "<group>"; };
 		DAD10001DAD10001DAD10001 /* OmiBleConnectionPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OmiBleConnectionPolicy.swift; sourceTree = "<group>"; };
 		E1293503E1293503E1293503 /* SpeechDeadline.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = SpeechDeadline.swift; sourceTree = "<group>"; };
@@ -680,7 +688,9 @@
 				7AA100000000000000000008 /* TtsPcmPlayer.swift */,
 				E1293503E1293503E1293503 /* SpeechDeadline.swift */,
 				A2047903A2047903A2047903 /* WatchAudioChunkRelay.swift */,
+				A2047910A2047910A2047910 /* WatchRecordingStore.swift */,
 				D71C4A0A2F0A11E700DE7000 /* DeviceToolsService.swift */,
+				C4A7D0E0C4A7D0E0C4A7D0E0 /* ChatVideoSampler.swift */,
 				CD12345678901234567890CD /* AppleRemindersService.swift */,
 				CD12345678901234567890CE /* AppleHealthService.swift */,
 				7A3F1C2E9B4D5E6F0A1B2C3D /* FlutterLaunchEngineGuard.swift */,
@@ -781,8 +791,8 @@
 				A39438EBCDB909113855E505 /* Sources */,
 				C82A98EF678B6558928D2B66 /* Frameworks */,
 				86C81B2505549CDA309E429B /* Resources */,
-				5E566183C4137FBADE4077BD /* Thin Binary */,
 				84317A1F9CC5D75F9718DFFF /* Embed Frameworks */,
+				5E566183C4137FBADE4077BD /* Thin Binary */,
 			);
 			buildRules = (
 			);
@@ -1181,6 +1191,8 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A2047914A2047914A2047914 /* SafeFoundationSinks.swift in Sources */,
+				A2047913A2047913A2047913 /* WatchRecordingStore.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1196,6 +1208,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A2047911A2047911A2047911 /* WatchRecordingStore.swift in Sources */,
 				74858FAF1ED2DC5600515810 /* AppDelegate.swift in Sources */,
 				A5F00002A5F00002A5F00002 /* SafeFoundationSinks.swift in Sources */,
 				51794E0351794E0351794E03 /* SyncTransferBackgroundLease.swift in Sources */,
@@ -1211,6 +1224,7 @@
 				E91C0002E91C0002E91C0002 /* OmiBlePairingPolicy.swift in Sources */,
 				E91D0002E91D0002E91D0002 /* OmiBleDiscoveryNaming.swift in Sources */,
 				D71C4A0B2F0A11E700DE7001 /* DeviceToolsService.swift in Sources */,
+				C4A7D0E1C4A7D0E1C4A7D0E1 /* ChatVideoSampler.swift in Sources */,
 				42B17C622F69B9CF00BFDA9D /* OmiBleManager.swift in Sources */,
 				BAADF00DF00DF00DF00DF0D2 /* BatchAudioWriter.swift in Sources */,
 				BAADF00DF00DF00DF00DF0D4 /* BaseBatchAudioWriter.swift in Sources */,
@@ -1268,6 +1282,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A2047912A2047912A2047912 /* WatchRecordingStore.swift in Sources */,
 				873C99F3D85C142369688A1D /* AppDelegate.swift in Sources */,
 				A5F00004A5F00004A5F00004 /* SafeFoundationSinks.swift in Sources */,
 				51794E0451794E0451794E04 /* SyncTransferBackgroundLease.swift in Sources */,
@@ -1283,6 +1298,7 @@
 				E91C0003E91C0003E91C0003 /* OmiBlePairingPolicy.swift in Sources */,
 				E91D0003E91D0003E91D0003 /* OmiBleDiscoveryNaming.swift in Sources */,
 				D71C4A0C2F0A11E700DE7002 /* DeviceToolsService.swift in Sources */,
+				C4A7D0E2C4A7D0E2C4A7D0E2 /* ChatVideoSampler.swift in Sources */,
 				99ADCEC5933A6FA3EE3AAE5D /* OmiBleManager.swift in Sources */,
 				0658C1BEFC86B56785C10A69 /* BatchAudioWriter.swift in Sources */,
 				BB125CDB70C0DB5AAFB15E9C /* BaseBatchAudioWriter.swift in Sources */,

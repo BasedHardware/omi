@@ -1,11 +1,26 @@
 # EXP-002 — desktop identity: memory, not assistant (`control` vs `memory_v1`)
 
-**Status:** pre-registered, not started. First enrollment happens only after
-this merges, the Beta build containing it ships, and
-`exp-002-desktop-identity-v1` is set true in PostHog.
+**Status:** withdrawn on 2026-10-20 per DEC-PRD-001. No confirmatory Stable
+stage was authorized. Enrollment and the memory_v1 arm have been removed;
+the historical pre-registration below is retained for provenance.
 **Registered:** 2026-09-03. **Owner:** desktop identity workstream.
-**Registry:** `backend/config/desktop_experiments.py` names this file's
-experiment id, arms, flag keys, channel, and version floor.
+
+### Released desktop compatibility
+
+Desktop v0.12.508 (`fa2de758b9f26ce3c4d0e32af400b4066087838b`) still
+calls `POST /v1/desktop/experiments/enroll` from the Beta bundle. Its
+`APIClient.performRequest` throws `APIError.httpError` for a 404; only 401
+triggers an authentication retry. `DesktopExperimentCoordinator.resolveForCurrentOwner`
+catches the error, clears the assignment, marks the phase resolved, and logs
+“painting control”. It presents no error UI and the resolved guard prevents
+another request for that launch/owner. Assignments are not persisted on the
+client. Removing the route therefore restores control on the next launch;
+no compatibility stub or two-release deletion timer is needed. Git history
+shows the same catch/control/resolved guard in both coordinator revisions since
+EXP-002 was introduced (`f9ca7105ddb9`, `d04010dffcce`). Turning the
+PostHog enrollment flag off first also restores control before server removal.
+Remote flag disable/archive is an operator prerequisite; this PR does not
+claim to have changed PostHog.
 
 This is the analysis contract. It is committed **before** the first
 enrollment, on the substrate of [`utils/experiments.py`](../../utils/experiments.py)

@@ -622,18 +622,26 @@ def _assert_recovery_pending(stack: BatchStack, upload: Upload, phase: str) -> d
 
 
 def _assert_recovery_failed(stack: BatchStack, upload: Upload) -> dict[str, Any]:
+    """A terminally held unit answers completed/batch_unit_held so the phone stops re-uploading.
+
+    Its encrypted audio stays server-side for the operator path; no conversation
+    ID is named. BATCH_PIPELINE_HELD_TERMINAL_STATUS_ENABLED=false restores failed.
+    """
     code, status = _status(stack, upload)
+    result = status.get('result') or {}
     if (
         code != 200
-        or status.get('status') != 'failed'
+        or status.get('status') != 'completed'
+        or status.get('reason_code') != 'batch_unit_held'
         or status.get('poll_after_ms') != 0
         or status.get('failed_segments') != len(upload.segment_ids)
-        or status.get('result') is not None
+        or result.get('new_memories')
+        or result.get('updated_memories')
     ):
         raise StackFailure(
             f'terminal recovery failure polled HTTP {code} status={status.get("status")!r} '
-            f'poll_after_ms={status.get("poll_after_ms")!r} failed_segments={status.get("failed_segments")!r}, '
-            'expected failed'
+            f'reason_code={status.get("reason_code")!r} poll_after_ms={status.get("poll_after_ms")!r} '
+            f'failed_segments={status.get("failed_segments")!r}, expected completed/batch_unit_held without IDs'
         )
     return status
 

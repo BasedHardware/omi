@@ -19,9 +19,10 @@ from config.batch_pipeline import (
     recovery_dispatch_batch_size,
     recovery_wake_lease_seconds,
     empty_asr_disposition_enabled,
+    recovery_policy_refresh_enabled,
 )
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
-from database.batch_pipeline_policy import load_stage_policy
+from database.batch_pipeline_policy import load_stage_policy, refresh_disabled_recovery
 from config.policy import RecoveryPolicy, kill_switch
 from database.batch_pipeline_projection_protocol import ProjectionBlocked
 from database.batch_pipeline_quarantine_recovery import RecoveryStore, recovery_candidates, cancel_fenced_recovery
@@ -136,11 +137,20 @@ class QuarantineRecovery:
         # The serving pass and the dispatch loop share this instance.
         self._sweeping = threading.Lock()
 
+    def _refreshed(self, segment_id, owner_id, job, policy):
+        """A disabled snapshot with no paid intent follows today's recovery setting."""
+        if not recovery_policy_refresh_enabled():
+            return job, policy
+        refreshed = refresh_disabled_recovery(self.store, segment_id, owner_id)
+        return refreshed if refreshed is not None else (job, policy)
+
     def recover(self, segment_id, owner_id):
         try:
             job, policy = load_stage_policy(self.store, segment_id, 'recovery')
             if not job or job.get('owner_id') != owner_id:
                 return 'held'
+            if not policy.recovery_enabled:
+                job, policy = self._refreshed(segment_id, owner_id, job, policy)
             if not policy.recovery_enabled:
                 return 'disabled'
             job = self.protocol.prepare(segment_id, owner_id, self.clock())
@@ -303,6 +313,8 @@ class QuarantineRecovery:
         existing, policy = load_stage_policy(self.store, segment_id, 'recovery')
         if not existing or existing.get('owner_id') != owner_id:
             return 'held'
+        if not policy.recovery_enabled:
+            existing, policy = self._refreshed(segment_id, owner_id, existing, policy)
         if not policy.recovery_enabled:
             return 'disabled'
         # prepare() is the existing durable privacy/ownership fence. Enqueue

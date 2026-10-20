@@ -489,7 +489,15 @@ PINNED_CONVERSATION_DUMPS: FrozenSet[DumpSite] = frozenset(
         DumpSite('utils/memory/developer_memory_list.py', '_validated_memories', 'model_dump'),
         DumpSite('utils/goals_response.py', 'list_developer_goals', 'model_dump'),
         DumpSite('routers/developer.py', '_create_conversation_from_segments', 'model_dump'),
+        # #22731: CalendarMeetingContext stored under external_data on a
+        # from-segments retry. A storage dump of meeting metadata, not a
+        # Conversation, so it cannot carry `client_processing`. Reviewed 2026-10-20.
+        DumpSite('routers/developer.py', '_apply_late_from_segments_context', 'model_dump'),
         DumpSite('routers/developer.py', 'update_goal', 'model_dump'),
+        # From-segments retry (#22731): dumps the request's CalendarMeetingContext
+        # into external_data.calendar_meeting_context. Calendar fields only, not a
+        # Conversation, so it cannot carry `client_processing`.
+        DumpSite('routers/developer.py', '_apply_late_from_segments_context', 'model_dump'),
         # DailySummaryDayStatsPayload aggregates (counts/minutes watched), not
         # conversation content; transcripts reach the LLM via
         # conversations_to_string. Reviewed with the daily-summary work (#12636).

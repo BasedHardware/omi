@@ -1286,6 +1286,11 @@ def _round3_module(name, relpath):
         capture_output=True,
         text=True,
     ).stdout
+    # Historical red comparisons still exercise the graduated consumer path.
+    source = source.replace(
+        'from config.audio_timeline import live_speaker_span_resolution_enabled',
+        'def live_speaker_span_resolution_enabled(): return True',
+    )
     module = types.ModuleType(name)
     exec(compile(source, relpath, 'exec'), module.__dict__)
     return module
@@ -1454,7 +1459,7 @@ async def test_overlapping_spans_from_two_sockets_refuse_ambiguous_windows(monke
     _patch_stage_io(monkeypatch, stage_module, store, diarizer, uploads)
     if old_stage is not None:
         _patch_stage_io(monkeypatch, old_stage, store, diarizer, uploads)
-    monkeypatch.setenv('LIVE_SPEAKER_SPAN_RESOLUTION', 'true')
+
     monkeypatch.setenv('AUDIO_TIMELINE_V2', 'false')
 
     epoch = datetime.fromtimestamp(0.0, tz=timezone.utc)

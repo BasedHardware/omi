@@ -45,6 +45,7 @@ from routers import (
     review,
     proactivity,
     chat,
+    chat_video,
     firmware,
     static_map,
     transcribe,
@@ -263,6 +264,7 @@ app.include_router(x_connector.router)
 app.include_router(memories.router)
 app.include_router(chat.router)
 app.include_router(chat_receipts.router)
+app.include_router(chat_video.router)
 app.include_router(speech_profile.router)
 app.include_router(speaker_tag_prompts.router)
 app.include_router(speaker_labels.router)

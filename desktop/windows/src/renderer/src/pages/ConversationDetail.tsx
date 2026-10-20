@@ -27,7 +27,11 @@ import type {
 } from '../lib/omiApi.generated'
 import type { ChatMessage, ConversationFolder } from '../../../shared/types'
 import { Markdown } from '../components/Markdown'
-import { noteTranscriptIDs, presentableNoteText } from '@omi/note-shared/note-sources.mjs'
+import {
+  noteTranscriptIDs,
+  presentableNoteText,
+  presentableNoteTitle
+} from '@omi/note-shared/note-sources.mjs'
 import { Spinner } from '../components/ui/Spinner'
 import { ModalShell } from '../components/conversations/ModalShell'
 import { MoveToFolderMenu } from '../components/conversations/MoveToFolderMenu'
@@ -586,7 +590,7 @@ function ConversationDetailView({ conversationId }: { conversationId: string }):
   // Read-time citation repair (contracts/note_citation_contract.json), as on macOS and web:
   // legacy notes can carry `[s01234]` / `Speaker_00` debris. Display only; rename edits `title`.
   const transcriptIDs = noteTranscriptIDs(segments)
-  const displayTitle = presentableNoteText(structured.title, transcriptIDs) || 'Conversation'
+  const displayTitle = presentableNoteTitle(structured.title, transcriptIDs) || 'Conversation'
   const overview = presentableNoteText(structured.overview?.trim(), transcriptIDs)
   const actionItems = structured.action_items ?? []
   const insights = (conv.apps_results ?? []).filter((r) => r.content?.trim())
