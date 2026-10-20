@@ -1,4 +1,4 @@
-﻿"""Unit tests for the speaker-learning input and snapshot hardening.
+"""Unit tests for the speaker-learning input and snapshot hardening.
 
 Verifies:
 - ``update_person_voice_learning`` rejects unusable document ids and labels
@@ -10,12 +10,37 @@ Verifies:
 - A failing client lookup degrades to ``None`` and an injected client is used.
 """
 
+import importlib
 from unittest.mock import MagicMock
 
 import pytest
 
 import database.speaker_learning as speaker_learning
 
+
+def _strip_transactional(module):
+    """Rebind ``module`` with Firestore's ``transactional`` decorator disabled.
+
+    ``@transactional`` wraps the body in a ``Transaction``-aware callable that
+    reads ``transaction._read_only``; these tests drive the body directly with a
+    fake transaction, so the wrapper has to come off first.
+    """
+    import google.cloud.firestore_v1 as firestore_v1
+    from google.cloud.firestore_v1 import transaction as firestore_transaction
+
+    patched = (firestore_transaction, firestore_v1)
+    real = [target.transactional for target in patched]
+    for target in patched:
+        target.transactional = lambda fn: fn
+    try:
+        importlib.reload(module)
+    finally:
+        for target, original in zip(patched, real):
+            target.transactional = original
+    return module
+
+
+speaker_learning = _strip_transactional(speaker_learning)
 
 class _FakeSnapshot:
     def __init__(self, payload, exists=True):
@@ -165,7 +190,13 @@ def test_disabled_profiles_force_the_disabled_state():
 
 def test_learned_state_keeps_the_stored_speech_seconds():
     client, person_ref, user_ref = _client(
-        {'updated_at': 'ts-1', 'voice_speech_seconds': 99.0, 'voice_readiness': 'ready'}
+        {
+            'updated_at': 'ts-1',
+            'voice_speech_seconds': 99.0,
+            'speech_samples': [{'id': 's1', 'duration': 4.0, 'created_at': 'ts'}],
+            'speech_samples_version': 3,
+            'speaker_embedding': [0.0, 0.5, -0.25],
+        }
     )
     transaction = _FakeTransaction()
     speaker_learning._update_voice_learning_transaction(
