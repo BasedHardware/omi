@@ -420,6 +420,13 @@ ignore:
 
 
 retired:
+  - {"key":"TRANSLATION_PROFILE_GATE_ENABLED","aliases":[],"kind":"env","retired":"2026-10-20","reason":"David 2026-10-20, DEC-TRN-001 graduate: translation behavior is unconditional."}
+  - {"key":"TRANSLATION_OUTPUT_GUARD_ENABLED","aliases":[],"kind":"env","retired":"2026-10-20","reason":"David 2026-10-20, DEC-TRN-001 graduate: translation behavior is unconditional."}
+  - {"key":"TRANSLATION_DEMAND_SHADOW_ENABLED","aliases":[],"kind":"env","retired":"2026-10-20","reason":"David 2026-10-20, DEC-TRN-002 kill: translation behavior is unconditional."}
+  - {"key":"TRANSLATION_DEMAND_LEASE_V1_ENABLED","aliases":[],"kind":"env","retired":"2026-10-20","reason":"David 2026-10-20, DEC-TRN-005 graduate: translation behavior is unconditional."}
+  - {"key":"TRANSLATION_ONDEMAND_GEMINI_ENABLED","aliases":[],"kind":"env","retired":"2026-10-20","reason":"David 2026-10-20, DEC-TRN-004 graduate: translation behavior is unconditional."}
+  - {"key":"TRANSLATION_ONDEMAND_COHORT_PERCENT","aliases":[],"kind":"env","retired":"2026-10-20","reason":"David 2026-10-20, DEC-TRN-003 graduate: translation behavior is unconditional."}
+  - {"key":"TRANSLATION_ONDEMAND_UID_ALLOWLIST","aliases":[],"kind":"env","retired":"2026-10-20","reason":"David 2026-10-20, DEC-TRN-003 graduate: translation behavior is unconditional."}
   - {"key":"FREE_TIER_EMERGENCY_STOP","kind":"env","retired":"2026-10-19","reason":"No surviving backend consumer after memory-suppression retirement and ladder/client processing fold."}
   - {"key":"negative_feedback_remediation","aliases":[],"kind":"posthog","retired":"2026-10-18","reason":"David 2026-10-18, DEC-MEM-003: graduate negative-feedback remediation for all macOS users; retain only the permanent kill switch.","posthog":{"row":"delete"}}
   - {"key":"MEMORY_BELIEF_AUTOMATION_PAUSED","aliases":[],"kind":"env","retired":"2026-10-18","reason":"David 2026-10-18, DEC-MEM-001: remove belief-model admission, currency, and automation controls."}

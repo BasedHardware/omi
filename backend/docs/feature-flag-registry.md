@@ -688,6 +688,13 @@ admission.
 
 | Key | Retired | Reason |
 | --- | --- | --- |
+| `TRANSLATION_PROFILE_GATE_ENABLED` | 2026-10-20 | David 2026-10-20, DEC-TRN-001 graduate: translation behavior is unconditional. |
+| `TRANSLATION_OUTPUT_GUARD_ENABLED` | 2026-10-20 | David 2026-10-20, DEC-TRN-001 graduate: translation behavior is unconditional. |
+| `TRANSLATION_DEMAND_SHADOW_ENABLED` | 2026-10-20 | David 2026-10-20, DEC-TRN-002 kill: translation behavior is unconditional. |
+| `TRANSLATION_DEMAND_LEASE_V1_ENABLED` | 2026-10-20 | David 2026-10-20, DEC-TRN-005 graduate: translation behavior is unconditional. |
+| `TRANSLATION_ONDEMAND_GEMINI_ENABLED` | 2026-10-20 | David 2026-10-20, DEC-TRN-004 graduate: translation behavior is unconditional. |
+| `TRANSLATION_ONDEMAND_COHORT_PERCENT` | 2026-10-20 | David 2026-10-20, DEC-TRN-003 graduate: translation behavior is unconditional. |
+| `TRANSLATION_ONDEMAND_UID_ALLOWLIST` | 2026-10-20 | David 2026-10-20, DEC-TRN-003 graduate: translation behavior is unconditional. |
 | `FREE_TIER_EMERGENCY_STOP` | 2026-10-19 | No surviving backend consumer after memory-suppression retirement and ladder/client processing fold. |
 | `negative_feedback_remediation` | 2026-10-18 | David 2026-10-18, DEC-MEM-003: graduate negative-feedback remediation for all macOS users; retain only the permanent kill switch. |
 | `MEMORY_BELIEF_AUTOMATION_PAUSED` | 2026-10-18 | David 2026-10-18, DEC-MEM-001: remove belief-model admission, currency, and automation controls. |
