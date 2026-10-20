@@ -327,7 +327,7 @@ class MemoriesProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  void toggleCategoryFilter(MemoryCategory category) async {
+  Future<void> toggleCategoryFilter(MemoryCategory category) async {
     if (_selectedCategories.contains(category)) {
       _selectedCategories.remove(category);
     } else {
