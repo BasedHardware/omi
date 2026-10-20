@@ -41,7 +41,8 @@ Implementation and rollout checklist:
 - [x] Free/inactive/exhausted/BYOK denial, unresolved allowance retry, write
   failure/retry, redirect identity, and explicit backlog choice coverage.
 - [x] Original stored content preserved; no automatic processing or charge.
-- [ ] Required selected backend suites, type checks and preflight.
+- [x] Focused backend suites, type checks and the 34-check PR preflight.
+  The complete selector-owned CI contract and remote CI are recorded on the PR.
 - [ ] Merge, then deploy the backend API; no mobile release or flag activation
   is required for this server-side repair.
 - [ ] Privately confirm Thomas's paid account/upgrade date and affected record,
