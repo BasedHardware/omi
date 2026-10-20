@@ -1,3 +1,0 @@
-{
-  "change": "Fixed Daily Summary, Store Recordings, and Private Cloud Sync switches staying flipped and silently reverting later when the account refused the save"
-}

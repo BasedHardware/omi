@@ -19,8 +19,13 @@ import datetime as dt
 import json
 import os
 import pathlib
-import subprocess
 import sys
+import urllib.error
+import urllib.parse
+import urllib.request
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import auth_http  # noqa: E402
 
 ENV = pathlib.Path.home() / ".hermes/skills/devops/omi-prometheus/references/.env"
 
@@ -48,16 +53,17 @@ def load_env() -> tuple[str, str]:
 
 
 def call(base: str, tok: str, api: str, params) -> dict:
-    cmd = ["curl", "-fsS", "-H", "Authorization: Bearer " + tok, "--get", f"{base}/{api}"]
-    for k, v in params:
-        cmd += ["--data-urlencode", f"{k}={v}"]
-    p = subprocess.run(cmd, text=True, capture_output=True, timeout=300)
-    if p.returncode:
-        return {"status": "error", "error": p.stderr[:300]}
+    url = f"{base}/{api}?{urllib.parse.urlencode(params)}"
+    request = urllib.request.Request(url, headers={"Authorization": "Bearer " + tok})
     try:
-        return json.loads(p.stdout)
-    except Exception as e:  # noqa: BLE001
-        return {"status": "error", "error": str(e)}
+        with auth_http.open_authenticated(request, timeout=300) as response:
+            return json.loads(response.read().decode())
+    except auth_http.RedirectRefused:
+        raise RuntimeError("prometheus redirect refused") from None
+    except urllib.error.HTTPError as error:
+        return {"status": "error", "error": "prometheus HTTP %d" % error.code}
+    except (OSError, UnicodeError, json.JSONDecodeError, ValueError):
+        return {"status": "error", "error": "prometheus transport/JSON failure"}
 
 
 def main() -> None:
