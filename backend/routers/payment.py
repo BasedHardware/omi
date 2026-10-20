@@ -985,10 +985,11 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
         client_reference_id = session.get('client_reference_id')
 
         # App payments for creators
-        if session.get('metadata', {}).get('app_id'):
+        session_metadata = session.get('metadata') or {}
+        if session_metadata.get('app_id'):
             logger.info(f"Payment completed for session: {session['id']}")
-            app_id = session['metadata']['app_id']
-            uid = session['client_reference_id']
+            app_id = session_metadata['app_id']
+            uid = session.get('client_reference_id')
             if not uid or len(uid) < 4:
                 raise HTTPException(status_code=400, detail="Invalid client")
             uid = uid[4:]
@@ -1010,9 +1011,9 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
             await run_blocking(db_executor, paid_app, app_id, uid, current_period_end)
 
         # Regular user subscription - check for sub_type metadata or client_reference_id
-        elif client_reference_id or session.get('metadata', {}).get('sub_type'):
+        elif client_reference_id or session_metadata.get('sub_type'):
             # Get uid from client_reference_id or fallback to metadata
-            uid = client_reference_id or session.get('metadata', {}).get('uid')
+            uid = client_reference_id or session_metadata.get('uid')
 
             if not uid:
                 # It should not happen, ref id might be missing but never the metadata
@@ -1135,9 +1136,9 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
         record_subscription_event(
             stripe_event_type=event['type'],
             subscription_obj=subscription_obj,
-            previous_attributes=event.get('data', {}).get('previous_attributes'),
+            previous_attributes=(event.get('data') or {}).get('previous_attributes'),
         )
-        uid = subscription_obj.get('metadata', {}).get('uid')
+        uid = (subscription_obj.get('metadata') or {}).get('uid')
 
         if not uid:
             customer_id = subscription_obj.get('customer')
@@ -1308,8 +1309,9 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
             else:
                 subscription_id = subscription_obj.get('id', 'unknown')
                 price_id = 'unknown'
-                if subscription_obj.get('items', {}).get('data'):
-                    price_id = subscription_obj['items']['data'][0].get('price', {}).get('id', 'unknown')
+                sub_items = (subscription_obj.get('items') or {}).get('data') or []
+                if sub_items and isinstance(sub_items, list) and isinstance(sub_items[0], dict):
+                    price_id = (sub_items[0].get('price') or {}).get('id', 'unknown')
                 logger.warning(
                     f"Stripe webhook: could not build subscription for user {uid}, "
                     f"subscription {subscription_id}, price {price_id} — unknown price ID"
@@ -1323,7 +1325,7 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
         'subscription_schedule.canceled',
     ]:
         schedule_obj = event['data']['object']
-        uid = schedule_obj.get('metadata', {}).get('uid')
+        uid = (schedule_obj.get('metadata') or {}).get('uid')
 
         if uid:
             if schedule_obj.get('status') == 'completed':
