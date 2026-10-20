@@ -4285,14 +4285,24 @@ async def test_terminal_cleanup_retry_requires_a_confirmed_lock_release():
         return 0  # EVAL: token no longer owns the key
 
     try:
-        module.SYNC_JOB_HANDLER_BUDGET_SECONDS = 0.05
+        # Wide enough that the preamble and the run-lock acquisition finish
+        # inside the budget on a loaded worker; the pipeline sleeps 30s, so the
+        # budget still expires after the lock is held (legacy-retire C10).
+        module.SYNC_JOB_HANDLER_BUDGET_SECONDS = 0.5
         module._run_full_pipeline_background_async = _pipeline_never_returns_then_terminal
         module.release_job_run_lock_strict = MagicMock(side_effect=_strict_release)
         reads = {'n': 0}
+        started = time.monotonic()
 
         def _job_read(job_id):
             reads['n'] += 1
-            status = 'completed' if reads['n'] > 2 else ('queued' if reads['n'] == 1 else 'processing')
+            # The post-budget recovery read sees the terminal result; reads
+            # inside the budget see queued/processing. Keyed to the budget, not
+            # to the read count, which varies with the handler's pre-lock reads.
+            if time.monotonic() - started >= module.SYNC_JOB_HANDLER_BUDGET_SECONDS:
+                status = 'completed'
+            else:
+                status = 'queued' if reads['n'] == 1 else 'processing'
             return {
                 'job_id': job_id,
                 'status': status,
