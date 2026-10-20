@@ -17,7 +17,7 @@ import utils.conversations.audio_placement as placement_module
 from models.audio_file import AudioFile, ChunkSpan
 from models.conversation import AudioTimelineProvenance, Conversation
 from models.structured import Structured
-from models.transcript_segment import TranscriptSegment
+from models.transcript_segment import SpeakerIdentityStatus, TranscriptSegment
 from utils.conversations import speaker_resolution as stage
 from utils.conversations.audio_placement import prepare_audio_coverage
 from utils.conversations.smart_merge_policy import rebase_donor_segments
@@ -525,7 +525,7 @@ def test_unproven_legacy_donor_abstains_without_blocking_other_sync_voices(env, 
     stage.resolve_speakers_for_processing('u1', conversation)
 
     assert conversation.speaker_resolution.status == 'resolved'
-    assert conversation.transcript_segments[0].speaker_identity_status == SpeakerIdentityStatus.unavailable
+    assert conversation.transcript_segments[0].speaker_identity_status == SpeakerIdentityStatus.unknown
     assert len({s.speaker_id for s in conversation.transcript_segments[1:]}) == 2
     assert env[1].calls == len(plan) - 1
 

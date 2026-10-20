@@ -1333,7 +1333,8 @@ def test_saved_sync_cache_rebuild_resolves(env, monkeypatch, round4_stage, cache
 @pytest.mark.parametrize(
     'damage', ['retimed', 'absent', 'non_sync', 'malformed', 'nonfinite', 'unplaced', 'origin_changed']
 )
-def test_capture_history_without_saved_sync_refuses(env, monkeypatch, damage):
+@pytest.mark.parametrize('capture_covered', [False, True])
+def test_capture_history_requires_saved_sync_or_validated_spans(env, monkeypatch, damage, capture_covered):
     store, diarizer = env
     monkeypatch.setenv('AUDIO_TIMELINE_SPANS', 'false')
 
@@ -1343,7 +1344,7 @@ def test_capture_history_without_saved_sync_refuses(env, monkeypatch, damage):
     stagemod.stage.resolve_speakers_for_processing('u1', conv)
     assert conv.speaker_resolution.status == 'resolved'
     origin = stagemod.STARTED.timestamp()
-    conv.audio_files = [stagemod._span_manifest(origin, [(origin, origin + 32)])]
+    conv.audio_files = [stagemod._span_manifest(origin, [(origin, origin + 32)])] if capture_covered else []
     calls = diarizer.calls
     for s in conv.transcript_segments:
         s.audio_capture_start = stagemod.STARTED.timestamp() + s.start
@@ -1368,8 +1369,14 @@ def test_capture_history_without_saved_sync_refuses(env, monkeypatch, damage):
             conv.started_at = conv.started_at + timedelta(hours=1)
     store.clear()
     stagemod.stage.resolve_speakers_for_processing('u1', conv)
-    assert conv.speaker_resolution.status != 'resolved'
-    assert diarizer.calls == calls
+    if capture_covered and damage != 'unplaced':
+        # The graduated consumer can use independently proven capture spans
+        # even when the old saved-sync marker no longer proves placement.
+        assert conv.speaker_resolution.status == 'resolved'
+        assert diarizer.calls == calls + 8
+    else:
+        assert conv.speaker_resolution.status != 'resolved'
+        assert diarizer.calls == calls
 
 
 def test_off_own_capture_cache_loss_parity_with_main(env, monkeypatch, round4_stage):
