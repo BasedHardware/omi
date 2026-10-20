@@ -217,3 +217,45 @@ def test_windowed_live_rollout_is_prod_canary_and_bounded():
         assert _env_value(values, 'PARAKEET_WINDOW_PACE_SECONDS') == '6'
         assert _env_value(values, 'PARAKEET_WINDOW_MAX_CONTEXT_SECONDS') == '24'
         assert _env_value(values, 'STT_CIRCUIT_HALF_OPEN_PROBES') == '1'
+
+
+def test_prod_listen_hpa_scales_on_cpu_with_socket_guards():
+    """D0b: CPU drives listen scaling; socket metrics stay as a floor against stranding."""
+    helm = shutil.which('helm')
+    if helm is None:
+        pytest.skip('helm is not installed')
+
+    rendered = subprocess.run(
+        [
+            helm,
+            'template',
+            'backend-listen',
+            str(CHART_DIR),
+            '-f',
+            str(ENV_IDENTITY_DEFAULTS['prod']['values_file']),
+            '--set-string',
+            'image.tag=abc1234',
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout
+    hpa = next(
+        doc
+        for doc in yaml.safe_load_all(rendered)
+        if isinstance(doc, dict) and doc.get('kind') == 'HorizontalPodAutoscaler'
+    )
+    metrics = hpa['spec']['metrics']
+    cpu = [m['resource']['target'] for m in metrics if m['type'] == 'Resource' and m['resource']['name'] == 'cpu']
+    external = {
+        m['external']['metric']['name']: m['external']['target']['value'] for m in metrics if m['type'] == 'External'
+    }
+
+    # HPA ignores ratios within 10% of target; on 2026-10-19 mean listen CPU
+    # peaked at 0.56-0.65 while hot pods saturated, so a target at or above 60%
+    # could not have scaled out of that incident.
+    assert len(cpu) == 1 and cpu[0]['type'] == 'Utilization'
+    assert 0 < cpu[0]['averageUtilization'] < 60
+    # Dropping a socket guard lets a CPU dip strand live sockets on too few pods.
+    assert set(external) == {'backend_listen_requests_per_pod', 'backend_listen_active_ws_connections_per_pod'}
+    assert hpa['spec']['minReplicas'] >= 1
