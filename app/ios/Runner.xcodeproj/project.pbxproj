@@ -172,6 +172,8 @@
 		CF2F518D2EC08EA60025B331 /* Base.xcconfig in Resources */ = {isa = PBXBuildFile; fileRef = CF2F518C2EC08EA60025B331 /* Base.xcconfig */; };
 		D4DB62EA3B33E082C7D4E197 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 31D5B906D56C4FDBBCCFF403 /* Foundation.framework */; };
 		D71C4A0B2F0A11E700DE7001 /* DeviceToolsService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D71C4A0A2F0A11E700DE7000 /* DeviceToolsService.swift */; };
+		C4A7D0E1C4A7D0E1C4A7D0E1 /* ChatVideoSampler.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4A7D0E0C4A7D0E0C4A7D0E0 /* ChatVideoSampler.swift */; };
+		C4A7D0E2C4A7D0E2C4A7D0E2 /* ChatVideoSampler.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4A7D0E0C4A7D0E0C4A7D0E0 /* ChatVideoSampler.swift */; };
 		D71C4A0C2F0A11E700DE7002 /* DeviceToolsService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D71C4A0A2F0A11E700DE7000 /* DeviceToolsService.swift */; };
 		D988BCB88D5D696871753297 /* SiriSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 037C2E4049E0EF06EF66231A /* SiriSession.swift */; };
 		DAD10002DAD10002DAD10002 /* OmiBleConnectionPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAD10001DAD10001DAD10001 /* OmiBleConnectionPolicy.swift */; };
@@ -401,6 +403,7 @@
 		CF0FE6142D61FDC10072C10D /* Custom.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = Custom.xcconfig; path = Flutter/Custom.xcconfig; sourceTree = "<group>"; };
 		CF2F518C2EC08EA60025B331 /* Base.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = Base.xcconfig; path = Flutter/Base.xcconfig; sourceTree = "<group>"; };
 		D289F7085D97C1A955A86231 /* SiriDebugProbe.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SiriDebugProbe.swift; sourceTree = "<group>"; };
+		C4A7D0E0C4A7D0E0C4A7D0E0 /* ChatVideoSampler.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ChatVideoSampler.swift; sourceTree = "<group>"; };
 		D71C4A0A2F0A11E700DE7000 /* DeviceToolsService.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = DeviceToolsService.swift; sourceTree = "<group>"; };
 		DAD10001DAD10001DAD10001 /* OmiBleConnectionPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OmiBleConnectionPolicy.swift; sourceTree = "<group>"; };
 		E1293503E1293503E1293503 /* SpeechDeadline.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = SpeechDeadline.swift; sourceTree = "<group>"; };
@@ -681,6 +684,7 @@
 				E1293503E1293503E1293503 /* SpeechDeadline.swift */,
 				A2047903A2047903A2047903 /* WatchAudioChunkRelay.swift */,
 				D71C4A0A2F0A11E700DE7000 /* DeviceToolsService.swift */,
+				C4A7D0E0C4A7D0E0C4A7D0E0 /* ChatVideoSampler.swift */,
 				CD12345678901234567890CD /* AppleRemindersService.swift */,
 				CD12345678901234567890CE /* AppleHealthService.swift */,
 				7A3F1C2E9B4D5E6F0A1B2C3D /* FlutterLaunchEngineGuard.swift */,
@@ -1211,6 +1215,7 @@
 				E91C0002E91C0002E91C0002 /* OmiBlePairingPolicy.swift in Sources */,
 				E91D0002E91D0002E91D0002 /* OmiBleDiscoveryNaming.swift in Sources */,
 				D71C4A0B2F0A11E700DE7001 /* DeviceToolsService.swift in Sources */,
+				C4A7D0E1C4A7D0E1C4A7D0E1 /* ChatVideoSampler.swift in Sources */,
 				42B17C622F69B9CF00BFDA9D /* OmiBleManager.swift in Sources */,
 				BAADF00DF00DF00DF00DF0D2 /* BatchAudioWriter.swift in Sources */,
 				BAADF00DF00DF00DF00DF0D4 /* BaseBatchAudioWriter.swift in Sources */,
@@ -1283,6 +1288,7 @@
 				E91C0003E91C0003E91C0003 /* OmiBlePairingPolicy.swift in Sources */,
 				E91D0003E91D0003E91D0003 /* OmiBleDiscoveryNaming.swift in Sources */,
 				D71C4A0C2F0A11E700DE7002 /* DeviceToolsService.swift in Sources */,
+				C4A7D0E2C4A7D0E2C4A7D0E2 /* ChatVideoSampler.swift in Sources */,
 				99ADCEC5933A6FA3EE3AAE5D /* OmiBleManager.swift in Sources */,
 				0658C1BEFC86B56785C10A69 /* BatchAudioWriter.swift in Sources */,
 				BB125CDB70C0DB5AAFB15E9C /* BaseBatchAudioWriter.swift in Sources */,

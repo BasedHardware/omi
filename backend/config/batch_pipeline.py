@@ -15,6 +15,9 @@ class Priority(IntEnum):
     DEEP = 2
 
 
+# David's fresh bar (2026-10-20): capture lag at most 10 min at upload.
+FRESH_CAPTURE_LAG_SECONDS = 600.0
+
 T = TypeVar('T')
 
 
@@ -38,8 +41,24 @@ def in_percent_cohort(owner_id: str, percent: float) -> bool:
     return bucket < percent
 
 
+def fresh_gpu_priority_enabled() -> bool:
+    """Ship-on: catch-up audio in the 6 h fresh sync lane leases GPU after fresh uploads.
+
+    The owner's FIFO is per priority, so a backlog sharing FRESH queued that
+    owner's fresh uploads behind it. ``false`` is the kill switch.
+    """
+    return os.getenv('BATCH_PIPELINE_FRESH_GPU_PRIORITY_ENABLED', 'true').strip().lower() != 'false'
+
+
 def priority_for(lane: str, recording_age_seconds: float | None) -> Priority:
     if lane == 'fresh':
+        if (
+            recording_age_seconds is not None
+            and math.isfinite(recording_age_seconds)
+            and recording_age_seconds > FRESH_CAPTURE_LAG_SECONDS
+            and fresh_gpu_priority_enabled()
+        ):
+            return Priority.RECENT
         return Priority.FRESH
     if lane != 'backfill':
         raise ValueError('unclassified sync lane')
@@ -228,6 +247,32 @@ def recovery_dispatch_batch_size() -> int:
     return value if 1 <= value <= 64 else 16
 
 
+RECOVERY_DISPATCH_INTERVAL_DEFAULT = 5.0
+RECOVERY_DISPATCH_INTERVAL_MAX = 60.0
+
+
+def recovery_dispatch_interval_seconds() -> float:
+    """Ship-on: serving dispatches quarantine recovery on its own short loop.
+
+    The serving pass (maintenance, projection sweep, then a 20 s sleep) left
+    quarantine -> recovery prepared at p50 52 s / p95 97 s in the 5% ramp runs.
+    ``off`` or a value <= 0 is the kill switch: dispatch only from the serving
+    pass. Malformed or out-of-range values keep the default.
+    """
+    raw = os.getenv('BATCH_PIPELINE_RECOVERY_DISPATCH_INTERVAL_SECONDS', '').strip().lower()
+    if not raw:
+        return RECOVERY_DISPATCH_INTERVAL_DEFAULT
+    if raw == 'off':
+        return 0.0
+    try:
+        value = float(raw)
+    except ValueError:
+        return RECOVERY_DISPATCH_INTERVAL_DEFAULT
+    if value <= 0:
+        return 0.0
+    return value if 1 <= value <= RECOVERY_DISPATCH_INTERVAL_MAX else RECOVERY_DISPATCH_INTERVAL_DEFAULT
+
+
 def projection_pagination_enabled() -> bool:
     from config.policy import kill_switch
 
@@ -363,6 +408,34 @@ def merge_head_wait_seconds() -> float:
     if value <= 0:
         return 0.0
     return value if value <= MERGE_HEAD_WAIT_MAX else MERGE_HEAD_WAIT_DEFAULT
+
+
+MERGE_CATCH_UP_DEPTH_DEFAULT = 16
+MERGE_CATCH_UP_DEPTH_MAX = 1000
+
+
+def merge_catch_up_depth() -> int:
+    """Ship-on fresh-first merge (David's fresh bar, 2026-10-20).
+
+    Fresh uploads (capture ended at most ``FRESH_CAPTURE_LAG_SECONDS`` before
+    admission) commit ahead of the owner's pending catch-up rows, and catch-up
+    commits wait while the owner already has this many committed rows awaiting
+    projection, so a fresh row never queues behind the owner's whole backlog.
+    ``off`` or a value <= 0 is the kill switch: the plain ordered merge.
+    Malformed or out-of-range values keep the default.
+    """
+    raw = os.getenv('BATCH_PIPELINE_MERGE_CATCH_UP_DEPTH', '').strip().lower()
+    if not raw:
+        return MERGE_CATCH_UP_DEPTH_DEFAULT
+    if raw == 'off':
+        return 0
+    try:
+        value = int(raw)
+    except ValueError:
+        return MERGE_CATCH_UP_DEPTH_DEFAULT
+    if value <= 0:
+        return 0
+    return value if value <= MERGE_CATCH_UP_DEPTH_MAX else MERGE_CATCH_UP_DEPTH_DEFAULT
 
 
 RECOVERY_WAKE_LEASE_DEFAULT = 600

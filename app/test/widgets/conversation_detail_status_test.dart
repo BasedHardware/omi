@@ -138,7 +138,7 @@ void main() {
       final gate = Completer<ServerConversation?>();
       final detail = _detail(
         _conversation(status: ConversationStatus.failed),
-        reprocess: conversationReprocess((id, {appId, requireSpeakerReceipt = false}) {
+        reprocess: conversationReprocess((id, {appId, requireSpeakerReceipt = false, forceOmi = false}) {
           calls.add(id);
           return gate.future;
         }),
@@ -165,7 +165,7 @@ void main() {
       final gate = Completer<ServerConversation?>();
       final detail = _detail(
         _conversation(segments: [_segment('Hi')], overview: 'Old summary'),
-        reprocess: conversationReprocess((id, {appId, requireSpeakerReceipt = false}) => gate.future),
+        reprocess: conversationReprocess((id, {appId, requireSpeakerReceipt = false, forceOmi = false}) => gate.future),
       );
       addTearDown(detail.dispose);
 
@@ -220,7 +220,7 @@ void main() {
     final gate = Completer<ServerConversation?>();
     final detail = _detail(
       _conversation(segments: [_segment('Hi')]),
-      reprocess: conversationReprocess((id, {appId, requireSpeakerReceipt = false}) => gate.future),
+      reprocess: conversationReprocess((id, {appId, requireSpeakerReceipt = false, forceOmi = false}) => gate.future),
     );
     addTearDown(detail.dispose);
 
@@ -302,7 +302,7 @@ void main() {
       final gate = Completer<ServerConversation?>();
       final detail = _detail(
         _conversation(segments: [_segment('Hi')]),
-        reprocess: conversationReprocess((id, {appId, requireSpeakerReceipt = false}) => gate.future),
+        reprocess: conversationReprocess((id, {appId, requireSpeakerReceipt = false, forceOmi = false}) => gate.future),
       );
       addTearDown(detail.dispose);
 

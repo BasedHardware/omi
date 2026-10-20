@@ -1712,7 +1712,7 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
                 ),
             ),
             created_at=started_at,
-            structured=build_deterministic_minimum_structured(create_memory),
+            structured=build_deterministic_minimum_structured(create_memory, uid=uid),
             **create_memory.model_dump(),
         ).model_dump()
         incoming['data_protection_level'] = data_protection_level
