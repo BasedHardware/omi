@@ -256,7 +256,10 @@ def test_partial_upload_keeps_the_reviewed_paid_redrive(setup, monkeypatch, lega
     with pytest.raises((module.held.Refused, ProjectionBlocked)):
         module.inspect_unit(store, artifacts, 'bad', binding.owner_id, key)
     ledger['status'] = 'partial'
-    assert redrive_one(store, artifacts, 'bad', binding.owner_id, 'plan', old, clock=lambda: 100) == 'recovered'
+    assert (
+        redrive_one(store, artifacts, 'bad', binding.owner_id, 'plan', old, server_flags=SERVING_ENV, clock=lambda: 100)
+        == 'recovered'
+    )
     assert row(client)['result']['outcome'] == 'success' and row(client)['merge_pending']
     alternate.assert_called_once()
     legacy.assert_not_called()
