@@ -38,6 +38,21 @@ class AdvanceDispatchTests(unittest.TestCase):
             with self.assertRaisesRegex(dispatcher.DispatchError, "buildId"):
                 dispatcher.dispatch("app-1", "token", dry_run=False)
 
+    def test_a_capture_health_override_travels_only_when_given(self):
+        self.assertNotIn(
+            "TRAIN_CAPTURE_HEALTH_OVERRIDE",
+            dispatcher.build_payload("app-1", dry_run=False, capture_health_override="  ")["environment"]["variables"],
+        )
+        variables = dispatcher.build_payload("app-1", dry_run=False, capture_health_override=" noise, DZ ")[
+            "environment"
+        ]["variables"]
+        self.assertEqual(variables["TRAIN_CAPTURE_HEALTH_OVERRIDE"], "noise, DZ")
+        with patch.dict(os.environ, {"CODEMAGIC_API_TOKEN": "t"}), patch.object(
+            dispatcher, "_api_post", return_value={"buildId": "b-1"}
+        ) as post:
+            self.assertEqual(dispatcher.main(["--app-id", "app-1", "--capture-health-override", "why"]), 0)
+        self.assertEqual(post.call_args.args[2]["environment"]["variables"]["TRAIN_CAPTURE_HEALTH_OVERRIDE"], "why")
+
     def test_main_fails_without_a_token_and_before_any_request(self):
         with patch.dict(os.environ, {"CODEMAGIC_API_TOKEN": ""}), patch.object(dispatcher, "_api_post") as post:
             self.assertEqual(dispatcher.main(["--app-id", "app-1"]), 1)

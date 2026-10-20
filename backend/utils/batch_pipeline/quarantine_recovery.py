@@ -70,6 +70,7 @@ def transcribe(item, binding, audio, *, multilingual=None):
     # Preserve the existing deferred STT boundary: its transitive encryption
     # module requires runtime secrets and cannot join credential-free imports.
     from utils.stt.pre_recorded import prerecorded_from_bytes, modulate_prerecorded_from_bytes
+    from utils.stt.parakeet_request_metrics import parakeet_caller
 
     pcm, duration, spans = inspect_audio(item, audio)
     if not spans:
@@ -97,7 +98,8 @@ def transcribe(item, binding, audio, *, multilingual=None):
         dispatch = lambda: prerecorded_from_bytes(
             output.getvalue(), language=binding.language, return_language=True, attempts=2
         )
-    response = at_stage('provider', 'provider_failed', dispatch)
+    with parakeet_caller('batch_recovery'):
+        response = at_stage('provider', 'provider_failed', dispatch)
 
     def validate_response():
         if not isinstance(response, tuple) or len(response) != 2:

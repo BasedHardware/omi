@@ -29,6 +29,7 @@ from utils.stt.pre_recorded import (
     prerecorded_from_bytes,
     get_prerecorded_service,
 )
+from utils.stt.parakeet_request_metrics import parakeet_caller
 from utils.stt.outcomes import (
     TranscriptionFailure,
     TranscriptionOutcome,
@@ -177,13 +178,14 @@ def _transcribe_voice_message_url(
     provider, stt_language, stt_model = get_prerecorded_service(language)
     is_multi = stt_language == 'multi'
     try:
-        if is_multi and detect_language:
-            words, detected_language = prerecorded(
-                url, diarize=False, language=stt_language, return_language=True, model=stt_model
-            )
-        else:
-            words = prerecorded(url, diarize=False, language=stt_language, return_language=False, model=stt_model)
-            detected_language = stt_language
+        with parakeet_caller('voice_message'):
+            if is_multi and detect_language:
+                words, detected_language = prerecorded(
+                    url, diarize=False, language=stt_language, return_language=True, model=stt_model
+                )
+            else:
+                words = prerecorded(url, diarize=False, language=stt_language, return_language=False, model=stt_model)
+                detected_language = stt_language
     except Exception as error:
         failure = failure_from_exception(error, provider=provider)
         logger.warning(
@@ -264,31 +266,32 @@ def transcribe_pcm_bytes(
             raise TranscriptionFailure(TranscriptionOutcome.UPSTREAM_ERROR, provider=provider) from error
 
     try:
-        if is_multi:
-            result = prerecorded_from_bytes(
-                audio_bytes,
-                sample_rate=sample_rate,
-                diarize=False,
-                encoding=encoding,
-                channels=channels,
-                language=stt_language,
-                model=stt_model,
-                return_language=True,
-                keywords=keywords,
-            )
-            words, detected_language = result
-        else:
-            words = prerecorded_from_bytes(
-                audio_bytes,
-                sample_rate=sample_rate,
-                diarize=False,
-                encoding=encoding,
-                channels=channels,
-                language=stt_language,
-                model=stt_model,
-                keywords=keywords,
-            )
-            detected_language = stt_language
+        with parakeet_caller('voice_message'):
+            if is_multi:
+                result = prerecorded_from_bytes(
+                    audio_bytes,
+                    sample_rate=sample_rate,
+                    diarize=False,
+                    encoding=encoding,
+                    channels=channels,
+                    language=stt_language,
+                    model=stt_model,
+                    return_language=True,
+                    keywords=keywords,
+                )
+                words, detected_language = result
+            else:
+                words = prerecorded_from_bytes(
+                    audio_bytes,
+                    sample_rate=sample_rate,
+                    diarize=False,
+                    encoding=encoding,
+                    channels=channels,
+                    language=stt_language,
+                    model=stt_model,
+                    keywords=keywords,
+                )
+                detected_language = stt_language
     except Exception as error:
         raise failure_from_exception(error, provider=provider) from error
 

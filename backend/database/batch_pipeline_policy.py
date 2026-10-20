@@ -17,8 +17,24 @@ from config.policy import (
 from config.policy.stages import STAGE_TYPES
 from config.policy.parts import PolicyPart
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
+from database.batch_pipeline_projection_protocol import ProjectionBlocked
 
 logger = logging.getLogger(__name__)
+
+# `server_flags` default: this process is a serving role, so its environment
+# is the server configuration. Operator runs (scripts on a laptop or VM) must
+# pass `server_flags` explicitly: None refuses an unpinned unit, and a mapping
+# is the serving role's live settings. An operator never pins its own env.
+PROCESS_ENVIRONMENT: Any = object()
+UNPINNED_REFUSAL = 'unpinned_policy_requires_server_flags'
+
+
+class UnpinnedPolicyRefused(ProjectionBlocked):
+    """An operator run met a unit with no stored stage part and no server flags."""
+
+    def __init__(self, stage: str):
+        super().__init__(UNPINNED_REFUSAL)
+        self.stage = stage
 
 
 def recorded_policy(job: dict) -> dict | None:
@@ -115,37 +131,43 @@ def unit_anchor(tx, job):
 
 @overload
 def stage_in_transaction(
-    tx, job, stage: Literal['projection'], *, observations=None, candidates=None
+    tx, job, stage: Literal['projection'], *, observations=None, candidates=None, server_flags=PROCESS_ENVIRONMENT
 ) -> ProjectionPolicy: ...
 
 
 @overload
 def stage_in_transaction(
-    tx, job, stage: Literal['scheduler'], *, observations=None, candidates=None
+    tx, job, stage: Literal['scheduler'], *, observations=None, candidates=None, server_flags=PROCESS_ENVIRONMENT
 ) -> SchedulerPolicy: ...
 
 
 @overload
 def stage_in_transaction(
-    tx, job, stage: Literal['recovery'], *, observations=None, candidates=None
+    tx, job, stage: Literal['recovery'], *, observations=None, candidates=None, server_flags=PROCESS_ENVIRONMENT
 ) -> RecoveryPolicy: ...
 
 
 @overload
 def stage_in_transaction(
-    tx, job, stage: Literal['first_summary'], *, observations=None, candidates=None
+    tx, job, stage: Literal['first_summary'], *, observations=None, candidates=None, server_flags=PROCESS_ENVIRONMENT
 ) -> FirstSummaryPolicy: ...
 
 
 @overload
-def stage_in_transaction(tx, job, stage: str, *, observations=None, candidates=None) -> PolicyPart: ...
+def stage_in_transaction(
+    tx, job, stage: str, *, observations=None, candidates=None, server_flags=PROCESS_ENVIRONMENT
+) -> PolicyPart: ...
 
 
-def stage_in_transaction(tx, job, stage, *, observations=None, candidates=None):
+def stage_in_transaction(tx, job, stage, *, observations=None, candidates=None, server_flags=PROCESS_ENVIRONMENT):
     """CAS one owner part, serializing sibling segments through the same anchor.
 
     An absent part is expected on new work. No other role's values are filled
     here. Once present, even a partial dict uses code defaults without env.
+
+    `server_flags` selects where an absent part resolves from: the serving
+    process's own env (default), an explicit server settings mapping, or, for
+    None, nowhere (UnpinnedPolicyRefused before any write).
     """
     raw = (job.get('policy_parts') or {}).get(stage)
     cls = STAGE_TYPES[stage]
@@ -156,25 +178,43 @@ def stage_in_transaction(tx, job, stage, *, observations=None, candidates=None):
     check_unit_privacy(tx, job)
     anchor = unit_anchor(tx, job)
     raw = (anchor.get('policy_parts') or {}).get(stage)
+    serving = server_flags is PROCESS_ENVIRONMENT
+    if raw is None and server_flags is None:
+        raise UnpinnedPolicyRefused(stage)
+    # Only a resolution reads server_flags; copying a stored sibling part never does.
+    flags = dict(server_flags) if raw is None and not serving else None
     policy = (
         cls.from_dict(raw)
         if raw is not None
         else candidate_once(
-            candidates, (anchor['segment_id'], stage), lambda: resolve_stage_policy(job['owner_id'], stage)
+            candidates,
+            (anchor['segment_id'], stage),
+            lambda: (
+                resolve_stage_policy(job['owner_id'], stage)
+                if serving
+                else resolve_stage_policy(job['owner_id'], stage, flags=flags)
+            ),
         )
     )
+    if serving:
+        source = 'fallback'
+    elif raw is not None:
+        # A copied part keeps its anchor's provenance (only `job` is written).
+        source = (anchor.get('policy_part_sources') or {}).get(stage, 'fallback')
+    else:
+        source = 'operator_server_flags'
     for sibling in ([job] if raw is not None or anchor['segment_id'] == job['segment_id'] else [anchor, job]):
         # Copy only this part; retain every concurrent/previous owner's receipt.
         sibling['policy_parts'] = {**(sibling.get('policy_parts') or {}), stage: policy.to_dict()}
         if recorded_policy(sibling) is None:
-            sibling['policy_part_sources'] = {**(sibling.get('policy_part_sources') or {}), stage: 'fallback'}
+            sibling['policy_part_sources'] = {**(sibling.get('policy_part_sources') or {}), stage: source}
         tx.put('jobs', sibling['segment_id'], sibling)
     if observations is not None:
         observations.append(('policy_fallback' if recorded_policy(job) is None else 'policy_stage', policy.policy_id))
     return policy
 
 
-def load_stage_policy(store, segment_id, stage):
+def load_stage_policy(store, segment_id, stage, *, server_flags=PROCESS_ENVIRONMENT):
     observations = []
     candidates = {}
 
@@ -183,7 +223,9 @@ def load_stage_policy(store, segment_id, stage):
         job = tx.get('jobs', segment_id)
         if not job:
             return job, None
-        policy = stage_in_transaction(tx, job, stage, observations=observations, candidates=candidates)
+        policy = stage_in_transaction(
+            tx, job, stage, observations=observations, candidates=candidates, server_flags=server_flags
+        )
         return job, policy
 
     job, policy = store.run(commit)
