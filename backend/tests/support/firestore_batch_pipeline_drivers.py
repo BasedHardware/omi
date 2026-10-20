@@ -54,7 +54,11 @@ def entries():
         ),
         DriverEntry(
             'database.batch_pipeline_store.projection_page',
-            domains={'namespace': namespaces, 'after': [None, (2.0, 'result-100')]},
+            domains={
+                'namespace': namespaces,
+                'after': [None, (2.0, 'result-100')],
+                'states': [('pending', 'persisted', 'ready'), ('pending',), ('persisted', 'ready')],
+            },
             neutrals={'limit': (100, 'bounded page size only')},
         ),
         DriverEntry(
@@ -79,9 +83,9 @@ def entries():
         CoveredByEntry(
             'database.batch_pipeline_store.FirestoreStore.projection_page',
             covered_by=('database.batch_pipeline_store.projection_page',),
-            reason='store adapter forwards namespace, limit and keyset cursor unchanged',
+            reason='store adapter forwards namespace, limit, keyset cursor and drain states unchanged',
             expect_observed=False,
-            body_digest='49c9e1328475cf209b188988ba3f179b6a1281ca79b56ef4b21139abf27a15d1',
+            body_digest='bc9fe5cd08a05748eaa118af15031abdcb1a68d91d7f0b74bf177a27eb980a94',
         ),
         CoveredByEntry(
             'database.batch_pipeline_store.FirestoreStore.projection_pending',

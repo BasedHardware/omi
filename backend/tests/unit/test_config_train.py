@@ -188,19 +188,20 @@ def test_committed_ops_files_validate(environment):
 def test_prod_carries_both_stall_repoints_and_recovery_16_8():
     spec = ops_train.load_ops('prod')
     services = {s.name: s for s in spec.services}
-    assert services['backend-sync'].env == {
+    queues_of = lambda name: {k: v for k, v in services[name].env.items() if k.endswith('_QUEUE')}  # noqa: E731
+    assert queues_of('backend-sync') == {
         'SYNC_TASKS_QUEUE': 'sync-jobs-fresh',
         'SYNC_BACKFILL_TASKS_QUEUE': 'sync-backfill-fresh',
     }
-    assert services['backend-sync-backfill'].env == {
+    assert queues_of('backend-sync-backfill') == {
         'SYNC_TASKS_QUEUE': 'sync-backfill-fresh',
         'SYNC_BACKFILL_TASKS_QUEUE': 'sync-backfill-fresh',
     }
-    assert services['backend-integration'].env == {
-        'SYNC_TASKS_QUEUE': 'sync-jobs-fresh',
-        # C4: the enrichment-maintenance tick on backend-integration owns summary-debt repair.
-        'SUMMARY_DEBT_REPAIR_ENABLED': 'true',
-    }
+    assert queues_of('backend-integration') == {'SYNC_TASKS_QUEUE': 'sync-jobs-fresh'}
+    # C4: the enrichment-maintenance tick on backend-integration owns summary-debt repair.
+    assert services['backend-integration'].env['SUMMARY_DEBT_REPAIR_ENABLED'] == 'true'
+    # Prod live-only settings carried into source (2026-10-20 inventory, lesson 9).
+    assert all(services[s].env['FAIR_USE_ENABLED'] == 'true' for s in services)
     queues = {q.name: q for q in spec.queues}
     recovery = queues['batch-quarantine-recovery'].fields
     assert (recovery['max_concurrent_dispatches'], recovery['max_dispatches_per_second']) == (16, 8.0)
@@ -492,11 +493,11 @@ def test_disabled_queue_is_neither_read_nor_created():
 
 def test_render_env_lists_ops_values_for_the_train():
     spec = ops_train.load_ops('prod')
-    assert ops_train.render_env(spec, 'backend-sync-backfill') == [
-        'SYNC_BACKFILL_TASKS_QUEUE=sync-backfill-fresh',
-        'SYNC_TASKS_QUEUE=sync-backfill-fresh',
-    ]
-    assert ops_train.render_env(spec, 'backend') == []
+    backfill = ops_train.render_env(spec, 'backend-sync-backfill')
+    assert backfill == sorted(backfill)
+    assert {'SYNC_BACKFILL_TASKS_QUEUE=sync-backfill-fresh', 'SYNC_TASKS_QUEUE=sync-backfill-fresh'} <= set(backfill)
+    assert 'FAIR_USE_ENABLED=true' in ops_train.render_env(spec, 'backend')
+    assert ops_train.render_env(spec, 'pusher') == []
 
 
 def test_cli_exit_codes(tmp_path, capsys):
