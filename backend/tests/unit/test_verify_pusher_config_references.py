@@ -220,7 +220,7 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
         "AUDIO_MERGE_WORKER_URL": "",
         "ACTION_ITEM_REFRESH_PRESERVE_ENABLED": "true",
         "AUDIO_TIMELINE_SPANS": "false",
-        "BUCKET_SCREEN_FRAMES": "based-hardware-dev-screen-frames",
+        "BUCKET_SCREEN_FRAMES": "based-hardware-prod-screen-frames",
         "CAPTURE_EVIDENCE_V1_DARK_WRITE": "true",
         "CONVERSATION_RELEVANCE_JEV_PERCENT": "0",
         "DREAM_AGENT_ELIGIBILITY": "allowlist",
