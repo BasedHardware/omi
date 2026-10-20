@@ -387,3 +387,26 @@ def test_uploaded_clip_route_maps_unreadable_video_to_400(monkeypatch, tmp_path)
     with pytest.raises(HTTPException) as error:
         chat_video.store_uploaded_clip('u', tmp_path / 'clip.mp4', 'clip.mp4')
     assert error.value.status_code == 400
+
+
+def test_all_intra_long_clip_falls_back_to_per_target_seeks(tmp_path, monkeypatch):
+    # Every frame a keyframe: the keyframe pass would decode the whole clip, so when its
+    # budget runs out the sampler seeks to each target instead.
+    monkeypatch.setattr(video_frames, 'KEYFRAME_PASS_SECONDS', 0.001)
+    data = _clip(tmp_path, 'testsrc2=size=160x90:rate=2', 130, '-g', '1')
+    digest = digest_video(data, executable=_ffmpeg())
+    step = (130 - video_frames.END_MARGIN_SECONDS) / (MAX_CANDIDATES - 1)
+    assert len(digest.strip.times) == MAX_CANDIDATES
+    assert digest.strip.times[1] == pytest.approx(step, abs=0.01) and digest.strip.times[-1] > 128.5
+
+
+def test_ffmpeg_stderr_is_drained_with_a_retained_line_cap():
+    import re
+    import sys
+
+    noisy = [sys.executable, '-c', 'import sys\nfor i in range(20000): sys.stderr.write(f"Stream #{i} x\\n")']
+    kept = video_frames._run_keeping(noisy, re.compile(rb'Stream #'), timeout=30)
+    assert len(kept) == video_frames._MAX_KEPT_LINES
+    slow = [sys.executable, '-c', 'import time; time.sleep(30)']
+    with pytest.raises(subprocess.TimeoutExpired):
+        video_frames._run_keeping(slow, re.compile(rb'x'), timeout=0.2)

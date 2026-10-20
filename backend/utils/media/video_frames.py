@@ -17,6 +17,8 @@ import math
 import re
 import subprocess
 import tempfile
+import threading
+import time
 from dataclasses import dataclass
 from io import BytesIO
 from pathlib import Path
@@ -31,6 +33,12 @@ CELL_EDGE = 384
 STRIP_COLUMNS = 8
 # Above this length, decode keyframes only, so a ten-minute clip stays inside the timeout.
 KEYFRAME_SAMPLING_SECONDS = 120
+# The keyframe pass gets this long; if it runs out (every frame is a keyframe), the
+# remaining budget goes to per-target seeks, which are cheap for exactly those clips.
+KEYFRAME_PASS_SECONDS = 25
+SEEK_PASS_SECONDS = 30
+_MAX_KEPT_LINES = 256
+_MAX_LINE_BYTES = 64 * 1024
 DECODE_TIMEOUT_SECONDS = 60
 # Mean absolute luma difference (0-255) below which another frame adds nothing new.
 MIN_FRAME_CHANGE = 6.0
@@ -42,6 +50,7 @@ END_MARGIN_SECONDS = 0.1
 _VIDEO_FORMATS = 'mov,matroska,webm,avi'
 _DURATION = re.compile(rb'Duration: (\d+):(\d\d):(\d\d(?:\.\d+)?)')
 _VIDEO_STREAM = re.compile(rb'Stream #\d+:\d+[^\n]*: Video: ')
+_PROBE_LINE = re.compile(rb'Duration: |Stream #')
 _PTS_TIME = re.compile(rb'Parsed_showinfo[^\n]*? pts_time:\s*(-?[0-9.]+)')
 
 
@@ -81,9 +90,45 @@ def _decoder() -> str:
     return get_media_decoder()
 
 
+def _run_keeping(command: list[str], keep: re.Pattern, timeout: float, check: bool = True) -> list[bytes]:
+    """Run FFmpeg, draining stderr line by line and keeping only lines that match ``keep``.
+
+    Memory stays bounded however much a hostile or metadata-heavy file makes FFmpeg print:
+    non-matching lines are discarded as read and at most _MAX_KEPT_LINES are retained.
+    Raises subprocess.TimeoutExpired / CalledProcessError like subprocess.run.
+    """
+    process = subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+    expired = threading.Event()
+
+    def expire() -> None:
+        expired.set()
+        process.kill()
+
+    timer = threading.Timer(timeout, expire)
+    timer.start()
+    kept: list[bytes] = []
+    try:
+        assert process.stderr is not None
+        stderr = process.stderr
+        for line in iter(lambda: stderr.readline(_MAX_LINE_BYTES), b''):
+            if len(kept) < _MAX_KEPT_LINES and keep.search(line):
+                kept.append(line)
+        code = process.wait()
+    finally:
+        timer.cancel()
+        if process.poll() is None:
+            process.kill()
+            process.wait()
+    if expired.is_set():
+        raise subprocess.TimeoutExpired(command, timeout)
+    if check and code != 0:
+        raise subprocess.CalledProcessError(code, command)
+    return kept
+
+
 def _probe(executable: str, source: Path) -> tuple[float, bool]:
     """Container duration and whether a picture stream exists (FFmpeg banner, no output)."""
-    result = subprocess.run(
+    lines = _run_keeping(
         [
             executable,
             '-nostdin',
@@ -95,12 +140,11 @@ def _probe(executable: str, source: Path) -> tuple[float, bool]:
             '-i',
             str(source),
         ],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.PIPE,
+        _PROBE_LINE,
         timeout=10,
-        check=False,
+        check=False,  # no output file: FFmpeg exits 1 after printing the stream summary
     )
-    banner = result.stderr[: 1024 * 1024]
+    banner = b''.join(lines)
     match = _DURATION.search(banner)
     duration = 0.0
     if match:
@@ -183,16 +227,78 @@ def _candidates(
         '-y',
         str(directory / 'c%03d.jpg'),
     ]
-    result = subprocess.run(
-        command, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, timeout=DECODE_TIMEOUT_SECONDS
-    )
-    stamps = [max(0.0, float(t)) for t in _PTS_TIME.findall(result.stderr[: 1024 * 1024])]
+    budget = KEYFRAME_PASS_SECONDS if duration > KEYFRAME_SAMPLING_SECONDS else DECODE_TIMEOUT_SECONDS
+    try:
+        lines = _run_keeping(command, _PTS_TIME, timeout=budget)
+    except subprocess.TimeoutExpired:
+        if duration <= KEYFRAME_SAMPLING_SECONDS:
+            raise
+        # Every frame is a keyframe (an all-intra screen recording): seek to each target
+        # instead, which decodes one frame per target for exactly this kind of clip.
+        for path in directory.glob('c*.jpg'):
+            path.unlink(missing_ok=True)
+        return _seek_candidates(executable, source, duration, directory)
+    stamps = [max(0.0, float(m.group(1))) for m in map(_PTS_TIME.search, lines) if m]
     paths = sorted(directory.glob('c*.jpg'))[:count]
     if len(stamps) != len(paths):  # showinfo and the muxer see the same frames in order
         raise VideoFramesError('frame times unavailable')
     if duration > 0:
         stamps = [min(t, duration) for t in stamps]
     return _load(paths), stamps
+
+
+def _seek_candidates(
+    executable: str, source: Path, duration: float, directory: Path
+) -> tuple[list[Image.Image], list[float]]:
+    """One accurate seek per target, inside a shared budget; for clips where every frame is a keyframe."""
+    step = (duration - END_MARGIN_SECONDS) / (MAX_CANDIDATES - 1)
+    deadline = time.monotonic() + SEEK_PASS_SECONDS
+    paths: list[Path] = []
+    times: list[float] = []
+    for index in range(MAX_CANDIDATES):
+        at = index * step
+        output = directory / f's{index:03d}.jpg'
+        if _seek_one(executable, source, at, output, deadline):
+            paths.append(output)
+            times.append(at)
+        elif index == MAX_CANDIDATES - 1 and times and at - 1.0 > times[-1]:
+            # A low-frame-rate clip can end before the last target: take its final second.
+            if _seek_one(executable, source, at - 1.0, output, deadline):
+                paths.append(output)
+                times.append(at - 1.0)
+    return _load(paths), times
+
+
+def _seek_one(executable: str, source: Path, at: float, output: Path, deadline: float) -> bool:
+    """Write the frame at ``at`` seconds to ``output``; False when nothing decoded there in time."""
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        return False
+    command = _base_command(executable) + [
+        '-ss',
+        f'{at:.3f}',
+        '-i',
+        str(source),
+        '-map',
+        '0:v:0',
+        '-an',
+        '-sn',
+        '-vf',
+        _SCALE,
+        '-frames:v',
+        '1',
+        '-q:v',
+        '5',
+        '-y',
+        str(output),
+    ]
+    try:
+        subprocess.run(
+            command, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=min(remaining, 5)
+        )
+    except subprocess.SubprocessError:
+        return False  # one undecodable spot; the rest still describe the clip
+    return output.exists()
 
 
 def candidate_count(duration: float) -> int:

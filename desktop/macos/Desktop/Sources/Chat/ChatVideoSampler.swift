@@ -14,6 +14,9 @@ struct SampledChatVideo {
   let duration: Double
   /// AAC (.m4a) audio track, or nil when the clip is silent.
   let audio: Data?
+  /// The clip has speech this Mac can't export (macOS 14): upload the clip whole instead,
+  /// so the server transcribes it.
+  var audioNeedsServer = false
 }
 
 enum ChatVideoSamplerError: Error, LocalizedError {
@@ -75,12 +78,15 @@ enum ChatVideoSampler {
     // The async sequence answers in request order; keep times ascending regardless.
     let order = kept.indices.sorted { kept[$0] < kept[$1] }
     let audio = try? await exportAudio(asset: asset, duration: duration)
-    return SampledChatVideo(
+    let hasAudio = (try? await !asset.loadTracks(withMediaType: .audio).isEmpty) ?? false
+    var sampled = SampledChatVideo(
       frames: order.map { frames[$0] },
       times: order.map { (kept[$0] * 100).rounded() / 100 },
       duration: duration.isFinite ? duration : (kept.max() ?? 0),
       audio: audio
     )
+    sampled.audioNeedsServer = hasAudio && audio == nil
+    return sampled
   }
 
   private static func jpegData(_ image: CGImage) -> Data? {
@@ -88,7 +94,7 @@ enum ChatVideoSampler {
       using: .jpeg, properties: [.compressionFactor: 0.75])
   }
 
-  /// AAC export uses the macOS 15 async API; on macOS 14 the clip uploads as frames only.
+  /// AAC export uses the macOS 15 async API; on macOS 14 a clip with audio uploads whole.
   private static func exportAudio(asset: AVURLAsset, duration: Double) async throws -> Data? {
     guard #available(macOS 15, *) else { return nil }
     guard try await !asset.loadTracks(withMediaType: .audio).isEmpty,
