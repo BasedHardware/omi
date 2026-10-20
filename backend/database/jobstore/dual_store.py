@@ -27,7 +27,9 @@ returns at once, without constructing anything, unless this process runs ``BATCH
 Customer documents (``conversations``, ``content``) are never mirrored. The selector is
 ``BATCH_JOBSTORE_MODE=shadow`` (default ``firestore``: no shadow, no Postgres connection), and the live
 stop lever is the ops kill switch ``JOBSTORE_SHADOW_WRITES`` (on unless set off; cross-plan L3/X3).
-The ``batch_pipeline_prod`` namespace is refused until account deletion purges the Postgres copy too.
+The ``batch_pipeline_prod`` namespace is refused until account deletion purges the Postgres copy too,
+except in staging on the staging Firestore database, which keeps that worker namespace
+(``utils.staging_fence.jobstore_shadow_admits``, ruling L02-2).
 """
 
 from __future__ import annotations
@@ -46,6 +48,7 @@ from prometheus_client import Counter
 
 import database.jobstore.codec as codec
 from utils.observability.reasons import ReasonFamily, reason_label
+from utils.staging_fence import jobstore_shadow_admits
 
 logger = logging.getLogger(__name__)
 
@@ -305,7 +308,8 @@ _SHADOWED_LOCK = threading.Lock()
 def shadow_from_env(primary: Any) -> Any:
     """``primary`` unchanged unless ``BATCH_JOBSTORE_MODE=shadow`` and the staging Postgres is configured.
 
-    Fails closed to Firestore-only: any other mode, the prod namespace, a missing setting, or an image
+    Fails closed to Firestore-only: any other mode, the prod namespace outside the staging DB, a missing
+    setting, or an image
     without the Postgres driver returns
     ``primary`` and logs why. One ``DualStore`` (one mirror thread, one pool) serves each namespace per
     process, so call sites that build a store per call share it. No Postgres connection is opened here
@@ -315,7 +319,7 @@ def shadow_from_env(primary: Any) -> Any:
     if mode != 'shadow':
         return primary
     namespace = getattr(primary, 'namespace', '')
-    if namespace == 'batch_pipeline_prod':
+    if not jobstore_shadow_admits(namespace):
         logger.warning('event=jobstore_shadow outcome=refused reason=prod_namespace')
         return primary
     target = [os.getenv(name, '').strip() for name in ('JOBSTORE_PG_HOST', 'JOBSTORE_PG_DATABASE', 'JOBSTORE_PG_USER')]
@@ -344,7 +348,9 @@ def mirror_refresh(namespace: str, keys) -> None:
     A strict no-op (nothing constructed, nothing read) unless this process runs ``BATCH_JOBSTORE_MODE=shadow``;
     otherwise queued for the mirror thread. Never raises into the caller.
     """
-    if os.getenv('BATCH_JOBSTORE_MODE', 'firestore').strip().lower() != 'shadow' or namespace == 'batch_pipeline_prod':
+    if os.getenv('BATCH_JOBSTORE_MODE', 'firestore').strip().lower() != 'shadow' or not jobstore_shadow_admits(
+        namespace
+    ):
         return
     try:
         store = _SHADOWED.get(namespace)

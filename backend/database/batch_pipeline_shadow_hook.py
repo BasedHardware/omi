@@ -20,9 +20,13 @@ def _shadow_mode() -> bool:
 
 def mirror_refresh(namespace: str, keys: Iterable[tuple[str, str]]) -> None:
     """After a commit outside ``Store.run``: re-copy ``keys`` [(table, key)] to the shadow. Never raises."""
-    if not _shadow_mode() or namespace == 'batch_pipeline_prod':
+    if not _shadow_mode():
         return
     try:
+        from utils.staging_fence import jobstore_shadow_admits
+
+        if not jobstore_shadow_admits(namespace):  # prod namespace outside the staging DB (L02-2)
+            return
         import database.jobstore.dual_store as dual_store
 
         dual_store.mirror_refresh(namespace, list(keys))
