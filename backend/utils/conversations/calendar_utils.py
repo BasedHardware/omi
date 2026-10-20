@@ -15,14 +15,14 @@ def parse_event_times(event: Dict[str, Any]) -> Tuple[Optional[datetime], Option
     start: Dict[str, Any] = cast(Dict[str, Any], start_raw) if isinstance(start_raw, dict) else {}
     end: Dict[str, Any] = cast(Dict[str, Any], end_raw) if isinstance(end_raw, dict) else {}
     try:
-        if 'dateTime' in start:
+        if start.get('dateTime') is not None:
             start_dt = datetime.fromisoformat(str(start['dateTime']).replace('Z', '+00:00'))
         elif 'date' in start:
             start_dt = datetime.fromisoformat(str(start['date']) + 'T00:00:00+00:00')
         else:
             return None, None
 
-        if 'dateTime' in end:
+        if end.get('dateTime') is not None:
             end_dt = datetime.fromisoformat(str(end['dateTime']).replace('Z', '+00:00'))
         elif 'date' in end:
             # Google Calendar end.date is exclusive (the day after the event ends)
