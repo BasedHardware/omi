@@ -94,13 +94,13 @@ final class ChatVideoSampler {
           return
         }
         Self.exportAudio(asset: asset, duration: duration, directory: directory) { audioPath in
-          let payload: [String: Any] = [
+          var payload: [String: Any] = [
             "frames": ordered.map { $0.path },
             "times": ordered.map { ($0.time * 100).rounded() / 100 },
             "duration": duration.isFinite ? duration : (ordered.last?.time ?? 0),
-            "audio": audioPath as Any,
             "directory": directory.path,
           ]
+          if let audioPath { payload["audio"] = audioPath }
           DispatchQueue.main.async { result(payload) }
         }
       }
