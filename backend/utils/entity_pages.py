@@ -187,7 +187,10 @@ def _facts(
 
 def _coerce_utc_datetime(val) -> datetime:
     if isinstance(val, str):
-        val = isoparse(val)
+        try:
+            val = isoparse(val)
+        except (ValueError, OverflowError):
+            return datetime.now(timezone.utc)
     if val.tzinfo is None:
         val = val.replace(tzinfo=timezone.utc)
     return val
