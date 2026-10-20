@@ -135,6 +135,30 @@ class TestSelectOverlappingCalendarEvent:
             is event
         )
 
+    def test_floating_time_event_without_a_utc_offset_does_not_crash(self):
+        """A floating-time or ICS-imported event has no UTC offset on dateTime.
+
+        Comparing its naive datetime against the timezone-aware conversation
+        bounds used to raise TypeError: can't compare offset-naive and
+        offset-aware datetimes instead of degrading to no-match.
+        """
+        conversation_start = WINDOW_START + timedelta(minutes=5)
+        conversation_end = conversation_start + timedelta(seconds=25)
+        floating_event = {
+            'id': 'evt-floating',
+            'summary': 'Floating Sync',
+            'status': 'confirmed',
+            'start': {'dateTime': (WINDOW_START + timedelta(minutes=-5)).replace(tzinfo=None).isoformat()},
+            'end': {'dateTime': (WINDOW_START + timedelta(minutes=25)).replace(tzinfo=None).isoformat()},
+        }
+
+        assert (
+            cl.select_overlapping_calendar_event(
+                [floating_event], conversation_start, conversation_end, require_accepted=True
+            )
+            is floating_event
+        )
+
     def test_sub_threshold_overlap_is_rejected(self):
         conversation_start = WINDOW_START + timedelta(minutes=5)
         conversation_end = conversation_start + timedelta(seconds=9)

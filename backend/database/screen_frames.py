@@ -20,16 +20,21 @@ extract rather than excuse.
 """
 
 import copy
+import logging
 import re
 from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, List, Optional
 
 from google.cloud import firestore
+from prometheus_client import Counter
 
 from utils import encryption
 from ._client import db, get_firestore_client
 from .conversations import conversations_collection, prepare_conversation_for_read
+from .firestore_retry import FIRESTORE_NO_RETRY
 from .helpers import set_data_protection_level, prepare_for_write, prepare_for_read
+
+logger = logging.getLogger(__name__)
 
 screen_frames_subcollection = 'screen_frames'
 _ENCRYPTED_TEXT_FIELDS = ('caption', 'screen_summary')
@@ -179,14 +184,17 @@ def delete_conversation_screen_frame_docs(uid: str, conversation_id: str) -> int
 # ---------------------------------------------------------------------------
 # Per-environment frame state.
 #
-# Dev and prod backends share this Firestore but write screen-frame bytes to
-# different buckets. Every frame doc records the bucket its bytes live in
-# (`storage_bucket`), and the conversation-level markers (revision, the
-# adjudication stamp, the selection fingerprint) are kept per bucket, so one
-# environment's pass can never hide, sign, or skip the other's. Docs and
-# markers written before this split carry no bucket; only dev ever had egress,
-# so they belong to LEGACY_SCREEN_FRAMES_BUCKET and keep their original
-# top-level fields as that bucket's state.
+# Every frame doc records the bucket its bytes live in (`storage_bucket`), and
+# the conversation-level markers (revision, the adjudication stamp, the
+# selection fingerprint) are kept per bucket, so a host whose bucket differs
+# can never hide, sign, or skip another bucket's frames. The bucket follows the
+# customer data plane, not the compute project: the dev backends serve
+# production Firestore, so they use the production bucket too and share its
+# markers with the production hosts. Docs and markers written before the
+# split carry no bucket; only dev ever had egress, so they belong to
+# LEGACY_SCREEN_FRAMES_BUCKET and keep their original top-level fields as that
+# bucket's state. Production-customer frames that dev wrote to that bucket
+# are moved by scripts/migrate_screen_frames_to_data_plane_bucket.py.
 # ---------------------------------------------------------------------------
 
 LEGACY_SCREEN_FRAMES_BUCKET = 'based-hardware-dev-screen-frames'
@@ -204,11 +212,57 @@ def frame_storage_bucket(frame: Dict[str, Any]) -> str:
     return bucket if isinstance(bucket, str) and bucket else LEGACY_SCREEN_FRAMES_BUCKET
 
 
+# Frames a host filtered out because their bytes live in another bucket. Low
+# cardinality: `reason` is `legacy_unstamped` (no `storage_bucket`, mapped to
+# LEGACY_SCREEN_FRAMES_BUCKET) or `foreign_bucket` (stamped with a different
+# bucket). A non-zero rate on a data plane means notes and the screenshot UI
+# are missing frames that the bucket migration has not moved yet.
+SCREEN_FRAMES_FOREIGN_BUCKET_DROPPED_TOTAL = Counter(
+    'screen_frames_foreign_bucket_dropped_total',
+    'Screen-frame docs skipped because their bytes live in a bucket other than this host\'s',
+    ['reason'],
+)
+
+
 def own_frames(frames: Iterable[Dict[str, Any]], bucket: Optional[str]) -> List[Dict[str, Any]]:
-    """Frames whose recorded bucket is ``bucket``; none when no bucket is configured."""
+    """Frames whose recorded bucket is ``bucket``; none when no bucket is configured.
+
+    Every skipped frame is counted and logged (bucket names only, no frame
+    content), so a reader that silently loses frames to another bucket shows up.
+    """
     if not bucket:
         return []
-    return [frame for frame in frames if frame_storage_bucket(frame) == bucket]
+    kept: List[Dict[str, Any]] = []
+    dropped: Dict[str, int] = {}
+    unstamped = 0
+    for frame in frames:
+        frame_bucket = frame_storage_bucket(frame)
+        if frame_bucket == bucket:
+            kept.append(frame)
+            continue
+        dropped[frame_bucket] = dropped.get(frame_bucket, 0) + 1
+        if not _has_stamped_bucket(frame):
+            unstamped += 1
+    if dropped:
+        total = sum(dropped.values())
+        if unstamped:
+            SCREEN_FRAMES_FOREIGN_BUCKET_DROPPED_TOTAL.labels(reason='legacy_unstamped').inc(unstamped)
+        if total - unstamped:
+            SCREEN_FRAMES_FOREIGN_BUCKET_DROPPED_TOTAL.labels(reason='foreign_bucket').inc(total - unstamped)
+        logger.warning(
+            "screen_frame foreign-bucket frames skipped host_bucket=%s kept=%d dropped=%d unstamped=%d by_bucket=%s",
+            bucket,
+            len(kept),
+            total,
+            unstamped,
+            ','.join(f'{name}:{count}' for name, count in sorted(dropped.items())),
+        )
+    return kept
+
+
+def _has_stamped_bucket(frame: Dict[str, Any]) -> bool:
+    bucket = frame.get('storage_bucket')
+    return isinstance(bucket, str) and bool(bucket)
 
 
 # Durable record of screen-frame bytes one environment could not delete from
@@ -254,7 +308,7 @@ def _state_payload(bucket: str, field: str, value: Any) -> Dict[str, Any]:
 
 def _rpc_bounds(rpc_timeout: Optional[float]) -> Dict[str, Any]:
     # A caller with a deadline gets one attempt within it: no library retry past the bound.
-    return {'timeout': rpc_timeout, 'retry': None} if rpc_timeout is not None else {}
+    return {'timeout': rpc_timeout, 'retry': FIRESTORE_NO_RETRY} if rpc_timeout is not None else {}
 
 
 def _read_state(conversation_ref: Any, bucket: str, field: str, rpc_timeout: Optional[float] = None) -> Any:

@@ -29,7 +29,7 @@ class FakeDeviceTransport extends DeviceTransport {
   String get deviceId => 'fake-limitless';
 
   @override
-  Future<void> connect() async {}
+  Future<void> connect() async => emitState(DeviceTransportState.connected);
 
   @override
   Future<void> disconnect() async {}
@@ -873,6 +873,7 @@ void main() {
     await connection.connect();
     expect(transport.writes.length, 2);
 
+    transport.emitState(DeviceTransportState.disconnected);
     transport.emitState(DeviceTransportState.connected);
     await Future<void>.delayed(const Duration(milliseconds: 450));
 

@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "catalog_revision": 7,
+  "catalog_revision": 10,
   "authority": {
     "plan_identity": "catalog",
     "price_identity": "repository_ledger",
@@ -773,7 +773,27 @@
   },
   "entitlement_versions": {
     "legacy": {
-      "budget": null
+      "budget": null,
+      "capabilities": {
+        "basic": {
+          "cloud_screen_vectors": false
+        },
+        "plus": {
+          "cloud_screen_vectors": true
+        },
+        "unlimited": {
+          "cloud_screen_vectors": true
+        },
+        "unlimited_v2": {
+          "cloud_screen_vectors": true
+        },
+        "operator": {
+          "cloud_screen_vectors": true
+        },
+        "architect": {
+          "cloud_screen_vectors": true
+        }
+      }
     },
     "ladder_v1": {
       "rate_card_version": "v1",
@@ -797,8 +817,66 @@
           "kind": "units",
           "value": 189463
         }
+      },
+      "mcp_daily_caps": {
+        "basic": 100,
+        "plus": 500,
+        "operator": 5000,
+        "architect": 5000
+      },
+      "api_max_reads_per_request": {
+        "basic": 2000,
+        "plus": 5000,
+        "operator": 25000,
+        "architect": 25000
+      },
+      "capabilities": {
+        "basic": {
+          "cloud_screen_vectors": false
+        },
+        "plus": {
+          "cloud_screen_vectors": false
+        },
+        "operator": {
+          "cloud_screen_vectors": true
+        },
+        "architect": {
+          "cloud_screen_vectors": true
+        }
       }
     }
   },
-  "ladder_v1_stripe_prices": []
+  "ladder_v1_stripe_prices": [],
+  "ladder_v1_price_bindings": {
+    "ladder_v1_plus_month": {
+      "plan_id": "plus",
+      "interval": "month",
+      "env_var": "LADDER_V1_PLUS_MONTH_PRICE_ID"
+    },
+    "ladder_v1_plus_year": {
+      "plan_id": "plus",
+      "interval": "year",
+      "env_var": "LADDER_V1_PLUS_YEAR_PRICE_ID"
+    },
+    "ladder_v1_pro_month": {
+      "plan_id": "operator",
+      "interval": "month",
+      "env_var": "LADDER_V1_PRO_MONTH_PRICE_ID"
+    },
+    "ladder_v1_pro_year": {
+      "plan_id": "operator",
+      "interval": "year",
+      "env_var": "LADDER_V1_PRO_YEAR_PRICE_ID"
+    },
+    "ladder_v1_architect_month": {
+      "plan_id": "architect",
+      "interval": "month",
+      "env_var": "LADDER_V1_ARCHITECT_MONTH_PRICE_ID"
+    },
+    "ladder_v1_architect_year": {
+      "plan_id": "architect",
+      "interval": "year",
+      "env_var": "LADDER_V1_ARCHITECT_YEAR_PRICE_ID"
+    }
+  }
 }

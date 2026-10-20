@@ -118,6 +118,12 @@ sdist = { url = "https://files.pythonhosted.org/packages/e7/45/282a04df72c17cc6c
 wheels = [{ url = "https://files.pythonhosted.org/packages/51/95/d43a02410e4e1cb6397a675facf5a65285d670697c0762a0e29c0c3615b4/av-12.0.0-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", upload-time = 2024-03-21T11:15:50Z, size = 34691295, hashes = { sha256 = "7a6d4f1e261df48932128e6495772faa4cc23f5dd1512eec73daab82ad9f3240" } }]
 
 [[packages]]
+name = "babel"
+version = "2.18.0"
+sdist = { url = "https://files.pythonhosted.org/packages/7d/b2/51899539b6ceeeb420d40ed3cd4b7a40519404f9baf3d4ac99dc413a834b/babel-2.18.0.tar.gz", upload-time = 2026-02-01T12:30:56Z, size = 9959554, hashes = { sha256 = "b80b99a14bd085fcacfa15c9165f651fbb3406e66cc603abf11c5750937c992d" } }
+wheels = [{ url = "https://files.pythonhosted.org/packages/77/f5/21d2de20e8b8b0408f0681956ca2c69f1320a3848ac50e6e7f39c6159675/babel-2.18.0-py3-none-any.whl", upload-time = 2026-02-01T12:30:53Z, size = 10196845, hashes = { sha256 = "e2b422b277c2b9a9630c1d7903c2a00d0830c409c59ac8cae9081c92f1aeba35" } }]
+
+[[packages]]
 name = "backoff"
 version = "2.2.1"
 sdist = { url = "https://files.pythonhosted.org/packages/47/d7/5bbeb12c44d7c4f2fb5b56abce497eb5ed9f34d85701de869acedd602619/backoff-2.2.1.tar.gz", upload-time = 2022-10-05T19:19:32Z, size = 17001, hashes = { sha256 = "03f829f5bb1923180821643f8753b0502c3b682293992485b0eef2807afa5cba" } }
@@ -557,6 +563,12 @@ sdist = { url = "https://files.pythonhosted.org/packages/82/77/7b3966d0b9d1d31a3
 wheels = [{ url = "https://files.pythonhosted.org/packages/d2/23/408243171aa9aaba178d3e2559159c24c1171a641aa83b67bdd3394ead8e/idna-3.15-py3-none-any.whl", upload-time = 2026-05-12T22:45:55Z, size = 72340, hashes = { sha256 = "048adeaf8c2d788c40fee287673ccaa74c24ffd8dcf09ffa555a2fbb59f10ac8" } }]
 
 [[packages]]
+name = "imageio-ffmpeg"
+version = "0.6.0"
+sdist = { url = "https://files.pythonhosted.org/packages/44/bd/c3343c721f2a1b0c9fc71c1aebf1966a3b7f08c2eea8ed5437a2865611d6/imageio_ffmpeg-0.6.0.tar.gz", upload-time = 2025-01-16T21:34:32Z, size = 25210, hashes = { sha256 = "e2556bed8e005564a9f925bb7afa4002d82770d6b08825078b7697ab88ba1755" } }
+wheels = [{ url = "https://files.pythonhosted.org/packages/a0/2d/43c8522a2038e9d0e7dbdf3a61195ecc31ca576fb1527a528c877e87d973/imageio_ffmpeg-0.6.0-py3-none-manylinux2014_x86_64.whl", upload-time = 2025-01-16T21:34:13Z, size = 29498237, hashes = { sha256 = "c7e46fcec401dd990405049d2e2f475e2b397779df2519b544b8aab515195282" } }]
+
+[[packages]]
 name = "iniconfig"
 version = "2.3.0"
 sdist = { url = "https://files.pythonhosted.org/packages/72/34/14ca021ce8e5dfedc35312d08ba8bf51fdd999c576889fc2c24cb97f4f10/iniconfig-2.3.0.tar.gz", upload-time = 2025-10-18T21:55:43Z, size = 20503, hashes = { sha256 = "c76315c77db068650d49c5b56314774a7804df16fee4402c1f19d6d15d8c4730" } }
@@ -940,6 +952,12 @@ sdist = { url = "https://files.pythonhosted.org/packages/1c/3d/bb7fca845737cf9d7
 wheels = [{ url = "https://files.pythonhosted.org/packages/3b/2d/ede717bc1144f63886c21fd349bb95860b0d1a21149ff16f2bb362b612b6/pillow-12.3.0-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", upload-time = 2026-07-01T11:53:53Z, size = 6934408, hashes = { sha256 = "23d27a3e0307ec2244cc51e7287b919aa68d097504ebe19df4e76a98a3eea5bd" } }]
 
 [[packages]]
+name = "pillow-heif"
+version = "1.3.0"
+sdist = { url = "https://files.pythonhosted.org/packages/cd/58/2df4fc42840633e01c97b75965cb1bc6e14425973b92382391650e97e4b7/pillow_heif-1.3.0.tar.gz", upload-time = 2026-02-27T12:21:36Z, size = 17133211, hashes = { sha256 = "af8d2bda85e395677d5bb50d7bda3b5655c946cc95b913b5e7222fabacbb467f" } }
+wheels = [{ url = "https://files.pythonhosted.org/packages/d8/43/20cec5c7666b6dbf20927620a33ebed7983cc558649a1e383877b3abc546/pillow_heif-1.3.0-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", upload-time = 2026-02-27T12:20:37Z, size = 5579319, hashes = { sha256 = "a5a9f26d9ece400f55ac006e2fed079392e44a550023c99122e281fcd72b7c06" } }]
+
+[[packages]]
 name = "pinecone"
 version = "7.3.0"
 sdist = { url = "https://files.pythonhosted.org/packages/fa/38/12731d4af470851b4963eba616605868a8599ef4df51c7b6c928e5f3166d/pinecone-7.3.0.tar.gz", upload-time = 2025-06-27T20:03:51Z, size = 235256, hashes = { sha256 = "307edc155621d487c20dc71b76c3ad5d6f799569ba42064190d03917954f9a7b" } }
@@ -1053,8 +1071,6 @@ version = "0.2.3"
 sdist = { url = "https://files.pythonhosted.org/packages/cd/05/0a34433a064256a578f1783a10da6df098ceaa4a57bbeaa96a6c0352786b/pure_eval-0.2.3.tar.gz", upload-time = 2024-07-21T12:58:21Z, size = 19752, hashes = { sha256 = "5f4e983f40564c576c7c8635ae88db5956bb2229d7e9237d03b3c0b0190eaf42" } }
 wheels = [{ url = "https://files.pythonhosted.org/packages/8e/37/efad0257dc6e593a18957422533ff0f87ede7c9c6ea010a2177d738fb82f/pure_eval-0.2.3-py3-none-any.whl", upload-time = 2024-07-21T12:58:20Z, size = 11842, hashes = { sha256 = "1db8e35b67b3d218d818ae653e27f06c3aa420901fa7b081ca98cbedc874e0d0" } }]
 
-# TODO(#12758): pyarrow pinned at 19.0.1 for GCP buildpack/rmgpgab manylinux2014
-# (23.x is manylinux_2_28-only → sdist fail). Drop when trigger uses Dockerfile/uv.
 [[packages]]
 name = "pyarrow"
 version = "19.0.1"

@@ -110,6 +110,19 @@ def _install_document_read_probe() -> None:
 
 _install_document_read_probe()
 
+
+def _install_action_item_write_fences() -> None:
+    # Match the SDK read probe's import-isolation seam. No clients or IO here.
+    try:
+        from database.action_item_write_fence import install_write_fences
+    except ImportError:
+        return
+    install_write_fences()
+
+
+_install_action_item_write_fences()
+
+
 _firestore_client = None
 _firestore_client_lock = Lock()
 _customer_firestore_client = None
@@ -117,31 +130,11 @@ _customer_firestore_client_lock = Lock()
 
 
 def _firestore_database_id() -> str | None:
-    """Resolve the optional named database, with a hard QA-only fence.
-
-    The isolated JIT plane owns ``jit-qa`` in the development project.  A
-    named database must never be accepted as an ambient production override:
-    ordinary services retain the default database when this variable is absent,
-    while a misconfigured QA process fails before constructing a client.
-    """
-
+    """Reject named database overrides outside the local emulator branch."""
     database = (os.getenv("FIRESTORE_DATABASE_ID") or "").strip()
-    qa_auth_only = (os.getenv("OMI_JIT_QA_AUTH_ONLY") or "").strip().casefold() in {"1", "true", "yes", "on"}
-    if qa_auth_only:
-        if database != "jit-qa":
-            raise RuntimeError("isolated JIT QA requires FIRESTORE_DATABASE_ID=jit-qa")
-        if (
-            (os.getenv("OMI_ENV_STAGE") or "").strip().casefold() != "dev"
-            or (os.getenv("GOOGLE_CLOUD_PROJECT") or "").strip() != "based-hardware-dev"
-            or (os.getenv("OMI_FIRESTORE_DATA_PLANE_PROJECT") or "").strip() != "based-hardware-dev"
-        ):
-            raise RuntimeError("FIRESTORE_DATABASE_ID=jit-qa requires the isolated development JIT QA fence")
-        return database
     if not database or database == "(default)":
         return None
-    if database == "jit-qa":
-        raise RuntimeError("FIRESTORE_DATABASE_ID=jit-qa requires the isolated development JIT QA fence")
-    raise RuntimeError("FIRESTORE_DATABASE_ID is restricted to the isolated JIT QA database")
+    raise RuntimeError("FIRESTORE_DATABASE_ID is restricted to local Firestore emulators")
 
 
 def _client_kwargs(credentials: Any, project: str) -> dict[str, Any]:
@@ -172,8 +165,6 @@ def _build_firestore_client() -> Any:
     if customer_data is not None:
         credentials, project_id = customer_data
         database = _firestore_database_id()
-        if database and project_id != "based-hardware-dev":
-            raise RuntimeError("jit-qa cannot use a mounted customer-data service account")
         customer_kwargs: dict[str, Any] = _client_kwargs(credentials, project_id)
         if database:
             customer_kwargs["database"] = database
@@ -209,8 +200,6 @@ def _build_customer_firestore_client() -> Any:
     if entitlements is not None:
         credentials, project_id = entitlements
         database = _firestore_database_id()
-        if database and project_id != "based-hardware-dev":
-            raise RuntimeError("jit-qa cannot use a mounted customer-entitlement service account")
         kwargs: dict[str, Any] = _client_kwargs(credentials, project_id)
         if database:
             kwargs["database"] = database
@@ -238,7 +227,7 @@ def _build_data_plane_firestore_client() -> Any:
 
     Some deployments (desktop-backend in dev) run their compute on one GCP
     project via bare ADC (``GOOGLE_CLOUD_PROJECT``) while the user's actual
-    Firestore data — the memory ledger, JIT proactivity state, screen-activity
+    Firestore data — the memory ledger, retained proactivity history, screen-activity
     sync — lives in a different project (see ``backend/deploy/runtime_env``'s
     ``data_plane_project``). ``OMI_FIRESTORE_DATA_PLANE_PROJECT`` names that
     project explicitly so ADC can be pinned to it instead of silently
@@ -275,8 +264,6 @@ def _build_data_plane_firestore_client() -> Any:
                 f"{data_plane_project} does not match the mounted service account's "
                 f"project {sa_project}"
             )
-        if database and sa_project != "based-hardware-dev":
-            raise RuntimeError("jit-qa cannot use a mounted customer-entitlement service account")
         kwargs: dict[str, Any] = _client_kwargs(credentials, data_plane_project)
         if database:
             kwargs["database"] = database
@@ -422,7 +409,14 @@ def firestore_document_kind(error: BaseException) -> str:
     return 'other'
 
 
-def run_transactional(client: Any, transactional_callable: Any, *args: Any, attempts: int = 3, **kwargs: Any) -> Any:
+def run_transactional(
+    client: Any,
+    transactional_callable: Any,
+    *args: Any,
+    attempts: int = 3,
+    initial_transaction: Any = None,
+    **kwargs: Any,
+) -> Any:
     """Run a ``@firestore.transactional`` callable, restarting it on an expired transaction.
 
     ``_Transactional.__call__`` retries contention by replaying the *same* transaction id,
@@ -432,10 +426,15 @@ def run_transactional(client: Any, transactional_callable: Any, *args: Any, atte
     that read. Nothing was written. Recovery requires a brand-new transaction and belongs
     to this boundary rather than to every caller — callers that own a live WebSocket
     session have no way to distinguish it from a real write failure.
+    ``initial_transaction`` lets an outer contention budget own the first transaction;
+    expiry still replaces it with a new transaction under the existing attempt limit.
     """
     for attempt in range(1, max(1, attempts) + 1):
         try:
-            return transactional_callable(client.transaction(), *args, **kwargs)
+            transaction = (
+                initial_transaction if attempt == 1 and initial_transaction is not None else client.transaction()
+            )
+            return transactional_callable(transaction, *args, **kwargs)
         except (InvalidArgument, Aborted) as error:
             if attempt >= attempts or not is_expired_transaction_error(error):
                 raise

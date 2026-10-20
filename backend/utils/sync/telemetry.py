@@ -55,3 +55,28 @@ def bounded_exception_reason(error: BaseException) -> str:
     cleaned = ''.join(ch if ch.isalnum() or ch in ' ._:-=' else '_' for ch in text)
     cleaned = cleaned.strip(' _')[:120]
     return cleaned or 'empty'
+
+
+_FINALIZE_SITES = {
+    'database/action_item_refresh.py': 'action_item_refresh',
+    'database/sync_bridges.py': 'bridge_receipt',
+    'database/conversations.py': 'conversation_store',
+    'utils/sync/fsr_metadata.py': 'bridge_metadata',
+    'utils/conversations/merge_conversations.py': 'bridge_effects',
+    'utils/other/storage.py': 'audio_storage',
+    'utils/sync/bridge.py': 'bridge',
+    'utils/sync/intake_completion.py': 'intake_completion',
+}
+
+
+def finalize_exception_site(error: BaseException) -> str:
+    """Deepest known code boundary, without emitting paths, locals or exception text."""
+    site = 'other'
+    traceback = error.__traceback__
+    while traceback is not None:
+        filename = traceback.tb_frame.f_code.co_filename.replace('\\', '/')
+        for suffix, token in _FINALIZE_SITES.items():
+            if filename.endswith('/' + suffix):
+                site = token
+        traceback = traceback.tb_next
+    return site

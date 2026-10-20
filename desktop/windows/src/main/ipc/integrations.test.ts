@@ -5,7 +5,8 @@ const h = vi.hoisted(() => {
   return {
     ipcHandlers,
     defaultSignOpts: vi.fn(() => ({ baseUrl: null, posesDir: undefined })),
-    translateToGlosses: vi.fn()
+    translateToGlosses: vi.fn(),
+    send: vi.fn()
   }
 })
 
@@ -13,6 +14,9 @@ vi.mock('electron', () => ({
   ipcMain: {
     handle: (channel: string, handler: (...args: unknown[]) => unknown) =>
       h.ipcHandlers.set(channel, handler)
+  },
+  webContents: {
+    getAllWebContents: () => [{ isDestroyed: () => false, send: h.send }]
   }
 }))
 
@@ -94,5 +98,26 @@ describe('integrations:signLanguage:translate IPC', () => {
       baseUrl: null,
       posesDir: undefined
     })
+  })
+})
+
+describe('integrations:signLanguage:setEnabled IPC', () => {
+  beforeEach(() => {
+    h.ipcHandlers.clear()
+    h.send.mockClear()
+    setSignLanguageEnabled(false)
+    registerIntegrationsHandlers()
+  })
+
+  it('broadcasts the new value so the overlay can mount or unmount live', async () => {
+    const setEnabled = h.ipcHandlers.get('integrations:signLanguage:setEnabled')!
+
+    await setEnabled({}, true)
+    expect(isSignLanguageEnabled()).toBe(true)
+    expect(h.send).toHaveBeenLastCalledWith('integrations:signLanguage:changed', true)
+
+    await setEnabled({}, false)
+    expect(isSignLanguageEnabled()).toBe(false)
+    expect(h.send).toHaveBeenLastCalledWith('integrations:signLanguage:changed', false)
   })
 })

@@ -115,8 +115,9 @@ def test_memory_maintenance_job_entrypoint_calls_cron_runner():
     source = entry_path.read_text(encoding="utf-8")
     assert "run_canonical_short_term_maintenance_cron" in source
     assert "from utils.other.jobs import start_job" not in source
-    assert "recurrence_signal_persister=persist_recurrence_signals_for_maintenance" in source
-    assert "recurrence_signal_consumer=drain_recurrence_inbox_for_maintenance" in source
+    assert "recurrence_inbox_drain=drain_recurrence_inbox_for_maintenance" in source
+    assert "persist_recurrence_signals_for_maintenance" not in source
+    assert "recurrence_signal_consumer=" not in source
     assert "asyncio.run(" in source
     assert 'if __name__ == "__main__":' in source
     assert "def main() -> None:" in source
@@ -169,10 +170,3 @@ def test_memory_maintenance_job_still_fails_outbox_errors_after_flex_stop(monkey
 
     with pytest.raises(RuntimeError, match=r"completed with 1 error\(s\)"):
         memory_maintenance_job.main()
-
-
-def test_daily_sweep_has_no_legacy_orchestrator_edge():
-    entry_path = Path(__file__).resolve().parents[2] / "modal" / "daily_memory_sweep_job.py"
-    source = entry_path.read_text(encoding="utf-8")
-    assert "canonical_short_term_maintenance_cron" not in source
-    assert "memory_maintenance_job" not in source

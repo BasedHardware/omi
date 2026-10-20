@@ -24,11 +24,14 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
+from grafana_business import Grafana, ensure_business, secure_business_dashboard
 
-def _post_dashboard(base: str, token: str, dashboard: dict, source_sha: str) -> tuple[int, dict]:
+
+def _post_dashboard(base: str, token: str, dashboard: dict, source_sha: str, folder_uid: str = "") -> tuple[int, dict]:
     body = json.dumps(
         {
             "dashboard": dashboard,
+            "folderUid": folder_uid,
             "overwrite": True,
             "message": f"provisioned from main {source_sha}",
         }
@@ -66,6 +69,7 @@ def main() -> int:
         default="",
         help="Comma-separated filenames to provision; empty = all dashboards",
     )
+    parser.add_argument("--folder-uid", choices=["business"], default="")
     args = parser.parse_args()
 
     token = os.environ.get(args.token_env) or ""
@@ -82,6 +86,9 @@ def main() -> int:
         print(f"FAIL: no dashboard JSON under {args.dashboards_dir}", file=sys.stderr)
         return 1
 
+    grafana = Grafana(base, token)
+    if args.folder_uid:
+        ensure_business(grafana)
     failures: list[str] = []
     for path in files:
         label = str(path)
@@ -90,15 +97,16 @@ def main() -> int:
         except json.JSONDecodeError as exc:
             failures.append(f"{label}: invalid JSON ({exc})")
             continue
-        uid = dashboard.get("uid") or ""
-        if not uid:
+        uid = dashboard.get("uid", "") if isinstance(dashboard, dict) else ""
+        if not isinstance(dashboard, dict) or not uid:
             failures.append(f"{label}: missing uid; POST would create an orphan board")
             continue
 
         try:
-            _status, body = _post_dashboard(base, token, dashboard, args.source_sha)
+            _status, body = _post_dashboard(base, token, dashboard, args.source_sha, args.folder_uid)
         except urllib.error.HTTPError as exc:
-            failures.append(f"{label}: POST failed HTTP {exc.code}: {exc.read().decode()[:200]}")
+            failures.append(f"{label}: POST failed HTTP {exc.code}")
+            exc.close()
             continue
         if body.get("status") not in ("success", None):
             failures.append(f"{label}: POST returned {body}")
@@ -128,6 +136,8 @@ def main() -> int:
                 f"{label}: read-back version {served_version} did not advance past POST version {body.get('version')}"
             )
             continue
+        if args.folder_uid:
+            secure_business_dashboard(grafana, uid)
         print(f"OK {label}: uid={uid} version={served_version}")
 
     if failures:

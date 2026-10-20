@@ -10,6 +10,7 @@ import secrets
 from dataclasses import asdict
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
+from typing import Any
 
 from config.messaging import channel_policy
 from utils.messaging.access import SeatFull, AccessDenied
@@ -18,6 +19,7 @@ from google.cloud import firestore
 from prometheus_client import Counter
 from google.api_core.exceptions import AlreadyExists
 
+from database.messaging_albums import read_album, append_album, seal_album
 from database._client import get_firestore_client
 from database.account_deletion_marker import account_deletion_document
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
@@ -151,17 +153,19 @@ class MessagingStore:
             if existing.get('uid') and existing['uid'] != uid:
                 raise PermissionError('Identity already linked')
             cap = channel_policy(message.channel).get('seat_cap')
-            capacity = self.capacity(message.channel)
-            member_ref = capacity.collection('members').document(uid)
-            # Track every link per user, including legacy links after cap activation.
-            member = member_ref.get(transaction=tx).to_dict() or {}
-            seats = capacity.get(transaction=tx).to_dict() or {}
-            link_ids = member.get('link_ids', [])
-            if cap is not None and not link_ids:
-                if seats.get('initialized') is not True:
-                    raise PermissionError('Seat counter needs reconciliation')
-                if seats.get('count', 0) >= cap:
-                    raise SeatFull()
+            capacity = member_ref = None
+            link_ids, seats = [], {}
+            if cap is not None:
+                capacity = self.capacity(message.channel)
+                member_ref = capacity.collection('members').document(uid)
+                member = member_ref.get(transaction=tx).to_dict() or {}
+                seats = capacity.get(transaction=tx).to_dict() or {}
+                link_ids = member.get('link_ids', [])
+                if not link_ids:
+                    if seats.get('initialized') is not True:
+                        raise PermissionError('Seat counter needs reconciliation')
+                    if seats.get('count', 0) >= cap:
+                        raise SeatFull()
             link = dict(
                 uid=uid,
                 channel=message.channel,
@@ -175,7 +179,7 @@ class MessagingStore:
             )
             for name, default in _SETTING_DEFAULTS.items():
                 link[name] = existing.get(name, default)
-            if cap is not None or seats.get('initialized'):
+            if capacity is not None and member_ref is not None:
                 if identity.id not in link_ids:
                     tx.set(member_ref, {'link_ids': [*link_ids, identity.id]})
                     if not link_ids:
@@ -227,18 +231,19 @@ class MessagingStore:
             link = identity.get(transaction=tx).to_dict() or {}
             if link.get('uid') != uid:
                 raise PermissionError('Link not found')
-            capacity = self.capacity(link.get('channel', 'unknown'))
-            member_ref = capacity.collection('members').document(uid)
-            member = member_ref.get(transaction=tx).to_dict() or {}
-            seats = capacity.get(transaction=tx).to_dict() or {}
-            link_ids = member.get('link_ids', [])
-            if link_id in link_ids:
-                remaining = [value for value in link_ids if value != link_id]
-                if remaining:
-                    tx.set(member_ref, {'link_ids': remaining})
-                else:
-                    tx.delete(member_ref)
-                    tx.set(capacity, {'count': max(0, seats.get('count', 0) - 1)}, merge=True)
+            if channel_policy(link.get('channel', 'unknown')).get('seat_cap') is not None:
+                capacity = self.capacity(link.get('channel', 'unknown'))
+                member_ref = capacity.collection('members').document(uid)
+                member = member_ref.get(transaction=tx).to_dict() or {}
+                seats = capacity.get(transaction=tx).to_dict() or {}
+                link_ids = member.get('link_ids', [])
+                if link_id in link_ids:
+                    remaining = [value for value in link_ids if value != link_id]
+                    if remaining:
+                        tx.set(member_ref, {'link_ids': remaining})
+                    else:
+                        tx.delete(member_ref)
+                        tx.set(capacity, {'count': max(0, seats.get('count', 0) - 1)}, merge=True)
             tx.update(identity, {'active': False, 'generation': str(uuid4())})
             return link
 
@@ -283,14 +288,21 @@ class MessagingStore:
 
         @firestore.transactional
         def apply(tx):
-            exists = ref.get(transaction=tx).exists
+            if ref.get(transaction=tx).exists:
+                return None
+            batch = read_album(tx, identity, message)
             identity_row = identity.get(transaction=tx).to_dict() or {}
             if identity_row.get('cleanup_pending'):
                 raise ValueError('Identity cleanup in progress')
             prior = head.get(transaction=tx).to_dict() or {}
-            if exists:
-                return None
             tx.set(identity, {'last_inbound_at': now}, merge=True)
+            if batch is not None:
+                path = append_album(tx, batch, ref, payload, identity.id, now, message.channel, message.provider)
+                if advances_inbound_head(message, prior):
+                    tx.set(
+                        head, {'provider_message_id': message.provider_message_id, 'received_at': message.received_at}
+                    )
+                return path
             tx.create(
                 ref,
                 {
@@ -365,6 +377,8 @@ class MessagingStore:
                         path,
                         _age(row, now),
                     )
+                if row.get('album_ready_at', now) > now:
+                    return None
                 if row['status'] == 'pending' and (take_head or head.reference.path == path):
                     payload = json.loads(encryption.decrypt(row['payload'], ref.parent.parent.id))
             for candidate, reason, age in retired:
@@ -375,11 +389,17 @@ class MessagingStore:
                 tx.update(candidate.reference, patch)
                 _queue_event(reason, candidate.reference.path, age)
             if payload is not None and head is not None:
-                tx.update(head.reference, {'status': 'running', 'started_at': now})
+                claim_patch: dict[str, Any] = {'status': 'running', 'started_at': now}
+                if payload.get('media_group_id'):
+                    claim_patch['album_appendable'] = True  # Only a generation-aware worker opts in.
+                tx.update(head.reference, claim_patch)
                 return head.reference.path, payload
             return None
 
         return run_with_transaction_contention_retry(self.db.transaction, apply, operation_name='messaging_transaction')
+
+    def seal_album(self, path, attachment_count):
+        return seal_album(self.db, path, attachment_count, stale_seconds=STALE_SECONDS)
 
     def assert_running(self, path):
         row = self.db.document(path).get().to_dict() or {}
@@ -636,7 +656,7 @@ class MessagingStore:
         return claimed
 
     def retry(self, path):
-        self.db.document(path).update({'status': 'pending'})
+        self.db.document(path).update({'status': 'pending', 'album_appendable': firestore.DELETE_FIELD})
 
     def pending(self, message):
         """Recovery seam: Stage B's dispatcher periodically scans its owned identities."""
@@ -674,6 +694,7 @@ class MessagingStore:
             link = self.db.collection('channel_identities').document(link_id).get(transaction=tx).to_dict() or {}
             if not link.get('active') or link.get('uid') != uid or link.get('generation') != session['link_generation']:
                 raise PermissionError('Link revoked')
+        return user
 
     def persist_message(self, uid, document, session_id):
         session_ref = self.user(uid).collection('chat_sessions').document(session_id)
@@ -753,6 +774,11 @@ class MessagingStore:
             def revoke(tx):
                 row = identity.reference.get(transaction=tx).to_dict() or {}
                 if row.get('active') or row.get('uid') or row.get('last_inbound_at', now) > cutoff:
+                    return False
+                # Unknown senders can also have ambiguous provider delivery. Never
+                # erase their running reconciliation evidence through a parent purge.
+                running = identity.reference.collection('inbox').where('status', '==', 'running').limit(1)
+                if next(running.stream(transaction=tx), None) is not None:
                     return False
                 tx.update(identity.reference, {'cleanup_pending': True})
                 return True

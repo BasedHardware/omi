@@ -26,6 +26,7 @@ class InboundAttachment:
     mime_type: str
     size: int = 0
     voice: bool = False
+    duration_seconds: float = 0
 
 
 @dataclass(frozen=True)
@@ -47,6 +48,9 @@ class ChannelMessage:
     callback_id: str | None = None
     undo_receipt_id: str | None = None
     forwarded: bool = False
+    media_group_id: str | None = None
+    quoted_text: str | None = None
+    quoted_message_id: str | None = None
 
     def __post_init__(self):
         if not all(

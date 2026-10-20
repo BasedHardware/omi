@@ -14,6 +14,7 @@ from utils.conversations.mcp_transcript_search import (
     resolve_mcp_conversation_search_ids,
     search_chat_transcript_chunks,
 )
+from utils.model_text import DisplayClock
 
 
 def test_chat_chunk_search_shares_embedding_and_bounds_candidates():
@@ -72,6 +73,27 @@ def test_chat_excerpt_is_rebuilt_from_accessible_conversation_only():
     assert list(excerpts) == ['visible']
     assert '47 dollars' in excerpts['visible']
     assert 'secret' not in str(excerpts) and 'erased' not in str(excerpts)
+
+
+def test_chat_excerpt_header_uses_requested_clock():
+    started = datetime(2026, 9, 26, 7, 18, tzinfo=timezone.utc)
+    excerpts = chat_transcript_excerpts(
+        [{'id': 'visible', 'started_at': started, 'transcript_segments': [{'text': 'Morning update'}]}],
+        ChatTranscriptSearch([{'conversation_id': 'visible', 'chunk_index': 0}], True),
+        clock=DisplayClock.from_name('Asia/Ho_Chi_Minh'),
+    )
+    assert 'Sat 26 Sep 2026, 14:18 Asia/Ho_Chi_Minh (UTC+07:00)' in excerpts['visible']
+
+
+def test_chat_excerpt_marks_character_truncation():
+    started = datetime(2026, 8, 18, tzinfo=timezone.utc)
+    excerpt = chat_transcript_excerpts(
+        [{'id': 'visible', 'started_at': started, 'transcript_segments': [{'text': 'x' * 200}]}],
+        ChatTranscriptSearch([{'conversation_id': 'visible', 'chunk_index': 0}], True),
+        max_chars=60,
+    )['visible']
+    assert 'omitted, not absent' in excerpt
+    assert 'max_transcript_segments' in excerpt
 
 
 def test_chat_chunk_search_failure_does_not_claim_transcript_coverage():

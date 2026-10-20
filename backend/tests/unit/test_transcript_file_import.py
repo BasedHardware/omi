@@ -774,6 +774,17 @@ def test_file_dispatch_uses_extension_title_and_filename_date():
     [
         ('20260912_143005.txt', 'UTC', datetime(2026, 9, 12, 14, 30, 5, tzinfo=timezone.utc)),
         ('Sync 2026-09-12T09-15.vtt', 'America/New_York', datetime(2026, 9, 12, 13, 15, tzinfo=timezone.utc)),
+        # Zoom names cloud recordings by their GMT start; the same digits without "GMT" stay local.
+        (
+            'GMT20240508-213012_Recording.transcript.vtt',
+            'America/New_York',
+            datetime(2024, 5, 8, 21, 30, 12, tzinfo=timezone.utc),
+        ),
+        (
+            '20240508-213012_Recording.transcript.vtt',
+            'America/New_York',
+            datetime(2024, 5, 9, 1, 30, 12, tzinfo=timezone.utc),
+        ),
         ('2026-02-30 10_00 bad date.txt', 'UTC', None),
         ('Weekly sync.txt', 'UTC', None),
         ('0001-01-01 00_00 call.txt', 'Asia/Tokyo', None),
@@ -1257,6 +1268,15 @@ def test_single_file_upload_and_origin_mapping(tmp_path, job):
     (conversation,) = job.store.docs.values()
     assert conversation['source'] == ConversationSource.plaud.value
     assert conversation['structured']['title'] == 'Standup'
+
+
+def test_a_zoom_recording_is_dated_by_its_gmt_start_not_the_users_timezone(tmp_path, job):
+    """Zoom names a cloud recording by its start in GMT; read as Tokyo time it would be stored nine hours early."""
+    _run(tmp_path, 'GMT20240508-213012_Recording.transcript.vtt', VTT.encode('utf-8'), tz='Asia/Tokyo')
+
+    (conversation,) = job.store.docs.values()
+    assert conversation['started_at'] == datetime(2024, 5, 8, 21, 30, 12, tzinfo=timezone.utc)
+    assert conversation['created_at'] == conversation['started_at']
 
 
 def test_upload_without_transcripts_fails_with_a_clear_message(tmp_path, job):
@@ -2607,3 +2627,29 @@ def test_a_shutdown_during_a_failing_save_still_releases_its_bytes(tmp_path, job
 
     release.assert_called_once_with(UID, 'byte', 'reservation')
     assert job.store.docs == {}
+
+
+def test_paragraph_title_line_stays_its_own_cue():
+    """#21203 — a title line + one speaker label must not glue onto the name.
+
+    Before: a block with <2 labels joined into one cue, so 'Meeting notes'
+    became part of the first speaker's name ('Meeting notes Alice')."""
+    from utils.imports.transcript_files import _paragraph_cues
+
+    cues = _paragraph_cues(['Meeting notes', 'Alice: hi there'])
+    texts = [c.text for c in cues]
+    assert texts == ['Meeting notes', 'Alice: hi there']
+
+
+def test_paragraph_wrapped_turn_still_joins():
+    from utils.imports.transcript_files import _paragraph_cues
+
+    cues = _paragraph_cues(['Alice: hi', 'more of the turn'])
+    assert [c.text for c in cues] == ['Alice: hi more of the turn']
+
+
+def test_paragraph_no_labels_whole_block():
+    from utils.imports.transcript_files import _paragraph_cues
+
+    cues = _paragraph_cues(['just', 'a', 'paragraph'])
+    assert [c.text for c in cues] == ['just a paragraph']

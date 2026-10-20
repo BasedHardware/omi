@@ -1,3 +1,7 @@
+import 'package:permission_handler/permission_handler.dart';
+import 'package:omi/services/sockets/on_device_apple_provider.dart';
+import 'package:omi/services/sockets/local_stt_failure.dart';
+import 'package:omi/ui/components/local_stt_recovery_notice.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -18,6 +22,7 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/models/custom_stt_config.dart';
 import 'package:omi/models/stt_provider.dart';
+import 'package:omi/pages/on_device/on_device_settings_page.dart';
 import 'package:omi/pages/settings/transcription/json_editor_page.dart';
 import 'package:omi/pages/settings/transcription/stt_language.dart';
 import 'package:omi/pages/settings/transcription/transcription_dialogs.dart';
@@ -700,6 +705,8 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // On-device transcription after the usage limit is reached; nothing while its flag is off.
+                  const OnDeviceSettingsEntry(),
                   _buildSourceSelector(),
                   const SizedBox(height: OmiSpacing.xl),
                   if (_useCustomStt) ...[
@@ -1207,7 +1214,20 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
             ),
           ),
           const SizedBox(height: OmiSpacing.sm),
-          TranscriptionHelpText(context.l10n.nativeEngineNoDownload),
+          FutureBuilder(
+            future: OnDeviceAppleProvider.readiness(_currentLanguage),
+            builder: (context, snapshot) {
+              final readiness = snapshot.data;
+              if (readiness == null || readiness.ready) return const SizedBox.shrink();
+              return LocalSttRecoveryNotice(
+                  language: _currentLanguage,
+                  failure: LocalSttFailure(readiness.status, canProbeRecovery: true),
+                  onRetry: () async {
+                    setState(() {});
+                  },
+                  onSetup: openAppSettings);
+            },
+          ),
           const SizedBox(height: OmiSpacing.lg),
           _buildLanguageSelector(),
         ],

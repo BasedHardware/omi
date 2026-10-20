@@ -1,3 +1,4 @@
+from utils.generated_compute import generated_compute_allowed, generated_compute_scope
 import asyncio
 from collections.abc import Mapping
 from datetime import datetime, timezone
@@ -435,7 +436,8 @@ async def trigger_realtime_audio_bytes(uid: str, sample_rate: int, data: bytearr
 
 # proactive notification
 def _retrieve_contextual_memories(uid: str, user_context):
-    vector = generate_embedding(user_context.get('question', '')) if user_context.get('question') else [0] * 3072
+    with generated_compute_scope(uid):
+        vector = generate_embedding(user_context.get('question', '')) if user_context.get('question') else [0] * 3072
     logger.info(f"query_vectors vector: {vector[:5]}")
 
     date_filters = {}  # not support yet
@@ -668,6 +670,8 @@ def _mentor_gate_debounce_skip_reason(
 
 def admit_mentor_evaluation(uid: str, conversation_messages: list[dict]) -> tuple[int, float] | None:
     # 1. Get frequency setting
+    if not generated_compute_allowed(uid, 'proactive_notification', allow_byok=False):
+        return None
     frequency = get_mentor_notification_frequency(uid)
     if frequency == 0:
         return None
@@ -763,6 +767,8 @@ def _process_proactive_notification(uid: str, app: App, data):
     ERROR level, which is the exact signature this guard used to emit for
     every no-notification webhook response in production.
     """
+    if not generated_compute_allowed(uid, 'app_integration'):
+        return None
     if not app.has_capability("proactive_notification"):
         logger.error(f"App {app.id} lacks proactive_notification capability {uid}")
         return None
@@ -799,7 +805,10 @@ def _process_proactive_notification(uid: str, app: App, data):
     max_prompt_char_limit = 128000
     min_message_char_limit = 5
 
-    prompt = data.get('prompt', '')
+    # `data.get(k, default)` returns the stored value even when it's an
+    # explicit JSON null — a default only fires on a MISSING key. `or` coerces
+    # {"prompt": null} to the default so len()/iteration/.get can't TypeError.
+    prompt = data.get('prompt') or ''
     if len(prompt) > max_prompt_char_limit:
         send_app_notification(
             uid,
@@ -810,13 +819,15 @@ def _process_proactive_notification(uid: str, app: App, data):
         logger.info(f"App {app.id}, prompt too long, length: {len(prompt)}/{max_prompt_char_limit} {uid}")
         return None
 
-    filter_scopes = app.filter_proactive_notification_scopes(data.get('params', []))
+    # params/context can also be explicit JSON nulls — coerce to the default so
+    # iteration/lookup can't TypeError/AttributeError on None.
+    filter_scopes = app.filter_proactive_notification_scopes(data.get('params') or [])
 
     user_name, user_facts = get_prompt_memories(uid)
 
     context = None
     if 'user_context' in filter_scopes:
-        memories = _retrieve_contextual_memories(uid, data.get('context', {}))
+        memories = _retrieve_contextual_memories(uid, data.get('context') or {})
         if len(memories) > 0:
             context = conversations_to_string(deserialize_conversations(memories))
 
@@ -912,6 +923,7 @@ async def _async_trigger_realtime_audio_bytes(uid: str, sample_rate: int, data: 
             if response.status_code >= 200 and response.status_code < 300:
                 cb.record_success()
                 await run_blocking(db_executor, record_app_webhook_success, app.id)
+                logger.debug(f'trigger_realtime_audio_bytes {app.id} status: {response.status_code}')
             else:
                 cb.record_failure()
                 error_str = f'HTTP {response.status_code}'
@@ -919,7 +931,7 @@ async def _async_trigger_realtime_audio_bytes(uid: str, sample_rate: int, data: 
                     db_executor, record_app_webhook_failure, app.id, response.status_code, error_str
                 )
                 await run_blocking(db_executor, _handle_webhook_health_action, app.id, action, error_str)
-            logger.info(f'trigger_realtime_audio_bytes {app.id} status: {response.status_code}')
+                logger.warning(f'trigger_realtime_audio_bytes {app.id} status: {response.status_code}')
         except Exception as e:
             cb.record_failure()
             error_str = type(e).__name__

@@ -331,7 +331,12 @@ def test_chat_real_shared_loop_with_tools(monkeypatch, shadow):
     assert 'suppressed' in captured[1][-1]['content'] if shadow else 'Retrieved evidence' in captured[1][-1]['content']
     assert 'OLD CHAT PROMPT' not in str(captured)
     assert 'Find something' not in str(captured[0][0])
-    assert 'prompt_cache_breakpoint' in captured[0][0]['content'][0]
+    assert any(
+        'prompt_cache_breakpoint' in part
+        for message in captured[0]
+        if isinstance(message.get('content'), list)
+        for part in message['content']
+    )
 
 
 @pytest.mark.parametrize(
@@ -341,7 +346,6 @@ def test_execute_chat_stream_mount_wiring_and_off_bytes(monkeypatch, mode, opt_i
     if mode:
         monkeypatch.setenv(shaped.FLAG, mode)
     monkeypatch.setattr(agentic, '_get_agentic_qa_prompt', lambda *a, **k: 'Original prompt bytes')
-    monkeypatch.setattr(agentic, '_resolve_jit_conversation_retrieval', AsyncMock(return_value=False))
     monkeypatch.setattr(agentic, 'load_app_tools', lambda *a: [])
     captured = []
 

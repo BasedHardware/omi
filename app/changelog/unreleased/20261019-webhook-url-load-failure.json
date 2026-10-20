@@ -1,0 +1,3 @@
+{
+  "change": "Developer Settings keeps webhook URLs that fail to load, so saving no longer turns those webhooks off"
+}

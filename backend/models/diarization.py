@@ -30,6 +30,9 @@ class DiarizationResult(BaseModel):
     embedding_space: str = Field(min_length=1)
     version: str = Field(min_length=1)
     provenance: dict[str, str]
+    # Optional diagnostic metadata from batch; legacy providers omit it.
+    audio_seconds: float | None = Field(default=None, ge=0, allow_inf_nan=False)
+    inference_seconds: float | None = Field(default=None, ge=0, allow_inf_nan=False)
 
     @model_validator(mode='after')
     def validate_clock(self):

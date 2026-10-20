@@ -8,8 +8,6 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
 WORKFLOWS = (
-    ".github/workflows/gcp_daily_memory_sweep_job.yml",
-    ".github/workflows/gcp_daily_memory_sweep_job_auto_dev.yml",
     ".github/workflows/gcp_day3_reengagement_email_job.yml",
     ".github/workflows/gcp_day3_reengagement_email_job_auto_dev.yml",
 )
@@ -53,7 +51,7 @@ def test_every_main_advanced_branch_is_neutral_and_gates_later_steps():
             assert "exit 1" not in branch.group(1)
             prior_checks.append(check_id)
 
-    assert branch_count == 10
+    assert branch_count == 5
 
 
 if __name__ == "__main__":

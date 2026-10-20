@@ -181,6 +181,7 @@ import routers.developer as developer_module  # noqa: E402
 from dependencies import get_developer_memory_default_memory_read_context  # noqa: E402
 from utils.memory.product_authorization import ProductAuthorizationDecision  # noqa: E402
 from utils.memory.default_read_rollout import MemoryReadDecision  # noqa: E402
+from utils.memory.category_reads import read_category_window  # noqa: E402
 from utils.other.list_budget import (  # noqa: E402
     REQUEST_STARTED_MONOTONIC_STATE_KEY,
     ListReadBudget,
@@ -258,7 +259,16 @@ def _build(page, monkeypatch):
         )
     )
     memory_service = MagicMock()
-    memory_service.read.return_value = [_ServiceMemory(raw) for raw in page]
+    memory_service._read_window.return_value = [_ServiceMemory(raw) for raw in page]
+
+    def read(uid, *, category_filter=None, reuse_compatibility_reads=False, **kwargs):
+        if category_filter is None:
+            return memory_service._read_window(uid, **kwargs)
+        return read_category_window(
+            memory_service._read_window, uid, category_filter=category_filter, max_window=5000, **kwargs
+        )
+
+    memory_service.read.side_effect = read
     monkeypatch.setattr(developer_module, 'MemoryService', MagicMock(return_value=memory_service))
     app = FastAPI()
     app.include_router(developer_router)
@@ -313,6 +323,8 @@ def test_pagination_is_clamped_before_firestore(monkeypatch):
     second_kwargs = dict(memory_service.read.call_args_list[1].kwargs)
     assert isinstance(first_kwargs.pop('budget'), ListReadBudget)
     assert isinstance(second_kwargs.pop('budget'), ListReadBudget)
+    assert first_kwargs.pop('reuse_compatibility_reads') is True
+    assert second_kwargs.pop('reuse_compatibility_reads') is True
     assert first_kwargs == {
         'limit': 1001,
         'offset': 0,
@@ -368,14 +380,14 @@ def test_category_scan_stops_on_exhaustion_and_keeps_matched_prefix(monkeypatch,
         return result
 
     client, memory_service = _build([], monkeypatch)
-    memory_service.read.side_effect = read
+    memory_service._read_window.side_effect = read
 
     resp = client.get(f'/v1/dev/user/memories?categories={category}&limit=10')
 
     assert resp.status_code == 200
     assert [m['id'] for m in resp.json()] == [f'm{i}' for i in range(5)]
     assert resp.headers['x-omi-list-truncated'] == 'true'
-    assert calls == ([0, 500] if exhaust_via == 'read' else [0])
+    assert calls == ([0, 25] if exhaust_via == 'read' else [0])
 
 
 def test_category_reads_share_one_budget_and_consume_allowance(monkeypatch):
@@ -389,12 +401,12 @@ def test_category_reads_share_one_budget_and_consume_allowance(monkeypatch):
 
     def read(uid, *, limit, offset, include_pending_processing, budget):
         seen.append((id(budget), budget.remaining_documents))
-        batch = first if offset == 0 else [tail]
+        batch = first[:limit] if offset == 0 else [tail]
         budget.charge(len(batch))
         return [_ServiceMemory(raw) for raw in batch]
 
     client, memory_service = _build([], monkeypatch)
-    memory_service.read.side_effect = read
+    memory_service._read_window.side_effect = read
 
     resp = client.get(f'/v1/dev/user/memories?categories={category}&limit=10')
 
@@ -418,14 +430,16 @@ def test_category_scan_cap_marks_truncation_when_page_unsatisfied(monkeypatch):
         return [_ServiceMemory(raw) for raw in batch[:limit]]
 
     client, memory_service = _build([], monkeypatch)
-    memory_service.read.side_effect = read
+    memory_service._read_window.side_effect = read
 
     resp = client.get(f'/v1/dev/user/memories?categories={category}&limit=10')
 
     assert resp.status_code == 200
     assert resp.json() == []
     assert resp.headers['x-omi-list-truncated'] == 'true'
-    assert calls == [offset for offset in range(0, 5000, 500)]
+    assert calls[:4] == [0, 25, 75, 175]
+    assert calls[-1] == 4775
+    assert len(calls) == 14
 
 
 def test_request_budget_deadline_starts_from_middleware_stamp():
@@ -439,7 +453,7 @@ def test_service_503_is_not_converted_into_truncation(monkeypatch):
         raise HTTPException(status_code=503, detail='Canonical memory unavailable')
 
     client, memory_service = _build([], monkeypatch)
-    memory_service.read.side_effect = read
+    memory_service._read_window.side_effect = read
 
     resp = client.get('/v1/dev/user/memories')
 
@@ -475,3 +489,22 @@ def test_grant_denial_is_unchanged(monkeypatch):
 
     assert resp.status_code == 403
     assert 'x-omi-list-truncated' not in resp.headers
+
+
+@pytest.mark.parametrize('enabled', [True, False])
+def test_tail_read_exhaustion_keeps_existing_page_continuation(monkeypatch, enabled):
+    monkeypatch.setenv('OMI_DEV_MEMORY_REUSE_READ_WINDOWS_ENABLED', 'true' if enabled else 'false')
+    client, memory_service = _build([], monkeypatch)
+
+    def read(uid, **kwargs):
+        assert kwargs.get('reuse_compatibility_reads', False) is enabled
+        kwargs['budget'].mark_exhausted('documents')
+        return [_ServiceMemory(_valid_memory('legacy-visible'))]
+
+    memory_service.read.side_effect = read
+    resp = client.get('/v1/dev/user/memories?limit=10&offset=2')
+    assert resp.status_code == 200
+    assert [row['id'] for row in resp.json()] == ['legacy-visible']
+    assert resp.headers['x-omi-list-truncated'] == 'true'
+    assert resp.headers['x-omi-has-more'] == 'true'
+    assert resp.headers['x-omi-next-offset'] == '3'

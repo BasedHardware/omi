@@ -1,0 +1,172 @@
+{
+  "transactions": [
+    {
+      "id": "txn-1",
+      "accountId": "SYNTHETIC_ACCOUNT",
+      "amount": -100.25,
+      "status": "sent",
+      "postedAt": "2026-10-01T23:30:00-02:00",
+      "createdAt": "2026-09-25T00:00:00Z",
+      "kind": "debitCardTransaction",
+      "counterpartyName": "VERCEL * TEAM123",
+      "note": "SYNTHETIC_PERSON_DO_NOT_PERSIST",
+      "externalMemo": "PRIVATE_MEMO_DO_NOT_PERSIST",
+      "details": {
+        "accountNumber": "ACCOUNT_DO_NOT_PERSIST"
+      },
+      "cardId": "CARD_DO_NOT_PERSIST"
+    },
+    {
+      "id": "txn-2",
+      "accountId": "SYNTHETIC_ACCOUNT",
+      "amount": -143,
+      "status": "sent",
+      "postedAt": "2026-10-02T10:00:00Z",
+      "createdAt": "2026-09-25T00:00:00Z",
+      "kind": "debitCardTransaction",
+      "counterpartyName": "Soniox Inc",
+      "note": "SYNTHETIC_PERSON_DO_NOT_PERSIST",
+      "externalMemo": "PRIVATE_MEMO_DO_NOT_PERSIST",
+      "details": {
+        "accountNumber": "ACCOUNT_DO_NOT_PERSIST"
+      },
+      "cardId": "CARD_DO_NOT_PERSIST"
+    },
+    {
+      "id": "txn-3",
+      "accountId": "SYNTHETIC_ACCOUNT",
+      "amount": -70,
+      "status": "sent",
+      "postedAt": "2026-10-01T23:30:00-02:00",
+      "createdAt": "2026-09-25T00:00:00Z",
+      "kind": "debitCardTransaction",
+      "counterpartyName": "SYNTHETIC_PERSON_DO_NOT_PERSIST",
+      "note": "SYNTHETIC_PERSON_DO_NOT_PERSIST",
+      "externalMemo": "PRIVATE_MEMO_DO_NOT_PERSIST",
+      "details": {
+        "accountNumber": "ACCOUNT_DO_NOT_PERSIST"
+      },
+      "cardId": "CARD_DO_NOT_PERSIST"
+    },
+    {
+      "id": "txn-4",
+      "accountId": "SYNTHETIC_ACCOUNT",
+      "amount": -1000,
+      "status": "sent",
+      "postedAt": "2026-10-01T23:30:00-02:00",
+      "createdAt": "2026-09-25T00:00:00Z",
+      "kind": "internalTransfer",
+      "counterpartyName": "PRIVATE_TRANSFER_NAME",
+      "note": "SYNTHETIC_PERSON_DO_NOT_PERSIST",
+      "externalMemo": "PRIVATE_MEMO_DO_NOT_PERSIST",
+      "details": {
+        "accountNumber": "ACCOUNT_DO_NOT_PERSIST"
+      },
+      "cardId": "CARD_DO_NOT_PERSIST"
+    },
+    {
+      "id": "txn-5",
+      "accountId": "SYNTHETIC_ACCOUNT",
+      "amount": -999,
+      "status": "pending",
+      "postedAt": "2026-10-01T23:30:00-02:00",
+      "createdAt": "2026-09-25T00:00:00Z",
+      "kind": "debitCardTransaction",
+      "counterpartyName": "VERCEL * TEAM123",
+      "note": "SYNTHETIC_PERSON_DO_NOT_PERSIST",
+      "externalMemo": "PRIVATE_MEMO_DO_NOT_PERSIST",
+      "details": {
+        "accountNumber": "ACCOUNT_DO_NOT_PERSIST"
+      },
+      "cardId": "CARD_DO_NOT_PERSIST"
+    },
+    {
+      "id": "txn-6",
+      "accountId": "SYNTHETIC_ACCOUNT",
+      "amount": 25,
+      "status": "sent",
+      "postedAt": "2026-10-01T23:30:00-02:00",
+      "createdAt": "2026-09-25T00:00:00Z",
+      "kind": "debitCardTransaction",
+      "counterpartyName": "VERCEL * TEAM123",
+      "note": "SYNTHETIC_PERSON_DO_NOT_PERSIST",
+      "externalMemo": "PRIVATE_MEMO_DO_NOT_PERSIST",
+      "details": {
+        "accountNumber": "ACCOUNT_DO_NOT_PERSIST"
+      },
+      "cardId": "CARD_DO_NOT_PERSIST"
+    },
+    {
+      "id": "txn-7",
+      "accountId": "SYNTHETIC_ACCOUNT",
+      "amount": -123,
+      "status": "sent",
+      "postedAt": null,
+      "createdAt": "2026-09-25T00:00:00Z",
+      "kind": "debitCardTransaction",
+      "counterpartyName": "VERCEL * TEAM123",
+      "note": "SYNTHETIC_PERSON_DO_NOT_PERSIST",
+      "externalMemo": "PRIVATE_MEMO_DO_NOT_PERSIST",
+      "details": {
+        "accountNumber": "ACCOUNT_DO_NOT_PERSIST"
+      },
+      "cardId": "CARD_DO_NOT_PERSIST"
+    },
+    {
+      "id": "txn-8",
+      "accountId": "SYNTHETIC_ACCOUNT",
+      "amount": -50,
+      "status": "reversed",
+      "postedAt": "2026-10-01T23:30:00-02:00",
+      "createdAt": "2026-09-25T00:00:00Z",
+      "kind": "debitCardTransaction",
+      "counterpartyName": "VERCEL * TEAM123",
+      "note": "SYNTHETIC_PERSON_DO_NOT_PERSIST",
+      "externalMemo": "PRIVATE_MEMO_DO_NOT_PERSIST",
+      "details": {
+        "accountNumber": "ACCOUNT_DO_NOT_PERSIST"
+      },
+      "cardId": "CARD_DO_NOT_PERSIST"
+    },
+    {
+      "id": "txn-9",
+      "accountId": "SYNTHETIC_ACCOUNT",
+      "amount": -400,
+      "status": "sent",
+      "postedAt": "2026-10-01T23:30:00-02:00",
+      "createdAt": "2026-09-25T00:00:00Z",
+      "kind": "debitCardTransaction",
+      "counterpartyName": "GOOGLE *CLOUD",
+      "note": "SYNTHETIC_PERSON_DO_NOT_PERSIST",
+      "externalMemo": "PRIVATE_MEMO_DO_NOT_PERSIST",
+      "details": {
+        "accountNumber": "ACCOUNT_DO_NOT_PERSIST"
+      },
+      "cardId": "CARD_DO_NOT_PERSIST"
+    },
+    {
+      "id": "txn-10",
+      "accountId": "SYNTHETIC_ACCOUNT",
+      "amount": -200,
+      "status": "sent",
+      "postedAt": "2026-10-01T23:30:00-02:00",
+      "createdAt": "2026-09-25T00:00:00Z",
+      "kind": "debitCardTransaction",
+      "counterpartyName": "OpenAI LLC",
+      "note": "SYNTHETIC_PERSON_DO_NOT_PERSIST",
+      "externalMemo": "PRIVATE_MEMO_DO_NOT_PERSIST",
+      "details": {
+        "accountNumber": "ACCOUNT_DO_NOT_PERSIST"
+      },
+      "cardId": "CARD_DO_NOT_PERSIST",
+      "merchant": {
+        "currency": "JPY",
+        "amount": -3000000
+      }
+    }
+  ],
+  "page": {
+    "nextPage": "txn-first-unseen",
+    "previousPage": null
+  }
+}

@@ -1245,6 +1245,38 @@ TOOL_SPECS: Tuple[ToolSpec, ...] = (
         rate_bucket=None,
         handler=other.get_daily_summaries,
     ),
+    ToolSpec(
+        name="process_recent_conversations",
+        title="Process recent conversations",
+        description="Process your own pending conversations from the last six hours. Returns progress; ready=false is not completion.",
+        annotations=_create_annotations("Process recent conversations", idempotent=True),
+        input_schema={
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "hours": {"type": "integer", "minimum": 1, "maximum": 6, "default": 6},
+                "limit": {"type": "integer", "minimum": 1, "maximum": 20, "default": 20},
+            },
+        },
+        output_schema=_output_schema(
+            {
+                "type": "object",
+                "required": ["status", "ready"],
+                "properties": {
+                    "status": {"type": "string"},
+                    "ready": {"type": "boolean"},
+                    "promoted": {"type": "integer"},
+                    "has_more": {"type": "boolean"},
+                    "retry_after_seconds": {"type": "integer"},
+                },
+            }
+        ),
+        scope="conversations.read",
+        operation="conversation_process_recent",
+        write_operation=_READ,
+        rate_bucket=None,
+        handler=other.process_recent_conversations,
+    ),
 )
 
 TOOLS_BY_NAME: Dict[str, ToolSpec] = {spec.name: spec for spec in TOOL_SPECS}

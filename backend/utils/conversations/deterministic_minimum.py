@@ -17,6 +17,7 @@ from datetime import datetime, timezone
 from datetime import tzinfo
 from typing import Any, Callable, Iterable, List, Optional, cast
 
+from config.summary_guarantee import enabled
 from models.conversation_enums import CategoryEnum
 from models.structured import Structured
 
@@ -139,12 +140,20 @@ def deterministic_minimum_title(
 def build_deterministic_minimum_structured(
     conversation: Any,
     *,
+    uid: Optional[str] = None,
     source_label: str = DEFAULT_SOURCE_LABEL,
     tz_name_provider: Optional[Callable[[], Optional[str]]] = None,
 ) -> Structured:
     """The whole §1.7 row: deterministic title, empty overview, category ``other``,
-    no action items, no events. Every other field keeps its model default."""
+    no action items, no events. Every other field keeps its model default.
+
+    ``uid`` is the conversation owner. ``title_provenance`` is stamped only for an
+    owner in the first-summary cohort; an unknown owner (None) gets no stamp.
+    """
+    in_cohort = uid is not None and enabled(uid)
+    metadata: dict[str, Any] = {'title_provenance': 'server_minimum'} if in_cohort else {}
     return Structured(
+        **metadata,
         title=deterministic_minimum_title(
             conversation,
             source_label=source_label,

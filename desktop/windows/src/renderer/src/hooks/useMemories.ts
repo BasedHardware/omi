@@ -1,20 +1,15 @@
 import { useEffect, useState } from 'react'
 import { omiApi } from '../lib/apiClient'
 import {
-  beliefCapabilityFromResponse,
   canonicalLifecycleFromResponse,
   fetchAllMemoriesPaged,
-  type FetchMemoriesOptions,
   type MemoriesResponse
 } from '../lib/memoriesBulk'
 import {
   cache,
   hydrateFromDisk,
   publish,
-  readBeliefCapability,
   subscribers,
-  writeBeliefCapability,
-  type MemoryReadView
 } from '../lib/memoriesCache'
 import { getCacheUid } from '../lib/persistentCache'
 import {
@@ -25,33 +20,20 @@ import {
 /** Memory is the legacy adapter plus optional knowledge_ledger.v1 fields. */
 export type Memory = KnowledgeLedgerMemory
 
-export type { MemoryReadView }
-
 // Optional extra fields for a created memory. `tags` carries provenance (e.g.
 // 'omi-app-index'); `category` is sent best-effort — the server may ignore or
 // reassign it, so UI coloring must not depend on it.
 export type CreateMemoryExtra = { category?: string; tags?: string[] }
-export type MemoryUseAction = 'suppress' | 'allow' | 'useful'
 
 // Fetch EVERY memory for the page via the shared pager (server page cap 500).
 // Read the existing device-scope capability (paired with lifecycle); sort
 // newest-first because the server does not guarantee created_at order.
-async function fetchMemories(view: MemoryReadView): Promise<Memory[]> {
+async function fetchMemories(): Promise<Memory[]> {
   const onResponse = (r: MemoriesResponse): void => {
     const lifecycleExposed = canonicalLifecycleFromResponse(r)
     if (lifecycleExposed !== null) cache.canonicalLifecycleExposed = lifecycleExposed
-    const beliefEnabled = beliefCapabilityFromResponse(r)
-    // A missing or malformed capability header means this backend cannot safely
-    // serve temporal reads. Clear a previously cached true value immediately so
-    // a beta client never keeps sending view=history/all after a rollback or a
-    // proxy/CORS regression.
-    writeBeliefCapability(beliefEnabled === true)
   }
-  // A cached true capability lets the first render request useful-now directly.
-  // With no capability yet, probe the stable route first; the caller retries the
-  // selected temporal view after the response advertises the beta contract.
-  const options: FetchMemoriesOptions = cache.beliefEnabled === true ? { view } : {}
-  const list = await fetchAllMemoriesPaged(onResponse, options)
+  const list = await fetchAllMemoriesPaged(onResponse)
   return list
     .map(parseKnowledgeLedgerMemory)
     .filter((memory): memory is Memory => memory !== null)
@@ -73,47 +55,31 @@ async function patchMemoryOptimistic(
 ): Promise<void> {
   const originUid = getCacheUid()
   const prev = cache.list ?? []
-  publish(
-    prev.map((m) => (m.id === id ? apply(m) : m)),
-    cache.view
-  )
+  publish(prev.map((m) => (m.id === id ? apply(m) : m)))
   try {
     await omiApi.patch(urlPath, null, { params: { value } })
   } catch (e) {
     // Revert only if still the same account — a switch mid-request already reset
     // A's cache, so re-publishing A's `prev` list would stamp it under B.
-    if (getCacheUid() === originUid) publish(prev, cache.view)
+    if (getCacheUid() === originUid) publish(prev)
     throw e
   }
 }
 
-export function useMemories(requestedView: MemoryReadView = 'useful_now'): {
+export function useMemories(): {
   memories: Memory[]
   loading: boolean
   error: string | null
-  beliefEnabled: boolean | null
   // True when the existing device-scope capability establishes lifecycle.
   // Gates the layer filter, including for empty accounts.
-  // Read at render time; publish() surfaces the fresh value.
   canonicalLifecycleExposed: boolean
   createMemory: (content: string, extra?: CreateMemoryExtra) => Promise<void>
   editMemory: (id: string, content: string) => Promise<void>
   setMemoryVisibility: (id: string, visibility: 'public' | 'private') => Promise<void>
-  setMemoryUse: (id: string, action: MemoryUseAction) => Promise<void>
   deleteMemory: (id: string) => Promise<void>
   refresh: () => Promise<void>
 } {
-  // Only an explicit capability opt-in may select a temporal route. Unknown and
-  // false states use the stable default, which keeps an owner switch or a
-  // capability downgrade from briefly labeling default rows as history.
-  const effectiveRequestedView: MemoryReadView =
-    (cache.beliefEnabled ?? readBeliefCapability()) === true ? requestedView : 'useful_now'
-  hydrateFromDisk(effectiveRequestedView)
-  const [feedbackIds] = useState(() => new Map<string, string>())
-  const feedbackOwner = getCacheUid()
-  useEffect(() => {
-    feedbackIds.clear()
-  }, [feedbackOwner, feedbackIds])
+  hydrateFromDisk()
   const [memories, setMemories] = useState<Memory[]>(cache.list ?? [])
   // Show cached memories immediately on cold start (no spinner) whenever we have a
   // snapshot to render — from disk (hydrateFromDisk) or a prior in-session fetch.
@@ -130,19 +96,6 @@ export function useMemories(requestedView: MemoryReadView = 'useful_now'): {
     }
   }, [])
 
-  // hydrateFromDisk (in the render above) clears the module cache when the
-  // requested view changes, but this component's snapshot still holds the
-  // previous view's rows — and with cache.list null no publish is coming to
-  // replace them. Align local state during render on view change (React's
-  // "adjust state when a prop changes" pattern) so old rows drop without
-  // a setState-in-effect or a render-time ref read.
-  const [syncedView, setSyncedView] = useState(effectiveRequestedView)
-  if (syncedView !== effectiveRequestedView) {
-    setSyncedView(effectiveRequestedView)
-    setMemories(cache.list ?? [])
-    setLoading(!cache.loaded && (cache.list?.length ?? 0) === 0)
-  }
-
   useEffect(() => {
     if (cache.loaded) return
 
@@ -150,20 +103,13 @@ export function useMemories(requestedView: MemoryReadView = 'useful_now'): {
     const originUid = getCacheUid()
     ;(async () => {
       try {
-        const hadBeliefCapability = cache.beliefEnabled
-        let list = await fetchMemories(effectiveRequestedView)
-        // The probe response may be the first time this account has seen the
-        // capability header. Reissue the selected view so useful-now/history/all
-        // never silently renders the legacy default after beta is enabled.
-        if (hadBeliefCapability !== true && cache.beliefEnabled === true) {
-          list = await fetchMemories(effectiveRequestedView)
-        }
+        const list = await fetchMemories()
         // Account-switch guard (belt-and-suspenders alongside `cancelled`): drop the
         // publish if the account changed while the fetch was in flight, so it can't
         // write A's memories under B's uid on a future in-place switch.
         if (!cancelled && getCacheUid() === originUid) {
           cache.error = null
-          publish(list, effectiveRequestedView)
+          publish(list)
         }
       } catch (e) {
         if (!cancelled) {
@@ -187,7 +133,7 @@ export function useMemories(requestedView: MemoryReadView = 'useful_now'): {
     return () => {
       cancelled = true
     }
-  }, [effectiveRequestedView])
+  }, [])
 
   // Create a manual memory, then re-fetch so the list reflects whatever the
   // server actually stored (id, timestamps, category) rather than guessing the
@@ -197,10 +143,10 @@ export function useMemories(requestedView: MemoryReadView = 'useful_now'): {
     if (!text) return
     const originUid = getCacheUid()
     await omiApi.post('/v3/memories', { content: text, ...extra })
-    const list = await fetchMemories(effectiveRequestedView)
+    const list = await fetchMemories()
     // Drop the publish if the account switched while the request was in flight
     // (same guard as the revalidation effect) — never write A's memories under B.
-    if (getCacheUid() === originUid) publish(list, effectiveRequestedView)
+    if (getCacheUid() === originUid) publish(list)
   }
 
   // Edit a memory's content.
@@ -231,36 +177,13 @@ export function useMemories(requestedView: MemoryReadView = 'useful_now'): {
     const prev = cache.list ?? []
     publish(
       prev.filter((m) => m.id !== id),
-      cache.view
-    )
+      )
     try {
       await omiApi.delete(`/v3/memories/${id}`)
     } catch (e) {
       // Same-account revert only — see patchMemoryOptimistic.
-      if (getCacheUid() === originUid) publish(prev, cache.view)
+      if (getCacheUid() === originUid) publish(prev)
       throw e
-    }
-  }
-
-  // Record a user's use/suppression decision through the beta endpoint. The
-  // feedback id is stable for this user action so a retry after a transient
-  // error remains idempotent; a later, distinct click receives a new id. The
-  // confirmed server read refreshes the list instead of guessing the worker's
-  // memory_use state locally.
-  const setMemoryUse = async (id: string, action: MemoryUseAction): Promise<void> => {
-    if (cache.beliefEnabled !== true) return
-    const feedbackKey = `${id}:${action}`
-    const feedbackId =
-      feedbackIds.get(feedbackKey) ??
-      globalThis.crypto?.randomUUID?.() ??
-      `memory-use-${Date.now()}-${Math.random().toString(16).slice(2)}`
-    feedbackIds.set(feedbackKey, feedbackId)
-    const originUid = getCacheUid()
-    await omiApi.post(`/v3/memories/${id}/use`, { action, feedback_id: feedbackId })
-    const list = await fetchMemories(effectiveRequestedView)
-    if (getCacheUid() === originUid) {
-      feedbackIds.delete(feedbackKey)
-      publish(list, effectiveRequestedView)
     }
   }
 
@@ -268,20 +191,18 @@ export function useMemories(requestedView: MemoryReadView = 'useful_now'): {
   // import so the Memories page and export count reflect the new memories.
   const refresh = async (): Promise<void> => {
     const originUid = getCacheUid()
-    const list = await fetchMemories(effectiveRequestedView)
-    if (getCacheUid() === originUid) publish(list, effectiveRequestedView)
+    const list = await fetchMemories()
+    if (getCacheUid() === originUid) publish(list)
   }
 
   return {
     memories,
     loading,
     error,
-    beliefEnabled: cache.beliefEnabled ?? readBeliefCapability(),
     canonicalLifecycleExposed: cache.canonicalLifecycleExposed,
     createMemory,
     editMemory,
     setMemoryVisibility,
-    setMemoryUse,
     deleteMemory,
     refresh
   }

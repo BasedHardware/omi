@@ -1,75 +1,285 @@
+"""Cancellation drain for the local Whisper engine.
+
+No model, device, or network: the runner is injected.
+"""
+
 from __future__ import annotations
 
 import asyncio
+import threading
 import time
+
 import pytest
 
 from omi.stt.whisper import WhisperTranscriber
 from omi.transcribe import transcribe
 
+_BATCH_BYTES = 16000 * 2 * 5  # one full Whisper batch: 5s mono s16le
 
-def test_whisper_cancellation_transcribes_buffered_tail():
+
+def _pcm(seconds: float) -> bytes:
+    return b"\x00\x01" * int(16000 * seconds)
+
+
+async def _wait_for_thread_event(event: threading.Event, timeout: float = 1) -> None:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if event.is_set():
+            return
+        await asyncio.sleep(0.01)
+    raise AssertionError("timed out waiting for the runner")
+
+
+async def _wait_until_queue_consumed(queue: asyncio.Queue, task: asyncio.Task) -> None:
+    for _ in range(50):
+        if queue.empty() and not task.done():
+            await asyncio.sleep(0)
+            if queue.empty() and not task.done():
+                return
+        await asyncio.sleep(0)
+    raise AssertionError("transcriber did not consume queued audio")
+
+
+def test_whisper_cancel_transcribes_buffered_tail():
+    """A recording shorter than one batch is transcribed when run() is cancelled."""
+
     async def scenario():
-        calls, transcripts = [], []
+        calls = []
+        transcripts = []
 
         def runner(pcm: bytes) -> str:
             calls.append(len(pcm))
             return "hello"
 
-        queue = asyncio.Queue()
-        queue.put_nowait(b"\x00\x00" * 16000)  # 1 s of 16 kHz PCM16
-        task = asyncio.create_task(
-            WhisperTranscriber(runner=runner).run(queue, transcripts.append)
-        )
-        await asyncio.sleep(0)  # run() consumes the chunk into buffer
+        queue: asyncio.Queue[bytes] = asyncio.Queue()
+        queue.put_nowait(_pcm(1))
+        task = asyncio.create_task(WhisperTranscriber(runner=runner).run(queue, transcripts.append))
+        await _wait_until_queue_consumed(queue, task)
         task.cancel()
         with pytest.raises(asyncio.CancelledError):
             await task
 
         assert calls == [32000]
         assert transcripts == ["hello"]
+        assert asyncio.all_tasks() == {asyncio.current_task()}
 
     asyncio.run(scenario())
 
 
-def test_whisper_cancellation_completes_in_flight_batch_and_drains_queue_tail():
+def test_whisper_cancel_via_transcribe_wrapper():
     async def scenario():
+        calls = []
         transcripts = []
 
         def runner(pcm: bytes) -> str:
-            time.sleep(0.02)
-            return f"segment_{len(pcm)}"
+            calls.append(pcm)
+            return "hello"
 
-        queue = asyncio.Queue()
-        # 5s of audio (160000 bytes) triggers full batch
-        queue.put_nowait(b"\x00\x00" * 16000 * 5)
-        # 1s tail remaining in queue
+        queue: asyncio.Queue[bytes] = asyncio.Queue()
         queue.put_nowait(b"\x00\x00" * 16000)
-
-        t = WhisperTranscriber(runner=runner)
-        task = asyncio.create_task(t.run(queue, transcripts.append))
-        await asyncio.sleep(0.005)  # Let full batch start transcribing in thread
+        task = asyncio.create_task(transcribe(queue, transcripts.append, engine="whisper", runner=runner))
+        await _wait_until_queue_consumed(queue, task)
         task.cancel()
         with pytest.raises(asyncio.CancelledError):
             await task
 
-        assert transcripts == ["segment_160000", "segment_32000"]
+        assert calls == [b"\x00\x00" * 16000]
+        assert transcripts == ["hello"]
 
     asyncio.run(scenario())
 
 
-def test_whisper_cancellation_empty_buffer_does_not_call_runner():
+def test_whisper_cancel_keeps_inflight_batch_and_following_tail():
+    """A full batch in flight is kept, and PCM taken after it is flushed on cancel."""
+
+    async def scenario():
+        calls = []
+        transcripts = []
+        started = threading.Event()
+        release = threading.Event()
+        emitted = asyncio.Event()
+
+        def runner(pcm: bytes) -> str:
+            calls.append(len(pcm))
+            if len(pcm) == _BATCH_BYTES:
+                started.set()
+                assert release.wait(2)
+                return "batch"
+            return "tail"
+
+        def on_transcript(text: str) -> None:
+            transcripts.append(text)
+            emitted.set()
+
+        queue: asyncio.Queue[bytes] = asyncio.Queue()
+        queue.put_nowait(b"\x00" * _BATCH_BYTES)
+        transcriber = WhisperTranscriber(runner=runner)
+        task = asyncio.create_task(transcriber.run(queue, on_transcript))
+        await _wait_for_thread_event(started)
+        release.set()
+        await asyncio.wait_for(emitted.wait(), 1)
+        assert transcripts == ["batch"]
+
+        queue.put_nowait(_pcm(1))
+        await _wait_until_queue_consumed(queue, task)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+        assert calls == [_BATCH_BYTES, 32000]
+        assert transcripts == ["batch", "tail"]
+        assert asyncio.all_tasks() == {asyncio.current_task()}
+
+    asyncio.run(scenario())
+
+
+def test_whisper_cancel_waits_for_inflight_batch():
+    async def scenario():
+        transcripts = []
+        started = threading.Event()
+        release = threading.Event()
+
+        def runner(pcm: bytes) -> str:
+            started.set()
+            assert release.wait(2)
+            return "batch"
+
+        queue: asyncio.Queue[bytes] = asyncio.Queue()
+        queue.put_nowait(b"\x00" * _BATCH_BYTES)
+        task = asyncio.create_task(WhisperTranscriber(runner=runner).run(queue, transcripts.append))
+        await _wait_for_thread_event(started)
+        task.cancel()
+        await asyncio.sleep(0.05)
+        assert transcripts == []
+        release.set()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+        assert transcripts == ["batch"]
+        assert asyncio.all_tasks() == {asyncio.current_task()}
+
+    asyncio.run(scenario())
+
+
+def test_whisper_drain_timeout_abandons_slow_inflight_runner():
+    async def scenario():
+        transcripts = []
+        started = threading.Event()
+        release = threading.Event()
+
+        def runner(pcm: bytes) -> str:
+            started.set()
+            release.wait(5)
+            return "too late"
+
+        queue: asyncio.Queue[bytes] = asyncio.Queue()
+        queue.put_nowait(b"\x00" * _BATCH_BYTES)
+        task = asyncio.create_task(WhisperTranscriber(runner=runner, drain_timeout=0.05).run(queue, transcripts.append))
+        await _wait_for_thread_event(started)
+        task.cancel()
+        started_at = time.monotonic()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        elapsed = time.monotonic() - started_at
+        release.set()
+        await asyncio.sleep(0.05)
+
+        assert elapsed < 1
+        assert transcripts == []
+        assert asyncio.all_tasks() == {asyncio.current_task()}
+
+    asyncio.run(scenario())
+
+
+def test_whisper_drain_timeout_zero_skips_buffered_tail():
     async def scenario():
         calls = []
 
         def runner(pcm: bytes) -> str:
             calls.append(len(pcm))
-            return "empty"
+            return "hello"
 
-        queue = asyncio.Queue()
-        task = asyncio.create_task(
-            WhisperTranscriber(runner=runner).run(queue)
-        )
+        queue: asyncio.Queue[bytes] = asyncio.Queue()
+        queue.put_nowait(_pcm(1))
+        task = asyncio.create_task(WhisperTranscriber(runner=runner, drain_timeout=0).run(queue, lambda text: None))
+        await _wait_until_queue_consumed(queue, task)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+        assert calls == []
+
+    asyncio.run(scenario())
+
+
+def test_whisper_drain_timeout_zero_does_not_wait_for_inflight_runner():
+    async def scenario():
+        transcripts = []
+        started = threading.Event()
+        release = threading.Event()
+
+        def runner(pcm: bytes) -> str:
+            started.set()
+            release.wait(5)
+            return "too late"
+
+        queue: asyncio.Queue[bytes] = asyncio.Queue()
+        queue.put_nowait(b"\x00" * _BATCH_BYTES)
+        task = asyncio.create_task(WhisperTranscriber(runner=runner, drain_timeout=0).run(queue, transcripts.append))
+        await _wait_for_thread_event(started)
+        task.cancel()
+        started_at = time.monotonic()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        elapsed = time.monotonic() - started_at
+        release.set()
+        await asyncio.sleep(0.05)
+
+        assert elapsed < 0.5
+        assert transcripts == []
+        assert asyncio.all_tasks() == {asyncio.current_task()}
+
+    asyncio.run(scenario())
+
+
+def test_whisper_full_batch_emits_without_cancel():
+    async def scenario():
+        calls = []
+        transcripts = []
+        emitted = asyncio.Event()
+
+        def runner(pcm: bytes) -> str:
+            calls.append(len(pcm))
+            return "hello"
+
+        def on_transcript(text: str) -> None:
+            transcripts.append(text)
+            emitted.set()
+
+        queue: asyncio.Queue[bytes] = asyncio.Queue()
+        queue.put_nowait(b"\x00" * _BATCH_BYTES)
+        task = asyncio.create_task(WhisperTranscriber(runner=runner).run(queue, on_transcript))
+        await asyncio.wait_for(emitted.wait(), 1)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+        assert calls == [_BATCH_BYTES]
+        assert transcripts == ["hello"]
+
+    asyncio.run(scenario())
+
+
+def test_whisper_cancel_with_empty_buffer_does_not_call_runner():
+    async def scenario():
+        calls = []
+
+        def runner(pcm: bytes) -> str:
+            calls.append(pcm)
+            return "hello"
+
+        queue: asyncio.Queue[bytes] = asyncio.Queue()
+        task = asyncio.create_task(WhisperTranscriber(runner=runner).run(queue))
         await asyncio.sleep(0)
         task.cancel()
         with pytest.raises(asyncio.CancelledError):
@@ -80,78 +290,36 @@ def test_whisper_cancellation_empty_buffer_does_not_call_runner():
     asyncio.run(scenario())
 
 
-def test_whisper_cancellation_bounded_by_drain_timeout():
+def test_whisper_runner_error_during_drain_still_cancels():
     async def scenario():
-        def hanging_runner(pcm: bytes) -> str:
-            time.sleep(2.0)
-            return "late"
+        def runner(pcm: bytes) -> str:
+            raise RuntimeError("model failed")
 
-        queue = asyncio.Queue()
-        queue.put_nowait(b"\x00\x00" * 16000)
-
-        t = WhisperTranscriber(runner=hanging_runner, drain_timeout=0.05)
-        t0 = time.time()
-        task = asyncio.create_task(t.run(queue))
-        await asyncio.sleep(0.005)
+        queue: asyncio.Queue[bytes] = asyncio.Queue()
+        queue.put_nowait(_pcm(1))
+        task = asyncio.create_task(WhisperTranscriber(runner=runner).run(queue))
+        await _wait_until_queue_consumed(queue, task)
         task.cancel()
         with pytest.raises(asyncio.CancelledError):
             await task
 
-        elapsed = time.time() - t0
-        assert elapsed < 1.0, f"Cancellation exceeded bounded timeout: {elapsed}s"
+        assert asyncio.all_tasks() == {asyncio.current_task()}
 
     asyncio.run(scenario())
 
 
-def test_whisper_transcribe_wrapper_drains_on_cancellation():
+def test_whisper_empty_tail_is_not_delivered():
     async def scenario():
         transcripts = []
 
-        def runner(pcm: bytes) -> str:
-            return "wrapped_transcript"
-
-        queue = asyncio.Queue()
-        queue.put_nowait(b"\x00\x00" * 16000)
-
-        task = asyncio.create_task(
-            transcribe(
-                queue,
-                on_transcript=transcripts.append,
-                engine="whisper",
-                runner=runner,
-                drain_timeout=1.0,
-            )
-        )
-        await asyncio.sleep(0)
+        queue: asyncio.Queue[bytes] = asyncio.Queue()
+        queue.put_nowait(_pcm(1))
+        task = asyncio.create_task(WhisperTranscriber(runner=lambda pcm: "").run(queue, transcripts.append))
+        await _wait_until_queue_consumed(queue, task)
         task.cancel()
         with pytest.raises(asyncio.CancelledError):
             await task
 
-        assert transcripts == ["wrapped_transcript"]
+        assert transcripts == []
 
     asyncio.run(scenario())
-
-
-def test_whisper_drain_timeout_zero_skips_drain_on_cancellation():
-    async def scenario():
-        calls = []
-
-        def runner(pcm: bytes) -> str:
-            calls.append(len(pcm))
-            return "skipped"
-
-        queue = asyncio.Queue()
-        queue.put_nowait(b"\x00\x00" * 16000)
-
-        t = WhisperTranscriber(runner=runner, drain_timeout=0)
-        task = asyncio.create_task(t.run(queue))
-        await asyncio.sleep(0)  # queue item consumed into buffer
-        task.cancel()
-        with pytest.raises(asyncio.CancelledError):
-            await task
-
-        # drain_timeout=0 explicitly opts out of draining on cancel
-        assert calls == []
-
-    asyncio.run(scenario())
-

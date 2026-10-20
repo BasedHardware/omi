@@ -13,7 +13,7 @@ once a time_zone or preference write has run (and after the one-time backfill).
 Those two fields are the write-time form of the Python defaults True / 22.
 """
 
-from zoneinfo import ZoneInfo
+from models.time_zone_admission import is_schedulable_time_zone
 
 from google.cloud.firestore_v1.base_query import FieldFilter
 from google.cloud import firestore
@@ -93,7 +93,8 @@ def save_token(uid: str, data: Dict[str, Any], *, firestore_client: Any = None) 
 
     # Migration's earlier snapshot must not decide which schedule fields are
     # absent: another client can opt out while its token is being registered.
-    _update_summary_schedule(uid, {'time_zone': time_zone} if time_zone else {}, firestore_client=client)
+    schedulable_tz = time_zone if is_schedulable_time_zone(time_zone) else None
+    _update_summary_schedule(uid, {'time_zone': schedulable_tz} if schedulable_tz else {}, firestore_client=client)
 
 
 def get_user_time_zone(uid: str) -> Optional[str]:
@@ -112,28 +113,27 @@ def set_user_time_zone(uid: str, time_zone: str, *, firestore_client: Any = None
     Tokenless clients need the same defaults as token registration to match the
     indexed recipient query. Present values, including False and 0, are preserved.
     """
-    _update_summary_schedule(uid, {'time_zone': time_zone}, firestore_client=firestore_client)
+    schedulable_tz = time_zone if is_schedulable_time_zone(time_zone) else None
+    _update_summary_schedule(
+        uid, {'time_zone': schedulable_tz} if schedulable_tz else {}, firestore_client=firestore_client
+    )
 
 
 def resolve_user_timezone(uid: str) -> str:
-    """Return a validated IANA timezone for ``uid``, or ``UTC`` when missing/invalid."""
+    """Return a schedulable IANA timezone for ``uid``, or ``UTC`` when missing/unusable."""
     tz = get_user_time_zone(uid)
     if tz is None:
         return "UTC"
-    try:
-        ZoneInfo(tz)
+    if is_schedulable_time_zone(tz):
         return tz
-    except Exception:
-        return "UTC"
+    return "UTC"
 
 
 def sync_user_time_zone_from_client(uid: str, request_tz: Optional[str]) -> str:
     """Persist a client-reported IANA timezone when it changes and return the resolved zone."""
     if not request_tz:
         return resolve_user_timezone(uid)
-    try:
-        ZoneInfo(request_tz)
-    except Exception:
+    if not is_schedulable_time_zone(request_tz):
         logger.warning("sync_user_time_zone_from_client - invalid request_tz, ignoring")
         return resolve_user_timezone(uid)
     stored = get_user_time_zone(uid)
@@ -157,6 +157,8 @@ def set_user_time_zone_if_missing(uid: str, time_zone: str, *, firestore_client:
     daily-summary cron never saw them. Mobile stays authoritative: a zone already present is never
     replaced here.
     """
+    if not is_schedulable_time_zone(time_zone):
+        return False
     return _update_summary_schedule(
         uid, {'time_zone': time_zone}, only_if_timezone_missing=True, firestore_client=firestore_client
     )

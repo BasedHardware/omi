@@ -1475,6 +1475,31 @@
               }
             ]
           },
+          "operation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HarnessEdit"
+              },
+              {
+                "$ref": "#/components/schemas/MemoryHygieneEdit"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Operation"
+          },
+          "other_content": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Other Content"
+          },
           "other_label": {
             "anyOf": [
               {
@@ -1485,6 +1510,17 @@
               }
             ],
             "title": "Other Label"
+          },
+          "target_content": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Content"
           },
           "target_label": {
             "default": "",
@@ -4209,6 +4245,209 @@
         "title": "AssistantVoicePreferenceUpdate",
         "type": "object"
       },
+      "AttentionItem": {
+        "properties": {
+          "conversation_id": {
+            "title": "Conversation Id",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "duration_seconds": {
+            "title": "Duration Seconds",
+            "type": "number"
+          },
+          "failure_code": {
+            "title": "Failure Code",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "const": "conversation_summary_failed",
+            "title": "Kind",
+            "type": "string"
+          },
+          "retry": {
+            "$ref": "#/components/schemas/AttentionRetryStatus"
+          },
+          "retryable": {
+            "title": "Retryable",
+            "type": "boolean"
+          },
+          "seen": {
+            "title": "Seen",
+            "type": "boolean"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "conversation_id",
+          "title",
+          "started_at",
+          "duration_seconds",
+          "failure_code",
+          "retryable",
+          "created_at",
+          "seen",
+          "retry"
+        ],
+        "title": "AttentionItem",
+        "type": "object"
+      },
+      "AttentionItemsPage": {
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AttentionItem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "unseen_count": {
+            "title": "Unseen Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "enabled",
+          "items",
+          "unseen_count"
+        ],
+        "title": "AttentionItemsPage",
+        "type": "object"
+      },
+      "AttentionRetryAllOperation": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "operation_id": {
+            "title": "Operation Id",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "in_progress",
+              "succeeded",
+              "failed"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "operation_id",
+          "state",
+          "id"
+        ],
+        "title": "AttentionRetryAllOperation",
+        "type": "object"
+      },
+      "AttentionRetryAllResponse": {
+        "properties": {
+          "operations": {
+            "items": {
+              "$ref": "#/components/schemas/AttentionRetryAllOperation"
+            },
+            "title": "Operations",
+            "type": "array"
+          }
+        },
+        "required": [
+          "operations"
+        ],
+        "title": "AttentionRetryAllResponse",
+        "type": "object"
+      },
+      "AttentionRetryResponse": {
+        "properties": {
+          "operation_id": {
+            "title": "Operation Id",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "in_progress",
+              "succeeded",
+              "failed"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "operation_id",
+          "state"
+        ],
+        "title": "AttentionRetryResponse",
+        "type": "object"
+      },
+      "AttentionRetryStatus": {
+        "properties": {
+          "operation_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Operation Id"
+          },
+          "state": {
+            "enum": [
+              "none",
+              "in_progress",
+              "succeeded",
+              "failed"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "state",
+          "operation_id"
+        ],
+        "title": "AttentionRetryStatus",
+        "type": "object"
+      },
       "AudioDownloadPendingResponse": {
         "properties": {
           "poll_after_ms": {
@@ -4272,6 +4511,17 @@
             "description": "Storage provider (e.g., 'gcp')",
             "title": "Provider",
             "type": "string"
+          },
+          "source_fingerprint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Fingerprint"
           },
           "started_at": {
             "anyOf": [
@@ -7252,6 +7502,68 @@
         "title": "ChartDataset",
         "type": "object"
       },
+      "ChatAtCap": {
+        "properties": {
+          "body": {
+            "title": "Body",
+            "type": "string"
+          },
+          "reset_at": {
+            "title": "Reset At",
+            "type": "integer"
+          },
+          "reset_line": {
+            "title": "Reset Line",
+            "type": "string"
+          },
+          "state": {
+            "const": "paused",
+            "default": "paused",
+            "title": "State",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "trigger": {
+            "const": "usage_budget",
+            "default": "usage_budget",
+            "title": "Trigger",
+            "type": "string"
+          },
+          "upgrade_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Upgrade Label"
+          },
+          "upgrade_plan": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Upgrade Plan"
+          }
+        },
+        "required": [
+          "title",
+          "body",
+          "reset_at",
+          "reset_line"
+        ],
+        "title": "ChatAtCap",
+        "type": "object"
+      },
       "ChatEvidenceEnvelope": {
         "description": "Versioned transport envelope for supplemental chat evidence.",
         "properties": {
@@ -7704,6 +8016,16 @@
             "title": "Allowed",
             "type": "boolean"
           },
+          "chat_at_cap": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ChatAtCap"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "is_overage_plan": {
             "default": false,
             "title": "Is Overage Plan",
@@ -7750,6 +8072,11 @@
           "used": {
             "title": "Used",
             "type": "number"
+          },
+          "uses_shared_budget": {
+            "default": false,
+            "title": "Uses Shared Budget",
+            "type": "boolean"
           }
         },
         "required": [
@@ -8566,6 +8893,11 @@
             ],
             "title": "Processing Conversation Id"
           },
+          "processing_deferred": {
+            "default": false,
+            "title": "Processing Deferred",
+            "type": "boolean"
+          },
           "processing_memory_id": {
             "anyOf": [
               {
@@ -9047,6 +9379,11 @@
           "meeting_treatment_eligible": {
             "default": false,
             "title": "Meeting Treatment Eligible",
+            "type": "boolean"
+          },
+          "processing_deferred": {
+            "default": false,
+            "title": "Processing Deferred",
             "type": "boolean"
           },
           "status": {
@@ -9822,6 +10159,11 @@
             ],
             "title": "Processing Conversation Id"
           },
+          "processing_deferred": {
+            "default": false,
+            "title": "Processing Deferred",
+            "type": "boolean"
+          },
           "processing_memory_id": {
             "anyOf": [
               {
@@ -10576,6 +10918,19 @@
               }
             ],
             "title": "Promotion Code"
+          },
+          "trial_days": {
+            "anyOf": [
+              {
+                "maximum": 30.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trial Days"
           }
         },
         "required": [
@@ -10584,8 +10939,107 @@
         "title": "CreateCheckoutRequest",
         "type": "object"
       },
+      "CreateConversationCalendarMeeting": {
+        "description": "Calendar meeting a developer-API caller attaches to a conversation it uploads",
+        "properties": {
+          "calendar_event_id": {
+            "description": "Event ID in your calendar",
+            "maxLength": 1024,
+            "minLength": 1,
+            "title": "Calendar Event Id",
+            "type": "string"
+          },
+          "duration_minutes": {
+            "description": "Meeting duration in minutes",
+            "maximum": 1440.0,
+            "minimum": 0.0,
+            "title": "Duration Minutes",
+            "type": "integer"
+          },
+          "meeting_link": {
+            "anyOf": [
+              {
+                "maxLength": 2048,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "URL to join the meeting",
+            "title": "Meeting Link"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "maxLength": 10000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Meeting description from the calendar",
+            "title": "Notes"
+          },
+          "participants": {
+            "description": "Invited participants (name and/or email)",
+            "items": {
+              "$ref": "#/components/schemas/MeetingParticipant"
+            },
+            "maxItems": 100,
+            "title": "Participants",
+            "type": "array"
+          },
+          "platform": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Zoom, Teams, Google Meet, in person…",
+            "title": "Platform"
+          },
+          "start_time": {
+            "description": "Meeting start time",
+            "format": "date-time",
+            "title": "Start Time",
+            "type": "string"
+          },
+          "title": {
+            "description": "Meeting title",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "calendar_event_id",
+          "title",
+          "start_time",
+          "duration_minutes"
+        ],
+        "title": "CreateConversationCalendarMeeting",
+        "type": "object"
+      },
       "CreateConversationFromTranscriptRequest": {
         "properties": {
+          "calendar_meeting_context": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CreateConversationCalendarMeeting"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Calendar meeting this conversation belongs to. Used as context for the summary and to identify participants, like the meetings Omi reads from a connected calendar."
+          },
           "capture_evidence": {
             "anyOf": [
               {
@@ -10676,6 +11130,20 @@
             ],
             "description": "When conversation finished (calculated from segments duration if not provided)",
             "title": "Finished At"
+          },
+          "folder_id": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "ID of one of your folders (GET /v1/dev/user/folders). Files the conversation there instead of letting AI pick a folder.",
+            "title": "Folder Id"
           },
           "geolocation": {
             "anyOf": [
@@ -10900,6 +11368,18 @@
             "description": "Start time in seconds (e.g., 0.0, 1.5, 60.2)",
             "title": "Start",
             "type": "number"
+          },
+          "stt_provider": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stt Provider"
           },
           "text": {
             "description": "The text spoken in this segment",
@@ -13553,6 +14033,17 @@
               }
             ],
             "title": "Id"
+          },
+          "original_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Original Text"
           },
           "speaker_id": {
             "anyOf": [
@@ -17713,6 +18204,108 @@
         "title": "HTTPValidationError",
         "type": "object"
       },
+      "HarnessEdit": {
+        "additionalProperties": false,
+        "properties": {
+          "after": {
+            "default": "",
+            "description": "Corrected text or new language tag. For supersede_memory choose new fact text OR other. Empty for retirement, dismissal and task/conversation/person merges: preserve the survivor.",
+            "maxLength": 16000,
+            "title": "After",
+            "type": "string"
+          },
+          "before": {
+            "default": "",
+            "description": "Exact wrong text as it appears in the target, including its capitalization. For spelling, one edit fixes every occurrence of this text.",
+            "maxLength": 16000,
+            "title": "Before",
+            "type": "string"
+          },
+          "effective_from": {
+            "default": "",
+            "description": "For supersede_memory: optional timezone-aware ISO 8601 time when the cited evidence says the new fact became true. Never invent a time; omit to use apply time.",
+            "maxLength": 40,
+            "title": "Effective From",
+            "type": "string"
+          },
+          "evidence": {
+            "description": "Fully read owner refs, with segment ids for speech when available. Cited evidence must support this change; do not invent refs or use the old memory itself as retirement support.",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 10,
+            "minItems": 1,
+            "title": "Evidence",
+            "type": "array"
+          },
+          "kind": {
+            "description": "Correct evidenced defects, never style or low importance. Retire memories only for garbage, contradiction or facts spoken by someone else but attributed to the owner. Supersede only with a newer fact about the same attribute. Dismiss junk person detections (filler, nationalities, fragments), never a real person. Merge tasks only when they represent the same obligation; retire duplicates or someone else's task misfiled to the owner. Autonomous agents must not change manual or edited tasks. Merge conversations only for overlapping captures of the same speech, preserving both records and audio. Set language to the language actually spoken, never translate speech.",
+            "enum": [
+              "spelling",
+              "title",
+              "overview",
+              "memory",
+              "merge_memories",
+              "retire_memory",
+              "supersede_memory",
+              "merge_people",
+              "entity_summary",
+              "close_task",
+              "dismiss_person",
+              "merge_tasks",
+              "retire_task",
+              "merge_conversations",
+              "set_language"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "other": {
+            "default": "",
+            "description": "Second fully read ref for a merge; target is retired into other for task/conversation merges. For supersede_memory, the existing newer memory. Otherwise empty.",
+            "maxLength": 256,
+            "title": "Other",
+            "type": "string"
+          },
+          "reason": {
+            "description": "Explain the defect and cited evidence.",
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          },
+          "target": {
+            "description": "Supplied record ref to edit, optionally with #segment-id or #start-seconds. One spelling edit fixes every occurrence in its target; with a fragment, only that transcript segment is changed.",
+            "maxLength": 256,
+            "minLength": 3,
+            "title": "Target",
+            "type": "string"
+          },
+          "value": {
+            "default": 3,
+            "description": "how much the answer changes what future agents should believe about this person's people, projects or vocabulary; trivial acronym casing is 1",
+            "maximum": 5.0,
+            "minimum": 1.0,
+            "title": "Value",
+            "type": "integer"
+          },
+          "why_it_matters": {
+            "default": "",
+            "description": "Short explanation of future value.",
+            "maxLength": 200,
+            "title": "Why It Matters",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "target",
+          "reason",
+          "evidence"
+        ],
+        "title": "HarnessEdit",
+        "type": "object"
+      },
       "HasSpeechProfileResponse": {
         "properties": {
           "has_profile": {
@@ -17724,6 +18317,76 @@
           "has_profile"
         ],
         "title": "HasSpeechProfileResponse",
+        "type": "object"
+      },
+      "HeldAudioRecording": {
+        "description": "One recording the server is keeping until reset or upgrade. No audio bytes.",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "seconds": {
+            "title": "Seconds",
+            "type": "integer"
+          },
+          "started_at": {
+            "title": "Started At",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "started_at",
+          "seconds"
+        ],
+        "title": "HeldAudioRecording",
+        "type": "object"
+      },
+      "HeldAudioSummary": {
+        "description": "Additive held-audio totals. Absent until funded-STT dispatch enforcement is holding audio.\n\n``count`` is the exact number of holds, including ones past the newest page.\n``recordings`` is that page, newest first.",
+        "properties": {
+          "count": {
+            "default": 0,
+            "title": "Count",
+            "type": "integer"
+          },
+          "recordings": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/HeldAudioRecording"
+            },
+            "title": "Recordings",
+            "type": "array"
+          },
+          "reset_at": {
+            "title": "Reset At",
+            "type": "integer"
+          },
+          "retain_live": {
+            "title": "Retain Live",
+            "type": "boolean"
+          },
+          "seconds": {
+            "title": "Seconds",
+            "type": "integer"
+          },
+          "state": {
+            "default": "paused",
+            "enum": [
+              "paused",
+              "recovering"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "seconds",
+          "reset_at",
+          "retain_live"
+        ],
+        "title": "HeldAudioSummary",
         "type": "object"
       },
       "IgnoredVoice": {
@@ -18132,257 +18795,6 @@
         "title": "InterventionSurface",
         "type": "string"
       },
-      "JITDecisionReason": {
-        "enum": [
-          "evaluated",
-          "rollout_enabled",
-          "rollout_disabled",
-          "kill_switch_enabled",
-          "provider_timeout",
-          "configuration_missing",
-          "malformed_response",
-          "provider_error",
-          "flag_absent"
-        ],
-        "title": "JITDecisionReason",
-        "type": "string"
-      },
-      "JITErrorClass": {
-        "enum": [
-          "none",
-          "timeout",
-          "configuration",
-          "malformed",
-          "provider",
-          "absent"
-        ],
-        "title": "JITErrorClass",
-        "type": "string"
-      },
-      "JITRolloutDecisionEnvelope": {
-        "additionalProperties": false,
-        "properties": {
-          "budget_contract_version": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Budget Contract Version"
-          },
-          "cache_hit": {
-            "title": "Cache Hit",
-            "type": "boolean"
-          },
-          "cache_ttl_seconds": {
-            "title": "Cache Ttl Seconds",
-            "type": "integer"
-          },
-          "effective": {
-            "$ref": "#/components/schemas/TriState"
-          },
-          "error_class": {
-            "$ref": "#/components/schemas/JITErrorClass"
-          },
-          "kill_switch": {
-            "$ref": "#/components/schemas/TriState"
-          },
-          "reason": {
-            "$ref": "#/components/schemas/JITDecisionReason"
-          },
-          "rollout": {
-            "$ref": "#/components/schemas/TriState"
-          }
-        },
-        "required": [
-          "rollout",
-          "kill_switch",
-          "effective",
-          "reason",
-          "error_class",
-          "cache_hit",
-          "cache_ttl_seconds"
-        ],
-        "title": "JITRolloutDecisionEnvelope",
-        "type": "object"
-      },
-      "JITTriggerActionEnvelope": {
-        "additionalProperties": false,
-        "properties": {
-          "prompt": {
-            "title": "Prompt",
-            "type": "string"
-          },
-          "type": {
-            "title": "Type",
-            "type": "string"
-          }
-        },
-        "required": [
-          "type",
-          "prompt"
-        ],
-        "title": "JITTriggerActionEnvelope",
-        "type": "object"
-      },
-      "JITTriggerSnapshotEnvelope": {
-        "additionalProperties": false,
-        "properties": {
-          "account_generation": {
-            "minimum": 0.0,
-            "title": "Account Generation",
-            "type": "integer"
-          },
-          "budget_day": {
-            "anyOf": [
-              {
-                "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Budget Day"
-          },
-          "budget_timezone": {
-            "anyOf": [
-              {
-                "maxLength": 64,
-                "minLength": 1,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Budget Timezone"
-          },
-          "commit_sequence": {
-            "minimum": 0.0,
-            "title": "Commit Sequence",
-            "type": "integer"
-          },
-          "complete": {
-            "title": "Complete",
-            "type": "boolean"
-          },
-          "failure_reason": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Failure Reason"
-          },
-          "head_commit_id": {
-            "title": "Head Commit Id",
-            "type": "string"
-          },
-          "owner_id": {
-            "title": "Owner Id",
-            "type": "string"
-          },
-          "policy": {
-            "$ref": "#/components/schemas/TriggerRuntimePolicy",
-            "default": {
-              "ambiguous_nano_triages_per_day": 8,
-              "embedding": {
-                "enabled": false,
-                "match_similarity": 0.82,
-                "triage_similarity": 0.74
-              },
-              "full_agent_turns_per_candidate": 1,
-              "max_calendar_events": 32,
-              "paid_boundary_refresh_required": true,
-              "planned_notifications_per_trigger_per_day": 1,
-              "schema_version": "jit_trigger_policy.v1",
-              "total_proactive_notifications_per_day": 3,
-              "valid_for_seconds": 30
-            }
-          },
-          "rows": {
-            "items": {
-              "$ref": "#/components/schemas/JITTriggerSnapshotRowEnvelope"
-            },
-            "title": "Rows",
-            "type": "array"
-          },
-          "snapshot_revision": {
-            "title": "Snapshot Revision",
-            "type": "string"
-          }
-        },
-        "required": [
-          "owner_id",
-          "account_generation",
-          "head_commit_id",
-          "commit_sequence",
-          "snapshot_revision",
-          "complete",
-          "rows"
-        ],
-        "title": "JITTriggerSnapshotEnvelope",
-        "type": "object"
-      },
-      "JITTriggerSnapshotRowEnvelope": {
-        "additionalProperties": false,
-        "properties": {
-          "action": {
-            "$ref": "#/components/schemas/JITTriggerActionEnvelope"
-          },
-          "item_revision": {
-            "title": "Item Revision",
-            "type": "integer"
-          },
-          "memory_id": {
-            "title": "Memory Id",
-            "type": "string"
-          },
-          "snoozed_until": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Snoozed Until"
-          },
-          "trigger_condition_json": {
-            "title": "Trigger Condition Json",
-            "type": "string"
-          },
-          "updated_at": {
-            "format": "date-time",
-            "title": "Updated At",
-            "type": "string"
-          },
-          "wakeup_budget_per_day": {
-            "minimum": 1.0,
-            "title": "Wakeup Budget Per Day",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "memory_id",
-          "item_revision",
-          "updated_at",
-          "trigger_condition_json",
-          "action",
-          "wakeup_budget_per_day"
-        ],
-        "title": "JITTriggerSnapshotRowEnvelope",
-        "type": "object"
-      },
       "KnowledgeGraphResponse": {
         "properties": {
           "edge_count": {
@@ -18481,272 +18893,6 @@
         ],
         "title": "LearnedMemoryRef",
         "type": "object"
-      },
-      "LedgerMirrorAliasEnvelope": {
-        "additionalProperties": false,
-        "properties": {
-          "alias_memory_id": {
-            "maxLength": 256,
-            "minLength": 1,
-            "title": "Alias Memory Id",
-            "type": "string"
-          },
-          "canonical_memory_id": {
-            "maxLength": 256,
-            "minLength": 1,
-            "title": "Canonical Memory Id",
-            "type": "string"
-          },
-          "reason": {
-            "pattern": "^(canonical_memory_id|superseded_by)$",
-            "title": "Reason",
-            "type": "string"
-          },
-          "source_memory_id": {
-            "maxLength": 256,
-            "minLength": 1,
-            "title": "Source Memory Id",
-            "type": "string"
-          }
-        },
-        "required": [
-          "alias_memory_id",
-          "canonical_memory_id",
-          "source_memory_id",
-          "reason"
-        ],
-        "title": "LedgerMirrorAliasEnvelope",
-        "type": "object"
-      },
-      "LedgerMirrorRowEnvelope": {
-        "additionalProperties": false,
-        "properties": {
-          "canonical_memory_id": {
-            "anyOf": [
-              {
-                "maxLength": 256,
-                "minLength": 1,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Canonical Memory Id"
-          },
-          "content_purged": {
-            "title": "Content Purged",
-            "type": "boolean"
-          },
-          "item_revision": {
-            "minimum": 1.0,
-            "title": "Item Revision",
-            "type": "integer"
-          },
-          "memory": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/MemoryDB"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "memory_id": {
-            "maxLength": 256,
-            "minLength": 1,
-            "title": "Memory Id",
-            "type": "string"
-          },
-          "source_state": {
-            "$ref": "#/components/schemas/SourceState"
-          },
-          "status": {
-            "$ref": "#/components/schemas/MemoryItemStatus"
-          }
-        },
-        "required": [
-          "memory_id",
-          "item_revision",
-          "status",
-          "source_state",
-          "content_purged"
-        ],
-        "title": "LedgerMirrorRowEnvelope",
-        "type": "object"
-      },
-      "LedgerMirrorSnapshotEnvelope": {
-        "additionalProperties": false,
-        "properties": {
-          "account_generation": {
-            "minimum": 0.0,
-            "title": "Account Generation",
-            "type": "integer"
-          },
-          "aliases": {
-            "items": {
-              "$ref": "#/components/schemas/LedgerMirrorAliasEnvelope"
-            },
-            "title": "Aliases",
-            "type": "array"
-          },
-          "chain_revision": {
-            "title": "Chain Revision",
-            "type": "string"
-          },
-          "commit_sequence": {
-            "minimum": 0.0,
-            "title": "Commit Sequence",
-            "type": "integer"
-          },
-          "epoch_id": {
-            "title": "Epoch Id",
-            "type": "string"
-          },
-          "failure_reason": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Failure Reason"
-          },
-          "final_page": {
-            "default": false,
-            "title": "Final Page",
-            "type": "boolean"
-          },
-          "head_commit_id": {
-            "title": "Head Commit Id",
-            "type": "string"
-          },
-          "next_cursor": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Next Cursor"
-          },
-          "owner_id": {
-            "title": "Owner Id",
-            "type": "string"
-          },
-          "page_revision": {
-            "title": "Page Revision",
-            "type": "string"
-          },
-          "projected_count": {
-            "minimum": 0.0,
-            "title": "Projected Count",
-            "type": "integer"
-          },
-          "rows": {
-            "items": {
-              "$ref": "#/components/schemas/LedgerMirrorRowEnvelope"
-            },
-            "maxItems": 500,
-            "title": "Rows",
-            "type": "array"
-          },
-          "scanned_count": {
-            "minimum": 0.0,
-            "title": "Scanned Count",
-            "type": "integer"
-          },
-          "schema_version": {
-            "default": "knowledge_ledger_mirror.v1",
-            "title": "Schema Version",
-            "type": "string"
-          },
-          "source_generation": {
-            "minimum": 0.0,
-            "title": "Source Generation",
-            "type": "integer"
-          },
-          "writer_epoch": {
-            "minimum": 0.0,
-            "title": "Writer Epoch",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "owner_id",
-          "account_generation",
-          "source_generation",
-          "writer_epoch",
-          "head_commit_id",
-          "commit_sequence",
-          "epoch_id",
-          "page_revision",
-          "chain_revision",
-          "scanned_count",
-          "projected_count"
-        ],
-        "title": "LedgerMirrorSnapshotEnvelope",
-        "type": "object"
-      },
-      "LedgerPromptSnapshotEnvelope": {
-        "additionalProperties": false,
-        "properties": {
-          "mode": {
-            "$ref": "#/components/schemas/LedgerPromptSnapshotMode"
-          },
-          "reason": {
-            "maxLength": 64,
-            "title": "Reason",
-            "type": "string"
-          },
-          "rows": {
-            "items": {
-              "$ref": "#/components/schemas/MemoryDB"
-            },
-            "maxItems": 64,
-            "title": "Rows",
-            "type": "array"
-          },
-          "schema_version": {
-            "default": "knowledge_ledger.v1",
-            "title": "Schema Version",
-            "type": "string"
-          },
-          "source_head_commit_id": {
-            "anyOf": [
-              {
-                "maxLength": 256,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Source Head Commit Id"
-          }
-        },
-        "required": [
-          "mode",
-          "reason"
-        ],
-        "title": "LedgerPromptSnapshotEnvelope",
-        "type": "object"
-      },
-      "LedgerPromptSnapshotMode": {
-        "enum": [
-          "enabled",
-          "compatibility",
-          "disabled",
-          "killed",
-          "unknown"
-        ],
-        "title": "LedgerPromptSnapshotMode",
-        "type": "string"
       },
       "LedgerWriteReason": {
         "enum": [
@@ -20245,17 +20391,6 @@
             "title": "Arguments",
             "type": "object"
           },
-          "belief_class": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Belief Class"
-          },
           "capture_confidence": {
             "anyOf": [
               {
@@ -20299,17 +20434,6 @@
             ],
             "description": "Expected durability horizon for the fact",
             "title": "Durability"
-          },
-          "half_life_days": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Half Life Days"
           },
           "headline": {
             "anyOf": [
@@ -20669,41 +20793,6 @@
             "title": "Arguments",
             "type": "object"
           },
-          "as_of": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "As Of"
-          },
-          "belief_class": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Belief Class"
-          },
-          "belief_computed_at": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Belief Computed At"
-          },
           "body": {
             "anyOf": [
               {
@@ -20786,28 +20875,6 @@
             "title": "Curation Weight",
             "type": "integer"
           },
-          "currency": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Currency"
-          },
-          "currency_band": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Currency Band"
-          },
           "data_protection_level": {
             "anyOf": [
               {
@@ -20842,17 +20909,6 @@
             },
             "title": "Evidence",
             "type": "array"
-          },
-          "half_life_days": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Half Life Days"
           },
           "headline": {
             "anyOf": [
@@ -21258,6 +21314,76 @@
         "title": "MemoryGlobalReadGateObservability",
         "type": "object"
       },
+      "MemoryHygieneEdit": {
+        "additionalProperties": false,
+        "properties": {
+          "after": {
+            "default": "",
+            "description": "For supersede_memory without other, the newer time-scoped fact text supported by conversations. Empty for retire_memory.",
+            "maxLength": 2000,
+            "title": "After",
+            "type": "string"
+          },
+          "before": {
+            "default": "",
+            "description": "Exact wrong text as it appears in the target, including its capitalization. For spelling, one edit fixes every occurrence of this text.",
+            "title": "Before",
+            "type": "string"
+          },
+          "effective_from": {
+            "default": "",
+            "description": "For supersede_memory: optional timezone-aware ISO 8601 time when the cited evidence says the new fact became true. Never invent a time; omit to use apply time.",
+            "maxLength": 40,
+            "title": "Effective From",
+            "type": "string"
+          },
+          "evidence": {
+            "description": "Supplied conversation refs or other memory refs supporting retirement or replacement. The target alone is not evidence.",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 10,
+            "minItems": 1,
+            "title": "Evidence",
+            "type": "array"
+          },
+          "kind": {
+            "description": "Retire garbage (not merely low-importance facts), facts misattributed from another speaker, or facts contradicted by evidence. Supersede an old fact only with a newer time-scoped fact about the same attribute; age alone is not staleness.",
+            "enum": [
+              "retire_memory",
+              "supersede_memory"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "other": {
+            "default": "",
+            "description": "For supersede_memory, the supplied newer memory ref. Otherwise empty. Choose exactly one of other or after.",
+            "title": "Other",
+            "type": "string"
+          },
+          "reason": {
+            "description": "Required explanation of garbage, another speaker attribution, contradiction, or the newer fact about the same attribute.",
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          },
+          "target": {
+            "description": "Supplied record ref to edit, optionally with #segment-id or #start-seconds. One spelling edit fixes every occurrence in its target; with a fragment, only that transcript segment is changed.",
+            "title": "Target",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "target",
+          "reason",
+          "evidence"
+        ],
+        "title": "MemoryHygieneEdit",
+        "type": "object"
+      },
       "MemoryItemStatus": {
         "enum": [
           "active",
@@ -21497,90 +21623,6 @@
           "has_rating"
         ],
         "title": "MemorySummaryRatingResponse",
-        "type": "object"
-      },
-      "MemoryUseAction": {
-        "enum": [
-          "suppress",
-          "allow",
-          "useful"
-        ],
-        "title": "MemoryUseAction",
-        "type": "string"
-      },
-      "MemoryUseRequest": {
-        "additionalProperties": false,
-        "description": "Retry-stable owner action for one canonical memory.",
-        "properties": {
-          "action": {
-            "$ref": "#/components/schemas/MemoryUseAction"
-          },
-          "expected_item_revision": {
-            "anyOf": [
-              {
-                "minimum": 1.0,
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Expected Item Revision"
-          },
-          "feedback_id": {
-            "maxLength": 128,
-            "minLength": 1,
-            "title": "Feedback Id",
-            "type": "string"
-          }
-        },
-        "required": [
-          "action",
-          "feedback_id"
-        ],
-        "title": "MemoryUseRequest",
-        "type": "object"
-      },
-      "MemoryUseResponse": {
-        "properties": {
-          "action": {
-            "$ref": "#/components/schemas/MemoryUseAction"
-          },
-          "curation_weight": {
-            "title": "Curation Weight",
-            "type": "integer"
-          },
-          "feedback_id": {
-            "title": "Feedback Id",
-            "type": "string"
-          },
-          "item_revision": {
-            "title": "Item Revision",
-            "type": "integer"
-          },
-          "memory_id": {
-            "title": "Memory Id",
-            "type": "string"
-          },
-          "status": {
-            "title": "Status",
-            "type": "string"
-          },
-          "suppressed": {
-            "title": "Suppressed",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "status",
-          "memory_id",
-          "action",
-          "feedback_id",
-          "item_revision",
-          "suppressed",
-          "curation_weight"
-        ],
-        "title": "MemoryUseResponse",
         "type": "object"
       },
       "MemoryValueRequest": {
@@ -23467,6 +23509,103 @@
         "title": "PendingSyncResponse",
         "type": "object"
       },
+      "PendingWorkItem": {
+        "properties": {
+          "conversation_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Conversation Ids",
+            "type": "array"
+          },
+          "duration_seconds": {
+            "title": "Duration Seconds",
+            "type": "number"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "conversation",
+              "sync_job"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "state": {
+            "enum": [
+              "queued",
+              "transcribing",
+              "summarizing"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "state",
+          "conversation_ids",
+          "started_at",
+          "duration_seconds",
+          "updated_at"
+        ],
+        "title": "PendingWorkItem",
+        "type": "object"
+      },
+      "PendingWorkSnapshot": {
+        "properties": {
+          "attention_unseen_count": {
+            "title": "Attention Unseen Count",
+            "type": "integer"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PendingWorkItem"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "enabled",
+          "items",
+          "attention_unseen_count"
+        ],
+        "title": "PendingWorkSnapshot",
+        "type": "object"
+      },
       "PeopleResponse": {
         "properties": {
           "people": {
@@ -24024,6 +24163,17 @@
             "title": "Chat Quota Used",
             "type": "number"
           },
+          "cloud_screen_vectors": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cloud Screen Vectors"
+          },
           "desktop_grandfather_until": {
             "anyOf": [
               {
@@ -24034,6 +24184,16 @@
               }
             ],
             "title": "Desktop Grandfather Until"
+          },
+          "held_audio": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HeldAudioSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "insights_gained_limit": {
             "title": "Insights Gained Limit",
@@ -24047,6 +24207,16 @@
             "anyOf": [
               {
                 "$ref": "#/components/schemas/PhoneCallQuota"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "processing_backlog": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProcessingBacklog"
               },
               {
                 "type": "null"
@@ -24078,6 +24248,11 @@
           "transcription_seconds_used": {
             "title": "Transcription Seconds Used",
             "type": "integer"
+          },
+          "trial_eligible": {
+            "default": false,
+            "title": "Trial Eligible",
+            "type": "boolean"
           },
           "words_transcribed_limit": {
             "title": "Words Transcribed Limit",
@@ -24668,6 +24843,81 @@
           }
         },
         "title": "ProcessConversationRequest",
+        "type": "object"
+      },
+      "ProcessingBacklog": {
+        "properties": {
+          "budget_exhausted": {
+            "default": false,
+            "title": "Budget Exhausted",
+            "type": "boolean"
+          },
+          "deferred_conversations": {
+            "default": 0,
+            "title": "Deferred Conversations",
+            "type": "integer"
+          },
+          "deferred_seconds": {
+            "default": 0,
+            "title": "Deferred Seconds",
+            "type": "integer"
+          },
+          "estimated_hours": {
+            "default": 0,
+            "title": "Estimated Hours",
+            "type": "number"
+          },
+          "estimated_percent": {
+            "default": 0,
+            "title": "Estimated Percent",
+            "type": "number"
+          },
+          "estimated_units": {
+            "default": 0,
+            "title": "Estimated Units",
+            "type": "number"
+          },
+          "exceeds_remaining": {
+            "default": false,
+            "title": "Exceeds Remaining",
+            "type": "boolean"
+          },
+          "held_audio_count": {
+            "default": 0,
+            "title": "Held Audio Count",
+            "type": "integer"
+          },
+          "held_audio_seconds": {
+            "default": 0,
+            "title": "Held Audio Seconds",
+            "type": "integer"
+          },
+          "remaining_units": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Remaining Units"
+          },
+          "state": {
+            "enum": [
+              "capped",
+              "waiting_choice",
+              "processing",
+              "none"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "state"
+        ],
+        "title": "ProcessingBacklog",
         "type": "object"
       },
       "ProductMemorySearchItem": {
@@ -26249,6 +26499,21 @@
         "title": "RestoreLegacyConversationItemsResponse",
         "type": "object"
       },
+      "RetryAllRequest": {
+        "properties": {
+          "idempotency_key": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Idempotency Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "idempotency_key"
+        ],
+        "title": "RetryAllRequest",
+        "type": "object"
+      },
       "ReviewAnswer": {
         "additionalProperties": false,
         "properties": {
@@ -26434,14 +26699,71 @@
       },
       "ReviewChange": {
         "properties": {
+          "after": {
+            "anyOf": [
+              {
+                "maxLength": 4000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "After"
+          },
+          "before": {
+            "anyOf": [
+              {
+                "maxLength": 4000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Before"
+          },
           "change_id": {
             "title": "Change Id",
             "type": "string"
+          },
+          "context": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SpellingContext"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
             "type": "string"
+          },
+          "diff": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReviewChangeDiff"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional before/after excerpt with surrounding context. Released clients ignore it. Never a whole transcript."
+          },
+          "edit_kind": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Edit Kind"
           },
           "kind": {
             "enum": [
@@ -26502,6 +26824,134 @@
           "created_at"
         ],
         "title": "ReviewChange",
+        "type": "object"
+      },
+      "ReviewChangeDiff": {
+        "description": "Bounded before/after excerpt. Released clients ignore this object.\n\n``group_key`` is stable for the same term change across conversations so a\nclient can group by change, by conversation, or by term.",
+        "properties": {
+          "after": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "After"
+          },
+          "before": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Before"
+          },
+          "context_after": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Context After"
+          },
+          "context_before": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Context Before"
+          },
+          "field": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Field"
+          },
+          "group_key": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Group Key"
+          },
+          "occurrences": {
+            "anyOf": [
+              {
+                "maximum": 10000.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Occurrences"
+          },
+          "source_started_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Started At"
+          },
+          "source_title": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Title"
+          },
+          "target_label": {
+            "anyOf": [
+              {
+                "maxLength": 180,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Label"
+          }
+        },
+        "title": "ReviewChangeDiff",
         "type": "object"
       },
       "ReviewChangesResponse": {
@@ -27945,6 +28395,26 @@
         "title": "Section",
         "type": "object"
       },
+      "SeenRequest": {
+        "properties": {
+          "all": {
+            "default": false,
+            "title": "All",
+            "type": "boolean"
+          },
+          "ids": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 100,
+            "title": "Ids",
+            "type": "array"
+          }
+        },
+        "title": "SeenRequest",
+        "type": "object"
+      },
       "SendMessageRequest": {
         "properties": {
           "context": {
@@ -28776,7 +29246,7 @@
         "type": "object"
       },
       "SharedSection": {
-        "description": "Public note content, without internal transcript evidence IDs.",
+        "description": "Public note content linked to the transcript segments on the same share payload.",
         "properties": {
           "body_markdown": {
             "title": "Body Markdown",
@@ -28794,6 +29264,13 @@
             ],
             "title": "Kind",
             "type": "string"
+          },
+          "source_segment_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Source Segment Ids",
+            "type": "array"
           }
         },
         "required": [
@@ -28901,6 +29378,17 @@
           "is_user": {
             "title": "Is User",
             "type": "boolean"
+          },
+          "original_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Original Text"
           },
           "person_id": {
             "anyOf": [
@@ -29294,6 +29782,17 @@
             ],
             "title": "Id"
           },
+          "original_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Original Text"
+          },
           "speaker_id": {
             "anyOf": [
               {
@@ -29360,16 +29859,6 @@
         ],
         "title": "SnapshotReceipt",
         "type": "object"
-      },
-      "SourceState": {
-        "enum": [
-          "active",
-          "missing",
-          "tombstoned",
-          "purged"
-        ],
-        "title": "SourceState",
-        "type": "string"
       },
       "SpeakerAnalytics": {
         "properties": {
@@ -30401,6 +30890,44 @@
         "title": "StoreRecordingPermissionResponse",
         "type": "object"
       },
+      "StorefrontCapChoice": {
+        "properties": {
+          "body": {
+            "title": "Body",
+            "type": "string"
+          },
+          "dont_ask_again_label": {
+            "title": "Dont Ask Again Label",
+            "type": "string"
+          },
+          "on_device_label": {
+            "title": "On Device Label",
+            "type": "string"
+          },
+          "on_device_upgrade_line": {
+            "title": "On Device Upgrade Line",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "upgrade_label": {
+            "title": "Upgrade Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "body",
+          "upgrade_label",
+          "on_device_label",
+          "dont_ask_again_label",
+          "on_device_upgrade_line"
+        ],
+        "title": "StorefrontCapChoice",
+        "type": "object"
+      },
       "StorefrontCurrent": {
         "properties": {
           "cancel_at_period_end": {
@@ -30476,6 +31003,20 @@
           "amount_minor": {
             "title": "Amount Minor",
             "type": "integer"
+          },
+          "confirm_lines": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confirm Lines"
           },
           "cta_label": {
             "anyOf": [
@@ -30560,9 +31101,29 @@
       },
       "StorefrontResponse": {
         "properties": {
+          "at_cap": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StorefrontCapChoice"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "catalog_revision": {
             "title": "Catalog Revision",
             "type": "integer"
+          },
+          "chat_at_cap": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ChatAtCap"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "current": {
             "anyOf": [
@@ -30717,6 +31278,17 @@
       },
       "StorefrontUsage": {
         "properties": {
+          "hours_left": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hours Left"
+          },
           "kind": {
             "default": "unavailable",
             "enum": [
@@ -30726,6 +31298,11 @@
             ],
             "title": "Kind",
             "type": "string"
+          },
+          "mcp_cap_reached": {
+            "default": false,
+            "title": "Mcp Cap Reached",
+            "type": "boolean"
           },
           "meter_line": {
             "anyOf": [
@@ -30737,6 +31314,17 @@
               }
             ],
             "title": "Meter Line"
+          },
+          "more_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "More Label"
           },
           "nudge_line": {
             "anyOf": [
@@ -31181,6 +31769,38 @@
         "title": "SummaryTaskReference",
         "type": "object"
       },
+      "SurfaceStateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "foreground": {
+            "title": "Foreground",
+            "type": "boolean"
+          },
+          "session_id": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[a-zA-Z0-9-]+$",
+            "title": "Session Id",
+            "type": "string"
+          },
+          "surface_open": {
+            "title": "Surface Open",
+            "type": "boolean"
+          },
+          "transcript_visible": {
+            "title": "Transcript Visible",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "session_id",
+          "surface_open",
+          "foreground",
+          "transcript_visible"
+        ],
+        "title": "SurfaceStateRequest",
+        "type": "object"
+      },
       "SyncBatchItem": {
         "properties": {
           "apple_reminder_id": {
@@ -31537,6 +32157,17 @@
             "default": 0,
             "title": "Failed Segments",
             "type": "integer"
+          },
+          "held_audio": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Held Audio"
           },
           "new_memories": {
             "items": {
@@ -33570,6 +34201,18 @@
             "title": "Is User",
             "type": "boolean"
           },
+          "original_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Immutable captured text when text includes active corrections.",
+            "title": "Original Text"
+          },
           "person_id": {
             "anyOf": [
               {
@@ -33845,15 +34488,6 @@
         "title": "Translation",
         "type": "object"
       },
-      "TriState": {
-        "enum": [
-          "enabled",
-          "disabled",
-          "unknown"
-        ],
-        "title": "TriState",
-        "type": "string"
-      },
       "TrialMetadata": {
         "description": "Structured trial state for desktop clients to render countdown UI.",
         "properties": {
@@ -33909,112 +34543,6 @@
           }
         },
         "title": "TrialMetadata",
-        "type": "object"
-      },
-      "TriggerEmbeddingPolicy": {
-        "additionalProperties": false,
-        "properties": {
-          "enabled": {
-            "default": false,
-            "title": "Enabled",
-            "type": "boolean"
-          },
-          "language": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Language"
-          },
-          "match_similarity": {
-            "default": 0.82,
-            "title": "Match Similarity",
-            "type": "number"
-          },
-          "model_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Model Id"
-          },
-          "model_version": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Model Version"
-          },
-          "triage_similarity": {
-            "default": 0.74,
-            "title": "Triage Similarity",
-            "type": "number"
-          }
-        },
-        "title": "TriggerEmbeddingPolicy",
-        "type": "object"
-      },
-      "TriggerRuntimePolicy": {
-        "additionalProperties": false,
-        "description": "Versioned, backend-authored budgets consumed by every JIT client.",
-        "properties": {
-          "ambiguous_nano_triages_per_day": {
-            "default": 8,
-            "title": "Ambiguous Nano Triages Per Day",
-            "type": "integer"
-          },
-          "embedding": {
-            "$ref": "#/components/schemas/TriggerEmbeddingPolicy"
-          },
-          "full_agent_turns_per_candidate": {
-            "default": 1,
-            "title": "Full Agent Turns Per Candidate",
-            "type": "integer"
-          },
-          "max_calendar_events": {
-            "default": 32,
-            "title": "Max Calendar Events",
-            "type": "integer"
-          },
-          "paid_boundary_refresh_required": {
-            "default": true,
-            "title": "Paid Boundary Refresh Required",
-            "type": "boolean"
-          },
-          "planned_notifications_per_trigger_per_day": {
-            "default": 1,
-            "title": "Planned Notifications Per Trigger Per Day",
-            "type": "integer"
-          },
-          "schema_version": {
-            "default": "jit_trigger_policy.v1",
-            "title": "Schema Version",
-            "type": "string"
-          },
-          "total_proactive_notifications_per_day": {
-            "default": 3,
-            "title": "Total Proactive Notifications Per Day",
-            "type": "integer"
-          },
-          "valid_for_seconds": {
-            "default": 30,
-            "title": "Valid For Seconds",
-            "type": "integer"
-          }
-        },
-        "title": "TriggerRuntimePolicy",
         "type": "object"
       },
       "TriggerType": {
@@ -35542,6 +36070,17 @@
             "title": "Chat Quota Used",
             "type": "number"
           },
+          "cloud_screen_vectors": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cloud Screen Vectors"
+          },
           "desktop_grandfather_until": {
             "anyOf": [
               {
@@ -35552,6 +36091,16 @@
               }
             ],
             "title": "Desktop Grandfather Until"
+          },
+          "held_audio": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HeldAudioSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "insights_gained_limit": {
             "title": "Insights Gained Limit",
@@ -35565,6 +36114,16 @@
             "anyOf": [
               {
                 "$ref": "#/components/schemas/PhoneCallQuota"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "processing_backlog": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProcessingBacklog"
               },
               {
                 "type": "null"
@@ -35596,6 +36155,11 @@
           "transcription_seconds_used": {
             "title": "Transcription Seconds Used",
             "type": "integer"
+          },
+          "trial_eligible": {
+            "default": false,
+            "title": "Trial Eligible",
+            "type": "boolean"
           },
           "words_transcribed_limit": {
             "title": "Words Transcribed Limit",
@@ -43244,6 +43808,431 @@
         "summary": "Get App Subscription"
       }
     },
+    "/v1/attention-items": {
+      "get": {
+        "operationId": "attention_items_v1_attention_items_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AttentionItemsPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Attention Items",
+        "tags": [
+          "processing"
+        ]
+      }
+    },
+    "/v1/attention-items/retry-all": {
+      "post": {
+        "operationId": "retry_all_v1_attention_items_retry_all_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RetryAllRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AttentionRetryAllResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Retry All",
+        "tags": [
+          "processing"
+        ]
+      }
+    },
+    "/v1/attention-items/seen": {
+      "post": {
+        "operationId": "seen_v1_attention_items_seen_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SeenRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Seen",
+        "tags": [
+          "processing"
+        ]
+      }
+    },
+    "/v1/attention-items/{item_id}/dismiss": {
+      "post": {
+        "operationId": "dismiss_v1_attention_items__item_id__dismiss_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "title": "Item Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Dismiss",
+        "tags": [
+          "processing"
+        ]
+      }
+    },
+    "/v1/attention-items/{item_id}/retry": {
+      "post": {
+        "operationId": "retry_v1_attention_items__item_id__retry_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "title": "Item Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AttentionRetryResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Retry",
+        "tags": [
+          "processing"
+        ]
+      }
+    },
     "/v1/calendar/capture-gaps": {
       "get": {
         "description": "Accepted calendar events in [start, end] with no overlapping non-discarded conversation.\n\nThe honesty surface for the Conversations list (SCA-381): what was booked\nbut never recorded. Read-only against Google Calendar; it never creates or\nmutates conversations. Declined, cancelled, tentative, and all-day / >8h\nblocks are excluded by ``select_capture_gaps``.",
@@ -48504,7 +49493,7 @@
     },
     "/v1/conversations/{conversation_id}/reprocess": {
       "post": {
-        "description": "Whenever a user wants to reprocess a conversation, or wants to force process a discarded one\n:param conversation_id: The ID of the conversation to reprocess\n:param language_code: Optional language code to use for processing\n:param app_id: Optional app ID to use for processing (if provided, only this app will be triggered)\n:return: The updated conversation after reprocessing.",
+        "description": "Whenever a user wants to reprocess a conversation, or wants to force process a discarded one\n:param conversation_id: The ID of the conversation to reprocess\n:param language_code: Optional language code to use for processing\n:param app_id: Optional app ID to use for processing (if provided, only this app will be triggered)\n:param source: ``omi`` asks for Omi's own notes only: neither the preferred app nor a suggested\n    app runs. Omitted keeps the legacy meaning (Omi notes plus the user's preferred app).\n:return: The updated conversation after reprocessing.",
         "operationId": "reprocess_conversation_v1_conversations__conversation_id__reprocess_post",
         "parameters": [
           {
@@ -48546,6 +49535,23 @@
                 }
               ],
               "title": "App Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "source",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "const": "omi",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Source"
             }
           },
           {
@@ -48597,7 +49603,7 @@
             "description": "Successful Response"
           },
           "400": {
-            "description": "The selected app cannot summarize conversations"
+            "description": "The selected app cannot summarize conversations, or app_id was combined with source=omi"
           },
           "401": {
             "$ref": "#/components/responses/Error401"
@@ -48609,7 +49615,7 @@
             "description": "The conversation or selected app does not exist"
           },
           "409": {
-            "description": "The selected app is disabled or not enabled by this user"
+            "description": "The selected app is disabled or not enabled by this user, or the conversation is already being processed (detail code conversation_processing_in_progress)"
           },
           "422": {
             "content": {
@@ -48620,6 +49626,9 @@
               }
             },
             "description": "Validation Error"
+          },
+          "502": {
+            "description": "The selected app produced no summary (detail code app_result_failed)"
           }
         },
         "security": [
@@ -51274,7 +52283,7 @@
     },
     "/v1/dev/user/conversations/from-segments": {
       "post": {
-        "description": "Create a new conversation from structured transcript segments.\n\nThis endpoint is for advanced integrations that have speaker diarization and timing information.\nIt processes the transcript segments through the full conversation pipeline.\n\n**Transcript Segments:**\n- **text**: The text spoken (required)\n- **speaker**: Speaker identifier like 'SPEAKER_00', 'SPEAKER_01' (default: 'SPEAKER_00')\n- **speaker_id**: Numeric speaker ID (auto-calculated from speaker if not provided)\n- **is_user**: Whether this segment is from the user (default: False)\n- **person_id**: ID of known person speaking (optional)\n- **start**: Start time in seconds, e.g., 0.0, 1.5, 60.2 (required)\n- **end**: End time in seconds, e.g., 1.5, 3.0, 65.8 (required)\n\n**Other Parameters:**\n- **source**: Source of conversation (default: external_integration). Options:\n  - omi, friend, openglass, phone, desktop, apple_watch, bee, plaud, frame, etc.\n- **started_at**: When conversation started (defaults to now)\n- **finished_at**: When conversation finished (calculated from last segment if not provided)\n- **language**: Language code (default: 'en')\n- **geolocation**: Optional geolocation data\n\n**Example:**\n```json\n{\n  \"transcript_segments\": [\n    {\n      \"text\": \"Hey, how are you doing?\",\n      \"speaker\": \"SPEAKER_00\",\n      \"is_user\": true,\n      \"start\": 0.0,\n      \"end\": 2.5\n    },\n    {\n      \"text\": \"I'm doing great, thanks!\",\n      \"speaker\": \"SPEAKER_01\",\n      \"is_user\": false,\n      \"start\": 2.8,\n      \"end\": 5.2\n    }\n  ],\n  \"source\": \"phone\",\n  \"language\": \"en\"\n}\n```",
+        "description": "Create a new conversation from structured transcript segments.\n\nThis endpoint is for advanced integrations that have speaker diarization and timing information.\nIt processes the transcript segments through the full conversation pipeline.\n\n**Transcript Segments:**\n- **text**: The text spoken (required)\n- **speaker**: Speaker identifier like 'SPEAKER_00', 'SPEAKER_01' (default: 'SPEAKER_00')\n- **speaker_id**: Numeric speaker ID (auto-calculated from speaker if not provided)\n- **is_user**: Whether this segment is from the user (default: False)\n- **person_id**: ID of known person speaking (optional)\n- **start**: Start time in seconds, e.g., 0.0, 1.5, 60.2 (required)\n- **end**: End time in seconds, e.g., 1.5, 3.0, 65.8 (required)\n\n**Other Parameters:**\n- **source**: Source of conversation (default: external_integration). Options:\n  - omi, friend, openglass, phone, desktop, apple_watch, bee, plaud, frame, etc.\n- **started_at**: When conversation started (defaults to now)\n- **finished_at**: When conversation finished (calculated from last segment if not provided)\n- **language**: Language code (default: 'en')\n- **geolocation**: Optional geolocation data\n- **folder_id**: Optional ID of one of your folders (from GET /v1/dev/user/folders); skips AI folder assignment\n- **calendar_meeting_context**: Optional calendar meeting (title, participants, start_time, duration_minutes,\n  notes…) used as context for the summary\n\n**Example:**\n```json\n{\n  \"transcript_segments\": [\n    {\n      \"text\": \"Hey, how are you doing?\",\n      \"speaker\": \"SPEAKER_00\",\n      \"is_user\": true,\n      \"start\": 0.0,\n      \"end\": 2.5\n    },\n    {\n      \"text\": \"I'm doing great, thanks!\",\n      \"speaker\": \"SPEAKER_01\",\n      \"is_user\": false,\n      \"start\": 2.8,\n      \"end\": 5.2\n    }\n  ],\n  \"source\": \"phone\",\n  \"language\": \"en\"\n}\n```",
         "operationId": "createConversationFromSegments",
         "requestBody": {
           "content": {
@@ -54424,8 +55433,8 @@
     },
     "/v1/frame-requests/temporary/{request_id}/image": {
       "get": {
-        "description": "Read one uploaded, unattached temporary frame for JIT vision.\n\nConversation evidence is deliberately excluded: permanent images remain\nreachable only through the conversation-owned endpoint. This read neither\npromotes nor extends the temporary request's at-most-seven-day expiry.",
-        "operationId": "consume_temporary_frame_request_image_v1_frame_requests_temporary__request_id__image_get",
+        "deprecated": true,
+        "operationId": "retired_temporary_frame_image_v1_frame_requests_temporary__request_id__image_get",
         "parameters": [
           {
             "in": "path",
@@ -54441,10 +55450,15 @@
             "name": "account_generation",
             "required": false,
             "schema": {
-              "default": 0,
-              "minimum": 0,
-              "title": "Account Generation",
-              "type": "integer"
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Account Generation"
             }
           },
           {
@@ -54485,34 +55499,19 @@
           }
         ],
         "responses": {
-          "200": {
-            "content": {
-              "image/jpeg": {
-                "schema": {
-                  "format": "binary",
-                  "type": "string"
-                }
-              },
-              "image/png": {
-                "schema": {
-                  "format": "binary",
-                  "type": "string"
-                }
-              },
-              "image/webp": {
-                "schema": {
-                  "format": "binary",
-                  "type": "string"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
           "401": {
             "$ref": "#/components/responses/Error401"
           },
           "404": {
             "$ref": "#/components/responses/Error404"
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
           },
           "422": {
             "content": {
@@ -54530,7 +55529,7 @@
             "firebaseBearer": []
           }
         ],
-        "summary": "Consume Temporary Frame Request Image"
+        "summary": "Retired Temporary Frame Image"
       }
     },
     "/v1/frame-requests/{request_id}/promote": {
@@ -57929,7 +58928,8 @@
     },
     "/v1/jit/knowledge-ledger/mirror-snapshot": {
       "get": {
-        "operationId": "get_knowledge_ledger_mirror_snapshot_v1_jit_knowledge_ledger_mirror_snapshot_get",
+        "deprecated": true,
+        "operationId": "retired_ledger_mirror_snapshot_v1_jit_knowledge_ledger_mirror_snapshot_get",
         "parameters": [
           {
             "in": "query",
@@ -57952,7 +58952,7 @@
             "name": "page_size",
             "required": false,
             "schema": {
-              "default": 200,
+              "default": 50,
               "title": "Page Size",
               "type": "integer"
             }
@@ -57995,18 +58995,16 @@
           }
         ],
         "responses": {
-          "200": {
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "410": {
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/LedgerMirrorSnapshotEnvelope"
-                }
+                "schema": {}
               }
             },
             "description": "Successful Response"
-          },
-          "401": {
-            "$ref": "#/components/responses/Error401"
           },
           "422": {
             "content": {
@@ -58024,12 +59022,13 @@
             "firebaseBearer": []
           }
         ],
-        "summary": "Get Knowledge Ledger Mirror Snapshot"
+        "summary": "Retired Ledger Mirror Snapshot"
       }
     },
     "/v1/jit/knowledge-ledger/prompt-snapshot": {
       "get": {
-        "operationId": "get_knowledge_ledger_prompt_snapshot_v1_jit_knowledge_ledger_prompt_snapshot_get",
+        "deprecated": true,
+        "operationId": "retired_ledger_prompt_snapshot_v1_jit_knowledge_ledger_prompt_snapshot_get",
         "parameters": [
           {
             "in": "header",
@@ -58069,18 +59068,16 @@
           }
         ],
         "responses": {
-          "200": {
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "410": {
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/LedgerPromptSnapshotEnvelope"
-                }
+                "schema": {}
               }
             },
             "description": "Successful Response"
-          },
-          "401": {
-            "$ref": "#/components/responses/Error401"
           },
           "422": {
             "content": {
@@ -58098,13 +59095,13 @@
             "firebaseBearer": []
           }
         ],
-        "summary": "Get Knowledge Ledger Prompt Snapshot"
+        "summary": "Retired Ledger Prompt Snapshot"
       }
     },
     "/v1/jit/proactivity/reservations": {
       "post": {
         "deprecated": true,
-        "operationId": "reserve_jit_proactivity_v1_jit_proactivity_reservations_post",
+        "operationId": "retired_jit_proactivity_reservation_v1_jit_proactivity_reservations_post",
         "parameters": [
           {
             "in": "header",
@@ -58147,85 +59144,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "additionalProperties": false,
-                "properties": {
-                  "account_generation": {
-                    "minimum": 0.0,
-                    "title": "Account Generation",
-                    "type": "integer"
-                  },
-                  "candidate_id": {
-                    "pattern": "^[0-9a-f]{64}$",
-                    "title": "Candidate Id",
-                    "type": "string"
-                  },
-                  "device_id": {
-                    "pattern": "^[0-9a-f]{64}$",
-                    "title": "Device Id",
-                    "type": "string"
-                  },
-                  "event_id": {
-                    "pattern": "^[0-9a-f]{64}$",
-                    "title": "Event Id",
-                    "type": "string"
-                  },
-                  "operation": {
-                    "enum": [
-                      "planned_notification",
-                      "ambient_notification",
-                      "nano_triage",
-                      "full_turn"
-                    ],
-                    "title": "Operation",
-                    "type": "string"
-                  },
-                  "parent_event_id": {
-                    "anyOf": [
-                      {
-                        "pattern": "^[0-9a-f]{64}$",
-                        "type": "string"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ],
-                    "title": "Parent Event Id"
-                  },
-                  "trigger_memory_id": {
-                    "anyOf": [
-                      {
-                        "maxLength": 256,
-                        "minLength": 1,
-                        "pattern": "^[^/]+$",
-                        "type": "string"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ],
-                    "title": "Trigger Memory Id"
-                  },
-                  "trigger_revision": {
-                    "anyOf": [
-                      {
-                        "minimum": 1.0,
-                        "type": "integer"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ],
-                    "title": "Trigger Revision"
-                  }
-                },
-                "required": [
-                  "event_id",
-                  "candidate_id",
-                  "operation",
-                  "account_generation",
-                  "device_id"
-                ],
-                "title": "JITProactivityReservationRequest",
+                "additionalProperties": true,
                 "type": "object"
               }
             }
@@ -58233,151 +59152,6 @@
           "required": true
         },
         "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "additionalProperties": false,
-                  "properties": {
-                    "receipt": {
-                      "additionalProperties": false,
-                      "properties": {
-                        "account_generation": {
-                          "minimum": 0.0,
-                          "title": "Account Generation",
-                          "type": "integer"
-                        },
-                        "budget_day": {
-                          "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
-                          "title": "Budget Day",
-                          "type": "string"
-                        },
-                        "budget_timezone": {
-                          "default": "UTC",
-                          "maxLength": 64,
-                          "minLength": 1,
-                          "title": "Budget Timezone",
-                          "type": "string"
-                        },
-                        "candidate_id": {
-                          "title": "Candidate Id",
-                          "type": "string"
-                        },
-                        "created_at": {
-                          "format": "date-time",
-                          "title": "Created At",
-                          "type": "string"
-                        },
-                        "device_id": {
-                          "title": "Device Id",
-                          "type": "string"
-                        },
-                        "event_id": {
-                          "title": "Event Id",
-                          "type": "string"
-                        },
-                        "feedback_id": {
-                          "anyOf": [
-                            {
-                              "type": "string"
-                            },
-                            {
-                              "type": "null"
-                            }
-                          ],
-                          "title": "Feedback Id"
-                        },
-                        "operation": {
-                          "enum": [
-                            "planned_notification",
-                            "ambient_notification",
-                            "nano_triage",
-                            "full_turn"
-                          ],
-                          "title": "Operation",
-                          "type": "string"
-                        },
-                        "parent_event_id": {
-                          "anyOf": [
-                            {
-                              "pattern": "^[0-9a-f]{64}$",
-                              "type": "string"
-                            },
-                            {
-                              "type": "null"
-                            }
-                          ],
-                          "title": "Parent Event Id"
-                        },
-                        "request_hash": {
-                          "pattern": "^[0-9a-f]{64}$",
-                          "title": "Request Hash",
-                          "type": "string"
-                        },
-                        "schema_version": {
-                          "const": "jit_proactivity_event.v1",
-                          "default": "jit_proactivity_event.v1",
-                          "title": "Schema Version",
-                          "type": "string"
-                        },
-                        "trigger_memory_id": {
-                          "anyOf": [
-                            {
-                              "type": "string"
-                            },
-                            {
-                              "type": "null"
-                            }
-                          ],
-                          "title": "Trigger Memory Id"
-                        },
-                        "trigger_revision": {
-                          "anyOf": [
-                            {
-                              "minimum": 1.0,
-                              "type": "integer"
-                            },
-                            {
-                              "type": "null"
-                            }
-                          ],
-                          "title": "Trigger Revision"
-                        },
-                        "uid": {
-                          "title": "Uid",
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "uid",
-                        "event_id",
-                        "candidate_id",
-                        "operation",
-                        "account_generation",
-                        "budget_day",
-                        "device_id",
-                        "created_at",
-                        "request_hash"
-                      ],
-                      "title": "JITProactivityEventReceipt",
-                      "type": "object"
-                    },
-                    "reserved": {
-                      "title": "Reserved",
-                      "type": "boolean"
-                    }
-                  },
-                  "required": [
-                    "reserved",
-                    "receipt"
-                  ],
-                  "title": "JITProactivityReservationEnvelope",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Historical success schema only. This retired endpoint always returns 410."
-          },
           "401": {
             "$ref": "#/components/responses/Error401"
           },
@@ -58393,47 +59167,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "properties": {
-                    "detail": {
-                      "items": {
-                        "properties": {
-                          "loc": {
-                            "items": {
-                              "anyOf": [
-                                {
-                                  "type": "string"
-                                },
-                                {
-                                  "type": "integer"
-                                }
-                              ]
-                            },
-                            "title": "Location",
-                            "type": "array"
-                          },
-                          "msg": {
-                            "title": "Message",
-                            "type": "string"
-                          },
-                          "type": {
-                            "title": "Error Type",
-                            "type": "string"
-                          }
-                        },
-                        "required": [
-                          "loc",
-                          "msg",
-                          "type"
-                        ],
-                        "title": "ValidationError",
-                        "type": "object"
-                      },
-                      "title": "Detail",
-                      "type": "array"
-                    }
-                  },
-                  "title": "HTTPValidationError",
-                  "type": "object"
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             },
@@ -58445,12 +59179,13 @@
             "firebaseBearer": []
           }
         ],
-        "summary": "Reserve Jit Proactivity"
+        "summary": "Retired Jit Proactivity Reservation"
       }
     },
     "/v1/jit/rollout-decision": {
       "get": {
-        "operationId": "get_jit_rollout_decision_v1_jit_rollout_decision_get",
+        "deprecated": true,
+        "operationId": "retired_jit_rollout_decision_v1_jit_rollout_decision_get",
         "parameters": [
           {
             "in": "header",
@@ -58490,18 +59225,16 @@
           }
         ],
         "responses": {
-          "200": {
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "410": {
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/JITRolloutDecisionEnvelope"
-                }
+                "schema": {}
               }
             },
             "description": "Successful Response"
-          },
-          "401": {
-            "$ref": "#/components/responses/Error401"
           },
           "422": {
             "content": {
@@ -58519,13 +59252,13 @@
             "firebaseBearer": []
           }
         ],
-        "summary": "Get Jit Rollout Decision"
+        "summary": "Retired Jit Rollout Decision"
       }
     },
     "/v1/jit/trigger-feedback": {
       "post": {
         "deprecated": true,
-        "operationId": "post_jit_trigger_feedback_v1_jit_trigger_feedback_post",
+        "operationId": "retired_jit_trigger_feedback_v1_jit_trigger_feedback_post",
         "parameters": [
           {
             "in": "header",
@@ -58568,74 +59301,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "additionalProperties": false,
-                "properties": {
-                  "account_generation": {
-                    "minimum": 0.0,
-                    "title": "Account Generation",
-                    "type": "integer"
-                  },
-                  "action": {
-                    "enum": [
-                      "useful",
-                      "false_positive",
-                      "snooze",
-                      "disable",
-                      "missed_or_late"
-                    ],
-                    "title": "Action",
-                    "type": "string"
-                  },
-                  "event_id": {
-                    "pattern": "^[0-9a-f]{64}$",
-                    "title": "Event Id",
-                    "type": "string"
-                  },
-                  "feedback_id": {
-                    "pattern": "^[0-9a-f]{64}$",
-                    "title": "Feedback Id",
-                    "type": "string"
-                  },
-                  "recorded_at": {
-                    "format": "date-time",
-                    "title": "Recorded At",
-                    "type": "string"
-                  },
-                  "snoozed_until": {
-                    "anyOf": [
-                      {
-                        "format": "date-time",
-                        "type": "string"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ],
-                    "title": "Snoozed Until"
-                  },
-                  "trigger_memory_id": {
-                    "maxLength": 256,
-                    "minLength": 1,
-                    "pattern": "^[^/]+$",
-                    "title": "Trigger Memory Id",
-                    "type": "string"
-                  },
-                  "trigger_revision": {
-                    "minimum": 1.0,
-                    "title": "Trigger Revision",
-                    "type": "integer"
-                  }
-                },
-                "required": [
-                  "feedback_id",
-                  "event_id",
-                  "trigger_memory_id",
-                  "account_generation",
-                  "trigger_revision",
-                  "action",
-                  "recorded_at"
-                ],
-                "title": "JITTriggerFeedbackRequest",
+                "additionalProperties": true,
                 "type": "object"
               }
             }
@@ -58643,141 +59309,6 @@
           "required": true
         },
         "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "additionalProperties": false,
-                  "properties": {
-                    "applied": {
-                      "title": "Applied",
-                      "type": "boolean"
-                    },
-                    "receipt": {
-                      "additionalProperties": false,
-                      "properties": {
-                        "account_generation": {
-                          "minimum": 0.0,
-                          "title": "Account Generation",
-                          "type": "integer"
-                        },
-                        "action": {
-                          "enum": [
-                            "useful",
-                            "false_positive",
-                            "snooze",
-                            "disable",
-                            "missed_or_late"
-                          ],
-                          "title": "Action",
-                          "type": "string"
-                        },
-                        "applied_trigger_revision": {
-                          "anyOf": [
-                            {
-                              "minimum": 1.0,
-                              "type": "integer"
-                            },
-                            {
-                              "type": "null"
-                            }
-                          ],
-                          "title": "Applied Trigger Revision"
-                        },
-                        "event_id": {
-                          "pattern": "^[0-9a-f]{64}$",
-                          "title": "Event Id",
-                          "type": "string"
-                        },
-                        "expected_trigger_revision": {
-                          "minimum": 1.0,
-                          "title": "Expected Trigger Revision",
-                          "type": "integer"
-                        },
-                        "feedback_id": {
-                          "pattern": "^[0-9a-f]{64}$",
-                          "title": "Feedback Id",
-                          "type": "string"
-                        },
-                        "recorded_at": {
-                          "format": "date-time",
-                          "title": "Recorded At",
-                          "type": "string"
-                        },
-                        "request_hash": {
-                          "pattern": "^[0-9a-f]{64}$",
-                          "title": "Request Hash",
-                          "type": "string"
-                        },
-                        "schema_version": {
-                          "const": "jit_trigger_feedback.v1",
-                          "default": "jit_trigger_feedback.v1",
-                          "title": "Schema Version",
-                          "type": "string"
-                        },
-                        "snoozed_until": {
-                          "anyOf": [
-                            {
-                              "format": "date-time",
-                              "type": "string"
-                            },
-                            {
-                              "type": "null"
-                            }
-                          ],
-                          "title": "Snoozed Until"
-                        },
-                        "trigger_memory_id": {
-                          "title": "Trigger Memory Id",
-                          "type": "string"
-                        },
-                        "uid": {
-                          "title": "Uid",
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "uid",
-                        "feedback_id",
-                        "event_id",
-                        "trigger_memory_id",
-                        "account_generation",
-                        "expected_trigger_revision",
-                        "action",
-                        "recorded_at",
-                        "request_hash"
-                      ],
-                      "title": "JITTriggerFeedbackReceipt",
-                      "type": "object"
-                    },
-                    "trigger_memory_id": {
-                      "title": "Trigger Memory Id",
-                      "type": "string"
-                    },
-                    "trigger_revision": {
-                      "minimum": 1.0,
-                      "title": "Trigger Revision",
-                      "type": "integer"
-                    },
-                    "trigger_status": {
-                      "title": "Trigger Status",
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "applied",
-                    "trigger_memory_id",
-                    "trigger_revision",
-                    "trigger_status",
-                    "receipt"
-                  ],
-                  "title": "JITTriggerFeedbackEnvelope",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Historical success schema only. This retired endpoint always returns 410."
-          },
           "401": {
             "$ref": "#/components/responses/Error401"
           },
@@ -58793,47 +59324,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "properties": {
-                    "detail": {
-                      "items": {
-                        "properties": {
-                          "loc": {
-                            "items": {
-                              "anyOf": [
-                                {
-                                  "type": "string"
-                                },
-                                {
-                                  "type": "integer"
-                                }
-                              ]
-                            },
-                            "title": "Location",
-                            "type": "array"
-                          },
-                          "msg": {
-                            "title": "Message",
-                            "type": "string"
-                          },
-                          "type": {
-                            "title": "Error Type",
-                            "type": "string"
-                          }
-                        },
-                        "required": [
-                          "loc",
-                          "msg",
-                          "type"
-                        ],
-                        "title": "ValidationError",
-                        "type": "object"
-                      },
-                      "title": "Detail",
-                      "type": "array"
-                    }
-                  },
-                  "title": "HTTPValidationError",
-                  "type": "object"
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             },
@@ -58845,13 +59336,13 @@
             "firebaseBearer": []
           }
         ],
-        "summary": "Post Jit Trigger Feedback"
+        "summary": "Retired Jit Trigger Feedback"
       }
     },
     "/v1/jit/trigger-snapshot": {
       "get": {
-        "description": "Retired proactivity surface; preserve the disabled client envelope.",
-        "operationId": "get_jit_trigger_snapshot_v1_jit_trigger_snapshot_get",
+        "deprecated": true,
+        "operationId": "retired_jit_trigger_snapshot_v1_jit_trigger_snapshot_get",
         "parameters": [
           {
             "in": "header",
@@ -58891,18 +59382,16 @@
           }
         ],
         "responses": {
-          "200": {
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "410": {
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/JITTriggerSnapshotEnvelope"
-                }
+                "schema": {}
               }
             },
             "description": "Successful Response"
-          },
-          "401": {
-            "$ref": "#/components/responses/Error401"
           },
           "422": {
             "content": {
@@ -58920,7 +59409,7 @@
             "firebaseBearer": []
           }
         ],
-        "summary": "Get Jit Trigger Snapshot"
+        "summary": "Retired Jit Trigger Snapshot"
       }
     },
     "/v1/knowledge-graph": {
@@ -63323,6 +63812,83 @@
           }
         ],
         "summary": "Save Paypal Payment Details"
+      }
+    },
+    "/v1/pending-work": {
+      "get": {
+        "operationId": "pending_work_v1_pending_work_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PendingWorkSnapshot"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Pending Work",
+        "tags": [
+          "processing"
+        ]
       }
     },
     "/v1/phone/numbers": {
@@ -69449,6 +70015,94 @@
         "summary": "Put Budget Choice"
       }
     },
+    "/v1/users/client-state": {
+      "post": {
+        "description": "Explicit expiring human-surface intent; no user-document lookup.",
+        "operationId": "report_surface_state_v1_users_client_state_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SurfaceStateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserStatusResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Report Surface State",
+        "tags": [
+          "users"
+        ]
+      }
+    },
     "/v1/users/daily-summaries": {
       "get": {
         "description": "Get list of daily summaries for the authenticated user.\nReturns summaries in reverse chronological order.",
@@ -74361,6 +75015,82 @@
       }
     },
     "/v1/users/preferences/app": {
+      "delete": {
+        "description": "Clears the user's preferred app: future processing uses Omi's own summary. Idempotent.",
+        "operationId": "clear_preferred_app_for_user_v1_users_preferences_app_delete",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserStatusResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Clear Preferred App For User",
+        "tags": [
+          "v1"
+        ]
+      },
       "put": {
         "description": "Sets the user's preferred app for future processing.",
         "operationId": "set_preferred_app_for_user_v1_users_preferences_app_put",
@@ -74605,6 +75335,94 @@
           }
         ],
         "summary": "Set Private Cloud Sync",
+        "tags": [
+          "v1"
+        ]
+      }
+    },
+    "/v1/users/processing-backlog/process": {
+      "post": {
+        "operationId": "process_waiting_recordings_v1_users_processing_backlog_process_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 8,
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProcessingBacklog"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Process Waiting Recordings",
         "tags": [
           "v1"
         ]
@@ -80144,6 +80962,38 @@
           },
           {
             "in": "header",
+            "name": "X-Omi-Firmware-Version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Omi-Firmware-Version"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Omi-Device-Model",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Omi-Device-Model"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-Omi-Conversation-Geolocation",
             "required": false,
             "schema": {
@@ -80241,6 +81091,16 @@
             "schema": {
               "title": "Job Id",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "surface_open",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Surface Open",
+              "type": "boolean"
             }
           },
           {
@@ -82150,8 +83010,8 @@
     },
     "/v3/memories/{memory_id}/use": {
       "post": {
-        "description": "Record an owner use decision without changing truth or currency.\n\nThe route is additive and only available when the belief-model beta flag\nis enabled.  The canonical mutation adapter supplies authenticated owner,\naccount-generation, source, deletion, and operation-journal fences.",
-        "operationId": "use_memory_v3_memories__memory_id__use_post",
+        "deprecated": true,
+        "operationId": "retired_memory_use_v3_memories__memory_id__use_post",
         "parameters": [
           {
             "in": "path",
@@ -82203,25 +83063,24 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/MemoryUseRequest"
+                "additionalProperties": true,
+                "type": "object"
               }
             }
           },
           "required": true
         },
         "responses": {
-          "200": {
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "410": {
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/MemoryUseResponse"
-                }
+                "schema": {}
               }
             },
             "description": "Successful Response"
-          },
-          "401": {
-            "$ref": "#/components/responses/Error401"
           },
           "422": {
             "content": {
@@ -82239,10 +83098,7 @@
             "firebaseBearer": []
           }
         ],
-        "summary": "Use Memory",
-        "tags": [
-          "memories"
-        ]
+        "summary": "Retired Memory Use"
       }
     },
     "/v3/memories/{memory_id}/visibility": {

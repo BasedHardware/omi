@@ -1,0 +1,39 @@
+enabled: true
+image:
+  repository: gcr.io/based-hardware/batch-pipeline-worker
+  # gcp_diarizer.yml builds the prod image and supplies its immutable digest.
+  digest: ""
+serviceAccountName: batch-pipeline-worker
+gcpServiceAccount: batch-pipeline-worker@based-hardware.iam.gserviceaccount.com
+bucket: based-hardware-batch-pipeline-staging
+dataPlaneProject: based-hardware
+stage: prod
+namespace: batch_pipeline_prod
+secretName: prod-omi-backend-secrets
+# Fixed floor, no HPA. Each replica requests the one L4 on its own
+# g2-standard-8 node (pool cap 4). Leases, ordered merge and privacy
+# fences are durable per segment/owner; see two-worker emulator test.
+replicaCount: 2
+autoscaling:
+  enabled: false
+nodeSelector:
+  cloud.google.com/gke-nodepool: batch-pipeline-pool
+  service: batch-pipeline
+  env: prod
+tolerations:
+  - key: omi.ai/batch-pipeline
+    operator: Equal
+    value: "true"
+    effect: NoSchedule
+  - key: nvidia.com/gpu
+    operator: Equal
+    value: present
+    effect: NoSchedule
+worker:
+  apiUrl: https://backend-sync-hhibjajaja-uc.a.run.app
+  audience: https://backend-sync-hhibjajaja-uc.a.run.app
+  emptyAsrRecoveryEnabled: true
+  emptyAsrDispositionEnabled: true
+  headPriorityEnabled: true
+  workerSilenceDispositionEnabled: true
+  correctnessMetricsEnabled: true

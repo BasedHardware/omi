@@ -15,7 +15,10 @@ from dataclasses import dataclass
 from typing import Literal, TypedDict
 
 from utils.metrics import OMI_FALLBACK_TOTAL
+from utils.observability.demand_cohort import record_metric
+from utils.observability.demand_cohort import DEMAND_COHORTS, FAILURE_DETAIL, current_demand
 from utils.observability.routing_cohort import current_routing_cohort
+from utils.stt.failure_diagnostics import CONNECTION_LOSS_CAUSES
 from utils.stt.live_reason import LIVE_STT_REASONS
 
 logger = logging.getLogger(__name__)
@@ -36,6 +39,13 @@ class ReplayLagDiagnostics:
     empty_streak: int
     cut_pending: bool
     pacing_wait: bool
+    # Non-window (Soniox/Modulate) replacement legs have no POST state; they
+    # report why emitted text did not reach their VAD speech instead.
+    leg: Literal['window', 'nonwindow'] = 'window'
+    speech_unemitted_seconds: float = -1.0
+    text_segments: int = 0
+    placed_text_segments: int = 0
+    provider_output_pending: bool | None = None
 
     def log_fields(self) -> str:
         # Bounds apply to log values, never metric labels. -1 means no text yet.
@@ -45,7 +55,7 @@ class ReplayLagDiagnostics:
         def count(value: int) -> int:
             return min(1000000, max(0, value))
 
-        return (
+        fields = (
             f' un_emitted_capture_seconds={seconds(self.capture_seconds):.3f}'
             f' vad_admitted_seconds={seconds(self.admitted_seconds):.3f}'
             f' seconds_since_text={seconds(self.seconds_since_text):.3f}'
@@ -55,6 +65,16 @@ class ReplayLagDiagnostics:
             f' empty_streak={count(self.empty_streak)}'
             f' cut_pending={int(bool(self.cut_pending))}'
             f' pacing_wait={int(bool(self.pacing_wait))}'
+        )
+        if self.leg != 'nonwindow':
+            return fields
+        pending = -1 if self.provider_output_pending is None else int(self.provider_output_pending)
+        return (
+            fields + ' leg=nonwindow'
+            f' speech_unemitted_seconds={seconds(self.speech_unemitted_seconds):.3f}'
+            f' text_segments={count(self.text_segments)}'
+            f' placed_text_segments={count(self.placed_text_segments)}'
+            f' provider_output_pending={pending}'
         )
 
 
@@ -139,9 +159,20 @@ ALLOWED_REASONS = LIVE_STT_REASONS | frozenset(
         'provider_5xx',
         'provider_429',
         'enqueue_failed',
+        'marker_failed',
+        'enqueue_uncertain',
+        'marker_timeout',
+        'acquire_unsettled',
+        'marker_clear_failed',
+        'owner_write_failed',
+        'pre_lock_expiry',
+        'preamble_timeout',
+        'deferrals_exhausted',
         'config_incomplete',
         'circuit_open',
         'last_resort',
+        'session_excluded',
+        'recovery_budget',
         'connection_lost',
         'modulate_serve_error',
         'capability_mismatch',
@@ -163,6 +194,7 @@ ALLOWED_REASONS = LIVE_STT_REASONS | frozenset(
         'authorization_unavailable',
         'unmigrated_principal',
         'document_size_limit',
+        'kept_over_80pct',
         'other',
         'none',
     }
@@ -170,7 +202,9 @@ ALLOWED_REASONS = LIVE_STT_REASONS | frozenset(
 
 # Diagnostic detail stays in the log; metric dimensions stay fixed and live
 # STT reasons share the bounded vocabulary used by cost health.
-ALLOWED_CAPACITY_SUBTYPES = frozenset({'buffer_cap', 'span_cap', 'admission', 'replay_ring_cap', 'queue_timeout'})
+ALLOWED_CAPACITY_SUBTYPES = frozenset({'buffer_cap', 'span_cap', 'admission', 'queue_timeout'})
+# Bounded ramp-watch reasons with their own failure-detail series.
+FAILURE_DETAIL_REASONS = frozenset({'first_text_deadline', 'capacity_full', 'replay_ring_overflow', 'gate_unavailable'})
 ALLOWED_STT_FAILURE_SUBTYPES = frozenset(
     {
         'initialization_failed',
@@ -234,6 +268,8 @@ def record_fallback(
     replay_diagnostics: ReplayLagDiagnostics | None = None,
     first_text_diagnostics: FirstTextDeadlineDiagnostics | None = None,
     failure_subtype: str | None = None,
+    demand_cohort: str | None = None,
+    connection_cause: str | None = None,
 ) -> None:
     """Increment ``omi_fallback_total`` and emit a matching warning log.
 
@@ -257,6 +293,35 @@ def record_fallback(
     except Exception:
         pass
 
+    try:
+        demand = current_demand.get()
+        if component_label in {'stt_selection', 'stt_live_session'} and (
+            demand is not None or demand_cohort is not None
+        ):
+            if demand is not None and outcome_label == 'exhausted':
+                demand.exhausted = True
+            # An explicit cohort (the gate runs in a spawned task) beats the context var.
+            detail_cohort = (
+                demand_cohort
+                if demand_cohort in DEMAND_COHORTS
+                else (demand.cohort if demand is not None else 'ineligible')
+            )
+            record_metric(
+                FAILURE_DETAIL,
+                {
+                    'demand_cohort': detail_cohort,
+                    'reason': reason_label if reason_label in FAILURE_DETAIL_REASONS else 'other',
+                    'capacity_subtype': (
+                        (capacity_subtype if capacity_subtype in ALLOWED_CAPACITY_SUBTYPES else 'unknown')
+                        if reason_label == 'capacity_full'
+                        else 'none'
+                    ),
+                    'outcome': outcome_label,
+                },
+                1,
+            )
+    except Exception:
+        pass
     cohort = current_routing_cohort.get()
     if cohort is not None and component_label in {'stt_selection', 'stt_live_session'} and outcome_label == 'exhausted':
         cohort.exhausted = True
@@ -266,13 +331,10 @@ def record_fallback(
         fields = (FALLBACK_EVENT, component_label, from_label, to_label, reason_label, outcome_label)
         if reason_label == 'capacity_full':
             subtype = capacity_subtype if capacity_subtype in ALLOWED_CAPACITY_SUBTYPES else 'unknown'
-            detail = (
-                replay_diagnostics.log_fields()
-                if subtype == 'replay_ring_cap' and replay_diagnostics is not None
-                else ''
-            )
+            emit_log.warning('%s component=%s from=%s to=%s reason=%s outcome=%s subtype=%s', *fields, subtype)
+        elif reason_label == 'replay_ring_overflow' and replay_diagnostics is not None:
             emit_log.warning(
-                '%s component=%s from=%s to=%s reason=%s outcome=%s subtype=%s%s', *fields, subtype, detail
+                '%s component=%s from=%s to=%s reason=%s outcome=%s%s', *fields, replay_diagnostics.log_fields()
             )
         elif reason_label == 'first_text_deadline' and first_text_diagnostics is not None:
             emit_log.warning(
@@ -283,6 +345,10 @@ def record_fallback(
         elif reason_label == 'other' and failure_subtype is not None:
             subtype = failure_subtype if failure_subtype in ALLOWED_STT_FAILURE_SUBTYPES else 'unknown'
             emit_log.warning('%s component=%s from=%s to=%s reason=%s outcome=%s subtype=%s', *fields, subtype)
+        elif reason_label == 'connection_lost' and connection_cause is not None:
+            # Log-only: the untyped connection_lost bucket gains its transport cause.
+            cause = connection_cause if connection_cause in CONNECTION_LOSS_CAUSES else 'other'
+            emit_log.warning('%s component=%s from=%s to=%s reason=%s outcome=%s cause=%s', *fields, cause)
         else:
             emit_log.warning('%s component=%s from=%s to=%s reason=%s outcome=%s', *fields)
     except Exception:
@@ -345,6 +411,16 @@ def initialize_live_stt_exhausted_children() -> None:
                 from_mode=provider,
                 to_mode='unavailable',
                 reason=reason,
+                outcome='exhausted',
+            )
+    # Undialed selection origins report their skip (live_chain.note_skip).
+    for skip in ('session_excluded', 'recovery_budget', 'circuit_open', 'policy', 'unconfigured'):
+        for provider in providers:
+            OMI_FALLBACK_TOTAL.labels(
+                component='stt_selection',
+                from_mode=provider,
+                to_mode='unavailable',
+                reason=skip,
                 outcome='exhausted',
             )
 

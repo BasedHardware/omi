@@ -18,6 +18,7 @@ import 'package:omi/services/capture/empty_recording_notice.dart';
 import 'package:omi/services/integrations/google_calendar_service.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/logger.dart';
+import 'package:omi/utils/off_ui_isolate.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/utils/wal_sync_upload.dart';
 
@@ -114,11 +115,14 @@ Future<({List<ServerConversation> items, bool ok, bool truncated})> getConversat
   var response = await makeApiCall(url: url, headers: {}, method: 'GET', body: '');
   if (response == null) return (items: <ServerConversation>[], ok: false, truncated: false);
   if (response.statusCode == 200) {
-    // decode body bytes to utf8 string and then parse json so as to avoid utf8 char issues
-    var body = utf8.decode(response.bodyBytes);
-    var memories = (jsonDecode(body) as List<dynamic>)
-        .map((conversation) => ServerConversation.fromJson(conversation as Map<String, dynamic>))
-        .toList();
+    final bodyBytes = response.bodyBytes;
+    // Unlocked rows carry full transcripts, so a page can be megabytes; parse
+    // it off the UI isolate (this runs on resume, right as the user scrolls).
+    final memories = await offUiIsolate(
+        () => parseConversationListBody(jsonDecode(utf8.decode(bodyBytes)) as List<dynamic>),
+        size: bodyBytes.length,
+        threshold: conversationListBackgroundParseBytes,
+        debugName: 'conversation_list_parse');
     Logger.debug('getConversations length: ${memories.length}');
     return (items: memories, ok: true, truncated: isOmiListTruncated(response));
   }
@@ -126,29 +130,140 @@ Future<({List<ServerConversation> items, bool ok, bool truncated})> getConversat
   return (items: <ServerConversation>[], ok: false, truncated: false);
 }
 
+/// Response bodies at or above this size are parsed on a background isolate.
+@visibleForTesting
+int conversationListBackgroundParseBytes = 64 * 1024;
+
+/// Maps a decoded list body (decode the UTF-8 bytes first so multi-byte
+/// characters survive) into conversations.
+List<ServerConversation> parseConversationListBody(List<dynamic> decoded) {
+  return decoded.map((conversation) => ServerConversation.fromJson(conversation as Map<String, dynamic>)).toList();
+}
+
 bool hasSpeakerReceiptSummaryCapability(Map<String, String> headers) => headers['x-omi-speaker-receipt-summary'] == '1';
 
-Future<ServerConversation?> reProcessConversationServer(
+/// What POST /v1/conversations/{id}/reprocess did. Never null: the detail page needs to tell "the
+/// server is already working on it" (409) and "too many regenerations" (429) from a plain failure.
+sealed class ReprocessResult {
+  const ReprocessResult();
+
+  /// The reprocessed conversation, only on [ReprocessSuccess].
+  ServerConversation? get conversation => null;
+
+  /// Adapts a call that only knows "a conversation or nothing" (older seams, list-row retries).
+  static ReprocessResult fromConversation(ServerConversation? conversation) =>
+      conversation == null ? const ReprocessFailed() : ReprocessSuccess(conversation);
+}
+
+final class ReprocessSuccess extends ReprocessResult {
+  const ReprocessSuccess(this.conversation);
+
+  @override
+  final ServerConversation conversation;
+}
+
+/// Another writer holds the conversation's processing claim (HTTP 409
+/// `conversation_processing_in_progress`).
+final class ReprocessBusy extends ReprocessResult {
+  const ReprocessBusy();
+}
+
+/// The hourly reprocess limit (HTTP 429). [retryAfter] when the server said how long.
+final class ReprocessRateLimited extends ReprocessResult {
+  const ReprocessRateLimited({this.retryAfter});
+
+  final Duration? retryAfter;
+}
+
+/// Anything else: transport failure, 5xx (502 `app_result_failed` when the selected template
+/// returned nothing), an app the server will not run, an unacknowledged speaker receipt, an
+/// undecodable body.
+final class ReprocessFailed extends ReprocessResult {
+  const ReprocessFailed({this.statusCode});
+
+  final int? statusCode;
+}
+
+/// A reprocess runs the whole summary pipeline and can take minutes. It is not idempotent, so the
+/// pool must never retry it (a timeout or 5xx retry starts a second, duplicate reprocess).
+const Duration reprocessRequestTimeout = Duration(seconds: 180);
+
+/// The reprocess query: `app_id` for a template, `source=omi` for Omi's own notes ([forceOmi]),
+/// nothing for the legacy "regenerate" (Omi notes plus the user's server preferred template).
+/// A backend that predates `source` ignores the unknown parameter.
+@visibleForTesting
+String reprocessQuery({String? appId, bool forceOmi = false}) {
+  if (appId != null) return '?app_id=${Uri.encodeQueryComponent(appId)}';
+  if (forceOmi) return '?source=omi';
+  return '';
+}
+
+Future<ReprocessResult> reProcessConversationServer(
   String conversationId, {
   String? appId,
   bool requireSpeakerReceipt = false,
+  bool forceOmi = false,
 }) async {
-  var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/conversations/$conversationId/reprocess${appId != null ? '?app_id=$appId' : ''}',
+  final route = '${Env.apiBaseUrl}v1/conversations/$conversationId/reprocess';
+  final response = await makeApiCall(
+    url: '$route${reprocessQuery(appId: appId, forceOmi: forceOmi)}',
     headers: {},
     method: 'POST',
     body: '',
+    timeout: reprocessRequestTimeout,
+    retries: 0,
   );
-  if (response == null) return null;
-  Logger.debug('reProcessConversationServer: ${response.body}');
-  if (response.statusCode == 200) {
-    // A pre-fix backend can return 200 with a summary made from stale speaker
-    // labels. Keep the detail page's retry action until the receipt-aware
-    // processor explicitly acknowledges its summary path.
-    if (requireSpeakerReceipt && !hasSpeakerReceiptSummaryCapability(response.headers)) return null;
-    return ServerConversation.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+  if (response == null) return const ReprocessFailed();
+  Logger.debug('reProcessConversationServer: ${response.statusCode}');
+  return reprocessResultFromResponse(response, requireSpeakerReceipt: requireSpeakerReceipt);
+}
+
+/// Maps a reprocess response to its [ReprocessResult].
+@visibleForTesting
+ReprocessResult reprocessResultFromResponse(
+  http.Response response, {
+  bool requireSpeakerReceipt = false,
+  DateTime Function() now = DateTime.now,
+}) {
+  switch (response.statusCode) {
+    case 200:
+      // A pre-fix backend can return 200 with a summary made from stale speaker
+      // labels. Keep the detail page's retry action until the receipt-aware
+      // processor explicitly acknowledges its summary path.
+      if (requireSpeakerReceipt && !hasSpeakerReceiptSummaryCapability(response.headers)) {
+        return const ReprocessFailed(statusCode: 200);
+      }
+      try {
+        return ReprocessSuccess(ServerConversation.fromJson(jsonDecode(response.body) as Map<String, dynamic>));
+      } catch (e) {
+        Logger.debug('reProcessConversationServer decode failed: ${e.runtimeType}');
+        return const ReprocessFailed(statusCode: 200);
+      }
+    case 409:
+      // 409 is busy only with the structured `conversation_processing_in_progress` detail. The same
+      // route answers 409 with a string detail when the selected app is disabled or not enabled:
+      // that is the template failing, not the conversation being busy.
+      return _detailCode(response.body) == 'conversation_processing_in_progress'
+          ? const ReprocessBusy()
+          : const ReprocessFailed(statusCode: 409);
+    case 429:
+      return ReprocessRateLimited(retryAfter: parseApiRetryAfter(response, now));
+    default:
+      return ReprocessFailed(statusCode: response.statusCode);
   }
-  return null;
+}
+
+/// The `detail.code` of an error body (`{"detail": {"code": ..., "message": ...}}`), if any.
+String? _detailCode(String body) {
+  try {
+    // omi-perf-allow: history-json-on-ui -- a small error body, never a conversation list
+    final decoded = jsonDecode(body);
+    final detail = decoded is Map ? decoded['detail'] : null;
+    final code = detail is Map ? detail['code'] : null;
+    return code is String ? code : null;
+  } catch (_) {
+    return null;
+  }
 }
 
 Future<bool> deleteConversationServer(String conversationId) async {
@@ -1150,7 +1265,9 @@ Future<ActionItemsResponse> getActionItems({
   }
 }
 
-Future<List<App>> getConversationSuggestedApps(String conversationId) async {
+/// The templates the server suggests for this conversation; null when the request failed (an
+/// empty list is a real "no suggestions").
+Future<List<App>?> getConversationSuggestedApps(String conversationId) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/conversations/$conversationId/suggested-apps',
     headers: {},
@@ -1158,15 +1275,18 @@ Future<List<App>> getConversationSuggestedApps(String conversationId) async {
     body: '',
   );
 
-  if (response == null) return [];
-  Logger.debug('getConversationSuggestedApps: ${response.body}');
-  if (response.statusCode == 200) {
+  if (response == null) return null;
+  Logger.debug('getConversationSuggestedApps: ${response.statusCode}');
+  if (response.statusCode != 200) return null;
+  try {
     final data = apps_wire.GeneratedConversationSuggestedAppsResponse.fromJson(
       jsonDecode(response.body) as Map<String, dynamic>,
     );
     return data.suggestedApps.map(App.fromGeneratedDetail).toList();
+  } catch (e) {
+    Logger.debug('getConversationSuggestedApps decode failed: ${e.runtimeType}');
+    return null;
   }
-  return [];
 }
 
 // *********************************

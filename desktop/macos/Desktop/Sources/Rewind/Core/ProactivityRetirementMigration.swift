@@ -6,8 +6,7 @@ enum ProactivityRetirementMigration {
   static let retiredTables = [
     "proactive_deliveries", "proactive_candidates", "bucket_facts", "bucket_entries",
     "bucket_versions", "bucket_workstreams", "context_visits", "context_buckets",
-    "context_bucket_migration_meta", "jit_trigger_mirror", "jit_trigger_snapshot_receipts",
-    "jit_trigger_wakeup_receipts", "jit_ambient_context_state", "jit_nano_billing_observations",
+    "context_bucket_migration_meta",
   ]
 
   static func registerMigration(on migrator: inout DatabaseMigrator) {

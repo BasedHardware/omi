@@ -17,6 +17,7 @@ from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from tests.unit.test_sync_cloud_tasks import _load_sync_jobs, _seed_fenced_job
 from tests.unit.test_sync_cross_job_assignment import intake, conversations, chunk
 from tests.unit.test_sync_geolocation_enrichment import _build_pipeline_fakes
+from utils.stt.pre_recorded import postprocess_words
 from utils.sync import telemetry
 from utils.sync.capture import chunk_identity
 
@@ -31,6 +32,7 @@ def pipeline():
     fakes = _build_pipeline_fakes()
     lifecycle = AutoMockModule('utils.conversations.lifecycle')
     bridge = AutoMockModule('utils.sync.bridge')
+    final_pass = AutoMockModule('utils.conversations.final_pass_sync')
     bridge.finish_sync_bridges = lambda uid, cid: cid
     fakes.update(
         {
@@ -40,6 +42,7 @@ def pipeline():
             'utils.conversations.deterministic_minimum': deterministic_minimum,
             'utils.conversations.lifecycle': lifecycle,
             'utils.sync.bridge': bridge,
+            'utils.conversations.final_pass_sync': final_pass,
         }
     )
     with stub_modules(fakes):
@@ -47,6 +50,7 @@ def pipeline():
             'utils.sync.pipeline', Path(__file__).resolve().parents[2] / 'utils/sync/pipeline.py'
         )
         module.ingest_test_seam = lifecycle
+        module.final_pass_test_seam = final_pass
         module.real_bridge = real_bridge
         module.AudioSegment = AudioSegment
         module.get_timestamp_from_path = lambda path: float(Path(path).stem)
@@ -89,6 +93,48 @@ def test_vad_preserves_speech_origin_and_exports_nothing_for_silence(pipeline, t
     assert row['transcript_segments'][0]['start'] == 0
     assert row['id'] == chunk_identity('u', 'omi', None, False, 1700000020)
     assert outcome['outcome'].value == 'success'
+
+
+@pytest.mark.parametrize('recovered', [False, True])
+def test_late_first_word_stays_on_the_vad_file_clock(pipeline, monkeypatch, tmp_path, recovered):
+    """A cough 20 s before speech opens their shared VAD file (gaps under 120 s merge).
+
+    postprocess_words times lines from the first word. They must land where they were
+    spoken on the file clock that started_at and the stored audio use, and finished_at
+    and the merge lookup must end at the last word.
+    """
+    module, store = pipeline
+    original = tmp_path / '1700000000.wav'
+    module.AudioSegment.silent(duration=50000).export(original, format='wav')
+    module.vad_is_empty = lambda *a, **kw: [{'start': 20, 'end': 21}, {'start': 40, 'end': 45}]
+    paths = set()
+    module.retrieve_vad_segments(str(original), paths, [])
+    path = next(iter(paths))
+    assert Path(path).stem == '1700000020.0'
+    # Provider clocks are relative to the exported file: speech starts 20.5 s in.
+    words = [
+        {'timestamp': [20.5, 21.0], 'speaker': 'SPEAKER_00', 'text': 'Keep'},
+        {'timestamp': [21.0, 24.25], 'speaker': 'SPEAKER_00', 'text': 'this'},
+    ]
+    if recovered:
+        monkeypatch.setenv('SYNC_EMPTY_MULTILINGUAL_RECOVERY_ENABLED', 'true')
+        module.get_prerecorded_service = lambda language: ('parakeet', None, 'parakeet')
+        module.prerecorded = MagicMock(return_value=([], 'multi'))
+        recovery = MagicMock(return_value=(words, 'en', 25.0, [{'start': 20.5, 'end': 24.25}]))
+        monkeypatch.setattr(module.empty_recovery, 'recover', recovery)
+    else:
+        module.prerecorded = MagicMock(return_value=(words, 'en'))
+    module.postprocess_words = postprocess_words
+    module.get_closest_conversation_to_timestamps = MagicMock(return_value=None)
+    response = {'new_memories': set(), 'updated_memories': set()}
+    errors = []
+    assert module.process_segment(path, 'u', response, threading.Lock(), errors)
+    assert errors == []
+    row = conversations(store)[0]
+    assert row['started_at'].timestamp() == 1700000020
+    assert [(s['text'], s['start'], s['end']) for s in row['transcript_segments']] == [('Keep this', 20.5, 24.25)]
+    assert row['finished_at'].timestamp() == 1700000044.25
+    module.get_closest_conversation_to_timestamps.assert_called_once_with('u', 1700000020.0, 1700000044.25)
 
 
 def test_colliding_absolute_timestamps_from_distinct_sources_keep_both_segments(pipeline, tmp_path):
@@ -509,3 +555,136 @@ def test_persistence_errors_keep_audio_and_do_not_blame_stt(pipeline, caplog, er
     assert f'firestore_doc_kind={kind} ' in event
     assert 'private' not in event and '2026-10-03' not in event
     module.prerecorded.assert_called_once()
+
+
+@pytest.mark.parametrize('legacy_failure', [False, True])
+def test_sync_budget_refusal_retains_legacy_and_logs_only_uid_hash(pipeline, monkeypatch, caplog, legacy_failure):
+    import hashlib
+
+    module, store = pipeline
+    uid = 'synthetic-private-uid'
+    monkeypatch.setattr(module, 'sync_enabled_for', lambda _: True)
+    monkeypatch.setattr(module, '_download_audio_bytes', lambda _: b'synthetic')
+    monkeypatch.setattr(
+        module.final_pass_test_seam, 'run_sync_final_pass', lambda *a, **kw: (None, {'outcome': 'skipped_budget'})
+    )
+    legacy = MagicMock(side_effect=RuntimeError('synthetic') if legacy_failure else None)
+    monkeypatch.setattr(module, 'identify_speakers_for_segments', legacy)
+    response = {'new_memories': set(), 'updated_memories': set()}
+    with caplog.at_level(logging.INFO):
+        assert module.process_segment('1700000000.wav', uid, response, threading.Lock(), [])
+    legacy.assert_called_once()
+    assert conversations(store)[0]['transcript_segments'][0]['text'] == 'Keep the capture.'
+    events = [
+        r.message
+        for r in caplog.records
+        if 'event=sync_final_pass' in r.message or 'event=sync_speaker_id' in r.message
+    ]
+    assert len(events) == (2 if legacy_failure else 1)
+    digest = hashlib.sha256(('sync-final-pass:' + uid).encode()).hexdigest()
+    assert all(f'uid_hash={digest}' in event and uid not in event for event in events)
+    assert 'outcome=skipped_budget' in events[0]
+    assert 'lane=' in events[0] and 'duration_seconds=' in events[0]
+
+
+@pytest.mark.parametrize('result', ['silence', 'speech', 'empty', 'inspection_error'])
+def test_dark_empty_recovery_runs_through_real_legacy_assignment(pipeline, monkeypatch, result):
+    module, store = pipeline
+    monkeypatch.setenv('SYNC_EMPTY_MULTILINGUAL_RECOVERY_ENABLED', 'true')
+    module.get_prerecorded_service = lambda language: ('parakeet', None, 'parakeet')
+    module.prerecorded = MagicMock(return_value=([], 'multi'))
+    recovered = ([{'text': 'Synthetic speech', 'timestamp': [0, 3]}], 'vi', 3.0, [{'start': 0, 'end': 3}])
+    if result == 'silence':
+        recovered = ([], '', 3.0, [])
+    recovery = MagicMock(return_value=recovered)
+    if result == 'empty':
+        recovery.side_effect = module.TranscriptionFailure(
+            module.TranscriptionOutcome.EMPTY_UNEXPECTED, provider='modulate'
+        )
+    elif result == 'inspection_error':
+        recovery.side_effect = RuntimeError('inspection failed')
+    monkeypatch.setattr(module.empty_recovery, 'recover', recovery)
+    module.postprocess_words = lambda words, *a: (
+        [module.TranscriptSegment(text='Synthetic speech', start=0, end=3, is_user=False)] if words else []
+    )
+    errors, outcome = [], {}
+    success = module.process_segment(
+        '1700000000.wav',
+        'synthetic-owner',
+        {'new_memories': set(), 'updated_memories': set()},
+        threading.Lock(),
+        errors,
+        deferred_outcome=outcome,
+    )
+    assert module.prerecorded.call_count == 2
+    recovery.assert_called_once()
+    assert success == (result == 'speech')
+    assert len(conversations(store)) == int(result == 'speech')
+    if result in ('empty', 'inspection_error'):
+        assert errors and outcome['retryable'] and outcome['outcome'].value != 'expected_silence'
+    else:
+        assert not errors
+        assert outcome['outcome'].value == ('success' if result == 'speech' else 'expected_silence')
+
+
+def test_cached_multilingual_response_does_not_increment_submitted_audio(pipeline, monkeypatch):
+    module, _ = pipeline
+    module.stt_cap_dispatch_enabled = lambda uid, lane: True
+    module.sync_allowed = lambda uid, *, lane='sync': True
+    module.compute_sync_segment_id = lambda *args: 'stable-synthetic-segment'
+    module.dispatch_empty_recovery_once = lambda uid, sid, dispatch: (
+        [{'text': 'Synthetic', 'timestamp': [0, 3]}],
+        'vi',
+    )
+    module.modulate_prerecorded_from_bytes = MagicMock()
+    module.record_cap_audio = MagicMock()
+
+    def inspect_and_recover(path, *, transcribe, authorize, observe):
+        observe(3, [{'start': 0, 'end': 3}])
+        authorize()
+        words, language = transcribe(b'synthetic-canonical-wav')
+        return words, language, 3, [{'start': 0, 'end': 3}]
+
+    monkeypatch.setattr(module.empty_recovery, 'recover', inspect_and_recover)
+    assert module._recover_empty_segment('synthetic.wav', 'synthetic-owner', 'parakeet', 'fresh', None, None)
+    module.modulate_prerecorded_from_bytes.assert_not_called()
+    module.record_cap_audio.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    'spans,outcome', [([], 'silence'), ([{'start': 0, 'end': 3}], 'speech'), (None, 'inspection_error')]
+)
+def test_strict_vad_log_survives_failed_recovery_without_content(pipeline, monkeypatch, caplog, spans, outcome):
+    module, _ = pipeline
+    module.compute_sync_segment_id = lambda *args: 'synthetic-sealed-segment'
+
+    def inspect_then_fail(path, *, transcribe, authorize, observe):
+        observe(None if spans is None else 3, spans)
+        raise RuntimeError('synthetic recovery failure')
+
+    monkeypatch.setattr(module.empty_recovery, 'recover', inspect_then_fail)
+    with caplog.at_level('INFO'), pytest.raises(RuntimeError, match='synthetic recovery failure'):
+        module._recover_empty_segment('private-path.wav', 'private-owner', 'parakeet', 'fresh', None, None)
+    events = [record.message for record in caplog.records if 'event=sync_empty_strict_vad ' in record.message]
+    assert len(events) == 1
+    assert f'outcome={outcome} lane=fresh provider=parakeet segment_ref=synthetic-sealed-segment' in events[0]
+    assert 'private-owner' not in events[0] and 'private-path' not in events[0]
+
+
+@pytest.mark.parametrize(
+    'error', [ValueError('internal refresh'), TypeError('internal type'), RuntimeError('transient')]
+)
+def test_finalize_internal_failure_is_retryable_and_has_no_provider_label(pipeline, monkeypatch, tmp_path, error):
+    module, store = pipeline
+    path = tmp_path / '1700000000.wav'
+    module.AudioSegment.silent(duration=3000).export(path, format='wav')
+    monkeypatch.setattr(module, 'finish_sync_segment', MagicMock(side_effect=error))
+    response = {'new_memories': set(), 'updated_memories': set()}
+    errors, outcome = [], {}
+    assert module.process_segment(str(path), 'u', response, threading.Lock(), errors, deferred_outcome=outcome) is False
+    assert conversations(store)
+    assert errors == ['sync_finalize_failed']
+    assert outcome['outcome'].value == 'upstream_error'
+    assert outcome['retryable'] is True
+    assert outcome['provider'] == 'unknown' and outcome['model'] == 'unknown'
+    assert outcome['phase'] == 'finalize' and not outcome.get('provider_invalid_input')

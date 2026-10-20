@@ -458,8 +458,83 @@ would advance the anchor by less than one 6-second pace. Earlier windows keep
 their sentence boundary, and windows with enough progress still hold the last
 segment. This extends the forced cut already used for one unfinished segment.
 Fallback logs keep `reason=capacity_full` and add a bounded `subtype` of
-`buffer_cap`, `replay_ring_cap`, or `admission` (or `unknown`); the shared
-fallback metric gains no new label.
+`buffer_cap`, `admission`, or `queue_timeout` (or `unknown`); the shared
+fallback metric gains no new label. A capture replay ring that outgrows its
+90-second horizon before the leg emits is session-local replay lag, not
+provider capacity: it fails over with its own bounded reason
+`replay_ring_overflow` (formerly `capacity_full` subtype `replay_ring_cap`),
+so capacity alerts and dashboards do not count it, and it is censored from
+provider health like other session causes.
+
+A long-silence stranded flush is the last POST a quiet span selects. When its
+answer carries text whose TDT timestamps fall in the silence envelope added to
+the short fragment (dropped as `timestamp_beyond_window`), the leg settles that
+fragment like an answered-empty one: when nothing was emitted the POST anchor
+stays, its PCM remains context for the next window, and its replay copy ages
+out only at the natural ring horizon. When some text was placed, the existing
+beyond-window anchoring applies and the remainder is accounted the same way. Before 2026-10-19 the anchor waited for a repost that no job
+would select, so ~90 s of near-silence overflowed the ring into failover (prod
+signature `posts_since_anchor=1 empty_posts_since_anchor=0 cut_pending=1
+post_in_flight=0`). `omi_stt_window_stranded_flushes_total{outcome="settled_unplaced"}`
+counts these settlements. `PARAKEET_WINDOW_STRANDED_DRIFT_SETTLE_ENABLED`
+(default on; `false` is the kill switch) restores the held anchor.
+
+Non-window replacement legs (Soniox, Modulate) inherit the session's replay
+obligation once a demand-eligible session starts the window ring. They have no
+POST anchor: any VAD-positive chunk (noise, a cough, hangover) extends their
+tracked speech, and only text segments that carry a capture end sample advance
+their emitted boundary. Before 2026-10-20 a blip the provider correctly ignored
+held the ring until it overflowed into a `replay_ring_overflow` failover
+(about 110–120 per 10 min in prod, 75% Soniox, 25% Modulate). Placement alone
+cannot fix this: in prod about 62% of Soniox segments are refused as
+`outside_accepted_sends`/`after_last_send` and carry no capture end, while
+Modulate utterances are placed (8,311 mapped versus 80 refused per hour on
+2026-10-20). Now, when the ring would overflow, the leg settles capture older
+than the ring horizon like an answered-empty window if all of these hold: the
+leg is serving, the provider owes no output (`has_pending_provider_output()`:
+Soniox has no non-final or unflushed final token; Modulate has no buffered
+partial, which only a text utterance or drain flush emits), and every speech or
+replayed send before the horizon is at least 15 s old, so a replay the provider
+has not answered keeps its obligation even where this leg's VAD scores it
+silent. Providers without that hook keep the old behavior.
+Speech inside the horizon stays pending and ages out at the ring horizon.
+`omi_stt_nonwindow_replay_settles_total{provider}` counts settle episodes.
+`LISTEN_NONWINDOW_REPLAY_SETTLE_ENABLED` (default on; `false`/`0`/`off` is the
+kill switch) restores overflow failover. A non-window overflow's diagnostics
+line adds `leg=nonwindow speech_unemitted_seconds text_segments
+placed_text_segments provider_output_pending` (`-1` when the provider has no
+hook).
+
+Active Soniox transcription still overflowed: on 2026-10-20 overflow lines
+showed a median 224 text segments but 11 placed, last text 2.9 s earlier,
+`provider_output_pending=1`, and about 85 s of speech unaccounted. Soniox
+finalizes tokens in stream order within seconds, so any final text now
+accounts every tracked speech or replayed send older than the 15 s grace,
+placed or not. Only the unresolved-speech boundary moves: ring retention, the
+replay anchor and the settle rule above are unchanged, and Modulate keeps the
+placed-text rule. `LISTEN_NONWINDOW_EMITTED_TEXT_ACCOUNTING_ENABLED` (default
+on) is the kill switch.
+
+A replay overflow is session-local. The provider that overflowed is excluded
+from the replacement selection it triggers, then re-admitted once a successor
+is adopted, so that successor's next ordinary death can return to it.
+Without this, a session whose healthy Soniox leg overflowed later exhausted
+with no candidate whenever Modulate was benched and the window was full. Any
+later provider-evidence death of that family keeps it excluded, and the
+recovery dial ledger and episode cap still bound re-dials.
+`LISTEN_SESSION_LOCAL_EXCLUSION_RELEASE_ENABLED` (default on) is the kill
+switch; `omi_stt_session_local_exclusion_releases_total{provider}` counts
+releases.
+
+`stt_selection` hops: a chain whose origin route was skipped without a dial
+reports why (`session_excluded`, `recovery_budget`, `circuit_open`,
+`capacity_full`, `policy`, `unconfigured`, `last_resort`). Previously the
+chain's `circuit_open` sentinel went through the live reason vocabulary and
+came out as `connection_lost`. That made recovery chains that skipped a
+session-excluded Soniox the largest untyped exhaustion bucket
+(`soniox->unavailable`, 454 of 489 Soniox selection `connection_lost` lines
+with no Soniox dial). An exhausted chain also logs
+`live_stt_chain_exhausted origin= reason= skips=family:cause,...`.
 Growing windows re-post overlapping context. A minimum 6 s interval between
 POST starts bounds sustained requests to eight per listen pod per 6 s, with
 up to 216–320 synchronized sessions fleet-wide at the current pod count.

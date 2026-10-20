@@ -39,7 +39,8 @@ from utils.metrics import (
 from utils.env_loader import resolve_stage_from_env
 from utils.product_telemetry import emit_product_event
 from utils.stt.outcomes import TranscriptionOutcome, bounded_provider
-from utils.stt.soniox_runway import meter_audio_seconds
+from utils.observability.demand_cohort import record_metric
+from utils.observability.demand_cohort import DEMAND_COHORTS
 from utils.observability.routing_cohort import current_routing_cohort
 
 logger = logging.getLogger(__name__)
@@ -171,7 +172,7 @@ class LiveSTTAttempt:
         source: str | None = None,
         model: str | None = None,
         language: str | None = None,
-        emitter: Callable[..., None] = emit_product_event,
+        emitter: Callable[..., object] = emit_product_event,
         clock: Callable[[], float] = monotonic,
     ) -> None:
         self.provider = bounded_provider(provider)
@@ -361,8 +362,6 @@ def record_live_stt_audio_seconds(*, provider: str | None, platform: str | None,
         client_platform=_bounded_platform(platform),
         deployment_environment=_deployment_environment(),
     ).inc(seconds)
-    if provider == 'soniox':
-        meter_audio_seconds(seconds)
 
 
 def record_live_stt_failover_accepted(*, provider: str | None, platform: str | None) -> None:
@@ -437,6 +436,7 @@ def record_listen_audio_outcome(*, source: str | None, outcome: str, platform: s
 
 def record_live_session_transcript_outcome(
     *,
+    demand_cohort: str = 'ineligible',
     outcome: LiveSessionTranscriptOutcome,
     uid: str | None = None,
     source: str | None = None,
@@ -454,7 +454,7 @@ def record_live_session_transcript_outcome(
 
     if outcome not in LIVE_SESSION_TRANSCRIPT_OUTCOMES:
         raise ValueError(f'unknown live session transcript outcome: {outcome}')
-    OMI_LIVE_SESSION_TRANSCRIPT_OUTCOME_TOTAL.labels(outcome=outcome).inc()
+    record_metric(OMI_LIVE_SESSION_TRANSCRIPT_OUTCOME_TOTAL, {'outcome': outcome, 'demand_cohort': demand_cohort}, 1)
     if outcome != 'no_transcript' or not uid:
         return
     now = _zero_transcript_clock()
@@ -502,7 +502,8 @@ def initialize_live_session_transcript_outcome_children() -> None:
 
     try:
         for outcome in sorted(LIVE_SESSION_TRANSCRIPT_OUTCOMES):
-            OMI_LIVE_SESSION_TRANSCRIPT_OUTCOME_TOTAL.labels(outcome=outcome)
+            for cohort in DEMAND_COHORTS:
+                OMI_LIVE_SESSION_TRANSCRIPT_OUTCOME_TOTAL.labels(outcome=outcome, demand_cohort=cohort)
     except Exception:
         pass
 

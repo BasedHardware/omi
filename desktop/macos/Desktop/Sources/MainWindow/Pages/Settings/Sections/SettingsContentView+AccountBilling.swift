@@ -266,117 +266,125 @@ extension SettingsContentView {
     VStack(spacing: OmiSpacing.xl) {
       trialCountdownCard
 
-      settingsCard(settingId: "planusage.current") {
-        VStack(alignment: .leading, spacing: OmiSpacing.md) {
-          HStack(spacing: OmiSpacing.lg) {
-            Image(systemName: "creditcard.fill")
-              .scaledFont(size: OmiType.title)
-              .foregroundColor(Ink.secondary)
+      if PlanStorefrontGate.sheetEnabled {
+        storefrontPlanSection
+      } else {
+        settingsCard(settingId: "planusage.current") {
+          VStack(alignment: .leading, spacing: OmiSpacing.md) {
+            HStack(spacing: OmiSpacing.lg) {
+              Image(systemName: "creditcard.fill")
+                .scaledFont(size: OmiType.title)
+                .foregroundColor(Ink.secondary)
 
-            VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
-              Text(currentPlanTitle)
-                .scaledFont(size: OmiType.subheading, weight: .semibold)
-                .foregroundColor(Ink.primary)
+              VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
+                Text(currentPlanTitle)
+                  .scaledFont(size: OmiType.subheading, weight: .semibold)
+                  .foregroundColor(Ink.primary)
 
-              Text(currentPlanSubtitle)
-                .scaledFont(size: OmiType.body)
+                Text(currentPlanSubtitle)
+                  .scaledFont(size: OmiType.body)
+                  .foregroundColor(Ink.secondary)
+              }
+
+              Spacer()
+
+              if isLoadingSubscription {
+                ProgressView()
+                  .controlSize(.small)
+              } else if hasPaidSubscription {
+                CurrentPlanCardActions(
+                  cancelAtPeriodEnd: userSubscription?.subscription.cancelAtPeriodEnd == true,
+                  currentPriceId: userSubscription?.subscription.currentPriceId,
+                  checkoutBusy: activeCheckoutPriceId != nil
+                    && activeCheckoutPriceId == userSubscription?.subscription.currentPriceId,
+                  portalBusy: isOpeningCustomerPortal,
+                  onResubscribe: { startCheckout(for: $0) },
+                  onManage: openCustomerPortal
+                )
+              } else {
+                Button("Refresh") {
+                  loadSubscriptionInfo()
+                }
+                .buttonStyle(OmiButtonStyle(.primary, size: .compact))
+                .disabled(isLoadingSubscription)
+              }
+            }
+
+            if let periodText = currentPlanPeriodText {
+              GlassSeparator()
+
+              Text(periodText)
+                .scaledFont(size: OmiType.caption)
                 .foregroundColor(Ink.secondary)
             }
 
-            Spacer()
-
-            if isLoadingSubscription {
-              ProgressView()
-                .controlSize(.small)
-            } else if hasPaidSubscription {
-              Button(action: openCustomerPortal) {
-                if isOpeningCustomerPortal {
-                  ProgressView()
-                    .controlSize(.small)
-                } else {
-                  Text("Manage")
-                    .scaledFont(size: OmiType.body, weight: .semibold)
-                }
-              }
-              .buttonStyle(OmiButtonStyle(.primary, size: .compact))
-              .disabled(isOpeningCustomerPortal)
-            } else {
-              Button("Refresh") {
-                loadSubscriptionInfo()
-              }
-              .buttonStyle(OmiButtonStyle(.primary, size: .compact))
-              .disabled(isLoadingSubscription)
+            if let confirmation = subscriptionConfirmation {
+              Text(confirmation)
+                .scaledFont(size: OmiType.caption, weight: .semibold)
+                .foregroundColor(Ink.listeningGreen)
             }
-          }
 
-          if let periodText = currentPlanPeriodText {
-            GlassSeparator()
+            if let userSubscription {
+              GlassSeparator()
+              Text(TranscriptionAllowancePresentation.statusText(userSubscription.transcriptionAllowance))
+                .scaledFont(size: OmiType.caption)
+                .foregroundColor(Ink.secondary)
+            }
 
-            Text(periodText)
-              .scaledFont(size: OmiType.caption)
-              .foregroundColor(Ink.secondary)
-          }
-
-          if let userSubscription {
-            GlassSeparator()
-            Text(TranscriptionAllowancePresentation.statusText(userSubscription.transcriptionAllowance))
-              .scaledFont(size: OmiType.caption)
-              .foregroundColor(Ink.secondary)
-          }
-
-          if let error = subscriptionError {
-            Text(error)
-              .scaledFont(size: OmiType.caption)
-              .foregroundColor(SettingsInk.notice)
-          }
-        }
-      }
-
-      if let subscription = userSubscription?.subscription,
-        subscription.deprecated == true
-      {
-        settingsCard(settingId: "planusage.deprecation") {
-          VStack(alignment: .leading, spacing: OmiSpacing.md) {
-            HStack(spacing: OmiSpacing.sm) {
-              Image(systemName: "exclamationmark.triangle.fill")
+            if let error = subscriptionError {
+              Text(error)
+                .scaledFont(size: OmiType.caption)
                 .foregroundColor(SettingsInk.notice)
-                .scaledFont(size: OmiType.subheading)
-              Text("Plan Retiring")
-                .scaledFont(size: OmiType.subheading, weight: .semibold)
-                .foregroundColor(Ink.primary)
             }
-
-            Text(
-              subscription.deprecationMessage
-                ?? "Your Unlimited plan is being retired. Try the new Pro plan — same great features at \(operatorDeprecationFallbackPrice)."
-            )
-            .scaledFont(size: OmiType.body)
-            .foregroundColor(Ink.secondary)
-            .fixedSize(horizontal: false, vertical: true)
-
-            Button(action: {
-              selectedPlanIdForCheckout = "operator"
-            }) {
-              Text("Try Pro")
-                .scaledFont(size: OmiType.body, weight: .semibold)
-            }
-            .buttonStyle(OmiButtonStyle(.primary, size: .compact))
           }
         }
-      }
 
-      if shouldShowPlanPurchaseOptions {
-        // Deliberately a `settingsGroup` and not a `settingsCard`: each plan tile draws its own
-        // fill, corner and selected border, so wrapping the row in a card put a card inside a card
-        // — two grounds, two radii and two borders for one block of content, against the one-card
-        // recipe every other pane follows. The tiles *are* the cards; the group only carries the
-        // `settingId` so the deep link still lands.
-        settingsGroup(settingId: "planusage.purchase") {
-          // All plan cards share the row width — no horizontal scrolling.
-          HStack(alignment: .top, spacing: OmiSpacing.lg) {
-            ForEach(subscriptionPlansForDisplay) { plan in
-              subscriptionPlanCard(plan)
-                .frame(maxWidth: .infinity, alignment: .topLeading)
+        if let subscription = userSubscription?.subscription,
+          subscription.deprecated == true
+        {
+          settingsCard(settingId: "planusage.deprecation") {
+            VStack(alignment: .leading, spacing: OmiSpacing.md) {
+              HStack(spacing: OmiSpacing.sm) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                  .foregroundColor(SettingsInk.notice)
+                  .scaledFont(size: OmiType.subheading)
+                Text("Plan Retiring")
+                  .scaledFont(size: OmiType.subheading, weight: .semibold)
+                  .foregroundColor(Ink.primary)
+              }
+
+              Text(
+                subscription.deprecationMessage
+                  ?? "Your Unlimited plan is being retired. Try the new Pro plan — same great features at \(operatorDeprecationFallbackPrice)."
+              )
+              .scaledFont(size: OmiType.body)
+              .foregroundColor(Ink.secondary)
+              .fixedSize(horizontal: false, vertical: true)
+
+              Button(action: {
+                selectedPlanIdForCheckout = "operator"
+              }) {
+                Text("Try Pro")
+                  .scaledFont(size: OmiType.body, weight: .semibold)
+              }
+              .buttonStyle(OmiButtonStyle(.primary, size: .compact))
+            }
+          }
+        }
+
+        if shouldShowPlanPurchaseOptions {
+          // Deliberately a `settingsGroup` and not a `settingsCard`: each plan tile draws its own
+          // fill, corner and selected border, so wrapping the row in a card put a card inside a card
+          // — two grounds, two radii and two borders for one block of content, against the one-card
+          // recipe every other pane follows. The tiles *are* the cards; the group only carries the
+          // `settingId` so the deep link still lands.
+          settingsGroup(settingId: "planusage.purchase") {
+            // All plan cards share the row width — no horizontal scrolling.
+            HStack(alignment: .top, spacing: OmiSpacing.lg) {
+              ForEach(subscriptionPlansForDisplay) { plan in
+                subscriptionPlanCard(plan)
+                  .frame(maxWidth: .infinity, alignment: .topLeading)
+              }
             }
           }
         }

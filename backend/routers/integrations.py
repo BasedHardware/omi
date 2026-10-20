@@ -1,3 +1,5 @@
+from utils.generated_compute import require_generated_compute, generated_compute_configured
+
 # async-blockers: no-import-scope
 # async-blockers: no-changed-range-scope  # pre-existing patterns surfaced by type-annotation import changes
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -258,6 +260,8 @@ async def synthesize_connector_data(
     their own prompts and inventing memories via Anthropic Haiku chat completions, then
     persist through the normal memory/task write APIs.
     """
+    if generated_compute_configured():
+        await run_blocking(db_executor, require_generated_compute, uid, 'memories')
     from utils.llm import connector_synthesis
 
     if await run_blocking(db_executor, is_trial_paywalled, uid, 'desktop'):
