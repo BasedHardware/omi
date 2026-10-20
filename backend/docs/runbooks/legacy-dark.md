@@ -66,13 +66,31 @@ Never 503 (invariant 2). `omi_legacy_dark_ack_total{reason}` counts every fenced
 - `omi_legacy_sync_mode_read_total{source}`: reads that fell back to `on` (`absent`, `error`, `malformed`). Non-zero during `draining`/`dark` means some processes are serving legacy.
 - `omi_legacy_sync_admissions_total{reason}`, `omi_legacy_dark_ack_total{reason}` as above.
 
-## 12h soak and the auto-proceed criteria
+## Evidence-based soak (6h floor) and the auto-proceed criteria
 
-Lane 5's `soak_check.py` runs every 30 minutes for 12 hours from the `dark` write, so there are 24 reads. Lost-recording accounting starts at `draining`, not `dark`.
+The soak is evidence-based with a 6h floor (David, 2026-10-20), replacing the 12h clock. Lane 5's `soak_check.py` runs every 30 minutes from the `dark` write with `--history-dir <run-dir>/soak-reads` (one directory per `dark` write). Each read is kept, and the last line, `SOAK_WINDOW_<STATUS> <reason>`, judges the whole window. Lost-recording accounting starts at `draining`, not `dark`.
 
-**Deletion is pre-authorized (David, 2026-10-19 08:15Z).** If **every** read below is green for the whole 12h window, the deletion PRs (including the named C10 `.github/actions/sync-backfill-lifecycle` edit) merge and deploy with no separate `go`.
+```bash
+cd backend && .venv/bin/python scripts/parity/soak_check.py --env prod \
+  --draining-since <T_draining> --dark-since <T_dark> --collect \
+  --fleet-output fleet.txt --evidence soak_evidence.json \
+  --history-dir <run-dir>/soak-reads --output soak_report.json
+```
 
-**Any red or unavailable read means hold and escalate** to the lead, and the lead to David. A hold does not restart the soak by itself: the lead decides between reverting `legacy_sync` to `on` and re-running the 12h window. Prometheus queries run against prod Managed Prometheus (`ro-prod`); `<T_dark>` is the `dark` write time from the `_ramp` history.
+`fleet.txt` is `fleet_gate.sh <T_dark> 20 30 100` (T0 is `dark`, so its `completed` count is the window's), and `soak_evidence.json` carries the `lost_recordings` census taken at the same read (`scripts.legacy_dark.lost_recordings --since <T_draining>`, no `--until`).
+
+The window passes (`SOAK_WINDOW_PASS`, exit 0) only when **all** of these hold:
+
+1. **Elapsed:** the last read is at least 6h after `dark` (`MIN_SOAK_SECONDS`).
+2. **Every read green for the whole window:** every read since `dark` is `SOAK_PASS` (all ten checks, including check 5, zero lost recordings), with no gap over 45 minutes between `dark`, consecutive reads and now.
+3. **Final census:** the last read's check 5 census is fresh (its `until` is within the census's 1h grace plus 15 minutes of that read), so the zero-lost result covers the window's end, not an earlier read.
+4. **The window saw traffic** (`WINDOW_FLOORS`, prod): at least **2,000 batch completions** (the last read's fleet-gate `completed`, counted from `dark`) and at least **1,000 uploads accepted** (the census's `accepted_content_ids` at the last read minus at the first read after `dark`). Staging floors are 20 and 20.
+
+Any FAIL read fails the window (`SOAK_WINDOW_FAIL`, exit 1; `data_loss` when it was check 2 or 5). Anything else short, such as a PENDING read, a gap, a stale census, a floor not reached or an unreadable history, is `SOAK_WINDOW_PENDING` (exit 3), never a pass. A quiet night therefore extends the soak past 6h until the floors are met.
+
+**Deletion is pre-authorized (David, 2026-10-19 08:15Z).** If the window passes and **every** read below is green for the whole window, the deletion PRs (including the named C10 `.github/actions/sync-backfill-lifecycle` edit) merge and deploy with no separate `go`.
+
+**Any red or unavailable read means hold and escalate** to the lead, and the lead to David. A hold does not restart the soak by itself: the lead decides between reverting `legacy_sync` to `on` and re-running the window in a fresh history dir. Prometheus queries run against prod Managed Prometheus (`ro-prod`); `<T_dark>` is the `dark` write time from the `_ramp` history.
 
 | # | Gate | Concrete check (every 30-minute read) | Green when |
 |---|---|---|---|
@@ -94,7 +112,7 @@ Lane 5's `soak_check.py` runs every 30 minutes for 12 hours from the `dark` writ
 | 4d | | the last `parity_gate.py --surface prod-shadow` (rows 3–6) from the 100% hold | PASS |
 | 5 | **Cost on track** | `backend-sync-backfill` and `backend-sync` legacy-worker billable instance time (`run.googleapis.com/container/billable_instance_time`), last 6h against the 6h before `draining` | ≤ 10% of the pre-draining 6h |
 | 5b | | batch GPU nodes (`kubectl` node count on the batch pool, copied KUBECONFIG and explicit context) | ≤ 4 (the 10-19 approval) |
-| 5c | | vendor STT spend from vendor usage (Soniox, Deepgram, Modulate), lane 13's receipt, last 12h against the pre-dark 12h | ≤ 1.10× |
+| 5c | | vendor STT spend from vendor usage (Soniox, Deepgram, Modulate), lane 13's receipt, the window since `dark` against the same length before `draining` | ≤ 1.10× |
 
 **Preconditions for auto-proceed** (all are checked before the first merge; any failure is a hold):
 
@@ -104,7 +122,7 @@ Lane 5's `soak_check.py` runs every 30 minutes for 12 hours from the `dark` writ
 
 ## After the soak: deletion
 
-1. All 24 soak reads are green and the preconditions hold. Record the gate table with each read's values in the run dir STATE.md.
+1. The last read prints `SOAK_WINDOW_PASS`, every gate-table read is green and the preconditions hold. Record the window JSON (`window` in `soak_report.json`) and the gate table with each read's values in the run dir STATE.md.
 2. **Lead action on `prod-operator`:** capture the live queue configs. This needs `cloudtasks.queues.get`, which `ro-prod` lacks. Commit the spec to the run dir before anything is deleted:
 
    ```bash

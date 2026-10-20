@@ -1,5 +1,6 @@
 """Contract (g): ramp-controller decisions, authority limits, and a hermetic full-ladder rehearsal."""
 
+from dataclasses import replace
 import json
 import math
 from pathlib import Path
@@ -47,9 +48,51 @@ def test_advance_one_step_after_hold():
     )
 
 
-def test_five_percent_holds_three_hours():
-    assert decide(snap(5.0), verdict(percent=5.0, hold=3 * H - 1)).action is rc.Action.HOLD
-    assert decide(snap(5.0), verdict(percent=5.0, hold=3 * H)).to_percent == 10.0
+DAY = 86400
+NOON_UTC = 20 * DAY + 18 * H  # 18:00Z
+NIGHT_UTC = 20 * DAY + 8 * H  # 08:00Z
+
+
+def five(hold=H, observed_at=NOON_UTC, completed=rc.FIVE_PERCENT_MIN_COMPLETED, **kw):
+    raw = {} if completed is None else {'completed': completed}
+    return rc.GateVerdict(kw.pop('status', 'PASS'), '', observed_at, hold, 5.0, raw)
+
+
+def test_five_percent_holds_one_hour_ruling_10_20():
+    assert rc.HOLD_SECONDS[5.0] == H
+    assert decide(snap(5.0), five(hold=H - 1)).detail == 'hold_incomplete'
+    assert decide(snap(5.0), five(hold=H)).to_percent == 10.0
+
+
+def test_five_percent_has_no_time_of_day_requirement():
+    # Lead ruling on #22886: "5% hold 1h" means 1h; a night hold with enough completions advances.
+    assert not hasattr(rc, 'daytime_seconds')
+    assert decide(snap(5.0), five(hold=H, observed_at=NIGHT_UTC)).to_percent == 10.0
+
+
+@pytest.mark.parametrize(
+    ('completed', 'detail'),
+    [
+        (None, 'sample_unmeasured'),
+        ('150', 'sample_unmeasured'),
+        (True, 'sample_unmeasured'),
+        (149, 'sample_below_floor'),
+    ],
+)
+def test_five_percent_needs_the_completion_floor(completed, detail):
+    d = decide(snap(5.0), five(completed=completed))
+    assert (d.action, d.reason, d.detail) == (rc.Action.HOLD, rc.RampReason.HOLD_INCOMPLETE, detail)
+
+
+def test_five_percent_sample_floor_scales_only_for_a_staging_rehearsal():
+    v = five(hold=H / 60, observed_at=NOON_UTC, completed=3)
+    assert decide(snap(5.0), v, hold_scale=1 / 60).to_percent == 10.0
+    assert decide(snap(5.0), v).action is rc.Action.HOLD
+
+
+def test_other_steps_need_no_sample_floor():
+    v = rc.GateVerdict('PASS', '', NIGHT_UTC, H, 10.0, {})
+    assert decide(snap(10.0), v).to_percent == 25.0
 
 
 @pytest.mark.parametrize('status', ['PENDING', 'NO_WORK'])
@@ -64,7 +107,9 @@ def test_never_past_one_hundred():
 
 
 def test_off_ladder_value_moves_to_next_step_without_skipping():
-    assert decide(snap(7.0), verdict(percent=7.0, hold=4 * H)).to_percent == 10.0
+    # 7% sits on the 5% step, so the 5% sample floor applies.
+    assert decide(snap(7.0), replace(five(hold=4 * H), percent=7.0)).to_percent == 10.0
+    assert decide(snap(7.0), verdict(percent=7.0, hold=4 * H)).detail == 'sample_unmeasured'
     assert decide(snap(7.0), verdict('FAIL', 'http_5xx_regression', percent=7.0)).to_percent == 5.0
 
 
@@ -309,7 +354,8 @@ class Rig:
         status, reason, _ = rc.parse_gate_output(
             line, {'PASS': 0, 'FAIL': 1, 'NO_WORK': 2, 'PENDING': 3}[line.split()[0][5:]]
         )
-        return rc.GateVerdict(status, reason, self.now, self.now - since, percent, {})
+        # The gate's `completed` count since the step began: enough for the 5% sample floor.
+        return rc.GateVerdict(status, reason, self.now, self.now - since, percent, {'completed': 1000})
 
     def write(self, env, change, **kw):
         assert env == self.env
@@ -612,7 +658,7 @@ def test_first_summary_below_the_lead_pages_on_every_lead_action():
 
 def test_first_summary_above_the_lead_holds_quietly():
     s = snap(percents={'batch-pipeline': 5.0, 'first-summary': 100.0})
-    for v in (verdict(percent=5.0, hold=3 * H), verdict('FAIL', 'projection_error', percent=5.0)):
+    for v in (five(hold=H), verdict('FAIL', 'projection_error', percent=5.0)):
         lead, follower = rc.decide_all(s, v, now=0.0)
         assert lead.action is not rc.Action.HOLD
         assert (follower.action, follower.to_percent, follower.page) == (rc.Action.HOLD, 100.0, False)
