@@ -901,7 +901,11 @@ export interface DailyRecapDeps {
   conversations: () => LocalConversation[]
   actionItems: () => ActionItemRecord[]
   focusSessions: (sinceMs: number) => FocusSessionRecord[]
-  memories: (limit: number) => { content: string; category: string }[]
+  memories: (
+    from: number,
+    to: number,
+    limit: number
+  ) => { content: string; category: string; createdAt: number }[]
   insights: (limit: number) => InsightRecord[]
 }
 
@@ -924,8 +928,8 @@ function bindDailyRecapDeps(deps?: Partial<DailyRecapDeps>): DailyRecapDeps {
 /**
  * `get_daily_recap`. Pre-formatted markdown activity recap for a day (0=today,
  * 1=yesterday, N=past N days), composed entirely from LOCAL reads: app usage
- * (rewind aggregate), conversations, tasks created, focus sessions, recent
- * memories, and proactive observations. Matches the Mac recap's section layout.
+ * (rewind aggregate), conversations, tasks created, focus sessions, memories
+ * from that window, and proactive observations. Matches the Mac recap's section layout.
  */
 export function createGetDailyRecapExecutor(deps?: Partial<DailyRecapDeps>): ProductToolExecutor {
   return async (input, ctx) => {
@@ -958,7 +962,7 @@ export function createGetDailyRecapExecutor(deps?: Partial<DailyRecapDeps>): Pro
     const convos = d.conversations().filter((c) => inWindow(c.createdAt))
     const tasks = d.actionItems().filter((t) => !t.deleted && inWindow(t.createdAt))
     const focus = d.focusSessions(from).filter((f) => inWindow(f.createdAt))
-    const memories = d.memories(10)
+    const memories = d.memories(from, to, 10).filter((m) => inWindow(m.createdAt))
     const observations = d.insights(30).filter((i) => inWindow(i.ts))
 
     const out: string[] = [`# ${label} Recap`, '']
@@ -1011,7 +1015,7 @@ export function createGetDailyRecapExecutor(deps?: Partial<DailyRecapDeps>): Pro
     }
 
     if (memories.length > 0) {
-      out.push('', `## Memories (${memories.length} recent)`)
+      out.push('', `## Memories (${memories.length})`)
       for (const m of memories) {
         const cat = m.category ? ` [${m.category}]` : ''
         out.push(`- ${m.content}${cat}`)
@@ -1040,7 +1044,7 @@ async function bindDailyRecapProd(): Promise<DailyRecapDeps> {
     conversations: () => db.listLocalConversations(),
     actionItems: () => db.getLocalActionItems({ limit: 500 }),
     focusSessions: (sinceMs) => db.listFocusSessions(sinceMs),
-    memories: (limit) => db.recentMemories(limit),
+    memories: (from, to, limit) => db.memoriesInWindow(from, to, limit),
     insights: (limit) => db.recentInsights(limit)
   }
 }

@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "FC-recap-section-ignores-requested-window",
+  "violated_contract": "A daily recap section for a requested day must list rows from that window. Reading the newest rows overall and ignoring days_ago shows today's data under Yesterday or Past N days.",
+  "canonical_prevention": "Pass the recap window into the section reader and keep only rows whose timestamp falls inside it. The regression test asks for yesterday and asserts today's row is absent.",
+  "canonical_prevention_artifact": [
+    "desktop/windows/src/main/agentKernel/productToolExecutorsTierB.test.ts"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "desktop/windows/src/main/agentKernel/productToolExecutors.ts",
+    "desktop/windows/src/main/ipc/db.ts"
+  ],
+  "status": "open"
+}

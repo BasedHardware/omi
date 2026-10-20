@@ -415,7 +415,7 @@ describe('get_daily_recap', () => {
       actionItem({ description: 'old task', createdAt: 100 })
     ]),
     focusSessions: vi.fn(() => [] as FocusSessionRecord[]),
-    memories: vi.fn(() => [{ content: 'likes tea', category: 'preference' }]),
+    memories: vi.fn(() => [{ content: 'likes tea', category: 'preference', createdAt: now - 1000 }]),
     insights: vi.fn(() => [] as InsightRecord[])
   })
 
@@ -431,7 +431,22 @@ describe('get_daily_recap', () => {
     expect(out).toContain('## Tasks (1)')
     expect(out).toContain('today task')
     expect(out).not.toContain('old task')
-    expect(out).toContain('## Memories (1 recent)')
+    expect(out).toContain('## Memories (1)')
+  })
+
+  it('lists memories from the requested day, not the newest overall', async () => {
+    const d = deps()
+    d.memories.mockImplementation((from: number, to: number) =>
+      [
+        { content: 'today fact', category: 'system', createdAt: now - 1000 },
+        { content: 'yesterday fact', category: 'system', createdAt: yesterdayMorning }
+      ].filter((m) => m.createdAt >= from && m.createdAt < to)
+    )
+    const exec = createGetDailyRecapExecutor(d)
+    const out = await exec({ days_ago: 1 }, ctx())
+    expect(out).toContain('yesterday fact')
+    expect(out).not.toContain('today fact')
+    expect(d.memories).toHaveBeenCalledWith(startToday - 24 * 60 * 60 * 1000, startToday, 10)
   })
 
   it('labels Yesterday and passes the day window to appActivity', async () => {
