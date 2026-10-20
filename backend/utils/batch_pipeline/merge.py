@@ -5,7 +5,7 @@ import time
 
 from google.api_core.exceptions import FailedPrecondition, GoogleAPICallError
 
-from config.batch_pipeline import merge_catch_up_depth, merge_head_wait_seconds
+from config.batch_pipeline import merge_catch_up_depth, merge_head_wait_seconds, recovered_merge_release_enabled
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from database.batch_pipeline_store import Store
 from utils.batch_pipeline.correctness_metrics import record as record_correctness
@@ -19,8 +19,11 @@ logger = logging.getLogger(__name__)
 HEAD_WAIT_UNAVAILABLE_RETRY_SECONDS = 300
 # Pending fresh rows read per probe (the query cap); an owner rarely has more in flight.
 FRESH_PROBE_ROWS = 32
+# Content siblings a recovery wake may release with the recovered unit.
+RELEASE_SIBLINGS_MAX = 32
 _HEAD_STATES = frozenset({'ready', 'leased', 'retry', 'record_pending', 'privacy_blocked'})
 _FRESH_FIRST_HEAD_STATES = _HEAD_STATES | {'result_ready'}
+_RELEASE_HEAD_STATES = _FRESH_FIRST_HEAD_STATES | {'held'}
 _WAIT_BUCKETS = (60, 120, 300, 600, 1800)
 
 
@@ -145,20 +148,55 @@ class OrderedMerge:
         )
         return None
 
-    def commit_next(self, owner_id: str, now: float) -> dict | None:
+    def release_set(self, segment_id: str) -> list[str]:
+        """The recovered unit first, then its content's other units (bounded).
+
+        A recovery wake passes this to ``commit_next(release=...)``. Only rows
+        still pending and ready are ever committed from it."""
+        job = self.store.run(lambda tx: tx.get('jobs', segment_id))
+        siblings = (job.get('projection_binding') or {}).get('segment_ids') or []
+        return [segment_id, *[sid for sid in siblings if sid != segment_id][:RELEASE_SIBLINGS_MAX]]
+
+    def _next_release(self, key: str, release: list[str]) -> str | None:
+        """Drop release rows that are not this owner's pending, ready rows; return the first that is."""
+        while release:
+            segment = release[0]
+            job = self.store.run(lambda tx: tx.get('jobs', segment))
+            if job.get('owner_key') == key and job.get('merge_pending') and job.get('state') == 'result_ready':
+                return segment
+            release.pop(0)
+        return None
+
+    def commit_next(self, owner_id: str, now: float, *, release: list[str] | None = None) -> dict | None:
+        """Commit the owner's next result-log row, or return None.
+
+        ``release`` (a recovery wake's ``release_set``, consumed in place):
+        when strict order, fresh-first and the head wait commit nothing, the
+        first still-pending ready row in it commits at once. Recovered units
+        already waited out quarantine and recovery, so they skip the head wait
+        and the catch-up depth hold; the body, late marking and chain are the
+        same as every other commit."""
         key = owner_key(owner_id)
         wait = self._head_wait()
         depth = self._catch_up_depth()
         blocked: dict = {}
         bypass: dict = {}
         fresh_first: dict = {}
+        released: dict = {}
         held: dict = {}
         head: dict = {}
 
-        def commit(tx, waiter: dict | None = None, fresh: dict | None = None, skipped: dict | None = None):
+        def commit(
+            tx,
+            waiter: dict | None = None,
+            fresh: dict | None = None,
+            skipped: dict | None = None,
+            exact: str | None = None,
+        ):
             blocked.clear()  # Firestore may retry this callback.
             bypass.clear()
             fresh_first.clear()
+            released.clear()
             held.clear()
             head.clear()
             owner = tx.get('owners', key)
@@ -168,7 +206,23 @@ class OrderedMerge:
             over_cap = bool(depth and candidate and _awaiting_projection(tx, owner) >= depth)
             if candidate:
                 head['catch_up'] = _catch_up(candidate)
-            if over_cap and waiter is None and fresh is None:
+            if exact is not None:
+                # Recovered release: the wake's row must still be this owner's
+                # pending, ready row. It appends at the tail like any commit;
+                # anything it passes appends later, as late_capture if behind.
+                current = tx.get('jobs', exact)
+                if not (
+                    current.get('owner_key') == key
+                    and current.get('merge_pending')
+                    and current.get('state') == 'result_ready'
+                ):
+                    return None
+                if candidate and candidate.get('segment_id') != exact:
+                    released['head_state'] = candidate['state']
+                else:
+                    released['head_state'] = 'held' if over_cap else 'ready'
+                candidate = current
+            elif over_cap and waiter is None and fresh is None:
                 # At the depth cap with rows pending, whatever the head's state:
                 # maintenance re-offers this owner, and the durable marker
                 # (owner key only) survives a restart.
@@ -221,7 +275,7 @@ class OrderedMerge:
                     raise HeadWaitUnavailable from error
             if not candidate or candidate['state'] != 'result_ready':
                 return None
-            if over_cap and not fresh_first and _catch_up(candidate):
+            if over_cap and not fresh_first and not released and _catch_up(candidate):
                 # Keep the owner's unprojected log short so a fresh row lands
                 # near the projection head.
                 held['catch_up'] = True
@@ -258,6 +312,8 @@ class OrderedMerge:
                 entry['head_wait_bypass'] = True
             if fresh_first:
                 entry['fresh_first'] = True
+            if released:
+                entry['recovered_release'] = True
             tx.put('results', job['segment_id'], entry)
             job.update(state='committed', merge_pending=False)
             tx.put('jobs', job['segment_id'], job)
@@ -327,6 +383,20 @@ class OrderedMerge:
                     bypass.clear()
         if entry is None and fenced is not None:
             raise fenced
+        if entry is None and release and recovered_merge_release_enabled():
+            # Recovery wake: commit the recovered unit (then its content's
+            # ready siblings) now instead of after the head wait or the depth
+            # hold. Run 18: 46 of 54 wakes advanced no row; held recovered
+            # units waited 65-86 s for the head wait plus a maintenance tick.
+            segment = self._next_release(key, release)
+            if segment is not None:
+                try:
+                    entry = self.store.run(lambda tx: commit(tx, exact=segment))
+                except BatchPrivacyBlocked:
+                    # A fence refuses only this row; strict order commits nothing here.
+                    release.pop(0)
+                    entry = None
+                    released.clear()
         if entry is None and strict_blocked and wait > 0:
             # The strict transaction issues no head-wait query. Probe outside
             # it so a blocked owner takes no extra transactional query lock;
@@ -367,6 +437,13 @@ class OrderedMerge:
                 )
                 logger.info(
                     'event=batch_merge outcome=fresh_first source=%s head_state=%s count=1',
+                    self.commit_source,
+                    head_state,
+                )
+            if released:
+                head_state = released['head_state'] if released['head_state'] in _RELEASE_HEAD_STATES else 'other'
+                logger.info(
+                    'event=batch_merge outcome=recovered_release source=%s head_state=%s count=1',
                     self.commit_source,
                     head_state,
                 )
