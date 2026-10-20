@@ -54,7 +54,10 @@ class JudgeTests(unittest.TestCase):
         self.assertTrue(verdict.hold)
         self.assertIn("over the 50/day cap", verdict.reason)
 
-    def test_the_previous_build_is_the_largest_lower_build_with_enough_users(self):
+    def test_the_previous_build_is_the_lower_build_with_the_most_pendant_users(self):
+        # The operator gate's rule (omi_capture_wedge.previous_build): the store
+        # build being replaced has the most pendant users below the candidate.
+        # A thin intermediate build (1417 here) is not the baseline.
         stats = {
             ("iOS", "1420"): S(30, 1000, "1.0.567"),
             ("iOS", "1417"): S(5, 300, "1.0.566"),
@@ -104,11 +107,6 @@ class StatsTests(unittest.TestCase):
         self.assertIn("'connected_no_bytes', 'connected_not_capturing'", wedge_sql)
         self.assertIn("omi_sample_pct", wedge_sql)
 
-    def test_a_version_resolves_to_its_build_with_the_most_pendant_users(self):
-        stats = health.build_stats(FakePostHog(self.PENDANT, self.WEDGES))
-        self.assertEqual(health.resolve_build(stats, "iOS", "1.0.566"), "1417")
-        self.assertIsNone(health.resolve_build(stats, "iOS", "9.9.9"))
-
     def test_identifiers_are_validated_before_they_reach_hogql(self):
         with self.assertRaises(health.CaptureHealthError):
             health._identifier("x' OR 1=1 --")
@@ -123,23 +121,30 @@ class CheckRolloutTests(unittest.TestCase):
     )
 
     def test_no_key_fails_closed(self):
-        verdict = health.check_rollout("ios", version="1.0.566", env={})
+        verdict = health.check_rollout("ios", build="1417", env={})
         self.assertTrue(verdict.hold)
         self.assertIn("POSTHOG_PERSONAL_API_KEY is not configured", verdict.reason)
 
+    def test_any_read_failure_holds_instead_of_crashing_the_train(self):
+        import http.client
+
+        for error in (http.client.IncompleteRead(b""), OSError("reset"), UnicodeDecodeError("utf-8", b"", 0, 1, "x")):
+            verdict = health.check_rollout("android", build="1461", env={}, runner=FakePostHog([], [], error=error))
+            self.assertTrue(verdict.hold, repr(error))
+
     def test_a_query_error_fails_closed(self):
         broken = FakePostHog([], [], error=health.CaptureHealthError("PostHog query failed: 503"))
-        verdict = health.check_rollout("ios", version="1.0.566", env={}, runner=broken)
+        verdict = health.check_rollout("ios", build="1417", env={}, runner=broken)
         self.assertTrue(verdict.hold)
         self.assertIn("failing closed", verdict.reason)
 
-    def test_a_missing_build_or_version_fails_closed(self):
-        self.assertTrue(health.check_rollout("android", env={}, runner=self.BAD).hold)
-        self.assertTrue(health.check_rollout("ios", version="9.9.9", env={}, runner=self.BAD).hold)
+    def test_a_missing_or_unknown_build_fails_closed(self):
+        self.assertTrue(health.check_rollout("android", build=None, env={}, runner=self.BAD).hold)
+        self.assertTrue(health.check_rollout("ios", build="", env={}, runner=self.BAD).hold)
         self.assertTrue(health.check_rollout("android", build="9999", env={}, runner=self.BAD).hold)
 
     def test_both_platforms_hold_a_bad_build_and_the_override_lets_one_run_through(self):
-        ios = health.check_rollout("ios", version="1.0.566", env={}, runner=self.BAD)
+        ios = health.check_rollout("ios", build="1417", env={}, runner=self.BAD)
         android = health.check_rollout("android", build="1461", env={}, runner=self.BAD)
         self.assertTrue(ios.hold, ios.reason)
         self.assertIn("iOS 1417", ios.reason)

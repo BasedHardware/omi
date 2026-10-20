@@ -85,10 +85,17 @@ class SimulatedPendant {
     return [counter & 0xff, (counter >> 8) & 0xff, 0, ...payload];
   }
 
-  /// The frame id a headerless payload carries, or null for other audio.
+  /// The frame id a headerless payload carries, or null for other audio. The
+  /// marker alone is a legal Opus TOC byte, so the synthetic fill must match too:
+  /// real audio of the same length can never be counted as a pendant frame.
   static int? idOf(List<int> payload) {
     if (payload.length != payloadLength || payload[0] != marker) return null;
-    return (payload[1] << 16) | (payload[2] << 8) | payload[3];
+    final id = (payload[1] << 16) | (payload[2] << 8) | payload[3];
+    final fill = id & 0x7f;
+    for (var i = 4; i < payloadLength; i++) {
+      if (payload[i] != fill) return null;
+    }
+    return id;
   }
 }
 

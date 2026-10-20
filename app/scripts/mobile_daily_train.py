@@ -130,14 +130,14 @@ class TrainError(Exception):
     pass
 
 
-def capture_health_hold(platform: str, *, build: str | None = None, version: str | None = None) -> str | None:
+def capture_health_hold(platform: str, *, build: str | None) -> str | None:
     """Why a rollout hop must hold on capture health, or None to proceed.
 
     Read-only PostHog check (mobile_capture_health.py), mirroring the operator
-    gate's judge per (platform, build). Android passes the exact version code;
-    iOS passes the live marketing version, resolved to its store build. Fails closed; TRAIN_CAPTURE_HEALTH_OVERRIDE=<reason> lets a hop through.
+    gate's judge per (platform, build): the Android version code, or the iOS
+    build attached to the live App Store version. No build holds. Fails closed; TRAIN_CAPTURE_HEALTH_OVERRIDE=<reason> lets a hop through.
     """
-    verdict = capture_health.check_rollout(platform, build=build, version=version)
+    verdict = capture_health.check_rollout(platform, build=build)
     log(f"{platform} capture health: {verdict.reason}")
     return verdict.reason if verdict.hold else None
 
@@ -433,6 +433,27 @@ def ios_phased_release(live_version_id: str) -> dict[str, object] | None:
     return payload["data"]
 
 
+def ios_version_build_number(version_id: str) -> str | None:
+    """The build number (CFBundleVersion) attached to an App Store version, or None.
+
+    Reads GET /v1/appStoreVersions/{id}/build. The capture-health hold judges
+    the exact store build, never a same-version TestFlight sibling; an
+    unreadable build returns None, and the hold then fails closed.
+    """
+    try:
+        token = _asc_rest_token()
+        url = f"https://api.appstoreconnect.apple.com/v1/appStoreVersions/{version_id}/build"
+        request = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}"})
+        with urllib.request.urlopen(request, timeout=60) as response:
+            payload = json.load(response)
+    except Exception as exc:  # noqa: BLE001 - any failure means "unknown build", which holds
+        log(f"App Store Connect build lookup failed for {version_id}: {exc}")
+        return None
+    data = payload.get("data") if isinstance(payload, dict) else None
+    number = _attributes(data).get("version") if isinstance(data, dict) else None
+    return str(number) if isinstance(number, (str, int)) and str(number).isdigit() else None
+
+
 def ios_phased_release_paused(live_version_id: str) -> bool:
     """Whether the live version's phased rollout is PAUSED (the operator brake)."""
     phased = ios_phased_release(live_version_id)
@@ -448,9 +469,7 @@ def _phased_started_at(phased: dict[str, object]) -> datetime:
     return datetime.strptime(started, "%Y-%m-%dT%H:%M:%S%z")
 
 
-def ios_phased_release_should_complete(
-    live_version_id: str, *, version: str | None = None, now: datetime | None = None
-) -> tuple[bool, str]:
+def ios_phased_release_should_complete(live_version_id: str, *, now: datetime | None = None) -> tuple[bool, str]:
     """Whether the live phased rollout should be released to everyone right now.
 
     True after IOS_PHASED_JUMP_HOURS with the rollout still ACTIVE (COMPLETE is
@@ -458,7 +477,8 @@ def ios_phased_release_should_complete(
     never jumps; any other state (COMPLETE, INACTIVE, or one Apple adds later)
     is not a live rollout to advance. Anything unreadable fails closed (False
     with the reason — never True on an error).
-    The jump also waits on capture health for [version] (capture_health_hold).
+    The jump also waits on capture health for the live version's exact build
+    (ios_version_build_number, capture_health_hold).
     """
     now = now or datetime.now(timezone.utc)
     try:
@@ -480,7 +500,7 @@ def ios_phased_release_should_complete(
     age_hours = (now - started).total_seconds() / 3600
     if age_hours < IOS_PHASED_JUMP_HOURS:
         return False, f"phased rollout is {age_hours:.1f}h old (< {IOS_PHASED_JUMP_HOURS:g}h observation window)"
-    hold = capture_health_hold("ios", version=version)
+    hold = capture_health_hold("ios", build=ios_version_build_number(live_version_id))
     if hold:
         return False, f"phased rollout is {age_hours:.1f}h old; held on capture health: {hold}"
     return True, f"phased rollout is {age_hours:.1f}h old; releasing to everyone"
@@ -814,7 +834,7 @@ def run_ios(*, dry_run: bool, release_date: str, advance_only: bool = False, asc
     live_id = _live_version_id(asc, state)
     jump_note = "phased release disabled"
     if PHASED_RELEASE:
-        should_complete, jump_reason = ios_phased_release_should_complete(live_id, version=state.live_version)
+        should_complete, jump_reason = ios_phased_release_should_complete(live_id)
         log(f"live phased rollout check: {jump_reason}")
         jump_note = jump_reason
         if should_complete:

@@ -142,14 +142,6 @@ def previous_build(stats: Stats, os_name: str, build: str) -> tuple[str | None, 
     return max(lower, key=lambda item: item[1].pendant_users)
 
 
-def resolve_build(stats: Stats, os_name: str, version: str) -> str | None:
-    """The store build of a marketing version: its build with the most pendant users."""
-    builds = [(key[1], row) for key, row in stats.items() if key[0] == os_name and row.version == version]
-    if not builds:
-        return None
-    return max(builds, key=lambda item: item[1].pendant_users)[0]
-
-
 def judge(stats: Stats, os_name: str, build: str, hours: int = WINDOW_HOURS) -> Verdict:
     """The operator gate's judge for one build; a build with no data holds."""
     row = stats.get((os_name, str(build)))
@@ -224,24 +216,20 @@ def posthog_runner(api_key: str, *, host: str = DEFAULT_HOST, project_id: str = 
 def check_rollout(
     platform: str,
     *,
-    build: str | None = None,
-    version: str | None = None,
+    build: str | None,
     env: dict[str, str] | None = None,
     runner: QueryRunner | None = None,
 ) -> Verdict:
-    """HOLD or proceed for one rollout hop. Never raises: errors HOLD.
-
-    Pass the exact [build] when the store reports it (Android version code);
-    otherwise [version] resolves to its build with the most pendant users.
-    """
+    """HOLD or proceed for one rollout hop on the exact store [build] (Android
+    version code, iOS CFBundleVersion). Never raises: any error HOLDS."""
     env = dict(os.environ) if env is None else env
     override = env.get(OVERRIDE_ENV, "").strip()
     try:
         os_name = PLATFORM_OS.get(platform.lower())
         if os_name is None:
             raise CaptureHealthError(f"unknown platform {platform!r}")
-        if not build and not version:
-            raise CaptureHealthError("the build under rollout has no readable build or version")
+        if not build:
+            raise CaptureHealthError("the build under rollout has no readable build number")
         if runner is None:
             key = env.get(KEY_ENV, "").strip()
             if not key:
@@ -251,12 +239,8 @@ def check_rollout(
                 host=env.get("POSTHOG_HOST", "").strip() or DEFAULT_HOST,
                 project_id=env.get("POSTHOG_PROJECT_ID", "").strip() or DEFAULT_PROJECT_ID,
             )
-        stats = build_stats(runner)
-        resolved = str(build) if build else resolve_build(stats, os_name, str(version))
-        if resolved is None:
-            raise CaptureHealthError(f"no {os_name} build of {version} has pendant sessions in the last {WINDOW_HOURS}h")
-        verdict = judge(stats, os_name, resolved)
-    except (CaptureHealthError, ValueError, TypeError, IndexError) as exc:
+        verdict = judge(build_stats(runner), os_name, str(build))
+    except Exception as exc:  # noqa: BLE001 - the train must hold, never crash, on any read failure
         verdict = Verdict(True, f"capture health unknown ({exc}); failing closed")
     if verdict.hold and override:
         return Verdict(False, f"OVERRIDDEN ({OVERRIDE_ENV}={override!r}): {verdict.reason}")
