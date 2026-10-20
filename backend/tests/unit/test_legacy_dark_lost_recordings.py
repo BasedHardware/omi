@@ -59,8 +59,10 @@ def test_a_unit_still_running_after_the_grace_is_lost_and_named_by_state_only():
 
 def test_a_legacy_writer_field_on_a_batch_row_is_double_processing():
     rows = [
-        _batch('completed', ['a'], result=COMPLETED, processed_segment_ids=['legacy-seg']),
+        _batch('completed', ['a'], result=COMPLETED, ledger_run_token='legacy-run'),
         _batch('completed', ['b'], result=COMPLETED, adopted_legacy_job_id='legacy-1'),
+        # Batch projection writes processed_segment_ids itself; it is not legacy evidence.
+        _batch('completed', ['c'], result=COMPLETED, processed_segment_ids=['c']),
     ]
     counts = _classify(rows)
     assert counts['legacy_and_batch_content_ids'] == 1

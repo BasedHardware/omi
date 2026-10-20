@@ -23,7 +23,8 @@ Definitions (lead ruling 10-20):
   accounted and reported separately as ``in_custody``.
 * **lost**: ``accepted - accounted``.
 * **legacy_and_batch**: a ``batch_v1`` row that also carries a field only the
-  legacy runner writes (``LEGACY_WRITER_FIELDS``). Batch admission replaces the
+  legacy runner writes (``LEGACY_WRITER_FIELDS``; batch projection also writes
+  ``processed_segment_ids``, so it is not one). Batch admission replaces the
   whole row, so such a field means a legacy writer touched content batch owns.
   Rows batch adopted from a stranded legacy claim carry
   ``adopted_legacy_job_id`` and are counted as ``adopted`` (informational).
@@ -52,8 +53,10 @@ CAP_HOLD_PROTOCOL = 'stt_cap_hold_v1'
 # blocked it, or the unit is quarantined with its audio held for recovery.
 TERMINAL_JOB_STATES = frozenset({'completed', 'committed', 'erased', 'privacy_blocked', 'dead', 'quarantined'})
 CUSTODY_JOB_STATES = frozenset({'quarantined'})
-# Fields only the legacy runner writes on a ledger row (database/sync_ledger.py).
-LEGACY_WRITER_FIELDS = ('processed_segment_ids', 'partial_result', 'ledger_run_token', 'ledger_run_epoch')
+# Fields only the legacy runner writes on a ledger row (database/sync_ledger.py). Not
+# ``processed_segment_ids``: batch projection writes it too
+# (database/batch_pipeline_projection_session.py).
+LEGACY_WRITER_FIELDS = ('partial_result', 'ledger_run_token', 'ledger_run_epoch')
 ADOPTION_MARKER = 'adopted_legacy_job_id'
 
 
