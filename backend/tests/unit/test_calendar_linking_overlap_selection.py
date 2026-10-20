@@ -135,6 +135,30 @@ class TestSelectOverlappingCalendarEvent:
             is event
         )
 
+    def test_floating_time_event_without_a_utc_offset_does_not_crash(self):
+        """A floating-time or ICS-imported event has no UTC offset on dateTime.
+
+        Comparing its naive datetime against the timezone-aware conversation
+        bounds used to raise TypeError: can't compare offset-naive and
+        offset-aware datetimes instead of degrading to no-match.
+        """
+        conversation_start = WINDOW_START + timedelta(minutes=5)
+        conversation_end = conversation_start + timedelta(seconds=25)
+        floating_event = {
+            'id': 'evt-floating',
+            'summary': 'Floating Sync',
+            'status': 'confirmed',
+            'start': {'dateTime': (WINDOW_START + timedelta(minutes=-5)).replace(tzinfo=None).isoformat()},
+            'end': {'dateTime': (WINDOW_START + timedelta(minutes=25)).replace(tzinfo=None).isoformat()},
+        }
+
+        assert (
+            cl.select_overlapping_calendar_event(
+                [floating_event], conversation_start, conversation_end, require_accepted=True
+            )
+            is floating_event
+        )
+
     def test_sub_threshold_overlap_is_rejected(self):
         conversation_start = WINDOW_START + timedelta(minutes=5)
         conversation_end = conversation_start + timedelta(seconds=9)
@@ -433,3 +457,57 @@ class TestGetOverlappingCalendarEventWiring:
         )
 
         assert link is None
+
+    def test_mixed_naive_aware_and_iso_timestamps_do_not_crash(self):
+        from utils.conversations import meeting_context as mc
+        from models.conversation import CalendarEventLink
+
+        event = _event(WINDOW_START, WINDOW_START + timedelta(minutes=30))
+        naive_start = (WINDOW_START + timedelta(minutes=5)).replace(tzinfo=None)
+        aware_end = WINDOW_START + timedelta(minutes=20)
+
+        assert cl.select_overlapping_calendar_event([event], naive_start, aware_end) is event
+
+        iso_conv = [
+            {
+                'id': 'conv-iso',
+                'started_at': (WINDOW_START + timedelta(minutes=5)).isoformat().replace('+00:00', 'Z'),
+                'finished_at': (WINDOW_START + timedelta(minutes=20)).isoformat(),
+                'discarded': False,
+            }
+        ]
+        assert cl.select_capture_gaps([event], iso_conv) == []
+
+        self._patched_provider([event])
+        link = asyncio.run(
+            cl.get_overlapping_calendar_event(
+                'uid-1',
+                naive_start.isoformat(),
+                aware_end,
+                require_accepted=True,
+            )
+        )
+        assert link is not None and link.event_id == 'evt-1'
+
+        rows = [{'appName': 'Zoom', 'windowTitle': 'Zoom Meeting', 'ocrText': 'Alice Smith is in this call'}]
+        ctx_screen = mc.context_from_screen_activity(rows, started_at=naive_start, finished_at=aware_end)
+        assert ctx_screen is not None and ctx_screen.duration_minutes == 15
+
+        naive_link = CalendarEventLink(
+            event_id='evt-2',
+            title='Sync',
+            attendees=['Alice Smith'],
+            attendee_emails=['alice@example.com'],
+            start_time=naive_start,
+            end_time=aware_end,
+        )
+        ctx_link = mc.context_from_calendar_link(naive_link)
+        assert ctx_link.duration_minutes == 15
+
+        win = mc.stored_meeting_window(
+            {
+                'start_time': WINDOW_START.isoformat().replace('+00:00', 'Z'),
+                'end_time': (WINDOW_START + timedelta(minutes=30)).isoformat(),
+            }
+        )
+        assert win == (WINDOW_START, WINDOW_START + timedelta(minutes=30))
