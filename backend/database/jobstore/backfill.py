@@ -2,7 +2,7 @@
 (``apply``) copy every missing or differing one.
 
 Firestore stays the primary and the only authority. Each copy goes through the A2 mirror's own path
-(``DualStore._copy_current``): the key's Postgres advisory lock, then a fresh, lock-free ``get_all`` of the
+(``DualStore.copy_current``): the key's Postgres advisory lock, then a fresh, lock-free ``get_all`` of the
 primary's current state. A backfill page therefore never regresses a row that a live mirror updated after the
 census read it, and a document deleted meanwhile is deleted from Postgres too. Rerunnable and idempotent.
 
@@ -39,9 +39,9 @@ class TableReport:
 
 def _pages(client: Any, collection: str, page_size: int) -> Iterator[list[Any]]:
     """Firestore snapshots of ``collection`` in document-id order, one page at a time."""
-    from google.cloud import firestore
+    from google.cloud.firestore_v1.field_path import FieldPath
 
-    query = client.collection(collection).order_by(firestore.FieldPath.document_id()).limit(page_size)
+    query = client.collection(collection).order_by(FieldPath.document_id()).limit(page_size)
     last = None
     while True:
         page = list((query.start_after(last) if last is not None else query).stream())
@@ -88,7 +88,7 @@ def backfill_table(dual: DualStore, client: Any, table: str, *, apply: bool, pag
             try:
                 with shadow.pool.connection(timeout=COPY_BUDGET_S) as conn:
                     with conn.transaction():
-                        dual._copy_current(conn, sorted(stale), reader=read_current)
+                        dual.copy_current(conn, sorted(stale), reader=read_current)
                 report.copied += len(stale)
             except Exception as exc:  # counted per page; the rerun picks the page up again
                 report.copy_errors += len(stale)

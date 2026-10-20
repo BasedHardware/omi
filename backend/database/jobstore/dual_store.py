@@ -247,7 +247,7 @@ class DualStore:
     # -- mirror -----------------------------------------------------------------------------------
     def _after_commit(self, view: _Recorder) -> None:
         # Only the written addresses travel: the mirror copies the primary's current state, never this
-        # commit's snapshot (see ``_copy_current``).
+        # commit's snapshot (see ``copy_current``).
         writes = sorted({address for address in view.writes if address[0] in MIRRORED_TABLES})
         if not writes and not view.reads:
             return
@@ -306,7 +306,7 @@ class DualStore:
             return
         self._ensure_worker()
 
-    def _copy_current(
+    def copy_current(
         self,
         conn: Any,
         keys: list[tuple[str, str]],
@@ -346,7 +346,7 @@ class DualStore:
             with self.shadow.pool.connection(timeout=self.budget_s) as conn:
                 with conn.transaction():
                     conn.execute(f'SET LOCAL statement_timeout = {int(self.budget_s * 1000)}')
-                    self._copy_current(conn, keys, phase)
+                    self.copy_current(conn, keys, phase)
         except Exception as exc:
             outcome = ShadowParityOutcome.TIMEOUT if _is_timeout(exc) else ShadowParityOutcome.ERROR
             for table, _ in keys:
@@ -372,7 +372,7 @@ class DualStore:
                         if outcome is not ShadowParityOutcome.MATCH:
                             differing.append((table, key, outcome, primary_doc, shadow_doc))
                     if writes:
-                        self._copy_current(conn, writes, phase)
+                        self.copy_current(conn, writes, phase)
         except Exception as exc:
             outcome = ShadowParityOutcome.TIMEOUT if _is_timeout(exc) else ShadowParityOutcome.ERROR
             for table, _ in writes:
