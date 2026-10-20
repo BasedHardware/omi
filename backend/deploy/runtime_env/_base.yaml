@@ -166,16 +166,7 @@ environment_shared:
         CAPTURE_GROUP_CONTAINMENT_MODE:
           value: shadow
           category: rollout
-        TRANSLATION_DEMAND_SHADOW_ENABLED:
-          value: 'false'
-          category: rollout
         TRANSLATION_DEMAND_GATE_ENABLED:
-          value: 'true'
-          category: rollout
-        TRANSLATION_DEMAND_LEASE_V1_ENABLED:
-          value: 'true'
-          category: rollout
-        TRANSLATION_ONDEMAND_GEMINI_ENABLED:
           value: 'true'
           category: rollout
         TRANSLATION_ONOPEN_ENABLED:
@@ -186,12 +177,6 @@ environment_shared:
           category: rollout
         TRANSLATION_NEGATIVE_CACHE_TTL:
           value: '21600'
-          category: rollout
-        TRANSLATION_ONDEMAND_COHORT_PERCENT:
-          value: '100'
-          category: rollout
-        TRANSLATION_ONDEMAND_UID_ALLOWLIST:
-          value: ''
           category: rollout
         TRANSLATION_ONDEMAND_MAX_SEGMENTS:
           value: '50'
@@ -1095,16 +1080,7 @@ environment_shared:
           SYNC_LINEAGE_S1_REQUIRED:
             value: 'true'
             category: rollout
-          TRANSLATION_DEMAND_SHADOW_ENABLED:
-            value: 'false'
-            category: rollout
           TRANSLATION_DEMAND_GATE_ENABLED:
-            value: 'true'
-            category: rollout
-          TRANSLATION_DEMAND_LEASE_V1_ENABLED:
-            value: 'true'
-            category: rollout
-          TRANSLATION_ONDEMAND_GEMINI_ENABLED:
             value: 'true'
             category: rollout
           TRANSLATION_ONOPEN_ENABLED:
@@ -1115,9 +1091,6 @@ environment_shared:
             category: rollout
           TRANSLATION_NEGATIVE_CACHE_TTL:
             value: '21600'
-            category: rollout
-          TRANSLATION_ONDEMAND_COHORT_PERCENT:
-            value: '100'
             category: rollout
           TRANSLATION_ONDEMAND_MAX_SEGMENTS:
             value: '50'

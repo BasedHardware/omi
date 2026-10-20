@@ -33,8 +33,6 @@ def conversation(count=2):
 
 def configure(monkeypatch):
     monkeypatch.setenv('TRANSLATION_ONOPEN_ENABLED', 'true')
-    monkeypatch.setenv('TRANSLATION_ONDEMAND_UID_ALLOWLIST', 'u,another-user')
-    monkeypatch.setenv('TRANSLATION_ONDEMAND_GEMINI_ENABLED', 'true')
     monkeypatch.setenv('TRANSLATION_ONDEMAND_UID_DAILY_CHARS', '100000')
     monkeypatch.setenv('TRANSLATION_ONDEMAND_GLOBAL_DAILY_CHARS', '1000000')
     monkeypatch.setenv('ENCRYPTION_SECRET', 'a' * 32)
