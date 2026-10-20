@@ -50,6 +50,10 @@ def test_gateway_route_overrides_do_not_change_the_legacy_model_profile():
     assert chat_agent_lane.surface == Surface.OPENAI_CHAT_COMPLETIONS
     assert chat_agent_lane.capabilities.streaming is True
     assert chat_agent_lane.capabilities.tools is True
+    # Agentic meeting notes call read-only tools before a terminal submit on their own lane.
+    conv_structure_lane = config.lanes['omi:auto:conv-structure']
+    assert conv_structure_lane.capabilities.tools is True
+    assert conv_structure_lane.capabilities.streaming is True
 
 
 def test_memory_l2_gateway_lane_resolves_to_luna():

@@ -231,6 +231,7 @@ from utils.conversations.meeting_context import (
     store_meeting_context as _store_meeting_context,
 )
 from utils.conversations.meeting_notes_wiring import (
+    notes_capture_sources,
     rich_notes_inputs,
     rich_roster_inputs,
 )
@@ -624,6 +625,9 @@ def _get_structured(
                 rich_context_enabled=roster is not None,
                 roster=roster,
                 screen_frames=screen_frames,
+                finished_at=main_conv.finished_at,
+                desktop_meeting_capture=desktop_capture,
+                capture_sources=notes_capture_sources(main_conv),
             )
         validate_structured_source_segment_ids(structured, transcript_segment_ids)
         return structured, False
