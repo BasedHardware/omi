@@ -45,7 +45,7 @@ def _write_stub(path: Path, body: str) -> None:
     path.chmod(0o755)
 
 
-def _run_dev_probe_step(tmp_path: Path, *, stages: list[str], generations: list[int]):
+def _run_dev_probe_step(tmp_path: Path, *, stages: list[str], generations: list[int | str]):
     """Run the real probe step with kubectl/curl/python3/jq-free stubs.
 
     `stages` is what each probe attempt reports (PASS or a failure stage);
@@ -120,6 +120,9 @@ def test_dev_probe_retries_once_when_listen_rolled_out_mid_probe(tmp_path):
         (['listen_closed_early', 'PASS'], [7, 7]),  # listen never rolled: a real failure
         (['transcript_mismatch', 'PASS'], [7, 8]),  # any other stage is final
         (['listen_closed_early', 'PASS'], [7, 7, 7]),
+        # An unreadable generation on either side is not proof of a rollout.
+        (['listen_closed_early', 'PASS'], [7, 'unknown']),
+        (['listen_closed_early', 'PASS'], ['unknown', 8]),
     ],
 )
 def test_dev_probe_does_not_retry_without_a_listen_rollout(tmp_path, stages, generations):

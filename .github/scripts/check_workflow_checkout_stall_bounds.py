@@ -70,12 +70,25 @@ def checkout_action_refs(repo_root: Path) -> set[str]:
     return refs
 
 
+def _uses_checkout_action(uses: object, checkout_actions: set[str]) -> bool:
+    """A local action call, including a staged copy of one.
+
+    Deploy workflows check the action tree out under a prefix and call, for example,
+    `./.github/firestore-workflow/.github/actions/firestore-readiness`. That is still
+    the `./.github/actions/firestore-readiness` action, so match on the suffix.
+    """
+    if not isinstance(uses, str) or not uses.startswith("./"):
+        return False
+    uses = uses.rstrip("/")
+    return any(uses == ref or uses.endswith("/" + ref[2:]) for ref in checkout_actions)
+
+
 def check_workflow(path: Path, checkout_actions: set[str] = frozenset()) -> list[str]:
     document = _load(path)
     if not isinstance(document, dict):
         return []
     checks_out = any(
-        _is_checkout(uses) or (isinstance(uses, str) and uses.rstrip("/") in checkout_actions)
+        _is_checkout(uses) or _uses_checkout_action(uses, checkout_actions)
         for uses in (step.get("uses") for step in _workflow_steps(document))
     )
     if not checks_out:

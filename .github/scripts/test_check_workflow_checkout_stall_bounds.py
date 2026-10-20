@@ -76,6 +76,16 @@ class CheckoutStallBoundsTests(unittest.TestCase):
         self.assertTrue(guard.check_workflow(self._workflow("./.github/actions/deploy"), refs))
         self.assertEqual(guard.check_workflow(self._workflow("./.github/actions/deploy", env=BOUND_ENV), refs), [])
 
+    def test_staged_copy_of_a_checkout_action_counts(self) -> None:
+        """Deploy workflows call the action from a staged tree under another prefix."""
+        self._action("actions/checkout@v7", name="firestore-readiness")
+        refs = guard.checkout_action_refs(self.root)
+        staged = "./.github/firestore-workflow/.github/actions/firestore-readiness"
+        self.assertTrue(guard.check_workflow(self._workflow(staged), refs))
+        self.assertEqual(guard.check_workflow(self._workflow(staged, env=BOUND_ENV), refs), [])
+        # A different action that merely shares a name prefix is not a match.
+        self.assertEqual(guard.check_workflow(self._workflow("./.github/actions/firestore-readiness-lite"), refs), [])
+
     def test_main_fails_on_unbounded_tree_and_passes_bounded_one(self) -> None:
         self._workflow("actions/checkout@v7", name="a.yml")
         self.assertEqual(guard.main(["prog", str(self.root)]), 1)

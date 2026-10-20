@@ -299,7 +299,8 @@ jobs:
           # port-forward is pinned to, and the probe fails listen_closed_early
           # (6 runs on 2026-10-19/20, each 15-17 s after a listen helm upgrade).
           # Retry once, only for that stage and only when the generation of the listen
-          # Deployment changed during the attempt; every other failure is final.
+          # Deployment changed during the attempt (both reads numeric); every other
+          # failure, including an unreadable generation, is final.
           listen_generation() {
             kubectl --context "$producer_context" -n dev-omi-backend get deploy/dev-omi-backend-listen \
               --request-timeout=30s -o jsonpath='{.metadata.generation}' || echo unknown
@@ -356,7 +357,7 @@ jobs:
             stage="$(jq -r '.failure_stage // "unknown"' pusher-dev-semantic-probe.json 2>/dev/null || echo unknown)"
             close_code="$(jq -r '.listen_close_code // "none"' pusher-dev-semantic-probe.json 2>/dev/null || echo none)"
             generation_after="$(listen_generation)"
-            if [[ "$stage" != listen_closed_early || "$generation_before" == unknown || "$generation_after" == "$generation_before" ]]; then
+            if [[ "$stage" != listen_closed_early || ! "$generation_before" =~ ^[0-9]+$ || ! "$generation_after" =~ ^[0-9]+$ || "$generation_after" == "$generation_before" ]]; then
               exit 1
             fi
             cp pusher-dev-semantic-probe.json pusher-dev-semantic-probe.attempt1.json

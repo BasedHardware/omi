@@ -356,8 +356,9 @@ class TestCodemagicSourcePinCheckout(unittest.TestCase):
         self._git("commit", "--quiet", "--allow-empty", "-m", message)
         return self._git("rev-parse", "HEAD")
 
-    def _run(self, pin):
-        env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+    def _run(self, pin, **extra):
+        env = {k: v for k, v in os.environ.items() if not k.startswith(("GIT_", "CM_"))}
+        env.update(extra)
         if pin is not None:
             env["OMI_RELEASE_SOURCE_SHA"] = pin
         return subprocess.run(
@@ -371,10 +372,18 @@ class TestCodemagicSourcePinCheckout(unittest.TestCase):
 
     def test_moved_tip_that_contains_the_pin_builds_the_pin(self):
         """2026-10-20: main moved between dispatch and clone; both builds died."""
-        self._commit("landed after dispatch")
-        result = self._run(self.first)
+        tip = self._commit("landed after dispatch")
+        cm_env = self.repo / "cm_env"
+        result = self._run(self.first, CM_BUILD_ID="b", CM_ENV=str(cm_env))
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(self._git("rev-parse", "HEAD"), self.first)
+        # build_provenance_dart_defines.sh accepts HEAD != CM_COMMIT only with this record.
+        self.assertEqual(cm_env.read_text(), f"OMI_RELEASE_PIN_CLONED_TIP={tip}\n")
+
+    def test_moved_tip_inside_codemagic_without_cm_env_fails_closed(self):
+        tip = self._commit("landed after dispatch")
+        self.assertNotEqual(self._run(self.first, CM_BUILD_ID="b").returncode, 0)
+        self.assertEqual(self._git("rev-parse", "HEAD"), tip)
 
     def test_pin_off_the_tip_history_fails_closed(self):
         self._git("checkout", "--quiet", "-b", "side")

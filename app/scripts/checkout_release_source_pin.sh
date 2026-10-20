@@ -43,13 +43,23 @@ main() {
     return 1
   fi
 
+  # Later steps (build_provenance_dart_defines.sh) compare HEAD with Codemagic's
+  # CM_COMMIT, the cloned tip. Record the tip so they can accept this checkout.
+  if [[ -n "${CM_BUILD_ID:-}" && -z "${CM_ENV:-}" ]]; then
+    echo "CM_ENV is unset; cannot record the cloned tip for later steps" >&2
+    return 1
+  fi
+  local tip="$head"
   git checkout --quiet --detach "$pin"
   head="$(git rev-parse HEAD)"
   if [[ "$head" != "$pin" ]]; then
     echo "checkout of dispatcher source pin $pin left HEAD at $head" >&2
     return 1
   fi
-  echo "checked out dispatcher source pin $pin"
+  if [[ -n "${CM_ENV:-}" ]]; then
+    echo "OMI_RELEASE_PIN_CLONED_TIP=$tip" >>"$CM_ENV"
+  fi
+  echo "checked out dispatcher source pin $pin (cloned tip $tip)"
 }
 
 main "$@"; exit $?
