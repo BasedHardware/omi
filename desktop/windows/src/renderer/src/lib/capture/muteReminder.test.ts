@@ -166,6 +166,40 @@ describe('muteReminder (#20215)', () => {
     expect(reminders[1].title).toContain('1h 15m')
   })
 
+  it('changing the interval mid-mute restarts the countdown without resetting muted duration', () => {
+    const onRemind = vi.fn()
+    const controller = createMuteReminderController({ onRemind })
+    const state = {
+      signedIn: true,
+      onboarded: true,
+      continuousRecording: false,
+      urgency: 'standard' as const,
+      intervalMinutes: 30
+    }
+
+    controller.update(state)
+    vi.advanceTimersByTime(20 * 60_000)
+    controller.update({ ...state, intervalMinutes: 15 })
+
+    // The old 30-minute deadline must not survive the interval change.
+    vi.advanceTimersByTime(10 * 60_000)
+    expect(onRemind).not.toHaveBeenCalled()
+    vi.advanceTimersByTime(5 * 60_000 - 1)
+    expect(onRemind).not.toHaveBeenCalled()
+    vi.advanceTimersByTime(1)
+    expect(onRemind).toHaveBeenCalledTimes(1)
+    expect(onRemind).toHaveBeenLastCalledWith(
+      expect.objectContaining({ mutedMinutes: 35, reminderCount: 1 })
+    )
+
+    vi.advanceTimersByTime(15 * 60_000)
+    expect(onRemind).toHaveBeenCalledTimes(2)
+    expect(onRemind).toHaveBeenLastCalledWith(
+      expect.objectContaining({ mutedMinutes: 50, reminderCount: 2 })
+    )
+    controller.dispose()
+  })
+
   it('updating only urgency mid-mute preserves the running interval countdown', () => {
     const reminders: MuteReminderNotificationPayload[] = []
     const controller = createMuteReminderController({
