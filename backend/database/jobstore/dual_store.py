@@ -1,7 +1,10 @@
 """A2 shadow: Firestore stays the primary and the only authority; Postgres is a best-effort mirror.
 
 After a primary transaction commits, the batch documents it wrote are copied into Postgres (doc mode, the
-same rows ``PostgresStore`` reads) by one background thread per store. The caller never waits for the
+same rows ``PostgresStore`` reads) by one background thread per store. The copy is the primary's current
+state, re-read under a per-key Postgres advisory lock, never the commit's snapshot, so mirrors that arrive out
+of commit order cannot regress a row (one extra primary read per mirrored document; shadow never runs in
+prod). The caller never waits for the
 mirror and nothing on the mirror path raises into it: the queue is bounded (a full queue drops the copy),
 the pool wait and every statement are bounded by ``budget_s`` (200 ms), and any failure is counted.
 
@@ -167,7 +170,9 @@ class DualStore:
 
     # -- mirror -----------------------------------------------------------------------------------
     def _after_commit(self, view: _Recorder) -> None:
-        writes = {address: deepcopy(value) for address, value in view.writes.items() if address[0] in MIRRORED_TABLES}
+        # Only the written addresses travel: the mirror copies the primary's current state, never this
+        # commit's snapshot (see ``_copy_current``).
+        writes = sorted({address for address in view.writes if address[0] in MIRRORED_TABLES})
         if not writes and not view.reads:
             return
         if not shadow_writes_enabled():
@@ -225,18 +230,34 @@ class DualStore:
             return
         self._ensure_worker()
 
+    def _copy_current(self, conn: Any, keys: list[tuple[str, str]]) -> None:
+        """Copy the primary's CURRENT state of ``keys`` into Postgres (upsert, or delete when gone).
+
+        Commits reach the mirror out of order: two threads can queue in the reverse of Firestore's commit
+        order, and every instance runs its own mirror thread. Applying a commit's captured snapshot could
+        therefore land an older write after a newer one (or undo a purge). Instead each key is locked with a
+        transaction advisory lock, then re-read from the primary and copied. Firestore reads are strongly
+        consistent, so whichever mirror takes a key's lock later also reads a state at least as new, and the
+        last copy applied is the current one. ``keys`` is sorted, so the lock order cannot deadlock.
+        """
+        for table, key in keys:
+            conn.execute(
+                'SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))', (f'{self.shadow.namespace}/{table}/{key}',)
+            )
+        docs = self.primary.run(lambda tx: {address: tx.get(*address) for address in keys})
+        for (table, key), doc in docs.items():
+            if doc:
+                self.shadow.write_doc(conn, table, key, doc)
+            else:
+                self.shadow.delete_doc(conn, table, key)
+
     def refresh_now(self, keys: list[tuple[str, str]]) -> None:
-        """Read ``keys`` from the primary, then upsert (or delete) each Postgres copy. Never raises."""
+        """Re-copy ``keys`` from the primary into Postgres (upsert, or delete when gone). Never raises."""
         try:
-            docs = self.primary.run(lambda tx: {address: tx.get(*address) for address in keys})
             with self.shadow.pool.connection(timeout=self.budget_s) as conn:
                 with conn.transaction():
                     conn.execute(f'SET LOCAL statement_timeout = {int(self.budget_s * 1000)}')
-                    for (table, key), doc in docs.items():
-                        if doc:
-                            self.shadow.write_doc(conn, table, key, doc)
-                        else:
-                            self.shadow.delete_doc(conn, table, key)
+                    self._copy_current(conn, keys)
         except Exception as exc:
             outcome = ShadowParityOutcome.TIMEOUT if _is_timeout(exc) else ShadowParityOutcome.ERROR
             for table, _ in keys:
@@ -246,16 +267,16 @@ class DualStore:
         for table, _ in keys:
             _count(table, 'refresh', ShadowParityOutcome.MIRRORED)
 
-    def mirror(self, reads: dict[tuple[str, str], dict], writes: dict[tuple[str, str], dict]) -> None:
-        """One Postgres transaction: compare the read pre-images, then apply the writes. Never raises."""
+    def mirror(self, reads: dict[tuple[str, str], dict], writes: list[tuple[str, str]]) -> None:
+        """One Postgres transaction: compare the read pre-images, then copy the written keys. Never raises."""
         try:
             with self.shadow.pool.connection(timeout=self.budget_s) as conn:
                 with conn.transaction():
                     conn.execute(f'SET LOCAL statement_timeout = {int(self.budget_s * 1000)}')
                     for (table, key), primary_doc in reads.items():
                         _count(table, 'read', compare(primary_doc, self.shadow.read_doc(conn, table, key)))
-                    for (table, key), value in writes.items():
-                        self.shadow.write_doc(conn, table, key, value)
+                    if writes:
+                        self._copy_current(conn, writes)
         except Exception as exc:
             outcome = ShadowParityOutcome.TIMEOUT if _is_timeout(exc) else ShadowParityOutcome.ERROR
             for table, _ in writes:
