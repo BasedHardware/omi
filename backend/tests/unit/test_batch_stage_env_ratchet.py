@@ -83,7 +83,10 @@ class _Visitor(ast.NodeVisitor):
     def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
         if node.module == 'os':
             for alias in node.names:
-                if alias.name == 'getenv':
+                if alias.name == '*':
+                    self.getenv_names.add('getenv')
+                    self.environ_names.add('environ')
+                elif alias.name == 'getenv':
                     self.getenv_names.add(alias.asname or alias.name)
                 elif alias.name == 'environ':
                     self.environ_names.add(alias.asname or alias.name)
@@ -139,6 +142,12 @@ class _Visitor(ast.NodeVisitor):
             self._claimed.add(id(node))
             self._add(DYNAMIC)
         self.generic_visit(node)
+
+    def visit_Name(self, node: ast.Name) -> None:
+        # A bare imported `environ` (or alias) used as a mapping: dict(env), env.items(), {**env}, ...
+        if node.id in self.environ_names and isinstance(node.ctx, ast.Load) and id(node) not in self._claimed:
+            self._claimed.add(id(node))
+            self._add(DYNAMIC)
 
 
 def scan_source(source: str) -> Counter[tuple[str, str]]:
@@ -283,6 +292,18 @@ def f():
         ('f', 'C'): 1,
         ('f', 'D'): 1,
     }
+    mappings = '''
+from os import environ as env
+from os import *
+
+def g():
+    dict(env)
+    env.items()
+    {**env}
+    getenv('E')
+    environ.copy()
+'''
+    assert dict(scan_source(mappings)) == {('g', DYNAMIC): 4, ('g', 'E'): 1}
 
 
 def _write_baseline() -> None:
