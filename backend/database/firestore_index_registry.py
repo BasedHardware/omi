@@ -2118,6 +2118,10 @@ FIELD_INDEX_REQUIREMENTS: tuple[FieldIndexRequirement, ...] = MESSAGING_FIELD_RE
         ('ASCENDING',),
     ),
     FieldIndexRequirement('memory_outbox_status_group_ascending', 'memory_outbox', 'status', ('ASCENDING',)),
+    # Legacy dark zero-lost census (scripts/legacy_dark/lost_recordings.py, soak check 5).
+    FieldIndexRequirement(
+        'sync_content_ledger_created_at_group_ascending', 'sync_content_ledger', 'created_at', ('ASCENDING',)
+    ),
     FieldIndexRequirement(
         'task_recurrence_inbox_status_group_ascending', 'task_recurrence_inbox', 'status', ('ASCENDING',)
     ),
