@@ -1,24 +1,23 @@
-# Bounty Objective: [Bounty Proposal] Normalize datetime and ISO-8601 string timestamps across episode selection, writer, and conversation duration
-Target: BasedHardware/omi Issue #22942
-URL: https://github.com/BasedHardware/omi/issues/22942
+# Bounty Objective: [Bounty Proposal] Fix LocalWalSyncImpl async flush frame-buffer wipe & stale device clear on reconnect (#22912)
+Target: BasedHardware/omi Issue #22940
+URL: https://github.com/BasedHardware/omi/issues/22940
 
 ## Issue Description
 ## Scope & Problem Statement
 
-Several backend conversation and episode-note helpers make contradictory assumptions about whether `started_at`, `finished_at`, and `item.time` are `datetime` objects or ISO-8601 `str` values, and whether timestamps are timezone-aware or naive:
+In #22912, `test/unit/capture_live_recovery_test.dart` (`device reconnect finishes stopping the old session before starting the new one`) fails with `Expected: <210>`, `Actual: <200>` (losing the 10 `orphanPendant` frames emitted while the previous session stop is in flight):
 
-1. **`backend/utils/conversations/episode_selection.py` vs. `backend/utils/llm/episode_writer.py`:**
-   - `_datetime()` in `episode_selection.py` calls `datetime.fromisoformat(value or '')`, raising `TypeError: fromisoformat: argument must be str` when `finished_at` or `item.time` is a `datetime` object.
-   - Conversely, `episode_finish_local_iso(finished_at, user_tz)` in `episode_writer.py` accesses `finished_at.tzinfo` directly, raising `AttributeError: 'str' object has no attribute 'tzinfo'` when passed an ISO-8601 `str` (such as `EpisodeEvidence.finished_at` or raw Firestore dict payloads).
-2. **`backend/testing/episode_notes/policy_replay.py`:**
-   - `episode_route_signals` subtracts `datetime.fromisoformat(...)` values without normalizing naive vs. aware timestamps to UTC, raising `TypeError` when evidence items mix naive and offset-aware strings.
-3. **`backend/utils/conversations/duration.py`:**
-   - Although `duration.py` supports plain `dict` conversations via `_value()`, `_wall_duration_seconds` rejects ISO-8601 string `started_at`/`finished_at` fields (`if not isinstance(started_at, datetime)`) and `_as_utc` only checks `value.tzinfo is None` rather than `value.tzinfo is None or value.tzinfo.utcoffset(value) is None`.
+1. **`LocalWalSyncImpl.onAudioCodecChanged` & `stop` (`app/lib/services/wals/local_wal_sync.dart`):**
+   - `_drainPendantTail(generation)`, `_chunk(generation)`, and `_flush(generation)` are scheduled across separate `_enqueueBuffer` calls, and `_frames = []; _pendingPhoneOnly = false; _frameSynced = [];` is executed **after** `await _enqueueBuffer(() => _flush(generation))` returns.
+   - Because `onFrameCaptured` is synchronous and does not wait on `_bufferQueue`, frames arriving while `_flush(generation)` awaits disk I/O (`File.writeAsBytes` / `_saveWalsToFile`) are appended to `_frames` under the old `_codec` and `_sourceClockEpoch`, and then wiped out when `_flush` finishes and `_frames = []` runs.
+2. **`CaptureController._stopDeviceSessionBody` (`app/lib/services/capture/capture_controller.dart`):**
+   - `_stopDeviceSessionBody(cleanDevice: true)` calls `_updateRecordingDeviceBody(null)` after `await _wal.getSyncs().phone.finalizeCurrentSession()` without checking `!_deviceIdentityStale(deviceRevision)`, clobbering any newer `_recordingDevice` set by `updateRecordingDevice(pendant)` while `finalizeCurrentSession()` was awaiting disk I/O.
 
 ## Deliverables & Verification
-- Unify UTC-aware `datetime | str | None` coercion in `episode_selection._datetime`, `episode_writer.episode_finish_local_iso`, `episode_evidence.evidence_time`, `policy_replay.episode_route_signals`, and `duration._as_utc` / `_wall_duration_seconds`.
-- Add unit tests in `backend/tests/unit/test_episode_writer.py` and `backend/tests/unit/test_conversation_duration.py`.
-- **Implementation PR:** #22941
+- Fix `LocalWalSyncImpl.stop` and `LocalWalSyncImpl.onAudioCodecChanged` so `_drainPendantTailFrames`, `_chunk`, `_frames` reset, and `_codec`/`_sourceClockEpoch` rotation happen synchronously before `await _flush(generation)` yields for disk I/O.
+- Guard `_updateRecordingDeviceBody(null)` in `_stopDeviceSessionBody` with `!_deviceIdentityStale(deviceRevision)`.
+- Add deterministic unit test coverage in `app/test/unit/local_wal_sync_test.dart` verifying that frames captured while `persistWals` disk I/O is in flight during `onAudioCodecChanged` are preserved with the updated `sourceClockEpoch`.
+- **Implementation PR:** #22939 (Fixes #22912)
 
 ---
 **Designated Payout Rail — EVM (Base / Arbitrum / Polygon USDC):** `0x484eD370DEd0D36e36AAD469a2AFE5D69B1A005D`
