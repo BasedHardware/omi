@@ -282,4 +282,114 @@ void main() {
       expect(world.controller.recordingState, isNot(RecordingState.deviceRecord));
     });
   });
+
+  /// Regression guard for #20837: each fault must leave live capture running
+  /// again within a bound, and every pendant packet emitted while the pendant
+  /// was connected must be durable in the safety WAL (no transcript confirms
+  /// them here, so nothing is pruned).
+  group('regression guard for #20837 (fault injection)', () {
+    var emitted = 0;
+    late int baseline;
+
+    Future<void> startAccounting() async {
+      emitted = 0;
+      baseline = await persistedFrames();
+    }
+
+    void emitPackets(int count) {
+      for (var i = 0; i < count; i++) {
+        world.deviceConnection!.emitAudio(value: (emitted + i) & 255);
+      }
+      emitted += count;
+    }
+
+    Future<void> expectNoPacketDropped() async {
+      for (var i = 0; i < 200 && await persistedFrames() < baseline + emitted; i++) {
+        await world.settle();
+        await Future<void>.delayed(const Duration(milliseconds: 5));
+      }
+      expect(await persistedFrames(), baseline + emitted, reason: 'every emitted pendant packet is durable');
+    }
+
+    /// Advances virtual time one second at a time (emitting audio each second)
+    /// until live capture is up; fails if that takes longer than [bound].
+    Future<void> expectCaptureBackWithin(Duration bound) async {
+      for (var s = 0; s <= bound.inSeconds; s++) {
+        await world.controller.pendingSourceSwitch;
+        await world.settle();
+        if (liveCaptureUp()) return;
+        emitPackets(10);
+        await world.elapse(const Duration(seconds: 1));
+      }
+      fail('live capture did not come back within ${bound.inSeconds}s');
+    }
+
+    test('wifi to cellular handover during an upload pass', () async {
+      await startAccounting();
+      final pass = await holdFencedPass(trigger: WakeTrigger.deviceConnected);
+      emitPackets(50);
+      // The handover kills the socket on the old interface without ever going offline.
+      world.socket!.emitClose(1006);
+      world.emitNetworkChange();
+      emitPackets(50);
+      await expectCaptureBackWithin(const Duration(seconds: 3));
+      emitPackets(50);
+      pass.release.complete();
+      await pass.wake;
+      pass.coordinator.dispose();
+      await expectNoPacketDropped();
+    });
+
+    test('normal server close of the live socket', () async {
+      await startAccounting();
+      emitPackets(50);
+      world.socket!.emitClose(1000);
+      emitPackets(50);
+      await expectCaptureBackWithin(const Duration(seconds: 3));
+      emitPackets(50);
+      await expectNoPacketDropped();
+    });
+
+    test('pendant BLE drop and reconnect in the middle of a fenced pass', () async {
+      await startAccounting();
+      emitPackets(50);
+      final pass = await holdFencedPass();
+      await disconnect();
+      await connect();
+      // Connected but capture is deferred past the fence: the transport has no
+      // listener, so these reach the orphan route and must be persisted.
+      emitPackets(100);
+      pass.release.complete();
+      await pass.wake;
+      await expectCaptureBackWithin(const Duration(seconds: 3));
+      emitPackets(50);
+      pass.coordinator.dispose();
+      await expectNoPacketDropped();
+    });
+
+    test('a hung pass that never finishes', () async {
+      await startAccounting();
+      final hang = Completer<void>();
+      final coordinator = RecordingTransferCoordinator(
+        reconcile: () async {},
+        discover: () => hang.future,
+        refreshPending: () async {},
+        drain: () async => const RecordingTransferDrainResult.skipped(),
+        autoUploadEnabled: () => true,
+        fencedPassTimeLimit: const Duration(milliseconds: 50),
+        scheduleCooldown: (_, __) {},
+      );
+      final wake = coordinator.wake(WakeTrigger.periodic);
+      await pumpEventQueue();
+      await disconnect();
+      await connect();
+      emitPackets(100);
+      await wake; // ended by the hard time limit, not by the hung stage
+      await expectCaptureBackWithin(const Duration(seconds: 3));
+      emitPackets(50);
+      await expectNoPacketDropped();
+      hang.complete();
+      coordinator.dispose();
+    });
+  });
 }
