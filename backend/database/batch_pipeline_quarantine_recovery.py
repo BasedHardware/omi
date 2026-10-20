@@ -239,6 +239,7 @@ class RecoveryStore:
                 job.update(
                     result=asdict(WorkResult(segment_id, result_uri, outcome)),
                     state='result_ready',
+                    ready_at=now,
                     merge_pending=True,
                     recovery_state='recovered',
                 )
@@ -393,6 +394,7 @@ class SilenceDispositionStore(RecoveryStore):
             marker.update(state='completed', completed_at=now)
             job.update(
                 state='result_ready',
+                ready_at=now,
                 merge_pending=True,
                 recovery_state='recovered',
                 result=asdict(WorkResult(segment_id, result_uri, 'silence')),

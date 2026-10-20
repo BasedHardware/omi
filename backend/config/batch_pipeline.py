@@ -308,6 +308,32 @@ def publish_concurrency() -> int:
     return value if 1 <= value <= MAX_PUBLISH_CONCURRENCY else 1
 
 
+MERGE_HEAD_WAIT_DEFAULT = 60.0
+MERGE_HEAD_WAIT_MAX = 3600.0
+
+
+def merge_head_wait_seconds() -> float:
+    """Ship-on bounded ordered-merge head wait (David, 2026-10-20).
+
+    A row ``result_ready`` for this long commits past an earlier pending head,
+    which later appends as ``late_capture``. ``off`` or a value <= 0 is the
+    kill switch: strict capture order. Malformed or out-of-range values keep
+    the default.
+    """
+    raw = os.getenv('BATCH_PIPELINE_MERGE_HEAD_WAIT_SECONDS', '').strip().lower()
+    if not raw:
+        return MERGE_HEAD_WAIT_DEFAULT
+    if raw == 'off':
+        return 0.0
+    try:
+        value = float(raw)
+    except ValueError:
+        return MERGE_HEAD_WAIT_DEFAULT
+    if value <= 0:
+        return 0.0
+    return value if value <= MERGE_HEAD_WAIT_MAX else MERGE_HEAD_WAIT_DEFAULT
+
+
 RECOVERY_WAKE_LEASE_DEFAULT = 600
 RECOVERY_WAKE_LEASE_MAX = 3600
 
