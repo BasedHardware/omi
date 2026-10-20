@@ -109,8 +109,10 @@ LABEL org.opencontainers.image.revision=${OMI_RELEASE_SHA}
 FROM os-base AS pusher
 
 COPY --from=venv-pusher /opt/venv /opt/venv
+# backend/pusher/Dockerfile's runtime user has home /app; keep that for `~` expansion.
 RUN mkdir -p _temp _samples _segments _speech_profiles \
-    && chown -R omi:omi _temp _samples _segments _speech_profiles
+    && chown -R omi:omi _temp _samples _segments _speech_profiles \
+    && usermod -d /app omi
 
 # Whitelist-copy only the modules pusher reaches
 COPY backend/config/ ./config/

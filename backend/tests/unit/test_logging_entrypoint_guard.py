@@ -310,4 +310,10 @@ def test_each_registered_build_target_is_its_own_launch_surface(tmp_path, monkey
 
 
 def test_build_only_targets_have_no_launch_surface_until_deployed(tmp_path, monkeypatch):
+    monkeypatch.setattr(guard, 'dockerfile_shipped_by_github', lambda _: [])
     assert _multi_target_service(tmp_path, monkeypatch, build_only=True) == {}
+
+
+def test_build_only_flag_cannot_hide_a_dockerfile_a_workflow_ships(tmp_path, monkeypatch):
+    monkeypatch.setattr(guard, 'dockerfile_shipped_by_github', lambda _: ['.github/workflows/ships.yml'])
+    assert len(_multi_target_service(tmp_path, monkeypatch, build_only=True)) == 2

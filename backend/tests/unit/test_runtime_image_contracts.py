@@ -630,11 +630,25 @@ def test_role_pusher_target_copies_the_pusher_source_surface(contracts_module):
         ),
         (lambda p: p['services']['vad'].update({'current_image': 'parakeet'}), "!= chart image 'models'"),
         (lambda p: p['services'].pop('llm-gateway'), 'backend-gateway serves no declared service'),
+        (
+            lambda p: p['services']['llm-gateway'].update({'current_deploy': ['.github/workflows/gcp_parakeet.yml']}),
+            'gcp_parakeet.yml never names the service',
+        ),
+        (
+            lambda p: p['services']['pusher'].update(
+                {'current_deploy': ['.github/workflows/gcp_backend_listen_helm.yml']}
+            ),
+            "no current_deploy builds pusher's backend/pusher/Dockerfile",
+        ),
+        (
+            lambda p: _image_entry(p, 'backend').update({'build_only': True, 'deployment_workflows': []}),
+            'build_only image backend is the current image of',
+        ),
     ],
 )
 def test_role_map_rejects_incomplete_or_ambiguous_maps(contracts_module, tmp_path, mutate, expected):
     registry = _registry_variant(tmp_path, mutate)
-    errors = contracts_module.role_map_errors(contracts_module.load_contracts(), registry)
+    errors = contracts_module.role_map_errors(contracts_module.load_contracts(registry), registry)
     assert any(expected in error for error in errors), errors
 
 
@@ -655,6 +669,58 @@ def test_role_target_without_release_stamp_is_rejected(contracts_module, tmp_pat
     ]
     errors = contracts_module.role_map_errors(contracts)
     assert any('target api must end with the release stamp' in error for error in errors), errors
+
+
+def _role_errors_for_dockerfile(contracts_module, tmp_path, text, image='backend-api'):
+    dockerfile = tmp_path / 'Dockerfile.roles'
+    dockerfile.write_text(text, encoding='utf-8')
+    contracts = [
+        replace(contract, dockerfile=dockerfile) if contract.name == image else contract
+        for contract in contracts_module.load_contracts()
+    ]
+    return contracts_module.role_map_errors(contracts)
+
+
+_STAMP = (
+    'ARG OMI_RELEASE_SHA=unknown\n'
+    'ENV OMI_RELEASE_SHA=${OMI_RELEASE_SHA}\n'
+    'LABEL org.opencontainers.image.revision=${OMI_RELEASE_SHA}\n'
+)
+
+
+def test_copied_but_uninstalled_lock_is_rejected(contracts_module, tmp_path):
+    errors = _role_errors_for_dockerfile(
+        contracts_module,
+        tmp_path,
+        'FROM python AS api\n'
+        'COPY backend/pylock.runtime.toml /tmp/pylock.runtime.toml\n'
+        'COPY backend/pusher/pylock.toml /tmp/pylock.toml\n'
+        'RUN uv pip sync /tmp/pylock.toml\n' + _STAMP,
+    )
+    assert any('does not install its declared lock backend/pylock.runtime.toml' in error for error in errors), errors
+
+
+def test_installed_lock_and_trailing_stamp_pass(contracts_module, tmp_path):
+    errors = _role_errors_for_dockerfile(
+        contracts_module,
+        tmp_path,
+        'FROM python AS api\n'
+        'COPY backend/pylock.runtime.toml /tmp/pylock.runtime.toml\n'
+        'RUN uv pip sync /tmp/pylock.runtime.toml\n' + _STAMP,
+    )
+    assert not [error for error in errors if 'backend-api' in error or 'target api' in error], errors
+
+
+def test_release_sha_referenced_before_the_stamp_is_rejected(contracts_module, tmp_path):
+    errors = _role_errors_for_dockerfile(
+        contracts_module,
+        tmp_path,
+        'FROM python AS api\n'
+        'ARG OMI_RELEASE_SHA=unknown\n'
+        'COPY backend/pylock.runtime.toml /tmp/pylock.runtime.toml\n'
+        'RUN uv pip sync /tmp/pylock.runtime.toml\n' + _STAMP,
+    )
+    assert any('reference OMI_RELEASE_SHA nowhere earlier' in error for error in errors), errors
 
 
 def test_target_instructions_follow_the_stage_chain_not_copy_from(contracts_module, tmp_path):
@@ -693,6 +759,7 @@ def test_build_smoke_builds_the_registered_target(contracts_module, monkeypatch)
     class Result:
         returncode = 0
 
+    monkeypatch.setenv('GITHUB_SHA', 'abc1234')
     monkeypatch.setattr(contracts_module, 'third_party_dependency_modules', lambda _: ('fastapi',))
     monkeypatch.setattr(contracts_module.subprocess, 'run', lambda command, check: calls.append(command) or Result())
 
@@ -705,6 +772,8 @@ def test_build_smoke_builds_the_registered_target(contracts_module, monkeypatch)
         ROLE_DOCKERFILE,
         '--target',
         'api',
+        '--build-arg',
+        'OMI_RELEASE_SHA=abc1234',
         '--tag',
         'omi-api:test',
         '.',

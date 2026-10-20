@@ -18,6 +18,9 @@ from __future__ import annotations
 import argparse
 import ast
 import json
+import os
+import posixpath
+import re
 import shlex
 import shutil
 import subprocess
@@ -755,10 +758,23 @@ def smoke_image(image: str, contracts: Iterable[ImageContract]) -> int:
     return 0
 
 
+def _release_sha() -> str:
+    sha = os.environ.get("GITHUB_SHA", "")
+    if not sha:
+        result = subprocess.run(
+            ["git", "-C", str(REPOSITORY_ROOT), "rev-parse", "HEAD"], capture_output=True, text=True, check=False
+        )
+        sha = result.stdout.strip() if result.returncode == 0 else ""
+    return sha or "unknown"
+
+
 def build_and_smoke_image(image: str, contract: ImageContract) -> int:
     dockerfile = _repository_relative(contract.dockerfile)
     build_context = _repository_relative(contract.build_context)
     target = ["--target", contract.target] if contract.target else []
+    if contract.target:
+        # Role targets end with the release stamp; stamp the SHA actually built.
+        target += ["--build-arg", f"OMI_RELEASE_SHA={_release_sha()}"]
     build_command = ["docker", "build", "--file", dockerfile, *target, "--tag", image, build_context]
     print(f"Building {contract.name} runtime image: {' '.join(build_command)}", flush=True)
     build = subprocess.run(build_command, check=False)
@@ -771,7 +787,7 @@ def pull_request_smoke_matrix(contracts: Iterable[ImageContract]) -> str:
     return json.dumps({"service": [contract.name for contract in contracts if contract.pull_request_smoke]})
 
 
-ROLE_PLATFORMS = {"cloud-run", "gke"}
+ROLE_PLATFORMS = {"cloud-run", "cloud-run-job", "gke"}
 RELEASE_STAMP_LINES = (
     "ARG OMI_RELEASE_SHA=unknown",
     "ENV OMI_RELEASE_SHA=${OMI_RELEASE_SHA}",
@@ -798,6 +814,53 @@ def _build_instructions(dockerfile: Path, target: str | None) -> list[str]:
                     if token.startswith("--from=") and token[len("--from=") :] in stage_names:
                         pending.append(token[len("--from=") :])
     return lines
+
+
+LOCK_INSTALLERS = ("uv pip sync", "pip install", "pip3 install")
+
+
+def _installs_lock(contract: ImageContract, lock: str) -> bool:
+    """True when the image's build copies ``lock`` and a RUN installs from that copy.
+
+    A lock equal to the image Dockerfile means inline pins: some RUN must install.
+    """
+    lines = _build_instructions(contract.dockerfile, contract.target)
+    runs = [line for line in lines if line.upper().startswith("RUN ") and any(i in line for i in LOCK_INSTALLERS)]
+    if (REPOSITORY_ROOT / lock).resolve() == contract.dockerfile.resolve():
+        return bool(runs)
+    name = PurePosixPath(lock).name
+    for line in lines:
+        if not line.upper().startswith("COPY "):
+            continue
+        tokens = [token for token in shlex.split(line[5:]) if not token.startswith("--")]
+        if len(tokens) < 2 or lock not in tokens[:-1]:
+            continue
+        destination = tokens[-1]
+        if destination.endswith("/") or destination in {".", "./"}:
+            destination = posixpath.join(destination, name)
+        destination = posixpath.normpath(destination)
+        relative = not destination.startswith("/")
+        if any(destination in run or (relative and name in run) for run in runs):
+            return True
+    return False
+
+
+def _github_texts() -> dict[str, str]:
+    """Every workflow and composite action, keyed by repository-relative path."""
+    github = REPOSITORY_ROOT / ".github"
+    paths = sorted(github.glob("workflows/*.y*ml")) + sorted(github.glob("actions/**/action.y*ml"))
+    return {_repository_relative(path): path.read_text(encoding="utf-8") for path in paths}
+
+
+def dockerfile_shipped_by_github(dockerfile: Path) -> list[str]:
+    """Workflows or composite actions that reference ``dockerfile`` (so it may be shipped)."""
+    relative = _repository_relative(dockerfile)
+    return [path for path, text in _github_texts().items() if relative in text]
+
+
+def _deploy_text(path: str) -> str:
+    text = (REPOSITORY_ROOT / path).read_text(encoding="utf-8")
+    return _workflow_contract_text(REPOSITORY_ROOT / path) if path.startswith(".github/workflows/") else text
 
 
 def role_map_errors(contracts: Iterable[ImageContract], registry_path: Path = REGISTRY_PATH) -> list[str]:
@@ -842,16 +905,17 @@ def role_map_errors(contracts: Iterable[ImageContract], registry_path: Path = RE
             if not isinstance(lock, str) or not (REPOSITORY_ROOT / lock).is_file():
                 errors.append(f"role {role}: image {image} declares a missing dependency lock {lock!r}")
                 continue
-            if (REPOSITORY_ROOT / lock).resolve() != contract.dockerfile.resolve() and not any(
-                lock in line for line in _build_instructions(contract.dockerfile, contract.target)
-            ):
+            if not _installs_lock(contract, lock):
                 errors.append(f"role {role}: image {image} does not install its declared lock {lock}")
             if contract.target is not None:
-                stamp = docker_target_instructions(contract.dockerfile, contract.target)[-len(RELEASE_STAMP_LINES) :]
-                if tuple(stamp) != RELEASE_STAMP_LINES:
+                chain = docker_target_instructions(contract.dockerfile, contract.target)
+                stamp = chain[-len(RELEASE_STAMP_LINES) :]
+                early = [line for line in chain[: -len(RELEASE_STAMP_LINES)] if "OMI_RELEASE_SHA" in line]
+                if tuple(stamp) != RELEASE_STAMP_LINES or early:
                     errors.append(
                         f"role {role}: target {contract.target} must end with the release stamp "
-                        "(ARG/ENV OMI_RELEASE_SHA, LABEL org.opencontainers.image.revision)"
+                        "(ARG/ENV OMI_RELEASE_SHA, LABEL org.opencontainers.image.revision) and reference "
+                        "OMI_RELEASE_SHA nowhere earlier, or every later layer rebuilds per SHA"
                     )
                 if not contract.dependency_probe_smoke:
                     errors.append(f"role {role}: image {image} must run the dependency probe")
@@ -883,11 +947,37 @@ def role_map_errors(contracts: Iterable[ImageContract], registry_path: Path = RE
             errors.append(f"service {service}: current_image {current!r} is not a registered runtime image")
         deploys = spec.get("current_deploy")
         if not isinstance(deploys, list) or not deploys:
-            errors.append(f"service {service}: current_deploy must list the workflows that ship it today")
-        else:
-            for workflow in deploys:
-                if not isinstance(workflow, str) or not (REPOSITORY_ROOT / workflow).is_file():
-                    errors.append(f"service {service}: current_deploy {workflow!r} does not exist")
+            errors.append(f"service {service}: current_deploy must list the files that ship it today")
+            continue
+        texts: list[str] = []
+        for deploy in deploys:
+            if not isinstance(deploy, str) or not (REPOSITORY_ROOT / deploy).is_file():
+                errors.append(f"service {service}: current_deploy {deploy!r} does not exist")
+                continue
+            text = _deploy_text(deploy)
+            texts.append(text)
+            deployed_as = spec.get("deployed_as", service)
+            if not re.search(rf"(?<![\w-]){re.escape(deployed_as)}(?![\w-])", text):
+                errors.append(f"service {service}: current_deploy {deploy} never names the service")
+        # A deploy that runs an image another pipeline built (a tag reuse, an admitted image)
+        # says so; otherwise the deploy set must build the current image's Dockerfile.
+        if current in by_name and "image_built_elsewhere" not in spec:
+            dockerfile = _repository_relative(by_name[current].dockerfile)
+            if texts and not any(dockerfile in text for text in texts):
+                errors.append(f"service {service}: no current_deploy builds {current}'s {dockerfile}")
+
+    for contract in by_name.values():
+        if not contract.build_only:
+            continue
+        users = sorted(name for name, spec in services.items() if spec.get("current_image") == contract.name)
+        if users:
+            errors.append(f"build_only image {contract.name} is the current image of {users}")
+        shippers = dockerfile_shipped_by_github(contract.dockerfile)
+        if shippers:
+            errors.append(
+                f"build_only image {contract.name}: {_repository_relative(contract.dockerfile)} "
+                f"is referenced by {shippers}; clear build_only and register the deploy"
+            )
 
     for chart, image in payload.get("logging_chart_images", {}).items():
         spec = services.get(chart)

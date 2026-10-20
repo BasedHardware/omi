@@ -25,7 +25,7 @@ import yaml
 if __package__ in (None, ''):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from scripts.runtime_image_contracts import docker_target_instructions, load_contracts
+from scripts.runtime_image_contracts import docker_target_instructions, dockerfile_shipped_by_github, load_contracts
 
 ROOT = Path(__file__).resolve().parents[2]
 PENDING = 'backend/logging_rollout_pending.json'
@@ -245,11 +245,15 @@ def inventory(root: Path = ROOT) -> dict[str, dict[str, int]]:
         if dockerfile.relative_to(root).as_posix() in NON_PRODUCTION:
             continue
         registered = by_docker.get(dockerfile, [])
-        if registered and all(getattr(c, 'build_only', False) for c in registered):
+        if (
+            registered
+            and all(getattr(c, 'build_only', False) for c in registered)
+            and not dockerfile_shipped_by_github(dockerfile)
+        ):
             # Build-only images (runtime_images.json) are built and probed but no
-            # workflow ships them, so they have no launch surface yet. The registry
-            # contract forbids a build_only image from declaring a deploy; clearing
-            # build_only brings every target under this guard.
+            # workflow or action references their Dockerfile, so they have no launch
+            # surface yet. Marking a shipped image build_only does not hide it: the
+            # Dockerfile reference keeps it inspected (and check-roles rejects it).
             continue
         # A multi-target Dockerfile launches one image per registered build stage.
         stages: list[str | None] = sorted({c.target for c in registered if getattr(c, 'target', None)})
