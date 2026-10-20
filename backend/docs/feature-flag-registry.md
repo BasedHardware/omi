@@ -732,6 +732,11 @@ admission.
 
 | Key | Retired | Reason |
 | --- | --- | --- |
+| `SYNC_LINEAGE_S1_REQUIRED` | 2026-10-20 | David 2026-10-20, DEC-SYN-005 graduate |
+| `SYNC_ASSIGNMENT_RECOVERY_ENABLED` | 2026-10-20 | David 2026-10-20, DEC-SYN-007 graduate |
+| `CAPTURE_EVIDENCE_V1_DARK_WRITE` | 2026-10-20 | David 2026-10-20, DEC-SYN-008 graduate |
+| `LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED` | 2026-10-20 | David 2026-10-20, DEC-SYN-009 graduate |
+| `AUDIO_TIMELINE_SPANS` | 2026-10-20 | David 2026-10-20, DEC-SYN-010 graduate |
 | `TRANSLATION_PROFILE_GATE_ENABLED` | 2026-10-20 | David 2026-10-20, DEC-TRN-001 graduate: translation behavior is unconditional. |
 | `TRANSLATION_OUTPUT_GUARD_ENABLED` | 2026-10-20 | David 2026-10-20, DEC-TRN-001 graduate: translation behavior is unconditional. |
 | `TRANSLATION_DEMAND_SHADOW_ENABLED` | 2026-10-20 | David 2026-10-20, DEC-TRN-002 kill: translation behavior is unconditional. |
