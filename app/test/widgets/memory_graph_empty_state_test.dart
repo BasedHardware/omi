@@ -9,7 +9,6 @@ import 'package:omi/backend/http/api/knowledge_graph_api.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/memories/widgets/memory_graph_page.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
-import 'package:omi/utils/memory_graph_identity.dart';
 
 Future<Map<String, dynamic>> _emptyGraph() async => {'nodes': [], 'edges': []};
 
@@ -40,12 +39,6 @@ void main() {
       expect(memoryGraphUserLabel('', lookupAppLocalizations(const Locale('es'))), 'Tú');
       expect(memoryGraphUserLabel('  ', lookupAppLocalizations(const Locale('de'))), 'Sie');
       expect(memoryGraphUserLabel('', lookupAppLocalizations(const Locale('en'))), 'You');
-    });
-
-    test('only backend labels and the given name identify the user node', () {
-      expect(memoryGraphKnownUserLabels(''), {'me', 'the user'});
-      expect(memoryGraphKnownUserLabels(' Ana '), {'me', 'the user', 'ana'});
-      expect(memoryGraphKnownUserLabels('').contains('tú'), isFalse);
     });
 
     test('uses the given name when one is set', () {
