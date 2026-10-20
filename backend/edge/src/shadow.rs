@@ -55,6 +55,8 @@ const LISTEN_WAIT_LIMIT: usize = 1024;
 /// Opens further apart than this are not the same open.
 const OPEN_MATCH_SECONDS: u64 = 2;
 const OPEN_RING: usize = 1024;
+/// Non-aligned listen gates tracked for de-duplication.
+const OTHER_GENS: usize = 64;
 /// Disagreement lines per session, and across the process per second.
 const DETAIL_PER_SESSION: u32 = 5;
 const DETAIL_PER_SECOND: u64 = 20;
@@ -332,6 +334,8 @@ pub struct ShadowCore {
     listen_waiting: VecDeque<(u64, f32)>,
     /// Next listen ordinal not yet seen (repeats are ignored).
     listen_next: u64,
+    /// (gen, next unseen ordinal) of listen gates the edge is not aligned with.
+    other_next: Vec<(u16, u64)>,
     /// Capture sample just past the last chunk the edge gate scored.
     scored_until: u64,
     edge_opens: VecDeque<(Open, bool)>,
@@ -359,6 +363,7 @@ impl ShadowCore {
             edge_base: 0,
             listen_waiting: VecDeque::new(),
             listen_next: 0,
+            other_next: Vec::new(),
             scored_until: 0,
             edge_opens: VecDeque::new(),
             listen_opens: VecDeque::new(),
@@ -599,8 +604,21 @@ impl ShadowCore {
     fn on_windows(&mut self, gen: u16, first: u64, probs: &[f32]) {
         if self.aligned.as_ref().map(|a| a.gen) != Some(gen) {
             // Before alignment, a window of the aligned gen cannot arrive:
-            // GATE_START precedes it on the same ordered socket.
-            self.count(CompareResult::NotComparable, probs.len() as u64);
+            // GATE_START precedes it on the same ordered socket. Other gens
+            // are only counted, once per ordinal.
+            let end = first + probs.len() as u64;
+            let seen = match self.other_next.iter_mut().find(|(g, _)| *g == gen) {
+                Some((_, next)) => std::mem::replace(next, (*next).max(end)),
+                None => {
+                    if self.other_next.len() >= OTHER_GENS {
+                        self.other_next.remove(0);
+                    }
+                    self.other_next.push((gen, end));
+                    0
+                }
+            };
+            let fresh = end.saturating_sub(first.max(seen));
+            self.count(CompareResult::NotComparable, fresh);
             return;
         }
         let edge_end = self.edge_base + self.edge_windows.len() as u64;
@@ -991,6 +1009,23 @@ mod tests {
         assert_eq!(core.pending.back().unwrap().1.len(), 640);
         assert_eq!(core.summary().length_mismatches, 2);
         core.on_message(&frame(640, 320, &[1; 640])).unwrap();
+    }
+
+    #[test]
+    fn non_aligned_gen_windows_are_counted_once() {
+        let mut core = pcm16_core();
+        let mut w = vec![3, 0, 5, 0, 0, 0, 0];
+        for _ in 0..4 {
+            w.extend_from_slice(&0.5f32.to_be_bytes());
+        }
+        core.on_message(&w).unwrap();
+        core.on_message(&w).unwrap(); // exact repeat
+        let mut overlap = vec![3, 0, 5, 0, 0, 0, 2]; // ordinals 2..6: two new
+        for _ in 0..4 {
+            overlap.extend_from_slice(&0.5f32.to_be_bytes());
+        }
+        core.on_message(&overlap).unwrap();
+        assert_eq!(core.summary().compare[CompareResult::NotComparable.idx()], 6);
     }
 
     #[test]

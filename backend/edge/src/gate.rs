@@ -160,8 +160,7 @@ impl SessionGain {
             let v = (s * g).clamp(-32768.0, 32767.0) as i16;
             out.extend_from_slice(&v.to_le_bytes());
         }
-        // listen raises on an odd-length chunk here (the window leg ends);
-        // keep the byte so the gate's sample carry stays aligned regardless.
+        // `Gate` passes whole samples; a stray byte is passed through as is.
         out.extend_from_slice(odd);
         Some(out)
     }
@@ -209,6 +208,8 @@ pub struct Gate {
     vad_buffer: Vec<f32>,
     stream: silero::Stream,
     gain: Option<SessionGain>,
+    /// Byte of a sample split across chunks, held ahead of the AGC copy.
+    agc_carry: Vec<u8>,
     next_ordinal: u64,
     state: GateState,
     audio_cursor_ms: f64,
@@ -227,6 +228,7 @@ impl Gate {
             vad_buffer: Vec::new(),
             stream: silero::Stream::new(),
             gain: (params.variant == Variant::Agc).then(SessionGain::default),
+            agc_carry: Vec::new(),
             next_ordinal: 0,
             state: GateState::Silence,
             audio_cursor_ms: 0.0,
@@ -263,9 +265,20 @@ impl Gate {
         let chunk_ms = (n_samples as f64 * 1000.0) / self.sample_rate as f64;
         self.audio_cursor_ms += chunk_ms;
 
-        let scored = self.gain.as_mut().and_then(|g| g.apply(pcm));
-        let vad_pcm = scored.as_deref().unwrap_or(pcm);
-        let mut out = self.run_vad(vad_pcm)?;
+        let mut out = if self.gain.is_none() {
+            self.run_vad(pcm)?
+        } else {
+            // listen's window leg ends on an odd-length chunk (numpy cannot
+            // view it as int16). Here a split sample is carried ahead of
+            // gaining, so Silero always scores whole samples.
+            let mut whole = std::mem::take(&mut self.agc_carry);
+            whole.extend_from_slice(pcm);
+            if whole.len() % 2 == 1 {
+                self.agc_carry.push(whole.pop().expect("odd length is non-empty"));
+            }
+            let gained = self.gain.as_mut().and_then(|g| g.apply(&whole));
+            self.run_vad(&gained.unwrap_or(whole))?
+        };
         if out.is_speech {
             self.last_speech_ms = self.audio_cursor_ms;
         }
@@ -428,6 +441,18 @@ mod tests {
         // n_out == 1 -> linspace gives [0.0].
         assert_eq!(resample_linear(&[5, 9, 11], 48000, 16000), vec![5]);
         assert!(resample_linear(&[5], 48000, 16000).is_empty());
+    }
+
+    #[test]
+    fn agc_gate_carries_a_split_sample_before_gaining() {
+        // Three samples of 1000 split 3 + 3 bytes: the gained copy must stay
+        // sample-aligned (4000 each), not byte-rotated. No window runs yet.
+        let mut gate = Gate::new(16000, GateParams::window());
+        let pcm: Vec<u8> = [1000i16; 3].iter().flat_map(|s| s.to_le_bytes()).collect();
+        gate.process_chunk(&pcm[..3], 0).unwrap();
+        gate.process_chunk(&pcm[3..], 1).unwrap();
+        assert!(gate.agc_carry.is_empty() && gate.pcm_remainder.is_empty());
+        assert_eq!(gate.vad_buffer, vec![4000.0 / 32768.0; 3]);
     }
 
     #[test]
