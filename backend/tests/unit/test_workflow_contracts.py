@@ -68,7 +68,7 @@ def test_background_task_ratchet_change_selects_the_ratchet(selector_and_all_tes
     for path in (
         "backend/routers/sync.py",
         "backend/services/users/account_deletion.py",
-        "backend/utils/stt/soniox_runway.py",  # transitive closure member, not an AREA seed
+        "backend/utils/stt/soniox.py",  # transitive closure member, not an AREA seed
         "backend/utils/retrieval/agentic.py",
     ):
         selected, reason = selector.tests_for_changed_paths([path], all_tests)

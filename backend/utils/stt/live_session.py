@@ -342,7 +342,6 @@ class LiveChainSession:
                         sample_rate,
                         language,
                         profile=host.language_profile,
-                        keywords=keywords,
                         idle_budget=getattr(self.receiver, 'soniox_idle_budget', None),
                     )
                 elif service == st.STTService.modulate:
