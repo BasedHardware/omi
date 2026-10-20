@@ -36,7 +36,7 @@ from contextlib import contextmanager
 from importlib.machinery import ExtensionFileLoader
 from pathlib import Path
 from types import ModuleType
-from typing import Iterable, Iterator
+from typing import Any, Iterable, Iterator, Mapping
 from unittest.mock import MagicMock
 
 
@@ -465,10 +465,54 @@ def package_submodule_stubs(
     return stubs
 
 
+def install_package_submodule_stubs(
+    package: str,
+    saved_modules: dict[str, Any],
+    *,
+    overrides: Mapping[str, ModuleType] | None = None,
+    directory: Path | None = None,
+) -> None:
+    """Bind every on-disk submodule under a package stub whose ``__path__`` is empty.
+
+    An empty ``__path__`` stops the import system from reading the real tree, so a
+    hand-listed child set drifts: the next module added to ``package`` raises
+    ``ModuleNotFoundError`` at collection. Membership comes from
+    ``package_submodule_stubs``. ``overrides`` replace the auto-mock (harness spies).
+    A child already loaded from a real file stays in ``sys.modules`` and is attached
+    to the parent, so telemetry retained before the package stub survives.
+
+    The parent must already sit in ``sys.modules``. Each name this function writes
+    is recorded with ``setdefault``, so a caller that snapshotted the name earlier
+    keeps that original for restore.
+    """
+
+    parent = sys.modules.get(package)
+    if not isinstance(parent, ModuleType):
+        raise LookupError(f"install_package_submodule_stubs: {package!r} is not an installed module")
+
+    chosen = dict(overrides or {})
+    for name in chosen:
+        if not name.startswith(package + "."):
+            raise LookupError(f"install_package_submodule_stubs: {name!r} is not a child of {package!r}")
+
+    modules = package_submodule_stubs(package, include_package=False, directory=directory)
+    modules.update(chosen)
+    for name, module in modules.items():
+        if name not in chosen:
+            existing = sys.modules.get(name)
+            if _has_existing_file_origin(existing):
+                _set_parent_attr(name, existing)
+                continue
+        saved_modules.setdefault(name, sys.modules.get(name))
+        sys.modules[name] = module
+        _set_parent_attr(name, module)
+
+
 __all__ = [
     "AutoMockModule",
     "stub_modules",
     "load_module_fresh",
     "fake_firestore_transactional",
     "package_submodule_stubs",
+    "install_package_submodule_stubs",
 ]
