@@ -76,3 +76,22 @@ async def test_subscription_schedule_completed_handles_null_metadata_gracefully(
     # In unpatched code, schedule_obj.get('metadata', {}).get('uid') raises AttributeError
     # It should complete gracefully without raising AttributeError
     await _handle_stripe_event(event)
+
+
+@pytest.mark.asyncio
+async def test_checkout_session_completed_with_client_reference_id_and_null_metadata():
+    """Pin fallback ordering: client_reference_id resolves uid when metadata is null."""
+    event = {
+        'type': 'checkout.session.completed',
+        'data': {
+            'object': {
+                'id': 'cs_test_client_ref_null_metadata',
+                'client_reference_id': 'test_uid_1234',
+                'metadata': None,
+            }
+        },
+    }
+
+    with patch('routers.payment.users_db.get_user_profile', return_value=None):
+        result = await _handle_stripe_event(event)
+        assert result == {'status': 'success'}
