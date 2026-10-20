@@ -3,9 +3,10 @@
 Once a row is in the result log its successor link, job binding, result payload
 and audio manifest never change, so they can be read while earlier rows commit.
 Receipt state is mutable and is never taken from here: the walk reads it fresh,
-and the assignment transaction rereads everything it fences on. Every miss,
-error or timeout falls back to the walk's own read, so read-ahead can only make
-a walk faster, never change what it persists.
+and the assignment transaction rereads everything it fences on. A miss or a
+failed load falls back to the walk's own read; a load still running at the step
+deadline ends the step instead. So read-ahead can only make a walk faster,
+never change what it persists.
 """
 
 from __future__ import annotations
@@ -14,7 +15,6 @@ from concurrent.futures import Future, wait
 from dataclasses import dataclass
 import logging
 import threading
-import time
 from typing import TYPE_CHECKING, Any
 
 from utils.batch_pipeline.contracts import ProjectionBinding, WorkItem
@@ -24,7 +24,7 @@ if TYPE_CHECKING:
     from utils.batch_pipeline.projection import Projector
 
 logger = logging.getLogger(__name__)
-# A prefetched row the walk is waiting for; beyond it the walk reads inline.
+# Longest single wait on a read-ahead; a load still running stays queued.
 PREFETCH_WAIT_SECONDS = 30.0
 EMPTY_OUTCOMES = frozenset({'silence', 'no_recoverable_speech'})
 # ``take`` result for a row whose read-ahead is still loading at the step deadline.
@@ -52,8 +52,6 @@ class ChainPrefetch:
         self.lock = threading.Lock()
         self.links: dict[str | None, str] = {}
         self.rows: dict[str, Future] = {}
-        # Seconds walks already waited on a still-loading row, across steps.
-        self.waited: dict[str, float] = {}
         self.scouting = False
         self.closed = False
 
@@ -82,23 +80,19 @@ class ChainPrefetch:
     def take(self, segment_id: str, timeout: float = PREFETCH_WAIT_SECONDS) -> Prefetched | object | None:
         """The row's inputs; None means read inline; NOT_READY means still loading.
 
-        A load still running at ``timeout`` stays queued for the next step, so
-        a slow read never holds the walk's pool slot past its step budget.
+        A load still running at ``timeout`` stays queued for the next step: a
+        slow read is never repeated inline on the walk's pool slot. Only a
+        failed load is read inline. The storage calls carry their own
+        timeouts, and a drain turn starts a fresh read-ahead.
         """
         with self.lock:
             future = self.rows.get(segment_id)
         if future is None:
             return None
         try:
-            waited = self.waited.get(segment_id, 0.0)
-            budget = max(0.0, min(timeout, PREFETCH_WAIT_SECONDS - waited))
-            started = time.monotonic()
-            wait([future], timeout=budget)
+            wait([future], timeout=max(0.0, min(timeout, PREFETCH_WAIT_SECONDS)))
             if not future.done():
-                self.waited[segment_id] = waited + time.monotonic() - started
-                if self.waited[segment_id] < PREFETCH_WAIT_SECONDS:
-                    return NOT_READY
-                raise TimeoutError('read-ahead exceeded its wait')
+                return NOT_READY
             with self.lock:
                 self.rows.pop(segment_id, None)
             return future.result(timeout=0)

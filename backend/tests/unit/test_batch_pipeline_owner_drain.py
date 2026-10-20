@@ -433,21 +433,21 @@ def test_a_still_loading_read_ahead_ends_the_step_instead_of_holding_the_slot(mo
     assert projector.drain_step(BURST, 15.0, prefetch=loading).advanced == ids
 
 
-def test_read_ahead_wait_accumulates_across_steps_then_falls_back(monkeypatch):
-    log = ResultLog()
-    ids = chain(log, BURST, 'a', 1)
-    projector = projector_for(log)
-    ticks = itertools.count(0.0, 20.0)
-    monkeypatch.setattr(projection_prefetch, 'time', Mock(monotonic=lambda: next(ticks)))
-    monkeypatch.setattr(projection_prefetch, 'wait', lambda futures, timeout: None)
-    prefetch = projection_prefetch.ChainPrefetch(projector, owner_key(BURST), 1, executor=InlineExecutor())
+def test_a_slow_read_ahead_is_never_redone_inline_only_a_failed_one(monkeypatch):
     from concurrent.futures import Future
 
-    prefetch.rows[ids[0]] = Future()  # never completes
-    assert prefetch.take(ids[0], timeout=15.0) is projection_prefetch.NOT_READY
-    assert ids[0] in prefetch.rows  # kept for the next step
-    assert prefetch.take(ids[0], timeout=15.0) is None  # 40 s waited: read inline
-    assert ids[0] not in prefetch.rows
+    log = ResultLog()
+    ids = chain(log, BURST, 'a', 2)
+    projector = projector_for(log)
+    waits = []
+    monkeypatch.setattr(projection_prefetch, 'wait', lambda futures, timeout: waits.append(timeout))
+    prefetch = projection_prefetch.ChainPrefetch(projector, owner_key(BURST), 1, executor=InlineExecutor())
+    slow = prefetch.rows[ids[0]] = Future()
+    for _ in range(3):  # however long it has waited across steps
+        assert prefetch.take(ids[0], timeout=60.0) is projection_prefetch.NOT_READY
+    assert ids[0] in prefetch.rows and waits == [projection_prefetch.PREFETCH_WAIT_SECONDS] * 3
+    slow.set_exception(RuntimeError('synthetic storage timeout'))
+    assert prefetch.take(ids[0], timeout=15.0) is None and ids[0] not in prefetch.rows
 
 
 def test_prefetch_depth_kill_switch_and_bounds(monkeypatch):
@@ -470,10 +470,53 @@ def test_parallel_candidate_is_used_only_for_the_exact_span():
     assert projection.Projector._parallel_candidate(pending, (10, 20)) == (True, {'id': 'near'})
     assert projection.Projector._parallel_candidate(pending, (10, 21)) == (False, None)
     assert projection.Projector._parallel_candidate(None, (10, 20)) == (False, None)
+    # No match is looked up again inline: a conversation may have committed since.
     nothing_near = ((10, 20), InlineExecutor().submit(lambda: None))
-    assert projection.Projector._parallel_candidate(nothing_near, (10, 20)) == (True, None)
+    assert projection.Projector._parallel_candidate(nothing_near, (10, 20)) == (False, None)
     failed = ((10, 20), InlineExecutor().submit(lambda: 1 / 0))
     assert projection.Projector._parallel_candidate(failed, (10, 20)) == (False, None)
+
+
+def test_parallel_candidate_wait_never_outlasts_the_step(monkeypatch):
+    future = Mock()
+    future.result.side_effect = TimeoutError
+    monkeypatch.setattr(projection, 'time', Mock(monotonic=lambda: 100.0))
+    assert projection.Projector._parallel_candidate(((1, 2), future), (1, 2), 103.0) == (False, None)
+    assert future.result.call_args.kwargs['timeout'] == 3.0
+    projection.Projector._parallel_candidate(((1, 2), future), (1, 2), 90.0)
+    assert future.result.call_args.kwargs['timeout'] == 0.0
+
+
+def test_a_row_stopped_between_parts_ends_the_step_with_more():
+    log = ResultLog()
+    chain(log, BURST, 'a', 2)
+    projector = projector_for(log)
+    projector._persist_read = Mock(side_effect=projection.StepDeadline)
+    assert projector.drain_step(BURST, 15.0) == projection.Walk([], [], True)
+    assert projector._persist_read.call_args.kwargs['hint'].deadline is not None
+
+
+def test_step_deadline_stops_between_parts_and_the_next_step_resumes(monkeypatch):
+    from utils.batch_pipeline import projection_parts
+    from utils.batch_pipeline.contracts import Priority, ProjectionBinding, WorkItem
+
+    item = WorkItem('segment', 'synthetic-owner', 0, 'gs://synthetic/audio', 2, Priority.DEEP)
+    payload = {'words': [], 'audio_seconds': 2, 'speech_seconds': 1, 'diarization': {'turns': []}}
+    projector = projection.Projector(Mock(), Mock(return_value=payload))
+    projector.store = Mock()
+    persisted = []
+    projector.store.session.side_effect = lambda *a, part_index=None, **k: Mock(
+        persist_empty=lambda **_: persisted.append(part_index) or {'state': 'persisted'}
+    )
+    monkeypatch.setattr(projection_parts, 'split_result', lambda item, payload: [(item, payload)] * 3)
+    # The step's budget runs out while part 1 persists.
+    monkeypatch.setattr(projection, 'time', Mock(monotonic=lambda: 50.0 if len(persisted) >= 2 else 0.0))
+    binding = ProjectionBinding('synthetic-owner', 'job', 'content', ('segment',))
+    hint = projection.WalkHint(successor=True, deadline=10.0)
+    entry = {'result': {'result_uri': 'fixture'}}
+    with pytest.raises(projection.StepDeadline):
+        projector.assign_parts(item, entry, binding, finish=False, hint=hint)
+    assert persisted == [0, 1]  # parts 0 and 1 persisted; part 2 waits for the next step
 
 
 # --- deferred index: only new donors, eventual equivalence -------------------------------

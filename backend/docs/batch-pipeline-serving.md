@@ -633,7 +633,8 @@ None relaxes ordering: the assignment transaction's predecessor, privacy,
 binding and receipt fences decide every row exactly as before.
 
 `BATCH_PIPELINE_OWNER_DRAIN_ENABLED` (kill switch; `false` restores the sweep
-owner-chain walk above, exactly):
+owner-chain walk above with every pre-check. Read-ahead and the deferred index
+below have their own switches; all three off is the pre-drain behaviour):
 - The sweep only discovers owners. When it persists an owner's pending head
   row, it hands the owner to this process's drain, not a budgeted walk. It
   leaves that owner's later rows on the same page to the drain, and it skips
@@ -665,11 +666,17 @@ malformed or above 8 keeps 4). A budgeted walk reads the next N rows ahead on
 `storage_executor`: their successor links, job bindings, result payloads and
 audio manifests. All of these are immutable once committed. The walk still
 reads each result row fresh, so receipt state is never taken from the
-read-ahead. Any read-ahead miss, error or 30 s wait falls back to the walk's
-own read. A drain turn keeps one read-ahead across its steps. The candidate hint
-lookup starts beside context and build, after the predecessor committed, for
-the span the words predict. It is used only when the built span matches
-exactly; otherwise it is redone inline.
+read-ahead. A read-ahead miss or failed load falls back to the walk's own read.
+A load still running when the step's budget is spent ends the step (`more`)
+and stays queued for the next step, so a slow read never runs again inline on
+the sync slot. A drain turn keeps one read-ahead across its steps. The step
+deadline is also checked between the parts of a multipart row; a row stopped
+there resumes at its first unpersisted part on the next step. The candidate
+hint lookup starts beside context and build, after the predecessor committed,
+for the span the words predict. Its wait is capped by what is left of the step.
+It is used only when it returns a conversation for exactly the built span;
+otherwise (no match, a different span, an error or the cap) the lookup runs
+inline as before.
 
 `BATCH_PIPELINE_PROJECTION_INDEX_DEFERRED_ENABLED` (kill switch; `false`
 restores the inline index step). Budgeted walks no longer run the people-stats
@@ -690,8 +697,8 @@ today. On the drain path `sync_assignment_timing` reports `index_ms=0` and
 
 `python -m testing.pipeline_sim projection-drain` runs the real walk, sweep and
 drain on virtual time with modelled run-14 latencies. One 1,200-row owner:
-today's sweep walk 36.7 rows/min, drain with no cuts 44.4, Phase 1 120. Twelve
-300-row owners on one instance: 3.0 rows/min each today, 65-114 with the drain.
+today's sweep walk 36.7 rows/min, drain with no cuts 44.4, Phase 1 118.2. Twelve
+300-row owners on one instance: 3.0 rows/min each today, 61.5-99.4 with the drain.
 Every mode makes the same assignment calls and ends with the same index. The
 model has no Firestore hot-document contention, so live rates stay below these.
 

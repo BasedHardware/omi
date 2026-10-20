@@ -65,6 +65,12 @@ class WalkHint:
     prefetched: 'Prefetched | None' = None
     defer_index: bool = False
     parallel_candidate: bool = False
+    # The walk step's monotonic deadline: checked between parts, caps waits.
+    deadline: float | None = None
+
+
+class StepDeadline(Exception):
+    """A walk step's budget ran out between parts of one multipart row."""
 
 
 class Walk(NamedTuple):
@@ -431,14 +437,23 @@ class Projector:
         return span, future
 
     @staticmethod
-    def _parallel_candidate(pending, span) -> tuple[bool, dict | None]:
-        """(found, candidate): the parallel lookup's answer for exactly this span."""
+    def _parallel_candidate(pending, span, deadline=None) -> tuple[bool, dict | None]:
+        """(found, candidate): the parallel lookup's conversation for exactly this span.
+
+        No match is not trusted: a conversation committed after the lookup
+        started would be missed, so the caller looks again inline, as the
+        serial path does. The wait never outlasts the walk step.
+        """
         if pending is None or pending[0] != span:
             return False, None
+        timeout = CANDIDATE_WAIT_SECONDS
+        if deadline is not None:
+            timeout = min(timeout, max(0.0, deadline - time.monotonic()))
         try:
-            return True, pending[1].result(timeout=CANDIDATE_WAIT_SECONDS)
+            candidate = pending[1].result(timeout=timeout)
         except Exception:
             return False, None
+        return candidate is not None, candidate
 
     def _finish(self, segment_id, job, entry, binding):
         policy = ProjectionPolicy.from_dict(job['policy_parts']['projection'])
@@ -544,6 +559,9 @@ class Projector:
                     manifest = read_context(self.fetch_audio(item))
         receipts = entry.get('projection_parts') or {}
         for index, (part, part_payload) in enumerate(parts):
+            if index and hint is not None and hint.deadline is not None and time.monotonic() >= hint.deadline:
+                # Earlier parts are persisted; the next step resumes at this one.
+                raise StepDeadline()
             session = self.store.session(
                 item.segment_id,
                 binding,
@@ -603,7 +621,8 @@ class Projector:
                     if context.target_id is None:
                         with projection_phase('candidate', policy):
                             span = (int(incoming['started_at'].timestamp()), int(incoming['finished_at'].timestamp()))
-                            found, candidate = self._parallel_candidate(pending_candidate, span)
+                            deadline = hint.deadline if hint is not None else None
+                            found, candidate = self._parallel_candidate(pending_candidate, span, deadline)
                             if not found:
                                 candidate = get_closest_conversation_to_timestamps(binding.owner_id, *span)
                     assigned = conversations_db.assign_sync_conversation(
@@ -955,11 +974,15 @@ class Projector:
                     prefetched=inputs,
                     defer_index=deferred,
                     parallel_candidate=prefetch is not None,
+                    deadline=deadline,
                 )
                 if policy.async_projection:
                     self._persist_read(segment_id, job, entry, binding, hint=hint, claimed=drain)
                 else:
                     self._project_read(segment_id, job, entry, binding, hint=hint, claimed=drain)
+            except StepDeadline:
+                more = True  # a partial multipart; the next step resumes it
+                break
             except (ProjectionBlocked, BatchPrivacyBlocked):
                 break
             except Exception as error:
