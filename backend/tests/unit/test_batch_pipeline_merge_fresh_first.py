@@ -10,6 +10,7 @@ from google.api_core.exceptions import FailedPrecondition, ServiceUnavailable
 import pytest
 
 from config.batch_pipeline import MERGE_CATCH_UP_DEPTH_DEFAULT, merge_catch_up_depth
+from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from database.batch_pipeline_purge import _write_erased_result
 from tests.unit.test_batch_pipeline_scheduler import MemoryStore, MemoryTransaction, item
 from utils.batch_pipeline.contracts import WorkResult
@@ -373,3 +374,67 @@ def test_serving_pass_re_offers_held_owners_after_projection():
     service.reconcile()
     assert all(not store.rows['jobs', s]['merge_pending'] for s in rows)
     assert service.merge.held_owners == set()
+
+
+class _FencedFreshStore(MemoryStore):
+    """Privacy flush refuses any transaction that would commit segment ``f``."""
+
+    def run(self, body):
+        with self.lock:
+            snapshot = deepcopy(self.rows)
+            result = body(MemoryTransaction(snapshot))
+            if ('results', 'f') in snapshot and ('results', 'f') not in self.rows:
+                raise BatchPrivacyBlocked('fenced')
+            self.rows = snapshot
+            return result
+
+
+def test_a_fenced_fresh_row_does_not_stop_the_head_wait_for_other_ready_rows():
+    rows = {'old': (1000, CATCH_UP), 'c': (2000, CATCH_UP), 'f': (90_000, FRESH)}
+    store, queue, leases = admitted(rows, _FencedFreshStore())
+    complete(queue, leases, 'c', NOW)
+    complete(queue, leases, 'f', NOW)
+    merge = merge_for(store, depth=16, wait=60)
+    assert merge.commit_next('heavy', NOW + 30) is None  # Fresh fenced; head wait not yet due.
+    entry = merge.commit_next('heavy', NOW + 60)
+    assert entry['segment_id'] == 'c' and entry['head_wait_bypass'] is True and 'fresh_first' not in entry
+
+
+def test_the_skipped_fresh_head_is_re_verified_inside_the_transaction():
+    rows = {f'c{n}': (1000 + n, CATCH_UP) for n in range(3)} | {'f1': (90_000, FRESH), 'f2': (90_010, FRESH)}
+    store, queue, leases = admitted(rows)
+    for segment in ('c0', 'c1', 'c2', 'f2'):
+        complete(queue, leases, segment, NOW)
+    merge = merge_for(store, depth=2, wait=60)
+    assert len(drain(merge, NOW)) == 2
+    stale = store.fresh_pending(OWNER, 32)  # The probe saw f1 still leased...
+    complete(queue, leases, 'f1', NOW + 60)  # ...then it became ready before the transaction.
+    store.fresh_pending = lambda key, limit: stale
+    assert merge.commit_next('heavy', NOW + 60) is None
+    del store.fresh_pending
+    assert [e['segment_id'] for e in drain(merge, NOW + 61)] == ['f1', 'f2']
+
+
+def test_a_durable_hold_marker_survives_a_restart_and_clears_once_released():
+    rows = {f'c{n}': (1000 + n, CATCH_UP) for n in range(4)}
+    store, queue, leases = admitted(rows)
+    for segment in rows:
+        complete(queue, leases, segment)
+    assert len(drain(merge_for(store, depth=2))) == 2
+    assert store.rows['merge_holds', OWNER]['held'] is True
+    project_through(store, 'c1')
+    restarted = merge_for(store, depth=2)  # A new process: its in-memory set is empty.
+    assert restarted.held_owners == set()
+    drained = []
+    restarted.reoffer_marked(lambda owner_id: drained.extend(drain(restarted)))
+    assert [e['segment_id'] for e in drained] == ['c2', 'c3']
+    assert store.rows['merge_holds', OWNER]['held'] is False
+    assert store.held_merge_owners(50) == []
+
+
+def test_a_stale_marker_without_pending_rows_is_cleared_without_a_drain():
+    store = MemoryStore()
+    store.rows['merge_holds', OWNER] = {'held': True, 'held_at': NOW}
+    drain_calls = []
+    merge_for(store).reoffer_marked(drain_calls.append)
+    assert drain_calls == [] and store.rows['merge_holds', OWNER]['held'] is False

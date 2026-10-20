@@ -17,8 +17,8 @@ logger = logging.getLogger(__name__)
 
 # A missing head-wait index falls back to strict order; retry the query after this.
 HEAD_WAIT_UNAVAILABLE_RETRY_SECONDS = 300
-# Pending fresh rows read per probe; an owner rarely has more in flight.
-FRESH_PROBE_ROWS = 8
+# Pending fresh rows read per probe (the query cap); an owner rarely has more in flight.
+FRESH_PROBE_ROWS = 32
 _HEAD_STATES = frozenset({'ready', 'leased', 'retry', 'record_pending', 'privacy_blocked'})
 _FRESH_FIRST_HEAD_STATES = _HEAD_STATES | {'result_ready'}
 _WAIT_BUCKETS = (60, 120, 300, 600, 1800)
@@ -48,7 +48,7 @@ def _fresh_pick(rows: list[dict], now: float, wait: float) -> tuple[dict | None,
     ready = [row for row in rows if row.get('state') == 'result_ready']
     waited = max((now - row['ready_at'] for row in ready if row.get('ready_at') is not None), default=None)
     if wait > 0 and waited is not None and waited >= wait:
-        return ready[0], {'state': rows[0].get('state'), 'waited': waited}
+        return ready[0], {'segment_id': rows[0]['segment_id'], 'state': rows[0].get('state'), 'waited': waited}
     return None, None
 
 
@@ -96,6 +96,25 @@ class OrderedMerge:
             return 0
         return self.catch_up_depth if self.catch_up_depth is not None else merge_catch_up_depth()
 
+    def release_hold(self, key: str) -> None:
+        """Clear an owner's durable hold marker once a drain no longer holds."""
+
+        def clear(tx):
+            mark = tx.get('merge_holds', key)
+            if mark.get('held'):
+                tx.put('merge_holds', key, {**mark, 'held': False})
+
+        self.store.run(clear)
+
+    def reoffer_marked(self, drain, limit: int = 50) -> None:
+        """Leader maintenance: re-offer owners holding durable markers, which an
+        in-memory set loses on restart and the global ready page can hide."""
+        for key, owner_id in self.store.held_merge_owners(limit):
+            if owner_id:
+                drain(owner_id)
+            if not owner_id or owner_id not in self.held_owners:
+                self.release_hold(key)
+
     def _head_wait_unavailable(self) -> None:
         self._head_wait_retry_at = time.monotonic() + HEAD_WAIT_UNAVAILABLE_RETRY_SECONDS
         logger.warning('event=batch_merge outcome=head_wait_unavailable source=%s count=1', self.commit_source)
@@ -141,9 +160,14 @@ class OrderedMerge:
                     and current.get('fresh_capture') is True
                 ):
                     return None
-                fresh_first.update(head_state=candidate['state'])
                 if skipped is not None:
+                    # The skipped earlier fresh row must still be unready;
+                    # otherwise the next drain commits both in capture order.
+                    head = tx.get('jobs', skipped['segment_id'])
+                    if head.get('merge_pending') and head.get('state') == 'result_ready':
+                        return None
                     bypass.update(head_state=skipped['state'], waited=skipped['waited'])
+                fresh_first.update(head_state=candidate['state'])
                 candidate = current
             elif candidate and candidate['state'] != 'result_ready':
                 if waiter is None:
@@ -169,8 +193,11 @@ class OrderedMerge:
                 return None
             if depth and not fresh_first and _catch_up(candidate) and _awaiting_projection(tx, owner) >= depth:
                 # Keep the owner's unprojected log short so a fresh row lands
-                # near the projection head. Maintenance re-offers this owner.
+                # near the projection head. Maintenance re-offers this owner;
+                # the durable marker (owner key only) survives a restart.
                 held['catch_up'] = True
+                if not tx.get('merge_holds', key).get('held'):
+                    tx.put('merge_holds', key, {'held': True, 'held_at': now})
                 return None
             job = tx.get('jobs', candidate['segment_id'])
             existing = tx.get('results', job['segment_id'])
@@ -258,7 +285,11 @@ class OrderedMerge:
                 try:
                     entry = self.store.run(lambda tx: commit(tx, fresh=fresh, skipped=skipped))
                 except BatchPrivacyBlocked:
-                    return None
+                    # A fence on that fresh row refuses only it; the head wait
+                    # below still releases the owner's other ready rows.
+                    entry = None
+                    fresh_first.clear()
+                    bypass.clear()
         if entry is None and strict_blocked and wait > 0:
             # The strict transaction issues no head-wait query. Probe outside
             # it so a blocked owner takes no extra transactional query lock;

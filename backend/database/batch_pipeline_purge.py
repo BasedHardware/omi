@@ -204,6 +204,7 @@ def _purge_owner_fairness(client: Any, namespace: str, key: str) -> None:
         for queue_key in queue_keys:
             transaction.delete(client.collection(f'{namespace}_queues').document(queue_key))
         transaction.delete(client.collection(f'{namespace}_owners').document(key))
+        transaction.delete(client.collection(f'{namespace}_merge_holds').document(key))
 
     remove(client.transaction())
 

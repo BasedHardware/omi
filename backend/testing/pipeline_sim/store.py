@@ -272,6 +272,14 @@ class SimStore:
         )
         return [deepcopy(self.rows[('jobs', segment_id)]) for _, segment_id in rows[:limit]]
 
+    def held_merge_owners(self, limit: int) -> list[tuple[str, str | None]]:
+        keys = sorted(key for (table, key), row in self.rows.items() if table == 'merge_holds' and row.get('held'))
+        owners = []
+        for key in keys[:limit]:
+            job = self.first_pending(key)
+            owners.append((key, job['owner_id'] if job else None))
+        return owners
+
     def service_frontier(self, priority: int) -> float:
         name = f'p{priority}_service'
         values = [self.rows[('control', key)][name] for key in self._controls if name in self.rows[('control', key)]]

@@ -187,6 +187,18 @@ def entries():
             domains={'namespace': namespaces},
             neutrals={'limit': (8, 'bounded page size')},
         ),
+        CoveredByEntry(
+            'database.batch_pipeline_store.FirestoreStore.held_merge_owners',
+            covered_by=('database.batch_pipeline_store.held_merge_owners',),
+            reason='thin store adapter delegates unchanged query arguments to the named query builder',
+            expect_observed=False,
+            body_digest='c038082dc62dd4c006580269e5a313a65a8608d032cbbfb2b265d68f75b52558',
+        ),
+        DriverEntry(
+            'database.batch_pipeline_store.held_merge_owners',
+            domains={'namespace': namespaces},
+            neutrals={'limit': (50, 'bounded page size')},
+        ),
         DriverEntry(
             'database.batch_pipeline_store.due',
             domains={'namespace': namespaces, 'state': ['leased', 'retry', 'result_ready', 'record_pending']},

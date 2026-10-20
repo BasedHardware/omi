@@ -134,6 +134,16 @@ class MemoryStore:
         ]
         return deepcopy(sorted(jobs, key=lambda v: (v['capture_at'], v['segment_id']))[:limit])
 
+    def held_merge_owners(self, limit):
+        owners = []
+        for (table, key), row in sorted(self.rows.items()):
+            if table == 'merge_holds' and row.get('held') and len(owners) < limit:
+                pending = [
+                    v for (t, _), v in self.rows.items() if t == 'jobs' and v['owner_key'] == key and v['merge_pending']
+                ]
+                owners.append((key, pending[0]['owner_id'] if pending else None))
+        return owners
+
 
 def colliding_owner(owner):
     shard = scheduler_control_key(owner_key(owner))

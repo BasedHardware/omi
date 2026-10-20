@@ -148,6 +148,8 @@ class Serving:
             if job and job['owner_id'] not in owners:
                 owners.add(job['owner_id'])
                 self.drain_owner(job['owner_id'])
+        # Held owners by durable marker: the page above can be all one held backlog.
+        self.merge.reoffer_marked(self.drain_owner)
 
 
 @lru_cache(maxsize=2)
