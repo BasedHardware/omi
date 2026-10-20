@@ -368,6 +368,8 @@ def test_private_env_loads_valid_file(tmp_path: Path):
             f'privateEnv:\n  STT_CAP_DISPATCH_COHORT: "{SENTINEL}"\n  STT_CAP_DISPATCH_COHORT: "{SENTINEL}"\n',
             "repeat a key",
         ),
+        (f'privateEnv: {{}}\n---\nenv:\n  - name: X\n    value: "{SENTINEL}"\n', "exactly one YAML document"),
+        ("\n", "exactly one YAML document"),
     ],
 )
 def test_private_env_rejects_bad_files_without_echoing_content(tmp_path: Path, text: str, message: str):
@@ -428,7 +430,8 @@ def test_cli_private_values_masks_values_and_appends_values_file(tmp_path: Path)
     assert tokens[:2][0] == "--set-string"
     assert tokens[-2:] == ["-f", str(path)]
     assert "listen helm env overrides: 1 (STT_SERVICE_MODELS)" in result.stderr
-    assert "listen private env: 2 key(s) (STT_CAP_DISPATCH_COHORT, STT_CAP_DISPATCH_LANES)" in result.stderr
+    assert "listen private env: 2 key(s)\n" in result.stderr
+    assert "STT_CAP_DISPATCH" not in result.stderr
 
 
 def test_cli_private_values_failure_writes_nothing_and_leaks_nothing(tmp_path: Path):
@@ -463,6 +466,9 @@ def test_redact_release_values_passes_through_without_private_env():
     assert HELPER.redact_release_values(text) == text
     assert HELPER.redact_release_values("") == ""
     assert HELPER.redact_release_values("USER-SUPPLIED VALUES:\nnull\n") == "USER-SUPPLIED VALUES:\nnull\n"
+    # After the first prod upgrade the stored values carry the file's own privateEnv: {}.
+    stored = "USER-SUPPLIED VALUES:\nenv:\n- name: A\n  value: \"1\"\nprivateEnv: {}\n"
+    assert HELPER.redact_release_values(stored) == stored
 
 
 def test_redact_release_values_hides_private_env_values():
@@ -562,7 +568,7 @@ def _python3_stub(tmp_path: Path) -> Path:
     return bin_dir
 
 
-def _run_materialize(tmp_path: Path, secret: str) -> tuple[subprocess.CompletedProcess, Path, Path]:
+def _run_materialize(tmp_path: Path, secret: str, **dispatch: str) -> tuple[subprocess.CompletedProcess, Path, Path]:
     step = _step(MATERIALIZE)
     runner_temp = tmp_path / "runner-temp"
     runner_temp.mkdir()
@@ -574,6 +580,7 @@ def _run_materialize(tmp_path: Path, secret: str) -> tuple[subprocess.CompletedP
         "GITHUB_ENV": str(github_env),
         "LISTEN_PRIVATE_VALUES_YAML": secret,
         "VALUES_FILE": str(PROD_VALUES),
+        **dispatch,
     }
     result = subprocess.run(["bash", "-e", "-c", step["run"]], cwd=ROOT, env=env, capture_output=True, text=True)
     return result, runner_temp, github_env
@@ -607,3 +614,45 @@ def test_materialize_step_fails_closed_on_invalid_secret(tmp_path: Path):
     # The path is recorded only so the always() cleanup step can remove it.
     (path,) = runner_temp.iterdir()
     assert github_env.read_text(encoding="utf-8") == f"LISTEN_PRIVATE_VALUES_FILE={path}\n"
+
+
+def test_short_flag_values_are_not_masked_so_job_outputs_survive(tmp_path: Path):
+    # GitHub drops job outputs containing a mask; "true"/"live" would hit tags.
+    path = _write_private(
+        tmp_path,
+        f'privateEnv:\n  STT_CAP_DISPATCH_ENFORCEMENT: "true"\n  STT_CAP_DISPATCH_LANES: "live"\n'
+        f'  STT_CAP_DISPATCH_COHORT: "{SENTINEL}"\n',
+    )
+    result = _run_cli(
+        "--values-file", str(PROD_VALUES), "--output-argv-file", str(tmp_path / "a"), "--private-values-file", str(path)
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.splitlines() == [f"::add-mask::{SENTINEL}"]
+
+
+def test_materialize_step_rejects_dispatch_collision_before_any_cluster_write(tmp_path: Path):
+    secret = f'privateEnv:\n  STT_SERVICE_MODELS: "{SENTINEL}"\n'
+    result, _, _ = _run_materialize(tmp_path, secret, STT_SERVICE_MODELS="parakeet")
+    assert result.returncode != 0
+    assert "conflicts with a workflow_dispatch override" in result.stderr
+    assert SENTINEL not in result.stdout + result.stderr
+    # Blank and chart-default dispatch inputs do not collide.
+    ok_tmp = tmp_path / "ok"
+    ok_tmp.mkdir()
+    result, _, _ = _run_materialize(
+        ok_tmp, secret, STT_SERVICE_MODELS="", GATEWAY_FEATURE_MODE="chart-default", CHAT_AGENT_ROUTE="chart-default"
+    )
+    assert result.returncode == 0, result.stderr
+
+
+def test_materialize_step_installs_dependencies_before_the_secret_touches_disk():
+    run = _step(MATERIALIZE)["run"]
+    assert run.index("pip install") < run.index("umask 077") < run.index("mktemp")
+    for name in (
+        "GATEWAY_FEATURE_MODE",
+        "CHAT_AGENT_ROUTE",
+        "ALLOW_DIRECT_MODEL_EXCEPTION",
+        "STT_SERVICE_MODELS",
+        "TRANSLATION_SERVICE_MODELS",
+    ):
+        assert _step(MATERIALIZE)["env"][name] == _step("Resolve optional listen env overrides")["env"][name]

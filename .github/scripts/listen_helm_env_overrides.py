@@ -40,6 +40,10 @@ _CONTROL_CHARS = re.compile(r"[\x00-\x1f\x7f]")
 # value replace it.
 _CHART_OWNED_ENV = frozenset({"GOOGLE_CLOUD_PROJECT"})
 REDACTED = "<redacted>"
+# GitHub drops any job output that contains a masked string, and this job
+# exports short-SHA image tags. Short flag values ("true", "live") are not
+# identifiers, so only values at least this long are registered as masks.
+MASK_MIN_LENGTH = 8
 
 
 class _UniqueKeyLoader(yaml.SafeLoader):
@@ -135,12 +139,15 @@ def load_private_env(path: Path) -> dict[str, str]:
     except (OSError, UnicodeDecodeError):
         raise ValueError("private values file is unreadable or not UTF-8") from None
     try:
-        loaded = yaml.load(text, Loader=_UniqueKeyLoader)  # noqa: S506 - SafeLoader subclass
+        documents = list(yaml.load_all(text, Loader=_UniqueKeyLoader))  # noqa: S506 - SafeLoader subclass
     except yaml.YAMLError as exc:
         # str(exc) quotes the offending line; report only its position.
         mark = getattr(exc, "problem_mark", None)
         where = f" (line {mark.line + 1})" if mark is not None else ""
         raise ValueError(f"private values do not parse as YAML{where}") from None
+    if len(documents) != 1:
+        raise ValueError("private values must be exactly one YAML document")
+    loaded = documents[0]
     if not isinstance(loaded, dict) or set(loaded) != {PRIVATE_ENV_KEY}:
         raise ValueError(f"private values must be a mapping whose only top-level key is {PRIVATE_ENV_KEY}")
     private_env = loaded[PRIVATE_ENV_KEY]
@@ -206,7 +213,8 @@ def redact_release_values(text: str) -> str:
         return text
     if not isinstance(loaded, dict):
         return "release values withheld: they could not be parsed for redaction\n"
-    if PRIVATE_ENV_KEY not in loaded:
+    if not loaded.get(PRIVATE_ENV_KEY):
+        # Absent, null, or the values file's own privateEnv: {} carries nothing.
         return text
     private_env = loaded[PRIVATE_ENV_KEY]
     if isinstance(private_env, dict):
@@ -280,7 +288,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.private_values_file is not None:
         # Register masks before anything downstream can render these values.
         for value in private_env.values():
-            if value:
+            if len(value) >= MASK_MIN_LENGTH:
                 print(github_mask_command(value), flush=True)
         resolved = resolved + ["-f", str(args.private_values_file)]
 
@@ -303,7 +311,8 @@ def main(argv: list[str] | None = None) -> int:
         print("listen helm env overrides: none (chart defaults win)", file=sys.stderr)
     if args.private_values_file is not None:
         print(
-            f"listen private env: {len(private_env)} key(s) ({', '.join(sorted(private_env))})",
+            # Count only: a key name is not guaranteed to be safe to print.
+            f"listen private env: {len(private_env)} key(s)",
             file=sys.stderr,
         )
     return 0

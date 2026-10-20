@@ -262,12 +262,19 @@ jobs:
         env:
           LISTEN_PRIVATE_VALUES_YAML: ${{ secrets.LISTEN_PRIVATE_VALUES_YAML }}
           VALUES_FILE: ./backend/charts/backend-listen/${{ vars.ENV }}_omi_backend_listen_values.yaml
+          GATEWAY_FEATURE_MODE: ${{ github.event.inputs.gateway_feature_mode }}
+          CHAT_AGENT_ROUTE: ${{ github.event.inputs.chat_agent_route }}
+          ALLOW_DIRECT_MODEL_EXCEPTION: ${{ github.event.inputs.allow_direct_model_exception }}
+          STT_SERVICE_MODELS: ${{ github.event.inputs.stt_service_models }}
+          TRANSLATION_SERVICE_MODELS: ${{ github.event.inputs.translation_service_models }}
         run: |
           set -euo pipefail
           if [[ -z "${LISTEN_PRIVATE_VALUES_YAML:-}" ]]; then
             echo "No private listen values configured; chart defaults apply."
             exit 0
           fi
+          # Install before the secret touches disk so no install hook can see it.
+          python3 -m pip install -q pyyaml
           umask 077
           PRIVATE_VALUES_FILE="$(mktemp "${RUNNER_TEMP}/listen-private-values.XXXXXX")"
           printf '%s\n' "$LISTEN_PRIVATE_VALUES_YAML" > "$PRIVATE_VALUES_FILE"
@@ -275,12 +282,18 @@ jobs:
           # Recorded before validation so the always() cleanup step removes it
           # even when validation fails the job.
           echo "LISTEN_PRIVATE_VALUES_FILE=$PRIVATE_VALUES_FILE" >> "$GITHUB_ENV"
-          python3 -m pip install -q pyyaml
-          # Validates without printing content and registers each value as a mask.
+          # Validates without printing content, rejects names the dispatch
+          # overrides below also set (the helper maps disabled/chart-default the
+          # same way the resolve step does), and registers value masks.
           python3 .github/scripts/listen_helm_env_overrides.py \
             --values-file "$VALUES_FILE" \
             --private-values-file "$PRIVATE_VALUES_FILE" \
-            --output-argv-file /dev/null
+            --output-argv-file /dev/null \
+            --set "OMI_LLM_GATEWAY_FEATURE_MODE=${GATEWAY_FEATURE_MODE:-}" \
+            --set "OMI_LLM_CHAT_AGENT_ROUTE=${CHAT_AGENT_ROUTE:-}" \
+            --set "OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION=${ALLOW_DIRECT_MODEL_EXCEPTION:-}" \
+            --set "STT_SERVICE_MODELS=${STT_SERVICE_MODELS:-}" \
+            --set "TRANSLATION_SERVICE_MODELS=${TRANSLATION_SERVICE_MODELS:-}"
 
       - name: Carry forward config this workflow does not own
         if: ${{ (github.event.inputs.mode || 'deploy') == 'deploy' }}
