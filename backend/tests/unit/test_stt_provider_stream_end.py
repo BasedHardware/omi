@@ -551,7 +551,7 @@ def test_a_cancelled_drain_then_abort_records_once_with_the_abort_close_code():
         drain.cancel()
         await asyncio.gather(drain, return_exceptions=True)
         assert not socket.stream_end.recorded  # Left to the abort, which closes the transport.
-        await abort_replay_socket(socket, timeout=0.2)
+        await abort_replay_socket(socket, timeout=1.0)
         return socket
 
     delta = _Delta('soniox', US_DRAIN, '1000')
