@@ -94,7 +94,7 @@ class ClientCustomerData:
         try:
             assert_batch_write_allowed(
                 self.client,
-                self.client.transaction(),
+                None,  # plain reads: an unstarted transaction cannot serve API requests
                 uid,
                 conversation_ids=tuple(conversation_ids),
                 expected_generation=expected_generation,
@@ -444,6 +444,16 @@ def build_outbox_backend(name: str, kind: Any) -> OutboxHarness:
             outbox_cls: Any = outbox_firestore.FirestoreOutbox
             probe = _privacy_probe(harness)
             from utils.enrichment import outbox as enrichment_outbox  # row keys are (owner, conversation) hashes
+
+            owner = harness.uid('o')
+            outbox_rows = harness.customer.client.collection(enrichment_outbox.COLLECTION)
+
+            def drop_outbox_rows() -> None:
+                # The enrichment collection is fixed (row compatibility), so remove only this harness's rows.
+                for doc in outbox_rows.where('uid', '==', owner).stream():
+                    doc.reference.delete()
+
+            harness.cleanup_steps.append(drop_outbox_rows)  # close() runs steps in reverse: before the client closes
 
             return OutboxHarness(
                 name,

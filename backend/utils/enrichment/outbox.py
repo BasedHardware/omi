@@ -677,10 +677,15 @@ def sweep(
     discard: Callable[[str], bool] | None = None,
     client: Any = None,
     wake: Callable[[Row], None] | None = None,
+    cursor: bool = True,
 ) -> dict[str, int]:
     """Re-wake due obligations; ``discard`` retires privacy-fenced rows instead (contract (b) invariant 6).
 
-    ``client``/``wake`` bind the pass to an injected store and task creator (the outbox conformance suite).
+    ``client``/``wake`` bind the pass to an injected store and task creator (the outbox conformance suite);
+    an injected creator stands in for the queue binding and the named-task probe. ``cursor=False`` (the
+    contract (b) outbox, invariant 8) scans from the oldest due row instead of resuming the shared
+    ``sync_reprocess_scan`` checkpoint. An expired lease is fenced and re-woken under a new token, and
+    ``wake_check_after`` throttles a row only once its wake was created.
     """
     from utils.enrichment import scan as enrichment_scan
 
@@ -688,6 +693,7 @@ def sweep(
     counts = {'repaired': 0, 'error': 0}
     if discard is not None:
         counts['discarded'] = 0
+        counts['expired'] = 0
     if not owns_runtime():
         return counts
 
@@ -700,8 +706,9 @@ def sweep(
         return _cas(bound, document_id, operation) if bound is not None else _mutate(document_id, operation)
 
     enqueue = wake or _enqueue
+    injected = wake is not None
     # One range/order field uses the automatic single-field index.
-    previous, cursor = enrichment_scan.begin(client, COLLECTION)
+    previous, start = enrichment_scan.begin(client, COLLECTION) if cursor else (None, None)
     query = (
         client.collection(COLLECTION)
         .where('due_at', '<=', current)
@@ -713,7 +720,7 @@ def sweep(
 
     def due_snapshots():
         nonlocal exhausted
-        page_query = query.start_after(cursor) if cursor else query
+        page_query = query.start_after(start) if start else query
         # Pending valid wakes at the front must not hide missing wakes behind
         # them. Bound both scanning and external task probes independently.
         for _ in range(10):
@@ -736,25 +743,41 @@ def sweep(
             if old is None or old.get('dormant') or old.get('lease_until', 0) > current:
                 return old, ('skipped', None)
             row = dict(old)
-            if row.get('wake_check_after', 0) > current:
+            # A lease that ran out is new information, so the wake-check throttle does not apply to it.
+            expired = bool(row.get('owner')) and row.get('lease_until', 0) > 0
+            if not expired and row.get('wake_check_after', 0) > current:
                 return old, ('skipped', None)
-            if not valid_effects_binding(row):
+            if not injected and not valid_effects_binding(row):
                 if binding is None:
                     return old, ('unbound', None)
                 # Claim and fence the repaired binding in the same CAS. Any old
                 # task delivery becomes stale; valid backfill bindings stay put.
                 row.update(dispatch=binding, task_token=uuid.uuid4().hex, task_due_at=current)
+            if expired:
+                # Fence the old holder (invariant 1) and retire its delivery: its task already ran.
+                row.update(owner=None, lease_until=0, task_token=uuid.uuid4().hex, task_due_at=current)
+                row.pop('summary_seen_by', None)
 
             row['wake_check_after'] = current + WAKE_CHECK_SECONDS
-            if first_summary_pending(row):
+            if not expired and not injected and first_summary_pending(row):
                 # Probe outside CAS, then recheck the exact name under CAS below.
                 return row, ('check', row)
             if row['task_due_at'] + REPAIR_SECONDS <= current:
                 row.update(task_token=uuid.uuid4().hex, task_due_at=current)
-            return row, ('ready', row)
+            return row, ('expired' if expired else 'ready', row)
+
+        def unthrottle(token: str, checked_after: float) -> Callable[[Row | None], tuple[Row | None, None]]:
+            def update(old: Row | None) -> tuple[Row | None, None]:
+                if old is None or old.get('task_token') != token or old.get('wake_check_after') != checked_after:
+                    return old, None
+                return {**old, 'wake_check_after': 0}, None
+
+            return update
 
         try:
             status, row = mutate(snapshot.id, repair)
+            if status == 'expired' and 'expired' in counts:
+                counts['expired'] += 1
             if status == 'check' and row is not None:
                 checked += 1
                 if _wake_exists(row):
@@ -784,14 +807,24 @@ def sweep(
                 counts['discarded'] += 1
                 row = None
             if row is not None:
-                enqueue(row)
+                try:
+                    enqueue(row)
+                except Exception:
+                    # The wake was not created: let the next pass retry instead of hiding the row for
+                    # WAKE_CHECK_SECONDS. Best effort; a lost reset only delays the retry to that bound.
+                    try:
+                        mutate(snapshot.id, unthrottle(row['task_token'], row['wake_check_after']))
+                    except Exception:
+                        pass
+                    raise
                 counts['repaired'] += 1
         except Exception as error:
             counts['error'] += 1
             logger.error('event=sync_reprocess action=repair outcome=error exception_type=%s', type(error).__name__)
         if checked >= limit:
             break
-    enrichment_scan.finish(previous, last, exhausted)
+    if cursor:
+        enrichment_scan.finish(previous, last, exhausted)
     return counts
 
 
