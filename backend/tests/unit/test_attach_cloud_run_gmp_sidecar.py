@@ -1388,6 +1388,11 @@ def test_sync_scrape_retains_exporter_and_direct_sentinel_consumers():
         'omi_summary_debt_sample_timestamp_seconds',
         'omi_live_session_transcript_outcome_total',
         'omi_firestore_documents_per_operation_bucket',
+        # Legacy dark: drain_census and the soak gates (contract (h)).
+        'omi_legacy_sync_mode',
+        'omi_legacy_sync_admissions_total',
+        'omi_legacy_dark_ack_total',
+        'omi_legacy_sync_mode_read_total',
     ):
         assert kept(name), name
     for component in ('sync', 'summary_delivery', 'storage'):
