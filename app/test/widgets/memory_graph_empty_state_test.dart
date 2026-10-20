@@ -193,6 +193,40 @@ void main() {
     await tester.pump(const Duration(seconds: 9));
   });
 
+  testWidgets('a failed refresh on app resume keeps the map without a toast', (tester) async {
+    var calls = 0;
+    await tester.pumpWidget(_app(MemoryGraphPage(
+        trackOpenEvent: false,
+        loadGraph: () async {
+          if (++calls > 1) throw Exception('offline');
+          return {
+            'nodes': [],
+            'edges': [],
+            'catalog_nodes': [
+              {'id': 'memory:1', 'label': 'Saved memory'}
+            ]
+          };
+        })));
+    await tester.pumpAndSettle();
+    final l10n = AppLocalizations.of(tester.element(find.byType(MemoryGraphPage)));
+
+    // The page stays alive on Home's other tabs, so a resume refresh must not speak over them.
+    tester
+        .state<MemoryGraphPageState>(find.byType(MemoryGraphPage))
+        .didChangeAppLifecycleState(AppLifecycleState.resumed);
+    await tester.pumpAndSettle();
+    expect(calls, 2);
+    expect(find.text('Saved memory'), findsOneWidget);
+    expect(find.text(l10n.couldNotLoadKnowledgeGraph), findsNothing);
+
+    // A refresh the person asked for still says it failed.
+    await tester.tap(find.byKey(const ValueKey('mind_map_refresh')));
+    await tester.pumpAndSettle();
+    expect(calls, 3);
+    expect(find.text(l10n.couldNotLoadKnowledgeGraph), findsOneWidget);
+    await tester.pump(const Duration(seconds: 9));
+  });
+
   testWidgets('a late empty response cannot overwrite a newer graph or its labels', (tester) async {
     final old = Completer<Map<String, dynamic>>();
     var calls = 0;
