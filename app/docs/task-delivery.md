@@ -14,10 +14,20 @@ retries only that read. A session reset fences all outstanding requests.
 
 A write revision prevents earlier Tasks, pagination and Home reads from
 replacing a newly acknowledged task. Resolved Candidate IDs suppress stale
-suggestion responses. A task revealed by its receipt does not advance the
-pagination offset until a server page includes it, so older summary replays
-cannot skip unseen tasks. Existing deletion tombstones remain authoritative;
+suggestion responses. A receipt that invalidates the initial Tasks snapshot
+schedules a replacement read rather than leaving existing tasks unloaded.
+A task revealed by its receipt does not advance the
+pagination offset until a server page includes it; the same applies to pending
+creates and restored point-read tasks. A newer full read owns the current query,
+so an earlier refresh or page cannot replace it. Query changes clear page
+provenance, and account reset fences loading state as well as returned data.
+Existing deletion tombstones remain authoritative;
 identical descriptions never imply identical tasks.
+
+Completed may be shown automatically when all loaded tasks are finished. New
+incomplete tasks arriving by refresh, pagination or Undo return that automatic
+view to open tasks; a manually selected Completed view is respected. Account
+reset clears this view state as well as the task/suggestion data.
 
 Desktop summary readers can also recover an older action item explicitly.
 The client submits its stored conversation, row index and expected description
@@ -28,6 +38,11 @@ there is no description-matching or manual-create fallback. This control is
 excluded from phone summaries, locked/discarded conversations and app-result
 summaries. Phone extraction already has a direct writer and must not acquire a
 second unlinked creation path.
+
+Summary retries retain their idempotency key after ambiguous failures. An
+expired or rejected proposal returned by preparation is replaced once during
+the next explicit gesture; an acceptance conflict uses a canonical Candidate
+read to retire the key only when its terminal state can be confirmed.
 
 The summary adapter records each valid row's original storage index before
 skipping malformed rows. Cache JSON retains that coordinate and completion /
@@ -54,7 +69,10 @@ a Settings → Integrations row, and a localized Settings search destination.
 - [ ] Verify affected customer conversations appear and remain after reopening.
 
 `test/providers/task_delivery_test.dart` exercises production composition,
-receipts, retries, stale reads and account reset. The offline native target is
+receipts, retries, stale reads and account reset. It is supplemented by
+`test/providers/task_projection_ownership_test.dart` for
+overlapping refresh/page requests, query changes and account switching.
+The offline native target is
 `integration_test/task_delivery_capture.dart`; it uses the real provider factory
 and widgets with a synthetic HTTP boundary, never customer credentials or data.
 Its cached summary has invalid leading rows, and the transport rejects any

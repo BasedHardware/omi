@@ -70,6 +70,75 @@ void main() {
     expect(provider.showCompletedView, isFalse);
   });
 
+  for (final pagination in [false, true]) {
+    for (final manualSelection in [false, true]) {
+      test('incoming tasks exit automatic Completed only (pagination: $pagination, manual: $manualSelection)',
+          () async {
+        final fixture = TaskDeliveryFixture();
+        var incoming = false;
+        final provider = ActionItemsProvider(
+            actionItemsApi: ActionItemsApi(
+          baseUrl: 'http://fixture.invalid/',
+          send: (request) async {
+            final nextPage = Uri.parse(request.url).queryParameters['offset'] != '0';
+            return fixture.response({
+              'action_items': [
+                if (!nextPage) {'id': 'done', 'description': 'Completed task', 'completed': true},
+                if (incoming) {'id': 'open', 'description': 'New phone task', 'completed': false},
+              ],
+              'has_more': pagination && !incoming
+            });
+          },
+        ));
+        addTearDown(provider.dispose);
+        await provider.ensureLoaded();
+        expect(provider.showCompletedView, isTrue);
+        if (manualSelection) {
+          provider.toggleShowCompletedView();
+          provider.toggleShowCompletedView();
+        }
+        incoming = true;
+        if (pagination) {
+          await provider.loadMoreActionItems();
+        } else {
+          await provider.fetchActionItems();
+        }
+        expect(provider.actionItems.map((item) => item.id), ['done', 'open']);
+        expect(provider.showCompletedView, manualSelection);
+      });
+    }
+  }
+
+  for (final undo in [true, false]) {
+    test('restoring an open task exits automatic Completed (undo: $undo)', () async {
+      final fixture = TaskDeliveryFixture();
+      final provider = ActionItemsProvider(
+        actionItemsApi: ActionItemsApi(
+            baseUrl: 'http://fixture.invalid/',
+            send: (_) async => fixture.response({
+                  'action_items': [
+                    {'id': 'done', 'description': 'Done', 'completed': true},
+                    {'id': 'open', 'description': 'Open', 'completed': false},
+                  ],
+                  'has_more': false,
+                })),
+        deleteActionItemRequest: (_) async => false,
+      );
+      addTearDown(provider.dispose);
+      await provider.ensureLoaded();
+      provider.stageDeleteActionItem(provider.actionItems.last);
+      await provider.fetchActionItems();
+      expect(provider.showCompletedView, isTrue);
+      if (undo) {
+        await provider.undoStagedDelete('open');
+      } else {
+        expect(await provider.commitStagedDelete('open'), isFalse);
+      }
+      expect(provider.showCompletedView, isFalse);
+      expect(provider.actionItems.map((item) => item.id), ['done', 'open']);
+    });
+  }
+
   test('manual create still lands if a refresh removes its optimistic placeholder', () async {
     final created = Completer<ActionItemWithMetadata?>();
     final provider = ActionItemsProvider(
@@ -96,37 +165,57 @@ void main() {
     expect(provider.actionItems.single.id, 'created-task');
   });
 
-  test('replaying an older accepted task cannot skip an unseen row during pagination', () async {
-    final fixture = TaskDeliveryFixture();
-    final rows = List.generate(
-        100,
-        (index) => {
-              'id': index == 80 ? 'synthetic-task' : 'task-$index',
-              'description': 'Task $index',
-              'completed': false,
-            });
-    final offsets = <int>[];
-    final provider = ActionItemsProvider(
-      actionItemsApi: ActionItemsApi(
-          baseUrl: 'http://fixture.invalid/',
-          send: (request) async {
-            final uri = Uri.parse(request.url);
-            if (uri.path != '/v1/action-items') return fixture.send(request);
-            final offset = int.parse(uri.queryParameters['offset'] ?? '0');
-            offsets.add(offset);
-            return fixture.response({'action_items': rows.skip(offset).take(50).toList(), 'has_more': offset == 0});
-          }),
-      taskSuggestionsApi: TaskSuggestionsApi(baseUrl: 'http://fixture.invalid/', send: fixture.send),
-    );
-    addTearDown(provider.dispose);
-    await provider.ensureLoaded();
-    await provider.suggestions!.load();
-    await provider.suggestions!.accept(provider.suggestions!.items.single);
-    expect(provider.actionItems.length, 51);
-    await provider.loadMoreActionItems();
-    expect(offsets, [0, 50]);
-    expect(provider.actionItems.map((item) => item.id), unorderedEquals(rows.map((row) => row['id'])));
-  });
+  for (final actor in ['receipt', 'undo', 'optimistic']) {
+    test('an older accepted task cannot skip a server row during pagination ($actor)', () async {
+      final fixture = TaskDeliveryFixture();
+      final created = Completer<ActionItemWithMetadata?>();
+      Future<ActionItemWithMetadata?>? saving;
+      final rows = List.generate(
+          100,
+          (index) => {
+                'id': index == 80 ? 'synthetic-task' : 'task-$index',
+                'description': 'Task $index',
+                'completed': false,
+              });
+      final offsets = <int>[];
+      final provider = ActionItemsProvider(
+        createActionItemRequest: ({required description, dueAt, conversationId, completed = false}) => created.future,
+        actionItemsApi: ActionItemsApi(
+            baseUrl: 'http://fixture.invalid/',
+            send: (request) async {
+              final uri = Uri.parse(request.url);
+              if (uri.path != '/v1/action-items') return fixture.send(request);
+              final offset = int.parse(uri.queryParameters['offset'] ?? '0');
+              offsets.add(offset);
+              return fixture.response({'action_items': rows.skip(offset).take(50).toList(), 'has_more': offset == 0});
+            }),
+        taskSuggestionsApi: TaskSuggestionsApi(baseUrl: 'http://fixture.invalid/', send: fixture.send),
+      );
+      addTearDown(provider.dispose);
+      await provider.ensureLoaded();
+      await provider.suggestions!.load();
+      await provider.suggestions!.accept(provider.suggestions!.items.single);
+      expect(provider.actionItems.length, 51);
+      if (actor == 'undo') {
+        provider.stageDeleteActionItem(provider.actionItems.first);
+        await provider.fetchActionItems();
+        await provider.undoStagedDelete('synthetic-task');
+      } else if (actor == 'optimistic') {
+        saving = provider.createActionItem(description: 'New task');
+        expect(provider.actionItems.length, 52);
+      }
+      await provider.loadMoreActionItems();
+      expect(offsets, [0, if (actor == 'undo') 0, 50]);
+      expect(provider.actionItems.where((item) => !item.id.startsWith('temp_')).map((item) => item.id),
+          unorderedEquals(rows.map((row) => row['id'])));
+      if (saving != null) {
+        created.complete(const ActionItemWithMetadata(id: 'created-task', description: 'New task', completed: false));
+        await saving;
+        expect(provider.actionItems.map((item) => item.id).toSet().length, 101);
+        expect(provider.actionItems.length, 101);
+      }
+    });
+  }
 
   for (final lane in ['list', 'pagination', 'home']) {
     test('older $lane response cannot erase an accepted task', () async {
@@ -250,4 +339,73 @@ void main() {
     expect(await state.addSummaryTask('synthetic-conversation', 2, TaskDeliveryFixture.description), isTrue);
     expect(fixture.acceptCalls, 1);
   });
+
+  for (final terminal in ['rejected', 'expired', 'lapsed']) {
+    test('summary retry replaces a $terminal alias after an ambiguous acceptance failure', () async {
+      final fixture = TaskDeliveryFixture();
+      var prepareCalls = 0;
+      var accepts = 0;
+      final keys = <String>[];
+      final state = TaskSuggestionsController(
+        api: TaskSuggestionsApi(
+            baseUrl: 'http://fixture.invalid/',
+            send: (request) async {
+              if (request.url.endsWith('/from-conversation')) {
+                prepareCalls++;
+                keys.add(request.headers['Idempotency-Key']!);
+                if (prepareCalls == 2) {
+                  return fixture.response({
+                    ...fixture.candidate,
+                    'status': terminal == 'lapsed' ? 'pending' : terminal,
+                    if (terminal == 'lapsed') 'expires_at': '2000-01-01T00:00:00Z',
+                  });
+                }
+              }
+              if (request.url.endsWith('/accept') && ++accepts == 1) return fixture.response({}, 503);
+              return fixture.send(request);
+            }),
+        onTaskSaved: (_) async => true,
+      );
+      addTearDown(state.dispose);
+      expect(await state.addSummaryTask('synthetic-conversation', 0, TaskDeliveryFixture.description), isFalse);
+      expect(await state.addSummaryTask('synthetic-conversation', 0, TaskDeliveryFixture.description), isTrue);
+      expect(prepareCalls, 3);
+      expect(keys[0], keys[1]);
+      expect(keys[2], isNot(keys[1]));
+      expect(accepts, 2);
+      expect(fixture.acceptCalls, 1);
+    });
+  }
+
+  for (final terminal in [false, true]) {
+    test('an acceptance conflict retires only a confirmed terminal retry key ($terminal)', () async {
+      final fixture = TaskDeliveryFixture();
+      final keys = <String>[];
+      var conflict = true;
+      final state = TaskSuggestionsController(
+        api: TaskSuggestionsApi(
+            baseUrl: 'http://fixture.invalid/',
+            send: (request) async {
+              if (request.url.endsWith('/from-conversation')) keys.add(request.headers['Idempotency-Key']!);
+              if (request.url.endsWith('/accept') && conflict) {
+                conflict = false;
+                return fixture.response({}, 409);
+              }
+              if (request.method == 'GET' && request.url.endsWith('/synthetic-candidate')) {
+                return terminal
+                    ? fixture.response({...fixture.candidate, 'status': 'rejected'})
+                    : fixture.response({}, 503);
+              }
+              return fixture.send(request);
+            }),
+        onTaskSaved: (_) async => true,
+      );
+      addTearDown(state.dispose);
+      expect(await state.addSummaryTask('synthetic-conversation', 0, TaskDeliveryFixture.description), isFalse);
+      expect(await state.addSummaryTask('synthetic-conversation', 0, TaskDeliveryFixture.description), isTrue);
+      expect(keys.length, 2);
+      expect(keys[0] == keys[1], !terminal);
+      expect(fixture.acceptCalls, 1);
+    });
+  }
 }

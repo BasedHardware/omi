@@ -28,6 +28,16 @@ class TaskSuggestionsApi {
         decode: (body) => wire.GeneratedCandidateListResponse.fromJson(_object(body)).candidates,
       );
 
+  Future<ApiResult<TaskSuggestion>> get(String id) => executeApi(
+        request: ApiRequest(url: '${_baseUrl}v1/candidates/${Uri.encodeComponent(id)}', method: 'GET'),
+        send: _send,
+        decode: (body) {
+          final item = TaskSuggestion.fromJson(_object(body));
+          if (item.candidateId != id) throw const FormatException('Candidate identity mismatch');
+          return item;
+        },
+      );
+
   Future<ApiResult<int>> generation() => executeApi(
         request: ApiRequest(url: '${_baseUrl}v1/candidates/control', method: 'GET'),
         send: _send,

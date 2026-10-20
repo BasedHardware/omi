@@ -164,19 +164,44 @@ class TaskSuggestionsController extends ChangeNotifier {
       }
       final generation = await _api.generation();
       if (!_current(epoch) || generation is! ApiSuccess<int>) return false;
-      final prepared = await _api.prepareSummary(
+      var prepared = await _api.prepareSummary(
         reference: reference,
         generation: generation.data,
         idempotencyKey: _summaryKeys.putIfAbsent(id, () => const Uuid().v4()),
       );
       if (!_current(epoch) || prepared is! ApiSuccess<TaskSuggestion>) return false;
-      final accepted = await _api.accept(prepared.data, summary: reference);
-      if (!_current(epoch) || accepted is! ApiSuccess<TaskSuggestionReceipt>) return false;
+      if (_terminalSummaryCandidate(prepared.data)) {
+        // A fresh explicit gesture may replace a terminal proposal. Ambiguous
+        // transport failures keep the old key so an accepted task is replayed.
+        _summaryKeys.remove(id);
+        prepared = await _api.prepareSummary(
+          reference: reference,
+          generation: generation.data,
+          idempotencyKey: _summaryKeys.putIfAbsent(id, () => const Uuid().v4()),
+        );
+        if (!_current(epoch) || prepared is! ApiSuccess<TaskSuggestion>) return false;
+        if (_terminalSummaryCandidate(prepared.data)) {
+          _summaryKeys.remove(id);
+          return false;
+        }
+      }
+      final candidate = prepared.data;
+      final accepted = await _api.accept(candidate, summary: reference);
+      if (!_current(epoch)) return false;
+      if (accepted is! ApiSuccess<TaskSuggestionReceipt>) {
+        if (accepted case ApiFailure(problem: final problem) when problem.statusCode == 409) {
+          final current = await _api.get(candidate.candidateId);
+          if (_current(epoch) && current is ApiSuccess<TaskSuggestion> && _terminalSummaryCandidate(current.data)) {
+            _summaryKeys.remove(id);
+          }
+        }
+        return false;
+      }
       _savedSummaries[id] = accepted.data.taskId!;
-      _resolvedIds.add(prepared.data.candidateId);
-      _savedTasks[prepared.data.candidateId] = accepted.data.taskId!;
-      if (!items.any((item) => item.candidateId == prepared.data.candidateId)) items = [...items, prepared.data];
-      await _hydrate(prepared.data.candidateId, epoch);
+      _resolvedIds.add(candidate.candidateId);
+      _savedTasks[candidate.candidateId] = accepted.data.taskId!;
+      if (!items.any((item) => item.candidateId == candidate.candidateId)) items = [...items, candidate];
+      await _hydrate(candidate.candidateId, epoch);
       if (!_current(epoch)) return false;
       return true;
     } finally {
@@ -186,6 +211,11 @@ class TaskSuggestionsController extends ChangeNotifier {
       }
     }
   }
+
+  bool _terminalSummaryCandidate(TaskSuggestion item) =>
+      item.status == 'rejected' ||
+      item.status == 'expired' ||
+      (item.status == 'pending' && item.expiresAt != null && !item.expiresAt!.isAfter(DateTime.now()));
 
   bool summarySaved(String conversationId, int index, String description) =>
       _savedSummaries.containsKey('$conversationId/$index/$description');
