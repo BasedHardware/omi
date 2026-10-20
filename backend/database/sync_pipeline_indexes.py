@@ -22,6 +22,10 @@ _BATCH_PIPELINE_INDEXES = tuple(
             (_asc('owner_key'), _asc('merge_pending'), _asc('state'), _asc('capture_at'), _asc('segment_id')),
         ),
         ('merge_ready_age', (_asc('owner_key'), _asc('merge_pending'), _asc('state'), _asc('ready_at'))),
+        (
+            'merge_fresh',
+            (_asc('owner_key'), _asc('merge_pending'), _asc('fresh_capture'), _asc('capture_at'), _asc('segment_id')),
+        ),
         ('recovery', (_asc('owner_id'), _asc('recovery_state'))),
         ('lease', (_asc('state'), _asc('lease_until'))),
         ('retry', (_asc('state'), _asc('available_at'))),

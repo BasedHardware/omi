@@ -7,6 +7,7 @@ import re
 from urllib.parse import urlsplit
 import io
 import logging
+import threading
 import time
 import wave
 
@@ -132,6 +133,8 @@ class QuarantineRecovery:
         self.store, self.artifacts, self.stt, self.clock = store, artifacts, stt, clock
         self.protocol = RecoveryStore(store)
         self._candidate_after: str | None = None
+        # The serving pass and the dispatch loop share this instance.
+        self._sweeping = threading.Lock()
 
     def recover(self, segment_id, owner_id):
         try:
@@ -382,6 +385,14 @@ class QuarantineRecovery:
             self.protocol.shorten_wake(segment_id, int(match.group(1)), self.clock(), REWAKE_AFTER_HELD_SECONDS)
 
     def sweep(self):
+        if not self._sweeping.acquire(blocking=False):
+            return {}  # A concurrent scan of the same instance is already dispatching.
+        try:
+            return self._sweep()
+        finally:
+            self._sweeping.release()
+
+    def _sweep(self):
         counts = {}
         budget = recovery_dispatch_batch_size()
         # Discovery is independent of today's admission/recovery cohort. Every
@@ -412,4 +423,9 @@ class QuarantineRecovery:
                 logger.info('event=batch_quarantine_recovery outcome=%s', outcome)
             except Exception:
                 pass
+        if len(candidates) < budget:
+            # A short page reached the end of the scan. Resuming after its last
+            # ID would skip every earlier candidate, including new quarantines,
+            # for a whole pass.
+            self._candidate_after = None
         return counts

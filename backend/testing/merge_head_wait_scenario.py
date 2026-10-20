@@ -175,7 +175,9 @@ def replay(
         horizon_seconds=3 * 3600.0,
         # The replay measures ordering, not the per-UID backfill speech budget.
         backfill_speech_seconds_per_day=10**9,
-        flags={'BATCH_PIPELINE_MERGE_HEAD_WAIT_SECONDS': head_wait},
+        # The catch-up depth hold is measured by testing/fresh_latency_scenario.py;
+        # off here, the replay isolates the head wait.
+        flags={'BATCH_PIPELINE_MERGE_HEAD_WAIT_SECONDS': head_wait, 'BATCH_PIPELINE_MERGE_CATCH_UP_DEPTH': 'off'},
     )
     dropped: set[str] = set()
     original = sim_module.Scheduler
