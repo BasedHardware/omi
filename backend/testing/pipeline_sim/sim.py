@@ -36,6 +36,7 @@ from dataclasses import dataclass, field
 from unittest.mock import patch
 
 from config.policy import BatchUnitPolicy, FirstSummaryPolicy, resolve_batch_policy, resolve_stage_policy
+from config.policy.listen import ListenSessionPolicy
 from config.policy.stages import STAGE_TYPES
 from database import batch_pipeline_policy as policy_store
 from config.policy.batch import SNAPSHOT_ENV_KEYS
@@ -166,6 +167,7 @@ class SimConfig:
     purge_on_fence: bool = True  # production purges synchronously after the tombstone / privacy advance
     flags: dict[str, str] = field(default_factory=dict)
     policy: BatchUnitPolicy | None = None
+    listen_policy: ListenSessionPolicy | None = None
     role_environments: dict[str, dict[str, str]] = field(default_factory=dict)
     stage_roles: dict[str, str] = field(default_factory=dict)
     trace_policy: bool = False
@@ -175,6 +177,8 @@ class SimConfig:
     def __post_init__(self):
         if isinstance(self.policy, dict):
             self.policy = BatchUnitPolicy.from_dict(self.policy)
+        if isinstance(self.listen_policy, dict):
+            self.listen_policy = ListenSessionPolicy.from_dict(self.listen_policy)
 
 
 @dataclass

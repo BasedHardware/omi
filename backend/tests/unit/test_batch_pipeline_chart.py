@@ -315,3 +315,36 @@ def test_gpu_skip_switches_render_overrides():
     env = {v['name']: v.get('value') for v in deployment['spec']['template']['spec']['containers'][0]['env']}
     assert env['BATCH_PIPELINE_DIARIZE_SPEECH_ONLY_ENABLED'] == 'false'
     assert env['BATCH_PIPELINE_SHORT_SPEECH_SINGLE_ENABLED'] == 'true'
+
+
+@pytest.mark.parametrize('environment', ['dev', 'prod'])
+def test_worker_dispatch_rollout_defaults_are_dark_and_live_only(environment):
+    values = CHART / f'{environment}_omi_batch-pipeline-worker_values.yaml'
+    result = render('-f', str(values), '--set-string', 'image.digest=sha256:' + 'd' * 64)
+    assert result.returncode == 0, result.stderr
+    deployment = next(doc for doc in yaml.safe_load_all(result.stdout) if doc and doc['kind'] == 'Deployment')
+    env = {row['name']: row.get('value') for row in deployment['spec']['template']['spec']['containers'][0]['env']}
+    assert env['STT_CAP_DISPATCH_ENFORCEMENT'] == env['LADDER_V1_BUDGET_ENFORCEMENT_ENABLED'] == 'false'
+    assert env['STT_CAP_DISPATCH_COHORT'] == ''
+    assert env['STT_CAP_DISPATCH_LANES'] == 'live'
+
+
+def test_worker_dispatch_scope_can_be_bound_without_changing_other_admission():
+    result = render(
+        *enabled_arguments(),
+        '--set',
+        'worker.capDispatchEnforcement=true',
+        '--set-string',
+        'worker.capDispatchCohort=uid:synthetic',
+        '--set-string',
+        'worker.capDispatchLanes=batch',
+        '--set',
+        'worker.ladderBudgetEnforcement=true',
+    )
+    assert result.returncode == 0, result.stderr
+    deployment = next(doc for doc in yaml.safe_load_all(result.stdout) if doc and doc['kind'] == 'Deployment')
+    env = {row['name']: row.get('value') for row in deployment['spec']['template']['spec']['containers'][0]['env']}
+    assert env['STT_CAP_DISPATCH_ENFORCEMENT'] == env['LADDER_V1_BUDGET_ENFORCEMENT_ENABLED'] == 'true'
+    assert env['STT_CAP_DISPATCH_COHORT'] == 'uid:synthetic'
+    assert env['STT_CAP_DISPATCH_LANES'] == 'batch'
+    assert env['BATCH_PIPELINE_ENABLED'] == 'false'

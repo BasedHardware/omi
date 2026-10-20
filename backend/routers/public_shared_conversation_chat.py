@@ -1,7 +1,7 @@
 """Gateway-only chat over a server-resolved public shared conversation."""
 
 from __future__ import annotations
-from utils.generated_compute import require_generated_compute, generated_compute_enabled
+from utils.generated_compute import require_generated_compute, generated_compute_configured
 
 import os
 import re
@@ -302,7 +302,7 @@ async def public_shared_conversation_chat(
     except Exception as exc:
         raise _route_http_exception(503, 'Public shared conversation chat unavailable') from exc
 
-    if generated_compute_enabled():
+    if generated_compute_configured():
         await run_blocking(
             db_executor,
             require_generated_compute,

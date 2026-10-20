@@ -12,6 +12,7 @@ from dataclasses import dataclass
 
 import httpx
 
+from config.policy.listen import window_pressure_allocation
 from utils.executors import start_background_task
 from utils.stt.live_metrics import WINDOW_PRESSURE_REFRESH, WINDOW_PRESSURE_REFUSAL, WINDOW_PRESSURE_REPLICAS
 
@@ -46,7 +47,7 @@ class BatchPressure:
 
     def start_from_env(self) -> None:
         try:
-            allocation = float(os.getenv('PARAKEET_WINDOW_ALLOCATION_PERCENT', '0'))
+            allocation = window_pressure_allocation()
             min_replicas = int(os.getenv('PARAKEET_BATCH_PRESSURE_MIN_REPLICAS', '2'))
         except ValueError:
             return
