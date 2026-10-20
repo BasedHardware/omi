@@ -11,7 +11,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Iterable, Mapping, Sequence
 
-from utils.llm.notes_agent_prompt import length_ceiling
+from utils.llm.notes_agent_prompt import length_ceiling, length_floor
 
 # Words that make a heading a task list rather than discussion.
 _ACTION_HEADING = re.compile(
@@ -106,6 +106,12 @@ def check_notes(submission: Mapping[str, Any], *, transcript_words: int) -> Note
     if words > ceiling * LENGTH_TOLERANCE:
         check.problems.append(
             f'The section bodies have {words} words; the ceiling is {ceiling}. Cut minor details and repetition.'
+        )
+    floor = length_floor(transcript_words)
+    if words < floor:
+        check.problems.append(
+            f'The section bodies have {words} words; this meeting needs at least {floor}. Cover every substantive '
+            'thread with its points and details.'
         )
     return check
 

@@ -407,15 +407,44 @@ def test_validator_requires_nesting_bullets_and_no_action_sections_for_long_meet
     flat = submission(sections=[{'heading': 'Pricing', 'body_markdown': '- one\n- two'}])
     assert any('Nest' in problem for problem in check_notes(flat, transcript_words=3000).problems)
     assert check_notes(flat, transcript_words=800).ok
-    assert check_notes(submission(), transcript_words=3000).ok
+    filled = submission(sections=[{'heading': 'Pricing', 'body_markdown': GOOD_BODY + ' ' + ' '.join(['word'] * 500)}])
+    assert check_notes(filled, transcript_words=3000).ok
     for heading in ('Action Items', 'Next steps', 'To-dos', 'Follow-ups'):
         bad = submission(sections=[*submission()['sections'], {'heading': heading, 'body_markdown': '- x'}])
         assert not check_notes(bad, transcript_words=800).ok
     assert nested_bullet_count('- a\n  - b\n\t- c\n- d') == 2
 
 
+def test_validator_flags_thin_notes_on_long_meetings():
+    problems = check_notes(submission(), transcript_words=6000).problems
+    assert any('at least 650' in problem for problem in problems)
+    assert check_notes(submission(), transcript_words=900).ok
+
+
+def test_long_meetings_must_investigate_before_submitting():
+    class Eager(ScriptedModel):
+        # Submits immediately unless told to investigate; then looks up and resubmits.
+        async def __call__(self, messages, tool_choice):
+            self.choices.append(tool_choice)
+            told = any(
+                m.get('role') == 'tool' and 'Investigate before submitting' in str(m.get('content')) for m in messages
+            )
+            looked = sum(m.get('role') == 'tool' and 'people' in str(m.get('content')) for m in messages)
+            if told and looked < 4 and not isinstance(tool_choice, dict):
+                calls = [call('search_people', {'query': 'x'}, len(self.choices) * 10 + i) for i in range(4)]
+            else:
+                calls = [call(prompt.SUBMIT, submission(), len(self.choices))]
+            return agent.CompletionTurn(tool_calls=calls, prompt_tokens=100)
+
+    toolbox = CountingToolbox()
+    result = run_agent(Eager(), policy.budget_for_words(2000), toolbox=toolbox, words=800)
+    assert 'Investigate before submitting' in result.rejections[0]
+    assert toolbox.calls == 4 and result.submission is not None
+    assert policy.budget_for_words(9000).min_tool_calls == 5
+
+
 def test_validator_flags_overlong_notes():
-    body = '- point\n  - ' + ' '.join(['word'] * 800)
+    body = '- point\n  - ' + ' '.join(['word'] * 1200)
     long = submission(sections=[{'heading': 'H', 'body_markdown': body}])
     assert any('ceiling' in problem for problem in check_notes(long, transcript_words=3000).problems)
 
@@ -500,6 +529,7 @@ def test_synthetic_replay_through_shaped_notes_writer(monkeypatch):
     monkeypatch.setattr(serving, 'owner_profile', lambda uid: 'Founder of a hardware startup.')
     monkeypatch.setattr(tools.calendar_db, 'get_meetings_in_time_range', lambda *a, **k: [])
     monkeypatch.setattr(tools.screen_activity_db, 'get_screen_activity', lambda *a, **k: [])
+    monkeypatch.setattr(tools, 'load_people_documents', lambda uid: [{'id': 'p1', 'name': 'Maya Okafor'}])
 
     structured = notes._get_shaped_conversation_notes(
         prefix,

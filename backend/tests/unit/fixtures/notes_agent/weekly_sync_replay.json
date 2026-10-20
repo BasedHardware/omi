@@ -51,6 +51,12 @@
           "arguments": {
             "frame_id": "frame-tile-1"
           }
+        },
+        {
+          "name": "search_people",
+          "arguments": {
+            "query": "Maya"
+          }
         }
       ]
     },

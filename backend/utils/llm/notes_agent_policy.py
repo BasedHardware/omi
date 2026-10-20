@@ -49,6 +49,8 @@ OUTPUT_USD_PER_MILLION = 0.60
 class NotesAgentBudget:
     max_turns: int
     max_tool_calls: int
+    # Lookups required before a submission is accepted (one rejection, never past the caps).
+    min_tool_calls: int = 0
     max_cost_usd: float = MAX_COST_USD
     deadline_seconds: float = DEADLINE_SECONDS
     force_submit_after_seconds: float = FORCE_SUBMIT_AFTER_SECONDS
@@ -90,12 +92,12 @@ def in_cohort(uid: Optional[str], conversation_id: Optional[str]) -> bool:
 
 
 def budget_for_words(words: int) -> NotesAgentBudget:
-    """Value-proportional: longer meetings may look up more, never past ~15 tools or ~2 cents."""
+    """Value-proportional: longer meetings must investigate more, never past ~15 tools or ~2 cents."""
     if words >= 5000:
-        return NotesAgentBudget(max_turns=9, max_tool_calls=15)
+        return NotesAgentBudget(max_turns=9, max_tool_calls=15, min_tool_calls=5)
     if words >= AGENT_MIN_WORDS:
-        return NotesAgentBudget(max_turns=7, max_tool_calls=10)
-    return NotesAgentBudget(max_turns=5, max_tool_calls=6)
+        return NotesAgentBudget(max_turns=7, max_tool_calls=10, min_tool_calls=4)
+    return NotesAgentBudget(max_turns=5, max_tool_calls=6, min_tool_calls=2)
 
 
 def plan_notes_agent(

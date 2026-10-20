@@ -213,7 +213,7 @@ async def run_notes_agent(
                 verdict, payload = _review_submission(
                     arguments,
                     transcript_words=transcript_words,
-                    open_tasks=open_tasks,
+                    lookups_missing=max(0, budget.min_tool_calls - result.tool_calls),
                     # One rejection, and only while a further turn still fits the budget.
                     may_reject=not result.rejections
                     and result.turns < budget.max_turns
@@ -222,7 +222,8 @@ async def run_notes_agent(
                 if payload is None:
                     result.rejections.append(verdict)
                     REPAIRS.labels(kind='rejected').inc()
-                    state['force'] = True
+                    # A note sent back to investigate keeps its lookups; a format fix resubmits next turn.
+                    state['force'] = result.tool_calls >= budget.min_tool_calls
                     responses.append(_tool_reply(call, {'status': 'rejected', 'fix': verdict}))
                     continue
                 accepted = payload
@@ -265,7 +266,7 @@ def _tool_reply(call: Mapping[str, Any], body: Mapping[str, Any]) -> dict[str, A
 
 
 def _review_submission(
-    arguments: dict[str, Any], *, transcript_words: int, open_tasks: Sequence[Any], may_reject: bool
+    arguments: dict[str, Any], *, transcript_words: int, lookups_missing: int, may_reject: bool
 ) -> tuple[str, Optional[dict[str, Any]]]:
     try:
         AgentNotesSubmission.model_validate(arguments)
@@ -273,6 +274,13 @@ def _review_submission(
         fields = sorted({'.'.join(map(str, row['loc'])) for row in error.errors(include_input=False)})[:6]
         return 'Schema problems at: ' + ', '.join(fields), None
     check = check_notes(arguments, transcript_words=transcript_words)
+    if lookups_missing:
+        check.problems.insert(
+            0,
+            f'Investigate before submitting: make at least {lookups_missing} more lookups to verify the people, '
+            'unnamed speakers and uncertain names (search_people, view_screenshot, get_screen_activity, get_calendar, '
+            'search_memories, search_past_meetings), then resubmit the complete notes.',
+        )
     if check.problems and may_reject:
         return ' '.join(check.problems), None
     if check.problems:
