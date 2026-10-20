@@ -8,21 +8,68 @@ project: based-hardware-dev
 region: us-central1
 
 cloud_run:
+  backend-staging:
+    env:
+      # live-only on prod, 2026-10-20 inventory (see prod.yaml)
+      AUDIO_MERGE_DISPATCH_MODE: cloud_tasks
+      FAIR_USE_ENABLED: 'true'
+      HTTP_AUDIO_MERGE_RUN_TIMEOUT: '600'
+      HTTP_DEFAULT_TIMEOUT: '600'
+      HTTP_GET_TIMEOUT: '30'
+      HTTP_POST_TIMEOUT: '600'
+      LANGCHAIN_TRACING_V2: 'false'
+      LANGSMITH_TRACING: 'false'
+      MEMORY_MODE: 'false'
+      OMI_LANGSMITH_AGENTIC_PROMPT_NAME: agentic-chat-main
+      OMI_LANGSMITH_PROMPT_CACHE_TTL_SECONDS: '3600'
+      TYPESENSE_HOST_PORT: '443'
   backend-sync-staging:
     env:
       SYNC_TASKS_QUEUE: staging-sync-jobs-fresh
       SYNC_BACKFILL_TASKS_QUEUE: staging-sync-backfill-fresh
+      # live-only on prod, 2026-10-20 inventory (see prod.yaml)
+      AUDIO_MERGE_DISPATCH_MODE: cloud_tasks
+      FAIR_USE_ENABLED: 'true'
+      HTTP_AUDIO_MERGE_RUN_TIMEOUT: '600'
+      HTTP_DEFAULT_TIMEOUT: '600'
+      HTTP_POST_TIMEOUT: '600'
+      HTTP_SYNC_JOBS_RUN_TIMEOUT: '1500'
+      LANGCHAIN_TRACING_V2: 'false'
+      MEMORY_MODE: 'off'
     # Replica counts are on contract (i)'s staging allowlist: lane 2's deploy.sh sizes staging.
     max_instances: 20
   backend-sync-backfill-staging:
     env:
       SYNC_TASKS_QUEUE: staging-sync-backfill-fresh
       SYNC_BACKFILL_TASKS_QUEUE: staging-sync-backfill-fresh
+      # live-only on prod, 2026-10-20 inventory (see prod.yaml)
+      AUDIO_MERGE_DISPATCH_MODE: cloud_tasks
+      DREAM_AGENT_HUNT_INTERVAL_HOURS: '2'
+      DREAM_AGENT_MANUAL_RUNS_PER_DAY: '3'
+      DREAM_AGENT_PASSES_PER_DAY: '6'
+      FAIR_USE_ENABLED: 'true'
+      HTTP_AUDIO_MERGE_RUN_TIMEOUT: '600'
+      HTTP_DEFAULT_TIMEOUT: '600'
+      HTTP_POST_TIMEOUT: '600'
+      HTTP_SYNC_JOBS_RUN_TIMEOUT: '1500'
+      LANGCHAIN_TRACING_V2: 'false'
+      LISTEN_FINALIZATION_DURABLE_ATTEMPT_CAP_ENABLED: 'true'
+      LISTEN_FINALIZATION_RECOVERY_MINIMUM_TERMINAL_ENABLED: 'true'
+      MEETING_NOTES_EVIDENCE_WAIT_SECONDS: '25'
+      MEMORY_MODE: 'off'
+      TYPESENSE_HOST_PORT: '443'
     max_instances: {owner: none, floor: 8, ceiling: 40}
   backend-integration-staging:
     env:
       SYNC_TASKS_QUEUE: staging-sync-jobs-fresh
       SUMMARY_DEBT_REPAIR_ENABLED: 'true'
+      # live-only on prod, 2026-10-20 inventory (see prod.yaml)
+      FAIR_USE_ENABLED: 'true'
+      HTTP_DEFAULT_TIMEOUT: '600'
+      HTTP_GET_TIMEOUT: '30'
+      LANGCHAIN_TRACING_V2: 'false'
+      MEMORY_MODE: 'off'
+      TYPESENSE_HOST_PORT: '443'
 
 cloud_tasks:
   staging-batch-quarantine-recovery:
