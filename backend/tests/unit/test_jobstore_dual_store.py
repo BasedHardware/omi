@@ -322,6 +322,36 @@ class TestSelection:
 
     def test_prod_namespace_is_refused(self, monkeypatch):
         self.configure(monkeypatch)
+        monkeypatch.delenv('OMI_DEPLOYMENT', raising=False)
+        monkeypatch.delenv('FIRESTORE_DATABASE_ID', raising=False)
+        primary = self.primary('batch_pipeline_prod')
+        assert dual_store.shadow_from_env(primary) is primary
+
+    def test_prod_namespace_on_the_staging_db_id_without_the_staging_flag_is_refused(self, monkeypatch):
+        self.configure(monkeypatch)
+        monkeypatch.delenv('OMI_DEPLOYMENT', raising=False)
+        monkeypatch.setenv('FIRESTORE_DATABASE_ID', 'staging')
+        primary = self.primary('batch_pipeline_prod')
+        assert dual_store.shadow_from_env(primary) is primary
+
+    def test_staging_on_the_staging_db_admits_the_prod_namespace(self, monkeypatch):
+        """L02-2: staging keeps the worker namespace batch_pipeline_prod; its A2 parity read must measure."""
+        self.configure(monkeypatch)
+        monkeypatch.setenv('OMI_DEPLOYMENT', 'staging')
+        monkeypatch.setenv('FIRESTORE_DATABASE_ID', 'staging')
+        primary = self.primary('batch_pipeline_prod')
+        store = dual_store.shadow_from_env(primary)
+        assert isinstance(store, DualStore) and store.primary is primary
+        assert store.shadow.namespace == 'batch_pipeline_prod'
+
+    @pytest.mark.parametrize('database_id', [None, '', '(default)', 'prod', ' Staging'])
+    def test_staging_flag_on_a_non_staging_db_is_refused(self, monkeypatch, database_id):
+        self.configure(monkeypatch)
+        monkeypatch.setenv('OMI_DEPLOYMENT', 'staging')
+        if database_id is None:
+            monkeypatch.delenv('FIRESTORE_DATABASE_ID', raising=False)
+        else:
+            monkeypatch.setenv('FIRESTORE_DATABASE_ID', database_id)
         primary = self.primary('batch_pipeline_prod')
         assert dual_store.shadow_from_env(primary) is primary
 
@@ -406,6 +436,36 @@ class TestMirrorRefreshHook:
         assert store.drain(5)
         assert shadow.rows == {('jobs', 'j'): {'a': 1}}
 
+    @pytest.mark.parametrize(
+        'deployment, database_id',
+        [(None, None), (None, 'staging'), ('staging', None), ('staging', '(default)')],
+        ids=['prod', 'staging-db-id-without-flag', 'staging-flag-without-db-id', 'staging-flag-on-default-db'],
+    )
+    def test_prod_namespace_is_refused_outside_the_staging_db(self, monkeypatch, deployment, database_id):
+        monkeypatch.setenv('BATCH_JOBSTORE_MODE', 'shadow')
+        for name, value in (('OMI_DEPLOYMENT', deployment), ('FIRESTORE_DATABASE_ID', database_id)):
+            if value is None:
+                monkeypatch.delenv(name, raising=False)
+            else:
+                monkeypatch.setenv(name, value)
+        monkeypatch.setattr(batch_store, 'FirestoreStore', lambda *a, **k: pytest.fail('constructed a store'))
+        monkeypatch.setattr(dual_store, 'shadow_from_env', lambda *a: pytest.fail('consulted the shadow'))
+        dual_store.mirror_refresh('batch_pipeline_prod', [('jobs', 'j')])
+
+    def test_staging_on_the_staging_db_refreshes_the_prod_namespace(self, monkeypatch):
+        monkeypatch.setenv('BATCH_JOBSTORE_MODE', 'shadow')
+        monkeypatch.setenv('OMI_DEPLOYMENT', 'staging')
+        monkeypatch.setenv('FIRESTORE_DATABASE_ID', 'staging')
+        monkeypatch.setenv('OMI_ENV_STAGE', 'prod')  # staging takes prod code paths
+        primary, shadow = SimStore(CustomerData(), namespace='batch_pipeline_prod'), FakeShadow('batch_pipeline_prod')
+        store = DualStore(primary, shadow)
+        monkeypatch.setattr(dual_store, '_SHADOWED', {})
+        monkeypatch.setattr(dual_store, 'shadow_from_env', lambda _primary: store)
+        primary.rows[('jobs', 'j')] = {'a': 1}
+        dual_store.mirror_refresh('batch_pipeline_prod', [('jobs', 'j')])
+        assert store.drain(5)
+        assert shadow.rows == {('jobs', 'j'): {'a': 1}}
+
     def test_hook_never_raises(self, monkeypatch):
         monkeypatch.setenv('BATCH_JOBSTORE_MODE', 'shadow')
         monkeypatch.setattr(dual_store, 'shadow_from_env', lambda _primary: (_ for _ in ()).throw(RuntimeError('x')))
@@ -426,8 +486,30 @@ class TestLightHook:
         from database import batch_pipeline_shadow_hook as hook
 
         monkeypatch.setenv('BATCH_JOBSTORE_MODE', 'shadow')
+        monkeypatch.delenv('OMI_DEPLOYMENT', raising=False)
+        monkeypatch.delenv('FIRESTORE_DATABASE_ID', raising=False)
         monkeypatch.setattr(dual_store, 'mirror_refresh', lambda *a: pytest.fail('reached the job store'))
         hook.mirror_refresh('batch_pipeline_prod', [('jobs', 'j')])
+
+    def test_staging_flag_on_a_non_staging_db_is_refused(self, monkeypatch):
+        from database import batch_pipeline_shadow_hook as hook
+
+        monkeypatch.setenv('BATCH_JOBSTORE_MODE', 'shadow')
+        monkeypatch.setenv('OMI_DEPLOYMENT', 'staging')
+        monkeypatch.setenv('FIRESTORE_DATABASE_ID', '(default)')
+        monkeypatch.setattr(dual_store, 'mirror_refresh', lambda *a: pytest.fail('reached the job store'))
+        hook.mirror_refresh('batch_pipeline_prod', [('jobs', 'j')])
+
+    def test_staging_on_the_staging_db_delegates_the_prod_namespace(self, monkeypatch):
+        from database import batch_pipeline_shadow_hook as hook
+
+        calls = []
+        monkeypatch.setenv('BATCH_JOBSTORE_MODE', 'shadow')
+        monkeypatch.setenv('OMI_DEPLOYMENT', 'staging')
+        monkeypatch.setenv('FIRESTORE_DATABASE_ID', 'staging')
+        monkeypatch.setattr(dual_store, 'mirror_refresh', lambda ns, keys: calls.append((ns, keys)))
+        hook.mirror_refresh('batch_pipeline_prod', [('jobs', 'j')])
+        assert calls == [('batch_pipeline_prod', [('jobs', 'j')])]
 
     def test_shadow_mode_delegates_and_never_raises(self, monkeypatch):
         from database import batch_pipeline_shadow_hook as hook

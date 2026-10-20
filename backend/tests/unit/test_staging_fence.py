@@ -272,3 +272,30 @@ def test_every_client_seam_builds_on_the_staging_db(monkeypatch, data_plane_proj
         assert kwargs.get('database') == 'staging'
         assert kwargs.get('project') == 'based-hardware-dev'
     staging_fence.reset_for_tests()
+
+
+# L02-2: staging keeps the worker namespace batch_pipeline_prod, so the A2 job-store shadow gate keys on
+# the deployment and the Firestore database, not on the namespace alone.
+
+
+def test_jobstore_shadow_refuses_the_prod_namespace_in_prod():
+    assert not staging_fence.jobstore_shadow_admits('batch_pipeline_prod', {'OMI_ENV_STAGE': 'prod'})
+    assert not staging_fence.jobstore_shadow_admits('batch_pipeline_prod', {'FIRESTORE_DATABASE_ID': 'staging'})
+
+
+def test_jobstore_shadow_admits_the_prod_namespace_in_staging_on_the_staging_db():
+    assert staging_fence.jobstore_shadow_admits('batch_pipeline_prod', _clean_env())
+
+
+@pytest.mark.parametrize('database_id', [None, '', '(default)', 'prod'])
+def test_jobstore_shadow_refuses_the_staging_flag_on_a_non_staging_db(database_id):
+    env = _clean_env()
+    if database_id is None:
+        env.pop('FIRESTORE_DATABASE_ID')
+    else:
+        env['FIRESTORE_DATABASE_ID'] = database_id
+    assert not staging_fence.jobstore_shadow_admits('batch_pipeline_prod', env)
+
+
+def test_jobstore_shadow_admits_other_namespaces():
+    assert staging_fence.jobstore_shadow_admits('batch_pipeline_dev', {})
