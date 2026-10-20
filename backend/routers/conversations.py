@@ -4,7 +4,7 @@ import hashlib
 import os
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, BackgroundTasks
-from typing import Annotated, Any, Dict, List, Optional
+from typing import Annotated, Any, Dict, List, Literal, Optional
 from datetime import datetime, timezone
 
 import database.conversation_scan as conversation_scan_db
@@ -57,7 +57,7 @@ from models.conversation import (
 from utils.conversations.fragment_visibility import is_completed_rule_discard
 from utils.conversations.factory import deserialize_conversation
 from utils.conversations.processing_trigger import ProcessingTrigger
-from utils.conversations.reprocess_contract import reprocess_result_contract_enabled
+from utils.conversations.reprocess_contract import DERIVED_EFFECTS_TRANSCRIPT_FIELD, FIRST_PARTY_SUMMARY_SOURCE
 from utils.conversations.analytics import build_conversation_analytics
 from utils.conversations.render import redact_conversations_for_list
 from utils.conversations.onopen_translation import translate_open_page
@@ -721,7 +721,7 @@ def get_conversation_finalization_status(
     '/v1/conversations/{conversation_id}/reprocess',
     response_model=Conversation,
     responses={
-        400: {'description': 'The selected app cannot summarize conversations'},
+        400: {'description': 'The selected app cannot summarize conversations, or app_id was combined with source=omi'},
         403: {'description': 'The selected app is not available to this user'},
         404: {'description': 'The conversation or selected app does not exist'},
         409: {
@@ -736,6 +736,7 @@ def reprocess_conversation(
     conversation_id: str,
     language_code: Optional[str] = None,
     app_id: Optional[str] = None,
+    source: Optional[Literal['omi']] = None,
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "conversations:reprocess")),
     response: Response = None,  # type: ignore[assignment]
     background_tasks: BackgroundTasks = None,
@@ -745,8 +746,13 @@ def reprocess_conversation(
     :param conversation_id: The ID of the conversation to reprocess
     :param language_code: Optional language code to use for processing
     :param app_id: Optional app ID to use for processing (if provided, only this app will be triggered)
+    :param source: ``omi`` asks for Omi's own notes only: neither the preferred app nor a suggested
+        app runs. Omitted keeps the legacy meaning (Omi notes plus the user's preferred app).
     :return: The updated conversation after reprocessing.
     """
+    first_party_only = source == FIRST_PARTY_SUMMARY_SOURCE
+    if first_party_only and app_id:
+        raise HTTPException(status_code=400, detail='app_id and source=omi are mutually exclusive')
     conversation = _get_valid_conversation_by_id(uid, conversation_id)
     # Reprocess force-processes a *discarded* conversation to revive it, but a
     # soft-deleted tombstone is invisible to the user and must not be reprocessed:
@@ -760,6 +766,8 @@ def reprocess_conversation(
 
     input_generation = attention_db.generation(conversation)
     was_discarded = bool(conversation.get('discarded'))
+    # A hidden conversation's derived effects are not trusted to be current.
+    effects_transcript = None if was_discarded else conversation.get(DERIVED_EFFECTS_TRANSCRIPT_FIELD)
     conversation = deserialize_conversation(conversation)
     if not language_code:
         language_code = conversation.language or 'en'
@@ -775,11 +783,10 @@ def reprocess_conversation(
     except attention_db.ClaimRejected as error:
         raise HTTPException(status_code=404, detail='Conversation not found') from error
     if not owned or not attention_db.owns_live_claim(uid, operation):
-        if reprocess_result_contract_enabled():
-            # Echoing the stale row as 200 made clients report "updated" with
-            # no new summary; another writer still owns this conversation.
-            raise HTTPException(status_code=409, detail=REPROCESS_IN_PROGRESS_ERROR_DETAIL)
-        return deserialize_conversation(_get_valid_conversation_by_id(uid, conversation_id))
+        # Echoing the stale row as 200 made clients report "updated" with no new
+        # summary; another writer still owns this conversation. Every released
+        # client treats a non-200 reprocess answer as failure.
+        raise HTTPException(status_code=409, detail=REPROCESS_IN_PROGRESS_ERROR_DETAIL)
     try:
         result = execute_reprocess(
             uid,
@@ -791,6 +798,8 @@ def reprocess_conversation(
             was_discarded,
             background_tasks,
             response,
+            first_party_only=first_party_only,
+            derived_effects_transcript_sha256=effects_transcript if isinstance(effects_transcript, str) else None,
         )
     except Exception:
         attention_db.finish(uid, operation, 'failed')
@@ -821,7 +830,18 @@ def _reprocess_succeeded(result: Any, app_id: Optional[str]) -> bool:
 
 
 def execute_reprocess(
-    uid, conversation_id, conversation, language_code, app_id, explicit_app, was_discarded, background_tasks, response
+    uid,
+    conversation_id,
+    conversation,
+    language_code,
+    app_id,
+    explicit_app,
+    was_discarded,
+    background_tasks,
+    response,
+    *,
+    first_party_only: bool = False,
+    derived_effects_transcript_sha256: Optional[str] = None,
 ):
     receipt_applied: list = []
 
@@ -836,6 +856,8 @@ def execute_reprocess(
             AppUsageAttribution.EXPLICIT_SELECTION if explicit_app else AppUsageAttribution.NON_USER_REPROCESS
         ),
         speaker_receipt_observer=receipt_applied.append,
+        first_party_only=first_party_only,
+        derived_effects_transcript_sha256=derived_effects_transcript_sha256,
     )
 
     # Reprocessing a hidden conversation is an explicit recovery: persist it as
