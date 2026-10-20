@@ -30,6 +30,8 @@ class Transaction(Protocol):
     def put(self, table: str, key: str, value: dict) -> None: ...
     def patch(self, table: str, key: str, fields: dict) -> None: ...
     def first_pending(self, owner_key: str) -> dict | None: ...
+    def first_ready_pending(self, owner_key: str) -> dict | None: ...
+    def longest_ready_pending(self, owner_key: str) -> dict | None: ...
     def ready_predecessor(self, owner_key: str, priority: int, segment_id: str) -> dict | None: ...
     def service_frontier(self, priority: int) -> float: ...
     def check_privacy(self, uid: str, conversation_ids=(), expected_generation: int | None = None) -> int: ...
@@ -86,6 +88,12 @@ class FirestoreTransaction:
 
     def first_pending(self, owner_key: str) -> dict | None:
         return first_pending(self.client, self.namespace, owner_key, transaction=self.transaction)
+
+    def first_ready_pending(self, owner_key: str) -> dict | None:
+        return first_ready_pending(self.client, self.namespace, owner_key, transaction=self.transaction)
+
+    def longest_ready_pending(self, owner_key: str) -> dict | None:
+        return longest_ready_pending(self.client, self.namespace, owner_key, transaction=self.transaction)
 
     def ready_predecessor(self, owner_key: str, priority: int, segment_id: str) -> dict | None:
         return ready_predecessor(
@@ -252,6 +260,35 @@ def first_pending(client: Any, namespace: str, owner_key: str, *, transaction: A
         .where('merge_pending', '==', True)
         .order_by('capture_at')
         .order_by('segment_id')
+        .limit(1)
+        .stream(transaction=transaction)
+    )
+    return docs[0].to_dict() if docs else None
+
+
+def first_ready_pending(client: Any, namespace: str, owner_key: str, *, transaction: Any = None) -> dict | None:
+    """The owner's earliest-captured pending row that already has a result (bounded head wait)."""
+    docs = list(
+        client.collection(f'{namespace}_jobs')
+        .where('owner_key', '==', owner_key)
+        .where('merge_pending', '==', True)
+        .where('state', '==', 'result_ready')
+        .order_by('capture_at')
+        .order_by('segment_id')
+        .limit(1)
+        .stream(transaction=transaction)
+    )
+    return docs[0].to_dict() if docs else None
+
+
+def longest_ready_pending(client: Any, namespace: str, owner_key: str, *, transaction: Any = None) -> dict | None:
+    """The owner's pending result that has waited longest; rows without ``ready_at`` never match."""
+    docs = list(
+        client.collection(f'{namespace}_jobs')
+        .where('owner_key', '==', owner_key)
+        .where('merge_pending', '==', True)
+        .where('state', '==', 'result_ready')
+        .order_by('ready_at')
         .limit(1)
         .stream(transaction=transaction)
     )

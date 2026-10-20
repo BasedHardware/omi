@@ -435,7 +435,7 @@ class Scheduler:
                 return False, False
             if job.get('requires_compute_admission') and job.get('compute_admission_token') != token:
                 return False, False
-            job.update(state='result_ready', result=asdict(result))
+            job.update(state='result_ready', result=asdict(result), ready_at=now)
             job.pop('retry_started_at', None)
             tx.put('jobs', result.segment_id, job)
             return True, True

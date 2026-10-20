@@ -494,7 +494,44 @@ owner claim. Its atomic persist advances the projection watermark; a later
 unit can become visible only after every committed predecessor has persisted
 (or its privacy erasure receipt permits progress). Captures admitted after a
 later commit retain the existing explicit `late_capture` behavior. No disjoint
-segment independence or change to transcript visibility order is assumed.
+segment independence is assumed.
+
+### Bounded merge head wait
+
+David ruled on 2026-10-20 that catch-up uploads may publish newer parts of a
+recording first and fold older parts in late, with a bounded wait. The app
+uploads its pending backlog newest-first, so capture order and arrival order
+are reversed for every catch-up owner.
+
+`BATCH_PIPELINE_MERGE_HEAD_WAIT_SECONDS` (default `60`; `off` or `<= 0`
+restores strict capture order) bounds how long a ready result waits behind an
+unready earlier-captured merge head. `complete` and every recovery re-entry
+stamp `ready_at`. When the owner's longest-waiting ready row has waited at
+least W, the merge commits the owner's ready rows in capture order past the
+head. The head later appends at the log tail as `late_capture`, exactly like a
+recovered quarantine. Rows without `ready_at` (written before this change)
+never start a bypass. A bypass commit carries `head_wait_bypass: true` and logs
+`event=batch_merge outcome=head_wait_bypass` with the head state and a wait
+bucket, never an ID. The two owner-scoped job queries need the `merge_ready`
+and `merge_ready_age` indexes; without them the merge logs
+`outcome=head_wait_unavailable` and keeps strict order for five minutes.
+
+The commit body is unchanged: the append-only log chain, `log_sequence`,
+watermark and late marking, owner revision fence, owner-serial projection in
+log order, sibling completion, billing and privacy fences all hold. Fresh
+traffic keeps capture order because attempt-1 compute finishes well inside W.
+Only intermediate states change, and they converge to the strict-order result:
+
+- a conversation can appear with its newest part first, then grow backwards
+  (earlier start, more transcript at the top) as older units land;
+- a late bridging unit can briefly leave two conversations that later merge
+  through the existing donor redirect;
+- a summary generated on the partial conversation is regenerated through the
+  coalesced reprocess outbox, and a short early fragment marked for review is
+  promoted when meaningful content arrives;
+- no visible first-summary push exists on the batch path; action items found
+  in the partial transcript can sync silently and keep their identity across
+  the regeneration.
 
 The serving supervisor, explicit reconcile RPC, and metrics reconciliation all
 use the same async coordinator. Their pass persists the bounded pending page,

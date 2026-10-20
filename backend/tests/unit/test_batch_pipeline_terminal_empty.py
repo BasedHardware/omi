@@ -203,6 +203,7 @@ def test_canary_recovery_success_keeps_real_words(setup, monkeypatch, legacy_dep
         == 'recovered'
     )
     assert row(client)['result']['outcome'] == 'success'
+    assert row(client)['ready_at'] > 0  # Re-entry restarts the bounded merge head wait.
     alternate.assert_called_once()
 
 
@@ -517,5 +518,6 @@ def test_skipped_oversized_padded_retry_still_recovers_when_multilingual_succeed
     assert recovery.recover('bad', binding.owner_id) == 'recovered'
     assert row(client)['state'] == 'result_ready'
     assert row(client)['result']['outcome'] == 'success'
+    assert row(client)['ready_at'] > 0  # Re-entry restarts the bounded merge head wait.
     alternate.assert_called_once()
     legacy.assert_not_called()

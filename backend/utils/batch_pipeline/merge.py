@@ -1,25 +1,76 @@
 """Ordered durable result log. Projection consumers must use stable segment IDs."""
 
+import logging
+import time
+
+from google.api_core.exceptions import FailedPrecondition
+
+from config.batch_pipeline import merge_head_wait_seconds
 from database.batch_pipeline_store import Store
 from utils.batch_pipeline.correctness_metrics import record as record_correctness
 from utils.batch_pipeline.scheduler import owner_key
 from utils.batch_pipeline.metrics import QueueMetrics
 
+logger = logging.getLogger(__name__)
+
+# A missing head-wait index falls back to strict order; retry the query after this.
+HEAD_WAIT_UNAVAILABLE_RETRY_SECONDS = 300
+_HEAD_STATES = frozenset({'ready', 'leased', 'retry', 'record_pending', 'privacy_blocked'})
+_WAIT_BUCKETS = (60, 120, 300, 600, 1800)
+
+
+class HeadWaitUnavailable(Exception):
+    """The head-wait query has no serving index; the merge keeps strict order."""
+
+
+def _wait_bucket(seconds: float) -> str:
+    return next((f'lt{bound}' for bound in _WAIT_BUCKETS if seconds < bound), f'ge{_WAIT_BUCKETS[-1]}')
+
 
 class OrderedMerge:
-    def __init__(self, store: Store, *, metrics: QueueMetrics | None = None, commit_source: str = 'ordered_merge'):
+    def __init__(
+        self,
+        store: Store,
+        *,
+        metrics: QueueMetrics | None = None,
+        commit_source: str = 'ordered_merge',
+        head_wait_seconds: float | None = None,
+    ):
         self.store = store
         self.metrics = metrics
         self.commit_source = commit_source
+        # None reads BATCH_PIPELINE_MERGE_HEAD_WAIT_SECONDS on every commit.
+        self.head_wait_seconds = head_wait_seconds
+        self._head_wait_retry_at = 0.0
+
+    def _head_wait(self) -> float:
+        if time.monotonic() < self._head_wait_retry_at:
+            return 0.0
+        return self.head_wait_seconds if self.head_wait_seconds is not None else merge_head_wait_seconds()
 
     def commit_next(self, owner_id: str, now: float) -> dict | None:
         key = owner_key(owner_id)
+        wait = self._head_wait()
+        bypass: dict = {}
 
         def commit(tx):
+            bypass.clear()  # Firestore may retry this callback.
             owner = tx.get('owners', key)
             # Terminal quarantine atomically removes merge_pending; it never
             # enters this success log or the projection predecessor chain.
             candidate = tx.first_pending(key)
+            if candidate and candidate['state'] != 'result_ready' and wait > 0:
+                # Bounded head wait (David, 2026-10-20): once any result has
+                # waited `wait` seconds behind an unready head, release the
+                # owner's ready rows in capture order. The bypassed head later
+                # appends as late_capture through the unchanged body below.
+                try:
+                    waiting = tx.longest_ready_pending(key)
+                    if waiting and now - waiting['ready_at'] >= wait:
+                        bypass.update(head_state=candidate['state'], waited=now - waiting['ready_at'])
+                        candidate = tx.first_ready_pending(key)
+                except FailedPrecondition as error:
+                    raise HeadWaitUnavailable from error
             if not candidate or candidate['state'] != 'result_ready':
                 return None
             job = tx.get('jobs', candidate['segment_id'])
@@ -50,6 +101,8 @@ class OrderedMerge:
             }
             if job.get('recovery_state') == 'recovered':
                 entry['recovery_version'] = 1
+            if bypass:
+                entry['head_wait_bypass'] = True
             tx.put('results', job['segment_id'], entry)
             job.update(state='committed', merge_pending=False)
             tx.put('jobs', job['segment_id'], job)
@@ -62,11 +115,25 @@ class OrderedMerge:
             tx.put('owners', key, owner)
             return entry
 
-        entry = self.store.run(commit)
+        try:
+            entry = self.store.run(commit)
+        except HeadWaitUnavailable:
+            # The head is not ready, so strict order commits nothing either.
+            self._head_wait_retry_at = time.monotonic() + HEAD_WAIT_UNAVAILABLE_RETRY_SECONDS
+            logger.warning('event=batch_merge outcome=head_wait_unavailable source=%s count=1', self.commit_source)
+            return None
         if entry:
             record_correctness('committed', source=self.commit_source)
             if self.metrics:
                 self.metrics.record('committed')
+            if bypass:
+                head_state = bypass['head_state'] if bypass['head_state'] in _HEAD_STATES else 'other'
+                logger.info(
+                    'event=batch_merge outcome=head_wait_bypass source=%s head_state=%s wait_bucket=%s count=1',
+                    self.commit_source,
+                    head_state,
+                    _wait_bucket(bypass['waited']),
+                )
         return entry
 
     def committed_result(self, segment_id: str) -> dict:

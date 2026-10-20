@@ -42,6 +42,26 @@ class MemoryTransaction:
         ]
         return min(jobs, key=lambda v: (v['capture_at'], v['segment_id'])) if jobs else None
 
+    def first_ready_pending(self, owner_key):
+        jobs = [
+            v
+            for (table, _), v in self.rows.items()
+            if table == 'jobs' and v['owner_key'] == owner_key and v['merge_pending'] and v['state'] == 'result_ready'
+        ]
+        return min(jobs, key=lambda v: (v['capture_at'], v['segment_id'])) if jobs else None
+
+    def longest_ready_pending(self, owner_key):
+        jobs = [
+            v
+            for (table, key), v in self.rows.items()
+            if table == 'jobs'
+            and v['owner_key'] == owner_key
+            and v['merge_pending']
+            and v['state'] == 'result_ready'
+            and 'ready_at' in v
+        ]
+        return min(jobs, key=lambda v: (v['ready_at'], v['segment_id'])) if jobs else None
+
     def ready_predecessor(self, owner_key, priority, segment_id):
         jobs = [
             v
@@ -290,7 +310,8 @@ def test_dead_letter_redrive_preserves_order_and_identity():
             queue.fail('a', lease.token, 1)
     # A historical terminal job from the previous implementation.
     store.rows['jobs', 'a'].update(state='dead', available_at=0)
-    merge = OrderedMerge(store)
+    # Strict order: the bounded head wait would release b past the dead head.
+    merge = OrderedMerge(store, head_wait_seconds=0)
     assert merge.commit_next('heavy', 9999) is None
     assert queue.redrive_dead('a', 9999)
     assert not queue.redrive_dead('a', 9999)
