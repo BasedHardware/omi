@@ -5704,7 +5704,10 @@ channel, a declared TDT-supported language with a fully supported expected-langu
 profile, and pusher enabled. Resumed legacy
 records never qualify just because the owner is admitted. The already loaded
 conversation snapshot is reduced to scalar eligibility fields; transcripts and
-photos are never retained by this gate. Fresh capture resolves the privacy level
+photos are never retained by this gate. A client-id create that loses the
+idempotent race (another writer created the id after the probe) reads the stored
+row once and snapshots it, the same as a resume, rather than pinning the socket
+ineligible. Fresh capture resolves the privacy level
 through the existing write resolver before stamping ownership, so E2EE remains
 excluded and the write performs no second privacy lookup. No new Firestore scan
 is introduced.

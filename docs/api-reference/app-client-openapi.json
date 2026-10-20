@@ -49493,7 +49493,7 @@
     },
     "/v1/conversations/{conversation_id}/reprocess": {
       "post": {
-        "description": "Whenever a user wants to reprocess a conversation, or wants to force process a discarded one\n:param conversation_id: The ID of the conversation to reprocess\n:param language_code: Optional language code to use for processing\n:param app_id: Optional app ID to use for processing (if provided, only this app will be triggered)\n:return: The updated conversation after reprocessing.",
+        "description": "Whenever a user wants to reprocess a conversation, or wants to force process a discarded one\n:param conversation_id: The ID of the conversation to reprocess\n:param language_code: Optional language code to use for processing\n:param app_id: Optional app ID to use for processing (if provided, only this app will be triggered)\n:param source: ``omi`` asks for Omi's own notes only: neither the preferred app nor a suggested\n    app runs. Omitted keeps the legacy meaning (Omi notes plus the user's preferred app).\n:return: The updated conversation after reprocessing.",
         "operationId": "reprocess_conversation_v1_conversations__conversation_id__reprocess_post",
         "parameters": [
           {
@@ -49535,6 +49535,23 @@
                 }
               ],
               "title": "App Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "source",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "const": "omi",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Source"
             }
           },
           {
@@ -49586,7 +49603,7 @@
             "description": "Successful Response"
           },
           "400": {
-            "description": "The selected app cannot summarize conversations"
+            "description": "The selected app cannot summarize conversations, or app_id was combined with source=omi"
           },
           "401": {
             "$ref": "#/components/responses/Error401"
@@ -74998,6 +75015,82 @@
       }
     },
     "/v1/users/preferences/app": {
+      "delete": {
+        "description": "Clears the user's preferred app: future processing uses Omi's own summary. Idempotent.",
+        "operationId": "clear_preferred_app_for_user_v1_users_preferences_app_delete",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserStatusResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Clear Preferred App For User",
+        "tags": [
+          "v1"
+        ]
+      },
       "put": {
         "description": "Sets the user's preferred app for future processing.",
         "operationId": "set_preferred_app_for_user_v1_users_preferences_app_put",

@@ -148,7 +148,7 @@ def build_incoming(
     incoming = Conversation(
         id=chunk_identity(item.owner_id, binding.source, binding.client_device_id, binding.is_locked, item.capture_at),
         created_at=started,
-        structured=build_deterministic_minimum_structured(create),
+        structured=build_deterministic_minimum_structured(create, uid=item.owner_id),
         **create.model_dump(),
     ).model_dump()
     incoming['data_protection_level'] = binding.data_protection_level
