@@ -5295,6 +5295,7 @@
           },
           "frame_times": {
             "description": "JSON array of each frame's time in seconds.",
+            "maxLength": 4096,
             "title": "Frame Times",
             "type": "string"
           },
