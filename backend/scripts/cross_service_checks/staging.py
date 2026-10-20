@@ -54,6 +54,8 @@ STAGING_DIFF_ALLOWLIST: tuple[str, ...] = (
     # A2 job-store shadow: staging-only (prod stays on the Firestore store).
     'BATCH_JOBSTORE_MODE',
     'JOBSTORE_*',
+    # Enrichment queue route: staging at M2 (plan C3), prod stays sync_handler until M3.
+    'ENRICHMENT_ROUTE',
 )
 # Cloud Run flags that may differ: network placement and replica counts.
 STAGING_FLAG_ALLOWLIST: tuple[str, ...] = (
