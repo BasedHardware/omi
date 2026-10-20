@@ -336,3 +336,40 @@ def test_recreate_restores_queue_state_both_ways(monkeypatch, tmp_path, state, v
     assert legacy_queues.recreate('staging', str(spec_path), apply=True) == 0
     assert [command[2] for command in calls] == ['update', verb]
     assert calls[1][3] == 'staging-sync-jobs'
+
+
+@pytest.mark.parametrize('env, counted', [('staging', 0), ('prod', 981)])
+def test_census_counts_only_the_envs_own_queues(env, counted):
+    """Staging shares based-hardware-dev with dev: dev's unprefixed queues are not staging's."""
+    from scripts.legacy_dark import drain_census
+
+    def series(queue_id, depth):
+        return {'resource': {'labels': {'queue_id': queue_id}}, 'points': [{'value': {'int64Value': str(depth)}}]}
+
+    class Response:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {
+                'timeSeries': [
+                    series('staging-sync-jobs', 0),
+                    series('sync-jobs', 981),
+                    series('staging-sync-jobs-fresh', 0),
+                    series('sync-backfill', 0),
+                    series('sync-backfill-fresh', 0),
+                    series('sync-jobs-fresh', 0),
+                    series('staging-sync-backfill', 0),
+                    series('staging-sync-backfill-fresh', 0),
+                ]
+            }
+
+    class Session:
+        def get(self, url, params=None, timeout=None):
+            return Response()
+
+    errors: dict = {}
+    depths = drain_census._queue_depths(Session(), 'project', env, errors)
+    assert depths['sync-jobs'] == counted
+    assert set(depths.values()) <= {0, 981} and None not in depths.values()
+    assert errors == {}
