@@ -153,30 +153,96 @@ String _keyDigits(int index) {
 
 // Citation-shaped bracket tokens in a title: a transcript segment UUID, the compact `s01234` form,
 // or a `^1` footnote marker.
-final _titleCitationToken =
-    RegExp(r'^(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|s\d{4,}|\^\d+)$', caseSensitive: false);
+final _titleCitationToken = RegExp(
+    r'^(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|s[0-9]{4,}|\^[0-9]+)$',
+    caseSensitive: false);
 final _titleSpeaker = RegExp(r'^(?:spk|speaker)[ _]\p{Nd}+:?$', caseSensitive: false, unicode: true);
-final _titleBracket = RegExp(r'[\[［【]([^\[\]［］【】\n]*)[\]］】]');
-const _titleMask = '';
+const _titleOpen = '[［【';
+const _titleClose = ']］】';
+const _slotBase = 0xF00; // slot digits U+E100..U+EFFF
+
+typedef _TitleGroup = ({int start, int end, bool nested});
+
+/// Balanced bracket groups that are not inside another closed group.
+List<_TitleGroup> _titleBracketGroups(String input) {
+  final groups = <_TitleGroup>[];
+  var stack = <({int start, List<_TitleGroup> inner})>[];
+  void flush() {
+    for (final open in stack) {
+      groups.addAll(open.inner);
+    }
+    stack = [];
+  }
+
+  for (var i = 0; i < input.length; i++) {
+    final c = input[i];
+    if (c == '\n') {
+      flush();
+    } else if (_titleOpen.contains(c)) {
+      stack.add((start: i, inner: <_TitleGroup>[]));
+    } else if (_titleClose.contains(c) && stack.isNotEmpty) {
+      final open = stack.removeLast();
+      final group = (start: open.start, end: i + 1, nested: open.inner.isNotEmpty);
+      if (stack.isNotEmpty) {
+        stack.last.inner.add(group);
+      } else {
+        groups.add(group);
+      }
+    }
+  }
+  flush();
+  return groups..sort((a, b) => a.start.compareTo(b.start));
+}
+
+bool _isTitleCitation(String content, Set<String> known) {
+  final bare = content.replaceAll(RegExp('[​‌‍⁠﻿]'), '').trim();
+  if (_titleSpeaker.hasMatch(bare)) return true;
+  return bare
+      .split(RegExp(r'[\s,;]+'))
+      .where((token) => token.isNotEmpty)
+      .every((token) => known.contains(token) || _titleCitationToken.hasMatch(token));
+}
+
+String _slotDigits(int index) {
+  final codes = <int>[];
+  do {
+    codes.insert(0, 0xE100 + index % _slotBase);
+    index ~/= _slotBase;
+  } while (index > 0);
+  return String.fromCharCodes(codes);
+}
 
 /// Read-time repair of a conversation title (web `presentableNoteTitle`). Titles keep ordinary
 /// bracketed words ("Project [Q3]"): only bracket units made of known IDs, citation-shaped IDs or a
-/// speaker label are debris. Everything else the note repair does applies as for any note text.
+/// speaker label are debris, and a nested group ("[Project [s01234]]") is kept whole. Everything else
+/// the note repair does applies as for any note text.
 String presentableNoteTitle(String text, Iterable<String> knownIDs) {
   final known = knownIDs.where((id) => id.isNotEmpty).toSet();
-  if (text.contains(_titleMask)) return repairNoteCitations(text, known).text;
+  var mask = '';
+  while (text.contains(mask)) {
+    mask += '';
+  }
   final kept = <String>[];
-  final masked = text.replaceAllMapped(_titleBracket, (match) {
-    final unit = match[0]!;
-    final bare = match[1]!.replaceAll(RegExp('[​‌‍⁠﻿]'), '').trim();
-    final tokens = bare.split(RegExp(r'[\s,;]+')).where((token) => token.isNotEmpty);
-    final citation = _titleSpeaker.hasMatch(bare) ||
-        tokens.every((token) => known.contains(token) || _titleCitationToken.hasMatch(token));
-    if (citation || kept.length >= 0x0f00) return unit;
+  final masked = StringBuffer();
+  var last = 0;
+  for (final group in _titleBracketGroups(text)) {
+    final unit = text.substring(group.start, group.end);
+    if (!group.nested && _isTitleCitation(unit.substring(1, unit.length - 1), known)) continue;
+    masked
+      ..write(text.substring(last, group.start))
+      ..write('$mask${_slotDigits(kept.length)}');
     kept.add(unit);
-    return '$_titleMask${String.fromCharCode(0xE100 + kept.length - 1)}';
-  });
-  return repairNoteCitations(masked, known)
-      .text
-      .replaceAllMapped(RegExp('([-])'), (match) => kept[match[1]!.codeUnitAt(0) - 0xE100]);
+    last = group.end;
+  }
+  masked.write(text.substring(last));
+  return repairNoteCitations(masked.toString(), known).text.replaceAllMapped(
+    RegExp('${RegExp.escape(mask)}([-]+)'),
+    (match) {
+      var index = 0;
+      for (final digit in match[1]!.codeUnits) {
+        index = index * _slotBase + digit - 0xE100;
+      }
+      return index < kept.length ? kept[index] : match[0]!;
+    },
+  );
 }

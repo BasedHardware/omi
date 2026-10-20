@@ -77,8 +77,15 @@ test('titles keep ordinary bracketed words and lose only citation-shaped units',
     ['Plan [s01234, Q3]', [], 'Plan [s01234, Q3]'],
     ['Mixed [Q3] text s01234', ['s01234'], 'Mixed [Q3] text'],
     ['[s01234]', [], ''],
+    ['Project [Q3] \uE012', [], 'Project [Q3] \uE012'],
+    ['[Project [s01234]]', [], '[Project [s01234]]'],
+    ['[Project [s01234] notes', [], '[Project notes'],
+    ['Plan ] [Q3] [s01234', [], 'Plan ] [Q3] [s01234'],
+    ['Link [x](https://e.com) [s01234]', [], 'Link [x](https://e.com)'],
   ];
   for (const [input, ids, expected] of cases) {
     assert.equal(presentableNoteTitle(input, ids), expected, input);
   }
+  const many = Array(5000).fill('[Q3]').join(' ');
+  assert.equal(presentableNoteTitle(`${many} [s01234]`), many);
 });

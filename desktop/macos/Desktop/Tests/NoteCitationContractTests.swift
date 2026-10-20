@@ -27,10 +27,17 @@ final class NoteCitationContractTests: XCTestCase {
       ("Plan [s01234, Q3]", [], "Plan [s01234, Q3]"),
       ("Mixed [Q3] text s01234", ["s01234"], "Mixed [Q3] text"),
       ("[s01234]", [], ""),
+      ("Project [Q3] \u{E012}", [], "Project [Q3] \u{E012}"),
+      ("[Project [s01234]]", [], "[Project [s01234]]"),
+      ("[Project [s01234] notes", [], "[Project notes"),
+      ("Plan ] [Q3] [s01234", [], "Plan ] [Q3] [s01234"),
+      ("Link [x](https://e.com) [s01234]", [], "Link [x](https://e.com)"),
     ]
     for (input, valid, expected) in cases {
       XCTAssertEqual(NoteCitationContract.repairTitle(input, valid: valid), expected, input)
     }
+    let many = Array(repeating: "[Q3]", count: 5000).joined(separator: " ")
+    XCTAssertEqual(NoteCitationContract.repairTitle(many + " [s01234]", valid: []), many)
   }
 
   func testHandAuthoredCrossClientContract() throws {
