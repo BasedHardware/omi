@@ -4,6 +4,7 @@ Uses the shared sync_v2 coordinator harness (all heavy deps stubbed) plus real
 labeled PCM WAV files so the trimmed bytes reaching VAD can be asserted.
 """
 
+import gc
 import logging
 import os
 import sys
@@ -37,6 +38,10 @@ WAV_STEM = 'audio_pcm16_1760000000'
 @pytest.fixture
 def coordinator():
     module, stubs = sync_v2_harness.TestAsyncCoordinatorBehavioral._load_sync_module()
+    # Match the shared harness's fenced_worker_module fixture: retire prior
+    # cyclic mock graphs during setup, rather than charging their collection
+    # to an unrelated coordinator call later in this file.
+    gc.collect()
     try:
         yield module, stubs
     finally:
