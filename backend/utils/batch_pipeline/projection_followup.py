@@ -27,6 +27,9 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 MAX_FOLLOWUPS = 4
+# Walk-owed rows held between discovery passes. Dropped rows stay durable and
+# are rediscovered; the bound only caps memory.
+MAX_OWED = 256
 FOLLOWUP_TIMEOUT_SECONDS = 120.0
 CLAIM_RELEASE_TIMEOUT_SECONDS = 2.0
 
@@ -38,6 +41,7 @@ class ProjectionFollowups:
         self.after: str | None = None
         self.pending: deque[str] = deque()
         self.prioritized: set[str] = set()
+        self.owed: dict[str, None] = {}
         self.closed = False
         self.discovery = ProjectionDiscovery(projector.store.store)
 
@@ -54,7 +58,19 @@ class ProjectionFollowups:
                 candidates.append(sid)
         return candidates
 
-    async def schedule(self, priority=()):
+    async def schedule(self, priority=(), *, tail=()):
+        # Rows a sweep's chain walk persisted, possibly behind the discovery
+        # cursor. They wait for the next discovery pass and join behind its page,
+        # so they never jump discovered work and never keep discovery from running.
+        for segment in tail:
+            if segment in self.owed:
+                continue
+            if len(self.owed) < MAX_OWED:
+                self.owed[segment] = None
+            else:
+                # Over the bound: restart discovery at the head once so the next
+                # page rediscovers the durable rows we could not hold.
+                self.discovery.after = None
         if priority:
             # A targeted owner-chain wake goes ahead of discovered rows. Slots,
             # segment claims and receipt fences are unchanged; discovery resumes
@@ -63,12 +79,15 @@ class ProjectionFollowups:
             self.prioritized.update(first)
             self.pending = deque(first + [segment for segment in self.pending if segment not in first])
             self.launch()
-            return
+            if self.pending or not self.owed:
+                return
         # Finish launching this bounded page before advancing discovery. Slow
         # tasks must not cause the next serving pass to discard queued rows.
-        if self.pending:
+        # Owed rows fall through to discovery once the queue has launched.
+        elif self.pending:
             self.launch()
-            return
+            if self.pending or not self.owed:
+                return
         # No await of slow follow-ups. Durable rows are rediscovered after restart.
         segments = await run_blocking(db_executor, self.candidates)
         if self.after in segments:
@@ -77,9 +96,16 @@ class ProjectionFollowups:
         # A wake may have queued rows while this read was suspended; keep them
         # ahead of the discovered page instead of replacing the queue.
         queued = list(self.pending)
-        self.pending = deque(
-            queued + [segment for segment in segments if segment not in self.tasks and segment not in queued]
-        )
+        discovered = [segment for segment in segments if segment not in self.tasks and segment not in queued]
+        owed = [
+            segment
+            for segment in self.owed
+            if segment not in self.tasks and segment not in queued and segment not in discovered
+        ]
+        self.owed.clear()
+        # Owed rows are out of discovery order: they must not move the rotation.
+        self.prioritized.update(owed)
+        self.pending = deque(queued + discovered + owed)
         self.launch()
 
     def launch(self):
@@ -101,6 +127,7 @@ class ProjectionFollowups:
             # worker with another task after the shutdown snapshot was taken.
             self.closed = True
             self.pending.clear()
+            self.owed.clear()
         self.launch()  # Refill immediately, without another 20s serving sleep.
 
     def read_persisted(self, segment):

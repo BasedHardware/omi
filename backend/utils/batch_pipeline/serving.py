@@ -77,7 +77,9 @@ class Serving:
             owner_id=owner_id,
             recovered=recovered,
         )
-        if self.projector and (priority or self.projector.has_async_followups):
+        # Walk-owed follow-ups keep the drain scheduled until they are queued.
+        owes = getattr(self.projector, 'owes_followups', False) is True
+        if self.projector and (priority or self.projector.has_async_followups or owes):
             await self.projector.start_followups(priority or ())
 
     def _leads(self, periodic: bool) -> bool:

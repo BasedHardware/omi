@@ -75,6 +75,15 @@ cloud_run:
     BATCH_PIPELINE_RECOVERY_TASK_AUDIENCE: '{run_url:backend-integration}'
     BATCH_PIPELINE_WORKER_AUDIENCE: '{run_url:backend-sync}'
     BATCH_PIPELINE_WORKER_SERVICE_ACCOUNT: staging-worker@based-hardware-dev.iam.gserviceaccount.com
+    # Enrichment queue route (plan C3 'staging at M2', lead ruling 2026-10-20 07:36Z; prod still sync_handler):
+    # new sr- obligations bind to /v2/enrichment/run on staging-enrichment instead of staging-sync-jobs-fresh.
+    # backend-sync serves the route (no OMI_ROLE, so every role mounts), and its URL is both the task target and
+    # the verified audience (self-referential, as for backfill's sync-jobs audience). Rollback: sync_handler;
+    # rows keep the binding they were created with.
+    ENRICHMENT_ROUTE: enrichment_queue
+    ENRICHMENT_TASKS_QUEUE: staging-enrichment
+    ENRICHMENT_TASKS_HANDLER_URL: '{run_url:backend-sync}/v2/enrichment/run'
+    ENRICHMENT_TASKS_OIDC_AUDIENCE: '{run_url:backend-sync}/v2/enrichment/run'
     FIREBASE_SIGNER_SERVICE_ACCOUNT: staging-runtime@based-hardware-dev.iam.gserviceaccount.com
     # Vendor spend caps (staging uses dev's test keys).
     SONIOX_MONTHLY_CEILING_USD: '50'

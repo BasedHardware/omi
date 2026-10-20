@@ -52,6 +52,18 @@ def test_staging_composes_and_passes_the_fence(composer):
     assert composer.staging_fence_errors(staging) == []
 
 
+def test_staging_enrichment_routes_to_its_queue_on_backend_sync(composer):
+    # Plan C3 'staging at M2': new sr- obligations go to staging-enrichment, served and verified by backend-sync.
+    services = composer.compose_staging(inputs=INPUTS)['cloud_run']['services']
+    for config in services.values():
+        env = config['env']
+        assert env['ENRICHMENT_ROUTE']['value'] == 'enrichment_queue'
+        assert env['ENRICHMENT_TASKS_QUEUE']['value'] == 'staging-enrichment'
+        handler = env['ENRICHMENT_TASKS_HANDLER_URL']['value']
+        assert handler.startswith('https://backend-sync-staging-') and handler.endswith('/v2/enrichment/run')
+        assert env['ENRICHMENT_TASKS_OIDC_AUDIENCE']['value'] == handler
+
+
 def test_staging_batch_serving_leader_stays_warm(composer):
     # The serving loop (reconcile, projection, recovery) runs only on backend-integration.
     services = composer.compose_staging(inputs=INPUTS)['cloud_run']['services']
