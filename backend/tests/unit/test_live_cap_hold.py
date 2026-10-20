@@ -193,8 +193,11 @@ async def test_receive_cap_transition_and_resume_have_no_gap_or_paid_overlap(
     # A successful live prefix cannot be retained even when replayed at the cap.
     receiver._observe_cap_capture(b'\1\0' * 16000, 16000, 0, True)
     held_pcm = b'\2\0' * 16000
+    host.state.last_audio_received_time = 500.0
     await receiver._flush_stt_buffer(bytearray(held_pcm))
     assert not persistence  # Sub-minute denied audio stays buffered until seal.
+    # The receipt span is excluded from the elapsed usage meter.
+    assert receiver.cap_admission.held_spans == [[499.0, 500.0]]
     forwarded = []
 
     async def forward(self, buffer, **kwargs):
@@ -206,10 +209,12 @@ async def test_receive_cap_transition_and_resume_have_no_gap_or_paid_overlap(
     receiver.cap_admission.managed, receiver.cap_admission.remaining = True, None
     receiver._stt_buffer_start_sample = 32000
     resumed = b'\3\0' * 8000
+    host.state.last_audio_received_time = 500.5
     await receiver._flush_stt_buffer(bytearray(resumed))
     assert persistence[0][2]['timestamp'] == 101
     assert forwarded == [resumed]
     assert b''.join(item[0] for item in persistence) == held_pcm
+    assert receiver.cap_admission.held_spans == [[499.0, 500.0]]  # Resumed audio is not held.
 
 
 def test_recovery_storage_uses_the_capture_month_and_combined_ceiling(monkeypatch):

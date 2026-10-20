@@ -45,7 +45,7 @@ from utils.manual_speaker_assignments import (
     remap_absorbed_receipt,
 )
 from ._client import db, delete_collection_recursive, get_firestore_client, run_transactional
-from database.sync_assignment import encode_sync_assignment_plan, run_sync_assignment
+from database.sync_assignment import SyncAssignmentClock, encode_sync_assignment_plan, run_sync_assignment
 from database.sync_live_overlap import find_sync_live_overlap_candidates
 from utils.sync.live_overlap import live_overlap_enabled
 from .audio_timeline import group_chunks_by_coverage
@@ -4195,16 +4195,16 @@ def assign_sync_conversation(
     validate_plan: Callable[[Any, dict], None] | None = None,
     after_assign: Callable[[Any, tuple], None] | None = None,
     retry_contention: bool = False,
+    timing: bool = False,
 ):
-    """Atomically choose, create or append a sync conversation across workers."""
+    """Atomically choose, create or append a sync conversation; ``timing`` logs bounded sub-phases."""
     from utils.sync.assignment import assign_in_transaction, run_with_size_limit_backstop
 
+    clock = SyncAssignmentClock(logger, enabled=timing)
     client = firestore_client if firestore_client is not None else get_firestore_client()
     user_ref = client.collection('users').document(uid)
 
     live_candidate_ids: tuple[str, ...] = ()
-    if not target_id and incoming.get('client_device_id') and live_overlap_enabled():
-        live_candidate_ids = find_sync_live_overlap_candidates(user_ref, incoming)
 
     score_snapshots: dict = {}
 
@@ -4229,46 +4229,59 @@ def assign_sync_conversation(
 
     @firestore.transactional
     def assign(transaction, full_ids=frozenset()):
+        clock.attempt()
         score_snapshots.clear()
         # Optional batch projection hooks share the exact legacy transaction.
         # Guards/plan validation may only read; after_assign may only write.
         if before_assign is not None:
-            before_assign(transaction)
+            with clock.timed('fence'):
+                before_assign(transaction)
 
         def encode(payload):
-            if validate_plan is not None:
-                validate_plan(transaction, payload)
-            return encode_sync_assignment_plan(
-                uid, client, transaction, payload, score_snapshots.get(payload.get('id'))
-            )
+            with clock.timed('encode'):
+                if validate_plan is not None:
+                    validate_plan(transaction, payload)
+                return encode_sync_assignment_plan(
+                    uid, client, transaction, payload, score_snapshots.get(payload.get('id'))
+                )
 
-        planned = assign_in_transaction(
-            transaction,
-            user_ref,
-            incoming,
-            candidate_id=candidate_id,
-            target_id=target_id,
-            decode=decode,
-            encode=encode,
-            invalidate=clear_client_processing,
-            full_ids=full_ids,
-            live_candidate_ids=live_candidate_ids,
-        )
+        with clock.timed('plan'):
+            planned = assign_in_transaction(
+                transaction,
+                user_ref,
+                incoming,
+                candidate_id=candidate_id,
+                target_id=target_id,
+                decode=decode,
+                encode=encode,
+                invalidate=clear_client_processing,
+                full_ids=full_ids,
+                live_candidate_ids=live_candidate_ids,
+            )
         # The commit runs after this returns; remember which row it would grow.
         attempted['canonical'] = planned[0]['id']
         if after_assign is not None:
-            after_assign(transaction, planned)
+            with clock.timed('persist'):
+                after_assign(transaction, planned)
+        clock.body_done()
         return planned
 
-    result = run_with_size_limit_backstop(
-        lambda full_ids: run_sync_assignment(client, assign, full_ids, retry_contention=retry_contention),
-        lambda: attempted.get('canonical'),
-    )
-    invalidate_people_stats_cache(uid)
-    conversation = result[0]
-    for donor_id in conversation.get('sync_merged_from') or []:
-        _delete_conversation_search_index(uid, str(donor_id))
-    _sync_conversation_search_index(uid, conversation['id'])
+    with clock.call():
+        if not target_id and incoming.get('client_device_id') and live_overlap_enabled():
+            with clock.timed('live_overlap'):
+                live_candidate_ids = find_sync_live_overlap_candidates(user_ref, incoming)
+        with clock.timed('transaction'):
+            result = run_with_size_limit_backstop(
+                lambda full_ids: run_sync_assignment(client, assign, full_ids, retry_contention=retry_contention),
+                lambda: attempted.get('canonical'),
+            )
+        with clock.timed('index'):
+            invalidate_people_stats_cache(uid)
+            conversation = result[0]
+            clock.donors = len(conversation.get('sync_merged_from') or [])
+            for donor_id in conversation.get('sync_merged_from') or []:
+                _delete_conversation_search_index(uid, str(donor_id))
+            _sync_conversation_search_index(uid, conversation['id'])
     return result
 
 
