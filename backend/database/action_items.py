@@ -2,7 +2,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone, timedelta, tzinfo
 import logging
 import os
-from typing import Any, Dict, Iterable, List, Optional, Protocol, cast
+from typing import Any, Dict, Iterable, List, Optional, Protocol, cast, overload
 from database import chat_edits
 from database.dream_dirty import after_write
 from google.api_core.exceptions import (
@@ -510,6 +510,14 @@ def _list_scan_budget(row_budget: int) -> int:
     if row_budget <= 0:
         return 0
     return min(_ACTION_ITEMS_LIST_HARD_MAX, int(row_budget) + _ACTION_ITEMS_LIST_DELETED_SLACK)
+
+
+@overload
+def _coerce_item_datetime(val: Any, default: datetime) -> datetime: ...
+
+
+@overload
+def _coerce_item_datetime(val: Any, default: None) -> Optional[datetime]: ...
 
 
 def _coerce_item_datetime(val: Any, default: Optional[datetime]) -> Optional[datetime]:
