@@ -127,6 +127,9 @@ generated_route_overrides:
   - feature: smart_glasses
     primary: {provider: openai, model: gpt-5-nano}
     provider_options: {reasoning_effort: minimal}
+  - feature: sync_redrive_title
+    primary: {provider: openai, model: gpt-5-nano}
+    provider_options: {reasoning_effort: minimal}
   - feature: trends
     primary: {provider: openai, model: gpt-6-luna}
     provider_options: {reasoning_effort: none}

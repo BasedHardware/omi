@@ -432,7 +432,10 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
 
   Widget _buildRightNow() {
     final l10n = context.l10n;
-    final battery = context.watch<DeviceProvider>().batteryLevel;
+    // batteryLevel keeps the last value seen after the link drops (only isCharging is reset), so a
+    // disconnected pendant has no "right now" reading; the support bundle nulls it the same way.
+    final device = context.watch<DeviceProvider>();
+    final battery = device.isConnected ? device.batteryLevel : -1;
     final latestRssi = _rssiPoints.isNotEmpty ? _rssiPoints.last.rssi : null;
     return OmiSettingsGroup(
       header: l10n.diagnosticsRightNow,

@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, NamedTuple, Optional
 
+from config.policy.listen import ListenSessionPolicy
 from routers.listen.realtime_demand import RealtimeDemandTracker
 from utils.client_device import ClientDeviceContext
 from models.geolocation import Geolocation
@@ -156,6 +157,8 @@ class ListenSessionState:
     finalization_reason: Optional[str] = None
     # Who could watch this session live; see routers/listen/realtime_demand.py.
     realtime_demand: RealtimeDemandTracker = field(default_factory=RealtimeDemandTracker)
+    listen_policy: ListenSessionPolicy | None = None
+    policy_source: str | None = None
 
 
 @dataclass(frozen=True)

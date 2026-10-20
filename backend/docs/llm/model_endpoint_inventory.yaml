@@ -48,6 +48,7 @@ model_config_features:
     - persona_clone
     - session_titles
     - smart_glasses
+    - sync_redrive_title
     - wrapped_analysis
     - x_memory_extraction_flex
     - app_generator
@@ -129,6 +130,7 @@ surfaces:
   - utils/llm/chat.py::feature:chat_extraction
   - utils/llm/conversation_folder.py::feature:conv_folder
   - utils/llm/conversation_processing.py::feature:conv_discard
+  - utils/sync/minimal_redrive.py::feature:sync_redrive_title
   - utils/llm/conversation_processing.py::feature:conv_structure
   - utils/llm/episode_writer.py::feature:conv_structure
   - utils/llm/conversation_processing.py::feature:conv_app_result

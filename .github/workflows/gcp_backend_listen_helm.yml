@@ -417,9 +417,9 @@ jobs:
           # leaving Helm's stored release ahead of the cluster, so the next chart upgrade
           # would silently reapply the bad revision.
           if [[ -n "$TARGET_REVISION" ]]; then
-            helm -n "$NS" rollback "$RELEASE" "$TARGET_REVISION" --wait --timeout 50m
+            helm -n "$NS" rollback "$RELEASE" "$TARGET_REVISION" --wait --timeout 70m
           else
-            helm -n "$NS" rollback "$RELEASE" --wait --timeout 50m
+            helm -n "$NS" rollback "$RELEASE" --wait --timeout 70m
           fi
           AFTER="$(kubectl -n "$NS" get deploy/"$RELEASE" -o jsonpath='{.spec.template.spec.containers[0].image}')"
           echo "Image after rollback: $AFTER"
@@ -429,7 +429,7 @@ jobs:
         run: |
           # See gcp_backend.yml: 300s cannot cover a full backend-listen roll; a
           # stalled rollout still fails on progressDeadlineSeconds.
-          if ! kubectl -n ${{ vars.ENV }}-omi-backend rollout status deploy/${{ vars.ENV }}-omi-backend-listen --timeout=3000s; then
+          if ! kubectl -n ${{ vars.ENV }}-omi-backend rollout status deploy/${{ vars.ENV }}-omi-backend-listen --timeout=4200s; then
             python3 backend/scripts/deploy_status_report.py --env ${{ vars.ENV }} --include-gke --gke-service backend-listen || true
             exit 1
           fi

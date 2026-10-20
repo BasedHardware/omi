@@ -3,7 +3,7 @@ AI App Generator utility
 Generates app configuration from a natural language prompt using LLM
 """
 
-from utils.generated_compute import require_current_generated_compute, generated_compute_enabled
+from utils.generated_compute import require_current_generated_compute, generated_compute_configured
 
 import json
 import re
@@ -164,7 +164,7 @@ async def generate_app_icon(app_name: str, app_description: str, category: str) 
     Returns:
         PNG image bytes of the generated icon
     """
-    if generated_compute_enabled():
+    if generated_compute_configured():
         await run_blocking(db_executor, require_current_generated_compute, 'app_generator', allow_byok=False)
     # Create a prompt for icon generation
     icon_prompt = f"""Create a modern, minimal app icon for an AI app called "{app_name}".

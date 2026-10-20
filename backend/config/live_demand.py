@@ -21,27 +21,43 @@ class LiveDemandConfig:
     percent: float = 0
     uids: frozenset[str] = frozenset()
     dwell_seconds: float = 15
+    admitted: bool | None = None
 
-    def admits(self, uid: str) -> bool:
+    def admits(self, uid: str, *, explicit=False) -> bool:
+        if self.admitted is not None:
+            return self.admitted
         if not self.enabled or not uid:
             return False
         bucket = int.from_bytes(hashlib.sha256(('live-demand:' + uid).encode()).digest()[:8], 'big')
         return (
-            in_rollout_cohort(uid, 'stt-live-demand', legacy_members=tuple(self.uids))
-            or bucket / 2**64 * 100 < self.percent
+            (uid in self.uids)
+            if explicit
+            else in_rollout_cohort(uid, 'stt-live-demand', legacy_members=tuple(self.uids))
+        ) or bucket / 2**64 * 100 < self.percent
+
+
+def resolve_live_demand(*, flags=None) -> LiveDemandConfig:
+    from config.policy.listen import current_listen_policy
+
+    policy = current_listen_policy.get() if flags is None else None
+    if policy is not None:
+        return LiveDemandConfig(
+            policy.demand_enabled,
+            policy.demand_percent,
+            frozenset(),
+            policy.demand_dwell_seconds,
+            policy.demand_admitted,
         )
-
-
-def resolve_live_demand() -> LiveDemandConfig:
+    env = os.environ if flags is None else flags
     try:
-        percent = float(os.getenv('STT_LIVE_DEMAND_PERCENT', '0'))
-        dwell = float(os.getenv('STT_LIVE_DEMAND_MIN_DWELL_SECONDS', '15'))
+        percent = float(env.get('STT_LIVE_DEMAND_PERCENT', '0'))
+        dwell = float(env.get('STT_LIVE_DEMAND_MIN_DWELL_SECONDS', '15'))
         if not math.isfinite(percent) or not 0 <= percent <= 100 or not math.isfinite(dwell) or not 5 <= dwell <= 300:
             return LiveDemandConfig()
         return LiveDemandConfig(
-            os.getenv('STT_LIVE_DEMAND_ENABLED', 'false').lower() == 'true',
+            env.get('STT_LIVE_DEMAND_ENABLED', 'false').lower() == 'true',
             percent,
-            frozenset(filter(None, (uid.strip() for uid in os.getenv('STT_LIVE_DEMAND_UID_ALLOWLIST', '').split(',')))),
+            frozenset(filter(None, (uid.strip() for uid in env.get('STT_LIVE_DEMAND_UID_ALLOWLIST', '').split(',')))),
             dwell,
         )
     except ValueError:

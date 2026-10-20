@@ -630,9 +630,16 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
     _readAloud.newQuery();
     final readAloudGeneration = _readAloud.generation;
     var readAloudDelivered = false;
-    // Pendant voice addresses the server-current conversation. Its playback may continue while
-    // Past chats is open, but its transient reply must never become a row in an archived thread.
-    final voiceMessages = chatSessionId == null && !isFreshChat ? messages : <ServerMessage>[];
+    var currentAppId = appProvider?.selectedChatAppId;
+    if (currentAppId == 'no_selected') {
+      currentAppId = null;
+    }
+    // Pendant voice addresses the server-current main conversation: the voice endpoint carries no
+    // app or session, so the backend saves the question and answer to the main Omi chat. Its
+    // playback may continue while Past chats or an app's thread (Mentor included) is open, but its
+    // transient reply must never become a row in that other thread.
+    final voiceMessages =
+        chatSessionId == null && !isFreshChat && (currentAppId ?? '').isEmpty ? messages : <ServerMessage>[];
     final visibleVoice = identical(voiceMessages, messages);
     final chatAttempt = ProductTelemetry.instance.start(ProductJourney.chatVoice, surface: ProductSurface.chat);
     var chatAttemptCompleted = false;
@@ -658,10 +665,6 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
       return;
     }
 
-    var currentAppId = appProvider?.selectedChatAppId;
-    if (currentAppId == 'no_selected') {
-      currentAppId = null;
-    }
     String chatTargetId = currentAppId ?? 'omi';
     // The voice endpoint has no app field and the backend voice pipeline runs
     // without an app persona (`app = None`), so a voice turn never uses the

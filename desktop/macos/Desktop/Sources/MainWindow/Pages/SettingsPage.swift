@@ -295,8 +295,16 @@ struct SettingsContentView: View {
 
   // Transcription settings (from backend)
   @State var singleLanguageMode: Bool = false
+  /// The custom vocabulary the account last confirmed it holds, or `nil` until Settings has read it.
+  /// A failed save puts it back; see `TranscriptionVocabularySaver`.
+  @State var savedVocabularyList: [String]?
+  @State var vocabularySaveError: String?
   @State var newVocabularyWord: String = ""
   @State var vocabularyList: [String] = []
+  /// Whether `vocabularyList` was read from the account rather than shown from the local copy.
+  /// A save replaces the account's whole list; see `TranscriptionVocabularyWriter`.
+  @State var vocabularyLoadedFromAccount: Bool = false
+  @State var isReadingVocabulary: Bool = false
 
   // Language setting
   @State var userLanguage: String = "en"

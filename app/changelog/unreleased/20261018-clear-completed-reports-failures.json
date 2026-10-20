@@ -1,0 +1,3 @@
+{
+  "change": "Clearing completed tasks tells you when the server rejected the delete instead of quietly putting them back"
+}

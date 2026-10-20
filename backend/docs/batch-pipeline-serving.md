@@ -395,10 +395,16 @@ kill switch. Deploy the worker from the same change first: its exhausted
 `RecoveryWork` now persists `worker_empty_evidence.padded_retry=empty` under the
 lease CAS only when the GPU padded retry actually ran and returned empty; units
 whose padded length exceeds `min(120, max_padded_seconds)` (>116s) skip that
-retry and persist `worker_empty_evidence.padded_retry=skipped_oversize`. Recovery
+retry and persist `worker_empty_evidence.padded_retry=skipped_oversize`. A
+zero-word unit with at least 5 s of worker VAD speech whose intake-recorded STT
+language (`stt_language` in the staged context) is unknown, `multi`, or outside
+Parakeet TDT v3's set skips the retry too and persists
+`worker_empty_evidence.padded_retry=skipped_long_speech`: repadding cannot make
+Parakeet transcribe a language it lacks, so the unit goes straight to recovery
+(`BATCH_PIPELINE_LONG_SPEECH_HANDOFF_ENABLED`, kill switch, unset is on). Recovery
 pins/persists its provider before dispatch. With the flag on, positive strict
 local VAD, affirmative GPU padded-empty evidence, and a validated empty
-**multilingual** response produce `no_recoverable_speech`. Oversized units that
+**multilingual** response produce `no_recoverable_speech`. Oversized and long-speech units that
 skipped the GPU padded retry still run strict VAD and multilingual recovery, but
 an empty multilingual response stays `failed_held` rather than terminal-empty.
 Timeouts, malformed responses, uncertain calls, missing evidence, and provider
@@ -545,3 +551,43 @@ page deadlock. `quarantine_held` obligations still require their ordinary fenced
 recovery to succeed; pagination neither retries uncertain paid intents nor
 resolves genuine held quarantines. Monitor falling pending age/count and durable
 content/client completion on the deployed release before expanding admission.
+
+### Owner-chain wake after recovery
+
+`BATCH_PIPELINE_OWNER_CHAIN_PROJECTION_ENABLED` defaults to `true` (kill
+switch: `false` restores the generic sweep after recovery). A settled recovery
+re-enters the ordered merge and commits at its owner's log tail, behind that
+owner's unprojected rows, which the per-instance cursors may already have
+passed. Waiting for the assignment and follow-up cursors to come back around
+took 5–12 minutes for one backlog owner during the 5% ramp. After
+`/recover-quarantine` returns `recovered` or `reconciled`, the handler's
+reconcile now drains that owner's merge and walks the owner's result log from
+its `projection_watermark`, following `previous_segment_id` links (and erased
+receipts) in chain order. It stops at the first row whose assignment does not
+advance the watermark, or after 64 rows or 30 seconds. The generic sweep runs
+afterwards as before, and any error in the wake falls back to it.
+
+The walk is only a wakeup. Each row still passes the transactional predecessor,
+privacy, receipt-replay and owner-claim fences, so ordering is unchanged. For
+async projection, the persisted rows and their contents' persisted, not-ready
+siblings go to the front of the follow-up queue. The recovered unit's content
+goes first. The four-slot bound, segment claims and all-sibling completion
+fence are unchanged. The successor lookup is two equality filters ordered by
+`__name__` on `{namespace}_results`, which automatic single-field indexes serve.
+Two matches fail closed.
+
+## Per-unit policy snapshots
+
+E1 records admission decisions on the job, outside the unchanged immutable binding. Projection,
+scheduler and recovery owners each stamp their own part on first handling,
+using a first-writer-wins transaction. The enrichment owner stamps first-summary
+policy when creating the obligation. Each part carries its source role and hash;
+subsequent handling uses that part across env changes and restarts. Live recovery
+task and pagination switches, privacy/deletion fences and paid-intent fencing
+remain current. Pre-E1 admission rows acquire one recorded fallback with bounded
+telemetry. No admission process substitutes its env for a serving role's values.
+
+The [policy contract](../config/policy/README.md) owns the read map, unchanged
+legacy cohort assignments, nested live-STT retirement rule, explicit process/worker
+exceptions, replay commands and revert procedure. This change alters no environment
+values; deployment remains part of the two-lane train.

@@ -71,6 +71,7 @@ def capture_identity(path: str, metadata: dict[str, Any]) -> str:
 
 def describe(path: str, metadata: dict[str, Any]) -> tuple[str, float, dict]:
     metadata = dict(metadata)
+    metadata.setdefault('origin', 'sync')
     geolocation = metadata.get('geolocation')
     if geolocation is not None and hasattr(geolocation, 'model_dump'):
         metadata['geolocation'] = geolocation.model_dump(mode='json')
@@ -524,7 +525,7 @@ async def hold_capture_if_exhausted(
     **context: Any,
 ) -> bool:
     # Shared by v1 intake and v2 execution, before VAD can discard silence.
-    if not paths or not enabled():
+    if not paths or not enabled(uid, 'sync'):
         return False
     allowance = await run_blocking(db_executor, funded_allowance, uid)
     if allowance.managed:
@@ -540,6 +541,7 @@ async def hold_capture_if_exhausted(
                 **context,
                 'timestamp': get_timestamp_from_path(path),
                 'source': getattr(source, 'value', source),
+                'origin': 'sync',
                 'full_capture': True,
                 'file_name': Path(path).name,
                 'source_frame_map': (source_frame_maps or {}).get(path),
@@ -555,7 +557,12 @@ async def hold_capture_if_exhausted(
 def defer_segment(uid: str, path: str, metadata: dict, response: dict, lock: Any) -> None:
     """Report a durable late hold to both coordinators, never as silence."""
     receipt: dict = {}
-    hold_segment(uid, path, {**metadata, 'file_name': Path(path).name}, receipt=receipt)
+    hold_segment(
+        uid,
+        path,
+        {'timestamp': get_timestamp_from_path(path), **metadata, 'file_name': Path(path).name},
+        receipt=receipt,
+    )
     with lock:
         response.setdefault('_cap_holds', {})[receipt['id']] = receipt
 
