@@ -54,7 +54,14 @@ logger = logging.getLogger('ramp_controller')
 
 ACTOR = 'ramp-controller'
 LADDER = (0.0, 5.0, 10.0, 25.0, 50.0, 75.0, 100.0)
-HOLD_SECONDS = {5.0: 3 * 3600, 10.0: 3600, 25.0: 3600, 50.0: 3600, 75.0: 3600}  # 5% hold is the 3h ruling
+# Every step holds 1h. The 5% hold was 3h (David, 10-15); David's 10-20 ruling makes it 1h. There is
+# no time-of-day requirement: waiting for daytime would stretch a night run into the next day.
+HOLD_SECONDS = {5.0: 3600, 10.0: 3600, 25.0: 3600, 50.0: 3600, 75.0: 3600}
+FIVE_PERCENT_STEP = 5.0
+# Evidence, not clock: the 5% step also holds until the gate's `completed` count since the step began
+# (batch units the client saw completed) reaches this floor. Measured 5% daytime traffic is ~225-430
+# completions/hour; a quiet hour holds longer instead of failing.
+FIVE_PERCENT_MIN_COMPLETED = 150
 CONTROLLED_NAMES = ('batch-pipeline', 'first-summary')
 LEAD_NAME = 'batch-pipeline'
 # Quality guarantees, not ramp knobs: a rollback never lowers them. Every tested rollback set in the
@@ -180,6 +187,20 @@ def required_hold_seconds(current: float, hold_scale: float = 1.0) -> float:
     return HOLD_SECONDS[base] * hold_scale if base is not None else 0.0
 
 
+def five_percent_evidence_gap(verdict: GateVerdict, hold_scale: float = 1.0) -> str | None:
+    """The 5% step's completion floor: the hold detail token while it is short, None once met.
+
+    A missing or malformed `completed` count is short (fail closed). A staging rehearsal scales the
+    floor by its hold_scale.
+    """
+    completed = verdict.raw.get('completed')
+    if isinstance(completed, bool) or not isinstance(completed, int):
+        return 'sample_unmeasured'
+    if completed < math.ceil(FIVE_PERCENT_MIN_COMPLETED * hold_scale):
+        return 'sample_below_floor'
+    return None
+
+
 def classify_fail(reason: str) -> tuple[Action | None, RampReason]:
     """Map a GATE_FAIL token to the rollback it requires; (None, ...) means HOLD (not a cohort verdict)."""
     if reason in INCOMPLETE_SAMPLE_TOKENS:
@@ -250,6 +271,10 @@ def decide(
         return hold(RampReason.LOCKED_BY_OPERATOR, 'at_zero_needs_operator')
     if verdict.hold_elapsed_seconds < required_hold_seconds(current, context.hold_scale):
         return hold(RampReason.HOLD_INCOMPLETE, 'hold_incomplete')
+    if FIVE_PERCENT_STEP <= current < next_step(FIVE_PERCENT_STEP):
+        gap = five_percent_evidence_gap(verdict, context.hold_scale)
+        if gap is not None:
+            return hold(RampReason.HOLD_INCOMPLETE, gap)
     if recent_write:
         return hold(RampReason.HOLD_INCOMPLETE, 'write_rate_limited')
     target = next_step(current)
