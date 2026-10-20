@@ -204,9 +204,9 @@ Future<ReprocessResult> reProcessConversationServer(
   bool requireSpeakerReceipt = false,
   bool forceOmi = false,
 }) async {
+  final route = '${Env.apiBaseUrl}v1/conversations/$conversationId/reprocess';
   final response = await makeApiCall(
-    url:
-        '${Env.apiBaseUrl}v1/conversations/$conversationId/reprocess${reprocessQuery(appId: appId, forceOmi: forceOmi)}',
+    url: '$route${reprocessQuery(appId: appId, forceOmi: forceOmi)}',
     headers: {},
     method: 'POST',
     body: '',

@@ -599,13 +599,16 @@ class LiveConversationController:
         payload = omit_null_processing_state(conversation.model_dump())
         if carry:
             payload['manual_speaker_assignments'] = carry
+        idempotent_create = bool(
+            self.host.client_conversation_id and conversation_id == self.host.client_conversation_id
+        )
         created = await self.host.persistence.call(
             lifecycle_service.create_in_progress_conversation,
             request.uid,
             payload,
-            idempotent=bool(self.host.client_conversation_id and conversation_id == self.host.client_conversation_id),
+            idempotent=idempotent_create,
         )
-        if created:
+        if created or not idempotent_create:
             self.host.batch_record_capture = capture_snapshot(payload)
         else:
             # An idempotent hit: another writer created this client id between the
