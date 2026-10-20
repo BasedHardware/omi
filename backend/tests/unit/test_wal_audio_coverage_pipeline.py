@@ -540,6 +540,16 @@ async def test_half_boundary_proof_rounds_inward(coordinator, monkeypatch, tmp_p
     assert payloads[1] == b''.join(_frame_bytes(v, FRAME_SAMPLES) for v in (6, 7, 8, 9))
 
 
+@pytest.fixture
+def mismatched_committed_attempt(coordinator, monkeypatch, tmp_path, mutate):
+    module, stubs = coordinator
+    _coverage_env(monkeypatch)
+    env = _committed_envelope(range(7))
+    mutate(env)
+    state = _wire(stubs['pipeline'], monkeypatch, tmp_path, lineage_rows=[generation(1, capture_evidence=env)])
+    return module, stubs, state
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     'mutate',
@@ -553,13 +563,8 @@ async def test_half_boundary_proof_rounds_inward(coordinator, monkeypatch, tmp_p
         lambda e: e.update(proof='receipt_v1'),
     ],
 )
-async def test_mismatched_committed_evidence_keeps_original(coordinator, monkeypatch, tmp_path, mutate):
-    module, stubs = coordinator
-    pipeline = stubs['pipeline']
-    _coverage_env(monkeypatch)
-    env = _committed_envelope(range(7))
-    mutate(env)
-    state = _wire(pipeline, monkeypatch, tmp_path, lineage_rows=[generation(1, capture_evidence=env)])
+async def test_mismatched_committed_evidence_keeps_original(mismatched_committed_attempt, tmp_path):
+    module, stubs, state = mismatched_committed_attempt
     await _run_batch(module, stubs, tmp_path)
     assert len(state.vad_seen) == 1
     original = state.vad_seen[0]
