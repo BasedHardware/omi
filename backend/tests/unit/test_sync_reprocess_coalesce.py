@@ -15,6 +15,8 @@ _MUTATE = reprocess._mutate
 
 @pytest.fixture
 def state(monkeypatch):
+    from utils.sync import enrichment_scan
+
     rows, tasks = {}, []
 
     def mutate(key, operation):
@@ -28,6 +30,9 @@ def state(monkeypatch):
     monkeypatch.setattr(reprocess, 'owns_runtime', lambda: True)
     monkeypatch.setattr(reprocess, '_mutate', mutate)
     monkeypatch.setattr(reprocess, '_enqueue', lambda row: tasks.append(deepcopy(row)))
+    monkeypatch.setattr(reprocess, '_wake_exists', lambda *_: False)
+    monkeypatch.setattr(enrichment_scan, 'begin', lambda *_: (None, None))
+    monkeypatch.setattr(enrichment_scan, 'finish', lambda *_: None)
 
     def empty_failure(_client, _collection, document_id, owner, token):
         row = rows[document_id]
@@ -464,7 +469,7 @@ def test_mark_never_persists_invalid_worker_or_sibling_audience(state, monkeypat
 
 def test_integration_manifest_has_fresh_worker_queue_and_receiving_audience(runtime_manifest):
     env = runtime_manifest['environments']['prod']['cloud_run']['services']['backend-integration']['env']
-    assert env['SYNC_TASKS_QUEUE']['value'] == 'sync-jobs'
+    assert env['SYNC_TASKS_QUEUE']['value'] == 'sync-jobs-fresh'
     assert env['SYNC_TASKS_OIDC_AUDIENCE']['env_var'] == env['SYNC_TASKS_HANDLER_URL']['env_var']
     assert env['SYNC_TASKS_INVOKER_SA']['env_var'] == 'SYNC_TASKS_INVOKER_SA'
 
@@ -713,6 +718,7 @@ def test_short_first_summary_lease_and_rolled_back_later_revision(state, monkeyp
 
 
 def test_first_summary_retry_preserves_queued_token(state, monkeypatch):
+    monkeypatch.setattr(reprocess, '_wake_exists', lambda *_: True)
     monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
     monkeypatch.setenv('FIRST_SUMMARY_UID_ALLOWLIST', 'u')
     rows, tasks = state
@@ -728,7 +734,8 @@ def test_first_summary_retry_preserves_queued_token(state, monkeypatch):
     for now in (240, 360, 480):
         reprocess.sweep(now=now)
         assert rows[key]['task_token'] == earliest
-    assert rows[key]['wake_generation'] == 3
+    assert rows[key].get('wake_generation', 0) == 0
+    assert len(tasks) == 1
     output = SimpleNamespace(discarded=False, structured={'overview': 'Real summary'})
     assert reprocess.run(key, earliest, lambda *_: output, now=480) == 'processed'
 
@@ -1005,7 +1012,7 @@ def test_preserved_deadline_bypasses_demand_wait_and_repairs_without_rotating_qu
     query.stream.return_value = [SimpleNamespace(id=key)]
     monkeypatch.setattr(reprocess, 'get_firestore_client', lambda: SimpleNamespace(collection=lambda _: query))
     assert reprocess.sweep(now=240) == {'repaired': 1, 'error': 0}
-    assert rows[key]['task_token'] == token and rows[key]['wake_generation'] == 1
+    assert rows[key]['task_token'] != token and rows[key].get('wake_generation', 0) == 0
     for exclusions in ({'effects_only': True}, {'summary_seen': True}):
         rows[key].update(exclusions)
         from config import summary_guarantee

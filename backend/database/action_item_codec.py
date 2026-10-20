@@ -89,7 +89,22 @@ def prepare_action_item_for_read(action_item_data: Dict[str, Any]) -> Dict[str, 
     action_item_data.setdefault('sort_order', 0)
     action_item_data.setdefault('indent_level', 0)
     for field in ['created_at', 'updated_at', 'due_at', 'completed_at']:
-        if field in action_item_data and action_item_data[field]:
-            if hasattr(action_item_data[field], 'timestamp'):
-                action_item_data[field] = datetime.fromtimestamp(action_item_data[field].timestamp(), tz=timezone.utc)
+        value = action_item_data.get(field)
+        if not value:
+            continue
+        if hasattr(value, 'timestamp'):
+            action_item_data[field] = datetime.fromtimestamp(value.timestamp(), tz=timezone.utc)
+        elif isinstance(value, str):
+            # Legacy/externally-written rows (webhook syncs, migrations, pre-normalization
+            # writes) can still hold a raw ISO string. Downstream sort keys (e.g.
+            # ``_action_item_list_sort_key``) compare this field against datetimes and crash
+            # with a TypeError on a string, so coerce here or drop it rather than 500ing
+            # every reader of this document.
+            try:
+                parsed = datetime.fromisoformat(value.replace('Z', '+00:00'))
+                if parsed.tzinfo is None:
+                    parsed = parsed.replace(tzinfo=timezone.utc)
+                action_item_data[field] = parsed.astimezone(timezone.utc)
+            except (ValueError, OverflowError):
+                action_item_data.pop(field, None)
     return action_item_data

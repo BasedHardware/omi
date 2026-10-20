@@ -224,30 +224,20 @@ final class LocalEmbeddingOptInTests: XCTestCase {
     await LocalEmbeddingIndexer.shared.setRuntimeForTesting(.makeDefault())
   }
 
-  func testProductionFamilyDefaultDisablesEngineAndIndexer() async throws {
-    let (defaults, cleanup) = try emptyDefaults()
-    defer { cleanup() }
+  func testProductionFamilyDefaultSelectsLocalEngine() async throws {
+    let defaults = try makeIsolatedDefaults()
     let flags = LocalEmbeddingKillSwitches.resolve(
       environment: [:], defaults: defaults, isNonProduction: false)
-    XCTAssertFalse(flags.isEnabled)
+    XCTAssertTrue(flags.isEnabled)
     XCTAssertFalse(flags.isDisabled)
-
-    let engine = FailOnCallEmbeddingEngine()
+    let engine = HashEmbeddingEngine()
     var runtime = LocalEmbeddingRuntime(
       engines: [engine], killSwitches: flags, defaultEngineID: engine.engineID, record: { _, _ in })
     runtime.probe = { _ in
-      XCTFail("opted-out runtime must not probe")
-      return LocalEmbeddingProbe(
+      LocalEmbeddingProbe(
         appleSilicon: true, assetsAvailable: true, fixtureSucceeded: true, elapsed: .zero, dimension: 8)
     }
-    guard case .disabled = await runtime.selectEngine() else {
-      return XCTFail("production-family default must keep the Gemini route")
-    }
-
-    await LocalEmbeddingIndexer.shared.setRuntimeForTesting(runtime)
-    await LocalEmbeddingIndexer.shared.indexFinalizedSession(sessionId: 1)
-    await LocalEmbeddingIndexer.shared.indexMemory(id: 1, content: "synthetic opted-out memory")
-    await LocalEmbeddingIndexer.shared.backfillIfNeeded()
+    guard case .engine = await runtime.selectEngine() else { return XCTFail("Stable defaults local") }
   }
 
   func testNonProductionDefaultSelectsEngine() async throws {

@@ -4,6 +4,8 @@ Wrapped 2025 generation logic.
 Computes analytics from user's 2025 data and generates LLM-based insights.
 """
 
+from utils.generated_compute import generated_compute_allowed, generated_compute_scoped
+
 from collections import Counter
 from datetime import datetime, timezone, date
 from typing import List, Dict, Any, Set, cast
@@ -743,6 +745,7 @@ Be specific and empathetic. These should feel personal and meaningful."""
         }
 
 
+@generated_compute_scoped
 def generate_wrapped_2025(uid: str, year: int = 2025):
     """
     Generate Wrapped 2025 for a user.
@@ -750,6 +753,8 @@ def generate_wrapped_2025(uid: str, year: int = 2025):
     This fetches all 2025 data, computes analytics, generates LLM insights,
     and stores the result in Firestore.
     """
+    if not generated_compute_allowed(uid, 'wrapped_analysis', allow_byok=False):
+        return
     import time
 
     start_time = time.time()

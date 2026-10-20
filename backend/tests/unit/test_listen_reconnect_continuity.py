@@ -181,8 +181,6 @@ async def test_live_meeting_stamp_reaches_finalization_and_meeting_aware_summary
     assert pc._stored_meeting_context(conversation) == stamped
     # The stamp must stand on its own even without a subsequent provider read.
     monkeypatch.setattr(pc, '_stored_meeting_lookup_enabled', lambda: False)
-    monkeypatch.setattr(pc, '_calendar_context_read_enabled', lambda: False)
-    monkeypatch.setattr(pc, '_ocr_meeting_context_enabled', lambda: False)
     pc._enrich_meeting_context('u', conversation)
     assert pc._stored_meeting_context(conversation) == stamped
 
@@ -194,7 +192,6 @@ async def test_live_meeting_stamp_reaches_finalization_and_meeting_aware_summary
     # Isolate the persisted meeting stamp from optional roster/background reads.
     monkeypatch.setattr(pc, 'rich_notes_inputs', lambda *args, **kwargs: (None, None, False, ()))
     monkeypatch.setattr(pc, '_fetch_dedup_candidates_for_query', lambda *args: [])
-    monkeypatch.setattr(pc, 'submit_relevance_shadow', lambda **kwargs: None)
     notes = Mock(return_value=Structured(title='Project launch', overview='Launch next week; review on Friday.'))
     monkeypatch.setattr(pc, 'get_conversation_notes', notes)
     prefix_builder = Mock(wraps=pc.build_conversation_prompt_prefix)
@@ -658,6 +655,43 @@ async def test_live_created_row_honors_active_calendar_window(monkeypatch, meeti
     await controller.lifecycle_loop()
     assert (controller.host.state.current_conversation_id == cid) is (meeting_state == 'active')
     assert harness.creates == (1 if meeting_state == 'active' else 2)
+
+
+@pytest.mark.anyio
+async def test_meeting_that_runs_over_its_scheduled_end_keeps_the_silence_boundary(monkeypatch):
+    harness = CaptureHarness(monkeypatch)
+    end = harness.now + timedelta(minutes=1)
+    harness.meetings = [
+        {
+            'id': 'meeting-doc',
+            'calendar_event_id': 'event-1',
+            'calendar_source': 'system_calendar',
+            'start_time': end - timedelta(minutes=30),
+            'end_time': end,
+            'duration_minutes': 30,
+        }
+    ]
+    controller = harness.connect()
+    await controller.prepare()
+    cid = controller.host.state.current_conversation_id
+    row = harness.rows[cid]
+    assert row['external_data']['calendar_meeting_context']['end_time'] == end
+    # The meeting runs over: its latest speech lands 110 seconds after the scheduled end.
+    last_speech = end + timedelta(seconds=110)
+    row.update(has_content=True, transcript_segments=[{'text': 'kept'}], finished_at=last_speech)
+    controller.process_conversation = AsyncMock(return_value=True)
+    harness.now = last_speech + timedelta(seconds=15)
+    controller.host.wait = AsyncMock(side_effect=[False, True])
+    await controller.lifecycle_loop()
+    assert controller.host.state.current_conversation_id == cid
+    assert harness.creates == 1
+    controller.process_conversation.assert_not_awaited()
+    # The ordinary 120-second silence boundary still ends it.
+    harness.now = last_speech + timedelta(seconds=120)
+    controller.host.wait = AsyncMock(side_effect=[False, True])
+    await controller.lifecycle_loop()
+    assert controller.host.state.current_conversation_id != cid
+    controller.process_conversation.assert_awaited_once_with(cid)
 
 
 @pytest.mark.anyio

@@ -12,6 +12,7 @@ from prometheus_client import CollectorRegistry
 import pytest
 
 from config.batch_pipeline import max_worker_attempts
+from config.policy import ProjectionPolicy
 from database.batch_pipeline_projection import ProjectionStore
 from database.batch_pipeline_projection_protocol import ProjectionBlocked
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
@@ -75,7 +76,7 @@ async def test_pump_drains_already_ready_sibling_when_last_lease_quarantines(mon
     assert store.rows['results', 'later']['previous_segment_id'] is None
 
 
-def test_quarantine_holds_batch_claim_and_reports_terminal_failure(monkeypatch):
+def test_recoverable_quarantine_holds_batch_claim_and_keeps_polling(monkeypatch):
     monkeypatch.setenv('BATCH_PIPELINE_ENABLED', 'true')
     monkeypatch.setenv('BATCH_PIPELINE_PERCENT', '100')
     monkeypatch.setenv('BATCH_PIPELINE_MAX_ATTEMPTS', '1')
@@ -87,9 +88,9 @@ def test_quarantine_holds_batch_claim_and_reports_terminal_failure(monkeypatch):
     original = deepcopy(store.rows['content', 'synthetic-owner/content'])
     for _ in range(2):
         status = durable_status(store, 'synthetic-owner', 'bp_first')
-        assert status['status'] == 'failed' and status['failed_segments'] == 1
-        assert status['result'] is None and status['poll_after_ms'] == 0
-        assert status['errors'] == ['batch_worker_quarantined']
+        assert status['status'] == 'processing' and status['failed_segments'] == 0
+        assert status['result'] is None and status['poll_after_ms'] == 3000
+        assert status['errors'] == []
         assert submit(store, *proposal('another', 'another')) == {'outcome': 'batch', 'job_id': 'bp_first'}
     assert store.rows['content', 'synthetic-owner/content'] == original
     # The existing legacy entry point cannot bind this retained whole-upload claim.
@@ -136,8 +137,14 @@ def projection_fixture():
             },
         },
     }
+    for (collection, *_), value in rows.items():
+        if collection == 'batch_pipeline_dev_jobs':
+            value['policy_parts'] = {'projection': ProjectionPolicy().to_dict()}
     client = StrictFirestore(rows)
     store = ProjectionStore(SimpleNamespace(client=client, namespace='batch_pipeline_dev'))
+    store.policy = lambda sid: ProjectionPolicy.from_dict(
+        client.rows[('batch_pipeline_dev_jobs', sid)]['policy_parts']['projection']
+    )
     return client, store, binding
 
 

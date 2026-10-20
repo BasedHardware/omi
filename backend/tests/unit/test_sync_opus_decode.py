@@ -12,6 +12,8 @@ focusing on failure modes that cause WALs to become permanently stuck:
 Each scenario corresponds to a real-world sticky-pending failure mode.
 """
 
+from utils.other import owned_paths  # noqa: F401 - retain real scratch guard across legacy package stubs
+
 import enum
 import importlib.util
 import io

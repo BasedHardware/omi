@@ -10,7 +10,10 @@ dataPlaneProject: based-hardware
 stage: prod
 namespace: batch_pipeline_prod
 secretName: prod-omi-backend-secrets
-replicaCount: 1
+# Fixed floor, no HPA. Each replica requests the one L4 on its own
+# g2-standard-8 node (pool cap 4). Leases, ordered merge and privacy
+# fences are durable per segment/owner; see two-worker emulator test.
+replicaCount: 2
 autoscaling:
   enabled: false
 nodeSelector:

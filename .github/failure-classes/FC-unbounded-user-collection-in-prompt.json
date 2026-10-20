@@ -12,5 +12,6 @@
   "scope_hints": [
     "backend/**"
   ],
-  "status": "open"
+  "status": "dormant",
+  "dormant_since": "2026-10-19T09:27:54.163786Z"
 }

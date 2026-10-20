@@ -16,7 +16,6 @@ from utils.other.endpoints import enforce_account_deletion_http_access
 from utils.http_client import safe_request_target, get_auth_client, UnsafeWebhookURLError
 from database.redis_db import enable_app, increase_app_installs_count
 from utils.apps import is_user_app_enabled, get_is_user_paid_app, is_tester
-from utils.jit_qa_admission import JITQAAdmissionError, enforce_jit_qa_uid
 from models.app import App as AppModel, ActionType
 
 logger = logging.getLogger(__name__)
@@ -191,10 +190,6 @@ async def oauth_token(
         logger.error(f"Error verifying Firebase ID token: {e}")
         raise HTTPException(status_code=401, detail="Error verifying Firebase ID token. Please re-authenticate.")
 
-    try:
-        enforce_jit_qa_uid(uid)
-    except JITQAAdmissionError as error:
-        raise HTTPException(status_code=403, detail="account is not admitted to the isolated JIT QA plane") from error
     await run_blocking(db_executor, enforce_account_deletion_http_access, uid)
 
     app_data = await run_blocking(db_executor, get_app_by_id_db, app_id)

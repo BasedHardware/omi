@@ -559,6 +559,8 @@ class Conversation(BaseModel):
     @model_serializer(mode='wrap')
     def _serialize_match_scores(self, handler, info):
         data = handler(self)
+        if not self.processing_deferred and 'processing_deferred' not in self.model_fields_set:
+            data.pop('processing_deferred', None)
         if info.mode == 'python' and self.owner_recognition_diagnostics:
             excluded = info.exclude or ()
             included = info.include
@@ -620,6 +622,8 @@ class Conversation(BaseModel):
     # raw transcript with no LLM enrichment yet — enrichment runs on first open
     # (get_conversation_by_id → process_conversation). Cleared once enriched.
     deferred: bool = False
+    # Stored transcripts waiting for an explicit, budgeted backlog choice.
+    processing_deferred: bool = False
     data_protection_level: Optional[str] = None
     folder_id: Optional[str] = Field(default=None, description="ID of the folder this conversation belongs to")
     call_id: Optional[str] = Field(default=None, description="Twilio call SID for phone call conversations")
@@ -777,6 +781,7 @@ class CreateConversation(BaseModel):
 
     processing_conversation_id: Optional[str] = None
     calendar_meeting_context: Optional[CalendarMeetingContext] = None
+    folder_id: Optional[str] = None
     is_locked: bool = False
     private_cloud_sync_enabled: bool = False
 

@@ -10,6 +10,8 @@ Rate limits per user (Redis-backed sliding-window + daily counter):
   - 5,000 characters per single request (hard cap, 400)
 """
 
+from utils.generated_compute import require_generated_compute, generated_compute_configured
+
 import asyncio
 import logging
 import os
@@ -105,6 +107,8 @@ async def tts_synthesize(
     ),
 ):
     """Synthesize MP3 speech through Gemini, with a legacy rollback path."""
+    if generated_compute_configured():
+        await run_blocking(db_executor, require_generated_compute, uid, 'desktop_tts', allow_byok=False)
     if 'voice_id' in req.model_fields_set:
         voice_id = req.voice_id
     else:

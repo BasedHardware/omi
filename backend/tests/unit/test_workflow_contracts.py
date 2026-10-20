@@ -57,6 +57,33 @@ def test_memory_policy_core_change_selects_inv_mem_guard(selector_and_all_tests)
     assert reason == "selected backend unit tests from changed paths and workflow contracts"
 
 
+def test_background_task_ratchet_change_selects_the_ratchet(selector_and_all_tests):
+    """Any module the ratchet can scan (utils/routers/services top-level dirs)
+    selects the background-task ratchet and drain harness (#22198); modules
+    outside those directories do not."""
+    selector, all_tests = selector_and_all_tests
+    ratchet = "tests/unit/test_background_task_ratchet.py"
+    harness = "tests/unit/test_revision_drain_harness.py"
+
+    for path in (
+        "backend/routers/sync.py",
+        "backend/services/users/account_deletion.py",
+        "backend/utils/stt/soniox_runway.py",  # transitive closure member, not an AREA seed
+        "backend/utils/retrieval/agentic.py",
+    ):
+        selected, reason = selector.tests_for_changed_paths([path], all_tests)
+        assert ratchet in selected and harness in selected, path
+        assert reason == "selected backend unit tests from changed paths and workflow contracts"
+
+    # Negatives: narrow-area paths outside the ratchet's scanned directories.
+    # (backend/database/_client.py is not a valid negative: database/ changes
+    # fall back to the full suite, which includes the ratchet.)
+    for path in ("backend/models/users.py", "backend/database/csat.py"):
+        selected, reason = selector.tests_for_changed_paths([path], all_tests)
+        assert ratchet not in selected, path
+        assert reason == "selected backend unit tests from changed paths and workflow contracts"
+
+
 def test_workflow_contract_sources_select_adjacent_tests(selector_and_all_tests):
     selector, all_tests = selector_and_all_tests
 
@@ -1372,18 +1399,6 @@ runs:
     )
 
 
-def test_firestore_gate_policy_pins_qa_database_and_environment():
-    policy = _workflow_policy()
-    repo = BACKEND_DIR.parent
-    dockerfiles = policy._runtime_images(repo)
-    for workflow_name in ('jit_qa_cloud_run.yml', 'jit_qa_typesense_projection.yml'):
-        workflow = (repo / '.github/workflows' / workflow_name).read_text(encoding='utf-8')
-        wrong_db = workflow.replace('database: ${{ env.QA_FIRESTORE_DATABASE }}', 'database: (default)')
-        assert policy.workflow_gate_violations(wrong_db, name=workflow_name, dockerfiles=dockerfiles)
-        wrong_env = workflow.replace('environment: development', 'environment: qa-sandbox')
-        assert policy.workflow_gate_violations(wrong_env, name=workflow_name, dockerfiles=dockerfiles)
-
-
 def test_firestore_gate_policy_rejects_source_sha_workflow_commit_substitution():
     policy = _workflow_policy()
     repo = BACKEND_DIR.parent
@@ -1423,16 +1438,12 @@ _LANE_SOURCE_BINDINGS = {
     'gcp_memory_maintenance_job_auto_dev.yml': '${{ github.sha }}',
     'gcp_notifications_job.yml': '${{ env.CHECKED_OUT_SHA }}',
     'gcp_x_connector_sync_job.yml': '${{ env.CHECKED_OUT_SHA }}',
-    'gcp_daily_memory_sweep_job.yml': '${{ steps.admitted_source.outputs.admitted_sha }}',
-    'gcp_daily_memory_sweep_job_auto_dev.yml': '${{ steps.admitted_source.outputs.admitted_sha }}',
     'gcp_day3_reengagement_email_job.yml': '${{ steps.admitted_source.outputs.admitted_sha }}',
     'gcp_day3_reengagement_email_job_auto_dev.yml': '${{ steps.admitted_source.outputs.admitted_sha }}',
     'gcp_frame_request_retention_job.yml': '${{ github.event.inputs.release_sha }}',
     'gcp_backend_pusher.yml': '${{ env.FIRESTORE_GATE_SOURCE_SHA }}',
     'gcp_backend_pusher_auto_deploy.yml': '${{ github.sha }}',
     'gcp_backend_listen_helm.yml': '${{ env.BACKEND_LISTEN_SOURCE_SHA }}',
-    'jit_qa_cloud_run.yml': '${{ needs.admit.outputs.source_sha }}',
-    'jit_qa_typesense_projection.yml': '${{ needs.admit.outputs.source_sha }}',
 }
 
 
@@ -1462,18 +1473,18 @@ def test_firestore_gate_lane_source_and_target_bindings():
     assert 'BACKEND_LISTEN_SOURCE_SHA=$SELECTED_SHA' not in listen
     # Rollback replays the operator's requested Helm revision verbatim; there is
     # no resolver step and no source-sha derivation on that lane.
-    assert 'helm -n "$NS" rollback "$RELEASE" "$TARGET_REVISION" --wait --timeout 30m' in listen
-    assert 'helm -n "$NS" rollback "$RELEASE" --wait --timeout 30m' in listen
+    assert 'helm -n "$NS" rollback "$RELEASE" "$TARGET_REVISION" --wait --timeout 70m' in listen
+    assert 'helm -n "$NS" rollback "$RELEASE" --wait --timeout 70m' in listen
     assert 'TARGET_REVISION: ${{ github.event.inputs.helm_revision }}' in listen
     assert 'BACKEND_LISTEN_ROLLBACK_REVISION' not in listen
+    # A listen rollback must not roll back or uninstall the NEG coverage
+    # exporter; it is a separate monitoring release (2026-10-18 rollback
+    # 39161774715 uninstalled its only revision).
+    assert 'uninstall' not in listen
+    assert 'RELEASE=prod-omi-neg-coverage-exporter' not in listen
     assert 'BACKEND_LISTEN_SOURCE_SHA=$RUNNING_TAG' not in listen
     gate_condition = "if: ${{ env.BACKEND_LISTEN_SOURCE_SHA != '' }}"
     assert listen.count(gate_condition) == 2
-
-    for jit_name in ('jit_qa_cloud_run.yml', 'jit_qa_typesense_projection.yml'):
-        jit = (workflows / jit_name).read_text(encoding='utf-8')
-        assert 'project_id: ${{ env.QA_PROJECT }}' in jit, jit_name
-        assert 'database: ${{ env.QA_FIRESTORE_DATABASE }}' in jit, jit_name
 
     auto_dev = (workflows / 'gcp_backend_auto_dev.yml').read_text(encoding='utf-8')
     assert "verify_credential_project: 'true'" in auto_dev
@@ -1711,8 +1722,6 @@ def test_no_customer_data_gate_for_central_or_qa():
     for workflow_name in (
         'gcp_backend.yml',
         'gcp_backend_auto_dev.yml',
-        'jit_qa_cloud_run.yml',
-        'jit_qa_typesense_projection.yml',
     ):
         workflow = (repo / '.github/workflows' / workflow_name).read_text(encoding='utf-8')
         violations = policy.workflow_gate_violations(

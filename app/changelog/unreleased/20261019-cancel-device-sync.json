@@ -1,0 +1,3 @@
+{
+  "change": "Cancelling a sync from an Omi with firmware 3.0.17 to 3.0.19 now stops it right away instead of holding up the next sync for up to 10 minutes"
+}

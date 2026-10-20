@@ -235,6 +235,9 @@ def stored_transcript_segment(segment: Any) -> TranscriptSegment | None:
         speaker_id=kept.speaker_id,
         is_user=kept.is_user,
         person_id=kept.person_id,
+        stt_provider=(
+            segment.get('stt_provider') if isinstance(segment, Mapping) else getattr(segment, 'stt_provider', None)
+        ),
         start=_segment_timing(segment, 'start', 0.0),
         end=_segment_timing(segment, 'end', 1.0),
     )

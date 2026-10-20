@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "id": "FC-filter-change-absorbed-by-in-flight-read",
+  "violated_contract": "A list that refetches when its filters change must load the new filters even while a read for the old ones is still in flight, and must never apply that older read. The web conversations hook (useConversations) allowed one fetch at a time through a plain boolean guard, so a folder or date change made during a fetch was dropped, the old filters' page rendered under the new tab, and the hook already counted the new filters as loaded, so nothing refetched. A switch to a filter served from cache was overwritten the same way when the old read returned, and a refresh captured before the switch (deleting the folder being viewed, then refreshing) loaded that folder's list into All.",
+  "canonical_prevention": "Tie every list read to the filter key it is for. The effect that applies a filter change records the new key as current and releases the in-flight guard, so the guard only deduplicates reads of the same list. A read whose key is not current is not started, and after its await it applies data, errors and the loading flag only while its key is still current. Prove it with deferred reads: change the filters while the first read is pending and let it answer last, for an uncached and a cached target, and call a refresh captured before the change; assert the new filters' list stays and loading clears.",
+  "canonical_prevention_artifact": [
+    "web/app/src/hooks/__tests__/useConversations.test.tsx"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "web/app/src/hooks/**"
+  ],
+  "status": "open"
+}

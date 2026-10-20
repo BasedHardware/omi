@@ -551,8 +551,8 @@ class WorkflowContractTests(unittest.TestCase):
         self.mutate(
             root,
             CHECKER.MANUAL_WORKFLOW_PATH,
-            "    if: >-\n      github.ref == 'refs/heads/main' &&\n      github.event.inputs.mode == 'deploy'\n",
-            "    if: >-\n      github.ref == 'refs/heads/main' &&\n      github.event.inputs.mode == 'deploy' || true\n",
+            "    if: >-\n      github.ref == 'refs/heads/main' &&\n      (github.event.inputs.mode == 'deploy' || github.event.inputs.mode == 'build-only')\n",
+            "    if: >-\n      github.ref == 'refs/heads/main' &&\n      (github.event.inputs.mode == 'deploy' || github.event.inputs.mode == 'build-only') || true\n",
         )
         self.assertIn("manual source admission must use exactly the main-ref deploy condition", CHECKER.validate(root))
 
@@ -584,13 +584,111 @@ class WorkflowContractTests(unittest.TestCase):
         self.mutate(
             root,
             CHECKER.MANUAL_WORKFLOW_PATH,
-            "needs: [validate-production-boundary, firestore_readiness, record_break_glass]",
-            "needs: firestore_readiness",
+            "  deploy:\n    needs: [validate-production-boundary, firestore_readiness, record_break_glass]",
+            "  deploy:\n    needs: firestore_readiness",
         )
         self.assertIn(
             "manual deployment must depend on production-boundary validation, source admission, and break-glass audit",
             CHECKER.validate(root),
         )
+
+    def test_build_only_requires_the_shared_admission_and_audit(self) -> None:
+        root = self.fixture_root()
+        self.mutate(
+            root,
+            CHECKER.MANUAL_WORKFLOW_PATH,
+            "  build-image:\n    needs: [validate-production-boundary, firestore_readiness, record_break_glass]",
+            "  build-image:\n    needs: [validate-production-boundary, firestore_readiness]",
+        )
+        self.assertIn(
+            "build-only must depend on production-boundary validation, source admission, and break-glass audit",
+            CHECKER.validate(root),
+        )
+
+        for old, new in (
+            (
+                "      github.event.inputs.mode == 'build-only' &&\n      needs.validate-production-boundary.result == 'success' &&\n      needs.firestore_readiness.result == 'success' &&\n      (needs.record_break_glass.result == 'success' || needs.record_break_glass.result == 'skipped')\n",
+                "      github.event.inputs.mode == 'build-only' &&\n      needs.validate-production-boundary.result == 'success' &&\n      (needs.record_break_glass.result == 'success' || needs.record_break_glass.result == 'skipped')\n",
+            ),
+            (
+                "      github.event.inputs.mode == 'build-only' &&\n      needs.validate-production-boundary.result == 'success' &&",
+                "      github.event.inputs.mode == 'build-only' || true &&\n      needs.validate-production-boundary.result == 'success' &&",
+            ),
+        ):
+            root = self.fixture_root()
+            self.mutate(root, CHECKER.MANUAL_WORKFLOW_PATH, old, new)
+            self.assertIn(
+                "build-only must use exactly the admitted, audited main-ref build condition", CHECKER.validate(root)
+            )
+
+        root = self.fixture_root()
+        self.mutate(
+            root,
+            CHECKER.MANUAL_WORKFLOW_PATH,
+            "          ref: ${{ needs.firestore_readiness.outputs.admitted_sha }}\n",
+            "          ref: ${{ github.event.inputs.release_sha }}\n",
+        )
+        errors = CHECKER.validate(root)
+        self.assertIn("build-only must check out exactly the admitted SHA", errors)
+        self.assertIn("build-only must build the admitted SHA, never the raw release_sha input", errors)
+
+    def test_build_only_keeps_admitted_smoked_and_uncancelled_publication(self) -> None:
+        cases = (
+            (
+                "    if: >-\n      always() && !cancelled() &&\n      github.ref == 'refs/heads/main' &&\n      github.event.inputs.mode == 'build-only' &&",
+                "    if: >-\n      always() &&\n      github.ref == 'refs/heads/main' &&\n      github.event.inputs.mode == 'build-only' &&",
+                "build-only must use exactly the admitted, audited main-ref build condition",
+            ),
+            (
+                'if [[ -z "$ADMITTED_SHA" || "$head_sha" != "$ADMITTED_SHA" ]]; then',
+                'if [[ -z "$ADMITTED_SHA" ]]; then',
+                "build-only must verify the checked-out HEAD is the admitted SHA",
+            ),
+            (
+                "      - name: Google Auth (WIF)\n        uses: google-github-actions/auth@v3\n        with:\n          workload_identity_provider: ${{ github.event.inputs.environment == 'prod' && 'projects/208440318997",
+                "      - name: Replace admitted tree\n        uses: actions/checkout@v7\n\n"
+                "      - name: Google Auth (WIF)\n        uses: google-github-actions/auth@v3\n        with:\n          workload_identity_provider: ${{ github.event.inputs.environment == 'prod' && 'projects/208440318997",
+                "build-only must check out exactly one root source tree",
+            ),
+            (
+                "          path: .deploy-control\n",
+                "          path: ./\n",
+                "build-only must check out exactly one root source tree",
+            ),
+            (
+                "          python3 .deploy-control/backend/scripts/runtime_image_contracts.py smoke --dockerfile backend/Dockerfile --image \"$IMAGE\"\n",
+                "          docker push \"$IMAGE\"\n          python3 .deploy-control/backend/scripts/runtime_image_contracts.py smoke --dockerfile backend/Dockerfile --image \"$IMAGE\"\n",
+                "build-only must smoke the built image before pushing its exact tag",
+            ),
+        )
+        for old, new, message in cases:
+            root = self.fixture_root()
+            self.mutate(root, CHECKER.MANUAL_WORKFLOW_PATH, old, new)
+            self.assertIn(message, CHECKER.validate(root))
+
+    def test_build_only_never_reaches_a_serving_surface(self) -> None:
+        for injected in (
+            "uses: ./.github/actions/deploy-backend-stack",
+            "gcloud run services update-traffic backend --to-latest",
+            "uses: google-github-actions/get-gke-credentials@v3",
+            "helm upgrade --install backend-listen",
+            "docker push gcr.io/p/backend:latest",
+            "echo cache-to: type=registry",
+            "python3 .github/scripts/ensure_backend_route_5xx_alert.py",
+        ):
+            root = self.fixture_root()
+            self.mutate(
+                root,
+                CHECKER.MANUAL_WORKFLOW_PATH,
+                "      - name: Push verified runtime image\n        if: steps.image-tag.outputs.exists == 'false'\n",
+                f"      - name: Injected\n        run: {injected}\n\n"
+                "      - name: Push verified runtime image\n        if: steps.image-tag.outputs.exists == 'false'\n",
+            )
+            errors = CHECKER.validate(root)
+            self.assertTrue(
+                any(error.startswith("build-only must not touch a serving surface") for error in errors),
+                (injected, errors),
+            )
 
     def test_auto_workflow_rejects_github_sha_or_incomplete_source_binding(self) -> None:
         root = self.fixture_root()

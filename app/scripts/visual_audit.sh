@@ -78,7 +78,10 @@ prepare() {
     printf 'API_BASE_URL=\nUSE_WEB_AUTH=true\nUSE_AUTH_CUSTOM_TOKEN=true\nSTAGING_API_URL=\n' > .dev.env
     : > .env
     flutter pub get
-    dart run build_runner build --delete-conflicting-outputs
+    # flutter-aware solver: a bare `dart run` re-resolves with the pure-Dart solver,
+    # which cannot satisfy flutter-constrained dependencies such as
+    # device_info_plus_platform_interface once their pub.dev metadata is in the cache.
+    flutter pub run build_runner build --delete-conflicting-outputs
   )
 }
 

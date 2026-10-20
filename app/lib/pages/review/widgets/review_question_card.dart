@@ -171,7 +171,7 @@ Future<bool> answerReviewItem(BuildContext context, ReviewItem item, ReviewAnswe
   // A sheet may close before the answer settles; the root navigator outlives it.
   final host = Navigator.of(context, rootNavigator: true).context;
   final failedMessage = context.l10n.reviewAnswerFailed;
-  final conflictMessage = context.l10n.reviewProposalConflict;
+  final conflictMessage = context.l10n.reviewQuestionOutOfDate;
   OmiHaptics.light();
   final saved = await provider.answer(item, answer);
   if (!saved) {

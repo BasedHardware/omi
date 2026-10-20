@@ -1,0 +1,3 @@
+{
+  "change": "A Developer Settings webhook switch now goes back and shows an error when turning that webhook on or off fails"
+}

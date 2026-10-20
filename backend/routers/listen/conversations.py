@@ -14,6 +14,7 @@ from models.conversation import Conversation
 from models.conversation_enums import ConversationSource, ConversationStatus
 from models.message_event import ConversationEvent, ConversationSessionEvent, LastConversationEvent
 from models.structured import Structured  # type: ignore[reportAttributeAccessIssue]
+from routers.listen.policy import persist_conversation_policy
 from routers.listen.contracts import ConversationCaptureOrigin, persisted_started_seconds
 from utils.byok import get_byok_keys
 from utils.cloud_tasks import is_listen_finalization_dispatch_enabled
@@ -56,7 +57,7 @@ RECORDING_SESSION_LEASE_RENEW_INTERVAL = timedelta(minutes=1)
 
 def resolve_onboarding_provenance_marker(host: Any) -> Optional[str]:
     """The onboarding-provenance marker consumed by the daily memory sweep
-    (utils/memory/daily_memory_sweep.py) must reflect the runtime's own
+    (the conversation processor) must reflect the runtime's own
     onboarding-admission decision (``host.onboarding_session_id``), not
     ``OnboardingHandler.session_id``: the handler mints its own fallback id
     whenever none is supplied (utils/onboarding.py), so a Settings speech-
@@ -146,6 +147,7 @@ class LiveConversationController:
         self.host.recording_session_id = pointer['recording_session_id']
         self.host.batch_record_capture = capture_snapshot(existing)
         self.host.state.current_conversation_id = binding['conversation_id']
+        await persist_conversation_policy(self.host, binding['conversation_id'])
         self.host.recording_session_ids_by_conversation[binding['conversation_id']] = self.host.recording_session_id
         self._adopt_capture_timeline(binding['conversation_id'], (existing or {}).get('started_at'))
         if self.host.use_custom_stt and not existing.get('uses_custom_stt', False):
@@ -497,6 +499,7 @@ class LiveConversationController:
                     return
                 self.host.batch_record_capture = capture_snapshot(existing)
                 self.host.state.current_conversation_id = conversation_id
+                await persist_conversation_policy(self.host, conversation_id)
                 self._adopt_capture_timeline(conversation_id, existing.get('started_at'))
                 # Persist the custom-STT marker on resume so a conversation that
                 # started under normal STT but continues under custom STT keeps
@@ -620,6 +623,7 @@ class LiveConversationController:
         if source == ConversationSource.desktop and meeting:
             await self.host.persistence.call(redis_db.set_conversation_meeting_id, conversation_id, meeting['id'])
         self.host.state.current_conversation_id = conversation_id
+        await persist_conversation_policy(self.host, conversation_id)
         # Fresh v2 generation: the origin is pinned by the receiver at the
         # first accepted audio frame associated with this conversation.
         self._adopt_capture_timeline(conversation_id, None)
@@ -659,7 +663,11 @@ class LiveConversationController:
             # existing-conversation behavior instead of dodging it.
             await self.create_new_in_progress_conversation()
             return None
-        existing = await self.host.persistence.call(retrieve_in_progress_conversation, self.host.request.uid)
+        if hasattr(self.host, '_policy_resume_candidate'):
+            existing = self.host._policy_resume_candidate
+            del self.host._policy_resume_candidate
+        else:
+            existing = await self.host.persistence.call(retrieve_in_progress_conversation, self.host.request.uid)
         if not existing:
             await self.create_new_in_progress_conversation()
             return None
@@ -716,6 +724,7 @@ class LiveConversationController:
             existing = current
         self.host.batch_record_capture = capture_snapshot(existing)
         self.host.state.current_conversation_id = existing['id']
+        await persist_conversation_policy(self.host, existing['id'])
         self.host.recording_session_ids_by_conversation[existing['id']] = self.host.recording_session_id
         self._adopt_capture_timeline(existing['id'], existing.get('started_at'))
         self.send_conversation_session(binding, self.host.recording_session_id)

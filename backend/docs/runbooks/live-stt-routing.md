@@ -28,6 +28,11 @@ connect cost/latency risk; inspect its reason counter and transcript/latency SLI
 and withdraw the endpoint manually if the aggregate shows an outage.
 Local VAD and other explicitly censored input/configuration failures also release
 circuit admission without accumulating provider failures.
+A Parakeet window whose own pump task listen cancelled (owner close, recovery
+switch, teardown) reports the censored reason `cancelled`, not `connection_lost`,
+so listen-side cancellation cannot bench Parakeet through the disruption gate.
+A pump that ends on its own, or a POST/transport error, still reports a provider
+reason (`connection_lost`, `provider_5xx`, `timeout`).
 
 `omi_stt_cost_routing_settlements_total{target,outcome,reason,path}` is the
 expected observation count from that seam (`path=close|failover|connect`). Its
@@ -327,7 +332,7 @@ completed sessions feed `omi-live-transcription-success-low` (existing <90%,
 >=50 counted sessions/5m, five-minute dwell page). Quiet unfinished streams do
 not establish a vendor fault and remain outside this automatic detector.
 
-## Recommended on ramp and abort
+## Historical router-on ramp and abort
 
 After the checklist passes, configure `on` at **5% for at least 60 minutes and
 100 classified canary sessions**, then **25% for at least 60 minutes and 300**,
@@ -362,8 +367,8 @@ reopens; rejected sends and idle buffering are excluded until transport
 acceptance. This is an admission proxy, not confirmed wire delivery or vendor
 billing. All bounded children exist from process start. Compare uniform on/off
 configuration, continuous scrapes and matched completion windows; never infer
-cohort from pod track or pool shadow with off silently. First-text latency and
-serving-owned disruption remain separate uninstrumented cohort gates.
+cohort from pod track or pool shadow with off silently. The static-routing ramp below adds a companion window first-text histogram;
+other provider first-text latency remains uninstrumented.
 
 Extend dwell until the on arm reaches the exposure floor; do not substitute
 shadow proposals or window-allocation counts for actual router canary sessions.
@@ -392,9 +397,101 @@ Keep chart + prod overlay aligned, then regenerate `backend/deploy/runtime_env.y
 with `python3 backend/deploy/compose_runtime_env.py`. Do not write routing state
 through dev: dev shares production Redis/Firestore.
 
-## Production routing-off rollout (2026-10-18)
+## Static-routing cohort ramp (stage 1)
 
-Prod backend-listen uses `STT_ROUTING_MODE=off`, the independent canary's only
+This sequence supersedes the historical router-on expansion above. Production
+listen stage 1 uses `STT_ROUTING_MODE=on`, `STT_ROUTING_ON_PERCENT=90`: the
+complementary approximately 10% of managed accounts use static selection. Keep
+`PARAKEET_WINDOW_ALLOCATION_PERCENT=100`, `PARAKEET_WINDOW_MAX_SESSIONS=16`,
+`STT_FAILOVER_RECOVERY_ENABLED=true`, and `STT_NO_TEXT_RESCUE_ENABLED=true`.
+There is no provider, endpoint, GPU-pool, or admission-limit change. Custom STT,
+BYOK, and multi-channel sessions remain outside the managed cohort.
+
+Ship the instrumented binary with `STT_ROUTING_MODE=on` and
+`STT_ROUTING_ON_PERCENT=100` first. Let that image serve on/100 for at least
+**60 minutes** before the separate stage-1 allocation change. Pin `image_tag`
+to that same immutable instrumented image for stage 1 and both arms. A source
+rollback or a deployment workflow's overall completion time is not a flag-only
+serving boundary. Verify
+image convergence, Ready pods, public NEG exposure in every serving zone and
+complete scrapes. Hold for an unobserved Ready pod or missing telemetry.
+
+| Stage | `STT_ROUTING_ON_PERCENT` | Approximate static share | Minimum qualified observation |
+|---|---:|---:|---|
+| 1 | 90 | 10% | 2 hours, 150 classified static outcomes, 50 first-text observations per arm |
+| 2 | 75 | 25% | Same floors, measured again at this stage |
+| 3 | 50 | 50% | Full 24-hour cycle and the same sample floors |
+| 4 | 0 | 100% | 2 hours and the static sample floors; retain the qualified 50/50 control receipt as a historical reference |
+
+At the observed fleet pace, the 10% static cohort may need about 2.5 hours to
+reach 150 classified static outcomes. Extend dwell instead of waiving sample
+floors.
+Stages 1–3 use concurrent on control; stage 4 has no concurrent on cohort, so do
+not call its historical reference a concurrent comparison. The release operator
+owns each expansion after reviewing its receipt, starting with a review within
+24 hours of stage-1 activation. No automatic promotion. Each receipt records
+image, actual arm counts, dwell, counts/denominators, zone mix, scrape coverage
+and vendor usage. Missing data, stale vendor usage, unexplained accounting
+signals or unmet floors are HOLD.
+
+The added histogram is
+`omi_stt_routing_cohort_window_first_text_seconds{routing_arm="on|off|shadow"}`.
+`off` identifies the static cohort in mode-on; it does not prove global off.
+It uses the existing Parakeet-window measurement: first VAD speech through first
+emitted nonempty transcript, once per emitting window leg, including recovery
+legs. It is not fleet-wide end-to-end first text, and excludes unmanaged sockets.
+The arm is pinned when the window socket is constructed, before background
+callbacks; later context/flag changes cannot relabel it. Existing global and
+demand-cohort histograms keep their schemas and semantics. Only the closed arm
+label is added; no account, session, endpoint or language label is introduced.
+
+```promql
+# Per-arm window p95 and observation counts; extend the window to stage dwell.
+histogram_quantile(0.95, sum by (routing_arm, le) (rate(omi_stt_routing_cohort_window_first_text_seconds_bucket{job="backend-listen-metrics",namespace="prod-omi-backend",listen_track!="canary"}[30m])))
+sum by (routing_arm) (increase(omi_stt_routing_cohort_window_first_text_seconds_count{job="backend-listen-metrics",namespace="prod-omi-backend",listen_track!="canary"}[30m]))
+
+# Classified managed outcomes; exclude too_short from the success denominator.
+sum by (routing_arm, outcome) (increase(omi_stt_routing_cohort_outcomes_total{job="backend-listen-metrics",namespace="prod-omi-backend",signal="transcript",outcome=~"transcribed|no_transcript"}[30m]))
+
+# Session-end booleans: compare yes / (yes + no), not global accepts.
+sum by (routing_arm, signal, outcome) (increase(omi_stt_routing_cohort_outcomes_total{job="backend-listen-metrics",namespace="prod-omi-backend",signal=~"terminal_after_text|fallback_exhausted"}[30m]))
+```
+
+Qualification requires static-arm transcript success **at least 95%**, with no
+**greater-than-2-percentage-point decline** versus control; apply the retained
+15-minute outcome guard at **at least 100 classified outcomes**. Window first-text
+p95 must be **below 30s and no more than control +5s**, with the per-arm sample
+floors above. Do not compute a passing p95 from absent or undersampled series.
+Investigate any terminal-after-text or exhaustion excess immediately; a sustained
+excess versus concurrent on control aborts the expansion. Keep booleans/counts
+separate from attempt outcomes and account for completion lag.
+
+Retain window POST p95 below 2s and the existing overflow guard (>1% sustained
+10 minutes). No new GPU queue timeouts, sustained live queue p95 at least 1s,
+admission-overflow rise, or restart/readiness regression may pass. Retain the
+existing real outcome and lifecycle guards; accounting gaps are investigation
+HOLDs, not automatic serving rollback. Watch the whole fleet and each serving
+zone as well as the two arms. LB 101 share has a broad 403/429-inclusive request
+denominator and is supporting evidence, not an exact session-open success SLI.
+
+Rollback for this **static expansion** is `STT_ROUTING_MODE=on` and
+`STT_ROUTING_ON_PERCENT=100`, with the same image, through the normal listen
+configuration workflow. Keep chart, prod overlay and generated runtime manifest
+aligned. This direction differs from aborting the historical router-on ramp.
+Do not set global mode off for a partial ramp: it ignores the on percentage and
+also suppresses shared health evidence. Keeping mode on preserves health
+collection even in the complementary static cohort; a later global evidence-off
+change needs its own evidence.
+
+No additional capacity is requested. Planning incremental vendor cost at 5% is
+about **$0.5–1/day** at the investigated volume, not a contracted bill. Measure
+fresh vendor usage, include Modulate and Soniox, and separate replay-inclusive
+paid-audio proxies from vendor invoices before expanding.
+
+## Historical production routing-off rollout (2026-10-18)
+
+The historical trial used `STT_ROUTING_MODE=off` (reverted by #22222);
+the current static expansion is defined above. Off was the independent canary's only
 routing override. Dev keeps its existing configuration. Static provider order,
 recovery, capacity rescue, account quarantine and the routing kill switch stay
 available; off does not disable fallback. No account cohort is added by this

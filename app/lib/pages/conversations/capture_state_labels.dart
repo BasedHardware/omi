@@ -14,7 +14,7 @@ import 'package:omi/l10n/app_localizations.dart';
 /// | [muted]                      | Muted                        | the device's mic is muted                      |
 /// | [reconnecting]               | Reconnecting…                | the transcription connection dropped and is being restored |
 /// | [bufferingOffline]           | Offline, buffering (· 3m)    | a custom speech endpoint is unreachable; audio is kept locally |
-/// | [transcriptionUnavailable]   | Transcriptions are unavailable, recording continues on device and will process later | the server said live transcription cannot run; the WAL keeps recording regardless |
+/// | [transcriptionUnavailable]   | Not transcribing             | the server said live transcription cannot run; the WAL keeps recording regardless — the recovery banner carries the full outage sentence |
 /// | [processing]                 | Processing                   | capture ended; the conversation is being made  |
 ///
 /// An audio-session interruption is **Paused**, not Reconnecting: nothing is reconnecting, the OS
@@ -32,8 +32,9 @@ enum CaptureDisplayState {
 }
 
 /// The one label for [state]. [bufferingFor] adds the elapsed minutes to [CaptureDisplayState.bufferingOffline].
-/// The capturing page uses the full transcription-outage sentence so the reader learns recording
-/// still continues and will be processed later; the Home card uses [captureCardCopy].
+/// [transcriptionUnavailable] is the short "Not transcribing": a heading, not the whole story — the
+/// full outage sentence (recording continues, processes later) lives only in the recovery banner
+/// and the Home card's details sheet, so one moment never states itself twice.
 String captureStateLabel(
   AppLocalizations l10n,
   CaptureDisplayState state, {
@@ -56,7 +57,7 @@ String captureStateLabel(
       final minutes = bufferingFor?.inMinutes ?? 0;
       return minutes < 1 ? l10n.captureOfflineBuffering : l10n.captureOfflineBufferingFor(minutes);
     case CaptureDisplayState.transcriptionUnavailable:
-      return l10n.transcriptionUnavailableRecordingContinues;
+      return l10n.captureNotTranscribing;
     case CaptureDisplayState.processing:
       return l10n.processing;
   }
