@@ -1,6 +1,7 @@
 import 'package:omi/models/custom_stt_config.dart';
 import 'package:omi/models/stt_provider.dart';
 import 'package:omi/services/capture/local_stt_custody.dart';
+import 'dart:async';
 import 'dart:io';
 import 'dart:convert';
 import 'dart:typed_data';
@@ -273,6 +274,99 @@ void main() {
         expect(sync.testFrames[i].payload, [i]);
         expect(sync.testFrameSynced[i], false);
       }
+    });
+  });
+
+  group('session boundary frame detach', () {
+    const root = '12345678-1234-4234-8234-123456789abc';
+
+    void feed(LocalWalSyncImpl local, int start, int count) {
+      for (var i = start; i < start + count; i++) {
+        local.onFrameCaptured(
+          WalFrame(payload: [i], syncKey: FrameSyncKey([i])),
+          captureRoot: root,
+        );
+      }
+    }
+
+    test('frames captured while a codec-change flush awaits disk keep the rotated clock', () async {
+      final persistEntered = Completer<void>();
+      final releasePersist = Completer<void>();
+      final local = LocalWalSyncImpl(
+        _MockListener(),
+        persistWals: (wals) async {
+          if (!persistEntered.isCompleted) {
+            persistEntered.complete();
+            await releasePersist.future;
+          }
+        },
+        loadWals: () async => <Wal>[],
+      );
+      addTearDown(() async {
+        if (!releasePersist.isCompleted) releasePersist.complete();
+        await local.stop();
+      });
+      feed(local, 0, 5);
+
+      final change = local.onAudioCodecChanged(BleAudioCodec.pcm16);
+      await persistEntered.future;
+      expect(
+        local.currentCodec,
+        BleAudioCodec.pcm16,
+        reason: 'the codec rotates before the flush yields to disk I/O',
+      );
+      feed(local, 10, 3);
+      releasePersist.complete();
+      await change;
+
+      expect(
+        local.testFrames.map((frame) => frame.payload).toList(),
+        [
+          [10],
+          [11],
+          [12],
+        ],
+        reason: 'frames captured mid-flush belong to the next session and are not wiped',
+      );
+      expect(local.testFrames.map((frame) => frame.sourceClockEpoch).toSet(), {1});
+      expect(local.testFrames.map((frame) => frame.sourceFramePosition).toList(), [0, 1, 2]);
+      expect(local.testFrameSynced, [false, false, false]);
+    });
+
+    test('frames captured while a stop flush awaits disk are not wiped', () async {
+      final persistEntered = Completer<void>();
+      final releasePersist = Completer<void>();
+      final local = LocalWalSyncImpl(
+        _MockListener(),
+        persistWals: (wals) async {
+          if (!persistEntered.isCompleted) {
+            persistEntered.complete();
+            await releasePersist.future;
+          }
+        },
+        loadWals: () async => <Wal>[],
+      );
+      addTearDown(() {
+        if (!releasePersist.isCompleted) releasePersist.complete();
+      });
+      feed(local, 0, 5);
+
+      final stopping = local.stop();
+      await persistEntered.future;
+      feed(local, 10, 3);
+      releasePersist.complete();
+      await stopping;
+
+      expect(
+        local.testFrames.map((frame) => frame.payload).toList(),
+        [
+          [10],
+          [11],
+          [12],
+        ],
+        reason: 'a frame emitted while the previous session stop is in flight is kept for the next one',
+      );
+      expect(local.testFrameSynced, [false, false, false]);
     });
   });
 
