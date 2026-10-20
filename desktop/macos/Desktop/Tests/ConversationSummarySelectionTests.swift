@@ -206,6 +206,20 @@ final class ConversationSummarySelectionTests: XCTestCase {
     XCTAssertEqual(section.sourceSegmentIDs, [])
   }
 
+  func testPresentableTextRepairsLegacyActionItemDebris() {
+    let segment = TranscriptSegment(
+      id: "local", backendId: "s01234", text: "Evidence.", speaker: nil, isUser: false, personId: nil,
+      start: 0, end: 1)
+    XCTAssertEqual(
+      ConversationSummarySelection.presentableText("Send the recap [s01234]", segments: [segment]),
+      "Send the recap")
+    XCTAssertEqual(
+      ConversationSummarySelection.presentableText("Speaker_00 owns the deck", segments: [segment]),
+      "owns the deck")
+    XCTAssertEqual(
+      ConversationSummarySelection.presentableText("Plain item", segments: []), "Plain item")
+  }
+
   func testPresentableSectionPreservesMarkdownExactlyWhenThereIsNoInlineCitation() {
     let segment = TranscriptSegment(
       id: "local", backendId: nil, text: "Evidence.", speaker: nil, isUser: false, personId: nil,
