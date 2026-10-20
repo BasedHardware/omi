@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "id": "FC-query-limit-before-python-filter",
+  "violated_contract": "A limit the caller reads as the first N rows after filtering and sorting must be applied after that filtering and sorting when the query has no order. Pushing the limit into an unordered query returns an arbitrary page, so rows the filter would have kept are dropped and rows the filter rejects shorten the page.",
+  "canonical_prevention": "Read a bounded superset from the unordered query and slice to the caller's limit only after the in-Python filter and sort, with a regression test whose fake streams in document-id order and honours the query limit.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_goal_context_all_active_goals.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/database/goals.py"
+  ],
+  "status": "open"
+}
