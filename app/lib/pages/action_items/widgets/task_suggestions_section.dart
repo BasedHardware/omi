@@ -41,6 +41,12 @@ class TaskSuggestionsSection extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
+                      if (item.workstreamProposal != null) ...[
+                        Text(l10n.reviewProject, style: OmiType.footnote),
+                        Text(item.workstreamProposal!.title, style: OmiType.headline),
+                        Text(item.workstreamProposal!.objective, style: OmiType.subhead),
+                        const SizedBox(height: OmiSpacing.sm),
+                      ],
                       Text(TaskSuggestionsController.description(item), style: OmiType.callout),
                       if (state.saved(item.candidateId))
                         Semantics(liveRegion: true, child: Text(l10n.sharedTasksAdded(1), style: OmiType.footnote)),

@@ -93,6 +93,21 @@ void main() {
     });
   }
 
+  testWidgets('project suggestions show their context before approving the anchor task', (tester) async {
+    final fixture = TaskDeliveryFixture()..projectSuggestion = true;
+    final provider = createProductionActionItemsProvider(send: fixture.send);
+    addTearDown(provider.dispose);
+    await provider.ensureLoaded();
+    await pump(tester, provider, const ActionItemsPage(), locale: const Locale('pt'), scale: 2);
+    expect(find.text('Project launch'), findsOneWidget);
+    expect(find.text('Share the agreed launch notes'), findsOneWidget);
+    expect(fixture.acceptCalls, 0);
+    await tester.tap(find.byKey(const ValueKey('accept_task_synthetic-candidate')));
+    await tester.pumpAndSettle();
+    expect(provider.actionItems.single.id, 'synthetic-task');
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('old desktop summary has explicit recovery; phone summaries have no second writer', (tester) async {
     final fixture = TaskDeliveryFixture();
     final provider = createProductionActionItemsProvider(send: fixture.send);

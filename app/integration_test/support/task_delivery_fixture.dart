@@ -10,6 +10,7 @@ class TaskDeliveryFixture {
   bool accepted = false;
   bool rejected = false;
   bool failHydration = false;
+  bool projectSuggestion = false;
   int acceptCalls = 0;
   int generation = 7;
 
@@ -26,8 +27,15 @@ class TaskDeliveryFixture {
         'proposed_action': 'create',
         'source_surface': 'conversation',
         'status': accepted ? 'accepted' : 'pending',
-        'subject_kind': 'task',
-        'task_change': {'description': description, 'owner': 'self'},
+        'subject_kind': projectSuggestion ? 'workstream' : 'task',
+        if (projectSuggestion)
+          'workstream_proposal': {
+            'title': 'Project launch',
+            'objective': 'Share the agreed launch notes',
+            'anchor_task': {'description': description, 'owner': 'self'},
+          }
+        else
+          'task_change': {'description': description, 'owner': 'self'},
         if (accepted) 'result_task_id': 'synthetic-task',
       };
 
