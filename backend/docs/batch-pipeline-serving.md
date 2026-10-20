@@ -591,7 +591,12 @@ left out of the sweep's counts; the chain summary reports them. Every other page
 including rows past a walk that stopped at its bound, is attempted in page
 order as before. Each walked row still takes the Redis owner claim and the
 transactional predecessor, privacy and receipt fences one at a time, so no
-owner gains concurrency. Walked async rows do not use the wake's priority
+owner gains concurrency. Every async row the sweep persists is owed a follow-up, the page's own rows as
+well as the walk's. The page row seeds its owner's walk. Later page rows of
+an owner already walked, and rows reached once the shared budget is spent, get
+a seed-only hand-off: one watermark read, nothing persisted. A seed is owed only
+if the watermark shows it advanced (a partial multipart did not), or if the
+watermark cannot be read. Owed rows do not use the wake's priority
 queue. They are held (at most 256, durable either way) until the next
 follow-up discovery pass and queued behind its page, without moving its
 rotation. Serving keeps scheduling follow-ups while any are owed, and a pass whose

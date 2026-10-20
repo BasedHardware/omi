@@ -20,7 +20,7 @@ from database.batch_pipeline_projection import ProjectionBlocked, ProjectionRepl
 from database.batch_pipeline_store import PROJECTION_ASSIGNMENT_STATES, PROJECTION_FINISH_STATES, FirestoreStore
 from utils.batch_pipeline.projection_discovery import ProjectionDiscovery
 from database import conversations as conversations_db
-from utils.batch_pipeline.contracts import WorkItem, projection_speech_spans
+from utils.batch_pipeline.contracts import ProjectionBinding, WorkItem, projection_speech_spans
 from utils.batch_pipeline.correctness_metrics import record_labels
 from utils.batch_pipeline.recovery_disposition import result_outcome
 from database.batch_pipeline_projection_claim import projection_claim
@@ -637,9 +637,20 @@ class Projector:
         return followups
 
     def _walk_owner(
-        self, owner_id: str, *, recovered: str | None, limit: int, budget_seconds: float
+        self,
+        owner_id: str,
+        *,
+        recovered: str | None,
+        limit: int,
+        budget_seconds: float,
+        seed: tuple[str, ProjectionBinding] | None = None,
     ) -> tuple[list[str], list[str]]:
-        """Returns (follow-ups, rows this walk advanced in chain order)."""
+        """Returns (follow-ups, rows this walk advanced in chain order).
+
+        ``seed`` is an async row the caller just persisted. It is owed a
+        follow-up when the watermark shows it advanced (a partial multipart
+        did not), or when the watermark cannot be read.
+        """
         from database.batch_pipeline_privacy import BatchPrivacyBlocked
 
         key = owner_key(owner_id)
@@ -647,7 +658,39 @@ class Projector:
         groups: dict[str, dict[str, None]] = {}
         first = None
         advanced: list[str] = []
-        previous = self.store.projection_watermark(key)
+
+        def failed(error: BaseException) -> None:
+            # Keep what this walk already persisted; the sweep resumes later.
+            logger.error(
+                'event=batch_projection action=owner_chain outcome=error exception_type=%s', type(error).__name__
+            )
+
+        def owe(segment_id: str, binding: ProjectionBinding) -> bool:
+            """Queue this row and its content's persisted, not-ready siblings."""
+            group = groups.get(binding.content_id)
+            if group is None:
+                group = groups[binding.content_id] = {}
+                try:
+                    for sibling in binding.segment_ids:
+                        receipt = (self.store.ref('results', sibling).get().to_dict() or {}).get('projection') or {}
+                        if receipt and receipt.get('state') != 'ready':
+                            group[sibling] = None
+                except Exception as error:
+                    group[segment_id] = None  # The persisted row is still owed.
+                    failed(error)
+                    return False
+            group[segment_id] = None
+            return True
+
+        try:
+            previous = self.store.projection_watermark(key)
+        except Exception as error:
+            if seed is not None:
+                owe(*seed)
+            failed(error)
+            return list(dict.fromkeys(sid for group in groups.values() for sid in group)), advanced
+        if seed is not None and previous == seed[0] and not owe(*seed):
+            return list(dict.fromkeys(sid for group in groups.values() for sid in group)), advanced
         for _ in range(max(1, limit)):
             if time.monotonic() >= deadline:
                 break
@@ -657,10 +700,7 @@ class Projector:
                 if segment_id is not None:
                     row = self.store.ref('results', segment_id).get().to_dict() or {}
             except Exception as error:
-                # Keep what this walk already persisted; the sweep resumes later.
-                logger.error(
-                    'event=batch_projection action=owner_chain outcome=error exception_type=%s', type(error).__name__
-                )
+                failed(error)
                 break
             if segment_id is None:
                 break
@@ -678,16 +718,15 @@ class Projector:
             except (ProjectionBlocked, BatchPrivacyBlocked):
                 break
             except Exception as error:
-                logger.error(
-                    'event=batch_projection action=owner_chain outcome=error exception_type=%s', type(error).__name__
-                )
+                failed(error)
                 break
             try:
                 watermark = self.store.projection_watermark(key)
             except Exception as error:
-                logger.error(
-                    'event=batch_projection action=owner_chain outcome=error exception_type=%s', type(error).__name__
-                )
+                # Persist succeeded but its advance is unknown: still owe it.
+                if policy.async_projection:
+                    owe(segment_id, binding)
+                failed(error)
                 break
             if watermark != segment_id:
                 break  # Busy claim or partial multipart: the sweep retries it.
@@ -696,23 +735,8 @@ class Projector:
             if policy.async_projection:
                 if segment_id == recovered:
                     first = binding.content_id
-                group = groups.get(binding.content_id)
-                if group is None:
-                    group = groups[binding.content_id] = {}
-                    try:
-                        for sibling in binding.segment_ids:
-                            receipt = (self.store.ref('results', sibling).get().to_dict() or {}).get('projection') or {}
-                            if receipt and receipt.get('state') != 'ready':
-                                group[sibling] = None
-                    except Exception as error:
-                        # The persisted row is still owed its follow-up.
-                        group[segment_id] = None
-                        logger.error(
-                            'event=batch_projection action=owner_chain outcome=error exception_type=%s',
-                            type(error).__name__,
-                        )
-                        break
-                group[segment_id] = None
+                if not owe(segment_id, binding):
+                    break
         ordered = [groups.pop(first)] if first is not None else []
         followups = list(dict.fromkeys(sid for group in ordered + list(groups.values()) for sid in group))
         return followups, advanced
@@ -762,22 +786,30 @@ class Projector:
                     'event=batch_projection action=sweep outcome=error exception_type=%s', type(error).__name__
                 )
                 continue
-            if chain and entry.get('projection_state') == 'pending' and binding.owner_id not in walked:
+            if chain and entry.get('projection_state') == 'pending':
                 # This row was assignable and passed every fence: keep walking
                 # the owner's chain now instead of waiting for the cursor to
                 # wrap. Each row still takes the owner claim and predecessor
                 # fence one at a time; nothing runs concurrently per owner.
-                if chain_deadline is None:
-                    chain_deadline = time.monotonic() + OWNER_CHAIN_SECONDS
-                remaining = chain_deadline - time.monotonic()
-                if remaining > 0:
-                    walked.add(binding.owner_id)
+                # The page row itself is owed a follow-up too. Only the first
+                # row per owner walks; later rows, or rows with no budget left,
+                # get a seed-only walk (one watermark read, persists nothing).
+                budget = 0.0
+                if binding.owner_id not in walked:
+                    if chain_deadline is None:
+                        chain_deadline = time.monotonic() + OWNER_CHAIN_SECONDS
+                    budget = max(0.0, min(OWNER_CHAIN_SECONDS, chain_deadline - time.monotonic()))
+                seed = (segment_id, binding) if policy.async_projection else None
+                if budget > 0 or seed is not None:
+                    if budget > 0:
+                        walked.add(binding.owner_id)
                     try:
                         followups, advanced = self._walk_owner(
                             binding.owner_id,
                             recovered=None,
                             limit=OWNER_CHAIN_LIMIT,
-                            budget_seconds=min(OWNER_CHAIN_SECONDS, remaining),
+                            budget_seconds=budget,
+                            seed=seed,
                         )
                         # Walked async rows are owed follow-ups even when no
                         # other async row is on either page this pass.

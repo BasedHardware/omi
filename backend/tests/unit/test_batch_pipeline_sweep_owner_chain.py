@@ -123,7 +123,10 @@ def test_continuation_budget_is_shared_across_owners_in_one_sweep(monkeypatch):
     projector._walk_owner = walk
     projector.sweep(limit=100)
     assert log.persist_order == first + second
-    assert [call.args[0] for call in walk.call_args_list] == ['owner-1']
+    walks = [call for call in walk.call_args_list if call.kwargs['budget_seconds'] > 0]
+    assert [call.args[0] for call in walks] == ['owner-1']
+    # Every other page persist is a seed-only hand-off that persists nothing.
+    assert all(call.kwargs['seed'][0] not in first[1:3] for call in walk.call_args_list)
 
 
 def test_continuation_stops_at_predecessor_fence_and_privacy_block(monkeypatch):
@@ -157,9 +160,11 @@ def test_walk_stopped_by_its_row_limit_leaves_later_page_rows_to_the_page(monkey
     walk = Mock(wraps=projector._walk_owner)
     projector._walk_owner = walk
     counts = projector.sweep()
-    # Head by the page, two by the walk, the rest in page order; one walk only.
+    # Head by the page, two by the walk, the rest in page order; one walk only,
+    # then seed-only hand-offs for the rows the page persisted itself.
     assert log.persist_order == ids
-    assert walk.call_count == 1
+    assert [call.kwargs['budget_seconds'] > 0 for call in walk.call_args_list] == [True, False, False, False]
+    assert set(projector.chain_followups) == set(ids)
     assert counts['waiting'] == 4 and log.blocked_checks == 0
 
 
@@ -368,6 +373,48 @@ def test_finish_page_contention_on_async_receipts_still_logs_the_summary(monkeyp
     with caplog.at_level('INFO', logger=projection.logger.name):
         projector_for(log).sweep()
     assert any('action=sweep outcome=summary' in record.getMessage() for record in caplog.records)
+
+
+def test_single_segment_contents_hand_off_the_page_row_too():
+    """The row the page persisted is owed, not only the rows the walk persisted."""
+    log = ResultLog()
+    ids = ['a', 'b', 'c']
+    for sid in ids:
+        log.commit(BURST, sid, sid, [sid])  # each content is one segment
+    projector = projector_for(log)
+    projector.sweep(limit=1)
+    assert log.persist_order == ids
+    assert projector.chain_followups == ids
+
+
+def test_watermark_read_failure_after_a_persist_still_hands_the_row_off():
+    log = ResultLog()
+    ids = ['a', 'b']
+    for sid in ids:
+        log.commit(BURST, sid, sid, [sid])
+    real = log.projection_watermark
+    reads = []
+
+    def flaky(key):
+        reads.append(key)
+        if log.results['b'].get('projection'):
+            raise RuntimeError('synthetic watermark outage')
+        return real(key)
+
+    log.projection_watermark = flaky
+    projector = projector_for(log)
+    projector.sweep(limit=1)
+    assert log.persist_order == ids
+    assert projector.chain_followups == ids
+
+
+def test_partial_page_persist_that_did_not_advance_is_not_handed_off():
+    log = ResultLog()
+    log.commit(BURST, 'a', 'a', ['a'])
+    projector = projector_for(log)
+    projector._persist_read = Mock()  # partial multipart: no receipt, no advance
+    projector.sweep()
+    assert projector.chain_followups == []
 
 
 def test_busy_owner_claim_blocks_the_row_and_starts_no_walk(monkeypatch, claims):
