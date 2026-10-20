@@ -40,6 +40,15 @@ class SDCardWalSyncImpl implements SDCardWalSync {
 
   /// Parses an 83-byte SD card packet: byte 3 is the frame length, frame data starts at byte 4.
   /// Returns null when the length byte is corrupted (frame would exceed the packet bounds).
+  /// Arms [duration] and cancels [previous]. A later packet or the initial 5s
+  /// arm must not leave the earlier timer running, or it fires into a transfer
+  /// that is still receiving data.
+  @visibleForTesting
+  static Timer replaceTimer(Timer? previous, Duration duration, void Function() onFire) {
+    previous?.cancel();
+    return Timer(duration, onFire);
+  }
+
   static List<int>? parseLegacyPacketFrame(List<int> value) {
     final amount = value[3];
     if (amount <= 0 || 4 + amount > value.length) {
@@ -362,8 +371,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
           timeoutTimer?.cancel();
           Logger.debug('First data received, timeout cancelled');
         }
-        timeoutTimer?.cancel();
-        timeoutTimer = Timer(const Duration(seconds: 15), () {
+        timeoutTimer = replaceTimer(timeoutTimer, const Duration(seconds: 15), () {
           if (!completer.isCompleted) {
             hasError = true;
             Logger.debug('SD card read stalled: no data for 15s');
@@ -434,7 +442,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
 
     await _writeToStorage(deviceId, fileNum, 0, offset);
 
-    timeoutTimer = Timer(const Duration(seconds: 5), () {
+    timeoutTimer = replaceTimer(timeoutTimer, const Duration(seconds: 5), () {
       if (!firstDataReceived && !completer.isCompleted) {
         hasError = true;
         final error = TimeoutException('No data received from SD card within 5 seconds');
@@ -523,8 +531,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
           timeoutTimer?.cancel();
           Logger.debug('First data received, timeout cancelled');
         }
-        timeoutTimer?.cancel();
-        timeoutTimer = Timer(const Duration(seconds: 15), () {
+        timeoutTimer = replaceTimer(timeoutTimer, const Duration(seconds: 15), () {
           if (!completer.isCompleted) {
             hasError = true;
             Logger.debug('SD card read stalled: no data for 15s');
@@ -670,7 +677,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
 
     await _writeToStorage(deviceId, fileNum, 0, offset);
 
-    timeoutTimer = Timer(const Duration(seconds: 5), () {
+    timeoutTimer = replaceTimer(timeoutTimer, const Duration(seconds: 5), () {
       if (!firstDataReceived && !completer.isCompleted) {
         hasError = true;
         final error = TimeoutException('No data received from SD card within 5 seconds');
