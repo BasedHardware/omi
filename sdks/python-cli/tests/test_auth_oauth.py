@@ -349,6 +349,54 @@ def test_exchange_firebase_token_proceeds_when_listing_fails(monkeypatch) -> Non
     assert key == "omi_dev_after_failed_list"
 
 
+@pytest.mark.parametrize(
+    "listing",
+    [
+        httpx.Response(200, text="<html>gateway</html>"),  # 2xx that is not JSON
+        httpx.Response(200, json=5),  # JSON, but not iterable
+        httpx.Response(200, json={"keys": []}),  # JSON object instead of a list
+    ],
+    ids=["not-json", "scalar", "object"],
+)
+def test_exchange_firebase_token_proceeds_when_listing_is_malformed(monkeypatch, listing) -> None:
+    """Cleanup of our own stale keys is best-effort by design: a duplicate key
+    is recoverable, a failed login is not. A 200 carrying something other than
+    a JSON list must not abort the mint any more than a transport error does."""
+    posted = []
+
+    def fake_post(self, url, **kwargs):  # noqa: ANN001
+        posted.append(url)
+        return httpx.Response(200, json={"key": "omi_dev_after_bad_list"})
+
+    monkeypatch.setattr(httpx.Client, "get", lambda self, url, **kw: listing)
+    monkeypatch.setattr(httpx.Client, "post", fake_post)
+
+    key = oauth._exchange_firebase_token_for_dev_key("https://api.test.omi.local", "tok")
+    assert key == "omi_dev_after_bad_list"
+    assert posted, "the mint request must still be sent"
+
+
+@pytest.mark.parametrize(
+    "mint",
+    [
+        httpx.Response(200, text="<html>gateway</html>"),  # 2xx that is not JSON
+        httpx.Response(200, json=["not", "an", "object"]),
+        httpx.Response(200, json="plain string"),
+    ],
+    ids=["not-json", "list", "string"],
+)
+def test_exchange_firebase_token_raises_on_malformed_mint_response(monkeypatch, mint) -> None:
+    """A mint response that is not a JSON object carrying `key` is the same
+    failure to the caller as a missing field, and must surface as the AuthError
+    this function already defines rather than a raw parse error."""
+    monkeypatch.setattr(httpx.Client, "get", lambda self, url, **kw: httpx.Response(200, json=[]))
+    monkeypatch.setattr(httpx.Client, "post", lambda self, url, **kw: mint)
+
+    with pytest.raises(AuthError) as info:
+        oauth._exchange_firebase_token_for_dev_key("https://api.test.omi.local", "tok")
+    assert "missing the api key" in str(info.value).lower()
+
+
 def test_exchange_firebase_token_raises_on_non_200(monkeypatch) -> None:
     monkeypatch.setattr(httpx.Client, "get", lambda self, url, **kw: httpx.Response(200, json=[]))
     monkeypatch.setattr(httpx.Client, "post", lambda self, url, **kw: httpx.Response(403, json={"detail": "nope"}))
