@@ -233,7 +233,9 @@ def test_prod_arguments_are_guarded(monkeypatch):
     )
     assert rc.validate_args(parse(base + ['--apply'])) == 'prod_apply_requires_train_lock_cmd'
     monkeypatch.setenv('GCP_AGENT_TIER', 'ro-prod')
-    full = base + ['--apply', '--train-lock-cmd', 'x', '--parity-cmd', 'y']
+    no_preflight = base + ['--apply', '--train-lock-cmd', 'x', '--parity-cmd', 'y']
+    assert rc.validate_args(parse(no_preflight)) == 'prod_apply_requires_preflight_cmd'
+    full = no_preflight + ['--preflight-cmd', 'z']
     assert rc.validate_args(parse(full)) == 'operator_tier_mismatch'
     monkeypatch.setenv('GCP_AGENT_TIER', 'prod-operator')
     assert rc.validate_args(parse(full)) is None
@@ -333,12 +335,15 @@ def test_full_ladder_rehearsal_with_two_injected_rollbacks():
 
     run_until(rig, 25.0)
     result = rig.tick()  # injected ordinary FAIL at 25
-    assert [d.action for d in result.decisions] == [rc.Action.ROLLBACK_ONE] * 2
+    # first-summary is a quality floor: it advanced in lockstep but a rollback never lowers it.
+    assert [d.action for d in result.decisions] == [rc.Action.ROLLBACK_ONE, rc.Action.HOLD]
+    assert result.decisions[1].detail == 'quality_floor_kept' and not result.decisions[1].page
     assert rig.percent() == 10.0
     run_until(rig, 50.0)
     result = rig.tick()  # injected data-loss FAIL at 50
-    assert [d.action for d in result.decisions] == [rc.Action.ROLLBACK_ZERO] * 2
+    assert [d.action for d in result.decisions] == [rc.Action.ROLLBACK_ZERO, rc.Action.HOLD]
     assert rig.percent() == 0.0
+    assert rig.document()['envs'][rig.env]['percents']['first-summary'] == 50.0
 
     # Two rollbacks in 24h: stopped, even after the lead re-seeds under a lock.
     rig.lead({'locked_by': 'lead'}, 'locked_by_operator')
@@ -472,15 +477,20 @@ def test_gate_unavailable_escalates_every_third_consecutive_tick():
 
 
 def test_leaving_on_requires_every_draining_precondition():
-    assert 'cap_hold_ladder_debit' in rc.DRAINING_PRECONDITIONS
+    assert {'cap_hold_ladder_debit', 'minimal_redrive_finished'} <= set(rc.DRAINING_PRECONDITIONS)
     parse = ramp_set.build_parser().parse_args
     on = {'percents': {'batch-pipeline': 100.0}, 'locked_by': None, 'legacy_sync': 'on'}
     refused = ramp_set.plan_change(parse(['--env', 'prod', '--legacy-sync', 'draining']), on)
-    assert refused == 'draining_precondition_unmet:cap_hold_ladder_debit'
+    assert refused == 'draining_precondition_unmet:cap_hold_ladder_debit,minimal_redrive_finished'
+    partial = parse(['--env', 'prod', '--legacy-sync', 'draining', '--precondition-met', 'cap_hold_ladder_debit'])
+    assert ramp_set.plan_change(partial, on) == 'draining_precondition_unmet:minimal_redrive_finished'
     assert ramp_set.plan_change(parse(['--env', 'prod', '--legacy-sync', 'dark']), None).startswith(
         'draining_precondition'
     )
-    ok = parse(['--env', 'prod', '--legacy-sync', 'draining', '--precondition-met', 'cap_hold_ladder_debit'])
+    ok = parse(
+        ['--env', 'prod', '--legacy-sync', 'draining']
+        + [arg for pid in ('cap_hold_ladder_debit', 'minimal_redrive_finished') for arg in ('--precondition-met', pid)]
+    )
     assert ramp_set.plan_change(ok, on)[0] == {'legacy_sync': 'draining'}
     # Returning to on, and draining -> dark, are never gated (rollback and progression after the gate passed).
     assert ramp_set.plan_change(parse(['--env', 'prod', '--legacy-sync', 'on']), {**on, 'legacy_sync': 'dark'})[0]
@@ -523,3 +533,195 @@ def test_controller_reads_with_the_operator_budget(tmp_path, monkeypatch):
     argv = ['--env', 'staging', '--gate-cmd', 'true', '--no-anx', '--state-file', str(tmp_path / 'STATE.md')]
     rc.main(argv, client_factory=lambda **kw: client, runner=lambda argv, timeout: (0, ''))
     assert client.timeouts and set(client.timeouts) == {store.OPERATOR_READ_TIMEOUT_SECONDS}
+
+
+# ---------------------------------------------------------------------------
+# Lessons from the 5% record-lane ramps (lessons/batch-rollout-and-staging-traps.md #2-#5).
+# ---------------------------------------------------------------------------
+
+# Every `GATE_FAIL <token>` that fleet_gate.sh's verdict() can print (workspace infra/rollout/fleet_gate.sh,
+# pinned at omi-workspace 900e3d48). The workspace's infra/rollout/test_controller_contract.py pins the same list
+# against the gate source, so a new gate verdict fails there until it is classified here.
+FLEET_GATE_VERDICT_FAIL_TOKENS = frozenset(
+    {
+        'pre_existing_debt_growing',
+        'projection_error',
+        'projection_transient_rate',
+        'unrecovered_quarantine',
+        'failed_held_duration_unknown',
+        'terminal_unrecovered_speech_unit_over_120s',
+        'failed_held_over_budget',
+        'terminal_unrecovered_speech_over_0_2pct',
+        'terminal_unrecovered_speech_unknown',
+        'projection_stalled',
+        'stuck_job_over_30m',
+        'obligation_over_15m',
+        'recovery_spend_over_0_005_per_worn_hour',
+        'recovery_spend_unknown',
+        'quarantine_projection_p95_unknown',
+        'quarantine_projection_p95_over_5m',
+        'first_summary_dispatch_contract',
+        'first_summary_completion_outlier',
+        'http_5xx_regression',
+        'timeout_incomplete',
+    }
+)
+
+
+def test_every_fleet_gate_verdict_token_acts():
+    # A verdict missing from the closed lists would HOLD as "gate unavailable" and leave a failing cohort on.
+    unclassified = {
+        t for t in FLEET_GATE_VERDICT_FAIL_TOKENS - rc.INCOMPLETE_SAMPLE_TOKENS if rc.classify_fail(t)[0] is None
+    }
+    assert unclassified == set()
+    # An unknown-size failed_held loss is data loss, like an over-budget one.
+    assert rc.classify_fail('failed_held_duration_unknown')[0] is rc.Action.ROLLBACK_ZERO
+
+
+def test_rollback_never_lowers_the_first_summary_floor():
+    out = rc.decide_all(snap(25.0), verdict('FAIL', 'http_5xx_regression', percent=25.0), now=0.0)
+    assert [(d.name, d.action, d.to_percent) for d in out] == [
+        ('batch-pipeline', rc.Action.ROLLBACK_ONE, 10.0),
+        ('first-summary', rc.Action.HOLD, 25.0),
+    ]
+    assert out[1].detail == 'quality_floor_kept' and not out[1].page
+
+
+def test_first_summary_below_the_lead_pages_on_every_lead_action():
+    s = snap(percents={'batch-pipeline': 25.0, 'first-summary': 5.0})
+    for v in (verdict(percent=25.0, hold=2 * H), verdict('FAIL', 'http_5xx_regression', percent=25.0)):
+        follower = rc.decide_all(s, v, now=0.0)[1]
+        assert (follower.action, follower.detail, follower.page) == (rc.Action.HOLD, 'follower_diverged', True)
+
+
+def test_first_summary_above_the_lead_holds_quietly():
+    s = snap(percents={'batch-pipeline': 5.0, 'first-summary': 100.0})
+    for v in (verdict(percent=5.0, hold=3 * H), verdict('FAIL', 'projection_error', percent=5.0)):
+        lead, follower = rc.decide_all(s, v, now=0.0)
+        assert lead.action is not rc.Action.HOLD
+        assert (follower.action, follower.to_percent, follower.page) == (rc.Action.HOLD, 100.0, False)
+
+
+def test_controller_never_writes_an_unseeded_or_floored_first_summary():
+    # Seeded the M3 way (first-summary at prod's 100): the ladder and both rollback kinds leave it at 100.
+    rig = Rig(script={25.0: ['GATE_FAIL http_5xx_regression'], 50.0: ['GATE_FAIL obligation_over_15m']})
+    rig.lead({'percents': {'batch-pipeline': 5.0, 'first-summary': 100.0}}, 'seed')
+    run_until(rig, 50.0)
+    rig.tick()
+    assert rig.percent() == 0.0
+    assert rig.document()['envs'][rig.env]['percents']['first-summary'] == 100.0
+    assert not any(text.startswith('PAGE') and 'follower' in text for text, _ in rig.notes)
+
+    # Absent from `_ramp`, serving uses the env default; the controller must not write the lead's value.
+    rig = Rig()
+    rig.lead({'percents': {'batch-pipeline': 5.0}}, 'seed')
+    run_until(rig, 10.0)
+    assert 'first-summary' not in rig.document()['envs'][rig.env]['percents']
+
+
+def test_ramp_set_refuses_lowering_a_quality_floor():
+    parse = ramp_set.build_parser().parse_args
+    seed = ['--env', 'prod', '--percent', 'batch-pipeline=5', '--percent', 'first-summary=5']
+    assert ramp_set.plan_change(parse(seed), None) == 'quality_floor:first-summary'
+    assert ramp_set.plan_change(parse(seed + ['--allow-quality-decrease']), None)[0] == {
+        'percents': {'batch-pipeline': 5.0, 'first-summary': 5.0}
+    }
+    ok = ['--env', 'prod', '--percent', 'batch-pipeline=5', '--percent', 'first-summary=100']
+    assert ramp_set.plan_change(parse(ok), None)[0]['percents']['first-summary'] == 100.0
+
+
+def test_preflight_blocks_advance_but_never_rollback():
+    rig = Rig(script={10.0: ['GATE_PASS', 'GATE_FAIL http_5xx_regression']})
+    rig.lead({'percents': {'batch-pipeline': 10.0, 'first-summary': 100.0}}, 'seed')
+    calls = []
+
+    def preflight(percent):
+        calls.append(percent)
+        return False, 'live_env_recovery_all_admitted'
+
+    effects = rig.effects()
+    effects.preflight = preflight
+    rig.now += 2 * H
+    result = rc.tick(rig.env, effects)
+    lead = result.decisions[0]
+    assert not result.wrote and rig.percent() == 10.0 and calls == [10.0]
+    assert (lead.action, lead.detail, lead.page) == (
+        rc.Action.HOLD,
+        'preflight:live_env_recovery_all_admitted',
+        True,
+    )
+    rig.now += 600
+    result = rc.tick(rig.env, effects)  # a FAIL rolls back without consulting the preflight
+    assert result.wrote and rig.percent() == 5.0 and calls == [10.0]
+
+
+def test_preflight_probe_reports_a_token_and_fails_closed():
+    seen = []
+
+    def runner(argv, timeout):
+        seen.append(argv)
+        return (1, 'checking\nPREFLIGHT_FAIL owner_backlog\n') if argv[-1] == '5' else (2, 'Traceback: x y z!')
+
+    probe = rc.preflight_probe(['controller_preflight.sh'], runner)
+    assert probe(5.0) == (False, 'owner_backlog')
+    assert probe(10.0) == (False, 'preflight_failed')
+    assert seen == [['controller_preflight.sh', '5'], ['controller_preflight.sh', '10']]
+    assert rc.preflight_probe(['ok'], lambda argv, timeout: (0, ''))(25.0) == (True, 'ok')
+
+
+class _FailingClient:
+    def collection(self, name):
+        raise RuntimeError('firestore unavailable')
+
+
+def _loop_main(tmp_path, monkeypatch, stop, apply=True):
+    notes = []
+
+    def runner(argv, timeout):
+        if argv[:2] == ['anx', 'note']:
+            notes.append(argv[3])
+        return 0, ''
+
+    sleeps = {'n': 0}
+
+    def fake_sleep(_seconds):
+        sleeps['n'] += 1
+        if sleeps['n'] == 4:
+            stop()
+
+    monkeypatch.setattr(rc, '_sleep', fake_sleep)
+    monkeypatch.setenv('GCP_AGENT_TIER', 'dev-operator')
+    argv = ['--env', 'staging', '--gate-cmd', 'true', '--loop', '--interval', '0']
+    argv += ['--apply'] if apply else []
+    argv += ['--state-file', str(tmp_path / 'STATE.md')]
+    code = rc.main(argv, client_factory=lambda **kw: _FailingClient(), runner=runner)
+    return code, notes
+
+
+def test_loop_pages_after_three_failed_ticks_and_when_interrupted(tmp_path, monkeypatch):
+    def interrupt():
+        raise KeyboardInterrupt
+
+    code, notes = _loop_main(tmp_path, monkeypatch, interrupt)
+    assert code == 130
+    assert [n for n in notes if 'tick failed 3 consecutive times (RuntimeError)' in n]
+    assert notes[-1].startswith('PAGE lead: ramp-controller staging stopped (interrupted)')
+
+
+def test_dry_run_loop_never_pages(tmp_path, monkeypatch):
+    def interrupt():
+        raise KeyboardInterrupt
+
+    code, notes = _loop_main(tmp_path, monkeypatch, interrupt, apply=False)
+    assert code == 130 and notes == []
+
+
+def test_loop_pages_when_terminated_and_restores_the_handler(tmp_path, monkeypatch):
+    import os
+    import signal
+
+    before = signal.getsignal(signal.SIGTERM)
+    code, notes = _loop_main(tmp_path, monkeypatch, lambda: os.kill(os.getpid(), signal.SIGTERM))
+    assert code == 128 + signal.SIGTERM
+    assert 'stopped (signal_SIGTERM)' in notes[-1]
+    assert signal.getsignal(signal.SIGTERM) is before
