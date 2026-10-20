@@ -261,6 +261,9 @@ async def accept_upload(
                     'client_device_id': client_device_id,
                     'client_platform': client_platform,
                     'conversation_id': conversation_id,
+                    # Resolved conversation/user STT language ('' when unknown).
+                    # The worker skips a Parakeet-only retry for other languages.
+                    'stt_language': language,
                 },
             )
             uri = await run_blocking(storage_executor, artifacts.stage_audio, item, frozen)

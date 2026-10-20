@@ -9,7 +9,7 @@ from typing import Any, Callable
 from utils.stt.socket import STTSocket
 from utils.stt.live_router import connecting_target
 
-from config.stt_cap_dispatch import enabled, execution_admission_enabled
+from config.stt_cap_dispatch import enabled, execution_admission_enabled, execution_admission_configured, LANES
 from config.ladder_v1 import budget_enforcement_enabled
 from utils.observability.stt_cap_dispatch import record_audio
 from utils.byok import get_byok_key
@@ -29,13 +29,18 @@ def customer_funded(provider):
 _UNRESOLVED = object()
 
 
-def funded_allowance(uid, source=None, *, usage_cache=None, subscription=_UNRESOLVED):
+def funded_allowance(uid, source=None, *, usage_cache=None, subscription=_UNRESOLVED, lane=None):
     # Streaming imports this module even with enforcement off. Load billing
     # policy only at the admission boundary, not during provider-module import.
     from utils.subscription import resolve_transcription_allowance, TranscriptionAllowance
     from utils import ladder_v1
 
-    if not enabled() and execution_admission_enabled():
+    if lane is not None:
+        if lane not in LANES:
+            raise ValueError('unknown cap dispatch lane')
+        if not execution_admission_enabled(uid, lane):
+            return TranscriptionAllowance('managed', None, 'dispatch_scope_disabled', limit_seconds=None)
+    if not enabled() and execution_admission_configured():
         # Ladder-only activation must not activate legacy monthly-seconds
         # dispatch enforcement. A missing/unreadable budget is never permission
         # to spend; match the funded resolver's fail-closed behavior.
@@ -63,14 +68,16 @@ def funded_allowance(uid, source=None, *, usage_cache=None, subscription=_UNRESO
     return resolve_transcription_allowance(uid, source=source, byok_active=False, omi_funded=True, **kwargs)
 
 
-def sync_allowed(uid: str, seconds: float = 0, provider: Any = 'unknown') -> bool:
-    if not execution_admission_enabled():
+def sync_allowed(uid: str, seconds: float = 0, provider: Any = 'unknown', *, lane: str = 'sync') -> bool:
+    if lane not in LANES:
+        raise ValueError('unknown cap dispatch lane')
+    if not execution_admission_enabled(uid, lane):
         return True
     from utils import funded_processing
 
     if not funded_processing.consent_allows(uid):
         return False
-    allowance = funded_allowance(uid)
+    allowance = funded_allowance(uid, lane=lane)
     if not allowance.managed:
         record_audio('sync', 'held', provider, seconds, allowance.reason == 'plan_allowance_exhausted')
     return allowance.managed
@@ -142,7 +149,7 @@ class LiveAdmission:
             kwargs['usage_cache'] = self.usage_cache
             if subscription is not _UNRESOLVED:
                 kwargs['subscription'] = subscription
-        allowance = await run_blocking(db_executor, funded_allowance, self.uid, self.source, **kwargs)
+        allowance = await run_blocking(db_executor, funded_allowance, self.uid, self.source, lane='live', **kwargs)
         self.failures = min(self.failures + 1, 5) if allowance.reason == 'allowance_unavailable' else 0
         self.remaining, self.reason, self.managed = allowance.remaining_seconds, allowance.reason, allowance.managed
         self.remaining_units = allowance.remaining_units
@@ -342,7 +349,9 @@ def live_provider(provider, rate_index):
     def decorate(fn):
         @wraps(fn)
         async def connect(*args, **kwargs):
-            admission = current_live_admission.get() if execution_admission_enabled() else None
+            admission = current_live_admission.get()
+            if admission is not None and not execution_admission_enabled(admission.uid, 'live'):
+                admission = None
             if admission is None:
                 return await fn(*args, **kwargs)
             rate = kwargs.get('sample_rate') or args[rate_index]

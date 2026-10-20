@@ -1067,3 +1067,34 @@ def test_review_v1_hides_v2_proposals_and_cannot_answer_them(harness):
     retry = client.post('/v2/review/items/spelling:1/answer', json={'not_sure': True})
     assert first.status_code == retry.status_code == 200
     assert first.json() == retry.json()
+
+
+@pytest.mark.parametrize('decision', ['yes', 'no'])
+def test_same_person_redirects_converge_and_do_not_reappear(harness, monkeypatch, decision):
+    client, uid, user, db = harness
+    monkeypatch.setattr(entity_pages.users, 'get_person', lambda uid, pid: {'name': 'Synthetic Sam'})
+    item = ReviewItem(
+        item_id='same_person:stale-redirect',
+        kind='same_person',
+        title='Same person?',
+        created_at=NOW,
+        same_person=SamePersonItem(
+            left=EntitySummary(entity_id='person:a', type='person', name='Sam'),
+            right=EntitySummary(entity_id='person:b', type='person', name='Samuel'),
+            reason='Same voice',
+        ),
+    )
+    user.collection('knowledge_nodes').document('person:a').set({'node_type': 'person', 'label': 'Sam'})
+    user.collection('knowledge_nodes').document('person:b').set({'node_type': 'person', 'label': 'Samuel'})
+    enqueue(uid, item)
+    assert client.get('/v2/review/items').json()['items'][0]['item_id'] == item.item_id
+    # Another question or manual merge completed after this offer was made.
+    user.collection('knowledge_nodes').document('person:b').update({'redirect_entity_id': 'person:a'})
+    response = client.post(f'/v2/review/items/{item.item_id}/answer', json={'same_person': {'decision': decision}})
+    assert response.status_code == (200 if decision == 'yes' else 409), response.text
+    if decision == 'yes':
+        assert response.json()['applied'] is False
+    row = user.collection('review_proposals').document(store.safe_id(item.item_id)).get().to_dict()
+    assert row['status'] == 'resolved'
+    assert client.get('/v2/review/items').json()['items'] == []
+    assert list(user.collection('review_changes').stream()) == []

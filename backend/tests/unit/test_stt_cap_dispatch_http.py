@@ -5,6 +5,8 @@ from unittest.mock import Mock, AsyncMock
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from tests.unit.fixtures.cap_rollout import full_cap_dispatch_rollout  # noqa: F401
+
 import pytest
 
 from routers import sync as router
@@ -204,3 +206,20 @@ def test_ladder_denied_upload_reaches_custody_without_402(client, monkeypatch, v
         assert response.json()['status'] == 'completed'
         assert router.mark_job_completed.call_args.args[1]['held_audio'] is True
     reject.assert_not_called()
+
+
+@pytest.mark.parametrize('cohort,lanes', [('', 'sync'), ('uid:other', 'sync'), ('all', 'live')])
+def test_sync_v1_intake_outside_scope_retains_unheld_wire(client, monkeypatch, cohort, lanes):
+    monkeypatch.setenv('STT_CAP_DISPATCH_COHORT', cohort)
+    monkeypatch.setenv('STT_CAP_DISPATCH_LANES', lanes)
+    monkeypatch.setattr(router, 'FAIR_USE_ENABLED', False)
+    monkeypatch.setattr(router, 'retrieve_vad_segments', Mock())
+    monkeypatch.setattr(router.users_db, 'get_user_transcription_preferences', Mock(return_value={}))
+    monkeypatch.setattr(router.users_db, 'get_user_private_cloud_sync_enabled', Mock(return_value=False))
+    monkeypatch.setattr(router, 'build_person_embeddings_cache', Mock(return_value={}))
+    monkeypatch.setattr(router, '_reprocess_merged_conversations', Mock())
+    monkeypatch.setattr(router, 'schedule_person_voice_learning_retries', Mock())
+    response = client.post('/v1/sync-local-files', files={'files': ('omi_1792152000.bin', b'synthetic')})
+    assert response.status_code == 200, response.text
+    assert 'held_audio' not in response.json()
+    router.hold_capture_if_exhausted.assert_not_called()

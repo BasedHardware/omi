@@ -18,6 +18,9 @@ LIVE_STT_FAILURE_REASONS = frozenset(
         'soniox_no_audio_teardown',
         'soniox_rotation',
         'capacity_full',
+        # The session's capture replay ring outgrew its horizon before the
+        # leg emitted; session-local, never provider capacity or failure.
+        'replay_ring_overflow',
         'allocation_rejected',
         'capability_mismatch',
         'first_text_deadline',

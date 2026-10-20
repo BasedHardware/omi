@@ -5,7 +5,7 @@ import time
 
 from database.batch_pipeline_policy import load_stage_policy
 from config.prerecorded_stt import require_provider_environment, PrerecordedSTTService
-from config.stt_cap_dispatch import enabled as cap_enabled
+from config.stt_cap_dispatch import execution_admission_enabled as cap_enabled
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from database.batch_pipeline_projection_protocol import normalized_binding
 from database.batch_pipeline_speech_redrive import SpeechRedriveStore
@@ -77,7 +77,7 @@ def redrive_one(
     _, _, spans = inspect_audio(item, audio)
     if not spans:
         raise RecoveryFailure('strict_vad', 'no_speech')
-    if not sync_allowed(uid, item.duration_seconds, 'modulate'):
+    if not sync_allowed(uid, item.duration_seconds, 'modulate', lane='batch'):
         return 'allowance_held'
     # Check deployment dependencies before spending the sole intent. No fallback
     # to Parakeet is permitted if the alternate provider is unconfigured.
@@ -116,13 +116,13 @@ def redrive_one(
         return 'failed_held'
     if payload is None:
         raise RecoveryFailure('payload_validation', 'invalid_payload')
-    if cap_enabled():
+    if cap_enabled(uid, 'batch'):
         record_audio(
             'sync',
             'accepted',
             'modulate',
             item.duration_seconds,
-            funded_allowance(uid).reason == 'plan_allowance_exhausted',
+            funded_allowance(uid, lane='batch').reason == 'plan_allowance_exhausted',
         )
     # A storage/commit exception intentionally leaves running intact. A later
     # invocation may reconcile the object, but can never call the provider again.

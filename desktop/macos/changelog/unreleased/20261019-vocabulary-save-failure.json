@@ -1,3 +1,0 @@
-{
-  "change": "Fixed custom vocabulary changes that failed to save still showing as saved; Settings now puts the list back and shows an error"
-}

@@ -39,7 +39,11 @@ sample 0 usually starts mid-utterance, and Parakeet TDT v3 then decodes nothing
 With `BATCH_PIPELINE_ASR_LEFT_CONTEXT_SECONDS` set (default 0, off until an L4
 community-1 replay qualifies it; 8 is the evaluated value), such a unit's first
 ASR window is prefixed with the contiguous predecessor of the same capture
-stream (same owner, privacy generation and conversation; gap within 1s; an
+stream (same owner and privacy generation, and the same source, client device
+and lock read from the staged unit's authenticated intake context; record units
+use their conversation. Intake's per-unit `conversation_id` is a chunk identity
+that hashes each unit's own `capture_at`, so it never links two capture spans.
+A unit with no readable intake context gets no context. Gap within 1s; an
 overlap is trimmed so audio is never replayed), starting 0.5s before the onset
 of the speech run that crosses the seam. Predecessors come from the same flight
 or a bounded process-local tail cache (`BATCH_PIPELINE_ASR_LEFT_CONTEXT_UNITS`,
