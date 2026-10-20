@@ -21,8 +21,9 @@ Guards (rejection hold):
 - the hold is evidence-scoped, not outage-scoped: only the delivery layer's
   deterministic-response classification arms it (the SSRF invalid-target
   refusal self-heals when the stored URL resolves again and arms nothing;
-  408/429 stay transient; 5xx/3xx keep the outage path), and it clears on the
-  first successful delivery;
+  408/429 stay transient; 5xx keeps the outage path; a receiver 3xx redirect
+  is deterministic like the 4xx members and arms the hold), and it clears on
+  the first successful delivery;
 - once expired, the breaker's own half-open gating admits exactly one real
   probe per recovery window — recovery stays observable;
 - the per-uid disable ladder keeps converging under the hold: the arming
@@ -441,13 +442,21 @@ class TestHoldScope:
             breaker.record_success()
 
     @pytest.mark.asyncio
-    async def test_redirect_3xx_does_not_arm_the_hold(self, delivery_env, monkeypatch):
+    @pytest.mark.parametrize('redirect_status', [301, 302, 307, 308])
+    async def test_redirect_3xx_arms_the_hold(self, delivery_env, monkeypatch, redirect_status):
+        """A redirect is a deterministic receiver answer: deliveries pin the
+        destination and never follow redirects, so a stored redirect is a
+        not-delivered answer no repeat post can change (the delivery layer
+        classifies it with the deterministic 4xx members). It arms the hold,
+        and the next delivery is a counted breaker skip."""
         breaker = _real_breaker(monkeypatch)
         try:
-            delivery_env.client.post = AsyncMock(return_value=httpx.Response(302))
+            delivery_env.client.post = AsyncMock(return_value=httpx.Response(redirect_status))
             response = await webhooks._post_dev_webhook('test_webhook', URL, retry_delays=(), dlq_uid='uid')
-            assert response.status_code == 302
-            assert breaker.allow_request() is True
+            assert response.status_code == redirect_status
+            assert breaker.allow_request() is False
+            skipped = await webhooks._post_dev_webhook('test_webhook', URL, retry_delays=())
+            assert skipped is None, 'the redirect hold makes the next delivery a counted skip'
         finally:
             breaker.record_success()
 

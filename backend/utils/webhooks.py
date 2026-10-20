@@ -56,6 +56,31 @@ def _is_deterministic_rejection(status_code: int) -> bool:
     return status_code in _DEV_WEBHOOK_NO_RETRY_STATUSES
 
 
+def _is_redirect_answer(status_code: int) -> bool:
+    """True when the receiver answered a POST with a redirect (3xx).
+
+    Deliveries pin the destination IP and set ``follow_redirects=False`` by
+    design, so a redirect is a terminal not-delivered answer from a host that
+    is up: the stored URL points somewhere else, and repeating the same POST
+    reproduces the same redirect forever. The app-webhook health path already
+    classifies 3xx this way (``record_app_webhook_failure`` routes 3xx to
+    ``_record_redirect_not_followed`` instead of the failure ladder); the
+    delivery layer applies the same determinism to its retry decision.
+    """
+    return 300 <= status_code < 400
+
+
+def _is_unretryable_receiver_answer(status_code: int) -> bool:
+    """A real receiver dial answered in a way a repeat post cannot change.
+
+    Both members share one consequence in ``_post_dev_webhook``: one dial, no
+    retry walk, and the destination's rejection hold arms so the endpoint
+    cools down instead of being re-dialed on every delivery. The per-uid
+    disable ladder keeps counting the real status for either member.
+    """
+    return _is_deterministic_rejection(status_code) or _is_redirect_answer(status_code)
+
+
 async def _record_dev_webhook_probe_failure(uid: Optional[str], wtype) -> bool:
     """Advance the developer-webhook disable counter for a delivery that was skipped.
 
@@ -223,7 +248,7 @@ async def _post_dev_webhook(
     log_url = _redact_webhook_url(webhook_url)
 
     dial_attempts = 0
-    deterministic_answer = False
+    unretryable_answer = False
     cb = get_webhook_circuit_breaker(webhook_url)
     if not cb.allow_request():
         # The URL's circuit breaker is open. Skip the whole schedule and return
@@ -272,8 +297,8 @@ async def _post_dev_webhook(
                         connect_error = exc
                         response = None
                         continue
-                    if 200 <= response.status_code < 300 or _is_deterministic_rejection(response.status_code):
-                        deterministic_answer = deterministic_answer or _is_deterministic_rejection(response.status_code)
+                    if 200 <= response.status_code < 300 or _is_unretryable_receiver_answer(response.status_code):
+                        unretryable_answer = unretryable_answer or _is_unretryable_receiver_answer(response.status_code)
                         break
                 if response is None:
                     # Every safe address failed to connect.
@@ -287,11 +312,14 @@ async def _post_dev_webhook(
                     )
                     return response
                 failure_reason = f'HTTP {response.status_code}'
-                if _is_deterministic_rejection(response.status_code):
-                    # Deterministic rejection: a repeat post cannot converge. Fall
-                    # through to the final handling below (ERROR log + DLQ) with
-                    # this response as the last one — DLQ, circuit breaker, and
-                    # auto-disable all fire off the final response unchanged.
+                if _is_unretryable_receiver_answer(response.status_code):
+                    # Deterministic receiver answer (4xx rejection, or a 3xx
+                    # redirect the pinned no-follow delivery can never
+                    # complete): a repeat post cannot converge. Fall through
+                    # to the final handling below (ERROR log + DLQ) with
+                    # this response as the last one — DLQ, circuit breaker,
+                    # and auto-disable all fire off the final response
+                    # unchanged.
                     break
         except Exception as e:
             last_response = None
@@ -307,10 +335,12 @@ async def _post_dev_webhook(
             await asyncio.sleep(delay)
 
     if last_response is not None:
-        if deterministic_answer:
+        if unretryable_answer:
             # A receiver (not the SSRF refusal — that one self-heals when the
             # stored URL becomes resolvable again and arms nothing) answered a
-            # real dial with a deterministic 4xx. Arm the breaker's rejection
+            # real dial with an answer no repeat post can change — a
+            # deterministic 4xx, or a 3xx redirect the pinned no-follow
+            # delivery can never complete. Arm the breaker's rejection
             # hold so the next delivery for any subscriber is a counted,
             # logged skip instead of another full schedule against a config
             # error that cannot heal — the per-uid disable ladder still

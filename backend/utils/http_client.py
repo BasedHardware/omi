@@ -186,16 +186,20 @@ def safe_request_targets(url: str) -> list[tuple[str, dict]]:
 _CIRCUIT_BREAKER_FAILURE_THRESHOLD = 5
 _CIRCUIT_BREAKER_RECOVERY_TIMEOUT = 30  # seconds
 _CIRCUIT_BREAKER_HALF_OPEN_MAX = 1  # probes allowed in half-open
-# A deterministic 4xx webhook answer (the transient 408/429 are excluded by the
+# A deterministic webhook answer (the transient 408/429 are excluded by the
 # delivery layer's classification) is configuration evidence, not an outage: the
-# same payload re-posted 30 seconds later gets the same answer. The outage
-# latch's 30-second half-open probe therefore re-dialed a deterministically
-# rejecting endpoint about twice a minute forever — each probe re-writing the
+# same payload re-posted 30 seconds later gets the same answer. That covers a
+# receiver's 3xx redirect too — deliveries pin the destination and never follow
+# redirects, so a stored redirect is a not-delivered answer no repeat post can
+# change. The outage latch's 30-second half-open probe therefore re-dialed a
+# deterministically rejecting endpoint about twice a minute forever — each
+# probe re-writing the
 # DLQ and logging one `delivery failed status=4xx` ERROR (prod pusher 2026-10:
 # ×58/30m status=400 and ×51/30m status=403 against one dead developer
 # endpoint). The rejection hold is a longer, evidence-specific admission block
 # on the same breaker: armed when the delivery layer reports a deterministic
-# final response, cleared by any success (endpoint or stored URL was fixed),
+# final response (4xx or 3xx), cleared by any success (endpoint or stored URL
+# was fixed),
 # expiring to one real probe per window so recovery stays observable while the
 # per-uid disable ladder keeps converging through the counted skips.
 _WEBHOOK_DETERMINISTIC_REJECTION_COOLDOWN_SECONDS = 900.0
@@ -251,8 +255,10 @@ class WebhookCircuitBreaker:
     def record_deterministic_rejection(self) -> None:
         """Arm the rejection hold with the deterministic final response's status.
 
-        Called by the delivery layer only after a final deterministic 4xx
-        (retries already skipped). The hold blocks admission for the
+        Called by the delivery layer only after a final deterministic receiver
+        answer — a 4xx rejection, or a 3xx redirect the pinned no-follow
+        delivery can never complete (retries already skipped). The hold blocks
+        admission for the
         deterministic-rejection cooldown, then leaves the breaker's own
         half-open gating to admit exactly one real probe per recovery window.
         The outage latch is not touched: an endpoint that rejects

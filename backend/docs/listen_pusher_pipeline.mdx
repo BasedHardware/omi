@@ -5030,6 +5030,17 @@ still counts through the per-uid ladder, so auto-disable keeps converging; the
 hold clears on the first successful delivery and the outage latch remains
 independent (a 5xx ramp still opens the breaker on its own evidence).
 
+Since 2026-10-20 the same determinism covers a receiver 3xx: deliveries pin
+the destination and never follow redirects, so a redirect answer is a
+not-delivered result no repeat post can change (the stored URL points
+somewhere else — the app-webhook health path already classifies 3xx as
+redirect-not-followed instead of outage evidence). A redirecting endpoint now
+takes one dial instead of the full 4-attempt schedule (no 1s/5s/30s retry
+sleeps), arms the same rejection hold, and still writes its DLQ entry and one
+terminal `delivery failed status=3xx` ERROR. The per-uid disable ladder keeps
+counting the real 3xx status — redirect handling changes dial behavior only,
+not the auto-disable policy.
+
 ### Realtime app-integration webhook transport resilience
 
 The app (third-party developer) realtime lanes — transcript segments
