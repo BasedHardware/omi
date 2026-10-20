@@ -33,6 +33,10 @@ on:
         description: 'Release version (optional)'
         required: false
         default: ''
+      expected_ancestor_sha:
+        description: 'Optional: full 40-hex SHA the deployed release must contain (advisory check only)'
+        required: false
+        default: ''
       mode:
         description: 'Workflow mode'
         required: true
@@ -581,6 +585,30 @@ jobs:
     steps:
       - name: Checkout workflow dispatch surface for composite action
         uses: actions/checkout@v7
+
+      # Advisory only: a mismatch annotates the run and records evidence in the
+      # step summary, but never blocks a deploy that already passed source
+      # admission. Operators use it to prove the release contains the commit
+      # they believe fixed the incident.
+      - name: Verify release contains expected ancestor (advisory)
+        if: github.event.inputs.expected_ancestor_sha != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_SHA: ${{ needs.firestore_readiness.outputs.admitted_sha }}
+          EXPECTED_ANCESTOR_SHA: ${{ github.event.inputs.expected_ancestor_sha }}
+        run: |
+          set +e
+          python3 backend/scripts/verify_deploy_ancestry.py \
+            --repository "$GITHUB_REPOSITORY" \
+            --release "$RELEASE_SHA" \
+            --contains "$EXPECTED_ANCESTOR_SHA" \
+            --summary-file "$GITHUB_STEP_SUMMARY"
+          ancestry_exit=$?
+          set -e
+          if [[ "$ancestry_exit" -ne 0 ]]; then
+            echo "::warning title=Deploy ancestry unverified::Release ${RELEASE_SHA} does not verifiably contain ${EXPECTED_ANCESTOR_SHA} (exit ${ancestry_exit}). The deploy continues; treat this release as unverified."
+          fi
+          exit 0
 
       - name: Deploy backend stack
         uses: ./.github/actions/deploy-backend-stack

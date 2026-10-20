@@ -1,26 +1,32 @@
-# Bounty Objective: [Bounty Proposal] Fix LocalWalSyncImpl async flush frame-buffer wipe & stale device clear on reconnect (#22912)
-Target: BasedHardware/omi Issue #22940
-URL: https://github.com/BasedHardware/omi/issues/22940
+# Bounty Objective: Bounty Proposal: Reusable Deploy Ancestry Guard & CI Pipeline Hardening ($100 - $125 USD)
+Target: BasedHardware/omi Issue #22860
+URL: https://github.com/BasedHardware/omi/issues/22860
 
 ## Issue Description
-## Scope & Problem Statement
+### Bounty Proposal: Reusable Deploy Ancestry Guard & CI Pipeline Hardening ($100 - $125 USD)
 
-In #22912, `test/unit/capture_live_recovery_test.dart` (`device reconnect finishes stopping the old session before starting the new one`) fails with `Expected: <210>`, `Actual: <200>` (losing the 10 `orphanPendant` frames emitted while the previous session stop is in flight):
+**Pull Request:** https://github.com/BasedHardware/omi/pull/21192
+**Closes Issue:** https://github.com/BasedHardware/omi/issues/20941
+**Target Maintainers:** @kodjima33 @nikpetrovic @josancamon19
 
-1. **`LocalWalSyncImpl.onAudioCodecChanged` & `stop` (`app/lib/services/wals/local_wal_sync.dart`):**
-   - `_drainPendantTail(generation)`, `_chunk(generation)`, and `_flush(generation)` are scheduled across separate `_enqueueBuffer` calls, and `_frames = []; _pendingPhoneOnly = false; _frameSynced = [];` is executed **after** `await _enqueueBuffer(() => _flush(generation))` returns.
-   - Because `onFrameCaptured` is synchronous and does not wait on `_bufferQueue`, frames arriving while `_flush(generation)` awaits disk I/O (`File.writeAsBytes` / `_saveWalsToFile`) are appended to `_frames` under the old `_codec` and `_sourceClockEpoch`, and then wiped out when `_flush` finishes and `_frames = []` runs.
-2. **`CaptureController._stopDeviceSessionBody` (`app/lib/services/capture/capture_controller.dart`):**
-   - `_stopDeviceSessionBody(cleanDevice: true)` calls `_updateRecordingDeviceBody(null)` after `await _wal.getSyncs().phone.finalizeCurrentSession()` without checking `!_deviceIdentityStale(deviceRevision)`, clobbering any newer `_recordingDevice` set by `updateRecordingDevice(pendant)` while `finalizeCurrentSession()` was awaiting disk I/O.
+#### Description
+Implements an end-to-end reusable ancestry guard and verification CLI for backend deployments as requested in #20941. Mechanically verifies whether a given release SHA actually contains the intended merge/commit SHA using GitHub's Commits Compare API (avoiding heavy git checkouts).
 
-## Deliverables & Verification
-- Fix `LocalWalSyncImpl.stop` and `LocalWalSyncImpl.onAudioCodecChanged` so `_drainPendantTailFrames`, `_chunk`, `_frames` reset, and `_codec`/`_sourceClockEpoch` rotation happen synchronously before `await _flush(generation)` yields for disk I/O.
-- Guard `_updateRecordingDeviceBody(null)` in `_stopDeviceSessionBody` with `!_deviceIdentityStale(deviceRevision)`.
-- Add deterministic unit test coverage in `app/test/unit/local_wal_sync_test.dart` verifying that frames captured while `persistWals` disk I/O is in flight during `onAudioCodecChanged` are preserved with the updated `sourceClockEpoch`.
-- **Implementation PR:** #22939 (Fixes #22912)
+#### Key Improvements Delivered
+1. **Ancestry Verification CLI (`backend/scripts/verify_deploy_ancestry.py`)**:
+   - Exit code `0` iff `<contains>` is a true ancestor of `<release>`.
+   - Defensive validation: rejects non-40-hex inputs, nil sentinels, and sanitizes authorization tokens from all diagnostic logs.
+2. **Workflow Wiring (`.github/workflows/gcp_backend_pusher.yml` & `gcp_backend.yml`)**:
+   - Integrated optional `expected_ancestor_sha` input into workflow dispatch.
+   - Non-blocking advisory warnings on verification mismatches, recording structured release metadata into `$GITHUB_STEP_SUMMARY`.
+3. **Hermetic Test Suite (`backend/tests/unit/test_verify_deploy_ancestry.py`)**:
+   - 14/14 unit tests passing hermetically with full network/API mocking.
+   - Re-verified and dismissed previous changes-requested review; confirmed `mergeable: true` with zero conflicts.
+4. **Runbook Documentation (`backend/docs/runbooks/backend-deploy-rollout-safety.md`)**:
+   - Added operator documentation on CLI usage flags, exit codes (0/1/2), and emergency release verification protocols.
 
----
-**Designated Payout Rail — EVM (Base / Arbitrum / Polygon USDC):** `0x484eD370DEd0D36e36AAD469a2AFE5D69B1A005D`
+#### Designated Payout Rail
+- **EVM (Base / Arbitrum / Polygon USDC)**: `0x2821d6003ceE245C4997Ff908029aa0116177b69`
 
 
 ## Instructions for Kuro (Autonomous Solver):
