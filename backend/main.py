@@ -26,6 +26,7 @@ from starlette.staticfiles import StaticFiles
 
 from database.google_credentials import prepare_google_credentials
 from utils.rollout_cohorts import configure_rollout_runtime
+from utils.stt_cap_cohort import refresh_stt_cap_cohort_forever
 
 prepare_google_credentials()
 install_firebase_auth_mutation_guard()
@@ -412,6 +413,7 @@ async def startup_event():
 
     app.state.messaging_runtime = await start_adapters(messaging.register_adapter)
     start_metrics_sidecar_server()
+    start_background_task(refresh_stt_cap_cohort_forever(), name='stt_cap_cohort_refresh')
     start_background_task(live_stt_health.refresh_forever(), name='live_stt_fleet_health')
     batch_pressure.start_from_env()
     app.state.batch_pipeline_serving = start_serving_from_env()
