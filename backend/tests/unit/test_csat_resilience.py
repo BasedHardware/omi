@@ -27,14 +27,24 @@ def test_fetch_config_firestore_exception_fails_open():
     assert cfg["question_threshold"] == 3
 
 
-def test_get_product_config_caches_fail_open_for_ttl():
+class _MemoryCache:
+    def __init__(self):
+        self._store = {}
+
+    def get_or_fetch(self, key, fetch, ttl=None):
+        if key not in self._store:
+            self._store[key] = fetch()
+        return self._store[key]
+
+    def invalidate(self, key):
+        self._store.pop(key, None)
+
+
+def test_get_product_config_caches_fail_open_for_ttl(monkeypatch):
+    fake_cache = _MemoryCache()
+    monkeypatch.setattr(csat_db, "get_memory_cache", lambda: fake_cache)
     mock_client = MagicMock()
     mock_client.collection.side_effect = Exception("Transient Firestore timeout")
-
-    # Clear cache before testing
-    cache = csat_db.get_memory_cache()
-    if hasattr(cache, "invalidate"):
-        cache.invalidate(csat_db._CACHE_KEY)
 
     # First call fails open and caches fallback
     cfg1 = csat_db.get_product_config(firestore_client=mock_client)
