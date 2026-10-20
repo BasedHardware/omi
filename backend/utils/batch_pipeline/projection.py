@@ -25,6 +25,8 @@ from config.batch_pipeline import (
     sweep_owner_chain_enabled,
 )
 from database.batch_pipeline_projection import ProjectionBlocked, ProjectionReplay, ProjectionStore
+from database.batch_pipeline_projection_protocol import normalized_binding
+from database.batch_pipeline_quarantine_recovery import held_candidates
 from database.batch_pipeline_store import PROJECTION_ASSIGNMENT_STATES, PROJECTION_FINISH_STATES, FirestoreStore
 from utils.batch_pipeline.projection_discovery import ProjectionDiscovery
 from utils.batch_pipeline.projection_index import ProjectionIndex
@@ -49,6 +51,8 @@ OWNER_CHAIN_SECONDS = 30.0
 OWNER_DRAIN_STEP_ROWS = 128
 # A parallel candidate lookup slower than this is redone on the chain.
 CANDIDATE_WAIT_SECONDS = 10.0
+# Held units read per partial-completion scan.
+HELD_PARTIAL_PAGE = 32
 
 
 @dataclass(frozen=True)
@@ -236,6 +240,55 @@ def publish_client_completion(binding, result: dict) -> None:
         release_job_run_lock(binding.job_id, token)
 
 
+def record_speech_step(binding, source: str, previous: float, committed: float) -> None:
+    """Fair-use speech for one durable charge step, exactly once per step."""
+    if committed <= previous:
+        return
+    from utils.fair_use import record_speech_ms
+
+    record_speech_ms(
+        binding.owner_id,
+        int(committed * 1000) - int(previous * 1000),
+        source=source,
+        # The first charge keeps the historical key; a later one is keyed by
+        # what was already charged, so each step lands once.
+        idempotency_key=binding.content_id if not previous else f'{binding.content_id}:{int(previous * 1000)}',
+        raise_on_error=True,
+    )
+
+
+def reissue_window_seconds() -> float:
+    """Re-issue a step only while its once-key is certainly live (TTL less a two-day margin)."""
+    from utils.fair_use import FAIR_USE_REDIS_RETENTION_SECONDS
+
+    return max(0.0, FAIR_USE_REDIS_RETENTION_SECONDS - 2 * 86400)
+
+
+def record_speech_steps(binding, source: str, steps, times, now: float) -> None:
+    """Re-issue every recent durable charge step; each once-key lands at most once.
+
+    A step whose Redis write was lost after its commit is repaired by any later
+    attempt, even one that charges a newer step. A step of unknown age, or older
+    than the window, is skipped: its once-key may have expired, and re-admitting
+    it would count the same speech twice (it is outside the fair-use read anyway).
+    """
+    window = reissue_window_seconds()
+    for (previous, committed), at in zip(zip(steps, steps[1:]), times):
+        if at is not None and now - at <= window:
+            record_speech_step(binding, source, previous, committed)
+
+
+def record_speech(binding, accounting: dict, now: float) -> None:
+    """Fair-use speech before an ordinary completion; after a partial only the remainder."""
+    if not accounting['completed']:
+        steps = list(accounting.get('steps') or [0.0])
+        times: list[float | None] = list(accounting.get('step_times') or [None] * (len(steps) - 1))
+        if accounting['seconds'] > steps[-1]:
+            steps.append(accounting['seconds'])
+            times.append(now)
+        record_speech_steps(binding, accounting['source'], steps, times, now)
+
+
 class Projector:
     def __init__(
         self,
@@ -270,6 +323,8 @@ class Projector:
         # Sweeps and wakes hand off from sync-pool threads while overlapping
         # reconcile passes and drains swap or extend on the event loop.
         self.handoff = threading.Lock()
+        # Resume point of the held-partial scan; a short page wraps it.
+        self.held_after: str | None = None
 
     def request_drain(self, owner_id: str) -> None:
         with self.handoff:
@@ -473,17 +528,8 @@ class Projector:
         if accounting is None:
             self.store.hold_for_quarantine(segment_id, binding, self.clock(), policy=policy)
             return None
-        if accounting['seconds'] > 0 and not accounting['completed']:
-            from utils.fair_use import record_speech_ms
-
-            with projection_phase('usage', policy):
-                record_speech_ms(
-                    binding.owner_id,
-                    int(accounting['seconds'] * 1000),
-                    source=accounting['source'],
-                    idempotency_key=binding.content_id,
-                    raise_on_error=True,
-                )
+        with projection_phase('usage', policy):
+            record_speech(binding, accounting, self.clock())
         with projection_phase('completion', policy):
             result = self.store.complete(segment_id, binding, self.clock(), accounting, policy=policy)
         if result is not None:
@@ -500,6 +546,46 @@ class Projector:
                         raise ProjectionBlocked('completion retention receipt unavailable')
                     self.store.acknowledge(sibling, binding, self.clock(), policy=policy)
         return result
+
+    def complete_held(self, binding):
+        """Complete an upload as partial once its unprojected units are all held.
+
+        No provider call, no job/intent write and no retention: held audio stays
+        for a reviewed redrive, whose ordinary completion upgrades the ledger.
+        The poll reads the partial from the ledger, so nothing is published to
+        the legacy Redis job (its fence accepts only all-success results).
+        """
+        accounting = self.store.prepare_accounting(binding, self.clock(), held=True)
+        if accounting is None:
+            return None
+        outcome = self.store.complete_partial(binding, self.clock(), accounting)
+        if outcome is None:
+            return None
+        result, (steps, times) = outcome
+        # Fair use follows the durable steps, never an uncommitted attempt. A
+        # crash before this call is repaired by the next scan or the ordinary
+        # completion, which re-issue every stored step under the same keys.
+        if not accounting['completed']:
+            record_speech_steps(binding, accounting['source'], steps, times, self.clock())
+        return result
+
+    def sweep_held(self, limit: int = HELD_PARTIAL_PAGE) -> dict[str, int]:
+        """Bounded page of held units; one partial attempt per upload."""
+        counts = {'partial': 0, 'waiting': 0, 'error': 0}
+        page = held_candidates(self.store.client, self.store.store.namespace, limit, after_id=self.held_after)
+        self.held_after = page[-1][0] if len(page) >= limit else None
+        seen = set()
+        for _, job in page:
+            try:
+                binding = normalized_binding(job['projection_binding'])
+                if (binding.owner_id, binding.content_id) in seen:
+                    continue
+                seen.add((binding.owner_id, binding.content_id))
+                counts['partial' if self.complete_held(binding) is not None else 'waiting'] += 1
+            except Exception as error:
+                counts['error'] += 1
+                logger.warning('event=batch_held_partial outcome=retry exception_type=%s', type(error).__name__)
+        return counts
 
     def assign_record_silence(self, item, binding, session, *, hint=None):
         incoming = {

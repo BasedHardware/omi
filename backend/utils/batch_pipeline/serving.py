@@ -8,6 +8,7 @@ import os
 import time
 
 from config.batch_pipeline import (
+    held_partial_enabled,
     owner_chain_projection_enabled,
     recovered_merge_release_enabled,
     recovery_dispatch_interval_seconds,
@@ -26,6 +27,8 @@ from utils.batch_pipeline.scheduler import Scheduler
 from utils.batch_pipeline.retention import cleanup_completed_artifacts
 from utils.sync.stage import current_stage
 from utils.sync import reprocess
+
+HELD_PARTIAL_INTERVAL_SECONDS = 300
 
 
 class Serving:
@@ -51,6 +54,9 @@ class Serving:
         # Optional single-owner lease for periodic maintenance (see reconcile).
         self.leader = leader
         self.merge = OrderedMerge(store, metrics=metrics)
+        # Held units change only on a recovery or operator settle: scan them
+        # at a slow cadence, not every maintenance pass.
+        self.held_partial_due = 0.0
 
     def queue(self, pool='batch'):
         return Scheduler(self.store, metrics=self.metrics, pool=pool)
@@ -157,6 +163,15 @@ class Serving:
             self.enrichment_sweep()
         if recover_quarantine and self.recovery:
             self.recovery.sweep()
+        sweep_held = getattr(self.projector, 'sweep_held', None)
+        if sweep_held is not None and time.monotonic() >= self.held_partial_due and held_partial_enabled():
+            self.held_partial_due = time.monotonic() + HELD_PARTIAL_INTERVAL_SECONDS
+            try:
+                sweep_held()
+            except Exception as error:
+                logging.getLogger(__name__).error(
+                    'event=batch_held_partial action=sweep outcome=retry exception_type=%s', type(error).__name__
+                )
         self.queue().recover(time.time())
         owners = set()
         for segment in self.store.due('result_ready', time.time(), 100):

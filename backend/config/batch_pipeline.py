@@ -330,6 +330,13 @@ def held_terminal_status_enabled() -> bool:
     return kill_switch('BATCH_PIPELINE_HELD_TERMINAL_STATUS_ENABLED')
 
 
+def held_partial_enabled() -> bool:
+    """Kill switch: an upload whose unprojected units are all held completes as partial on the ledger."""
+    from config.policy import kill_switch
+
+    return kill_switch('BATCH_PIPELINE_HELD_PARTIAL_ENABLED')
+
+
 def recovery_policy_refresh_enabled() -> bool:
     """Kill switch: a recovery-disabled snapshot with no paid intent re-resolves the setting."""
     from config.policy import kill_switch

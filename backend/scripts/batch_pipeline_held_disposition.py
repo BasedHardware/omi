@@ -107,6 +107,7 @@ def readonly_run(store, operation):
 
 def checked_job(store, sid, uid, key):
     from database.batch_pipeline_quarantine_recovery import RecoveryStore
+    from database.sync_ledger import batch_ledger_owes_held_units
 
     def check(tx):
         job, binding = RecoveryStore(store).checked(tx, sid, allow_completed_silence=True)
@@ -132,7 +133,7 @@ def checked_job(store, sid, uid, key):
         )
         require(bool(job.get('recovery', {}).get('settled_at')), 'missing_terminal_intent')
         ledger = tx.get('content', f'{uid}/{binding.content_id}')
-        require(ledger.get('status') != 'completed' and ledger.get('usage_committed_at') is None, 'completed_ledger')
+        require(batch_ledger_owes_held_units(ledger), 'completed_ledger')
         return job
 
     return readonly_run(store, check)
