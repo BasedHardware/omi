@@ -509,13 +509,13 @@
       "budget_p50_minutes": 9,
       "display_name": "Linux package \u00b7 helper smoke",
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 5,
+      "expected_runs_per_day": 5.2,
       "if": null,
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Account for upstream desktop_windows_release.yml trigger already present but absent from the inventory: prior 4 executions/day plus one forecast release-path execution. Workflow, runner, matrix, and 9-minute p50 budget are unchanged.",
+      "rationale": "Account for upstream desktop_windows_release.yml trigger already present but absent from the inventory: prior 4 executions/day plus one forecast release-path execution. Workflow, runner, matrix, and 9-minute p50 budget are unchanged. Plus ~0.2/day for the web/packages/note-shared and note citation contract triggers: the Windows renderer bundles that package from source, so its tests must run when it changes (rare; a few PRs a month).",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -527,13 +527,13 @@
       "budget_p50_minutes": 8,
       "display_name": "Windows build smoke",
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 5,
+      "expected_runs_per_day": 5.2,
       "if": null,
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Account for upstream desktop_windows_release.yml trigger already present but absent from the inventory: prior 4 executions/day plus one forecast release-path execution. Workflow, runner, matrix, and 8-minute p50 budget are unchanged.",
+      "rationale": "Account for upstream desktop_windows_release.yml trigger already present but absent from the inventory: prior 4 executions/day plus one forecast release-path execution. Workflow, runner, matrix, and 8-minute p50 budget are unchanged. Plus ~0.2/day for the web/packages/note-shared and note citation contract triggers: the Windows renderer bundles that package from source, so its tests must run when it changes (rare; a few PRs a month).",
       "reusable": null,
       "runner": "windows",
       "runner_counts": {
@@ -545,13 +545,13 @@
       "budget_p50_minutes": 7,
       "display_name": "Typecheck \u00b7 Lint \u00b7 Test",
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 5,
+      "expected_runs_per_day": 5.2,
       "if": null,
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Account for upstream desktop_windows_release.yml trigger already present but absent from the inventory: prior 4 executions/day plus one forecast release-path execution. Workflow, runner, matrix, and 7-minute p50 budget are unchanged.",
+      "rationale": "Account for upstream desktop_windows_release.yml trigger already present but absent from the inventory: prior 4 executions/day plus one forecast release-path execution. Workflow, runner, matrix, and 7-minute p50 budget are unchanged. Plus ~0.2/day for the web/packages/note-shared and note citation contract triggers: the Windows renderer bundles that package from source, so its tests must run when it changes (rare; a few PRs a month).",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -2931,7 +2931,7 @@
     "desktop-windows-ci.yml": {
       "name": "Desktop Windows CI",
       "owner": "CI maintainers",
-      "rationale": "Refresh pre-existing inventory drift: the current upstream workflow already triggers for desktop_windows_release.yml. This PR does not edit that workflow; forecast one additional execution per day per job for the existing release path, with duration budgets and global caps unchanged.",
+      "rationale": "Also triggers on web/packages/note-shared/** and contracts/note_citation_contract.json: the Windows renderer bundles @omi/note-shared from source, so its typecheck and tests must run when the package or its contract changes. Earlier: the workflow already triggered for desktop_windows_release.yml.",
       "triggers": {
         "pull_request": {
           "branches": [
@@ -2939,6 +2939,8 @@
           ],
           "paths": [
             "desktop/windows/**",
+            "web/packages/note-shared/**",
+            "contracts/note_citation_contract.json",
             ".github/workflows/desktop-windows-ci.yml",
             ".github/workflows/desktop_windows_release.yml"
           ]
@@ -2949,6 +2951,8 @@
           ],
           "paths": [
             "desktop/windows/**",
+            "web/packages/note-shared/**",
+            "contracts/note_citation_contract.json",
             ".github/workflows/desktop-windows-ci.yml",
             ".github/workflows/desktop_windows_release.yml"
           ]

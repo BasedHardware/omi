@@ -143,6 +143,14 @@ void main() {
     await shoot(tester, '3-chatgpt-connected');
   });
 
+  testWidgets('3b partial ChatGPT grant: reconnect sheet offers Disconnect', (tester) async {
+    await pump(tester, FakeAgentBackend(chatGptConnected: true, chatGptScopes: ['memories.read']));
+    await tester.tap(find.text('Reconnect'));
+    await settle(tester);
+    expect(find.byKey(const ValueKey('connect_chatgpt_disconnect')), findsOneWidget);
+    await shoot(tester, '3b-chatgpt-reconnect-sheet-disconnect');
+  });
+
   testWidgets('4 agent prompt before copy', (tester) async {
     await pump(tester, FakeAgentBackend());
     await tester.tap(find.byKey(const ValueKey('connect_agent_instinct')));

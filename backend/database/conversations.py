@@ -4196,8 +4196,14 @@ def assign_sync_conversation(
     after_assign: Callable[[Any, tuple], None] | None = None,
     retry_contention: bool = False,
     timing: bool = False,
+    defer_index: Callable[[str, str, list[str]], None] | None = None,
 ):
-    """Atomically choose, create or append a sync conversation; ``timing`` logs bounded sub-phases."""
+    """Atomically choose, create or append a sync conversation; ``timing`` logs bounded sub-phases.
+
+    ``defer_index`` takes the post-commit search/people-stats step off this
+    call: it receives the canonical and its donor lineage, and the caller
+    converges each conversation once later (``index_sync_assignment``).
+    """
     from utils.sync.assignment import assign_in_transaction, run_with_size_limit_backstop
 
     clock = SyncAssignmentClock(logger, enabled=timing)
@@ -4205,6 +4211,7 @@ def assign_sync_conversation(
     user_ref = client.collection('users').document(uid)
 
     live_candidate_ids: tuple[str, ...] = ()
+    absorbed: list[str] = []
 
     score_snapshots: dict = {}
 
@@ -4257,6 +4264,7 @@ def assign_sync_conversation(
                 invalidate=clear_client_processing,
                 full_ids=full_ids,
                 live_candidate_ids=live_candidate_ids,
+                absorbed=absorbed,
             )
         # The commit runs after this returns; remember which row it would grow.
         attempted['canonical'] = planned[0]['id']
@@ -4275,14 +4283,33 @@ def assign_sync_conversation(
                 lambda full_ids: run_sync_assignment(client, assign, full_ids, retry_contention=retry_contention),
                 lambda: attempted.get('canonical'),
             )
-        with clock.timed('index'):
-            invalidate_people_stats_cache(uid)
-            conversation = result[0]
-            clock.donors = len(conversation.get('sync_merged_from') or [])
-            for donor_id in conversation.get('sync_merged_from') or []:
-                _delete_conversation_search_index(uid, str(donor_id))
-            _sync_conversation_search_index(uid, conversation['id'])
+        conversation = result[0]
+        if defer_index is not None:
+            # The caller coalesces per conversation, so the full lineage (which
+            # retries a failed or lost donor delete) is paid once per flush.
+            clock.donors = len(absorbed)
+            defer_index(uid, conversation['id'], sorted({*(conversation.get('sync_merged_from') or []), *absorbed}))
+        else:
+            with clock.timed('index'):
+                clock.donors = len(conversation.get('sync_merged_from') or [])
+                index_sync_assignment(uid, [conversation['id']], conversation.get('sync_merged_from') or [])
     return result
+
+
+def index_sync_assignment(uid: str, conversation_ids, donor_ids) -> None:
+    """Fail-open search and people-stats convergence after sync assignment commits.
+
+    Donors are redirect tombstones and are deleted directly. Every other id is
+    converged from its current durable state, so a late or coalesced call
+    cannot index stale content or resurrect a donor.
+    """
+    invalidate_people_stats_cache(uid)
+    donors = list(dict.fromkeys(str(donor_id) for donor_id in donor_ids))
+    for donor_id in donors:
+        _delete_conversation_search_index(uid, donor_id)
+    for conversation_id in dict.fromkeys(conversation_ids):
+        if conversation_id not in donors:
+            _sync_conversation_search_index(uid, conversation_id)
 
 
 def eligible_merge_target(conversation: Optional[dict]) -> bool:

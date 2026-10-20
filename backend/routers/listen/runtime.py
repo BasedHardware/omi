@@ -57,6 +57,7 @@ from utils.metrics import BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS
 from utils.notifications import send_credit_limit_notification, send_silent_user_notification
 from utils.onboarding import OnboardingHandler
 from utils.observability.journeys import ClientJourneyAttempt
+from utils.observability.listen_close import CLOSE_FRAME_DRAIN_SECONDS, note_ws_close, record_listen_ws_close
 from utils.observability.listen_loop import ensure_loop_lag_probe
 from utils.observability.routing_cohort import RoutingCohort, current_routing_cohort
 from utils.observability.transcription import (
@@ -1274,13 +1275,43 @@ class ListenSessionRuntime:
             if error is not None:
                 raise error
 
+    async def _observe_pending_client_close(self) -> None:
+        # A sender's WebSocketDisconnect carries a synthetic 1006 whatever the peer
+        # sent, so read the queued disconnect frame for the client's real code. Data
+        # frames queue ahead of it; the receive loop has left, so they are discarded.
+        websocket = self.request.websocket
+        if (
+            getattr(self.state, 'ws_close_initiator', None) is not None
+            or getattr(self.receiver, '_receiving', False)
+            or websocket.client_state != WebSocketState.CONNECTED
+        ):
+            return
+        deadline = time.monotonic() + CLOSE_FRAME_DRAIN_SECONDS
+        while (remaining := deadline - time.monotonic()) > 0:
+            try:
+                message = await asyncio.wait_for(websocket.receive(), timeout=remaining)
+            except Exception:
+                return
+            if message.get('type') == 'websocket.disconnect':
+                note_ws_close(self.state, 'client', message.get('code', 1000))
+                return
+
+    def _cap_held_at_close(self) -> bool:
+        # Paused at onset (cap_paused) or holding denied audio mid-session (live_hold.paused).
+        receiver = getattr(self, 'receiver', None)
+        hold = getattr(receiver, 'live_hold', None)
+        return getattr(receiver, 'cap_paused', False) is True or getattr(hold, 'paused', False) is True
+
     async def _teardown(self) -> None:
         observation = getattr(self, '_no_audio_observation', None)
         if observation is not None:
             observation.close()
+        teardown_started_at = time.monotonic()
+        held_at_close = self._cap_held_at_close()
         try:
             await self._teardown_components()
         finally:
+            record_listen_ws_close(self.state, held=held_at_close, teardown_started_at=teardown_started_at)
             # Receiver finish/drain can settle an exhausted leg or admit a
             # pending paid onset. Count the complete socket after those seams.
             cohort = getattr(self, '_routing_cohort', None)
@@ -1328,9 +1359,11 @@ class ListenSessionRuntime:
             logger.error('STT finish failed type=%s', type(error).__name__)
         if not owner_persistence_blocked:
             await self._flush_usage(final=True)
+        await self._observe_pending_client_close()
         if self.request.websocket.client_state == WebSocketState.CONNECTED and not self.state.stt_terminal_failure:
             try:
                 await self.request.websocket.close(code=self.state.close_code)
+                note_ws_close(self.state, 'server', self.state.close_code)
             except Exception:
                 pass
         conversation_id = self.state.current_conversation_id

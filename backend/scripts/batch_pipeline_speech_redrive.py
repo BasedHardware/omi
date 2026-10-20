@@ -31,7 +31,7 @@ from database.batch_pipeline_store import FirestoreStore
 from utils.batch_pipeline.artifact_policy import create_artifact_store
 from utils.batch_pipeline.artifacts import ProtectionContext
 from utils.batch_pipeline.contracts import WorkItem
-from utils.batch_pipeline.recovery_disposition import inspect_audio
+from utils.batch_pipeline.recovery_disposition import inspect_audio, STAGES, REASONS
 from utils.batch_pipeline.speech_redrive import redrive_one
 from utils.executors import storage_executor
 
@@ -53,6 +53,14 @@ def paid_digest(census_digest, speech_count, paid_epoch):
             separators=(',', ':'),
         ).encode()
     ).hexdigest()
+
+
+def epoch1_failure(job):
+    """Closed stage/reason of the spent recovery. Selection pays any failed_held
+    speech unit, not only empty ASR, so the approver must see the mix."""
+    failure = (job.get('recovery') or {}).get('failure') or {}
+    stage, reason = failure.get('stage'), failure.get('reason')
+    return f'{stage}/{reason}' if stage in STAGES and reason in REASONS else 'unrecorded'
 
 
 def checked_job(store, sid, uid, key):
@@ -172,6 +180,7 @@ def main():
     )
     require(len(docs) <= 1000, 'owner_read_budget')
     selected = []
+    failures = {}
     for doc in docs:
         job = doc.to_dict() or {}
         if 0 < job.get('quarantined_at', 0) <= cutoff and (
@@ -181,6 +190,7 @@ def main():
             or job.get('speech_redrive')
         ):
             selected.append((doc.id, held.fingerprint(job)))
+            failures[doc.id] = epoch1_failure(job)
     require(len(selected) == args.expect_count, 'cohort_count_changed')
 
     units = []
@@ -203,6 +213,8 @@ def main():
         'owner_count': 1,
         'units': len(units),
         'strict_vad': dict(counts),
+        # Not in the digest: the approved census is unchanged by this report.
+        'speech_epoch1_failures': dict(Counter(failures[sid] for sid, _, decision in units if decision == 'speech')),
         'paid_epoch': args.paid_epoch,
         'source_census_sha256': census,
         'plan_sha256': digest,

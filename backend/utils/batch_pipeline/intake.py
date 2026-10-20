@@ -270,8 +270,9 @@ async def accept_upload(
             and policy.live_record_enabled
             and not target.get('uses_custom_stt')
             and user.get('private_cloud_sync_enabled', True)
-            and normalized_stt_language(target.get('language'))
-            in PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL['nvidia/parakeet-tdt-0.6b-v3']
+            # The same conversation-or-user language as the escape above: a blank
+            # conversation language must replace, not append beside provisional text.
+            and language in PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL['nvidia/parakeet-tdt-0.6b-v3']
         )
         artifacts = await run_blocking(storage_executor, artifacts_for, store)
         config = provider_config()

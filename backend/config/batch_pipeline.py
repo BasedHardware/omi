@@ -254,6 +254,37 @@ def projection_pending_page_enabled() -> bool:
     return kill_switch('BATCH_PIPELINE_PROJECTION_PENDING_PAGE_ENABLED')
 
 
+def owner_drain_enabled() -> bool:
+    """Kill switch: a per-process owner drain replaces the sweep-shared walk budget."""
+    from config.policy import kill_switch
+
+    return kill_switch('BATCH_PIPELINE_OWNER_DRAIN_ENABLED')
+
+
+def projection_index_deferred_enabled() -> bool:
+    """Kill switch: walks converge search/people-stats after the chain, once per conversation."""
+    from config.policy import kill_switch
+
+    return kill_switch('BATCH_PIPELINE_PROJECTION_INDEX_DEFERRED_ENABLED')
+
+
+PROJECTION_PREFETCH_DEFAULT = 4
+PROJECTION_PREFETCH_MAX = 8
+
+
+def projection_prefetch_depth() -> int:
+    """Ship-on read-ahead of an owner chain's immutable inputs; ``0`` is the kill switch.
+
+    Malformed or out-of-range values keep the default rather than silently
+    turning the read-ahead off.
+    """
+    try:
+        value = int(os.getenv('BATCH_PIPELINE_PROJECTION_PREFETCH', str(PROJECTION_PREFETCH_DEFAULT)))
+    except ValueError:
+        return PROJECTION_PREFETCH_DEFAULT
+    return value if 0 <= value <= PROJECTION_PREFETCH_MAX else PROJECTION_PREFETCH_DEFAULT
+
+
 WORKER_PIPELINE_DEPTH_DEFAULT = 2
 WORKER_PIPELINE_DEPTH_MAX = 4
 
@@ -306,6 +337,32 @@ def publish_concurrency() -> int:
     except ValueError:
         return 1
     return value if 1 <= value <= MAX_PUBLISH_CONCURRENCY else 1
+
+
+MERGE_HEAD_WAIT_DEFAULT = 60.0
+MERGE_HEAD_WAIT_MAX = 3600.0
+
+
+def merge_head_wait_seconds() -> float:
+    """Ship-on bounded ordered-merge head wait (David, 2026-10-20).
+
+    A row ``result_ready`` for this long commits past an earlier pending head,
+    which later appends as ``late_capture``. ``off`` or a value <= 0 is the
+    kill switch: strict capture order. Malformed or out-of-range values keep
+    the default.
+    """
+    raw = os.getenv('BATCH_PIPELINE_MERGE_HEAD_WAIT_SECONDS', '').strip().lower()
+    if not raw:
+        return MERGE_HEAD_WAIT_DEFAULT
+    if raw == 'off':
+        return 0.0
+    try:
+        value = float(raw)
+    except ValueError:
+        return MERGE_HEAD_WAIT_DEFAULT
+    if value <= 0:
+        return 0.0
+    return value if value <= MERGE_HEAD_WAIT_MAX else MERGE_HEAD_WAIT_DEFAULT
 
 
 RECOVERY_WAKE_LEASE_DEFAULT = 600

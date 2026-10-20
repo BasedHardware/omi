@@ -133,6 +133,9 @@ class SimTransaction:
     def ready_predecessor(self, owner_key: str, priority: int, segment_id: str) -> dict | None:
         return self.store.ready_predecessor(owner_key, priority, segment_id)
 
+    def first_ready_pending(self, owner_key: str) -> dict | None:
+        return self.store.first_pending(owner_key, ready_only=True)
+
     def service_frontier(self, priority: int) -> float:
         return self.store.service_frontier(priority)
 
@@ -255,10 +258,12 @@ class SimStore:
         return True
 
     # -- Query helpers --------------------------------------------------
-    def first_pending(self, owner_key: str) -> dict | None:
+    def first_pending(self, owner_key: str, *, ready_only: bool = False) -> dict | None:
         best = None
         for segment_id in self._pending_by_owner.get(owner_key, ()):
             row = self.rows[('jobs', segment_id)]
+            if ready_only and row.get('state') != 'result_ready':
+                continue
             candidate = (row['capture_at'], segment_id)
             if best is None or candidate < best:
                 best = candidate
@@ -294,6 +299,15 @@ class SimStore:
         page = ordered[:size]
         cursor = (page[-1][0], page[-1][1]) if len(page) == size else None
         return [key for _, key in page], cursor
+
+    def longest_ready_pending(self, owner_key: str) -> dict | None:
+        # Firestore excludes rows without the ordered field, and orders ties by document name.
+        rows = [
+            (row['ready_at'], segment_id)
+            for segment_id in self._pending_by_owner.get(owner_key, ())
+            if (row := self.rows[('jobs', segment_id)]).get('state') == 'result_ready' and 'ready_at' in row
+        ]
+        return deepcopy(self.rows[('jobs', min(rows)[1])]) if rows else None
 
     def service_frontier(self, priority: int) -> float:
         if priority not in (0, 1, 2):
