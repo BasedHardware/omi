@@ -12,7 +12,7 @@ import pytest
 
 from tests.unit.test_batch_pipeline_quarantine_recovery import setup, legacy_dependencies, row
 from tests.unit.test_batch_pipeline_speech_redrive import enabled
-from tests.unit.test_batch_pipeline_empty_disposition import wav, work
+from tests.unit.test_batch_pipeline_empty_disposition import wav, work, SERVING_ENV
 from database.batch_pipeline_projection_protocol import ProjectionBlocked
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from database.batch_pipeline_quarantine_recovery import RecoveryStore
@@ -154,14 +154,34 @@ def test_operator_exhausted_never_dispatches_and_replays_after_ledger_completion
     assert module.inspect_unit(store, artifacts, 'bad', binding.owner_id, key, True) == 'no_recoverable_speech'
     for _ in range(2):
         assert module.apply_one(
-            store, artifacts, 'bad', binding.owner_id, key, 'no_recoverable_speech', 'plan', True, None
+            store,
+            artifacts,
+            'bad',
+            binding.owner_id,
+            key,
+            'no_recoverable_speech',
+            'plan',
+            True,
+            None,
+            server_flags=SERVING_ENV,
         ) in {'completed', 'already_applied'}
     assert row(client)['recovery'] == old
     assert row(client)['result']['outcome'] == 'no_recoverable_speech'
     ledger = client.rows[('users', binding.owner_id, 'sync_content_ledger', binding.content_id)]
     ledger.update(status='completed')
     assert (
-        module.apply_one(store, artifacts, 'bad', binding.owner_id, key, 'no_recoverable_speech', 'plan', True, None)
+        module.apply_one(
+            store,
+            artifacts,
+            'bad',
+            binding.owner_id,
+            key,
+            'no_recoverable_speech',
+            'plan',
+            True,
+            None,
+            server_flags=SERVING_ENV,
+        )
         == 'already_applied'
     )
     alternate.assert_not_called()
@@ -179,14 +199,19 @@ def test_gpu_canary_vad_routes_without_resetting_spent_intent(setup, monkeypatch
     key = module.fingerprint(row(client))
     decision = module.inspect_unit(store, artifacts, 'bad', binding.owner_id, key, True)
     assert decision == ('canary_recovery' if speech else 'silence')
-    assert module.apply_one(store, artifacts, 'bad', binding.owner_id, key, decision, 'plan', True, 2) in {
+    assert module.apply_one(
+        store, artifacts, 'bad', binding.owner_id, key, decision, 'plan', True, 2, server_flags=SERVING_ENV
+    ) in {
         'completed',
         'recovered',
     }
     assert row(client)['recovery'] == old
     assert row(client)['result']['outcome'] == ('no_recoverable_speech' if speech else 'silence')
     assert (
-        module.apply_one(store, artifacts, 'bad', binding.owner_id, key, decision, 'plan', True, 2) == 'already_applied'
+        module.apply_one(
+            store, artifacts, 'bad', binding.owner_id, key, decision, 'plan', True, 2, server_flags=SERVING_ENV
+        )
+        == 'already_applied'
     )
     assert alternate.call_count == int(speech)
     legacy.assert_not_called()
@@ -199,7 +224,9 @@ def test_canary_recovery_success_keeps_real_words(setup, monkeypatch, legacy_dep
     module = load_operator()
     key = module.fingerprint(row(client))
     assert (
-        module.apply_one(store, artifacts, 'bad', binding.owner_id, key, 'canary_recovery', 'plan', True, 2)
+        module.apply_one(
+            store, artifacts, 'bad', binding.owner_id, key, 'canary_recovery', 'plan', True, 2, server_flags=SERVING_ENV
+        )
         == 'recovered'
     )
     assert row(client)['result']['outcome'] == 'success'
@@ -233,11 +260,22 @@ def test_operator_fences_reject_without_provider(setup, monkeypatch, legacy_depe
         row(client)['recovery']['failure']['reason'] = 'provider_failed'
         key = module.fingerprint(row(client))
     else:
-        TerminalEmptyStore(store).prepare(
+        TerminalEmptyStore(store, server_flags=SERVING_ENV).prepare(
             'bad', binding.owner_id, 'other', intent_snapshot(row(client)), 'no_recoverable_speech', True, 99
         )
     with pytest.raises((ProjectionBlocked, BatchPrivacyBlocked, module.held.Refused)):
-        module.apply_one(store, artifacts, 'bad', binding.owner_id, key, 'no_recoverable_speech', 'plan', True, None)
+        module.apply_one(
+            store,
+            artifacts,
+            'bad',
+            binding.owner_id,
+            key,
+            'no_recoverable_speech',
+            'plan',
+            True,
+            None,
+            server_flags=SERVING_ENV,
+        )
     alternate.assert_not_called()
 
 
@@ -246,7 +284,18 @@ def test_terminal_empty_releases_real_sibling_transcript_and_client_completion(s
     historical(client)
     module = load_operator()
     key = module.fingerprint(row(client))
-    module.apply_one(store, artifacts, 'bad', binding.owner_id, key, 'no_recoverable_speech', 'plan', True, None)
+    module.apply_one(
+        store,
+        artifacts,
+        'bad',
+        binding.owner_id,
+        key,
+        'no_recoverable_speech',
+        'plan',
+        True,
+        None,
+        server_flags=SERVING_ENV,
+    )
     monkeypatch.setattr('database.batch_pipeline_store.first_pending', lambda *args, **kwargs: deepcopy(row(client)))
     entry = OrderedMerge(store).commit_next(binding.owner_id, 101)
     assert entry['recovery_version'] == 1 and entry['result']['outcome'] == 'no_recoverable_speech'
@@ -311,6 +360,7 @@ def test_canary_paid_authorization_is_required_before_any_write(setup, monkeypat
             'plan',
             True,
             None,
+            server_flags=SERVING_ENV,
         )
     assert client.rows == before
     legacy.assert_not_called()
@@ -328,13 +378,33 @@ def test_operator_storage_loss_reconciles_and_counts_terminal_once(setup, monkey
     key = module.fingerprint(row(client))
     artifacts.persist_recovery_result.side_effect = TimeoutError('PRIVATE_SENTINEL')
     with pytest.raises(TimeoutError):
-        module.apply_one(store, artifacts, 'bad', binding.owner_id, key, 'no_recoverable_speech', 'plan', True, None)
+        module.apply_one(
+            store,
+            artifacts,
+            'bad',
+            binding.owner_id,
+            key,
+            'no_recoverable_speech',
+            'plan',
+            True,
+            None,
+            server_flags=SERVING_ENV,
+        )
     assert row(client)['terminal_disposition']['state'] == 'prepared'
     artifacts.find_recovery_result.return_value = 'gs://synthetic/reconciled'
     artifacts.load_result.return_value = terminal_empty_payload(5, [{'start': 1, 'end': 2}])
     for _ in range(2):
         assert module.apply_one(
-            store, artifacts, 'bad', binding.owner_id, key, 'no_recoverable_speech', 'plan', True, None
+            store,
+            artifacts,
+            'bad',
+            binding.owner_id,
+            key,
+            'no_recoverable_speech',
+            'plan',
+            True,
+            None,
+            server_flags=SERVING_ENV,
         ) in {'completed', 'already_applied'}
     meter.assert_called_once_with('no_recoverable_speech', seconds=5)
     alternate.assert_not_called()
@@ -345,7 +415,7 @@ def test_nonpaid_artifact_requires_current_token_and_recorded_disposition(setup,
 
     client, store, binding, _, _, _, old = terminal_setup(setup, monkeypatch, legacy_dependencies)
     historical(client)
-    protocol = TerminalEmptyStore(store)
+    protocol = TerminalEmptyStore(store, server_flags=SERVING_ENV)
     job = protocol.prepare(
         'bad', binding.owner_id, 'plan', intent_snapshot(row(client)), 'no_recoverable_speech', True, 100
     )
@@ -455,11 +525,11 @@ def test_skipped_oversized_padded_retry_does_not_terminal_complete_empty_recover
         from database.batch_pipeline_speech_redrive import SpeechRedriveStore
 
         with pytest.raises(ProjectionBlocked):
-            SpeechRedriveStore(store).prepare(
+            SpeechRedriveStore(store, server_flags=SERVING_ENV).prepare(
                 'bad', binding.owner_id, 'plan', job['recovery'], 101, gpu_padded_retry_empty=True
             )
         with pytest.raises(ProjectionBlocked):
-            TerminalEmptyStore(store).prepare(
+            TerminalEmptyStore(store, server_flags=SERVING_ENV).prepare(
                 'bad', binding.owner_id, 'plan', intent_snapshot(job), 'no_recoverable_speech', True, 101
             )
         module = load_operator()
@@ -537,7 +607,9 @@ def test_paid_epoch_meters_cap_audio_only_for_recognized_speech(setup, monkeypat
     meter = Mock()
     monkeypatch.setattr(speech_redrive, 'record_audio', meter)
     assert (
-        speech_redrive.redrive_one(store, artifacts, 'bad', binding.owner_id, 'plan', old, clock=lambda: 100)
+        speech_redrive.redrive_one(
+            store, artifacts, 'bad', binding.owner_id, 'plan', old, server_flags=SERVING_ENV, clock=lambda: 100
+        )
         == 'recovered'
     )
     assert row(client)['result']['outcome'] == ('no_recoverable_speech' if empty else 'success')

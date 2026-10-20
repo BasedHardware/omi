@@ -29,6 +29,22 @@ sys.modules[_SPEC.name] = train
 _SPEC.loader.exec_module(train)
 promote = train.promote
 
+# Rollout hops call the read-only PostHog capture-health check, which fails
+# closed offline. Every test runs with it green unless it patches its own;
+# CaptureHealthWiringTests and mobile_capture_health_test.py cover it.
+_CAPTURE_HEALTH_GREEN = patch.object(train, "capture_health_hold", return_value=None)
+_STORE_BUILD_LOOKUP = patch.object(train, "ios_version_build_number", return_value="1")
+
+
+def setUpModule():
+    _CAPTURE_HEALTH_GREEN.start()
+    _STORE_BUILD_LOOKUP.start()
+
+
+def tearDownModule():
+    _STORE_BUILD_LOOKUP.stop()
+    _CAPTURE_HEALTH_GREEN.stop()
+
 CREDENTIALS = {
     "APP_STORE_CONNECT_ISSUER_ID": "issuer",
     "APP_STORE_CONNECT_KEY_IDENTIFIER": "key",
@@ -1348,6 +1364,90 @@ class MainTests(unittest.TestCase):
                 self.assertEqual(train.main(["--platform", "ios", "--date", "2026-10-06"]), 0)
         ios.assert_called_once()
         android.assert_not_called()
+
+
+class CaptureHealthWiringTests(unittest.TestCase):
+    """The two exposure-expanding hops wait on capture health (mobile_capture_health.py)."""
+
+    def test_the_ios_jump_holds_on_capture_health_for_the_exact_store_build(self):
+        phased = {"attributes": {"phasedReleaseState": "ACTIVE", "startDate": "2026-01-01T00:00:00Z"}}
+        with patch.object(train, "ios_phased_release", return_value=phased), patch.object(
+            train, "ios_version_build_number", return_value="1360"
+        ) as lookup, patch.object(train, "capture_health_hold", return_value="more than 2x the previous build") as hold:
+            should, reason = train.ios_phased_release_should_complete(
+                "live-id", now=datetime(2026, 1, 1, 13, tzinfo=timezone.utc)
+            )
+        self.assertFalse(should)
+        self.assertIn("held on capture health: more than 2x the previous build", reason)
+        lookup.assert_called_once_with("live-id")
+        hold.assert_called_once_with("ios", build="1360")
+
+    def test_the_ios_jump_inside_its_window_never_queries_capture_health(self):
+        phased = {"attributes": {"phasedReleaseState": "ACTIVE", "startDate": "2026-01-01T00:00:00Z"}}
+        with patch.object(train, "ios_phased_release", return_value=phased), patch.object(
+            train, "capture_health_hold"
+        ) as hold:
+            should, _ = train.ios_phased_release_should_complete(
+                "x", now=datetime(2026, 1, 1, 5, tzinfo=timezone.utc)
+            )
+        self.assertFalse(should)
+        hold.assert_not_called()
+
+    def test_an_unreadable_store_build_holds_the_jump(self):
+        phased = {"attributes": {"phasedReleaseState": "ACTIVE", "startDate": "2026-01-01T00:00:00Z"}}
+        with patch.object(train, "ios_phased_release", return_value=phased), patch.object(
+            train, "ios_version_build_number", return_value=None
+        ), patch.object(train, "capture_health_hold", return_value="no readable build number") as hold:
+            should, _ = train.ios_phased_release_should_complete("x", now=datetime(2026, 1, 1, 13, tzinfo=timezone.utc))
+        self.assertFalse(should)
+        hold.assert_called_once_with("ios", build=None)
+
+    def test_the_store_build_lookup_reads_the_version_build_relationship(self):
+        _STORE_BUILD_LOOKUP.stop()
+        self.addCleanup(_STORE_BUILD_LOOKUP.start)
+        response = io.BytesIO(json.dumps({"data": {"type": "builds", "id": "b", "attributes": {"version": "1417"}}}).encode())
+        with patch.object(train, "_asc_rest_token", return_value="jwt"), patch.object(
+            train.urllib.request, "urlopen", return_value=response
+        ) as urlopen:
+            self.assertEqual(train.ios_version_build_number("v-1"), "1417")
+        self.assertTrue(urlopen.call_args.args[0].full_url.endswith("/v1/appStoreVersions/v-1/build"))
+        with patch.object(train, "_asc_rest_token", side_effect=train.TrainError("no key")), redirect_stdout(io.StringIO()):
+            self.assertIsNone(train.ios_version_build_number("v-1"))
+        for body in ({"data": {"type": "builds", "id": "b"}}, {"data": {"attributes": "x"}}, {"data": None}, ["x"]):
+            response = io.BytesIO(json.dumps(body).encode())
+            with patch.object(train, "_asc_rest_token", return_value="jwt"), patch.object(
+                train.urllib.request, "urlopen", return_value=response
+            ), redirect_stdout(io.StringIO()):
+                self.assertIsNone(train.ios_version_build_number("v-1"), body)
+
+    def test_an_android_hop_holds_in_place_on_capture_health(self):
+        client = Mock()
+        staged = {"name": STALE_RECEIPT_NAME, "versionCodes": ["1340"], "status": "inProgress", "userFraction": 0.10}
+        tracks = {
+            "internal": {"track": "internal", "releases": []},
+            "alpha": {"track": "alpha", "releases": []},
+            "production": {"track": "production", "releases": [staged]}}
+        with patch.object(promote, "play_edit", return_value=(client, "edit")), patch.object(
+            promote, "play_track", side_effect=lambda c, e, name: tracks[name]
+        ), patch.object(train, "capture_health_hold", return_value="capture wedge users above 50/day") as hold:
+            summary = train.run_android(dry_run=False, release_date="2026-10-06")
+        self.assertEqual(summary, "android=staged 1.0.554 1340 @10% held on capture health (capture wedge users above 50/day)")
+        hold.assert_called_once_with("android", build="1340")
+        client.edits().tracks().update.assert_not_called()
+        client.edits().commit.assert_not_called()
+
+    def test_capture_health_hold_logs_and_returns_the_verdict(self):
+        verdict = train.capture_health.Verdict(True, "no PostHog key")
+        _CAPTURE_HEALTH_GREEN.stop()
+        try:
+            with patch.object(train.capture_health, "check_rollout", return_value=verdict), redirect_stdout(io.StringIO()) as out:
+                self.assertEqual(train.capture_health_hold("ios", build="1360"), "no PostHog key")
+            ok = train.capture_health.Verdict(False, "capture health ok")
+            with patch.object(train.capture_health, "check_rollout", return_value=ok), redirect_stdout(io.StringIO()):
+                self.assertIsNone(train.capture_health_hold("ios", build="1360"))
+        finally:
+            _CAPTURE_HEALTH_GREEN.start()
+        self.assertIn("ios capture health: no PostHog key", out.getvalue())
 
 
 class AscKeyNormalizationTest(unittest.TestCase):

@@ -1,3 +1,0 @@
-{
-  "change": "Your Omi keeps recording after a network change or a reconnect during sync, and recordings waiting to sync upload on their own instead of waiting for a restart"
-}
