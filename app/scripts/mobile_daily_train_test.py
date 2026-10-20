@@ -35,6 +35,9 @@ CREDENTIALS = {
     "APP_STORE_CONNECT_PRIVATE_KEY": "secret",
 }
 
+# A staged release whose observation window closed long ago: the ladder may hop it.
+STALE_RECEIPT_NAME = "1.0.554 (gate 2026-10-06-1015)"
+
 
 def version(id_: str, number: str, state: str) -> dict:
     return {"id": id_, "attributes": {"versionString": number, "appStoreState": state, "appVersionState": state}}
@@ -426,6 +429,45 @@ class RunIOSTests(unittest.TestCase):
         release.assert_called_once_with("pend", "1.0.554")
         self.assertEqual(summary, "ios=blocked: released approved 1.0.554 (phased rollout attached)")
         self.assertEqual([c for c in asc.calls if c[:2] == ("review-submissions", "cancel")], [])
+
+    def _pending_asc(self):
+        pending = version("pend", "1.0.554", "PENDING_DEVELOPER_RELEASE")
+        return FakeASC(
+            live_responses(
+                states={"PENDING_DEVELOPER_RELEASE": [pending]},
+                builds={"1.0.554": [build("b1335", "1335"), build("b1334", "1334")]},
+                extra={("builds", "app-store-version"): None},
+            )
+        )
+
+    def test_an_already_attached_phased_rollout_still_releases_the_approved_version(self):
+        # The train's own submit attaches the phased rollout, so Apple rejects
+        # the re-attach as a duplicate; the read-back proves it is there.
+        asc = self._pending_asc()
+        with patch.object(promote.subprocess, "run"), patch.object(
+            train, "ios_phased_release_should_complete", return_value=(False, "no phased release")
+        ), patch.object(train, "ios_phased_release_paused", return_value=False), patch.object(
+            train, "_attach_phased_release", side_effect=train.TrainError("HTTP 409 duplicate")
+        ), patch.object(
+            train, "ios_phased_release", return_value={"id": "ph1", "attributes": {"phasedReleaseState": "INACTIVE"}}
+        ) as read_back, patch.object(train, "_release_approved_version") as release:
+            summary = train.run_ios(dry_run=False, release_date="2026-10-06", asc=asc)
+        read_back.assert_called_once_with("pend")
+        release.assert_called_once_with("pend", "1.0.554")
+        self.assertEqual(summary, "ios=blocked: released approved 1.0.554 (phased rollout attached)")
+
+    def test_a_failed_attach_without_a_phased_rollout_never_releases(self):
+        asc = self._pending_asc()
+        with patch.object(promote.subprocess, "run"), patch.object(
+            train, "ios_phased_release_should_complete", return_value=(False, "no phased release")
+        ), patch.object(train, "ios_phased_release_paused", return_value=False), patch.object(
+            train, "_attach_phased_release", side_effect=train.TrainError("HTTP 500")
+        ), patch.object(train, "ios_phased_release", return_value=None), patch.object(
+            train, "_release_approved_version"
+        ) as release:
+            with self.assertRaisesRegex(train.TrainError, "not attached to approved 1.0.554"):
+                train.run_ios(dry_run=False, release_date="2026-10-06", asc=asc)
+        release.assert_not_called()
 
     def test_a_paused_brake_defers_releasing_the_approved_version(self):
         pending = version("pend", "1.0.554", "PENDING_DEVELOPER_RELEASE")
@@ -819,7 +861,7 @@ class AndroidTests(unittest.TestCase):
 
     def test_ladder_promotes_staged_release_one_hop_per_green_day(self):
         client = Mock()
-        staged = {"name": "1.0.554 (1340)", "versionCodes": ["1340"], "status": "inProgress", "userFraction": 0.05}
+        staged = {"name": STALE_RECEIPT_NAME, "versionCodes": ["1340"], "status": "inProgress", "userFraction": 0.05}
         tracks = {"internal": self.internal, "alpha": self.alpha, "production": {"track": "production", "releases": [staged]}}
         with tempfile.TemporaryDirectory() as tmp:
             release = Path(tmp) / "1.0.554.json"
@@ -838,7 +880,7 @@ class AndroidTests(unittest.TestCase):
 
     def test_ladder_completes_at_the_top(self):
         client = Mock()
-        staged = {"name": "1.0.554 (1340)", "versionCodes": ["1340"], "status": "inProgress", "userFraction": 0.50}
+        staged = {"name": STALE_RECEIPT_NAME, "versionCodes": ["1340"], "status": "inProgress", "userFraction": 0.50}
         tracks = {"internal": self.internal, "alpha": self.alpha, "production": {"track": "production", "releases": [staged]}}
         with tempfile.TemporaryDirectory() as tmp:
             release = Path(tmp) / "1.0.554.json"
@@ -879,7 +921,7 @@ class AndroidTests(unittest.TestCase):
 
     def test_ladder_keeps_hopping_while_a_newer_candidate_waits(self):
         client = Mock()
-        staged = {"name": "1.0.554 (1340)", "versionCodes": ["1340"], "status": "inProgress", "userFraction": 0.05}
+        staged = {"name": STALE_RECEIPT_NAME, "versionCodes": ["1340"], "status": "inProgress", "userFraction": 0.05}
         newer_internal = {
             "track": "internal",
             "releases": [{"name": "1.0.555 (1350)", "versionCodes": ["1350"], "status": "completed"}],
@@ -903,7 +945,7 @@ class AndroidTests(unittest.TestCase):
     def test_ladder_hop_reuses_the_notes_play_already_holds(self):
         client = Mock()
         staged = {
-            "name": "1.0.554 (1340)",
+            "name": STALE_RECEIPT_NAME,
             "versionCodes": ["1340"],
             "status": "inProgress",
             "userFraction": 0.05,
@@ -976,28 +1018,69 @@ class AndroidTests(unittest.TestCase):
         self.assertEqual(body["releases"][0]["userFraction"], 0.10)
         client.edits().commit.assert_called_once()
 
-    def test_a_receipt_free_name_advances_freely(self):
+    def test_a_receipt_free_name_is_stamped_and_held_not_hopped(self):
+        # A rollout renamed in Play Console, or one in flight from before
+        # receipts existed, has no proof of when it reached its fraction. It
+        # gets a receipt at the same fraction and waits out the window.
+        for advance_only in (False, True):
+            with self.subTest(advance_only=advance_only):
+                client = Mock()
+                staged = {
+                    "name": "1.0.554 (1340)",
+                    "versionCodes": ["1340"],
+                    "status": "inProgress",
+                    "userFraction": 0.05,
+                    "releaseNotes": [{"language": "en-US", "text": "Shipped text"}],
+                }
+                tracks = {
+                    "internal": self.internal,
+                    "alpha": self.alpha,
+                    "production": {"track": "production", "releases": [staged]},
+                }
+                with patch.object(promote, "play_edit", return_value=(client, "edit")), patch.object(
+                    promote, "play_track", side_effect=lambda c, e, name: tracks[name]
+                ), patch.object(train, "ensure_release_notes") as ensure_notes:
+                    summary = train.run_android(dry_run=False, release_date="2026-10-06", advance_only=advance_only)
+                self.assertEqual(summary, "android=staged 1.0.554 1340 @5% (no gate receipt; stamped, holding 4h)")
+                body = client.edits().tracks().update.call_args.kwargs["body"]
+                self.assertEqual(body["releases"][0]["status"], "inProgress")
+                self.assertEqual(body["releases"][0]["userFraction"], 0.05)
+                self.assertRegex(body["releases"][0]["name"], r"^1\.0\.554 \(gate \d{4}-\d{2}-\d{2}-\d{4}\)$")
+                self.assertEqual(body["releases"][0]["releaseNotes"], [{"language": "en-US", "text": "Shipped text"}])
+                ensure_notes.assert_not_called()
+
+    def test_the_stamp_holds_the_next_run(self):
+        # The stamped name is what Play hands back next time: inside the window it holds.
         client = Mock()
-        staged = {
-            "name": "1.0.554 (1340)",
-            "versionCodes": ["1340"],
-            "status": "inProgress",
-            "userFraction": 0.05,
-            "releaseNotes": [{"language": "en-US", "text": "Shipped text"}],
-        }
+        staged = {"name": "1.0.554 (1340)", "versionCodes": ["1340"], "status": "inProgress", "userFraction": 0.05,
+                  "releaseNotes": [{"language": "en-US", "text": "Shipped text"}]}
         tracks = {"internal": self.internal, "alpha": self.alpha, "production": {"track": "production", "releases": [staged]}}
         with patch.object(promote, "play_edit", return_value=(client, "edit")), patch.object(
             promote, "play_track", side_effect=lambda c, e, name: tracks[name]
-        ), patch.object(train, "ensure_release_notes") as ensure_notes:
+        ):
+            train.run_android(dry_run=False, release_date="2026-10-06")
+            staged["name"] = client.edits().tracks().update.call_args.kwargs["body"]["releases"][0]["name"]
+            client.reset_mock()
             summary = train.run_android(dry_run=False, release_date="2026-10-06")
-        self.assertEqual(summary, "android=staged 1.0.554 1340 @10%")
-        body = client.edits().tracks().update.call_args.kwargs["body"]
-        self.assertRegex(body["releases"][0]["name"], r"^1\.0\.554 \(gate \d{4}-\d{2}-\d{2}-\d{4}\)$")
+        self.assertTrue(summary.endswith("window 4h)"), summary)
+        client.edits().tracks().update.assert_not_called()
+
+    def test_a_receipt_free_dry_run_reports_the_stamp_without_writing(self):
+        client = Mock()
+        staged = {"name": "1.0.554 (1340)", "versionCodes": ["1340"], "status": "inProgress", "userFraction": 0.10,
+                  "releaseNotes": [{"language": "en-US", "text": "Shipped text"}]}
+        tracks = {"internal": self.internal, "alpha": self.alpha, "production": {"track": "production", "releases": [staged]}}
+        with patch.object(promote, "play_edit", return_value=(client, "edit")), patch.object(
+            promote, "play_track", side_effect=lambda c, e, name: tracks[name]
+        ):
+            summary = train.run_android(dry_run=True, release_date="2026-10-06")
+        self.assertEqual(summary, "android=dry-run:staged-stamp 1.0.554 1340 @10% (no gate receipt; would stamp and hold)")
+        client.edits().tracks().update.assert_not_called()
 
     def test_ladder_hop_retains_every_apk_code(self):
         client = Mock()
         staged = {
-            "name": "1.0.554 (1340)",
+            "name": STALE_RECEIPT_NAME,
             "versionCodes": ["1340", "1339"],
             "status": "inProgress",
             "userFraction": 0.05,
@@ -1016,7 +1099,7 @@ class AndroidTests(unittest.TestCase):
 
     def test_ladder_dry_run_validates_the_notes_fallback(self):
         client = Mock()
-        staged = {"name": "1.0.554 (1340)", "versionCodes": ["1340"], "status": "inProgress", "userFraction": 0.05}
+        staged = {"name": STALE_RECEIPT_NAME, "versionCodes": ["1340"], "status": "inProgress", "userFraction": 0.05}
         tracks = {"internal": self.internal, "alpha": self.alpha, "production": {"track": "production", "releases": [staged]}}
         with patch.object(promote, "play_edit", return_value=(client, "edit")), patch.object(
             promote, "play_track", side_effect=lambda c, e, name: tracks[name]
@@ -1030,7 +1113,7 @@ class AndroidTests(unittest.TestCase):
         # require_notes raises PromotionError, which main() does not catch —
         # the ladder path must convert it so TRAIN SUMMARY reports the failure.
         client = Mock()
-        staged = {"name": "1.0.554 (1340)", "versionCodes": ["1340"], "status": "inProgress", "userFraction": 0.05}
+        staged = {"name": STALE_RECEIPT_NAME, "versionCodes": ["1340"], "status": "inProgress", "userFraction": 0.05}
         tracks = {"internal": self.internal, "alpha": self.alpha, "production": {"track": "production", "releases": [staged]}}
         with patch.object(promote, "play_edit", return_value=(client, "edit")), patch.object(
             promote, "play_track", side_effect=lambda c, e, name: tracks[name]
