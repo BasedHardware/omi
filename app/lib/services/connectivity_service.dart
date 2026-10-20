@@ -2,6 +2,7 @@ import 'package:omi/env/physical_qualification.dart';
 import 'dart:async';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:flutter/foundation.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/env/environment_profile.dart';
 import 'package:internet_connection_checker_plus/internet_connection_checker_plus.dart';
@@ -26,6 +27,14 @@ class ConnectivityService {
   final _connectionChangeController = StreamController<bool>.broadcast();
   Stream<bool> get onConnectionChange => _connectionChangeController.stream;
 
+  /// Fires when the set of active network interfaces changes while a network
+  /// remains usable (wifi -> cellular handover, a new wifi). [onConnectionChange]
+  /// stays silent for those: the phone never reported offline, yet every open
+  /// socket and upload on the old interface is dead.
+  final _networkChangeController = StreamController<void>.broadcast();
+  Stream<void> get onNetworkChange => _networkChangeController.stream;
+  String? _networkSignature;
+
   bool _isConnected = true;
   bool get isConnected => _isConnected;
   bool _isInitialized = false;
@@ -34,6 +43,7 @@ class ConnectivityService {
     if (_isInitialized) return;
 
     final connectivityResult = await _connectivity.checkConnectivity();
+    _networkSignature = networkSignature(connectivityResult);
     if (connectivityResult.contains(ConnectivityResult.none)) {
       _isConnected = false;
     } else {
@@ -49,12 +59,22 @@ class ConnectivityService {
     _connectivitySubscription?.cancel();
     _internetSubscription?.cancel();
     _connectionChangeController.close();
+    _networkChangeController.close();
   }
 
+  /// Order-independent identity of the active interfaces.
+  @visibleForTesting
+  static String networkSignature(List<ConnectivityResult> result) =>
+      (result.map((r) => r.name).toList()..sort()).join(',');
+
   void _handleConnectivityChange(List<ConnectivityResult> result) {
+    final signature = networkSignature(result);
+    final changed = _networkSignature != null && signature != _networkSignature;
+    _networkSignature = signature;
     if (result.contains(ConnectivityResult.mobile) ||
         result.contains(ConnectivityResult.wifi) ||
         result.contains(ConnectivityResult.ethernet)) {
+      if (changed && !_networkChangeController.isClosed) _networkChangeController.add(null);
       _internetConnection.hasInternetAccess.then(_updateConnectionState);
       _internetSubscription ??= _internetConnection.onStatusChange.listen(_handleInternetStatusChange);
       return;

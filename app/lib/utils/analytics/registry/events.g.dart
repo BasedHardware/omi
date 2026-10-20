@@ -2939,3 +2939,33 @@ final class OnboardingWebviewFallback extends RegisteredEvent {
   @override
   Map<String, Object> get properties => {"reason": reason.wireName};
 }
+
+enum CaptureRecoveryObservedKind {
+  captureStartSkipped("capture_start_skipped"),
+  captureStartRedriven("capture_start_redriven"),
+  pendantAudioOrphaned("pendant_audio_orphaned"),
+  transferPassTimedOut("transfer_pass_timed_out");
+  const CaptureRecoveryObservedKind(this.wireName);
+  final String wireName;
+}
+
+enum CaptureRecoveryObservedTrigger {
+  syncPass("sync_pass"),
+  passEnded("pass_ended"),
+  appResumed("app_resumed"),
+  orphanAudio("orphan_audio"),
+  periodic("periodic"),
+  other("other");
+  const CaptureRecoveryObservedTrigger(this.wireName);
+  final String wireName;
+}
+
+final class CaptureRecoveryObserved extends RegisteredEvent {
+  const CaptureRecoveryObserved({required this.kind, required this.trigger});
+  final CaptureRecoveryObservedKind kind;
+  final CaptureRecoveryObservedTrigger trigger;
+  @override
+  String get wireName => "Capture Recovery Observed";
+  @override
+  Map<String, Object> get properties => {"kind": kind.wireName, "trigger": trigger.wireName};
+}

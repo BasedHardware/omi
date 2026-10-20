@@ -49,11 +49,17 @@ final class OmiBleManager: NSObject {
     /// Discovered services per peripheral, keyed by peripheral UUID.
     private var discoveredServices: [String: [CBService]] = [:]
 
-    /// Pending read completions keyed by "peripheralUuid:serviceUuid:charUuid".
-    private var readCompletions: [String: (Result<FlutterStandardTypedData, Error>) -> Void] = [:]
-
-    /// Pending write completions keyed by "peripheralUuid:serviceUuid:charUuid".
-    private var writeCompletions: [String: (Result<Void, Error>) -> Void] = [:]
+    /// Pending GATT read/write completions, FIFO per "peripheralUuid:serviceUuid:charUuid".
+    /// A second request on the same characteristic queues behind the first instead of
+    /// overwriting it, and every request fails after `gattOperationTimeout`.
+    private struct PendingGattOperation<T> {
+        let id: UInt64
+        let completion: (Result<T, Error>) -> Void
+    }
+    private var readCompletions: [String: [PendingGattOperation<FlutterStandardTypedData>]] = [:]
+    private var writeCompletions: [String: [PendingGattOperation<Void>]] = [:]
+    private var nextGattOperationId: UInt64 = 0
+    static let gattOperationTimeout: TimeInterval = 10
 
     private struct NotificationRequest {
         let characteristic: CBCharacteristic
@@ -565,7 +571,17 @@ final class OmiBleManager: NSObject {
         }
 
         let key = "\(peripheralUuid):\(serviceUuid):\(characteristicUuid)".lowercased()
-        readCompletions[key] = completion
+        nextGattOperationId &+= 1
+        let operationId = nextGattOperationId
+        readCompletions[key, default: []].append(PendingGattOperation(id: operationId, completion: completion))
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.gattOperationTimeout) { [weak self] in
+            guard let self, var queue = self.readCompletions[key],
+                  let index = queue.firstIndex(where: { $0.id == operationId }) else { return }
+            let pending = queue.remove(at: index)
+            self.readCompletions[key] = queue.isEmpty ? nil : queue
+            NSLog("[OmiBle] ble_op_timeout read \(key)")
+            pending.completion(.failure(PigeonError(code: "TIMEOUT", message: "Characteristic read timed out", details: nil)))
+        }
 
         peripherals[peripheralUuid]?.readValue(for: characteristic)
     }
@@ -586,7 +602,17 @@ final class OmiBleManager: NSObject {
         let writeType: CBCharacteristicWriteType = characteristic.properties.contains(.write) ? .withResponse : .withoutResponse
 
         if writeType == .withResponse {
-            writeCompletions[key] = completion
+            nextGattOperationId &+= 1
+            let operationId = nextGattOperationId
+            writeCompletions[key, default: []].append(PendingGattOperation(id: operationId, completion: completion))
+            DispatchQueue.main.asyncAfter(deadline: .now() + Self.gattOperationTimeout) { [weak self] in
+                guard let self, var queue = self.writeCompletions[key],
+                      let index = queue.firstIndex(where: { $0.id == operationId }) else { return }
+                let pending = queue.remove(at: index)
+                self.writeCompletions[key] = queue.isEmpty ? nil : queue
+                NSLog("[OmiBle] ble_op_timeout write \(key)")
+                pending.completion(.failure(PigeonError(code: "TIMEOUT", message: "Characteristic write timed out", details: nil)))
+            }
         }
 
         peripherals[peripheralUuid]?.writeValue(data.data, for: characteristic, type: writeType)
@@ -1391,13 +1417,13 @@ final class OmiBleManager: NSObject {
         // Clean up pending completions
         let completionKeys = readCompletions.keys.filter { $0.hasPrefix(peripheralUuid.lowercased()) }
         for key in completionKeys {
-            readCompletions[key]?(.failure(PigeonError(code: "DISCONNECTED", message: "Peripheral disconnected", details: nil)))
-            readCompletions.removeValue(forKey: key)
+            let pending = readCompletions.removeValue(forKey: key) ?? []
+            pending.forEach { $0.completion(.failure(PigeonError(code: "DISCONNECTED", message: "Peripheral disconnected", details: nil))) }
         }
         let writeKeys = writeCompletions.keys.filter { $0.hasPrefix(peripheralUuid.lowercased()) }
         for key in writeKeys {
-            writeCompletions[key]?(.failure(PigeonError(code: "DISCONNECTED", message: "Peripheral disconnected", details: nil)))
-            writeCompletions.removeValue(forKey: key)
+            let pending = writeCompletions.removeValue(forKey: key) ?? []
+            pending.forEach { $0.completion(.failure(PigeonError(code: "DISCONNECTED", message: "Peripheral disconnected", details: nil))) }
         }
     }
 }
@@ -1721,8 +1747,9 @@ extension OmiBleManager: CBPeripheralDelegate {
         let key = "\(uuid):\(serviceUuid):\(charUuid)".lowercased()
 
         // Handle pending read completion
-        if let completion = readCompletions[key] {
-            readCompletions.removeValue(forKey: key)
+        if var queue = readCompletions[key], !queue.isEmpty {
+            let completion = queue.removeFirst().completion
+            readCompletions[key] = queue.isEmpty ? nil : queue
             if let error = error {
                 completion(.failure(error))
             } else {
@@ -1805,8 +1832,9 @@ extension OmiBleManager: CBPeripheralDelegate {
 
         let key = "\(uuid):\(fullUuidString(service.uuid)):\(fullUuidString(characteristic.uuid))".lowercased()
 
-        if let completion = writeCompletions[key] {
-            writeCompletions.removeValue(forKey: key)
+        if var queue = writeCompletions[key], !queue.isEmpty {
+            let completion = queue.removeFirst().completion
+            writeCompletions[key] = queue.isEmpty ? nil : queue
             if let error = error {
                 completion(.failure(error))
             } else {

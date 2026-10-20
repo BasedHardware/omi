@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/services/wals/recording_transfer_coordinator.dart';
+import 'package:omi/services/wals/sync_wake_scope.dart';
 
 void main() {
   group('RecordingTransferCoordinator', () {
@@ -97,18 +98,103 @@ void main() {
       expect(harness.coordinator.nextCooldownAt, DateTime.utc(2026, 1, 1, 0, 0, 5));
     });
 
-    test('backgrounding cancels a scheduled foreground cooldown wake', () async {
+    test('a scheduled cooldown wake still runs after the app is backgrounded', () async {
       final harness = _TransferHarness()..drainFails = true;
       addTearDown(harness.dispose);
 
       await harness.coordinator.wake(WakeTrigger.startup);
       final scheduled = harness.scheduledCooldowns.single;
       harness.coordinator.setForeground(false);
+      harness.drainFails = false;
       scheduled.callback();
       await _settle();
 
-      expect(harness.drainPasses, 1);
+      expect(harness.reconcilePasses, 2, reason: 'the retry is no longer dropped in the background');
+      expect(harness.liveCaptureDrainPasses, 1);
       expect(harness.coordinator.nextCooldownAt, isNull);
+    });
+
+    test('background failures keep retrying, then stop after a bounded streak', () async {
+      final harness = _TransferHarness()..drainFails = true;
+      addTearDown(harness.dispose);
+      harness.coordinator.setForeground(false);
+
+      await harness.coordinator.wake(WakeTrigger.watchdog);
+      for (var i = 0; i < 10 && harness.scheduledCooldowns.isNotEmpty; i++) {
+        harness.scheduledCooldowns.removeAt(0).callback();
+        await _settle();
+      }
+      expect(harness.scheduledCooldowns, isEmpty);
+      expect(harness.reconcilePasses, 7, reason: 'first pass plus six background retries');
+    });
+
+    test('a network handover that never reported offline wakes a transfer pass', () async {
+      final harness = _TransferHarness();
+      addTearDown(harness.dispose);
+
+      harness.coordinator.setForeground(false);
+      harness.network.add(null);
+      await _settle();
+
+      expect(harness.reconcilePasses, 1);
+      expect(harness.retryBudgetResets, 1);
+      expect(harness.liveCaptureDrainPasses, 1);
+    });
+
+    test('the watchdog wakes a backlog pass only while recordings are pending', () async {
+      final harness = _TransferHarness();
+      addTearDown(harness.dispose);
+      harness.coordinator.setForeground(false);
+
+      harness.coordinator.watchdogTick();
+      await _settle();
+      expect(harness.reconcilePasses, 0);
+
+      harness.pendingWork = true;
+      harness.coordinator.watchdogTick();
+      await _settle();
+      expect(harness.reconcilePasses, 1);
+      expect(harness.discoveryPasses, 1, reason: 'a watchdog pass is a backlog pass, even in the background');
+      expect(harness.drainPasses, 1);
+    });
+
+    test('a hung pass is abandoned at its time limit, releasing the capture fence and later wakes', () async {
+      final hang = Completer<void>();
+      final timedOut = <WakeTrigger>[];
+      var discoveries = 0;
+      final coordinator = RecordingTransferCoordinator(
+        reconcile: () async {},
+        discover: () {
+          discoveries++;
+          return discoveries == 1 ? hang.future : Future<void>.value();
+        },
+        refreshPending: () async {},
+        drain: () async => const RecordingTransferDrainResult.skipped(),
+        autoUploadEnabled: () => true,
+        passTimeLimit: const Duration(milliseconds: 40),
+        fencedPassTimeLimit: const Duration(milliseconds: 20),
+        onPassTimedOut: (trigger, _) => timedOut.add(trigger),
+        scheduleCooldown: (_, __) {},
+      );
+      addTearDown(coordinator.dispose);
+
+      final fenced = coordinator.wake(WakeTrigger.periodic);
+      await _settle();
+      expect(SyncWakeScope.syncOnly, true);
+      expect(coordinator.wake(WakeTrigger.userRetry), same(fenced), reason: 'later wakes join the stuck pass');
+      await fenced;
+      expect(timedOut, [WakeTrigger.periodic]);
+      expect(SyncWakeScope.syncOnly, false);
+      await coordinator.waitUntilIdle();
+      expect(discoveries, 2, reason: 'the joined user retry runs once the stuck pass is abandoned');
+      expect(coordinator.hasInFlight, false);
+    });
+
+    test('only the OS periodic window fences live capture', () async {
+      for (final trigger in WakeTrigger.values) {
+        expect(RecordingTransferCoordinator.fencesLiveCapture(trigger), trigger == WakeTrigger.periodic,
+            reason: '$trigger');
+      }
     });
 
     test('an in-flight drain finishes after the screen turns off (#5221)', () async {
@@ -449,6 +535,8 @@ class _TransferHarness {
       drainLiveCapture: _drainLiveCapture,
       autoUploadEnabled: () => _autoUploadEnabled,
       connectivityChanges: connectivity.stream,
+      networkChanges: network.stream,
+      hasPendingWork: () => pendingWork,
       initiallyConnected: true,
       clock: () => DateTime.utc(2026, 1, 1),
       scheduleCooldown: (delay, callback) => scheduledCooldowns.add(_ScheduledCooldown(delay, callback)),
@@ -462,6 +550,8 @@ class _TransferHarness {
 
   final bool _autoUploadEnabled;
   final StreamController<bool> connectivity = StreamController<bool>.broadcast(sync: true);
+  final StreamController<void> network = StreamController<void>.broadcast(sync: true);
+  bool pendingWork = false;
   final List<String> backlog;
   final List<String> drainedWalIds;
   final List<_ScheduledCooldown> scheduledCooldowns = [];
@@ -560,5 +650,6 @@ class _TransferHarness {
   Future<void> dispose() async {
     coordinator.dispose();
     await connectivity.close();
+    await network.close();
   }
 }

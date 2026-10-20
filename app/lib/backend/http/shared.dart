@@ -798,6 +798,14 @@ Future<http.MultipartRequest> _buildMultipartRequest({
 
 typedef UploadProgressCallback = void Function(int bytesSent, int totalBytes, double speedKBps);
 
+/// The upload send has a header timeout, but the body read had none: a socket
+/// that dies after the headers would hold the upload lane (and its transfer
+/// pass) forever. Bodies here are small JSON acknowledgements.
+const multipartBodyReadTimeout = Duration(minutes: 2);
+
+Future<http.Response> _readMultipartBody(http.StreamedResponse response) =>
+    http.Response.fromStream(response).timeout(multipartBodyReadTimeout);
+
 Future<http.Response> makeMultipartApiCall({
   required String url,
   required List<File> files,
@@ -828,7 +836,7 @@ Future<http.Response> makeMultipartApiCall({
     );
 
     var streamedResponse = await _sendMultipartWithProgress(request, onUploadProgress);
-    var response = await http.Response.fromStream(streamedResponse);
+    var response = await _readMultipartBody(streamedResponse);
 
     if (requireAuthCheck && response.statusCode == 401) {
       response = await refreshAndReplayAfter401(
@@ -847,7 +855,7 @@ Future<http.Response> makeMultipartApiCall({
             namedFiles: namedFiles,
           );
           streamedResponse = await _sendMultipartWithProgress(request, onUploadProgress);
-          return http.Response.fromStream(streamedResponse);
+          return _readMultipartBody(streamedResponse);
         },
       );
     }
@@ -901,7 +909,7 @@ Future<http.Response> makeMultipartApiCallUnpooled({
 
     var streamedResponse = await client.send(request).timeout(const Duration(minutes: 10));
     ApiEdgeThrottleTelemetry.instance.observe(request, streamedResponse);
-    var response = await http.Response.fromStream(streamedResponse);
+    var response = await _readMultipartBody(streamedResponse);
 
     if (requireAuthCheck && response.statusCode == 401) {
       response = await refreshAndReplayAfter401(
@@ -921,7 +929,7 @@ Future<http.Response> makeMultipartApiCallUnpooled({
           HttpPoolManager.stampRequestTime(request);
           streamedResponse = await client.send(request).timeout(const Duration(minutes: 10));
           ApiEdgeThrottleTelemetry.instance.observe(request, streamedResponse);
-          return http.Response.fromStream(streamedResponse);
+          return _readMultipartBody(streamedResponse);
         },
       );
     }

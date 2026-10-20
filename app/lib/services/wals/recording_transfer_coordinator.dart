@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
+
 import 'package:omi/utils/logger.dart';
 import 'package:omi/services/wals/sync_wake_scope.dart';
 
@@ -17,7 +19,13 @@ enum WakeTrigger {
   dataStalled,
   cooldownElapsed,
   userRetry,
+
+  /// Periodic in-process wake while recordings wait to upload. Wake sources
+  /// are all event-driven otherwise, and a missed event stranded rows for hours.
+  watchdog,
 }
+
+typedef RecordingTransferPassTimedOut = void Function(WakeTrigger trigger, Duration limit);
 
 /// Result reported by the production drain seam.
 ///
@@ -59,9 +67,10 @@ typedef RecordingTransferKeepAlive = Future<void> Function();
 
 /// The single owner for recording recovery.
 ///
-/// Foreground, device reconnect, and periodic wakes discover and drain backlog.
-/// Background wakes run at most two serial passes, without retry timers, and
-/// backlog wakes fence live capture. A running pass keeps its Android transfer
+/// Foreground, device reconnect, watchdog and periodic wakes discover and drain
+/// backlog. Background wakes run at most two serial passes plus bounded retries;
+/// only the OS periodic window fences live capture, and every pass has a hard
+/// time limit. A running pass keeps its Android transfer
 /// keep-alive until completion or cancellation so screen-off cannot kill
 /// BLE/cloud file sync (#5221). It knows no provider or transport details.
 class RecordingTransferCoordinator {
@@ -79,6 +88,12 @@ class RecordingTransferCoordinator {
     RecordingTransferKeepAlive? onTransferStarted,
     RecordingTransferKeepAlive? onTransferFinished,
     RecordingTransferPass? onConnectivityRestored,
+    Stream<void>? networkChanges,
+    bool Function()? hasPendingWork,
+    RecordingTransferPassTimedOut? onPassTimedOut,
+    this.passTimeLimit = defaultPassTimeLimit,
+    this.fencedPassTimeLimit = defaultFencedPassTimeLimit,
+    this.watchdogInterval = defaultWatchdogInterval,
   })  : _reconcile = reconcile,
         _discover = discover,
         _refreshPending = refreshPending,
@@ -89,9 +104,12 @@ class RecordingTransferCoordinator {
         _scheduleCooldown = scheduleCooldown,
         _onTransferStarted = onTransferStarted,
         _onTransferFinished = onTransferFinished,
-        _onConnectivityRestored = onConnectivityRestored {
+        _onConnectivityRestored = onConnectivityRestored,
+        _hasPendingWork = hasPendingWork,
+        _onPassTimedOut = onPassTimedOut {
     _configured = true;
-    _listenToConnectivity(connectivityChanges, initiallyConnected);
+    _listenToConnectivity(connectivityChanges, initiallyConnected, networkChanges);
+    _armWatchdog();
   }
 
   RecordingTransferCoordinator._singleton()
@@ -101,7 +119,25 @@ class RecordingTransferCoordinator {
         _drain = _skippedDrain,
         _drainLiveCapture = _skippedDrain,
         _autoUploadEnabled = _disabled,
-        _clock = DateTime.now;
+        _clock = DateTime.now,
+        passTimeLimit = defaultPassTimeLimit,
+        fencedPassTimeLimit = defaultFencedPassTimeLimit,
+        watchdogInterval = defaultWatchdogInterval;
+
+  /// Hard limit on one pass. A pendant storage pull of a full ring is ~50 min.
+  static const defaultPassTimeLimit = Duration(minutes: 60);
+
+  /// Hard limit on a pass that fences live capture (OS-granted periodic window).
+  static const defaultFencedPassTimeLimit = Duration(minutes: 10);
+  static const defaultWatchdogInterval = Duration(minutes: 10);
+
+  /// Background retries stop after this many consecutive failures; the
+  /// watchdog keeps waking at [watchdogInterval] after that.
+  static const _maxBackgroundRetries = 6;
+
+  final Duration passTimeLimit;
+  final Duration fencedPassTimeLimit;
+  final Duration watchdogInterval;
 
   static final RecordingTransferCoordinator instance = RecordingTransferCoordinator._singleton();
 
@@ -127,8 +163,12 @@ class RecordingTransferCoordinator {
   RecordingTransferKeepAlive? _onTransferStarted;
   RecordingTransferKeepAlive? _onTransferFinished;
   RecordingTransferPass? _onConnectivityRestored;
+  bool Function()? _hasPendingWork;
+  RecordingTransferPassTimedOut? _onPassTimedOut;
 
   StreamSubscription<bool>? _connectivitySubscription;
+  StreamSubscription<void>? _networkChangeSubscription;
+  Timer? _watchdogTimer;
   Timer? _cooldownTimer;
   Future<void>? _inFlight;
   WakeTrigger? _pendingWake;
@@ -191,6 +231,9 @@ class RecordingTransferCoordinator {
     RecordingTransferKeepAlive? onTransferStarted,
     RecordingTransferKeepAlive? onTransferFinished,
     RecordingTransferPass? onConnectivityRestored,
+    Stream<void>? networkChanges,
+    bool Function()? hasPendingWork,
+    RecordingTransferPassTimedOut? onPassTimedOut,
   }) {
     _reconcile = reconcile;
     _discover = discover;
@@ -201,8 +244,11 @@ class RecordingTransferCoordinator {
     _onTransferStarted = onTransferStarted ?? _onTransferStarted;
     _onTransferFinished = onTransferFinished ?? _onTransferFinished;
     _onConnectivityRestored = onConnectivityRestored ?? _onConnectivityRestored;
+    _hasPendingWork = hasPendingWork ?? _hasPendingWork;
+    _onPassTimedOut = onPassTimedOut ?? _onPassTimedOut;
     _configured = true;
-    _listenToConnectivity(connectivityChanges, initiallyConnected);
+    _listenToConnectivity(connectivityChanges, initiallyConnected, networkChanges);
+    _armWatchdog();
 
     final queued = _wakeBeforeConfigured;
     _wakeBeforeConfigured = null;
@@ -211,7 +257,7 @@ class RecordingTransferCoordinator {
     }
   }
 
-  void _listenToConnectivity(Stream<bool>? connectivityChanges, bool initiallyConnected) {
+  void _listenToConnectivity(Stream<bool>? connectivityChanges, bool initiallyConnected, Stream<void>? networkChanges) {
     _connectivitySubscription?.cancel();
     _wasConnected = initiallyConnected;
     _connectivitySubscription = connectivityChanges?.listen((isConnected) {
@@ -221,27 +267,39 @@ class RecordingTransferCoordinator {
         unawaited(wake(WakeTrigger.connectivityRestored));
       }
     });
+    // A wifi -> cellular handover never reports offline, but uploads bound to
+    // the old interface are dead and new ones may now succeed.
+    _networkChangeSubscription?.cancel();
+    _networkChangeSubscription = networkChanges?.listen((_) {
+      if (_wasConnected) unawaited(wake(WakeTrigger.connectivityRestored));
+    });
   }
 
-  /// Stops foreground-only retry timers while the app is backgrounded. A
-  /// bounded set of data-plane wakes may still run one live-capture-only pass.
+  void _armWatchdog() {
+    _watchdogTimer?.cancel();
+    _watchdogTimer = null;
+    if (_hasPendingWork == null) return;
+    _watchdogTimer = Timer.periodic(watchdogInterval, (_) => watchdogTick());
+  }
+
+  /// Wakes a pass while work is pending and none is running. A pass that
+  /// overruns is ended by its own time limit, never by this tick.
+  @visibleForTesting
+  void watchdogTick() {
+    if (_inFlight != null || !_autoUploadEnabled()) return;
+    final pending = _hasPendingWork;
+    if (pending == null || !pending()) return;
+    unawaited(wake(WakeTrigger.watchdog));
+  }
+
+  /// Records the foreground state. Retries and the cooldown-end wake keep
+  /// running in the background while the process is alive (bounded by
+  /// [_maxBackgroundRetries]); a coalesced extra pass stays foreground-only (#5221).
   void setForeground(bool isForeground) {
     _foreground = isForeground;
     if (!isForeground) {
-      // An already-running pass must finish, but a coalesced extra pass is a
-      // new discovery/drain and stays foreground-only (#5221).
       _pendingWake = null;
-      if (_inFlight == null) {
-        _cancelForegroundTimers();
-      }
     }
-  }
-
-  void _cancelForegroundTimers() {
-    _cooldownGeneration++;
-    _cooldownTimer?.cancel();
-    _cooldownTimer = null;
-    nextCooldownAt = null;
   }
 
   /// Coalesces concurrent events into a single extra serial pass. Five wakes
@@ -275,7 +333,6 @@ class RecordingTransferCoordinator {
       _inFlight = null;
       if (!_foreground) {
         _pendingWake = null;
-        _cancelForegroundTimers();
         return;
       }
       final lateWake = _pendingWake;
@@ -292,7 +349,9 @@ class RecordingTransferCoordinator {
       trigger == WakeTrigger.deviceConnected ||
       trigger == WakeTrigger.connectivityRestored ||
       trigger == WakeTrigger.socketReconnected ||
-      trigger == WakeTrigger.dataStalled;
+      trigger == WakeTrigger.dataStalled ||
+      trigger == WakeTrigger.cooldownElapsed ||
+      trigger == WakeTrigger.watchdog;
 
   WakeTrigger _preferWake(WakeTrigger? existing, WakeTrigger incoming) {
     if (existing == null) return incoming;
@@ -301,7 +360,11 @@ class RecordingTransferCoordinator {
 
   int _wakePriority(WakeTrigger trigger) => switch (trigger) {
         WakeTrigger.userRetry => 3,
-        WakeTrigger.periodic || WakeTrigger.deviceConnected || WakeTrigger.connectivityRestored => 2,
+        WakeTrigger.periodic ||
+        WakeTrigger.deviceConnected ||
+        WakeTrigger.connectivityRestored ||
+        WakeTrigger.watchdog =>
+          2,
         WakeTrigger.socketReconnected || WakeTrigger.dataStalled => 1,
         _ => 0,
       };
@@ -331,18 +394,39 @@ class RecordingTransferCoordinator {
     }
   }
 
+  /// Only the OS-granted periodic window fences live capture. A pendant
+  /// reconnect must never wait on its own sync pass to start capturing: a
+  /// connected, unsubscribed legacy pendant discards its audio.
+  static bool fencesLiveCapture(WakeTrigger trigger) => trigger == WakeTrigger.periodic;
+
   Future<void> _runPass(WakeTrigger trigger) async {
-    if (trigger == WakeTrigger.periodic || trigger == WakeTrigger.deviceConnected) {
-      await SyncWakeScope.run(() => _runPassBody(trigger));
-    } else {
-      await _runPassBody(trigger);
+    final fenced = fencesLiveCapture(trigger);
+    final limit = fenced ? fencedPassTimeLimit : passTimeLimit;
+    // The limit sits inside the scope, so a hung stage cannot hold the capture
+    // fence or `_inFlight` (which every later wake joins) past it.
+    Future<void> body() => _runPassBody(trigger).timeout(limit);
+    try {
+      if (fenced) {
+        await SyncWakeScope.run(body);
+      } else {
+        await body();
+      }
+    } on TimeoutException {
+      Logger.warning('RecordingTransferCoordinator: $trigger pass exceeded ${limit.inMinutes} min; abandoning it');
+      try {
+        _onPassTimedOut?.call(trigger, limit);
+      } catch (error) {
+        Logger.debug('RecordingTransferCoordinator: pass timeout hook failed: $error');
+      }
+      _scheduleRetry('pass exceeded its time limit');
     }
   }
 
   Future<void> _runPassBody(WakeTrigger trigger) async {
     final periodicGeneration = _periodicGeneration;
     bool expired() => trigger == WakeTrigger.periodic && periodicGeneration != _periodicGeneration;
-    final backlogWake = trigger == WakeTrigger.periodic || trigger == WakeTrigger.deviceConnected;
+    final backlogWake =
+        trigger == WakeTrigger.periodic || trigger == WakeTrigger.deviceConnected || trigger == WakeTrigger.watchdog;
     try {
       if (trigger == WakeTrigger.connectivityRestored) {
         await _onConnectivityRestored?.call();
@@ -416,7 +500,7 @@ class RecordingTransferCoordinator {
   }
 
   void _scheduleRetry(String reason) {
-    if (!_foreground) return;
+    if (!_foreground && _failureStreak >= _maxBackgroundRetries) return;
     final index = _failureStreak.clamp(0, _failureBackoff.length - 1);
     final delay = _failureBackoff[index];
     _failureStreak++;
@@ -426,7 +510,7 @@ class RecordingTransferCoordinator {
     _cooldownTimer?.cancel();
     final generation = ++_cooldownGeneration;
     void fire() {
-      if (!_foreground || generation != _cooldownGeneration) return;
+      if (generation != _cooldownGeneration) return;
       _cooldownTimer = null;
       nextCooldownAt = null;
       unawaited(wake(WakeTrigger.cooldownElapsed));
@@ -447,6 +531,9 @@ class RecordingTransferCoordinator {
     _pendingWake = null;
     nextCooldownAt = null;
     _connectivitySubscription?.cancel();
+    _networkChangeSubscription?.cancel();
+    _watchdogTimer?.cancel();
+    _watchdogTimer = null;
     _cooldownTimer?.cancel();
     _cooldownTimer = null;
   }
