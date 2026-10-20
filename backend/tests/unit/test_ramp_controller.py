@@ -153,12 +153,28 @@ def test_refusals_hold_and_page_on_fail(kw, ctx):
 
 
 def test_write_rate_limit_and_gate_percent_match():
-    assert decide(snap(), verdict(), seconds_since_last_controller_write=599).action is rc.Action.HOLD
-    assert (
-        decide(snap(), verdict('FAIL', 'projection_error'), seconds_since_last_controller_write=10).action
-        is rc.Action.HOLD
-    )
+    d = decide(snap(), verdict(), seconds_since_last_controller_write=599)
+    assert (d.action, d.detail) == (rc.Action.HOLD, 'write_rate_limited')
     assert decide(snap(10.0), verdict(percent=5.0)).action is rc.Action.HOLD
+
+
+def test_rollback_is_not_write_rate_limited():
+    # Time-inflation audit item 9: a FAIL minutes after an advance must roll back on this tick, not wait out
+    # the 10-minute write interval. The rate limit is for advances; ROLLBACK_STOP_COUNT bounds rollbacks.
+    d = decide(
+        snap(25.0), verdict('FAIL', 'pre_existing_debt_growing', percent=25.0), seconds_since_last_controller_write=10
+    )
+    assert (d.action, d.from_percent, d.to_percent) == (rc.Action.ROLLBACK_ONE, 25.0, 10.0)
+    d = decide(snap(), verdict('FAIL', 'projection_error'), seconds_since_last_controller_write=10)
+    assert (d.action, d.to_percent) == (rc.Action.ROLLBACK_ZERO, 0.0)
+    # The two-rollback stop still holds even right after a write.
+    d = decide(
+        snap(),
+        verdict('FAIL', 'projection_error'),
+        seconds_since_last_controller_write=10,
+        rollbacks_in_window=rc.ROLLBACK_STOP_COUNT,
+    )
+    assert d.action is rc.Action.HOLD and d.detail == 'stopped_after_two_rollbacks'
 
 
 def test_resume_after_gap_never_advances_but_still_rolls_back():

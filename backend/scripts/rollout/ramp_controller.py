@@ -5,7 +5,8 @@ Authority (contract (g)), enforced here and by tests:
 - writes only envs.<env>.percents.{batch-pipeline, first-summary}; never legacy_sync, locked_by,
   batch-live-stt-retire, env vars, deploys, queues or scaling;
 - acts only while legacy_sync == 'on'; refuses while locked_by is set or the prod-train lock is held;
-- one ladder step per decision, at most one write per 10 minutes, never above 100, never skips;
+- one ladder step per decision, at most one advance per 10 minutes (a rollback is never rate-limited:
+  ROLLBACK_STOP_COUNT bounds repeats), never above 100, never skips;
 - stops after two rollbacks in 24h until a human clears locked_by (a ramp_set --clear-lock write);
 - never lowers a quality floor (QUALITY_FLOOR: first-summary); a rollback moves batch-pipeline only;
 - before any ADVANCE, runs the serving-revision preflight (--preflight-cmd; required for prod --apply).
@@ -61,7 +62,7 @@ LEAD_NAME = 'batch-pipeline'
 # a rollback set that turned a recovery-quality flag off stranded 28 units in failed_held (2026-10-20).
 # The value is the floor the operator CLI refuses to write below without --allow-quality-decrease.
 QUALITY_FLOOR = {'first-summary': 100.0}
-MIN_WRITE_INTERVAL_SECONDS = 600
+MIN_WRITE_INTERVAL_SECONDS = 600  # advances only; a rollback after a recent write acts at once
 ROLLBACK_STOP_COUNT = 2
 ROLLBACK_WINDOW_SECONDS = 24 * 3600
 PROD_SHADOW_FROM_PERCENT = 25.0
@@ -235,8 +236,8 @@ def decide(
         if current <= 0.0:
             return hold(reason, 'at_floor', page=True)
         target = 0.0 if action is Action.ROLLBACK_ZERO else previous_step(current)
-        if recent_write:
-            return hold(reason, 'rollback_rate_limited', page=True)
+        # Not write-rate-limited: a FAIL minutes after an advance rolls back on this tick, not the next one.
+        # ROLLBACK_STOP_COUNT (checked above) is what bounds repeated rollbacks.
         return Decision(action, name, current, target, reason, verdict.reason, page=action is Action.ROLLBACK_ZERO)
     if verdict.status in ('PENDING', 'NO_WORK'):
         return hold(RampReason.GATE_PENDING, verdict.status.lower())
