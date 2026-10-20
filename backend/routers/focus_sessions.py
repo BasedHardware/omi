@@ -4,7 +4,7 @@ from datetime import datetime
 import logging
 from typing import Any, Dict, List, Mapping, Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from models.focus_session import FocusSession, FocusStats
@@ -43,14 +43,17 @@ def create_focus_session(
     request: CreateFocusSessionRequest,
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    return focus_sessions_db.create_focus_session(
-        uid,
-        status=request.status,
-        app_or_site=request.app_or_site,
-        description=request.description,
-        message=request.message,
-        duration_seconds=request.duration_seconds,
-    )
+    try:
+        return focus_sessions_db.create_focus_session(
+            uid,
+            status=request.status,
+            app_or_site=request.app_or_site,
+            description=request.description,
+            message=request.message,
+            duration_seconds=request.duration_seconds,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.get('/v1/focus-sessions', tags=['focus-sessions'], response_model=list[FocusSession])
