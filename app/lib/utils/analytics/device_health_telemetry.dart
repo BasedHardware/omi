@@ -207,7 +207,7 @@ class DeviceHealthTelemetry {
     for (final key in ['battery_history_v2', 'firmware_diagnostics', 'disconnect_history_v2', 'audio_packet_days']) {
       for (final point in (diagnostics[key] as List? ?? []).whereType<Map>()) {
         final ts = point['ts'] ?? point['timestamp'];
-        if (ts is num && ts >= start && ts < end) return true;
+        if (ts is int && ts >= start && ts < end) return true;
       }
     }
     return false;
@@ -263,8 +263,10 @@ class DeviceHealthTelemetry {
     var expected = 0;
     for (final event in events) {
       if (event['eventType'] != 'disconnect') continue;
-      final ts = (event['timestamp'] as num?)?.toInt() ?? 0;
-      final duration = (event['connectionDurationMs'] as num?)?.toInt() ?? 0;
+      // Integer millis only: writers emit ints, and a fractional value would
+      // truncate into a shifted connected-window inside the lost-audio cap.
+      final ts = event['timestamp'] is int ? event['timestamp'] as int : 0;
+      final duration = event['connectionDurationMs'] is int ? event['connectionDurationMs'] as int : 0;
       connectedMs += (ts.clamp(start, end) - (ts - duration).clamp(start, end)).clamp(0, end - start);
       if (retentionHorizon > start) {
         final prefixEnd = retentionHorizon < end ? retentionHorizon : end;
@@ -435,15 +437,17 @@ class DeviceHealthTelemetry {
     if (connectedAt <= 0) return null;
     int? evidence;
     for (final point in (diagnostics['audio_packet_days'] as List? ?? []).whereType<Map>()) {
-      final received = (point['received'] as num?)?.toInt() ?? 0;
+      // Integer millis only: a fractional value truncating past connectedAt
+      // would fabricate (or shift) the proof boundary.
+      final received = point['received'] is int ? point['received'] as int : 0;
       if (received <= 0) continue;
-      final lastAt = (point['last_at'] as num?)?.toInt();
+      final lastAt = point['last_at'];
       int? at;
-      if (lastAt != null) {
+      if (lastAt is int) {
         if (lastAt >= connectedAt) at = lastAt;
       } else {
-        final ts = (point['ts'] as num?)?.toInt();
-        if (ts != null && ts >= connectedAt) at = ts;
+        final ts = point['ts'];
+        if (ts is int && ts >= connectedAt) at = ts;
       }
       if (at != null && (evidence == null || at > evidence)) evidence = at;
     }
@@ -564,8 +568,11 @@ class DeviceHealthTelemetry {
       for (final stamp in stamps) {
         await _resolveOutage(device.id, nativeStart: stamp.start, at: DateTime.fromMillisecondsSinceEpoch(stamp.at));
       }
-      final nativeStart = diagnostics['audio_outage_started_at'] as num?;
-      final connectedAt = (diagnostics['connected_at'] as num?)?.toInt() ?? 0;
+      // Writers emit integer millis; a fractional nativeStart would truncate
+      // into a billable outage boundary it never wrote.
+      final nativeStartRaw = diagnostics['audio_outage_started_at'];
+      final nativeStart = nativeStartRaw is int ? nativeStartRaw : null;
+      final connectedAt = diagnostics['connected_at'] is int ? diagnostics['connected_at'] as int : 0;
       // Cumulative session counters are not proof: Android stamps connected_at
       // when a retry starts and keeps the previous session's packet count until
       // GATT succeeds. Require a packet timestamp at or after the link, and
@@ -578,12 +585,12 @@ class DeviceHealthTelemetry {
         // that is still inside the link — packets are already flowing.
         if (nativeStart != null && nativeStart > 0 && nativeStart <= connectedAt) {
           await _resolveOutage(device.id,
-              nativeStart: nativeStart.toInt(), at: DateTime.fromMillisecondsSinceEpoch(connectedAt));
+              nativeStart: nativeStart, at: DateTime.fromMillisecondsSinceEpoch(connectedAt));
         }
         await _resolveOutage(device.id,
             at: DateTime.fromMillisecondsSinceEpoch(connectedAt), keepOutagesAfterRecovery: true);
       } else if (nativeStart != null && nativeStart > 0) {
-        await recordOutage(device.id, at: DateTime.fromMillisecondsSinceEpoch(nativeStart.toInt()));
+        await recordOutage(device.id, at: DateTime.fromMillisecondsSinceEpoch(nativeStart));
       }
       await (_writes[outageKey(device.id)] ?? Future.value());
       final stored = jsonDecode(prefs.getString(outageKey(device.id)) ?? '{}') as Map;

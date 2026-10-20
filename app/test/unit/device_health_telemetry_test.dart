@@ -570,6 +570,24 @@ void main() {
     expect(record['last_resolved_start'], start.millisecondsSinceEpoch);
   });
 
+  test('fractional native outage start is not imported as an outage', () async {
+    const id = 'fractional-native-start';
+    final start = DateTime(2026, 10, 15, 10);
+    final events = <Map<String, dynamic>>[];
+    await DeviceHealthTelemetry.maybeEmit(BtDevice.empty().copyWith(id: id),
+        now: DateTime(2026, 10, 16, 8),
+        emissionContext: {},
+        loadDiagnostics: (_) async => jsonEncode({
+              'observed_at': DateTime(2026, 10, 16).millisecondsSinceEpoch,
+              // Fractional native start: truncation would bill an outage the
+              // writers never recorded.
+              'audio_outage_started_at': start.millisecondsSinceEpoch + 0.5,
+            }),
+        emit: (_, props) => events.add(props));
+    // The malformed start proves nothing: no outage record is written at all.
+    expect((await SharedPreferences.getInstance()).getString(DeviceHealthTelemetry.outageKey(id)), isNull);
+  });
+
   test('fractional audio_recovered history row is not imported as a resolution', () async {
     const id = 'fractional-history-row';
     final start = DateTime(2026, 10, 15, 10);

@@ -1150,7 +1150,7 @@ class OmiBleForegroundService : Service() {
             val retained = recovery.retainedHistory(
                 (0 until history.length()).mapNotNull { history.optJSONObject(it) },
                 now, DISCONNECT_RETENTION_MS, MAX_DISCONNECT_HISTORY,
-            ) { it.optLong("timestamp", 0L) }
+            ) { it.validTimestamp() }
             val editor = prefs.edit().putString(key, JSONArray(retained).toString())
             packetDays[addr]?.let { editor.putString("packet_days_$addr", it.toString()) }
             // History first, marker second. A crash between the commits leaves the
@@ -1215,7 +1215,7 @@ class OmiBleForegroundService : Service() {
         val updated = managed.reconnectDiagnostics.backfilledHistory(
             (0 until history.length()).mapNotNull { history.optJSONObject(it) },
             System.currentTimeMillis(), managed.hasEverConnected || outage > 0L,
-            timestampOf = { it.optLong("timestamp", 0L) },
+            timestampOf = { it.validTimestamp() },
             withDuration = { event, duration -> event.put("timeToReconnectMs", duration) },
         ) ?: return
         prefs.edit().putString(key, JSONArray(updated).toString()).apply()
