@@ -5,6 +5,12 @@ import 'package:omi/services/wals.dart';
 import 'package:omi/utils/batch_recording.dart';
 
 void main() {
+  _runBatchRecordingUtilsTests();
+  _runBatchRecordingInfoFromFileNameTests();
+  _runBatchRecordingInfoSecondsFromFrameCountTests();
+}
+
+void _runBatchRecordingUtilsTests() {
   group('BatchRecording Utils', () {
     test('isAutoPhoneBatchRecording correctly identifies auto recordings', () {
       expect(
@@ -138,7 +144,9 @@ void main() {
       );
     });
   });
+}
 
+void _runBatchRecordingInfoFromFileNameTests() {
   group('BatchRecordingInfo.fromFileName', () {
     test('parses opus fs160', () {
       final info = BatchRecordingInfo.fromFileName(
@@ -254,7 +262,9 @@ void main() {
       );
     });
   });
+}
 
+void _runBatchRecordingInfoSecondsFromFrameCountTests() {
   group('BatchRecordingInfo.secondsFromFrameCount', () {
     test(
       'exact duration is frames * frameSize / sampleRate (opus fs160 = 10ms/frame)',
