@@ -257,16 +257,13 @@ def _get_answer_simple_message_prompt(
         app_name_resolver=resolve_app_display_name,
     )
     user_name, memories_str = get_prompt_memories(uid)
-    custom_instructions_section = get_custom_instructions_section(
-        uid, enabled_override=custom_instructions_enabled
-    )
+    custom_instructions_section = get_custom_instructions_section(uid, enabled_override=custom_instructions_enabled)
 
     plugin_info = ""
     if app:
         plugin_info = f"Your name is: {app.name}, and your personality/description is '{app.description}'.\nMake sure to reflect your personality in your response.\n"
 
-    return (
-        f"""
+    return f"""
     You are an assistant for engaging personal conversations.
     You are made for {user_name}, {memories_str}
 
@@ -279,9 +276,7 @@ def _get_answer_simple_message_prompt(
     {conversation_history}
 
     Answer:
-    """.replace('    ', '').strip()
-        + custom_instructions_section
-    )
+    """.replace('    ', '').strip() + custom_instructions_section
 
 
 def answer_simple_message(uid: str, messages: List[Message], plugin: Optional[App] = None) -> str:
@@ -344,9 +339,7 @@ def _get_qa_rag_prompt(
 ) -> str:
     _user_name, memories_str = get_prompt_memories(uid)
     memories_str = '\n'.join(memories_str.split('\n')[1:]).strip()
-    custom_instructions_section = get_custom_instructions_section(
-        uid, enabled_override=custom_instructions_enabled
-    )
+    custom_instructions_section = get_custom_instructions_section(uid, enabled_override=custom_instructions_enabled)
 
     # Use as template (make sure it varies every time): "If I were you $user_name I would do x, y, z."
     context = context.replace('\n\n', '\n').strip()
@@ -586,9 +579,7 @@ def _get_agentic_qa_prompt(  # type: ignore[reportUnusedFunction]  # imported by
     """
     user_name = get_user_name(uid)
     platform_section = _get_platform_context_section(platform)
-    custom_instructions_section = get_custom_instructions_section(
-        uid, enabled_override=custom_instructions_enabled
-    )
+    custom_instructions_section = get_custom_instructions_section(uid, enabled_override=custom_instructions_enabled)
 
     # Resolve timezone only — the live datetime is injected into the user turn, not here,
     # so the cached system prefix stays byte-identical across requests. A caller that already

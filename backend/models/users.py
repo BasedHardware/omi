@@ -360,4 +360,3 @@ class CustomInstructionsResponse(BaseModel):
     @classmethod
     def sanitize_output(cls, v: Optional[str]) -> str:
         return sanitize_custom_instruction_text(v) if v else ''
-

@@ -2514,9 +2514,9 @@ def _normalize_custom_instructions_dict(raw: Any) -> dict:
         return _default_custom_instructions()
     enabled = raw.get('enabled')
     about_raw = raw.get('about_me') if isinstance(raw.get('about_me'), str) else raw.get('about_user')
-    about_me = sanitize_custom_instruction_text(
-        about_raw if isinstance(about_raw, str) else ''
-    )[:CUSTOM_INSTRUCTIONS_MAX_LENGTH]
+    about_me = sanitize_custom_instruction_text(about_raw if isinstance(about_raw, str) else '')[
+        :CUSTOM_INSTRUCTIONS_MAX_LENGTH
+    ]
     response_style = sanitize_custom_instruction_text(
         raw.get('response_style') if isinstance(raw.get('response_style'), str) else ''
     )[:CUSTOM_INSTRUCTIONS_MAX_LENGTH]
@@ -2571,4 +2571,3 @@ def delete_custom_instructions(uid: str) -> dict:
     user_ref.set({'custom_instructions': reset_state}, merge=True)
     invalidate(_USER_CUSTOM_INSTRUCTIONS_CACHE, uid)
     return reset_state
-

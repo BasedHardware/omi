@@ -1359,15 +1359,12 @@ def test_custom_instructions_prompt_section_escapes_xml_and_respects_overrides()
     # Disabled at account level returns empty string unless overridden True
     disabled_payload = dict(raw_payload, enabled=False)
     assert get_custom_instructions_section('uid-1', custom_instructions=disabled_payload) == ''
-    assert (
-        '<user_custom_instructions>'
-        in get_custom_instructions_section('uid-1', custom_instructions=disabled_payload, enabled_override=True)
+    assert '<user_custom_instructions>' in get_custom_instructions_section(
+        'uid-1', custom_instructions=disabled_payload, enabled_override=True
     )
 
     # Per-session/per-turn disable override suppresses even enabled account instructions
-    assert (
-        get_custom_instructions_section('uid-1', custom_instructions=raw_payload, enabled_override=False) == ''
-    )
+    assert get_custom_instructions_section('uid-1', custom_instructions=raw_payload, enabled_override=False) == ''
 
 
 def test_stored_custom_instructions_reaches_rendered_agentic_prompt(monkeypatch):
@@ -1385,4 +1382,3 @@ def test_stored_custom_instructions_reaches_rendered_agentic_prompt(monkeypatch)
     assert '<user_custom_instructions>' in section
     assert 'distributed systems engineer' in section
     assert 'Bullet points only, no apologies.' in section
-

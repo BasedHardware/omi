@@ -2756,4 +2756,3 @@ def patch_custom_instructions_endpoint(
 def delete_custom_instructions_endpoint(uid: str = Depends(auth.get_current_user_uid)):
     """Clear and reset the user's account-wide custom instructions."""
     return users_db.delete_custom_instructions(uid)
-
