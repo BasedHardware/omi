@@ -1463,7 +1463,7 @@ def upload_file_chat(
     thumbs_name = []
     thumb_source_by_name = {}
     files_chat = []
-    stored_videos: List[FileChat] = []  # stored as read; answered after the other files
+    stored_videos: dict[int, FileChat] = {}  # by upload position; answered in that order
     for file in files:
         # Use a UUID-based temp file name to prevent path traversal via user-controlled filename
         safe_suffix = Path(file.filename).name if file.filename else "upload"
@@ -1473,7 +1473,9 @@ def upload_file_chat(
                 shutil.copyfileobj(file.file, buffer)
 
             if chat_video.is_video_upload(safe_suffix, file.content_type):
-                stored_videos.append(chat_video.store_uploaded_clip(uid, temp_file, safe_suffix))
+                stored_videos[len(files_chat) + len(stored_videos)] = chat_video.store_uploaded_clip(
+                    uid, temp_file, safe_suffix
+                )
                 continue
 
             try:
@@ -1518,7 +1520,10 @@ def upload_file_chat(
 
     chat_db.add_multi_files(uid, files_chat_dict)
 
-    response = [fc.client_dump() for fc in files_chat + stored_videos]
+    ordered = iter(files_chat)
+    response = [
+        (stored_videos.get(i) or next(ordered)).client_dump() for i in range(len(files_chat) + len(stored_videos))
+    ]
 
     return response
 

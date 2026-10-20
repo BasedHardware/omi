@@ -15,6 +15,7 @@ import java.io.File
 import java.nio.ByteBuffer
 import java.util.UUID
 import kotlin.concurrent.thread
+import kotlin.math.ceil
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
@@ -53,14 +54,11 @@ object ChatVideoSamplerPlugin {
 
     fun sampleTimes(durationSeconds: Double): List<Double> {
         if (!durationSeconds.isFinite() || durationSeconds <= 0) return listOf(0.0)
-        val step = max(durationSeconds / MAX_FRAMES, 1 / MAX_FPS)
-        val times = mutableListOf<Double>()
-        var t = 0.0
-        while (t < durationSeconds && times.size < MAX_FRAMES) {
-            times.add((t * 100).roundToInt() / 100.0)
-            t += step
-        }
-        return if (times.isEmpty()) listOf(0.0) else times
+        val count = min(MAX_FRAMES, max(1, ceil(durationSeconds * MAX_FPS).toInt()))
+        if (count == 1) return listOf(0.0)
+        // First frame at 0, last just before the end, so the whole clip is covered.
+        val step = max(0.0, durationSeconds - 0.05) / (count - 1)
+        return (0 until count).map { (it * step * 100).roundToInt() / 100.0 }
     }
 
     private fun sample(context: Context, path: String): Map<String, Any?> {
@@ -78,7 +76,8 @@ object ChatVideoSamplerPlugin {
             for (t in sampleTimes(duration)) {
                 val bitmap = retriever.getScaledFrameAtTime(
                     (t * 1_000_000).toLong(),
-                    MediaMetadataRetriever.OPTION_CLOSEST_SYNC,
+                    // Exact frame, so its time label is the requested one (CLOSEST_SYNC can jump seconds).
+                    MediaMetadataRetriever.OPTION_CLOSEST,
                     FRAME_EDGE,
                     FRAME_EDGE,
                 ) ?: continue
@@ -90,6 +89,12 @@ object ChatVideoSamplerPlugin {
             }
             if (frames.isEmpty()) error("Couldn't read frames from that video.")
             val audio = runCatching { copyAacTrack(path, File(directory, "audio.m4a"), durationMs * 1000) }.getOrNull()
+            if (audio == null && hasAudioTrack(path)) {
+                // Speech we can't remux (Opus/Vorbis in WebM/MKV): the caller uploads the clip
+                // whole and the server transcribes it.
+                directory.deleteRecursively()
+                return mapOf("audio_unsupported" to true)
+            }
             return mapOf(
                 "frames" to frames,
                 "times" to times,
@@ -102,6 +107,20 @@ object ChatVideoSamplerPlugin {
             throw error
         } finally {
             retriever.release()
+        }
+    }
+
+    private fun hasAudioTrack(source: String): Boolean {
+        val extractor = MediaExtractor()
+        return try {
+            extractor.setDataSource(source)
+            (0 until extractor.trackCount).any {
+                extractor.getTrackFormat(it).getString(MediaFormat.KEY_MIME)?.startsWith("audio/") == true
+            }
+        } catch (_: Exception) {
+            false
+        } finally {
+            extractor.release()
         }
     }
 

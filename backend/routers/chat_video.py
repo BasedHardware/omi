@@ -14,13 +14,17 @@ from multipart.multipart import shutil
 
 from models.chat import FileChat
 from utils.media import video_upload
-from utils.multipart import CHAT_FILE_MAX_PART_SIZE, MultipartMaxPartSizeRoute, max_part_size
+from utils.multipart import MultipartLimits, MultipartMaxPartSizeRoute, max_part_size, multipart_limits
 from utils.other import endpoints as auth
 
 router = APIRouter(route_class=MultipartMaxPartSizeRoute)
 
 _VIDEO_SUFFIXES = {'.mp4', '.mov', '.m4v', '.webm', '.mkv', '.avi', '.3gp'}
-MAX_VIDEO_FRAME_BYTES = 2 * 1024 * 1024
+MB = 1024 * 1024
+MAX_VIDEO_FRAME_BYTES = MB // 2
+MAX_VIDEO_AUDIO_BYTES = 20 * MB
+# Parsed before auth: at most 48 frames + audio, three form fields, and Cloud Run's body cap.
+VIDEO_FRAMES_LIMITS = MultipartLimits(max_files=video_upload.MAX_CANDIDATES + 1, max_fields=3, max_body_size=32 * MB)
 
 
 def is_video_upload(name: str, content_type: Optional[str]) -> bool:
@@ -36,7 +40,8 @@ def store_uploaded_clip(uid: str, path: Path, name: str) -> FileChat:
 
 
 @router.post('/v2/files/video', response_model=List[FileChat], tags=['chat'])
-@max_part_size(CHAT_FILE_MAX_PART_SIZE)
+@max_part_size(MAX_VIDEO_AUDIO_BYTES)
+@multipart_limits(VIDEO_FRAMES_LIMITS)
 def upload_video_frames_chat(
     frames: List[UploadFile] = File(
         ..., description='JPEG or PNG stills sampled from the clip, in time order (at most 48).'
@@ -68,7 +73,7 @@ def upload_video_frames_chat(
     for frame in frames:
         blob = frame.file.read(MAX_VIDEO_FRAME_BYTES + 1)
         if len(blob) > MAX_VIDEO_FRAME_BYTES:
-            raise HTTPException(status_code=400, detail='Each frame must be 2 MB or smaller')
+            raise HTTPException(status_code=400, detail='Each frame must be 512 KB or smaller')
         blobs.append(blob)
     safe_name = Path(name).name or 'video.mov'
     audio_path = None

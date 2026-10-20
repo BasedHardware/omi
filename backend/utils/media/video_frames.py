@@ -29,14 +29,20 @@ MAX_CANDIDATES = 48
 MAX_CANDIDATE_FPS = 4.0
 CELL_EDGE = 384
 STRIP_COLUMNS = 8
-# Keyframe-only decode above this length keeps a ten-minute clip inside the timeout.
-KEYFRAME_ONLY_SECONDS = 120
+# Above this length, decode keyframes only (with their real timestamps), so a
+# ten-minute clip stays inside the timeout.
+KEYFRAME_SAMPLING_SECONDS = 120
 DECODE_TIMEOUT_SECONDS = 60
 # Mean absolute luma difference (0-255) below which another frame adds nothing new.
 MIN_FRAME_CHANGE = 6.0
+# A client frame is a downscaled still; anything larger is refused before decoding.
+MAX_CLIENT_FRAME_PIXELS = 2048 * 2048
+# Last sample sits this far before the end so a final frame always decodes.
+END_MARGIN_SECONDS = 0.05
 _VIDEO_FORMATS = 'mov,matroska,webm,avi'
 _DURATION = re.compile(rb'Duration: (\d+):(\d\d):(\d\d(?:\.\d+)?)')
 _VIDEO_STREAM = re.compile(rb'Stream #\d+:\d+[^\n]*: Video: ')
+_PTS_TIME = re.compile(rb'Parsed_showinfo[^\n]*? pts_time:\s*(-?[0-9.]+)')
 
 
 class VideoFramesError(ValueError):
@@ -103,10 +109,8 @@ def _probe(executable: str, source: Path) -> tuple[float, bool]:
     return duration, bool(_VIDEO_STREAM.search(banner))
 
 
-def _candidates(executable: str, source: Path, duration: float, directory: Path) -> tuple[list[Image.Image], float]:
-    span = duration if duration > 0 else 10.0
-    rate = min(MAX_CANDIDATE_FPS, MAX_CANDIDATES / max(span, 0.25))
-    command = [
+def _base_command(executable: str) -> list[str]:
+    return [
         executable,
         '-nostdin',
         '-v',
@@ -120,9 +124,30 @@ def _candidates(executable: str, source: Path, duration: float, directory: Path)
         '-format_whitelist',
         _VIDEO_FORMATS,
     ]
-    if span > KEYFRAME_ONLY_SECONDS:
-        command += ['-skip_frame', 'nokey']
-    command += [
+
+
+_SCALE = f'scale={CELL_EDGE}:{CELL_EDGE}:force_original_aspect_ratio=decrease:flags=bilinear'
+
+
+def _load(paths: Sequence[Path]) -> list[Image.Image]:
+    frames = []
+    for path in paths:
+        with Image.open(path) as image:
+            frames.append(image.convert('RGB'))
+    return frames
+
+
+def _candidates(
+    executable: str, source: Path, duration: float, directory: Path
+) -> tuple[list[Image.Image], list[float]]:
+    """Up to MAX_CANDIDATES frames from 0 to just before the end, with their times."""
+    span = duration if duration > 0 else 10.0
+    if duration > KEYFRAME_SAMPLING_SECONDS:
+        return _keyframe_candidates(executable, source, duration, directory)
+    # Frame k of the fps filter sits at k / rate; the last of MAX_CANDIDATES lands just
+    # before the end rather than one sample interval short of it.
+    rate = min(MAX_CANDIDATE_FPS, (MAX_CANDIDATES - 1) / max(span - END_MARGIN_SECONDS, 0.25))
+    command = _base_command(executable) + [
         '-i',
         str(source),
         '-map',
@@ -130,7 +155,7 @@ def _candidates(executable: str, source: Path, duration: float, directory: Path)
         '-an',
         '-sn',
         '-vf',
-        f'fps={rate:.6f},scale={CELL_EDGE}:{CELL_EDGE}:force_original_aspect_ratio=decrease:flags=bilinear',
+        f'fps={rate:.6f},{_SCALE}',
         '-frames:v',
         str(MAX_CANDIDATES),
         '-q:v',
@@ -143,11 +168,56 @@ def _candidates(executable: str, source: Path, duration: float, directory: Path)
     subprocess.run(
         command, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=DECODE_TIMEOUT_SECONDS
     )
-    frames = []
-    for path in sorted(directory.glob('c*.jpg'))[:MAX_CANDIDATES]:
-        with Image.open(path) as image:
-            frames.append(image.convert('RGB'))
-    return frames, rate
+    frames = _load(sorted(directory.glob('c*.jpg'))[:MAX_CANDIDATES])
+    times = [i / rate for i in range(len(frames))]
+    if duration > 0:
+        times = [min(t, duration) for t in times]
+    return frames, times
+
+
+def _keyframe_candidates(
+    executable: str, source: Path, duration: float, directory: Path
+) -> tuple[list[Image.Image], list[float]]:
+    """Keyframes only, one pass, each with its own presentation time (from showinfo).
+
+    Decoding only keyframes keeps a ten-minute clip fast; the times are the frames' real
+    timestamps, so a window search never shows a frame under the wrong label. Up to
+    MAX_CANDIDATES keyframes are kept, the ones closest to evenly spaced targets.
+    """
+    command = _base_command(executable)
+    command[command.index('-v') + 1] = 'info'  # showinfo reports at info level
+    command += [
+        '-hide_banner',
+        '-skip_frame',
+        'nokey',
+        '-i',
+        str(source),
+        '-map',
+        '0:v:0',
+        '-an',
+        '-sn',
+        '-vf',
+        f'{_SCALE},showinfo',
+        '-fps_mode',
+        'passthrough',
+        '-q:v',
+        '5',
+        '-f',
+        'image2',
+        '-y',
+        str(directory / 'k%05d.jpg'),
+    ]
+    result = subprocess.run(
+        command, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, timeout=DECODE_TIMEOUT_SECONDS
+    )
+    stamps = [float(t) for t in _PTS_TIME.findall(result.stderr[: 4 * 1024 * 1024])]
+    paths = sorted(directory.glob('k*.jpg'))
+    keyframes = list(zip(stamps, paths))  # showinfo and the muxer see frames in the same order
+    if not keyframes:
+        return [], []
+    targets = [i * (duration - END_MARGIN_SECONDS) / (MAX_CANDIDATES - 1) for i in range(MAX_CANDIDATES)]
+    chosen = sorted({min(range(len(keyframes)), key=lambda k: abs(keyframes[k][0] - t)) for t in targets})
+    return _load([keyframes[k][1] for k in chosen]), [max(0.0, keyframes[k][0]) for k in chosen]
 
 
 def _signature(image: Image.Image) -> bytes:
@@ -281,15 +351,12 @@ def digest_video(data: bytes, duration_hint: float = 0, executable: Optional[str
                 raise VideoFramesError('no video stream')
             if duration <= 0:
                 duration = float(duration_hint or 0)
-            frames, rate = _candidates(executable, source, duration, directory)
+            frames, times = _candidates(executable, source, duration, directory)
     except (OSError, subprocess.SubprocessError) as error:
         raise VideoFramesError('decode failed') from error
     if not frames:
         raise VideoFramesError('no frames')
-    times = [i / rate for i in range(len(frames))]
-    if duration > 0:
-        times = [min(t, duration) for t in times]
-    else:
+    if duration <= 0:
         duration = times[-1]
     picked = select_keyframes(frames)
     sheet_times = tuple(round(times[i], 2) for i in picked)
@@ -319,8 +386,13 @@ def digest_frames(images: Sequence[bytes], times: Sequence[float], duration: flo
     for blob in images:
         try:
             with Image.open(BytesIO(blob)) as image:
+                # Header only so far: refuse a frame that declares a huge canvas before decoding it.
                 if image.format not in ('JPEG', 'PNG'):
                     raise VideoFramesError('frames must be JPEG or PNG')
+                if image.width * image.height > MAX_CLIENT_FRAME_PIXELS:
+                    raise VideoFramesError('frame too large')
+                if image.format == 'JPEG':
+                    image.draft('RGB', (CELL_EDGE, CELL_EDGE))  # decode at reduced scale
                 frame = image.convert('RGB')
         except (OSError, Image.DecompressionBombError) as error:
             raise VideoFramesError('unreadable frame') from error

@@ -41,15 +41,25 @@ class SampledChatVideo {
 class ChatVideoSampler {
   static const _channel = MethodChannel('com.omi/chat_video');
 
+  static Future<void> _deleteQuietly(String? path) async {
+    if (path == null) return;
+    try {
+      await Directory(path).delete(recursive: true);
+    } catch (_) {}
+  }
+
   static Future<SampledChatVideo?> sample(File video) async {
     if (!Platform.isIOS && !Platform.isAndroid) return null;
     try {
       final result = await _channel.invokeMapMethod<String, dynamic>('sample', {'path': video.path});
-      if (result == null) return null;
+      if (result == null || result['audio_unsupported'] == true) return null;
       final frames = (result['frames'] as List).cast<String>().map(File.new).toList();
       final times = (result['times'] as List).map((t) => (t as num).toDouble()).toList();
       final audio = result['audio'] as String?;
-      if (frames.isEmpty || frames.length != times.length) return null;
+      if (frames.isEmpty || frames.length != times.length) {
+        await _deleteQuietly(result['directory'] as String?);
+        return null;
+      }
       return SampledChatVideo(
         frames: frames,
         times: times,

@@ -5,16 +5,16 @@ import XCTest
 /// The desktop sampler must request the same candidate set the backend would sample itself
 /// (backend/utils/media/video_frames.py): at most 48 frames, at most 4 per second.
 final class ChatVideoSamplerTests: XCTestCase {
-  func testShortClipSamplesFourPerSecond() {
-    XCTAssertEqual(ChatVideoSampler.sampleTimes(duration: 2), [0, 0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75])
+  func testShortClipSamplesAboutFourPerSecondToTheEnd() {
+    XCTAssertEqual(ChatVideoSampler.sampleTimes(duration: 2), [0, 0.28, 0.56, 0.84, 1.11, 1.39, 1.67, 1.95])
   }
 
-  func testLongClipCapsAtFortyEightEvenlySpacedFrames() {
+  func testLongClipCapsAtFortyEightFramesCoveringTheEnd() {
     let times = ChatVideoSampler.sampleTimes(duration: 600)
     XCTAssertEqual(times.count, 48)
     XCTAssertEqual(times.first, 0)
-    XCTAssertEqual(times[1], 12.5, accuracy: 0.01)
-    XCTAssertLessThan(times.last ?? 600, 600)
+    XCTAssertEqual(times[1], 12.77, accuracy: 0.01)
+    XCTAssertEqual(times.last ?? 0, 599.95, accuracy: 0.01)
   }
 
   func testUnknownDurationStillAsksForTheFirstFrame() {

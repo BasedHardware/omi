@@ -350,14 +350,11 @@ String _filesUrl(String path, String? appId) {
 Future<List<MessageFile>?> uploadFilesServer(List<File> files, {String? appId}) async {
   if (!files.any((f) => isChatVideo(f.path))) return _uploadFilesBatch(files, appId: appId);
   final results = List<MessageFile?>.filled(files.length, null);
-  final others = <int>[];
-  for (var i = 0; i < files.length; i++) {
-    if (isChatVideo(files[i].path)) {
-      results[i] = await uploadVideoServer(files[i], appId: appId);
-    } else {
-      others.add(i);
-    }
-  }
+  final others = [
+    for (var i = 0; i < files.length; i++)
+      if (!isChatVideo(files[i].path)) i
+  ];
+  // The quick batch first: if it fails, no video has been stored yet.
   if (others.isNotEmpty) {
     final uploaded = await _uploadFilesBatch([for (final i in others) files[i]], appId: appId);
     if (uploaded == null || uploaded.length != others.length) {
@@ -366,6 +363,9 @@ Future<List<MessageFile>?> uploadFilesServer(List<File> files, {String? appId}) 
     for (var k = 0; k < others.length; k++) {
       results[others[k]] = uploaded[k];
     }
+  }
+  for (var i = 0; i < files.length; i++) {
+    if (results[i] == null) results[i] = await uploadVideoServer(files[i], appId: appId);
   }
   return results.cast<MessageFile>();
 }

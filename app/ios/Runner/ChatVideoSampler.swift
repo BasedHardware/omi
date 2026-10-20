@@ -33,14 +33,11 @@ final class ChatVideoSampler {
 
   static func sampleTimes(duration: Double) -> [Double] {
     guard duration.isFinite, duration > 0 else { return [0] }
-    let step = max(duration / Double(maxFrames), 1 / maxFramesPerSecond)
-    var times: [Double] = []
-    var t = 0.0
-    while t < duration, times.count < maxFrames {
-      times.append((t * 100).rounded() / 100)
-      t += step
-    }
-    return times.isEmpty ? [0] : times
+    let count = min(maxFrames, max(1, Int((duration * maxFramesPerSecond).rounded(.up))))
+    guard count > 1 else { return [0] }
+    // First frame at 0, last just before the end, so the whole clip is covered.
+    let step = max(0, duration - 0.05) / Double(count - 1)
+    return (0..<count).map { (Double($0) * step * 100).rounded() / 100 }
   }
 
   private func sample(path: String, result: @escaping FlutterResult) {
@@ -71,14 +68,15 @@ final class ChatVideoSampler {
     var remaining = times.count
     let lock = NSLock()
     let requested = times.map { NSValue(time: CMTime(seconds: $0, preferredTimescale: 600)) }
-    generator.generateCGImagesAsynchronously(forTimes: requested) { [queue] requestedTime, image, _, status, _ in
+    generator.generateCGImagesAsynchronously(forTimes: requested) { [queue] requestedTime, image, actualTime, status, _ in
       lock.lock()
       if status == .succeeded, let image,
         let jpeg = UIImage(cgImage: image).jpegData(compressionQuality: 0.75)
       {
         let file = directory.appendingPathComponent("frame-\(frames.count).jpg")
         if (try? jpeg.write(to: file)) != nil {
-          frames.append((requestedTime.seconds, file.path))
+          // The decoded frame's own time (within the tolerance), not the requested one.
+          frames.append((actualTime.isValid ? actualTime.seconds : requestedTime.seconds, file.path))
         }
       }
       remaining -= 1
@@ -88,6 +86,7 @@ final class ChatVideoSampler {
       queue.async {
         let ordered = frames.sorted { $0.time < $1.time }
         guard !ordered.isEmpty else {
+          try? FileManager.default.removeItem(at: directory)
           DispatchQueue.main.async {
             result(FlutterError(code: "no_frames", message: "Couldn't read frames from that video.", details: nil))
           }

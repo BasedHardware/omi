@@ -35,17 +35,14 @@ enum ChatVideoSampler {
   /// Matches the backend's transcription cap (MAX_MEDIA_SECONDS).
   static let maxAudioSeconds = 600.0
 
-  /// Evenly spaced sample times: at most `maxFramesPerSecond`, at most `maxFrames`.
+  /// Evenly spaced sample times from 0 to the end: at most `maxFramesPerSecond`, at most `maxFrames`.
   static func sampleTimes(duration: Double) -> [Double] {
     guard duration.isFinite, duration > 0 else { return [0] }
-    let step = max(duration / Double(maxFrames), 1 / maxFramesPerSecond)
-    var times: [Double] = []
-    var t = 0.0
-    while t < duration, times.count < maxFrames {
-      times.append((t * 100).rounded() / 100)
-      t += step
-    }
-    return times.isEmpty ? [0] : times
+    let count = min(maxFrames, max(1, Int((duration * maxFramesPerSecond).rounded(.up))))
+    guard count > 1 else { return [0] }
+    // First frame at 0, last just before the end, so the whole clip is covered.
+    let step = max(0, duration - 0.05) / Double(count - 1)
+    return (0..<count).map { (Double($0) * step * 100).rounded() / 100 }
   }
 
   static func sample(url: URL) async throws -> SampledChatVideo {
@@ -70,7 +67,8 @@ enum ChatVideoSampler {
     for await result in generator.images(for: requested) {
       guard let image = try? result.image, let jpeg = jpegData(image) else { continue }
       frames.append(jpeg)
-      kept.append(result.requestedTime.seconds)
+      // The decoded frame's own time (within the tolerance), not the requested one.
+      kept.append((try? result.actualTime.seconds) ?? result.requestedTime.seconds)
     }
     guard !frames.isEmpty else { throw ChatVideoSamplerError.noFrames }
     // The async sequence answers in request order; keep times ascending regardless.

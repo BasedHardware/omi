@@ -83,9 +83,14 @@ def test_static_clip_stops_at_three_frames(tmp_path):
 
 
 def test_long_clip_keeps_candidate_cap(tmp_path):
-    data = _clip(tmp_path, 'testsrc2=size=320x180:rate=10', 200)
+    # Long clips decode keyframes only; -g 20 is a phone-like keyframe every 2 s.
+    data = _clip(tmp_path, 'testsrc2=size=320x180:rate=10', 200, '-g', '20')
     digest = digest_video(data, executable=_ffmpeg())
-    assert len(digest.strip.times) <= MAX_CANDIDATES and digest.strip.times[-1] <= 200
+    assert len(digest.strip.times) == MAX_CANDIDATES
+    # The filmstrip reaches the end of the clip, not one sample interval short of it.
+    assert 195 <= digest.strip.times[-1] <= 200
+    # Labels are the keyframes' own timestamps (every 2 s), never interpolated guesses.
+    assert all(abs(t / 2 - round(t / 2)) < 0.01 for t in digest.strip.times)
 
 
 @pytest.mark.parametrize('payload', [b'not a video' * 50, b''])
@@ -128,6 +133,10 @@ def test_client_frames_are_validated():
         digest_frames([b'GIF89a' + b'0' * 20] * 4, [0, 1, 2, 3], 3)
     with pytest.raises(VideoFramesError):
         digest_frames([frames[0]] * (MAX_CANDIDATES + 1), list(range(MAX_CANDIDATES + 1)), 60)
+    huge = BytesIO()
+    Image.new('L', (4096, 2049)).save(huge, 'PNG')
+    with pytest.raises(VideoFramesError, match='too large'):
+        digest_frames([huge.getvalue()], [0], 1)
     mixed = digest_frames([_jpeg((0, 0, 0), (64, 48)), _jpeg((255, 255, 255), (48, 64))], [0, 1], 1)
     assert mixed.strip.cell_width == mixed.strip.cell_height == 64
 

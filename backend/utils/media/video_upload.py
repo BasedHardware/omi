@@ -19,6 +19,10 @@ from utils.media.video_frames import MAX_CANDIDATES, VideoDigest, VideoFramesErr
 
 logger = logging.getLogger(__name__)
 
+# In-app uploads are sync routes; their STT runs here so concurrent uploads on one instance
+# share a small bound instead of each starting its own thread.
+_STT_POOL = ThreadPoolExecutor(max_workers=4, thread_name_prefix='chat-video-stt')
+
 VIDEO_UNREADABLE = "Couldn't read that video. Try a different clip, or send a screenshot."
 
 
@@ -62,11 +66,13 @@ def video_from_file(uid: str, path: Path, name: str) -> Dict[str, Any]:
 
     Raises VideoFramesError when the clip has no decodable picture.
     """
-    with ThreadPoolExecutor(max_workers=1, thread_name_prefix='chat-video-stt') as pool:
-        speech = pool.submit(_transcribe_file, path, uid)
+    speech = _STT_POOL.submit(_transcribe_file, path, uid)
+    try:
         digest = digest_video(path.read_bytes())
-        transcript = speech.result()
-    return store_video(uid, name, digest, transcript)
+    except BaseException:
+        speech.cancel()
+        raise
+    return store_video(uid, name, digest, speech.result())
 
 
 def video_from_frames(
@@ -78,11 +84,14 @@ def video_from_frames(
     audio_path: Optional[Path] = None,
 ) -> Dict[str, Any]:
     """Frames (and optionally the audio track) a client sampled on device."""
-    with ThreadPoolExecutor(max_workers=1, thread_name_prefix='chat-video-stt') as pool:
-        speech = pool.submit(_transcribe_file, audio_path, uid) if audio_path else None
+    speech = _STT_POOL.submit(_transcribe_file, audio_path, uid) if audio_path else None
+    try:
         digest = digest_frames(frames, times, duration)
-        transcript = speech.result() if speech else ''
-    return store_video(uid, name, digest, transcript)
+    except BaseException:
+        if speech:
+            speech.cancel()
+        raise
+    return store_video(uid, name, digest, speech.result() if speech else '')
 
 
 __all__ = [
