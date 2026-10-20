@@ -1,4 +1,4 @@
-"""Contract (h) 12h legacy-dark soak checks."""
+"""Contract (h) legacy-dark soak checks and the evidence-based window (6h floor, David 2026-10-20)."""
 
 import io
 import json
@@ -221,3 +221,156 @@ def test_cli_end_to_end(tmp_path, capsys):
     )
     assert code == 0 and capsys.readouterr().out.strip().endswith('SOAK_PASS')
     assert json.loads(out.read_text())['status'] == 'PASS'
+
+
+# --- the window: evidence-based soak with a 6h floor (David, 2026-10-20) --------------------------
+
+H = 3600
+
+
+def read_at(offset, *, accepted=None, completed=3000, census_age=H, **changes):
+    """One SOAK read ``offset`` seconds after dark, as main() would keep it."""
+    at = DARK + offset
+    ev = evidence(**changes)
+    if 'lost_recordings' not in changes:
+        ev['lost_recordings'] = dict(
+            ev['lost_recordings'],
+            until=sc.iso(at - census_age),
+            accepted_content_ids=accepted if accepted is not None else 900 + int(offset // 6),
+        )
+        ev['lost_recordings']['receipted_or_terminal_content_ids'] = ev['lost_recordings']['accepted_content_ids']
+    g = gate()
+    g['sample']['completed'] = completed
+    report = run(ev, g)
+    report['observed_at'] = sc.iso(at)
+    return report
+
+
+def series(hours=6, step=30 * 60, **kw):
+    return [read_at(t, **kw) for t in range(step, int(hours * H) + 1, step)]
+
+
+def window(reads, now=None):
+    last = max((sc.parse_iso(r['observed_at']) for r in reads if 'observed_at' in r), default=DARK)
+    return sc.evaluate_window('prod', reads, dark_since=DARK, now=last if now is None else now)
+
+
+def test_window_passes_at_six_hours_with_every_read_green_and_volume():
+    w = window(series())
+    assert (w['status'], w['reason']) == ('PASS', 'pass'), w
+    assert w['elapsed_seconds'] == 6 * H and w['batch_completions'] == 3000
+    assert w['uploads_accepted'] == 3300 and w['floors'] == sc.WINDOW_FLOORS['prod']
+    assert sc.window_line(w) == 'SOAK_WINDOW_PASS pass'
+
+
+def test_window_floor_is_six_hours_not_twelve():
+    assert sc.MIN_SOAK_SECONDS == 6 * H
+    assert window(series(hours=5.5))['reason'] == 'soak_under_6h'
+
+
+def test_window_fails_on_any_red_read_and_carries_data_loss():
+    reads = series()
+    reads[3] = read_at(
+        4 * 30 * 60,
+        lost_recordings=dict(evidence()['lost_recordings'], lost_content_ids=2, receipted_or_terminal_content_ids=898),
+    )
+    w = window(reads)
+    assert w['status'] == 'FAIL' and w['data_loss'] and w['reason'].startswith('read_failed:lost_recordings')
+
+
+def test_window_pending_when_any_read_was_not_green():
+    reads = series()
+    reads[2] = read_at(3 * 30 * 60, reason_unknown_ratio={})
+    w = window(reads)
+    assert (w['status'], w['reason']) == ('PENDING', 'read_not_green:reason_unknown:input_missing')
+
+
+def test_window_pending_on_an_unobserved_stretch():
+    reads = series()
+    del reads[4:6]  # a 90-minute hole
+    assert window(reads)['reason'] == 'read_gap'
+    # The first read must also follow dark closely, and the window must still be current.
+    assert window(series()[2:])['reason'] == 'read_gap'
+    assert window(series(), now=DARK + 6 * H + 46 * 60)['reason'] == 'read_gap'
+
+
+def test_window_needs_a_fresh_final_census():
+    reads = series()
+    reads[-1] = read_at(6 * H, census_age=2 * H)
+    assert window(reads)['reason'] == 'final_census_stale'
+    reads[-1] = read_at(6 * H)
+    del reads[-1]['checks'][4]['measured']['until']
+    assert window(reads)['reason'] == 'final_census_window_missing'
+
+
+def test_window_volume_floors():
+    reads = series(completed=1999)
+    assert window(reads)['reason'] == 'batch_completions_below_floor'
+    reads = series(accepted=900)
+    assert (window(reads)['reason'], window(reads)['uploads_accepted']) == ('uploads_accepted_below_floor', 0)
+    reads = series()
+    reads[-1]['checks'][0]['measured']['completed'] = None
+    assert window(reads)['reason'] == 'window_volume_unmeasured'
+
+
+def test_window_rejects_reads_from_another_window_and_empty_history():
+    assert window([])['reason'] == 'no_reads'
+    reads = series()
+    reads[0] = dict(reads[0], dark_since='2026-10-20T00:00:00Z')
+    assert window(reads)['reason'] == 'read_from_other_window'
+    reads = series()
+    reads[0] = {k: v for k, v in reads[0].items() if k != 'observed_at'}
+    assert window(reads)['reason'] == 'read_from_other_window'
+
+
+def test_cli_history_dir_judges_the_window(tmp_path, capsys, monkeypatch):
+    history = tmp_path / 'soak-reads'
+    for read in series()[:-1]:
+        history.mkdir(exist_ok=True)
+        stamp = read['observed_at'].replace('-', '').replace(':', '')
+        (history / f'read-{stamp}.json').write_text(json.dumps(read))
+    fleet = tmp_path / 'fleet.txt'
+    sample = dict(gate()['sample'], completed=3000)
+    fleet.write_text(json.dumps(sample) + '\nGATE_PASS\n')
+    ev = tmp_path / 'ev.json'
+    ev.write_text(
+        json.dumps(
+            evidence(
+                lost_recordings={
+                    'since': '2026-10-21T14:00:00Z',
+                    'until': sc.iso(DARK + 5 * H),
+                    'accepted_content_ids': 4500,
+                    'receipted_or_terminal_content_ids': 4500,
+                    'lost_content_ids': 0,
+                    'legacy_and_batch_content_ids': 0,
+                }
+            )
+        )
+    )
+    out = tmp_path / 'soak.json'
+    monkeypatch.setattr(sc.time, 'time', lambda: DARK + 6 * H)
+    argv = [
+        '--draining-since',
+        '2026-10-21T14:00:00Z',
+        '--dark-since',
+        '2026-10-21T15:10:00Z',
+        '--fleet-output',
+        str(fleet),
+        '--evidence',
+        str(ev),
+        '--output',
+        str(out),
+        '--history-dir',
+        str(history),
+    ]
+    assert sc.main(argv) == 0
+    lines = capsys.readouterr().out.strip().splitlines()
+    assert lines[-2:] == ['SOAK_PASS', 'SOAK_WINDOW_PASS pass']
+    report = json.loads(out.read_text())
+    assert report['window']['reads'] == 12 and report['observed_at'] == sc.iso(DARK + 6 * H)
+    assert len(list(history.glob('read-*.json'))) == 12
+
+    # An unreadable kept read leaves the window PENDING, never PASS.
+    (history / 'read-zzz.json').write_text('{')
+    assert sc.main(argv) == 3
+    assert capsys.readouterr().out.strip().endswith('SOAK_WINDOW_PENDING history_unreadable')

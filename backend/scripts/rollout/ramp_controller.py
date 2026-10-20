@@ -53,7 +53,20 @@ logger = logging.getLogger('ramp_controller')
 
 ACTOR = 'ramp-controller'
 LADDER = (0.0, 5.0, 10.0, 25.0, 50.0, 75.0, 100.0)
-HOLD_SECONDS = {5.0: 3 * 3600, 10.0: 3600, 25.0: 3600, 50.0: 3600, 75.0: 3600}  # 5% hold is the 3h ruling
+# Every step holds 1h. The 5% hold was 3h (David, 10-15); David's 10-20 ruling makes it 1h plus one
+# daytime window and a sample floor, because the case for a longer hold was diurnal coverage (night
+# traffic read ~1.7pp worse on exhaustion), which a flat clock gives only by accident.
+HOLD_SECONDS = {5.0: 3600, 10.0: 3600, 25.0: 3600, 50.0: 3600, 75.0: 3600}
+FIVE_PERCENT_STEP = 5.0
+# US daytime in UTC: 14:00Z-02:00Z is 07:00-19:00 PDT and 10:00-22:00 EDT. The window wraps midnight UTC.
+DAYTIME_UTC_START_HOUR = 14
+DAYTIME_UTC_END_HOUR = 2
+# The 5% hold must include one full hour inside the daytime window...
+FIVE_PERCENT_DAYTIME_SECONDS = 3600
+# ...and the gate's `completed` count since the step began (batch units the client saw completed) must
+# reach this floor. Measured 5% daytime traffic is ~225-430 completions/hour, so a healthy daytime hour
+# clears it; a quiet night hour does not.
+FIVE_PERCENT_MIN_COMPLETED = 150
 CONTROLLED_NAMES = ('batch-pipeline', 'first-summary')
 LEAD_NAME = 'batch-pipeline'
 # Quality guarantees, not ramp knobs: a rollback never lowers them. Every tested rollback set in the
@@ -179,6 +192,37 @@ def required_hold_seconds(current: float, hold_scale: float = 1.0) -> float:
     return HOLD_SECONDS[base] * hold_scale if base is not None else 0.0
 
 
+def daytime_seconds(start: float, end: float) -> float:
+    """Seconds of [start, end] (epoch) inside the daily DAYTIME_UTC window, which wraps midnight UTC."""
+    if end <= start:
+        return 0.0
+    day = 86400
+    length = ((DAYTIME_UTC_END_HOUR - DAYTIME_UTC_START_HOUR) % 24) * 3600
+    total = 0.0
+    # A window opening on day d may close on day d + 1, so start one day early.
+    for d in range(int(start // day) - 1, int(end // day) + 1):
+        opens = d * day + DAYTIME_UTC_START_HOUR * 3600
+        total += max(0.0, min(end, opens + length) - max(start, opens))
+    return total
+
+
+def five_percent_evidence_gap(verdict: GateVerdict, hold_scale: float = 1.0) -> str | None:
+    """The 5% step's extra requirements (David, 10-20): one daytime hour and the completion floor.
+
+    Returns the hold detail token while either is short, None when both hold. A missing or malformed
+    `completed` count is short (fail closed). A staging rehearsal scales both by its hold_scale.
+    """
+    start = verdict.observed_at - verdict.hold_elapsed_seconds
+    if daytime_seconds(start, verdict.observed_at) < FIVE_PERCENT_DAYTIME_SECONDS * hold_scale:
+        return 'daytime_window_incomplete'
+    completed = verdict.raw.get('completed')
+    if isinstance(completed, bool) or not isinstance(completed, int):
+        return 'sample_unmeasured'
+    if completed < math.ceil(FIVE_PERCENT_MIN_COMPLETED * hold_scale):
+        return 'sample_below_floor'
+    return None
+
+
 def classify_fail(reason: str) -> tuple[Action | None, RampReason]:
     """Map a GATE_FAIL token to the rollback it requires; (None, ...) means HOLD (not a cohort verdict)."""
     if reason in INCOMPLETE_SAMPLE_TOKENS:
@@ -249,6 +293,10 @@ def decide(
         return hold(RampReason.LOCKED_BY_OPERATOR, 'at_zero_needs_operator')
     if verdict.hold_elapsed_seconds < required_hold_seconds(current, context.hold_scale):
         return hold(RampReason.HOLD_INCOMPLETE, 'hold_incomplete')
+    if FIVE_PERCENT_STEP <= current < next_step(FIVE_PERCENT_STEP):
+        gap = five_percent_evidence_gap(verdict, context.hold_scale)
+        if gap is not None:
+            return hold(RampReason.HOLD_INCOMPLETE, gap)
     if recent_write:
         return hold(RampReason.HOLD_INCOMPLETE, 'write_rate_limited')
     target = next_step(current)

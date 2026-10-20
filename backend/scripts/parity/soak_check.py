@@ -1,8 +1,23 @@
 #!/usr/bin/env python3
-"""12h legacy-dark soak checks (contract (h)), run every 30 minutes by the sentinel.
+"""Legacy-dark soak checks (contract (h)), run every 30 minutes by the sentinel.
 
     soak_check.py --env prod --draining-since 2026-10-21T14:00:00Z --dark-since 2026-10-21T15:10:00Z \\
-        --fleet-output fleet.txt [--evidence soak_evidence.json] [--collect] --output soak_report.json
+        --fleet-output fleet.txt [--evidence soak_evidence.json] [--collect] \\
+        [--history-dir <run-dir>/soak-reads] --output soak_report.json
+
+The soak is evidence-based with a 6h floor (David, 2026-10-20), replacing the 12h clock. One read
+judges the ten checks below; ``--history-dir`` keeps every read and judges the WINDOW, which is what
+authorizes deletion. ``evaluate_window`` passes only when ALL of:
+  * the last read is at least 6h after ``dark`` (MIN_SOAK_SECONDS);
+  * every read since ``dark`` is SOAK_PASS (all ten checks green), with no gap over 45 minutes
+    between ``dark``, consecutive reads and now, so the window has no unobserved stretch;
+  * the last read carries a fresh final lost-recordings census (check 5, census ``until`` within
+    ``lost_recordings.GRACE_SECONDS`` + 15 minutes of that read);
+  * the window saw traffic (WINDOW_FLOORS): the last read's fleet gate, run from ``dark``, counts at
+    least ``batch_completions`` batch units completed, and the census counted at least
+    ``uploads_accepted`` more accepted content ids at the last read than at the first read after ``dark``.
+Any FAIL read fails the window. Anything else short (a PENDING read, a gap, a stale census, a floor
+not met, a field missing) is PENDING, never PASS.
 
 Checks (all must hold continuously):
   1  fleet_gate          fleet gate PASS at 100%                   (--fleet-output: captured fleet_gate.sh stdout)
@@ -23,7 +38,8 @@ for ``--env`` (ro-prod / ro-dev); the caller sources gcp-agent-env.sh. Checks
 provider-STT and cap-hold counters, the upload census). Anything unmeasured is
 PENDING, never PASS.
 
-Exit: 0 SOAK_PASS, 1 SOAK_FAIL <check>, 3 SOAK_PENDING <check>. A FAIL on
+Exit: 0 SOAK_PASS, 1 SOAK_FAIL <check>, 3 SOAK_PENDING <check>; with ``--history-dir`` the exit and
+the last line (``SOAK_WINDOW_<STATUS> <reason>``) are the window's. A FAIL on
 checks 2 or 5 sets ``data_loss=true``: the lead's one rollback is
 ``legacy_sync -> on``. Output holds counts and fixed tokens only.
 """
@@ -68,6 +84,19 @@ DATA_LOSS_CHECKS = frozenset({'legacy_admissions', 'lost_recordings'})
 UPLOAD_2XX_MAX_DROP = 0.01
 UPLOAD_2XX_MIN_REQUESTS = 50
 REASON_UNKNOWN_MAX = 0.02
+
+# Window (David, 2026-10-20: evidence-based soak with a 6h floor, replacing the 12h clock).
+MIN_SOAK_SECONDS = 6 * 3600
+READ_MAX_GAP_SECONDS = 45 * 60  # reads run every 30 minutes; one late read is tolerated, a missed one is not
+CENSUS_GRACE_SECONDS = 3600  # scripts/legacy_dark/lost_recordings.py GRACE_SECONDS
+FINAL_CENSUS_MAX_AGE_SECONDS = CENSUS_GRACE_SECONDS + 15 * 60
+# Minimum traffic the window must have seen. Prod at 5% completed ~225-430 batch units an hour in daytime,
+# so 100% completes thousands an hour; the floors sit far below a 6h night so that a dead or empty
+# pipeline cannot pass on silence. Staging carries only rehearsal traffic.
+WINDOW_FLOORS = {
+    'prod': {'batch_completions': 2000, 'uploads_accepted': 1000},
+    'staging': {'batch_completions': 20, 'uploads_accepted': 20},
+}
 
 ENVS = {
     'prod': {
@@ -116,7 +145,15 @@ def _check(name, status, reason, measured=None):
 def check_fleet_gate(gate: Mapping[str, Any] | None):
     if not gate or not gate.get('status'):
         return _check('fleet_gate', PENDING, 'input_missing')
-    measured = {'status': gate['status'], 'reason': gate.get('reason'), 'percent': gate.get('percent')}
+    sample = gate.get('sample') or {}
+    measured = {
+        'status': gate['status'],
+        'reason': gate.get('reason'),
+        'percent': gate.get('percent'),
+        # Since the gate's T0 (`dark` in the soak): the window's batch-completion volume.
+        'admissions': _cnt(sample, 'admissions'),
+        'completed': _cnt(sample, 'completed'),
+    }
     if gate['status'] == 'FAIL':
         token = gate.get('reason') or 'unknown'
         return _check('fleet_gate', FAIL, 'gate_fail_' + token, measured)
@@ -175,6 +212,7 @@ def check_lost_recordings(ev, draining_since: float):
         'lost': missing,
         'legacy_and_batch': double,
         'since': since,
+        'until': lost.get('until'),
     }
     try:
         since_epoch = parse_iso(since)
@@ -343,6 +381,122 @@ def verdict_line(report: Mapping[str, Any]) -> str:
     return f"SOAK_{report['status']} {report['failing_check']}:{report['reason']}"
 
 
+def _measured(report: Mapping[str, Any], check: str) -> Mapping[str, Any]:
+    for item in report.get('checks') or []:
+        if isinstance(item, Mapping) and item.get('check') == check:
+            return item.get('measured') or {}
+    return {}
+
+
+def _read_time(report: Mapping[str, Any]) -> float | None:
+    try:
+        return parse_iso(report.get('observed_at'))
+    except ValueError:
+        return None
+
+
+def evaluate_window(env: str, reads: list[Mapping[str, Any]], *, dark_since: float, now: float) -> dict[str, Any]:
+    """Judge the whole soak from every read since ``dark`` (module docstring). Fail closed: PENDING
+    whenever evidence is missing; FAIL only on a FAIL read."""
+    floors = WINDOW_FLOORS[env]
+    out: dict[str, Any] = {
+        'status': PENDING,
+        'reason': None,
+        'reads': len(reads),
+        'dark_since': iso(dark_since),
+        'min_soak_seconds': MIN_SOAK_SECONDS,
+        'elapsed_seconds': None,
+        'max_gap_seconds': None,
+        'batch_completions': None,
+        'uploads_accepted': None,
+        'floors': dict(floors),
+        'failing_read': None,
+        'data_loss': False,
+    }
+
+    def verdict(status: str, reason: str, read: Mapping[str, Any] | None = None) -> dict[str, Any]:
+        out.update(status=status, reason=reason)
+        if read is not None:
+            out['failing_read'] = read.get('observed_at')
+        return out
+
+    timed = []
+    for read in reads:
+        at = _read_time(read)
+        if (
+            read.get('schema_version') != SCHEMA_VERSION
+            or read.get('env') != env
+            or read.get('dark_since') != iso(dark_since)
+            or read.get('status') not in EXIT
+            or at is None
+            or at < dark_since
+        ):
+            return verdict(PENDING, 'read_from_other_window', read)
+        timed.append((at, read))
+    if not timed:
+        return verdict(PENDING, 'no_reads')
+    timed.sort(key=lambda pair: pair[0])
+    failed = [read for _, read in timed if read['status'] == FAIL]
+    if failed:
+        first = next((r for r in failed if r.get('data_loss')), failed[0])
+        out['data_loss'] = any(bool(r.get('data_loss')) for r in failed)
+        return verdict(FAIL, f"read_failed:{first.get('failing_check')}:{first.get('reason')}", first)
+    not_green = next((read for _, read in timed if read['status'] != PASS), None)
+    if not_green is not None:
+        return verdict(PENDING, f"read_not_green:{not_green.get('failing_check')}:{not_green.get('reason')}", not_green)
+
+    first_at, first = timed[0]
+    last_at, last = timed[-1]
+    out['elapsed_seconds'] = round(last_at - dark_since, 1)
+    edges = [dark_since, *(at for at, _ in timed), max(now, last_at)]
+    out['max_gap_seconds'] = round(max(b - a for a, b in zip(edges, edges[1:])), 1)
+    if out['max_gap_seconds'] > READ_MAX_GAP_SECONDS:
+        return verdict(PENDING, 'read_gap')
+    if last_at - dark_since < MIN_SOAK_SECONDS:
+        return verdict(PENDING, 'soak_under_6h')
+
+    # Check 5's final census: taken at the last read, not carried over from an earlier one.
+    census = _measured(last, 'lost_recordings')
+    try:
+        until = parse_iso(census.get('until'))
+    except ValueError:
+        return verdict(PENDING, 'final_census_window_missing', last)
+    if until < last_at - FINAL_CENSUS_MAX_AGE_SECONDS:
+        return verdict(PENDING, 'final_census_stale', last)
+
+    completions = _cnt(_measured(last, 'fleet_gate'), 'completed')
+    accepted_first = _cnt(_measured(first, 'lost_recordings'), 'accepted')
+    accepted_last = _cnt(census, 'accepted')
+    out['batch_completions'] = completions
+    if accepted_first is not None and accepted_last is not None:
+        out['uploads_accepted'] = accepted_last - accepted_first
+    if completions is None or out['uploads_accepted'] is None:
+        return verdict(PENDING, 'window_volume_unmeasured')
+    if completions < floors['batch_completions']:
+        return verdict(PENDING, 'batch_completions_below_floor')
+    if out['uploads_accepted'] < floors['uploads_accepted']:
+        return verdict(PENDING, 'uploads_accepted_below_floor')
+    return verdict(PASS, 'pass')
+
+
+def window_line(window: Mapping[str, Any]) -> str:
+    return f"SOAK_WINDOW_{window['status']} {window['reason']}"
+
+
+def load_reads(directory: Path) -> list[dict[str, Any]] | None:
+    """Every ``read-*.json`` in the history dir; None if any is unreadable (the window is then PENDING)."""
+    reads = []
+    for path in sorted(directory.glob('read-*.json')):
+        try:
+            value = json.loads(path.read_text())
+        except (OSError, ValueError):
+            return None
+        if not isinstance(value, dict):
+            return None
+        reads.append(value)
+    return reads
+
+
 # --- time helpers -----------------------------------------------------------------------------
 
 
@@ -478,7 +632,7 @@ def collect(env: str, draining_since: float, dark_since: float, now: float) -> d
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description='12h legacy-dark soak checks (contract (h)).')
+    parser = argparse.ArgumentParser(description='Legacy-dark soak checks and the 6h-floor window (contract (h)).')
     parser.add_argument('--env', choices=sorted(ENVS), default='prod')
     parser.add_argument('--draining-since', required=True)
     parser.add_argument('--dark-since', required=True)
@@ -486,6 +640,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument('--evidence', type=Path, help='census JSON for checks 5, 6, 7, 9 (and overrides)')
     parser.add_argument('--collect', action='store_true', help='live read-only collection for checks 2, 3, 4, 10')
     parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument(
+        '--history-dir',
+        type=Path,
+        help='keep this read as read-<time>.json here and judge the whole window (one dir per dark write)',
+    )
     args = parser.parse_args(argv)
     try:
         draining, dark = parse_iso(args.draining_since), parse_iso(args.dark_since)
@@ -517,11 +676,29 @@ def main(argv: list[str] | None = None) -> int:
         gate = {'status': status, 'reason': reason, 'sample': sample, 'percent': (sample or {}).get('percent')}
     report = evaluate(args.env, evidence, gate, draining_since=draining, dark_since=dark)
     report['soak_elapsed_seconds'] = round(max(0.0, now - dark), 1)
+    report['observed_at'] = iso(now)
     report['collect_error'] = evidence.get('collect_error')
+    window = None
+    if args.history_dir is not None:
+        try:
+            args.history_dir.mkdir(parents=True, exist_ok=True)
+            stamp = dt.datetime.fromtimestamp(now, dt.timezone.utc).strftime('%Y%m%dT%H%M%SZ')
+            (args.history_dir / f'read-{stamp}.json').write_text(json.dumps(report, indent=1, sort_keys=True) + '\n')
+            reads = load_reads(args.history_dir)
+        except OSError:
+            reads = None
+        if reads is None:
+            window = {'status': PENDING, 'reason': 'history_unreadable'}
+        else:
+            window = evaluate_window(args.env, reads, dark_since=dark, now=now)
+        report['window'] = window
     args.output.write_text(json.dumps(report, indent=1, sort_keys=True) + '\n')
     for check in report['checks']:
         print(f"{check['check']:<20} {check['status']:<7} {check['reason']}", flush=True)
     print(verdict_line(report), flush=True)
+    if window is not None:
+        print(window_line(window), flush=True)
+        return EXIT[window['status']]
     return EXIT[report['status']]
 
 
