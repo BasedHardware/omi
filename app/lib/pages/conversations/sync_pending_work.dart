@@ -146,10 +146,16 @@ abstract final class SyncPendingWork {
 
 /// Opens the Offline Sync page the device settings open, behind the same gate:
 /// work that lives on a storage-less pendant has no Offline Sync screen.
-void openOfflineSyncDetails(BuildContext context, SyncProvider p, {bool? multiFileSync}) {
+///
+/// [phoneLocal] bypasses that gate for the Activity page's capture rows: a
+/// phone-local problem (full phone disk, stalled phone upload) must reach the
+/// page even when unrelated device recordings wait on a disconnected wearable.
+/// The page still renders device rows read-only without the wearable, which is
+/// exactly what a phone problem needs.
+void openOfflineSyncDetails(BuildContext context, SyncProvider p, {bool? multiFileSync, bool phoneLocal = false}) {
   final moved = SyncPendingWork.movedIds(p);
   final hasDeviceWork = p.allWals.any((w) => w.status == WalStatus.miss && walIsOnDevice(w) && !moved.contains(w.id));
-  if (hasDeviceWork && !context.read<DeviceProvider>().isDeviceStorageSupport) {
+  if (!phoneLocal && hasDeviceWork && !context.read<DeviceProvider>().isDeviceStorageSupport) {
     showOmiAlert(context, title: context.l10n.v2Undetected, message: context.l10n.v2UndetectedMessage);
     return;
   }

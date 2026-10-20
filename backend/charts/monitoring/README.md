@@ -102,6 +102,111 @@ the new check ID. After rollout, operators should confirm Grafana readiness,
 healthy multi-region samples and approved channel delivery; this change has only
 local validation, not a live acceptance receipt.
 
+## Source provisioning and GMP shadow datasource
+
+The existing `grafana_dashboard_provisioning.yml` validates dashboard JSON and
+split/combined alert equality. Main updates provision development dashboards;
+production requires explicit `environment=prod` dispatch from main. The job binds
+the protected `prod` Environment or `development`; production uses its existing
+`MONITOR_GRAFANA_TOKEN`, while development may inherit the repository's dev token.
+PR #21686 restored legacy dashboard provisioning through monitoring-specific
+Environments; the broader alert writer requires protected production authority
+and a permission probe. Rotate only failed credentials. Never use a credential belonging to the retired TV Grafana instance.
+
+The production path upserts `alert-rules.json` by stable UID, backs up live rules
+before writes, preserves UI/API provenance and notification timing, retains
+unknown live UIDs, and fails on definition drift after readback. File-provisioned
+rules require their owner; the API script refuses takeover. Both existing Grafana
+writers share an environment lock. Contact points and notification policies are
+read-only dependencies, not managed by the importer. Paused source rules stay
+paused. Removing source entries does not silently delete live rules.
+
+Parent/operator commands, after loading the authorized token in the environment:
+
+```bash
+python3 backend/scripts/provision_monitoring_alerts.py --lint
+python3 backend/scripts/provision_monitoring_alerts.py --probe-datasources
+python3 backend/scripts/provision_monitoring_alerts.py  # read-only UID/definition drift
+# After reviewing drift and query probes:
+gh workflow run grafana_dashboard_provisioning.yml --repo BasedHardware/omi \
+  --ref main -f environment=prod
+```
+
+The workflow retains pre-write alert and dashboard snapshots for 15 days.
+Canaries are installed, read back and queried successfully before any business
+rule can switch to `KeepLast`; a failed probe blocks those business updates.
+Preserve it before a reviewed rollback; it includes prior rule definitions and
+new UIDs, never token/contact settings. The direct parent API equivalent is
+`--apply --backup-file <new-file>`; backups use exclusive creation and mode0600.
+Dashboard imports require an exclusive `--backup-file`, preserve the existing
+folder, verify desired fields on readback and never follow credentialed redirects. Only the reviewed dashboard allowlist is imported; the overview board
+is production-only because it uses production datasource UIDs. Query/visible
+acceptance remains required; POST success and a version are not rendering proof.
+
+The protected production metrics-egress workflow additionally layers
+[`gmp/frontend-values.prod.yaml`](gmp/frontend-values.prod.yaml) onto the pinned
+stack. This adds Google's digest-pinned frontend, two node-separated replicas,
+PDB, internal Service and non-default datasource `gmp-cloud-run`. Existing local
+Prometheus, adapter URLs, recording rules and warm-up Service remain intact.
+`verify_gmp_frontend_render.py` compares base/candidate renders without printing
+Secret payloads. The rollout probes the actual Grafana query path; readiness
+alone cannot prove Google API authorization or credential renewal.
+
+The frontend uses the verified existing exporter KSA's Monitoring Viewer Workload
+Identity. No new token or IAM change is required. It is accessible inside the
+trusted cluster under that identity's metrics scope, not limited to Cloud Run by
+its name. All migration queries must scope project/location/resource labels.
+Before retiring the LB exporter, preserve/transfer its Helm-owned KSA; the separate
+`gmp/exporter-identity-retention-values.prod.yaml` targets that exporter release,
+not the stack. Verify the stored Helm manifest contains the retention annotation.
+
+No business query, panel or HPA is cut over by adding this datasource. Require
+accepted consumer-specific shadow comparisons for at least24h, full long-query
+warm-up, label/rate/histogram equivalence, and notification receipts before any
+exporter removal. An unsuccessful family comparison is a hold, never evidence
+that tolerances should be relaxed. Removing the overlay preserves the primary
+sources; with pruning disabled the unused shadow UID may remain in Grafana until
+an explicit datasource cleanup. Do not enable global datasource pruning.
+
+The read-only migration tools inventory source consumers and compare exact metric
+families without changing any datasource or rule. Regenerate the inventory after
+source changes, then run only reviewed mappings over at least24h:
+
+```bash
+python3 backend/scripts/monitoring_gmp_shadow.py --inventory \
+  --output backend/charts/monitoring/gmp-query-migration-inventory.json
+source ~/.local/bin/gcp-agent-env.sh ro-prod
+python3 backend/scripts/monitoring_gmp_shadow.py \
+  --kube-context gke_based-hardware_us-central1_prod-omi-gke --gcloud-token \
+  --hours 24 --step 300 --ids omi_fallback_total,omi_journey_accepted_total,omi_journey_terminal_total \
+  --output /tmp/gmp-shadow.json
+```
+
+For frontend acceptance, compare through Grafana's documented
+[datasource UID proxy](https://grafana.com/docs/grafana/latest/developer-resources/api-reference/http-api/api-legacy/data_source/#data-source-proxy-calls),
+using the parent's token loader instead of `--gcloud-token`:
+
+```bash
+python3 backend/scripts/monitoring_gmp_shadow.py \
+  --kube-context gke_based-hardware_us-central1_prod-omi-gke \
+  --managed-url https://monitor.omi.me/api/datasources/proxy/uid/gmp-cloud-run \
+  --managed-token-env MONITOR_GRAFANA_TOKEN --hours 24 --step 300 \
+  --ids omi_fallback_total,omi_journey_accepted_total,omi_journey_terminal_total \
+  --output /tmp/gmp-frontend-shadow.json
+```
+
+Credentialed URLs are fixed to the production Grafana GMP/Prometheus proxy UIDs;
+`--gcloud-token` is fixed to Google's project endpoint. Custom URLs accept no token.
+
+Keep the GMP canary healthy over the observation window, including credential
+renewal. Direct Google API comparisons alone do not prove the frontend path.
+
+An empty/partial response, mismatched labels or values, shared gaps, or an
+unsupported custom metric cannot pass. Family aggregates do not prove every
+consumer's threshold or label semantics; complete per-consumer rewrites and
+Grafana evaluation comparisons remain a separate admission gate. The report
+always records `cutover_authorized=false`, including a matched comparison.
+
 ## Architecture
 
 ```
@@ -221,7 +326,7 @@ Pod stdout/stderr → Alloy (kubernetesApi method) → Loki gateway (basic auth)
                                                                     Grafana Explore (LogQL)
 ```
 
-Alloy collects from `{env}-omi-backend` namespace only. Labels kept: `app_kubernetes_io_name`, `container`, `instance`, `job`, `level`, `namespace`, `service_name`, `pod` (structured metadata).
+Collector values stay enabled pending the valid teardown review in [LOG_CONSOLIDATION.md](LOG_CONSOLIDATION.md). Held route/error and storm preparations live in [route-errors/](route-errors/README.md). Alloy collects from `{env}-omi-backend` namespace only. Labels kept: `app_kubernetes_io_name`, `container`, `instance`, `job`, `level`, `namespace`, `service_name`, `pod` (structured metadata).
 
 Loki runs in distributed mode: 2x ingester, 2x querier, 2x query-frontend, 2x query-scheduler, 2x distributor, 1x compactor, 2x index-gateway, 1x ruler. Storage on GCS (`prod-omi-loki-chunks`). Retention: 15 days (360h).
 
@@ -562,15 +667,15 @@ Grafana: prod at `https://monitor.omi.me/`, dev at `https://monitor.omiapi.com/`
 2. **Export the dashboard JSON:**
 ```bash
 # Get a Grafana API token (Settings → API Keys → Add, role=Viewer)
-export GRAFANA_TOKEN="your-token"
+export MONITOR_GRAFANA_TOKEN="your-token"
 export GRAFANA_HOST="https://monitor.omiapi.com"  # dev first
 
 # List dashboards to find the UID
-curl -s -H "Authorization: Bearer $GRAFANA_TOKEN" \
+curl -s -H "Authorization: Bearer $MONITOR_GRAFANA_TOKEN" \
   "$GRAFANA_HOST/api/search?type=dash-db" | jq '.[] | {title, uid}'
 
 # Export a specific dashboard (strips runtime fields)
-curl -s -H "Authorization: Bearer $GRAFANA_TOKEN" \
+curl -s -H "Authorization: Bearer $MONITOR_GRAFANA_TOKEN" \
   "$GRAFANA_HOST/api/dashboards/uid/<UID>" | \
   jq '.dashboard | del(.id, .version)' > dashboards/<name>.json
 ```
@@ -584,11 +689,11 @@ curl -s -H "Authorization: Bearer $GRAFANA_TOKEN" \
 4. **Import to Grafana** (if creating on a new/different instance):
 ```bash
 # First, get or create the target folder (returns folderUid)
-FOLDER_UID=$(curl -s -H "Authorization: Bearer $GRAFANA_TOKEN" \
+FOLDER_UID=$(curl -s -H "Authorization: Bearer $MONITOR_GRAFANA_TOKEN" \
   "$GRAFANA_HOST/api/folders" | jq -r '.[] | select(.title=="GKE") | .uid')
 
 # Import with folder placement
-curl -s -X POST -H "Authorization: Bearer $GRAFANA_TOKEN" \
+curl -s -X POST -H "Authorization: Bearer $MONITOR_GRAFANA_TOKEN" \
   -H "Content-Type: application/json" \
   -d "{\"dashboard\": $(cat dashboards/<folder>/<name>.json), \"folderUid\": \"$FOLDER_UID\", \"overwrite\": true}" \
   "$GRAFANA_HOST/api/dashboards/db"
@@ -608,12 +713,12 @@ When a dashboard is edited via the Grafana UI (emergency fixes, quick iterations
 
 ```bash
 # 1. Set up
-export GRAFANA_TOKEN="your-token"
+export MONITOR_GRAFANA_TOKEN="your-token"
 export GRAFANA_HOST="https://monitor.omi.me"  # or monitor.omiapi.com
 
 # 2. Export the updated dashboard
 DASHBOARD_UID="07e4c65f-ae79-414d-bf05-99468267d199"  # example: Parakeet ASR
-curl -s -H "Authorization: Bearer $GRAFANA_TOKEN" \
+curl -s -H "Authorization: Bearer $MONITOR_GRAFANA_TOKEN" \
   "$GRAFANA_HOST/api/dashboards/uid/$DASHBOARD_UID" | \
   jq '.dashboard | del(.id, .version)' > dashboards/parakeet-asr-monitoring.json
 
@@ -627,7 +732,7 @@ git commit -m "sync(monitoring): export parakeet dashboard from Grafana UI"
 
 **Bulk sync (all 17 custom dashboards):**
 ```bash
-export GRAFANA_TOKEN="your-token"
+export MONITOR_GRAFANA_TOKEN="your-token"
 export GRAFANA_HOST="https://monitor.omi.me"
 
 # UID → folder mapping (mirrors repo directory structure)
@@ -658,10 +763,10 @@ declare -A DASHBOARDS=(
 for uid in "${!DASHBOARDS[@]}"; do
   folder="${DASHBOARDS[$uid]}"
   mkdir -p "dashboards/$folder"
-  slug=$(curl -s -H "Authorization: Bearer $GRAFANA_TOKEN" \
+  slug=$(curl -s -H "Authorization: Bearer $MONITOR_GRAFANA_TOKEN" \
     "$GRAFANA_HOST/api/dashboards/uid/$uid" | \
     jq -r '.meta.slug // .dashboard.title' | tr ' /' '-' | tr '[:upper:]' '[:lower:]')
-  curl -s -H "Authorization: Bearer $GRAFANA_TOKEN" \
+  curl -s -H "Authorization: Bearer $MONITOR_GRAFANA_TOKEN" \
     "$GRAFANA_HOST/api/dashboards/uid/$uid" | \
     jq '.dashboard | del(.id, .version)' > "dashboards/$folder/${slug}.json"
   echo "Exported: $folder/$slug ($uid)"
@@ -672,20 +777,20 @@ done
 ```bash
 # Export from dev
 export GRAFANA_HOST="https://monitor.omiapi.com"
-curl -s -H "Authorization: Bearer $GRAFANA_TOKEN" \
+curl -s -H "Authorization: Bearer $MONITOR_GRAFANA_TOKEN" \
   "$GRAFANA_HOST/api/dashboards/uid/<uid>" | \
   jq '.dashboard | del(.id, .version)' > dashboards/<folder>/<name>.json
 
 # Import to prod with correct folder
 FOLDER_UID="aev9igt5fwgsgc"  # example: GKE folder
-curl -s -X POST -H "Authorization: Bearer $PROD_GRAFANA_TOKEN" \
+curl -s -X POST -H "Authorization: Bearer $MONITOR_GRAFANA_TOKEN" \
   -H "Content-Type: application/json" \
   -d "{\"dashboard\": $(cat dashboards/<folder>/<name>.json), \"folderUid\": \"$FOLDER_UID\", \"overwrite\": true}" \
   "https://monitor.omi.me/api/dashboards/db"
 ```
 
 **Rules:**
-- Always export from prod to repo (prod is the live source until full provisioning is in place)
+- Export emergency production UI edits back to the repo before the next import
 - Strip `.id` and `.version` — they are instance-specific
 - Keep `.uid` — it prevents duplicate dashboards on import
 - Emergency UI edits must be synced back to repo within the same day
@@ -717,8 +822,8 @@ Pusher release workflows additionally call `verify_pusher_live_alert_route.py`
 before publishing or promoting an image. The protected `MONITOR_GRAFANA_TOKEN`
 secret (repo-scoped for dest `monitor.omiapi.com`, `prod` environment-scoped
 for `monitor.omi.me`) must be able to read provisioned alert rules, datasource
-health and queries, and contact points. Do not reuse `GRAFANA_TOKEN` here; that
-secret belongs to the TV Cloud Run Grafana. The default invocation is the
+health and queries, and contact points. Do not reuse the retired TV-instance
+credential here. The default invocation is the
 Pusher release gate: it fails closed unless the committed memory-admission
 and capture-outcome pager set is live and unpaused, Prometheus reports healthy,
 both Pusher and backend-listen have a non-terminating scrape target and every such target is up, and the
@@ -826,9 +931,9 @@ evidence of saturation. Operator response is in
 
 ## Dashboard & Metrics Lifecycle
 
-### Approach: UI-First, Git-Backed
+### Approach: repo definitions with explicit production apply
 
-Dashboards are created and edited directly in the Grafana UI — it's purpose-built for visual iteration. Git serves as backup, version control, and the restore source for disaster recovery or new cluster setup.
+Prototype dashboards in the development UI, export reviewed JSON, and merge it before production apply. Split alert files and the combined export must match. Emergency production UI changes must be exported before the next import; source equality is checked locally and live definition drift is checked through the API.
 
 ```
 Create/edit dashboard in Grafana UI
@@ -907,7 +1012,7 @@ datasource provisioning is disabled; an existing unused SQLite entry is retained
 until its exact live organization and ownership are checked. No datasource pruning
 or persistent-store deletion occurs.
 
-Two datasource canaries cover local Prometheus and Cloud Monitoring, with
+Three datasource canaries cover local Prometheus, Cloud Monitoring and GMP, with
 `execErrState=Alerting` and `noDataState=Alerting`, routed directly to Telegram.
 Business rules use `KeepLast` on query errors, preserving existing no-data policy
 and any firing state. Four active rules retain their fingerprinted admission debt
@@ -917,8 +1022,8 @@ exactly one page per outage is made while those exceptions remain.
 
 The Cloud Logging plugin does not support Grafana-managed alerting. A synthetic
 raw-log alert would be a permanent error, not a health canary; use bounded
-log-based metrics through Cloud Monitoring for alert signals. Loki rules remain
-paused pending the separate log-plane migration. The external deadman covers
+log-based metrics through Cloud Monitoring for alert signals. Four paused Loki definitions are retired from source; manual live retirement and
+Cloud Logging presentation acceptance follow [LOG_CONSOLIDATION.md](LOG_CONSOLIDATION.md). The external deadman covers
 Grafana availability independently; it cannot prove query-path or delivery health.
 
 ### Metrics Contract
@@ -939,6 +1044,21 @@ one-line reason in `DECLARED_SPARSE`. The allowlist records existing debt and
 must shrink as initialization is added. Exporter/GPU/other service registries and
 full selector coverage are outside this family-level contract; stream-close
 selector coverage has its own unit test.
+
+The backend-listen fleet-health write counters use closed labels:
+`omi_stt_fleet_health_write_attempted_total{write_path,kind}` counts each logical
+write passed to the scheduler, including writes dropped by its bounds;
+`omi_stt_fleet_health_write_written_total` counts only after Redis acknowledges
+a commit, and
+`omi_stt_fleet_health_write_dropped_total{write_path,kind,reason}` records bounded
+drop reasons. `write_path` is `transcript_result`, `cost_routing_result`, or
+`cost_bench`; `kind` is `result` or `bench`; `reason` is `redis_backoff`,
+`identity_changed`, `identity_changed_after_commit`, `redis_error`,
+`loop_unavailable`, `in_flight_limit`, `background_schedule_error`, or
+`cross_thread_schedule_error`. The finalization
+`listen_finalization_summary_last_success_timestamp_seconds` gauge is registered
+only after a successful Firestore summary, so absence means this process has not
+yet confirmed the summary.
 
 Each service that exposes Prometheus metrics should document them alongside its ServiceMonitor or in its chart's values comments. Minimum contract:
 
@@ -1138,6 +1258,12 @@ node in another zone before changing the preference to a requirement. No PVC
 migration/deletion or pool expansion is included. Recheck node capacity and
 placement before apply; these are dated measurements, not deployment receipts.
 
+Decide zone capacity before replica1's first claim binding. With only zone-a
+nodes, its standard-rwo claim will also bind in a; adding zone-b nodes later
+cannot move that disk. Cross-zone adoption then requires a separately reviewed
+retained-claim migration/replacement. Prefer zone-b capacity and required zone
+anti-affinity before the first replica1 rollout if zone HA is required.
+
 Grafana and the HPA adapter retain the existing Prometheus ClusterIP. After
 unpinning it selects ready replicas and balances TCP connections; keep-alive can pin a client to one
 replica, and a failed in-flight request is not retried by the Service. No query
@@ -1254,6 +1380,9 @@ boolean threshold units, reduction/math support and pending periods on rate,
 ratio or average queries. `legacy_debt` pins unchanged pre-existing findings to
 a rule hash; any rule edit invalidates the exception. It is debt, never deployment
 approval. The snapshot is historical presence, not proof of current ingestion.
+`declared_metrics` records source-backed metric names that are not yet in that
+historical snapshot; offline lint accepts them, while a live replay still checks
+the actual Prometheus series and fails if they have not been deployed or scraped.
 Explicit `admission_holds` require a rule to stay paused until its reviewed hold
 is removed. Live replay exits nonzero on dead, noisy or unproven results.
 The CI gate catches structural regressions; live threshold calibration remains

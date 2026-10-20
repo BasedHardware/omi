@@ -15,7 +15,7 @@ operator settings, RPCs and index readiness are in
 | Compute loop | `pump.py`, `compute_client.py` | Pull/heartbeat/drain interface used by the GPU runtime; service-OIDC authorization before model spend. |
 | Spend policy | `admission.py` | Backend-only original quota guards and lease-bound compute seals. |
 | Encrypted artifacts | `artifacts.py`, `artifact_policy.py` | Authenticated object IO, immutable generations and privacy-fenced object registration. |
-| Conversation projection | `context.py`, `projection.py`, `projection_parts.py` | Validated encrypted metadata, legacy VAD/assignment grouping and resumable per-part receipts. |
+| Conversation projection | `context.py`, `projection.py`, `projection_parts.py`, `projection_followup.py` | Validated encrypted metadata, legacy VAD/assignment grouping and resumable per-part receipts. |
 | Enrichment | `enrichment.py` | Privacy-aware adapter to the existing coalesced sync reprocess outbox. |
 | Quarantine recovery | `quarantine_recovery.py` | Default-off owner-gated per-unit legacy sync STT, single dispatch and encrypted result reconciliation; original batch claim retained. |
 | Cleanup | `retention.py` | Durable erasure outboxes and bounded object/metadata cleanup. |

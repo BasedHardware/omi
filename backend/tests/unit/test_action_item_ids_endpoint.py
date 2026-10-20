@@ -109,19 +109,19 @@ class _Firestore:
 
 
 def test_list_action_item_ids_returns_ids(monkeypatch):
-    monkeypatch.setattr(ai_mod.action_items_db, 'get_action_item_ids', lambda uid: ['a1', 'a2', 'a3'])
+    monkeypatch.setattr(ai_mod.action_items_db, 'get_action_item_ids', lambda uid, **kwargs: ['a1', 'a2', 'a3'])
     assert ai_mod.list_action_item_ids(completed=None, uid='u1') == {'ids': ['a1', 'a2', 'a3']}
 
 
 def test_list_action_item_ids_empty(monkeypatch):
-    monkeypatch.setattr(ai_mod.action_items_db, 'get_action_item_ids', lambda uid: [])
+    monkeypatch.setattr(ai_mod.action_items_db, 'get_action_item_ids', lambda uid, **kwargs: [])
     assert ai_mod.list_action_item_ids(completed=None, uid='u1') == {'ids': []}
 
 
 def test_list_action_item_ids_scopes_to_caller(monkeypatch):
     seen = {}
 
-    def fake(uid):
+    def fake(uid, **kwargs):
         seen['uid'] = uid
         return []
 
@@ -133,7 +133,7 @@ def test_list_action_item_ids_scopes_to_caller(monkeypatch):
 def test_list_action_item_ids_scopes_select_all_to_completion_bucket(monkeypatch):
     seen = {}
 
-    def fake(uid, *, completed):
+    def fake(uid, *, completed, **kwargs):
         seen.update(uid=uid, completed=completed)
         return ['done-1']
 
@@ -297,3 +297,36 @@ def test_batch_delete_preflight_chunks_large_id_lists(monkeypatch):
     assert len(preflight_chunks[1]) == 500
     assert len(preflight_chunks[2]) == 200
     assert result['deleted_count'] == 1200
+
+
+def test_ids_route_marks_partial_census_with_header(monkeypatch):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from utils.other import endpoints
+
+    def slow_ids(uid, *, completed, budget):
+        assert uid == 'user-budget'
+        assert completed is False
+        budget.mark_exhausted('deadline')
+        return ['verified-id']
+
+    monkeypatch.setattr(action_items_db, 'get_visible_action_item_ids', slow_ids)
+    app = FastAPI()
+    app.include_router(ai_mod.router)
+    app.dependency_overrides[endpoints.get_current_user_uid] = lambda: 'user-budget'
+    with TestClient(app) as client:
+        response = client.get('/v1/action-items/ids?completed=false')
+    assert response.status_code == 200
+    assert response.headers['X-Omi-List-Truncated'] == 'true'
+    assert response.json() == {'ids': ['verified-id'], 'completed_scope': False}
+
+
+def test_id_scan_budget_retains_prefix_and_stops_before_another_page():
+    from utils.other.list_budget import ListReadBudget
+
+    client = _Firestore([_Doc(f'task-{index:04d}', {}) for index in range(501)])
+    budget = ListReadBudget(deadline_monotonic=5, max_documents=3, clock=lambda: 0)
+    ids = action_items_db.get_action_item_ids('user-9', firestore_client=client, budget=budget)
+    assert ids == ['task-0000', 'task-0001', 'task-0002']
+    assert budget.truncated
+    assert client.query.start_after_calls == []

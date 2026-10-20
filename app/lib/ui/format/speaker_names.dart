@@ -55,6 +55,7 @@ class SpeakerNames {
   /// The name for [segment]'s speaker. [person] overrides the people lookup (callers that already
   /// resolved it).
   String forSegment(TranscriptSegment segment, {Person? person}) {
+    if (segment.sttProvider?.startsWith('on_device:') == true) return '';
     if (segment.isUser) return _ownerName ?? _l10n.you;
     if (segment.speakerId == omiSpeakerId) return _l10n.omiAppName;
     final assigned = person ?? (segment.personId == null ? null : _peopleById[segment.personId]);

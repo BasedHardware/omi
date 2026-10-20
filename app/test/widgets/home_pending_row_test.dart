@@ -8,9 +8,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart' show BleAudioCodec;
+import 'package:omi/backend/http/api_result.dart';
+import 'package:omi/backend/schema/pending_work.dart';
+import 'package:omi/services/pending_work/pending_work_store.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/models/sync_state.dart';
-import 'package:omi/pages/conversations/widgets/capture_recovery_banner.dart';
 import 'package:omi/pages/conversations/conversations_page.dart' show dateFilterIncludesToday;
 import 'package:omi/pages/conversations/on_the_way_page.dart';
 import 'package:omi/pages/conversations/sync_pending_work.dart';
@@ -167,7 +169,12 @@ Future<void> _pumpRow(WidgetTester tester, SyncProvider sync, {List<SingleChildW
 }
 
 Future<void> _pumpPage(WidgetTester tester, SyncProvider sync, {List<SingleChildWidget> extras = const []}) async {
-  await tester.pumpWidget(_app(sync, const OnTheWayPage(multiFileSync: true), extras: extras));
+  // The fixtures start a few minutes into 1970: pin Today there so their day opens by default.
+  OnTheWayPage.resetFolds();
+  await tester.pumpWidget(
+    _app(sync, OnTheWayPage(multiFileSync: true, clock: () => DateTime.fromMillisecondsSinceEpoch(1000 * 1000)),
+        extras: extras),
+  );
   await tester.pump();
 }
 
@@ -288,7 +295,7 @@ void main() {
       await tester.tap(find.byKey(_row));
       await tester.pumpAndSettle();
       expect(find.text('On the Way'), findsOneWidget);
-      expect(find.text('ALMOST READY'), findsOneWidget);
+      expect(find.text('1 recording · 4m on the way'), findsOneWidget);
     });
 
     // Home mounts the row inside a CustomScrollView's slivers, where a plain
@@ -299,7 +306,6 @@ void main() {
             const Scaffold(
               body: CustomScrollView(
                 slivers: [
-                  SliverToBoxAdapter(child: CaptureRecoveryBanner()),
                   SliverToBoxAdapter(child: HomePendingRow(showTodayHeader: true)),
                 ],
               ),
@@ -321,13 +327,61 @@ void main() {
   });
 
   group('OnTheWayPage', () {
-    testWidgets('groups recordings by how close they are to done', (tester) async {
+    Future<PendingWorkStore> serverWork(List<PendingWorkItem> items) async {
+      final store = PendingWorkStore(
+        loadPending: () async => ApiSuccess(PendingWorkSnapshot(enabled: true, attentionUnseenCount: 0, items: items)),
+        loadAttention: () async => const ApiSuccess(AttentionItemsPage.disabled),
+      );
+      await store.refresh();
+      return store;
+    }
+
+    Future<void> pumpWithServerWork(WidgetTester tester, SyncProvider sync, PendingWorkStore store) async {
+      OnTheWayPage.resetFolds();
+      await tester.pumpWidget(_app(
+        sync,
+        OnTheWayPage(
+          multiFileSync: true,
+          pendingWork: store,
+          clock: () => DateTime.fromMillisecondsSinceEpoch(1000 * 1000),
+        ),
+      ));
+      await tester.pump();
+    }
+
+    testWidgets('lists server work the phone did not start instead of saying all is synced', (tester) async {
+      final store = await serverWork([
+        PendingWorkItem(
+          id: 'conv:a',
+          kind: 'conversation',
+          state: 'summarizing',
+          conversationIds: const ['a'],
+          startedAt: DateTime.fromMillisecondsSinceEpoch(900 * 1000),
+          durationSeconds: 600,
+        ),
+        const PendingWorkItem(id: 'sync:j', kind: 'sync_job', state: 'transcribing', conversationIds: []),
+      ]);
+      await pumpWithServerWork(tester, _FakeSync(), store);
+
+      expect(find.text('All recordings are synced'), findsNothing);
+      expect(find.text('Processing'), findsOneWidget, reason: 'the summarizing conversation, on its day');
+      expect(find.text('Transcribing…'), findsOneWidget, reason: 'the undated sync job');
+    });
+
+    testWidgets('a server sync job the phone is uploading itself is not listed twice', (tester) async {
+      final store = await serverWork([
+        const PendingWorkItem(id: 'sync:j', kind: 'sync_job', state: 'transcribing', conversationIds: []),
+      ]);
+      await pumpWithServerWork(tester, _FakeSync(wals: [_wal('phone', 4, WalStatus.uploaded)]), store);
+
+      expect(find.text('Transcribing…'), findsOneWidget, reason: 'the recording only, not the job again');
+    });
+
+    testWidgets('shows how close each recording is to done', (tester) async {
       final device = _wal('device', 2, WalStatus.miss)..storage = WalStorage.sdcard;
       await _pumpPage(tester, _FakeSync(wals: [_wal('processing', 4, WalStatus.uploaded), device]));
 
-      expect(find.text('ALMOST READY'), findsOneWidget);
       expect(find.text('Transcribing…'), findsOneWidget);
-      expect(find.text('SYNCING'), findsOneWidget);
       expect(find.text('On your device'), findsOneWidget);
     });
 
@@ -337,7 +391,7 @@ void main() {
       await _pumpPage(tester, _FakeSync(wals: [phone, deviceTwin]));
 
       expect(find.text('On your device'), findsNothing);
-      expect(find.text('SYNCING'), findsNothing);
+      expect(find.text('Transcribing…'), findsOneWidget);
     });
 
     testWidgets('counts fragments of one recording as one row', (tester) async {
@@ -412,8 +466,7 @@ void main() {
             device: 'pendant',
           );
       await _pumpPage(tester, _FakeSync(wals: [rest, piece(1000), piece(1150)]));
-      expect(find.textContaining('· 10m'), findsOneWidget);
-      expect(find.textContaining('·'), findsOneWidget);
+      expect(find.text('1 recording · 10m on the way'), findsOneWidget);
     });
 
     test('the catching-up check is answered once per WAL list, not per progress tick', () {
@@ -500,7 +553,7 @@ void main() {
     });
 
     testWidgets('a live capture still processing is listed once, not again as its uploaded audio', (tester) async {
-      final now = DateTime.now();
+      final now = DateTime.fromMillisecondsSinceEpoch(1000 * 1000);
       final conversations = ConversationProvider(
         conversationListFetcher: () async => (items: <ServerConversation>[], ok: true),
         isSignedIn: () => true,
@@ -524,7 +577,7 @@ void main() {
     });
 
     testWidgets('a live capture still processing is not repeated as its not-yet-uploaded audio', (tester) async {
-      final now = DateTime.now();
+      final now = DateTime.fromMillisecondsSinceEpoch(1000 * 1000);
       final conversations = ConversationProvider(
         conversationListFetcher: () async => (items: <ServerConversation>[], ok: true),
         isSignedIn: () => true,
@@ -544,7 +597,7 @@ void main() {
         extras: [ChangeNotifierProvider<ConversationProvider>.value(value: conversations)],
       );
       expect(find.text('Processing'), findsOneWidget);
-      expect(find.text('SYNCING'), findsNothing);
+      expect(find.text('Waiting to sync'), findsNothing);
     });
 
     testWidgets('one recording straddling an upload batch is listed once, by its least advanced part', (tester) async {
@@ -563,14 +616,12 @@ void main() {
         device: 'pendant',
       );
       await _pumpPage(tester, _FakeSync(wals: [next, done]));
-      expect(find.text('ALMOST READY'), findsNothing);
+      expect(find.text('Transcribing…'), findsNothing);
       expect(find.text('Waiting to sync'), findsOneWidget);
     });
 
-    testWidgets('a transfer with no recording listed yet sits under Syncing', (tester) async {
+    testWidgets('a transfer with no recording listed yet still reads as in progress', (tester) async {
       await _pumpPage(tester, _FakeSync(syncing: true));
-      expect(find.text('SYNCING'), findsOneWidget);
-      expect(find.text('ALMOST READY'), findsNothing);
       expect(find.text('Downloading from your device'), findsOneWidget);
     });
 

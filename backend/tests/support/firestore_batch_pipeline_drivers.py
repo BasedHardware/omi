@@ -9,6 +9,19 @@ def entries():
     namespaces = ['batch_pipeline_prod', 'batch_pipeline_dev']
     return (
         CoveredByEntry(
+            'database.batch_pipeline_store.FirestoreTransaction.ready_predecessor',
+            covered_by=('database.batch_pipeline_store.ready_predecessor',),
+            reason='thin adapter forwards the transaction-bound predecessor query unchanged',
+            expect_observed=False,
+            body_digest='345662386754d78758580d321467fcd012838fc0a9ae8194eeb7b3e6ede54f14',
+        ),
+        DriverEntry(
+            'database.batch_pipeline_store.ready_predecessor',
+            base={'owner_key': 'owner-hash', 'segment_id': 'segment-head'},
+            domains={'namespace': namespaces, 'priority': [0, 1, 2]},
+            neutrals={'transaction': (None, 'transaction binding only')},
+        ),
+        CoveredByEntry(
             'database.batch_pipeline_store.FirestoreTransaction.service_frontier',
             covered_by=('database.batch_pipeline_store.service_frontier',),
             reason='thin adapter forwards the transaction-bound frontier query unchanged',
@@ -32,20 +45,47 @@ def entries():
         ),
         DriverEntry(
             'database.batch_pipeline_quarantine_recovery.recovery_candidates',
-            domains={'namespace': namespaces},
-            neutrals={
-                'owner_id': ('synthetic-owner', 'owner equality operand only'),
-                'limit': (10, 'bounded page size'),
+            domains={
+                'namespace': namespaces,
+                'owner_id': ['synthetic-owner', None],
+                'after_id': [None, 'held-09'],
             },
+            neutrals={'limit': (10, 'bounded page size')},
         ),
         DriverEntry(
-            'database.batch_pipeline_store.projection_pending',
-            domains={'namespace': namespaces},
+            'database.batch_pipeline_store.projection_page',
+            domains={'namespace': namespaces, 'after': [None, (2.0, 'result-100')]},
             neutrals={'limit': (100, 'bounded page size only')},
+        ),
+        DriverEntry(
+            'database.batch_pipeline_store.projection_successor',
+            base={'owner_key': 'owner-hash'},
+            domains={'namespace': namespaces, 'previous': [None, 'segment-head']},
+        ),
+        CoveredByEntry(
+            'database.batch_pipeline_store.FirestoreStore.projection_successor',
+            covered_by=('database.batch_pipeline_store.projection_successor',),
+            reason='store adapter forwards namespace, owner and predecessor unchanged',
+            expect_observed=False,
+            body_digest='96adabf372104327c5a8065ef2ff06621648ee242b3415d04b047d50ded9e6b1',
+        ),
+        CoveredByEntry(
+            'database.batch_pipeline_store.projection_pending',
+            covered_by=('database.batch_pipeline_store.projection_page',),
+            reason='legacy first-page adapter discards the cursor only',
+            expect_observed=False,
+            body_digest='52cc913cca9086557133a8f7118b9980ce5f13649897207fafcfa221513a5629',
+        ),
+        CoveredByEntry(
+            'database.batch_pipeline_store.FirestoreStore.projection_page',
+            covered_by=('database.batch_pipeline_store.projection_page',),
+            reason='store adapter forwards namespace, limit and keyset cursor unchanged',
+            expect_observed=False,
+            body_digest='49c9e1328475cf209b188988ba3f179b6a1281ca79b56ef4b21139abf27a15d1',
         ),
         CoveredByEntry(
             'database.batch_pipeline_store.FirestoreStore.projection_pending',
-            covered_by=('database.batch_pipeline_store.projection_pending',),
+            covered_by=('database.batch_pipeline_store.projection_page',),
             reason='thin store adapter forwards namespace and bounded page size unchanged',
             expect_observed=False,
             body_digest='351a3ea949d6033cf3f2003805681af4af223cd0db4a12dc2869e70fb2a74d59',
@@ -107,7 +147,7 @@ def entries():
         ),
         DriverEntry(
             'database.batch_pipeline_store.due',
-            domains={'namespace': namespaces, 'state': ['leased', 'retry', 'result_ready']},
+            domains={'namespace': namespaces, 'state': ['leased', 'retry', 'result_ready', 'record_pending']},
             neutrals={'now': (1.0, 'timestamp operand only'), 'limit': (100, 'bounded page size')},
         ),
         DriverEntry(

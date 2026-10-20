@@ -6,6 +6,8 @@ Messages are persistence-only writes (no LLM streaming) — they use
 streams AI responses.
 """
 
+from utils.generated_compute import require_generated_compute
+
 import logging
 from typing import Any, Callable, List, cast
 
@@ -360,6 +362,7 @@ def generate_session_title(
     ),
 ):
     """Generate a title for a chat session based on its messages."""
+    require_generated_compute(uid, 'session_titles')
     conversation = '\n'.join(f"{m.sender}: {m.text}" for m in request.messages[:10])
     prompt = (
         "Generate a short, descriptive title (max 6 words) for this chat conversation. "

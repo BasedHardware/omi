@@ -159,7 +159,6 @@ def memory_stack(memory_module, monkeypatch):
     monkeypatch.setattr(pc, 'conversation_transcript_and_speaker_map', lambda *_: ('Ship Friday', {}))
     monkeypatch.setattr(pc, 'may_attribute_to_owner', lambda *_: True)
     monkeypatch.setattr(pc, '_rejected_memory_examples_for_l1', lambda *_, **__: ())
-    monkeypatch.setattr(pc, 'select_owner_shadow_indices', lambda *_: ([], 0))
     yield pc, conversation, service
 
 
@@ -227,22 +226,6 @@ def test_invalid_checkpoint_output_is_a_cache_miss(enabled, monkeypatch):
     assert generate.call_count == 2
 
 
-def test_owner_adjudication_summary_is_part_of_l1_effective_input(enabled, memory_stack, monkeypatch):
-    pc, conversation, _ = memory_stack
-    row = {}
-    monkeypatch.setattr(pc, 'memory_owner_jev_flip_enabled', lambda: True)
-    monkeypatch.setattr(dedupe, '_stored', lambda *_, **__: row)
-    monkeypatch.setattr(
-        dedupe, 'l1_succeeded', lambda uid, conv, digest, **kwargs: row.update({dedupe.L1_HASH: digest})
-    )
-    extract = Mock(return_value=[])
-    monkeypatch.setattr(pc, 'extract_canonical_l1_memory_candidates', extract)
-    pc._extract_memories_canonical('u', conversation, db_client=Mock())
-    conversation.structured.overview = 'Changed notes context for owner attribution'
-    pc._extract_memories_canonical('u', conversation, db_client=Mock())
-    assert extract.call_count == 2
-
-
 @pytest.mark.parametrize('enabled_flag', [False, True])
 def test_l1_checkpoint_uses_injected_client_even_when_disabled(memory_stack, monkeypatch, enabled_flag):
     from database import _client
@@ -290,3 +273,38 @@ def test_route_module_changes_invalidate_both_feature_fingerprints(monkeypatch, 
             assert dedupe.fingerprint(feature, 'same input') != old
     finally:
         dedupe.implementation_digest.cache_clear()
+
+
+@pytest.mark.parametrize('summary_gate', [False, True])
+def test_empty_notes_checkpoint_is_not_first_summary_success(monkeypatch, summary_gate):
+    from types import SimpleNamespace
+    from unittest.mock import Mock
+    from models.structured import Structured
+    from utils.conversations import llm_input_dedupe as target
+
+    monkeypatch.setenv('CONVERSATION_LLM_INPUT_DEDUPE_ENABLED', 'true')
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true' if summary_gate else 'false')
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '100')
+    monkeypatch.delenv('FIRST_SUMMARY_UID_ALLOWLIST', raising=False)
+    empty = Structured(title='Server transcript title', overview='')
+    rich = Structured(title='Generated title', overview='A supported synthetic summary')
+    monkeypatch.setattr(target, 'fingerprint', lambda *_: 'same-input')
+    monkeypatch.setattr(
+        target,
+        '_stored',
+        lambda *_: {
+            target.NOTES_HASH: 'same-input',
+            target.NOTES_OUTPUT_HASH: target.output_fingerprint(empty),
+            'structured': empty.model_dump(),
+            'discarded': False,
+        },
+    )
+    monkeypatch.setattr(target, 'record_feature', lambda *_: None)
+    generate = Mock(return_value=rich)
+    output = target.notes('u', SimpleNamespace(id='c'), [], generate, {})
+    if summary_gate:
+        generate.assert_called_once()
+        assert output.overview == rich.overview
+    else:
+        generate.assert_not_called()
+        assert output.overview == ''

@@ -9,9 +9,11 @@ from database import conversations, action_items, users, candidates
 from utils.entity_pages import _facts, resolve_entity  # pyright: ignore[reportPrivateUsage]
 from utils.memory.canonical_memory_adapter import read_canonical_memory_item, memory_item_to_memorydb
 from utils.memory.memory_service import MemoryService
-from models.product_memory import MemoryAccessPolicy
+from models.product_memory import MemoryAccessPolicy, MemoryTier, MemoryItemStatus
+from models.memory_evidence import SourceState
 from utils.memory.canonical_visibility_filter import filter_canonical_default_visible_items
 from database.task_intelligence_control import get_task_workflow_control
+from utils.agent_capabilities.errors import AgentRecordUnavailable
 
 READ_COLLECTIONS = {
     'conversations',
@@ -70,7 +72,7 @@ def search_hydration_unavailable(error):
     return not unavailable_is_transient(error)
 
 
-def read_record(uid, ref, *, control_cache=None, diagnostics=None):
+def read_record(uid, ref, *, control_cache=None, diagnostics=None, require_available=False):
     control_cache = {} if control_cache is None else control_cache
     collection, separator, key = ref.partition('/')
     if not separator or '/' in key or not key or collection not in READ_COLLECTIONS:
@@ -81,6 +83,8 @@ def read_record(uid, ref, *, control_cache=None, diagnostics=None):
         # decoder can silently replace corrupt/wrong-key speech with [].
         raw = conversations.get_conversation_raw_snapshot(uid, key)
         if not raw or not conversations.is_visible_conversation(raw):
+            if require_available and conversations.is_visible_conversation(raw, include_discarded=True):
+                raise AgentRecordUnavailable('Dream conversation temporarily hidden')
             return None
         if raw.get('is_locked'):
             raise HTTPException(423, 'Dream record locked')
@@ -101,7 +105,7 @@ def read_record(uid, ref, *, control_cache=None, diagnostics=None):
         row.setdefault('id', key)
         return row
     if collection in {'memories', 'memory_items'}:
-        return _read_memory_record(uid, key)
+        return _read_memory_record(uid, key, require_available=require_available)
     if collection in {'action_items', 'candidates'}:
         if 'generation' not in control_cache:
             control_cache['generation'] = get_task_workflow_control(uid).account_generation
@@ -122,30 +126,50 @@ def read_record(uid, ref, *, control_cache=None, diagnostics=None):
     return None
 
 
-def _read_memory_record(uid, key):
-    """Owner-visible memory, or None when the row is gone or not visible.
+def _read_memory_record(uid, key, *, require_available=False):
+    """Owner-visible memory, with explicit temporary unavailability for Review.
 
-    A 404 means the item is missing or not an active visible item (superseded,
-    hidden, tombstoned, archived, invalid). A 402 is the paid-plan lock. Those
-    are permanent. A store fault such as 503 stays an exception so the session
-    can retry it instead of acknowledging the dirty id as consumed.
+    Review releases by default. Only the explicit terminal exclusions return None;
+    ordinary retrieval continues to omit all unavailable rows.
+    Store faults stay exceptions for every caller.
     """
     try:
-        canonical = read_canonical_memory_item(uid, key)
-        if canonical and not filter_canonical_default_visible_items(
-            [canonical],
-            policy=MemoryAccessPolicy.for_omi_chat(archive_capability=False),
-            now=datetime.now(timezone.utc),
-        ):
-            return None
+        canonical = (
+            read_canonical_memory_item(uid, key, include_inactive=True)
+            if require_available
+            else read_canonical_memory_item(uid, key)
+        )
+        if canonical:
+            # This is the complete terminal allowlist for canonical memory evidence.
+            if require_available and (
+                canonical.status in {MemoryItemStatus.hidden, MemoryItemStatus.tombstoned}
+                or canonical.source_state in {SourceState.tombstoned, SourceState.purged}
+                or canonical.tier == MemoryTier.archive
+                or (canonical.promotion or {}).get('user_review') is False
+            ):
+                return None
+            policy = MemoryAccessPolicy.for_omi_chat(archive_capability=False)
+            now = datetime.now(timezone.utc)
+            if not filter_canonical_default_visible_items([canonical], policy=policy, now=now):
+                if require_available:
+                    raise AgentRecordUnavailable('Dream memory temporarily unavailable')
+                return None
         row = memory_item_to_memorydb(canonical) if canonical else MemoryService().fetch(uid, key)
     except HTTPException as exc:
+        if require_available and exc.status_code == 402:
+            raise AgentRecordUnavailable('Dream memory locked') from exc
         if not unavailable_is_transient(exc):
             return None
         raise
-    if row.user_review is False or row.visibility != 'private' or row.invalid_at is not None:
+    if row.user_review is False:
+        return None
+    if row.visibility != 'private' or row.invalid_at is not None:
+        if require_available:
+            raise AgentRecordUnavailable('Dream memory temporarily unavailable')
         return None
     if row.is_locked:
+        if require_available:
+            raise AgentRecordUnavailable('Dream memory locked')
         return None
     return row.model_dump(mode='python')
 

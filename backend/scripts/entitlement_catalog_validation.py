@@ -8,13 +8,54 @@ def validate_entitlement_versions(catalog: Mapping[str, Any]) -> list[str]:
     versions = catalog.get('entitlement_versions')
     if not isinstance(versions, dict) or set(versions) != {'legacy', 'ladder_v1'}:
         return ['entitlement_versions: expected legacy and ladder_v1']
-    if versions['legacy'] != {'budget': None}:
+    if (
+        not isinstance(versions['legacy'], dict)
+        or set(versions['legacy']) != {'budget', 'capabilities'}
+        or versions['legacy'].get('budget') is not None
+    ):
         errors.append('entitlement_versions.legacy: legacy has no usage-unit budget')
     ladder = versions['ladder_v1']
-    if not isinstance(ladder, dict) or set(ladder) != {'rate_card_version', 'unit_usd_micros', 'monthly_budgets'}:
+    if not isinstance(ladder, dict) or set(ladder) != {
+        'rate_card_version',
+        'unit_usd_micros',
+        'monthly_budgets',
+        'mcp_daily_caps',
+        'api_max_reads_per_request',
+        'capabilities',
+    }:
         return errors + ['entitlement_versions.ladder_v1: invalid keys']
     if ladder['rate_card_version'] != 'v1' or ladder['unit_usd_micros'] != 1000:
         errors.append('entitlement_versions.ladder_v1: expected v1 at $0.001/unit')
+    if ladder.get('mcp_daily_caps') != {'basic': 100, 'plus': 500, 'operator': 5000, 'architect': 5000}:
+        errors.append('ladder_v1.mcp_daily_caps: expected ratified caps')
+    if ladder.get('api_max_reads_per_request') != {'basic': 2000, 'plus': 5000, 'operator': 25000, 'architect': 25000}:
+        errors.append('ladder_v1.api_max_reads_per_request: expected per-plan read limits')
+    for version, plans in {
+        'legacy': {
+            'basic': False,
+            'plus': True,
+            'unlimited': True,
+            'unlimited_v2': True,
+            'operator': True,
+            'architect': True,
+        },
+        'ladder_v1': {'basic': False, 'plus': False, 'operator': True, 'architect': True},
+    }.items():
+        expected_capabilities = {plan: {'cloud_screen_vectors': allowed} for plan, allowed in plans.items()}
+        if versions[version].get('capabilities') != expected_capabilities:
+            errors.append(f'entitlement_versions.{version}.capabilities: expected cloud screen vector parity')
+    bindings_config = catalog.get('ladder_v1_price_bindings')
+    expected = {
+        f'ladder_v1_{tier}_{interval}': {
+            'plan_id': plan,
+            'interval': interval,
+            'env_var': f'LADDER_V1_{tier.upper()}_{interval.upper()}_PRICE_ID',
+        }
+        for tier, plan in [('plus', 'plus'), ('pro', 'operator'), ('architect', 'architect')]
+        for interval in ('month', 'year')
+    }
+    if bindings_config != expected:
+        errors.append('ladder_v1_price_bindings: expected six lookup-key bindings')
     budgets = ladder['monthly_budgets']
     if not isinstance(budgets, dict) or set(budgets) != {'basic', 'plus', 'operator', 'architect'}:
         return errors + ['entitlement_versions.ladder_v1.monthly_budgets: invalid plans']

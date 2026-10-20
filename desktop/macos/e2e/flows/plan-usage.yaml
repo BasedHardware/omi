@@ -9,6 +9,10 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Components/SettingsContentView+BillingHelpers.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/SettingsViewModel.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Components/BillingWebFlow.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/SettingsContentView+Storefront.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Storefront/PlanStorefront.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Storefront/StorefrontPlansSection.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Storefront/StorefrontPlansView.swift
   - desktop/macos/Desktop/Sources/UsageLimitPopupView.swift
   - desktop/macos/Desktop/Sources/TrialBannerService.swift
 preconditions:

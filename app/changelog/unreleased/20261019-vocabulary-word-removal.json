@@ -1,0 +1,3 @@
+{
+  "change": "Removing a Custom Vocabulary word now goes through even if you leave the page right away, and shows an error when it can't be saved"
+}

@@ -17,6 +17,7 @@ from google.auth.transport.requests import AuthorizedSession
 
 ROOT = Path(__file__).resolve().parents[1] / 'deploy' / 'messaging'
 PROJECT = 'based-hardware'
+CONTEXT_RATE_POLICY = 'Messaging: shaped context degraded above 5%'
 
 
 def contains(actual, expected):
@@ -67,7 +68,9 @@ def reconcile_job(session, image, mode):
     params = {'validateOnly': 'true' if mode == 'validate' else 'false'}
     if current is None:
         params['jobId'] = 'messaging-maintenance-job'
-        request(session, 'POST', url.rsplit('/', 1)[0], params=params, json=body)
+        # CreateJobRequest requires an empty Job.name; jobId supplies its identity.
+        create_body = {key: value for key, value in body.items() if key != 'name'}
+        request(session, 'POST', url.rsplit('/', 1)[0], params=params, json=create_body)
     else:
         # v2 UpdateJobRequest contains Job + validate_only + allow_missing, no
         # update_mask. Send the complete declared Job (this tool owns its config).
@@ -78,7 +81,9 @@ def reconcile_job(session, image, mode):
     return False
 
 
-def desired_alerts(channels):
+def desired_alerts(channels, group='all'):
+    if group not in ('all', 'operational', 'context-rate'):
+        raise ValueError('Unknown alert group')
     if (
         not channels
         or len(channels) != len(set(channels))
@@ -86,6 +91,8 @@ def desired_alerts(channels):
     ):
         raise ValueError('Distinct approved production notification channel resource names are required')
     bodies = json.loads((ROOT / 'alert-policies.json').read_text())
+    if group != 'all':
+        bodies = [body for body in bodies if (body['displayName'] == CONTEXT_RATE_POLICY) == (group == 'context-rate')]
     for body in bodies:
         body['notificationChannels'] = sorted(channels)
     return bodies
@@ -96,6 +103,16 @@ def normalize_log_metric(value):
     value.setdefault('disabled', False)
     for label in value.get('metricDescriptor', {}).get('labels', []):
         label.setdefault('valueType', 'STRING')
+    return value
+
+
+def normalize_policy(value):
+    # Proto JSON omits a zero thresholdValue (e.g. "any failed execution > 0").
+    for condition in value.get('conditions', []):
+        threshold = condition.get('conditionThreshold')
+        if isinstance(threshold, dict):
+            threshold.setdefault('thresholdValue', 0)
+    value['notificationChannels'] = sorted(value.get('notificationChannels', []))
     return value
 
 
@@ -143,7 +160,8 @@ def reconcile_log_metrics(session, mode):
     return bool(planned)
 
 
-def reconcile_alerts(session, channels, mode):
+def reconcile_alerts(session, channels, mode, group='all'):
+    bodies = desired_alerts(channels, group)
     if mode == 'validate':
         raise ValueError('Monitoring has no validateOnly API; use --check to review the diff')
     metrics_drift = reconcile_log_metrics(session, 'check')
@@ -160,7 +178,6 @@ def reconcile_alerts(session, channels, mode):
         token = page.get('nextPageToken')
         if not token:
             break
-    bodies = desired_alerts(channels)
     for body in bodies:
         if sum(p['displayName'] == body['displayName'] for p in policies) > 1:
             raise RuntimeError('Duplicate managed policy name; refusing writes')
@@ -171,7 +188,7 @@ def reconcile_alerts(session, channels, mode):
             raise RuntimeError('Duplicate managed policy name; refusing writes')
         current = copy.deepcopy(matches[0]) if matches else None
         if current is not None:
-            current['notificationChannels'] = sorted(current.get('notificationChannels', []))
+            normalize_policy(current)
         if current is not None and contains(current, desired):
             print('MATCH ' + desired['displayName'])
             continue
@@ -202,7 +219,7 @@ def reconcile_alerts(session, channels, mode):
         verified = request(session, 'GET', target)
         if verified is None:
             raise RuntimeError('Created policy missing during verification')
-        verified['notificationChannels'] = sorted(verified.get('notificationChannels', []))
+        normalize_policy(verified)
         if not contains(verified, desired):
             raise RuntimeError('Policy verification failed')
         print('VERIFIED ' + desired['displayName'])
@@ -218,13 +235,14 @@ def main():
     modes.add_argument('--apply', action='store_true')
     parser.add_argument('--image', default='')
     parser.add_argument('--notification-channels', nargs='+', default=[])
+    parser.add_argument('--alert-group', choices=('all', 'operational', 'context-rate'), default='all')
     args = parser.parse_args()
     mode = 'apply' if args.apply else 'validate' if args.validate else 'check'
     # Validate inputs before authenticating or contacting GCP.
     if args.resource == 'job':
         desired_job(args.image)
     elif args.resource == 'alerts':
-        desired_alerts(args.notification_channels)
+        desired_alerts(args.notification_channels, args.alert_group)
     # Honor gcp-agent-env's selected gcloud identity, including human IAM/operator
     # sessions, rather than silently falling through to a different ADC account.
     token = subprocess.run(
@@ -238,7 +256,7 @@ def main():
     elif args.resource == 'log-metrics':
         drift = reconcile_log_metrics(session, mode)
     else:
-        drift = reconcile_alerts(session, args.notification_channels, mode)
+        drift = reconcile_alerts(session, args.notification_channels, mode, args.alert_group)
     return 1 if mode == 'check' and drift else 0
 
 

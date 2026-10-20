@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""OpenAI and Anthropic organization cost, per usage day, straight off the provider APIs.
+"""OpenAI, Anthropic and optional STT organization cost, per usage day, straight off the provider APIs.
 
 These are the INVOICE side of the LLM reconciliation: the gateway ledger explains most of
 the OpenAI bill per user, and the difference (`llm_direct_residual`) is spread by each
@@ -149,6 +149,10 @@ def main() -> None:
         tot[d] = tot.get(d, 0.0) + sum(float(x["amount_usd"]) for x in b["results"])
     for d in sorted(tot):
         sys.stderr.write("  anthropic %s $%.2f\n" % (d, tot[d]))
+
+    from pull_stt_costs import pull
+
+    pull(raw, a.start, end_excl)
 
 
 if __name__ == "__main__":

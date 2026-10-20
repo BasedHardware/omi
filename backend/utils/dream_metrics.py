@@ -44,6 +44,7 @@ ERROR_TYPES = {
     'AgentTranscriptReadError',
     'InvalidModelResponse',
     'LeaseAbandoned',
+    'DestructiveOperationInProgress',
 }
 
 
@@ -127,6 +128,7 @@ BASE_VALUE_ERROR_CODES = (
             'dream_frame_evidence',
             'dream_gateway_failure',
             'dream_gateway_rejected',
+            'dream_gate_contention',
             'dream_input_token_budget',
             'dream_invalid_arguments',
             'dream_invalid_cache_usage',

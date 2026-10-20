@@ -90,7 +90,7 @@ There are exactly two ways out, and they mean different things.
 | On/off setting | `OmiSwitch` in an `OmiSettingsRow` | a checkbox, a purple/green/indigo switch |
 | Settings list | `OmiSettingsGroup` of `OmiSettingsRow`s under an `OmiSectionHeader` | a hand-built row per page |
 | Search | `OmiSearchField(placeholder: l10n.searchConversations)` | a styled `TextField` per page |
-| Filters over a list | a row of `OmiFilterChip(label:, selected:, onSelected:, count:)` — one selected, accent-filled; 44 pt target | a local chip with its own colours per page |
+| Filters over a list | a row of `OmiFilterChip(label:, selected:, onSelected:, count:)` — one selected, accent-filled; 44 pt target; an icon-only "+" chip is `icon:` with an empty `label` and a `semanticsLabel` | a local chip with its own colours per page |
 | A choice among people or answers (tag a speaker, a likely-speaker Yes / Not) | `OmiFilterChip` as above, with an optional leading `icon:` ("+ Add Person") | a Material `ChoiceChip` on a grey slab that reads as disabled |
 | A removable **date** filter | `OmiDateFilterChip(start:, end:, onClear:)` — calendar glyph, localized date or `start – end`, ×; remove semantics `removeFilter` + the date | a raw `InputChip`, a filter with no way off |
 | A level (how sure Omi is, how close a voice is) | `OmiLevelMeter(level: 0–3, semanticsLabel:)` — three neutral steps; a newly filled step animates in (`OmiMotion.standard`) | a percentage, a coloured or traffic-light bar |
@@ -222,6 +222,7 @@ participant lists, the speaker filter and every copied, shared or exported trans
   the plain **Speaker** (`l10n.unnamedSpeakerLabel`), never "Speaker ?" and never a number, and the
   transcript heading omits its speaker count. A saved transcript names each speaker once per turn
   (consecutive lines from the same voice), so a change of voice is still visible.
+- On-device overflow transcripts (`stt_provider=on_device:<engine>`) have one **unlabeled** voice: omit speaker names and the speaker count. Local engines never imply diarization or identity.
 - The speaker filter is "Filter by speaker" (`l10n.filterBySpeaker`), never the loudspeaker string
   `phoneSpeaker`.
 

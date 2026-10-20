@@ -249,12 +249,12 @@ class PostHogManager {
       "Screen Task Delivery Completed", distinctId: ownerID, properties: completion.properties(deferred: deferred))
   }
 
-  /// Fresh admission for the screen-task kill switch. SDK reload callbacks may
-  /// return cached values on quota/failure, so they cannot renew an upload lease.
+  /// Fresh screen-task kill-switch read. Missing, quota-limited or failed flag
+  /// reads default on; backend admission remains a separate authority.
   func screenTaskFlagAdmission(authorization: RuntimeOwnerAuthorizationSnapshot) async throws -> Bool {
-    guard isInitialized, !PostHogSDK.shared.isOptOut(), RuntimeOwnerIdentity.isAuthorizationCurrent(authorization),
-      let url = URL(string: host + "/flags/?v=2")
-    else { throw ScreenTaskFailure.stopped }
+    guard !PostHogSDK.shared.isOptOut() else { throw ScreenTaskFailure.stopped }
+    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else { throw ScreenTaskFailure.ownerRevoked }
+    guard isInitialized, let url = URL(string: host + "/flags/?v=2") else { return true }
     var request = URLRequest(url: url)
     request.httpMethod = "POST"
     request.timeoutInterval = 5
@@ -270,13 +270,20 @@ class PostHogManager {
     ])
     guard !PostHogSDK.shared.isOptOut() else { throw ScreenTaskFailure.stopped }
     guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else { throw ScreenTaskFailure.ownerRevoked }
-    let (data, response) = try await URLSession.shared.data(for: request)
+    let data: Data
+    let response: URLResponse
+    do {
+      (data, response) = try await URLSession.shared.data(for: request)
+    } catch {
+      if Task.isCancelled { throw CancellationError() }
+      guard !PostHogSDK.shared.isOptOut() else { throw ScreenTaskFailure.stopped }
+      guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else { throw ScreenTaskFailure.ownerRevoked }
+      return true
+    }
     guard !PostHogSDK.shared.isOptOut() else { throw ScreenTaskFailure.stopped }
     guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else { throw ScreenTaskFailure.ownerRevoked }
-    guard let response = response as? HTTPURLResponse, response.statusCode == 200 else {
-      throw ScreenTaskFailure.stopped
-    }
-    return try ScreenTaskFreshFlagResponse.enabled(data)
+    guard let response = response as? HTTPURLResponse, response.statusCode == 200 else { return true }
+    return ScreenTaskFreshFlagResponse.enabled(data)
   }
 
   /// Reload feature flags

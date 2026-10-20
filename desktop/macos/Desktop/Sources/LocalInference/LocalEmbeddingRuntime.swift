@@ -21,13 +21,13 @@ struct LocalEmbeddingRuntime: Sendable {
     await LocalEmbeddingProbe.run($0)
   }
   var record: @Sendable (String, String) -> Void = { from, reason in
+    guard LocalEmbeddingFallbackChanges.shared.shouldRecord(from: from, reason: reason) else { return }
     DesktopDiagnosticsManager.shared.recordFallback(
       area: "local_embeddings", from: from, to: "keyword", reason: reason, outcome: .degraded)
   }
 
-  /// Apple NLCE is the registered engine. Released bundles stay on Gemini until
-  /// `localEmbeddingsEnabled` / `OMI_LOCAL_EMBEDDINGS=1` opts in; non-production
-  /// dogfoods it. Selection still fail-closes until the probe passes.
+  /// Apple NLCE defaults on in all channels, subject to kill switches.
+  /// Selection still fail-closes until the probe passes.
   /// Probe cache and engine are process-wide so chat search pays the 32-token probe once.
   static func makeDefault() -> Self {
     let apple = AppleNLContextualEmbeddingEngine.shared
@@ -102,5 +102,21 @@ struct LocalEmbeddingRuntime: Sendable {
       record("local_embeddings", "engine_failed")
       return nil
     }
+  }
+}
+
+/// Bounded state only, no query/frame payload or periodic heartbeat.
+final class LocalEmbeddingFallbackChanges: @unchecked Sendable {
+  static let shared = LocalEmbeddingFallbackChanges()
+  private let lock = NSLock()
+  private var last: String?
+
+  func shouldRecord(from: String, reason: String) -> Bool {
+    lock.lock()
+    defer { lock.unlock() }
+    let decision = from + ":" + reason
+    guard last != decision else { return false }
+    last = decision
+    return true
   }
 }

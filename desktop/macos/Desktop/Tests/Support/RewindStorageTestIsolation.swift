@@ -99,7 +99,9 @@ enum RewindStorageTestIsolation {
   }
 
   static func invalidateAllStorageCaches() async {
-    await LocalEmbeddingIndexer.shared.setRuntimeForTesting(.makeDefault())
+    // Storage fixtures must never start real platform inference after local defaults turn on.
+    // Suites exercising indexing explicitly install their deterministic engine.
+    await LocalEmbeddingIndexer.shared.setRuntimeForTesting(LocalEmbeddingRuntime(engines: [], record: { _, _ in }))
     await OCREmbeddingService.shared.reset()
     await MemoryStorage.shared.invalidateCache()
     await ActionItemStorage.shared.invalidateCache()

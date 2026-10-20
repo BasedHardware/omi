@@ -1,3 +1,4 @@
+from utils.stt_cap_dispatch import live_provider
 import asyncio
 import inspect
 import io
@@ -31,6 +32,7 @@ from config.stt_provider_policy import (
     provider_is_enabled,
     supports_live_multilingual_mode,
 )
+from config.policy.listen import service_models, account_circuit_cooldown
 from utils.stt.live_rollout import configured_chain_enabled, window_allocation, window_language_supported
 from utils.stt.live_health import health
 from utils.stt.language_policy import LiveLanguageProfile, prefer_hintable_soniox
@@ -41,6 +43,7 @@ from utils.metrics import OMI_LIVE_STT_MISALIGNED_FRAMES_TOTAL
 from utils.http_client import get_stt_client, get_stt_semaphore
 from utils.log_sanitizer import sanitize_provider_error
 from utils.stt.committed_words import remember_provider_word
+from utils.stt.failure_diagnostics import connection_loss_cause
 from utils.stt.safe_socket import SafeDeepgramSocket  # noqa: F401 — re-exported for backward compat
 from config import live_stt_state
 from config.live_stt_registry import DEFAULT_IDS, Target
@@ -247,7 +250,7 @@ def open_provider_selection_circuit(provider: str | None, *, reason: str, endpoi
         return False
     circuit = _circuit_for_primary(service)
     if configured_chain_enabled() and reason in ACCOUNT_REJECTION_REASONS:
-        circuit.record_account_failure(float(os.getenv('STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS', '1800')))
+        circuit.record_account_failure(account_circuit_cooldown())
     else:
         if endpoint is not None and endpoint != live_stt_state.family_endpoint(service.value):
             circuit = target_circuit(
@@ -279,7 +282,7 @@ def open_provider_selection_circuit(provider: str | None, *, reason: str, endpoi
 
 def _primary_streaming_service() -> Optional[STTService]:
     """First configured provider; see ARCHITECTURE.md (incident history)."""
-    for model in (m.strip() for m in stt_service_models):
+    for model in (m.strip() for m in service_models(stt_service_models)):
         provider = provider_for_model_token(model)
         if provider is None:
             continue
@@ -449,7 +452,7 @@ async def connect_stt_socket_with_fallback(
                 STTService.soniox: connect_soniox,
             },
             failed=failed if failed is not None else set(),
-            models=stt_service_models,
+            models=service_models(stt_service_models),
             routing_uid=routing_uid,
             routing_language=routing_language,
             routing_languages=routing_languages,
@@ -814,7 +817,7 @@ def modulate_is_configured_fallback(language: Optional[str]) -> bool:
     accepts the session language.
     """
     return (
-        'modulate-velma-2' in (model.strip() for model in stt_service_models)
+        'modulate-velma-2' in (model.strip() for model in service_models(stt_service_models))
         and provider_is_enabled(MODULATE_PROVIDER, STTServingSurface.STREAMING)
         and modulate_supports_language(language)
     )
@@ -835,7 +838,7 @@ def deepgram_fallback_model(language: Optional[str]) -> Optional[str]:
         return None
     if language not in deepgram_nova3_multi_languages and language not in deepgram_nova3_languages:
         return None
-    for model in (model.strip() for model in stt_service_models):
+    for model in (model.strip() for model in service_models(stt_service_models)):
         if model.startswith('dg-'):
             return model.replace('dg-', '', 1)
     return None
@@ -844,7 +847,7 @@ def deepgram_fallback_model(language: Optional[str]) -> Optional[str]:
 def parakeet_is_configured_fallback(language: Optional[str]) -> bool:
     """RNNT fallback eligibility; see ARCHITECTURE.md (incident history)."""
     return (
-        STTService.parakeet.value in (model.strip() for model in stt_service_models)
+        STTService.parakeet.value in (model.strip() for model in service_models(stt_service_models))
         and provider_is_enabled(PARAKEET_PROVIDER, STTServingSurface.STREAMING)
         and bool(os.getenv('HOSTED_PARAKEET_API_URL'))
         and parakeet_supports_language(STTServingSurface.STREAMING, language or 'en')
@@ -854,9 +857,7 @@ def parakeet_is_configured_fallback(language: Optional[str]) -> bool:
 def _stt_selection_from_mode(_language: str, base_lang: str) -> str:
     if base_lang and base_lang != 'en':
         return 'requested_non_en'
-    if any(m.strip() for m in stt_service_models):
-        return 'configured'
-    return 'none'
+    return 'configured' if any(m.strip() for m in service_models(stt_service_models)) else 'none'
 
 
 def _requested_stt_language(
@@ -874,14 +875,14 @@ def _requested_stt_language(
 
 
 def _models_with_preferred_service(
-    models: List[str] | Tuple[str, ...], *, preferred_service: Optional[str]
+    models: List[str] | Tuple[str, ...], *, preferred_service: Optional[str], prefer_window: bool = False
 ) -> Tuple[str, ...]:
     """Honor a recognized client engine preference within the serving policy."""
-    normalized_preference = (preferred_service or '').strip().lower()
-    if normalized_preference != STTService.parakeet.value:
+    normalized_preference = 'parakeet-window' if prefer_window else (preferred_service or '').strip().lower()
+    if not prefer_window and normalized_preference != STTService.parakeet.value:
         return tuple(models)
-    return tuple(model for model in models if model.strip() == STTService.parakeet.value) + tuple(
-        model for model in models if model.strip() != STTService.parakeet.value
+    return tuple(model for model in models if model.strip() == normalized_preference) + tuple(
+        model for model in models if model.strip() != normalized_preference
     )
 
 
@@ -894,8 +895,10 @@ def get_stt_service_for_language(
     exclude: frozenset[str] = frozenset(),
     window_uid: Optional[str] = None,
     language_profile: LiveLanguageProfile | None = None,
+    prefer_window: bool = False,
 ) -> Tuple[Optional[STTService], Optional[str], Optional[str]]:
     """Select a surface-compatible provider; see ARCHITECTURE.md (incident history)."""
+    prefer_window = bool(prefer_window and surface == STTServingSurface.STREAMING and window_uid)
     base_lang = normalized_stt_language(language) or 'en'
     requested_language = _requested_stt_language(
         language,
@@ -905,11 +908,11 @@ def get_stt_service_for_language(
     )
     if surface == STTServingSurface.STREAMING and prefer_hintable_soniox(
         language_profile,
-        stt_service_models,
+        service_models(stt_service_models),
         exclude,
         lambda: _circuit_for_primary(STTService.soniox).cooldown_elapsed()
         and _circuit_for_primary(STTService.soniox).account_cooldown_elapsed(),
-        preferred_service=preferred_service,
+        preferred_service='parakeet' if prefer_window else preferred_service,
     ):
         return STTService.soniox, requested_language, 'soniox'
 
@@ -917,7 +920,9 @@ def get_stt_service_for_language(
         models: List[str] | Tuple[str, ...],
     ) -> Tuple[Optional[Tuple[STTService, str, str]], Optional[str]]:
         parakeet_fallback_reason: Optional[str] = None
-        for model in _models_with_preferred_service(models, preferred_service=preferred_service):
+        for model in _models_with_preferred_service(
+            models, preferred_service=preferred_service, prefer_window=prefer_window
+        ):
             model = model.strip()
             if provider_for_model_token(model) in exclude:
                 continue
@@ -959,7 +964,7 @@ def get_stt_service_for_language(
                 return (STTService.soniox, requested_language, 'soniox'), parakeet_fallback_reason
         return None, parakeet_fallback_reason
 
-    prefers_parakeet = (preferred_service or '').strip().lower() == STTService.parakeet.value
+    prefers_parakeet = prefer_window or (preferred_service or '').strip().lower() == STTService.parakeet.value
 
     def record_selected_fallback(
         selected: Tuple[STTService, str, str], *, used_default: bool, parakeet_fallback_reason: Optional[str]
@@ -986,7 +991,7 @@ def get_stt_service_for_language(
                 outcome='degraded',
             )
 
-    models = stt_service_models
+    models = service_models(stt_service_models)
     if configured_chain_enabled() and window_uid is None:
         models = [model for model in models if model.strip() != 'parakeet-window']
     selected, parakeet_fallback_reason = select(models)
@@ -1099,6 +1104,7 @@ def _deepgram_is_available() -> bool:
     return _managed_deepgram_client() is not None or bool(get_byok_key('deepgram'))
 
 
+@live_provider('deepgram', 2)
 async def process_audio_dg(
     stream_transcript: Callable[[List[Dict[str, Any]]], None],
     language: str,
@@ -1472,6 +1478,7 @@ class SafeModulateSocket(STTSocket):
         self._done_event = asyncio.Event()
         self._prev_partial_text: str = ''
         self._prev_partial_start_ms: int = 0
+        self._connection_cause: Optional[str] = None
         self._prev_partial_word_count: int = 0
         # Velma rejects any s16le frame that is not a whole number of samples with
         # {"type":"error","error":"Invalid input audio"} and then closes the socket, so a
@@ -1522,11 +1529,22 @@ class SafeModulateSocket(STTSocket):
         """Bounded reason for the terminal-failure vocabulary (None = untyped)."""
         return self._typed_death_reason
 
-    def _mark_dead(self, reason: str, typed_reason: Optional[str] = None) -> None:
+    @property
+    def connection_cause(self) -> Optional[str]:
+        """Content-free transport cause behind an untyped death, if one was seen."""
+        return self._connection_cause
+
+    def has_pending_provider_output(self) -> bool:
+        # A buffered partial is still owed: only a text utterance or a drain
+        # flush emits it, and an abrupt close drops it.
+        return bool(self._prev_partial_text)
+
+    def _mark_dead(self, reason: str, typed_reason: Optional[str] = None, *, cause: Optional[str] = None) -> None:
         with self._lock:
             if not self._dead:
                 self._death_reason = reason
                 self._typed_death_reason = typed_reason
+                self._connection_cause = cause
                 self._dead = True  # Metadata must precede the latch read by death observers.
 
     def send(self, data: bytes) -> bool:
@@ -1714,9 +1732,9 @@ class SafeModulateSocket(STTSocket):
         except AudioDeliveryExpired:
             self._mark_dead('live audio delivery expired', typed_reason='capacity_full')
         except websockets.exceptions.ConnectionClosed as e:
-            self._mark_dead(f'ws send closed: {e}')
+            self._mark_dead(f'ws send closed: {e}', cause=connection_loss_cause(e))
         except Exception as e:
-            self._mark_dead(f'ws send error: {e}')
+            self._mark_dead(f'ws send error: {e}', cause=connection_loss_cause(e))
 
     async def _recv_loop(self) -> None:
         try:
@@ -1780,11 +1798,11 @@ class SafeModulateSocket(STTSocket):
             # must latch terminal so the listen loop propagates it without waiting
             # for another client audio frame (#10028).
             if not self._closed and not self._done_event.is_set():
-                self._mark_dead('modulate ws closed cleanly without terminal frame')
+                self._mark_dead('modulate ws closed cleanly without terminal frame', cause='clean_eof')
         except websockets.exceptions.ConnectionClosed as e:
-            self._mark_dead(f'ws recv closed: {e}')
+            self._mark_dead(f'ws recv closed: {e}', cause=connection_loss_cause(e))
         except Exception as e:
-            self._mark_dead(f'ws recv error: {e}')
+            self._mark_dead(f'ws recv error: {e}', cause=connection_loss_cause(e))
 
     def _handle_partial_utterance(self, msg: Dict[str, Any]) -> None:
         # Modulate sends cumulative partial_utterance messages during streaming
@@ -1875,6 +1893,7 @@ class SafeModulateSocket(STTSocket):
         self._stream_transcript(segments)
 
 
+@live_provider('modulate', 1)
 async def process_audio_modulate(
     stream_transcript: Callable[[List[Dict[str, Any]]], None],
     sample_rate: int,
@@ -2352,6 +2371,7 @@ class ParakeetWebSocketSocket(STTSocket):
                 self._mark_dead(f"parakeet ws recv: {e}")
 
 
+@live_provider('parakeet', 2)
 async def process_audio_parakeet(
     stream_transcript: Callable[[List[Dict[str, Any]]], None],
     language: str,

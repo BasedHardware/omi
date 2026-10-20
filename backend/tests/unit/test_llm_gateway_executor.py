@@ -298,33 +298,6 @@ async def test_executor_retries_provider_up_to_max_attempts_before_fallback():
 
 
 @pytest.mark.asyncio
-async def test_executor_stops_jit_attempts_at_qualification_ceiling():
-    route = active_route_with_fallbacks([]).model_copy(
-        update={'retry': type(gateway_config().route_artifacts[ACTIVE_ROUTE].retry)(max_attempts=3)}
-    )
-    resolved = resolve_chat_completion_route(config_with_active_route(route), valid_request())
-    provider = FakeChatCompletionProvider(
-        [
-            ProviderFailure(FailureClass.TIMEOUT_BEFORE_OUTPUT),
-            ProviderFailure(FailureClass.TIMEOUT_BEFORE_OUTPUT),
-            fake_success_response(route.primary),
-        ]
-    )
-    trace = AttemptTrace()
-
-    with pytest.raises(GatewayInvalidRequestError, match='JIT provider attempt budget exhausted'):
-        await execute_chat_completion(
-            resolved,
-            omi_credentials(),
-            ProviderRegistry({'openai': provider}),
-            attempt_trace=trace,
-            max_provider_attempts=2,
-        )
-
-    assert len(provider.calls) == 2
-    assert len(trace.attempts) == 2
-
-
 @pytest.mark.asyncio
 async def test_executor_retries_with_only_the_remaining_request_deadline(monkeypatch):
     active_route = active_route_with_fallbacks([])

@@ -31,8 +31,6 @@ beforeEach(() => {
   );
   fetchMock.mockReset();
   fetchMock.mockImplementation(async (url: string, init: RequestInit) => {
-    if (url.endsWith("/grafana/api/datasources"))
-      return new Response(null, { status: 403 });
     const headers = init.headers as Record<string, string>;
     if (url.startsWith("https://secretmanager.googleapis.com/")) {
       expect(headers.Authorization).toBe("Bearer metadata-access");
@@ -153,18 +151,19 @@ it("leaves the existing board available while prerequisites are disabled", async
   expect(fetchMock).not.toHaveBeenCalled();
 });
 
-it("blocks cutover while legacy anonymous datasource access remains", async () => {
-  const original = fetchMock.getMockImplementation()!;
-  fetchMock.mockImplementation((url, init) =>
-    url.endsWith("/grafana/api/datasources")
-      ? Response.json([])
-      : original(url, init)
-  );
+it("mints only the Business embed without probing the retired Grafana origins", async () => {
   const { mintEmbed } = await import("../grafana-embed");
-  await expect(mintEmbed("admin")).rejects.toThrow("anonymous data access");
+  const result = await mintEmbed("admin");
+  const url = new URL(result.url);
+  expect(url.origin).toBe("https://monitor.omi.me");
+  expect(url.searchParams.get("orgId")).toBe("2");
   expect(
-    fetchMock.mock.calls.some(([url]) => url.includes("secretmanager"))
-  ).toBe(false);
+    fetchMock.mock.calls.every(
+      ([requestUrl]) =>
+        requestUrl.startsWith("https://secretmanager.googleapis.com/") ||
+        requestUrl.startsWith("https://monitor.omi.me/")
+    )
+  ).toBe(true);
 });
 
 it("publishes the public verification key while cutover is disabled for staged Helm startup", async () => {

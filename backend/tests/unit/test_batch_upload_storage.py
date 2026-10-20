@@ -64,6 +64,7 @@ def merge():
 
     vector_db_stub = ModuleType("database.vector_db")
     vector_db_stub.delete_vector = MagicMock()
+    vector_db_stub.delete_action_item_vectors_batch = MagicMock()
 
     # utils.other.storage is stubbed (not imported real) so the merge module's
     # ``_get_storage_client`` / ``list_audio_chunks`` / ``private_cloud_sync_bucket``

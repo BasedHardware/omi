@@ -163,6 +163,30 @@ def test_released_goal_properties_and_enum_values_cannot_disappear():
     )
 
 
+def test_removed_declared_request_property_is_accepted_by_open_additional_properties():
+    checker = load_checker()
+    base = contract()
+    head = copy.deepcopy(base)
+    goal = head['components']['schemas']['GoalCreate']
+    del goal['properties']['description']
+    goal['additionalProperties'] = True
+
+    assert checker.compare_specs(base, head) == []
+
+
+def test_removed_declared_request_property_must_match_typed_additional_properties():
+    checker = load_checker()
+    base = contract()
+    head = copy.deepcopy(base)
+    goal = head['components']['schemas']['GoalCreate']
+    del goal['properties']['description']
+    goal['additionalProperties'] = {'type': 'integer'}
+
+    failures = messages(checker, base, head)
+
+    assert any('properties.description.type: request no longer supports type(s): string' in item for item in failures)
+
+
 def test_new_required_request_property_is_breaking_but_optional_is_not():
     checker = load_checker()
     base = contract()

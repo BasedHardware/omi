@@ -19,6 +19,7 @@ import tempfile
 import unittest
 import unittest.mock
 from contextlib import redirect_stdout
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import Mock, patch
 
@@ -184,9 +185,9 @@ class RunIOSTests(unittest.TestCase):
 
     def test_dry_run_reads_everything_and_mutates_nothing(self):
         asc = FakeASC(live_responses())
-        with patch.object(train, "ios_phased_release_paused", return_value=False), patch.object(
-            promote.subprocess, "run"
-        ) as run:
+        with patch.object(train, "ios_phased_release_should_complete", return_value=(False, "no phased release")), patch.object(
+            train, "ios_phased_release_paused", return_value=False
+        ), patch.object(promote.subprocess, "run") as run:
             summary = train.run_ios(dry_run=True, release_date="2026-10-06", asc=asc)
         self.assertIn("dry-run:submit 1.0.554 (1334)", summary)
         self.assertEqual(asc.mutations(), [])
@@ -194,7 +195,9 @@ class RunIOSTests(unittest.TestCase):
 
     def test_hold_never_touches_notes_or_stores(self):
         asc = FakeASC(live_responses(states={"IN_REVIEW": [version("v", "1.0.554", "IN_REVIEW")]}))
-        with patch.object(promote.subprocess, "run") as run:
+        with patch.object(train, "ios_phased_release_should_complete", return_value=(False, "no phased release")), patch.object(
+            promote.subprocess, "run"
+        ) as run:
             summary = train.run_ios(dry_run=False, release_date="2026-10-06", asc=asc)
         self.assertTrue(summary.startswith("ios=hold"))
         run.assert_not_called()
@@ -203,6 +206,8 @@ class RunIOSTests(unittest.TestCase):
     def test_paused_phased_release_holds_the_train(self):
         asc = FakeASC(live_responses())
         with patch.object(train, "_asc_rest_token", return_value="faketoken"), patch.object(
+            train, "ios_phased_release_should_complete", return_value=(False, "phased rollout is PAUSED — the operator brake")
+        ), patch.object(
             train, "ios_phased_release_paused", return_value=True
         ) as paused, patch.object(promote.subprocess, "run") as run:
             summary = train.run_ios(dry_run=False, release_date="2026-10-06", asc=asc)
@@ -226,12 +231,18 @@ class RunIOSTests(unittest.TestCase):
             return Mock(returncode=0)
 
         with patch.object(train, "_asc_rest_token", return_value="faketoken"), patch.object(
+            train, "ios_phased_release_should_complete", return_value=(False, "no phased release")
+        ), patch.object(
             train, "ios_phased_release_paused", return_value=False
-        ), patch.object(promote.subprocess, "run", side_effect=fake_run), patch.object(train.time, "sleep"), patch.object(
+        ), patch.object(train, "_attach_phased_release") as attach, patch.object(
+            promote.subprocess, "run", side_effect=fake_run
+        ), patch.object(train.time, "sleep"), patch.object(
             promote, "require_notes", return_value="- New thing"
         ):
             summary = train.run_ios(dry_run=False, release_date="2026-10-06", asc=asc)
         self.assertTrue(summary.startswith("ios=submit"))
+        self.assertTrue(summary.endswith("(phased rollout attached; day 1 = 1%)"))
+        attach.assert_called_once_with("new-version")
 
     def test_phased_release_lookup_reads_the_rest_resource(self):
         def rest_lookup(url, timeout=60):
@@ -331,12 +342,15 @@ class RunIOSTests(unittest.TestCase):
             captured["localizations"] = json.loads(Path(path).read_text())
             return Mock(returncode=0)
 
-        with patch.object(train, "ios_phased_release_paused", return_value=False), patch.object(
+        with patch.object(train, "ios_phased_release_should_complete", return_value=(False, "no phased release")), patch.object(
+            train, "ios_phased_release_paused", return_value=False
+        ), patch.object(train, "_attach_phased_release") as attach, patch.object(
             promote.subprocess, "run", side_effect=fake_run
         ), patch.object(train.time, "sleep"), patch.object(
             promote, "require_notes", return_value="- New thing"
         ):
             summary = train.run_ios(dry_run=False, release_date="2026-10-06", asc=asc)
+        attach.assert_called_once_with("new-version")
         command = captured["command"]
         self.assertEqual(command[:3], ["app-store-connect", "builds", "submit-to-app-store"])
         self.assertEqual(command[command.index("--release-type") + 1], train.RELEASE_TYPE)
@@ -345,7 +359,7 @@ class RunIOSTests(unittest.TestCase):
         self.assertNotIn("--whats-new", command)
         self.assertEqual(command[-1], "b1334")
         self.assertEqual(captured["localizations"], [{"locale": "en-US", "whats_new": "- New thing"}, {"locale": "fr-FR", "whats_new": "- New thing"}])
-        self.assertEqual(summary, f"ios=submit 1.0.554 (1334) WAITING_FOR_REVIEW ({train.RELEASE_TYPE}{'/phased' if train.PHASED_RELEASE else ''})")
+        self.assertEqual(summary, f"ios=submit 1.0.554 (1334) WAITING_FOR_REVIEW ({train.RELEASE_TYPE}{'/phased' if train.PHASED_RELEASE else ''}) (phased rollout attached; day 1 = 1%)")
         self.assertEqual([c for c in asc.calls if c[:2] == ("review-submissions", "cancel")], [])
 
     def test_manual_release_type_and_no_phased_flag_stay_available(self):
@@ -381,12 +395,18 @@ class RunIOSTests(unittest.TestCase):
                 extra={("builds", "app-store-version"): None},
             )
         )
-        with patch.object(promote.subprocess, "run") as run, patch.object(train, "ios_phased_release_paused", return_value=True):
+        with patch.object(promote.subprocess, "run") as run, patch.object(
+            train, "ios_phased_release_should_complete", return_value=(False, "phased rollout is PAUSED — the operator brake")
+        ), patch.object(train, "ios_phased_release_paused", return_value=True):
             summary = train.run_ios(dry_run=False, release_date="2026-10-06", asc=asc)
         run.assert_not_called()
         self.assertTrue(summary.startswith("ios=hold (live 1.0.553 phased rollout is PAUSED"))
 
-    def test_blocked_pending_version_touches_nothing(self):
+    def test_blocked_pending_version_is_released_with_the_phased_rollout_attached(self):
+        # Apple refuses to cancel a COMPLETE review submission (409) but does
+        # honor POST appStoreVersionReleaseRequests (verified live 2026-10-17
+        # on 1.0.564): the train attaches the phased rollout first so the
+        # release starts at 1% with the pause brake available, then releases.
         pending = version("pend", "1.0.554", "PENDING_DEVELOPER_RELEASE")
         asc = FakeASC(
             live_responses(
@@ -395,11 +415,139 @@ class RunIOSTests(unittest.TestCase):
                 extra={("builds", "app-store-version"): None},
             )
         )
-        with patch.object(promote.subprocess, "run") as run, patch.object(train, "ios_phased_release_paused", return_value=False):
+        with patch.object(promote.subprocess, "run") as run, patch.object(
+            train, "ios_phased_release_should_complete", return_value=(False, "no phased release")
+        ), patch.object(train, "ios_phased_release_paused", return_value=False), patch.object(
+            train, "_attach_phased_release"
+        ) as attach, patch.object(train, "_release_approved_version") as release:
             summary = train.run_ios(dry_run=False, release_date="2026-10-06", asc=asc)
         run.assert_not_called()
-        self.assertTrue(summary.startswith("ios=blocked (ACTION REQUIRED: 1.0.554 is approved"))
+        attach.assert_called_once_with("pend")
+        release.assert_called_once_with("pend", "1.0.554")
+        self.assertEqual(summary, "ios=blocked: released approved 1.0.554 (phased rollout attached)")
         self.assertEqual([c for c in asc.calls if c[:2] == ("review-submissions", "cancel")], [])
+
+    def test_a_paused_brake_defers_releasing_the_approved_version(self):
+        pending = version("pend", "1.0.554", "PENDING_DEVELOPER_RELEASE")
+        asc = FakeASC(
+            live_responses(
+                states={"PENDING_DEVELOPER_RELEASE": [pending]},
+                builds={"1.0.554": [build("b1335", "1335"), build("b1334", "1334")]},
+                extra={("builds", "app-store-version"): None},
+            )
+        )
+        with patch.object(promote.subprocess, "run") as run, patch.object(
+            train, "ios_phased_release_should_complete", return_value=(False, "phased rollout is PAUSED — the operator brake")
+        ), patch.object(train, "ios_phased_release_paused", return_value=True), patch.object(
+            train, "_attach_phased_release"
+        ) as attach, patch.object(train, "_release_approved_version") as release:
+            summary = train.run_ios(dry_run=False, release_date="2026-10-06", asc=asc)
+        run.assert_not_called()
+        attach.assert_not_called()
+        release.assert_not_called()
+        self.assertTrue(summary.startswith("ios=hold (live 1.0.553 phased rollout is PAUSED"))
+        self.assertIn("deferred", summary)
+
+    def test_advance_mode_only_checks_the_phase_window(self):
+        asc = FakeASC(live_responses())
+        with patch.object(train, "ios_phased_release_should_complete", return_value=(False, "phased rollout is 5.0h old (< 12h observation window)")) as check:
+            summary = train.run_ios(dry_run=False, release_date="2026-10-06", advance_only=True, asc=asc)
+        self.assertEqual(summary, "ios=advance (phased rollout is 5.0h old (< 12h observation window))")
+        check.assert_called_once()
+        self.assertEqual([c for c in asc.calls if c[:2] == ("builds", "submit-to-app-store")], [])
+
+    def test_advance_mode_jumps_when_the_window_has_passed(self):
+        asc = FakeASC(live_responses())
+        with patch.object(train, "ios_phased_release_should_complete", return_value=(True, "phased rollout is 12.5h old; releasing to everyone")), patch.object(
+            train, "_complete_phased_release"
+        ) as complete:
+            summary = train.run_ios(dry_run=False, release_date="2026-10-06", advance_only=True, asc=asc)
+        complete.assert_called_once_with("live")
+        self.assertEqual(summary, "ios=advance (released to everyone (jump to 100%))")
+
+    def test_the_phased_jump_never_fires_while_paused(self):
+        # The operator pause is the brake: even weeks old, a PAUSED rollout is
+        # never "complete" by the decision helper.
+        phased = {"attributes": {"phasedReleaseState": "PAUSED", "startDate": "2026-01-01T00:00:00Z"}}
+        with patch.object(train, "ios_phased_release", return_value=phased):
+            should, reason = train.ios_phased_release_should_complete(
+                "x", now=datetime(2026, 1, 20, tzinfo=timezone.utc)
+            )
+        self.assertFalse(should)
+        self.assertIn("PAUSED", reason)
+
+    def test_the_phased_jump_fires_after_the_observation_window(self):
+        phased = {"attributes": {"phasedReleaseState": "ACTIVE", "startDate": "2026-01-01T00:00:00Z"}}
+        with patch.object(train, "ios_phased_release", return_value=phased):
+            should, reason = train.ios_phased_release_should_complete(
+                "x", now=datetime(2026, 1, 1, 13, tzinfo=timezone.utc)
+            )
+        self.assertTrue(should)
+        self.assertIn("13.0h", reason)
+
+    def test_the_phased_jump_waits_inside_the_observation_window(self):
+        phased = {"attributes": {"phasedReleaseState": "ACTIVE", "startDate": "2026-01-01T00:00:00Z"}}
+        with patch.object(train, "ios_phased_release", return_value=phased):
+            should, reason = train.ios_phased_release_should_complete(
+                "x", now=datetime(2026, 1, 1, 11, 59, tzinfo=timezone.utc)
+            )
+        self.assertFalse(should)
+        self.assertIn("12.0h", reason)
+
+    def test_the_phased_jump_holds_for_any_state_but_active(self):
+        # Apple's states are ACTIVE, PAUSED, COMPLETE and INACTIVE; only ACTIVE is
+        # a live rollout to advance. A finished (COMPLETE) one must not be touched.
+        for state in ("COMPLETE", "INACTIVE", "SOMETHING_NEW"):
+            phased = {"attributes": {"phasedReleaseState": state, "startDate": "2026-01-01T00:00:00Z"}}
+            with patch.object(train, "ios_phased_release", return_value=phased):
+                should, reason = train.ios_phased_release_should_complete(
+                    "x", now=datetime(2026, 1, 20, tzinfo=timezone.utc)
+                )
+            self.assertFalse(should, state)
+            self.assertIn(state, reason)
+
+    def _phased_response(self, state):
+        class Response:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return False
+
+            def read(self):
+                return json.dumps(
+                    {"data": {"type": "appStoreVersionPhasedReleases", "id": "pr-1", "attributes": {"phasedReleaseState": state}}}
+                ).encode()
+
+        return Response()
+
+    def test_the_jump_patches_the_phased_release_resource_to_complete(self):
+        phased = {"id": "pr-1", "attributes": {"phasedReleaseState": "ACTIVE", "startDate": "2026-01-01T00:00:00Z"}}
+        with patch.object(train, "ios_phased_release", return_value=phased), patch.object(
+            train, "_asc_rest_token", return_value="faketoken"
+        ), patch.object(train.urllib.request, "urlopen", return_value=self._phased_response("COMPLETE")) as urlopen:
+            train._complete_phased_release("live")
+        request = urlopen.call_args.args[0]
+        self.assertEqual(request.get_method(), "PATCH")
+        self.assertEqual(request.full_url, "https://api.appstoreconnect.apple.com/v1/appStoreVersionPhasedReleases/pr-1")
+        self.assertEqual(
+            json.loads(request.data)["data"],
+            {"type": "appStoreVersionPhasedReleases", "id": "pr-1", "attributes": {"phasedReleaseState": "COMPLETE"}},
+        )
+
+    def test_the_jump_fails_when_the_state_does_not_read_back_complete(self):
+        phased = {"id": "pr-1", "attributes": {"phasedReleaseState": "ACTIVE", "startDate": "2026-01-01T00:00:00Z"}}
+        with patch.object(train, "ios_phased_release", return_value=phased), patch.object(
+            train, "_asc_rest_token", return_value="faketoken"
+        ), patch.object(train.urllib.request, "urlopen", return_value=self._phased_response("ACTIVE")):
+            with self.assertRaises(train.TrainError):
+                train._complete_phased_release("live")
+
+    def test_phased_jump_decision_fails_closed_on_lookup_errors(self):
+        with patch.object(train, "ios_phased_release", side_effect=train.TrainError("HTTP 500")):
+            should, reason = train.ios_phased_release_should_complete("x")
+        self.assertFalse(should)
+        self.assertIn("HTTP 500", reason)
 
     def _generate_openssl_ec_pem(self) -> str:
         result = subprocess.run(
@@ -641,7 +789,7 @@ class AndroidTests(unittest.TestCase):
         self.assertEqual(body["releases"][0]["status"], "inProgress")
         self.assertEqual(body["releases"][0]["userFraction"], train.STAGED_ROLLOUT_FRACTION)
         self.assertEqual(body["releases"][0]["versionCodes"], ["1340"])
-        self.assertEqual(body["releases"][0]["name"], f"1.0.554 (gate 2026-10-06)")
+        self.assertRegex(body["releases"][0]["name"], r"^1\.0\.554 \(gate \d{4}-\d{2}-\d{2}-\d{4}\)$")
         self.assertEqual(body["releases"][0]["releaseNotes"], [{"language": "en-US", "text": "Faster sync"}])
         client.edits().commit.assert_called_once()
 
@@ -682,15 +830,15 @@ class AndroidTests(unittest.TestCase):
                 promote, "require_notes", return_value="Faster sync"
             ):
                 summary = train.run_android(dry_run=False, release_date="2026-10-06")
-        self.assertEqual(summary, "android=staged 1.0.554 1340 @25%")
+        self.assertEqual(summary, "android=staged 1.0.554 1340 @10%")
         body = client.edits().tracks().update.call_args.kwargs["body"]
         self.assertEqual(body["releases"][0]["status"], "inProgress")
-        self.assertEqual(body["releases"][0]["userFraction"], 0.25)
+        self.assertEqual(body["releases"][0]["userFraction"], 0.10)
         client.edits().commit.assert_called_once()
 
     def test_ladder_completes_at_the_top(self):
         client = Mock()
-        staged = {"name": "1.0.554 (1340)", "versionCodes": ["1340"], "status": "inProgress", "userFraction": 0.25}
+        staged = {"name": "1.0.554 (1340)", "versionCodes": ["1340"], "status": "inProgress", "userFraction": 0.50}
         tracks = {"internal": self.internal, "alpha": self.alpha, "production": {"track": "production", "releases": [staged]}}
         with tempfile.TemporaryDirectory() as tmp:
             release = Path(tmp) / "1.0.554.json"
@@ -746,10 +894,10 @@ class AndroidTests(unittest.TestCase):
                 promote, "require_notes", return_value="Faster sync"
             ):
                 summary = train.run_android(dry_run=False, release_date="2026-10-06")
-        self.assertEqual(summary, "android=staged 1.0.554 1340 @25%")
+        self.assertEqual(summary, "android=staged 1.0.554 1340 @10%")
         body = client.edits().tracks().update.call_args.kwargs["body"]
         self.assertEqual(body["releases"][0]["versionCodes"], ["1340"])
-        self.assertEqual(body["releases"][0]["userFraction"], 0.25)
+        self.assertEqual(body["releases"][0]["userFraction"], 0.10)
         client.edits().commit.assert_called_once()
 
     def test_ladder_hop_reuses_the_notes_play_already_holds(self):
@@ -766,7 +914,7 @@ class AndroidTests(unittest.TestCase):
             promote, "play_track", side_effect=lambda c, e, name: tracks[name]
         ), patch.object(train, "ensure_release_notes") as ensure_notes:
             summary = train.run_android(dry_run=False, release_date="2026-10-06")
-        self.assertEqual(summary, "android=staged 1.0.554 1340 @25%")
+        self.assertEqual(summary, "android=staged 1.0.554 1340 @10%")
         body = client.edits().tracks().update.call_args.kwargs["body"]
         self.assertEqual(body["releases"][0]["releaseNotes"], [{"language": "en-US", "text": "Shipped text"}])
         ensure_notes.assert_not_called()
@@ -782,32 +930,36 @@ class AndroidTests(unittest.TestCase):
         self.assertEqual(summary, "android=staged 1.0.554 1340 @5% parked (staged disabled)")
         client.edits().tracks().update.assert_not_called()
 
-    def test_a_same_day_retry_holds_position_after_a_gate_receipt(self):
+    def test_a_fresh_gate_receipt_holds_position_inside_the_observation_window(self):
         client = Mock()
-        staged = {"name": "1.0.554 (gate 2026-10-06)", "versionCodes": ["1340"], "status": "inProgress", "userFraction": 0.05}
+        receipt = (datetime.now(timezone.utc) - timedelta(hours=1)).strftime("%Y-%m-%d-%H%M")
+        staged = {"name": f"1.0.554 (gate {receipt})", "versionCodes": ["1340"], "status": "inProgress", "userFraction": 0.05}
         tracks = {"internal": self.internal, "alpha": self.alpha, "production": {"track": "production", "releases": [staged]}}
         with patch.object(promote, "play_edit", return_value=(client, "edit")), patch.object(
             promote, "play_track", side_effect=lambda c, e, name: tracks[name]
         ):
             summary = train.run_android(dry_run=False, release_date="2026-10-06")
-        self.assertEqual(summary, "android=staged 1.0.554 1340 @5% (gate 2026-10-06 done)")
+        self.assertIn("android=staged 1.0.554 1340 @5%", summary)
+        self.assertTrue(summary.endswith("window 4h)"))
         client.edits().tracks().update.assert_not_called()
 
     def test_a_dry_run_also_holds_position_after_a_gate_receipt(self):
         client = Mock()
-        staged = {"name": "1.0.554 (gate 2026-10-06)", "versionCodes": ["1340"], "status": "inProgress", "userFraction": 0.25}
+        receipt = (datetime.now(timezone.utc) - timedelta(hours=1)).strftime("%Y-%m-%d-%H%M")
+        staged = {"name": f"1.0.554 (gate {receipt})", "versionCodes": ["1340"], "status": "inProgress", "userFraction": 0.25}
         tracks = {"internal": self.internal, "alpha": self.alpha, "production": {"track": "production", "releases": [staged]}}
         with patch.object(promote, "play_edit", return_value=(client, "edit")), patch.object(
             promote, "play_track", side_effect=lambda c, e, name: tracks[name]
         ):
             summary = train.run_android(dry_run=True, release_date="2026-10-06")
-        self.assertEqual(summary, "android=staged 1.0.554 1340 @25% (gate 2026-10-06 done)")
+        self.assertIn("android=staged 1.0.554 1340 @25%", summary)
+        self.assertTrue(summary.endswith("window 4h)"))
         client.edits().tracks().update.assert_not_called()
 
-    def test_the_next_day_after_a_receipt_hops_again(self):
+    def test_a_stale_receipt_hops_again(self):
         client = Mock()
         staged = {
-            "name": "1.0.554 (gate 2026-10-06)",
+            "name": "1.0.554 (gate 2026-10-06-1015)",
             "versionCodes": ["1340"],
             "status": "inProgress",
             "userFraction": 0.05,
@@ -818,10 +970,10 @@ class AndroidTests(unittest.TestCase):
             promote, "play_track", side_effect=lambda c, e, name: tracks[name]
         ), patch.object(train, "ensure_release_notes") as ensure_notes:
             summary = train.run_android(dry_run=False, release_date="2026-10-07")
-        self.assertEqual(summary, "android=staged 1.0.554 1340 @25%")
+        self.assertEqual(summary, "android=staged 1.0.554 1340 @10%")
         body = client.edits().tracks().update.call_args.kwargs["body"]
-        self.assertEqual(body["releases"][0]["name"], "1.0.554 (gate 2026-10-07)")
-        self.assertEqual(body["releases"][0]["userFraction"], 0.25)
+        self.assertRegex(body["releases"][0]["name"], r"^1\.0\.554 \(gate \d{4}-\d{2}-\d{2}-\d{4}\)$")
+        self.assertEqual(body["releases"][0]["userFraction"], 0.10)
         client.edits().commit.assert_called_once()
 
     def test_a_receipt_free_name_advances_freely(self):
@@ -838,9 +990,9 @@ class AndroidTests(unittest.TestCase):
             promote, "play_track", side_effect=lambda c, e, name: tracks[name]
         ), patch.object(train, "ensure_release_notes") as ensure_notes:
             summary = train.run_android(dry_run=False, release_date="2026-10-06")
-        self.assertEqual(summary, "android=staged 1.0.554 1340 @25%")
+        self.assertEqual(summary, "android=staged 1.0.554 1340 @10%")
         body = client.edits().tracks().update.call_args.kwargs["body"]
-        self.assertEqual(body["releases"][0]["name"], "1.0.554 (gate 2026-10-06)")
+        self.assertRegex(body["releases"][0]["name"], r"^1\.0\.554 \(gate \d{4}-\d{2}-\d{2}-\d{4}\)$")
 
     def test_ladder_hop_retains_every_apk_code(self):
         client = Mock()
@@ -856,10 +1008,10 @@ class AndroidTests(unittest.TestCase):
             promote, "play_track", side_effect=lambda c, e, name: tracks[name]
         ), patch.object(train, "ensure_release_notes") as ensure_notes:
             summary = train.run_android(dry_run=False, release_date="2026-10-06")
-        self.assertEqual(summary, "android=staged 1.0.554 1340 @25%")
+        self.assertEqual(summary, "android=staged 1.0.554 1340 @10%")
         body = client.edits().tracks().update.call_args.kwargs["body"]
         self.assertEqual(body["releases"][0]["versionCodes"], ["1340", "1339"])
-        self.assertEqual(body["releases"][0]["userFraction"], 0.25)
+        self.assertEqual(body["releases"][0]["userFraction"], 0.10)
         ensure_notes.assert_not_called()
 
     def test_ladder_dry_run_validates_the_notes_fallback(self):
@@ -951,8 +1103,23 @@ class AndroidTests(unittest.TestCase):
                 promote, "require_notes", return_value="Faster sync"
             ), patch.dict(train.os.environ, {"TRAIN_PIN_ANDROID": "1.0.554/1340"}):
                 summary = train.run_android(dry_run=False, release_date="2026-10-06")
-        self.assertEqual(summary, "android=staged 1.0.554 (1340) @5%")
+        self.assertEqual(summary, f"android=staged 1.0.554 (1340) @{train.STAGED_ROLLOUT_FRACTION:.0%}")
         client.edits().commit.assert_called_once()
+
+    def test_advance_mode_never_stages_a_candidate(self):
+        # The watch runs advance-only with no pin; with no rollout in flight and a
+        # newer internal build it must not start a production rollout.
+        client = Mock()
+        tracks = {"internal": self.internal, "alpha": self.alpha, "production": self.production}
+        with patch.object(promote, "play_edit", return_value=(client, "edit")), patch.object(
+            promote, "play_track", side_effect=lambda c, e, name: tracks[name]
+        ), patch.object(train, "ensure_release_notes") as notes, patch.object(promote, "submit_android") as submit:
+            summary = train.run_android(dry_run=False, release_date="2026-10-06", advance_only=True)
+        self.assertEqual(summary, "android=advance (no staged rollout in flight; candidate 1.0.554 (1340) waits for the gate)")
+        submit.assert_not_called()
+        notes.assert_not_called()
+        client.edits().tracks().update.assert_not_called()
+        client.edits().commit.assert_not_called()
 
     def test_a_drifted_android_pin_fails_closed_before_any_write(self):
         client = Mock()
@@ -1057,7 +1224,9 @@ class PinTests(unittest.TestCase):
 
         with patch.dict(train.os.environ, CREDENTIALS | {"TRAIN_PIN_IOS": "1.0.554/1334"}), patch.object(
             train, "_asc_rest_token", return_value="faketoken"
-        ), patch.object(train, "ios_phased_release_paused", return_value=False), patch.object(
+        ), patch.object(train, "ios_phased_release_should_complete", return_value=(False, "no phased release")), patch.object(
+            train, "ios_phased_release_paused", return_value=False
+        ), patch.object(train, "_attach_phased_release"), patch.object(
             promote.subprocess, "run", side_effect=fake_run
         ), patch.object(promote, "require_notes", return_value="- New thing"), patch.object(
             train, "ensure_release_notes"
@@ -1068,8 +1237,10 @@ class PinTests(unittest.TestCase):
     def test_a_drifted_ios_pin_fails_closed_before_any_mutation(self):
         asc = FakeASC(live_responses())
         with patch.dict(train.os.environ, CREDENTIALS | {"TRAIN_PIN_IOS": "1.0.555/1400"}), patch.object(
-            train, "ios_phased_release_paused", return_value=False
-        ), patch.object(promote.subprocess, "run") as run:
+            train, "ios_phased_release_should_complete", return_value=(False, "no phased release")
+        ), patch.object(train, "ios_phased_release_paused", return_value=False), patch.object(
+            promote.subprocess, "run"
+        ) as run:
             with self.assertRaisesRegex(train.TrainError, "unaudited"):
                 train.run_ios(dry_run=False, release_date="2026-10-06", asc=asc)
         run.assert_not_called()

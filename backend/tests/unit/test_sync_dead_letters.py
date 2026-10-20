@@ -136,6 +136,7 @@ def test_failure_code_maps_to_the_closed_vocabulary():
     assert ledger.dead_letter_failure_code('stt_failed') == 'stt_failed'
     assert ledger.dead_letter_failure_code('llm_failed') == 'llm_failed'
     assert ledger.dead_letter_failure_code('empty_structured_guard') == 'empty_structured_guard'
+    assert ledger.dead_letter_failure_code('sync_budget_chain_exhausted') == 'sync_budget_chain_exhausted'
     assert ledger.dead_letter_failure_code('sync_decode_failed') == 'unknown'
     assert ledger.dead_letter_failure_code('SomeException: raw trace /tmp/a.wav') == 'unknown'
     assert ledger.dead_letter_failure_code(None) == 'unknown'
