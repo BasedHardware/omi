@@ -94,6 +94,7 @@ prepare/accept/read/refresh smoke and verify the released app on a physical phon
 - [x] Capture native iOS UI evidence with synthetic transport.
 - [x] Verify backend wire/route contracts and real Firestore transactions.
 - [x] Handle historical text rows and definite transaction contention safely.
+- [x] Run summary recovery and expiry suites in the existing emulator CI lane.
 - [ ] Merge, deploy the backend and verify an authenticated synthetic smoke.
 - [ ] Release mobile and verify the complete flow on a physical phone.
 - [ ] Verify affected customer conversations appear and remain after reopening.
