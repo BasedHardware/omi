@@ -174,6 +174,18 @@ def entries():
             base={'owner_key': 'owner-hash'},
             domains={'namespace': namespaces},
         ),
+        CoveredByEntry(
+            'database.batch_pipeline_store.FirestoreStore.first_fresh_pending',
+            covered_by=('database.batch_pipeline_store.first_fresh_pending',),
+            reason='thin store adapter delegates unchanged query arguments to the named query builder',
+            expect_observed=False,
+            body_digest='c29b518f2e64c0ca6817cb474d3691ffeb4892268e647f25f0f456d6f3ab4940',
+        ),
+        DriverEntry(
+            'database.batch_pipeline_store.first_fresh_pending',
+            base={'owner_key': 'owner-hash'},
+            domains={'namespace': namespaces},
+        ),
         DriverEntry(
             'database.batch_pipeline_store.due',
             domains={'namespace': namespaces, 'state': ['leased', 'retry', 'result_ready', 'record_pending']},

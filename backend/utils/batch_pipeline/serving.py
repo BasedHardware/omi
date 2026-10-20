@@ -7,7 +7,7 @@ import logging
 import os
 import time
 
-from config.batch_pipeline import owner_chain_projection_enabled
+from config.batch_pipeline import owner_chain_projection_enabled, recovery_dispatch_interval_seconds
 from database.batch_pipeline_store import FirestoreStore
 from database.batch_pipeline_staging import reap
 from utils.batch_pipeline.intake import artifacts_for
@@ -108,9 +108,23 @@ class Serving:
         # instance exports its own queue sample.
         if self.projector:
             self.projector.sweep()
+        # Catch-up rows this instance held for projection depth may now fit.
+        for held_owner in list(self.merge.held_owners):
+            try:
+                self.drain_owner(held_owner)
+            except Exception as error:
+                logging.getLogger(__name__).error(
+                    'event=batch_merge action=held_drain outcome=retry exception_type=%s', type(error).__name__
+                )
         if self.metrics:
             self.metrics.refresh(self.store, time.time())
         return priority
+
+    def dispatch_recovery(self):
+        """Dispatch-loop tick: quarantine recovery only, on the maintenance leader."""
+        if self.recovery is None or not self._leads(True):
+            return None
+        return self.recovery.sweep()
 
     def _maintain(self, *, recover_quarantine: bool):
         """Idempotent, transaction-fenced maintenance: cleanup, sweeps, discovery, recovery, drain."""
@@ -184,7 +198,29 @@ def start_serving_from_env():
             except asyncio.TimeoutError:
                 pass
 
-    return stop, start_background_task(supervise(), name='batch_pipeline_serving')
+    async def dispatch_recovery():
+        # Quarantine -> recovery start rode the whole serving pass plus its 20 s
+        # sleep; this loop dispatches on its own short cadence.
+        while not stop.is_set():
+            interval = recovery_dispatch_interval_seconds()
+            if interval > 0:
+                try:
+                    service = await run_blocking(sync_executor, serving_for_stage, current_stage())
+                    await run_blocking(sync_executor, service.dispatch_recovery)
+                except Exception as error:
+                    logging.getLogger(__name__).error(
+                        'event=batch_serving action=recovery_dispatch outcome=retry exception_type=%s',
+                        type(error).__name__,
+                    )
+            try:
+                await asyncio.wait_for(stop.wait(), timeout=interval if interval > 0 else 20)
+            except asyncio.TimeoutError:
+                pass
+
+    async def run():
+        await asyncio.gather(supervise(), dispatch_recovery())
+
+    return stop, start_background_task(run(), name='batch_pipeline_serving')
 
 
 async def stop_serving(runtime):

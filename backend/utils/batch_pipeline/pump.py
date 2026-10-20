@@ -203,6 +203,10 @@ class Pump:
                 await run_blocking(db_executor, self.scheduler.recover, time.time())
                 ready = await run_blocking(db_executor, self.scheduler.store.due, 'result_ready', time.time(), 100)
                 await self._drain_ready_owners(ready)
+            # Every pump re-offers the owners its merge held for projection
+            # depth; their rows may never surface in the 100-row page above.
+            for owner_id in list(self.merge.held_owners):
+                await self.drain_owner(owner_id)
             self._last_recovery = sampled_at
         if self.inline_metrics and self.metrics and sampled_at - self._last_metrics >= 15:
             await self.sample_metrics()

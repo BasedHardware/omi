@@ -126,6 +126,14 @@ class MemoryStore:
         ]
         return deepcopy(min(jobs, key=lambda v: (v['ready_at'], v['segment_id']))) if jobs else None
 
+    def first_fresh_pending(self, owner_key):
+        jobs = [
+            v
+            for (table, _), v in self.rows.items()
+            if table == 'jobs' and v['owner_key'] == owner_key and v['merge_pending'] and v.get('fresh_capture') is True
+        ]
+        return deepcopy(min(jobs, key=lambda v: (v['capture_at'], v['segment_id']))) if jobs else None
+
 
 def colliding_owner(owner):
     shard = scheduler_control_key(owner_key(owner))
@@ -281,6 +289,34 @@ def test_priority_respects_existing_lane():
     assert priority_for('backfill', 9 * 86400) == Priority.DEEP
     with pytest.raises(ValueError):
         priority_for('unknown', 1)
+
+
+def test_catch_up_inside_the_fresh_lane_leases_after_fresh_uploads(monkeypatch):
+    monkeypatch.delenv('BATCH_PIPELINE_FRESH_GPU_PRIORITY_ENABLED', raising=False)
+    assert priority_for('fresh', 600) == Priority.FRESH
+    assert priority_for('fresh', 601) == Priority.RECENT
+    assert priority_for('fresh', 5 * 3600) == Priority.RECENT
+    assert priority_for('fresh', float('nan')) == Priority.FRESH
+    monkeypatch.setenv('BATCH_PIPELINE_FRESH_GPU_PRIORITY_ENABLED', 'false')
+    assert priority_for('fresh', 5 * 3600) == Priority.FRESH
+
+
+def test_fresh_upload_leases_ahead_of_the_same_owners_catch_up_fifo(monkeypatch):
+    monkeypatch.delenv('BATCH_PIPELINE_FRESH_GPU_PRIORITY_ENABLED', raising=False)
+    queue = Scheduler(MemoryStore())
+    for n in range(20):
+        queue.enqueue(item(f'c{n}', priority=priority_for('fresh', 3600)), 0)
+    queue.enqueue(item('fresh', capture=2, priority=priority_for('fresh', 60)), 0)
+    assert queue.pull(1, 1)[0].item.segment_id == 'fresh'
+
+
+def test_admission_classifies_fresh_capture_by_capture_end():
+    store = MemoryStore()
+    queue = Scheduler(store)
+    queue.enqueue(item('fresh', capture=1000, duration=60), 1000 + 60 + 600)
+    queue.enqueue(item('catch_up', capture=1000, duration=60), 1000 + 60 + 601)
+    assert store.rows['jobs', 'fresh']['fresh_capture'] is True
+    assert store.rows['jobs', 'catch_up']['fresh_capture'] is False
 
 
 def test_expired_leases_never_terminal_state_ordered_head():

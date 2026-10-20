@@ -543,6 +543,52 @@ converge to the strict-order state. Only intermediate states change:
   in the partial transcript can sync silently and keep their identity across
   the regeneration.
 
+### Fresh-first merge and GPU priority
+
+David's fresh bar (2026-10-20): an upload whose capture ended at most 10 minutes
+before admission reaches a conversation within 2 minutes p95, and is never held
+by the same owner's catch-up backlog. Admission stamps `fresh_capture` on each
+job from its capture end. Rows without the stamp (record lane, written before
+this change) keep the plain ordered merge.
+
+`BATCH_PIPELINE_MERGE_CATCH_UP_DEPTH` (default `32`; `off` or `<= 0` restores
+the plain ordered merge) adds two rules to commit selection, never to the
+commit body:
+
+- when the owner's merge head is a catch-up row, the earliest pending fresh row
+  commits as soon as it is ready. Its catch-up predecessors append later as
+  `late_capture`, exactly as under the bounded head wait. Fresh rows keep
+  capture order among themselves. The commit carries `fresh_first: true` and
+  logs `event=batch_merge outcome=fresh_first` with the head state only;
+- a catch-up commit waits while the owner already has this many committed rows
+  awaiting projection (`log_sequence` minus the projection watermark row's).
+  Projection stays owner-serial in log order, so a fresh row lands at most this
+  many rows behind the projection head instead of behind the whole backlog. The
+  pump maintenance drain re-offers held rows every few seconds as projection
+  advances. A missing watermark row never holds a commit.
+
+The `merge_fresh` job index backs the fresh query; without it the merge logs
+`outcome=fresh_first_unavailable` and keeps the plain order (no hold, since a
+hold would also hold fresh rows) for five minutes.
+
+`BATCH_PIPELINE_FRESH_GPU_PRIORITY_ENABLED` (default on; `false` restores
+`FRESH` for the whole lane): the sync fresh lane admits audio up to 6 hours
+old, and the owner's GPU FIFO is per priority. Uploads in that lane whose
+oldest capture is over 10 minutes old are admitted at `RECENT`, so they lease
+after fresh uploads rather than ahead of the same owner's fresh audio.
+
+### Recovery dispatch loop
+
+`BATCH_PIPELINE_RECOVERY_DISPATCH_INTERVAL_SECONDS` (default `5`; `off` or
+`<= 0` dispatches only from the serving pass): the serving runtime runs the
+quarantine recovery sweep on its own loop beside the serving pass, on the
+maintenance leader only. The pass (maintenance, projection sweep, then a
+20-second sleep) had put quarantine -> recovery prepared at p50 52 s and p95
+97 s. A per-instance lock keeps the pass and the loop from scanning at once.
+The candidate scan restarts after a short page; resuming after the last ID of
+a short page skipped every earlier candidate, new quarantines included, for a
+whole pass.
+
 The serving supervisor, explicit reconcile RPC, and metrics reconciliation all
 use the same async coordinator. Their pass persists the bounded pending page,
 then schedules at most four tracked follow-ups per process without awaiting
