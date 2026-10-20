@@ -48,12 +48,21 @@ def test_hook_swallows_errors_and_skips_missing_rows(monkeypatch):
 
 
 def test_hook_is_time_bounded(monkeypatch):
-    async def slow(*args, **kwargs):
-        await asyncio.sleep(5)
+    budgets = []
 
-    monkeypatch.setattr(finalizer, 'run_blocking', slow)
-    monkeypatch.setattr(finalizer, 'EPISODE_FINALIZE_TIMEOUT_SECONDS', 0.01)
+    async def expired(awaitable, timeout):
+        # The budget expires deterministically: record it, drop the work, raise as wait_for would.
+        budgets.append(timeout)
+        awaitable.close()
+        raise asyncio.TimeoutError
+
+    async def never_awaited(*args, **kwargs):
+        raise AssertionError('the stubbed budget expires before the work runs')
+
+    monkeypatch.setattr(finalizer, 'run_blocking', never_awaited)
+    monkeypatch.setattr(finalizer.asyncio, 'wait_for', expired)
     asyncio.run(finalizer._episode_after_finalization('u', 'c1', {'id': 'c1'}, ProcessingTrigger.CAPTURE_END))
+    assert budgets == [finalizer.EPISODE_FINALIZE_TIMEOUT_SECONDS]
 
 
 def test_absorb_hook_follows_the_donor_to_its_survivor(monkeypatch):
