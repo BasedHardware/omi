@@ -49,8 +49,8 @@ def test_advance_one_step_after_hold():
 
 
 DAY = 86400
-NOON_UTC = 20 * DAY + 18 * H  # 18:00Z, inside the 14:00Z-02:00Z daytime window
-NIGHT_UTC = 20 * DAY + 8 * H  # 08:00Z, outside it
+NOON_UTC = 20 * DAY + 18 * H  # 18:00Z
+NIGHT_UTC = 20 * DAY + 8 * H  # 08:00Z
 
 
 def five(hold=H, observed_at=NOON_UTC, completed=rc.FIVE_PERCENT_MIN_COMPLETED, **kw):
@@ -64,25 +64,10 @@ def test_five_percent_holds_one_hour_ruling_10_20():
     assert decide(snap(5.0), five(hold=H)).to_percent == 10.0
 
 
-def test_five_percent_needs_one_daytime_hour():
-    # A 1h hold wholly at night is not evidence for the day.
-    d = decide(snap(5.0), five(hold=H, observed_at=NIGHT_UTC))
-    assert (d.action, d.detail) == (rc.Action.HOLD, 'daytime_window_incomplete')
-    # Half an hour of daytime at 14:30Z is still short; a full daytime hour at 15:00Z passes.
-    assert decide(snap(5.0), five(hold=2 * H, observed_at=20 * DAY + 14.5 * H)).detail == 'daytime_window_incomplete'
-    assert decide(snap(5.0), five(hold=2 * H, observed_at=20 * DAY + 15 * H)).to_percent == 10.0
-    # The window wraps midnight UTC: 01:00Z-02:00Z is daytime, 02:00Z-03:00Z is not.
-    assert decide(snap(5.0), five(hold=H, observed_at=21 * DAY + 2 * H)).to_percent == 10.0
-    assert decide(snap(5.0), five(hold=H, observed_at=21 * DAY + 3 * H)).detail == 'daytime_window_incomplete'
-    # A long hold that began at night advances once it has covered a daytime hour.
-    assert decide(snap(5.0), five(hold=10 * H, observed_at=20 * DAY + 15 * H)).to_percent == 10.0
-
-
-def test_daytime_seconds_counts_the_wrapping_window():
-    assert rc.daytime_seconds(20 * DAY, 21 * DAY) == 12 * H  # 00-02Z plus 14-24Z
-    assert rc.daytime_seconds(20 * DAY + 2 * H, 20 * DAY + 14 * H) == 0
-    assert rc.daytime_seconds(20 * DAY + 23 * H, 21 * DAY + 3 * H) == 3 * H
-    assert rc.daytime_seconds(5.0, 5.0) == 0
+def test_five_percent_has_no_time_of_day_requirement():
+    # Lead ruling on #22886: "5% hold 1h" means 1h; a night hold with enough completions advances.
+    assert not hasattr(rc, 'daytime_seconds')
+    assert decide(snap(5.0), five(hold=H, observed_at=NIGHT_UTC)).to_percent == 10.0
 
 
 @pytest.mark.parametrize(
@@ -99,13 +84,13 @@ def test_five_percent_needs_the_completion_floor(completed, detail):
     assert (d.action, d.reason, d.detail) == (rc.Action.HOLD, rc.RampReason.HOLD_INCOMPLETE, detail)
 
 
-def test_five_percent_requirements_scale_only_for_a_staging_rehearsal():
+def test_five_percent_sample_floor_scales_only_for_a_staging_rehearsal():
     v = five(hold=H / 60, observed_at=NOON_UTC, completed=3)
     assert decide(snap(5.0), v, hold_scale=1 / 60).to_percent == 10.0
     assert decide(snap(5.0), v).action is rc.Action.HOLD
 
 
-def test_other_steps_need_no_daytime_or_sample_floor():
+def test_other_steps_need_no_sample_floor():
     v = rc.GateVerdict('PASS', '', NIGHT_UTC, H, 10.0, {})
     assert decide(snap(10.0), v).to_percent == 25.0
 
@@ -122,7 +107,7 @@ def test_never_past_one_hundred():
 
 
 def test_off_ladder_value_moves_to_next_step_without_skipping():
-    # 7% sits on the 5% step, so the 5% daytime and sample requirements apply.
+    # 7% sits on the 5% step, so the 5% sample floor applies.
     assert decide(snap(7.0), replace(five(hold=4 * H), percent=7.0)).to_percent == 10.0
     assert decide(snap(7.0), verdict(percent=7.0, hold=4 * H)).detail == 'sample_unmeasured'
     assert decide(snap(7.0), verdict('FAIL', 'http_5xx_regression', percent=7.0)).to_percent == 5.0
