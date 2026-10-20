@@ -76,6 +76,8 @@ prod:
     OPENROUTER_API_KEY: [backend, backend-integration, backend-sync, backend-sync-backfill]
     PERPLEXITY_API_KEY: [backend]
     PINECONE_API_KEY: [backend, backend-integration, backend-sync, backend-sync-backfill]
+    # The prod index; staging uses memories-backend-dev and staging_fence refuses the prod value.
+    PINECONE_INDEX_NAME: [backend, backend-integration, backend-sync, backend-sync-backfill]
     RAPID_API_HOST: [backend, backend-integration, backend-sync, backend-sync-backfill]
     RAPID_API_KEY: [backend, backend-integration, backend-sync, backend-sync-backfill]
     REDIS_DB_HOST: [backend, backend-integration, backend-sync, backend-sync-backfill]
@@ -153,3 +155,8 @@ prod:
     WORKFLOW_API_KEY: [backend, backend-integration, backend-sync, backend-sync-backfill]
     'dg-nova-3': [backend, backend-integration, backend-sync, backend-sync-backfill]
     'modulate-velma-2': [backend, backend-integration, backend-sync, backend-sync-backfill]
+  # review: a live rollout or event knob read by code; the lead decides to encode it in source or
+  # revert it. Not an ops constant, so it is not in the ops file.
+  review:
+    RATE_LIMIT_BOOST: [backend]  # event multiplier, default 1.0; prod serves 100
+    REVIEW_SURFACE_MODE: [backend-sync-backfill]  # rollout flag on one service only

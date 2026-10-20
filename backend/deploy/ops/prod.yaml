@@ -50,8 +50,6 @@ cloud_run:
       MEMORY_MODE: 'false'
       OMI_LANGSMITH_AGENTIC_PROMPT_NAME: agentic-chat-main
       OMI_LANGSMITH_PROMPT_CACHE_TTL_SECONDS: '3600'
-      PINECONE_INDEX_NAME: memories-backend
-      RATE_LIMIT_BOOST: '100'
       TYPESENSE_HOST_PORT: '443'
   backend-sync:
     env:
@@ -69,7 +67,6 @@ cloud_run:
       HTTP_SYNC_JOBS_RUN_TIMEOUT: '1500'
       LANGCHAIN_TRACING_V2: 'false'
       MEMORY_MODE: 'off'
-      PINECONE_INDEX_NAME: memories-backend
     max_instances: 80
     min_instances: 1
   backend-sync-backfill:
@@ -91,8 +88,6 @@ cloud_run:
       LISTEN_FINALIZATION_RECOVERY_MINIMUM_TERMINAL_ENABLED: 'true'
       MEETING_NOTES_EVIDENCE_WAIT_SECONDS: '25'
       MEMORY_MODE: 'off'
-      PINECONE_INDEX_NAME: memories-backend
-      REVIEW_SURFACE_MODE: 'on'
       TYPESENSE_HOST_PORT: '443'
     # redis_guard.sh moves this between 8 and 40 from Redis memory. It is
     # deleted with the sequencer (C10); until then the config-train only
@@ -111,7 +106,6 @@ cloud_run:
       HTTP_GET_TIMEOUT: '30'
       LANGCHAIN_TRACING_V2: 'false'
       MEMORY_MODE: 'off'
-      PINECONE_INDEX_NAME: memories-backend
       TYPESENSE_HOST_PORT: '443'
     min_instances: 1
 

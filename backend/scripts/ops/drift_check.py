@@ -78,6 +78,7 @@ LIVE_DIFF_ALLOWLIST: dict[str, str] = {
     '*_UID_ALLOWLIST': 'prod-only UID cohort; staging has no prod users',
     '*_UIDS': 'prod-only UID cohort; staging has no prod users',
     'BATCH_PIPELINE_SHADOW_*': 'prod shadow sampling; staging has no prod traffic to shadow',
+    'FIRESTORE_READ_LEVERS': 'the AVO Firestore-reads loop ramps prod levers; staging takes them at its next deploy',
 }
 # Present on only one side without failing (names, with the reason).
 LIVE_ONE_SIDED_ALLOWLIST: dict[str, str] = {
@@ -89,9 +90,19 @@ LIVE_ONE_SIDED_ALLOWLIST: dict[str, str] = {
     'JOBSTORE_*': 'A2 job-store shadow is staging-only',
     'OMI_DEPLOYMENT': 'staging identity',
 }
-# staging-vs-prod scale rules. min: warm iff prod is warm, never above prod. max: never above prod
-# (staging carries no prod load). cpu, memory, concurrency: equal, so per-instance behaviour matches.
+# staging-vs-prod scale rules. Staging is prod-shaped, not prod-sized: it idles at min 0 by design
+# (staging.overlay.yaml scale_flags), except the services below, which must be warm whenever prod's
+# are, because they do work without inbound traffic. Min and max never exceed prod's. cpu, memory and
+# concurrency are equal, so per-instance behaviour matches.
+STAGING_WARM: dict[str, str] = {
+    'backend-integration': 'batch serving leader: reconciles and projects without traffic (lesson 8, #22757)',
+}
 EQUAL_SCALE_FIELDS = ('cpu', 'memory', 'concurrency')
+# Listen env whose prod values come from the LISTEN_PRIVATE_VALUES_YAML secret (#22763 privateEnv),
+# so source states presence only.
+LISTEN_PRIVATE_ENV = ('STT_CAP_DISPATCH_ENFORCEMENT', 'STT_CAP_DISPATCH_COHORT', 'STT_CAP_DISPATCH_LANES')
+# Ramp position: staging sits on prod's set, or ahead of it on the full-ramp set it proves (plan §1).
+STAGING_AHEAD_SET = '100_percent'
 
 
 @dataclass(frozen=True)
@@ -116,9 +127,11 @@ def sensitive(name: str, value: str) -> bool:
         return True
     url = urlparse(value) if '://' in value else None
     if url is not None and url.hostname:
-        # Hosts (run.app names are long) stay readable for the self-reference check; credentials
-        # or tokens in userinfo, path or query still redact the whole value.
-        value = f'{url.username or ""}{url.password or ""}{url.path}{url.query}{url.fragment}'
+        # Hosts (run.app names are long) stay readable for the self-reference check. Any userinfo
+        # or query redacts the whole value; a path redacts it when it holds a token-like run.
+        if url.username or url.password or url.query or url.fragment:
+            return True
+        value = url.path
     return bool(SECRET_LOOKING_VALUE.search(value))
 
 
@@ -399,7 +412,7 @@ def listen_values(path: Path) -> tuple[dict[str, dict[str, str]], dict[str, Any]
             env[entry['name']] = plain(entry['name'], str(entry['value']))
         else:
             env.update(redact_env([entry]))
-    for name in doc.get('privateEnv') or {}:
+    for name in [*(doc.get('privateEnv') or {}), *LISTEN_PRIVATE_ENV]:
         env[str(name)] = {'from': 'private-values'}
     autoscaling = doc.get('autoscaling') or {}
     limits = (doc.get('resources') or {}).get('limits') or {}
@@ -446,9 +459,11 @@ def source_model(environment: str, root: Path = ROOT) -> dict[str, SourceService
     out: dict[str, SourceService] = {}
     for name, cfg in ((composed.get('cloud_run') or {}).get('services') or {}).items():
         op = ops_services.get(name, {})
+        # Composed flags (staging's overlay scale_flags) first; deploy-script literals override.
+        composed_flags = dict(_FLAG.findall(' '.join(f'{k}={v}' for k, v in (cfg.get('flags') or {}).items()) + ' '))
         out[name] = SourceService(
             env=_source_env(cfg.get('env') or {}, cfg.get('secrets') or {}),
-            scale=_flag_scale(flags.get(name, {})),
+            scale=_flag_scale({**composed_flags, **flags.get(name, {})}),
             ops_env={k: str(v) for k, v in (op.get('env') or {}).items()},
             ops_scale={'service_min': op.get('min_instances'), 'service_max': op.get('max_instances')},
         )
@@ -494,13 +509,23 @@ def _same(a: Mapping[str, str], b: Mapping[str, str]) -> bool:
     return dict(a) == dict(b)
 
 
-def _effective_min(scale: Mapping[str, Any]) -> int:
-    return max(scale.get('service_min') or 0, scale.get('revision_min') or 0)
+def _min_range(scale: Mapping[str, Any]) -> tuple[int, int]:
+    """(lowest, highest) effective min across the two readings of a service/revision annotation split:
+    the larger wins, or the service-level value wins when set. Rules use the reading that fails."""
+    service, revision = scale.get('service_min'), scale.get('revision_min')
+    larger = max(service or 0, revision or 0)
+    service_wins = service if service is not None else (revision or 0)
+    return min(larger, service_wins), max(larger, service_wins)
 
 
-def _effective_max(scale: Mapping[str, Any]) -> int | None:
-    caps = [v for v in (scale.get('service_max'), scale.get('revision_max')) if v]
-    return min(caps) if caps else None
+def _max_range(scale: Mapping[str, Any]) -> tuple[int, int] | None:
+    """(lowest, highest) effective max: the smaller cap wins, or the service-level cap wins when set."""
+    service, revision = scale.get('service_max'), scale.get('revision_max')
+    caps = [v for v in (service, revision) if v]
+    if not caps:
+        return None
+    readings = (min(caps), service or revision or min(caps))
+    return min(readings), max(readings)
 
 
 KNOWN_LIVE_ONLY = BACKEND / 'deploy' / 'ops' / 'live_only.yaml'
@@ -593,7 +618,10 @@ def _scale_vs_source(service: str, live: Mapping[str, Any], src: SourceService) 
     for field, want in src.scale.items():
         if want is None or field not in live:
             continue
-        if quantity(live.get(field)) != quantity(want):
+        have = live.get(field)
+        if field.endswith('_min') and have is None:
+            have = 0  # an unset min is zero
+        if quantity(have) != quantity(want):
             out.append(Finding(service, field, f'scale: live {live.get(field)} != deploy flag {want}'))
     for field, want in src.ops_scale.items():
         have = live.get(field)
@@ -611,6 +639,11 @@ def _host(value: str) -> str | None:
     if '://' not in value:
         return None
     return urlparse(value).hostname
+
+
+def _route(entry: Mapping[str, str] | None) -> str:
+    """Path of a plain URL value, normalized for a trailing slash."""
+    return urlparse((entry or {}).get('value', '')).path.rstrip('/')
 
 
 def _url_index(snapshot: Mapping[str, Any]) -> dict[str, str]:
@@ -687,12 +720,26 @@ def compare_staging_prod(
     known_prod = dict(known_prod or {})
     ramp_sets = ramp_sets or {}
     findings: list[Finding] = []
-    ramp_owned = {(service, key) for targets in ramp_sets.values() for service, keys in targets.items() for key in keys}
+    positions: dict[str, str | None] = {}
     for env_name, snapshot in (('staging', staging), ('prod', prod)) if ramp_sets else ():
         position, off = ramp_position(snapshot, ramp_sets)
+        positions[env_name] = position
+        if position is None:
+            findings.append(Finding(env_name, 'ramp', 'no ramp set covers every snapshotted service'))
+            continue
         findings.append(Finding(env_name, 'ramp', f'sits on ramp set {position}', 'ramp position'))
         for service, key in off:
             findings.append(Finding(f'{env_name}:{service}', key, f'ramp key off its set {position}'))
+    s_pos, p_pos = positions.get('staging'), positions.get('prod')
+    if s_pos and p_pos and s_pos not in (p_pos, STAGING_AHEAD_SET):
+        findings.append(Finding('staging', 'ramp', f'on {s_pos}, neither prod\'s {p_pos} nor {STAGING_AHEAD_SET}'))
+    # Equality is skipped only where both winning sets judge the key; anything else is compared.
+    ramp_owned = (
+        {(s, k) for s, keys in ramp_sets[s_pos].items() for k in keys}
+        & {(s, k) for s, keys in ramp_sets[p_pos].items() for k in keys}
+        if s_pos and p_pos
+        else set()
+    )
     s_urls, p_urls = _url_index(staging), _url_index(prod)
     s_services = {_base_name(n): (n, svc) for n, svc in (staging.get('services') or {}).items()}
     p_services = dict((prod.get('services') or {}).items())
@@ -728,6 +775,8 @@ def compare_staging_prod(
                     findings.append(
                         Finding(s_name, key, f'points at {s_ref or "external"}; prod points at {p_ref or "external"}')
                     )
+                elif _route(s) != _route(p):  # same service, different handler (e.g. /v1 vs /v2 sync-jobs)
+                    findings.append(Finding(s_name, key, f'points at {s_ref} on a different path than prod'))
                 continue
             reason = LIVE_DIFF_ALLOWLIST.get(_matches(key, LIVE_DIFF_ALLOWLIST) or '')
             if not reason and _matches(key, STAGING_DIFF_ALLOWLIST):
@@ -740,14 +789,14 @@ def compare_staging_prod(
 
 def _scale_vs_prod(service: str, s: Mapping[str, Any], p: Mapping[str, Any]) -> list[Finding]:
     out: list[Finding] = []
-    s_min, p_min = _effective_min(s), _effective_min(p)
-    if (s_min > 0) != (p_min > 0) or s_min > p_min:
-        out.append(
-            Finding(service, 'min_instances', f'staging {s_min}, prod {p_min} (rule: warm iff prod warm, <= prod)')
-        )
-    s_max, p_max = _effective_max(s), _effective_max(p)
-    if s_max is not None and p_max is not None and s_max > p_max:
-        out.append(Finding(service, 'max_instances', f'staging {s_max} > prod {p_max}'))
+    (s_low, s_high), (p_low, p_high) = _min_range(s), _min_range(p)
+    if _base_name(service) in STAGING_WARM and p_low > 0 and s_low == 0:
+        out.append(Finding(service, 'min_instances', f'staging {s_low}, prod {p_low} (rule: warm whenever prod is)'))
+    if s_high > p_high:
+        out.append(Finding(service, 'min_instances', f'staging {s_high} > prod {p_high}'))
+    s_max, p_max = _max_range(s), _max_range(p)
+    if s_max is not None and p_max is not None and s_max[1] > p_max[0]:
+        out.append(Finding(service, 'max_instances', f'staging {s_max[1]} > prod {p_max[0]}'))
     for field in EQUAL_SCALE_FIELDS:
         if s.get(field) is not None and p.get(field) is not None and quantity(s[field]) != quantity(p[field]):
             out.append(Finding(service, field, f'staging {s[field]}, prod {p[field]}'))

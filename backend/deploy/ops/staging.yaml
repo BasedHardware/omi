@@ -22,8 +22,6 @@ cloud_run:
       MEMORY_MODE: 'false'
       OMI_LANGSMITH_AGENTIC_PROMPT_NAME: agentic-chat-main
       OMI_LANGSMITH_PROMPT_CACHE_TTL_SECONDS: '3600'
-      PINECONE_INDEX_NAME: memories-backend
-      RATE_LIMIT_BOOST: '100'
       TYPESENSE_HOST_PORT: '443'
   backend-sync-staging:
     env:
@@ -38,7 +36,6 @@ cloud_run:
       HTTP_SYNC_JOBS_RUN_TIMEOUT: '1500'
       LANGCHAIN_TRACING_V2: 'false'
       MEMORY_MODE: 'off'
-      PINECONE_INDEX_NAME: memories-backend
     # Replica counts are on contract (i)'s staging allowlist: lane 2's deploy.sh sizes staging.
     max_instances: 20
   backend-sync-backfill-staging:
@@ -60,8 +57,6 @@ cloud_run:
       LISTEN_FINALIZATION_RECOVERY_MINIMUM_TERMINAL_ENABLED: 'true'
       MEETING_NOTES_EVIDENCE_WAIT_SECONDS: '25'
       MEMORY_MODE: 'off'
-      PINECONE_INDEX_NAME: memories-backend
-      REVIEW_SURFACE_MODE: 'on'
       TYPESENSE_HOST_PORT: '443'
     max_instances: {owner: none, floor: 8, ceiling: 40}
   backend-integration-staging:
@@ -74,7 +69,6 @@ cloud_run:
       HTTP_GET_TIMEOUT: '30'
       LANGCHAIN_TRACING_V2: 'false'
       MEMORY_MODE: 'off'
-      PINECONE_INDEX_NAME: memories-backend
       TYPESENSE_HOST_PORT: '443'
 
 cloud_tasks:

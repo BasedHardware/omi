@@ -93,7 +93,7 @@ def test_cold_batch_serving_leader_fails():
     staging['services']['backend-integration-staging']['scale']['revision_min'] = 0
 
     assert _unexplained(dc.compare_staging_prod(staging, _prod())) == [
-        'backend-integration-staging/min_instances: staging 0, prod 3 (rule: warm iff prod warm, <= prod)'
+        'backend-integration-staging/min_instances: staging 0, prod 3 (rule: warm whenever prod is)'
     ]
 
 
@@ -144,16 +144,18 @@ def test_staging_may_be_smaller_but_not_larger_or_differently_shaped():
 def test_ramp_keys_are_judged_by_ramp_position_not_equality():
     """Staging may lead prod on the ramp, but each environment must sit on one coherent set."""
     ramp_sets = {
-        'off': {s: {'BATCH_PIPELINE_RECOVERY_ALL_ADMITTED': 'false', 'BATCH_PIPELINE_PERCENT': '0'} for s in PROD_URLS},
-        'full': {
+        '5_percent': {
+            s: {'BATCH_PIPELINE_RECOVERY_ALL_ADMITTED': 'false', 'BATCH_PIPELINE_PERCENT': '0'} for s in PROD_URLS
+        },
+        '100_percent': {
             s: {'BATCH_PIPELINE_RECOVERY_ALL_ADMITTED': 'true', 'BATCH_PIPELINE_PERCENT': '100'} for s in PROD_URLS
         },
     }
     prod, staging = _prod(), _staging_mirrored()
     for name in PROD_URLS:
-        for key, value in ramp_sets['off'][name].items():
+        for key, value in ramp_sets['5_percent'][name].items():
             prod['services'][name]['env'][key] = dc.plain(key, value)
-        for key, value in ramp_sets['full'][name].items():
+        for key, value in ramp_sets['100_percent'][name].items():
             staging['services'][f'{name}-staging']['env'][key] = dc.plain(key, value)
     assert _unexplained(dc.compare_staging_prod(staging, prod, ramp_sets)) == []
 
@@ -162,7 +164,77 @@ def test_ramp_keys_are_judged_by_ramp_position_not_equality():
         'X', 'false'
     )
     assert _unexplained(dc.compare_staging_prod(staging, prod, ramp_sets)) == [
-        'staging:backend-integration/BATCH_PIPELINE_RECOVERY_ALL_ADMITTED: ramp key off its set full'
+        'staging:backend-integration/BATCH_PIPELINE_RECOVERY_ALL_ADMITTED: ramp key off its set 100_percent'
+    ]
+
+
+def test_staging_may_not_lag_prod_on_the_ramp():
+    ramp_sets = {
+        '5_percent': {s: {'BATCH_PIPELINE_PERCENT': '5'} for s in PROD_URLS},
+        '100_percent': {s: {'BATCH_PIPELINE_PERCENT': '100'} for s in PROD_URLS},
+    }
+    prod, staging = _prod(), _staging_mirrored()
+    for name in PROD_URLS:
+        prod['services'][name]['env']['BATCH_PIPELINE_PERCENT'] = dc.plain('X', '100')
+        staging['services'][f'{name}-staging']['env']['BATCH_PIPELINE_PERCENT'] = dc.plain('X', '5')
+
+    assert _unexplained(dc.compare_staging_prod(staging, prod, ramp_sets)) == [
+        "staging/ramp: on 5_percent, neither prod's 100_percent nor 100_percent"
+    ]
+
+
+def test_no_covering_ramp_set_fails_and_keys_a_set_does_not_judge_are_compared():
+    partial = {'restore': {'backend-sync': {'BATCH_PIPELINE_PERCENT': '0'}}}
+    assert _unexplained(dc.compare_staging_prod(_staging_mirrored(), _prod(), partial)) == [
+        'staging/ramp: no ramp set covers every snapshotted service',
+        'prod/ramp: no ramp set covers every snapshotted service',
+    ]
+
+    # A winning set that omits the recovery flag must not hide it: it is compared by equality.
+    narrow = {'5_percent': {s: {'BATCH_PIPELINE_ENABLED': 'true'} for s in PROD_URLS}}
+    prod, staging = _prod(), _staging_mirrored()
+    for snapshot, suffix in ((prod, ''), (staging, '-staging')):
+        for name in PROD_URLS:
+            snapshot['services'][name + suffix]['env']['BATCH_PIPELINE_ENABLED'] = dc.plain('X', 'true')
+    staging['services']['backend-integration-staging']['env']['BATCH_PIPELINE_RECOVERY_ALL_ADMITTED'] = dc.plain(
+        'X', 'false'
+    )
+    assert _unexplained(dc.compare_staging_prod(staging, prod, narrow)) == [
+        'backend-integration-staging/BATCH_PIPELINE_RECOVERY_ALL_ADMITTED: value differs (staging false, prod true)'
+    ]
+
+
+def test_staging_idles_by_design_except_the_serving_leader():
+    staging = _staging_mirrored()
+    for name in ('backend-sync-staging', 'backend-sync-backfill-staging'):
+        staging['services'][name]['scale']['revision_min'] = 0  # overlay scale_flags: --min-instances 0
+    assert _unexplained(dc.compare_staging_prod(staging, _prod())) == []
+
+
+def test_an_annotation_split_cannot_hide_a_cold_leader_or_a_higher_cap():
+    staging = _staging_mirrored()
+    leader = staging['services']['backend-integration-staging']['scale']
+    leader.update(service_min=0, revision_min=3)  # service-level 0 wins when it is set
+    sync = staging['services']['backend-sync-staging']['scale']
+    sync.update(service_max=80, revision_max=4)  # service-level cap above prod's 40
+
+    assert _unexplained(dc.compare_staging_prod(staging, _prod())) == [
+        'backend-integration-staging/min_instances: staging 0, prod 3 (rule: warm whenever prod is)',
+        'backend-sync-staging/max_instances: staging 80 > prod 40',
+    ]
+
+
+def test_same_service_audience_on_a_different_path_fails():
+    prod, staging = _prod(), _staging_mirrored()
+    prod['services']['backend-sync']['env']['SYNC_TASKS_AUDIENCE'] = dc.plain(
+        'X', PROD_URLS['backend-sync'] + '/v2/sync-jobs/run'
+    )
+    staging['services']['backend-sync-staging']['env']['SYNC_TASKS_AUDIENCE'] = dc.plain(
+        'X', STAGING_URLS['backend-sync'] + '/v1/sync-jobs/run'
+    )
+
+    assert _unexplained(dc.compare_staging_prod(staging, prod)) == [
+        'backend-sync-staging/SYNC_TASKS_AUDIENCE: points at backend-sync on a different path than prod'
     ]
 
 
@@ -396,6 +468,45 @@ def test_staging_source_model_composes():
 
     assert model['backend-integration'].ops_env['SUMMARY_DEBT_REPAIR_ENABLED'] == 'true'
     assert model['backend-sync-backfill'].scale['concurrency'] == 6
+    # The overlay's scale_flags reach the source model, so a cold staging leader fails `source`.
+    assert model['backend-integration'].scale['revision_min'] == 1
+    assert model['backend-sync'].scale['revision_min'] == 0
+
+
+def test_staging_ops_values_pass_the_staging_fence():
+    from utils import staging_fence
+
+    staging = yaml.safe_load((dc.BACKEND / 'deploy' / 'ops' / 'staging.yaml').read_text(encoding='utf-8'))
+    for service, cfg in staging['cloud_run'].items():
+        env = {k: str(v) for k, v in (cfg.get('env') or {}).items()}
+        violations = staging_fence.staging_violations({'OMI_DEPLOYMENT': 'staging', **env})
+        assert [v for v in violations if v[1] in env] == [], service
+
+
+def test_a_value_mismatch_with_source_fails_when_not_ramp_owned():
+    """The real tree declares BATCH_PIPELINE_RECOVERY_ALL_ADMITTED=false; prod serves true."""
+    source = _source()
+    source['backend-integration'].env['BATCH_PIPELINE_RECOVERY_ALL_ADMITTED'] = dc.plain('X', 'false')
+    live = _live_integration(BATCH_PIPELINE_RECOVERY_ALL_ADMITTED='true')
+
+    assert _unexplained(dc.compare_source(live, source, ramp={})) == [
+        'backend-integration/BATCH_PIPELINE_RECOVERY_ALL_ADMITTED: value differs from source'
+    ]
+
+
+@pytest.mark.parametrize(
+    'value',
+    [
+        'https://user:s3cret@redis.example:6379/0',
+        'https://hooks.example/notify?sig=abc',
+        f'https://api.example/v1/{FAKE_UID}',
+    ],
+)
+def test_credential_bearing_urls_are_redacted(value: str):
+    assert set(dc.plain('UPSTREAM_URL', value)) == {'digest'}
+    assert dc.plain('SYNC_TASKS_AUDIENCE', PROD_URLS['backend-sync'] + '/v2/sync-jobs/run') == {
+        'value': PROD_URLS['backend-sync'] + '/v2/sync-jobs/run'
+    }
 
 
 def test_live_only_inventory_is_well_formed_and_disjoint_from_source():
@@ -403,7 +514,7 @@ def test_live_only_inventory_is_well_formed_and_disjoint_from_source():
     known = dc.load_known(dc.KNOWN_LIVE_ONLY, 'prod')
     model = dc.source_model('prod')
 
-    assert set(doc) == {'prod'} and set(doc['prod']) == {'manifest', 'stale'}
+    assert set(doc) == {'prod'} and set(doc['prod']) == {'manifest', 'stale', 'review'}
     assert known
     for (service, key), _ in known.items():
         assert service in model, service
