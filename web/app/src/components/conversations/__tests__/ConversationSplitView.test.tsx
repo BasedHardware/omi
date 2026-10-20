@@ -394,6 +394,21 @@ describe('ConversationSplitView review regressions', () => {
     );
     expect(harness.clearSearch).toHaveBeenCalledTimes(1);
   });
+
+  it('closes the detail pane when entering selection mode instead of re-selecting the newest tile', async () => {
+    harness.conversations = [conversation('conv-a', '2026-08-11T12:00:00Z')];
+
+    render(<ConversationSplitView />);
+    await waitFor(() =>
+      expect(screen.getByTestId('conversation-detail')).toHaveTextContent('conv-a'),
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Select' }));
+
+    await waitFor(() =>
+      expect(screen.queryByTestId('conversation-detail')).not.toBeInTheDocument(),
+    );
+  });
 });
 
 describe('ConversationSplitView date presets', () => {

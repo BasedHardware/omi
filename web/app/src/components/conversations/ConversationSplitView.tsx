@@ -309,7 +309,7 @@ export function ConversationSplitView() {
 
   // Auto-select the newest tile on load (only if no URL param and not explicitly showing the gallery)
   useEffect(() => {
-    if (selection || urlConversationId || urlRecapId) return;
+    if (selection || isSelectionMode || urlConversationId || urlRecapId) return;
     const waitingForRecaps =
       !isSearching && !filterDate && selectedFolderId === FOLDER_ALL && recapsLoading;
     if (listLoading || waitingForRecaps || preventAutoSelect.current) return;
@@ -327,6 +327,7 @@ export function ConversationSplitView() {
     dayGroups,
     filterDate,
     isSearching,
+    isSelectionMode,
     listLoading,
     recapsLoading,
     selectedFolderId,
@@ -465,14 +466,19 @@ export function ConversationSplitView() {
     setIsSelectionMode(true);
     setSelectedIds(new Set());
     setSelection(null); // Deselect any viewed tile
-  }, []);
+    preventAutoSelect.current = true;
+  }, [setSelection]);
 
   // Enter selection mode and select the specified card (for double-click)
-  const enterSelectionModeWithId = useCallback((id: string) => {
-    setIsSelectionMode(true);
-    setSelectedIds(new Set([id]));
-    setSelection(null); // Deselect any viewed tile
-  }, []);
+  const enterSelectionModeWithId = useCallback(
+    (id: string) => {
+      setIsSelectionMode(true);
+      setSelectedIds(new Set([id]));
+      setSelection(null); // Deselect any viewed tile
+      preventAutoSelect.current = true;
+    },
+    [setSelection],
+  );
 
   const exitSelectionMode = useCallback(() => {
     setIsSelectionMode(false);
