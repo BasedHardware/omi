@@ -24,11 +24,33 @@ extension SettingsContentView {
   }
 
   func updateDailySummarySettings(enabled: Bool? = nil, hour: Int? = nil) {
+    guard let enabled else {
+      Task {
+        do {
+          try await APIClient.shared.updateDailySummarySettings(hour: hour)
+        } catch {
+          logError("Failed to update daily summary settings", error: error)
+        }
+      }
+      return
+    }
+
+    dailySummaryEnabledError = nil
     Task {
-      do {
-        try await APIClient.shared.updateDailySummarySettings(enabled: enabled, hour: hour)
-      } catch {
-        logError("Failed to update daily summary settings", error: error)
+      let outcome = await BooleanSettingSaver.save(
+        enabled,
+        description: "daily summary settings",
+        lastConfirmed: { savedDailySummaryEnabled },
+        write: { try await APIClient.shared.updateDailySummarySettings(enabled: $0, hour: hour) }
+      )
+      switch outcome {
+      case .saved(let stored):
+        savedDailySummaryEnabled = stored
+      case .failed(let restore):
+        if let restore {
+          dailySummaryEnabled = restore
+          dailySummaryEnabledError = "Couldn't save. Try again."
+        }
       }
     }
   }
@@ -85,21 +107,43 @@ extension SettingsContentView {
   }
 
   func updateRecordingPermission(_ enabled: Bool) {
+    recordingPermissionError = nil
     Task {
-      do {
-        try await APIClient.shared.setRecordingPermission(enabled: enabled)
-      } catch {
-        logError("Failed to update recording permission", error: error)
+      let outcome = await BooleanSettingSaver.save(
+        enabled,
+        description: "recording permission",
+        lastConfirmed: { savedRecordingPermissionEnabled },
+        write: { try await APIClient.shared.setRecordingPermission(enabled: $0) }
+      )
+      switch outcome {
+      case .saved(let stored):
+        savedRecordingPermissionEnabled = stored
+      case .failed(let restore):
+        if let restore {
+          recordingPermissionEnabled = restore
+          recordingPermissionError = "Couldn't save. Try again."
+        }
       }
     }
   }
 
   func updatePrivateCloudSync(_ enabled: Bool) {
+    privateCloudSyncError = nil
     Task {
-      do {
-        try await APIClient.shared.setPrivateCloudSync(enabled: enabled)
-      } catch {
-        logError("Failed to update private cloud sync", error: error)
+      let outcome = await BooleanSettingSaver.save(
+        enabled,
+        description: "private cloud sync",
+        lastConfirmed: { savedPrivateCloudSyncEnabled },
+        write: { try await APIClient.shared.setPrivateCloudSync(enabled: $0) }
+      )
+      switch outcome {
+      case .saved(let stored):
+        savedPrivateCloudSyncEnabled = stored
+      case .failed(let restore):
+        if let restore {
+          privateCloudSyncEnabled = restore
+          privateCloudSyncError = "Couldn't save. Try again."
+        }
       }
     }
   }
@@ -231,6 +275,40 @@ enum TranscriptionVocabularySaver {
     } catch {
       logError("Settings: failed to save custom vocabulary", error: error)
       guard isLatestEdit() else { return .superseded }
+      return .failed(restore: lastConfirmed())
+    }
+  }
+}
+
+/// Save-with-rollback for a Settings toggle backed by a boolean the account confirms or refuses
+/// (Daily Summary, Store Recordings, Private Cloud Sync). Mirrors `TranscriptionVocabularySaver` for
+/// a plain boolean instead of a list.
+///
+/// These toggles bind straight to the switch shown on screen, so a failed save used to be only
+/// logged: the switch stayed on the side the user picked while the account kept its old value, and
+/// the next Settings load quietly flipped it back with no message.
+@MainActor
+enum BooleanSettingSaver {
+  enum Outcome: Equatable {
+    /// The account stored the value.
+    case saved(Bool)
+    /// The account did not store the value. Show `restore`, the value it last confirmed (`nil` when
+    /// Settings has not read it yet), and say the change was not saved.
+    case failed(restore: Bool?)
+  }
+
+  /// Stores `value` through `write`. `lastConfirmed` is read only once the save has failed.
+  static func save(
+    _ value: Bool,
+    description: String,
+    lastConfirmed: () -> Bool?,
+    write: (Bool) async throws -> Void
+  ) async -> Outcome {
+    do {
+      try await write(value)
+      return .saved(value)
+    } catch {
+      logError("Settings: failed to save \(description)", error: error)
       return .failed(restore: lastConfirmed())
     }
   }
