@@ -286,6 +286,36 @@ verification. Roll back to off to stop new dispatches; accepted normal
 projection still drains. Failed/ambiguous intents require a separately reviewed
 operator decision, never a blind reset to prepared.
 
+### Client status for held uploads
+
+The upload ledger stays `processing` while a unit is held. The status poll and a
+re-upload of the same content (`durable_status`) used to answer `failed` with
+`batch_worker_quarantined`; the phone re-uploaded, received the same answer and
+looped. Kill switch `BATCH_PIPELINE_HELD_TERMINAL_STATUS_ENABLED` (default on)
+answers instead:
+
+- `completed` with an empty result and `reason_code: batch_unit_held` when every
+  failed unit is `failed_held` with no open `speech_redrive`,
+  `terminal_disposition` or `silence_disposition` intent, and every other unit
+  is `committed`. Released apps ACK the WAL. A re-upload cannot change the
+  outcome, and the held unit's encrypted audio stays server-side for the
+  operator path above. Committed siblings are already projected; no
+  conversation ID is named. Nothing is written: the ledger, jobs and
+  retention keep their held state.
+- `processing` when such an intent is open or a sibling is still in flight.
+- Any other quarantine failure keeps `failed`/`batch_worker_quarantined`.
+
+Completed content whose conversation the user has since deleted answers
+`completed` with an empty result and `reason_code: conversation_deleted`, on
+both the poll and the re-upload claim (a legacy receipt re-upload answers the
+synchronous all-success 200 shape). Every other privacy denial keeps its 409.
+
+A unit admitted while recovery was off records `recovery_enabled=false` and used
+to sit `held` forever. Kill switch `BATCH_PIPELINE_RECOVERY_POLICY_REFRESH_ENABLED`
+(default on) lets the sweep and dispatch re-resolve that part while the unit is
+`held` with no `recovery` intent (no paid call authorized). It adopts the fresh
+part only when it is enabled; an enabled snapshot is never re-resolved.
+
 ### Dark empty-ASR disposition
 
 `BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED=false` is the default on all roles.

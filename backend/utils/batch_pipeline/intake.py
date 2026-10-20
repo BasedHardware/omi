@@ -30,9 +30,17 @@ from utils.observability.fallback import record_fallback
 from utils.sync.admission_responses import sync_content_in_progress_response
 from utils.sync.stage import current_stage
 from utils.sync.capture import chunk_identity
+from utils.sync.completed_status import (
+    CONVERSATION_DELETED_REASON_CODE,
+    deleted_conversation_result,
+    is_conversation_deleted,
+)
 
 logger = logging.getLogger(__name__)
 JOB_PREFIX = 'bp_'
+# Every failed unit settled its one paid recovery without words and waits for a
+# reviewed operator decision server-side. Released apps ACK `completed`.
+HELD_REASON_CODE = 'batch_unit_held'
 
 
 def artifacts_for(store: FirestoreStore) -> ArtifactStore:
@@ -45,6 +53,68 @@ def artifacts_for(store: FirestoreStore) -> ArtifactStore:
 def _next_unit(iterator):
     # StopIteration cannot cross asyncio Future boundaries.
     return next(iterator, None)
+
+
+def _open_operator_intent(job: dict) -> bool:
+    """A reviewed redrive/disposition is preparing or running for this unit."""
+    return any(
+        isinstance(job.get(key), dict) and job[key].get('state') != 'completed'
+        for key in ('speech_redrive', 'terminal_disposition', 'silence_disposition')
+    )
+
+
+def _terminally_held(job: dict) -> bool:
+    """The unit's one paid recovery settled without words; nothing automatic follows.
+
+    Its encrypted artifacts stay server-side for a reviewed operator redrive, so
+    a re-upload can neither change the outcome nor add a recovery path.
+    """
+    return job.get('state') == 'quarantined' and job.get('recovery_state') == 'failed_held'
+
+
+def _held_status(jobs: list[dict]) -> tuple[str, str | None] | None:
+    """Terminal or waiting answer for uploads whose failures are all held units."""
+    from config.batch_pipeline import held_terminal_status_enabled
+
+    failed = [
+        job
+        for job in jobs
+        if job.get('state') == 'quarantined' and job.get('recovery_state') not in {'held', 'prepared', 'running'}
+    ]
+    if not failed or not all(_terminally_held(job) for job in failed) or not held_terminal_status_enabled():
+        return None
+    # An operator intent or a sibling still in flight can still change this
+    # upload; wait for it rather than sending the phone into a re-upload loop.
+    if any(_open_operator_intent(job) for job in failed) or any(
+        job.get('state') not in {'committed', 'quarantined'} for job in jobs
+    ):
+        return 'processing', None
+    return 'completed', HELD_REASON_CODE
+
+
+def _deleted_conversation_status(ledger: dict, intake: dict, job_id: str) -> dict | None:
+    result = ledger.get('result')
+    if (
+        ledger.get('status') != 'completed'
+        or not isinstance(result, dict)
+        or not is_valid_completed_sync_content_result(result)
+    ):
+        return None
+    total = result['total_segments']
+    return {
+        'job_id': job_id,
+        'status': 'completed',
+        'lane': intake['lane'],
+        'total_files': intake['total_files'],
+        'total_segments': total,
+        'processed_segments': total,
+        'successful_segments': total,
+        'failed_segments': 0,
+        'errors': [],
+        'result': deleted_conversation_result(total),
+        'reason_code': CONVERSATION_DELETED_REASON_CODE,
+        'poll_after_ms': 0,
+    }
 
 
 def durable_status(store, uid: str, job_id: str) -> dict | None:
@@ -60,7 +130,17 @@ def durable_status(store, uid: str, job_id: str) -> dict | None:
         result_ids = ledger.get('result') or {}
         sources.update(result_ids.get('new_memories') or [])
         sources.update(result_ids.get('updated_memories') or [])
-        tx.check_privacy(uid, sources, jobs[0].get('privacy_generation') if jobs else None)
+        try:
+            tx.check_privacy(uid, sources, jobs[0].get('privacy_generation') if jobs else None)
+        except BatchPrivacyBlocked as error:
+            # Completed content whose conversation the user deleted is final:
+            # ACK without IDs so the phone stops re-uploading deleted audio.
+            # Unfinished work and every other denial keep the 409.
+            terminal = _deleted_conversation_status(ledger, intake, job_id) if is_conversation_deleted(error) else None
+            if terminal is None:
+                raise
+            logger.info('event=batch_intake_status outcome=conversation_deleted_terminal')
+            return terminal
         result = ledger.get('result')
         completed = ledger.get('status') == 'completed' and is_valid_completed_sync_content_result(result)
         if not completed:
@@ -74,6 +154,38 @@ def durable_status(store, uid: str, job_id: str) -> dict | None:
             job.get('state') == 'quarantined' and job.get('recovery_state') not in {'held', 'prepared', 'running'}
             for job in jobs
         )
+        held = None if completed else _held_status(jobs)
+        if held is not None:
+            held_state, reason_code = held
+            committed = sum(job.get('state') == 'committed' for job in jobs)
+            status = {
+                'job_id': job_id,
+                'status': held_state,
+                'lane': intake['lane'],
+                'total_files': intake['total_files'],
+                'total_segments': len(jobs),
+                'processed_segments': committed,
+                'successful_segments': committed if reason_code else 0,
+                'failed_segments': failed,
+                'errors': [],
+                # Committed siblings are already projected; never name
+                # conversations from an upload whose completion is held.
+                'result': (
+                    {
+                        'new_memories': [],
+                        'updated_memories': [],
+                        'failed_segments': failed,
+                        'total_segments': len(jobs),
+                        'errors': [],
+                    }
+                    if reason_code
+                    else None
+                ),
+                'poll_after_ms': 0 if reason_code else 3000,
+            }
+            if reason_code:
+                status['reason_code'] = reason_code
+            return status
         status = (
             'failed'
             if failed
@@ -142,21 +254,35 @@ async def accept_upload(
             status = await run_blocking(db_executor, durable_status, store, uid, previous['job_id'])
             return start_response(status) if status else sync_content_in_progress_response(previous['job_id'])
         if previous.get('status') == 'completed':
-            cached = await run_blocking(
-                db_executor,
-                cache_completed,
-                store,
-                uid,
-                content_id,
-                public_job_id,
-                {
-                    'owner_key': owner_key(uid),
-                    'conversation_id': conversation_id,
-                    'total_files': len(paths),
-                    'lane': lane,
-                },
-                time.time(),
-            )
+            try:
+                cached = await run_blocking(
+                    db_executor,
+                    cache_completed,
+                    store,
+                    uid,
+                    content_id,
+                    public_job_id,
+                    {
+                        'owner_key': owner_key(uid),
+                        'conversation_id': conversation_id,
+                        'total_files': len(paths),
+                        'lane': lane,
+                    },
+                    time.time(),
+                )
+            except BatchPrivacyBlocked as error:
+                # cache_completed checks privacy only after proving a valid
+                # completed receipt. The user deleted its conversation: answer
+                # the synchronous all-success shape (no IDs, no intake write) so
+                # the phone ACKs instead of looping on a 409.
+                if not is_conversation_deleted(error):
+                    raise
+                logger.info('event=batch_intake outcome=conversation_deleted_terminal')
+                total = (previous.get('result') or {}).get('total_segments')
+                return JSONResponse(
+                    status_code=200,
+                    content=deleted_conversation_result(total if isinstance(total, int) and total >= 0 else 0),
+                )
             if cached:
                 status = await run_blocking(db_executor, durable_status, store, uid, public_job_id)
                 if status:

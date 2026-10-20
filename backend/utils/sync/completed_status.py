@@ -2,6 +2,13 @@
 
 The requested job remains the client handle even when a redrive completed the
 same content under a new handle. Unknown/failed/held work is never ACKed.
+
+A completed receipt whose result names a conversation the user deleted is the
+one privacy denial answered terminally: the content was already processed, and
+the user's deletion is the final word on it. The answer is ``completed`` with
+an empty result and ``reason_code='conversation_deleted'``, so the phone ACKs
+its WAL instead of confirming a 404 and re-uploading the deleted audio. No
+deleted (or surviving) conversation ID is ever echoed.
 """
 
 import logging
@@ -12,12 +19,29 @@ from google.cloud import firestore
 from google.cloud.firestore_v1.base_query import FieldFilter
 
 from database._client import get_firestore_client
-from database.batch_pipeline_privacy import BatchPrivacyBlocked, assert_batch_write_allowed
+from database.batch_pipeline_privacy import BatchPrivacyBlocked, BatchPrivacyReason, assert_batch_write_allowed
 from database.sync_ledger import is_valid_completed_sync_content_result, sync_content_reference
 from utils.sync.stage import collection_name
 from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
+
+CONVERSATION_DELETED_REASON_CODE = 'conversation_deleted'
+
+
+def is_conversation_deleted(error: BatchPrivacyBlocked) -> bool:
+    return error.reason is BatchPrivacyReason.CONVERSATION_DELETED
+
+
+def deleted_conversation_result(total_segments: int) -> dict[str, Any]:
+    """An all-success, ID-free result for content whose conversation the user deleted."""
+    return {
+        'new_memories': [],
+        'updated_memories': [],
+        'failed_segments': 0,
+        'total_segments': total_segments,
+        'errors': [],
+    }
 
 
 def get_completed_legacy_status(job_id: str, uid: str, job: dict[str, Any] | None) -> dict[str, Any] | None:
@@ -88,10 +112,9 @@ def get_completed_legacy_status(job_id: str, uid: str, job: dict[str, Any] | Non
             if not isinstance(values, list) or any(not isinstance(value, str) for value in values):
                 return None
             ids.extend(values)
-        assert_batch_write_allowed(client, transaction, uid, conversation_ids=ids)
         total = result['total_segments']
         lane = (job or {}).get('lane', 'fresh')
-        return {
+        status = {
             'job_id': job_id,
             'status': 'completed',
             'lane': lane if lane in {'fresh', 'backfill'} else 'fresh',
@@ -101,6 +124,20 @@ def get_completed_legacy_status(job_id: str, uid: str, job: dict[str, Any] | Non
             'failed_segments': 0,
             'result': result,
         }
+        try:
+            assert_batch_write_allowed(client, transaction, uid, conversation_ids=ids)
+        except BatchPrivacyBlocked as error:
+            if not is_conversation_deleted(error):
+                raise
+            # Account, protection and generation fences all passed before the
+            # conversation walk; only the user's own deletion reaches here.
+            logger.info('event=sync_status_reconciliation outcome=conversation_deleted_terminal')
+            return {
+                **status,
+                'result': deleted_conversation_result(total),
+                'reason_code': CONVERSATION_DELETED_REASON_CODE,
+            }
+        return status
 
     try:
         return read(client.transaction())
