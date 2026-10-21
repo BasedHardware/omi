@@ -29,28 +29,64 @@ DeviceCatchUpLocal deviceCatchUpLocal(List<Wal> wals) {
   if (memo != null && memo.$1 == wals.length) return memo.$2;
   final hidden = SyncPendingWork.hiddenDeviceTwinIds(wals);
   // The same rows On the Way lists: terminal recordings belong to the bell, and
-  // a hidden twin is bookkeeping lag, not audio waiting anywhere.
-  final listed = wals
-      .where((w) => w.status == WalStatus.uploaded || (SyncPendingWork.isPendingWal(w) && !hidden.contains(w.id)))
+  // a hidden twin is bookkeeping lag, not audio waiting anywhere. A drain's
+  // copied pieces fold into their source exactly as On the Way groups them, so
+  // they never count twice: the source stands for the whole recording, and each
+  // piece counts once as audio that already left the device.
+  final sources = wals
+      .where((w) => walIsOnDevice(w) && SyncPendingWork.isPendingWal(w) && !hidden.contains(w.id))
       .toList(growable: false);
-  final amounts = SyncPipelineAmounts.of(listed);
+  final copiedBySource = <String, int>{};
   DateTime? start, end;
   final ids = <String>{};
-  for (final w in listed) {
+  var onDeviceSeconds = 0, onPhoneSeconds = 0, phoneRecordedSeconds = 0, processingSeconds = 0;
+  var hasPending = false;
+  for (final w in wals) {
+    final uploadedRow = w.status == WalStatus.uploaded;
+    final pendingRow = !uploadedRow && SyncPendingWork.isPendingWal(w) && !hidden.contains(w.id);
+    if (!uploadedRow && !pendingRow) continue;
+    hasPending = true;
     if (w.conversationId case final id? when id.isNotEmpty) ids.add(id);
-    if (w.timerStart <= 0 || w.seconds <= 0) continue;
-    final from = DateTime.fromMillisecondsSinceEpoch(w.timerStart * 1000);
-    final to = from.add(Duration(seconds: w.seconds));
-    if (start == null || from.isBefore(start)) start = from;
-    if (end == null || to.isAfter(end)) end = to;
+    final seconds = w.seconds > 0 ? w.seconds : 0;
+    final source = uploadedRow || !walIsOnDevice(w) ? SyncPendingWork.sourceOfPiece(w, sources) : null;
+    if (source != null) {
+      // A piece of a visible source: moved audio inside the source's own total.
+      copiedBySource[source.id] = (copiedBySource[source.id] ?? 0) + seconds;
+      continue;
+    }
+    if (w.timerStart > 0 && seconds > 0) {
+      final from = DateTime.fromMillisecondsSinceEpoch(w.timerStart * 1000);
+      final to = from.add(Duration(seconds: seconds));
+      if (start == null || from.isBefore(start)) start = from;
+      if (end == null || to.isAfter(end)) end = to;
+    }
+    if (uploadedRow) {
+      processingSeconds += seconds;
+    } else if (walIsOnDevice(w)) {
+      onDeviceSeconds += seconds;
+    } else if (w.originalStorage != null && w.originalStorage != WalStorage.disk) {
+      onPhoneSeconds += seconds;
+    } else {
+      phoneRecordedSeconds += seconds;
+    }
+  }
+  // Never claim more moved audio than the source recording holds.
+  var copiedSeconds = 0;
+  for (final source in sources) {
+    final copied = copiedBySource[source.id] ?? 0;
+    if (copied <= 0) continue;
+    final length = source.seconds > 0 ? source.seconds : 0;
+    copiedSeconds += length == 0 || copied < length ? copied : length;
   }
   final targets = ids.toList()..sort();
   final result = (
-    onDeviceSeconds: amounts.onDeviceSeconds,
-    onPhoneSeconds: amounts.onPhoneSeconds,
-    totalSeconds: amounts.onDeviceSeconds + amounts.onPhoneSeconds + amounts.processingSeconds,
-    movedSeconds: amounts.onPhoneSeconds + amounts.processingSeconds,
-    hasPending: listed.isNotEmpty,
+    onDeviceSeconds: onDeviceSeconds,
+    onPhoneSeconds: onPhoneSeconds + phoneRecordedSeconds,
+    totalSeconds: onDeviceSeconds + onPhoneSeconds + phoneRecordedSeconds + processingSeconds,
+    // Only audio that left device storage moves the bar: pieces copied or
+    // uploaded from a device. Phone-recorded audio is waiting, not moved.
+    movedSeconds: onPhoneSeconds + processingSeconds + copiedSeconds,
+    hasPending: hasPending,
     start: start,
     end: end,
     targetIds: targets.join('\n'),

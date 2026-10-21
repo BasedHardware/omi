@@ -229,12 +229,36 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('phone-only waiting audio is measured instead of Processing', (tester) async {
+  testWidgets('an uploaded first chunk keeps its longer device source measurable', (tester) async {
+    final chunk = _wal(minutes: 1, status: WalStatus.uploaded)
+      ..storage = WalStorage.disk
+      ..originalStorage = WalStorage.sdcard;
+    final source = _wal(minutes: 180);
+    await pump(tester, _Sync(wals: [chunk, source]));
+    expect(find.text('Catching up'), findsOneWidget);
+    expect(find.text('1 of 180 min'), findsOneWidget);
+    expect(find.text('Processing'), findsNothing);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('copied pieces move progress without inflating the source total', (tester) async {
+    final piece = _wal(minutes: 15)
+      ..storage = WalStorage.disk
+      ..originalStorage = WalStorage.sdcard;
+    final source = _wal(minutes: 20);
+    await pump(tester, _Sync(wals: [piece, source]));
+    expect(find.text('Catching up'), findsOneWidget);
+    expect(find.text('15 of 20 min'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('phone-only waiting audio is measured from zero, not as moved', (tester) async {
     final phone = _wal(minutes: 180)..storage = WalStorage.disk;
     await pump(tester, _Sync(wals: [phone]));
     expect(find.text('Catching up'), findsOneWidget);
-    expect(find.text('180 of 180 min'), findsOneWidget);
-    expect(tester.widget<LinearProgressIndicator>(find.byType(LinearProgressIndicator)).value, 1.0);
+    expect(find.text('0 of 180 min'), findsOneWidget);
+    expect(find.text('Processing'), findsNothing);
+    expect(tester.widget<LinearProgressIndicator>(find.byType(LinearProgressIndicator)).value, 0.0);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 

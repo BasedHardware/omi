@@ -43,27 +43,25 @@ abstract final class SyncPendingWork {
   static bool shouldShow(SyncProvider p) => hasServerJobs(p) || p.allWals.any(isPendingWal);
 
   /// Ids of device recordings whose phone copy already moved on: lagging
-  /// bookkeeping, not audio still on the device. An uploaded copy stands for its
-  /// source while it is transcribed; a synced copy only once its pieces cover
-  /// the whole recording, because a first chunk of a longer file leaves real
-  /// audio on the device that On the Way and the device card must still show.
+  /// bookkeeping, not audio still on the device. A phone copy stands for its
+  /// source only once its pieces cover the whole recording — whether they are
+  /// still transcribing (`uploaded`) or already done (`synced`) — because a
+  /// first chunk of a longer file leaves real audio on the device that On the
+  /// Way and the device card must still show.
   static Set<String> hiddenDeviceTwinIds(List<Wal> wals) {
-    final uploadedIds = <String>{};
-    final syncedSeconds = <String, int>{};
+    final phoneCopySeconds = <String, int>{};
     for (final w in wals) {
       if (walIsOnDevice(w)) continue;
-      if (w.status == WalStatus.uploaded) {
-        uploadedIds.add(w.id);
-      } else if (w.status == WalStatus.synced) {
-        syncedSeconds[w.id] = (syncedSeconds[w.id] ?? 0) + (w.seconds > 0 ? w.seconds : 0);
+      if (w.status == WalStatus.uploaded || w.status == WalStatus.synced) {
+        phoneCopySeconds[w.id] = (phoneCopySeconds[w.id] ?? 0) + (w.seconds > 0 ? w.seconds : 0);
       }
     }
-    if (uploadedIds.isEmpty && syncedSeconds.isEmpty) return const {};
+    if (phoneCopySeconds.isEmpty) return const {};
     final hidden = <String>{};
     for (final w in wals) {
       if (w.status != WalStatus.miss || !walIsOnDevice(w)) continue;
       final seconds = w.seconds > 0 ? w.seconds : 0;
-      if (uploadedIds.contains(w.id) || (syncedSeconds[w.id] ?? 0) >= seconds) hidden.add(w.id);
+      if ((phoneCopySeconds[w.id] ?? 0) >= seconds) hidden.add(w.id);
     }
     return hidden;
   }
@@ -84,15 +82,21 @@ abstract final class SyncPendingWork {
     return pending.where((w) => !_isPieceOfSource(w, sources)).toList(growable: false);
   }
 
-  static bool _isPieceOfSource(Wal w, List<Wal> sources) {
-    if (walIsOnDevice(w) || w.originalStorage == null || w.originalStorage == WalStorage.disk) return false;
+  /// The visible device source a phone piece was copied from, if any: the
+  /// piece's original storage is on-device and its start falls inside the
+  /// source's recording span. Shared by On the Way's row list and the device
+  /// card so both fold pieces into their source the same way.
+  static Wal? sourceOfPiece(Wal w, Iterable<Wal> sources) {
+    if (walIsOnDevice(w) || w.originalStorage == null || w.originalStorage == WalStorage.disk) return null;
     for (final src in sources) {
       if (src.device != w.device) continue;
       final end = src.timerStart + (src.seconds > 0 ? src.seconds : 0);
-      if (w.timerStart >= src.timerStart && w.timerStart <= end) return true;
+      if (w.timerStart >= src.timerStart && w.timerStart <= end) return src;
     }
-    return false;
+    return null;
   }
+
+  static bool _isPieceOfSource(Wal w, List<Wal> sources) => sourceOfPiece(w, sources) != null;
 
   static bool needsAttention(WalSyncDisplayState s) =>
       s == WalSyncDisplayState.failed ||
