@@ -60,7 +60,14 @@ from .graph_tools import (
     traverse_knowledge_graph_tool,
 )
 
+from .edit_tools import update_conversation, rename_person, edit_memory, delete_memory
+from .demand_processing_tools import process_recent_conversations
+
 __all__ = [
+    'update_conversation',
+    'rename_person',
+    'edit_memory',
+    'delete_memory',
     'get_conversations_tool',
     'search_conversations_tool',
     'get_memories_tool',
@@ -87,4 +94,5 @@ __all__ = [
     'save_user_preference_tool',
     'fetch_url_tool',
     'traverse_knowledge_graph_tool',
+    'process_recent_conversations',
 ]

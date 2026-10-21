@@ -8,15 +8,19 @@ This module provides functions for merging multiple conversations into one.
 
 """
 
+import config.speaker_match_scores as match_scores
+
 import copy
 import uuid
+from contextlib import nullcontext
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Callable, Dict, List, Optional, Set, Tuple
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
 import database.conversations as conversations_db
+from database import conversation_tombstones
 from database._client import db as firestore_db
-from database.vector_db import delete_vector
+from database.vector_db import delete_action_item_vectors_batch, delete_vector
 from models.audio_file import AudioFile
 from models.conversation import Conversation
 from models.conversation_enums import ConversationStatus
@@ -27,8 +31,12 @@ from utils.memory.retraction_scope import (
     historical_source_conversation_ids,
     retraction_can_be_skipped,
 )
+from utils.stt.speaker_identity import ConversationSpeakerIdAllocator, OMI_SPEAKER_ID_SENTINEL
 from utils.conversations.datetime_utils import coerce_utc_datetime
+from utils.conversations.projection_payload import omit_null_processing_state
 from utils.conversations import lifecycle as lifecycle_service
+from utils.conversations.processing_trigger import ProcessingTrigger
+from utils.conversations.smart_merge_audit import record_survivor_deleted
 from utils.cloud_tasks import is_audio_merge_dispatch_enabled
 from utils.other.storage import (
     compute_audio_files_fingerprint,
@@ -37,8 +45,17 @@ from utils.other.storage import (
     list_audio_chunks,
     _get_storage_client,
     private_cloud_sync_bucket,
-    _get_extension_for_path,
 )
+
+try:
+    from utils.other.storage import owner_storage_write_gate
+except ImportError:
+    # Narrow test-double compatibility for import-isolated merge tests whose
+    # storage module predates the owner-write fence.
+    def owner_storage_write_gate(uid: Any, bucket: Any = None) -> Any:
+        return nullcontext()
+
+
 import logging
 
 logger = logging.getLogger(__name__)
@@ -240,7 +257,7 @@ def perform_merge_async(
         sorted_convs = sorted(conversations, key=lambda c: c.get("started_at") or _UTC_MIN)
 
         # 2. Merge raw data
-        merged_segments = _merge_transcript_segments(sorted_convs)
+        merged_segments, segment_placements = _merge_transcript_segments_with_placements(sorted_convs)
         merged_photos = _collect_all_photos(uid, sorted_convs)
 
         # 3. Generate new conversation ID and copy audio chunks
@@ -254,7 +271,7 @@ def perform_merge_async(
         # into None.
         created_at = sorted_convs[0].get("created_at") or datetime.now(timezone.utc)
         started_at = sorted_convs[0].get("started_at")
-        finished_at = max((c.get("finished_at") or _UTC_MIN) for c in sorted_convs)
+        finished_at = _resolve_merged_finished_at(sorted_convs)
         language = sorted_convs[0].get("language", "en")
         source = sorted_convs[0].get("source", "omi")
 
@@ -265,9 +282,9 @@ def perform_merge_async(
         private_cloud_sync_enabled = any(c.get("private_cloud_sync_enabled", False) for c in sorted_convs)
 
         # Custom STT: True if any source was transcribed on a third-party
-        # provider, so the merged conversation stays behind the Omi-paid LLM
-        # post-processing gate (#7690). A custom-STT source must not be able to
-        # shed the marker by merging with a normal-STT one.
+        # provider, so the merged conversation keeps accurate provenance (#7690).
+        # A custom-STT source must not be able to shed the marker by merging with
+        # a normal-STT one.
         uses_custom_stt = any(c.get('uses_custom_stt', False) for c in sorted_convs)
 
         # Discarded: only if ALL are discarded
@@ -305,6 +322,7 @@ def perform_merge_async(
             language=language,
             source=source,
             transcript_segments=merged_segments,
+            speaker_match_scores=match_scores.aggregate(sorted_convs),
             photos=merged_photos,
             audio_files=merged_audio_files,
             geolocation=geolocation,
@@ -318,8 +336,10 @@ def perform_merge_async(
             external_data={"merge_metadata": merge_metadata},
         )
 
-        # 7. Save stub conversation to database
-        lifecycle_service.create_processing_conversation(uid, new_conversation.model_dump())
+        # 7. Save stub conversation to database. The modeled field's None
+        # default is omitted, never stamped: persist is merge=True, so a
+        # dumped None would become an explicit Firestore key.
+        lifecycle_service.create_processing_conversation(uid, omit_null_processing_state(new_conversation.model_dump()))
 
         # Build the conversation-level playback artifact for the merged conversation.
         # Fingerprint-named task: dedups with the enqueue process_conversation may
@@ -335,9 +355,11 @@ def perform_merge_async(
 
         # Store photos in subcollection if any
         if merged_photos:
-            conversations_db.store_conversation_photos(uid, new_conversation_id, merged_photos)
+            conversations_db.store_conversation_photos(uid, new_conversation_id, new_conversation.photos)
 
         # 8. Process conversation to generate title, summary, action items, memories, etc.
+        # Its created webhook is held until a failure can no longer roll the record back.
+        created_webhook_sends: List[Callable[[], None]] = []
         if reprocess:
             try:
                 with lifecycle_service.processing_admission_guard(uid, new_conversation_id, rollback_on_failure=False):
@@ -345,8 +367,8 @@ def perform_merge_async(
                         uid,
                         new_conversation.language or "en",
                         new_conversation,
-                        force_process=True,
-                        is_reprocess=False,  # Not a reprocess - this is a new conversation
+                        trigger=ProcessingTrigger.MERGE,
+                        created_webhook_observer=created_webhook_sends.append,
                     )
             except Exception as e:
                 logger.error(f"Error processing merged conversation: {e}")
@@ -356,6 +378,26 @@ def perform_merge_async(
         else:
             # If not reprocessing, just mark as completed
             lifecycle_service.complete(uid, new_conversation_id)
+
+        from database.review_overlay_merge import transfer
+
+        if transfer(
+            uid,
+            [c['id'] for c in sorted_convs],
+            new_conversation_id,
+            placements=segment_placements,
+            firestore_client=firestore_db,
+        ):
+            # Undo receipts now name the merged record. Recovery must retain it.
+            failure_phase = MergeFailurePhase.SOURCE_DELETION_STARTED
+
+        # transfer() returns only once committed, so failure handling now keeps the merged
+        # record; had it raised, the rollback would have deleted it. Announce it only now.
+        for send_created_webhook in created_webhook_sends:
+            try:
+                send_created_webhook()
+            except Exception as e:
+                logger.error(f"Error sending created webhook for merged conversation {new_conversation_id}: {e}")
 
         # 9. Delete ALL source conversations and their related data.
         # One history pass for the whole merge: the per-source scan would
@@ -378,6 +420,7 @@ def perform_merge_async(
                 conv["id"],
                 on_authoritative_retraction=mark_source_deletion_started,
                 historical_source_ids=historical_source_ids,
+                merged_into=new_conversation_id,
             )
 
         # 10. Send FCM notification
@@ -401,6 +444,11 @@ def perform_merge_async(
 
 
 def _merge_transcript_segments(conversations: List[Dict]) -> List[Dict]:
+    """The merged transcript of ``_merge_transcript_segments_with_placements``, without the placements."""
+    return _merge_transcript_segments_with_placements(conversations)[0]
+
+
+def _merge_transcript_segments_with_placements(conversations: List[Dict]) -> Tuple[List[Dict], List[List[int]]]:
     """
     Merge transcript segments from all conversations sequentially.
 
@@ -408,24 +456,72 @@ def _merge_transcript_segments(conversations: List[Dict]) -> List[Dict]:
     - Sort conversations by started_at
     - Append segments sequentially
     - Adjust timestamps to account for gaps between conversations
+    - Sort the merged segments by start, so overlapping sources interleave
 
     Args:
         conversations: List of conversation dictionaries (already sorted by started_at)
 
     Returns:
-        List of merged transcript segment dictionaries
+        The merged transcript segment dictionaries, and the placements:
+        ``placements[k][i]`` is the merged index of segment ``i`` of ``conversations[k]``.
+        The correction transfer needs them because an interleaved source is not one block.
     """
     merged = []
     cumulative_offset = 0.0
+    allocator = ConversationSpeakerIdAllocator()
+
+    def source_has_manual_tags(source) -> bool:
+        # A conversation carrying a manual speaker assignment (or a manual /
+        # carried label) keeps its numeric speaker_ids — never move a manual
+        # voice's authority while its receipt stays at the source.
+        return bool(
+            source.get('manual_speaker_assignments')
+            or any(
+                s.get('speaker_label_source') in ('manual', 'carried')
+                for s in (source.get('transcript_segments') or [])
+            )
+        )
+
+    # Reserve every manually-tagged id before any renumbering runs, so an
+    # untagged source's reallocated voices land ABOVE the tagged range — a
+    # renumbered voice can never collide with a manual voice's id.
+    for conv in conversations:
+        if source_has_manual_tags(conv):
+            allocator.hydrate_receipt(conv.get('manual_speaker_assignments'))
+            allocator.hydrate(conv.get('transcript_segments') or [])
+
+    def copy_segment(segment, source):
+        copied = copy.deepcopy(segment)
+        speaker_id = copied.get('speaker_id')
+        if (
+            isinstance(speaker_id, (int, str))
+            and str(speaker_id).isdigit()
+            and int(speaker_id) != OMI_SPEAKER_ID_SENTINEL
+        ):
+            if not copied.get('speaker_id_scope'):
+                # Unidentified legacy inputs cannot establish a new voice scope.
+                if source.get('id'):
+                    copied['speaker_id_scope'] = f"legacy-conversation:{source['id']}:{int(speaker_id)}"
+            # Renumber is per-source, not global: only an untagged source's
+            # voices are reallocated, so they can't collide with a manually
+            # tagged voice from another conversation.
+            if not source_has_manual_tags(source) and copied.get('speaker_id_scope'):
+                copied['speaker_id'] = int(speaker_id)
+                allocator.assign(copied)
+        return copied
 
     for i, conv in enumerate(conversations):
-        segments = conv.get("transcript_segments", [])
+        # `.get(key, [])`/`.get(key, 0)` only fall back when the key is absent.
+        # A doc persisted with an explicit `transcript_segments: None` (or a
+        # segment with an explicit `start`/`end: None`) still returns None here,
+        # which crashes the list comprehension / arithmetic below.
+        segments = conv.get("transcript_segments") or []
 
         if i == 0:
             # First conversation - use segments as-is
-            merged.extend([copy.deepcopy(s) for s in segments])
+            merged.extend([copy_segment(s, conv) for s in segments])
             if segments:
-                cumulative_offset = max(s.get("end", 0) for s in segments)
+                cumulative_offset = max((s.get("end") or 0) for s in segments)
             elif conv.get("finished_at") and conv.get("started_at"):
                 cumulative_offset = (conv["finished_at"] - conv["started_at"]).total_seconds()
         else:
@@ -438,22 +534,46 @@ def _merge_transcript_segments(conversations: List[Dict]) -> List[Dict]:
                 gap = max(0, (curr_started - prev_finished).total_seconds())
 
             offset = cumulative_offset + gap
+            origin = conversations[0].get("started_at")
+            if origin is not None and curr_started is not None:
+                offset = (curr_started - origin).total_seconds()
 
             # Adjust timestamps for this conversation's segments
             for seg in segments:
-                seg_copy = copy.deepcopy(seg)
-                seg_copy["start"] = seg.get("start", 0) + offset
-                seg_copy["end"] = seg.get("end", 0) + offset
+                seg_copy = copy_segment(seg, conv)
+                seg_copy["start"] = (seg.get("start") or 0) + offset
+                seg_copy["end"] = (seg.get("end") or 0) + offset
                 merged.append(seg_copy)
 
             # Update cumulative offset for next conversation
             if segments:
-                cumulative_offset = offset + max(s.get("end", 0) for s in segments)
+                cumulative_offset = offset + max((s.get("end") or 0) for s in segments)
             elif conv.get("finished_at") and conv.get("started_at"):
                 duration = (conv["finished_at"] - conv["started_at"]).total_seconds()
                 cumulative_offset = offset + duration
 
-    return merged
+    # Origin-based offsets interleave overlapping sources; keep the transcript chronological
+    # (stable, so equal starts keep their source order).
+    order = sorted(range(len(merged)), key=lambda index: merged[index].get("start") or 0)
+    position = {index: rank for rank, index in enumerate(order)}
+    placements, first = [], 0
+    for conv in conversations:
+        count = len(conv.get("transcript_segments") or [])
+        placements.append([position[index] for index in range(first, first + count)])
+        first += count
+    return [merged[index] for index in order], placements
+
+
+def _resolve_merged_finished_at(sorted_convs: List[Dict]) -> Optional[datetime]:
+    """Return the latest real ``finished_at`` among sources, or None if none has one.
+
+    ``max(c.get("finished_at") or _UTC_MIN for c in sorted_convs)`` used to leak
+    the ``_UTC_MIN`` (year 0001) sentinel straight into the merged conversation's
+    ``finished_at`` field whenever every source had ``finished_at: None`` — the
+    sentinel exists to keep comparisons total, not to become persisted data.
+    """
+    candidates = [c.get("finished_at") for c in sorted_convs if c.get("finished_at")]
+    return max(candidates) if candidates else None
 
 
 def _collect_all_photos(uid: str, conversations: List[Dict]) -> List[Dict]:
@@ -476,15 +596,12 @@ def _collect_all_photos(uid: str, conversations: List[Dict]) -> List[Dict]:
     seen_ids = set()
 
     for conv in conversations:
-        try:
-            photos = conversations_db.get_conversation_photos(uid, conv["id"])
-            for photo in photos:
-                photo_id = photo.get("id")
-                if photo_id and photo_id not in seen_ids:
-                    all_photos.append(photo)
-                    seen_ids.add(photo_id)
-        except Exception as e:
-            logger.error(f"Error fetching photos for {conv['id']}: {e}")
+        photos = conversations_db.get_conversation_photos(uid, conv["id"])
+        for photo in photos:
+            photo_id = photo.get("id")
+            if photo_id and photo_id not in seen_ids:
+                all_photos.append(photo)
+                seen_ids.add(photo_id)
 
     # Sort by creation time with a uniform tz-aware UTC key. Missing or malformed
     # created_at values are retained and ordered first, with structured metrics.
@@ -496,6 +613,8 @@ def _copy_audio_chunks_for_merge(
     uid: str,
     conversations: List[Dict],
     new_conversation_id: str,
+    *,
+    strict: bool = False,
 ) -> List[AudioFile]:
     """
     Copy audio chunks from all source conversations to new conversation.
@@ -530,8 +649,9 @@ def _copy_audio_chunks_for_merge(
         # source conversation's original audio chunks (step 9) after this returns, so a swallowed
         # failure — while has_chunks may already be True from an earlier source — would let that
         # deletion destroy audio that was never copied anywhere. Raising instead aborts the merge
-        # into _handle_merge_failure, which runs before any source is deleted.
-        chunks = list_audio_chunks(uid, conv_id)
+        # into _handle_merge_failure, which runs before any source is deleted. For the same reason a
+        # failed raw-archive listing raises rather than returning only the legacy chunks.
+        chunks = list_audio_chunks(uid, conv_id, require_archive=True)
         for chunk in chunks:
             has_chunks = True
 
@@ -539,7 +659,8 @@ def _copy_audio_chunks_for_merge(
             original_filename = chunk["path"].split("/")[-1]
             new_path = f"chunks/{uid}/{new_conversation_id}/{original_filename}"
             source_blob = bucket.blob(chunk["path"])
-            bucket.copy_blob(source_blob, bucket, new_path)
+            with owner_storage_write_gate(uid, bucket):
+                bucket.copy_blob(source_blob, bucket, new_path)
 
     # Create AudioFile records from copied chunks
     if has_chunks:
@@ -547,6 +668,8 @@ def _copy_audio_chunks_for_merge(
             return conversations_db.create_audio_files_from_chunks(uid, new_conversation_id)
         except Exception as e:
             logger.error(f"Error creating audio files: {e}")
+            if strict:
+                raise
 
     return []
 
@@ -592,12 +715,107 @@ def _shared_client_device_provenance(
     return client_device_id, client_platform
 
 
+def _sync_source_task_reminder(
+    *,
+    user_id: str,
+    action_item_id: str,
+    description: str,
+    completed: bool,
+    due_at: Any,
+) -> None:
+    """Lazily resolve FCM reminder sync so merge cleanup does not import it until needed.
+
+    ``utils.notifications`` pulls Firebase Admin and token lookup. Constructing that
+    stack at call time is what sent hermetic sync-bridge tests to the GCE metadata
+    server after #15177 imported it unconditionally. Resolve it only when an open
+    dated task actually needs a cancel, and keep the name on this module so tests
+    can inject a fake without widening the network fence.
+    """
+    from utils.notifications import sync_action_item_reminder
+
+    sync_action_item_reminder(
+        user_id=user_id,
+        action_item_id=action_item_id,
+        description=description,
+        completed=completed,
+        due_at=due_at,
+    )
+
+
+def _cancel_open_dated_task_reminders(uid: str, items: List[Dict]) -> None:
+    """Best-effort cancel of client-scheduled reminders for rows just deleted.
+
+    Isolated from the task-store mutation: a delivery failure must not fail merge
+    or sync-bridge cleanup after the rows are already gone. Same split as
+    ``process_conversation._write_action_items``.
+    """
+    for item in items:
+        if item.get('due_at') and not item.get('completed'):
+            _sync_source_task_reminder(
+                user_id=uid,
+                action_item_id=item['id'],
+                description='',
+                completed=True,
+                due_at=None,
+            )
+
+
+def retract_sync_bridge_source(uid: str, source_id: str) -> None:
+    """Retract derived data, retaining redirect/audio; propagate failures for retry."""
+    _delete_conversation_and_related_data(uid, source_id, retain_capture=True)
+
+
+def copy_sync_bridge_audio(uid: str, source_id: str, target_id: str) -> None:
+    """Copy retained donor audio strictly; never checkpoint a failed copy."""
+    _copy_audio_chunks_for_merge(uid, [{'id': source_id}], target_id, strict=True)
+
+
+def delete_conversation_with_sync_sources(uid: str, conversation_id: str, *, merged_into: Optional[str] = None) -> None:
+    """User/source deletion owns retained bridge artifacts, unlike raw DB deletion."""
+    row = conversations_db.get_conversation(uid, conversation_id) or {}
+    for source_id in row.get('sync_merged_from', []):
+        if source_id != conversation_id:
+            # The source row is destroyed below; without intent its from-segments
+            # session id would re-derive the same id on the next backlog retry and
+            # resurrect a merge donor the user deleted with the survivor. Best-effort:
+            # a tombstone write that cannot reach Firestore must not block the purge
+            # the user asked for (the caller's later from-segments retry re-checks the
+            # survivor's tombstone through the same module before recreating).
+            try:
+                conversation_tombstones.record_deletion(uid, source_id)
+            except Exception:
+                logger.exception('merge-source tombstone write failed uid=%s source=%s', uid, source_id)
+            _delete_conversation_and_related_data(
+                uid,
+                source_id,
+                purge_sync_sources=False,
+                merged_into=merged_into,
+            )
+    conversations_db.delete_conversation(uid, conversation_id)
+    record_survivor_deleted(uid, conversation_id, row)
+
+    folder_id = row.get('folder_id')
+    if folder_id:
+        # conversation_count is derived state the folder tabs render. Nothing
+        # else recomputes it after a delete, so a folder keeps counting a
+        # conversation the user removed.
+        try:
+            from database.folders import update_folder_conversation_count
+
+            update_folder_conversation_count(uid, str(folder_id))
+        except Exception as e:
+            logger.error(f"Error refreshing folder {folder_id} count after deleting {conversation_id}: {e}")
+
+
 def _delete_conversation_and_related_data(
     uid: str,
     conversation_id: str,
     *,
     on_authoritative_retraction: Optional[Callable[[], None]] = None,
     historical_source_ids: Optional[Set[str]] = None,
+    retain_capture: bool = False,
+    purge_sync_sources: bool = True,
+    merged_into: Optional[str] = None,
 ) -> None:
     """
     Delete a conversation and all its generated/related data.
@@ -623,13 +841,20 @@ def _delete_conversation_and_related_data(
             historical_source_ids=historical_source_ids,
         )
         if not skip_retraction:
+            # retain_capture is the sync-bridge path: derived-data cleanup for a
+            # conversation the same assignment already tombstoned. That must not
+            # take the exclusive per-account destructive gate.
+            retract_kwargs: dict[str, Any] = {}
+            if retain_capture:
+                retract_kwargs['claim_destructive_gate'] = False
             if on_authoritative_retraction is None:
-                memory_service.retract_conversation_memories(uid, conversation_id)
+                memory_service.retract_conversation_memories(uid, conversation_id, **retract_kwargs)
             else:
                 memory_service.retract_conversation_memories(
                     uid,
                     conversation_id,
                     on_authoritative_commit=on_authoritative_retraction,
+                    **retract_kwargs,
                 )
         elif on_authoritative_retraction is not None:
             # Nothing to retract, but everything below this point still destroys
@@ -643,10 +868,37 @@ def _delete_conversation_and_related_data(
         raise
 
     try:
-        # Delete action items from standalone collection
+        # Delete action items from standalone collection. Read them first: a deleted
+        # row can still own a client-scheduled reminder, and the client only cancels
+        # it on the deletion data message (#5085), so the merge has to send one per
+        # open dated task, like the conversation delete path does.
+        source_items = action_items_db.get_action_items_by_conversation(uid, conversation_id)
         action_items_db.delete_action_items_for_conversation(uid, conversation_id)
     except Exception as e:
         logger.error(f"Error deleting action items for {conversation_id}: {e}")
+        if retain_capture:
+            raise
+    else:
+        try:
+            _cancel_open_dated_task_reminders(uid, source_items)
+        except Exception as e:
+            logger.error(f"Error cancelling task reminders for {conversation_id}: {e}")
+        # The rows are gone from Firestore but their Pinecone vectors would survive as ghosts:
+        # find_similar_action_items feeds the extraction prompt so the LLM can suppress duplicate
+        # tasks, and a deleted task's vector makes a real new task look like a duplicate.
+        try:
+            if source_items:
+                delete_action_item_vectors_batch(uid, [item['id'] for item in source_items])
+        except Exception as e:
+            logger.error(f"Error deleting task vectors for {conversation_id}: {e}")
+
+    if retain_capture:
+        # Sync bridges retain redirect tombstones and original audio: another
+        # in-flight worker may still be uploading to that immutable source ID.
+        # Propagate errors so the durable ancestry can replay cleanup on retry.
+        delete_vector(uid, conversation_id)
+        conversations_db._delete_conversation_search_index(uid, conversation_id)
+        return
 
     try:
         # Delete photos subcollection
@@ -656,8 +908,13 @@ def _delete_conversation_and_related_data(
 
     try:
         # Delete audio chunks from GCS
-        delete_conversation_audio_files(uid, conversation_id)
+        if merged_into:
+            delete_conversation_audio_files(uid, conversation_id, merged_into=merged_into)
+        else:
+            delete_conversation_audio_files(uid, conversation_id)
     except Exception as e:
+        if merged_into:
+            raise
         logger.error(f"Error deleting audio files for {conversation_id}: {e}")
 
     try:
@@ -667,9 +924,18 @@ def _delete_conversation_and_related_data(
         logger.error(f"Error deleting vector for {conversation_id}: {e}")
 
     try:
-        # Delete conversation document
-        conversations_db.delete_conversation(uid, conversation_id)
+        # Purge retained bridge sources only for a real source/user deletion.
+        # Rollback of a newly created merge target still uses raw DB deletion.
+        if purge_sync_sources:
+            if merged_into:
+                delete_conversation_with_sync_sources(uid, conversation_id, merged_into=merged_into)
+            else:
+                delete_conversation_with_sync_sources(uid, conversation_id)
+        else:
+            conversations_db.delete_conversation(uid, conversation_id)
     except Exception as e:
+        if merged_into:
+            raise
         logger.error(f"Error deleting conversation {conversation_id}: {e}")
 
 

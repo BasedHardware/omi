@@ -25,6 +25,22 @@ TYPESENSE_PINNED_VERSION = "27.1"
 LOCAL_TYPESENSE_API_KEY = "local-typesense-api-key-not-real"
 LOCAL_FIREBASE_API_KEY = "local-firebase-auth-emulator-api-key"
 LOCAL_LLM_GATEWAY_SERVICE_TOKEN = "local-dev-llm-gateway-service-token-not-real"
+# Signs the internal screen-frame approval token. Production sets either this or
+# SCREEN_FRAME_KMS_KEY; without one the egress routes fail closed, so the harness
+# supplies a throwaway value rather than leaving meeting screenshots unrunnable locally.
+LOCAL_SCREEN_FRAME_SIGNING_SECRET = "local-dev-screen-frame-signing-secret-not-real"
+LOCAL_STORAGE_BUCKET_ENV = {
+    "BUCKET_SPEECH_PROFILES": "speech-profiles",
+    "BUCKET_POSTPROCESSING": "postprocessing",
+    "BUCKET_PRIVATE_CLOUD_SYNC": "omi-private-cloud-sync",
+    "BUCKET_TEMPORAL_SYNC_LOCAL": "sync-temporal",
+    "BUCKET_MEMORIES_RECORDINGS": "memories-recordings",
+    "BUCKET_PLUGINS_LOGOS": "plugins-logos",
+    "BUCKET_APP_THUMBNAILS": "app-thumbnails",
+    "BUCKET_CHAT_FILES": "chat-files",
+    "BUCKET_DESKTOP_UPDATES": "desktop-updates",
+    "BUCKET_SCREEN_FRAMES": "screen-frames",
+}
 PORT_OFFSET_ENV = "OMI_HARNESS_PORT_OFFSET"
 PORT_OVERRIDE_ENVS = {
     "firestore": "OMI_HARNESS_FIRESTORE_PORT",
@@ -68,6 +84,9 @@ class HarnessConfig:
     redis_port: int = REDIS_PORT
     typesense_port: int = TYPESENSE_PORT
     dev_bind_host: str = "127.0.0.1"
+    # Address clients on other machines (a phone) reach the backend at; only
+    # used for URLs the backend hands out, such as local-storage file links.
+    dev_advertise_host: str = "127.0.0.1"
     llm_gateway_port: int = LLM_GATEWAY_PORT
 
     @property
@@ -93,6 +112,11 @@ class HarnessConfig:
     @property
     def backend_url(self) -> str:
         return f"http://{self.backend_host}"
+
+    @property
+    def backend_public_url(self) -> str:
+        """Backend URL as reachable from a physical device (see OMI_DEV_HOST)."""
+        return f"http://{self.dev_advertise_host}:{self.backend_port}"
 
     @property
     def desktop_backend_url(self) -> str:
@@ -148,6 +172,23 @@ def dev_bind_host_from_env(env: Mapping[str, str] | None = None) -> str:
     if safety.is_loopback_host(requested):
         return "127.0.0.1"
     return "0.0.0.0"
+
+
+def dev_advertise_host_from_env(env: Mapping[str, str] | None = None) -> str:
+    """Resolve the address the backend advertises itself at in generated URLs.
+
+    A phone built against OMI_DEV_HOST cannot fetch a local-storage file (the
+    saved speech profile, say) from a 127.0.0.1 link, so when OMI_DEV_HOST names
+    a LAN/tailnet address the backend hands out links on that address instead.
+    Loopback stays the default for simulator-only setups.
+    """
+
+    source = os.environ if env is None else env
+    requested = source.get(APP_DEV_HOST_ENV, "").strip()
+    if not requested or safety.is_loopback_host(requested):
+        return "127.0.0.1"
+    safety.validate_dev_bind_host(requested, name=APP_DEV_HOST_ENV)
+    return requested
 
 
 def _port_from_env(source: Mapping[str, str], name: str, default: int, offset: int) -> int:
@@ -271,6 +312,7 @@ def load_config(repo_root: Path, env: Mapping[str, str] | None = None, *, create
     )
     ports = harness_ports_from_env(source)
     dev_bind_host = dev_bind_host_from_env(source)
+    dev_advertise_host = dev_advertise_host_from_env(source)
     cfg = HarnessConfig(
         repo_root=repo_root.resolve(),
         instance=instance,
@@ -284,6 +326,7 @@ def load_config(repo_root: Path, env: Mapping[str, str] | None = None, *, create
         typesense_port=ports["typesense"],
         llm_gateway_port=ports["llm_gateway"],
         dev_bind_host=dev_bind_host,
+        dev_advertise_host=dev_advertise_host,
     )
     parsed = parse_secrets_file(cfg)
     if parsed.secrets.get("PROVIDER_MODE"):
@@ -301,6 +344,7 @@ def load_config(repo_root: Path, env: Mapping[str, str] | None = None, *, create
             typesense_port=cfg.typesense_port,
             llm_gateway_port=cfg.llm_gateway_port,
             dev_bind_host=cfg.dev_bind_host,
+            dev_advertise_host=cfg.dev_advertise_host,
         )
     safety.validate_harness_runtime_config(
         project_id=cfg.project_id,
@@ -318,6 +362,8 @@ def _harness_service_extra(cfg: HarnessConfig) -> dict[str, str]:
     return {
         "OMI_HARNESS_INSTANCE": cfg.instance,
         "OMI_HARNESS_STATE_ROOT": str(cfg.layout.state_root),
+        "OMI_LOCAL_STORAGE_ROOT": str(cfg.layout.services_dir / "storage"),
+        "OMI_LOCAL_STORAGE_BASE_URL": f"{cfg.backend_public_url}/_local/storage",
         "FIRESTORE_EMULATOR_HOST": cfg.firestore_host,
         "FIREBASE_AUTH_EMULATOR_HOST": cfg.auth_host,
         "FIREBASE_AUTH_PROJECT_ID": cfg.project_id,
@@ -341,6 +387,10 @@ def _harness_service_extra(cfg: HarnessConfig) -> dict[str, str]:
         "OMI_LLM_GATEWAY_URL": cfg.llm_gateway_url,
         "OMI_LLM_GATEWAY_SERVICE_TOKEN": cfg.llm_gateway_service_token,
         "OMI_LLM_GATEWAY_FEATURE_MODE": gateway_feature_mode,
+        # Production ships default-off and turns this on deliberately; the harness is
+        # the one place the feature must be on, since running it is the whole point.
+        "SCREEN_FRAME_SIGNING_SECRET": LOCAL_SCREEN_FRAME_SIGNING_SECRET,
+        **LOCAL_STORAGE_BUCKET_ENV,
     }
 
 
@@ -356,6 +406,15 @@ def child_env_for(cfg: HarnessConfig) -> dict[str, str]:
     env = safety.build_child_env(provider_mode=cfg.provider_mode, extra=extra)
     if cfg.provider_mode == "offline":
         env.update(safety.offline_provider_placeholders())
+        # Offline strips real provider keys. Default STT_SERVICE_MODELS includes
+        # soniox, and backend startup then fails closed on an empty SONIOX_API_KEY.
+        # Pin a keyless chain so isolated sessions can boot without paid STT.
+        env["STT_SERVICE_MODELS"] = "parakeet"
+        # Pre-recorded STT has no keyless chain: without the deterministic stub,
+        # uploaded captures dead-end at PrerecordedSTTConfigurationError and
+        # conversations never finalize. Stub output is self-declaring synthetic
+        # text and is double-gated to offline stages (utils.stt.prerecorded_stub).
+        env["OMI_STT_STUB"] = "1"
     return env
 
 
@@ -372,4 +431,5 @@ def desktop_backend_child_env_for(cfg: HarnessConfig) -> dict[str, str]:
     if cfg.provider_mode == "offline":
         env.update(safety.offline_provider_placeholders())
         env["OMI_LLM_STUB"] = "1"
+        env["STT_SERVICE_MODELS"] = "parakeet"
     return env

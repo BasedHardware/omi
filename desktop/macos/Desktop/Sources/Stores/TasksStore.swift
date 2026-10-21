@@ -15,7 +15,6 @@ struct ActionItemMetadataBox: @unchecked Sendable {
 /// Both Dashboard and Tasks tab observe this store
 ///
 /// Tasks are loaded separately for incomplete vs completed to minimize memory usage.
-/// By default, only recent (7 days) incomplete tasks are loaded.
 @MainActor
 class TasksStore: ObservableObject {
   static let shared = TasksStore()
@@ -438,16 +437,29 @@ class TasksStore: ObservableObject {
     return a.createdAt > b.createdAt
   }
 
-  /// Overdue tasks (due date in the past but within 7 days) — loaded from SQLite
+  /// Overdue tasks — every incomplete task due before today, loaded from SQLite.
+  /// Together with `todaysTasks` this is the Tasks page's "Today" category.
   @Published var overdueTasks: [TaskActionItem] = []
 
   /// Today's tasks (due today) — loaded from SQLite
   @Published var todaysTasks: [TaskActionItem] = []
 
-  /// Tasks without due date (created within last 7 days) — loaded from SQLite
+  /// Tasks without a due date — the Tasks page's "No Deadline", loaded from SQLite
   @Published var tasksWithoutDueDate: [TaskActionItem] = []
 
-  /// Load dashboard task lists directly from SQLite (avoids pagination issues)
+  /// How many rows a bucket may hold. The spoken answer reads the first 15, but
+  /// the bucket's *count* is spoken too ("Overdue (82)"), so the cap has to sit
+  /// well clear of a real backlog or the assistant states a number the Tasks
+  /// page contradicts — at the old 50 it did. These are small rows, and the
+  /// Tasks page already materializes every incomplete dated task.
+  static let dashboardBucketLimit = 500
+
+  /// Load dashboard task lists directly from SQLite (avoids pagination issues).
+  ///
+  /// These three buckets are what the assistant knows about the user's tasks:
+  /// the voice `get_tasks` tool, the About-user card, and `SuggestionAssistant`
+  /// grounding all read them. They must partition the same rows the Tasks page
+  /// shows, or the assistant contradicts the list the user is looking at.
   func loadDashboardTasks(
     expectedOwnerID: String? = nil,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil,
@@ -462,30 +474,32 @@ class TasksStore: ObservableObject {
     let calendar = Calendar.current
     let startOfToday = calendar.startOfDay(for: Date())
     let endOfToday = calendar.date(byAdding: .day, value: 1, to: startOfToday)!
-    let sevenDaysAgo = calendar.date(byAdding: .day, value: -7, to: Date()) ?? Date()
 
     do {
       let snapshot: DashboardTaskSnapshot
       if let loader {
         snapshot = try await loader()
       } else {
+        // No lower bound. The Tasks page buckets by `dueAt < startOfTomorrow`
+        // alone (`TasksViewModel.categoryFor`), so a task overdue by more than a
+        // week is still on the user's list — it was only missing from this one.
         async let overdueResult = ActionItemStorage.shared.getFilteredActionItems(
-          limit: 50,
+          limit: Self.dashboardBucketLimit,
           completedStates: [false],
-          dueDateAfter: sevenDaysAgo,
           dueDateBefore: startOfToday
         )
         async let todayResult = ActionItemStorage.shared.getFilteredActionItems(
-          limit: 50,
+          limit: Self.dashboardBucketLimit,
           completedStates: [false],
           dueDateAfter: startOfToday,
           dueDateBefore: endOfToday
         )
+        // Likewise no creation cutoff: "No Deadline" on the Tasks page is every
+        // undated incomplete task, however long it has been sitting there.
         async let noDueDateResult = ActionItemStorage.shared.getFilteredActionItems(
-          limit: 50,
+          limit: Self.dashboardBucketLimit,
           completedStates: [false],
-          dueDateIsNull: true,
-          createdAfter: sevenDaysAgo
+          dueDateIsNull: true
         )
         let (overdue, today, noDueDate) = try await (
           overdueResult,
@@ -499,15 +513,19 @@ class TasksStore: ObservableObject {
         )
       }
       guard isCurrent(lease) else { return }
-      // Unreviewed AI captures stay out of dashboard / nudge / realtime lanes.
-      // The Tasks page uses incompleteTasks and shows those rows as ordinary
-      // due-date tasks after Candidate review replaced the sparkle list.
-      let sortedOverdue = snapshot.overdue.filter(DashboardTaskLanePolicy.admits)
-        .sorted(by: Self.sortByDueDateThenSource)
-      let sortedToday = snapshot.today.filter(DashboardTaskLanePolicy.admits)
-        .sorted(by: Self.sortByDueDateThenSource)
-      let sortedNoDueDate = snapshot.noDueDate.filter(DashboardTaskLanePolicy.admits)
-        .sorted(by: Self.sortByDueDateThenSource)
+      // These lanes carry the same rows the Tasks page shows. They used to drop
+      // AI-capture sources, on the reasoning that a capture is unreviewed until
+      // the user accepts it — but INV-TASK-2 has since made capture
+      // suggestion-only (`TaskCaptureModePolicy.usesLegacyStaging` is false for
+      // every mode), so a capture never reaches `action_items` at all. It stays
+      // a Candidate until an explicit gesture accepts it. Everything in this
+      // table is therefore already the user's, and the filter had stopped
+      // separating reviewed from unreviewed: it only hid the backlog they can
+      // see on Tasks, plus anything they created by voice, since
+      // `create_action_item` comes back stamped `conversation`.
+      let sortedOverdue = snapshot.overdue.sorted(by: Self.sortByDueDateThenSource)
+      let sortedToday = snapshot.today.sorted(by: Self.sortByDueDateThenSource)
+      let sortedNoDueDate = snapshot.noDueDate.sorted(by: Self.sortByDueDateThenSource)
       // Only update @Published properties if values actually changed to avoid unnecessary objectWillChange
       if overdueTasks != sortedOverdue { overdueTasks = sortedOverdue }
       if todaysTasks != sortedToday { todaysTasks = sortedToday }
@@ -1422,13 +1440,27 @@ class TasksStore: ObservableObject {
       )
       page = .init(items: response.items, hasMore: response.hasMore)
     }
-    // The lane is the authority on retirement, not `isRetired`'s re-derivation
-    // from whatever fields this response happened to carry. Stamping it here —
-    // after both transports, so neither can skip it — is what stops a retired
-    // row being written to the local cache as live and resurfacing as a live
-    // task. Every caller of this page (first load and auto-refresh) syncs it
-    // into SQLite, so normalizing anywhere later would leave one path wrong.
-    return .init(items: page.items.map { $0.retired() }, hasMore: page.hasMore)
+    // Keep only the rows the response itself reports retired, and let the lane
+    // stamp settle the ones that carry retirement through a field this decode
+    // did not read (#11460: a retired row written to the cache as live
+    // resurfaces as a live task).
+    //
+    // The lane used to be treated as the authority and stamped `.retired()`
+    // over the whole page — but `GET /v1/action-items` has no `deleted`
+    // parameter. FastAPI drops the unknown query item, and the handler's
+    // stream skips soft-deleted documents outright, so what came back was the
+    // user's *live* first page. Every caller of this page syncs it into
+    // SQLite, so each visit to Removed tombstoned a hundred live tasks
+    // locally: `deleted = 1` with no `deletedBy` and a canonical status still
+    // `active`. Completing any of them from a chat task card then read the
+    // tombstone back and rendered "Task is no longer available" over the task
+    // the reader had just ticked.
+    //
+    // Until the backend can scope a page to retired rows, Removed shows the
+    // deletions made on this Mac (those carry a local tombstone and a
+    // `deletedBy`) and not another device's. Showing fewer rows is a gap;
+    // manufacturing retirement is data loss.
+    return .init(items: page.items.filter(\.isRetired).map { $0.retired() }, hasMore: page.hasMore)
   }
 
   func syncPage(
@@ -1682,7 +1714,7 @@ class TasksStore: ObservableObject {
         completed: nil,
         includeDeleted: true
       )
-      return items.filter { $0.deleted == true }
+      return items.filter(\.isRetired)
     }
   }
 
@@ -2373,7 +2405,8 @@ class TasksStore: ObservableObject {
   func retryUnsyncedItems(
     includeRecent: Bool = false,
     expectedOwnerID: String? = nil,
-    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil,
+    operations: UnsyncedTaskSyncOperations = UnsyncedTaskSyncOperations()
   ) async {
     guard
       let lease = captureOwnerLease(
@@ -2381,11 +2414,11 @@ class TasksStore: ObservableObject {
         authorizationSnapshot: authorizationSnapshot
       )
     else { return }
-    let ownerID = lease.ownerID
-    guard await AccountCutoverOfflineUploadAdmission.allowsUploadOffMainActor() else {
+    guard await operations.allowsUpload() else {
       log("TasksStore: Skipping retryUnsyncedItems — account cutover offline upload gate closed")
       return
     }
+    guard isCurrent(lease) else { return }
     guard activeRetryLease == nil else {
       log("TasksStore: Skipping retryUnsyncedItems (already in progress)")
       return
@@ -2394,10 +2427,14 @@ class TasksStore: ObservableObject {
     defer {
       if activeRetryLease == lease { activeRetryLease = nil }
     }
+    let flushDeletions: @MainActor () async -> Void =
+      operations.flushDeletions ?? {
+        await self.flushPendingBackendDeletions(lease: lease)
+      }
 
     let items: [ActionItemRecord]
     do {
-      items = try await ActionItemStorage.shared.getUnsyncedActionItems(includeRecent: includeRecent)
+      items = try await operations.loadPending(includeRecent)
     } catch {
       if isCurrent(lease) {
         logError("TasksStore: Failed to fetch unsynced items", error: error)
@@ -2407,7 +2444,7 @@ class TasksStore: ObservableObject {
     guard isCurrent(lease) else { return }
 
     if items.isEmpty {
-      await flushPendingBackendDeletions(lease: lease)
+      await flushDeletions()
       return
     }
     log("TasksStore: Retrying sync for \(items.count) unsynced items")
@@ -2415,63 +2452,37 @@ class TasksStore: ObservableObject {
     var synced = 0
     for item in items {
       guard isCurrent(lease) else { return }
-      guard await AccountCutoverOfflineUploadAdmission.allowsUploadOffMainActor() else {
+      guard await operations.allowsUpload() else {
         log("TasksStore: Interrupted retryUnsyncedItems — account cutover offline upload gate closed")
         return
       }
+      guard isCurrent(lease) else { return }
       guard let localId = item.id else { continue }
 
-      // Re-check: the normal sync path may have synced this item while we were iterating
-      if let current = try? await ActionItemStorage.shared.getActionItem(id: localId),
-        current.backendSynced || (current.backendId != nil && !current.backendId!.isEmpty)
-      {
-        continue
-      }
-      guard isCurrent(lease) else { return }
-
-      // Parse metadata back from JSON
-      var metadata: [String: Any]?
-      if let json = item.metadataJson, let data = json.data(using: .utf8) {
-        metadata = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-      }
-
       do {
-        let response = try await APIClient.shared.createActionItem(
-          description: item.description,
-          dueAt: item.dueAt,
-          source: item.source,
-          priority: item.priority,
-          category: item.category,
-          metadataBox: ActionItemMetadataBox(metadata),
-          relevanceScore: item.relevanceScore,
-          expectedOwnerId: ownerID,
-          authorizationSnapshot: lease.authorizationSnapshot
-        )
+        // A pending-list snapshot is only an enumeration hint. The user or
+        // another sync path may have edited, deleted, or linked the row since.
+        let current = try await operations.reloadCurrent(localId)
         guard isCurrent(lease) else { return }
-        // createActionItem always posts completed:nil, so a task the user
-        // completed while it was still unsynced (offline / failed create) would
-        // be recreated on the backend as incomplete and resurrected on the next
-        // refresh. Push the completed state with a follow-up update.
-        if item.completed {
-          _ = try? await APIClient.shared.updateActionItem(
-            id: response.id,
-            completed: true,
-            expectedOwnerId: ownerID,
-            authorizationSnapshot: lease.authorizationSnapshot
-          )
-          guard isCurrent(lease) else { return }
-        }
-        try await ActionItemStorage.shared.markSynced(
+        guard let current, current.id == localId, !current.deleted,
+          !current.backendSynced,
+          (current.backendId ?? "").isEmpty
+        else { continue }
+        let projection = try UnsyncedTaskCreateProjection(record: current)
+        let response = try await operations.createRemote(projection, lease.authorizationSnapshot)
+        guard isCurrent(lease) else { return }
+        try await operations.markSynced(
           id: localId,
           backendId: response.id,
-          authorization: Self.localMutationAuthorization(
-            snapshot: lease.authorizationSnapshot
-          )
+          authorization: Self.localMutationAuthorization(snapshot: lease.authorizationSnapshot)
         )
         guard isCurrent(lease) else { return }
         synced += 1
       } catch {
-        // Skip this item, will retry next launch
+        guard isCurrent(lease) else { return }
+        // A malformed projection or failed create stays pending, never
+        // acknowledged after silently dropping repeat/evidence fields.
+        logError("TasksStore: Failed to recover unsynced task", error: error)
         continue
       }
     }
@@ -2479,7 +2490,8 @@ class TasksStore: ObservableObject {
     if isCurrent(lease) {
       log("TasksStore: Retry sync completed — \(synced)/\(items.count) items synced")
     }
-    await flushPendingBackendDeletions(lease: lease)
+    guard isCurrent(lease) else { return }
+    await flushDeletions()
   }
 
   /// Push unacknowledged deletions to the backend and purge the tombstones it confirms.
@@ -2727,35 +2739,13 @@ class TasksStore: ObservableObject {
   // MARK: - Recurrence Helpers
 
   /// Compute the next due date for a recurring task, skipping past dates.
-  private func nextFutureDueDate(from dueDate: Date, rule: String) -> Date? {
-    let calendar = Calendar.current
-    func nextDate(from date: Date) -> Date? {
-      switch rule {
-      case "daily":
-        return calendar.date(byAdding: .day, value: 1, to: date)
-      case "weekdays":
-        var next = calendar.date(byAdding: .day, value: 1, to: date)!
-        while calendar.isDateInWeekend(next) {
-          next = calendar.date(byAdding: .day, value: 1, to: next)!
-        }
-        return next
-      case "weekly":
-        return calendar.date(byAdding: .weekOfYear, value: 1, to: date)
-      case "biweekly":
-        return calendar.date(byAdding: .weekOfYear, value: 2, to: date)
-      case "monthly":
-        return calendar.date(byAdding: .month, value: 1, to: date)
-      default:
-        return nil
-      }
-    }
-    guard var next = nextDate(from: dueDate) else { return nil }
-    // Skip past dates to avoid pile-up when completing late
-    while next < Date() {
-      guard let n = nextDate(from: next) else { return nil }
-      next = n
-    }
-    return next
+  func nextFutureDueDate(
+    from dueDate: Date,
+    rule: String,
+    now: Date = Date(),
+    calendar: Calendar = .current
+  ) -> Date? {
+    TaskRecurrenceDatePolicy.nextDueDate(from: dueDate, rule: rule, now: now, calendar: calendar)
   }
 
   // MARK: - Task Actions
@@ -2921,8 +2911,8 @@ class TasksStore: ObservableObject {
         )
       }
       guard isCurrent(lease) else { return }
-
       // Spawn next recurring instance when completing a recurring task
+      if newCompleted, operationOverrides == nil, #available(macOS 27, *) { SiriDonations.taskCompleted(task.id) }
       if newCompleted, let rule = task.recurrenceRule, !rule.isEmpty {
         let baseDueDate = task.dueAt ?? Date()
         if let nextDue = nextFutureDueDate(from: baseDueDate, rule: rule) {
@@ -3263,53 +3253,64 @@ class TasksStore: ObservableObject {
   func restoreTask(
     _ task: TaskActionItem,
     expectedOwnerID: String? = nil
-  ) async {
-    guard let lease = captureOwnerLease(expectedOwnerID: expectedOwnerID) else { return }
+  ) async -> TaskActionItem? {
+    guard let lease = captureOwnerLease(expectedOwnerID: expectedOwnerID) else { return nil }
     // Undo of a tombstoned delete: the row still exists locally (deleted, whether or not
     // the backend acked). Purge it before the re-insert below or undo would duplicate it.
     try? await ActionItemStorage.shared.deleteActionItemByBackendId(
       task.id,
       authorization: Self.localMutationAuthorization(snapshot: lease.authorizationSnapshot)
     )
-    guard isCurrent(lease) else { return }
+    guard isCurrent(lease) else { return nil }
 
     // A local-only task never had a backend row (deleteTask skipped the backend
-    // delete). Restoring it through the backend-recreate path below is wrong on
-    // two counts: syncTaskActionItems([task]) would persist the "local_<rowid>"
-    // placeholder as a *synced* backendId, and createActionItem would mint a
-    // SECOND real backend task — leaving a duplicate/phantom row. Instead
+    // delete). It must not go through the backend-recreate path below: staging
+    // it there and calling createActionItem would mint a SECOND real backend
+    // task for one that already has none — a duplicate/phantom row. Instead
     // re-insert it as an UNSYNCED local row so the pending create-sync pushes it
     // exactly once (carrying completion via retryUnsyncedItems).
     if ActionItemTaskIdentity(surfacedId: task.id).isLocalOnly {
-      await restoreLocalOnlyTask(task, lease: lease)
-      return
+      return await restoreLocalOnlyTask(task, lease: lease)
     }
 
-    // 1. Re-insert into SQLite from the in-memory task object
+    // 1. Stage as an UNSYNCED local row with no stale backend identity (reusing
+    // the same staging shape as the local-only path above). The old backend row
+    // was hard-deleted, so persisting this row under task.id -- its old, now-
+    // invalid backend ID -- and later binding the NEW id the recreate below
+    // mints produced two SQLite rows for one task.
+    let stagedRecord = Self.localOnlyRestoreRecord(from: task)
+    let inserted: ActionItemRecord
     do {
-      try await ActionItemStorage.shared.syncTaskActionItems(
-        [task],
+      inserted = try await ActionItemStorage.shared.insertLocalActionItem(
+        stagedRecord,
         authorization: Self.localMutationAuthorization(snapshot: lease.authorizationSnapshot)
       )
     } catch {
       if isCurrent(lease) {
         logError("TasksStore: Failed to re-insert task locally for undo", error: error)
       }
-      return
+      return nil
     }
-    guard isCurrent(lease) else { return }
+    guard isCurrent(lease) else { return nil }
+    guard let localId = inserted.id else {
+      logError("TasksStore: Staged undo row has no local id", error: ActionItemStorageError.recordNotFound)
+      return nil
+    }
+    let stagedTask = inserted.toTaskActionItem()
 
     // 2. Re-insert into the appropriate in-memory array
-    if task.completed {
-      completedTasks.insert(task, at: 0)
+    if stagedTask.completed {
+      completedTasks.insert(stagedTask, at: 0)
     } else {
-      incompleteTasks.insert(task, at: 0)
+      incompleteTasks.insert(stagedTask, at: 0)
     }
 
     // 3. Re-create on backend (hard-delete already removed it). Pass the full
     // field set — restore used to send only description/dueAt/priority, so undo
     // silently dropped source, category, tags, recurrence, goal/workstream, and
-    // completion state.
+    // completion state. Completion now rides this same create request (the
+    // create endpoint honors it) instead of a separate best-effort PATCH, so a
+    // failed follow-up can no longer leave the restored task incomplete.
     do {
       var restoreMetadata: [String: Any] = [:]
       if let existing = task.metadata,
@@ -3333,34 +3334,30 @@ class TasksStore: ObservableObject {
         recurrenceParentId: task.recurrenceParentId,
         goalId: task.goalId,
         workstreamId: task.workstreamId,
+        completed: task.completed ? true : nil,
         expectedOwnerId: lease.ownerID,
         authorizationSnapshot: lease.authorizationSnapshot
       )
-      guard isCurrent(lease) else { return }
-      // createActionItem cannot set completion; restore the completed state of
-      // a task that was done when it was deleted via a follow-up update.
-      var resolved = created
-      if task.completed, !created.completed {
-        resolved =
-          (try? await APIClient.shared.updateActionItem(
-            id: created.id,
-            completed: true,
-            expectedOwnerId: lease.ownerID,
-            authorizationSnapshot: lease.authorizationSnapshot
-          )) ?? created
-        guard isCurrent(lease) else { return }
-      }
-      // Update local record with new backend ID
-      try await ActionItemStorage.shared.syncTaskActionItems(
-        [resolved],
+      guard isCurrent(lease) else { return nil }
+      // Bind this same staged row to its new backend ID -- never a second insert.
+      try await ActionItemStorage.shared.markSynced(
+        id: localId,
+        backendId: created.id,
         authorization: Self.localMutationAuthorization(snapshot: lease.authorizationSnapshot)
       )
-      guard isCurrent(lease) else { return }
-      log("TasksStore: Restored task via undo (new backend ID: \(resolved.id))")
+      guard isCurrent(lease) else { return nil }
+      if stagedTask.completed, let idx = completedTasks.firstIndex(where: { $0.id == stagedTask.id }) {
+        completedTasks[idx] = created
+      } else if !stagedTask.completed, let idx = incompleteTasks.firstIndex(where: { $0.id == stagedTask.id }) {
+        incompleteTasks[idx] = created
+      }
+      log("TasksStore: Restored task via undo (new backend ID: \(created.id))")
+      return created
     } catch {
       if isCurrent(lease) {
         logError("TasksStore: Failed to re-create task on backend (local restore preserved)", error: error)
       }
+      return stagedTask
     }
   }
 
@@ -3386,10 +3383,14 @@ class TasksStore: ObservableObject {
   /// its original rowid so the surfaced "local_<rowid>" id is stable. No backend
   /// recreate: the task never had a backend row, and the pending create-sync
   /// (retryUnsyncedItems) is the single writer that pushes it to the backend.
-  private func restoreLocalOnlyTask(_ task: TaskActionItem, lease: OwnerOperationLease) async {
+  private func restoreLocalOnlyTask(
+    _ task: TaskActionItem,
+    lease: OwnerOperationLease
+  ) async -> TaskActionItem? {
     let record = Self.localOnlyRestoreRecord(from: task)
+    let inserted: ActionItemRecord
     do {
-      try await ActionItemStorage.shared.insertLocalActionItem(
+      inserted = try await ActionItemStorage.shared.insertLocalActionItem(
         record,
         authorization: Self.localMutationAuthorization(snapshot: lease.authorizationSnapshot)
       )
@@ -3397,16 +3398,18 @@ class TasksStore: ObservableObject {
       if isCurrent(lease) {
         logError("TasksStore: Failed to re-insert local-only task for undo", error: error)
       }
-      return
+      return nil
     }
-    guard isCurrent(lease) else { return }
+    guard isCurrent(lease) else { return nil }
+    let restoredTask = inserted.toTaskActionItem()
 
-    if task.completed {
-      completedTasks.insert(task, at: 0)
+    if restoredTask.completed {
+      completedTasks.insert(restoredTask, at: 0)
     } else {
-      incompleteTasks.insert(task, at: 0)
+      incompleteTasks.insert(restoredTask, at: 0)
     }
-    log("TasksStore: Restored local-only task via undo (unsynced, id: \(task.id))")
+    log("TasksStore: Restored local-only task via undo (unsynced, id: \(restoredTask.id))")
+    return restoredTask
   }
 
   @discardableResult

@@ -45,7 +45,7 @@ def test_forwards_prompt_cache_key():
 
 @pytest.mark.parametrize(
     'lane_id',
-    ['omi:auto:memory-conflict-flex', 'omi:auto:memory-l2-flex', 'omi:auto:x-memory-extraction-flex'],
+    ['omi:auto:memory-l2-flex', 'omi:auto:x-memory-extraction-flex'],
 )
 def test_forwards_flex_only_for_scheduled_background_lanes(lane_id):
     lane = load_gateway_config(prod_mode=True).lanes[lane_id]
@@ -65,7 +65,7 @@ def test_rejects_flex_for_other_lanes():
 
 
 def test_rejects_unbounded_service_tier_values():
-    lane = load_gateway_config(prod_mode=True).lanes['omi:auto:memory-conflict-flex']
+    lane = load_gateway_config(prod_mode=True).lanes['omi:auto:memory-l2-flex']
     request = valid_request(service_tier='auto')
     request.pop('response_format')
 
@@ -162,6 +162,23 @@ def test_rejects_invalid_output_limits(key):
 
     with pytest.raises(GatewayInvalidRequestError, match='positive integer'):
         validate_chat_completion_request(valid_request(**{key: 0}), lane)
+
+
+@pytest.mark.parametrize('effort', ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'])
+def test_forwards_known_reasoning_effort_values(effort):
+    lane = load_gateway_config(prod_mode=True).lanes[LANE_ID]
+
+    validated = validate_chat_completion_request(valid_request(reasoning_effort=effort), lane)
+
+    assert validated.forwarded_params['reasoning_effort'] == effort
+
+
+@pytest.mark.parametrize('effort', ['instant', '', 3, None])
+def test_rejects_unknown_reasoning_effort_values(effort):
+    lane = load_gateway_config(prod_mode=True).lanes[LANE_ID]
+
+    with pytest.raises(GatewayInvalidRequestError, match='reasoning_effort'):
+        validate_chat_completion_request(valid_request(reasoning_effort=effort), lane)
 
 
 def test_rejects_streaming():
@@ -273,14 +290,19 @@ def test_rejects_unsupported_message_content_parts():
         ]
     )
 
-    with pytest.raises(GatewayCapabilityMismatchError, match='text or image_url message content'):
+    with pytest.raises(GatewayCapabilityMismatchError, match='text, image_url, or file message content'):
         validate_chat_completion_request(request, lane)
 
 
-def test_rejects_structured_output_modes_other_than_json_schema():
+def test_json_object_is_accepted_and_unknown_modes_rejected():
     lane = load_gateway_config(prod_mode=True).lanes[LANE_ID]
-    request = valid_request(response_format={'type': 'json_object'})
 
+    # json_object maps Gemini's responseMimeType=application/json without a
+    # schema (desktop BFF translation) and is valid on structured lanes.
+    validated = validate_chat_completion_request(valid_request(response_format={'type': 'json_object'}), lane)
+    assert validated.response_format == {'type': 'json_object'}
+
+    request = valid_request(response_format={'type': 'text'})
     with pytest.raises(GatewayCapabilityMismatchError, match='json_schema'):
         validate_chat_completion_request(request, lane)
 

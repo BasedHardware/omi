@@ -1,9 +1,10 @@
 version: 2
 name: keyboard-shortcuts
 tier: 2
-description: Sidebar navigation via Cmd+1..6 and Cmd+, shortcut bridge actions
+description: Top-bar navigation via Cmd+1..4 and Cmd+, shortcut bridge actions
 app: non-prod
 covers:
+  - desktop/macos/Desktop/Sources/MainWindow/Components/FindCommandRouter.swift
   - desktop/macos/Desktop/Sources/OmiApp.swift
   - desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/ShortcutsSettingsSection.swift
@@ -12,22 +13,22 @@ preconditions:
 
 steps:
   - id: S1
-    name: Navigate Home via Cmd+1 equivalent
+    name: Navigate Chat via Cmd+1 equivalent
     bridge.action:
       name: navigate_via_shortcut
       params:
         shortcut: "1"
     wait:
-      state.selectedTabIndex: 0
+      state.chatFirstRoute: chat
 
   - id: S2
-    name: Navigate Memories via Cmd+3 equivalent
+    name: Navigate Memories via Cmd+2 equivalent
     bridge.action:
       name: navigate_via_shortcut
       params:
-        shortcut: "3"
+        shortcut: "2"
     wait:
-      state.selectedTabIndex: 3
+      state.chatFirstRoute: memories
 
   - id: S3
     name: Navigate Settings via Cmd+, equivalent
@@ -36,7 +37,7 @@ steps:
       params:
         shortcut: ","
     wait:
-      state.selectedTabIndex: 9
+      state.chatFirstRoute: more.settings
 
   - id: S4
     name: Logs clean

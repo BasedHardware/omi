@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "id": "FC-optional-closure-parameter-implicitly-escaping",
+  "violated_contract": "A closure parameter declared Optional -- `completion: (() -> Void)?` -- is implicitly @escaping, even though the same parameter written non-Optional would default to non-escaping. Under the desktop package's `swiftLanguageModes: [.v6]` a call site that captures the enclosing object inside such a closure must therefore write the capture explicitly, and one that does not fails to compile. The trap is that the declaration site reads as if it opted into nothing: Optionality is a nullability decision, so `@escaping` is acquired silently as a side effect of allowing the argument to be omitted. Tests do not close the gap, because a seam like this is normally covered by driving the collaborator directly (`presenter.pauseQueueUntilAppActive()`), which never constructs the production trailing closure whose capture semantics are the thing at issue.",
+  "canonical_prevention": "When a function takes an Optional closure, treat it as @escaping at every call site: write `self.` on captured members rather than relying on the compiler to accept implicit capture, and do not infer escaping-ness from the absence of an `@escaping` keyword. Where a production call site's closure carries behaviour worth protecting, cover the call site rather than the collaborator -- inject the side effect the closure performs (here `NSWorkspace.open`) so the closure can be exercised in a test, instead of asserting against the collaborator that the closure happens to call.",
+  "evidence_prs": [
+    12277
+  ],
+  "scope_hints": [
+    "desktop/macos/Desktop/Sources/AppState/**",
+    "desktop/macos/Desktop/Sources/**"
+  ],
+  "status": "open"
+}

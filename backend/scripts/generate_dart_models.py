@@ -8,385 +8,23 @@ import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
+
+if __package__:
+    from .dart_schema_groups import additional_schema_groups
+else:
+    from dart_schema_groups import additional_schema_groups
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 DEFAULT_SPEC_PATH = ROOT_DIR / 'docs' / 'api-reference' / 'app-client-openapi.json'
-DEFAULT_OUTPUT_DIR = ROOT_DIR / 'app' / 'lib' / 'backend' / 'schema' / 'gen'
+if __package__:
+    from .dart_model_groups import DEFAULT_OUTPUT_DIR, SCHEMA_GROUPS
+else:
+    from dart_model_groups import DEFAULT_OUTPUT_DIR, SCHEMA_GROUPS
 
 SCHEMA_GROUPS = {
-    'conversation': {
-        'output': DEFAULT_OUTPUT_DIR / 'conversation_wire.g.dart',
-        'schemas': (
-            'Translation',
-            'TranscriptSegment',
-            'ActionItem',
-            'AppResult',
-            'PluginResult',
-            'Event',
-            'Section',
-            'Structured',
-            'Geolocation',
-            'ConversationPhoto',
-            'AudioFile',
-            'ConversationAudioSpan',
-            'ConversationAudio',
-            'CalendarEventLink',
-            'Conversation',
-            'ConversationTestPromptResponse',
-            'MergeConversationsResponse',
-            'SearchConversationsResponse',
-            'SyncLocalFilesResultResponse',
-            'SyncJobStartResponse',
-            'SyncRecoveryWindowExceededResponse',
-            'SyncJobStatusResponse',
-            'SyncCaptureManifestFile',
-            'SyncCaptureManifestRequest',
-            'SyncCaptureManifestResponse',
-        ),
-    },
-    'messages': {
-        'output': DEFAULT_OUTPUT_DIR / 'messages_wire.g.dart',
-        'schemas': (
-            'MessageConversationStructured',
-            'MessageConversation',
-            'FileChat',
-            'ChartDataPoint',
-            'ChartDataset',
-            'ChartData',
-            'Message',
-            'ResponseMessage',
-            'MessageReportResponse',
-            'VoiceMessageTranscriptionResponse',
-        ),
-    },
-    'action_items_folders': {
-        'output': DEFAULT_OUTPUT_DIR / 'action_items_folders_wire.g.dart',
-        'schemas': (
-            'EvidenceRef',
-            'ActionItemResponse',
-            'ActionItemCreateRequest',
-            'ActionItemUpdateRequest',
-            'ActionItemsResponse',
-            'ActionItemsSearchResponse',
-            'ConversationActionItemsCountResponse',
-            'PendingSyncResponse',
-            'BatchMutationResponse',
-            'BatchDeleteActionItemsResponse',
-            'BatchCreateActionItemsResponse',
-            'ShareActionItemsResponse',
-            'SharedActionItemPreview',
-            'SharedActionItemsResponse',
-            'AcceptSharedActionItemsResponse',
-            'Folder',
-            'FolderMutationResponse',
-            'BulkMoveConversationsResponse',
-        ),
-    },
-    'task_intelligence': {
-        'output': DEFAULT_OUTPUT_DIR / 'task_intelligence_wire.g.dart',
-        'schemas': (
-            'EvidenceRef',
-            'ActionItemResponse',
-            'TaskCreatePayload',
-            'TaskChangePayload',
-            'GoalMetric',
-            'CandidateCompatibilityMetadata',
-            'CandidateRecord',
-            'CandidateListResponse',
-            'CandidateResolutionReceipt',
-            'CandidateCreate',
-            'TaskCreateCandidate',
-            'TaskUpdateCandidate',
-            'TaskCompleteCandidate',
-            'TaskCancelCandidate',
-            'TaskSupersedeCandidate',
-            'CandidateResolutionRequest',
-            'WorkstreamProposal',
-            'WorkstreamProposal-Output',
-            'GoalResponse',
-            'GoalUpdate',
-            'GoalDetailProjection',
-            'GoalProgressEvent',
-            'Workstream',
-            'WorkstreamCreateCandidate',
-            'WorkstreamUpdate',
-            'WorkstreamDetailProjection',
-            'WorkstreamEvent',
-            'WorkstreamEventCreate',
-            'ArtifactDescriptor',
-            'ArtifactDescriptorCreate',
-            'ArtifactStatusTransitionRequest',
-            'ContinuationCheckpoint',
-            'ContinuationCheckpointUpsert',
-            'WhatMattersNowProjection',
-            'EvaluationRequest',
-            'FeedbackCreate',
-            'FeedbackRecord',
-            'InterventionCreate',
-            'InterventionRecord',
-            'OutcomeCreate',
-            'OutcomeRecord',
-            'NormalizedContextSnapshot',
-            'OpenLoopSnapshot',
-            'SnapshotReceipt',
-            'DecisionDebugProjection',
-            'Recommendation',
-            'RecommendationSubjectKind',
-            'DeterministicFacts',
-            'ShortlistEligibility',
-            'DecisionRecord',
-            'ContextMatchSignal',
-            'FeedbackSubjectKind',
-            'InterventionSurface',
-            'NormalizedContextMatch',
-            'OpenLoopDescriptor',
-            'OpenLoopKind',
-            'OpenLoopStatus',
-            'TaskIntelligenceFeedbackAction',
-            'TaskIntelligenceFeedbackReason',
-            'TaskIntelligenceOutcomeCode',
-        ),
-    },
-    'api_keys': {
-        'output': DEFAULT_OUTPUT_DIR / 'api_keys_wire.g.dart',
-        'schemas': (
-            'DevApiKey',
-            'DevApiKeyCreated',
-            'McpApiKey',
-            'McpApiKeyCreated',
-        ),
-    },
-    'phone_calls': {
-        'output': DEFAULT_OUTPUT_DIR / 'phone_calls_wire.g.dart',
-        'schemas': (
-            'VerifyPhoneNumberResponse',
-            'CheckVerificationResponse',
-            'PhoneNumberResponse',
-            'PhoneNumbersResponse',
-            'PhoneMutationResponse',
-            'TokenResponse',
-        ),
-    },
-    'people': {
-        'output': DEFAULT_OUTPUT_DIR / 'people_wire.g.dart',
-        'schemas': ('Person',),
-    },
-    'imports_integrations': {
-        'output': DEFAULT_OUTPUT_DIR / 'imports_integrations_wire.g.dart',
-        'schemas': (
-            'ImportJobResponse',
-            'IntegrationResponse',
-            'OAuthUrlResponse',
-            'DeleteLimitlessConversationsResponse',
-            'AppleHealthSyncResponse',
-        ),
-    },
-    'device_speech': {
-        'output': DEFAULT_OUTPUT_DIR / 'device_speech_wire.g.dart',
-        'schemas': (
-            'FirmwareVersionResponse',
-            'HasSpeechProfileResponse',
-            'SpeechProfileResponse',
-            'SpeechProfileUploadResponse',
-            'SpeechProfileMutationResponse',
-        ),
-        'operation_wrappers': (
-            (
-                'ExpandedSpeechProfileSamplesResponse',
-                'get_extra_speech_profile_samples_v3_speech_profile_expand_get',
-                'items',
-            ),
-        ),
-    },
-    'misc': {
-        'output': DEFAULT_OUTPUT_DIR / 'misc_wire.g.dart',
-        'schemas': (
-            'FcmTokenResponse',
-            'DeleteKnowledgeGraphResponse',
-            'KnowledgeGraphResponse',
-            'RebuildResponse',
-            'ErrorResponse',
-        ),
-    },
-    'wrapped_task_integrations': {
-        'output': DEFAULT_OUTPUT_DIR / 'wrapped_task_integrations_wire.g.dart',
-        'schemas': (
-            'WrappedStatusResponse',
-            'GenerateWrappedResponse',
-            'TaskIntegrationsResponse',
-            'OAuthUrlResponse',
-            'CreateTaskResponse',
-            'DefaultTaskIntegrationResponse',
-            'AsanaWorkspacesResponse',
-            'AsanaProjectsResponse',
-            'ClickUpTeamsResponse',
-            'ClickUpSpacesResponse',
-            'ClickUpListsResponse',
-        ),
-    },
-    'apps': {
-        'output': DEFAULT_OUTPUT_DIR / 'apps_wire.g.dart',
-        'schemas': (
-            'AppSelectOption',
-            'AppCapabilityAction',
-            'AppCapabilityResponse',
-            'AppThumbnailUploadResponse',
-            'AppMutationResponse',
-            'AppCreateResponse',
-            'AppMigrationResponse',
-            'McpAddServerResponse',
-            'AppDescriptionGenerationResponse',
-            'AppDescriptionEmojiGenerationResponse',
-            'AppPromptsGenerationResponse',
-            'AppDraftGenerationResponse',
-            'AppGenerationResponse',
-            'AppIconGenerationResponse',
-            'AppReview',
-            'AuthStep',
-            'Action',
-            'ExternalIntegration',
-            'ProactiveNotification',
-            'ChatTool',
-            'AppBaseModel',
-            'AppCatalogItem',
-            'App',
-            'AppPaginationLinks',
-            'AppPagination',
-            'AppCatalogGroup',
-            'AppCatalogMeta',
-            'AppCatalogResponse',
-            'AppSearchFilters',
-            'AppSearchResponse',
-            'ConversationSuggestedAppsResponse',
-            'AppApiKeyResponse',
-        ),
-        'operation_wrappers': (
-            (
-                'EnabledAppsResponse',
-                'get_user_enabled_apps_v1_apps_enabled_get',
-                'items',
-            ),
-        ),
-    },
-    'users': {
-        'output': DEFAULT_OUTPUT_DIR / 'users_wire.g.dart',
-        'schemas': (
-            'UserStatusResponse',
-            'UserWebhooksStatusResponse',
-            'StoreRecordingPermissionResponse',
-            'PrivateCloudSyncResponse',
-            'OnboardingStateResponse',
-            'UserLanguageResponse',
-            'UserLanguageUpdateResponse',
-            'AvailableLanguage',
-            'AvailableLanguagesResponse',
-            'MemorySummaryRatingResponse',
-            'TrainingDataOptInResponse',
-            'TranscriptionPreferencesResponse',
-            'TranscriptionPreferencesUpdate',
-            'UserWebhookUrlResponse',
-            'DailySummarySettingsResponse',
-            'DailySummaryTestResponse',
-            'MentorNotificationSettingsResponse',
-            'DailySummaryActionItem',
-            'DailySummaryTopicHighlight',
-            'DailySummaryUnresolvedQuestion',
-            'DailySummaryDecisionMade',
-            'DailySummaryKnowledgeNugget',
-            'DailySummaryDayStats',
-            'DailySummaryLocationPin',
-            'DailySummaryResponse',
-            'DailySummariesResponse',
-            'FairUseDailyGenerationsBudgetResponse',
-            'FairUseLimitsResponse',
-            'FairUseUsagePctResponse',
-            'FairUseStatusResponse',
-        ),
-    },
-    'subscription_usage': {
-        'output': DEFAULT_OUTPUT_DIR / 'subscription_usage_wire.g.dart',
-        'schemas': (
-            'PlanLimits',
-            'Subscription',
-            'PricingOption',
-            'SubscriptionPlan',
-            'PhoneCallQuota',
-            'UserSubscriptionResponse',
-            'UsageStats',
-            'UsageHistoryPoint',
-            'UserUsageResponse',
-        ),
-    },
-    'privacy': {
-        'output': DEFAULT_OUTPUT_DIR / 'privacy_wire.g.dart',
-        'schemas': (
-            'MigrationRequest',
-            'BatchMigrationRequest',
-            'MigrationTargetRequest',
-            'MigrationStatusResponse',
-            'MigrationRequestsResponse',
-            'UserProfileResponse',
-        ),
-    },
-    'announcements': {
-        'output': DEFAULT_OUTPUT_DIR / 'announcements_wire.g.dart',
-        'schemas': (
-            'Targeting',
-            'Display',
-            'Announcement',
-        ),
-    },
-    'audio': {
-        'output': DEFAULT_OUTPUT_DIR / 'audio_wire.g.dart',
-        'schemas': (
-            'AudioPrecacheResponse',
-            'AudioFileUrlInfo',
-            'ConversationAudioSpanInfo',
-            'ConversationAudioUrlInfo',
-            'AudioUrlsResponse',
-        ),
-    },
-    'payments': {
-        'output': DEFAULT_OUTPUT_DIR / 'payments_wire.g.dart',
-        'schemas': (
-            'PaymentMutationResponse',
-            'StripeConnectAccountResponse',
-            'StripeOnboardingStatusResponse',
-            'StripeSupportedCountryResponse',
-            'PayPalPaymentDetailsResponse',
-            'PaymentMethodStatusResponse',
-            'PaymentSubscriptionResponse',
-            'PaymentStatusMessageResponse',
-            'PaymentCheckoutSessionResponse',
-            'PaymentUpgradeSubscriptionResponse',
-            'CustomerPortalSessionResponse',
-            'PlanLimits',
-            'routers__payment__PricingOption',
-            'AvailablePlansResponse',
-            'AppSubscriptionDetails',
-            'AppSubscriptionResponse',
-            'AppSubscriptionCancelResponse',
-        ),
-    },
-    'memories': {
-        'output': DEFAULT_OUTPUT_DIR / 'memories_wire.g.dart',
-        'schemas': (
-            'Evidence',
-            'MemoryDB',
-        ),
-    },
-    'goals': {
-        'output': DEFAULT_OUTPUT_DIR / 'goals_wire.g.dart',
-        'schemas': (
-            'GoalMetric',
-            'GoalResponse',
-            'GoalSuggestionResponse',
-            'AdviceResponse',
-            'GoalHistoryEntryResponse',
-            'GoalDeleteResponse',
-        ),
-    },
+    **SCHEMA_GROUPS,
+    **additional_schema_groups(DEFAULT_OUTPUT_DIR),
 }
 ALIASES = {
     'Structured': {'action_items': ('actionItems',)},
@@ -473,6 +111,55 @@ def is_untyped_object_schema(schema: dict[str, Any]) -> bool:
     return schema.get('type') == 'object' or schema.get('additionalProperties') is not None
 
 
+_SCHEMA_DOC_KEYS = frozenset({'title', 'description', 'example', 'examples', 'deprecated'})
+
+
+def _structural_schema(schema: Any) -> Any:
+    """Drop documentation keys so input/output schema comparison is structural."""
+    if isinstance(schema, dict):
+        canonical: dict[str, Any] = {}
+        for key, value in schema.items():
+            if key in _SCHEMA_DOC_KEYS:
+                continue
+            if key == 'required' and isinstance(value, list):
+                canonical[key] = sorted(value)
+            else:
+                canonical[key] = _structural_schema(value)
+        return canonical
+    if isinstance(schema, list):
+        return [_structural_schema(item) for item in schema]
+    return schema
+
+
+def schemas_structurally_equal(left: dict[str, Any], right: dict[str, Any]) -> bool:
+    return _structural_schema(left) == _structural_schema(right)
+
+
+def resolve_output_ref_alias(schema_name: str, target_schemas: tuple[str, ...], all_schemas: dict[str, Any]) -> str:
+    """Alias ``Name-Output`` to ``Name`` only when the schemas are structurally identical.
+
+    Pydantic/OpenAPI emits a serializer-specific ``-Output`` sibling that is often
+    identical to the input model. Silently decoding it as the input shape is safe
+    only while that remains true; a later required-field or type split would
+    misdecode at runtime. Fail generation when they diverge, naming the schema.
+    """
+    if schema_name in target_schemas or not schema_name.endswith('-Output'):
+        return schema_name
+    base_name = schema_name[: -len('-Output')]
+    if base_name not in target_schemas:
+        return schema_name
+    output_schema = all_schemas.get(schema_name)
+    base_schema = all_schemas.get(base_name)
+    if not isinstance(output_schema, dict) or not isinstance(base_schema, dict):
+        raise ValueError(f'cannot alias OpenAPI schema {schema_name} to {base_name}: missing schema definition')
+    if not schemas_structurally_equal(cast(dict[str, Any], output_schema), cast(dict[str, Any], base_schema)):
+        raise ValueError(
+            f'OpenAPI schema {schema_name} diverges from {base_name}; '
+            'refuse to alias a serializer-specific output onto the input shape'
+        )
+    return base_name
+
+
 def dart_type_for(
     schema: dict[str, Any],
     required: bool,
@@ -520,7 +207,7 @@ def dart_type_for(
     nullable = nullable or not required
     ref = unwrapped.get('$ref')
     if isinstance(ref, str):
-        schema_name = ref.rsplit('/', 1)[-1]
+        schema_name = resolve_output_ref_alias(ref.rsplit('/', 1)[-1], target_schemas, all_schemas)
         if schema_name in target_schemas:
             ref_schema = all_schemas.get(schema_name, {})
             return DartType(
@@ -587,6 +274,11 @@ def dart_literal(value: Any) -> str:
         return json.dumps(value)
     if isinstance(value, list):
         return 'const []'
+    if isinstance(value, dict):
+        # Constructor defaults must be constant expressions.
+        if value:
+            raise ValueError('non-empty map defaults are unsupported')
+        return 'const {}'
     return str(value)
 
 
@@ -728,7 +420,7 @@ def emit_class(schema_name: str, fields: list[Field], *, emit_list_factory: bool
             constructor_is_const = False
 
     const_prefix = 'const ' if constructor_is_const else ''
-    lines.append(f'  {const_prefix}{class_name}({{')
+    lines.append(f'  {const_prefix}{class_name}({{' if fields else f'  {const_prefix}{class_name}(')
     for field in fields:
         required = 'required ' if field.required else ''
         default = ''
@@ -746,7 +438,7 @@ def emit_class(schema_name: str, fields: list[Field], *, emit_list_factory: bool
             suffix = ';' if index == len(initializers) - 1 else ','
             lines.append(f'       {initializer}{suffix}')
     else:
-        lines.append('  });')
+        lines.append('  });' if fields else '  );')
     lines.append('')
     lines.append(f'  factory {class_name}.fromJson(Map<String, dynamic> json) {{')
     lines.append(f'    return {class_name}(')
@@ -1173,7 +865,9 @@ def build_output(spec: dict[str, Any], group: str = 'conversation') -> str:
     chunks = [
         '// GENERATED CODE - DO NOT EDIT.',
         '// ignore_for_file: unused_element',
-        f'// Generated by backend/scripts/generate_dart_models.py --group {group} from docs/api-reference/app-client-openapi.json.',
+        f'// Generated by backend/scripts/generate_dart_models.py --group {group} from '
+        + str(SCHEMA_GROUPS[group].get('spec', DEFAULT_SPEC_PATH).relative_to(ROOT_DIR))
+        + '.',
         '',
     ]
     if group in {'action_items_folders', 'task_intelligence'}:
@@ -1239,7 +933,8 @@ def main() -> int:
     groups = tuple(SCHEMA_GROUPS) if args.all else (args.group,)
     for group in groups:
         output_path = Path(args.output) if args.output else SCHEMA_GROUPS[group]['output']
-        generated = build_output(spec, group)
+        group_spec = SCHEMA_GROUPS[group].get('spec')
+        generated = build_output(json.loads(group_spec.read_text(encoding='utf-8')) if group_spec else spec, group)
         if args.check:
             if not output_path.exists() or output_path.read_text(encoding='utf-8') != generated:
                 raise SystemExit(f'{output_path} is stale; run backend/scripts/generate_dart_models.py --group {group}')

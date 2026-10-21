@@ -25,9 +25,30 @@ from utils.stt import provider_resilience, streaming
 from utils.stt.streaming import STTService
 
 
+@pytest.fixture(autouse=True)
+def _byok_provider_route(monkeypatch):
+    # BYOK sessions still use the legacy connector; managed sessions always
+    # follow the configured chain after the connect-order graduation.
+    monkeypatch.setattr('utils.byok.get_byok_keys', lambda: {'deepgram': 'test-key'})
+
+
 @pytest.fixture
 def anyio_backend():
     return 'asyncio'
+
+
+@pytest.fixture(autouse=True)
+def _fresh_circuits(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Isolate the module-level breakers per test.
+
+    The breakers are singletons; leg-level circuit gating now makes cross-test
+    state consequential (an earlier file's serve-death opened the Deepgram
+    circuit, and later files' fallback legs were filtered by it).
+    """
+    from utils.stt.provider_resilience import ProviderCircuitBreaker
+
+    for name in ('_deepgram_circuit', '_modulate_circuit', '_parakeet_circuit', '_soniox_circuit'):
+        monkeypatch.setattr(streaming, name, ProviderCircuitBreaker(failure_threshold=3, cooldown_seconds=30.0))
 
 
 def _modulate_receiver():
@@ -230,6 +251,7 @@ async def test_a_modulate_primary_never_falls_back_to_itself():
         patch.object(streaming, 'record_fallback'),
     ):
         socket, service = await streaming.connect_stt_socket_with_fallback(
+            use_config=False,
             primary_service=STTService.modulate,
             connect_primary=AsyncMock(return_value=None),
             connect_modulate=connect_modulate,
@@ -250,6 +272,7 @@ async def test_a_modulate_primary_walks_deepgram_then_parakeet_in_policy_order()
         patch.object(streaming, 'record_fallback') as record,
     ):
         socket, service = await streaming.connect_stt_socket_with_fallback(
+            use_config=False,
             primary_service=STTService.modulate,
             connect_primary=AsyncMock(return_value=_RejectedSocket()),
             connect_modulate=AsyncMock(),
@@ -280,6 +303,7 @@ async def test_repeated_modulate_rejections_open_its_own_circuit():
         patch.object(streaming, 'record_fallback'),
     ):
         _, service = await streaming.connect_stt_socket_with_fallback(
+            use_config=False,
             primary_service=STTService.modulate,
             connect_primary=AsyncMock(return_value=None),
             connect_modulate=AsyncMock(),
@@ -301,6 +325,7 @@ async def test_the_modulate_circuit_stays_independent_of_the_other_providers():
         patch.object(streaming, 'record_fallback'),
     ):
         await streaming.connect_stt_socket_with_fallback(
+            use_config=False,
             primary_service=STTService.modulate,
             connect_primary=AsyncMock(return_value=None),
             connect_modulate=AsyncMock(),

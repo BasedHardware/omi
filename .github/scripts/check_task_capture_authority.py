@@ -1,21 +1,23 @@
 #!/usr/bin/env python3
-"""INV-TASK-2 guard: automatic task capture proposes, it never writes a task.
+"""INV-TASK-2 guard: capture that proposes may never accept or create.
 
-Four structural facts, each the shape of a defect that actually shipped:
+Three structural facts, each the shape of a defect that actually shipped:
 
 1. No capture-policy outcome may mean "create a task now". The policy used to
    return ``auto_accept_silent`` / ``create_direct``, and the adapter turned
    both into create-then-accept in one request.
 2. The conversation adapter may not accept a Candidate. Acceptance is the
    user's gesture.
-3. ``_save_action_items`` may not call an action-item writer. A fallback there
-   wrote a whole conversation's items straight into the task list.
-4. The desktop screen-capture client may not expose an ``accept`` at all — a
+3. The desktop screen-capture client may not expose an ``accept`` at all — a
    delivery path that can accept will eventually be wired to.
 
 Plus a manifest fact: a task source governed by the shared capture policy must
-declare no action-item *create* anchor, so a new extraction writer cannot be
-registered without failing this guard.
+declare no action-item *create* anchor, so a proposing source cannot acquire a
+writer without failing this guard.
+
+Which conversations propose and which write is behaviour, not text, and is
+covered by tests/unit/test_backend_candidate_capture.py — it runs both paths
+through ``_save_action_items``.
 
 Stdlib-only, no network. Wired from .github/checks-manifest.yaml.
 """
@@ -31,7 +33,6 @@ ROOT = Path(__file__).resolve().parents[2]
 
 CAPTURE_POLICY = ROOT / "backend/utils/task_intelligence/capture_policy.py"
 CONVERSATION_CAPTURE = ROOT / "backend/utils/task_intelligence/conversation_capture.py"
-PROCESS_CONVERSATION = ROOT / "backend/utils/conversations/process_conversation.py"
 SCREEN_ADAPTER = ROOT / "desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskExtraction/ScreenCandidateAdapter.swift"
 SOURCES_MANIFEST = ROOT / "backend/config/task_intelligence_sources_v1.json"
 
@@ -40,7 +41,6 @@ SOURCES_MANIFEST = ROOT / "backend/config/task_intelligence_sources_v1.json"
 FORBIDDEN_PY_OUTCOME = re.compile(r"""CapturePolicyResult\(\s*['"](auto_accept_silent|create_direct)['"]""")
 FORBIDDEN_SWIFT_OUTCOME = re.compile(r"return\s+\.(autoAcceptSilent|createDirect)\b")
 ACCEPT_CALL = re.compile(r"candidate_service\.accept_candidate\s*\(")
-WRITER_CALL = re.compile(r"action_items_db\.create_action_items?(?:_batch)?\s*\(")
 SWIFT_ACCEPT_DECL = re.compile(r"^\s*func\s+accept\s*\(", re.MULTILINE)
 CAPTURE_POLICY_CLASS = "shared_capture_policy"
 CREATE_SYMBOLS = ("action_items_db.create_action_item", "action_items_db.create_action_items_batch")
@@ -51,15 +51,6 @@ def _read(path: Path, failures: list[str]) -> str:
         failures.append(f"missing required source: {path.relative_to(ROOT)}")
         return ""
     return path.read_text(encoding="utf-8")
-
-
-def _save_action_items_body(text: str) -> str:
-    """Return the body of _save_action_items, or '' when absent."""
-    start = text.find("def _save_action_items(")
-    if start == -1:
-        return ""
-    nxt = re.search(r"\n(?=(?:def |@|# ))", text[start + 1 :])
-    return text[start : start + 1 + nxt.start()] if nxt else text[start:]
 
 
 def _client_protocol_body(text: str) -> str:
@@ -89,13 +80,6 @@ def main() -> int:
         failures.append(
             "conversation_capture.py calls accept_candidate. INV-TASK-2: extraction proposes; "
             "only an explicit user gesture accepts."
-        )
-
-    body = _save_action_items_body(_read(PROCESS_CONVERSATION, failures))
-    if WRITER_CALL.search(body):
-        failures.append(
-            "_save_action_items calls an action-item writer. INV-TASK-2: conversation extraction "
-            "writes Candidates only."
         )
 
     swift = _read(SCREEN_ADAPTER, failures)
@@ -134,7 +118,7 @@ def main() -> int:
             print(f"- {failure}")
         return 1
 
-    print("check_task_capture_authority: INV-TASK-2 holds (automatic capture proposes only)")
+    print("check_task_capture_authority: INV-TASK-2 holds (proposing capture never accepts or creates)")
     return 0
 
 

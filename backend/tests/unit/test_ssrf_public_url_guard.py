@@ -177,7 +177,7 @@ def test_pin_ipv4_preserves_path_and_query():
 def test_pin_ipv6_brackets_host_and_preserves_port():
     pinned_url, extra = pin_to_resolved_ip('http://example.com:8080/x', '2001:db8::1')
     assert pinned_url == 'http://[2001:db8::1]:8080/x'
-    assert extra['headers']['Host'] == 'example.com'
+    assert extra['headers']['Host'] == 'example.com:8080'
     assert extra['extensions']['sni_hostname'] == 'example.com'
 
 

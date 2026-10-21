@@ -9,8 +9,6 @@ were called directly on the loop, blocking every concurrent request during chat 
 - ``execute_agentic_chat_stream`` (the default chat path) ran ``get_user_timezone``,
   ``_get_agentic_qa_prompt`` (Firestore reads + a LangSmith prompt fetch), and
   ``load_app_tools`` inline before its first ``await``.
-- ``_has_file_context`` ran ``retrieve_is_file_question`` — a ~1-2s synchronous LLM
-  inference — inline on the file-chat path.
 
 They now run via ``run_blocking(...)``. These tests drive the production async functions
 through the executor seam and assert each helper executes on a non-loop thread, so a
@@ -62,35 +60,13 @@ async def _collect_agentic_chunks(producer, callback_data=None):
         stack.enter_context(patch.object(agentic, '_convert_tools', lambda _core, _app: ([], {})))
         stack.enter_context(patch.object(agentic, '_messages_to_anthropic', lambda _messages: []))
         stack.enter_context(patch.object(agentic, '_inject_current_datetime', lambda messages, _block: messages))
-        stack.enter_context(patch.object(agentic, '_run_anthropic_agent_stream', producer))
+        stack.enter_context(patch.object(agentic, '_run_openai_agent_stream', producer))
         return [
             chunk
             async for chunk in agentic.execute_agentic_chat_stream(
                 'uid1', [], app=None, callback_data=callback_data, chat_session=None
             )
         ]
-
-
-async def test_has_file_context_offloads_llm_call_off_loop():
-    """_has_file_context must run the synchronous retrieve_is_file_question in an executor,
-    not inline on the event loop."""
-    loop_thread = threading.current_thread()
-    ran_on = {}
-
-    def fake_is_file_question(question):
-        ran_on['thread'] = threading.current_thread()
-        return True
-
-    # File attached earlier in the session + a text-only follow-up → the retrieve path.
-    session = SimpleNamespace(id="s1", file_ids=["f1"])
-    last = SimpleNamespace(files_id=None, text="what's in the document I shared?")
-
-    with patch.object(graph, 'retrieve_is_file_question', fake_is_file_question):
-        result = await graph._has_file_context(last, session)
-
-    assert result is True
-    assert 'thread' in ran_on, "retrieve_is_file_question was not called"
-    assert ran_on['thread'] is not loop_thread, "retrieve_is_file_question must run off the event-loop thread"
 
 
 def _location_context_consent(*, status=LocationContextConsentStatus.granted, expires_at=None):
@@ -212,11 +188,9 @@ async def test_chat_router_passes_metadata_to_every_interactive_path():
 
     with patch.object(graph, '_current_prompt_metadata', AsyncMock(return_value=(metadata, 'UTC'))):
         persona = SimpleNamespace(id='persona1', is_a_persona=lambda: True)
-        with patch.object(graph, 'execute_persona_chat_stream', stream):
+        with patch.object(graph, 'execute_agentic_chat_stream', stream):
             assert [chunk async for chunk in graph.execute_chat_stream('uid1', [message], app=persona)] == [None]
-        with patch.object(graph, '_has_file_context', AsyncMock(return_value=True)), patch.object(
-            graph, '_execute_file_chat_stream', stream
-        ):
+        with patch.object(graph, 'execute_agentic_chat_stream', stream):
             assert [chunk async for chunk in graph.execute_chat_stream('uid1', [message], chat_session=session)] == [
                 None
             ]
@@ -224,6 +198,127 @@ async def test_chat_router_passes_metadata_to_every_interactive_path():
             assert [chunk async for chunk in graph.execute_chat_stream('uid1', [message])] == [None]
 
     assert seen == [metadata, metadata, metadata]
+
+
+async def test_text_followup_with_old_session_attachment_keeps_agentic_history_and_tools():
+    session = SimpleNamespace(id='session1', file_ids=['old-image'])
+    messages = [
+        SimpleNamespace(sender='human', text='My favorite food is hot pot', files_id=[]),
+        SimpleNamespace(sender='ai', text='I saved that.', files_id=[]),
+        SimpleNamespace(sender='human', text='Where did you save this?', files_id=[]),
+    ]
+    received = {}
+
+    async def agentic(_uid, passed_messages, _app, **kwargs):
+        received['messages'] = passed_messages
+        received['session'] = kwargs['chat_session']
+        yield 'data: I saved your preference.'
+        yield None
+
+    with patch.object(graph, '_current_prompt_metadata', AsyncMock(return_value=('<dt/>', 'UTC'))), patch.object(
+        graph, 'execute_agentic_chat_stream', agentic
+    ):
+        chunks = [chunk async for chunk in graph.execute_chat_stream('uid1', messages, chat_session=session)]
+
+    assert chunks == ['data: I saved your preference.', None]
+    assert received == {'messages': messages, 'session': session}
+
+
+def test_agentic_history_marks_only_the_turn_that_carried_files():
+    messages = [
+        SimpleNamespace(sender='human', text='Look at this', files_id=['old-image']),
+        SimpleNamespace(sender='human', text='Where did you save this?', files_id=[]),
+    ]
+    history = agentic._messages_to_anthropic(messages)
+    assert 'old-image' in history[0]['content']
+    assert history[1]['content'] == 'Where did you save this?'
+
+
+def test_bare_continue_gets_resume_contract_without_mutating_stored_history():
+    history = [
+        {'role': 'user', 'content': 'Write a detailed report in several parts.'},
+        {'role': 'assistant', 'content': 'Part one ends with an unfinished'},
+        {'role': 'user', 'content': 'Continue.'},
+    ]
+
+    marked = agentic._with_continuation_contract(history)
+
+    assert marked is not history
+    assert marked[:-1] == history[:-1]
+    assert marked[-1]['content'].startswith('Continue.\n\n<continuation_request>')
+    assert 'exact endpoint' in marked[-1]['content']
+    assert 'Do not restart' in marked[-1]['content']
+    assert history[-1]['content'] == 'Continue.'
+
+
+def test_continuation_contract_is_limited_to_unambiguous_followups_after_an_answer():
+    prior_answer = {'role': 'assistant', 'content': 'Deployment has three stages.'}
+
+    for text in (
+        'please continue',
+        'continue please',
+        'Continue,',
+        'Resume where you left off!',
+        'resume please',
+        'go on',
+        'next part',
+    ):
+        marked = agentic._with_continuation_contract([prior_answer, {'role': 'user', 'content': text}])
+        assert '<continuation_request>' in marked[-1]['content']
+
+    specific = [prior_answer, {'role': 'user', 'content': 'Continue explaining the deployment rollback.'}]
+    assert agentic._with_continuation_contract(specific) is specific
+
+    no_answer = [{'role': 'user', 'content': 'Continue'}]
+    assert agentic._with_continuation_contract(no_answer) is no_answer
+
+
+async def test_bare_continue_reaches_chat_agent_with_resume_contract():
+    messages = [
+        SimpleNamespace(sender='human', text='Write a detailed report in several parts.', files_id=[]),
+        SimpleNamespace(sender='ai', text='Part one ends here.', files_id=[]),
+        SimpleNamespace(sender='human', text='Continue', files_id=[]),
+    ]
+    received = {}
+
+    async def capture_agent_stream(
+        _system_prompt,
+        provider_messages,
+        _tool_schemas,
+        _tool_registry,
+        callback,
+        _full_response,
+        _safety_guard,
+        _configurable,
+    ):
+        received['messages'] = provider_messages
+        await callback.end()
+
+    with patch.object(agentic, 'get_user_timezone', return_value='UTC'), patch.object(
+        agentic, '_get_agentic_qa_prompt', return_value='SYSTEM'
+    ), patch.object(agentic, 'load_app_tools', return_value=[]), patch.object(
+        agentic, '_convert_tools', return_value=([], {})
+    ), patch.object(
+        agentic, '_run_openai_agent_stream', new=capture_agent_stream
+    ):
+        chunks = [
+            chunk
+            async for chunk in agentic.execute_agentic_chat_stream(
+                'uid1',
+                messages,
+                app=None,
+                callback_data={},
+                chat_session=None,
+                current_datetime_block='<current_datetime>now</current_datetime>',
+                tz='UTC',
+            )
+        ]
+
+    assert chunks == [f'think: {agentic.AGENT_STREAM_SETUP_PROGRESS}', None]
+    assert received['messages'][-2]['content'] == 'Part one ends here.'
+    assert received['messages'][-1]['content'].startswith(
+        '<current_datetime>now</current_datetime>\n\nContinue\n\n<continuation_request>'
+    )
 
 
 async def test_chat_router_and_agentic_share_one_setup_deadline():
@@ -250,32 +345,6 @@ async def test_chat_router_and_agentic_share_one_setup_deadline():
     assert before + 20.0 <= deadline <= after + 25.0
 
 
-async def test_file_route_classification_shares_router_setup_deadline():
-    """Existing session file IDs must classify under the remaining shared setup budget."""
-    message = SimpleNamespace(sender='human', text='what is in the file?', files_id=[])
-    session = SimpleNamespace(id='s1', file_ids=['f1'])
-    agentic_calls = []
-
-    async def slow_file_context(*_args, **_kwargs):
-        await asyncio.sleep(0.05)
-        return False
-
-    async def capture_agentic(*_args, **_kwargs):
-        agentic_calls.append(1)
-        yield None
-
-    with patch.object(graph, '_current_prompt_metadata', AsyncMock(return_value=('<dt/>', 'UTC'))), patch.object(
-        graph, '_has_file_context', slow_file_context
-    ), patch.object(graph, 'execute_agentic_chat_stream', capture_agentic), patch.object(
-        graph, 'AGENT_STREAM_SETUP_TIMEOUT_SECONDS', 0.01
-    ):
-        chunks = [chunk async for chunk in graph.execute_chat_stream('uid1', [message], chat_session=session)]
-
-    assert not agentic_calls, 'stalled file classification must not fall through to agentic after setup budget'
-    assert chunks[0].startswith('error: ')
-    assert chunks[-1] is None
-
-
 def test_prompt_metadata_is_prepended_to_the_live_user_turn():
     assert graph._with_prompt_metadata('question', '<current_datetime>now</current_datetime>') == (
         '<current_datetime>now</current_datetime>\n\nquestion'
@@ -295,108 +364,42 @@ def _file_chat_tool_for_stream_test():
     tool = object.__new__(chat_file.FileChatTool)
     tool.uid = 'uid1'
     tool.chat_session_id = 'session1'
-    tool.thread_id = None
-    tool.assistant_id = None
     return tool
 
 
-async def test_file_assistants_stream_runs_setup_and_sync_callbacks_off_loop():
-    """The real non-vision file stream keeps the loop responsive and bridges worker callbacks."""
+async def test_file_completions_stream_keeps_the_loop_responsive():
+    """PDF file chat streams on the event loop via Chat Completions, not a worker Assistants run."""
     loop = asyncio.get_running_loop()
-    loop_thread = threading.current_thread()
     ask_started = asyncio.Event()
-    worker_finished = asyncio.Event()
-    release_worker = threading.Event()
-    worker_threads = {}
+    release_stream = asyncio.Event()
     tool = _file_chat_tool_for_stream_test()
     callback = agentic.AsyncStreamingCallback()
 
-    def fake_ensure(self):
-        worker_threads['ensure'] = threading.current_thread()
-        self.thread_id = 'thread1'
-        self.assistant_id = 'assistant1'
-
-    def blocking_ask(self, _uid, _question, _file_ids, _thread_id, _assistant_id, stream_callback):
-        worker_threads['ask'] = threading.current_thread()
-        loop.call_soon_threadsafe(ask_started.set)
+    async def hanging_then_answer(self, _question, _files, stream_callback):
+        ask_started.set()
         try:
-            assert release_worker.wait(timeout=0.5), 'test did not release the blocking Assistants stream'
-            stream_callback.put_data_nowait('file answer')
+            await asyncio.wait_for(release_stream.wait(), timeout=0.5)
+            await stream_callback.put_data('file answer')
             return 'file answer'
         finally:
-            stream_callback.end_nowait()
-            loop.call_soon_threadsafe(worker_finished.set)
+            await stream_callback.end()
 
     with patch.object(chat_file.chat_db, 'get_chat_files_desc', lambda *_args, **_kwargs: []), patch.object(
-        chat_file.FileChatTool, '_ensure_thread_and_assistant', fake_ensure
-    ), patch.object(chat_file.FileChatTool, 'ask_stream', blocking_ask):
+        chat_file.FileChatTool, '_ask_files_stream', hanging_then_answer
+    ):
         task = asyncio.create_task(tool.process_chat_with_file_stream('summarize', ['file1'], callback))
         await asyncio.wait_for(ask_started.wait(), timeout=0.5)
 
         health_check_ran = asyncio.Event()
         loop.call_soon(health_check_ran.set)
         await asyncio.wait_for(health_check_ran.wait(), timeout=0.1)
-        assert not task.done(), 'the worker-side stream should still be pending while the loop serves other work'
+        assert not task.done(), 'the completions stream should still be pending while the loop serves other work'
 
-        release_worker.set()
+        release_stream.set()
         assert await task == 'file answer'
-        await asyncio.wait_for(worker_finished.wait(), timeout=0.5)
 
-    assert worker_threads['ensure'] is not loop_thread
-    assert worker_threads['ask'] is not loop_thread
     assert await callback.queue.get() == 'data: file answer'
     assert await callback.queue.get() is None
-
-
-async def test_file_stream_deadline_fires_while_sync_assistants_stream_is_off_loop():
-    """A blocked Assistants iterator yields the terminal SSE error instead of freezing its deadline."""
-    loop = asyncio.get_running_loop()
-    ask_started = asyncio.Event()
-    worker_finished = asyncio.Event()
-    release_worker = threading.Event()
-    tool = _file_chat_tool_for_stream_test()
-
-    def fake_ensure(self):
-        self.thread_id = 'thread1'
-        self.assistant_id = 'assistant1'
-
-    def blocking_ask(self, _uid, _question, _file_ids, _thread_id, _assistant_id, stream_callback):
-        loop.call_soon_threadsafe(ask_started.set)
-        try:
-            assert release_worker.wait(timeout=0.5), 'test did not release the blocking Assistants stream'
-            return ''
-        finally:
-            stream_callback.end_nowait()
-            loop.call_soon_threadsafe(worker_finished.set)
-
-    message = SimpleNamespace(files_id=['file1'], text='summarize')
-    session = SimpleNamespace(id='session1', file_ids=['file1'])
-    callback_data = {}
-
-    async def collect_file_stream():
-        return [
-            chunk
-            async for chunk in graph._execute_file_chat_stream('uid1', [message], session, callback_data=callback_data)
-        ]
-
-    with patch.object(graph, 'FileChatTool', lambda *_args: tool), patch.object(
-        chat_file.chat_db, 'get_chat_files_desc', lambda *_args, **_kwargs: []
-    ), patch.object(chat_file.FileChatTool, '_ensure_thread_and_assistant', fake_ensure), patch.object(
-        chat_file.FileChatTool, 'ask_stream', blocking_ask
-    ), patch.object(
-        graph, 'AGENT_STREAM_FIRST_EVENT_TIMEOUT_SECONDS', 0.01
-    ), patch.object(
-        agentic, 'AGENT_STREAM_CANCEL_GRACE_SECONDS', 0.05
-    ):
-        stream_task = asyncio.create_task(collect_file_stream())
-        await asyncio.wait_for(ask_started.wait(), timeout=0.5)
-        chunks = await asyncio.wait_for(stream_task, timeout=0.5)
-        release_worker.set()
-        await asyncio.wait_for(worker_finished.wait(), timeout=0.5)
-
-    assert chunks == [f'error: {agentic.AGENT_STREAM_TIMEOUT_MESSAGE}', None]
-    assert callback_data['error'] == 'stream_failure'
-    assert callback_data['answer'] == agentic.AGENT_STREAM_TIMEOUT_MESSAGE
 
 
 async def test_agentic_setup_reads_run_off_loop():
@@ -437,7 +440,7 @@ async def test_agentic_setup_reads_run_off_loop():
     ), patch.object(
         agentic, '_inject_current_datetime', lambda anthropic_messages, block: []
     ), patch.object(
-        agentic, '_run_anthropic_agent_stream', fake_agent_stream
+        agentic, '_run_openai_agent_stream', fake_agent_stream
     ):
         chunks = []
         async for chunk in agentic.execute_agentic_chat_stream(
@@ -652,7 +655,7 @@ async def test_agentic_setup_budget_does_not_consume_first_event_deadline():
     ), patch.object(
         agentic, '_inject_current_datetime', lambda messages, _block: messages
     ), patch.object(
-        agentic, '_run_anthropic_agent_stream', quick_producer
+        agentic, '_run_openai_agent_stream', quick_producer
     ), patch.object(
         agentic, 'AGENT_STREAM_SETUP_TIMEOUT_SECONDS', 2.0
     ), patch.object(
@@ -673,27 +676,48 @@ async def test_agentic_setup_budget_does_not_consume_first_event_deadline():
     assert 'error' not in callback_data
 
 
-async def test_file_chat_gateway_block_is_typed_not_generic_canned():
-    """Under gateway feature mode, file chat must fail with a typed user-safe message."""
-    from utils.llm.gateway_client import GatewayDirectModelSurfaceBlocked
+async def test_router_error_state_does_not_leak_into_the_next_defaulted_call():
+    """A call that omits ``callback_data`` must not inherit the previous call's error.
 
-    message = SimpleNamespace(files_id=['file1'], text='summarize')
-    session = SimpleNamespace(id='session1', file_ids=['file1'])
-    callback_data = {}
+    ``execute_chat_stream`` used to declare ``callback_data: Dict[str, Any] = {}``. That dict
+    is built once, when the module is imported, so every caller that omits the argument shares
+    one object -- and the router's setup-timeout branch writes ``error`` / ``route`` / ``answer``
+    into it. The first timeout therefore poisoned the default for the rest of the process: a
+    later defaulted call reached the agentic path already carrying a stale ``answer``, and
+    ``execute_graph_chat``-shaped readers (``callback_data.get('answer')``) would return the
+    previous request's text. Same defect and same cure as #12094 on
+    ``execute_agent_chat_stream``; this is its sibling in the router.
 
-    def blocked_tool(_uid, _session_id):
-        raise GatewayDirectModelSurfaceBlocked('file_chat.openai_files_assistants_vision')
+    Driven through the production seam rather than by inspecting ``__defaults__``: call once so
+    the timeout branch fires, then call again -- both omitting ``callback_data`` -- and read the
+    dict the second call actually hands to the agentic stream.
+    """
+    message = SimpleNamespace(sender='human', text='hello', files_id=[])
+    seen = {}
 
-    with patch.object(graph, 'FileChatTool', blocked_tool):
-        chunks = [
-            chunk
-            async for chunk in graph._execute_file_chat_stream(
-                'uid-gateway', [message], session, callback_data=callback_data
-            )
-        ]
+    async def capture_agentic(*_args, **kwargs):
+        seen['callback_data'] = kwargs.get('callback_data')
+        yield None
 
-    assert chunks == [f'error: {agentic.FILE_CHAT_GATEWAY_BLOCKED_MESSAGE}', None]
-    assert callback_data['error'] == 'file_chat_gateway_blocked'
-    assert callback_data['answer'] == agentic.FILE_CHAT_GATEWAY_BLOCKED_MESSAGE
-    assert callback_data['route'] == 'file'
-    assert agentic.AGENT_STREAM_FAILURE_MESSAGE not in (chunks[0] or '')
+    async def stalled_metadata(*_args, **_kwargs):
+        await asyncio.sleep(0.05)
+        return ('<dt/>', 'UTC')
+
+    # 1. A defaulted call whose router setup times out, writing error state.
+    with patch.object(graph, '_current_prompt_metadata', stalled_metadata), patch.object(
+        graph, 'AGENT_STREAM_SETUP_TIMEOUT_SECONDS', 0.01
+    ):
+        chunks = [chunk async for chunk in graph.execute_chat_stream('uid1', [message])]
+    assert chunks[0].startswith('error: '), 'test needs the setup-timeout branch to have fired'
+
+    # 2. A second defaulted call that completes normally.
+    with patch.object(graph, '_current_prompt_metadata', AsyncMock(return_value=('<dt/>', 'UTC'))), patch.object(
+        graph, 'execute_agentic_chat_stream', capture_agentic
+    ):
+        assert [chunk async for chunk in graph.execute_chat_stream('uid1', [message])] == [None]
+
+    carried = seen.get('callback_data')
+    assert carried is not None, 'agentic path must receive a callback_data mapping'
+    assert 'error' not in carried, f'stale router error leaked into the next call: {carried}'
+    assert 'answer' not in carried, f'stale router answer leaked into the next call: {carried}'
+    assert carried == {}

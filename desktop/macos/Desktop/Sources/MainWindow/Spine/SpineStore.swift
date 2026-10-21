@@ -29,8 +29,12 @@ final class SpineStore: ObservableObject {
   @Published private(set) var matchCount = 0
 
   /// Which kind the shell's chips have soloed. Read by the stream to decide whether attached rows
-  /// still indent.
+  /// still tuck in close under their conversation.
   private(set) var kind: SpineKind = .everything
+
+  /// The calendar the days were composed in. Recap lookups must format `SpineDay.id` with this
+  /// calendar; a UTC formatter here is the class of bug that silently misses every date.
+  let calendar: Calendar
 
   /// The request last applied, so an identical push costs nothing.
   private var request = QueryShellRequest()
@@ -79,8 +83,6 @@ final class SpineStore: ObservableObject {
   /// milliseconds — and far too short to read as a delay on a list that is already on screen.
   private static let recomposeCoalescingWindow: Duration = .milliseconds(300)
   private var recomposeTask: Task<Void, Never>?
-
-  private let calendar: Calendar
 
   init(calendar: Calendar = .current) {
     self.calendar = calendar

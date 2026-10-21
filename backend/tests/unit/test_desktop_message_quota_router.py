@@ -65,6 +65,16 @@ def _make_client():
     llm_usage_db.record_chat_quota_question = MagicMock(return_value=True)
     users_db = _install_module('database.users')
     users_db.set_chat_message_rating_score = MagicMock()
+    # The feedback ledger is a real Firestore module; importing it here would
+    # pull google.cloud.firestore_v1 into a process that stubs it, and the
+    # protobuf descriptor pool rejects the duplicate registration.
+    feedback_utils = _install_module('utils.feedback', ModuleType('utils.feedback'))
+    feedback_utils.record_chat_message_feedback = MagicMock()
+    # Same class of dependency: product_metrics reaches Firestore through its
+    # account_cutover import chain, so stub it before the router import.
+    product_metrics = _install_module('utils.product_metrics', ModuleType('utils.product_metrics'))
+    product_metrics.extract_app_build = MagicMock(return_value='unknown')
+    product_metrics.record_product_event = MagicMock()
 
     chat_utils = _install_module('utils.chat', ModuleType('utils.chat'))
     chat_utils.initial_message_util = MagicMock()

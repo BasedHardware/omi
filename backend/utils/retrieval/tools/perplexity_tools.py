@@ -2,18 +2,69 @@
 Tools for performing web searches using Perplexity AI.
 """
 
+from utils.generated_compute import require_current_generated_compute, generated_compute_configured
+
 import logging
+import re
 from typing import Any, cast
 
 import httpx
 from langchain_core.tools import tool  # type: ignore[reportUnknownVariableType]  # langchain @tool decorator partially typed
+from utils.executors import db_executor, run_blocking
 from utils.http_client import get_webhook_client
 from utils.llm.gateway_client import feature_auto_lane_id, get_llm_gateway_base_url, llm_gateway_headers
 from utils.log_sanitizer import sanitize
+from utils.model_text import UNTRUSTED_LEGEND, count_header, generated, truncation_note, untrusted_block
 
 logger = logging.getLogger(__name__)
 
 # Legacy QoS coverage anchor: web search maps to get_model('web_search') in model_config.
+
+# Fixed primary-source retrieval appendix shared by this tool's hop-2 retry and
+# the desktop managed web-search lane. sonar-pro stops at the vendor marketing
+# site for product-history questions unless the query itself asks for primary
+# sources (live RCA 2026-09-02: a rewritten query and a hop-2 retry both found
+# the founder interviews; context size, search_type, and reasoning models did
+# not move the retrieved URL set).
+WEB_SEARCH_RETRIEVAL_APPENDIX = (
+    "\n\nGo beyond the product's own marketing and documentation pages: search for primary sources such as "
+    'founder interviews, podcast and conference appearances, Product Hunt launch posts and their comment '
+    'threads, launch postmortems, and press coverage. Try likely alternative spellings and former names of '
+    'the product (for example, a spoken "Whisper Flow" may be written "Wispr Flow") and search the founders\' '
+    'names alongside the product. Report concrete dates and timelines from those primary sources.'
+)
+
+# Thin-miss markers on the model text of an otherwise HTTP 200 answer: the
+# retrieval landed only on the vendor marketing site and produced no primary
+# citation. Cheap phrase heuristic by design — a false positive costs one extra
+# bounded sonar call, and hop count is capped at two either way.
+_THIN_MISS_PHRASES = (
+    "couldn't find",
+    "couldn’t find",
+    'could not find',
+    "can't find",
+    "can’t find",
+    'cannot find',
+    'unable to find',
+    "couldn't locate",
+    'could not locate',
+    'no public information',
+    'no public info',
+    'no publicly available',
+    'not publicly available',
+    'no public timeline',
+    'no exact timeline',
+    'no specific timeline',
+    'no official timeline',
+    'no public details',
+    'no specific information',
+    'no detailed information',
+    'limited public information',
+    'no primary source',
+    'site focuses on',
+    'marketing site',
+)
+_THIN_MISS_PATTERN = re.compile('|'.join(re.escape(phrase) for phrase in _THIN_MISS_PHRASES), re.IGNORECASE)
 
 
 @tool
@@ -53,18 +104,7 @@ async def perplexity_web_search_tool(
 
 async def _perplexity_gateway_search(query: str) -> str:
     try:
-        response = await get_webhook_client().post(
-            f'{get_llm_gateway_base_url()}/v1/chat/completions',
-            json={
-                "model": feature_auto_lane_id('web_search'),
-                "messages": [{"role": "user", "content": query}],
-                "temperature": 0.2,
-                "max_tokens": 1000,
-            },
-            headers=llm_gateway_headers(),
-            timeout=30.0,
-        )
-
+        response = await _post_gateway_chat_completion(query)
         if response.status_code != 200:
             logger.error(
                 f"❌ perplexity_web_search_tool - Gateway API error: {response.status_code} - "
@@ -72,7 +112,27 @@ async def _perplexity_gateway_search(query: str) -> str:
             )
             return f"Error: Perplexity API returned status {response.status_code}. Please try again later."
 
-        return _format_perplexity_response(response.json())
+        result = response.json()
+        formatted = _format_perplexity_response(result)
+        if not _looks_like_thin_miss(_model_text(result)):
+            return formatted
+
+        # Hop-2: the first retrieval stopped at the vendor marketing site.
+        # Exactly one retry with the primary-source appendix — never a third
+        # call, and any hop-2 failure keeps the first formatted answer.
+        logger.info("🔁 perplexity_web_search_tool - Thin result, retrying with primary-source query rewrite")
+        try:
+            retry_response = await _post_gateway_chat_completion(query + WEB_SEARCH_RETRIEVAL_APPENDIX)
+            if retry_response.status_code != 200:
+                logger.error(
+                    f"❌ perplexity_web_search_tool - Hop-2 Gateway API error: {retry_response.status_code} - "
+                    f"{sanitize(retry_response.text[:200])}"
+                )
+                return formatted
+            return _format_perplexity_response(retry_response.json())
+        except Exception as e:
+            logger.warning(f"🔁 perplexity_web_search_tool - Hop-2 failed ({type(e).__name__}), returning first result")
+            return formatted
     except httpx.TimeoutException:
         logger.warning("❌ perplexity_web_search_tool - Gateway timeout")
         return "Error: Web search is temporarily unavailable. Please try again later."
@@ -83,30 +143,79 @@ async def _perplexity_gateway_search(query: str) -> str:
         logger.error("⚠️ perplexity_web_search_tool - Unexpected response format")
         return "Error: Unexpected response format from Perplexity API"
     except Exception as e:
-        logger.error(f"❌ perplexity_web_search_tool - Unexpected error: {e}")
-        return f"Error: An unexpected error occurred while searching: {str(e)}"
+        logger.error(f"❌ perplexity_web_search_tool - Unexpected error: {e}", exc_info=True)
+        return "Error: An unexpected error occurred while searching. Please try again later."
+
+
+async def _post_gateway_chat_completion(content: str) -> httpx.Response:
+    if generated_compute_configured():
+        await run_blocking(db_executor, require_current_generated_compute, 'web_search', allow_byok=False)
+    return await get_webhook_client().post(
+        f'{get_llm_gateway_base_url()}/v1/chat/completions',
+        json={
+            "model": feature_auto_lane_id('web_search'),
+            "messages": [{"role": "user", "content": content}],
+            "temperature": 0.2,
+            "max_tokens": 1000,
+        },
+        headers=llm_gateway_headers(),
+        timeout=30.0,
+    )
+
+
+def _looks_like_thin_miss(text: str) -> bool:
+    return bool(text) and _THIN_MISS_PATTERN.search(text) is not None
+
+
+def _model_text(result: dict[str, Any]) -> str:
+    try:
+        content: Any = result['choices'][0]['message']['content']
+    except (KeyError, IndexError, TypeError):
+        return ''
+    return content if isinstance(content, str) else ''
 
 
 def _format_perplexity_response(result: dict[str, Any]) -> str:
     if 'choices' in result and len(result['choices']) > 0:
         content: Any = result['choices'][0]['message']['content']
-        formatted_result = f"Web Search Results:\n\n{content}\n\n"
+        answer = untrusted_block('Perplexity answer', generated('Web search answer', str(content)))
+        formatted_result = f"Web Search Results:\n\n{answer}\n\n"
 
         citations = _extract_citations(result)
+        displayed_citations: list[str] = []
         if citations:
-            formatted_result += "\nSources:\n"
+            formatted_result += (
+                "\n"
+                + count_header(
+                    "Web citations",
+                    shown=min(len(citations), 10),
+                    total=len(citations),
+                    order="citation order",
+                )
+                + "\n"
+            )
             for i, citation in enumerate(citations[:10], 1):
                 if isinstance(citation, dict):
                     cit = cast(dict[str, Any], citation)
                     url = cit.get('url', cit.get('citation', ''))
                     title = cit.get('title', '')
+                    citation_text = f"{i}. {title}" if title else f"{i}. Web citation"
                     if url:
-                        formatted_result += f"{i}. {title}\n   {url}\n"
+                        citation_text += f"\n   {url}"
+                    displayed_citations.append(citation_text)
                 elif isinstance(citation, str):
-                    formatted_result += f"{i}. {citation}\n"
+                    displayed_citations.append(f"{i}. {citation}")
+            formatted_result += "\n".join(untrusted_block("web citation", citation) for citation in displayed_citations)
+            if len(citations) > 10:
+                formatted_result += "\n" + truncation_note(
+                    shown=10,
+                    total=len(citations),
+                    unit="web citations",
+                    how_to_get_more="Ask for a narrower search query to inspect additional citations.",
+                )
 
         logger.info("✅ perplexity_web_search_tool - Successfully retrieved search results")
-        return formatted_result.strip()
+        return f"{formatted_result.strip()}\n\n{UNTRUSTED_LEGEND}"
 
     logger.error(f"⚠️ perplexity_web_search_tool - Unexpected response format: {sanitize(str(result)[:200])}")
     return "Error: Unexpected response format from Perplexity API"

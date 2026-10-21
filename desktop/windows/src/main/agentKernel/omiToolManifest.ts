@@ -669,7 +669,7 @@ const swiftToolSurfacePatches: Record<string, OmiToolSurfacePatch> = {
         ['x', 'y']
       )
     }
-  }
+  },
 }
 
 const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
@@ -1453,7 +1453,7 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
       'Requires local Rewind database; raw screenshot pixels still require separate approval.'
     ],
     adapters: piLocalApiAndScreenContextStdio()
-  }
+  },
 ]
 
 export const swiftToolManifest: OmiToolManifestEntry[] = finalizeManifestEntries(

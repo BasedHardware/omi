@@ -45,15 +45,6 @@ def _make_chat_client():
     harness.wire_common_stubs(harness.install_module)
     harness.install_module('models.app')
 
-    # The gateway telemetry chat_file imports is out of scope here (and pulls the real gateway
-    # client stack in); keep it inert so the upload path itself is what runs.
-    gateway_client = harness.install_module('utils.llm.gateway_client', ModuleType('utils.llm.gateway_client'))
-    gateway_client.should_route_features_through_gateway = MagicMock(return_value=False)
-    gateway_obs = harness.install_module(
-        'utils.llm.gateway_observability', ModuleType('utils.llm.gateway_observability')
-    )
-    gateway_obs.record_direct_exception_surface = MagicMock()
-
     # wire_common_stubs replaces chat_file with a MagicMock; this suite needs the real module,
     # because the defect lives in its PIL and provider error handling.
     harness.load_real_module('utils.other.chat_file', BACKEND_DIR / 'utils' / 'other' / 'chat_file.py')
@@ -131,16 +122,70 @@ def test_supported_file_still_uploads(chat_client, monkeypatch):
     """The guard must not swallow the happy path."""
     client, module = chat_client
     chat_file = sys.modules['utils.other.chat_file']
-    monkeypatch.setattr(
-        chat_file.openai,
-        'files',
-        SimpleNamespace(create=lambda **_kwargs: SimpleNamespace(id='file-1', filename='note.txt')),
-    )
+    created: dict[str, object] = {}
 
-    response = client.post('/v2/files', files={'files': ('note.txt', b'hello', 'text/plain')})
+    def _create(*, file, purpose):
+        created['purpose'] = purpose
+        return SimpleNamespace(id='file-1', filename='note.pdf')
+
+    monkeypatch.setattr(chat_file.openai, 'files', SimpleNamespace(create=_create))
+
+    response = client.post('/v2/files', files={'files': ('note.pdf', b'%PDF-1.1\n%%EOF\n', 'application/pdf')})
 
     assert response.status_code == 200
     assert response.json()[0]['openai_file_id'] == 'file-1'
+    assert created['purpose'] == 'user_data'
+    module.chat_db.add_multi_files.assert_called_once()
+
+
+@pytest.mark.parametrize('route', ['/v2/files', '/v1/files'])
+def test_unsupported_archive_is_rejected_at_attach(chat_client, route, monkeypatch):
+    client, module = chat_client
+    chat_file = sys.modules['utils.other.chat_file']
+    monkeypatch.setattr(chat_file.openai, 'files', SimpleNamespace(create=_unreachable))
+
+    response = client.post(route, files={'files': ('archive.zip', b'PK\x03\x04', 'application/zip')})
+
+    assert response.status_code == 400
+    assert 'zip' in response.json()['detail']
+    module.chat_db.add_multi_files.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    'filename,mime,payload',
+    [
+        ('note.txt', 'text/plain', b'hello'),
+        ('readme.md', 'text/markdown', b'# hi'),
+        ('table.csv', 'text/csv', b'a,b\n1,2\n'),
+        (
+            'brief.docx',
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            b'PK\x03\x04docx',
+        ),
+        (
+            'sheet.xlsx',
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            b'PK\x03\x04xlsx',
+        ),
+    ],
+)
+@pytest.mark.parametrize('route', ['/v2/files', '/v1/files'])
+def test_documented_documents_upload_as_user_data(chat_client, monkeypatch, route, filename, mime, payload):
+    client, module = chat_client
+    chat_file = sys.modules['utils.other.chat_file']
+    created: dict[str, object] = {}
+
+    def _create(*, file, purpose):
+        created['purpose'] = purpose
+        return SimpleNamespace(id='file-doc', filename=filename)
+
+    monkeypatch.setattr(chat_file.openai, 'files', SimpleNamespace(create=_create))
+
+    response = client.post(route, files={'files': (filename, payload, mime)})
+
+    assert response.status_code == 200
+    assert response.json()[0]['openai_file_id'] == 'file-doc'
+    assert created['purpose'] == 'user_data'
     module.chat_db.add_multi_files.assert_called_once()
 
 

@@ -129,16 +129,66 @@ struct ChatTerminalTargetRegistry<T> {
 /// the session.
 @MainActor
 final class ChatJournalWriteCoordinator {
+  typealias Operation = @MainActor @Sendable () async -> Void
+
   private var updateTasks: [String: Task<Void, Never>] = [:]
   private var terminalizingMessageIDs: Set<String> = []
+  /// The newest coalescing write per message that has not started yet.
+  ///
+  /// A streaming flush schedules a journal write of the whole row every
+  /// ~35 ms. Each used to queue its own task behind the one before it, so
+  /// whenever a kernel round trip took longer than a flush the queue grew for
+  /// the rest of the answer — one task and one full-message snapshot per
+  /// flush, every one of them written, every one of them echoed back into the
+  /// transcript — and drained only after the answer had already settled. A
+  /// snapshot of a row that is still streaming is superseded by the next one,
+  /// so a coalescing write replaces the write waiting here instead of queueing
+  /// behind it: at most one in flight and one waiting, and the waiting one
+  /// always carries the newest row.
+  private var pendingCoalescedOperations: [String: PendingCoalescedWrite] = [:]
+
+  /// The slot one queued coalescing task will drain. Later coalescing writes
+  /// replace what it holds until the task runs — or until a durable write is
+  /// queued behind it, which seals the slot so the snapshot written before
+  /// that durable write is the one that was current when it was scheduled.
+  private final class PendingCoalescedWrite {
+    var operation: Operation?
+    init(_ operation: @escaping Operation) { self.operation = operation }
+  }
 
   @discardableResult
   func schedule(
     messageID: String,
     supersededByTerminalization: Bool = true,
-    operation: @escaping @MainActor @Sendable () async -> Void
+    coalescing: Bool = false,
+    operation: @escaping Operation
   ) -> Bool {
     if supersededByTerminalization, terminalizingMessageIDs.contains(messageID) { return false }
+    guard coalescing else {
+      // A durable mutation keeps its place in line, so the snapshot queued
+      // before it may no longer be replaced by one that arrives after it.
+      pendingCoalescedOperations.removeValue(forKey: messageID)
+      enqueue(messageID: messageID, operation)
+      return true
+    }
+    if let pending = pendingCoalescedOperations[messageID] {
+      pending.operation = operation
+      return true
+    }
+    let pending = PendingCoalescedWrite(operation)
+    pendingCoalescedOperations[messageID] = pending
+    enqueue(messageID: messageID) { [weak self] in
+      if let self, self.pendingCoalescedOperations[messageID] === pending {
+        self.pendingCoalescedOperations.removeValue(forKey: messageID)
+      }
+      guard let latest = pending.operation else { return }
+      pending.operation = nil
+      await latest()
+    }
+    return true
+  }
+
+  private func enqueue(messageID: String, _ operation: @escaping Operation) {
     let previous = updateTasks[messageID]
     let task = Task { @MainActor in
       _ = await previous?.value
@@ -146,7 +196,6 @@ final class ChatJournalWriteCoordinator {
       await operation()
     }
     updateTasks[messageID] = task
-    return true
   }
 
   func beginTerminalization(messageID: String) async -> Bool {
@@ -166,6 +215,8 @@ final class ChatJournalWriteCoordinator {
   func cancelAll() {
     for task in updateTasks.values { task.cancel() }
     updateTasks.removeAll()
+    for pending in pendingCoalescedOperations.values { pending.operation = nil }
+    pendingCoalescedOperations.removeAll()
     terminalizingMessageIDs.removeAll()
   }
 }

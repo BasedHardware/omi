@@ -47,6 +47,9 @@ def users():
             delete_collection_recursive=MagicMock(),
             document_id_from_seed=lambda seed: "id",
             get_firestore_client=MagicMock(),
+            get_data_plane_firestore_client=MagicMock(),
+            get_customer_firestore_client=MagicMock(),
+            data_plane_db=MagicMock(),
         ),
         "database.firestore_cache": _module(
             "database.firestore_cache", CachePolicy=MagicMock(), get_or_fetch=MagicMock(), invalidate=MagicMock()
@@ -118,3 +121,51 @@ def test_doc_present_but_field_absent_returns_default(users, fn, field, default,
     func = getattr(users, fn)
     with patch.object(users, "db", _db_for({"unrelated": 1})):
         assert func("uid") == default
+
+
+def test_is_exists_user_uses_a_projected_read_and_shared_read_boundary(users):
+    snapshot = MagicMock()
+    snapshot.exists = True
+    snapshot.to_dict.return_value = {"uid": "uid"}
+    client = MagicMock()
+    user_ref = client.collection.return_value.document.return_value
+    user_ref.get.return_value = snapshot
+
+    with patch.object(users, "db", client):
+        assert users.is_exists_user("uid") is True
+
+    user_ref.get.assert_called_once_with(field_paths=["uid"])
+
+
+def test_is_exists_user_returns_false_for_a_missing_snapshot(users):
+    snapshot = MagicMock()
+    snapshot.exists = False
+    client = MagicMock()
+    client.collection.return_value.document.return_value.get.return_value = snapshot
+
+    with patch.object(users, "db", client):
+        assert users.is_exists_user("uid") is False
+
+
+class _AdmissionSnapshot:
+    def __init__(self, payload):
+        self._payload = payload
+        self.exists = payload is not None
+
+    def to_dict(self):
+        return dict(self._payload or {})
+
+
+def test_completed_onboarding_admission_returns_none_not_false(users):
+    """Regression: the completed-onboarding early exit returned ``False`` from a
+    function typed ``Optional[str]``. The listen runtime derives admission via
+    ``is not None``, so ``False`` admitted users who had already COMPLETED
+    onboarding — fabricating onboarding provenance on ordinary conversations."""
+
+    client = MagicMock()
+    user_snapshot = _AdmissionSnapshot({"onboarding": {"completed": True}})
+    client.collection.return_value.document.return_value.get.return_value = user_snapshot
+
+    result = users.get_backend_onboarding_admission("uid1", firestore_client=client)
+
+    assert result is None

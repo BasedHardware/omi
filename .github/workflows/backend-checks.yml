@@ -10,6 +10,17 @@ concurrency:
   group: backend-checks-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
+env:
+  # Abort a stalled git HTTP transfer instead of hanging. Hosted-runner fetches
+  # from github.com intermittently stop receiving data for 7-10 minutes before
+  # the connection resets (Backend Hermetic E2E run 39435458398 spent 498 s in
+  # "Checkout code" and hit its 10-minute cap). With these set, git aborts any
+  # transfer that stays under 1 KB/s for 60 s, and actions/checkout retries the
+  # fetch (its built-in 3 attempts); a healthy depth-1 fetch takes ~20 s.
+  # Applies to every git network call in the workflow, including script steps.
+  GIT_HTTP_LOW_SPEED_LIMIT: "1000"
+  GIT_HTTP_LOW_SPEED_TIME: "60"
+
 jobs:
   changes:
     name: Detect Changes
@@ -46,6 +57,10 @@ jobs:
       - name: Set up uv
         uses: astral-sh/setup-uv@ecd24dd710f2fb0dca1693a67af11fc4a5c5ec84
         with:
+          # Exact version resolves locally; an unset version means "latest",
+          # which fetches the astral-sh/versions manifest and has hard-failed
+          # CI on that network call. Matches backend/Dockerfile UV_VERSION.
+          version: "0.11.13"
           enable-cache: true
           cache-dependency-glob: backend/pylock*.toml
 

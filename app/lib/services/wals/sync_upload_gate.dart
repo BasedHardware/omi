@@ -4,18 +4,32 @@ import 'dart:io';
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/http/shared.dart';
+import 'package:omi/backend/schema/geolocation.dart';
 import 'package:omi/services/account_cutover/account_cutover_runtime.dart';
+import 'package:omi/services/telemetry/client_telemetry.dart';
+import 'package:omi/services/telemetry/client_telemetry_flags.dart';
 import 'package:omi/services/wals/sync_rate_limit_reconciliation.dart';
 import 'package:omi/services/wals/sync_rate_limiter.dart';
+import 'package:omi/services/wals/sync_job_poller.dart';
+import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/mutex.dart';
+import 'package:uuid/uuid.dart';
 
 typedef SyncFilesUploader = Future<UploadFilesResult> Function(
   List<File> files, {
   UploadProgressCallback? onUploadProgress,
   String? conversationId,
+  String? captureEvidence,
+  String? recordingSessionId,
+  double? audioStartSeconds,
+  double? audioEndSeconds,
   bool claimLiveCapture,
+  Geolocation? geolocation,
 });
 typedef FairUseStatusLoader = Future<Map<String, dynamic>?> Function();
+typedef UploadTelemetryEmitter = void Function(String eventName, Map<String, dynamic> properties);
+typedef UploadAttemptIdFactory = String Function();
+typedef UploadClock = DateTime Function();
 
 /// Account-global admission gate for every `/v2/sync-local-files` upload.
 ///
@@ -28,14 +42,23 @@ class SyncUploadGate {
     required SyncRateLimiter limiter,
     required SyncFilesUploader uploader,
     required FairUseStatusLoader fairUseStatusLoader,
+    UploadTelemetryEmitter? telemetryEmitter,
+    UploadAttemptIdFactory? attemptIdFactory,
+    UploadClock? clock,
+    ClientTelemetry? clientTelemetry,
   })  : _limiter = limiter,
         _uploader = uploader,
-        _fairUseStatusLoader = fairUseStatusLoader;
+        _fairUseStatusLoader = fairUseStatusLoader,
+        _telemetryEmitter = telemetryEmitter,
+        _attemptIdFactory = attemptIdFactory ?? _defaultAttemptId,
+        _clock = clock ?? DateTime.now,
+        _clientTelemetry = clientTelemetry;
 
   static final SyncUploadGate instance = SyncUploadGate(
     limiter: SyncRateLimiter.instance,
     uploader: uploadLocalFilesV2,
     fairUseStatusLoader: getFairUseStatus,
+    telemetryEmitter: _emitProductionTelemetry,
   );
 
   static const int _statusRetryCooldownSeconds = 60;
@@ -43,8 +66,52 @@ class SyncUploadGate {
   final SyncRateLimiter _limiter;
   final SyncFilesUploader _uploader;
   final FairUseStatusLoader _fairUseStatusLoader;
+  final UploadTelemetryEmitter? _telemetryEmitter;
+  final UploadAttemptIdFactory _attemptIdFactory;
+  final UploadClock _clock;
+  final ClientTelemetry? _clientTelemetry;
   final Mutex _uploadMutex = Mutex();
   Future<bool>? _reconciliation;
+
+  static String _defaultAttemptId() => const Uuid().v4();
+
+  static void _emitProductionTelemetry(String eventName, Map<String, dynamic> properties) {
+    if (ClientTelemetryFlags.posthogRetirementEnabled) return;
+    final analytics = AnalyticsManager();
+    switch (eventName) {
+      case RecordingUploadTelemetry.startedEvent:
+        analytics.recordingUploadStarted(
+          attemptId: properties['upload_attempt_id'] as String,
+          recordingId: properties['recording_id'] as String?,
+          fileCount: properties['file_count'] as int,
+          totalBytes: properties['total_bytes'] as int,
+          claimsLiveCapture: properties['claims_live_capture'] as bool,
+        );
+        return;
+      case RecordingUploadTelemetry.completedEvent:
+        analytics.recordingUploadCompleted(
+          attemptId: properties['upload_attempt_id'] as String,
+          recordingId: properties['recording_id'] as String?,
+          fileCount: properties['file_count'] as int,
+          totalBytes: properties['total_bytes'] as int,
+          claimsLiveCapture: properties['claims_live_capture'] as bool,
+          durationSeconds: properties['duration_seconds'] as double,
+          result: properties['result'] as String,
+        );
+        return;
+      case RecordingUploadTelemetry.failedEvent:
+        analytics.recordingUploadFailed(
+          attemptId: properties['upload_attempt_id'] as String,
+          recordingId: properties['recording_id'] as String?,
+          fileCount: properties['file_count'] as int,
+          totalBytes: properties['total_bytes'] as int,
+          claimsLiveCapture: properties['claims_live_capture'] as bool,
+          durationSeconds: properties['duration_seconds'] as double,
+          failureClass: properties['failure_class'] as String,
+        );
+        return;
+    }
+  }
 
   /// Reconciles a previously confirmed fair-use restriction with the server.
   /// Returns whether uploads are currently allowed after all cooldowns.
@@ -92,7 +159,13 @@ class SyncUploadGate {
     List<File> files, {
     UploadProgressCallback? onUploadProgress,
     String? conversationId,
+    String? captureEvidence,
+    String? recordingSessionId,
+    double? audioStartSeconds,
+    double? audioEndSeconds,
     bool claimLiveCapture = false,
+    Geolocation? geolocation,
+    String telemetrySource = 'unknown',
   }) async {
     await _uploadMutex.acquire();
     try {
@@ -108,26 +181,112 @@ class SyncUploadGate {
       }
       if (!allowed) {
         throw SyncRateLimitedException(
-          kind: _limiter.reason == RateLimitReason.backendBusy
-              ? SyncRateLimitKind.backendCapacity
-              : SyncRateLimitKind.fairUse,
+          kind: switch (_limiter.reason) {
+            RateLimitReason.backendBusy => SyncRateLimitKind.backendCapacity,
+            RateLimitReason.edgeThrottle => SyncRateLimitKind.edgeThrottle,
+            _ => SyncRateLimitKind.fairUse,
+          },
           retryAfterSeconds: _limiter.activeRetryAfterSeconds,
         );
       }
+
+      final attemptId = _attemptIdFactory();
+      final startedAt = _clock();
+      final totalBytes = await RecordingUploadTelemetry.totalBytes(files);
+      _emitTelemetry(
+        RecordingUploadTelemetry.startedEvent,
+        RecordingUploadTelemetry.startedPayload(
+          attemptId: attemptId,
+          recordingId: conversationId,
+          fileCount: files.length,
+          totalBytes: totalBytes,
+          claimsLiveCapture: claimLiveCapture,
+        ),
+      );
+      _mirrorUpload(
+        attemptId: attemptId,
+        phase: 'started',
+        source: telemetrySource,
+        occurredAt: startedAt,
+      );
 
       try {
         final result = await _uploader(
           files,
           onUploadProgress: onUploadProgress,
           conversationId: conversationId,
+          captureEvidence: captureEvidence,
+          recordingSessionId: recordingSessionId,
+          audioStartSeconds: audioStartSeconds,
+          audioEndSeconds: audioEndSeconds,
           claimLiveCapture: claimLiveCapture,
+          geolocation: geolocation,
         );
-        _limiter.clear();
+        SyncJobPoller.instance.validateOwner(result);
+        if (_limiter.reason != RateLimitReason.edgeThrottle) _limiter.clear();
+        final queued = result.isQueued;
+        _emitTelemetry(
+          RecordingUploadTelemetry.completedEvent,
+          RecordingUploadTelemetry.completedPayload(
+            attemptId: attemptId,
+            recordingId: conversationId,
+            fileCount: files.length,
+            totalBytes: totalBytes,
+            claimsLiveCapture: claimLiveCapture,
+            durationSeconds: _durationSeconds(startedAt),
+            result: queued ? 'accepted' : 'completed',
+          ),
+        );
+        _mirrorUpload(
+          attemptId: attemptId,
+          phase: queued ? 'accepted' : 'completed',
+          source: telemetrySource,
+          occurredAt: _clock(),
+          latencyMs: _latencyMs(startedAt),
+          httpStatus: queued ? 202 : 200,
+          jobId: result.jobId,
+        );
         return result;
       } on SyncRateLimitedException catch (error) {
         _limiter.markLimited(
           retryAfterSeconds: error.retryAfterSeconds,
-          reason: error.kind == SyncRateLimitKind.fairUse ? RateLimitReason.fairUse : RateLimitReason.backendBusy,
+          reason: error.kind.cooldownReason,
+        );
+        // Paced historical recovery is the server asking us to wait. The WAL
+        // stays pending and retries on Retry-After; it is not a user-visible
+        // upload failure. Fair-use and unscoped 429s still are.
+        if (!isPacedBackfillReasonCode(error.reasonCode) && error.reasonCode != 'sync_content_in_progress') {
+          _recordUploadFailure(
+            error,
+            attemptId: attemptId,
+            recordingId: conversationId,
+            fileCount: files.length,
+            totalBytes: totalBytes,
+            claimsLiveCapture: claimLiveCapture,
+            startedAt: startedAt,
+            telemetrySource: telemetrySource,
+          );
+        } else {
+          _mirrorUpload(
+            attemptId: attemptId,
+            phase: 'deferred',
+            source: telemetrySource,
+            occurredAt: _clock(),
+            latencyMs: _latencyMs(startedAt),
+            httpStatus: error.statusCode ?? 429,
+          );
+        }
+        rethrow;
+      } catch (error) {
+        _recordUploadFailure(
+          error,
+          attemptId: attemptId,
+          recordingId: conversationId,
+          fileCount: files.length,
+          totalBytes: totalBytes,
+          claimsLiveCapture: claimLiveCapture,
+          startedAt: startedAt,
+          telemetrySource: telemetrySource,
         );
         rethrow;
       }
@@ -135,6 +294,218 @@ class SyncUploadGate {
       _uploadMutex.release();
     }
   }
+
+  double _durationSeconds(DateTime startedAt) {
+    final milliseconds = _latencyMs(startedAt) ?? 0;
+    return milliseconds / 1000.0;
+  }
+
+  int? _latencyMs(DateTime startedAt) {
+    // sol blocker: wall-clock deltas fabricate latency across NTP steps. The
+    // gate records latency only when it is within the credible window
+    // (ClientTelemetrySchema.maxLatencyMs); otherwise omit it.
+    final milliseconds = _clock().difference(startedAt).inMilliseconds;
+    if (milliseconds < 0 || milliseconds > 86400000) return null;
+    return milliseconds;
+  }
+
+  void _recordUploadFailure(
+    Object error, {
+    required String attemptId,
+    required String? recordingId,
+    required int fileCount,
+    required int totalBytes,
+    required bool claimsLiveCapture,
+    required DateTime startedAt,
+    required String telemetrySource,
+  }) {
+    _emitTelemetry(
+      RecordingUploadTelemetry.failedEvent,
+      RecordingUploadTelemetry.failedPayload(
+        attemptId: attemptId,
+        recordingId: recordingId,
+        fileCount: fileCount,
+        totalBytes: totalBytes,
+        claimsLiveCapture: claimsLiveCapture,
+        durationSeconds: _durationSeconds(startedAt),
+        failureClass: RecordingUploadTelemetry.failureClass(error),
+      ),
+    );
+    _mirrorUpload(
+      attemptId: attemptId,
+      phase: 'failed',
+      source: telemetrySource,
+      occurredAt: _clock(),
+      latencyMs: _latencyMs(startedAt),
+      httpStatus: error is SyncUploadHttpException
+          ? error.statusCode
+          : error is SyncRateLimitedException
+              ? error.statusCode
+              : null,
+      failureClass: RecordingUploadTelemetry.failureClass(error),
+    );
+  }
+
+  void _mirrorUpload({
+    required String attemptId,
+    required String phase,
+    required String source,
+    required DateTime occurredAt,
+    int? latencyMs,
+    int? httpStatus,
+    String? failureClass,
+    String? jobId,
+  }) {
+    try {
+      (_clientTelemetry ?? ClientTelemetry.instance).observeUpload(
+        UploadMirror(
+          attemptId: attemptId,
+          phase: phase,
+          source: source,
+          occurredAt: occurredAt,
+          latencyMs: latencyMs,
+          httpStatus: httpStatus,
+          failureClass: failureClass,
+          jobId: jobId,
+        ),
+      );
+    } catch (_) {
+      // Replacement telemetry must never change upload admission or retry.
+    }
+  }
+
+  void _emitTelemetry(String eventName, Map<String, dynamic> properties) {
+    try {
+      _telemetryEmitter?.call(eventName, properties);
+    } catch (_) {
+      // Analytics must never change upload success, failure, or retry behavior.
+    }
+  }
+}
+
+class RecordingUploadTelemetry {
+  static const String startedEvent = 'Recording Upload Started';
+  static const String completedEvent = 'Recording Upload Completed';
+  static const String failedEvent = 'Recording Upload Failed';
+
+  static Future<int> totalBytes(List<File> files) async {
+    var bytes = 0;
+    for (final file in files) {
+      try {
+        bytes += await file.length();
+      } catch (_) {
+        // A missing/unreadable file will be classified by the authoritative
+        // uploader. Telemetry remains best-effort and content-free.
+      }
+    }
+    return bytes;
+  }
+
+  static Map<String, dynamic> startedPayload({
+    required String attemptId,
+    required String? recordingId,
+    required int fileCount,
+    required int totalBytes,
+    required bool claimsLiveCapture,
+  }) =>
+      _basePayload(
+        attemptId: attemptId,
+        recordingId: recordingId,
+        fileCount: fileCount,
+        totalBytes: totalBytes,
+        claimsLiveCapture: claimsLiveCapture,
+      );
+
+  static Map<String, dynamic> completedPayload({
+    required String attemptId,
+    required String? recordingId,
+    required int fileCount,
+    required int totalBytes,
+    required bool claimsLiveCapture,
+    required double durationSeconds,
+    required String result,
+  }) =>
+      {
+        ..._basePayload(
+          attemptId: attemptId,
+          recordingId: recordingId,
+          fileCount: fileCount,
+          totalBytes: totalBytes,
+          claimsLiveCapture: claimsLiveCapture,
+        ),
+        'duration_seconds': durationSeconds < 0 ? 0.0 : durationSeconds,
+        'result': result == 'completed' ? 'completed' : 'accepted',
+      };
+
+  static Map<String, dynamic> failedPayload({
+    required String attemptId,
+    required String? recordingId,
+    required int fileCount,
+    required int totalBytes,
+    required bool claimsLiveCapture,
+    required double durationSeconds,
+    required String failureClass,
+  }) =>
+      {
+        ..._basePayload(
+          attemptId: attemptId,
+          recordingId: recordingId,
+          fileCount: fileCount,
+          totalBytes: totalBytes,
+          claimsLiveCapture: claimsLiveCapture,
+        ),
+        'duration_seconds': durationSeconds < 0 ? 0.0 : durationSeconds,
+        'failure_class': _failureClasses.contains(failureClass) ? failureClass : 'unknown',
+      };
+
+  static const Set<String> _failureClasses = {
+    'rate_limited',
+    'timeout',
+    'network',
+    'authentication',
+    'server',
+    'unknown',
+  };
+
+  static String failureClass(Object error) {
+    // Expected backfill backoff never reaches here: the gate does not mint
+    // Recording Upload Failed for [isPacedBackfillReasonCode]. An unscoped
+    // rate limit is still `rate_limited`.
+    if (error is SyncRateLimitedException) return 'rate_limited';
+    if (error is TimeoutException) return 'timeout';
+    if (error is SocketException) return 'network';
+    if (error is SyncUploadHttpException) {
+      if (error.statusCode == 401 || error.statusCode == 403) return 'authentication';
+      if (error.statusCode >= 500) return 'server';
+    }
+    final normalized = error.toString().toLowerCase();
+    if (normalized.contains('401') || normalized.contains('403') || normalized.contains('unauthorized')) {
+      return 'authentication';
+    }
+    if (normalized.contains('500') ||
+        normalized.contains('502') ||
+        normalized.contains('503') ||
+        normalized.contains('504')) {
+      return 'server';
+    }
+    return 'unknown';
+  }
+
+  static Map<String, dynamic> _basePayload({
+    required String attemptId,
+    required String? recordingId,
+    required int fileCount,
+    required int totalBytes,
+    required bool claimsLiveCapture,
+  }) =>
+      {
+        'upload_attempt_id': attemptId,
+        if (recordingId != null && recordingId.isNotEmpty) 'recording_id': recordingId,
+        'file_count': fileCount < 0 ? 0 : fileCount,
+        'total_bytes': totalBytes < 0 ? 0 : totalBytes,
+        'claims_live_capture': claimsLiveCapture,
+        'upload_source': 'offline_audio_queue',
+      };
 }
 
 /// Raised when the server cutover control quarantines legacy offline uploads.

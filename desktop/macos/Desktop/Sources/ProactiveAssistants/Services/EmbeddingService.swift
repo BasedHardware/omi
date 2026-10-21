@@ -57,13 +57,43 @@ actor EmbeddingService {
     )
   }
 
-  /// Get Firebase auth header for proxy requests
-  private func authHeader() async throws -> String {
-    let authService = await MainActor.run { AuthService.shared }
-    return try await authService.getAuthHeader()
+  private let acquireAuth: @Sendable (RuntimeOwnerAuthorizationSnapshot) async throws -> String
+  private let dispatch: @Sendable (URLRequest) async throws -> (Data, URLResponse)
+  private let cloudEmbeddingAllowed: @Sendable (RuntimeOwnerAuthorizationSnapshot) -> Bool
+  private let ownerIsCurrent: @Sendable (RuntimeOwnerAuthorizationSnapshot) -> Bool
+
+  init(
+    cloudEmbeddingAllowed: @escaping @Sendable (RuntimeOwnerAuthorizationSnapshot) -> Bool = {
+      ScreenCloudEntitlementService.shared.allowsCloud($0)
+    },
+    acquireAuth: @escaping @Sendable (RuntimeOwnerAuthorizationSnapshot) async throws -> String = { authorization in
+      let auth = await MainActor.run { AuthService.shared }
+      return try await auth.getAuthHeader(expectedUserId: authorization.ownerID)
+    },
+    dispatch: @escaping @Sendable (URLRequest) async throws -> (Data, URLResponse) = {
+      try await URLSession.shared.data(for: $0)
+    },
+    ownerIsCurrent: @escaping @Sendable (RuntimeOwnerAuthorizationSnapshot) -> Bool = {
+      RuntimeOwnerIdentity.isAuthorizationCurrent($0)
+    }
+  ) {
+    self.cloudEmbeddingAllowed = cloudEmbeddingAllowed
+    self.acquireAuth = acquireAuth
+    self.dispatch = dispatch
+    self.ownerIsCurrent = ownerIsCurrent
   }
 
-  private init() {}
+  private func requireAuthority(_ authorization: RuntimeOwnerAuthorizationSnapshot) throws {
+    try Task.checkCancellation()
+    try ScreenTaskWorkAuthority.require()
+    if !ownerIsCurrent(authorization) { throw ScreenTaskFailure.ownerRevoked }
+  }
+
+  private func requireCloudEntitlement(_ authorization: RuntimeOwnerAuthorizationSnapshot) throws {
+    guard cloudEmbeddingAllowed(authorization) else {
+      throw EmbeddingError.serverError(statusCode: 402, body: "plan_gated")
+    }
+  }
 
   // MARK: - Embedding API
 
@@ -71,7 +101,11 @@ actor EmbeddingService {
   /// - Parameters:
   ///   - text: Text to embed
   ///   - taskType: Optional Gemini task type (e.g. "RETRIEVAL_DOCUMENT", "RETRIEVAL_QUERY")
-  func embed(text: String, taskType: String? = nil) async throws -> [Float] {
+  func embed(text: String, taskType: String? = nil, authorization: RuntimeOwnerAuthorizationSnapshot)
+    async throws -> [Float]
+  {
+    try requireAuthority(authorization)
+    try requireCloudEntitlement(authorization)
     guard !Self.proxyBaseURL.isEmpty else {
       throw EmbeddingError.missingAPIKey
     }
@@ -93,11 +127,16 @@ actor EmbeddingService {
     var request = URLRequest(url: url)
     request.httpMethod = "POST"
     request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-    request.setValue(try await authHeader(), forHTTPHeaderField: "Authorization")
+    let header = try await acquireAuth(authorization)
+    try requireAuthority(authorization)
+    request.applyGeminiProxyHeaders(lane: .embedding, workload: .maintenance, authorization: header)
     request.timeoutInterval = 30
     request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
 
-    let (data, response) = try await URLSession.shared.data(for: request)
+    try requireCloudEntitlement(authorization)
+    try requireAuthority(authorization)
+    let (data, response) = try await dispatch(request)
+    try requireAuthority(authorization)
 
     // Check HTTP status before parsing — non-JSON error bodies (HTML 401/500)
     // cause "data couldn't be read" errors that mask the real problem.
@@ -121,7 +160,11 @@ actor EmbeddingService {
   /// - Parameters:
   ///   - texts: Texts to embed
   ///   - taskType: Optional Gemini task type (e.g. "RETRIEVAL_DOCUMENT", "RETRIEVAL_QUERY")
-  func embedBatch(texts: [String], taskType: String? = nil) async throws -> [[Float]] {
+  func embedBatch(texts: [String], taskType: String? = nil, authorization: RuntimeOwnerAuthorizationSnapshot)
+    async throws -> [[Float]]
+  {
+    try requireAuthority(authorization)
+    try requireCloudEntitlement(authorization)
     guard !Self.proxyBaseURL.isEmpty else {
       throw EmbeddingError.missingAPIKey
     }
@@ -148,11 +191,17 @@ actor EmbeddingService {
     var request = URLRequest(url: url)
     request.httpMethod = "POST"
     request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-    request.setValue(try await authHeader(), forHTTPHeaderField: "Authorization")
+    let header = try await acquireAuth(authorization)
+    try requireAuthority(authorization)
+    request.applyGeminiProxyHeaders(
+      lane: .embedding, workload: .maintenance, authorization: header)
     request.timeoutInterval = 60
     request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
 
-    let (data, response) = try await URLSession.shared.data(for: request)
+    try requireCloudEntitlement(authorization)
+    try requireAuthority(authorization)
+    let (data, response) = try await dispatch(request)
+    try requireAuthority(authorization)
 
     // Check HTTP status before parsing — non-JSON error bodies (HTML 401/500)
     // cause "data couldn't be read" errors that mask the real problem.
@@ -283,7 +332,7 @@ actor EmbeddingService {
         if items.isEmpty { break }
 
         let texts = items.map { $0.description }
-        let embeddings = try await embedBatch(texts: texts)
+        let embeddings = try await embedBatch(texts: texts, authorization: authorizationSnapshot)
 
         for (i, embedding) in embeddings.enumerated() where i < items.count {
           guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return }
@@ -311,15 +360,21 @@ actor EmbeddingService {
       while true {
         guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return }
         let items = try await StagedTaskStorage.shared.getItemsMissingEmbeddings(limit: batchSize)
+        guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return }
         if items.isEmpty { break }
 
         let texts = items.map { $0.description }
-        let embeddings = try await embedBatch(texts: texts)
+        let embeddings = try await embedBatch(texts: texts, authorization: authorizationSnapshot)
 
         for (i, embedding) in embeddings.enumerated() where i < items.count {
           let item = items[i]
           let data = floatsToData(embedding)
-          try await StagedTaskStorage.shared.updateEmbedding(id: item.id, embedding: data)
+          try await StagedTaskStorage.shared.updateEmbedding(
+            id: item.id, embedding: data,
+            authorization: LocalMutationAuthorization {
+              RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot)
+            })
+          guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return }
           addToIndex(source: .staged, id: item.id, embedding: embedding)
         }
 

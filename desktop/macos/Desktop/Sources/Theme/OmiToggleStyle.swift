@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// The app's switch: a white knob on a tinted track when on, on a neutral track when off.
+/// The app's switch: a white knob on an ink track when on, on a grey track when off.
 ///
 /// This is the shape a macOS switch has always had, and it is now the shape this one has too. The
 /// dark-palette version inverted it — a **white** track when on with a near-black knob — which was
@@ -17,6 +17,13 @@ import SwiftUI
 /// graphical object you must see to read the control's state. `systemGray` puts it at 3.28:1. The
 /// knob is the part that says *which way the switch is thrown*, so it is not allowed to be a
 /// low-contrast detail carried by its drop shadow alone.
+///
+/// The on track is `Ink.primary`, not `Ink.accent`. A blue on-state was the loudest colour in
+/// Settings, which a page of switches turned into a column of blue; the rest of the glass states
+/// selection in neutral ink, and `Ink.accent` is reserved for the one actionable link on a surface.
+/// On the light glass (`InkGlass.appearance` pins `.aqua`) the ink is near-black, so the white knob
+/// reads at far above 3:1, and ink against `systemGray` keeps on and off distinct by luminance
+/// rather than by hue.
 package struct OmiToggleStyle: ToggleStyle {
   private let width: CGFloat = 36
   private let height: CGFloat = 20
@@ -32,7 +39,7 @@ package struct OmiToggleStyle: ToggleStyle {
   /// `nonisolated` for the same reason `InkButtonStyle.minHeight` is: `ToggleStyle` is `@MainActor`,
   /// and these are values a caller may want to read rather than draw with.
   nonisolated package static func trackFill(isOn: Bool) -> Color {
-    isOn ? Ink.accent : Color(nsColor: .systemGray)
+    isOn ? Ink.primary : Color(nsColor: .systemGray)
   }
 
   /// The knob, in both states. White is not decoration here — it is what makes the track's state
@@ -46,21 +53,39 @@ package struct OmiToggleStyle: ToggleStyle {
     // so the style must not expand beyond the switch itself.
     HStack(spacing: OmiSpacing.sm) {
       configuration.label
-      ZStack(alignment: configuration.isOn ? .trailing : .leading) {
-        Capsule()
-          .fill(Self.trackFill(isOn: configuration.isOn))
-          .frame(width: width, height: height)
-
-        Circle()
-          .fill(Self.knobFill)
-          .frame(width: thumbSize, height: thumbSize)
-          .padding(thumbPadding)
-          .shadow(color: .black.opacity(0.15), radius: 1, x: 0, y: 1)
-      }
-      .omiAnimation(.easeInOut(duration: 0.15), value: configuration.isOn)
-      .onTapGesture {
+      // A custom `ToggleStyle` owns activation on macOS — the framework adds no click handling
+      // around `makeBody` — and the previous bare tap gesture had two measured defects: it drops
+      // any click whose up-event drifts a few points from its down-event (the user must click
+      // again until a clean tap lands), and it produces no accessibility element at all, so the
+      // app's switches were invisible to assistive tech. A `Button` fires on up-inside-bounds
+      // however far the pointer wandered within the control and is an accessibility element by
+      // construction. `OmiToggleStyleActivationTests` holds both claims.
+      //
+      // The label is a fallback only: every call site passes an empty title, and a style cannot
+      // read a string out of `configuration.label`, so per-feature names belong at the call sites.
+      Button {
         configuration.isOn.toggle()
+      } label: {
+        ZStack(alignment: configuration.isOn ? .trailing : .leading) {
+          Capsule()
+            .fill(Self.trackFill(isOn: configuration.isOn))
+            .frame(width: width, height: height)
+
+          Circle()
+            .fill(Self.knobFill)
+            .frame(width: thumbSize, height: thumbSize)
+            .padding(thumbPadding)
+            .shadow(color: .black.opacity(0.15), radius: 1, x: 0, y: 1)
+        }
       }
+      .buttonStyle(.plain)
+      .accessibilityLabel("Switch")
+      // The element exists (a Button is one by construction) but a switch must also *say* its
+      // state: without a value, assistive tech finds the control yet cannot tell on from off.
+      // The label stays the generic fallback — a style cannot read a string out of
+      // `configuration.label`, and per-feature names belong at the call sites.
+      .accessibilityValue(configuration.isOn ? "on" : "off")
+      .omiAnimation(.easeInOut(duration: 0.15), value: configuration.isOn)
     }
   }
 }

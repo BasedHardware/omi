@@ -159,4 +159,5 @@ describe('pimono:setSession — control-plane owner wiring', () => {
     expect(verify).not.toHaveBeenCalled()
     expect(controlPlaneOwnerId()).toBe(DEFAULT_LOCAL_OWNER_ID)
   })
+
 })

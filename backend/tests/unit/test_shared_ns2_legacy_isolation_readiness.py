@@ -1,6 +1,8 @@
 import importlib.util
 import sys
 import types
+
+import pytest
 from pathlib import Path
 
 REQUIRED_ARTIFACT_TERMS = [
@@ -9,7 +11,6 @@ REQUIRED_ARTIFACT_TERMS = [
     "mutation_allowed",
     "ns2",
     "find_similar_memories",
-    "search_memories_by_vector",
     "memory_schema_version",
     "memory_tier",
     "source_state",
@@ -86,19 +87,25 @@ def test_shared_ns2_readiness_execute_is_read_only_and_requires_provider_config(
     assert ready_artifact["mutation_allowed"] is False
 
 
-def test_legacy_memory_vector_filters_exclude_memory_schema_records():
+@pytest.fixture
+def legacy_vector_module(monkeypatch):
     pinecone_module = types.ModuleType("pinecone")
     setattr(pinecone_module, "Pinecone", lambda api_key: None)
-    sys.modules["pinecone"] = pinecone_module
+    monkeypatch.setitem(sys.modules, "pinecone", pinecone_module)
     clients_module = types.ModuleType("utils.llm.clients")
     setattr(clients_module, "embeddings", object())
-    sys.modules["utils.llm.clients"] = clients_module
+    monkeypatch.setitem(sys.modules, "utils.llm.clients", clients_module)
     projection_repair_module = types.ModuleType("database.projection_repair")
     setattr(projection_repair_module, "projection_metadata_for_fact", lambda memory, source_commit_id=None: {})
-    sys.modules["database.projection_repair"] = projection_repair_module
+    monkeypatch.setitem(sys.modules, "database.projection_repair", projection_repair_module)
 
     from database import vector_db
 
+    return vector_db
+
+
+def test_legacy_memory_vector_filters_exclude_memory_schema_records(legacy_vector_module):
+    vector_db = legacy_vector_module
     legacy_filter = vector_db.build_legacy_memory_vector_filter("uid-1")
     subject_filter = vector_db.build_legacy_memory_vector_filter("uid-1", subject_entity_id="person-1")
 
@@ -109,7 +116,7 @@ def test_legacy_memory_vector_filters_exclude_memory_schema_records():
 
 def test_shared_ns2_docs_reference_non_claims_and_remaining_provider_proof():
     root = Path(__file__).resolve().parents[2].parent
-    evidence_markers = (root / "docs" / "operational" / "memory_readiness_evidence_markers.md").read_text()
+    evidence_markers = (root / "backend" / "docs" / "operational" / "memory_readiness_evidence_markers.md").read_text()
 
     assert "shared_ns2_legacy_isolation_readiness.py" in evidence_markers
     assert "legacy queries exclude memory schema" in evidence_markers

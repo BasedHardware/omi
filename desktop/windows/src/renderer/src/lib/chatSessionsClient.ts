@@ -26,6 +26,10 @@ import type {
   UpdateChatSessionRequest
 } from '../../../shared/chatSessions'
 import type { ChatAttachment } from '../../../shared/types'
+import {
+  parseChatEvidenceFromRecord,
+  type ChatEvidenceReferenceEnvelope
+} from '../../../shared/knowledgeLedger'
 
 // ---------------------------------------------------------------------------
 // Wire shapes (snake_case, exactly as the backend serializes them). Kept local:
@@ -58,6 +62,8 @@ interface MessageWire {
   app_id?: string | null
   chat_session_id?: string | null
   rating?: number | null
+  /** Serialized additive metadata; evidence is decoded without making text dependent on it. */
+  metadata?: string | null
   // Subset of the backend `FileChat` the server stores on a user message when its
   // `file_ids` were new to the session (backend/routers/chat.py). Optional: absent
   // rows simply carry no attachments.
@@ -93,6 +99,7 @@ export interface DesktopMessage {
   /** Files attached to this (user) message, mapped from the wire `files`. Absent
    *  when the server row carries none. */
   attachments?: ChatAttachment[]
+  evidence?: ChatEvidenceReferenceEnvelope
 }
 
 function toDesktopMessage(w: MessageWire): DesktopMessage {
@@ -104,6 +111,7 @@ function toDesktopMessage(w: MessageWire): DesktopMessage {
         thumbnailUrl: f.thumbnail ?? undefined
       }))
     : undefined
+  const evidence = parseChatEvidenceFromRecord(w)
   return {
     id: w.id,
     text: w.text,
@@ -112,7 +120,8 @@ function toDesktopMessage(w: MessageWire): DesktopMessage {
     appId: w.app_id ?? undefined,
     sessionId: w.chat_session_id ?? undefined,
     rating: w.rating ?? undefined,
-    ...(attachments ? { attachments } : {})
+    ...(attachments ? { attachments } : {}),
+    ...(evidence ? { evidence } : {})
   }
 }
 

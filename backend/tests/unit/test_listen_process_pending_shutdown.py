@@ -16,12 +16,17 @@ Seam: the controller takes only a host, so this subclasses it to record the two 
 calls and drives the real process_pending. No patching and no sys.modules mutation.
 """
 
+import asyncio
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
+
+import pytest
+from google.api_core.exceptions import Aborted, InvalidArgument
 
 from database import conversations as conversations_db
 from database.conversations import select_stale_in_progress
-from routers.listen.conversations import LiveConversationController
+from routers.listen.conversations import STALE_IN_PROGRESS_RECOVERY_AGE_SECONDS, LiveConversationController
 
 
 class _Host:
@@ -44,6 +49,7 @@ class _Host:
         }
         self.waited: list[float] = []
         self.persistence = SimpleNamespace(call=self._call)
+        self.speakers = SimpleNamespace(refresh_for_conversation=AsyncMock())
 
     async def wait(self, seconds: float) -> bool:
         self.waited.append(seconds)
@@ -133,6 +139,260 @@ async def test_recovery_never_touches_the_sessions_current_conversation():
     await controller.process_pending(None)
 
     assert controller.processed == ['conv-orphan']
+
+
+# ── A conversation whose finalization always fails must not end the session ──
+#
+# process_pending is a supervised finite task: an exception escaping it is a
+# supervisor "crash" that tears the listen socket down. In prod a stale
+# in_progress conversation at Firestore's 1 MiB document limit failed its
+# finalization write every time, so every reconnect for that user died seconds
+# after it started and the client reconnected in a loop.
+
+
+class _OversizedDocument(Exception):
+    """Stands in for the Firestore InvalidArgument an oversized document write raises."""
+
+
+class _FailingController(_RecordingController):
+    """Records every attempt and raises for the configured conversation ids."""
+
+    def __init__(self, host: _Host, *, failing: set[str]) -> None:
+        super().__init__(host)
+        self.failing = failing
+
+    async def process_conversation(self, conversation_id: str) -> bool:
+        self.processed.append(conversation_id)
+        if conversation_id in self.failing:
+            raise _OversizedDocument('document exceeds the maximum allowed size')
+        return True
+
+    async def schedule_finalization(self, conversation_id: str) -> bool:
+        self.scheduled.append(conversation_id)
+        if conversation_id in self.failing:
+            raise _OversizedDocument('document exceeds the maximum allowed size')
+        return True
+
+
+async def test_failing_stale_conversation_does_not_crash_the_sweep(caplog):
+    host = _Host(
+        woken_by_shutdown=False,
+        processing=[],
+        stale_in_progress=[{'id': 'conv-oversized'}, {'id': 'conv-orphan'}],
+    )
+    controller = _FailingController(host, failing={'conv-oversized'})
+
+    with caplog.at_level('ERROR', logger='routers.listen.conversations'):
+        await controller.process_pending(None)
+
+    # The sweep returned normally and still recovered the row behind the failing one.
+    assert controller.processed == ['conv-oversized', 'conv-orphan']
+    failures = [r.getMessage() for r in caplog.records if 'pending finalization failed' in r.getMessage()]
+    assert failures == [
+        'Listen pending finalization failed stage=stale_in_progress conversation=conv-oversized '
+        'type=_OversizedDocument reason=other document=none'
+    ]
+
+
+async def test_failing_timed_out_and_processing_rows_do_not_skip_the_rest():
+    host = _Host(
+        woken_by_shutdown=False,
+        processing=[{'id': 'conv-processing-bad'}, {'id': 'conv-processing-ok'}],
+        stale_in_progress=[{'id': 'conv-orphan'}],
+    )
+    controller = _FailingController(host, failing={'conv-timed-out', 'conv-processing-bad'})
+
+    await controller.process_pending('conv-timed-out')
+
+    assert controller.processed == ['conv-timed-out', 'conv-orphan']
+    assert controller.scheduled == ['conv-processing-bad', 'conv-processing-ok']
+
+
+# ── A row at the 1 MiB ceiling is closed, not retried by every reconnect ────
+#
+# Prod (2026-09-30..10-04): five in_progress rows whose documents sat just under
+# Firestore's 1 MiB ceiling failed their finalization binding on every session
+# (stale_in_progress/InvalidArgument, up to 120 times per row). The isolation
+# above kept the socket alive but the rows stayed invisible forever.
+
+_SIZE_LIMIT_MESSAGE = (
+    "Document 'projects/p/databases/(default)/documents/users/{uid}/conversations/{cid}' cannot be "
+    "written because its size (1,048,684 bytes) exceeds the maximum allowed size of 1,048,576 bytes."
+)
+
+
+def _size_limit_error(cid: str, *, uid: str = 'uid-1', collection: str = 'conversations') -> InvalidArgument:
+    message = _SIZE_LIMIT_MESSAGE.format(uid=uid, cid=cid)
+    if collection != 'conversations':
+        message = message.replace('/conversations/', f'/{collection}/')
+    return InvalidArgument(message)
+
+
+class _RaisingController(_RecordingController):
+    """process_conversation raises the configured exception per conversation id."""
+
+    def __init__(self, host: _Host, *, errors: dict[str, BaseException]) -> None:
+        super().__init__(host)
+        self.errors = errors
+        self.completed_events: list[str] = []
+
+    async def process_conversation(self, conversation_id: str) -> bool:
+        self.processed.append(conversation_id)
+        if conversation_id in self.errors:
+            raise self.errors[conversation_id]
+        return True
+
+    def on_conversation_processed(self, conversation_id: str) -> None:
+        self.completed_events.append(conversation_id)
+
+
+class _CloseHost(_Host):
+    """Host whose persistence also answers the lifecycle oversize close."""
+
+    def __init__(self, *, close_outcome: object = 'closed', **kwargs) -> None:
+        super().__init__(woken_by_shutdown=False, processing=[], **kwargs)
+        self.close_outcome = close_outcome
+        self.close_calls: list[tuple] = []
+
+    async def _call(self, fn, *args, **kwargs):
+        if fn.__name__ == 'close_oversized_in_progress_conversation':
+            self.close_calls.append((args, kwargs))
+            if isinstance(self.close_outcome, BaseException):
+                raise self.close_outcome
+            return self.close_outcome
+        return await super()._call(fn, *args, **kwargs)
+
+
+def _messages(caplog) -> list[str]:
+    return [record.getMessage() for record in caplog.records if record.name == 'routers.listen.conversations']
+
+
+async def test_stale_row_at_the_size_ceiling_is_closed_instead_of_retried(caplog):
+    host = _CloseHost(stale_in_progress=[{'id': 'conv-oversized'}, {'id': 'conv-orphan'}])
+    controller = _RaisingController(host, errors={'conv-oversized': _size_limit_error('conv-oversized')})
+
+    with caplog.at_level('WARNING', logger='routers.listen.conversations'):
+        await controller.process_pending(None)
+
+    # The lifecycle owner is asked to close exactly that row, fenced on an hour of quiet.
+    assert host.close_calls == [
+        (('uid-1', 'conv-oversized'), {'quiet_for': timedelta(seconds=STALE_IN_PROGRESS_RECOVERY_AGE_SECONDS)})
+    ]
+    assert controller.completed_events == ['conv-oversized']
+    # The rest of the sweep still ran.
+    assert controller.processed == ['conv-oversized', 'conv-orphan']
+    messages = _messages(caplog)
+    assert (
+        'Listen pending finalization hit the document size limit stage=stale_in_progress '
+        'conversation=conv-oversized close=closed'
+    ) in messages
+    assert not [m for m in messages if 'pending finalization failed' in m]
+    # The Firestore message carries the uid-bearing document path; it is never logged.
+    assert not [m for m in caplog.text.splitlines() if 'uid-1' in m]
+
+
+async def test_refused_close_leaves_the_row_and_reports_the_fence(caplog):
+    host = _CloseHost(close_outcome='recent_write', stale_in_progress=[{'id': 'conv-oversized'}])
+    controller = _RaisingController(host, errors={'conv-oversized': _size_limit_error('conv-oversized')})
+
+    with caplog.at_level('WARNING', logger='routers.listen.conversations'):
+        await controller.process_pending(None)
+
+    assert len(host.close_calls) == 1
+    assert controller.completed_events == []
+    assert (
+        'Listen pending finalization hit the document size limit stage=stale_in_progress '
+        'conversation=conv-oversized close=recent_write'
+    ) in _messages(caplog)
+
+
+async def test_lifecycle_rollover_size_rejection_also_routes_to_the_close():
+    host = _CloseHost()
+    controller = _RaisingController(host, errors={'conv-live': _size_limit_error('conv-live')})
+
+    await controller._finalize_isolated(controller.process_conversation, 'conv-live', stage='lifecycle_rollover')
+
+    assert [args for args, _ in host.close_calls] == [('uid-1', 'conv-live')]
+    assert controller.completed_events == ['conv-live']
+
+
+async def test_size_rejection_naming_another_document_is_not_a_close(caplog):
+    """Only a rejection of the row's own document proves the row itself is at the ceiling."""
+    host = _CloseHost(stale_in_progress=[{'id': 'conv-a'}, {'id': 'conv-b'}])
+    errors = {
+        'conv-a': _size_limit_error('conv-other'),
+        'conv-b': _size_limit_error('conv-b', collection='people'),
+    }
+    controller = _RaisingController(host, errors=errors)
+
+    with caplog.at_level('ERROR', logger='routers.listen.conversations'):
+        await controller.process_pending(None)
+
+    assert host.close_calls == []
+    assert _messages(caplog) == [
+        'Listen pending finalization failed stage=stale_in_progress conversation=conv-a '
+        'type=InvalidArgument reason=document_size_limit document=conversation',
+        'Listen pending finalization failed stage=stale_in_progress conversation=conv-b '
+        'type=InvalidArgument reason=document_size_limit document=other',
+    ]
+
+
+@pytest.mark.parametrize(
+    ('error', 'reason'),
+    [
+        (ValueError('Failed to commit transaction in 5 attempts.'), 'contention'),
+        (Aborted('Too much contention on these documents. Please try again.'), 'contention'),
+        (InvalidArgument('The referenced transaction has expired or is no longer valid.'), 'expired_transaction'),
+        (Aborted('409 The referenced transaction has expired or is no longer valid.'), 'expired_transaction'),
+        (ValueError('something else'), 'other'),
+    ],
+)
+async def test_transient_failures_are_classified_and_left_for_the_next_sweep(caplog, error, reason):
+    host = _CloseHost(stale_in_progress=[{'id': 'conv-a'}])
+    controller = _RaisingController(host, errors={'conv-a': error})
+
+    with caplog.at_level('ERROR', logger='routers.listen.conversations'):
+        await controller.process_pending(None)
+
+    assert host.close_calls == []
+    assert controller.completed_events == []
+    assert _messages(caplog) == [
+        f'Listen pending finalization failed stage=stale_in_progress conversation=conv-a '
+        f'type={type(error).__name__} reason={reason} document=none'
+    ]
+
+
+async def test_failing_close_does_not_crash_the_sweep(caplog):
+    host = _CloseHost(
+        close_outcome=Aborted('Too much contention on these documents. Please try again.'),
+        stale_in_progress=[{'id': 'conv-oversized'}, {'id': 'conv-orphan'}],
+    )
+    controller = _RaisingController(host, errors={'conv-oversized': _size_limit_error('conv-oversized')})
+
+    with caplog.at_level('ERROR', logger='routers.listen.conversations'):
+        await controller.process_pending(None)
+
+    assert controller.processed == ['conv-oversized', 'conv-orphan']
+    assert controller.completed_events == []
+    assert _messages(caplog) == [
+        'Listen oversized conversation close failed stage=stale_in_progress conversation=conv-oversized '
+        'type=Aborted reason=contention'
+    ]
+
+
+async def test_cancellation_still_propagates_out_of_the_sweep():
+    """Isolation is for ordinary failures only; drain must still be able to cancel the task."""
+
+    class _CancelledController(_RecordingController):
+        async def process_conversation(self, conversation_id: str) -> bool:
+            raise asyncio.CancelledError
+
+    host = _Host(woken_by_shutdown=False, processing=[{'id': 'conv-processing'}])
+    controller = _CancelledController(host)
+
+    with pytest.raises(asyncio.CancelledError):
+        await controller.process_pending('conv-timed-out')
+    assert controller.scheduled == []
 
 
 def test_select_stale_in_progress_filters_sorts_and_bounds():
@@ -227,6 +487,21 @@ def test_stale_recovery_queries_oldest_rows_before_bounding_the_read():
 # ── Custom-STT marker on session resume (#7690) ─────────────────────────────
 
 
+def _resumable_in_progress(*, uses_custom_stt: bool = False) -> dict:
+    """A same-device in-window in_progress row: the resume path now requires the
+    shared continuity predicate, which production conversations already satisfy.
+    """
+    return {
+        'id': 'conv-1',
+        'status': 'in_progress',
+        'discarded': False,
+        'uses_custom_stt': uses_custom_stt,
+        'source': 'omi',
+        'client_device_id': 'dev-1',
+        'finished_at': datetime.now(timezone.utc),
+    }
+
+
 class _ResumeHost:
     """Minimal host for create_new_in_progress_conversation's resume branch."""
 
@@ -238,9 +513,11 @@ class _ResumeHost:
         self.client_conversation_id = None
         self.recording_session_id = 'session-1'
         self.is_multi_channel = False
+        self.conversation_creation_timeout = 120
         self.state = SimpleNamespace(current_conversation_id=None)
         self.recording_session_ids_by_conversation = {}
         self.persistence = SimpleNamespace(call=self._call)
+        self.speakers = SimpleNamespace(refresh_for_conversation=AsyncMock())
         self.calls: list[tuple] = []
         self._existing = existing_conversation
 
@@ -268,10 +545,10 @@ class _ResumeController(LiveConversationController):
 
 async def test_resume_persists_custom_stt_marker_when_session_uses_custom_stt():
     """A conversation that started under normal STT but resumes under custom STT
-    must get the durable uses_custom_stt marker, or it could run Omi-paid LLM
-    enrichment without a BYOK key (#7690)."""
+    must get the durable uses_custom_stt marker, or its custom-STT provenance is
+    lost for metering and the fair-use lane (#7690)."""
     host = _ResumeHost(
-        existing_conversation={'id': 'conv-1', 'status': 'in_progress', 'discarded': False, 'uses_custom_stt': False},
+        existing_conversation=_resumable_in_progress(uses_custom_stt=False),
         use_custom_stt=True,
     )
     controller = _ResumeController(host)
@@ -286,7 +563,7 @@ async def test_resume_persists_custom_stt_marker_when_session_uses_custom_stt():
 async def test_resume_does_not_rewrite_marker_for_normal_stt_session():
     """A normal-STT resume of a normal-STT conversation must not write anything."""
     host = _ResumeHost(
-        existing_conversation={'id': 'conv-1', 'status': 'in_progress', 'discarded': False, 'uses_custom_stt': False},
+        existing_conversation=_resumable_in_progress(uses_custom_stt=False),
         use_custom_stt=False,
     )
     controller = _ResumeController(host)
@@ -295,3 +572,155 @@ async def test_resume_does_not_rewrite_marker_for_normal_stt_session():
 
     updates = [c for c in host.calls if c[0] == 'update_conversation']
     assert updates == [], f'unexpected update_conversation call: {host.calls}'
+
+
+# ── Skip the guaranteed-miss existence read for server-generated ids ────────
+#
+# `users/{uid}/conversations/{id}` is the single largest slice of prod
+# single-document reads (38.3%), and a fresh server-generated id can never
+# already have a document under it. See conversation-existence-read.
+
+
+class _CreateConversationHost:
+    """Host for create_new_in_progress_conversation covering the existence-read
+    skip (a server-generated id can't already have a document) and the
+    lifecycle-snapshot reuse (open_live_recording_session already read the
+    document once while resolving the binding)."""
+
+    def __init__(
+        self,
+        *,
+        client_conversation_id: str | None = None,
+        existing_conversation: dict | None = None,
+        conversation_snapshot: dict | None = None,
+        conversation_snapshot_known: bool = False,
+        binding_conversation_id: str | None = None,
+    ) -> None:
+        self.request = SimpleNamespace(
+            uid='uid-1', source='omi', call_id=None, conversation_role=None, geolocation=None
+        )
+        self.client_device_context = SimpleNamespace(client_device_id='dev-1', platform='desktop')
+        self.language = 'en'
+        self.use_custom_stt = False
+        self.private_cloud_sync_enabled = False
+        self.client_conversation_id = client_conversation_id
+        self.recording_session_id = 'session-1'
+        self.is_multi_channel = False
+        self.conversation_creation_timeout = 120
+        self.state = SimpleNamespace(current_conversation_id=None)
+        self.recording_session_ids_by_conversation = {}
+        self.persistence = SimpleNamespace(call=self._call)
+        self.speakers = SimpleNamespace(refresh_for_conversation=AsyncMock())
+        self.calls: list[tuple] = []
+        self._existing = existing_conversation
+        self._conversation_snapshot = conversation_snapshot
+        self._conversation_snapshot_known = conversation_snapshot_known
+        self._binding_conversation_id_override = binding_conversation_id
+
+    async def _call(self, fn, *args, **kwargs):
+        self.calls.append((fn.__name__, args, kwargs))
+        if fn.__name__ == 'open_live_recording_session':
+            proposed_id = args[2]
+            conversation_id = self._binding_conversation_id_override or proposed_id
+            binding = {'requires_rollover': False, 'conversation_id': conversation_id}
+            if self._conversation_snapshot_known:
+                binding['conversation_snapshot'] = self._conversation_snapshot
+                binding['conversation_snapshot_known'] = True
+            return binding
+        if fn.__name__ == 'get_conversation':
+            return self._existing
+        if fn.__name__ == 'resolve_live_continuation':
+            return None
+        if fn.__name__ == 'create_in_progress_conversation':
+            return True  # the real lifecycle returns whether this call created the row
+        if fn.__name__ in ('set_in_progress_conversation_id', 'update_conversation'):
+            return None
+        return None
+
+
+class _CreateConversationController(LiveConversationController):
+    def __init__(self, host: _CreateConversationHost) -> None:
+        super().__init__(host)
+        self.session_events: list[str] = []
+
+    def send_conversation_session(self, *args, **kwargs) -> None:
+        self.session_events.append('sent')
+
+
+async def test_fresh_server_generated_id_skips_the_existence_read():
+    """No client_conversation_id: proposed_id is a freshly minted uuid4 and the
+    binding adopts it verbatim, so get_conversation for that id is a guaranteed
+    NOT_FOUND and must not be called."""
+    host = _CreateConversationHost(client_conversation_id=None)
+    controller = _CreateConversationController(host)
+
+    await controller.create_new_in_progress_conversation()
+
+    get_conversation_calls = [c for c in host.calls if c[0] == 'get_conversation']
+    assert get_conversation_calls == [], f'unexpected get_conversation call(s): {get_conversation_calls}'
+    create_calls = [c for c in host.calls if c[0] == 'create_in_progress_conversation']
+    assert len(create_calls) == 1, f'expected the new-conversation path to run, got {host.calls}'
+    assert host.state.current_conversation_id is not None
+    host.speakers.refresh_for_conversation.assert_awaited_once_with(
+        host.state.current_conversation_id, owner_carry_scope=None, owner_carry_donor=None
+    )
+
+
+async def test_rollover_generation_skips_the_existence_read():
+    """rollover=True first resolves a durable continuation, then mints a fresh
+    server-generated id even when a client_conversation_id is present
+    (silence/status rollovers must not reuse or mutate the prior binding). The
+    minted id is a guaranteed miss, so the existence read must still be skipped.
+    """
+    host = _CreateConversationHost(client_conversation_id='client-supplied-id')
+    controller = _CreateConversationController(host)
+
+    await controller.create_new_in_progress_conversation(rollover=True)
+
+    continuation_calls = [c for c in host.calls if c[0] == 'resolve_live_continuation']
+    assert continuation_calls, f'rollover must resolve a durable continuation first, got {host.calls}'
+    get_conversation_calls = [c for c in host.calls if c[0] == 'get_conversation']
+    assert get_conversation_calls == [], f'unexpected get_conversation call(s): {get_conversation_calls}'
+    open_calls = [c for c in host.calls if c[0] == 'open_live_recording_session']
+    assert len(open_calls) == 1
+    proposed_id = open_calls[0][1][2]
+    assert proposed_id != 'client-supplied-id', 'rollover must not reuse the client-supplied id as proposed_id'
+
+
+async def test_resume_with_client_id_naming_existing_conversation_still_reads_it():
+    """A client-supplied id can legitimately name an existing conversation
+    (resume/idempotency), so the existence read is load-bearing here and must
+    not be skipped; the same reconnect action must still be taken."""
+    host = _CreateConversationHost(
+        client_conversation_id='conv-1',
+        existing_conversation=_resumable_in_progress(),
+    )
+    controller = _CreateConversationController(host)
+
+    await controller.create_new_in_progress_conversation()
+
+    get_conversation_calls = [c for c in host.calls if c[0] == 'get_conversation']
+    assert len(get_conversation_calls) == 1, f'expected one get_conversation call, got {host.calls}'
+    assert get_conversation_calls[0][1][1] == 'conv-1'
+    assert host.state.current_conversation_id == 'conv-1'
+    assert controller.session_events == ['sent']
+    create_calls = [c for c in host.calls if c[0] == 'create_in_progress_conversation']
+    assert create_calls == [], 'a resumed conversation must not be recreated'
+
+
+async def test_resume_with_client_id_naming_missing_conversation_behaves_as_before():
+    """A client-supplied id naming no existing conversation must still be
+    looked up (it is not server-generated) and then fall through to the normal
+    new-conversation creation path, exactly as before this change."""
+    host = _CreateConversationHost(client_conversation_id='conv-missing', existing_conversation=None)
+    controller = _CreateConversationController(host)
+
+    await controller.create_new_in_progress_conversation()
+
+    get_conversation_calls = [c for c in host.calls if c[0] == 'get_conversation']
+    assert len(get_conversation_calls) == 1, f'expected one get_conversation call, got {host.calls}'
+    assert get_conversation_calls[0][1][1] == 'conv-missing'
+    create_calls = [c for c in host.calls if c[0] == 'create_in_progress_conversation']
+    assert len(create_calls) == 1
+    assert create_calls[0][2].get('idempotent') is True
+    assert host.state.current_conversation_id == 'conv-missing'

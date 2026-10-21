@@ -247,13 +247,19 @@ def _case_segments(case: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def _render_fixture_transcript(segments: list[dict[str, Any]], matched_segment_ids: set[str]) -> str:
+    """Mirror the production compact renderer (SCA-454): [segment-id cluster] turn
+    headers with run-length keys. Fixture speaker labels derive the cluster ids;
+    identity itself rides the speaker_labels payload, as in production."""
     lines: list[str] = []
+    cluster_by_label: dict[str, int] = {}
+    previous_cluster: object = object()
     for segment in segments:
+        label = str(_fixture_segment_value(segment, 'speaker_label'))
+        cluster = cluster_by_label.setdefault(label, len(cluster_by_label))
         marker = f'{WAKE_WORD_MARKER} ' if segment['id'] in matched_segment_ids else ''
-        lines.append(
-            f"[segment:{segment['id']} {segment['start']:.3f}-{segment['end']:.3f}] "
-            f"{marker}{_fixture_segment_value(segment, 'speaker_label')}: {segment['text']}"
-        )
+        header = f"[{segment['id']}]" if cluster == previous_cluster else f"[{segment['id']} {cluster}]"
+        lines.append(f'{header} {marker}{segment["text"]}')
+        previous_cluster = cluster
     return '\n\n'.join(lines)
 
 

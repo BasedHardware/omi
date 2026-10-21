@@ -32,7 +32,8 @@ import type {
   RewindFrame
 } from '../../shared/types'
 import type { TaskSearchResult } from '../assistants/tasks/toolBackends'
-import { executeReadOnlySql } from '../assistants/insight/sql'
+import { executeReadOnlySql } from '../assistants/core/readOnlySql'
+import { startOfDayOffset, startOfLocalDay } from '../../renderer/src/lib/localDay'
 import type { BackendJsonResult, BackendToolRequest } from './backendTools'
 
 // --- shared arg helpers ------------------------------------------------------
@@ -900,7 +901,7 @@ export interface DailyRecapDeps {
   conversations: () => LocalConversation[]
   actionItems: () => ActionItemRecord[]
   focusSessions: (sinceMs: number) => FocusSessionRecord[]
-  memories: (limit: number) => { content: string; category: string }[]
+  memories: (from: number, to: number, limit: number) => { content: string; category: string }[]
   insights: (limit: number) => InsightRecord[]
 }
 
@@ -920,12 +921,6 @@ function bindDailyRecapDeps(deps?: Partial<DailyRecapDeps>): DailyRecapDeps {
   }
 }
 
-/** Local midnight (start of day) for the timestamp `ms`, in the host timezone. */
-function startOfLocalDay(ms: number): number {
-  const d = new Date(ms)
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0).getTime()
-}
-
 /**
  * `get_daily_recap`. Pre-formatted markdown activity recap for a day (0=today,
  * 1=yesterday, N=past N days), composed entirely from LOCAL reads: app usage
@@ -941,7 +936,9 @@ export function createGetDailyRecapExecutor(deps?: Partial<DailyRecapDeps>): Pro
 
     const now = d.now()
     const startToday = startOfLocalDay(now)
-    const from = startToday - daysAgo * DAY_MS
+    // Whole calendar days back, not `startToday - daysAgo * DAY_MS`: a day with a DST
+    // change lasts 23 h or 25 h, so a fixed 24 h step starts the window an hour off.
+    const from = startOfDayOffset(now, -daysAgo)
     const to = daysAgo === 0 ? now : startToday
     const inWindow = (ts: number): boolean => ts >= from && ts < to
 
@@ -961,7 +958,7 @@ export function createGetDailyRecapExecutor(deps?: Partial<DailyRecapDeps>): Pro
     const convos = d.conversations().filter((c) => inWindow(c.createdAt))
     const tasks = d.actionItems().filter((t) => !t.deleted && inWindow(t.createdAt))
     const focus = d.focusSessions(from).filter((f) => inWindow(f.createdAt))
-    const memories = d.memories(10)
+    const memories = d.memories(from, to, 10)
     const observations = d.insights(30).filter((i) => inWindow(i.ts))
 
     const out: string[] = [`# ${label} Recap`, '']
@@ -1043,7 +1040,7 @@ async function bindDailyRecapProd(): Promise<DailyRecapDeps> {
     conversations: () => db.listLocalConversations(),
     actionItems: () => db.getLocalActionItems({ limit: 500 }),
     focusSessions: (sinceMs) => db.listFocusSessions(sinceMs),
-    memories: (limit) => db.recentMemories(limit),
+    memories: (from, to, limit) => db.recentMemoriesInWindow(from, to, limit),
     insights: (limit) => db.recentInsights(limit)
   }
 }

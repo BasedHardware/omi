@@ -43,6 +43,18 @@ extract_function() {
   extract_function select_ios_device
 } > "$HARNESS"
 
+PHYSICAL_DEVICE_HARNESS="$(mktemp -t omi_ios_physical_XXXXXX)"
+trap 'rm -f "$HARNESS" "$PHYSICAL_DEVICE_HARNESS"' EXIT
+{
+  echo "set -uo pipefail"
+  extract_function _ios_device_is_physical
+} > "$PHYSICAL_DEVICE_HARNESS"
+
+if ! bash -n "$PHYSICAL_DEVICE_HARNESS"; then
+  echo "FAIL: extracted _ios_device_is_physical harness is not valid bash" >&2
+  exit 1
+fi
+
 if ! bash -n "$HARNESS"; then
   echo "FAIL: extracted harness is not valid bash" >&2
   exit 1
@@ -130,6 +142,35 @@ if [[ "$rc" -ne 0 ]] && [[ "$out" == *"No iOS device or simulator found"* ]]; th
 else
   fail "expected a named no-iOS-device failure, got (rc=$rc): $out"
 fi
+
+echo "_ios_device_is_physical:"
+
+run_physical_check() {
+  local root="$1" device_id="$2"
+  PATH="$root/bin" bash -c "source '$PHYSICAL_DEVICE_HARNESS'; _ios_device_is_physical '$device_id'"
+}
+
+# 5. A physical device's id reports true (regression: setup.sh ios silently
+#    defaulted the dev backend host to 127.0.0.1 on physical devices, which is
+#    the device's own loopback, not the Mac's — see issue #11534).
+root=$(mktemp -d -t omi_ios_dev_physical_XXXXXX)
+stub_devices "$root" '[
+  {"name":"Revtim'"'"'s iPhone","id":"PHYS-1","isSupported":true,"targetPlatform":"ios","emulator":false},
+  {"name":"iPhone 17 Pro","id":"SIM-2","isSupported":true,"targetPlatform":"ios","emulator":true}
+]'
+if run_physical_check "$root" "PHYS-1"; then
+  pass "reports true for a physical device id"
+else
+  fail "expected true for physical device id PHYS-1"
+fi
+
+# 6. A simulator's id reports false.
+if run_physical_check "$root" "SIM-2"; then
+  fail "expected false for simulator id SIM-2"
+else
+  pass "reports false for a simulator id"
+fi
+rm -rf "$root"
 
 echo
 if [[ "$failures" -gt 0 ]]; then

@@ -18,7 +18,17 @@ SKIPPED_PARTS = {
     'tests',
 }
 FORBIDDEN_SOURCE_PATTERNS = {
-    'direct provider URL': re.compile(r'api\.anthropic\.com|api\.openai\.com|openrouter\.ai', re.I),
+    # SCA-118 covers inference traffic. The providers' organization namespaces
+    # (api.anthropic.com/v1/organizations/*, api.openai.com/v1/organization/*)
+    # serve only org-admin reporting — no model traffic exists there — and the
+    # admin dashboard's cost legs (web/admin/lib/services/provider-costs.ts)
+    # read spend from them with dedicated cost-report keys.
+    'direct provider URL': re.compile(
+        r'api\.anthropic\.com(?!/v1/organizations/)'
+        r'|api\.openai\.com(?!/v1/organization/)'
+        r'|openrouter\.ai',
+        re.I,
+    ),
     'direct provider credential': re.compile(
         r'\b(?:ANTHROPIC|CLAUDE|OPENAI|OPENROUTER)_API_KEY\b'
     ),

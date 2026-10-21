@@ -1,6 +1,25 @@
 import { createHash, randomUUID } from "node:crypto";
 import { structuredTurnFallbackText } from "./content-block-fallback.js";
+import {
+  conversationEvidenceById,
+  conversationEvidenceExcerpt,
+  conversationEvidenceForBackend,
+  conversationEvidenceForBackendImport,
+  conversationEvidenceMatches,
+  mergeConversationEvidenceMetadata,
+  parseConversationEvidenceMetadata,
+  preserveConversationEvidenceOnMetadataUpdate,
+  validateConversationEvidence,
+  validateConversationEvidenceMetadata,
+  type ConversationEvidence,
+} from "./conversation-evidence.js";
 import { conversationTurnFromRow } from "./conversation-turns.js";
+import {
+  decideAttempt,
+  DEFERRAL_OUTBOX_POLICY,
+  drainIsolated,
+  JOURNAL_OUTBOX_POLICY,
+} from "./durable-queue.js";
 import { generateAgentId } from "./sqlite-store.js";
 import type {
   AgentStore,
@@ -89,10 +108,112 @@ export interface UpdateJournalTurnInput {
   appendContentBlocks?: readonly ConversationContentBlock[];
   replaceResources?: readonly ConversationResource[];
   appendResources?: readonly ConversationResource[];
+  /** Kernel-owned evidence append; items merge atomically by stable evidence ID. */
+  appendEvidence?: readonly ConversationEvidence[];
   producingRunId?: string | null;
   producingAttemptId?: string | null;
   metadataJson?: string;
+  /**
+   * Narrow revision authority: the desktop client that optimistically sealed a
+   * row `completed` (before answer delivery resolved) downgrades it to
+   * `failed` once the reducer proves the answer never reached the user
+   * (#12743). Only a payload-free downgrade is accepted, and `metadataJson`
+   * merges into the row's existing metadata instead of replacing it.
+   */
+  terminalRevision?: boolean;
   nowMs?: number;
+}
+
+export interface AttachJournalEvidenceInput {
+  ownerId: string;
+  conversationId: string;
+  turnId: string;
+  evidence: ConversationEvidence;
+  nowMs?: number;
+}
+
+export interface AttachJournalEvidenceResult {
+  turn: ConversationTurn;
+  evidence: ConversationEvidence;
+  created: boolean;
+  duplicate: boolean;
+}
+
+export interface ReadJournalEvidenceInput {
+  ownerId: string;
+  conversationId: string;
+  turnId: string;
+  evidenceId: string;
+}
+
+export interface JournalEvidenceRead {
+  conversationId: string;
+  turnId: string;
+  evidence: ConversationEvidence;
+}
+
+export interface ReadConversationEvidenceInput {
+  ownerId: string;
+  conversationId: string;
+  evidenceId?: string;
+  turnId?: string;
+  offset?: number;
+  maxChars?: number;
+}
+
+export interface ConversationEvidenceReadResult {
+  conversationId: string;
+  turnId: string;
+  evidenceId: string;
+  kind: ConversationEvidence["kind"];
+  title: string;
+  chunk: string;
+  offset: number;
+  nextOffset: number | null;
+  complete: boolean;
+  /** False for pending/unavailable descriptors; no source body was read. */
+  available: boolean;
+  availability: ConversationEvidence["availability"];
+  extractionCompleteness: ConversationEvidence["extractionCompleteness"];
+  provenance?: Record<string, string>;
+  digest?: string;
+}
+
+export interface SearchJournalEvidenceInput {
+  ownerId: string;
+  conversationId: string;
+  query: string;
+  limit?: number;
+}
+
+export interface JournalEvidenceSearchMatch {
+  timestamp: string;
+  turnId: string;
+  role: ConversationTurnRole;
+  evidenceId: string;
+  kind: ConversationEvidence["kind"];
+  title: string;
+  excerpt: string;
+  availability: ConversationEvidence["availability"];
+  extractionCompleteness: ConversationEvidence["extractionCompleteness"];
+  fullReadRequired: boolean;
+}
+
+export interface SearchConversationEvidenceInput {
+  ownerId: string;
+  conversationId: string;
+  query: string;
+  limit?: number;
+  maxChars?: number;
+  offset?: number;
+}
+
+export interface SearchConversationEvidenceResult {
+  matches: JournalEvidenceSearchMatch[];
+  offset: number;
+  nextOffset: number | null;
+  hasMore: boolean;
+  scanned: number;
 }
 
 /**
@@ -191,6 +312,9 @@ export interface MaterializeChatFirstIntentInput {
 export interface ChatFirstIntentMaterializationResult {
   accepted: boolean;
   duplicate: boolean;
+  rejected: boolean;
+  rejectionCode: string | null;
+  rejectionMessage: string | null;
   suppressedByTailQuestion: boolean;
   suppressedByStreamingTail: boolean;
   turn: ConversationTurn | null;
@@ -198,13 +322,31 @@ export interface ChatFirstIntentMaterializationResult {
 }
 
 /**
- * One ordered server batch becomes one kernel transaction. The server owns
- * creation order; the kernel owns whether the current transcript tail admits
- * the next intent and records the only visible rows.
+ * The server owns creation order; the kernel gives each item its own fault
+ * domain while preserving tail suppression across the ordered batch.
  */
 export interface ChatFirstIntentsMaterializationResult {
   results: ChatFirstIntentMaterializationResult[];
   stoppedByTail: boolean;
+}
+
+export function chatFirstMaterializationDeferrals(
+  inputs: readonly Pick<MaterializeChatFirstIntentInput, "intentId">[],
+  result: ChatFirstIntentsMaterializationResult,
+): Array<{ intentId: string; code: "tail_question" | "streaming_tail" }> {
+  if (!result.stoppedByTail) return [];
+  return inputs.flatMap((input, index) => {
+    const candidate = result.results[index];
+    if (candidate?.accepted || candidate?.rejected) return [];
+    return [{
+      intentId: input.intentId,
+      code: candidate?.suppressedByStreamingTail ? "streaming_tail" : "tail_question",
+    }];
+  });
+}
+
+export function chatFirstWireRejectionMessage(error: unknown): string {
+  return (error instanceof Error ? error.message : "Unknown chat-first materialization failure").slice(0, 300);
 }
 
 export interface RepairOrphanedJournalTurnsInput {
@@ -372,6 +514,9 @@ const MAX_CHAT_HISTORY_SEARCH_SCAN = 500;
 const DEFAULT_CHAT_HISTORY_SEARCH_LIMIT = 10;
 const MAX_CHAT_HISTORY_SEARCH_LIMIT = 20;
 const MAX_CHAT_HISTORY_SEARCH_EXCERPT = 320;
+const DEFAULT_EVIDENCE_SEARCH_LIMIT = 10;
+const MAX_EVIDENCE_SEARCH_LIMIT = 20;
+const MAX_EVIDENCE_ITEMS_PER_TURN_CURSOR = 8;
 
 export interface JournalTurnChangedWake {
   ownerId: string;
@@ -634,6 +779,7 @@ export function updateJournalTurn(store: AgentStore, input: UpdateJournalTurnInp
     && input.appendContentBlocks === undefined
     && input.replaceResources === undefined
     && input.appendResources === undefined
+    && input.appendEvidence === undefined
     && input.producingRunId === undefined
     && input.producingAttemptId === undefined
     && input.metadataJson === undefined
@@ -641,10 +787,30 @@ export function updateJournalTurn(store: AgentStore, input: UpdateJournalTurnInp
     throw new Error("Journal turn update has no changes");
   }
   const now = input.nowMs ?? Date.now();
+  const appendEvidence = input.appendEvidence === undefined
+    ? []
+    : input.appendEvidence.map(validateConversationEvidence);
   return store.withTransaction(() => {
     assertConversationOwner(store, input.conversationId, input.ownerId);
     const current = requireJournalTurn(store, input.conversationId, input.turnId);
-    if (input.status !== undefined) assertTurnStatusTransition(current.status, input.status);
+    if (input.terminalRevision === true) {
+      assertTerminalRevisionShape(input);
+    }
+    if (input.status !== undefined) {
+      // The one sanctioned exception to the terminal transition table: the
+      // desktop client that sealed a row `completed` optimistically (before
+      // answer delivery resolved) downgrades it to `failed` when the reducer
+      // proves the answer never reached the user (#12743). Everything else —
+      // including run-linked turns, which the caller rejects earlier — still
+      // goes through the strict table.
+      const sealedCompletionDowngrade =
+        input.terminalRevision === true
+        && current.status === "completed"
+        && input.status === "failed";
+      if (!sealedCompletionDowngrade) {
+        assertTurnStatusTransition(current.status, input.status);
+      }
+    }
     if (input.producingRunId !== undefined) {
       assertProducingRunOwner(store, input.producingRunId, input.ownerId);
       if (current.producingRunId !== null && current.producingRunId !== input.producingRunId) {
@@ -678,14 +844,32 @@ export function updateJournalTurn(store: AgentStore, input: UpdateJournalTurnInp
 
     const contentBlocks = input.replaceContentBlocks === undefined
       ? mergeById(current.contentBlocks, validateContentBlocks(input.appendContentBlocks ?? []))
-      : mergeById([], validateContentBlocks(input.replaceContentBlocks));
+      : mergeById(
+        [],
+        projectContentBlocksOverKernelAuthored(
+          current.contentBlocks,
+          validateContentBlocks(input.replaceContentBlocks),
+        ),
+      );
     const resources = input.replaceResources === undefined
       ? mergeById(current.resources, validateResources(input.appendResources ?? []))
       : mergeById([], validateResources(input.replaceResources));
     const status = input.status ?? current.status;
     const metadataJson = input.metadataJson === undefined
       ? current.metadataJson
-      : validObjectJson(input.metadataJson, "metadataJson");
+      : input.terminalRevision === true
+        ? preserveConversationEvidenceOnMetadataUpdate(
+          current.metadataJson,
+          mergedObjectJson(current.metadataJson, input.metadataJson),
+        )
+        : preserveConversationEvidenceOnMetadataUpdate(
+          current.metadataJson,
+          validObjectJson(input.metadataJson, "metadataJson"),
+        );
+    let nextMetadataJson = metadataJson;
+    for (const evidence of appendEvidence) {
+      nextMetadataJson = mergeConversationEvidenceMetadata(nextMetadataJson, evidence).metadataJson;
+    }
     const content = input.content ?? current.content;
     const producingRunId = input.producingRunId === undefined ? current.producingRunId : input.producingRunId;
     const producingAttemptId = input.producingAttemptId === undefined
@@ -697,7 +881,7 @@ export function updateJournalTurn(store: AgentStore, input: UpdateJournalTurnInp
       || stableJson(resources) !== stableJson(current.resources)
       || producingRunId !== current.producingRunId
       || producingAttemptId !== current.producingAttemptId
-      || stableJson(parseObjectJson(metadataJson)) !== stableJson(parseObjectJson(current.metadataJson));
+      || stableJson(parseObjectJson(nextMetadataJson)) !== stableJson(parseObjectJson(current.metadataJson));
     if (!changed) return current;
 
     const sequence = nextJournalSequence(store, input.conversationId, now);
@@ -713,7 +897,7 @@ export function updateJournalTurn(store: AgentStore, input: UpdateJournalTurnInp
       producingRunId,
       producingAttemptId,
       remoteId: current.remoteId,
-      metadataJson,
+      metadataJson: nextMetadataJson,
     });
 
     store.execute(
@@ -733,7 +917,7 @@ export function updateJournalTurn(store: AgentStore, input: UpdateJournalTurnInp
         JSON.stringify(resources),
         producingRunId,
         producingAttemptId,
-        metadataJson,
+        nextMetadataJson,
         sequence.turnSeq,
         payloadHash,
         now,
@@ -762,6 +946,226 @@ export function updateJournalTurn(store: AgentStore, input: UpdateJournalTurnInp
     );
     return updated;
   });
+}
+
+/**
+ * Atomically attach source evidence to an existing journal turn. Evidence is
+ * part of the turn's canonical revision, so clear/replay, backend projection,
+ * and context freshness all observe the same identity. The stable evidence ID
+ * makes retries safe without a second receipt or transcript table.
+ */
+export function attachJournalEvidence(
+  store: AgentStore,
+  input: AttachJournalEvidenceInput,
+): AttachJournalEvidenceResult {
+  const evidence = validateConversationEvidence(input.evidence);
+  const now = input.nowMs ?? Date.now();
+  return store.withTransaction(() => {
+    assertConversationOwner(store, input.conversationId, input.ownerId);
+    const current = requireJournalTurn(store, input.conversationId, input.turnId);
+    const merged = mergeConversationEvidenceMetadata(current.metadataJson, evidence);
+    if (merged.duplicate) {
+      return { turn: current, evidence: merged.evidence, created: false, duplicate: true };
+    }
+    const turn = updateJournalTurn(store, {
+      ownerId: input.ownerId,
+      conversationId: input.conversationId,
+      turnId: input.turnId,
+      metadataJson: merged.metadataJson,
+      nowMs: now,
+    });
+    return { turn, evidence: merged.evidence, created: true, duplicate: false };
+  });
+}
+
+/** Read one complete bounded evidence item after the caller has established owner scope. */
+export function readJournalEvidence(
+  store: AgentStore,
+  input: ReadJournalEvidenceInput,
+): JournalEvidenceRead | null {
+  const result = readConversationEvidence(store, {
+    ...input,
+    offset: 0,
+    maxChars: 64 * 1024,
+  });
+  if (!result) return null;
+  const turn = requireJournalTurn(store, input.conversationId, input.turnId);
+  const evidence = conversationEvidenceById(turn.metadataJson, input.evidenceId);
+  return evidence ? { conversationId: input.conversationId, turnId: input.turnId, evidence } : null;
+}
+
+/**
+ * Owner-scoped bounded evidence read. The cursor is a character offset into
+ * the locally retained body, so the tool can page through 64 KiB without ever
+ * placing the full source into one model context packet.
+ */
+export function readConversationEvidence(
+  store: AgentStore,
+  input: ReadConversationEvidenceInput,
+): ConversationEvidenceReadResult | null {
+  assertConversationOwner(store, input.conversationId, input.ownerId);
+  if (!input.turnId) {
+    throw new Error("read_conversation_evidence requires an exact turnId; search first");
+  }
+  if (!input.evidenceId) {
+    throw new Error("read_conversation_evidence requires an exact evidenceId; search first");
+  }
+  const offset = boundedEvidenceOffset(input.offset);
+  const maxChars = boundedEvidenceChars(input.maxChars);
+  const turnRow = store.getOptionalRow(
+    `SELECT ${TURN_COLUMNS} FROM conversation_turns WHERE conversation_id = ? AND turn_id = ?`,
+    [input.conversationId, input.turnId],
+  );
+  if (!turnRow) return null;
+  const turn = conversationTurnFromRow(turnRow);
+  let envelope: ReturnType<typeof parseConversationEvidenceMetadata>;
+  try {
+    envelope = parseConversationEvidenceMetadata(turn.metadataJson);
+  } catch {
+    // Legacy or corrupt evidence must not fail the authorized read tool;
+    // exact retrieval of a missing/unreadable source is `found: false`.
+    return null;
+  }
+  const evidence = envelope?.items.find((item) => item.id === input.evidenceId);
+  const candidate = evidence ? { turn, evidence } : null;
+  if (!candidate) return null;
+  const body = candidate.evidence.bodyText ?? "";
+  const chunk = body.slice(offset, offset + maxChars);
+  const nextOffset = offset + chunk.length < body.length ? offset + chunk.length : null;
+  const available = candidate.evidence.availability === "available"
+    || candidate.evidence.availability === "partial";
+  return {
+    conversationId: input.conversationId,
+    turnId: candidate.turn.turnId,
+    evidenceId: candidate.evidence.id,
+    kind: candidate.evidence.kind,
+    title: candidate.evidence.title,
+    chunk,
+    offset,
+    nextOffset,
+    complete: candidate.evidence.availability !== "pending" && nextOffset === null,
+    available,
+    availability: candidate.evidence.availability,
+    extractionCompleteness: candidate.evidence.extractionCompleteness,
+    ...(candidate.evidence.provenance ? { provenance: candidate.evidence.provenance } : {}),
+    ...(candidate.evidence.digest ? { digest: candidate.evidence.digest } : {}),
+  };
+}
+
+/**
+ * Search only the current journal generation. This returns bounded descriptors
+ * and excerpts; callers must use readJournalEvidence for the full local body.
+ */
+export function searchJournalEvidence(
+  store: AgentStore,
+  input: SearchJournalEvidenceInput,
+): JournalEvidenceSearchMatch[] {
+  return searchConversationEvidence(store, input).matches;
+}
+
+/** Search evidence with an opaque fixed-width evidence cursor. Eight slots per
+ * turn means a page can resume inside one turn without repeating or skipping
+ * any of its evidence items. Latest-revision identity is paged on turn_seq
+ * before turn_json is materialized, and the SQL scan remains bounded by turns. */
+export function searchConversationEvidence(
+  store: AgentStore,
+  input: SearchConversationEvidenceInput,
+): SearchConversationEvidenceResult {
+  assertConversationOwner(store, input.conversationId, input.ownerId);
+  const query = input.query.trim();
+  if (!query) throw new Error("search_journal_evidence query must not be empty");
+  if (query.length > 512) throw new Error("search_journal_evidence query is too long");
+  const limit = boundedEvidenceSearchLimit(input.limit);
+  const maxChars = boundedEvidenceChars(input.maxChars);
+  const offset = boundedEvidenceOffset(input.offset);
+  const rowOffset = Math.floor(offset / MAX_EVIDENCE_ITEMS_PER_TURN_CURSOR);
+  const itemOffset = offset % MAX_EVIDENCE_ITEMS_PER_TURN_CURSOR;
+  store.execute(
+    `INSERT INTO conversation_journal_state(
+       conversation_id, generation, high_water_turn_seq, updated_at_ms
+     ) VALUES (?, 1, 0, ?)
+     ON CONFLICT(conversation_id) DO NOTHING`,
+    [input.conversationId, Date.now()],
+  );
+  const state = requireJournalState(store, input.conversationId);
+  // Latest-revision identity uses only turn_id/turn_seq. Ordering and the
+  // 500-turn page bound apply before turn_json is loaded. PK is
+  // (conversation_id, turn_seq); generation stays on the identity subquery.
+  const rows = store.allRows(
+    `SELECT turn_json
+     FROM conversation_turn_revisions
+     WHERE conversation_id = ? AND turn_seq IN (
+       SELECT MAX(turn_seq)
+       FROM conversation_turn_revisions
+       WHERE conversation_id = ? AND generation = ?
+       GROUP BY turn_id
+       ORDER BY MAX(turn_seq) DESC
+       LIMIT ? OFFSET ?
+     )
+     ORDER BY turn_seq DESC`,
+    [
+      input.conversationId,
+      input.conversationId,
+      state.generation,
+      MAX_CHAT_HISTORY_SEARCH_SCAN + 1,
+      rowOffset,
+    ],
+  );
+  const pageRows = rows.slice(0, MAX_CHAT_HISTORY_SEARCH_SCAN);
+  const matches: JournalEvidenceSearchMatch[] = [];
+  let scannedRows = 0;
+  for (const [rowIndex, row] of pageRows.entries()) {
+    scannedRows += 1;
+    const turn = JSON.parse(String(row.turn_json)) as ConversationTurn;
+    let envelope: ReturnType<typeof parseConversationEvidenceMetadata>;
+    try {
+      envelope = parseConversationEvidenceMetadata(turn.metadataJson);
+    } catch {
+      // A malformed legacy envelope must not abort search of later valid turns.
+      continue;
+    }
+    if (!envelope) continue;
+    const firstItemIndex = rowIndex === 0 ? itemOffset : 0;
+    for (const [itemIndex, evidence] of envelope.items.entries()) {
+      if (itemIndex < firstItemIndex) continue;
+      if (!conversationEvidenceMatches(evidence, query)) continue;
+      matches.push({
+        timestamp: new Date(turn.createdAtMs).toISOString(),
+        turnId: turn.turnId,
+        role: turn.role,
+        evidenceId: evidence.id,
+        kind: evidence.kind,
+        title: evidence.title,
+        excerpt: conversationEvidenceExcerpt(evidence, query, maxChars),
+        availability: evidence.availability,
+        extractionCompleteness: evidence.extractionCompleteness,
+        fullReadRequired: evidence.availability === "pending"
+          ? false
+          : Boolean(evidence.bodyText || evidence.artifactId),
+      });
+      if (matches.length >= limit) {
+        const hasMore = itemIndex + 1 < envelope.items.length || rows.length > rowIndex + 1;
+        const nextCursor = (rowOffset + rowIndex) * MAX_EVIDENCE_ITEMS_PER_TURN_CURSOR + itemIndex + 1;
+        return {
+          matches,
+          offset,
+          nextOffset: hasMore ? nextCursor : null,
+          hasMore,
+          scanned: scannedRows,
+        };
+      }
+    }
+  }
+  const hasMore = rows.length > pageRows.length;
+  return {
+    matches,
+    offset,
+    nextOffset: hasMore
+      ? (rowOffset + pageRows.length) * MAX_EVIDENCE_ITEMS_PER_TURN_CURSOR
+      : null,
+    hasMore,
+    scanned: pageRows.length,
+  };
 }
 
 export function appendChatFirstBlocksToProducingTurn(
@@ -1048,100 +1452,16 @@ export function recordQuestionInteractionReply(
  * retry to acknowledge the exact committed assistant row after a crash.
  */
 function materializeChatFirstIntentInTransaction(
-  store: AgentStore,
-  input: MaterializeChatFirstIntentInput,
+  _store: AgentStore,
+  _input: MaterializeChatFirstIntentInput,
 ): ChatFirstIntentMaterializationResult {
-  const now = input.nowMs ?? Date.now();
-  const intentId = nonEmpty(input.intentId, "chat-first intent ID");
-  const continuityKey = nonEmpty(input.continuityKey, "chat-first intent continuity key");
-  if (!Number.isSafeInteger(input.controlGeneration) || input.controlGeneration < 0) {
-    throw new Error("Chat-first materialization requires a valid control generation");
-  }
-  if (![
-    "daily_opener",
-    "capture_arrival",
-    "deferral_reraise",
-    "agent_judgment",
-    "cold_start_rich",
-    "cold_start_sparse",
-  ].includes(input.source)) {
-    throw new Error("Chat-first materialization source is invalid");
-  }
-  const blocks = chatFirstIntentBlocks(intentId, input.controlGeneration, input.source, input.blocks);
-  const turnId = stableChatFirstIntentTurnID(intentId);
-  const receiptId = stableChatFirstMaterializationReceiptID(intentId, continuityKey);
-
-  assertConversationOwner(store, input.conversationId, input.ownerId);
-  const existingReceipt = store.getOptionalRow(
-    `SELECT owner_id, conversation_id, control_generation, receipt_id, turn_id
-     FROM chat_first_materialization_receipts WHERE intent_id = ?`,
-    [intentId],
-  );
-  if (existingReceipt) {
-    if (
-      String(existingReceipt.owner_id) !== input.ownerId
-      || String(existingReceipt.conversation_id) !== input.conversationId
-      || Number(existingReceipt.control_generation) !== input.controlGeneration
-      || String(existingReceipt.receipt_id) !== receiptId
-      || String(existingReceipt.turn_id) !== turnId
-    ) {
-      throw new Error("Chat-first intent ID was reused with different receipt identity");
-    }
-    return {
-      accepted: true,
-      duplicate: true,
-      suppressedByTailQuestion: false,
-      suppressedByStreamingTail: false,
-      turn: requireJournalTurn(store, input.conversationId, turnId),
-      receipt: { intentId, receiptId },
-    };
-  }
-
-  const tail = materializationTailState(store, input.conversationId);
-  if (tail.unansweredQuestion || tail.streaming) {
-    return {
-      accepted: false,
-      duplicate: false,
-      suppressedByTailQuestion: tail.unansweredQuestion,
-      suppressedByStreamingTail: tail.streaming,
-      turn: null,
-      receipt: null,
-    };
-  }
-
-  const recorded = recordJournalTurn(store, {
-      ownerId: input.ownerId,
-      conversationId: input.conversationId,
-      turnId,
-      producerId: `chat-first-intent:${intentId}`,
-      role: "assistant",
-      surfaceKind: "main_chat",
-      origin: "typed_chat",
-      status: "completed",
-      // Rich blocks are the visible content. Keep this empty rather than
-      // inventing an assistant sentence that could become a "Done." filler.
-      content: "",
-      contentBlocks: blocks,
-      metadataJson: JSON.stringify({
-        continuityKey,
-        chatFirstIntentId: intentId,
-        chatFirstIntentSource: input.source,
-      }),
-      createdAtMs: now,
-  });
-  store.execute(
-    `INSERT INTO chat_first_materialization_receipts(
-       intent_id, owner_id, conversation_id, control_generation, receipt_id, turn_id, created_at_ms
-     ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    [intentId, input.ownerId, input.conversationId, input.controlGeneration, receiptId, turnId, now],
-  );
+  // Retained wire operation for existing callers; never creates a journal row.
   return {
-    accepted: true,
-    duplicate: recorded.duplicate,
-    suppressedByTailQuestion: false,
-    suppressedByStreamingTail: false,
-    turn: recorded.turn,
-    receipt: { intentId, receiptId },
+    accepted: false, duplicate: false, rejected: true,
+    rejectionCode: "invalid_intent",
+    rejectionMessage: "Automatic Chat entries are no longer supported",
+    suppressedByTailQuestion: false, suppressedByStreamingTail: false,
+    turn: null, receipt: null,
   };
 }
 
@@ -1159,23 +1479,7 @@ export function materializeChatFirstIntents(
   if (inputs.length < 1 || inputs.length > 8) {
     throw new Error("Chat-first materialization batch requires one to eight intents");
   }
-  return store.withTransaction(() => {
-    const results: ChatFirstIntentMaterializationResult[] = [];
-    for (const input of inputs) {
-      const result = materializeChatFirstIntentInTransaction(store, input);
-      results.push(result);
-      // Do not submit an additional intent after a current tail suppresses the
-      // batch, or after this intent itself becomes the new unanswered tail.
-      if (
-        result.suppressedByTailQuestion
-        || result.suppressedByStreamingTail
-        || materializationTailState(store, input.conversationId).unansweredQuestion
-      ) {
-        return { results, stoppedByTail: true };
-      }
-    }
-    return { results, stoppedByTail: false };
-  });
+  return { results: inputs.map(input => materializeChatFirstIntentInTransaction(store, input)), stoppedByTail: false };
 }
 
 /** Receipts remain pending locally until Swift receives a successful server acknowledgement. */
@@ -1268,7 +1572,8 @@ export function drainChatFirstDeferralOutbox(
        ORDER BY created_at_ms ASC LIMIT ?`,
       [input.ownerId, now, now, limit],
     );
-    return rows.map((row) => {
+    const deliveries: ChatFirstDeferralDelivery[] = [];
+    drainIsolated(rows, (row) => {
       const continuityKey = String(row.continuity_key);
       const deliveryGeneration = Number(row.delivery_generation) + 1;
       const attemptCount = Number(row.attempt_count) + 1;
@@ -1280,7 +1585,7 @@ export function drainChatFirstDeferralOutbox(
         [attemptCount, deliveryGeneration, now + DEFAULT_OUTBOX_LEASE_MS, now, continuityKey, input.ownerId],
       );
       const question = JSON.parse(String(row.question_json)) as Extract<ConversationContentBlock, { type: "questionCard" }>;
-      return {
+      deliveries.push({
         continuityKey,
         ownerId: String(row.owner_id),
         conversationId: String(row.conversation_id),
@@ -1290,8 +1595,10 @@ export function drainChatFirstDeferralOutbox(
         payloadHash: String(row.payload_hash),
         attemptCount,
         deliveryGeneration,
-      };
+      });
+      return { kind: "ack" };
     });
+    return deliveries;
   });
 }
 
@@ -1326,13 +1633,27 @@ export function settleChatFirstDeferralOutbox(
         [now, now, input.continuityKey],
       );
     } else {
-      const retryable = !input.errorCode?.endsWith("_4xx") && attempts < 5;
+      const errorText = boundedOutboxError(input.errorCode);
+      const outcome = input.errorCode?.endsWith("_4xx")
+        ? { kind: "reject" as const, errorText, reason: errorText }
+        : { kind: "retry" as const, errorText, reason: errorText };
+      const decision = decideAttempt({
+        attemptCount: attempts,
+        outcome,
+        policy: DEFERRAL_OUTBOX_POLICY,
+        nowMs: now,
+      });
       store.execute(
         `UPDATE chat_first_deferral_outbox
          SET status = ?, available_at_ms = ?, lease_expires_at_ms = NULL,
              last_error_code = ?, updated_at_ms = ? WHERE continuity_key = ?`,
-        [retryable ? "retrying" : "failed", retryable ? now + Math.min(30_000, attempts * 1_000) : now,
-          boundedOutboxError(input.errorCode), now, input.continuityKey],
+        [
+          decision.terminal ? "failed" : "retrying",
+          decision.retryAtMs ?? now,
+          decision.errorText,
+          now,
+          input.continuityKey,
+        ],
       );
     }
     return true;
@@ -1458,7 +1779,8 @@ export function assertPublicJournalUpdatePolicy(
   }
   const appendBlocks = input.appendContentBlocks ?? [];
   const appendResources = input.appendResources ?? [];
-  const hasAppend = appendBlocks.length > 0 || appendResources.length > 0;
+  const appendEvidence = input.appendEvidence ?? [];
+  const hasAppend = appendBlocks.length > 0 || appendResources.length > 0 || appendEvidence.length > 0;
   const hasForbiddenMutation = input.status !== undefined
     || input.content !== undefined
     || input.replaceContentBlocks !== undefined
@@ -1591,7 +1913,7 @@ export function terminalizeJournalTurn(
     }
     const content = input.content ?? current.content;
     const finalContentBlocks = input.disposition === "accept" && contentBlocks !== undefined
-      ? monotonicAcceptContentBlocks(current.contentBlocks, contentBlocks)
+      ? projectContentBlocksOverKernelAuthored(current.contentBlocks, contentBlocks)
       : contentBlocks ?? current.contentBlocks;
     const finalResources = input.disposition === "accept" && resources !== undefined
       ? monotonicAcceptResources(current.resources, resources)
@@ -1630,160 +1952,8 @@ export function terminalizeJournalTurn(
     if (input.disposition === "discard") {
       markDiscardedBackendProjection(store, input.turnId, now);
     }
-    if (input.disposition === "accept" && terminalized.status === "completed") {
-      appendNextColdStartSequenceQuestion(store, input.ownerId, terminalized, now);
-    }
     return terminalized;
   });
-}
-
-/**
- * Advance the fixed sparse sequence only from the selected option's ordinary
- * assistant continuation after that continuation reaches a successful
- * terminal state. The same SQLite transaction commits both facts, making a
- * crash retry replay-safe without a separate sequence-completed flag.
- */
-function appendNextColdStartSequenceQuestion(
-  store: AgentStore,
-  ownerId: string,
-  terminalized: ConversationTurn,
-  nowMs: number,
-): void {
-  const metadata = parseObjectJson(terminalized.metadataJson) as Record<string, unknown>;
-  const descriptor = localColdStartSequenceDescriptor(metadata.coldStartSequence);
-  const continuityKey = typeof metadata.continuityKey === "string" ? metadata.continuityKey : null;
-  if (!descriptor || !continuityKey) return;
-  const tail = canonicalConversationTail(store, terminalized.conversationId);
-  if (!tail || tail.turnId !== terminalized.turnId) return;
-  if (!selectedColdStartParentMatchesContinuation(store, ownerId, terminalized, descriptor, continuityKey)) return;
-
-  if (descriptor.step === 3) {
-    recordColdStartSequenceTerminalReceipt(store, {
-      ownerId,
-      conversationId: terminalized.conversationId,
-      sequenceId: descriptor.sequenceId,
-      terminalState: "completed",
-      terminalTurnId: terminalized.turnId,
-      nowMs,
-    });
-    return;
-  }
-
-  const nextStep = (descriptor.step + 1) as 2 | 3;
-  const nextQuestion = coldStartSequenceQuestion(descriptor.sequenceId, nextStep);
-  const turnId = stableColdStartSequenceTurnID(descriptor.sequenceId, nextStep);
-  recordJournalTurn(store, {
-    ownerId,
-    conversationId: terminalized.conversationId,
-    turnId,
-    producerId: `cold-start-sequence:${descriptor.sequenceId}:step:${nextStep}`,
-    role: "assistant",
-    surfaceKind: "main_chat",
-    origin: "typed_chat",
-    status: "completed",
-    content: "",
-    contentBlocks: [nextQuestion],
-    metadataJson: JSON.stringify({ coldStartSequence: { sequenceId: descriptor.sequenceId, step: nextStep } }),
-    createdAtMs: nowMs + 1,
-  });
-}
-
-function localColdStartSequenceDescriptor(
-  value: unknown,
-): { sequenceId: string; step: 1 | 2 | 3 } | null {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-  const record = value as Record<string, unknown>;
-  const sequenceId = typeof record.sequenceId === "string" ? record.sequenceId : "";
-  const step = record.step;
-  if (!sequenceId || (step !== 1 && step !== 2 && step !== 3)) return null;
-  return { sequenceId, step };
-}
-
-function selectedColdStartParentMatchesContinuation(
-  store: AgentStore,
-  ownerId: string,
-  terminalized: ConversationTurn,
-  descriptor: { sequenceId: string; step: 1 | 2 | 3 },
-  continuityKey: string,
-): boolean {
-  const rows = store.allRows(
-    `SELECT turn_id FROM conversation_turns
-     WHERE conversation_id = ? AND role = 'assistant' AND turn_seq < ?
-     ORDER BY turn_seq DESC`,
-    [terminalized.conversationId, terminalized.turnSeq],
-  );
-  for (const row of rows) {
-    const turn = requireJournalTurn(store, terminalized.conversationId, String(row.turn_id));
-    for (const block of turn.contentBlocks) {
-      if (
-        block.type !== "questionCard"
-        || block.selectedOptionId === undefined
-        || block.coldStartSequence?.retired === true
-        || block.coldStartSequence?.sequenceId !== descriptor.sequenceId
-        || block.coldStartSequence?.step !== descriptor.step
-      ) continue;
-      if (
-        questionInteractionContinuityKey(
-          ownerId,
-          terminalized.conversationId,
-          block.questionId,
-          block.selectedOptionId,
-        ) === continuityKey
-      ) return true;
-    }
-  }
-  return false;
-}
-
-function coldStartSequenceQuestion(
-  sequenceId: string,
-  step: 2 | 3,
-): Extract<ConversationContentBlock, { type: "questionCard" }> {
-  const questionId = `${sequenceId}:step:${step}`;
-  const options = step === 2
-    ? [
-      {
-        optionId: `${sequenceId}:goal:create`,
-        label: "Yes, create a goal",
-        preparedAnswer: "Yes, turn that into a goal for me.",
-      },
-      {
-        optionId: `${sequenceId}:goal:not-yet`,
-        label: "Not yet",
-        preparedAnswer: "Not yet. I want to keep thinking about it first.",
-      },
-    ]
-    : [
-      {
-        optionId: `${sequenceId}:tasks:draft`,
-        label: "Yes, draft tasks",
-        preparedAnswer: "Yes, draft a few first tasks for me.",
-      },
-      {
-        optionId: `${sequenceId}:tasks:not-yet`,
-        label: "I will add them later",
-        preparedAnswer: "I will add tasks later.",
-      },
-    ];
-  return {
-    type: "questionCard",
-    id: stableColdStartSequenceBlockID(sequenceId, step),
-    questionId,
-    text: step === 2
-      ? "Would you like me to turn that into a goal?"
-      : "Want me to draft a few first tasks?",
-    subject: { kind: "cold_start", id: sequenceId },
-    options,
-    coldStartSequence: { sequenceId, step },
-  };
-}
-
-function stableColdStartSequenceTurnID(sequenceId: string, step: 2 | 3): string {
-  return `turn_cfs_${createHash("sha256").update(`${sequenceId}\u0000${step}`).digest("hex").slice(0, 24)}`;
-}
-
-function stableColdStartSequenceBlockID(sequenceId: string, step: 2 | 3): string {
-  return `cfs_block_${createHash("sha256").update(`${sequenceId}\u0000${step}`).digest("hex").slice(0, 20)}`;
 }
 
 function recordColdStartSequenceTerminalReceipt(
@@ -1854,19 +2024,62 @@ function markDiscardedBackendProjection(store: AgentStore, turnId: string, nowMs
   );
 }
 
-function monotonicAcceptContentBlocks(
+/**
+ * The block kinds the kernel writes and the visible projection never authors.
+ *
+ * Both the streaming update and the terminal commit hand us the projection
+ * Swift assembled from the adapter stream — text, tool calls, thinking, and the
+ * cards Swift itself appends. A block the *agent* rendered mid-turn through
+ * `render_chat_blocks` cannot be in it: that append is a journal mutation, not
+ * a stream event, so the surface has never seen it. Replacing the turn's blocks
+ * with that projection deleted every task card, goal link and memory link the
+ * turn had rendered, seconds after the tool reported success — which is why
+ * chat-first components looked like they never rendered while the tool returned
+ * `ok`.
+ */
+const KERNEL_AUTHORED_CONTENT_BLOCK_TYPES: ReadonlySet<ConversationContentBlock["type"]> = new Set([
+  "agentSpawn",
+  "agentCompletion",
+  "taskCard",
+  "goalLink",
+  "captureLink",
+  "conversationLink",
+  "memoryLink",
+  "questionCard",
+]);
+
+/**
+ * Blocks the surface may re-send but never re-derive, so the journal's copy
+ * stays canonical even when a projection carries one of its own.
+ */
+const PINNED_CONTENT_BLOCK_TYPES: ReadonlySet<ConversationContentBlock["type"]> = new Set([
+  "agentSpawn",
+  "agentCompletion",
+]);
+
+/**
+ * Apply a surface projection over the journal's blocks without losing the ones
+ * the surface could not have known about.
+ *
+ * An id the projection carries is the projection's to define — that is how a
+ * question card's options get retired — except for the pinned kinds above.
+ * An id it omits survives only when the kernel wrote it.
+ */
+function projectContentBlocksOverKernelAuthored(
   current: readonly ConversationContentBlock[],
   incoming: readonly ConversationContentBlock[],
 ): ConversationContentBlock[] {
-  const protectedCurrent = new Map(
+  const pinned = new Map(
     current
-      .filter((block) => block.type === "agentSpawn" || block.type === "agentCompletion")
+      .filter((block) => PINNED_CONTENT_BLOCK_TYPES.has(block.type))
       .map((block) => [block.id, block] as const),
   );
-  const result = incoming.map((block) => structuredClone(protectedCurrent.get(block.id) ?? block));
+  const result = incoming.map((block) => structuredClone(pinned.get(block.id) ?? block));
   const resultIds = new Set(result.map((block) => block.id));
-  for (const block of protectedCurrent.values()) {
-    if (!resultIds.has(block.id)) result.push(structuredClone(block));
+  for (const block of current) {
+    if (resultIds.has(block.id)) continue;
+    if (!KERNEL_AUTHORED_CONTENT_BLOCK_TYPES.has(block.type)) continue;
+    result.push(structuredClone(block));
   }
   return result;
 }
@@ -2336,7 +2549,9 @@ export function importRemoteJournalTurn(
   const now = input.nowMs ?? Date.now();
   const contentBlocks = validateContentBlocks(input.contentBlocks);
   const resources = validateResources(input.resources ?? []);
-  const metadataJson = validObjectJson(input.metadataJson ?? "{}", "metadataJson");
+  const metadataJson = conversationEvidenceForBackendImport(
+    validObjectJson(input.metadataJson ?? "{}", "metadataJson"),
+  );
 
   return store.withTransaction(() => {
     assertConversationOwner(store, input.conversationId, input.ownerId);
@@ -2731,7 +2946,8 @@ export function drainBackendConversationDeleteOutbox(
        LIMIT ?`,
       [ownerId, now, now, limit],
     );
-    return candidates.map((candidate) => {
+    const deliveries: BackendConversationDeleteDelivery[] = [];
+    drainIsolated(candidates, (candidate) => {
       const operationId = String(candidate.operation_id);
       store.execute(
         `UPDATE backend_conversation_delete_outbox
@@ -2741,8 +2957,10 @@ export function drainBackendConversationDeleteOutbox(
          WHERE operation_id = ?`,
         [now + leaseMs, now, operationId],
       );
-      return requireBackendConversationDelete(store, operationId);
+      deliveries.push(requireBackendConversationDelete(store, operationId));
+      return { kind: "ack" };
     });
+    return deliveries;
   });
 }
 
@@ -2927,7 +3145,7 @@ export function drainBackendTurnOutbox(
 
     const deliveries: BackendTurnDelivery[] = [];
     const quarantined: string[] = [];
-    for (const candidate of candidates) {
+    drainIsolated(candidates, (candidate) => {
       const turnId = String(candidate.turn_id);
       const currentOutbox = requireOutboxRecord(store, turnId);
       const turn = requireJournalTurn(store, currentOutbox.conversationId, turnId);
@@ -2941,14 +3159,24 @@ export function drainBackendTurnOutbox(
         // stall that persists across restarts because the row is durable).
         // Parking to 'failed' excludes it from future selection; a later
         // `updateJournalTurn` re-stamps the hash and re-arms it to 'pending'.
+        const decision = decideAttempt({
+          attemptCount: Math.max(currentOutbox.attemptCount, 1),
+          outcome: {
+            kind: "reject",
+            errorText: OUTBOX_CANONICAL_HASH_MISMATCH_CODE,
+            reason: "malformed",
+          },
+          policy: JOURNAL_OUTBOX_POLICY,
+          nowMs: now,
+        });
         store.execute(
           `UPDATE backend_turn_outbox
-           SET status = 'failed', last_error_code = ?, lease_expires_at_ms = NULL, updated_at_ms = ?
+           SET status = ?, last_error_code = ?, lease_expires_at_ms = NULL, updated_at_ms = ?
            WHERE turn_id = ?`,
-          [OUTBOX_CANONICAL_HASH_MISMATCH_CODE, now, turnId],
+          [decision.terminal ? "failed" : "retrying", decision.errorText, now, turnId],
         );
         quarantined.push(turnId);
-        continue;
+        return { kind: "ack" };
       }
       const journalState = requireJournalState(store, currentOutbox.conversationId);
       store.execute(
@@ -2962,7 +3190,8 @@ export function drainBackendTurnOutbox(
       );
       const outbox = requireOutboxRecord(store, turnId);
       deliveries.push({ ...outbox, clientMessageId: turnId, turn, payload });
-    }
+      return { kind: "ack" };
+    });
     if (input.onQuarantine) {
       for (const turnId of quarantined) input.onQuarantine(turnId);
     }
@@ -3206,11 +3435,20 @@ export function getJournalObservability(
     `SELECT status, COUNT(*) AS count FROM backend_turn_outbox${deliveryWhere} GROUP BY status`,
     input.ownerId ? [input.ownerId] : [],
   );
+  const ownerFilter = input.ownerId ? " AND owner_id = ?" : "";
+  const oldestParams = input.ownerId ? [input.ownerId, input.ownerId, input.ownerId] : [];
   const oldest = store.getOptionalRow(
-    `SELECT MIN(created_at_ms) AS oldest
-     FROM backend_turn_outbox
-     WHERE status IN ('pending', 'delivering', 'retrying')${input.ownerId ? " AND owner_id = ?" : ""}`,
-    input.ownerId ? [input.ownerId] : [],
+    `SELECT MIN(created_at_ms) AS oldest FROM (
+       SELECT created_at_ms FROM backend_turn_outbox
+       WHERE status IN ('pending', 'delivering', 'retrying')${ownerFilter}
+       UNION ALL
+       SELECT created_at_ms FROM backend_conversation_delete_outbox
+       WHERE status IN ('pending', 'delivering', 'retrying')${ownerFilter}
+       UNION ALL
+       SELECT created_at_ms FROM chat_first_deferral_outbox
+       WHERE status IN ('pending', 'delivering', 'retrying')${ownerFilter}
+     )`,
+    oldestParams,
   );
   return {
     turnStatusCounts: countRows<ConversationTurnStatus>(turnRows),
@@ -3516,8 +3754,19 @@ function assertIdempotentRecord(
     && existing.producingAttemptId === (input.producingAttemptId ?? null)
     && stableJson(existing.contentBlocks) === stableJson(input.contentBlocks)
     && stableJson(existing.resources) === stableJson(input.resources)
-    && stableJson(parseObjectJson(existing.metadataJson)) === stableJson(parseObjectJson(input.metadataJson));
+    && recordMetadataEquivalent(existing.metadataJson, input.metadataJson);
   if (!equivalent) throw new Error("Canonical turn or producer identity collision has different journal content");
+}
+
+/** Evidence attachment is a later revision of the same original record.
+ * A retry of that original request must still be idempotent, while a retry
+ * that changes non-evidence metadata or evidence identity/content is not. */
+function recordMetadataEquivalent(existingMetadataJson: string, incomingMetadataJson: string): boolean {
+  const comparableIncoming = preserveConversationEvidenceOnMetadataUpdate(
+    existingMetadataJson,
+    incomingMetadataJson,
+  );
+  return stableJson(parseObjectJson(existingMetadataJson)) === stableJson(parseObjectJson(comparableIncoming));
 }
 
 function canonicalJournalDelivery(
@@ -3593,26 +3842,6 @@ function stableChatFirstMaterializationReceiptID(intentId: string, continuityKey
     .slice(0, 24)}`;
 }
 
-/** Any unanswered question or streaming assistant tail blocks proactive arrival. */
-function materializationTailState(
-  store: AgentStore,
-  conversationId: string,
-): { unansweredQuestion: boolean; streaming: boolean } {
-  const turn = canonicalConversationTail(store, conversationId);
-  if (!turn) return { unansweredQuestion: false, streaming: false };
-  const assistant = turn.role === "assistant";
-  return {
-    unansweredQuestion: assistant
-      && turn.status === "completed"
-      && turn.contentBlocks.some((block) => (
-        block.type === "questionCard"
-        && block.selectedOptionId === undefined
-        && block.coldStartSequence?.retired !== true
-      )),
-    streaming: assistant && (turn.status === "pending" || turn.status === "streaming"),
-  };
-}
-
 /**
  * Return the user-visible conversation tail by immutable creation order.
  *
@@ -3639,124 +3868,6 @@ function canonicalConversationTail(
   return row ? requireJournalTurn(store, conversationId, String(row.turn_id)) : null;
 }
 
-/**
- * Proactive intents are server contracts with snake_case fields; normalize and
- * bound them once before they become kernel-owned persisted blocks. This keeps
- * Swift a transport/projection layer instead of another block writer.
- */
-function chatFirstIntentBlocks(
-  intentId: string,
-  controlGeneration: number,
-  source: MaterializeChatFirstIntentInput["source"],
-  rawBlocks: readonly unknown[],
-): ConversationContentBlock[] {
-  if (rawBlocks.length < 1 || rawBlocks.length > 8) {
-    throw new Error("Chat-first intent requires one to eight blocks");
-  }
-  return rawBlocks.map((raw, index) => {
-    const block = recordValue(raw, "chat-first intent block");
-    const type = nonEmptyString(block.type, "chat-first intent block type");
-    const id = `cfi_block_${createHash("sha256")
-      .update(`${intentId}\u0000${index}\u0000${type}`)
-      .digest("hex")
-      .slice(0, 20)}`;
-    switch (type) {
-      case "questionCard": {
-        const subject = recordValue(block.subject, "chat-first question subject");
-        const subjectKind = chatFirstSubjectKind(subject.kind);
-        const subjectId = nonEmptyString(subject.id, "chat-first question subject ID");
-        const coldStartSequence = block.cold_start_sequence === undefined
-          ? undefined
-          : coldStartSequenceValue(block.cold_start_sequence);
-        const isColdStart = subjectKind === "cold_start";
-        if (isColdStart !== (coldStartSequence !== undefined)) {
-          throw new Error("chat-first cold-start question descriptor is invalid");
-        }
-        if (coldStartSequence) {
-          if (
-            source !== "cold_start_sparse"
-            || coldStartSequence.step !== 1
-            || coldStartSequence.sequenceId !== subjectId
-            || subjectId !== `cold-start:${controlGeneration}`
-          ) {
-            throw new Error("chat-first cold-start question is invalid");
-          }
-        }
-        const options = arrayValue(block.options, "chat-first question options").map((rawOption) => {
-          const option = recordValue(rawOption, "chat-first question option");
-          const defer = option.defer === undefined ? undefined : booleanValue(option.defer, "chat-first question defer");
-          return {
-            optionId: nonEmptyString(option.option_id, "chat-first question option ID"),
-            label: nonEmptyString(option.label, "chat-first question option label"),
-            preparedAnswer: nonEmptyString(option.prepared_answer, "chat-first question prepared answer"),
-            ...(defer === true ? { defer: true } : {}),
-          };
-        });
-        return {
-          type,
-          id,
-          questionId: nonEmptyString(block.question_id, "chat-first question ID"),
-          text: nonEmptyString(block.text, "chat-first question text"),
-          subject: {
-            kind: subjectKind,
-            id: subjectId,
-          },
-          options,
-          ...(coldStartSequence ? { coldStartSequence } : {}),
-        };
-      }
-      case "taskCard":
-        return { type, id, taskId: nonEmptyString(block.task_id, "chat-first task ID") };
-      case "goalLink":
-        return {
-          type,
-          id,
-          goalId: nonEmptyString(block.goal_id, "chat-first goal ID"),
-          summary: nonEmptyString(block.summary, "chat-first goal summary"),
-        };
-      case "captureLink": {
-        const rawMoment = block.moment_timestamp_ms;
-        const momentTimestampMs = rawMoment === undefined || rawMoment === null
-          ? undefined
-          : safeNonNegativeInteger(rawMoment, "chat-first capture moment");
-        return {
-          type,
-          id,
-          conversationId: nonEmptyString(block.conversation_id, "chat-first capture ID"),
-          ...(momentTimestampMs === undefined ? {} : { momentTimestampMs }),
-          summary: nonEmptyString(block.summary, "chat-first capture summary"),
-        };
-      }
-      case "conversationLink": {
-        const recommendedActionItems = block.recommended_action_items === undefined
-          ? []
-          : arrayValue(block.recommended_action_items, "chat-first recommended action items").map((rawItem) => {
-            const item = recordValue(rawItem, "chat-first recommended action item");
-            const taskId = item.task_id === undefined || item.task_id === null
-              ? undefined
-              : nonEmptyString(item.task_id, "chat-first recommended action item task ID");
-            return {
-              description: nonEmptyString(
-                item.description,
-                "chat-first recommended action item description",
-              ),
-              ...(taskId === undefined ? {} : { taskId }),
-            };
-          });
-        return {
-          type,
-          id,
-          conversationId: nonEmptyString(block.conversation_id, "chat-first conversation ID"),
-          summary: nonEmptyString(block.summary, "chat-first conversation summary"),
-          recommendedActionItems,
-        };
-      }
-      default:
-        throw new Error("Chat-first intent block type is invalid");
-    }
-  });
-}
-
 function recordValue(value: unknown, name: string): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(`${name} is invalid`);
   return value as Record<string, unknown>;
@@ -3777,26 +3888,11 @@ function booleanValue(value: unknown, name: string): boolean {
   return value;
 }
 
-function coldStartSequenceValue(value: unknown): { sequenceId: string; step: 1 | 2 | 3 } {
-  const sequence = recordValue(value, "chat-first cold-start sequence");
-  const step = safeNonNegativeInteger(sequence.step, "chat-first cold-start sequence step");
-  if (step < 1 || step > 3) throw new Error("chat-first cold-start sequence step is invalid");
-  return {
-    sequenceId: nonEmptyString(sequence.sequence_id, "chat-first cold-start sequence ID"),
-    step: step as 1 | 2 | 3,
-  };
-}
-
 function safeNonNegativeInteger(value: unknown, name: string): number {
   if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) {
     throw new Error(`${name} is invalid`);
   }
   return value;
-}
-
-function chatFirstSubjectKind(value: unknown): "task" | "goal" | "capture" | "cold_start" {
-  if (value === "task" || value === "goal" || value === "capture" || value === "cold_start") return value;
-  throw new Error("chat-first question subject kind is invalid");
 }
 
 function findSelectedQuestionBlock(
@@ -3843,7 +3939,7 @@ function questionInteractionTurns(
   };
 }
 
-function enqueueChatFirstDeferral(
+export function enqueueChatFirstDeferral(
   store: AgentStore,
   input: {
     ownerId: string;
@@ -3868,13 +3964,12 @@ function enqueueChatFirstDeferral(
   };
   const payloadHash = sha256(stableJson(payload));
   const existing = store.getOptionalRow(
-    "SELECT payload_hash FROM chat_first_deferral_outbox WHERE continuity_key = ?",
+    "SELECT continuity_key FROM chat_first_deferral_outbox WHERE continuity_key = ?",
     [input.continuityKey],
   );
+  // Identity-keyed adopt: a reused continuity_key keeps the first payload.
+  // The helper would compare the same key to itself after this SELECT.
   if (existing) {
-    if (String(existing.payload_hash) !== payloadHash) {
-      throw new Error("Question deferral continuity key was reused with different content");
-    }
     return;
   }
   store.execute(
@@ -4069,6 +4164,30 @@ function boundedLimit(limit: number): number {
   return Math.min(limit, MAX_DRAIN_BATCH);
 }
 
+function boundedEvidenceSearchLimit(limit: number | undefined): number {
+  const requested = limit ?? DEFAULT_EVIDENCE_SEARCH_LIMIT;
+  if (!Number.isInteger(requested) || requested <= 0) {
+    throw new Error("search_journal_evidence limit must be a positive integer");
+  }
+  return Math.min(requested, MAX_EVIDENCE_SEARCH_LIMIT);
+}
+
+function boundedEvidenceOffset(offset: number | undefined): number {
+  const requested = offset ?? 0;
+  if (!Number.isSafeInteger(requested) || requested < 0 || requested > 1_000_000_000) {
+    throw new Error("Conversation evidence offset is outside the bounded range");
+  }
+  return requested;
+}
+
+function boundedEvidenceChars(maxChars: number | undefined): number {
+  const requested = maxChars ?? 4_096;
+  if (!Number.isSafeInteger(requested) || requested <= 0) {
+    throw new Error("Conversation evidence maxChars must be a positive integer");
+  }
+  return Math.min(requested, 64 * 1024);
+}
+
 function boundedErrorCode(value: string): string {
   const code = nonEmpty(value, "errorCode");
   if (code.length > 128 || !/^[A-Za-z0-9_.:-]+$/.test(code)) {
@@ -4092,7 +4211,47 @@ function validObjectJson(raw: string, field: string): string {
   if (parsed === null || Array.isArray(parsed) || typeof parsed !== "object") {
     throw new Error(`${field} must contain a JSON object`);
   }
+  validateConversationEvidenceMetadata(parsed as Record<string, unknown>);
   return JSON.stringify(parsed);
+}
+
+/**
+ * Shallow key-merge used only by terminal revisions: the truncation cause
+ * joins the row's existing metadata (model attribution, continuity) instead
+ * of replacing it. The patch's keys win on conflict.
+ */
+function mergedObjectJson(base: string, patch: string): string {
+  const baseObject = parseObjectJson(base);
+  const patchObject = parseObjectJson(patch);
+  if (
+    baseObject === null || Array.isArray(baseObject) || typeof baseObject !== "object"
+    || patchObject === null || Array.isArray(patchObject) || typeof patchObject !== "object"
+  ) {
+    throw new Error("metadataJson must contain a JSON object");
+  }
+  return JSON.stringify({ ...(baseObject as Record<string, unknown>), ...(patchObject as Record<string, unknown>) });
+}
+
+/**
+ * A terminal revision is a payload-free downgrade of an optimistically sealed
+ * completion: status must be `failed`, and no payload or run-identity field
+ * may ride along — the sealed row's content, blocks, resources, and metadata
+ * (beyond the merged terminal reason) stay exactly as written.
+ */
+function assertTerminalRevisionShape(input: UpdateJournalTurnInput): void {
+  if (
+    input.status !== "failed"
+    || input.content !== undefined
+    || input.replaceContentBlocks !== undefined
+    || input.appendContentBlocks !== undefined
+    || input.replaceResources !== undefined
+    || input.appendResources !== undefined
+    || input.appendEvidence !== undefined
+    || input.producingRunId !== undefined
+    || input.producingAttemptId !== undefined
+  ) {
+    throw new Error("Terminal journal revision must be a payload-free downgrade to failed");
+  }
 }
 
 function parseObjectJson(raw: string): unknown {
@@ -4135,7 +4294,7 @@ function backendTurnPayload(turn: ConversationTurn): BackendTurnPayload {
     return pathless;
   });
   const backendMetadata = {
-    ...messageMetadata,
+    ...conversationEvidenceForBackend(messageMetadata),
     ...(backendResources.length > 0 ? { resources: backendResources } : {}),
   };
   const projectedText = turn.content.trim()

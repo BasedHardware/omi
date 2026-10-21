@@ -200,6 +200,22 @@ def test_get_tasks_skips_malformed_record():
     assert result['tasks'][0]['id'] == 'good'
 
 
+def test_get_tasks_locked_null_description_does_not_crash():
+    valid = {'id': 'good', 'description': 'do x', 'completed': False, 'is_locked': False}
+    locked_null = {'id': 'locked-1', 'description': None, 'is_locked': True, 'completed': False}
+    integ.action_items_db.get_action_items = MagicMock(return_value=[valid, locked_null])
+    _setup_gates()
+
+    with patch.object(integ, 'verify_api_key', return_value=True), patch.object(integ, 'apps_utils') as au:
+        au.app_can_read_tasks.return_value = True
+        result = _call_tasks()
+
+    assert len(result['tasks']) == 2
+    assert result['tasks'][0]['id'] == 'good'
+    assert result['tasks'][1]['id'] == 'locked-1'
+    assert result['tasks'][1]['description'] == ''
+
+
 def test_get_tasks_all_malformed_returns_empty():
     integ.action_items_db.get_action_items = MagicMock(return_value=[{'id': 'b1'}, {'id': 'b2'}])
     _setup_gates()
@@ -279,7 +295,7 @@ def test_resolve_geolocation_keeps_enrichment():
 
     from models.geolocation import Geolocation
 
-    enriched = Geolocation(latitude=37.78, longitude=-122.4, google_place_id='ChIJ_test', address='1 Main St')
+    enriched = Geolocation(latitude=37.7801, longitude=-122.4001, google_place_id='ChIJ_test', address='1 Main St')
     with (
         patch.object(integ, 'run_blocking', side_effect=_passthrough_run_blocking),
         patch.object(integ, 'get_google_maps_location', return_value=enriched),
@@ -288,6 +304,8 @@ def test_resolve_geolocation_keeps_enrichment():
         result = asyncio.run(integ._resolve_geolocation(raw))
 
     assert result.google_place_id == 'ChIJ_test'  # enrichment kept, not clobbered back to the raw value
+    assert result.latitude == raw.latitude
+    assert result.longitude == raw.longitude
 
 
 def test_resolve_geolocation_falls_back_to_raw_on_geocode_miss():

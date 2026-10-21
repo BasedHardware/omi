@@ -2,6 +2,7 @@ import importlib.util
 import os
 import sys
 import types
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -192,6 +193,12 @@ class _FailingIndex:
         raise RuntimeError("pinecone unavailable")
 
 
+@contextmanager
+def _allow_external_provider_write(uid, *, firestore_client=None):
+    assert uid
+    yield None
+
+
 def _load_vector_db_with_stubs():
     pinecone_module = types.ModuleType("pinecone")
     setattr(pinecone_module, "Pinecone", lambda api_key: None)
@@ -217,8 +224,10 @@ def _load_vector_db_with_stubs():
 def _install_recording_vector_db(monkeypatch):
     vector_db = _load_vector_db_with_stubs()
     fake_index = _RecordingIndex()
+
     monkeypatch.setattr(vector_db, "index", fake_index)
     monkeypatch.setattr(vector_db, "embeddings", _FakeEmbeddings())
+    monkeypatch.setattr(vector_db, "external_write_fence", _allow_external_provider_write)
     sys.modules["database.vector_db"] = vector_db
     return vector_db, fake_index
 
@@ -288,8 +297,13 @@ def test_parse_memory_search_vector_hit_rejects_legacy_memory_tier_metadata():
     assert parsed.decision == SearchDecision.stale_vector
 
 
-def test_upsert_canonical_memory_vector_writes_user_scoped_id_and_metadata(monkeypatch):
-    vector_db, fake_index = _install_recording_vector_db(monkeypatch)
+@pytest.fixture
+def recording_vector_db(monkeypatch, _vector_db_stub_isolation):
+    return _install_recording_vector_db(monkeypatch)
+
+
+def test_upsert_canonical_memory_vector_writes_user_scoped_id_and_metadata(recording_vector_db):
+    vector_db, fake_index = recording_vector_db
 
     item = _item(memory_id="mem_hash001", tier=MemoryTier.short_term)
     vector_db.upsert_canonical_memory_vector(item)
@@ -393,6 +407,21 @@ def test_account_purge_removes_all_uid_rows_across_provider_id_generations(monke
         "filter": build_canonical_memory_vector_delete_filter(first_uid),
         "namespace": "ns2",
     }
+
+
+def test_delete_canonical_memory_vectors_confirms_absence_when_index_unconfigured(monkeypatch):
+    """Privacy deletion must not fail closed on a deployment with no vector store.
+
+    No index means no vector copy can exist, so the desired absence is
+    trivially confirmed. The production backend and prod desktop-backend run
+    without ``PINECONE_API_KEY``; requiring a live provider here made every
+    explicit delete (and every cascade conversation delete) 503 forever
+    (#10446 recurrence: desktop delete errors, mobile re-adds on refresh).
+    """
+    vector_db = _load_vector_db_with_stubs()
+    monkeypatch.setattr(vector_db, "index", None)
+
+    assert vector_db.delete_canonical_memory_vectors("uid-first", "mem-any") is True
 
 
 def test_upsert_canonical_memory_vector_strips_null_optional_metadata(monkeypatch):
@@ -540,12 +569,15 @@ def test_sync_canonical_memory_vector_swallows_pinecone_failure(monkeypatch):
     vector_db = _load_vector_db_with_stubs()
     monkeypatch.setattr(vector_db, "index", _FailingIndex())
     monkeypatch.setattr(vector_db, "embeddings", _FakeEmbeddings())
+    monkeypatch.setattr(vector_db, "external_write_fence", _allow_external_provider_write)
     sys.modules["database.vector_db"] = vector_db
 
-    from utils.memory.canonical_vector_sync import sync_canonical_memory_vector
+    from utils.memory import canonical_vector_sync
 
     hard_failures = []
-    synced = sync_canonical_memory_vector(_item(), on_hard_failure=lambda: hard_failures.append(1))
+    synced = canonical_vector_sync.sync_canonical_memory_vector(
+        _item(), on_hard_failure=lambda: hard_failures.append(1)
+    )
     assert synced is False
     assert hard_failures == [1]
 

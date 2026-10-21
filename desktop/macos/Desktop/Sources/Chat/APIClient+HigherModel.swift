@@ -2,11 +2,17 @@ import Foundation
 
 extension APIClient {
   /// Owner-bound transport for the realtime hub's kernel-authorized
-  /// higher-model escalation. The body can contain the pinned turn's private
-  /// transcript and context, so the initial credential, 401 refresh, and late
-  /// response all remain bound to the same immutable owner.
-  func askHigherModel(
+  /// `think_deeper` escalation to the managed Luna thinking lane. The body can
+  /// contain the pinned turn's private transcript, context, and screenshot
+  /// pixels, so the initial credential, 401 refresh, and late response all
+  /// remain bound to the same immutable owner.
+  ///
+  /// Heavy thinking legitimately spends longer than a normal completion, so the
+  /// request timeout is bounded per level instead of leaving the escalation
+  /// hanging on the shared 60-second window.
+  func thinkDeeperForVoice(
     body: [String: Any],
+    thinkingLevel: RealtimeHubTools.EscalationThinkingLevel,
     expectedOwnerID: String,
     customBaseURL: String? = nil
   ) async throws -> String {
@@ -22,9 +28,7 @@ extension APIClient {
 
     var request = URLRequest(url: url)
     request.httpMethod = "POST"
-    // Escalations may run a server-side web search (pause_turn continuations),
-    // which routinely exceeds a bare completion's latency.
-    request.timeoutInterval = 60
+    request.timeoutInterval = thinkingLevel == .heavy ? 150 : 60
     request.allHTTPHeaderFields = try await buildHeaders(
       requireAuth: true,
       expectedAuthOwnerId: expectedOwnerID)
@@ -45,6 +49,8 @@ extension APIClient {
     else {
       throw APIError.invalidResponse
     }
-    return text.trimmingCharacters(in: .whitespacesAndNewlines)
+    let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { throw APIError.invalidResponse }
+    return trimmed
   }
 }

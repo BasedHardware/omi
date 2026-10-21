@@ -13,6 +13,7 @@ import pytest
 from utils.conversations.search import conversation_matches_date_range, parse_exact_conversation_reference
 
 CONVERSATION_ID = "e8c05000-52f0-4a95-951c-ccd715523429"
+SAFE_NON_UUID_ID = "jit-conversation_001"
 
 
 @pytest.mark.parametrize(
@@ -29,6 +30,20 @@ def test_parse_exact_conversation_reference_accepts_canonical_id_and_share_url(r
 
 
 @pytest.mark.parametrize(
+    "conversation_id",
+    [
+        CONVERSATION_ID,
+        SAFE_NON_UUID_ID,
+        "A",
+        "ownerScopedID-123",
+        "firestore.document~1",
+    ],
+)
+def test_parse_exact_conversation_reference_round_trips_owner_scoped_card_reference(conversation_id):
+    assert parse_exact_conversation_reference(f"conversation:{conversation_id}") == conversation_id
+
+
+@pytest.mark.parametrize(
     "reference",
     [
         CONVERSATION_ID[:-1],
@@ -41,6 +56,14 @@ def test_parse_exact_conversation_reference_accepts_canonical_id_and_share_url(r
         f"https://h.omi.me/conversations/{CONVERSATION_ID}?source=chat",
         f"https://h.omi.me/conversations/{CONVERSATION_ID}#transcript",
         "find the conversation e8c05000",
+        SAFE_NON_UUID_ID,
+        "conversation:",
+        "conversation: conversation-1",
+        "conversation:conversation-1 ",
+        "conversation:conversation/1",
+        "conversation:conversation-1:summary",
+        "conversation:conversation-1:segment:segment-1",
+        f"conversation:{'a' * 97}",
     ],
 )
 def test_parse_exact_conversation_reference_rejects_ambiguous_references(reference):

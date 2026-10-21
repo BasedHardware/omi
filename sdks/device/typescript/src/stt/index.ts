@@ -5,10 +5,41 @@ export interface StreamingTranscriber {
   stop(): void;
 }
 
+/** Thrown by a Parakeet transcriber's appendPcm and stop when the server closed the stream
+ *  before sending ready, e.g. 1013 capacity_full or service_not_ready. That stream never
+ *  becomes ready, so callers can retry or switch engines instead of losing the session's audio. */
+export class SttStreamClosedError extends Error {
+  /** The WebSocket close code, e.g. 1013 (try again later), or 1006 if the connection failed. */
+  readonly closeCode: number;
+  /** The server's close reason, e.g. capacity_full; empty if it gave none. */
+  readonly closeReason: string;
+
+  constructor(closeCode: number, closeReason: string) {
+    super(`stream closed before ready: ${closeCode}${closeReason ? ` ${closeReason}` : ''}`);
+    this.name = 'SttStreamClosedError';
+    this.closeCode = closeCode;
+    this.closeReason = closeReason;
+  }
+}
+
 export function parakeetWsUrl(apiUrl: string, sampleRate = 16000): string {
-  let base = apiUrl.trim().replace(/\/+$/, '');
-  base = base.replace(/^https:/, 'wss:').replace(/^http:/, 'ws:');
-  return `${base}/v3/stream?sample_rate=${sampleRate}`;
+  const trimmed = apiUrl.trim();
+  const rawUrl = /^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(trimmed)
+    ? trimmed
+    : `https://${trimmed}`;
+  const parsed = new URL(rawUrl);
+  if (parsed.protocol === 'http:' || parsed.protocol === 'ws:') {
+    parsed.protocol = 'ws:';
+  } else if (parsed.protocol === 'https:' || parsed.protocol === 'wss:') {
+    parsed.protocol = 'wss:';
+  } else {
+    throw new TypeError(`Unsupported Parakeet API URL protocol: ${parsed.protocol}`);
+  }
+  const cleanPath = parsed.pathname.replace(/\/+$/, '');
+  parsed.pathname = `${cleanPath}/v3/stream`.replace(/^\/+/, '/');
+  parsed.searchParams.set('sample_rate', sampleRate.toString());
+  parsed.hash = '';
+  return parsed.toString();
 }
 
 export function deepgramWsUrl(sampleRate = 16000): string {
@@ -24,11 +55,14 @@ export function createDeepgramTranscriber(opts: {
   /** Header-capable authenticated WebSocket factory (or an authenticated proxy).
    *  The factory owns Deepgram authentication so credentials never enter the URL. */
   createWebSocket: (url: string) => WebSocket;
+  /** How long Stop waits for Deepgram to close after CloseStream. Default 5s. */
+  drainTimeoutMs?: number;
 }): StreamingTranscriber {
   if (!opts.createWebSocket) throw new Error('Deepgram requires createWebSocket');
   const url = deepgramWsUrl(opts.sampleRate ?? 16000);
   const ws = opts.createWebSocket(url);
   ws.binaryType = 'arraybuffer';
+  let stopped = false;
   ws.onmessage = (event: MessageEvent) => {
     try {
       const data = typeof event.data === 'string' ? JSON.parse(event.data) : null;
@@ -38,10 +72,45 @@ export function createDeepgramTranscriber(opts: {
   };
   return {
     appendPcm(chunk) {
+      if (stopped) return;
       if (ws.readyState === 1) ws.send(chunk as any);
     },
     stop() {
-      try { ws.close(); } catch { /* ignore */ }
+      if (stopped) return;
+      stopped = true;
+      let sentClose = false;
+      try {
+        if (ws.readyState === 1) {
+          ws.send(JSON.stringify({ type: 'CloseStream' }));
+          sentClose = true;
+        }
+      } catch {
+        // CloseStream is best-effort; still tear down the socket.
+      }
+
+      let finished = false;
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const finish = () => {
+        if (finished) return;
+        finished = true;
+        if (timer !== undefined) clearTimeout(timer);
+        try {
+          ws.close();
+        } catch { /* ignore */ }
+      };
+
+      if (!sentClose) {
+        finish();
+        return;
+      }
+
+      const drainTimeoutMs = opts.drainTimeoutMs ?? 5000;
+      timer = setTimeout(finish, drainTimeoutMs);
+      const prevClose = ws.onclose;
+      ws.onclose = (ev) => {
+        finish();
+        if (typeof prevClose === 'function') prevClose.call(ws, ev);
+      };
     },
   };
 }
@@ -51,12 +120,19 @@ export function createParakeetTranscriber(opts: {
   sampleRate?: number;
   onTranscript: TranscriptHandler;
   WebSocketImpl?: typeof WebSocket;
+  /** How long Stop waits after finalize before closing. Default 5s. */
+  drainTimeoutMs?: number;
 }): StreamingTranscriber {
   const WS = opts.WebSocketImpl ?? WebSocket;
   const url = parakeetWsUrl(opts.apiUrl, opts.sampleRate ?? 16000);
   const ws = new WS(url);
   ws.binaryType = 'arraybuffer';
   let ready = false;
+  let stopped = false;
+  let sentFinalize = false;
+  let finished = false;
+  let closedBeforeReady: SttStreamClosedError | undefined;
+  let timer: ReturnType<typeof setTimeout> | undefined;
   ws.onmessage = (event: MessageEvent) => {
     if (typeof event.data !== 'string') return;
     try {
@@ -71,15 +147,52 @@ export function createParakeetTranscriber(opts: {
       if (text) opts.onTranscript(text);
     } catch { /* ignore */ }
   };
+  // The server can close the stream before ready, e.g. 1013 capacity_full or service_not_ready
+  // (backend/parakeet/main.py). Such a stream never becomes ready, so keep why it closed.
+  ws.onclose = (ev) => {
+    if (!ready && !stopped) closedBeforeReady = new SttStreamClosedError(ev.code, ev.reason);
+  };
+  const finish = () => {
+    if (finished) return;
+    finished = true;
+    if (timer !== undefined) clearTimeout(timer);
+    try {
+      ws.close();
+    } catch { /* ignore */ }
+  };
   return {
     appendPcm(chunk) {
-      if (ready && ws.readyState === WS.OPEN) ws.send(chunk as any);
+      if (stopped) return;
+      // PCM before ready is dropped, unless the server already closed the stream.
+      if (closedBeforeReady) throw closedBeforeReady;
+      if (ready && ws.readyState === 1) ws.send(chunk as any);
     },
     stop() {
+      if (stopped) return;
+      stopped = true;
+      ready = false;
       try {
-        if (ws.readyState === WS.OPEN) ws.send('finalize');
-        ws.close();
-      } catch { /* ignore */ }
+        if (ws.readyState === 1) {
+          ws.send('finalize');
+          sentFinalize = true;
+        }
+      } catch {
+        // finalize is best-effort; still tear down the socket.
+      }
+
+      if (!sentFinalize) {
+        finish();
+        if (closedBeforeReady) throw closedBeforeReady;
+        return;
+      }
+
+      const drainTimeoutMs = opts.drainTimeoutMs ?? 5000;
+      timer = setTimeout(finish, drainTimeoutMs);
+      const prevClose = ws.onclose;
+      ws.onclose = (ev) => {
+        finish();
+        if (typeof prevClose === 'function') prevClose.call(ws, ev);
+      };
     },
   };
 }
@@ -92,12 +205,20 @@ export function createWhisperTranscriber(opts: {
   const batchBytes = (opts.batchSeconds ?? 5) * 16000 * 2;
   let buffer = new Uint8Array(0);
   let stopped = false;
-  async function flush(deliverWhenStopped = false) {
+  let queue: Promise<void> = Promise.resolve();
+  function flush() {
     if (!buffer.byteLength) return;
     const pcm = buffer;
     buffer = new Uint8Array(0);
-    const text = await opts.runner(pcm);
-    if (text && (!stopped || deliverWhenStopped)) opts.onTranscript(text);
+    const job = async () => {
+      try {
+        const text = await opts.runner(pcm);
+        if (text) opts.onTranscript(text);
+      } catch {
+        return;
+      }
+    };
+    queue = queue.then(job, job);
   }
   return {
     appendPcm(chunk) {
@@ -110,8 +231,9 @@ export function createWhisperTranscriber(opts: {
       if (buffer.byteLength >= batchBytes) void flush();
     },
     stop() {
+      if (stopped) return;
       stopped = true;
-      void flush(true);
+      flush();
     },
   };
 }

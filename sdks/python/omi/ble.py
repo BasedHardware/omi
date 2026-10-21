@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 from dataclasses import dataclass
 from typing import Awaitable, Callable, List, Optional, Union
 
 from bleak import BleakClient, BleakScanner
+from bleak.exc import BleakError
 
 from .constants import AUDIO_CODEC_UUID, AUDIO_DATA_UUID, OMI_SERVICE_UUID, PACKET_HEADER_BYTES
 
@@ -37,20 +39,36 @@ async def listen(
     on_packet: AsyncPacketHandler,
     *,
     char_uuid: str = AUDIO_DATA_UUID,
-    service_uuid: str = OMI_SERVICE_UUID,
+    service_uuid: Optional[str] = None,
 ) -> None:
-    """Connect and notify on audio characteristic until cancelled."""
+    """Connect and notify on audio characteristic until cancelled or disconnected."""
 
     async def _handler(_sender, data: bytearray) -> None:
         raw = bytes(data)
         result = on_packet(raw)
-        if asyncio.iscoroutine(result):
+        if inspect.isawaitable(result):
             await result
 
-    async with BleakClient(device_id) as client:
-        await client.start_notify(char_uuid, _handler)
-        while True:
-            await asyncio.sleep(3600)
+    disconnected = asyncio.Event()
+
+    def _on_disconnect(_client: BleakClient) -> None:
+        disconnected.set()
+
+    async with BleakClient(device_id, disconnected_callback=_on_disconnect) as client:
+        services = getattr(client, "services", None)
+        if services is not None and service_uuid:
+            service = services.get_service(service_uuid)
+            if service is None:
+                raise BleakError(f"Service {service_uuid} was not found")
+            characteristic = service.get_characteristic(char_uuid)
+            if characteristic is None:
+                raise BleakError(f"Characteristic {char_uuid} was not found in service {service_uuid}")
+            await client.start_notify(characteristic, _handler)
+        else:
+            await client.start_notify(char_uuid, _handler)
+        while not disconnected.is_set():
+            await asyncio.sleep(1)
+    raise ConnectionError(f"Device {device_id} disconnected")
 
 
 async def listen_payload(
@@ -58,15 +76,16 @@ async def listen_payload(
     on_payload: AsyncPacketHandler,
     *,
     char_uuid: str = AUDIO_DATA_UUID,
+    service_uuid: Optional[str] = None,
 ) -> None:
     async def wrapped(packet: bytes) -> None:
         if len(packet) <= PACKET_HEADER_BYTES:
             return
         result = on_payload(packet[PACKET_HEADER_BYTES:])
-        if asyncio.iscoroutine(result):
+        if inspect.isawaitable(result):
             await result
 
-    await listen(device_id, wrapped, char_uuid=char_uuid)
+    await listen(device_id, wrapped, char_uuid=char_uuid, service_uuid=service_uuid)
 
 
 async def read_codec(device_id: str, *, char_uuid: str = AUDIO_CODEC_UUID) -> int:

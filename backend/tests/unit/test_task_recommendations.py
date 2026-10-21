@@ -1083,6 +1083,66 @@ def test_malformed_candidate_confidence_does_not_break_the_evaluation():
     assert not by_id['candidate-null'].eligibility.passes_recommendation_gates
 
 
+def _pending_candidate_row(candidate_id, *, created_at, expires_at=None):
+    row = {
+        'candidate_id': candidate_id,
+        'status': 'pending',
+        'subject_kind': 'task',
+        'proposed_action': 'create',
+        'task_change': {'description': 'Send the budget to Dana', 'due_at': NOW + timedelta(days=1)},
+        'capture_confidence': 0.9,
+        'ownership_confidence': 0.9,
+        'created_at': created_at,
+        'updated_at': created_at,
+        'evidence_refs': [{'kind': 'conversation', 'id': 'conversation-1', 'scope': 'canonical'}],
+    }
+    if expires_at is not None:
+        row['expires_at'] = expires_at
+    return row
+
+
+def test_a_lapsed_suggestion_is_not_recommended_after_the_suggested_surface_drops_it():
+    """A suggestion expires once, not per surface.
+
+    The Suggested surface stops showing a pending Candidate whose window closed.
+    Recommending it here would put it back in front of the user on a second
+    surface, days after it was supposed to be gone -- and, because the pre-existing
+    backlog carries no `expires_at`, it would keep months-old proposals eligible.
+    """
+
+    lapsed_created_at = NOW - timedelta(days=3)
+    state = {
+        'tasks': [],
+        'candidates': [
+            _pending_candidate_row(
+                'candidate-lapsed',
+                created_at=lapsed_created_at,
+                expires_at=lapsed_created_at + recommendations.candidates_db.SUGGESTION_TTL,
+            ),
+            _pending_candidate_row('candidate-backlog', created_at=NOW - timedelta(days=90)),
+            _pending_candidate_row(
+                'candidate-live',
+                created_at=NOW - timedelta(hours=1),
+                expires_at=NOW + timedelta(days=1),
+            ),
+        ],
+        'goals': [],
+        'workstreams': [],
+        'artifacts': [],
+    }
+
+    subjects = recommendations._build_subjects(state, context=None, open_loop_snapshots=[], now=NOW)
+    by_id = {subject.subject_id: subject for subject in subjects}
+
+    for lapsed in ('candidate-lapsed', 'candidate-backlog'):
+        assert by_id[lapsed].eligibility.open, lapsed
+        assert not by_id[lapsed].eligibility.unexpired, lapsed
+        assert not by_id[lapsed].eligibility.passes_recommendation_gates, lapsed
+
+    assert by_id['candidate-live'].eligibility.unexpired
+    assert [subject.subject_id for subject in recommendations.filter_shortlist(subjects, set())] == ['candidate-live']
+
+
 def test_recently_created_manual_task_qualifies_without_reanimating_old_edits_or_generated_rows():
     state = {
         'tasks': [

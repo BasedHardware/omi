@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import type { KnowledgeGraph, KnowledgeGraphNode, KnowledgeGraphEdge, KnowledgeGraphNodeType } from '@/types/conversation';
-import { getKnowledgeGraph, rebuildKnowledgeGraph } from '@/lib/api';
+import { getKnowledgeGraph } from '@/lib/api';
 
 // Node colors matching mobile app
 export const NODE_COLORS: Record<KnowledgeGraphNodeType | 'user', string> = {
@@ -46,11 +46,9 @@ export interface UseKnowledgeGraphReturn {
   graphData: GraphData | null;
   loading: boolean;
   error: string | null;
-  rebuilding: boolean;
   selectedNode: GraphNode | null;
   // Actions
   refresh: () => Promise<void>;
-  rebuild: () => Promise<void>;
   selectNode: (node: GraphNode | null) => void;
   // Helpers
   getNodeById: (id: string) => GraphNode | undefined;
@@ -62,7 +60,6 @@ export function useKnowledgeGraph(): UseKnowledgeGraphReturn {
   const [rawData, setRawData] = useState<KnowledgeGraph | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [rebuilding, setRebuilding] = useState(false);
   const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
 
   const initialFetchDone = useRef(false);
@@ -152,22 +149,6 @@ export function useKnowledgeGraph(): UseKnowledgeGraphReturn {
     await fetchGraph();
   }, [fetchGraph]);
 
-  // Rebuild graph
-  const rebuild = useCallback(async () => {
-    try {
-      setRebuilding(true);
-      setError(null);
-      await rebuildKnowledgeGraph();
-      // Wait a bit then refresh to get updated data
-      await new Promise((resolve) => setTimeout(resolve, 2000));
-      await fetchGraph();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to rebuild knowledge graph');
-    } finally {
-      setRebuilding(false);
-    }
-  }, [fetchGraph]);
-
   // Select node
   const selectNode = useCallback((node: GraphNode | null) => {
     setSelectedNode(node);
@@ -207,10 +188,8 @@ export function useKnowledgeGraph(): UseKnowledgeGraphReturn {
     graphData,
     loading,
     error,
-    rebuilding,
     selectedNode,
     refresh,
-    rebuild,
     selectNode,
     getNodeById,
     getConnectedNodes,

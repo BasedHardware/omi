@@ -77,12 +77,44 @@ void main() {
       };
       provider.disableAppOverride = (String id) async {
         expect(id, equals('app_456'));
+        return true;
       };
 
       final result = await provider.toggleApp('app_456', false, null);
 
-      expect(result, isTrue); // disable always reports success
+      expect(result, isTrue);
       expect(enableCalled, isFalse); // only disableAppOverride was used
+    });
+
+    test('returns false and keeps local state enabled when disableAppServer rejects', () async {
+      provider = AppProvider();
+      provider.apps = [
+        App(
+          id: 'app_456',
+          name: 'Test',
+          author: 'tester',
+          description: 'test',
+          image: '',
+          capabilities: {'memories'},
+          status: 'approved',
+          category: 'test',
+          approved: true,
+          ratingCount: 0,
+          enabled: true,
+          deleted: false,
+          isPaid: false,
+          isUserPaid: false,
+        ),
+      ];
+      provider.disableAppOverride = (String id) async {
+        expect(id, equals('app_456'));
+        return false;
+      };
+
+      final result = await provider.toggleApp('app_456', false, null);
+
+      expect(result, isFalse);
+      expect(provider.apps.single.enabled, isTrue);
     });
   });
 }

@@ -1,6 +1,22 @@
+export type SignGloss = {
+  gloss: string
+  duration: number
+  timestamp: number
+  swr?: string
+}
+
+export type TranslationResult = {
+  originalText: string
+  poseUrl?: string
+  assetType?: 'video' | 'pose'
+  glosses: SignGloss[]
+  swrFull?: string
+}
+
 // BYOK provider key types used by the OmiBridgeApi surface below.
 import type { ByokEnrollResult, ByokKeys, ByokProvider } from './byok'
 import type { ChatContentBlock } from './chatContent'
+import type { ChatEvidenceReferenceEnvelope } from './knowledgeLedger'
 import type {
   McpConnectorId,
   McpExportsSnapshot,
@@ -103,6 +119,8 @@ export type ChatMessage = {
   chartData?: unknown
   /** Whether the backend flagged this turn to prompt the user for an NPS rating. */
   askForNps?: boolean
+  /** Optional bounded supporting evidence; message text remains authoritative. */
+  evidence?: ChatEvidenceReferenceEnvelope
 }
 
 /**
@@ -127,7 +145,12 @@ export type ChatMessage = {
  * See lib/sync/outbox.ts for the transition rules and dedupe strategy.
  */
 export type ConversationSyncState =
-  'local_only' | 'pending' | 'posting' | 'done' | 'failed' | 'unconfirmed'
+  | 'local_only'
+  | 'pending'
+  | 'posting'
+  | 'done'
+  | 'failed'
+  | 'unconfirmed'
 
 /** One transcript segment in the `/v1/conversations/from-segments` request shape
  * (snake_case matches the wire verbatim). `start`/`end` are WALL-CLOCK
@@ -427,6 +450,8 @@ export type BarChatMessage = {
    *  structured-clone bridge; declared here so the bar's renderer type-checks and
    *  the projection stays honest. */
   attachments?: ChatAttachment[]
+  /** Optional bounded supporting evidence; unavailable refs are non-actionable. */
+  evidence?: ChatEvidenceReferenceEnvelope
 }
 /** The bar orb's coarse activity, derived in the main window's ChatBridgeHost:
  *  'sending' while a reply streams, 'speaking' while a spoken (TTS) reply plays. */
@@ -801,10 +826,10 @@ export type OmiBridgeApi = {
    *  on any failure. Faithful port of macOS's URLSession isAppSetupCompleted. */
   checkAppSetup: (args: { url: string; uid: string }) => Promise<boolean>
   // Bulk-delete memories from the main process (survives renderer navigation /
-  // reload; paced + backed-off). Renderer supplies the API base, a fresh token,
-  // and the ids; progress streams via onMemoriesDeleteProgress.
+  // reload; paced + backed-off). Renderer supplies a fresh token and the ids;
+  // the API base is main-owned config and progress streams via
+  // onMemoriesDeleteProgress.
   memoriesBulkDelete: (args: {
-    baseURL: string
     token: string
     ids: string[]
   }) => Promise<{ deleted: number; failed: number; firstError?: string }>
@@ -891,28 +916,6 @@ export type OmiBridgeApi = {
    *  `{ ok:false, reason:'no-frame' }` when nothing has been captured yet, and
    *  the handler is absent entirely on production builds. */
   focusAnalyzeNow: () => Promise<{ ok: boolean; reason?: string }>
-  /** Dev/QA only: run the REAL Insight Phase-1 activity aggregate over the last 24h
-   *  with `denylist` and return ONLY the distinct app names (never OCR/titles).
-   *  Proves a denylisted app is excluded at the SQL layer. Absent in production. */
-  insightDebugActivity: (denylist: string[]) => Promise<{ apps: string[]; rowCount: number }>
-  /** Dev/QA only: run the REAL execute_sql closure with `denylist` and return ONLY
-   *  the row count (or a content-free error). Proves the denylist CTE-shadow filters
-   *  a denylisted app to zero rows. Absent in production. */
-  insightDebugSql: (
-    query: string,
-    denylist: string[]
-  ) => Promise<{ rowCount: number; error?: string }>
-  /** Dev/QA only: optionally apply a notifications patch, then return the REAL
-   *  insightAssistant.isEnabled() and the inputs deciding it. Absent in production. */
-  insightDebugIsEnabled: (patch?: {
-    notificationsEnabled?: boolean
-    notificationFrequency?: number
-  }) => Promise<{
-    isEnabled: boolean
-    insightEnabled: boolean
-    notificationsEnabled: boolean
-    notificationFrequency: number
-  }>
   // Memory import (3b): parse a pasted ChatGPT/Claude dump into memory strings.
   // The renderer POSTs them to /v3/memories itself (it holds the auth token).
   memoryImportParse: (dump: string) => Promise<string[]>
@@ -950,15 +953,6 @@ export type OmiBridgeApi = {
   // browser (main owns the loopback callback + token exchange; the renderer
   // finishes with signInWithCustomToken on the returned custom token).
   signInWithProvider: (provider: SignInProvider) => Promise<SignInResult>
-  // Integrations (3d): Google OAuth + Gmail/Calendar. Main owns the OAuth grant
-  // and REST reads; the renderer synthesizes the returned items and writes
-  // /v3/memories + /v1/action-items itself (it holds the Firebase token).
-  googleConnect: () => Promise<GoogleStatus>
-  googleDisconnect: () => Promise<GoogleStatus>
-  googleStatus: () => Promise<GoogleStatus>
-  googleGmailFetchNew: () => Promise<FetchNewResult<GmailItem>>
-  googleCalendarFetchNew: () => Promise<FetchNewResult<CalendarItem>>
-  googleMarkProcessed: (source: GoogleSource, ids: string[]) => Promise<void>
   // Gmail session connector (Option B): an Omi-owned login window + own-session
   // cookie replay against Gmail's web endpoints — no restricted-scope OAuth.
   // `gmailSessionConnect` opens the login window and resolves once signed in;
@@ -1018,6 +1012,8 @@ export type OmiBridgeApi = {
   rewindPrimarySourceId: () => Promise<string | null>
   /** Display source containing the foreground window, with cursor/primary fallbacks. */
   rewindCaptureSourceId: () => Promise<string | null>
+  /** Whether Rewind can actually get a screen source right now, and why not. */
+  rewindCaptureDiagnostics: () => Promise<RewindCaptureDiagnostics>
   rewindSaveFrame: (
     data: Uint8Array,
     sourceId: string
@@ -1041,23 +1037,19 @@ export type OmiBridgeApi = {
   relaunchApp: () => void
   insightGetSettings: () => Promise<InsightSettings>
   insightSetSettings: (patch: Partial<InsightSettings>) => Promise<InsightSettings>
-  insightAdd: (p: InsightPayload) => Promise<void>
-  insightRecent: (limit: number) => Promise<InsightRecord[]>
-  /** Insights page: mark one record dismissed (read/handled). */
-  insightDismissRecord: (id: number) => Promise<boolean>
-  /** Insights page: mark all records dismissed (Mac's "Mark All Read"). */
-  insightDismissAll: () => Promise<number>
-  /** Insights page: delete all insight history (Mac's "Clear All History"). */
-  insightClearAll: () => Promise<number>
-  /** Engine → main: deliver this insight in the user's chosen style. */
-  insightShow: (p: InsightPayload) => void
-  /** Toast renderer → main: dismiss now. */
+  proactivityNotificationRendered: (itemID: string) => void
+  proactivityNotificationFeedback: (itemID: string, action: 'thumbs_up' | 'thumbs_down') => void
+  proactivityNotificationPending: () => Promise<InsightPayload | null>
+  onProactivityNavigate: (callback: (target: { kind: string; id: string }) => void) => () => void
+  proactivityTargetRendered: (target: { kind: string; id: string }) => void
+  proactivityNotificationOpen: (itemID: string) => void
   insightDismiss: () => void
   /** Toast renderer → main: pause/resume the auto-dismiss while hovered. */
   insightHoverStart: () => void
   insightHoverEnd: () => void
   /** Settings → main: deliver an example insight (a test). */
   insightTest: () => void
+
   /** Toast renderer subscribes to receive the payload to render. */
   onInsightShow: (cb: (p: InsightPayload) => void) => () => void
   // --- Meeting detection (Phase 5) ---
@@ -1132,6 +1124,12 @@ export type OmiBridgeApi = {
   // window are separate renderers with independent caches.
   notifyConversationsChanged: () => void
   onConversationsChanged: (cb: () => void) => () => void
+  onDeepgramSignUpdate: (cb: (result: TranslationResult) => void) => () => void
+  signLanguageSetEnabled: (enabled: boolean) => void
+  signLanguageGetEnabled: () => Promise<boolean>
+  /** Fires in every window when the sign-language toggle changes. Returns an
+   *  unsubscribe fn. */
+  onSignLanguageEnabledChanged: (cb: (enabled: boolean) => void) => () => void
   // --- Bar chat bridge (main-window side; the bar is a viewport, INV-CHAT-1) ---
   /** The bar sent a message — the main window's ChatBridgeHost drives the ONE
    *  chat.send() (with fromVoice). Main-window renderer only. */
@@ -1329,8 +1327,13 @@ export type OmiBridgeApi = {
   byokClear: (provider: ByokProvider) => Promise<void>
   /** Remove all stored provider keys. */
   byokClearAll: () => Promise<void>
-  /** True only when all four providers have a key (backend all-or-nothing). */
+  byokClearCodex: () => Promise<void>
+  /** True when a configured LLM provider has a stored key. */
   byokIsActive: () => Promise<boolean>
+  /** Providers whose stored key still matches the fingerprint the backend
+   *  accepted at the last successful enrollment (validated capabilities — not
+   *  mere key presence). Empty until an enrollment succeeds. */
+  byokValidatedProviders: () => Promise<ByokProvider[]>
   /** Live-validate the stored keys and reconcile backend BYOK activation. The
    *  Firebase bearer token is relayed from the renderer's session. */
   byokEnroll: (token: string) => Promise<ByokEnrollResult>
@@ -1610,7 +1613,10 @@ export type MainChatEvent =
   /** The run has been accepted and assigned a runId — the first event of a turn.
    *  Carries the runId so the caller can later cancel it via mainChatCancel. */
   | { type: 'accepted'; requestId: string; runId: string }
-  /** A run-lifecycle marker (queued/starting/running) for a spinner. */
+  /** The managed-cloud adapter wrote the provider command successfully.
+   *  Pre-dispatch owner/binding/session/concurrency failures never emit this. */
+  | { type: 'hosted_request_started'; requestId: string; runId: string }
+  /** A non-dispatch run-lifecycle marker for status UI. */
   | { type: 'status'; requestId: string; runId: string; message: string }
   /** An assistant text chunk; accumulate in order to render the streaming reply. */
   | { type: 'text_delta'; requestId: string; runId: string; text: string }
@@ -1636,7 +1642,13 @@ export type MainChatEvent =
       output: string
     }
   /** The final assistant text (emitted on a successful turn before run_finished). */
-  | { type: 'completed'; requestId: string; runId: string; text: string }
+  | {
+      type: 'completed'
+      requestId: string
+      runId: string
+      text: string
+      evidence?: ChatEvidenceReferenceEnvelope
+    }
   /** Terminal event — the turn is done. The renderer stops the spinner here. */
   | {
       type: 'run_finished'
@@ -1651,6 +1663,8 @@ export type MainChatResult = {
   requestId: string
   ok: boolean
   text: string
+  /** Optional additive evidence; answer text remains authoritative. */
+  evidence?: ChatEvidenceReferenceEnvelope
   terminalStatus: 'succeeded' | 'failed' | 'cancelled'
   costUsd?: number
   error?: string
@@ -1709,7 +1723,13 @@ export type MemoryExportResult = {
 }
 
 export type IndexedFileType =
-  'document' | 'code' | 'image' | 'media' | 'archive' | 'application' | 'other'
+  | 'document'
+  | 'code'
+  | 'image'
+  | 'media'
+  | 'archive'
+  | 'application'
+  | 'other'
 
 export type IndexedFileRecord = {
   path: string
@@ -1803,7 +1823,14 @@ export type RebuildResult = {
 // the macOS-parity local graph synthesized from indexed_files + memories and
 // consumed by the chat pre-step. Never conflate the two mechanisms.
 export type LocalKGNodeType =
-  'project' | 'app' | 'technology' | 'person' | 'org' | 'interest' | 'file_group' | 'card' // background-synthesized natural-language overview served to the chat floor
+  | 'project'
+  | 'app'
+  | 'technology'
+  | 'person'
+  | 'org'
+  | 'interest'
+  | 'file_group'
+  | 'card' // background-synthesized natural-language overview served to the chat floor
 
 export type LocalKGNode = {
   id: string // `${slug(label)}:${nodeType}` — stable across re-synthesis
@@ -1896,45 +1923,6 @@ export type SignInProvider = 'google' | 'apple'
 export type SignInResult =
   | { ok: true; customToken: string; email?: string; givenName?: string; familyName?: string }
   | { ok: false; error: string }
-
-// --- Integrations: Google (Gmail + Calendar) OAuth (parity 3d) ---
-
-export type GoogleSource = 'gmail' | 'calendar'
-
-/** Connection status surfaced to Settings. */
-export type GoogleStatus = {
-  connected: boolean
-  email?: string
-  /** ms epoch of the most recent successful sync (either source); undefined if never. */
-  lastSyncAt?: number
-}
-
-/** One Gmail message, metadata only — never the full body. */
-export type GmailItem = {
-  id: string
-  subject: string
-  from: string
-  snippet: string
-  internalDateMs: number
-}
-
-/** One upcoming Calendar event. */
-export type CalendarItem = {
-  id: string
-  title: string
-  startMs: number
-  endMs: number
-  location?: string
-  description?: string
-  updatedMs: number
-}
-
-/** Result of a fetch-new call. `ok:false` + error:'not_connected' when no grant. */
-export type FetchNewResult<T> = {
-  ok: boolean
-  items: T[]
-  error?: string
-}
 
 // --- Integrations: Gmail via an Omi-owned Electron session (Option B) ---
 // Windows can't harvest system-browser cookies the way macOS does (Chrome 127+
@@ -2071,6 +2059,19 @@ export type RewindSettings = {
   captureQuality: RewindCaptureQuality
 }
 
+/** Whether Rewind can actually get a screen source, and why not — see
+ *  main/rewind/sourceId.ts's getRewindCaptureDiagnostics. Read once on mount
+ *  (mirrors DbRecoveryStatus's "what happened at startup" shape): the
+ *  underlying fetch is cached for the process lifetime, so this is a stable
+ *  launch-time fact, not something that needs a push channel. */
+export type RewindCaptureDiagnostics = {
+  available: boolean
+  reason: string | null
+  /** Linux-only: the dominant real-world cause is a missing/misconfigured
+   *  Wayland desktop-portal ScreenCast backend for the running compositor. */
+  likelyMissingLinuxPortal: boolean
+}
+
 /** Runtime capture directive pushed main→renderer, derived from OS power/lock state.
  *  `paused` tears down the capture stream (sleep/lock); `intervalMs` is the effective
  *  cadence (base × battery multiplier). Separate from the persisted RewindSettings. */
@@ -2193,6 +2194,8 @@ export type AssistantSettingsView = {
 }
 
 export type InsightPayload = {
+  /** Main-owned v2 identity; renderer sends only this ID back, never a destination. */
+  proactivityItemID?: string
   headline: string // <= 5 words
   advice: string // 1-2 sentences, <= ~100 chars
   reasoning: string
@@ -2587,14 +2590,9 @@ export type GoalGenerateResult =
       reason: 'no_session' | 'insufficient_context' | 'invalid_suggestion' | 'stale' | 'error'
     }
 
+/** Shared toast presentation and screen privacy preferences. */
 export type InsightSettings = {
-  enabled: boolean // default ON
-  intervalMin: number // default 15 (picker offers 15/20/30/60)
-  // 'omi' = the in-app acrylic toast (richer, branded); 'native' = a Windows
-  // notification (kept in the Action Center). Default 'omi'.
   notificationStyle: InsightNotificationStyle
-  denylist: string[]
-  lastRunAt: number | null
 }
 
 // ───────────────────────── Desktop Automation Bridge ─────────────────────────

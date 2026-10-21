@@ -47,3 +47,37 @@ enum ScreenRecordingPermissionPolicy {
     grantedAtLaunch && onboardingComplete
   }
 }
+
+/// Policy for a capture attempt that ScreenCaptureKit rejected with "user declined
+/// TCCs" — macOS re-confirming consent for app-built content filters
+/// (`SCContentFilter(desktopIndependentWindow:)`), with the underlying grant intact.
+///
+/// The contract this encodes: a declined consent is TERMINAL for automatic capture.
+/// Every retried capture opens a fresh session, and macOS re-arms the consent dialog
+/// per session — the 3 s tick plus the 5 s recovery poll turned one due re-confirmation
+/// into three dialogs in ten minutes on a live machine. So outside the known special
+/// system modes, the only correct moves are: stop capturing, tell the user once, and
+/// resume only on a human-scale signal (notification click, Settings toggle, app
+/// re-activation).
+enum ScreenCaptureConsentPolicy {
+  enum DeclinedCaptureAction: Equatable {
+    /// Exposé / Mission Control / Notification Center produce the same "declined TCCs"
+    /// error transiently while they own the screen. That is not a consent event; keep
+    /// the normal timer armed and wait for the mode to end.
+    case waitForSpecialModeToEnd
+    /// The consent dialog is (or was) genuinely on screen. Stop monitoring — no timer
+    /// retry of any cadence — and surface at most one repair notification per session
+    /// (re-activation restarts monitoring anyway, and a banner per attempt is spam).
+    case stopAndNotify(shouldNotify: Bool)
+  }
+
+  static func actionForDeclinedCapture(
+    isInSpecialSystemMode: Bool,
+    hasNotifiedThisSession: Bool
+  ) -> DeclinedCaptureAction {
+    if isInSpecialSystemMode {
+      return .waitForSpecialModeToEnd
+    }
+    return .stopAndNotify(shouldNotify: !hasNotifiedThisSession)
+  }
+}

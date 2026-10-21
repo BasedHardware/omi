@@ -1,16 +1,17 @@
-import './globals.css';
-import type { Metadata } from 'next';
-import { Inter } from 'next/font/google';
-import { ThemeProvider } from '@/components/theme-provider';
-import { AuthProvider } from '@/components/auth-provider';
-import { SWRProvider } from '@/components/swr-provider';
-import { PublicBuildCanary } from '@/components/public-build-canary';
+import "./globals.css";
+import type { Metadata } from "next";
+import { Inter } from "next/font/google";
+import { ThemeProvider } from "@/components/theme-provider";
+import { AuthProvider } from "@/components/auth-provider";
+import { SWRProvider } from "@/components/swr-provider";
+import { PublicBuildCanary } from "@/components/public-build-canary";
+import { Toaster } from "@/components/ui/toaster";
 
-const inter = Inter({ subsets: ['latin'] });
+const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: 'Omi Admin Dashboard',
-  description: 'Omi\'s internal admin dashboard',
+  title: "Omi Admin Dashboard",
+  description: "Omi's internal admin dashboard",
 };
 
 export default function RootLayout({
@@ -25,6 +26,7 @@ export default function RootLayout({
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
           <AuthProvider>
             <SWRProvider>{children}</SWRProvider>
+            <Toaster />
           </AuthProvider>
         </ThemeProvider>
       </body>

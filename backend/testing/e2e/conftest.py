@@ -63,6 +63,7 @@ def _set_e2e_env():
     """
     os.environ["PYTHON_DOTENV_DISABLED"] = "1"
     os.environ["LOCAL_DEVELOPMENT"] = "true"
+    os.environ["OMI_ENV_STAGE"] = "offline"
     os.environ["ENCRYPTION_SECRET"] = "test-encryption-secret-for-e2e-testing-32chars!"
     os.environ["FIREBASE_PROJECT_ID"] = "test-e2e-project"
     os.environ["GOOGLE_CLOUD_PROJECT"] = "test-e2e-project"
@@ -83,6 +84,11 @@ def _set_e2e_env():
     os.environ["TYPESENSE_HOST"] = "localhost"
     os.environ["TYPESENSE_HOST_PORT"] = "8108"
     os.environ["TYPESENSE_API_KEY"] = "fake-typesense-key"
+    # The hermetic harness runs no Typesense server: an enabled first-party
+    # conversation index writer would block ~5s per durable conversation write
+    # on refused localhost:8108 retries and blow the e2e timing budget. The
+    # projection is covered by tests/unit/test_conversation_typesense_index.py.
+    os.environ["TYPESENSE_CONVERSATION_INDEX_WRITES"] = "0"
     os.environ["BUCKET_SPEECH_PROFILES"] = "speech-profiles"
     os.environ["BUCKET_POSTPROCESSING"] = "postprocessing"
     os.environ["BUCKET_PRIVATE_CLOUD_SYNC"] = "omi-private-cloud-sync"
@@ -93,6 +99,15 @@ def _set_e2e_env():
     os.environ["BUCKET_DESKTOP_UPDATES"] = "desktop-updates"
     os.environ["DEV_WEBHOOK_RETRY_DELAYS"] = "0,0,0"
     os.environ["SYNC_DISPATCH_MODE"] = "inline"
+    # 113 in-process e2e tests hammer MemoryService through the real admission
+    # path; the process-wide RetryAllowance (8 tokens, 1/s refill) sheds
+    # legitimate bursts as 503 "Memory read admission exhausted". Raise the
+    # burst and reset the shared allowance for the harness, mirroring the
+    # cursor-suite isolation.
+    import utils.memory.read_resilience as _rr
+
+    os.environ["OMI_MEMORY_READ_RETRY_BURST"] = "64"
+    _rr._retry_allowance = _rr.RetryAllowance()
     os.environ["AUDIO_MERGE_DISPATCH_MODE"] = "inline"
     # Disable Stripe validation so startup doesn't fail.
     os.environ["STRIPE_SECRET_KEY"] = ""
@@ -170,6 +185,22 @@ def _guarded_create_connection(address, timeout=None, source_address=None, *args
 
 def _guarded_getaddrinfo(host, port, *args, **kwargs):
     if host is not None and host not in _ALLOWED_NETWORK_HOSTS:
+        # RFC 6761 reserves the ".test" TLD so it can never resolve on the real
+        # DNS, which makes it the natural fixture domain for hermetic suites.
+        # Newer config-time validators (SSRF guards resolving webhook targets)
+        # need a successful public-class resolution, so answer reserved .test
+        # names with a deterministic public address instead of tripping the
+        # guard: nothing leaves the process because real connects stay guarded
+        # below. A real DNS lookup must never happen, and a non-.test host
+        # still fails exactly as before.
+        hostname = host.decode("idna") if isinstance(host, bytes) else host
+        if hostname.lower().endswith(".test") or hostname.lower() == "test":
+            # Mirror the shape and public-class answer the SSRF unit tests use
+            # (AF_INET, 8.8.8.8): deterministic on every runner, and the only
+            # address class the config-time validator accepts.
+            return [
+                (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("8.8.8.8", 0)),
+            ]
         raise AssertionError(f"Hermetic e2e blocked DNS lookup for {host!r}")
     return _original_getaddrinfo(host, port, *args, **kwargs)
 
@@ -219,6 +250,35 @@ def fake_storage():
 _app_cache = None
 
 
+def _install_hermetic_privacy_projection_fakes() -> None:
+    """Confirm deletion at provider boundaries the hermetic stack does not run."""
+    import database.vector_db as vector_db
+    import utils.memory.atom_keyword_index as atom_keyword_index
+    from fakes.vector_search import DeterministicEmbeddings, FakeVectorIndex
+
+    if vector_db.index is None:
+        embeddings = DeterministicEmbeddings()
+        vector_db.embeddings = embeddings
+        vector_db.index = FakeVectorIndex(embeddings)
+
+    real_vector_delete = vector_db.delete_canonical_memory_vectors
+
+    def delete_canonical_memory_vectors(uid: str, memory_id: str | None = None) -> bool:
+        # Tests that install an in-memory Pinecone index still exercise its
+        # real deletion path. With no index, the hermetic provider is absent,
+        # so absence is already confirmed without weakening production code.
+        if vector_db.index is None:
+            return True
+        return real_vector_delete(uid, memory_id)
+
+    def delete_atom_keyword_doc(uid: str, memory_id: str, *, db_client=None) -> bool:
+        del db_client
+        return bool(uid and memory_id)
+
+    vector_db.delete_canonical_memory_vectors = delete_canonical_memory_vectors
+    atom_keyword_index.delete_atom_keyword_doc = delete_atom_keyword_doc
+
+
 def _create_backend_app(fake_firestore_instance, fake_redis_instance, fake_storage_instance):
     """
     Create the real FastAPI app with patched dependencies.
@@ -264,6 +324,8 @@ def _create_backend_app(fake_firestore_instance, fake_redis_instance, fake_stora
     # Import the real FastAPI app (triggers all backend module imports)
     import main as backend_main
 
+    _install_hermetic_privacy_projection_fakes()
+
     # Some backend modules bind ``db``/``r`` with ``from database._client import db``
     # or ``from database.redis_db import r`` at import time. If an import raced ahead
     # of the constructor monkeypatches above, relink those already-bound module
@@ -276,6 +338,21 @@ def _create_backend_app(fake_firestore_instance, fake_redis_instance, fake_stora
     old_r = redis_db.r
     db_client.db = fake_firestore_instance
     redis_db.r = fake_redis_instance
+    # Redis Script objects retain the client that registered them. Relinking
+    # only redis_db.r leaves rate limits and other Lua-backed paths talking to
+    # the developer's localhost Redis, which both violates hermeticity and leaks
+    # counters across wrapper runs. Re-register every imported Lua script on
+    # FakeRedis, including scripts owned by modules outside database.redis_db.
+    for module in list(sys.modules.values()):
+        if module is None:
+            continue
+        for attr_name, attr_value in list(vars(module).items()):
+            try:
+                script = vars(attr_value).get('script')
+            except TypeError:
+                continue
+            if isinstance(script, str):
+                setattr(module, attr_name, fake_redis_instance.register_script(script))
     for module in list(sys.modules.values()):
         if module is None:
             continue
@@ -331,10 +408,42 @@ def isolate_e2e_state(fake_firestore, fake_redis, fake_storage):
         clear_user_data(DEV_UID)
         fake_redis.flushall()
         clear_fake_storage()
+        # Memory reads share a process-wide admission burst. Independent E2E
+        # cases must not spend each other's tokens; retain the real per-case
+        # admission policy and refill/in-flight limits unchanged.
+        from utils.memory import read_resilience
+
+        read_resilience._retry_allowance = read_resilience.RetryAllowance()
+        # Listen admission is process-local; the fixed E2E uid must start with
+        # a fresh burst for each isolated test, just like the fake stores.
+        try:
+            from utils.listen_reconnect_budget import listen_reconnect_budget
+
+            with listen_reconnect_budget._lock:
+                listen_reconnect_budget._buckets.clear()
+        except Exception:
+            pass
         try:
             import utils.http_client as http_client
 
             http_client._webhook_circuit_breakers.clear()
+        except Exception:
+            pass
+        try:
+            from utils.stt.streaming import (
+                _parakeet_circuit,
+                _deepgram_circuit,
+                _modulate_circuit,
+                _soniox_circuit,
+            )
+
+            for circuit in (
+                _parakeet_circuit,
+                _deepgram_circuit,
+                _modulate_circuit,
+                _soniox_circuit,
+            ):
+                circuit.record_success()
         except Exception:
             pass
         try:

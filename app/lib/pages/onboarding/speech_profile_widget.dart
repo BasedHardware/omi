@@ -1,530 +1,708 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-
-import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 
-import 'package:omi/pages/settings/language_selection_dialog.dart';
-import 'package:omi/pages/speech_profile/percentage_bar_progress.dart';
+import 'package:omi/pages/chat/widgets/voice_recorder_widget.dart' show AudioWavePainter;
 import 'package:omi/providers/capture_provider.dart';
-import 'package:omi/providers/home_provider.dart';
-import 'package:omi/providers/speech_profile_provider.dart';
+import 'package:omi/providers/goals_provider.dart';
+import 'package:omi/ui/ui.dart';
+import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
-import 'package:omi/widgets/dialog.dart';
+import 'guided_voice_controller.dart';
+import 'guided_voice_io.dart';
+import 'guided_voice_payoff.dart';
 
+/// A bounded introduction: user-paced prompts, independent voice enrollment,
+/// and explicit review before any personal statement becomes a memory.
 class SpeechProfileWidget extends StatefulWidget {
+  const SpeechProfileWidget({
+    super.key,
+    required this.goNext,
+    required this.onSkip,
+    this.controller,
+    this.flowSource = 'first_run',
+    this.flowVariant = 'guided_voice_v1',
+    this.onBusyChanged,
+  });
   final VoidCallback goNext;
   final VoidCallback onSkip;
 
-  const SpeechProfileWidget({super.key, required this.goNext, required this.onSkip});
+  /// Told when saving starts and ends, so the host flow can keep its back control from leaving
+  /// mid-save (this widget's own PopScope blocks system back meanwhile).
+  final ValueChanged<bool>? onBusyChanged;
+  final GuidedVoiceController? controller;
+  final String flowSource;
+  final String flowVariant;
 
   @override
   State<SpeechProfileWidget> createState() => _SpeechProfileWidgetState();
 }
 
-class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerProviderStateMixin {
-  late AnimationController _questionAnimationController;
-  late Animation<double> _questionFadeAnimation;
-  SpeechProfileProvider? _speechProvider;
+class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with WidgetsBindingObserver {
+  late final GuidedVoiceController flow;
+  bool _stoppingCapture = false;
+  bool _attemptedSave = false;
+  bool _finishing = false;
+  Future<void>? _startTask;
+  Future<void> Function()? _resumeCapture;
+  bool _captureChecked = false;
+  final _scrollController = ScrollController();
+  final _typedAnswer = TextEditingController();
+  int _shownPrompt = 0;
+  bool _reportedBusy = false;
+  String? _lastError;
+  OmiPermissionStatus _micStatus = OmiPermissionStatus.askable;
 
   @override
   void initState() {
     super.initState();
-    _questionAnimationController = AnimationController(duration: const Duration(milliseconds: 500), vsync: this);
-    _questionFadeAnimation = Tween<double>(
-      begin: 0.0,
-      end: 1.0,
-    ).animate(CurvedAnimation(parent: _questionAnimationController, curve: Curves.easeInOut));
+    flow = widget.controller ??
+        GuidedVoiceController(DeviceGuidedVoiceIO(), flowSource: widget.flowSource, flowVariant: widget.flowVariant);
+    flow.markStarted();
+    WidgetsBinding.instance.addObserver(this);
+    _shownPrompt = flow.promptIndex;
+    flow.addListener(_showCurrentPrompt);
+    flow.addListener(_reportBusy);
+    flow.addListener(_checkMicrophone);
+  }
 
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      if (!mounted) return;
-      // Check if user has set primary language
-      if (!context.read<HomeProvider>().hasSetPrimaryLanguage) {
-        await LanguageSelectionDialog.show(context);
+  void _reportBusy() {
+    final busy = flow.saving;
+    if (busy == _reportedBusy) return;
+    _reportedBusy = busy;
+    widget.onBusyChanged?.call(busy);
+  }
+
+  /// A refused microphone gets the shared permission row: Allow while the system can still ask,
+  /// Open Settings once it cannot (docs/ux-contract.md §15).
+  void _checkMicrophone() {
+    if (flow.error == _lastError) return;
+    _lastError = flow.error;
+    _refreshMicrophoneStatus();
+  }
+
+  /// Re-reads the microphone permission while the step shows the microphone error (on entering that
+  /// error, and on return from Settings).
+  void _refreshMicrophoneStatus() {
+    if (!flow.permissionBlocked) return;
+    unawaited(() async {
+      OmiPermissionStatus status;
+      try {
+        status = OmiPermissionStatus.fromStatus(await Permission.microphone.status);
+      } catch (_) {
+        status = OmiPermissionStatus.askable;
       }
+      if (mounted) setState(() => _micStatus = status);
+    }());
+  }
+
+  void _showCurrentPrompt() {
+    if (_shownPrompt == flow.promptIndex) return;
+    _shownPrompt = flow.promptIndex;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _scrollController.hasClients) _scrollController.jumpTo(0);
     });
-    // Onboarding completion is now handled by the completion screen
   }
 
   @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    _speechProvider ??= context.read<SpeechProfileProvider>();
+  void didChangeMetrics() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.hidden) unawaited(flow.pause());
+    if (state == AppLifecycleState.resumed) _refreshMicrophoneStatus();
   }
 
   @override
   void dispose() {
-    _speechProvider?.forceCompletionTimer?.cancel();
-    _speechProvider?.forceCompletionTimer = null;
-
+    WidgetsBinding.instance.removeObserver(this);
+    flow.removeListener(_showCurrentPrompt);
+    flow.removeListener(_reportBusy);
+    flow.removeListener(_checkMicrophone);
     _scrollController.dispose();
-    _questionAnimationController.dispose();
-
+    _typedAnswer.dispose();
+    if (widget.controller == null) flow.dispose();
+    final resume = _resumeCapture;
+    if (resume != null) {
+      unawaited(() async {
+        await _startTask;
+        try {
+          await resume();
+        } catch (e, st) {
+          Logger.error('[SpeechProfileWidget] capture restart on dispose failed: $e\n$st');
+        }
+      }());
+    }
     super.dispose();
   }
 
-  final ScrollController _scrollController = ScrollController();
+  String copy(String part) => context.l10n.voiceIntroduction(part);
 
-  void scrollDown() async {
-    if (!_scrollController.hasClients) return;
-    await Future.delayed(const Duration(milliseconds: 250));
-    if (!mounted || !_scrollController.hasClients) return;
-    _scrollController.animateTo(
-      _scrollController.position.maxScrollExtent,
-      duration: const Duration(milliseconds: 200),
-      curve: Curves.easeOut,
+  Future<void> _start() => _startTask = _startRecording();
+
+  Future<void> _startRecording() async {
+    if (_stoppingCapture || flow.busy || flow.active) return;
+    setState(() => _stoppingCapture = true);
+    try {
+      if (widget.controller == null && !_captureChecked) {
+        _captureChecked = true;
+        final capture = context.read<CaptureProvider>();
+        if (capture.recordingState == RecordingState.deviceRecord) {
+          final device = capture.recordingDevice;
+          _resumeCapture = () async {
+            await capture.streamDeviceRecording(device: device);
+          };
+          await capture.stopStreamDeviceRecording();
+        } else if (capture.recordingState == RecordingState.record ||
+            capture.recordingState == RecordingState.interrupted ||
+            capture.isPhoneMicPaused) {
+          _resumeCapture = () async {
+            await capture.streamRecording();
+          };
+          // The voice profile needs the phone mic; a pendant the phone recording took over from
+          // stays paused until the phone recording resumes and finishes.
+          await capture.stopStreamRecording(resumeHandedOffPendant: false);
+        }
+      }
+      if (mounted) await flow.start();
+    } finally {
+      if (mounted) setState(() => _stoppingCapture = false);
+    }
+  }
+
+  Future<void> _saveAndFinish() async {
+    if (flow.busy || _finishing) return;
+    FocusScope.of(context).unfocus();
+    setState(() => _attemptedSave = true);
+    await flow.saveAll();
+    if (!mounted) return;
+    if (widget.controller == null && flow.goalSaved) {
+      unawaited(context.read<GoalsProvider>().loadGoals());
+    }
+    if (flow.stage == IntroductionStage.done) {
+      OmiHaptics.success();
+      _finishWithPayoff();
+    } else {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _scrollController.hasClients) {
+          unawaited(
+            _scrollController.animateTo(
+              _scrollController.position.maxScrollExtent,
+              duration: const Duration(milliseconds: 200),
+              curve: Curves.easeOut,
+            ),
+          );
+        }
+      });
+    }
+  }
+
+  void _finishWithPayoff() {
+    if (_finishing) return;
+    if (flow.savedAnswers.isEmpty) {
+      _finishing = true;
+      widget.goNext();
+      return;
+    }
+    unawaited(flow.showPayoff(context.l10n.guidedVoiceExperience('question')));
+  }
+
+  void _continuePayoff() {
+    if (_finishing) return;
+    _finishing = true;
+    flow.continuePayoff();
+    widget.goNext();
+  }
+
+  Future<void> _skip() async {
+    flow.markSkipped();
+    await flow.pause();
+    if (mounted) widget.onSkip();
+  }
+
+  Widget _button(String text, VoidCallback? onPressed, String key) {
+    final labelStyle = OmiType.callout
+        .copyWith(fontWeight: FontWeight.w600, fontFamily: Theme.of(context).textTheme.bodyMedium?.fontFamily);
+    return OmiButton(key: Key(key), label: text, onPressed: onPressed, expand: true, labelStyle: labelStyle);
+  }
+
+  /// A low-emphasis text action ("Try another prompt", "Skip Question").
+  Widget _textAction(String text, VoidCallback? onPressed, String key) {
+    return TextButton(
+      key: Key(key),
+      onPressed: onPressed,
+      style: TextButton.styleFrom(foregroundColor: OmiColors.textSecondary, minimumSize: const Size(44, 44)),
+      child: Text(text, textAlign: TextAlign.center),
     );
   }
 
-  String _getLoadingText(BuildContext context, SpeechProfileLoadingState state) {
-    switch (state) {
-      case SpeechProfileLoadingState.uploading:
-        return context.l10n.uploadingVoiceProfile;
-      case SpeechProfileLoadingState.memorizing:
-        return context.l10n.memorizingYourVoice;
-      case SpeechProfileLoadingState.personalizing:
-        return context.l10n.personalizingExperience;
-      case SpeechProfileLoadingState.allSet:
-        return context.l10n.youreAllSet;
-    }
+  Widget _status(String text, {bool loading = false, bool success = false}) => Semantics(
+        liveRegion: true,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            if (loading)
+              const OmiSpinner(size: OmiSpinnerSize.small)
+            else
+              Icon(success ? Icons.check_circle_outline : Icons.mic_none, size: 20, color: OmiColors.textPrimary),
+            const SizedBox(width: 10),
+            Flexible(
+              child: Text(
+                text,
+                textAlign: TextAlign.center,
+                style: TextStyle(color: OmiColors.textPrimary.withValues(alpha: 0.7)),
+              ),
+            ),
+          ],
+        ),
+      );
+
+  String get _prompt {
+    if (flow.isGoalPrompt) return copy('goalPrompt');
+    if (flow.alternative == 1) return copy('food');
+    if (flow.alternative == 2) return copy('remember');
+    if (flow.promptIndex == 0) return context.l10n.guidedVoiceExperience('namePrompt');
+    return copy(['name', 'work', 'enjoy'][flow.promptIndex.clamp(0, 2)]);
   }
 
-  @override
-  Widget build(BuildContext context) {
-    Future restartDeviceRecording() async {
-      Logger.debug("restartDeviceRecording $mounted");
+  /// The prompt screen, before and while recording: a small "1 of 4", the sentence centred, then
+  /// either Try Another Prompt (before recording) or the live waveform (while recording).
+  Widget _recording() {
+    final paused = flow.stage == IntroductionStage.paused && flow.error == null;
+    final transcribing = flow.stage == IntroductionStage.transcribing;
+    final position = (flow.promptIndex + 1).clamp(1, GuidedVoiceController.promptCount);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          context.l10n.speakerTagPromptProgress(position, GuidedVoiceController.promptCount),
+          key: const Key('introduction_progress'),
+          textAlign: TextAlign.center,
+          style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
+        ),
+        const SizedBox(height: OmiSpacing.sm),
+        Text(
+          _prompt,
+          key: const Key('introduction_prompt'),
+          textAlign: TextAlign.center,
+          style: OmiType.title1.copyWith(height: 1.35, fontWeight: FontWeight.w600),
+        ),
+        const SizedBox(height: OmiSpacing.md),
+        if (flow.stage == IntroductionStage.typing) ...[
+          const SizedBox(height: OmiSpacing.md),
+          TextField(
+            key: Key('introduction_typed_${flow.promptIndex}'),
+            controller: _typedAnswer,
+            minLines: 3,
+            maxLines: 5,
+            maxLength: flow.isGoalPrompt ? 500 : 2000,
+            onChanged: (_) => setState(() {}),
+            decoration: InputDecoration(
+                labelText: context.l10n.guidedVoiceExperience('typing'),
+                floatingLabelBehavior: FloatingLabelBehavior.always,
+                alignLabelWithHint: true),
+          ),
+        ],
+        if (flow.active) ...[
+          Semantics(
+            label: context.l10n.microphone,
+            liveRegion: true,
+            child: SizedBox(
+              key: const Key('introduction_audio_level'),
+              width: 200,
+              height: 44,
+              child: CustomPaint(painter: AudioWavePainter(levels: _waveform)),
+            ),
+          ),
+          Text(context.l10n.secondsCount(flow.seconds.floor()),
+              key: const Key('introduction_elapsed'), style: OmiType.footnote),
+          // Only while the microphone hears nothing; speech coming through needs no instructions.
+          if (flow.quiet) ...[
+            const SizedBox(height: OmiSpacing.xs),
+            Text(
+              copy('silence'),
+              key: const Key('introduction_silence_hint'),
+              textAlign: TextAlign.center,
+              style: OmiType.footnote.copyWith(color: OmiColors.textSecondary, height: 1.4),
+            ),
+          ],
+        ] else if (flow.busy || _stoppingCapture)
+          _status(transcribing ? context.l10n.guidedVoiceExperience('transcribing') : context.l10n.loading,
+              loading: true)
+        else if (paused)
+          _status(context.l10n.recordingPaused),
+        if (flow.stage == IntroductionStage.confirmation) ...[
+          const SizedBox(height: OmiSpacing.md),
+          _status(context.l10n.guidedVoiceExperience('heard'), success: true),
+        ],
+        if (flow.transcript.isNotEmpty) ...[
+          const SizedBox(height: OmiSpacing.md),
+          Text(
+            flow.transcript,
+            key: const Key('introduction_transcript'),
+            textAlign: TextAlign.center,
+            style: OmiType.body.copyWith(color: OmiColors.textSecondary, height: 1.4),
+          ),
+        ],
+        if (flow.permissionBlocked) ...[
+          const SizedBox(height: OmiSpacing.sm),
+          OmiPermissionRow(
+            key: const Key('introduction_microphone_permission'),
+            leading: const FaIcon(FontAwesomeIcons.microphone),
+            title: context.l10n.microphone,
+            reason: context.l10n.microphoneAccessDescription,
+            status: _micStatus,
+            onAllow: _start,
+          ),
+        ] else if (flow.error != null) ...[
+          const SizedBox(height: OmiSpacing.sm),
+          Text(
+            context.l10n.guidedVoiceExperience(flow.error == 'transcription_unavailable'
+                ? 'unavailable'
+                : flow.error == 'engine_start_failed'
+                    ? 'engine'
+                    : 'failed'),
+            textAlign: TextAlign.center,
+            style: TextStyle(color: OmiColors.textPrimary, height: 1.5),
+          ),
+        ],
+      ],
+    );
+  }
 
-      // Restart device recording, clear transcripts
-      if (mounted) {
-        Provider.of<CaptureProvider>(context, listen: false).clearTranscripts();
-        final device = Provider.of<SpeechProfileProvider>(context, listen: false).deviceProvider?.connectedDevice;
-        if (device != null) {
-          Provider.of<CaptureProvider>(context, listen: false).streamDeviceRecording(device: device);
-        }
-      }
-    }
+  /// A fixed number of bars, newest on the right; quiet bars draw as dots so the waveform still
+  /// reads as listening before the first word.
+  List<double> get _waveform {
+    final history = flow.levelHistory;
+    const length = GuidedVoiceController.levelHistoryLength;
+    return [for (var i = history.length; i < length; i++) 0.0, ...history];
+  }
 
-    Future stopAllRecording() async {
-      Logger.debug("stopAllRecording $mounted");
-      if (mounted) {
-        final captureProvider = Provider.of<CaptureProvider>(context, listen: false);
-        // Stop any active device recording
-        await captureProvider.stopStreamDeviceRecording();
-      }
-    }
-
-    return PopScope(
-      canPop: true,
-      onPopInvokedWithResult: (didPop, result) async {
-        final speechProvider = context.read<SpeechProfileProvider>();
-        speechProvider.close();
-        restartDeviceRecording();
-      },
-      child: Consumer2<SpeechProfileProvider, CaptureProvider>(
-        builder: (context, provider, _, child) {
-          return MessageListener<SpeechProfileProvider>(
-            showInfo: (info) {
-              if (info == 'SCROLL_DOWN') {
-                scrollDown();
-              } else if (info == 'NEXT_QUESTION') {
-                if (!mounted) return;
-
-                _questionAnimationController
-                  ..reset()
-                  ..forward();
-              }
-            },
-            showError: (error) {
-              if (error == 'SOCKET_INIT_FAILED') {
-                showDialog(
-                  context: context,
-                  builder: (c) => getDialog(
-                    context,
-                    () => Navigator.pop(context),
-                    () {},
-                    context.l10n.connectionError,
-                    context.l10n.connectionErrorDesc,
-                    okButtonText: context.l10n.ok,
-                    singleButton: true,
-                  ),
-                  barrierDismissible: false,
-                );
-              } else if (error == 'MULTIPLE_SPEAKERS') {
-                showDialog(
-                  context: context,
-                  builder: (c) => getDialog(
-                    context,
-                    () {
-                      provider.close();
-                      Navigator.pop(context);
-                    },
-                    () {},
-                    context.l10n.invalidRecordingMultipleSpeakers,
-                    context.l10n.multipleSpeakersDesc,
-                    okButtonText: context.l10n.tryAgain,
-                    singleButton: true,
-                  ),
-                  barrierDismissible: false,
-                );
-              } else if (error == 'TOO_SHORT') {
-                showDialog(
-                  context: context,
-                  builder: (c) => getDialog(
-                    context,
-                    () {
-                      Navigator.pop(context);
-                      //  Navigator.pop(context);
-                    },
-                    () {},
-                    context.l10n.invalidRecordingMultipleSpeakers,
-                    context.l10n.tooShortDesc,
-                    okButtonText: context.l10n.ok,
-                    singleButton: true,
-                  ),
-                  barrierDismissible: false,
-                );
-              } else if (error == 'UPLOAD_FAILED') {
-                showDialog(
-                  context: context,
-                  builder: (c) => getDialog(
-                    context,
-                    () {
-                      Navigator.pop(context);
-                    },
-                    () {},
-                    context.l10n.connectionError,
-                    context.l10n.connectionErrorDesc,
-                    okButtonText: context.l10n.ok,
-                    singleButton: true,
-                  ),
-                  barrierDismissible: false,
-                );
-              } else if (error == 'INVALID_RECORDING') {
-                showDialog(
-                  context: context,
-                  builder: (c) => getDialog(
-                    context,
-                    () {
-                      Navigator.pop(context);
-                      //  Navigator.pop(context);
-                    },
-                    () {},
-                    // TODO: improve this
-                    context.l10n.invalidRecordingMultipleSpeakers,
-                    context.l10n.invalidRecordingDesc,
-                    okButtonText: context.l10n.ok,
-                    singleButton: true,
-                  ),
-                  barrierDismissible: false,
-                );
-              } else if (error == "NO_SPEECH") {
-                showDialog(
-                  context: context,
-                  builder: (c) => getDialog(
-                    context,
-                    () {
-                      Navigator.pop(context);
-                    },
-                    () {},
-                    context.l10n.areYouThere,
-                    context.l10n.noSpeechDesc,
-                    okButtonText: context.l10n.ok,
-                    singleButton: true,
-                  ),
-                  barrierDismissible: false,
-                );
-              } else if (error == 'SOCKET_DISCONNECTED' || error == 'SOCKET_ERROR') {
-                showDialog(
-                  context: context,
-                  builder: (c) => getDialog(
-                    context,
-                    () {
-                      provider.close();
-                      Navigator.pop(context);
-                    },
-                    () {},
-                    context.l10n.connectionLost,
-                    context.l10n.connectionLostDesc,
-                    okButtonText: context.l10n.tryAgain,
-                    singleButton: true,
-                  ),
-                  barrierDismissible: false,
-                );
-              } else if (error == 'STT_UNAVAILABLE') {
-                // The provider already gave up reconnecting after repeated
-                // 1011 closes with no captured speech, so offer the same
-                // way out as the "Skip for now" link instead of a "Try
-                // again" that would only restart the same failing loop.
-                showDialog(
-                  context: context,
-                  builder: (c) => getDialog(
-                    context,
-                    () {
-                      provider.close();
-                      widget.onSkip();
-                    },
-                    () {},
-                    context.l10n.connectionLost,
-                    context.l10n.connectionLostDesc,
-                    okButtonText: context.l10n.skipForNow,
-                    singleButton: true,
-                  ),
-                  barrierDismissible: false,
-                );
-              }
-            },
-            child: Column(
-              children: [
-                Expanded(child: Container()),
-                Container(
-                  width: double.infinity,
-                  padding: EdgeInsets.fromLTRB(32, 0, 32, MediaQuery.of(context).padding.bottom + 8),
-                  decoration: const BoxDecoration(
-                    color: Colors.black,
-                    borderRadius: BorderRadius.only(topLeft: Radius.circular(40), topRight: Radius.circular(40)),
-                  ),
-                  child: SafeArea(
-                    top: false,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const SizedBox(height: 32),
-
-                        // Title
-                        Text(
-                          provider.startedRecording && !provider.profileCompleted
-                              ? 'Answer with your voice:'
-                              : 'Please find a quiet place',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 28,
-                            fontWeight: FontWeight.bold,
-                            height: 1.2,
-                            fontFamily: 'Manrope',
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-
-                        const SizedBox(height: 16),
-
-                        // Content area changes based on state
-                        if (!provider.startedRecording) ...[
-                          // Intro text
-                          Text(
-                            'Omi needs to learn your goals and your voice. Answer questions with your voice. You\'ll be able to modify it later.',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.6),
-                              fontSize: 16,
-                              height: 1.5,
-                              fontFamily: 'Manrope',
-                            ),
-                          ),
-
-                          const SizedBox(height: 32),
-
-                          // Get Started button
-                          provider.isInitialising
-                              ? const CircularProgressIndicator(color: Colors.white)
-                              : SizedBox(
-                                  width: double.infinity,
-                                  height: 56,
-                                  child: ElevatedButton(
-                                    onPressed: () async {
-                                      // Check if user has set primary language, if not, show dialog
-                                      if (!context.read<HomeProvider>().hasSetPrimaryLanguage) {
-                                        await LanguageSelectionDialog.show(context);
-                                      }
-
-                                      await stopAllRecording();
-
-                                      // Initialize speech profile with phone mic as input source
-                                      bool success = await provider.initialise(
-                                        usePhoneMic: true,
-                                        processConversationCallback: () {
-                                          Provider.of<CaptureProvider>(
-                                            context,
-                                            listen: false,
-                                          ).forceProcessingCurrentConversation();
-                                        },
-                                      );
-
-                                      if (!success) {
-                                        return;
-                                      }
-
-                                      provider.forceCompletionTimer = Timer(
-                                        Duration(seconds: provider.maxDuration),
-                                        () async {
-                                          provider.finalize();
-                                        },
-                                      );
-
-                                      if (!mounted) return;
-                                      _questionAnimationController.forward();
-                                    },
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: Colors.white,
-                                      foregroundColor: Colors.black,
-                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-                                      elevation: 0,
-                                    ),
-                                    child: Text(
-                                      context.l10n.getStarted,
-                                      style: const TextStyle(
-                                        fontSize: 18,
-                                        fontWeight: FontWeight.w600,
-                                        fontFamily: 'Manrope',
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                        ] else if (provider.profileCompleted) ...[
-                          // All Done state
-                          const SizedBox(height: 16),
-                          SizedBox(
-                            width: double.infinity,
-                            height: 56,
-                            child: ElevatedButton(
-                              onPressed: () => widget.goNext(),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.white,
-                                foregroundColor: Colors.black,
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-                                elevation: 0,
-                              ),
-                              child: Text(
-                                context.l10n.allDone,
-                                style: const TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w600,
-                                  fontFamily: 'Manrope',
-                                ),
-                              ),
-                            ),
-                          ),
-                        ] else if (provider.uploadingProfile) ...[
-                          // Uploading state
-                          const SizedBox(height: 16),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              const SizedBox(
-                                height: 24,
-                                width: 24,
-                                child: Center(
-                                  child: CircularProgressIndicator(
-                                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 16),
-                              Text(
-                                _getLoadingText(context, provider.loadingState),
-                                style: const TextStyle(color: Colors.white, fontSize: 16, fontFamily: 'Manrope'),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 16),
-                        ] else ...[
-                          // Recording state - transcript + question + progress
-                          ShaderMask(
-                            shaderCallback: (bounds) {
-                              if (provider.text.split(' ').length < 10) {
-                                return const LinearGradient(colors: [Colors.white, Colors.white]).createShader(bounds);
-                              }
-                              return const LinearGradient(
-                                colors: [Colors.transparent, Colors.white],
-                                stops: [0.0, 0.5],
-                                begin: Alignment.topCenter,
-                                end: Alignment.bottomCenter,
-                              ).createShader(bounds);
-                            },
-                            blendMode: BlendMode.dstIn,
-                            child: SizedBox(
-                              height: 80,
-                              child: ListView(
-                                controller: _scrollController,
-                                shrinkWrap: true,
-                                physics: const NeverScrollableScrollPhysics(),
-                                children: [
-                                  Text(
-                                    provider.text,
-                                    textAlign: TextAlign.center,
-                                    style: TextStyle(
-                                      color: Colors.white.withValues(alpha: 0.6),
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w400,
-                                      height: 1.5,
-                                      fontFamily: 'Manrope',
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-
-                          const SizedBox(height: 8),
-
-                          // Current question
-                          FadeTransition(
-                            opacity: _questionFadeAnimation,
-                            child: Text(
-                              provider.currentQuestion,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 24,
-                                height: 1.3,
-                                fontFamily: 'Manrope',
-                                fontWeight: FontWeight.w600,
-                              ),
-                              textAlign: TextAlign.center,
-                            ),
-                          ),
-
-                          const SizedBox(height: 12),
-
-                          // Progress bar
-                          SizedBox(
-                            width: double.infinity,
-                            child: ProgressBarWithPercentage(progressValue: provider.questionProgress),
-                          ),
-
-                          const SizedBox(height: 8),
-
-                          Text(
-                            context.l10n.keepGoing,
-                            style: TextStyle(
-                              color: Colors.grey.shade400,
-                              fontSize: 14,
-                              height: 1.3,
-                              fontFamily: 'Manrope',
-                            ),
-                            textAlign: TextAlign.center,
-                          ),
-
-                          TextButton(
-                            onPressed: () {
-                              provider.close();
-                              widget.onSkip();
-                            },
-                            child: Text(
-                              context.l10n.skipForNow,
-                              style: const TextStyle(color: Colors.grey, fontSize: 14, fontFamily: 'Manrope'),
-                            ),
-                          ),
-                        ],
-                      ],
+  Widget _review() => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Semantics(
+            header: true,
+            child: Text(copy('review'), style: OmiType.title1.copyWith(fontWeight: FontWeight.w600)),
+          ),
+          const SizedBox(height: 12),
+          Text(copy('reviewHint'), style: OmiType.callout.copyWith(color: OmiColors.textSecondary, height: 1.5)),
+          const SizedBox(height: 20),
+          for (var i = 0; i < flow.answers.length; i++) ...[
+            DecoratedBox(
+              decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(4, 8, 16, 8),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Checkbox(
+                      value: flow.answers[i].keep,
+                      activeColor: OmiColors.accent,
+                      checkColor: OmiColors.onAccent,
+                      onChanged:
+                          flow.busy || flow.answers[i].locked ? null : (value) => flow.setKeep(i, value ?? false),
                     ),
-                  ),
+                    Expanded(
+                      child: TextFormField(
+                        key: Key('introduction_memory_${flow.answers[i].id}_${flow.answers[i].editRevision}'),
+                        initialValue: flow.answers[i].text,
+                        minLines: 1,
+                        maxLines: 5,
+                        maxLength: flow.answers[i].isGoal ? 500 : null,
+                        enabled: !flow.busy && !flow.answers[i].locked,
+                        onChanged: (value) => flow.edit(i, value),
+                        style: TextStyle(color: OmiColors.textPrimary, height: 1.5),
+                        decoration: InputDecoration(
+                          border: InputBorder.none,
+                          counterText: '',
+                          labelText: flow.answers[i].isGoal ? context.l10n.myGoal : context.l10n.memories,
+                          labelStyle: TextStyle(color: OmiColors.textPrimary.withValues(alpha: 0.7)),
+                        ),
+                      ),
+                    ),
+                    if (flow.answers[i].saved)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 14),
+                        child: Icon(Icons.check, color: OmiColors.textPrimary, size: 18),
+                      ),
+                  ],
                 ),
-              ],
+              ),
+            ),
+            if (flow.answers[i].isGoal &&
+                flow.answers[i].originalText != null &&
+                flow.answers[i].originalText != flow.answers[i].text &&
+                !flow.answers[i].locked)
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton(
+                  key: Key('introduction_original_${flow.answers[i].id}'),
+                  onPressed: flow.busy ? null : () => flow.useOriginalGoal(i),
+                  child:
+                      Text(copy('originalGoal'), style: TextStyle(color: OmiColors.textPrimary.withValues(alpha: 0.7))),
+                ),
+              ),
+            const SizedBox(height: 12),
+          ],
+          if (flow.answers.isEmpty)
+            Text(copy('noMemories'),
+                style: TextStyle(color: OmiColors.textPrimary.withValues(alpha: 0.7), height: 1.5)),
+          const SizedBox(height: 20),
+          // saveAll() enrolls the voice first, so `voiceSaved` is already true while the
+          // answers are still uploading: both receipts render together for the whole
+          // memory-save round trip. Space them like the done view below, or the spinner
+          // and the check sit on the same leading edge and read as one broken glyph.
+          if (flow.stage == IntroductionStage.savingMemories) ...[
+            _status(copy('savingAnswers'), loading: true),
+            const SizedBox(height: 16),
+          ],
+          if (flow.voiceSaved)
+            _status(copy('savedVoice'), success: true)
+          else if (flow.stage == IntroductionStage.savingVoice)
+            _status(copy('savingVoice'), loading: true)
+          else if (flow.voiceError == 'short')
+            Text(copy('short'), style: TextStyle(color: OmiColors.textPrimary, height: 1.5))
+          else if (flow.voiceError == 'upload')
+            Text(copy('uploadError'), style: TextStyle(color: OmiColors.textPrimary, height: 1.5)),
+          if (flow.voiceError == 'voiceUnavailable')
+            Text(copy('voiceUnavailable'), style: TextStyle(color: OmiColors.textPrimary, height: 1.5)),
+          if (flow.error == 'goal' || flow.error == 'goalLong')
+            Text(
+              copy(flow.error == 'goal' ? 'goalError' : 'goalLong'),
+              style: TextStyle(color: OmiColors.textPrimary, height: 1.5),
+            ),
+          if (flow.error == 'memories')
+            Text(copy('memoryError'), style: TextStyle(color: OmiColors.textPrimary, height: 1.5)),
+        ],
+      );
+
+  List<Widget> _actions() {
+    // Scaffold removes consumed insets from its body MediaQuery. Read the
+    // view to retain keyboard visibility after the body has been resized.
+    final editing = View.of(context).viewInsets.bottom > 0;
+    if (flow.stage == IntroductionStage.payoff) {
+      return [_button(context.l10n.continueButton, _continuePayoff, 'payoff_continue')];
+    }
+    if (flow.stage == IntroductionStage.done) {
+      return [_button(context.l10n.continueButton, _finishWithPayoff, 'introduction_continue')];
+    }
+    if (flow.stage == IntroductionStage.typing) {
+      return [
+        _button(
+            context.l10n.guidedVoiceExperience('answer'),
+            _typedAnswer.text.trim().isEmpty
+                ? null
+                : () {
+                    final text = _typedAnswer.text;
+                    _typedAnswer.clear();
+                    FocusScope.of(context).unfocus();
+                    unawaited(flow.submitTyped(text));
+                  },
+            'introduction_save_typed'),
+        _textAction(copy('skipPrompt'), () {
+          _typedAnswer.clear();
+          unawaited(flow.skipPrompt());
+        }, 'introduction_skip_prompt'),
+      ];
+    }
+    if (flow.stage == IntroductionStage.confirmation) {
+      return [
+        _button(context.l10n.guidedVoiceExperience('confirm'), () => unawaited(flow.confirmAnswer()),
+            'introduction_confirm'),
+        _textAction(
+            context.l10n.guidedVoiceExperience('type'), () => unawaited(flow.typeInstead()), 'introduction_type'),
+        _textAction(copy('skipPrompt'), () => unawaited(flow.skipPrompt()), 'introduction_skip_prompt'),
+      ];
+    }
+    if (flow.error != null && flow.promptIndex < GuidedVoiceController.promptCount && !flow.busy) {
+      return [
+        _button(context.l10n.guidedVoiceExperience('type'), () => unawaited(flow.typeInstead()), 'introduction_type'),
+        if (flow.error!.startsWith('transcribe_') && flow.canFinish)
+          _textAction(context.l10n.guidedVoiceExperience('retryTranscription'), () => unawaited(flow.next()),
+              'introduction_retry_transcription'),
+        _textAction(context.l10n.guidedVoiceExperience('retry'), () => unawaited(_start()), 'speech_profile_start'),
+        _textAction(copy('skipPrompt'), () => unawaited(flow.skipPrompt()), 'introduction_skip_prompt'),
+      ];
+    }
+    if (flow.promptIndex >= GuidedVoiceController.promptCount && flow.answers.isEmpty) {
+      return [_button(context.l10n.continueButton, widget.onSkip, 'introduction_continue')];
+    }
+    if (flow.promptIndex >= GuidedVoiceController.promptCount) {
+      return [
+        _button(
+          flow.busy
+              ? context.l10n.saving
+              : copy(_attemptedSave && flow.error != 'goalLong' ? 'retryRemaining' : 'saveFinish'),
+          flow.busy ? null : () => unawaited(_saveAndFinish()),
+          'introduction_save_all',
+        ),
+        if (flow.voiceError == 'short' && !editing)
+          TextButton(
+            key: const Key('introduction_add_sample'),
+            onPressed: flow.busy
+                ? null
+                : () {
+                    flow.addSample();
+                    unawaited(_start());
+                  },
+            child: Text(copy('addSample'), style: TextStyle(color: OmiColors.textPrimary.withValues(alpha: 0.7))),
+          ),
+        if (!editing)
+          TextButton(
+            key: const Key('introduction_leave_review'),
+            onPressed: flow.busy ? null : _finishWithPayoff,
+            child: Text(
+              copy(_attemptedSave ? 'continueSaved' : 'without'),
+              textAlign: TextAlign.center,
+              style: TextStyle(color: OmiColors.textPrimary.withValues(alpha: 0.7)),
+            ),
+          ),
+      ];
+    }
+    if (flow.busy) {
+      return [
+        _button(
+          flow.stage == IntroductionStage.transcribing ? context.l10n.transcribing : context.l10n.loading,
+          null,
+          'introduction_wait',
+        ),
+      ];
+    }
+    if (flow.active || (flow.stage == IntroductionStage.paused && flow.canFinish)) {
+      // Recording: Next leads; pausing and skipping this one sentence are small. Leaving the whole
+      // step is offered before recording, not here (docs/ux-contract.md §11, one verb per meaning).
+      return [
+        _button(
+          flow.promptIndex == GuidedVoiceController.promptCount - 1 ? copy('reviewAnswers') : context.l10n.nextButton,
+          flow.canFinish ? () => unawaited(flow.next()) : null,
+          'introduction_next',
+        ),
+        const SizedBox(height: OmiSpacing.xs),
+        Wrap(
+          alignment: WrapAlignment.center,
+          spacing: OmiSpacing.md,
+          children: [
+            _textAction(flow.active ? context.l10n.pauseRecording : context.l10n.continueRecording, () {
+              if (flow.active) {
+                unawaited(flow.pause());
+              } else {
+                unawaited(_start());
+              }
+            }, 'introduction_pause'),
+            _textAction(copy('skipPrompt'), () => unawaited(flow.skipPrompt()), 'introduction_skip_prompt'),
+          ],
+        ),
+      ];
+    }
+    // Before recording: Start, then one way to leave the whole step.
+    return [
+      _button(copy('start'), _stoppingCapture ? null : () => unawaited(_start()), 'speech_profile_start'),
+      const SizedBox(height: OmiSpacing.xs),
+      _textAction(context.l10n.guidedVoiceExperience('type'), () => unawaited(flow.typeInstead()), 'introduction_type'),
+      Center(child: _textAction(context.l10n.skip, () => unawaited(_skip()), 'speech_profile_skip_intro')),
+    ];
+  }
+
+  Widget _title() => Semantics(
+        header: true,
+        child: Text(copy('title'), textAlign: TextAlign.center, style: OmiType.title2),
+      );
+
+  /// Before and while recording: the title at the top and the prompt centred in the space left,
+  /// scrolling instead when large text does not fit.
+  Widget _prompting() => CustomScrollView(
+        key: const Key('introduction_scroll'),
+        controller: _scrollController,
+        slivers: [
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(24, 20, 24, 20),
+            sliver: SliverFillRemaining(
+              hasScrollBody: false,
+              child: Column(
+                children: [
+                  _title(),
+                  const SizedBox(height: OmiSpacing.xl),
+                  Expanded(child: Center(child: _recording())),
+                ],
+              ),
+            ),
+          ),
+        ],
+      );
+
+  /// Review and the saved receipt. Review carries its own heading ("Here is what I heard"), so the
+  /// step title is not repeated above it.
+  Widget _scrolling(bool done) => SingleChildScrollView(
+        key: const Key('introduction_scroll'),
+        controller: _scrollController,
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+        padding: const EdgeInsets.fromLTRB(24, 20, 24, 20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (done) ...[
+              _title(),
+              const SizedBox(height: 28),
+              Icon(Icons.check_circle_outline, size: 64, color: OmiColors.textPrimary),
+              const SizedBox(height: 24),
+              _status(flow.savedMemoryCount > 0 ? copy('savedMemories') : copy('noMemories'), success: true),
+              if (flow.goalSaved) ...[const SizedBox(height: 16), _status(copy('savedGoal'), success: true)],
+              if (flow.voiceSaved) ...[const SizedBox(height: 16), _status(copy('savedVoice'), success: true)],
+            ] else
+              _review(),
+          ],
+        ),
+      );
+
+  @override
+  Widget build(BuildContext context) => AnimatedBuilder(
+        animation: flow,
+        builder: (context, _) {
+          final done = flow.stage == IntroductionStage.done;
+          final reviewing = flow.promptIndex >= GuidedVoiceController.promptCount;
+          return PopScope(
+            canPop: !flow.saving,
+            child: ColoredBox(
+              color: OmiColors.surface0,
+              child: SafeArea(
+                child: LayoutBuilder(
+                    builder: (context, constraints) => Column(
+                          children: [
+                            Expanded(
+                                child: flow.stage == IntroductionStage.payoff
+                                    ? SingleChildScrollView(
+                                        padding: const EdgeInsets.all(24), child: GuidedVoicePayoff(flow: flow))
+                                    : done || reviewing
+                                        ? _scrolling(done)
+                                        : _prompting()),
+                            ConstrainedBox(
+                              constraints: BoxConstraints(maxHeight: constraints.maxHeight * 0.6),
+                              child: SingleChildScrollView(
+                                padding: const EdgeInsets.fromLTRB(24, 8, 24, 12),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                                  children: [
+                                    ..._actions(),
+                                    if (flow.stage == IntroductionStage.ready && !flow.isGoalPrompt)
+                                      _textAction(copy('another'), flow.changePrompt, 'introduction_another'),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        )),
+              ),
             ),
           );
         },
-      ),
-    );
-  }
+      );
 }

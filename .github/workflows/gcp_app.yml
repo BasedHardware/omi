@@ -5,13 +5,20 @@ on:
     branches: ["main", "development"]
     paths:
       - 'web/app/**'
+      - 'web/packages/note-shared/**'
       - 'config/public-build-*.json'
+      - '.dockerignore'
+      - '.github/workflows/gcp_app.yml'
       - '.github/actions/deploy-public-build/**'
       - '.github/actions/prepare-public-build/**'
       - '.github/actions/public-build-candidate-promotion/**'
       - '.github/scripts/preflight_public_build_config.py'
       - '.github/scripts/preflight_public_build_runtime.py'
+      - '.github/scripts/check_public_build_contract.py'
       - '.github/scripts/smoke_public_build_browser.py'
+      - '.github/scripts/public_build_acceptance_route.py'
+      - 'backend/scripts/wait_cloud_run_candidate_readiness.py'
+      - 'backend/scripts/resolve_cloud_run_tagged_url.py'
   workflow_dispatch:
     inputs:
       environment:
@@ -25,6 +32,12 @@ concurrency:
   group: deploy-cloud-run-omi-web-app-${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || github.ref == 'refs/heads/development' && 'development' || github.ref == 'refs/heads/main' && 'prod' || format('nondeploy-{0}', github.run_id) }}
   cancel-in-progress: false
 
+env:
+  # Abort a git HTTP transfer that stays under 1 KB/s for 60 s, so actions/checkout
+  # retries instead of hanging 7-10 min until the TCP reset (#22890).
+  GIT_HTTP_LOW_SPEED_LIMIT: "1000"
+  GIT_HTTP_LOW_SPEED_TIME: "60"
+
 jobs:
   deploy:
     environment: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || (github.ref == 'refs/heads/development' && 'development') || 'prod' }}
@@ -32,6 +45,8 @@ jobs:
       actions: read
       contents: read
       id-token: write
+    env:
+      DEPLOY_ENVIRONMENT: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || (github.ref == 'refs/heads/development' && 'development') || 'prod' }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -43,6 +58,10 @@ jobs:
           target: app
           environment: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || (github.ref == 'refs/heads/development' && 'development') || 'prod' }}
           project_id: ${{ vars.GCP_PROJECT_ID }}
-          gcp_credentials: ${{ secrets.GCP_CREDENTIALS }}
+          # Prod: GitHub WIF (omi-gha-deploy-prod, pinned to this file on main +
+          # the prod environment); development uses the dev deployer through
+          # omi-gha-deploy-dev (credential hygiene WS-D). No JSON key either way.
+          workload_identity_provider: ${{ env.DEPLOY_ENVIRONMENT == 'prod' && 'projects/208440318997/locations/global/workloadIdentityPools/omi-gha-deploy-prod/providers/github' || 'projects/1031333818730/locations/global/workloadIdentityPools/omi-gha-deploy-dev/providers/github' }}
+          workload_identity_service_account: ${{ env.DEPLOY_ENVIRONMENT == 'prod' && 'omi-ci-web-prod@based-hardware.iam.gserviceaccount.com' || 'omi-ci-deployer-dev@based-hardware-dev.iam.gserviceaccount.com' }}
           network: ${{ vars.CLOUD_RUN_VPC_NETWORK }}
           subnet: ${{ vars.CLOUD_RUN_VPC_SUBNET }}

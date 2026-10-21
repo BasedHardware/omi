@@ -1,0 +1,255 @@
+"""Decision policy for matching a voice clip against enrolled voiceprints.
+
+Kept free of network and scipy imports so the listen socket, the sync pipeline and
+their tests can share one implementation of "is this the enrolled speaker?" without
+pulling in the embedding client. Distances are cosine distances as produced by
+`utils.stt.speaker_embedding.compare_embeddings`.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, replace
+from math import isfinite
+from typing import Any, Mapping, Optional, Sequence, TypeVar
+
+import numpy as np
+
+# Cosine distance operating point for enrolled-voiceprint verification only.
+#
+# Measured offline on real enrollments (2026-09-07, scripts/speaker_id_bench): the
+# same user's audio from a different session sits at a median distance of 0.40-0.53
+# from their stored voiceprint, while other users sit at 0.93. The former 0.45
+# (taken from a clean-studio VoxCeleb figure) rejected 40-70% of cross-session
+# owner audio at a 0.0% false-accept rate; 0.65 rejects 14-22% at <1% false-accept
+# against random users. Same-session audio matches at either value, which is why
+# the old constant looked fine in demos. In-session clustering has its own policy in
+# speaker_clustering.py and must not silently retune this boundary.
+SPEAKER_MATCH_THRESHOLD = 0.65
+
+# A match must also beat the runner-up voiceprint by at least this much. Raising the
+# threshold alone would confuse the owner with a taught person in a minority of
+# households (owner-vs-own-person distances were measured as low as 0.43); the
+# margin keeps "the nearest is clearly nearest" as a second condition.
+SPEAKER_MATCH_MARGIN = 0.10
+
+# Live sessions decide on a speaker once this much clip audio has been embedded for
+# them (a single long clip, or a few short ones averaged). Two-second clips alone
+# had a 17% equal-error rate in the bench against 10% at five seconds.
+SPEAKER_MATCH_MIN_EVIDENCE_SECONDS = 5.0
+
+# How many recent clips per diarized speaker feed the running centroid.
+SPEAKER_MATCH_MAX_CLIPS = 3
+
+
+@dataclass(frozen=True)
+class SpeakerMatchDecision:
+    """Outcome of comparing one query voiceprint against enrolled candidates.
+
+    `person_id` is set only on an accept. `best_id` and both distances are populated
+    whenever at least one candidate existed, so callers can log the near-misses that
+    a bare boolean would hide.
+    """
+
+    person_id: Optional[str]
+    best_id: Optional[str]
+    best_distance: float
+    runner_up_distance: float
+    owner_contended: bool = False
+
+    @property
+    def accepted(self) -> bool:
+        return self.person_id is not None
+
+
+def select_speaker_match(
+    distances: Mapping[str, float],
+    *,
+    threshold: float = SPEAKER_MATCH_THRESHOLD,
+    margin: float = SPEAKER_MATCH_MARGIN,
+) -> SpeakerMatchDecision:
+    """Pick the enrolled speaker a query belongs to, or nobody.
+
+    Accepts the nearest candidate when its distance is strictly below `threshold`
+    and, if there is a runner-up, the runner-up is at least `margin` farther away.
+    NaN distances (zero-norm embeddings) never match. Ties keep insertion order.
+    """
+    best_id: Optional[str] = None
+    best = float('inf')
+    runner_up = float('inf')
+    for candidate_id, distance in distances.items():
+        if distance != distance:  # NaN
+            continue
+        if distance < best:
+            best_id, runner_up, best = candidate_id, best, distance
+        elif distance < runner_up:
+            runner_up = distance
+    accepted = best_id is not None and best < threshold and (runner_up - best) >= margin
+    return SpeakerMatchDecision(
+        person_id=best_id if accepted else None,
+        best_id=best_id,
+        best_distance=best,
+        runner_up_distance=runner_up,
+    )
+
+
+# Calibration-only near-miss sweep on production vectors (five repeated,
+# conversation-disjoint two-fold splits) selected 0.70 in every fold. This band
+# changes evidence state only; acceptance remains strictly below 0.65.
+OWNER_NEAR_MISS_THRESHOLD = 0.70
+
+
+def owner_near_miss(decision: SpeakerMatchDecision) -> bool:
+    """A clear owner runner-up gap with insufficient distance evidence to accept.
+
+    Live callers keep this voice pending for fresh audio or finished-conversation
+    resolution. No identity is assigned, and existing evidence/model budgets stay
+    in force. Contention and ordinary margin rejections remain separate abstentions.
+    """
+    return (
+        not decision.accepted
+        and not decision.owner_contended
+        and decision.best_id == 'user'
+        and SPEAKER_MATCH_THRESHOLD <= decision.best_distance < OWNER_NEAR_MISS_THRESHOLD
+        and decision.runner_up_distance - decision.best_distance >= SPEAKER_MATCH_MARGIN
+    )
+
+
+SpeakerKey = TypeVar('SpeakerKey')
+
+
+def arbitrate_owner_matches(
+    distances: Mapping[SpeakerKey, Mapping[str, float]],
+    decisions: Mapping[SpeakerKey, SpeakerMatchDecision],
+    *,
+    margin: float = SPEAKER_MATCH_MARGIN,
+    owner_reserved: bool = False,
+    voice_groups: Optional[Mapping[SpeakerKey, SpeakerKey]] = None,
+) -> dict[SpeakerKey, SpeakerMatchDecision]:
+    """Require an owner claim to beat the other *voices*, not just other prints.
+
+    The single-print cold start has no enrolled runner-up. Distinct voices measured
+    at 0.631/0.645 both passed 0.65 in production. Compare all evidenced voices,
+    including ones just outside the acceptance threshold, before publishing any
+    owner decision. A lone/uncontested owner retains the calibrated operating
+    point; a tie accepts neither. A manual owner reserves the identity outright.
+
+    Callers supply one row per diarized voice with sufficient audio, retain those
+    rows for live re-arbitration, and project withdrawn accepts onto old segments.
+    This never promotes a failed voiceprint decision or guesses a second identity.
+    """
+    ranked = sorted(
+        (
+            (scores['user'], key)
+            for key, scores in distances.items()
+            if isfinite(scores.get('user', float('inf')))
+            # A voice confidently identified as someone else cannot be the
+            # owner. Unidentified voices still compete, even just over threshold.
+            and decisions[key].person_id in (None, 'user')
+        ),
+        key=lambda item: item[0],
+    )
+    winner = None
+    if ranked and not owner_reserved:
+        best, key = ranked[0]
+        competing = next(
+            (
+                distance
+                for distance, other in ranked[1:]
+                if voice_groups is None or voice_groups.get(other, other) != voice_groups.get(key, key)
+            ),
+            float('inf'),
+        )
+        if competing - best >= margin:
+            winner = voice_groups.get(key, key) if voice_groups is not None else key
+    return {
+        key: (
+            replace(decision, person_id=None, owner_contended=True)
+            if decision.person_id == 'user'
+            and (voice_groups.get(key, key) if voice_groups is not None else key) != winner
+            else decision
+        )
+        for key, decision in decisions.items()
+    }
+
+
+def mean_embedding(embeddings: Sequence[np.ndarray[Any, Any]]) -> np.ndarray[Any, Any]:
+    """Length-normalised centroid of (1, D) embeddings, returned as (1, D).
+
+    Averaging a few short clips of one diarized speaker before comparing beat both
+    single-clip and majority-vote decisions in the offline bench; the mean is
+    renormalised so cosine distance to it behaves like distance to one clip.
+    """
+    stacked = np.concatenate([np.asarray(e, dtype=np.float32).reshape(1, -1) for e in embeddings], axis=0)
+    centroid = stacked.mean(axis=0, keepdims=True)
+    norm = float(np.linalg.norm(centroid))
+    return centroid / norm if norm > 0 else centroid
+
+
+# Pinned-person prior (flag PINNED_SPEAKER_PRIOR_ENABLED). A pinned person is someone the
+# user expects in their conversations, but that never buys an automatic label: a match
+# that just misses the operating point becomes a question ("Maya Chen?") instead.
+PINNED_NEAR_MISS_DISTANCE_BAND = 0.05
+PINNED_NEAR_MISS_MARGIN_BAND = 0.04
+# Voice-match levels recorded for the suggestion card: 3 close, 2 possible, 1 weak.
+MATCH_LEVEL_STEP = 0.10
+VOICE_CANDIDATE_LIMIT = 3
+
+
+def match_level(distance: float, *, threshold: float = SPEAKER_MATCH_THRESHOLD) -> Optional[int]:
+    if distance != distance or not isfinite(distance):
+        return None
+    if distance < threshold:
+        return 3
+    if distance < threshold + MATCH_LEVEL_STEP:
+        return 2
+    if distance < threshold + 2 * MATCH_LEVEL_STEP:
+        return 1
+    return None
+
+
+def pinned_near_miss(
+    decision: SpeakerMatchDecision,
+    pinned: Any,
+    *,
+    threshold: float = SPEAKER_MATCH_THRESHOLD,
+    margin: float = SPEAKER_MATCH_MARGIN,
+) -> Optional[str]:
+    """The pinned person a rejected decision nearly accepted, else None. Accepts never change."""
+    best_id = decision.best_id
+    if decision.accepted or decision.owner_contended or best_id is None or best_id not in pinned:
+        return None
+    best, gap = decision.best_distance, decision.runner_up_distance - decision.best_distance
+    if not isfinite(best):
+        return None
+    near_distance = threshold <= best < threshold + PINNED_NEAR_MISS_DISTANCE_BAND and gap >= margin
+    near_margin = best < threshold and margin - PINNED_NEAR_MISS_MARGIN_BAND <= gap < margin
+    return best_id if near_distance or near_margin else None
+
+
+def voice_candidates(
+    distances: Mapping[str, float],
+    decision: SpeakerMatchDecision,
+    pinned: Any,
+    *,
+    exclude: Sequence[str] = (),
+) -> list[dict]:
+    """Up to three people this voice resembles, closest first and pinned first within a level.
+
+    The pinned near-miss, if any, carries ``suggest: True``. Persisted on unlabeled
+    segments for the suggestion card; never an identity decision.
+    """
+    near = pinned_near_miss(decision, pinned)
+    ranked = []
+    for person_id, distance in distances.items():
+        level = match_level(distance)
+        if level is None or person_id in exclude:
+            continue
+        ranked.append((-level, person_id not in pinned, distance, person_id, level))
+    ranked.sort()
+    candidates = []
+    for _, _, _, person_id, level in ranked[:VOICE_CANDIDATE_LIMIT]:
+        entry: dict = {'person_id': person_id, 'level': level}
+        if person_id == near:
+            entry['suggest'] = True
+        candidates.append(entry)
+    return candidates

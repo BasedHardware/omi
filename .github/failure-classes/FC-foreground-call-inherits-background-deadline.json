@@ -4,10 +4,14 @@
   "violated_contract": "A dependency call that a user-facing request cannot complete without must be bounded by a deadline sized for that request's own budget and that call's observed cost, not silently inherit the shared client deadline sized for cheap background work.",
   "canonical_prevention": "Give each foreground call an explicit request timeout derived from its measured latency and the route's end-to-end budget, and hold it with a regression test that drives the real production function against a client which enforces the requested deadline against a provider slower than the shared default.",
   "canonical_prevention_artifact": [
+    "backend/utils/llm/model_config.py",
     "backend/tests/unit/test_conversation_structure_provider_timeout.py",
+    "backend/tests/unit/test_llm_gateway_client_config.py",
     "backend/tests/unit/test_conversation_test_prompt_provider_failure.py"
   ],
-  "evidence_prs": [11859],
+  "evidence_prs": [
+    11859
+  ],
   "scope_hints": [
     "backend/utils/llm/**",
     "backend/utils/conversations/**"

@@ -20,14 +20,18 @@ afterEach(() => {
   while (roots.length) rmSync(roots.pop()!, { recursive: true, force: true });
 });
 
-function fixture(role: "coordinator" | "leaf" = "coordinator") {
+function fixture(
+  role: "coordinator" | "leaf" = "coordinator",
+  mode: "ask" | "act" = "act",
+  surfaceKind?: string,
+) {
   const root = mkdtempSync(join(tmpdir(), "omi-capability-"));
   roots.push(root);
   const databasePath = join(root, "agent.sqlite");
   const store = new SqliteAgentStore({ databasePath, reconcileOnOpen: false });
   const session = store.insertSession({
     ownerId: "owner-1",
-    surfaceKind: role === "leaf" ? "background_agent" : "main_chat",
+    surfaceKind: surfaceKind ?? (role === "leaf" ? "background_agent" : "main_chat"),
     defaultAdapterId: "acp",
     executionRole: role,
   });
@@ -36,7 +40,7 @@ function fixture(role: "coordinator" | "leaf" = "coordinator") {
     clientId: "trace-client",
     requestId: "trace-request",
     status: "running",
-    mode: "act",
+    mode,
   });
   const attempt = store.insertAttempt({
     runId: run.runId,
@@ -86,6 +90,61 @@ function invocationIdentity(invocation: AuthorizedRunToolInvocation) {
 }
 
 describe("RunToolCapabilityBroker", () => {
+  it("hard-denies ask-mode service writes without trusting an external-ref prefix", () => {
+    const { store, session, run, attempt } = fixture("coordinator", "ask");
+    store.execute(
+      "UPDATE sessions SET surface_kind = 'service', external_ref_kind = 'service', external_ref_id = 'arbitrary-label' WHERE session_id = ?",
+      [session.sessionId],
+    );
+    const broker = createBroker(store);
+    const capability = broker.register({
+      ownerId: session.ownerId,
+      sessionId: session.sessionId,
+      runId: run.runId,
+      attemptId: attempt.attemptId,
+    });
+    const base = {
+      capabilityRef: capability.capabilityRef,
+      runId: run.runId,
+      attemptId: attempt.attemptId,
+      activeOwnerId: session.ownerId,
+      toolInput: {},
+    };
+
+    expect(capability.builtInToolPolicy).toBe("read_only");
+
+    expectCode(
+      () => broker.authorize({ ...base, invocationId: "write", toolName: "create_memory" }),
+      "tool_not_allowed",
+    );
+    expect(
+      broker.authorize({ ...base, invocationId: "read", toolName: "search_memories" }).effectClass,
+    ).toBe("read_only");
+    store.close();
+  });
+
+  it("keeps ordinary ask-mode chat adapter built-ins and manifest writes on default authority", () => {
+    const { store, session, run, attempt } = fixture("coordinator", "ask");
+    const broker = createBroker(store);
+    const capability = broker.register({
+      ownerId: session.ownerId,
+      sessionId: session.sessionId,
+      runId: run.runId,
+      attemptId: attempt.attemptId,
+    });
+    expect(capability.builtInToolPolicy).toBe("default");
+    expect(() => broker.authorize({
+      capabilityRef: capability.capabilityRef,
+      invocationId: "ordinary-write",
+      runId: run.runId,
+      attemptId: attempt.attemptId,
+      activeOwnerId: session.ownerId,
+      toolName: "create_memory",
+      toolInput: {},
+    })).not.toThrow();
+    store.close();
+  });
+
   it("requires the canonical profile reader and rejects unknown canonical adapters", () => {
     const { store } = fixture();
     expect(() => new RunToolCapabilityBroker({ store } as never)).toThrow(
@@ -428,10 +487,47 @@ describe("RunToolCapabilityBroker", () => {
     store.close();
   });
 
+  it("requires a persisted desktop approval before authorizing sensitive tools", () => {
+    const { store, session, run, attempt } = fixture();
+    const broker = createBroker(store);
+    const capability = broker.register({
+      ownerId: session.ownerId,
+      sessionId: session.sessionId,
+      runId: run.runId,
+      attemptId: attempt.attemptId,
+    });
+    const base = {
+      capabilityRef: capability.capabilityRef,
+      runId: run.runId,
+      attemptId: attempt.attemptId,
+      activeOwnerId: session.ownerId,
+      toolName: "list_message_chats",
+      toolInput: {},
+    };
+
+    expectCode(() => broker.authorize({ ...base, invocationId: "without-approval" }), "approval_required");
+    // The model relays this message; it must not send the user hunting for an approval control.
+    expect(() => broker.authorize({ ...base, invocationId: "without-approval-message" }))
+      .toThrow(/no approval prompt.*do not ask the user to approve/);
+
+    store.insertGrant({
+      sessionId: session.sessionId,
+      runId: run.runId,
+      capability: "desktop.messaging.read",
+      operation: "list_message_chats",
+      resourcePattern: "*",
+      effect: "allow",
+      source: "user",
+    });
+    const authorized = broker.authorize({ ...base, invocationId: "with-approval" });
+    expect(authorized.canonicalToolName).toBe("list_message_chats");
+    store.close();
+  });
+
   it("authorizes surface-scoped voice tools for swift_realtime runs without leaking them elsewhere", () => {
     // Regression: realtime-voice runs relay Swift-executed voice tools that no
     // chat adapter advertises. An adapter-only allowlist rejected every such
-    // tool (ask_higher_model, point_click) with tool_not_allowed in production.
+    // tool (think_deeper, web_search, point_click) with tool_not_allowed in production.
     const root = mkdtempSync(join(tmpdir(), "omi-capability-"));
     roots.push(root);
     const store = new SqliteAgentStore({ databasePath: join(root, "agent.sqlite"), reconcileOnOpen: false });
@@ -466,21 +562,24 @@ describe("RunToolCapabilityBroker", () => {
       attemptId: attempt.attemptId,
     });
     expect(capability.surfaceKind).toBe("realtime_voice");
-    expect(capability.allowedToolNames).toContain("ask_higher_model");
+    expect(capability.allowedToolNames).toContain("think_deeper");
+    expect(capability.allowedToolNames).toContain("web_search");
     expect(capability.allowedToolNames).toContain("point_click");
+    expect(capability.allowedToolNames).not.toContain("record_interject_feedback");
     const authorized = broker.authorize({
       capabilityRef: capability.capabilityRef,
       invocationId: "invoke-voice",
       runId: run.runId,
       attemptId: attempt.attemptId,
       activeOwnerId: session.ownerId,
-      toolName: "ask_higher_model",
+      toolName: "web_search",
       toolInput: { query: "what's the weather in nyc right now?" },
     });
-    expect(authorized.canonicalToolName).toBe("ask_higher_model");
+    expect(authorized.canonicalToolName).toBe("web_search");
     store.close();
 
-    // A plain chat run must not inherit voice-only tools.
+    // A plain ACP chat run must not inherit voice-only tools. Typed desktop
+    // chat advertises web_search through the pi-mono adapter, not this ACP fixture.
     const chat = fixture();
     const chatCapability = createBroker(chat.store).register({
       ownerId: chat.session.ownerId,
@@ -488,8 +587,10 @@ describe("RunToolCapabilityBroker", () => {
       runId: chat.run.runId,
       attemptId: chat.attempt.attemptId,
     });
-    expect(chatCapability.allowedToolNames).not.toContain("ask_higher_model");
+    expect(chatCapability.allowedToolNames).not.toContain("think_deeper");
+    expect(chatCapability.allowedToolNames).not.toContain("web_search");
     expect(chatCapability.allowedToolNames).not.toContain("point_click");
+    expect(chatCapability.allowedToolNames).not.toContain("record_interject_feedback");
     chat.store.close();
   });
 

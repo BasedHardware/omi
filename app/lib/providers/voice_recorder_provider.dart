@@ -21,6 +21,7 @@ import 'package:omi/utils/l10n_extensions.dart';
 enum VoiceRecorderState { idle, recording, transcribing, transcribeSuccess, transcribeFailed, pendingRecovery }
 
 typedef VoiceMessageTranscriber = Future<String> Function(List<File> audioFiles);
+typedef VoiceWavSplitter = Future<List<File>> Function(File wavFile, int sampleRate, int channels);
 
 class VoiceRecorderProvider extends ChangeNotifier {
   static const _wavPathKey = 'voice_recorder_pending_wav_path';
@@ -32,6 +33,7 @@ class VoiceRecorderProvider extends ChangeNotifier {
   VoiceRecorderState _state = VoiceRecorderState.idle;
   String _transcript = '';
   bool _isProcessing = false;
+  int _recordingGeneration = 0;
 
   // Disk-based recording: PCM chunks stream to a temp file instead of RAM
   IOSink? _pcmSink;
@@ -40,11 +42,18 @@ class VoiceRecorderProvider extends ChangeNotifier {
 
   // Persisted WAV file for retry (kept until transcription succeeds or user closes)
   File? _wavFile;
+  Future<File>? _wavConversion;
 
   // Audio visualization — more bars give the wave a denser, more "speech-like"
   // look that matches modern voice-mode designs.
   final List<double> _audioLevels = List.generate(50, (_) => 0.05);
   Timer? _waveformTimer;
+
+  /// Ticks at ~60Hz while recording. Only the waveform listens to it; the
+  /// provider itself notifies on state changes, so the chat composer is not
+  /// rebuilt 60 times a second while the user dictates.
+  final ValueNotifier<int> _waveformTick = ValueNotifier<int>(0);
+  Listenable get waveformTick => _waveformTick;
 
   // Callbacks for UI integration
   Function(String transcript, bool autoSend)? _onTranscriptReady;
@@ -59,13 +68,15 @@ class VoiceRecorderProvider extends ChangeNotifier {
   }
 
   final VoiceMessageTranscriber _transcribeVoiceMessage;
+  final VoiceWavSplitter _splitWavFile;
 
   // Injected only by tests — ServiceManager is a singleton initialised from
   // native plumbing, so the mic is resolved lazily at call time otherwise.
   final IMicRecorderService? _micOverride;
 
-  VoiceRecorderProvider({VoiceMessageTranscriber? transcriber, IMicRecorderService? mic})
+  VoiceRecorderProvider({VoiceMessageTranscriber? transcriber, VoiceWavSplitter? splitter, IMicRecorderService? mic})
       : _transcribeVoiceMessage = transcriber ?? transcribeVoiceMessage,
+        _splitWavFile = splitter ?? splitWavFileIfNeeded,
         _micOverride = mic;
 
   IMicRecorderService get _mic => _micOverride ?? ServiceManager.instance().mic;
@@ -109,6 +120,7 @@ class VoiceRecorderProvider extends ChangeNotifier {
 
   Future<void> startRecording() async {
     if (_state == VoiceRecorderState.recording) return;
+    final generation = ++_recordingGeneration;
 
     _state = VoiceRecorderState.recording;
     _transcript = '';
@@ -116,15 +128,21 @@ class VoiceRecorderProvider extends ChangeNotifier {
 
     // Clean up any previous WAV file
     await _cleanupWavFile();
+    if (generation != _recordingGeneration) return;
 
     // Create a persisted PCM file for streaming audio to disk.
     final recordingsDir = await _recordingsDirectory();
+    if (generation != _recordingGeneration) return;
     _pcmFile = File('${recordingsDir.path}/voice_recording_${DateTime.now().millisecondsSinceEpoch}.pcm');
     // Create the file before opening the sink. IOSink.openWrite() may defer
     // file creation until the first event-loop turn, which can leave the
     // recording session with no visible PCM file immediately after a
     // successful start under load.
     await _pcmFile!.create();
+    if (generation != _recordingGeneration) {
+      await _cleanupPcmFile();
+      return;
+    }
     _pcmSink = _pcmFile!.openWrite();
 
     // Reset audio levels
@@ -134,6 +152,7 @@ class VoiceRecorderProvider extends ChangeNotifier {
     notifyListeners();
 
     await Permission.microphone.request();
+    if (generation != _recordingGeneration) return;
 
     // Configure audio session for Bluetooth before starting recorder.
     if (Platform.isIOS) {
@@ -143,21 +162,23 @@ class VoiceRecorderProvider extends ChangeNotifier {
         Logger.debug('VoiceRecorderProvider: Failed to configure audio session for Bluetooth: $e');
       }
     }
+    if (generation != _recordingGeneration) return;
 
     // Repaint at ~60Hz so the wave flows smoothly. Levels are shifted in
     // onByteReceived (audio callback rate, much faster than the UI), but the
-    // canvas only re-renders on notifyListeners — so a slower timer made the
-    // wave appear frozen / laggy.
+    // canvas only re-renders on a tick — so a slower timer made the wave
+    // appear frozen / laggy. Tick [waveformTick], not the whole provider.
+    // omi-perf-allow: fast-periodic-timer -- ticks only waveformTick, which only the waveform paints from
     _waveformTimer = Timer.periodic(const Duration(milliseconds: 16), (_) {
       if (_state == VoiceRecorderState.recording) {
-        notifyListeners();
+        _waveformTick.value++;
       }
     });
 
     try {
       await _mic.start(
         onByteReceived: (bytes) {
-          if (_state == VoiceRecorderState.recording) {
+          if (generation == _recordingGeneration && _state == VoiceRecorderState.recording) {
             // Write to disk instead of accumulating in RAM
             _pcmSink?.add(bytes);
             _pcmBytesWritten += bytes.length;
@@ -193,6 +214,7 @@ class VoiceRecorderProvider extends ChangeNotifier {
           }
         },
         onRecording: () {
+          if (generation != _recordingGeneration) return;
           Logger.debug('VoiceRecorderProvider: Recording started');
           _state = VoiceRecorderState.recording;
           // Reset audio levels
@@ -209,6 +231,7 @@ class VoiceRecorderProvider extends ChangeNotifier {
         },
       );
     } catch (e) {
+      if (generation != _recordingGeneration) return;
       // Mic contention (a conversation already holds the recorder) or a native
       // start failure. Never rethrows: this runs from a fire-and-forget tap
       // handler, so an escaping error is an unhandled async crash.
@@ -246,6 +269,7 @@ class VoiceRecorderProvider extends ChangeNotifier {
 
   Future<void> processRecording() async {
     if (_isProcessing) return;
+    final generation = _recordingGeneration;
 
     _state = VoiceRecorderState.transcribing;
     _isProcessing = true;
@@ -270,18 +294,32 @@ class VoiceRecorderProvider extends ChangeNotifier {
 
       // Convert PCM file to WAV file (reads from disk, writes to disk — no full-file RAM copy)
       // Keep PCM file until WAV is confirmed on disk — if conversion fails, PCM is the only copy
-      _wavFile = await _convertPcmFileToWavFile(_pcmFile!, 16000, 1);
+      final conversion = _convertPcmFileToWavFile(_pcmFile!, 16000, 1);
+      _wavConversion = conversion;
+      final converted = await conversion;
+      _wavConversion = null;
+      if (generation != _recordingGeneration) {
+        if (await converted.exists()) await converted.delete();
+        return;
+      }
+      _wavFile = converted;
 
       // Persist WAV path so user can retry if the app is closed
       await SharedPreferencesUtil().saveString(_wavPathKey, _wavFile!.path);
+      if (generation != _recordingGeneration) {
+        await _cleanupWavFile();
+        return;
+      }
 
       // WAV conversion succeeded — safe to delete PCM file now
       await _cleanupPcmFile();
 
       // Split into chunks if the WAV is large, then transcribe
-      final chunks = await splitWavFileIfNeeded(_wavFile!, 16000, 1);
+      final chunks = await _splitWavFile(_wavFile!, 16000, 1);
       try {
+        if (generation != _recordingGeneration) return;
         final transcript = await _transcribeVoiceMessage(chunks);
+        if (generation != _recordingGeneration) return;
         if (transcript.trim().isNotEmpty) {
           _transcript = transcript;
           _state = VoiceRecorderState.transcribeSuccess;
@@ -299,6 +337,8 @@ class VoiceRecorderProvider extends ChangeNotifier {
         _cleanupChunkFiles(chunks);
       }
     } catch (e) {
+      _wavConversion = null;
+      if (generation != _recordingGeneration) return;
       Logger.debug('Error processing recording: $e');
       // Only clean up PCM if WAV exists (conversion succeeded).
       // If WAV conversion failed, keep PCM as the only surviving copy.
@@ -326,15 +366,18 @@ class VoiceRecorderProvider extends ChangeNotifier {
 
   Future<void> _retryTranscription() async {
     if (_isProcessing) return;
+    final generation = _recordingGeneration;
 
     _state = VoiceRecorderState.transcribing;
     _isProcessing = true;
     notifyListeners();
 
     try {
-      final chunks = await splitWavFileIfNeeded(_wavFile!, 16000, 1);
+      final chunks = await _splitWavFile(_wavFile!, 16000, 1);
       try {
+        if (generation != _recordingGeneration) return;
         final transcript = await _transcribeVoiceMessage(chunks);
+        if (generation != _recordingGeneration) return;
         if (transcript.trim().isNotEmpty) {
           _transcript = transcript;
           _state = VoiceRecorderState.transcribeSuccess;
@@ -352,6 +395,7 @@ class VoiceRecorderProvider extends ChangeNotifier {
         _cleanupChunkFiles(chunks);
       }
     } catch (e) {
+      if (generation != _recordingGeneration) return;
       Logger.debug('Error retrying transcription: $e');
       _state = VoiceRecorderState.transcribeFailed;
       _isProcessing = false;
@@ -380,17 +424,22 @@ class VoiceRecorderProvider extends ChangeNotifier {
     final wavFile = File(wavPath);
     final sink = wavFile.openWrite();
 
-    // Write 44-byte WAV header
-    sink.add(wavHeader);
-
-    // Stream PCM data in chunks — never loads entire file into RAM
-    final reader = pcmFile.openRead();
-    await for (final chunk in reader) {
-      sink.add(chunk);
+    try {
+      // Stream PCM data in chunks — never loads entire file into RAM.
+      sink.add(wavHeader);
+      await for (final chunk in pcmFile.openRead()) {
+        sink.add(chunk);
+      }
+      await sink.flush();
+      await sink.close();
+    } catch (_) {
+      try {
+        await sink.close();
+      } finally {
+        if (await wavFile.exists()) await wavFile.delete();
+      }
+      rethrow;
     }
-
-    await sink.flush();
-    await sink.close();
 
     Logger.debug('WAV file created: $wavPath (${pcmLength + 44} bytes from $pcmLength PCM bytes)');
     return wavFile;
@@ -540,9 +589,45 @@ class VoiceRecorderProvider extends ChangeNotifier {
     _onClose?.call();
   }
 
+  /// Discard the active draft without entering the transcription path. Await
+  /// sink closure before deleting files so a late disk write cannot recreate
+  /// a recording after the user has cancelled it.
+  Future<void> discardRecording() async {
+    if (_state == VoiceRecorderState.idle) return;
+    _recordingGeneration++;
+    if (_state == VoiceRecorderState.recording) stopRecording();
+    _waveformTimer?.cancel();
+    _waveformTimer = null;
+    _state = VoiceRecorderState.idle;
+    _transcript = '';
+    _isProcessing = false;
+    _pcmBytesWritten = 0;
+    _autoSendRequested = false;
+    final sink = _pcmSink;
+    _pcmSink = null;
+    try {
+      await sink?.close();
+    } catch (e) {
+      Logger.debug('Error closing discarded PCM sink: $e');
+    }
+    try {
+      await _wavConversion;
+    } catch (_) {
+      // Conversion removes its partial WAV on failure.
+    }
+    await _cleanupPcmFile();
+    await _cleanupWavFile();
+    for (int i = 0; i < _audioLevels.length; i++) {
+      _audioLevels[i] = 0.1;
+    }
+    notifyListeners();
+    _onClose?.call();
+  }
+
   @override
   void dispose() {
     _waveformTimer?.cancel();
+    _waveformTick.dispose();
     _pcmSink?.close();
     if (_state == VoiceRecorderState.recording) {
       _mic.stop();

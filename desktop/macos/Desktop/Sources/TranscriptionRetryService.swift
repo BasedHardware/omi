@@ -69,6 +69,15 @@ class TranscriptionRetryService: @unchecked Sendable {
             continue
           }
 
+          // The armed capture attempt that owned this session died with the
+          // process; emit its terminal record as `pending` so the attempt
+          // funnel can bound mid-flight deaths. Only the persisted join key
+          // survived, so the payload deliberately carries nothing else.
+          if let attemptId = session.captureAttemptId {
+            Task { @MainActor in
+              AnalyticsManager.shared.captureAttemptPendingOutcome(attemptId: attemptId)
+            }
+          }
           // Check if session has segments - if not, delete it
           let segmentCount = try await TranscriptionStorage.shared.getSegmentCount(sessionId: session.id!)
           if segmentCount == 0 {

@@ -1,7 +1,6 @@
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
-# from _mem0 import router as mem0_router
 from _multion import router as multion_router
 from basic import conversation_created as basic_conversation_created_router
 from oauth import conversation_created as oauth_conversation_created_router
@@ -12,14 +11,12 @@ from notifications import hey_omi
 from iq_rating import main as iq_rating_router
 
 # from ahda import client as ahda_realtime_transcription_router
-# from advanced import openglass as advanced_openglass_router
 
 # ************* @DEPRECATED **************
 # REALTIME plugins are not ready yet: (After various attempts, we found the following:
 # 1. Super expensive to maintain, running a llm or certain logic every 3 seconds for 10 hours a day is not cheap.
 # 2. There has to be a better way to trigger those plugins, current way is not efficient.
 # 3. Didn't find killer use cases.
-# from advanced import realtime as advanced_realtime_router
 # from basic import realtime as basic_realtime_router
 from basic import mentor as basic_realtime_mentor_router
 
@@ -50,8 +47,6 @@ app.include_router(zapier_conversation_created_router.router)
 
 app.include_router(basic_realtime_mentor_router.router)
 # app.include_router(basic_realtime_router.router)
-# app.include_router(advanced_realtime_router.router)
-# app.include_router(advanced_openglass_router.router)
 
 # ***********************************************
 # ************ EXTERNAL INTEGRATIONS ************

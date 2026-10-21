@@ -32,6 +32,8 @@ class UberDeepLinks:
 def _clean_text(value: str | None) -> str | None:
     if value is None:
         return None
+    if not isinstance(value, str):
+        raise ValueError(f"Text values must be strings, got {type(value).__name__}.")
     cleaned = " ".join(value.split())
     return cleaned or None
 
@@ -39,7 +41,28 @@ def _clean_text(value: str | None) -> str | None:
 def _normalize_float(value: float | int | str | None) -> float | None:
     if value in (None, ""):
         return None
-    return float(value)
+    # The Omi backend forwards ``geolocation`` as free-form JSON, so a coordinate
+    # can be any JSON type. bool is an int subclass (float(True) is 1.0), and
+    # float() raises TypeError, ValueError or OverflowError for the rest; all
+    # become the ValueError that call_uber maps to a 400.
+    if isinstance(value, bool):
+        raise ValueError("Coordinates must be a number or a numeric string, got bool.")
+    try:
+        return float(value)
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise ValueError(
+            "Coordinates must be a number or a numeric string, got "
+            f"{type(value).__name__}."
+        ) from exc
+
+
+def _valid_lat_lng(lat: float | None, lng: float | None) -> bool:
+    # Validate each supplied coordinate independently.
+    if lat is not None and not (-90.0 <= lat <= 90.0):
+        return False
+    if lng is not None and not (-180.0 <= lng <= 180.0):
+        return False
+    return True
 
 
 def build_location(
@@ -51,6 +74,11 @@ def build_location(
 ) -> UberLocation:
     lat = _normalize_float(latitude)
     lng = _normalize_float(longitude)
+    if not _valid_lat_lng(lat, lng):
+        raise ValueError(
+            f"Invalid coordinates: latitude={lat}, longitude={lng}. "
+            "Latitude must be in [-90, 90] and longitude in [-180, 180]."
+        )
     return UberLocation(
         latitude=lat,
         longitude=lng,

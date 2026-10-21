@@ -1,42 +1,46 @@
 import 'package:flutter/material.dart';
 
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import 'package:omi/pages/apps/providers/add_app_provider.dart';
 import 'package:omi/pages/apps/widgets/action_fields_widget.dart';
+import 'package:omi/pages/apps/widgets/app_form_fields.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/app_localizations_helper.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/validators.dart';
 
 class ExternalTriggerFieldsWidget extends StatelessWidget {
   const ExternalTriggerFieldsWidget({super.key});
 
-  InputDecoration _buildInputDecoration(String label, {bool alignLabelWithHint = false}) {
-    return InputDecoration(
-      labelText: label,
-      labelStyle: TextStyle(color: Colors.grey.shade400),
-      floatingLabelStyle: TextStyle(color: Colors.grey.shade300),
-      alignLabelWithHint: alignLabelWithHint,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 16.0),
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12.0),
-        borderSide: BorderSide(color: Colors.grey.withValues(alpha: 0.3), width: 1),
-      ),
-      enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12.0),
-        borderSide: BorderSide(color: Colors.grey.withValues(alpha: 0.3), width: 1),
-      ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12.0),
-        borderSide: BorderSide(color: Colors.grey.shade400, width: 1),
-      ),
-      errorBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12.0),
-        borderSide: BorderSide(color: Colors.red.shade300, width: 1),
-      ),
-      filled: false,
+  static const _docsUrl = 'https://docs.omi.me/doc/developer/apps/Integrations';
+
+  void _pickTriggerEvent(BuildContext context, AddAppProvider provider) {
+    final events = provider.getTriggerEvents();
+    showAppOptionPicker<String?>(
+      context: context,
+      title: context.l10n.triggerEvents,
+      options: [
+        for (final event in events) AppFormOption<String?>(event.id, event.getLocalizedTitle(context)),
+        AppFormOption<String?>(null, context.l10n.sttNone),
+      ],
+      selected: provider.triggerEvent,
+      onSelected: provider.setTriggerEvent,
     );
+  }
+
+  String? _selectedEventTitle(BuildContext context, AddAppProvider provider) {
+    final id = provider.triggerEvent;
+    if (id == null) return null;
+    for (final event in provider.getTriggerEvents()) {
+      if (event.id == id) return event.getLocalizedTitle(context);
+    }
+    return provider.mapTriggerEventIdToName(id);
+  }
+
+  String? _validateOptionalUrl(BuildContext context, String? value) {
+    if (value != null && value.isNotEmpty && !isValidUrl(value)) return context.l10n.invalidUrlError;
+    return null;
   }
 
   @override
@@ -46,6 +50,12 @@ class ExternalTriggerFieldsWidget extends StatelessWidget {
         if (!provider.isCapabilitySelectedById('external_integration')) {
           return const SizedBox.shrink();
         }
+        final l10n = context.l10n;
+
+        Widget field(Widget child) => Padding(
+              padding: const EdgeInsets.only(left: 10.0, right: 10.0, top: OmiSpacing.md),
+              child: child,
+            );
 
         return GestureDetector(
           onTap: () {
@@ -55,11 +65,7 @@ class ExternalTriggerFieldsWidget extends StatelessWidget {
             children: [
               // Scopes Card
               const SizedBox(height: 18),
-              Container(
-                decoration: BoxDecoration(color: const Color(0xFF1F1F25), borderRadius: BorderRadius.circular(18.0)),
-                padding: const EdgeInsets.all(14.0),
-                child: const Padding(padding: EdgeInsets.only(left: 2.0), child: ActionFieldsWidget()),
-              ),
+              const AppFormCard(child: Padding(padding: EdgeInsets.only(left: 2.0), child: ActionFieldsWidget())),
 
               // External Integration Card
               const SizedBox(height: 18),
@@ -68,240 +74,74 @@ class ExternalTriggerFieldsWidget extends StatelessWidget {
                 onChanged: () {
                   provider.checkValidity();
                 },
-                child: Container(
-                  decoration: BoxDecoration(color: const Color(0xFF1F1F25), borderRadius: BorderRadius.circular(18.0)),
+                child: AppFormCard(
                   padding: const EdgeInsets.symmetric(horizontal: 14.0, vertical: 20.0),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Padding(
-                        padding: const EdgeInsets.only(left: 10.0, right: 10.0, bottom: 12.0),
+                        padding: const EdgeInsets.only(left: 10.0, right: 0, bottom: OmiSpacing.xs),
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Text('External Integration', style: TextStyle(color: Colors.grey.shade300, fontSize: 16)),
-                            GestureDetector(
-                              onTap: () {
-                                launchUrl(Uri.parse('https://docs.omi.me/doc/developer/apps/Integrations'));
-                              },
-                              child: FaIcon(
-                                FontAwesomeIcons.solidCircleQuestion,
-                                color: Colors.grey.shade500,
-                                size: 18,
-                              ),
-                            ),
+                            AppFormSectionTitle(l10n.capabilityExternalIntegration),
+                            const AppFormDocsButton(url: _docsUrl),
                           ],
                         ),
                       ),
-                      GestureDetector(
-                        onTap: () {
-                          showModalBottomSheet(
-                            context: context,
-                            isScrollControlled: false,
-                            shape: const RoundedRectangleBorder(
-                              borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-                            ),
-                            builder: (context) {
-                              return Consumer<AddAppProvider>(
-                                builder: (context, provider, child) {
-                                  return Container(
-                                    padding: const EdgeInsets.all(16.0),
-                                    height: MediaQuery.of(context).size.height * 0.6,
-                                    child: SingleChildScrollView(
-                                      child: Column(
-                                        mainAxisSize: MainAxisSize.min,
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          const SizedBox(height: 12),
-                                          const Text(
-                                            'Trigger Events',
-                                            style: TextStyle(color: Colors.white, fontSize: 18),
-                                          ),
-                                          const SizedBox(height: 18),
-                                          ListView.separated(
-                                            separatorBuilder: (context, index) {
-                                              return Divider(color: Colors.grey.shade600, height: 1);
-                                            },
-                                            shrinkWrap: true,
-                                            itemCount: provider.getTriggerEvents().length + 1, // +1 for None option
-                                            physics: const NeverScrollableScrollPhysics(),
-                                            itemBuilder: (context, index) {
-                                              // Special case for "None" option at the end
-                                              if (index == provider.getTriggerEvents().length) {
-                                                return InkWell(
-                                                  onTap: () {
-                                                    provider.setTriggerEvent(null);
-                                                    Navigator.pop(context);
-                                                  },
-                                                  child: Container(
-                                                    padding: const EdgeInsets.symmetric(vertical: 10),
-                                                    child: Row(
-                                                      crossAxisAlignment: CrossAxisAlignment.center,
-                                                      children: [
-                                                        const SizedBox(width: 6),
-                                                        Text(
-                                                          "None",
-                                                          style: TextStyle(color: Colors.grey.shade300, fontSize: 16),
-                                                        ),
-                                                        const Spacer(),
-                                                        Checkbox(
-                                                          value: provider.triggerEvent == null,
-                                                          onChanged: (value) {
-                                                            provider.setTriggerEvent(null);
-                                                            Navigator.pop(context);
-                                                          },
-                                                          side: BorderSide(color: Colors.grey.shade300),
-                                                          shape: const CircleBorder(),
-                                                        ),
-                                                      ],
-                                                    ),
-                                                  ),
-                                                );
-                                              }
-                                              return InkWell(
-                                                onTap: () {
-                                                  provider.setTriggerEvent(provider.getTriggerEvents()[index].id);
-                                                  Navigator.pop(context);
-                                                },
-                                                child: Container(
-                                                  padding: const EdgeInsets.symmetric(vertical: 10),
-                                                  child: Row(
-                                                    crossAxisAlignment: CrossAxisAlignment.center,
-                                                    children: [
-                                                      const SizedBox(width: 6),
-                                                      Text(
-                                                        provider.getTriggerEvents()[index].getLocalizedTitle(context),
-                                                        style: TextStyle(color: Colors.grey.shade300, fontSize: 16),
-                                                      ),
-                                                      const Spacer(),
-                                                      Checkbox(
-                                                        value: provider.triggerEvent ==
-                                                            provider.getTriggerEvents()[index].id,
-                                                        onChanged: (value) {
-                                                          provider.setTriggerEvent(
-                                                            provider.getTriggerEvents()[index].id,
-                                                          );
-                                                        },
-                                                        side: BorderSide(color: Colors.grey.shade300),
-                                                        shape: const CircleBorder(),
-                                                      ),
-                                                    ],
-                                                  ),
-                                                ),
-                                              );
-                                            },
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  );
-                                },
-                              );
-                            },
-                          );
-                        },
-                        child: Container(
-                          margin: const EdgeInsets.only(left: 10.0, right: 10.0, top: 10, bottom: 6),
-                          padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 16.0),
-                          decoration: BoxDecoration(
-                            color: Colors.transparent,
-                            borderRadius: BorderRadius.circular(12.0),
-                            border: Border.all(color: Colors.grey.withValues(alpha: 0.3), width: 1),
-                          ),
-                          width: double.infinity,
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  provider.mapTriggerEventIdToName(provider.triggerEvent) ?? 'Trigger Event',
-                                  style: TextStyle(
-                                    color: provider.triggerEvent != null ? Colors.grey.shade100 : Colors.grey.shade400,
-                                    fontSize: 16,
-                                  ),
-                                ),
-                              ),
-                              FaIcon(FontAwesomeIcons.chevronRight, color: Colors.grey.shade400, size: 14),
-                            ],
-                          ),
-                        ),
+                      AppFormSelectorField(
+                        margin: const EdgeInsets.only(left: 10.0, right: 10.0, top: 10, bottom: 6),
+                        value: _selectedEventTitle(context, provider),
+                        placeholder: l10n.triggerEvent,
+                        onTap: () => _pickTriggerEvent(context, provider),
                       ),
-                      // Only show the rest of the form if a trigger event is selected
-                      if (provider.triggerEvent != null) ...[
-                        const SizedBox(height: 16),
-                        Padding(
-                          padding: const EdgeInsets.only(left: 10.0, right: 10.0),
-                          child: TextFormField(
+                      // Only show the webhook field once a trigger event is selected
+                      if (provider.triggerEvent != null)
+                        field(
+                          TextFormField(
                             validator: (value) {
                               if (provider.triggerEvent != null && (value == null || !isValidUrl(value))) {
-                                return 'Please enter a valid webhook URL';
+                                return l10n.invalidWebhookUrlError;
                               }
                               return null;
                             },
                             controller: provider.webhookUrlController,
-                            decoration: _buildInputDecoration('Webhook URL*'),
+                            decoration: appFormInputDecoration(label: '${l10n.webhookUrl}*'),
                           ),
                         ),
-                      ],
-                      const SizedBox(height: 16),
-                      Padding(
-                        padding: const EdgeInsets.only(left: 10.0, right: 10.0),
-                        child: TextFormField(
-                          validator: (value) {
-                            if (value != null && value.isNotEmpty && !isValidUrl(value)) {
-                              return 'Please enter a valid URL';
-                            }
-                            return null;
-                          },
+                      field(
+                        TextFormField(
+                          validator: (value) => _validateOptionalUrl(context, value),
                           controller: provider.appHomeUrlController,
-                          decoration: _buildInputDecoration('App Home URL'),
+                          decoration: appFormInputDecoration(label: l10n.appHomeUrl),
                         ),
                       ),
-                      const SizedBox(height: 16),
-                      Padding(
-                        padding: const EdgeInsets.only(left: 10.0, right: 10.0),
-                        child: TextFormField(
+                      field(
+                        TextFormField(
                           controller: provider.instructionsController,
                           maxLines: null,
                           minLines: 3,
-                          decoration: _buildInputDecoration('Setup Instructions', alignLabelWithHint: true),
+                          decoration: appFormInputDecoration(label: l10n.setupInstructions, alignLabelWithHint: true),
                         ),
                       ),
-                      const SizedBox(height: 16),
-                      Padding(
-                        padding: const EdgeInsets.only(left: 10.0, right: 10.0),
-                        child: TextFormField(
+                      field(
+                        TextFormField(
                           controller: provider.authUrlController,
-                          decoration: _buildInputDecoration('Auth URL'),
+                          decoration: appFormInputDecoration(label: l10n.authUrl),
                         ),
                       ),
-                      const SizedBox(height: 16),
-                      Padding(
-                        padding: const EdgeInsets.only(left: 10.0, right: 10.0),
-                        child: TextFormField(
-                          validator: (value) {
-                            if (value != null) {
-                              if (value.isNotEmpty && !isValidUrl(value)) {
-                                return 'Please enter a valid URL';
-                              }
-                            }
-                            return null;
-                          },
+                      field(
+                        TextFormField(
+                          validator: (value) => _validateOptionalUrl(context, value),
                           controller: provider.setupCompletedController,
-                          decoration: _buildInputDecoration('Setup Completed URL'),
+                          decoration: appFormInputDecoration(label: l10n.setupCompletedUrl),
                         ),
                       ),
-                      const SizedBox(height: 16),
-                      Padding(
-                        padding: const EdgeInsets.only(left: 10.0, right: 10.0),
-                        child: TextFormField(
-                          validator: (value) {
-                            if (value != null && value.isNotEmpty && !isValidUrl(value)) {
-                              return 'Please enter a valid URL';
-                            }
-                            return null;
-                          },
+                      field(
+                        TextFormField(
+                          validator: (value) => _validateOptionalUrl(context, value),
                           controller: provider.chatToolsManifestUrlController,
-                          decoration: _buildInputDecoration('Chat Tools Manifest URL'),
+                          decoration: appFormInputDecoration(label: l10n.chatToolsManifestUrl),
                         ),
                       ),
                     ],

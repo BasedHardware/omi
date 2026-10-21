@@ -199,6 +199,49 @@ def test_share_email_success_publishes_and_sends(monkeypatch, _stub_data_layer):
     assert CONV_ID in _stub_data_layer['redis']
 
 
+def test_share_email_success_emits_summary_shared_telemetry(monkeypatch, _stub_data_layer):
+    """Delivered shares feed the admin K-factor; a successful send must emit
+    exactly one 'Conversation Summary Shared' event with the delivered count."""
+    monkeypatch.setattr(
+        conversations_router.share_email,
+        'send_summary_email',
+        lambda *, uid, conversation, recipient_emails: {'sent_to': recipient_emails},
+    )
+    events = []
+    monkeypatch.setattr(
+        conversations_router,
+        'emit_posthog_event',
+        lambda distinct_id, event, properties: events.append((distinct_id, event, properties)),
+    )
+    response = _client().post(
+        f'/v1/conversations/{CONV_ID}/share-email',
+        json={'recipient_emails': ['sarah@acme.com']},
+    )
+    assert response.status_code == 200
+    assert events == [
+        (UID, 'Conversation Summary Shared', {'conversation_id': CONV_ID, 'recipient_count': 1, 'channel': 'email'})
+    ]
+
+
+def test_share_email_failed_send_emits_no_telemetry(monkeypatch, _stub_data_layer):
+    def failing_send(*, uid, conversation, recipient_emails):
+        raise RuntimeError('email provider rejected the send')
+
+    monkeypatch.setattr(conversations_router.share_email, 'send_summary_email', failing_send)
+    events = []
+    monkeypatch.setattr(
+        conversations_router,
+        'emit_posthog_event',
+        lambda distinct_id, event, properties: events.append(event),
+    )
+    response = _client().post(
+        f'/v1/conversations/{CONV_ID}/share-email',
+        json={'recipient_emails': ['sarah@acme.com']},
+    )
+    assert response.status_code == 502
+    assert events == []
+
+
 def test_share_email_provider_failure_rolls_back_visibility(monkeypatch, _stub_data_layer):
     def failing_send(*, uid, conversation, recipient_emails):
         raise RuntimeError('email provider rejected the send')

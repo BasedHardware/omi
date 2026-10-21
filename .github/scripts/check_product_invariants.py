@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Require PRs that touch locked product-invariant paths to name the invariant ID.
 
-Parses docs/product/invariants/*.md (except README). For each locked invariant
+Parses product/invariants/*.md (except README). For each locked invariant
 with path globs, if any changed file matches a glob and the invariant's PR rule
 requires naming the ID, the PR body must contain that ID (e.g. INV-CHAT-1).
 
@@ -17,7 +17,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-INVARIANT_DIR = Path("docs/product/invariants")
+INVARIANT_DIR = Path("product/invariants")
 ID_RE = re.compile(r"^#\s+(INV-[A-Z0-9]+(?:-\*|(?:-\d+)+))", re.MULTILINE)
 STATUS_RE = re.compile(r"^\*\*Status:\*\*\s*(\w+)", re.MULTILINE | re.IGNORECASE)
 # A glob may carry a trailing note, e.g. ``path/**`` (retired: ...).
@@ -67,9 +67,14 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--changed-files",
-        required=True,
-        help="Path to a file listing changed paths (one per line).",
+        help="Path to a file listing changed paths (one per line). Ignored when --base is set.",
     )
+    parser.add_argument(
+        "--base",
+        help="Live PR base ref or SHA. When set, changed paths come from the three-dot "
+        "diff base...head (merge-base vs head), never first-parent or HEAD~.",
+    )
+    parser.add_argument("--head", default="HEAD", help="PR head ref (default: HEAD).")
     parser.add_argument(
         "--pr-body",
         default="",
@@ -432,11 +437,50 @@ def missing_invariant_hits(hits: list[dict], pr_body: str) -> list[dict]:
     return still_missing
 
 
+def load_changed_paths(args: argparse.Namespace, root: Path) -> list[str]:
+    """Return the PR change set.
+
+    `--base` is the source of truth: `git diff base...head` (three-dot). A
+    two-dot `base head` list, or a first-parent rewrite of a merge commit,
+    disagrees between the branch head and GitHub's pull_request merge ref.
+    `--changed-files` remains for hermetic unit tests that do not have git.
+    """
+    if args.base:
+        result = subprocess.run(
+            [
+                "git",
+                "diff",
+                "--name-only",
+                "--no-renames",
+                "--diff-filter=ACMRTD",
+                f"{args.base}...{args.head}",
+            ],
+            cwd=root,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if result.returncode:
+            detail = (result.stderr or result.stdout).strip()
+            raise RuntimeError(f"git diff {args.base}...{args.head} failed: {detail}")
+        return [line for line in result.stdout.splitlines() if line.strip()]
+    if not args.changed_files:
+        raise RuntimeError("provide --base (three-dot PR diff) or --changed-files")
+    return [
+        line.strip()
+        for line in Path(args.changed_files).read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+
+
 def main() -> int:
     args = parse_args()
     root = Path(args.root).resolve()
-    changed_path = Path(args.changed_files)
-    changed = [line.strip() for line in changed_path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    try:
+        changed = load_changed_paths(args, root)
+    except (OSError, RuntimeError) as exc:
+        print(f"FAIL: {exc}", file=sys.stderr)
+        return 2
     audit_problems = audit_registry(root)
     invariants = load_locked_invariants(root)
     hits = matched_invariants(changed, invariants)
@@ -479,7 +523,7 @@ def main() -> int:
 
     print("FAIL: PR touches locked product invariant paths but does not name the invariant ID(s).")
     print("Add them under 'Product invariants affected' in the PR body.")
-    print("Registry: docs/product/invariants/")
+    print("Registry: product/invariants/")
     for hit in still_missing:
         print(f"  Missing: {hit['id']} — {len(hit['matched_files'])} changed file(s) under {len(hit.get('matched_by_glob') or {})} glob(s)")
     print("\nWhat these invariants require, and why each applies:")

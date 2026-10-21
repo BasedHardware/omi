@@ -60,7 +60,8 @@ final class WhatsNewToast: ObservableObject {
 /// `.overlay(alignment: .bottomTrailing) { WhatsNewToastOverlay() }`.
 struct WhatsNewToastOverlay: View {
   @ObservedObject private var model = WhatsNewToast.shared
-  private let autoDismissSeconds: UInt64 = 12
+  /// Informational, so it uses the shared informational time and waits while the pointer is on it.
+  @State private var isHovered = false
 
   var body: some View {
     ZStack(alignment: .bottomTrailing) {
@@ -75,10 +76,12 @@ struct WhatsNewToastOverlay: View {
           },
           onClose: { model.dismiss() }
         )
+        .onHover { isHovered = $0 }
         .padding(OmiSpacing.xl)
         .transition(.move(edge: .trailing).combined(with: .opacity))
-        .task(id: version) {
-          try? await Task.sleep(nanoseconds: autoDismissSeconds * 1_000_000_000)
+        .task(id: "\(version)-\(isHovered)") {
+          guard !isHovered else { return }
+          try? await Task.sleep(nanoseconds: UInt64(OmiFeedbackTiming.informational * 1_000_000_000))
           if !Task.isCancelled { model.dismiss() }
         }
       }
@@ -100,7 +103,7 @@ private struct WhatsNewToastCard: View {
 
       VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
         HStack(alignment: .top, spacing: OmiSpacing.sm) {
-          Text("omi updated")
+          Text("Omi updated")
             .inkStyle(.rowCopy, color: Ink.primary)
           Spacer(minLength: 0)
           closeButton
@@ -129,6 +132,10 @@ private struct WhatsNewToastCard: View {
     .inkGlassPanel()
     .contentShape(RoundedRectangle(cornerRadius: InkGlass.cornerRadius, style: .continuous))
     .onTapGesture { onOpen() }
+    .pointingHandOnHover()
+    .accessibilityElement(children: .combine)
+    .accessibilityAddTraits(.isButton)
+    .accessibilityHint("Opens the release notes")
   }
 
   private var logo: some View {
@@ -146,14 +153,6 @@ private struct WhatsNewToastCard: View {
   }
 
   private var closeButton: some View {
-    Button(action: onClose) {
-      Image(systemName: "xmark")
-        .scaledFont(size: OmiType.micro, weight: .bold)
-        .foregroundColor(Ink.secondary)
-        .padding(OmiSpacing.xxs)
-        .contentShape(Rectangle())
-    }
-    .buttonStyle(.plain)
-    .help("Dismiss")
+    DismissButton(action: onClose, showBackground: false, accessibilityLabel: "Dismiss", size: .compact)
   }
 }

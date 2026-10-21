@@ -158,6 +158,26 @@ class TestAsyncCacheHit:
 
         assert isinstance(result, Geolocation)
         assert result.google_place_id == "ChIJIQBpAG2ahYAR_6128GcTUEo"
+        assert result.latitude == 37.78512
+        assert result.longitude == -122.40932
+
+    @pytest.mark.asyncio
+    async def test_cache_read_is_offloaded_from_event_loop(self):
+        offloaded = []
+
+        async def fake_run_blocking(executor, fn, *args, **kwargs):
+            offloaded.append(executor)
+            return fn(*args, **kwargs)
+
+        cached = {"google_place_id": "ChIJ_cached", "latitude": 37.785, "longitude": -122.409}
+        with patch.object(location_module, "r") as mock_r, patch.object(
+            location_module, "run_blocking", new=fake_run_blocking
+        ):
+            mock_r.get.return_value = json.dumps(cached)
+            result = await async_get_google_maps_location(37.78512, -122.40932)
+
+        assert result is not None
+        assert offloaded == [location_module.db_executor]
 
 
 class TestAsyncCacheMiss:
@@ -181,9 +201,17 @@ class TestAsyncCacheMiss:
         mock_client = AsyncMock()
         mock_client.get = AsyncMock(return_value=mock_httpx_response)
 
+        offloaded = []
+
+        async def fake_run_blocking(executor, fn, *args, **kwargs):
+            offloaded.append(executor)
+            return fn(*args, **kwargs)
+
         with patch.object(location_module, "r") as mock_r, patch.object(
             location_module, "get_maps_client", return_value=mock_client
-        ), patch.dict("os.environ", {"GOOGLE_MAPS_API_KEY": "test-key"}):
+        ), patch.object(location_module, "run_blocking", new=fake_run_blocking), patch.dict(
+            "os.environ", {"GOOGLE_MAPS_API_KEY": "test-key"}
+        ):
             mock_r.get.return_value = None
 
             result = await async_get_google_maps_location(37.785, -122.409)
@@ -195,6 +223,7 @@ class TestAsyncCacheMiss:
         # Verify cached with 48h TTL
         cache_call = mock_r.set.call_args
         assert cache_call[1]["ex"] == 172800
+        assert offloaded == [location_module.db_executor, location_module.db_executor]
 
     @pytest.mark.asyncio
     async def test_uses_params_not_url_interpolation(self):
@@ -296,3 +325,39 @@ class TestAsyncApiEdgeCases:
             result = await async_get_google_maps_location(37.785, -122.409)
 
         assert result is None
+
+
+class TestAsyncCityGeocoding:
+    @pytest.mark.asyncio
+    async def test_city_cache_read_and_write_are_offloaded(self):
+        response = MagicMock()
+        response.json.return_value = {
+            "status": "OK",
+            "results": [
+                {
+                    "address_components": [
+                        {"long_name": "San Francisco", "types": ["locality"]},
+                        {"long_name": "California", "types": ["administrative_area_level_1"]},
+                        {"long_name": "United States", "types": ["country"]},
+                    ]
+                }
+            ],
+        }
+        client = AsyncMock()
+        client.get = AsyncMock(return_value=response)
+        offloaded = []
+
+        async def fake_run_blocking(executor, fn, *args, **kwargs):
+            offloaded.append(executor)
+            return fn(*args, **kwargs)
+
+        with patch.object(location_module, "r") as mock_r, patch.object(
+            location_module, "get_maps_client", return_value=client
+        ), patch.object(location_module, "run_blocking", new=fake_run_blocking), patch.dict(
+            "os.environ", {"GOOGLE_MAPS_API_KEY": "test-key"}
+        ):
+            mock_r.get.return_value = None
+            result = await location_module.async_get_google_maps_city(37.785, -122.409)
+
+        assert result == "San Francisco, California, United States"
+        assert offloaded == [location_module.db_executor, location_module.db_executor]

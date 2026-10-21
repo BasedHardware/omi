@@ -53,4 +53,17 @@ enum AgentRuntimeCredentialPolicy {
   ) -> Bool {
     !isNonProduction && !isDesktopLocalProfile
   }
+
+  static let yoloModeEnvironmentKey = "OMI_YOLO_MODE"
+
+  static func agentEnvironment(
+    _ environment: [String: String],
+    isNonProduction: Bool
+  ) -> [String: String] {
+    var filtered = environment
+    if !isNonProduction {
+      filtered.removeValue(forKey: yoloModeEnvironmentKey)
+    }
+    return filtered
+  }
 }

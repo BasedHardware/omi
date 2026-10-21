@@ -31,6 +31,10 @@ no_data_semantics:
   traffic_gated_journey: NoData
   live_transcription_journey: OK
   scrape_health: Alerting
+  # Page-class finalization queue series (oldest-nonterminal age, dead-letter
+  # counter): unlabeled and zero-initialized on every backend-listen replica,
+  # so absence during real traffic means the emitter or its scrape is gone.
+  finalization_queue_health: Alerting
 
 managed_gke_exclusions:
   # Owned by #9138 / PR #11093 — do not page TargetDown for these.
@@ -39,6 +43,15 @@ managed_gke_exclusions:
   - kubeControllerManager
 
 scrape_jobs:
+  # Opt-in batch release. No target exists until installed; HPA/flag gates
+  # require a fresh per-pod queue sample rather than treating absence as zero.
+  - name: diarizer-batch-metrics
+    mechanism: additionalScrapeConfigs
+    auth: null
+    namespace: prod-omi-backend
+    coverage_alert: null
+    coverage_status: declared
+
   - name: backend-listen-metrics
     mechanism: additionalScrapeConfigs
     auth: metrics-scrape-token

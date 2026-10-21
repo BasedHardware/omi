@@ -12,7 +12,7 @@ usage() {
 Usage: backend/scripts/pre-deploy-check.sh [--live ENV PROJECT]
 
 Hermetic checks (default):
-  - validate runtime env manifest vs workflows and rendered Cloud Run shape (dev + prod)
+  - validate runtime env manifest vs workflows and exercise the renderer/state validator contract (dev + prod)
   - unit tests for deploy safety scripts
 
 Live checks (--live, requires gcloud auth):
@@ -35,17 +35,24 @@ run_hermetic() {
     echo "ERROR: missing pinned backend test dependencies; run uv pip sync pylock.toml first" >&2
     exit 1
   fi
-  python3 scripts/validate-backend-runtime-env.py --env dev --check-workflows --check-rendered-cloud-run
-  python3 scripts/validate-backend-runtime-env.py --env prod --check-workflows --check-rendered-cloud-run
+  python3 scripts/validate_forward_audio_lifecycle.py
+  python3 scripts/validate-backend-runtime-env.py --env dev --check-workflows
+  python3 scripts/validate-backend-runtime-env.py --env prod --check-workflows
+  python3 scripts/validate_frame_request_bucket_contract.py \
+    --source-only \
+    --runtime-env deploy/runtime_env.yaml \
+    --contract deploy/frame-request-bucket-contract.json
   python3 ../.github/scripts/check_backend_deploy_source_admission.py
   python3 ../.github/scripts/test_check_backend_deploy_source_admission.py
   python3 scripts/check_mcp_oauth_deploy_contract.py
   python3 -m pytest \
     tests/unit/test_backend_runtime_env_validator.py \
     tests/unit/test_render_backend_runtime_env.py \
+    tests/unit/test_cloud_run_forbidden_env_deploy.py \
     tests/unit/test_repair_cloud_run_traffic.py \
     tests/unit/test_cloud_run_traffic_snapshot.py \
     tests/unit/test_preflight_cloud_run_deploy.py \
+    tests/unit/test_check_cloud_run_env_drift.py \
     tests/unit/test_deploy_status_report.py \
     tests/unit/test_verify_backend_release_vector.py \
     tests/unit/test_mcp_oauth_deploy_contract.py -q

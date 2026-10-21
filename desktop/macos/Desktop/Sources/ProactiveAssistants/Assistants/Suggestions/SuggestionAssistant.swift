@@ -20,15 +20,7 @@ actor SuggestionAssistant: ProactiveAssistant {
 
   var isEnabled: Bool {
     get async {
-      // Deliberately independent of ContextBucketsFeature. The buckets rollout gated this
-      // on `!ContextBucketsFeature.isEnabled`, betting the context director would replace
-      // live suggestions — it delivered almost nothing, and with the flag at 100% of all
-      // users focus nudges went silent fleet-wide with no error logged (Aug 13–14 2026).
-      // If the director is ever meant to replace this assistant again, that must be an
-      // explicit, evidenced change — never a side effect of a rollout flag.
-      await MainActor.run {
-        SuggestionAssistantSettings.shared.isEnabled
-      }
+      await MainActor.run { SuggestionAssistantSettings.shared.isEnabled }
     }
   }
 
@@ -64,7 +56,8 @@ actor SuggestionAssistant: ProactiveAssistant {
 
   /// The commitments handed to the evaluation currently in flight, kept so delivery can
   /// hold a `commitment` nudge to what the model was actually shown.
-  private var commitmentsInFlight: [String] = []
+  private var commitmentsInFlight: [SuggestionCommitment] = []
+  private var nudgeLedgerPersistence: SuggestionTaskNudgeLedgerPersisting = SuggestionTaskNudgeLedgerDefaults()
 
   /// Goals, cached because grounding must stay off the network — a fetch on this path would
   /// blow through the window in which a suggestion is still about the current screen. A
@@ -97,6 +90,7 @@ actor SuggestionAssistant: ProactiveAssistant {
       apiKey: apiKey,
       model: model,
       fallbackModel: "gemini-2.5-flash",
+      lane: .suggestions,
       workload: .maintenance
     )
     telemetryModel = SuggestionAssistantTelemetry.Model(configuredModel: model)
@@ -196,7 +190,7 @@ actor SuggestionAssistant: ProactiveAssistant {
     }
     lastEvaluationAt = now
     dailyBudget.recordEvaluation(now: now)
-    commitmentsInFlight = grounding.openCommitments
+    commitmentsInFlight = grounding.commitmentRecords
 
     do {
       return try await evaluate(frame: frame, grounding: grounding)
@@ -229,12 +223,23 @@ actor SuggestionAssistant: ProactiveAssistant {
 
     // Overdue and due-today work is relevant regardless of what is on screen, and reading
     // it is free — it is already resident in the store.
-    let alwaysRelevant = await MainActor.run {
-      (TasksStore.shared.overdueTasks + TasksStore.shared.todaysTasks)
+    let alwaysRelevant = await MainActor.run { () -> [SuggestionCommitment] in
+      let flagOn = NegativeFeedbackRemediationFeature.isEnabled
+      let ledger = flagOn ? SuggestionTaskNudgeLedgerDefaults().load() : SuggestionTaskNudgeLedger()
+      let now = Date()
+      return (TasksStore.shared.overdueTasks + TasksStore.shared.todaysTasks)
         .prefix(15)
-        .map(Self.describeCommitment)
+        .compactMap { task in
+          if flagOn {
+            guard
+              SuggestionTaskNudgePolicy.isEligible(
+                taskId: task.id, dueAt: task.dueAt, ledger: ledger, now: now)
+            else { return nil }
+          }
+          return SuggestionCommitment(id: task.id, text: Self.describeCommitment(task))
+        }
     }
-    grounding.openCommitments = Array(alwaysRelevant)
+    grounding.commitmentRecords = Array(alwaysRelevant)
 
     grounding.goals = currentOwnerGoals()
     refreshGoalsIfStale()
@@ -249,13 +254,19 @@ actor SuggestionAssistant: ProactiveAssistant {
     let lookbackStart = Date().addingTimeInterval(-30 * 24 * 60 * 60)
 
     do {
-      let commitments = try await ActionItemStorage.shared.searchFTS(
-        query: searchTerm,
-        limit: 10,
-        includeCompleted: false
-      )
-      let scoped = commitments.map(\.description).filter { !grounding.openCommitments.contains($0) }
-      grounding.openCommitments.append(contentsOf: scoped)
+      let flagOn = await MainActor.run { NegativeFeedbackRemediationFeature.isEnabled }
+      if !flagOn {
+        let commitments = try await ActionItemStorage.shared.searchFTS(
+          query: searchTerm,
+          limit: 10,
+          includeCompleted: false
+        )
+        let existingTexts = Set(grounding.commitmentRecords.map(\.text))
+        for item in commitments where !existingTexts.contains(item.description) {
+          let id = item.backendId ?? item.description
+          grounding.commitmentRecords.append(SuggestionCommitment(id: id, text: item.description))
+        }
+      }
     } catch {
       logError("Suggestion: commitment grounding unavailable", error: error)
     }
@@ -439,18 +450,40 @@ actor SuggestionAssistant: ProactiveAssistant {
   }
 
   private func buildPrompt(frame: CapturedFrame, grounding: SuggestionGrounding) -> String {
+    Self.userPrompt(
+      appName: frame.appName,
+      windowTitle: frame.windowTitle,
+      groundingText: grounding.promptSections(),
+      recentSuggestions: recentSuggestions.map(\.text),
+      now: Date()
+    )
+  }
+
+  /// The per-evaluation user prompt. Static with an injected clock so tests can pin
+  /// the rendered request from a fixed instant. The suggestion lane judges on-screen
+  /// dates (the "scheduled this for 2026" class) and commitment timing, so every
+  /// request carries today's date — date-only, in the user turn, keeping the system
+  /// prompt byte-stable for prefix caching (SCA-358).
+  static func userPrompt(
+    appName: String,
+    windowTitle: String?,
+    groundingText: String,
+    recentSuggestions: [String],
+    now: Date,
+    timeZone: TimeZone = .current
+  ) -> String {
     var sections: [String] = []
 
     sections.append(
       """
       == WHAT THE USER IS DOING RIGHT NOW ==
-      App: \(frame.appName)
-      Window: \(frame.windowTitle ?? "(no title)")
+      App: \(appName)
+      Window: \(windowTitle ?? "(no title)")
+      Today is \(ChatPromptBuilder.currentCalendarDay(at: now, timeZone: timeZone)).
       The attached screenshot is their screen at this moment.
       """
     )
 
-    let groundingText = grounding.promptSections()
     if !groundingText.isEmpty {
       sections.append(groundingText)
     }
@@ -458,7 +491,7 @@ actor SuggestionAssistant: ProactiveAssistant {
     if !recentSuggestions.isEmpty {
       sections.append(
         "== RECENT SUGGESTIONS (do not repeat these) ==\n"
-          + recentSuggestions.map(\.text).joined(separator: "\n")
+          + recentSuggestions.joined(separator: "\n")
       )
     }
 
@@ -510,7 +543,8 @@ actor SuggestionAssistant: ProactiveAssistant {
   @discardableResult
   private func resolveDelivery(
     _ result: AssistantResult,
-    sendEvent: @escaping @Sendable (String, [String: Any]) -> Void
+    sendEvent: @escaping @Sendable (String, [String: Any]) -> Void,
+    onPresentation: (@Sendable (Bool) -> Void)? = nil
   ) async -> SuggestionAssistantTelemetry.DeliveryOutcome? {
     guard let result = result as? SuggestionResult else { return nil }
     guard result.hasSuggestion, let suggestion = result.suggestion else {
@@ -531,7 +565,7 @@ actor SuggestionAssistant: ProactiveAssistant {
       isGroundedCommitment: SuggestionCommitmentGuard.isGrounded(
         suggestion: suggestion.suggestion,
         category: suggestion.category,
-        openCommitments: commitmentsInFlight
+        openCommitments: commitmentsInFlight.map(\.text)
       )
     )
 
@@ -546,7 +580,9 @@ actor SuggestionAssistant: ProactiveAssistant {
       return outcome
     case .filteredDuplicate:
       await emitDeliveryOutcome(.filteredDuplicate, identity: telemetryIdentity)
-      log("Suggestion: duplicate of a recent suggestion — \"\(suggestion.suggestion)\"")
+      log(
+        "Suggestion: duplicate of a recent suggestion [\(suggestion.category.rawValue)] — \"\(suggestion.suggestion)\""
+      )
       return outcome
     case .filteredUngroundedCommitment:
       await emitDeliveryOutcome(.filteredUngroundedCommitment, identity: telemetryIdentity)
@@ -554,6 +590,11 @@ actor SuggestionAssistant: ProactiveAssistant {
         "Suggestion: ungrounded commitment [\(percent)%] — "
           + "no open commitment matches \"\(suggestion.suggestion)\""
       )
+      return outcome
+    case .suppressedPresenting, .suppressedSnoozed:
+      // The pure decision never yields these. Presence and snooze are evaluated further
+      // down, after the owner re-check, so both are read as late as possible before the
+      // card and neither reaches the dedup window.
       return outcome
     case .delivered:
       break
@@ -566,17 +607,43 @@ actor SuggestionAssistant: ProactiveAssistant {
       return .rejectedOwner
     }
 
-    recentSuggestions = SuggestionDeduplication.remembering(
-      .init(text: suggestion.suggestion, category: suggestion.category),
-      in: recentSuggestions,
-      frequencyLevel: cachedFrequencyLevel
-    )
+    // Presenting is checked here, before the suggestion is remembered — not only at
+    // delivery. `recentSuggestions` gates every later evaluation, so recording a
+    // suggestion that the screen-share guard in NotificationService is about to withhold
+    // would retire it permanently: the user never sees it, and every regeneration after
+    // the call is filtered as a duplicate of a card that was never shown. Returning before
+    // the write leaves it eligible once the share ends.
+    if NotificationService.shouldSuppressForSnooze(
+      respectFrequency: true,
+      snoozedUntil: NotificationService.currentSnoozeExpiry(),
+      now: Date())
+    {
+      log(
+        "Suggestion: withheld while notifications are silenced [\(suggestion.category.rawValue)] — "
+          + "\"\(suggestion.suggestion)\""
+      )
+      await emitDeliveryOutcome(.suppressedSnoozed, identity: telemetryIdentity)
+      return .suppressedSnoozed
+    }
+
+    if NotificationService.shouldSuppressForPresence(
+      respectFrequency: true,
+      presence: NotificationService.currentPresence())
+    {
+      log(
+        "Suggestion: withheld while the screen is shared [\(suggestion.category.rawValue)] — "
+          + "\"\(suggestion.suggestion)\""
+      )
+      await emitDeliveryOutcome(.suppressedPresenting, identity: telemetryIdentity)
+      return .suppressedPresenting
+    }
 
     await deliver(
       suggestion,
       result: result,
       ownerID: ownerID,
-      telemetryIdentity: telemetryIdentity
+      telemetryIdentity: telemetryIdentity,
+      onPresentation: onPresentation
     )
     return .delivered
   }
@@ -595,8 +662,18 @@ actor SuggestionAssistant: ProactiveAssistant {
     _ suggestion: ExtractedSuggestion,
     result: SuggestionResult,
     ownerID: String,
-    telemetryIdentity: SuggestionAssistantTelemetry.NotificationIdentity?
+    telemetryIdentity: SuggestionAssistantTelemetry.NotificationIdentity?,
+    onPresentation: (@Sendable (Bool) -> Void)? = nil
   ) async {
+    let taskId = SuggestionCommitmentGuard.groundedTaskId(
+      suggestion: suggestion.suggestion,
+      category: suggestion.category,
+      commitments: commitmentsInFlight
+    )
+    var detail = suggestion.suggestion
+    if let taskId {
+      detail = "task_id=\(taskId)\n\(suggestion.suggestion)"
+    }
     let context = FloatingBarNotificationContext(
       sourceTitle: "Focus",
       assistantId: identifier,
@@ -605,10 +682,15 @@ actor SuggestionAssistant: ProactiveAssistant {
       contextSummary: result.contextSummary,
       currentActivity: result.currentActivity,
       reasoning: suggestion.reasoning,
-      detail: suggestion.suggestion
+      detail: detail
     )
 
-    log("Suggestion: delivering [\(Int(suggestion.confidence * 100))%] \"\(suggestion.suggestion)\"")
+    // The category is model-chosen and decides the dedup depth this suggestion gets
+    // (`SuggestionPacing.dedupMemory`), so a repeat that should have been suppressed is
+    // only explainable with the label in hand.
+    log(
+      "Suggestion: delivering [\(Int(suggestion.confidence * 100))%] [\(suggestion.category.rawValue)] \"\(suggestion.suggestion)\""
+    )
 
     await MainActor.run {
       NotificationService.shared.sendNotification(
@@ -617,8 +699,37 @@ actor SuggestionAssistant: ProactiveAssistant {
         message: suggestion.suggestion,
         assistantId: identifier,
         context: context,
-        suggestionTelemetryIdentity: telemetryIdentity
-      )
+        suggestionTelemetryIdentity: telemetryIdentity,
+        onPresented: { [weak self] in
+          onPresentation?(true)
+          Task {
+            await self?.recordPresentedSuggestion(
+              suggestion,
+              taskId: taskId,
+              ownerID: ownerID)
+          }
+        },
+        onDropped: { onPresentation?(false) })
+    }
+  }
+
+  /// Advances dedup and remediation state only after a real presentation receipt.
+  /// Queue admission is intentionally insufficient: snooze, screen sharing, or an
+  /// owner change can still reject the card before it reaches the user.
+  private func recordPresentedSuggestion(
+    _ suggestion: ExtractedSuggestion,
+    taskId: String?,
+    ownerID: String
+  ) async {
+    recentSuggestions = SuggestionDeduplication.remembering(
+      .init(text: suggestion.suggestion, category: suggestion.category),
+      in: recentSuggestions,
+      frequencyLevel: cachedFrequencyLevel)
+    let remediationEnabled = await MainActor.run { NegativeFeedbackRemediationFeature.isEnabled }
+    if remediationEnabled, let taskId {
+      var ledger = SuggestionTaskNudgeLedgerDefaults(ownerID: ownerID).load()
+      SuggestionTaskNudgePolicy.recordingDelivery(taskId: taskId, in: &ledger, now: Date())
+      SuggestionTaskNudgeLedgerDefaults(ownerID: ownerID).save(ledger)
     }
   }
 
@@ -665,7 +776,7 @@ actor SuggestionAssistant: ProactiveAssistant {
     }
 
     let grounding = await assembleGrounding(for: frame)
-    commitmentsInFlight = grounding.openCommitments
+    commitmentsInFlight = grounding.commitmentRecords
 
     guard !grounding.isEmpty else {
       return ["outcome": "no_grounding", "commitments": "0"]
@@ -691,19 +802,46 @@ actor SuggestionAssistant: ProactiveAssistant {
       ]
     }
 
-    // Report what delivery actually did, not that a suggestion existed. `outcome` is
-    // "delivered" only when a card reached NotificationService.
-    let delivery = await resolveDelivery(result, sendEvent: sendEvent)
+    // Report what delivery actually did, not that a suggestion existed. Handing a card to
+    // NotificationService is not delivery: snooze, presence, category and frequency gates and
+    // the bar can still withhold it, so `delivered` waits for the real presentation outcome.
+    let (presentations, reportPresentation) = AsyncStream.makeStream(of: Bool.self)
+    let delivery = await resolveDelivery(result, sendEvent: sendEvent) { presented in
+      reportPresentation.yield(presented)
+      reportPresentation.finish()
+    }
+    let presented =
+      delivery == .delivered ? await Self.awaitPresentation(presentations, timeout: .seconds(10)) : false
+    let outcome =
+      delivery == .delivered && !presented ? "handed_off_not_presented" : delivery?.rawValue ?? "no_delivery_decision"
 
     return [
-      "outcome": delivery?.rawValue ?? "no_delivery_decision",
-      "delivered": delivery == .delivered ? "true" : "false",
+      "outcome": outcome,
+      "delivered": presented ? "true" : "false",
       "suggestion": suggestion.suggestion,
       "category": suggestion.category.rawValue,
       "confidence": "\(Int(suggestion.confidence * 100))",
       "commitments": "\(grounding.openCommitments.count)",
       "goals": "\(grounding.goals.count)",
     ]
+  }
+
+  /// The first presentation outcome the notification service reports, or `false` when none
+  /// arrives within `timeout` (for example, a card still queued behind another one).
+  static func awaitPresentation(_ outcomes: AsyncStream<Bool>, timeout: Duration) async -> Bool {
+    await withTaskGroup(of: Bool.self) { group in
+      group.addTask {
+        for await presented in outcomes { return presented }
+        return false
+      }
+      group.addTask {
+        try? await Task.sleep(for: timeout)
+        return false
+      }
+      let first = await group.next() ?? false
+      group.cancelAll()
+      return first
+    }
   }
 
   // MARK: - Lifecycle

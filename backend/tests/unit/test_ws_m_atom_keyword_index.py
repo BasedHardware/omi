@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import os
-import re
 import types
 import importlib
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -90,7 +90,14 @@ ensure_utils_memory_packages_importable(str(BACKEND_DIR))
 from database.memory_vector_metadata import canonical_memory_provider_id
 from models.memory_apply import MemoryControlState
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState
-from models.product_memory import MemoryItemStatus, MemoryTier, ProcessingState, MemoryItem
+from models.product_memory import (
+    LedgerWriteReason,
+    MemoryItemStatus,
+    MemoryKind,
+    MemoryTier,
+    ProcessingState,
+    MemoryItem,
+)
 from utils.memory.atom_keyword_index import (
     AtomKeywordRebuildReport,
     build_atom_keyword_document,
@@ -109,6 +116,7 @@ from utils.memory.canonical_memory_adapter import (
     retract_conversation_sourced_memories,
     search_canonical_memories,
 )
+import utils.memory.canonical_memory_adapter as canonical_adapter_mod
 from utils.memory.canonical_vector_sync import sync_canonical_memory_vector
 from utils.memory.memory_system import MemorySystem
 
@@ -175,6 +183,92 @@ def _data_protection_db(level: str = "enhanced") -> MagicMock:
     return db_client
 
 
+def _patch_product_search_items(monkeypatch, items: list[MemoryItem], *, allow_full_fetch: bool = False):
+    by_id = {item.memory_id: item for item in items}
+
+    def _read_by_ids(uid, memory_ids, *, db_client):
+        del uid, db_client
+        return [by_id[memory_id] for memory_id in memory_ids if memory_id in by_id]
+
+    monkeypatch.setattr(
+        canonical_adapter_mod,
+        "fetch_authoritative_product_memory_items_by_ids",
+        _read_by_ids,
+    )
+    if allow_full_fetch:
+        monkeypatch.setattr(
+            canonical_adapter_mod,
+            "fetch_authoritative_product_memory_items",
+            lambda uid, db_client=None, budget=None: list(items),
+        )
+    else:
+        monkeypatch.setattr(
+            canonical_adapter_mod,
+            "fetch_authoritative_product_memory_items",
+            lambda **kwargs: pytest.fail("product search must not scan the canonical collection"),
+        )
+
+
+def _run_bounded_ledger_search(
+    monkeypatch,
+    items: list[MemoryItem],
+    candidate_id: str,
+    *,
+    payload_overrides: dict[str, dict] | None = None,
+):
+    payloads = {item.memory_id: item.model_dump(mode="python") for item in items}
+    for payload in payloads.values():
+        if payload.get("ledger_schema_version") == "knowledge_ledger.v1" and not payload.get("write_reason"):
+            payload["write_reason"] = LedgerWriteReason.agent_reusable_conclusion.value
+    payloads.update(payload_overrides or {})
+    for payload in payloads.values():
+        if payload.get("ledger_schema_version") == "knowledge_ledger.v1" and not payload.get("write_reason"):
+            payload["write_reason"] = LedgerWriteReason.agent_reusable_conclusion.value
+    read_ids: list[str] = []
+
+    class _Snapshot:
+        def __init__(self, document_id: str, payload):
+            self.id = document_id
+            self.exists = payload is not None
+            self._payload = payload
+
+        def to_dict(self):
+            return self._payload
+
+    class _Ref:
+        def __init__(self, path: str):
+            self.path = path
+
+    class _Db:
+        def document(self, path: str):
+            read_ids.append(path.rsplit("/", 1)[-1])
+            return _Ref(path)
+
+        def get_all(self, refs):
+            return [_Snapshot(ref.path.rsplit("/", 1)[-1], payloads.get(ref.path.rsplit("/", 1)[-1])) for ref in refs]
+
+        def collection(self, _path):
+            pytest.fail("ledger search must not scan the canonical collection")
+
+    monkeypatch.setattr(
+        "utils.memory.atom_keyword_index.keyword_search_ledger_memory_ids",
+        lambda *args, **kwargs: [candidate_id],
+    )
+    monkeypatch.setattr(
+        "utils.memory.canonical_memory_adapter.fetch_authoritative_product_memory_items",
+        lambda **kwargs: pytest.fail("ledger search must not materialize all canonical items"),
+    )
+    results = search_canonical_memories(
+        CANONICAL_UID,
+        NEEDLE,
+        limit=5,
+        vector_query=_empty_vector_query,
+        db_client=_Db(),
+        ledger_kinds={MemoryKind.fact.value},
+    )
+    return results, read_ids
+
+
 def test_user_rejected_long_term_item_is_not_rebuild_or_vector_eligible():
     rejected = _long_term_item().model_copy(update={"promotion": {"user_review": False}})
 
@@ -210,6 +304,21 @@ def _universal_memory(monkeypatch):
     configure_universal_memory(monkeypatch, CANONICAL_UID)
     monkeypatch.setattr(atom_index, "ensure_canonical_apply_control_state", lambda *args, **kwargs: None)
 
+    @contextmanager
+    def allow_external_provider_write(uid, *, kind="explicit_memory_deletion", firestore_client=None):
+        assert uid
+        assert kind in {"external_data_write", "explicit_memory_deletion"}
+        assert firestore_client is not None
+        yield "writer-token"
+
+    monkeypatch.setattr(atom_index, "external_write_fence", allow_external_provider_write)
+    monkeypatch.setattr(canonical_adapter, "destructive_operation_gate", allow_external_provider_write)
+    monkeypatch.setattr(
+        canonical_adapter,
+        "current_destructive_operation_token",
+        lambda uid, *, kind: "writer-token",
+    )
+
 
 @pytest.fixture
 def mock_typesense():
@@ -217,8 +326,26 @@ def mock_typesense():
     typesense_client = MagicMock()
 
     def _quoted_filter_values(filter_by):
-        values = re.findall(r"`((?:\\.|[^`])*)`", filter_by)
-        return [re.sub(r"\\(.)", r"\1", value) for value in values]
+        values = []
+        index = 0
+        while index < len(filter_by):
+            if filter_by[index] != '`':
+                index += 1
+                continue
+            index += 1
+            value = []
+            while index < len(filter_by):
+                char = filter_by[index]
+                if char == '`':
+                    index += 1
+                    break
+                if char == '\\' and index + 1 < len(filter_by):
+                    index += 1
+                    char = filter_by[index]
+                value.append(char)
+                index += 1
+            values.append(''.join(value))
+        return values
 
     def _upsert(doc):
         docs_store[doc["id"]] = doc
@@ -407,10 +534,7 @@ class TestKeywordSearchAndHybrid:
         def _empty_vector(*args, **kwargs):
             return _EmptyVectorResult()
 
-        monkeypatch.setattr(
-            "utils.memory.canonical_memory_adapter.fetch_authoritative_product_memory_items",
-            lambda uid, db_client=None: [item],
-        )
+        _patch_product_search_items(monkeypatch, [item])
         results = search_canonical_memories(
             CANONICAL_UID,
             NEEDLE,
@@ -421,6 +545,164 @@ class TestKeywordSearchAndHybrid:
         assert len(results) == 1
         assert results[0]["memory_id"] == item.memory_id
         assert NEEDLE in results[0]["content"]
+
+    def test_ledger_search_hydrates_only_candidate_and_lineage_ids(self, monkeypatch):
+        candidate = _long_term_item(memory_id="mem-ledger-candidate").model_copy(
+            update={
+                "ledger_schema_version": "knowledge_ledger.v1",
+                "kind": MemoryKind.fact,
+                "intent_backed": True,
+                "canonical_memory_id": "mem-ledger-root",
+            }
+        )
+        root = _long_term_item(memory_id="mem-ledger-root", content=f"Root {NEEDLE}").model_copy(
+            update={
+                "ledger_schema_version": "knowledge_ledger.v1",
+                "kind": MemoryKind.fact,
+                "intent_backed": True,
+            }
+        )
+        by_id = {candidate.memory_id: candidate, root.memory_id: root}
+        read_batches = []
+
+        def _read_by_ids(uid, memory_ids, *, db_client):
+            assert uid == CANONICAL_UID
+            read_batches.append(tuple(memory_ids))
+            return [by_id[memory_id] for memory_id in memory_ids if memory_id in by_id]
+
+        monkeypatch.setattr(
+            "utils.memory.atom_keyword_index.keyword_search_ledger_memory_ids",
+            lambda *args, **kwargs: [candidate.memory_id],
+        )
+        monkeypatch.setattr(
+            "utils.memory.canonical_memory_adapter.fetch_authoritative_product_memory_items_by_ids",
+            _read_by_ids,
+        )
+        monkeypatch.setattr(
+            "utils.memory.canonical_memory_adapter.fetch_authoritative_product_memory_items",
+            lambda **kwargs: pytest.fail("ledger search must not scan the canonical collection"),
+        )
+
+        results = search_canonical_memories(
+            CANONICAL_UID,
+            NEEDLE,
+            limit=5,
+            vector_query=_empty_vector_query,
+            db_client=_data_protection_db(),
+            ledger_kinds={MemoryKind.fact.value},
+        )
+
+        assert [row["memory_id"] for row in results] == [root.memory_id]
+        assert read_batches == [(candidate.memory_id,), (root.memory_id,)]
+
+    def test_ledger_search_omits_candidate_with_missing_lineage_target(self, monkeypatch):
+        candidate = _long_term_item(memory_id="mem-ledger-missing").model_copy(
+            update={
+                "ledger_schema_version": "knowledge_ledger.v1",
+                "kind": MemoryKind.fact,
+                "intent_backed": True,
+                "canonical_memory_id": "mem-ledger-not-found",
+            }
+        )
+
+        results, read_ids = _run_bounded_ledger_search(monkeypatch, [candidate], candidate.memory_id)
+
+        assert results == []
+        assert read_ids == [candidate.memory_id, "mem-ledger-not-found"]
+
+    def test_ledger_search_preserves_closed_cycle_lineage_behavior(self, monkeypatch):
+        candidate = _long_term_item(memory_id="mem-ledger-cycle-candidate").model_copy(
+            update={
+                "ledger_schema_version": "knowledge_ledger.v1",
+                "kind": MemoryKind.fact,
+                "intent_backed": True,
+                "canonical_memory_id": "mem-ledger-cycle-peer",
+            }
+        )
+        peer = _long_term_item(memory_id="mem-ledger-cycle-peer").model_copy(
+            update={
+                "ledger_schema_version": "knowledge_ledger.v1",
+                "kind": MemoryKind.fact,
+                "intent_backed": True,
+                "canonical_memory_id": candidate.memory_id,
+            }
+        )
+
+        results, read_ids = _run_bounded_ledger_search(monkeypatch, [candidate, peer], candidate.memory_id)
+
+        assert len(results) == 1
+        assert results[0]["memory_id"] in {candidate.memory_id, peer.memory_id}
+        assert read_ids == [candidate.memory_id, peer.memory_id]
+
+    def test_ledger_search_omits_candidate_with_cross_owner_lineage_target(self, monkeypatch):
+        candidate = _long_term_item(memory_id="mem-ledger-cross-owner").model_copy(
+            update={
+                "ledger_schema_version": "knowledge_ledger.v1",
+                "kind": MemoryKind.fact,
+                "intent_backed": True,
+                "canonical_memory_id": "mem-ledger-other-owner",
+            }
+        )
+        other_owner = _long_term_item(uid="uid-other", memory_id="mem-ledger-other-owner").model_copy(
+            update={
+                "ledger_schema_version": "knowledge_ledger.v1",
+                "kind": MemoryKind.fact,
+                "intent_backed": True,
+            }
+        )
+
+        results, read_ids = _run_bounded_ledger_search(monkeypatch, [candidate, other_owner], candidate.memory_id)
+
+        assert results == []
+        assert read_ids == [candidate.memory_id, other_owner.memory_id]
+
+    def test_ledger_search_omits_candidate_with_payload_id_mismatch_lineage_target(self, monkeypatch):
+        candidate = _long_term_item(memory_id="mem-ledger-id-mismatch").model_copy(
+            update={
+                "ledger_schema_version": "knowledge_ledger.v1",
+                "kind": MemoryKind.fact,
+                "intent_backed": True,
+                "canonical_memory_id": "mem-ledger-target",
+            }
+        )
+        wrong_payload = _long_term_item(memory_id="mem-ledger-wrong-payload").model_copy(
+            update={
+                "ledger_schema_version": "knowledge_ledger.v1",
+                "kind": MemoryKind.fact,
+                "intent_backed": True,
+            }
+        )
+
+        results, read_ids = _run_bounded_ledger_search(
+            monkeypatch,
+            [candidate],
+            candidate.memory_id,
+            payload_overrides={"mem-ledger-target": wrong_payload.model_dump(mode="python")},
+        )
+
+        assert results == []
+        assert read_ids == [candidate.memory_id, "mem-ledger-target"]
+
+    def test_ledger_search_omits_candidate_when_lineage_exceeds_bounded_hops(self, monkeypatch):
+        chain = []
+        for index in range(14):
+            memory_id = f"mem-ledger-hop-{index}"
+            target_id = f"mem-ledger-hop-{index + 1}" if index < 13 else None
+            chain.append(
+                _long_term_item(memory_id=memory_id).model_copy(
+                    update={
+                        "ledger_schema_version": "knowledge_ledger.v1",
+                        "kind": MemoryKind.fact,
+                        "intent_backed": True,
+                        "canonical_memory_id": target_id,
+                    }
+                )
+            )
+
+        results, read_ids = _run_bounded_ledger_search(monkeypatch, chain, chain[0].memory_id)
+
+        assert results == []
+        assert read_ids == [item.memory_id for item in chain[:13]]
 
     def test_search_excludes_superseded_long_term_items(self, mock_typesense, monkeypatch):
         active = _long_term_item(memory_id="mem_active", content=f"Active {NEEDLE}")
@@ -437,10 +719,7 @@ class TestKeywordSearchAndHybrid:
             "utils.memory.atom_keyword_index.keyword_search_memory_ids",
             lambda uid, query, limit=5, db_client=None: ["mem_active", "mem_superseded"],
         )
-        monkeypatch.setattr(
-            "utils.memory.canonical_memory_adapter.fetch_authoritative_product_memory_items",
-            lambda uid, db_client=None: [active, superseded],
-        )
+        _patch_product_search_items(monkeypatch, [active, superseded])
         results = search_canonical_memories(
             CANONICAL_UID,
             NEEDLE,
@@ -475,10 +754,7 @@ class TestKeywordSearchAndHybrid:
             "utils.memory.atom_keyword_index.keyword_search_memory_ids",
             lambda *args, **kwargs: [],
         )
-        monkeypatch.setattr(
-            "utils.memory.canonical_memory_adapter.fetch_authoritative_product_memory_items",
-            lambda uid, db_client=None: [pending, long_term, short_term],
-        )
+        _patch_product_search_items(monkeypatch, [pending, long_term, short_term])
 
         def _vector_query(*args, **kwargs):
             return _VectorResult(
@@ -499,6 +775,43 @@ class TestKeywordSearchAndHybrid:
 
         assert [row["memory_id"] for row in results] == [short_term.memory_id, long_term.memory_id]
         assert [row["tier"] for row in results] == [MemoryTier.short_term.value, MemoryTier.long_term.value]
+
+    def test_search_applies_item_filter_before_result_limit(self, mock_typesense, monkeypatch):
+        facts = [
+            _long_term_item(memory_id=f"mem_fact_{index}").model_copy(
+                update={
+                    "ledger_schema_version": "knowledge_ledger.v1",
+                    "kind": MemoryKind.fact,
+                    "intent_backed": True,
+                }
+            )
+            for index in range(2)
+        ]
+        document = _long_term_item(memory_id="mem_document").model_copy(
+            update={
+                "ledger_schema_version": "knowledge_ledger.v1",
+                "kind": MemoryKind.document,
+                "intent_backed": True,
+                "body": "A bounded playbook body",
+            }
+        )
+        ranked_ids = [fact.memory_id for fact in facts] + [document.memory_id]
+        monkeypatch.setattr(
+            "utils.memory.atom_keyword_index.keyword_search_memory_ids",
+            lambda *args, **kwargs: ranked_ids,
+        )
+        _patch_product_search_items(monkeypatch, [*facts, document])
+
+        results = search_canonical_memories(
+            CANONICAL_UID,
+            "playbook",
+            limit=1,
+            vector_query=_empty_vector_query,
+            db_client=_data_protection_db(),
+            item_filter=lambda item: item.kind == MemoryKind.document,
+        )
+
+        assert [row["memory_id"] for row in results] == [document.memory_id]
 
     def test_search_prefers_long_term_canonical_survivor_and_keeps_unique_short_term(self, mock_typesense, monkeypatch):
         now = datetime.now(timezone.utc)
@@ -526,9 +839,10 @@ class TestKeywordSearchAndHybrid:
             "utils.memory.atom_keyword_index.keyword_search_memory_ids",
             lambda *args, **kwargs: [],
         )
-        monkeypatch.setattr(
-            "utils.memory.canonical_memory_adapter.fetch_authoritative_product_memory_items",
-            lambda uid, db_client=None, budget=None: [unique_short_term, duplicate_short_term, survivor],
+        _patch_product_search_items(
+            monkeypatch,
+            [unique_short_term, duplicate_short_term, survivor],
+            allow_full_fetch=True,
         )
 
         def _vector_query(*args, **kwargs):
@@ -567,6 +881,52 @@ class TestKeywordSearchAndHybrid:
         assert duplicate_short_term.memory_id not in {row["memory_id"] for row in first}
         assert first[1]["tier"] == MemoryTier.short_term.value
 
+    def test_product_search_follows_lineage_pointers_without_full_scan(self, monkeypatch):
+        survivor = _long_term_item(
+            memory_id="mem-root",
+            content=f"Survivor {NEEDLE}",
+            canonical_memory_id="mem-root",
+        )
+        alias = _long_term_item(
+            memory_id="mem-alias",
+            content=f"Alias {NEEDLE}",
+            tier=MemoryTier.short_term,
+            canonical_memory_id=survivor.memory_id,
+        )
+        by_id = {survivor.memory_id: survivor, alias.memory_id: alias}
+        read_batches = []
+
+        def _read_by_ids(uid, memory_ids, *, db_client):
+            del uid, db_client
+            read_batches.append(tuple(memory_ids))
+            return [by_id[memory_id] for memory_id in memory_ids if memory_id in by_id]
+
+        monkeypatch.setattr(
+            "utils.memory.atom_keyword_index.keyword_search_memory_ids",
+            lambda *args, **kwargs: [alias.memory_id],
+        )
+        monkeypatch.setattr(
+            canonical_adapter_mod,
+            "fetch_authoritative_product_memory_items_by_ids",
+            _read_by_ids,
+        )
+        monkeypatch.setattr(
+            canonical_adapter_mod,
+            "fetch_authoritative_product_memory_items",
+            lambda **kwargs: pytest.fail("product search must not scan the canonical collection"),
+        )
+
+        results = search_canonical_memories(
+            CANONICAL_UID,
+            NEEDLE,
+            limit=5,
+            vector_query=_empty_vector_query,
+            db_client=_data_protection_db(),
+        )
+
+        assert [row["memory_id"] for row in results] == [survivor.memory_id]
+        assert read_batches == [(alias.memory_id,), (survivor.memory_id,)]
+
     def test_memory_service_search_hybrid_for_canonical(self, mock_typesense, monkeypatch):
         _, docs_store = mock_typesense
         item = _long_term_item()
@@ -578,7 +938,7 @@ class TestKeywordSearchAndHybrid:
         )
         monkeypatch.setattr(
             "utils.memory.memory_service.search_canonical_memories",
-            lambda uid, query, limit=5, db_client=None, device_scope_request=None: [
+            lambda uid, query, limit=5, db_client=None, device_scope_request=None, item_filter=None: [
                 {
                     "memory_id": item.memory_id,
                     "content": item.content,
@@ -891,3 +1251,96 @@ class TestDocumentShape:
         assert doc["predicate"] == "works_at"
         assert "ent_user" in doc["entity_terms"]
         assert "Omi" in doc["entity_terms"]
+
+
+class TestLedgerKeywordSchemaAdoption:
+    """A pre-ledger collection must adopt the ledger fields, not fail closed forever.
+
+    ``ensure_memories_collection`` includes the ledger fields only at creation,
+    so a collection created before they existed could never satisfy
+    ``ensure_ledger_keyword_schema``: every ledger keyword search failed closed,
+    permanently. Observed hourly in the dev daily-memory-sweep since 2026-08-30
+    (``ledger keyword search failed closed uid=... error_type=RuntimeError``).
+    """
+
+    @staticmethod
+    def _collection_with_fields(field_names):
+        from utils.memory.atom_keyword_index import _LEDGER_FIELD_DEFINITIONS
+
+        collection = MagicMock()
+        state = {"fields": [{"name": name} for name in field_names]}
+
+        def _retrieve():
+            return {"name": "canonical_memory_atoms", "fields": list(state["fields"])}
+
+        def _update(payload):
+            for field in payload["fields"]:
+                assert field == dict(_LEDGER_FIELD_DEFINITIONS[field["name"]])
+                state["fields"].append({"name": field["name"]})
+
+        collection.retrieve.side_effect = _retrieve
+        collection.update.side_effect = _update
+        return collection, state
+
+    @staticmethod
+    def _client_for(collection):
+        client = MagicMock()
+        client.collections.__getitem__.return_value = collection
+        return client
+
+    _PRE_LEDGER_FIELDS = [
+        "memory_id",
+        "userId",
+        "content",
+        "category",
+        "layer",
+        "status",
+        "schema_version",
+        "entity_terms",
+        "predicate",
+        "created_at",
+    ]
+
+    def test_pre_ledger_collection_adopts_the_missing_fields(self):
+        from utils.memory.atom_keyword_index import _LEDGER_SCHEMA_FIELDS, ensure_ledger_keyword_schema
+
+        collection, state = self._collection_with_fields(self._PRE_LEDGER_FIELDS)
+        with patch("utils.memory.atom_keyword_index._typesense_client", return_value=self._client_for(collection)):
+            ensure_ledger_keyword_schema()
+
+        adopted = {field["name"] for field in state["fields"]}
+        assert _LEDGER_SCHEMA_FIELDS <= adopted
+        collection.update.assert_called_once()
+
+    def test_complete_schema_is_never_altered(self):
+        from utils.memory.atom_keyword_index import _LEDGER_SCHEMA_FIELDS, ensure_ledger_keyword_schema
+
+        collection, _ = self._collection_with_fields(self._PRE_LEDGER_FIELDS + sorted(_LEDGER_SCHEMA_FIELDS))
+        with patch("utils.memory.atom_keyword_index._typesense_client", return_value=self._client_for(collection)):
+            ensure_ledger_keyword_schema()
+
+        collection.update.assert_not_called()
+
+    def test_failed_adoption_still_fails_closed(self):
+        from utils.memory.atom_keyword_index import ensure_ledger_keyword_schema
+
+        collection, _ = self._collection_with_fields(self._PRE_LEDGER_FIELDS)
+        collection.update.side_effect = Exception("alter refused")
+        with patch("utils.memory.atom_keyword_index._typesense_client", return_value=self._client_for(collection)):
+            with pytest.raises(RuntimeError, match="missing fields"):
+                ensure_ledger_keyword_schema()
+
+    def test_losing_the_adoption_race_is_success(self):
+        from utils.memory.atom_keyword_index import _LEDGER_SCHEMA_FIELDS, ensure_ledger_keyword_schema
+
+        collection, state = self._collection_with_fields(self._PRE_LEDGER_FIELDS)
+
+        def _racing_update(payload):
+            # A concurrent adopter already altered the collection; our alter
+            # is refused, but the fields are there on re-read.
+            state["fields"].extend({"name": name} for name in sorted(_LEDGER_SCHEMA_FIELDS))
+            raise Exception("alter conflict")
+
+        collection.update.side_effect = _racing_update
+        with patch("utils.memory.atom_keyword_index._typesense_client", return_value=self._client_for(collection)):
+            ensure_ledger_keyword_schema()

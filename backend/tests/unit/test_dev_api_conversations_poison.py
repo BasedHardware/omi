@@ -151,7 +151,11 @@ from fastapi import FastAPI  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 import routers.developer as developer_module  # noqa: E402
 from routers.developer import router as developer_router  # noqa: E402
-from dependencies import ApiKeyAuth, get_auth_with_conversations_read  # noqa: E402
+from dependencies import (  # noqa: E402
+    ApiKeyAuth,
+    get_auth_with_conversations_read,
+    get_uid_with_conversations_write,
+)
 
 _NOW = datetime(2026, 1, 1, tzinfo=timezone.utc)
 _VALID_CATEGORY = next(iter(CategoryEnum)).value
@@ -180,6 +184,7 @@ def _build():
     app = FastAPI()
     app.include_router(developer_router)
     app.dependency_overrides[get_auth_with_conversations_read] = _read_auth
+    app.dependency_overrides[get_uid_with_conversations_write] = lambda: 'uid1'
     return TestClient(app, raise_server_exceptions=False)
 
 
@@ -187,10 +192,12 @@ def test_malformed_conversation_skipped_not_500():
     missing_structured = _valid('bad')
     del missing_structured['structured']
     page = [_valid('c1'), missing_structured, _valid('c2')]
-    with patch.object(conversations_db, 'get_conversations', return_value=page), patch.object(
+    with patch.object(conversations_db, 'get_conversations_without_photos', return_value=page), patch.object(
         developer_module, 'populate_folder_names', lambda *a, **k: None
     ), patch.object(developer_module, 'populate_speaker_names', lambda *a, **k: None):
-        resp = _build().get('/v1/dev/user/conversations')
+        # Transcript inclusion selects the no-photo compatibility reader; default
+        # lists use the projected, shared MCP card reader.
+        resp = _build().get('/v1/dev/user/conversations?include_transcript=true')
     assert resp.status_code == 200
     assert [c['id'] for c in resp.json()] == ['c1', 'c2']
 
@@ -200,16 +207,16 @@ def test_pagination_is_clamped_before_firestore():
     # would otherwise raise (HTTP 500) and an oversized/zero limit would stream the whole
     # collection. Call the handler directly (the TestClient async path is flaky on Windows; the
     # clamp is what matters).
-    with patch.object(conversations_db, 'get_conversations', return_value=[]) as m, patch.object(
+    with patch.object(conversations_db, 'get_conversations_without_photos', return_value=[]) as m, patch.object(
         developer_module, 'populate_folder_names', lambda *a, **k: None
     ), patch.object(developer_module, 'populate_speaker_names', lambda *a, **k: None):
-        developer_module.get_conversations(uid=_read_auth(), limit=99999, offset=-1)
+        developer_module.get_conversations(uid=_read_auth(), limit=99999, offset=-1, folder_id='f1')
         developer_module.get_conversations(uid=_read_auth(), limit=99999, offset=0, include_transcript=True)
-        developer_module.get_conversations(uid=_read_auth(), limit=0, offset=5)
+        developer_module.get_conversations(uid=_read_auth(), limit=0, offset=5, folder_id='f1')
     high = m.call_args_list[0].args
-    assert high[1] == 100 and high[2] == 0  # limit 99999 -> 100, offset -1 -> 0
-    assert m.call_args_list[1].args[1] == 25  # transcript reads cap tighter
-    assert m.call_args_list[2].args[1] == 1  # limit 0 -> 1
+    assert high[1] == 201 and high[2] == 0  # clamped limit 200 plus one lookahead row
+    assert m.call_args_list[1].args[1] == 201  # unified cap (matches CLI --limit max) plus lookahead
+    assert m.call_args_list[2].args[1] == 2  # clamped limit 1 plus lookahead
 
 
 def test_goals_limit_is_clamped_before_firestore():
@@ -224,3 +231,37 @@ def test_goals_limit_is_clamped_before_firestore():
     assert m.call_args_list[0].kwargs['limit'] == 1  # -1 -> 1
     assert m.call_args_list[1].kwargs['limit'] == 1000  # 99999 -> 1000
     assert m.call_args_list[2].kwargs['limit'] == 1  # 0 -> 1
+
+
+def test_developer_patch_rejects_blank_title():
+    # #13933: {"title": "   "} satisfied min_length=1, so the handler persisted '' to both
+    # structured.title and user_title while sibling write paths rejected blank text with 422.
+    # Blank text must now fail at the request-model boundary and never reach the Firestore update.
+    with patch.object(conversations_db, 'get_conversation', return_value=_valid('c1')), patch.object(
+        conversations_db, 'update_conversation_title'
+    ) as update_title:
+        response = _build().patch('/v1/dev/user/conversations/c1', json={'title': '   '})
+
+    assert response.status_code == 422
+    update_title.assert_not_called()
+
+
+def test_developer_patch_strips_padded_title():
+    updated = _valid('c1')
+    updated['structured']['title'] = 'New Title'
+
+    with patch.object(conversations_db, 'get_conversation', side_effect=[_valid('c1'), updated]), patch.object(
+        conversations_db, 'update_conversation_title'
+    ) as update_title, patch.object(developer_module, 'populate_folder_names', lambda *a, **k: None):
+        response = _build().patch('/v1/dev/user/conversations/c1', json={'title': '  New Title  '})
+
+    assert response.status_code == 200
+    update_title.assert_called_once_with('uid1', 'c1', 'New Title')
+
+
+def test_update_conversation_request_null_title_means_unchanged():
+    # The other half of the PATCH contract: an omitted/null title is "leave unchanged",
+    # not a rejection — the validator must pass None through.
+    request = developer_module.UpdateConversationRequest.model_validate({'title': None, 'discarded': True})
+    assert request.title is None
+    assert request.discarded is True

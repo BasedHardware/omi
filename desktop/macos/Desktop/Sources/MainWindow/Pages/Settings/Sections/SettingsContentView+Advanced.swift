@@ -22,36 +22,60 @@ extension SettingsContentView {
     VStack(spacing: OmiSpacing.xxl) {
       advancedCategoryHeader(title: "AI Setup", icon: "cpu")
       aiSetupSubsection
-      // The three assistants that read your screen, and the throttle they share. Each card carries
-      // the switch that stops its assistant — which, until this pane rendered them, no surface in the
-      // app did. `advanced.taskassistant` is also where the Tasks page's gear button deep-links.
-      advancedCategoryHeader(title: "Task Assistant", icon: "checklist")
-      taskAssistantSubsection
-      advancedCategoryHeader(title: "Insight Assistant", icon: ProactiveNotificationBadge.insightSystemImage)
-      insightAssistantSubsection
-      advancedCategoryHeader(title: "Memory Assistant", icon: "brain.head.profile")
-      memoryAssistantSubsection
+      advancedCategoryHeader(title: "Connect an Agent", icon: "point.3.connected.trianglepath.dotted")
+      connectAgentSubsection
+      // HIDDEN DELIBERATELY (Nik, 2026-08-25): the Task/Insight/Memory Assistant panes are
+      // intentionally not rendered. This is product direction, not dead code — do NOT re-wire
+      // them the way 73c7f85fbc ("give the three proactive assistants a pane you can reach")
+      // did after the last hide. The assistants themselves keep running with their stored
+      // settings; only the settings UI is hidden.
+      // advancedCategoryHeader(title: "Task Assistant", icon: "checklist")
+      // taskAssistantSubsection
+      // advancedCategoryHeader(title: "Insight Assistant", icon: ProactiveNotificationBadge.insightSystemImage)
+      // insightAssistantSubsection
+      // advancedCategoryHeader(title: "Memory Assistant", icon: "brain.head.profile")
+      // memoryAssistantSubsection
       advancedCategoryHeader(title: "Analysis Throttle", icon: "clock.arrow.2.circlepath")
       analysisThrottleSubsection
-      advancedCategoryHeader(title: "Profile & Stats", icon: "brain")
-      profileAndStatsSubsection
-      advancedCategoryHeader(title: "Reset Onboarding", icon: "arrow.counterclockwise")
-      resetOnboardingSubsection
-      advancedCategoryHeader(title: "Goals", icon: "target")
-      goalsSubsection
-      advancedCategoryHeader(title: "Preferences", icon: "slider.horizontal.3")
-      preferencesSubsection
-      advancedCategoryHeader(title: "Troubleshooting", icon: "wrench.and.screwdriver")
-      troubleshootingSubsection
-      if AppBuild.isBetaProductionBundle {
-        advancedCategoryHeader(title: "Beta Diagnostics", icon: "waveform.path.ecg")
-        betaDiagnosticsSubsection
-      }
-      advancedCategoryHeader(title: "Developer API Keys", icon: "key")
-      developerKeysSubsection
 
-      advancedCategoryHeader(title: "Dev Tools", icon: "hammer")
-      devToolsSubsection
+      DisclosureGroup(isExpanded: $advancedDetailsExpanded) {
+        VStack(spacing: OmiSpacing.xxl) {
+          advancedCategoryHeader(title: "Profile & Stats", icon: "brain")
+          profileAndStatsSubsection
+          advancedCategoryHeader(title: "Reset Onboarding", icon: "arrow.counterclockwise")
+          resetOnboardingSubsection
+          advancedCategoryHeader(title: "Goals", icon: "target")
+          goalsSubsection
+          advancedCategoryHeader(title: "Preferences", icon: "slider.horizontal.3")
+          preferencesSubsection
+          advancedCategoryHeader(title: "Troubleshooting", icon: "wrench.and.screwdriver")
+          troubleshootingSubsection
+          if AppBuild.isBetaProductionBundle {
+            advancedCategoryHeader(title: "Beta Diagnostics", icon: "waveform.path.ecg")
+            betaDiagnosticsSubsection
+          }
+          advancedCategoryHeader(title: "Model Provider Keys", icon: "key")
+          developerKeysSubsection
+
+          if devModeEnabled {
+            advancedCategoryHeader(title: "Dev Tools", icon: "hammer")
+            devToolsSubsection
+          }
+        }
+        .padding(.top, OmiSpacing.md)
+      } label: {
+        HStack(spacing: OmiSpacing.sm) {
+          Image(systemName: "wrench.and.screwdriver")
+            .scaledFont(size: OmiType.subheading)
+            .foregroundStyle(Ink.secondary)
+          Text("Advanced")
+            .scaledFont(size: OmiType.heading, weight: .semibold)
+            .foregroundStyle(Ink.primary)
+        }
+      }
+      .tint(Ink.secondary)
+      .padding(.top, OmiSpacing.lg)
+      .accessibilityIdentifier("settings-ai-automation-advanced-disclosure")
     }
     // The assistant cards above are seeded from their singletons when the pane is constructed, but
     // `loadBackendSettings()` then runs `SettingsSyncManager.syncFromServer()`, which is
@@ -61,6 +85,14 @@ extension SettingsContentView {
     // this is the pane agreeing to listen. Same shape as the Notifications pane.
     .onReceive(NotificationCenter.default.publisher(for: .assistantSettingsDidSyncFromServer)) { _ in
       syncAssistantControlsFromSettings()
+    }
+    .onChange(of: highlightedSettingId) { _, settingId in
+      // Search and deep links must still reveal cards tucked into the collapsed
+      // secondary section. The default presentation stays compact until a
+      // specific result asks for that content.
+      if settingId != nil {
+        advancedDetailsExpanded = true
+      }
     }
   }
 
@@ -207,28 +239,9 @@ extension SettingsContentView {
             }
           }
 
-          if chatBridgeMode == "claudeCode" && chatProvider?.isClaudeConnected == true {
+          if chatBridgeMode == "claudeCode" {
             GlassSeparator()
-
-            HStack {
-              Image(systemName: "checkmark.circle.fill")
-                .foregroundColor(Ink.listeningGreen)
-                .scaledFont(size: OmiType.caption)
-              Text("Connected to Claude")
-                .scaledFont(size: OmiType.caption)
-                .foregroundColor(Ink.secondary)
-
-              Spacer()
-
-              Button("Disconnect") {
-                Task {
-                  await chatProvider?.disconnectClaude()
-                }
-              }
-              .buttonStyle(.plain)
-              .scaledFont(size: OmiType.caption, weight: .medium)
-              .foregroundColor(Ink.errorRed)
-            }
+            claudeConnectionRow
           }
         }
       }
@@ -246,7 +259,7 @@ extension SettingsContentView {
 
             Spacer()
 
-            Button("Browse...") {
+            Button("Browse…") {
               let panel = NSOpenPanel()
               panel.canChooseFiles = false
               panel.canChooseDirectories = true
@@ -365,13 +378,13 @@ extension SettingsContentView {
                   UserDefaults.standard.set("", forKey: "playwrightExtensionToken")
                 }) {
                   HStack(spacing: OmiSpacing.xxs) {
-                    Image(systemName: "xmark")
+                    Image(systemName: "arrow.counterclockwise")
                       .scaledFont(size: OmiType.caption)
                     Text("Reset")
                       .scaledFont(size: OmiType.caption)
                   }
                 }
-                .buttonStyle(OmiButtonStyle(.primary, size: .compact))
+                .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
               }
             }
           }
@@ -403,6 +416,69 @@ extension SettingsContentView {
           Text("Let the AI modify the app's source code, rebuild it, and add custom features.")
             .scaledFont(size: OmiType.caption)
             .foregroundColor(Ink.secondary)
+        }
+      }
+
+      settingsCard(settingId: "aichat.meetingbriefs") {
+        VStack(alignment: .leading, spacing: OmiSpacing.md) {
+          HStack(spacing: OmiSpacing.md) {
+            Image(systemName: "calendar.badge.clock")
+              .scaledFont(size: OmiType.subheading)
+              .foregroundColor(Ink.secondary)
+
+            Text("Meeting Briefs")
+              .scaledFont(size: OmiType.subheading, weight: .semibold)
+              .foregroundColor(Ink.primary)
+
+            Spacer()
+
+            Toggle(
+              "",
+              isOn: Binding(
+                get: { meetingMemoryBriefsEnabled },
+                set: { enabled in
+                  meetingBriefAccessRequestGeneration += 1
+                  let generation = meetingBriefAccessRequestGeneration
+                  if !enabled {
+                    meetingMemoryBriefsEnabled = false
+                    meetingBriefCalendarAccessUnavailable = false
+                    return
+                  }
+                  Task {
+                    let allowed = await SystemCalendarMeetingContextService.shared.requestBriefAccess()
+                    guard generation == meetingBriefAccessRequestGeneration else { return }
+                    if allowed {
+                      meetingMemoryBriefsEnabled = true
+                      meetingBriefCalendarAccessUnavailable = false
+                    } else {
+                      meetingBriefCalendarAccessUnavailable = true
+                      OmiToastCenter.shared.notice(
+                        "Allow Calendar access in macOS System Settings to see meeting briefs.",
+                        systemImage: "calendar.badge.exclamationmark")
+                    }
+                  }
+                }
+              )
+            )
+            .toggleStyle(OmiToggleStyle())
+            .labelsHidden()
+            .accessibilityLabel("Meeting Briefs")
+          }
+
+          Text(
+            "Quiet, source-linked context up to two hours before a matching meeting. Uses this Mac's calendar; nothing is posted to Chat or sent automatically."
+          )
+          .scaledFont(size: OmiType.caption)
+          .foregroundColor(Ink.secondary)
+
+          if meetingBriefCalendarAccessUnavailable {
+            Text(
+              "Calendar access is off. Open System Settings → Privacy & Security → Calendars, allow this app, then turn Meeting Briefs on again."
+            )
+            .scaledFont(size: OmiType.caption)
+            .foregroundColor(Ink.secondary)
+            .accessibilityIdentifier("meeting-brief-calendar-access-help")
+          }
         }
       }
     }
@@ -440,6 +516,14 @@ extension SettingsContentView {
 
       if showProfileAndStats {
         aiUserProfileSubsection
+          .shellConfirmation(
+            isPresented: $isConfirmingAIProfileDelete,
+            title: "Delete AI User Profile?",
+            message: "Omi forgets this profile. A new one is generated on next launch, or with Generate Now.",
+            confirmTitle: "Delete"
+          ) {
+            deleteCurrentAIProfile()
+          }
         statsSubsection
       }
     }
@@ -537,25 +621,14 @@ extension SettingsContentView {
                     .foregroundColor(Ink.secondary)
                 }
 
-                Button(action: {
+                OmiIconButton("pencil", help: "Edit Profile", size: .compact) {
                   aiProfileEditText = text
                   isEditingAIProfile = true
-                }) {
-                  Image(systemName: "pencil")
-                    .scaledFont(size: OmiType.caption)
                 }
-                .buttonStyle(.borderless)
-                .help("Edit profile")
 
-                Button(action: {
-                  deleteCurrentAIProfile()
-                }) {
-                  Image(systemName: "trash")
-                    .scaledFont(size: OmiType.caption)
-                    .foregroundColor(Ink.errorRed)
+                OmiIconButton("trash", help: "Delete Profile…", size: .compact, isDestructive: true) {
+                  isConfirmingAIProfileDelete = true
                 }
-                .buttonStyle(.borderless)
-                .help("Delete this profile")
               }
             }
           } else if !isGeneratingAIProfile {
@@ -569,7 +642,7 @@ extension SettingsContentView {
               Spacer()
               VStack(spacing: OmiSpacing.sm) {
                 ProgressView()
-                Text("Generating profile...")
+                Text("Generating profile…")
                   .scaledFont(size: OmiType.body)
                   .foregroundColor(Ink.secondary)
               }

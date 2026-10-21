@@ -10,20 +10,17 @@ final class MemoryHubSidebarRoutingTests: XCTestCase {
     XCTAssertEqual(
       Set(ActivityDestinationChip.reachableHubDestinations), Set(MemoryHubDestination.allCases),
       "every destination is reachable from Activity's chip row")
-    XCTAssertEqual(
-      MemoryHubDestination.destination(
-        for: .conversations, requestedRawValue: MemoryHubDestination.activity.rawValue),
-      .activity)
+    XCTAssertEqual(MemoryHubDestination.destination(for: .conversations), .conversations)
   }
 
   func testConversationsSidebarSelectionUpdatesRailAndDestination() {
     var selectedIndex = SidebarNavItem.dashboard.rawValue
     var memoryDestinationRawValue = MemoryHubDestination.memories.rawValue
 
-    MemoryHubDestination.applySidebarSelection(
+    MemoryHubDestination.apply(
       .conversations,
-      selectedIndex: &selectedIndex,
-      memoryDestinationRawValue: &memoryDestinationRawValue
+      to: &selectedIndex,
+      hub: &memoryDestinationRawValue
     )
 
     XCTAssertEqual(selectedIndex, SidebarNavItem.conversations.rawValue)
@@ -34,10 +31,10 @@ final class MemoryHubSidebarRoutingTests: XCTestCase {
     var selectedIndex = SidebarNavItem.dashboard.rawValue
     var memoryDestinationRawValue = MemoryHubDestination.conversations.rawValue
 
-    MemoryHubDestination.applySidebarSelection(
+    MemoryHubDestination.apply(
       .tasks,
-      selectedIndex: &selectedIndex,
-      memoryDestinationRawValue: &memoryDestinationRawValue
+      to: &selectedIndex,
+      hub: &memoryDestinationRawValue
     )
 
     XCTAssertEqual(selectedIndex, SidebarNavItem.tasks.rawValue)
@@ -45,7 +42,7 @@ final class MemoryHubSidebarRoutingTests: XCTestCase {
   }
 
   /// The menu/keyboard route (`⌘2`, posted as `.navigateToSidebarItem`) resolves the hub view
-  /// through this, not through `applySidebarSelection` — it has no `inout` pair to hand over.
+  /// through this, not through `apply` — it has no `inout` pair to hand over.
   ///
   /// Regression: the handler used to set only the rail index, so a menu item **labelled
   /// "Conversations"** opened the hub on whichever view was last persisted. The hub's stored default
@@ -60,27 +57,50 @@ final class MemoryHubSidebarRoutingTests: XCTestCase {
   /// disturb the hub's remembered view on its way past.
   func testAMenuCallerNamingAPageOutsideTheHubResolvesNoHubView() {
     XCTAssertNil(MemoryHubDestination.destination(for: .tasks))
-    XCTAssertNil(MemoryHubDestination.destination(for: .rewind))
     XCTAssertNil(MemoryHubDestination.destination(for: .settings))
   }
 
-  func testLegacyHomeDesignKeepsConversationsAsAStandalonePage() {
-    XCTAssertEqual(
-      MemoryHubDestination.presentation(
-        for: .conversations,
-        useLegacyHomeDesign: true
-      ),
-      .standaloneConversations
-    )
+  func testEveryLegacyMemoryAliasResolvesTheCanonicalHubDestination() {
+    XCTAssertEqual(MemoryHubDestination.destination(for: .conversations), .conversations)
+    XCTAssertEqual(MemoryHubDestination.destination(for: .memories), .memories)
+    XCTAssertEqual(MemoryHubDestination.destination(for: .rewind), .rewind)
   }
 
-  func testModernHomeDesignUsesTheMemoryHubForTheSharedRailIndex() {
+  /// `bridge.navigate conversations` used to select only the memories *route*,
+  /// so the hub stayed on its remembered view (default Memories). Automation
+  /// resolves the hub through `destination(forAutomationTarget:)` inside
+  /// `navigateToLegacyDestination(_:automationTarget:)` — the same helper this
+  /// test calls — before selecting the chat-first route.
+  func testAutomationNameConversationsSelectsConversationsHubNotRememberedMemories() {
     XCTAssertEqual(
-      MemoryHubDestination.presentation(
-        for: .conversations,
-        useLegacyHomeDesign: false
-      ),
-      .memoryHub
-    )
+      MemoryHubDestination.destination(forAutomationTarget: "conversations"), .conversations)
+    XCTAssertEqual(
+      MemoryHubDestination.destination(forAutomationTarget: "Conversations"), .conversations)
+    XCTAssertEqual(
+      MemoryHubDestination.destination(forAutomationTarget: "CONVERSATIONS"),
+      .conversations)
+    XCTAssertEqual(MemoryHubDestination.destination(forAutomationTarget: "memories"), .memories)
+    XCTAssertEqual(MemoryHubDestination.destination(forAutomationTarget: "rewind"), .rewind)
+  }
+
+  /// Targets outside the hub must leave the remembered view untouched on their way past.
+  func testAnAutomationCallerNamingAPageOutsideTheHubResolvesNoHubView() {
+    XCTAssertNil(MemoryHubDestination.destination(forAutomationTarget: "tasks"))
+    XCTAssertNil(MemoryHubDestination.destination(forAutomationTarget: "chat"))
+    XCTAssertNil(MemoryHubDestination.destination(forAutomationTarget: "dashboard"))
+    XCTAssertNil(MemoryHubDestination.destination(forAutomationTarget: "settings"))
+    XCTAssertNil(MemoryHubDestination.destination(forAutomationTarget: "help"))
+    XCTAssertNil(MemoryHubDestination.destination(forAutomationTarget: "not-a-target"))
+  }
+
+  /// `navigate permissions` must acknowledge `more.permissions`, not `more.settings`.
+  /// Mapping the name into `SidebarNavItem.permissions` sends automation through the
+  /// legacy adapter (`selectMore(.settings)`), which breaks `waitForNavigationTarget`.
+  func testAutomationPermissionsNameMapsToVisibleMorePermissionsRoute() {
+    XCTAssertNil(SidebarNavItem.automationDestination(named: "permissions"))
+    XCTAssertNil(SidebarNavItem.automationDestination(named: "PERMISSIONS"))
+    XCTAssertEqual(
+      ChatFirstRoute.automationVisibilityDestination(named: "permissions"),
+      .more(.permissions))
   }
 }

@@ -87,16 +87,17 @@ def test_missing_private_doc_skips_delete_and_recreate():
     doc_ref.set.assert_not_called()
 
 
-def test_present_private_doc_is_republished_public():
-    # Happy path is unchanged: an existing private app is deleted and recreated as a public app.
+def test_present_private_doc_is_updated_in_place():
+    # #15284: the private->public republish deleted the document and recreated it under a
+    # new id, orphaning reviews, API keys, usage history, and installed-app references.
+    # The function now updates the existing document in place, preserving the id and
+    # every subcollection keyed to it.
     db, doc_ref = _db_with({"name": "My App", "private": True})
     with patch.object(apps, "db", db):
         apps.update_app_visibility_in_db("plug-private", private=False)
-    doc_ref.delete.assert_called_once()
-    doc_ref.set.assert_called_once()
-    saved = doc_ref.set.call_args[0][0]
-    assert saved["private"] is False
-    assert saved["id"].startswith("plug-")
+    doc_ref.delete.assert_not_called()
+    doc_ref.set.assert_not_called()
+    doc_ref.update.assert_called_once_with({"private": False})
 
 
 def test_non_private_path_updates_flag():

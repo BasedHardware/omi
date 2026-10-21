@@ -111,7 +111,7 @@ class BleDisconnectEvent {
   /// RSSI trajectory over the ~15s before this event. One of:
   ///   "fading"  — signal declined ≥10 dB before the drop (walk-away)
   ///   "sudden"  — signal stable then link died (interference/stall/device off)
-  ///   "gap"     — no recent RSSI samples (keep-alive wasn't running)
+  ///   "gap"     — no recent RSSI samples (radio read unavailable)
   ///   "unknown" — insufficient samples to classify
   /// Empty string on legacy records written before this field existed.
   final String rssiTrend;
@@ -177,6 +177,10 @@ abstract class BleHostApi {
   @SwiftFunction('manageDevice(uuid:requiresBond:)')
   void manageDevice(String uuid, bool requiresBond);
 
+  /// Saved pairing authorizes cold-start retries; false restores legacy policy.
+  @SwiftFunction('configureSavedReconnect(uuid:enabled:)')
+  void configureSavedReconnect(String uuid, bool enabled);
+
   @SwiftFunction('unmanageDevice(uuid:)')
   void unmanageDevice(String uuid);
 
@@ -193,11 +197,16 @@ abstract class BleHostApi {
   @SwiftFunction('writeCharacteristic(peripheralUuid:serviceUuid:characteristicUuid:data:)')
   void writeCharacteristic(String peripheralUuid, String serviceUuid, String characteristicUuid, Uint8List data);
 
+  @async
   @SwiftFunction('subscribeCharacteristic(peripheralUuid:serviceUuid:characteristicUuid:)')
   void subscribeCharacteristic(String peripheralUuid, String serviceUuid, String characteristicUuid);
 
   @SwiftFunction('unsubscribeCharacteristic(peripheralUuid:serviceUuid:characteristicUuid:)')
   void unsubscribeCharacteristic(String peripheralUuid, String serviceUuid, String characteristicUuid);
+
+  /// iOS Omi ingress recovery; Android leaves this cut disabled.
+  @SwiftFunction('setCaptureAuthorized(uuid:authorized:)')
+  void setCaptureAuthorized(String uuid, bool authorized);
 
   // State
   @SwiftFunction('getBluetoothState()')
@@ -223,6 +232,11 @@ abstract class BleHostApi {
   @SwiftFunction('getDeviceDiagnostics(uuid:)')
   BleDeviceDiagnostics getDeviceDiagnostics(String uuid);
 
+  /// Bounded native BLE-only diagnostics as JSON. No audio or transcript payloads.
+  @async
+  @SwiftFunction('getExtendedDeviceDiagnostics(uuid:)')
+  String getExtendedDeviceDiagnostics(String uuid);
+
   @async
   @SwiftFunction('getBatteryHistory(uuid:)')
   List<BleBatteryPoint> getBatteryHistory(String uuid);
@@ -241,6 +255,8 @@ abstract class BleHostApi {
 abstract class BleFlutterApi {
   void onBluetoothStateChanged(String state);
 
+  void onSavedReconnect(String peripheralUuid, int attempt, String result, int disconnectedMs);
+
   void onPeripheralDiscovered(BlePeripheral peripheral);
 
   void onDeviceReady(String peripheralUuid, List<BleService> services);
@@ -258,9 +274,16 @@ abstract class BleFlutterApi {
 
   void onStateRestored(List<String> peripheralUuids);
 
+  /// Native ingress evidence and bounded recovery. Contains no audio payload.
+  void onCaptureHealth(String peripheralUuid, String snapshot);
+
   /// Native batch writer finalized a recording file (rotation / gap / stop) so
   /// Dart can rescan the recordings dir without waiting for a disconnect.
   void onBatchRecordingFinalized(String fileName);
+
+  /// Android `startScan` returned before discovery started.
+  /// `reason` is `no_adapter`, `bluetooth_off`, `nearby_devices_denied`, or `scanner_unavailable`.
+  void onScanBlocked(String reason);
 }
 
 // =============================================================================

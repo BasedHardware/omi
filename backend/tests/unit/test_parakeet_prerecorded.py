@@ -18,6 +18,7 @@ os.environ.setdefault('DEEPGRAM_API_KEY', 'x')
 os.environ.setdefault('HOSTED_PARAKEET_API_URL', 'http://fake-parakeet:8080')
 
 import utils.stt.pre_recorded as pr  # noqa: E402
+from utils.stt.streaming import STTService, get_stt_service_for_language  # noqa: E402
 
 
 def _cdist(a, b, metric='cosine'):
@@ -522,8 +523,6 @@ class TestTranscribeUrl:
 
 class TestStreamingFactoryRouting:
     def test_parakeet_in_stt_service_models(self):
-        from utils.stt.streaming import STTService, get_stt_service_for_language
-
         with patch('utils.stt.streaming.stt_service_models', ['parakeet']), patch.dict(
             os.environ, {'HOSTED_PARAKEET_API_URL': 'http://fake-parakeet:8080'}
         ):
@@ -532,8 +531,6 @@ class TestStreamingFactoryRouting:
             assert model == 'parakeet'
 
     def test_parakeet_streaming_fallback_for_cjk_uses_deepgram(self):
-        from utils.stt.streaming import STTService, get_stt_service_for_language
-
         with patch('utils.stt.streaming.stt_service_models', ['parakeet', 'dg-nova-3']), patch.dict(
             os.environ, {'HOSTED_PARAKEET_API_URL': 'http://fake-parakeet:8080'}
         ):
@@ -542,14 +539,14 @@ class TestStreamingFactoryRouting:
             assert model == 'nova-3'
 
     def test_parakeet_fallback_without_url_uses_policy_default(self):
-        from utils.stt.streaming import STTService, get_stt_service_for_language
-
         with patch('utils.stt.streaming.stt_service_models', ['parakeet']), patch.dict(os.environ, {}, clear=False):
             env_backup = os.environ.pop('HOSTED_PARAKEET_API_URL', None)
             try:
                 service, lang, model = get_stt_service_for_language('en')
-                assert service == STTService.deepgram
-                assert model == 'nova-3'
+                # The policy default now leads with Velma; Parakeet without its
+                # endpoint falls through to whatever heads that chain.
+                assert service == STTService.modulate
+                assert model == 'velma-2'
             finally:
                 if env_backup:
                     os.environ['HOSTED_PARAKEET_API_URL'] = env_backup

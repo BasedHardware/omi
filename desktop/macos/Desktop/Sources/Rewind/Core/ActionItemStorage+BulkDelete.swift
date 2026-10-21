@@ -7,7 +7,8 @@ extension ActionItemStorage {
   /// expose a partially deleted cache to refresh observers.
   func deleteActionItemsByBackendIds(
     _ backendIds: [String],
-    authorization: LocalMutationAuthorization
+    authorization: LocalMutationAuthorization,
+    indexDeletion: @Sendable ([String]) async -> Void = SiriIndexHooks.tasksDeleted
   ) async throws {
     try authorization.require()
     guard !backendIds.isEmpty else { return }
@@ -24,6 +25,7 @@ extension ActionItemStorage {
         try authorization.require()
       }
     }
+    await indexDeletion(backendIds)
 
     HomeKnowledgeCountInvalidation.post(
       logMessage: "ActionItemStorage: Hard-deleted \(backendIds.count) selected action items")

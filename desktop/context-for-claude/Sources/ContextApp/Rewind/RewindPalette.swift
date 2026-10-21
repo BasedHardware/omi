@@ -19,7 +19,7 @@ import SwiftUI
 ///
 /// **The output must never contain violet.** A hash swept over all 360° emits an off-brand hue for
 /// roughly one turn in three, and that family is off-brand anywhere in the product (`INV-UI-1`,
-/// `docs/product/invariants/brand-ui.md`). Excluding it after the fact — clamping, nudging, retrying
+/// `product/invariants/brand-ui.md`). Excluding it after the fact — clamping, nudging, retrying
 /// the hash — leaves the property untested and one refactor from returning. The range simply does
 /// not contain it: every band below ends at or under `hueCeiling`, which stops a clear distance
 /// short of pure blue and never reaches magenta, so no input can produce one. `RewindTests` asserts

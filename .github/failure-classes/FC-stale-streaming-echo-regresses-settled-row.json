@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "FC-stale-streaming-echo-regresses-settled-row",
+  "violated_contract": "A durable store's echo of a write is a snapshot from the moment the write was queued. When the in-memory row has since crossed a monotonic state boundary (a streaming transcript row that settled on its terminal answer), an echo still carrying the earlier state must not be projected over it: the row would regress to the earlier state and content, and the terminal replay would then flip it forward a second time, so the reader sees the change happen twice.",
+  "canonical_prevention": "Row projection compares the echo's lifecycle state against the row's before merging: a projected row still marked streaming never replaces an assistant row that has already settled, while a terminal projection always lands. A behavioural test settles a row, projects a streaming echo behind it, and asserts the row keeps its terminal text, stays settled, and publishes nothing; a second test asserts the terminal replay that follows still replaces the row.",
+  "canonical_prevention_artifact": [
+    "desktop/macos/Desktop/Tests/ChatStreamingJournalCoalescingTests.swift"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "desktop/macos/Desktop/Sources/Providers/ChatProvider+JournalProjection.swift",
+    "desktop/macos/Desktop/Sources/Chat/KernelTurnProjection.swift"
+  ],
+  "status": "open"
+}

@@ -7,6 +7,16 @@ import pytest
 import routers.action_items as action_items_router
 
 
+@pytest.fixture(autouse=True)
+def _disable_list_cache(monkeypatch):
+    """Keep the one-row-lookahead contract on its uncached database path.
+
+    The response-cache contract is covered by test_action_items_list_read_cost;
+    this module must exercise the database query for every parametrized page.
+    """
+    monkeypatch.setattr(action_items_router, 'list_cache_ttl_seconds', lambda: 0)
+
+
 def _item(item_id: str, *, locked: bool = False, description: str = 'Do a thing') -> dict:
     return {
         'id': item_id,

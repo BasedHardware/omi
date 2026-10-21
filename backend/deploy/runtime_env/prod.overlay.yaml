@@ -4,13 +4,156 @@ compute_project: based-hardware
 data_plane_project: based-hardware
 overlay:
   llm_gateway:
+    env:
+      PROACTIVITY_REDIS_HOST:
+        config_map:
+          name: prod-omi-backend-config
+          key: REDIS_DB_HOST
+      PROACTIVITY_REDIS_PORT:
+        value: '13151'
+        category: service_discovery
+      PROACTIVITY_REDIS_PASSWORD:
+        secret:
+          name: prod-omi-backend-secrets
+          key: REDIS_DB_PASSWORD
+      LLM_GATEWAY_ACCOUNTING_ENABLED:
+        value: 'true'
+        category: rollout
+      OMI_CUSTOMER_DATA_PROJECT:
+        value: based-hardware
+        category: service_discovery
+      POSTHOG_HOST:
+        value: https://us.posthog.com
+        category: telemetry
+      MENTOR_PIPELINE:
+        value: cohort
+        category: rollout
     static_address_name: prod-omi-self-hosted-llm-ip-address
   gke:
     backend-listen:
       env:
+        FIRST_SUMMARY_DEADLINE_ENABLED: {value: 'true', category: rollout}
+        FIRST_SUMMARY_DEADLINE_PERCENT: {value: '100', category: rollout}
+        BATCH_PIPELINE_ENABLED:
+          value: "true"
+          category: rollout
+        BATCH_PIPELINE_HEAD_PRIORITY_ENABLED:
+          value: 'true'
+          category: rollout
+        BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED:
+          value: 'true'
+          category: rollout
+        BATCH_PIPELINE_API_URL:
+          value: https://backend-sync-hhibjajaja-uc.a.run.app
+        BUCKET_BATCH_PIPELINE:
+          value: based-hardware-batch-pipeline-staging
+        AUDIO_ARCHIVE_PERCENT:
+          value: '100'
+        AUDIO_ARCHIVE_UID_ALLOWLIST:
+          value: ''
+        LIVE_CAPTURE_WINDOW_MERGE_UNION:
+          value: 'true'
+        LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS:
+          value: 'true'
+        SONIOX_CAPTURE_AXIS_DIAGNOSTICS:
+          value: 'true'
+        SONIOX_WIRE_LEDGER:
+          value: 'true'
+        STT_LIVE_DEMAND_ENABLED:
+          value: 'true'
+        STT_LIVE_DEMAND_UID_ALLOWLIST:
+          value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+        STT_FAILOVER_RECOVERY_ENABLED:
+          value: 'true'
+        STT_ROUTING_MODE:
+          value: 'on'
+        STT_ROUTING_ON_PERCENT:
+          value: '90'
+        PARAKEET_WINDOW_ALLOCATION_PERCENT:
+          value: '100'
+        PARAKEET_WINDOW_MAX_SESSIONS:
+          value: '16'
+        PARAKEET_BATCH_PRESSURE_MIN_REPLICAS:
+          value: '3'
+        STT_SERVICE_MODELS:
+          value: parakeet-window,modulate-velma-2,soniox
+        HOSTED_PARAKEET_API_URL:
+          value: http://parakeet.omi.me
+        HOSTED_SPEAKER_EMBEDDING_API_URL:
+          value: http://172.16.160.20/diarizer
+        PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
+          value: 'off'
+        HOSTED_TRANSLATION_API_URL:
+          value: http://172.16.160.20/nllb
         REFERRAL_PUBLIC_BASE_URL:
           value: https://omi.me
+        DREAM_AGENT_ENABLED:
+          value: 'true'
+          category: rollout
+        DREAM_AGENT_UID_ALLOWLIST:
+          value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+        POSTHOG_PRODUCT_CAPTURE_TOKEN:
+          value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
+          category: telemetry
+        PROACTIVITY_REDIS_HOST:
+          config_map:
+            name: prod-omi-backend-config
+            key: REDIS_DB_HOST
+        PROACTIVITY_REDIS_PORT:
+          value: '13151'
           category: service_discovery
+        PROACTIVITY_REDIS_PASSWORD:
+          secret:
+            name: prod-omi-backend-secrets
+            key: REDIS_DB_PASSWORD
+        POSTHOG_HOST:
+          value: https://us.posthog.com
+          category: telemetry
+        MENTOR_PIPELINE:
+          value: cohort
+          category: rollout
+        SPEAKER_GROUPING_SHADOW:
+          value: cohort
+          category: rollout
+        SPEAKER_GROUPING_SHADOW_PERCENT:
+          value: '10'
+          category: rollout
+        SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST:
+          value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+          category: rollout
+        SPEAKER_GROUPING_MODE:
+          value: incumbent
+          category: rollout
+        SPEAKER_MATCH_SCORES_ENABLED:
+          value: 'true'
+          category: rollout
+        OMI_SHAPED_AGENT_MODE:
+          value: 'on'
+          category: rollout
+        PARAKEET_WINDOW_FIRST_TEXT_DEADLINE_SECONDS:
+          value: '12'
+          category: reliability
+        PARAKEET_WINDOW_MAX_EMPTY_STREAK:
+          value: '4'
+          category: reliability
+        MOBILE_STANDARD_BATCH_ENABLED:
+          value: 'true'
+          category: rollout
+        MOBILE_STANDARD_BATCH_PERCENT:
+          value: '0'
+          category: rollout
+        MOBILE_STANDARD_BATCH_UIDS:
+          value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+          category: rollout
+        STT_NO_TEXT_RESCUE_ENABLED:
+          value: 'true'
+          category: rollout
+        OMI_CUSTOMER_DATA_PROJECT:
+          value: based-hardware
+        BUCKET_SCREEN_FRAMES:
+          value: based-hardware-prod-screen-frames
+        OMI_FIRESTORE_DATA_PLANE_PROJECT:
+          value: based-hardware
         ACCOUNT_DELETION_DISPATCH_MODE:
           value: cloud_tasks
           category: reliability
@@ -47,10 +190,6 @@ overlay:
           config_map:
             name: prod-omi-backend-config
             key: MCP_OAUTH_CLAUDE_REDIRECT_URIS
-        HOSTED_PARAKEET_API_URL:
-          value: http://parakeet.omi.me
-        HOSTED_TRANSLATION_API_URL:
-          value: http://nllb.omi.me
         SERVICE_ACCOUNT_JSON:
           secret:
             name: prod-omi-backend-secrets
@@ -58,12 +197,6 @@ overlay:
         OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE:
           value: 'true'
           category: rollout
-        OMI_LLM_GATEWAY_FEATURE_MODE:
-          value: gateway
-          category: rollout
-        MEMORY_ENABLED:
-          value: 'on'
-        # Canonical graph and /v3/memories first-page cursors fail closed without this HMAC.
         MEMORY_V3_CURSOR_SECRET:
           secret:
             name: prod-omi-backend-secrets
@@ -72,9 +205,147 @@ overlay:
           secret:
             name: prod-omi-backend-secrets
             key: MCP_OAUTH_CLIENTS_JSON
+        CONVERSATION_RELEVANCE_JEV_PERCENT:
+          value: '100'
+        NOTES_TIER_ESCALATION_ENABLED:
+          value: 'true'
+          category: rollout
+        SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST:
+          value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+          category: rollout
+    pusher:
+      env:
+        FIRST_SUMMARY_DEADLINE_ENABLED: {value: 'true', category: rollout}
+        FIRST_SUMMARY_DEADLINE_PERCENT: {value: '100', category: rollout}
+        AUDIO_ARCHIVE_PERCENT:
+          value: '100'
+        AUDIO_ARCHIVE_UID_ALLOWLIST:
+          value: ''
+        LIVE_CAPTURE_WINDOW_MERGE_UNION:
+          value: 'true'
+        LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS:
+          value: 'true'
+        SONIOX_CAPTURE_AXIS_DIAGNOSTICS:
+          value: 'true'
+        SONIOX_WIRE_LEDGER:
+          value: 'true'
+        HOSTED_SPEAKER_EMBEDDING_API_URL:
+          value: http://172.16.160.20/diarizer
+        HOSTED_DIARIZATION_API_URL:
+          value: http://172.16.160.20/diarizer-batch
+          category: service_discovery
+        TRANSCRIPTION_FINAL_PASS_DIARIZER:
+          value: pyannote_shadow
+          category: rollout
+        TRANSCRIPTION_FINAL_PASS_BACKEND:
+          value: pyannote
+          category: rollout
+        TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST:
+          value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+          category: rollout
+        TRANSCRIPTION_FINAL_PASS_PERCENT:
+          value: '5'
+          category: rollout
+        TRANSCRIPTION_FINAL_PASS_AUTHORITATIVE:
+          value: 'true'
+          category: rollout
+        TRANSCRIPTION_FINAL_PASS_SYNC_ENABLED:
+          value: 'true'
+          category: rollout
+        TRANSCRIPTION_SHADOW_ENABLED:
+          value: 'true'
+          category: rollout
+        TRANSCRIPTION_SHADOW_KILL_SWITCH:
+          value: 'false'
+          category: rollout
+        TRANSCRIPTION_SHADOW_UID_ALLOWLIST:
+          value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+          category: rollout
+        TRANSCRIPTION_SHADOW_PERCENT:
+          value: '5'
+          category: rollout
+        TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS:
+          value: '1200'
+          category: rollout
+        TRANSCRIPTION_SYNC_FINAL_PASS_HOURLY_AUDIO_HOURS:
+          value: '150'
+          category: rollout
+        TRANSCRIPTION_SYNC_FINAL_PASS_HOURLY_REQUESTS:
+          value: '15000'
+          category: rollout
+        DREAM_AGENT_ENABLED:
+          value: 'true'
+          category: rollout
+        DREAM_AGENT_UID_ALLOWLIST:
+          value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+        POSTHOG_PRODUCT_CAPTURE_TOKEN:
+          value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
+          category: telemetry
+        POSTHOG_PROJECT_API_KEY:
+          secret:
+            name: prod-omi-backend-secrets
+            key: POSTHOG_PROJECT_API_KEY
+        PROACTIVITY_REDIS_HOST:
+          config_map:
+            name: prod-omi-backend-config
+            key: REDIS_DB_HOST
+        PROACTIVITY_REDIS_PORT:
+          value: '13151'
+          category: service_discovery
+        PROACTIVITY_REDIS_PASSWORD:
+          secret:
+            name: prod-omi-backend-secrets
+            key: REDIS_DB_PASSWORD
+        POSTHOG_HOST:
+          value: https://us.posthog.com
+          category: telemetry
+        MENTOR_PIPELINE:
+          value: cohort
+          category: rollout
+        SPEAKER_GROUPING_SHADOW:
+          value: cohort
+          category: rollout
+        SPEAKER_GROUPING_SHADOW_PERCENT:
+          value: '10'
+          category: rollout
+        SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST:
+          value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+          category: rollout
+        SPEAKER_GROUPING_MODE:
+          value: incumbent
+          category: rollout
+        SPEAKER_MATCH_SCORES_ENABLED:
+          value: 'true'
+          category: rollout
+        OMI_SHAPED_AGENT_MODE:
+          value: 'on'
+          category: rollout
+        OMI_CUSTOMER_DATA_PROJECT:
+          value: based-hardware
+        BUCKET_SCREEN_FRAMES:
+          value: based-hardware-prod-screen-frames
+        CONVERSATION_RELEVANCE_JEV_PERCENT:
+          value: '100'
+        NOTES_TIER_ESCALATION_ENABLED:
+          value: 'true'
+          category: rollout
     config_map:
-      name: prod-omi-backend-config
       entries:
+        STT_SERVICE_MODELS:
+          value: parakeet-window,modulate-velma-2,soniox
+          source: literal
+        ACCOUNT_DELETION_HANDLER_URL:
+          source: environment
+        MCP_OAUTH_CLAUDE_CLIENT_ID:
+          source: environment
+        MCP_OAUTH_CLAUDE_CLIENT_NAME:
+          source: environment
+        MCP_OAUTH_CLAUDE_REDIRECT_URIS:
+          source: environment
+        SYNC_TASKS_HANDLER_URL:
+          source: environment
+        SYNC_TASKS_INVOKER_SA:
+          source: environment
         CONVERSATION_SUMMARIZED_APP_IDS:
           source: environment
         GOOGLE_CLIENT_ID:
@@ -98,9 +369,6 @@ overlay:
         STT_PRERECORDED_MODEL:
           source: literal
           value: parakeet,modulate-velma-2
-        STT_SERVICE_MODELS:
-          source: literal
-          value: dg-nova-3,modulate-velma-2,parakeet
         TYPESENSE_HOST:
           source: environment
         TWILIO_ACCOUNT_SID:
@@ -113,23 +381,26 @@ overlay:
           source: environment
         X_OAUTH_REDIRECT_URI:
           source: environment
-        ACCOUNT_DELETION_HANDLER_URL:
-          source: environment
-        MCP_OAUTH_CLAUDE_CLIENT_ID:
-          source: environment
-        MCP_OAUTH_CLAUDE_CLIENT_NAME:
-          source: environment
-        MCP_OAUTH_CLAUDE_REDIRECT_URIS:
-          source: environment
-        SYNC_TASKS_HANDLER_URL:
-          source: environment
-        SYNC_TASKS_INVOKER_SA:
-          source: environment
+      name: prod-omi-backend-config
+  desktop_backend:
+    env:
+      OMI_VERTEX_LEGACY_TASK_MIN_CAPABLE_MACOS_BUILD:
+        value: '12435'
+      OMI_CUSTOMER_DATA_PROJECT:
+        value: based-hardware
+        category: service_discovery
+      POSTHOG_HOST:
+        value: https://us.posthog.com
+        category: telemetry
+      MENTOR_PIPELINE:
+        value: cohort
+        category: rollout
+      OMI_FIRESTORE_DATA_PLANE_PROJECT:
+        value: based-hardware
+    secrets:
+      GEMINI_API_KEY:
+        secret: DESKTOP_GEMINI_API_KEY
   cloud_run:
-    workflow_files:
-    - .github/workflows/gcp_backend.yml
-    - .github/workflows/gcp_notifications_job.yml
-    - .github/workflows/gcp_memory_maintenance_job.yml
     network:
       flags:
         --network:
@@ -138,7 +409,167 @@ overlay:
           env_var: CLOUD_RUN_VPC_SUBNET
     services:
       backend:
+        secrets:
+          TELEGRAM_BOT_TOKEN:
+            secret: TELEGRAM_BOT_TOKEN
+            version: latest
+          TELEGRAM_WEBHOOK_SECRET:
+            secret: TELEGRAM_WEBHOOK_SECRET
+            version: latest
+          LINQ_API_KEY:
+            secret: LINQ_API_KEY
+            version: latest
+          LINQ_WEBHOOK_SECRET:
+            secret: LINQ_WEBHOOK_SECRET
+            version: latest
+          DREAM_AGENT_FEEDBACK_SALT:
+            secret: DREAM_AGENT_FEEDBACK_SALT
+            version: latest
+          DESKTOP_PREVIEW_PUBLISH_KEY:
+            secret: DESKTOP_PREVIEW_PUBLISH_KEY
+            version: latest
+          BETA_PROMOTION_TOKEN:
+            secret: BETA_PROMOTION_TOKEN
+            version: latest
+          MCP_OAUTH_CLIENTS_JSON:
+            secret: MCP_OAUTH_CLIENTS_JSON
+            version: latest
         env:
+          FIRST_SUMMARY_DEADLINE_ENABLED: {value: 'true', category: rollout}
+          FIRST_SUMMARY_DEADLINE_PERCENT: {value: '100', category: rollout}
+          # Explicit shared-speech rollback; GKE hosts remain off.
+          CAPTURE_SHARED_SPEECH_MODE:
+            value: 'off'
+            category: rollout
+          CAPTURE_SHARED_SPEECH_PERCENT:
+            value: '0'
+            category: rollout
+          BATCH_PIPELINE_ENABLED:
+            value: 'true'
+            category: rollout
+          BATCH_PIPELINE_API_URL:
+            value: 'https://backend-sync-hhibjajaja-uc.a.run.app'
+            category: service_discovery
+          BUCKET_BATCH_PIPELINE:
+            value: based-hardware-batch-pipeline-staging
+          BUCKET_TEMPORAL_SYNC_LOCAL:
+            value: syncing-local
+          AUDIO_ARCHIVE_PERCENT:
+            value: '100'
+          HOSTED_PARAKEET_API_URL:
+            value: http://parakeet.omi.me
+          HOSTED_SPEAKER_EMBEDDING_API_URL:
+            value: http://172.16.160.20/diarizer
+          POSTHOG_HOST:
+            value: https://us.posthog.com
+          HOSTED_DIARIZATION_API_URL:
+            value: http://172.16.160.20/diarizer-batch
+            category: service_discovery
+          TRANSCRIPTION_FINAL_PASS_DIARIZER:
+            value: pyannote_shadow
+            category: rollout
+          TRANSCRIPTION_FINAL_PASS_BACKEND:
+            value: pyannote
+            category: rollout
+          TRANSCRIPTION_FINAL_PASS_PERCENT:
+            value: '5'
+            category: rollout
+          TRANSCRIPTION_FINAL_PASS_AUTHORITATIVE:
+            value: 'true'
+            category: rollout
+          TRANSCRIPTION_FINAL_PASS_SYNC_ENABLED:
+            value: 'true'
+            category: rollout
+          TRANSCRIPTION_SHADOW_ENABLED:
+            value: 'true'
+            category: rollout
+          TRANSCRIPTION_SHADOW_KILL_SWITCH:
+            value: 'false'
+            category: rollout
+          TRANSCRIPTION_SHADOW_PERCENT:
+            value: '5'
+            category: rollout
+          TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS:
+            value: '1200'
+            category: rollout
+          TRANSCRIPTION_SYNC_FINAL_PASS_HOURLY_AUDIO_HOURS:
+            value: '150'
+            category: rollout
+          TRANSCRIPTION_SYNC_FINAL_PASS_HOURLY_REQUESTS:
+            value: '15000'
+            category: rollout
+          OMI_MESSAGING_CHANNELS:
+            value: 'on'
+            category: rollout
+          OMI_TELEGRAM_STREAMING:
+            value: none
+            category: rollout
+          OMI_TELEGRAM_SHARED_PACING:
+            value: 'on'
+            category: rollout
+          OMI_TELEGRAM_ENABLED:
+            value: 'on'
+            category: rollout
+          OMI_IMESSAGE_ENABLED:
+            value: 'on'
+            category: rollout
+          OMI_IMESSAGE_PROVIDER:
+            value: linq
+            category: rollout
+          OMI_IMESSAGE_MAX_SEND_RECEIVE_RATIO:
+            value: '3'
+            category: rollout
+          OMI_MESSAGING_LINK_TARGETS:
+            value: '{"telegram":{"provider":"telegram","address":"omi_chat_bot","deep_link_template":"https://t.me/{address}?start={proof}"},"imessage":{"provider":"linq","address":"+12062808403"}}'
+            category: rollout
+          DREAM_AGENT_ENABLED:
+            value: 'true'
+            category: rollout
+          DREAM_AGENT_PASSES_PER_DAY:
+            value: '6'
+            category: rollout
+          DREAM_AGENT_HUNT_INTERVAL_HOURS:
+            value: '2'
+            category: rollout
+          DREAM_AGENT_MANUAL_RUNS_PER_DAY:
+            value: '3'
+            category: rollout
+          DREAM_AGENT_DAILY_USD:
+            value: '20'
+            category: rollout
+          DREAM_AGENT_TOKENS_PER_MINUTE:
+            value: '2000000'
+            category: rollout
+          POSTHOG_BILLING_API_KEY:
+            value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
+            category: telemetry
+          MENTOR_PIPELINE:
+            value: cohort
+            category: rollout
+          SPEAKER_GROUPING_SHADOW:
+            value: cohort
+            category: rollout
+          SPEAKER_GROUPING_SHADOW_PERCENT:
+            value: '10'
+            category: rollout
+          SPEAKER_GROUPING_MODE:
+            value: incumbent
+            category: rollout
+          SPEAKER_MATCH_SCORES_ENABLED:
+            value: 'true'
+            category: rollout
+          OMI_SHAPED_AGENT_MODE:
+            value: 'on'
+            category: rollout
+          FIREBASE_SIGNER_SERVICE_ACCOUNT:
+            value: backend-runtime@based-hardware.iam.gserviceaccount.com
+          OMI_CUSTOMER_DATA_PROJECT:
+            value: based-hardware
+          BUCKET_SCREEN_FRAMES:
+            value: based-hardware-prod-screen-frames
+          ACTION_ITEMS_LIST_STALE_CLIENT_REFUSE:
+            value: '1'
+            category: rollout
           LISTEN_FINALIZATION_DISPATCH_MODE:
             value: cloud_tasks
             category: reliability
@@ -167,16 +598,18 @@ overlay:
             env_var: ACCOUNT_DELETION_HANDLER_URL
             category: reliability
           SYNC_TASKS_PROJECT:
-            value: based-hardware
+            value: 'based-hardware'
             category: reliability
           SYNC_TASKS_LOCATION:
-            value: us-central1
+            value: 'us-central1'
             category: reliability
           SYNC_TASKS_INVOKER_SA:
             env_var: SYNC_TASKS_INVOKER_SA
+            default: sync-tasks-invoker@based-hardware.iam.gserviceaccount.com
             category: reliability
           SYNC_TASKS_HANDLER_URL:
             env_var: SYNC_TASKS_HANDLER_URL
+            default: https://backend-sync-hhibjajaja-uc.a.run.app/v2/sync-jobs/run
             category: reliability
           GOOGLE_CLOUD_PROJECT:
             value: based-hardware
@@ -188,20 +621,9 @@ overlay:
             value: price_1TuIa81F8wnoWYvw0iX0j5M8
           STRIPE_UNLIMITED_V2_ANNUAL_PRICE_ID:
             value: price_1TuIap1F8wnoWYvwHWq0EvNU
-          HOSTED_PARAKEET_API_URL:
-            value: http://parakeet.omi.me
           OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE:
             value: 'true'
             category: rollout
-          OMI_LLM_GATEWAY_FEATURE_MODE:
-            value: gateway
-            category: rollout
-          MEMORY_ENABLED:
-            value: 'on'
-          # `/v1/knowledge-graph` and signed memory cursors fail closed until this binding is present.
-          MEMORY_V3_CURSOR_SECRET_VERSION:
-            value: prod-v1
-            category: memory_rollout
           MCP_OAUTH_CLAUDE_CLIENT_ID:
             env_var: MCP_OAUTH_CLAUDE_CLIENT_ID
             category: oauth_metadata
@@ -211,21 +633,243 @@ overlay:
           MCP_OAUTH_CLAUDE_REDIRECT_URIS:
             env_var: MCP_OAUTH_CLAUDE_REDIRECT_URIS
             category: oauth_metadata
-        secrets:
-          MEMORY_V3_CURSOR_SECRET:
-            secret: MEMORY_V3_CURSOR_SECRET
-            version: latest
-          DESKTOP_PREVIEW_PUBLISH_KEY:
-            secret: DESKTOP_PREVIEW_PUBLISH_KEY
-            version: latest
-          BETA_PROMOTION_TOKEN:
-            secret: BETA_PROMOTION_TOKEN
-            version: latest
-          MCP_OAUTH_CLIENTS_JSON:
-            secret: MCP_OAUTH_CLIENTS_JSON
-            version: latest
+          CONVERSATION_RELEVANCE_JEV_PERCENT:
+            value: '100'
+          NOTES_TIER_ESCALATION_ENABLED:
+            value: 'true'
+            category: rollout
+          BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED:
+            value: 'false'
+            category: rollout
+          BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED:
+            value: 'true'
+            category: rollout
+          BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED:
+            value: 'false'
+            category: rollout
+          BATCH_PIPELINE_PERCENT:
+            value: '0'
+            category: rollout
+          BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED:
+            value: 'false'
+            category: rollout
+          BATCH_PIPELINE_HEAD_PRIORITY_ENABLED:
+            value: 'true'
+            category: rollout
+          BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED:
+            value: 'true'
+            category: rollout
+          BATCH_PIPELINE_RECOVERY_ALL_ADMITTED:
+            value: 'false'
+            category: rollout
+          BATCH_PIPELINE_RECOVERY_MODE:
+            value: 'off'
+            category: rollout
+          BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED:
+            value: 'false'
+            category: rollout
+          BATCH_PIPELINE_SERVING_ENABLED:
+            value: 'false'
+            category: rollout
+          BATCH_PIPELINE_SHARED_LIVE_ENABLED:
+            value: 'false'
+            category: rollout
+          BATCH_PIPELINE_SPEECH_EMPTY_MULTILINGUAL_ENABLED:
+            value: 'false'
+            category: rollout
+          BATCH_PIPELINE_UNIT_SECONDS:
+            value: '3600'
+            category: reliability
+          BATCH_PIPELINE_WORKER_ENABLED:
+            value: 'false'
+            category: ops_kill
+          DEMAND_PROCESSING_ENABLED:
+            value: 'false'
+            category: rollout
+          DEMAND_PROCESSING_LAZY_ENABLED:
+            value: 'false'
+            category: rollout
+          DEMAND_PROCESSING_PERCENT:
+            value: '0'
+            category: rollout
+          DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED:
+            value: 'false'
+            category: rollout
+          DEMAND_PROCESSING_TOOL_ENABLED:
+            value: 'false'
+            category: rollout
+          REPEAT_WORK_LLM_VERSION:
+            value: '2026-10-16-v1'
+            category: rollout
+          REPEAT_WORK_REVISION_ENABLED:
+            value: 'false'
+            category: rollout
+          SYNC_DURABLE_STATUS_RECONCILIATION:
+            value: 'true'
+            category: rollout
+          SYNC_TASKS_OIDC_AUDIENCE:
+            env_var: SYNC_TASKS_HANDLER_URL
+            default: https://backend-sync-hhibjajaja-uc.a.run.app/v2/sync-jobs/run
+            category: reliability
+          VAD_CACHE_TTL_SECONDS:
+            value: '86400'
+            category: rollout
+        service_account: backend-runtime@based-hardware.iam.gserviceaccount.com
       backend-sync:
+        forbidden_env:
+        - DEEPGRAM_SELF_HOSTED_ENABLED
+        - DEEPGRAM_SELF_HOSTED_URL
+        - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
+        - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
+        - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
+        - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
+        secrets:
+          DREAM_AGENT_FEEDBACK_SALT:
+            secret: DREAM_AGENT_FEEDBACK_SALT
+            version: latest
         env:
+          FIRST_SUMMARY_DEADLINE_PERCENT: {value: '100', category: rollout}
+          SUMMARY_DEBT_REPAIR_ENABLED: {value: 'true', category: rollout}
+          # Explicit shared-speech rollback; GKE hosts remain off.
+          CAPTURE_SHARED_SPEECH_MODE:
+            value: 'off'
+            category: rollout
+          CAPTURE_SHARED_SPEECH_PERCENT:
+            value: '0'
+            category: rollout
+          BATCH_PIPELINE_ENABLED:
+            value: 'true'
+            category: rollout
+          BATCH_PIPELINE_API_URL:
+            value: 'https://backend-sync-hhibjajaja-uc.a.run.app'
+            category: service_discovery
+          BATCH_PIPELINE_WORKER_AUDIENCE:
+            value: 'https://backend-sync-hhibjajaja-uc.a.run.app'
+            category: service_auth
+          BATCH_PIPELINE_WORKER_SERVICE_ACCOUNT:
+            value: 'batch-pipeline-worker@based-hardware.iam.gserviceaccount.com'
+            category: service_auth
+          BUCKET_BATCH_PIPELINE:
+            value: based-hardware-batch-pipeline-staging
+          AUDIO_ARCHIVE_PERCENT:
+            value: '100'
+          SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM:
+            value: 'false'
+            category: rollout
+          SYNC_REPROCESS_COALESCE_ENABLED:
+            value: 'true'
+            category: rollout
+          CONVERSATION_LLM_INPUT_DEDUPE_ENABLED:
+            value: 'true'
+          HOSTED_PARAKEET_API_URL:
+            value: http://parakeet.omi.me
+          HOSTED_SPEAKER_EMBEDDING_API_URL:
+            value: http://172.16.160.20/diarizer
+          SYNC_LEGACY_FRESH_ENABLED:
+            value: 'true'
+            category: rollout
+          SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED:
+            value: 'true'
+            category: rollout
+          SYNC_LEGACY_FRESH_PERCENT:
+            value: '100'
+            category: rollout
+          SYNC_LEGACY_FRESH_HOURLY_TOKENS:
+            value: '120'
+            category: reliability
+          SYNC_LEGACY_FRESH_BURST_TOKENS:
+            value: '60'
+            category: reliability
+          POSTHOG_HOST:
+            value: https://us.posthog.com
+          HOSTED_DIARIZATION_API_URL:
+            value: http://172.16.160.20/diarizer-batch
+            category: service_discovery
+          TRANSCRIPTION_FINAL_PASS_DIARIZER:
+            value: pyannote_shadow
+            category: rollout
+          TRANSCRIPTION_FINAL_PASS_BACKEND:
+            value: pyannote
+            category: rollout
+          TRANSCRIPTION_FINAL_PASS_PERCENT:
+            value: '5'
+            category: rollout
+          TRANSCRIPTION_FINAL_PASS_AUTHORITATIVE:
+            value: 'true'
+            category: rollout
+          TRANSCRIPTION_FINAL_PASS_SYNC_ENABLED:
+            value: 'true'
+            category: rollout
+          TRANSCRIPTION_SHADOW_ENABLED:
+            value: 'true'
+            category: rollout
+          TRANSCRIPTION_SHADOW_KILL_SWITCH:
+            value: 'false'
+            category: rollout
+          TRANSCRIPTION_SHADOW_PERCENT:
+            value: '5'
+            category: rollout
+          TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS:
+            value: '1200'
+            category: rollout
+          TRANSCRIPTION_SYNC_FINAL_PASS_HOURLY_AUDIO_HOURS:
+            value: '150'
+            category: rollout
+          TRANSCRIPTION_SYNC_FINAL_PASS_HOURLY_REQUESTS:
+            value: '15000'
+            category: rollout
+          OMI_SHAPED_AGENT_MODE:
+            value: 'on'
+            category: rollout
+          DREAM_AGENT_ENABLED:
+            value: 'true'
+            category: rollout
+          REVIEW_SURFACE_MODE:
+            value: 'on'
+            category: rollout
+          DREAM_AGENT_PASSES_PER_DAY:
+            value: '6'
+            category: rollout
+          DREAM_AGENT_HUNT_INTERVAL_HOURS:
+            value: '2'
+            category: rollout
+          DREAM_AGENT_MANUAL_RUNS_PER_DAY:
+            value: '3'
+            category: rollout
+          DREAM_AGENT_DAILY_USD:
+            value: '20'
+            category: rollout
+          DREAM_AGENT_TOKENS_PER_MINUTE:
+            value: '2000000'
+            category: rollout
+          DREAM_AGENT_CANARY_UID:
+            value: dream-canary-prod-01
+            category: rollout
+          MENTOR_PIPELINE:
+            value: cohort
+            category: rollout
+          SPEAKER_GROUPING_SHADOW:
+            value: cohort
+            category: rollout
+          SPEAKER_GROUPING_SHADOW_PERCENT:
+            value: '10'
+            category: rollout
+          SPEAKER_GROUPING_MODE:
+            value: incumbent
+            category: rollout
+          SPEAKER_MATCH_SCORES_ENABLED:
+            value: 'true'
+            category: rollout
+          LISTEN_FINALIZATION_DURABLE_ATTEMPT_CAP_ENABLED:
+            value: 'true'
+            category: rollout
+          LISTEN_FINALIZATION_RECOVERY_MINIMUM_TERMINAL_ENABLED:
+            value: 'true'
+            category: rollout
+          OMI_CUSTOMER_DATA_PROJECT:
+            value: based-hardware
+          BUCKET_SCREEN_FRAMES:
+            value: based-hardware-prod-screen-frames
           LISTEN_FINALIZATION_DISPATCH_MODE:
             value: cloud_tasks
             category: reliability
@@ -254,31 +898,283 @@ overlay:
             env_var: ACCOUNT_DELETION_HANDLER_URL
             category: reliability
           SYNC_TASKS_PROJECT:
-            value: based-hardware
+            value: 'based-hardware'
             category: reliability
           SYNC_TASKS_LOCATION:
-            value: us-central1
+            value: 'us-central1'
             category: reliability
           SYNC_TASKS_INVOKER_SA:
             env_var: SYNC_TASKS_INVOKER_SA
+            default: sync-tasks-invoker@based-hardware.iam.gserviceaccount.com
             category: reliability
           SYNC_TASKS_HANDLER_URL:
             env_var: SYNC_TASKS_HANDLER_URL
+            default: https://backend-sync-hhibjajaja-uc.a.run.app/v2/sync-jobs/run
             category: reliability
           GOOGLE_CLOUD_PROJECT:
             value: based-hardware
-          HOSTED_PARAKEET_API_URL:
-            value: http://parakeet.omi.me
           OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE:
             value: 'true'
             category: rollout
-          OMI_LLM_GATEWAY_FEATURE_MODE:
-            value: gateway
+          CONVERSATION_RELEVANCE_JEV_PERCENT:
+            value: '100'
+          NOTES_TIER_ESCALATION_ENABLED:
+            value: 'true'
             category: rollout
-          MEMORY_ENABLED:
+          BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED:
+            value: 'false'
+            category: rollout
+          BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED:
+            value: 'true'
+            category: rollout
+          BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED:
+            value: 'false'
+            category: rollout
+          BATCH_PIPELINE_PERCENT:
+            value: '0'
+            category: rollout
+          BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED:
+            value: 'false'
+            category: rollout
+          BATCH_PIPELINE_HEAD_PRIORITY_ENABLED:
+            value: 'true'
+            category: rollout
+          BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED:
+            value: 'true'
+            category: rollout
+          BATCH_PIPELINE_RECOVERY_ALL_ADMITTED:
+            value: 'false'
+            category: rollout
+          BATCH_PIPELINE_RECOVERY_MODE:
+            value: 'off'
+            category: rollout
+          BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED:
+            value: 'false'
+            category: rollout
+          BATCH_PIPELINE_SERVING_ENABLED:
+            value: 'false'
+            category: rollout
+          BATCH_PIPELINE_SHARED_LIVE_ENABLED:
+            value: 'false'
+            category: rollout
+          BATCH_PIPELINE_SPEECH_EMPTY_MULTILINGUAL_ENABLED:
+            value: 'false'
+            category: rollout
+          BATCH_PIPELINE_UNIT_SECONDS:
+            value: '3600'
+            category: reliability
+          BATCH_PIPELINE_WORKER_ENABLED:
+            value: 'false'
+            category: ops_kill
+          DEMAND_PROCESSING_ENABLED:
+            value: 'false'
+            category: rollout
+          DEMAND_PROCESSING_LAZY_ENABLED:
+            value: 'false'
+            category: rollout
+          DEMAND_PROCESSING_PERCENT:
+            value: '0'
+            category: rollout
+          DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED:
+            value: 'false'
+            category: rollout
+          DEMAND_PROCESSING_TOOL_ENABLED:
+            value: 'false'
+            category: rollout
+          FIRST_SUMMARY_DEADLINE_ENABLED:
+            value: 'true'
+            category: rollout
+          FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED:
+            value: 'true'
+            category: rollout
+          REPEAT_WORK_LLM_VERSION:
+            value: '2026-10-16-v1'
+            category: rollout
+          REPEAT_WORK_REVISION_ENABLED:
+            value: 'false'
+            category: rollout
+          SYNC_BACKFILL_ENABLED:
+            value: 'true'
+            category: rollout
+          SYNC_BACKFILL_GLOBAL_DAILY_HOURS:
+            value: '555'
+            category: rollout
+          SYNC_BACKFILL_INFLIGHT_LIMIT:
+            value: 'false'
+            category: rollout
+          SYNC_BACKFILL_MAX_AGE_SECONDS:
+            value: '2592000'
+            category: rollout
+          SYNC_BACKFILL_ORDER:
+            value: 'newest'
+            category: rollout
+          SYNC_BACKFILL_ORDER_PERCENT:
+            value: '100'
+            category: rollout
+          SYNC_BACKFILL_ROUTING_ENABLED:
+            value: 'true'
+            category: rollout
+          SYNC_BACKFILL_TASKS_HANDLER_URL:
+            env_var: SYNC_BACKFILL_TASKS_HANDLER_URL
+            default: https://backend-sync-backfill-208440318997.us-central1.run.app/v2/sync-jobs/run
+            category: reliability
+          SYNC_BACKFILL_TASKS_OIDC_AUDIENCE:
+            env_var: SYNC_BACKFILL_TASKS_OIDC_AUDIENCE
+            default: https://backend-sync-backfill-208440318997.us-central1.run.app/v2/sync-jobs/run
+            category: reliability
+          SYNC_BACKFILL_TASKS_QUEUE:
+            value: 'sync-backfill-fresh'
+            category: reliability
+          SYNC_BACKFILL_UID_SEQUENCER:
             value: 'on'
+            category: rollout
+          SYNC_BACKFILL_USER_DAILY_HOURS:
+            value: '4'
+            category: rollout
+          SYNC_DURABLE_REDRIVE_GUARD:
+            value: 'true'
+            category: rollout
+          SYNC_JOB_COMPLETED_TTL_SECONDS:
+            value: '21600'
+            category: rollout
+          SYNC_JOB_METRIC_ONCE_TTL_SECONDS:
+            value: '3600'
+            category: rollout
+          SYNC_LEGACY_COMPLETION_CONVERGENCE:
+            value: 'true'
+            category: rollout
+          SYNC_REPROCESS_SETTLE_SECONDS:
+            value: '600'
+            category: rollout
+          SYNC_TASKS_MAX_ATTEMPTS:
+            value: '5'
+            category: reliability
+          SYNC_TASKS_OIDC_AUDIENCE:
+            env_var: SYNC_TASKS_HANDLER_URL
+            default: https://backend-sync-hhibjajaja-uc.a.run.app/v2/sync-jobs/run
+            category: reliability
+          SYNC_TASKS_QUEUE:
+            value: 'sync-jobs-fresh'
+            category: reliability
+          VAD_CACHE_TTL_SECONDS:
+            value: '7200'
+            category: rollout
+        service_account: backend-runtime@based-hardware.iam.gserviceaccount.com
       backend-sync-backfill:
+        forbidden_env:
+        - DEEPGRAM_SELF_HOSTED_ENABLED
+        - DEEPGRAM_SELF_HOSTED_URL
+        - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
+        - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
+        - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
+        - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
         env:
+          FIRST_SUMMARY_DEADLINE_PERCENT: {value: '100', category: rollout}
+          # Explicit shared-speech rollback; GKE hosts remain off.
+          CAPTURE_SHARED_SPEECH_MODE:
+            value: 'off'
+            category: rollout
+          CAPTURE_SHARED_SPEECH_PERCENT:
+            value: '0'
+            category: rollout
+          BATCH_PIPELINE_ENABLED:
+            value: 'true'
+            category: rollout
+          BATCH_PIPELINE_API_URL:
+            value: 'https://backend-sync-hhibjajaja-uc.a.run.app'
+            category: service_discovery
+          BUCKET_BATCH_PIPELINE:
+            value: based-hardware-batch-pipeline-staging
+          AUDIO_ARCHIVE_PERCENT:
+            value: '100'
+          SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM:
+            value: 'false'
+            category: rollout
+          SYNC_REPROCESS_COALESCE_ENABLED:
+            value: 'true'
+            category: rollout
+          CONVERSATION_LLM_INPUT_DEDUPE_ENABLED:
+            value: 'true'
+          HOSTED_PARAKEET_API_URL:
+            value: http://parakeet.omi.me
+          HOSTED_SPEAKER_EMBEDDING_API_URL:
+            value: http://172.16.160.20/diarizer
+          SYNC_LEGACY_FRESH_ENABLED:
+            value: 'true'
+            category: rollout
+          SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED:
+            value: 'true'
+            category: rollout
+          SYNC_LEGACY_FRESH_PERCENT:
+            value: '100'
+            category: rollout
+          SYNC_LEGACY_FRESH_HOURLY_TOKENS:
+            value: '120'
+            category: reliability
+          SYNC_LEGACY_FRESH_BURST_TOKENS:
+            value: '60'
+            category: reliability
+          POSTHOG_HOST:
+            value: https://us.posthog.com
+          HOSTED_DIARIZATION_API_URL:
+            value: http://172.16.160.20/diarizer-batch
+            category: service_discovery
+          TRANSCRIPTION_FINAL_PASS_DIARIZER:
+            value: pyannote_shadow
+            category: rollout
+          TRANSCRIPTION_FINAL_PASS_BACKEND:
+            value: pyannote
+            category: rollout
+          TRANSCRIPTION_FINAL_PASS_PERCENT:
+            value: '5'
+            category: rollout
+          TRANSCRIPTION_FINAL_PASS_AUTHORITATIVE:
+            value: 'true'
+            category: rollout
+          TRANSCRIPTION_FINAL_PASS_SYNC_ENABLED:
+            value: 'true'
+            category: rollout
+          TRANSCRIPTION_SHADOW_ENABLED:
+            value: 'true'
+            category: rollout
+          TRANSCRIPTION_SHADOW_KILL_SWITCH:
+            value: 'false'
+            category: rollout
+          TRANSCRIPTION_SHADOW_PERCENT:
+            value: '5'
+            category: rollout
+          TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS:
+            value: '1200'
+            category: rollout
+          TRANSCRIPTION_SYNC_FINAL_PASS_HOURLY_AUDIO_HOURS:
+            value: '150'
+            category: rollout
+          TRANSCRIPTION_SYNC_FINAL_PASS_HOURLY_REQUESTS:
+            value: '15000'
+            category: rollout
+          OMI_SHAPED_AGENT_MODE:
+            value: 'on'
+            category: rollout
+          DREAM_AGENT_ENABLED:
+            value: 'true'
+            category: rollout
+          MENTOR_PIPELINE:
+            value: cohort
+            category: rollout
+          SPEAKER_GROUPING_SHADOW:
+            value: cohort
+            category: rollout
+          SPEAKER_GROUPING_SHADOW_PERCENT:
+            value: '10'
+            category: rollout
+          SPEAKER_GROUPING_MODE:
+            value: incumbent
+            category: rollout
+          SPEAKER_MATCH_SCORES_ENABLED:
+            value: 'true'
+            category: rollout
+          OMI_CUSTOMER_DATA_PROJECT:
+            value: based-hardware
           LISTEN_FINALIZATION_DISPATCH_MODE:
             value: cloud_tasks
             category: reliability
@@ -307,31 +1203,246 @@ overlay:
             env_var: ACCOUNT_DELETION_HANDLER_URL
             category: reliability
           SYNC_TASKS_PROJECT:
-            value: based-hardware
+            value: 'based-hardware'
             category: reliability
           SYNC_TASKS_LOCATION:
-            value: us-central1
+            value: 'us-central1'
             category: reliability
           SYNC_TASKS_INVOKER_SA:
             env_var: SYNC_TASKS_INVOKER_SA
+            default: sync-tasks-invoker@based-hardware.iam.gserviceaccount.com
             category: reliability
           SYNC_TASKS_HANDLER_URL:
             env_var: SYNC_TASKS_HANDLER_URL
+            default: https://backend-sync-backfill-208440318997.us-central1.run.app/v2/sync-jobs/run
             category: reliability
           GOOGLE_CLOUD_PROJECT:
             value: based-hardware
-          HOSTED_PARAKEET_API_URL:
-            value: http://parakeet.omi.me
           OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE:
             value: 'true'
             category: rollout
-          OMI_LLM_GATEWAY_FEATURE_MODE:
-            value: gateway
+          CONVERSATION_RELEVANCE_JEV_PERCENT:
+            value: '100'
+            category: ops_kill
+          NOTES_TIER_ESCALATION_ENABLED:
+            value: 'true'
             category: rollout
-          MEMORY_ENABLED:
+          BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED:
+            value: 'false'
+            category: rollout
+          BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED:
+            value: 'true'
+            category: rollout
+          BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED:
+            value: 'false'
+            category: rollout
+          BATCH_PIPELINE_PERCENT:
+            value: '0'
+            category: rollout
+          BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED:
+            value: 'false'
+            category: rollout
+          BATCH_PIPELINE_HEAD_PRIORITY_ENABLED:
+            value: 'true'
+            category: rollout
+          BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED:
+            value: 'true'
+            category: rollout
+          BATCH_PIPELINE_RECOVERY_ALL_ADMITTED:
+            value: 'false'
+            category: rollout
+          BATCH_PIPELINE_RECOVERY_MODE:
+            value: 'off'
+            category: rollout
+          BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED:
+            value: 'false'
+            category: rollout
+          BATCH_PIPELINE_SERVING_ENABLED:
+            value: 'false'
+            category: rollout
+          BATCH_PIPELINE_SHARED_LIVE_ENABLED:
+            value: 'false'
+            category: rollout
+          BATCH_PIPELINE_SPEECH_EMPTY_MULTILINGUAL_ENABLED:
+            value: 'false'
+            category: rollout
+          BATCH_PIPELINE_UNIT_SECONDS:
+            value: '3600'
+            category: reliability
+          BATCH_PIPELINE_WORKER_ENABLED:
+            value: 'false'
+            category: ops_kill
+          DEMAND_PROCESSING_ENABLED:
+            value: 'false'
+            category: rollout
+          DEMAND_PROCESSING_LAZY_ENABLED:
+            value: 'false'
+            category: rollout
+          DEMAND_PROCESSING_PERCENT:
+            value: '0'
+            category: rollout
+          DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED:
+            value: 'false'
+            category: rollout
+          DEMAND_PROCESSING_TOOL_ENABLED:
+            value: 'false'
+            category: rollout
+          FIRST_SUMMARY_DEADLINE_ENABLED:
+            value: 'true'
+            category: rollout
+          FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED:
+            value: 'true'
+            category: rollout
+          REPEAT_WORK_LLM_VERSION:
+            value: '2026-10-16-v1'
+            category: rollout
+          REPEAT_WORK_REVISION_ENABLED:
+            value: 'false'
+            category: rollout
+          SYNC_BACKFILL_ENABLED:
+            value: 'true'
+            category: rollout
+          SYNC_BACKFILL_GLOBAL_DAILY_HOURS:
+            value: '555'
+            category: rollout
+          SYNC_BACKFILL_INFLIGHT_LIMIT:
+            value: 'false'
+            category: rollout
+          SYNC_BACKFILL_MAX_AGE_SECONDS:
+            value: '2592000'
+            category: rollout
+          SYNC_BACKFILL_ORDER:
+            value: 'newest'
+            category: rollout
+          SYNC_BACKFILL_ORDER_PERCENT:
+            value: '0'
+            category: rollout
+          SYNC_BACKFILL_ROUTING_ENABLED:
+            value: 'true'
+            category: rollout
+          SYNC_BACKFILL_TASKS_HANDLER_URL:
+            env_var: SYNC_BACKFILL_TASKS_HANDLER_URL
+            default: https://backend-sync-backfill-208440318997.us-central1.run.app/v2/sync-jobs/run
+            category: reliability
+          SYNC_BACKFILL_TASKS_OIDC_AUDIENCE:
+            env_var: SYNC_BACKFILL_TASKS_OIDC_AUDIENCE
+            default: https://backend-sync-backfill-208440318997.us-central1.run.app/v2/sync-jobs/run
+            category: reliability
+          SYNC_BACKFILL_TASKS_QUEUE:
+            value: 'sync-backfill-fresh'
+            category: reliability
+          SYNC_BACKFILL_UID_SEQUENCER:
             value: 'on'
+            category: rollout
+          SYNC_BACKFILL_USER_DAILY_HOURS:
+            value: '4'
+            category: rollout
+          SYNC_DURABLE_REDRIVE_GUARD:
+            value: 'true'
+            category: rollout
+          SYNC_JOB_COMPLETED_TTL_SECONDS:
+            value: '21600'
+            category: rollout
+          SYNC_JOB_METRIC_ONCE_TTL_SECONDS:
+            value: '3600'
+            category: rollout
+          SYNC_LEGACY_COMPLETION_CONVERGENCE:
+            value: 'true'
+            category: rollout
+          SYNC_REPROCESS_SETTLE_SECONDS:
+            value: '600'
+            category: rollout
+          SYNC_TASKS_MAX_ATTEMPTS:
+            value: '5'
+            category: reliability
+          SYNC_TASKS_OIDC_AUDIENCE:
+            env_var: SYNC_TASKS_HANDLER_URL
+            default: https://backend-sync-backfill-208440318997.us-central1.run.app/v2/sync-jobs/run
+            category: reliability
+          SYNC_TASKS_QUEUE:
+            value: 'sync-backfill-fresh'
+            category: reliability
+          VAD_CACHE_TTL_SECONDS:
+            value: '7200'
+            category: rollout
+        service_account: backend-runtime@based-hardware.iam.gserviceaccount.com
       backend-integration:
+        forbidden_env:
+        - DEEPGRAM_SELF_HOSTED_ENABLED
+        - DEEPGRAM_SELF_HOSTED_URL
+        - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
+        - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
+        - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
+        - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
         env:
+          FIRST_SUMMARY_DEADLINE_PERCENT: {value: '100', category: rollout}
+          BATCH_PIPELINE_RECOVERY_TASK_AUDIENCE:
+            value: https://backend-integration-hhibjajaja-uc.a.run.app
+            category: service_auth
+          # Recovery must not wait behind legacy transcription retries.
+          BATCH_PIPELINE_RECOVERY_TASKS_QUEUE:
+            value: batch-quarantine-recovery
+            category: reliability
+          # 64 (the code maximum) per serving pass, set live during the 10-19 record-lane ramp so
+          # recovery keeps pace with quarantines; the code default 16 would return on every train.
+          BATCH_PIPELINE_RECOVERY_DISPATCH_BATCH_SIZE:
+            value: '64'
+            category: reliability
+          # Explicit shared-speech rollback; GKE hosts remain off.
+          CAPTURE_SHARED_SPEECH_MODE:
+            value: 'off'
+            category: rollout
+          CAPTURE_SHARED_SPEECH_PERCENT:
+            value: '0'
+            category: rollout
+          BATCH_PIPELINE_ENABLED:
+            value: 'true'
+            category: rollout
+          BATCH_PIPELINE_SERVING_ENABLED:
+            value: 'true'
+            category: rollout
+          BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED:
+            value: 'true'
+            category: rollout
+          BATCH_PIPELINE_PROJECTION_TIMING_ENABLED:
+            value: 'true'
+            category: rollout
+          BATCH_PIPELINE_API_URL:
+            value: 'https://backend-sync-hhibjajaja-uc.a.run.app'
+            category: service_discovery
+          BUCKET_BATCH_PIPELINE:
+            value: based-hardware-batch-pipeline-staging
+          AUDIO_ARCHIVE_PERCENT:
+            value: '100'
+          HOSTED_PARAKEET_API_URL:
+            value: http://parakeet.omi.me
+          HOSTED_SPEAKER_EMBEDDING_API_URL:
+            value: http://172.16.160.20/diarizer
+          POSTHOG_HOST:
+            value: https://us.posthog.com
+          OMI_SHAPED_AGENT_MODE:
+            value: 'on'
+            category: rollout
+          DREAM_AGENT_ENABLED:
+            value: 'true'
+            category: rollout
+          MENTOR_PIPELINE:
+            value: cohort
+            category: rollout
+          SPEAKER_GROUPING_SHADOW:
+            value: cohort
+            category: rollout
+          SPEAKER_GROUPING_SHADOW_PERCENT:
+            value: '10'
+            category: rollout
+          SPEAKER_GROUPING_MODE:
+            value: incumbent
+            category: rollout
+          SPEAKER_MATCH_SCORES_ENABLED:
+            value: 'true'
+            category: rollout
+          OMI_CUSTOMER_DATA_PROJECT:
+            value: based-hardware
           ACCOUNT_DELETION_DISPATCH_MODE:
             value: cloud_tasks
             category: reliability
@@ -342,57 +1453,168 @@ overlay:
             env_var: ACCOUNT_DELETION_HANDLER_URL
             category: reliability
           SYNC_TASKS_PROJECT:
-            value: based-hardware
+            value: 'based-hardware'
             category: reliability
           SYNC_TASKS_LOCATION:
-            value: us-central1
+            value: 'us-central1'
             category: reliability
           SYNC_TASKS_INVOKER_SA:
             env_var: SYNC_TASKS_INVOKER_SA
+            default: sync-tasks-invoker@based-hardware.iam.gserviceaccount.com
+            category: reliability
+          SYNC_TASKS_QUEUE:
+            value: 'sync-jobs-fresh'
+            category: reliability
+          SYNC_TASKS_OIDC_AUDIENCE:
+            env_var: SYNC_TASKS_HANDLER_URL
+            default: https://backend-sync-hhibjajaja-uc.a.run.app/v2/sync-jobs/run
             category: reliability
           SYNC_TASKS_HANDLER_URL:
             env_var: SYNC_TASKS_HANDLER_URL
+            default: https://backend-sync-hhibjajaja-uc.a.run.app/v2/sync-jobs/run
             category: reliability
           GOOGLE_CLOUD_PROJECT:
             value: based-hardware
-          HOSTED_PARAKEET_API_URL:
-            value: http://parakeet.omi.me
           OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE:
             value: 'true'
             category: rollout
-          OMI_LLM_GATEWAY_FEATURE_MODE:
-            value: gateway
-            category: rollout
-          MEMORY_ENABLED:
+          BATCH_PIPELINE_RECOVERY_MODE:
             value: 'on'
+            category: rollout
+          BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED:
+            value: 'true'
+            category: rollout
+          BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED:
+            value: 'true'
+            category: rollout
+          BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED:
+            value: 'true'
+            category: rollout
+          BATCH_PIPELINE_PERCENT:
+            value: '0'
+            category: rollout
+          BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED:
+            value: 'true'
+            category: rollout
+          BATCH_PIPELINE_HEAD_PRIORITY_ENABLED:
+            value: 'true'
+            category: rollout
+          BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED:
+            value: 'true'
+            category: rollout
+          BATCH_PIPELINE_RECOVERY_ALL_ADMITTED:
+            value: 'false'
+            category: rollout
+          BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED:
+            value: 'true'
+            category: rollout
+          BATCH_PIPELINE_SHARED_LIVE_ENABLED:
+            value: 'false'
+            category: rollout
+          BATCH_PIPELINE_SPEECH_EMPTY_MULTILINGUAL_ENABLED:
+            value: 'true'
+            category: rollout
+          BATCH_PIPELINE_UNIT_SECONDS:
+            value: '3600'
+            category: reliability
+          BATCH_PIPELINE_WORKER_ENABLED:
+            value: 'false'
+            category: ops_kill
+          DEMAND_PROCESSING_ENABLED:
+            value: 'false'
+            category: rollout
+          DEMAND_PROCESSING_LAZY_ENABLED:
+            value: 'false'
+            category: rollout
+          DEMAND_PROCESSING_PERCENT:
+            value: '0'
+            category: rollout
+          DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED:
+            value: 'false'
+            category: rollout
+          DEMAND_PROCESSING_TOOL_ENABLED:
+            value: 'false'
+            category: rollout
+          FIRST_SUMMARY_DEADLINE_ENABLED:
+            value: 'true'
+            category: rollout
+          FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED:
+            value: 'true'
+            category: rollout
+          REPEAT_WORK_LLM_VERSION:
+            value: '2026-10-16-v1'
+            category: rollout
+          REPEAT_WORK_REVISION_ENABLED:
+            value: 'false'
+            category: rollout
+          SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED:
+            value: 'true'
+            category: rollout
+          BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED:
+            value: 'true'
+            category: rollout
+        service_account: backend-runtime@based-hardware.iam.gserviceaccount.com
     jobs:
       notifications-job:
         flags:
-          --task-timeout: 3600s
+          --service-account: backend-jobs-runtime@based-hardware.iam.gserviceaccount.com
         env:
-          OMI_BACKGROUND_FLEX_CAPABLE:
-            value: 'true'
           PINECONE_INDEX_NAME:
             value: memories-backend
-      memory-maintenance-job:
+          OMI_CUSTOMER_DATA_PROJECT:
+            value: based-hardware
+      x-connector-sync-job:
         flags:
-          --task-timeout: 3600s
+          --service-account: backend-runtime@based-hardware.iam.gserviceaccount.com
         env:
+          PINECONE_INDEX_NAME:
+            value: memories-backend
+          REDIS_DB_HOST:
+            value: redis-13151.c1.us-central1-2.gce.redns.redis-cloud.com
+          REDIS_DB_PORT:
+            value: '13151'
+          MEMORY_ENABLED:
+            value: 'on'
+          OMI_CUSTOMER_DATA_PROJECT:
+            value: based-hardware
+      memory-maintenance-job:
+        secrets:
+          SERVICE_ACCOUNT_JSON:
+            secret: SERVICE_ACCOUNT_JSON
+            version: latest
+        env:
+          PINECONE_INDEX_NAME:
+            value: memories-backend
+          OMI_CUSTOMER_DATA_PROJECT:
+            value: based-hardware
           OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE:
             value: 'true'
             category: rollout
-          OMI_LLM_GATEWAY_FEATURE_MODE:
-            value: gateway
-            category: rollout
-          MEMORY_ENABLED:
-            value: 'on'
-          MEMORY_CANONICAL_MAINTENANCE_ENABLED:
+      frame-request-retention-job:
+        secrets:
+          SERVICE_ACCOUNT_JSON:
+            secret: SERVICE_ACCOUNT_JSON
+            version: latest
+        env:
+          OMI_CUSTOMER_DATA_PROJECT:
+            value: based-hardware
+          GOOGLE_CLOUD_PROJECT:
+            value: based-hardware
+      day3-reengagement-email-job:
+        flags:
+          --service-account: backend-jobs-runtime@based-hardware.iam.gserviceaccount.com
+        env:
+          DAY3_REENGAGEMENT_EMAIL_ENABLED:
             value: 'true'
-          MEMORY_CANONICAL_MAINTENANCE_FLEX:
-            value: 'true'
-          MEMORY_CANONICAL_GRAPH_BACKFILL_ENABLED:
-            value: 'false'
-          OMI_BACKGROUND_FLEX_CAPABLE:
-            value: 'true'
-          PINECONE_INDEX_NAME:
-            value: memories-backend
+          OMI_CUSTOMER_DATA_PROJECT:
+            value: based-hardware
+          BASE_API_URL:
+            value: https://api.omi.me
+    workflow_files:
+    - .github/workflows/gcp_backend.yml
+    - .github/workflows/gcp_notifications_job.yml
+    - .github/workflows/gcp_x_connector_sync_job.yml
+    - .github/workflows/gcp_memory_maintenance_job.yml
+    - .github/workflows/gcp_frame_request_retention_job.yml
+    - .github/workflows/gcp_day3_reengagement_email_job.yml
+  data_plane_project: based-hardware

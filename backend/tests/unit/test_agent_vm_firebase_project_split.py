@@ -4,6 +4,7 @@ import os
 from unittest.mock import MagicMock
 
 import firebase_admin
+import pytest
 
 from database import _client as firestore_client
 import desktop_backend
@@ -157,3 +158,43 @@ def test_desktop_chat_quota_reads_customer_firestore_without_provisioning() -> N
     assert "provision=False" in quota_source
     assert "get_customer_firestore_client()" in paywall_source
     assert "provision=False" in paywall_source
+
+
+def test_screen_vector_entitlement_reads_customer_firestore_without_provisioning() -> None:
+    import inspect
+
+    from utils.screen_vector_entitlements import read_subscription
+
+    source = inspect.getsource(read_subscription)
+    assert "get_customer_firestore_client()" in source
+    assert "provision=False" in source
+
+
+@pytest.mark.asyncio
+async def test_screen_vector_entitlement_does_not_write_when_customer_subscription_doc_is_missing(monkeypatch) -> None:
+    from database import users as users_db
+    from models.users import PlanType
+    from utils.subscription import grants_cloud_screen_vectors
+    import utils.subscription as subscription
+
+    uid = "uid-missing-customer-subscription"
+    subscription.clear_cloud_screen_vector_entitlement_cache(uid)
+
+    user_ref = MagicMock()
+    snapshot = MagicMock()
+    snapshot.exists = False
+    user_ref.get.return_value = snapshot
+    customer_client = MagicMock()
+    customer_client.collection.return_value.document.return_value = user_ref
+
+    monkeypatch.setattr(
+        subscription.screen_vector_entitlements, "get_customer_firestore_client", lambda: customer_client
+    )
+
+    entitled = await grants_cloud_screen_vectors(uid)
+    stored = users_db.get_user_valid_subscription(uid, firestore_client=customer_client, provision=False)
+
+    assert entitled is False
+    assert stored is not None
+    assert stored.plan == PlanType.basic
+    user_ref.set.assert_not_called()

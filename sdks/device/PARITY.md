@@ -3,9 +3,9 @@
 | Capability | Python | Swift | React Native | TS device | Go | Rust | Dart | C++ |
 |------------|--------|-------|--------------|-----------|----|------|------|-----|
 | BLE UUIDs / packet strip | yes | yes | yes | yes | yes | yes | yes (app models.dart) | yes |
-| Full BLE scan/connect/listen | yes (bleak) | yes (CoreBluetooth) | yes (ble-plx) | optional `@stoprocent/noble` | `-tags ble` tinygo bluetooth | feature `ble` btleplug | **flutter_blue_plus** (app UUID map) | `OMI_DEVICE_BLE` SimpleBLE |
+| Full BLE scan/connect/listen | yes (bleak) | yes (CoreBluetooth) | yes (ble-plx) | optional `@stoprocent/noble` | `-tags ble` tinygo bluetooth | feature `ble` btleplug | **flutter_blue_plus** (app UUID map) | injectable `BleBackend` |
 | Audio notify + header strip | yes | yes | yes | yes | yes | yes | yes | yes |
-| Read codec / battery | yes | yes | yes | partial | codec yes | via chars | yes (app parity) | via SimpleBLE |
+| Read codec / battery | yes | yes | yes | partial | codec yes | via chars | yes (app parity) | via backend |
 | STT Deepgram | yes | yes | yes | yes | yes | feature | yes | URL helper |
 | STT Whisper | optional/runner | SwiftWhisper | runner | runner | runner | feature | runner | macro |
 | STT Parakeet `/v3/stream` | yes | yes | yes | yes | yes | feature | yes | URL helper |

@@ -25,6 +25,7 @@ struct MemoryRecord: Codable, FetchableRecord, PersistableRecord, Identifiable {
   var scoring: String?
   var source: String?  // desktop, omi, screenshot, phone
   var conversationId: String?
+  var expiresAt: Date?
 
   // Desktop extraction fields
   var screenshotId: Int64?
@@ -36,6 +37,16 @@ struct MemoryRecord: Codable, FetchableRecord, PersistableRecord, Identifiable {
   var currentActivity: String?
   var inputDeviceName: String?
   var headline: String?
+  /// Additive canonical-ledger metadata mirrored from the server. Legacy rows
+  /// remain decodable with nil metadata and are fail-closed for prompt use.
+  var ledgerMetadataJson: String?
+  /// Additive generated-v3 evidence mirror. Evidence is audit metadata only;
+  /// prompt projections must not read this column as authority.
+  var ledgerEvidenceJson: String?
+  /// Server timestamp of the last valid evidence payload written locally.
+  /// This fence is independent from `updatedAt`, which can be advanced by an
+  /// unrelated local edit and therefore cannot protect redaction state.
+  var ledgerEvidenceRevision: Date?
 
   // Capture-device provenance (preserved through SQLite cache round-trip)
   var primaryCaptureDevice: String?
@@ -44,6 +55,7 @@ struct MemoryRecord: Codable, FetchableRecord, PersistableRecord, Identifiable {
   // Status flags
   var isRead: Bool
   var isDismissed: Bool
+  var isLocked: Bool?
   var deleted: Bool
 
   // Timestamps
@@ -70,6 +82,7 @@ struct MemoryRecord: Codable, FetchableRecord, PersistableRecord, Identifiable {
     scoring: String? = nil,
     source: String? = nil,
     conversationId: String? = nil,
+    expiresAt: Date? = nil,
     screenshotId: Int64? = nil,
     confidence: Double? = nil,
     reasoning: String? = nil,
@@ -79,10 +92,14 @@ struct MemoryRecord: Codable, FetchableRecord, PersistableRecord, Identifiable {
     currentActivity: String? = nil,
     inputDeviceName: String? = nil,
     headline: String? = nil,
+    ledgerMetadataJson: String? = nil,
+    ledgerEvidenceJson: String? = nil,
+    ledgerEvidenceRevision: Date? = nil,
     primaryCaptureDevice: String? = nil,
     captureDeviceIdsJson: String? = nil,
     isRead: Bool = false,
     isDismissed: Bool = false,
+    isLocked: Bool? = false,
     deleted: Bool = false,
     createdAt: Date = Date(),
     updatedAt: Date = Date()
@@ -102,6 +119,7 @@ struct MemoryRecord: Codable, FetchableRecord, PersistableRecord, Identifiable {
     self.scoring = scoring
     self.source = source
     self.conversationId = conversationId
+    self.expiresAt = expiresAt
     self.screenshotId = screenshotId
     self.confidence = confidence
     self.reasoning = reasoning
@@ -111,10 +129,14 @@ struct MemoryRecord: Codable, FetchableRecord, PersistableRecord, Identifiable {
     self.currentActivity = currentActivity
     self.inputDeviceName = inputDeviceName
     self.headline = headline
+    self.ledgerMetadataJson = ledgerMetadataJson
+    self.ledgerEvidenceJson = ledgerEvidenceJson
+    self.ledgerEvidenceRevision = ledgerEvidenceRevision
     self.primaryCaptureDevice = primaryCaptureDevice
     self.captureDeviceIdsJson = captureDeviceIdsJson
     self.isRead = isRead
     self.isDismissed = isDismissed
+    self.isLocked = isLocked
     self.deleted = deleted
     self.createdAt = createdAt
     self.updatedAt = updatedAt
@@ -225,6 +247,7 @@ extension MemoryRecord {
       scoring: memory.scoring,
       source: memory.source,
       conversationId: memory.conversationId,
+      expiresAt: memory.expiresAt,
       screenshotId: nil,  // Not available from API
       confidence: memory.confidence,
       reasoning: memory.reasoning,
@@ -234,10 +257,14 @@ extension MemoryRecord {
       currentActivity: memory.currentActivity,
       inputDeviceName: memory.inputDeviceName,
       headline: memory.headline,
+      ledgerMetadataJson: Self.encodeLedgerMetadata(memory.ledgerMetadata),
+      ledgerEvidenceJson: Self.encodeLedgerEvidence(memory.evidence, preserveEmpty: memory.evidenceIsExplicit),
+      ledgerEvidenceRevision: memory.evidenceIsExplicit ? memory.updatedAt : nil,
       primaryCaptureDevice: memory.primaryCaptureDevice,
       captureDeviceIdsJson: encodeCaptureDeviceIds(memory.captureDeviceIds),
       isRead: memory.isRead,
       isDismissed: memory.isDismissed,
+      isLocked: memory.isLocked,
       deleted: false,
       createdAt: memory.createdAt,
       updatedAt: memory.updatedAt
@@ -262,6 +289,7 @@ extension MemoryRecord {
     self.scoring = memory.scoring
     self.source = memory.source
     self.conversationId = memory.conversationId
+    self.expiresAt = memory.expiresAt
 
     // Update tags
     if !memory.tags.isEmpty,
@@ -298,6 +326,14 @@ extension MemoryRecord {
     if let headline = memory.headline {
       self.headline = headline
     }
+    self.ledgerMetadataJson = Self.encodeLedgerMetadata(memory.ledgerMetadata)
+    if memory.evidenceIsExplicit,
+      ledgerEvidenceJson == nil
+        || (ledgerEvidenceRevision.map { memory.updatedAt >= $0 } ?? false)
+    {
+      self.ledgerEvidenceJson = Self.encodeLedgerEvidence(memory.evidence, preserveEmpty: true)
+      self.ledgerEvidenceRevision = memory.updatedAt
+    }
 
     // Preserve capture-device provenance through cache sync/reload
     self.primaryCaptureDevice = memory.primaryCaptureDevice
@@ -306,6 +342,7 @@ extension MemoryRecord {
     // Update status
     self.isRead = memory.isRead
     self.isDismissed = memory.isDismissed
+    self.isLocked = memory.isLocked
 
     // Update timestamp
     self.updatedAt = memory.updatedAt
@@ -332,6 +369,71 @@ extension MemoryRecord {
       tierIsExplicit = true
     }
     return changed
+  }
+
+  /// A stale server page may not overwrite a newer local edit, but exclusion
+  /// signals must still close an already indexed memory. A later, newer server
+  /// revision can re-enable it through `updateFrom`.
+  @discardableResult
+  mutating func mergeAuthoritativeSiriEligibilityFrom(_ memory: ServerMemory) -> Bool {
+    var changed = false
+    if memory.userReview == false && userReview != false {
+      userReview = false
+      changed = true
+    }
+    if memory.isDismissed && !isDismissed {
+      isDismissed = true
+      changed = true
+    }
+    if memory.isLocked && isLocked != true {
+      isLocked = true
+      changed = true
+    }
+    if !["private", "shared", "public"].contains(memory.visibility) && visibility != memory.visibility {
+      visibility = memory.visibility
+      changed = true
+    }
+    if let expiry = memory.expiresAt, expiresAt.map({ expiry < $0 }) ?? true {
+      expiresAt = expiry
+      changed = true
+    }
+    return changed
+  }
+
+  /// Ledger lifecycle metadata is server-authoritative even when an unrelated
+  /// local edit makes this row newer. Keeping stale trigger/fact metadata would
+  /// let a closed server row remain locally eligible after a conflict.
+  @discardableResult
+  mutating func mergeAuthoritativeLedgerMetadataFrom(_ memory: ServerMemory) -> Bool {
+    let metadata = memory.ledgerMetadata
+    guard ledgerMetadata != metadata else { return false }
+    ledgerMetadataJson = Self.encodeLedgerMetadata(metadata)
+    return true
+  }
+
+  /// Evidence is server-authoritative when the optional wire field is
+  /// present. An older response that omits it must not erase a newer local
+  /// mirror during a compatibility conflict.
+  @discardableResult
+  mutating func mergeAuthoritativeLedgerEvidenceFrom(_ memory: ServerMemory) -> Bool {
+    guard memory.evidenceIsExplicit else { return false }
+    // A valid stale response must not resurrect active evidence after a newer
+    // redaction. Legacy rows without a revision are fenced conservatively.
+    if ledgerEvidenceJson != nil {
+      guard let revision = ledgerEvidenceRevision, memory.updatedAt >= revision else { return false }
+    }
+    let current = MemoryLedgerEvidence.decode(ledgerEvidenceJson)
+    let payloadChanged = ledgerEvidenceJson == nil || current != memory.evidence
+    let revisionChanged = ledgerEvidenceRevision != memory.updatedAt
+    guard payloadChanged || revisionChanged else {
+      return false
+    }
+    if payloadChanged {
+      guard let encoded = Self.encodeLedgerEvidence(memory.evidence, preserveEmpty: true) else { return false }
+      ledgerEvidenceJson = encoded
+    }
+    ledgerEvidenceRevision = memory.updatedAt
+    return true
   }
 
   /// Convert to ServerMemory for UI display
@@ -376,6 +478,7 @@ extension MemoryRecord {
       tierIsExplicit: tierIsExplicit,
       createdAt: createdAt,
       updatedAt: updatedAt,
+      expiresAt: expiresAt,
       conversationId: conversationId,
       reviewed: reviewed,
       userReview: userReview,
@@ -388,15 +491,57 @@ extension MemoryRecord {
       contextSummary: contextSummary,
       isRead: isRead,
       isDismissed: isDismissed,
+      isLocked: isLocked ?? false,
       tags: tags,
       reasoning: reasoning,
       currentActivity: currentActivity,
       inputDeviceName: inputDeviceName,
       windowTitle: windowTitle,
       headline: headline,
+      ledgerMetadata: ledgerMetadata,
+      evidence: MemoryLedgerEvidence.decode(ledgerEvidenceJson),
+      evidenceIsExplicit: ledgerEvidenceJson != nil,
       primaryCaptureDevice: primaryCaptureDevice,
       captureDeviceIds: captureDeviceIds
     )
+  }
+
+  private static func encodeLedgerMetadata(_ metadata: [String: String]) -> String? {
+    guard !metadata.isEmpty else { return nil }
+    return MemoryLedgerMetadata.canonicalJSONString(metadata)
+  }
+
+  private static func encodeLedgerEvidence(
+    _ evidence: [ServerMemoryEvidence], preserveEmpty: Bool = false
+  ) -> String? {
+    if evidence.isEmpty {
+      return preserveEmpty ? "[]" : nil
+    }
+    return MemoryLedgerEvidence.canonicalJSONString(evidence)
+  }
+
+  private var ledgerMetadata: [String: String] {
+    guard let json = ledgerMetadataJson,
+      let data = json.data(using: .utf8),
+      let metadata = try? JSONDecoder().decode([String: String].self, from: data)
+    else { return [:] }
+    return metadata
+  }
+
+  /// The server lifecycle is kept in the existing bounded metadata mirror.
+  var siriLedgerMetadata: [String: String] { ledgerMetadata }
+
+  /// Read-only access to the bounded evidence mirror for audit/UI surfaces.
+  /// This never participates in prompt projection or trigger compilation.
+  var ledgerEvidence: [ServerMemoryEvidence] {
+    MemoryLedgerEvidence.decode(ledgerEvidenceJson)
+  }
+
+  /// Structured trigger data remains inert until a caller explicitly validates
+  /// the canonical schema and compiles the bounded payload.
+  var ledgerTriggerConditionJSON: Data? {
+    guard !deleted, userReview != false else { return nil }
+    return MemoryLedgerMetadata.triggerConditionJSON(from: ledgerMetadata)
   }
 }
 
@@ -437,6 +582,8 @@ extension ServerMemory {
       inputDeviceName: inputDeviceName,
       windowTitle: windowTitle,
       headline: headline,
+      ledgerMetadata: ledgerMetadata,
+      evidenceState: evidenceState,
       primaryCaptureDevice: primaryCaptureDevice,
       captureDeviceIds: captureDeviceIds
     )
@@ -465,12 +612,17 @@ extension ServerMemory {
     contextSummary: String?,
     isRead: Bool,
     isDismissed: Bool,
+    isLocked: Bool = false,
     tags: [String],
     reasoning: String?,
     currentActivity: String?,
     inputDeviceName: String?,
     windowTitle: String? = nil,
     headline: String? = nil,
+    ledgerMetadata: [String: String] = [:],
+    evidence: [ServerMemoryEvidence] = [],
+    evidenceIsExplicit: Bool = false,
+    evidenceState: ServerMemoryEvidenceState? = nil,
     primaryCaptureDevice: String? = nil,
     captureDeviceIds: [String] = []
   ) {
@@ -495,12 +647,15 @@ extension ServerMemory {
     self.contextSummary = contextSummary
     self.isRead = isRead
     self.isDismissed = isDismissed
+    self.isLocked = isLocked
     self.tags = tags
     self.reasoning = reasoning
     self.currentActivity = currentActivity
     self.inputDeviceName = inputDeviceName
     self.windowTitle = windowTitle
     self.headline = headline
+    self.ledgerMetadata = ledgerMetadata
+    self.evidenceState = evidenceState ?? (evidenceIsExplicit ? .valid(evidence) : .absent)
     self.primaryCaptureDevice = primaryCaptureDevice
     self.captureDeviceIds = captureDeviceIds
   }

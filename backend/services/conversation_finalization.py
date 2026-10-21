@@ -10,30 +10,33 @@ from __future__ import annotations
 
 import logging
 import os
+import time
+from datetime import datetime
 from typing import Any
 
 from google.api_core.exceptions import InvalidArgument
 
 from database import conversation_finalization_jobs as jobs_db
 from database._client import is_document_size_limit_error
+from services.conversation_selfheal import run_selfheal_tick
 from utils.cloud_tasks import (
     enqueue_listen_finalization_job,
     get_listen_finalization_tasks_max_attempts,
     is_listen_finalization_dispatch_enabled,
 )
 from utils.metrics import (
+    LISTEN_FINALIZATION_BYOK_ABANDONMENTS_TOTAL,
     LISTEN_FINALIZATION_DEAD_LETTER_TOTAL,
     LISTEN_FINALIZATION_DURABLE_JOBS,
     LISTEN_FINALIZATION_JOB_STATUS,
     LISTEN_FINALIZATION_OLDEST_NONTERMINAL_AGE_SECONDS,
+    LISTEN_FINALIZATION_OLDEST_BLOCKED_BYOK_AGE_SECONDS,
+    LISTEN_FINALIZATION_SUMMARY_LAST_SUCCESS_TIMESTAMP_SECONDS,
     LISTEN_FINALIZATION_RETRIES_TOTAL,
     LISTEN_FINALIZATION_STALE_PROCESSING_RECONCILIATIONS_TOTAL,
+    register_listen_finalization_summary_metrics,
 )
 from utils.observability.fallback import record_fallback
-from utils.conversations.meeting_receipt import (
-    record_and_persist_finalized_meeting_receipt,
-    repair_meeting_receipt_intent,
-)
 from utils.observability.journeys import (
     record_capture_finalization_reconciliation,
     record_capture_finalization_terminal,
@@ -43,66 +46,44 @@ from utils.observability.journeys import (
 logger = logging.getLogger(__name__)
 
 
-def is_meeting_receipt_reconciler_enabled() -> bool:
-    return os.getenv('MEETING_RECEIPT_RECONCILER_ENABLED', 'false').strip().lower() in {'1', 'true', 'yes', 'on'}
+def _skip_capture_wedge(**_: Any) -> dict[str, int]:
+    """The API reconciler owns conversation GC, not user-notification nudges."""
+
+    return {'nudged': 0, 'undeliverable': 0, 'errors': 0}
 
 
-def reconcile_meeting_receipts(limit: int = 100, *, firestore_client: Any = None) -> dict[str, int]:
-    """Repair missing intent writes and seed receipts for historical completed meetings."""
-    result = {'repaired': 0, 'backfilled': 0, 'skipped': 0, 'error': 0}
-    if not is_meeting_receipt_reconciler_enabled():
-        return result
+def reconcile_stale_in_progress_conversations(*, firestore_client: Any = None) -> dict[str, Any]:
+    """Admit stale content-bearing ``in_progress`` rows to durable finalization.
 
-    try:
-        candidates = jobs_db.get_meeting_receipt_reconcile_candidates(limit=limit, firestore_client=firestore_client)
-    except Exception:
-        logger.exception('meeting receipt reconciliation query failed')
-        result['error'] += 1
-        candidates = []
-    for candidate in candidates:
-        try:
-            if repair_meeting_receipt_intent(candidate):
-                result['repaired'] += 1
-            else:
-                result['skipped'] += 1
-        except Exception:
-            logger.exception('meeting receipt intent repair failed')
-            result['error'] += 1
+    This is the always-on owner for the recovery primitive otherwise exposed by
+    the optional conversation-selfheal job. It deliberately reuses that
+    primitive's bounded scan, persisted CAS cursor, SERVER_RECOVERY admission
+    fences, per-tick cap, and next-tick verification. Capture-wedge notification
+    work remains owned by the dedicated job and is skipped here.
+    """
 
-    try:
-        cursor = jobs_db.get_meeting_receipt_backfill_cursor(firestore_client=firestore_client)
-        sweep = jobs_db.get_meeting_receipt_backfill_candidates(
-            limit=limit,
-            resume_after_path=cursor.get('resume_after_path'),
-            firestore_client=firestore_client,
-        )
-        jobs_db.advance_meeting_receipt_backfill_cursor(
-            int(cursor.get('generation') or 0),
-            None if sweep['exhausted'] else sweep['resume_after_path'],
-            firestore_client=firestore_client,
-        )
-    except Exception:
-        logger.exception('meeting receipt backfill query failed')
-        result['error'] += 1
-        return result
-    for candidate in sweep['candidates']:
-        try:
-            receipt = record_and_persist_finalized_meeting_receipt(
-                candidate['uid'], candidate['conversation'], firestore_client=firestore_client
-            )
-            if receipt is not None:
-                result['backfilled'] += 1
-            else:
-                result['skipped'] += 1
-        except Exception:
-            logger.exception('meeting receipt backfill failed')
-            result['error'] += 1
-    return result
+    if not is_listen_finalization_dispatch_enabled():
+        return {'scanned': 0, 'enqueued': 0, 'verified': 0, 'refused': 0, 'errors': 0, 'mode': 'off'}
+    return run_selfheal_tick(
+        firestore_client=firestore_client,
+        mode='heal',
+        dry_run=False,
+        use_configured_uid_allowlist=False,
+        wedge_runner=_skip_capture_wedge,
+    )
 
 
 def reconcile_listen_finalization_jobs(limit: int = 100, *, firestore_client: Any = None) -> dict[str, int | float]:
     """Replay stale queued/leased platform-key jobs and publish backlog signals."""
     result: dict[str, int | float] = {'requeued': 0, 'skipped': 0, 'enqueue_failed': 0}
+    try:
+        recovery = jobs_db.recover_stranded_byok_jobs(firestore_client=firestore_client)
+        if recovery['blocked']:
+            logger.info('listen BYOK ownership reclaim: %s', recovery)
+        if recovery['errors']:
+            logger.error('listen BYOK ownership reclaim failed rows=%s', recovery['errors'])
+    except Exception:
+        logger.exception('listen BYOK ownership reclaim scan failed')
     if not is_listen_finalization_dispatch_enabled():
         _publish_job_metrics(firestore_client=firestore_client)
         return result
@@ -130,7 +111,7 @@ def reconcile_listen_finalization_jobs(limit: int = 100, *, firestore_client: An
             logger.exception('listen finalization reconciliation claim failed job=%s', job_id)
             result['skipped'] += 1
             continue
-        if claimed['status'] != 'queued' or claimed['dispatch_generation'] is None:
+        if not claimed.get('created') or claimed['status'] != 'queued' or claimed['dispatch_generation'] is None:
             result['skipped'] += 1
             continue
         try:
@@ -287,15 +268,150 @@ def reconcile_stale_processing_conversations(limit: int = 100, *, firestore_clie
     return result
 
 
+def is_byok_abandonment_sweep_enabled() -> bool:
+    """Gate the BYOK abandonment sweep; on by default.
+
+    A resumed BYOK job is reachable by no consumer -- the Cloud Tasks worker
+    refuses ``requires_byok`` and the reconciler filters on a
+    ``reconcile_after_at`` those paths delete -- so leaving the sweep off does
+    not hold the row in a recoverable state, it only defers its disposition
+    while the conversation stays in ``processing``. There is also no
+    environment that can rehearse it: dev holds zero BYOK jobs, so shipping
+    this dark would buy delay rather than evidence. The bounded age in
+    ``get_byok_abandoned_after`` is the real safety control; this switch exists
+    to stop the sweep, not to stage it.
+    """
+    return os.getenv('LISTEN_FINALIZATION_BYOK_ABANDONMENT_ENABLED', 'true').strip().lower() in {
+        '1',
+        'true',
+        'yes',
+        'on',
+    }
+
+
+def _record_byok_abandonment_journey(job: dict[str, Any]) -> None:
+    """Terminalize the journey for a job that will never be attempted again."""
+    try:
+        created_at = job.get('created_at')
+        record_capture_finalization_terminal('failure', created_at if isinstance(created_at, datetime) else None)
+        record_conversation_finalization_client_terminal('failure', job, issue_class='incomplete_attempt')
+    except Exception:
+        # The durable terminal is authoritative; a best-effort metric must never
+        # change it.
+        logger.exception('listen finalization byok abandonment metric failed')
+
+
+def reconcile_abandoned_byok_finalization_jobs(limit: int = 100, *, firestore_client: Any = None) -> dict[str, int]:
+    """Give stranded BYOK finalization jobs an owner and a truthful terminal.
+
+    Prompt reclaim returns lost live-session ownership to ``blocked_byok`` so a
+    reconnect can resume it. Waiting is bounded: this sweep covers queued,
+    leased (without a live lease), and blocked_byok jobs whose last live activity
+    exceeds ``get_byok_abandoned_after()``. Reclaim does not refresh that age.
+
+    This sweep is **disposition and visibility only**. It never replays a BYOK
+    finalization or substitutes platform credentials. Eligible jobs become
+    ``dead_letter`` with the distinct ``byok_session_abandoned`` failure code;
+    a still-bound ``processing`` conversation closes in the same transaction.
+    Reconnect or claim changes to status, epoch, or activity fence stale scans.
+
+    Work is bounded per invocation (fixed page size, capped scan) and eventual
+    coverage comes from a persisted, rotated CAS cursor, exactly like the stale
+    bare-``processing`` sweep. Terminal transitions move the projection shard
+    deltas, so the metric source of truth stays correct.
+    """
+    result: dict[str, int] = {'abandoned': 0, 'conversations_closed': 0, 'skipped': 0, 'error': 0}
+    if not is_byok_abandonment_sweep_enabled():
+        return result
+
+    abandoned_after = jobs_db.get_byok_abandoned_after()
+    try:
+        cursor = jobs_db.get_byok_abandonment_sweep_cursor(firestore_client=firestore_client)
+    except Exception:
+        logger.exception('byok abandonment sweep cursor read failed; sweeping from the top')
+        cursor = {'resume_after_path': None, 'generation': 0}
+    _path = cursor.get('resume_after_path')
+    resume_after_path: str | None = _path if isinstance(_path, str) else None
+    expected_generation = int(cursor.get('generation') or 0)
+
+    try:
+        sweep = jobs_db.get_abandoned_byok_job_candidates(
+            abandoned_after=abandoned_after,
+            limit=limit,
+            resume_after_path=resume_after_path,
+            firestore_client=firestore_client,
+        )
+    except Exception:
+        logger.exception('byok abandonment query failed')
+        LISTEN_FINALIZATION_BYOK_ABANDONMENTS_TOTAL.labels(outcome='error').inc()
+        return result | {'error': 1}
+
+    try:
+        jobs_db.advance_byok_abandonment_sweep_cursor(
+            expected_generation,
+            None if sweep['exhausted'] else sweep['resume_after_path'],
+            firestore_client=firestore_client,
+        )
+    except Exception:
+        logger.exception('byok abandonment sweep cursor advance failed; coverage is still guaranteed')
+
+    for candidate in sweep['candidates']:
+        job_id = candidate.get('job_id')
+        if not isinstance(job_id, str) or not job_id:
+            result['skipped'] += 1
+            LISTEN_FINALIZATION_BYOK_ABANDONMENTS_TOTAL.labels(outcome='skipped').inc()
+            continue
+        try:
+            disposition = jobs_db.abandon_byok_finalization_job(
+                job_id,
+                expected_status=str(candidate.get('status') or ''),
+                expected_dispatch_generation=int(candidate.get('dispatch_generation') or 1),
+                expected_lease_epoch=int(candidate.get('lease_epoch') or 0),
+                abandoned_after=abandoned_after,
+                firestore_client=firestore_client,
+            )
+        except Exception:
+            # An unexpected per-row failure is an error, distinct from the
+            # expected CAS fencing skip below.
+            logger.exception('byok abandonment failed for one job')
+            result['error'] += 1
+            LISTEN_FINALIZATION_BYOK_ABANDONMENTS_TOTAL.labels(outcome='error').inc()
+            continue
+        if disposition['status'] != 'abandoned':
+            result['skipped'] += 1
+            LISTEN_FINALIZATION_BYOK_ABANDONMENTS_TOTAL.labels(outcome='skipped').inc()
+            continue
+        result['abandoned'] += 1
+        if disposition['conversation_outcome'] == 'closed':
+            result['conversations_closed'] += 1
+            LISTEN_FINALIZATION_BYOK_ABANDONMENTS_TOTAL.labels(outcome='abandoned_conversation_closed').inc()
+        else:
+            LISTEN_FINALIZATION_BYOK_ABANDONMENTS_TOTAL.labels(outcome='abandoned_bookkeeping').inc()
+        _record_byok_abandonment_journey(candidate)
+
+    if result['abandoned']:
+        logger.info('byok finalization abandonment sweep: %s', result)
+    return result
+
+
 def final_attempt_failed(
-    job_id: str, dispatch_generation: int, lease_epoch: int, retry_count: int, *, firestore_client: Any = None
+    job_id: str,
+    dispatch_generation: int,
+    lease_epoch: int,
+    retry_count: int,
+    *,
+    failure_code: str = 'final_attempt_failed',
+    firestore_client: Any = None,
 ) -> bool:
+    dead_letter_kwargs = {'firestore_client': firestore_client}
+    if failure_code != 'final_attempt_failed':
+        dead_letter_kwargs['failure_code'] = failure_code
     marked = jobs_db.mark_finalization_dead_letter(
         job_id,
         dispatch_generation,
         lease_epoch,
         retry_count,
-        firestore_client=firestore_client,
+        **dead_letter_kwargs,
     )
     if marked:
         LISTEN_FINALIZATION_DEAD_LETTER_TOTAL.inc()
@@ -309,6 +425,20 @@ def final_attempt_failed(
             # Dead-lettering is authoritative; a best-effort metric lookup must
             # never change its terminal outcome.
             logger.exception('listen finalization terminal metric lookup failed job=%s', job_id)
+        # Dead-lettering closes the bound conversation inside its own
+        # transaction, bypassing the update hooks; converge the search
+        # projection. Fail-open: never change the terminal outcome.
+        try:
+            job = jobs_db.get_finalization_job(job_id, firestore_client=firestore_client)
+            if job:
+                uid = job.get('uid')
+                conversation_id = job.get('conversation_id')
+                if isinstance(uid, str) and uid and isinstance(conversation_id, str) and conversation_id:
+                    from utils.conversations.typesense_index import sync_conversation_index_after_write
+
+                    sync_conversation_index_after_write(uid, conversation_id)
+        except Exception:
+            logger.warning('listen finalization dead-letter index sync failed job=%s', job_id)
     return marked
 
 
@@ -323,7 +453,10 @@ def _publish_job_metrics(*, firestore_client: Any = None) -> None:
         logger.exception('listen finalization metrics query failed')
         return
     LISTEN_FINALIZATION_OLDEST_NONTERMINAL_AGE_SECONDS.set(float(summary['oldest_nonterminal_age_seconds']))
+    LISTEN_FINALIZATION_OLDEST_BLOCKED_BYOK_AGE_SECONDS.set(float(summary['oldest_blocked_byok_age_seconds']))
     for state in ('accepted', 'success', 'failure', 'stale', 'nonterminal', 'blocked_byok', 'terminal_unknown'):
         LISTEN_FINALIZATION_DURABLE_JOBS.labels(state=state).set(float(summary[state]))
     for status in ('queued', 'leased', 'blocked_byok', 'dead_letter'):
         LISTEN_FINALIZATION_JOB_STATUS.labels(status=status).set(float(summary[status]))
+    LISTEN_FINALIZATION_SUMMARY_LAST_SUCCESS_TIMESTAMP_SECONDS.set(time.time())
+    register_listen_finalization_summary_metrics()

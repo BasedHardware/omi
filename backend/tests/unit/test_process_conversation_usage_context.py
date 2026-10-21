@@ -61,6 +61,10 @@ def _build_fakes() -> dict[str, ModuleType]:
         return mod
 
     # --- database package + submodules -------------------------------------
+    refresh = ModuleType('utils.conversations.action_item_refresh')
+    refresh.preserve = lambda *a, **k: False
+    add('utils.conversations.action_item_refresh', refresh)
+
     database_pkg = ModuleType("database")
     database_pkg.__path__ = [str(BACKEND_DIR / "database")]  # type: ignore[attr-defined]
     add("database", database_pkg)
@@ -68,6 +72,7 @@ def _build_fakes() -> dict[str, ModuleType]:
     client_mod = ModuleType("database._client")
     client_mod.db = MagicMock(name="db")
     client_mod.get_firestore_client = lambda: client_mod.db
+    client_mod.get_data_plane_firestore_client = lambda: client_mod.db
 
     def _document_id_from_seed(seed: str) -> str:
         seed_hash = hashlib.sha256(seed.encode("utf-8")).digest()
@@ -220,14 +225,12 @@ def _build_fakes() -> dict[str, ModuleType]:
     # utils.llm.conversation_processing — stub with the names process_conversation imports.
     conv_proc = ModuleType("utils.llm.conversation_processing")
     for attr in [
-        "get_transcript_structure",
         "get_app_result",
         "should_discard_conversation",
         "get_suggested_apps_for_conversation",
-        "get_reprocess_transcript_structure",
         "assign_conversation_to_folder",
-        "extract_action_items",
         "get_conversation_notes",
+        "validate_structured_source_segment_ids",
     ]:
         setattr(conv_proc, attr, MagicMock())
     add("utils.llm.conversation_processing", conv_proc)
@@ -269,6 +272,7 @@ def _build_fakes() -> dict[str, ModuleType]:
     subscription = add("utils.subscription", AutoMockModule("utils.subscription"))
     subscription.is_trial_paywalled = MagicMock(return_value=False)
     subscription.should_defer_desktop_processing = MagicMock(return_value=False)
+    subscription.should_skip_omi_paid_postprocessing = MagicMock(return_value=False)
 
     executors = add("utils.executors", AutoMockModule("utils.executors"))
     executors.db_executor = MagicMock()
@@ -295,7 +299,6 @@ def _build_fakes() -> dict[str, ModuleType]:
 
     llm_memories = add("utils.llm.memories", AutoMockModule("utils.llm.memories"))
     for attr in [
-        "resolve_memory_conflict",
         "extract_canonical_l1_memory_candidates",
         "extract_memories_from_text",
         "new_memories_extractor",
@@ -408,12 +411,19 @@ def test_sub_feature_constants_exist():
     assert usage_tracker.Features.CONVERSATION_STRUCTURE != usage_tracker.Features.CONVERSATION_PROCESSING
 
 
-def test_fenced_completion_submits_no_derived_work(monkeypatch):
+@pytest.mark.parametrize(
+    'discarded, structured, deleted',
+    [(False, True, False), (True, True, False), (False, False, False), (False, True, True)],
+)
+def test_fenced_completion_submits_nothing(monkeypatch, discarded, structured, deleted):
     input_conversation = MagicMock()
     input_conversation.source = "omi"
     input_conversation.get_person_ids.return_value = []
 
     completed_conversation = MagicMock()
+    completed_conversation.discarded = discarded
+    completed_conversation.deleted = deleted
+    completed_conversation.structured = MagicMock() if structured else None
     completed_conversation.id = "conversation-fenced"
     completed_conversation.dict.return_value = {"id": "conversation-fenced", "status": "completed"}
 
@@ -423,11 +433,11 @@ def test_fenced_completion_submits_no_derived_work(monkeypatch):
     create_audio_files = MagicMock()
     update_conversation = MagicMock()
     observed_persistence: list[bool] = []
-    monkeypatch.setattr(process_conversation, "_get_structured", lambda *args, **kwargs: (MagicMock(), False))
+    monkeypatch.setattr(process_conversation, "_get_structured", lambda *args, **kwargs: (MagicMock(), discarded))
     monkeypatch.setattr(process_conversation, "_get_conversation_obj", lambda *args, **kwargs: completed_conversation)
     monkeypatch.setattr(process_conversation.lifecycle_service, "persist_processed_conversation", persistence)
     monkeypatch.setattr(process_conversation, "submit_with_context", submit)
-    monkeypatch.setattr(process_conversation, "_trigger_apps", trigger_apps)
+    monkeypatch.setattr(process_conversation, "trigger_conversation_apps", trigger_apps)
     monkeypatch.setattr(process_conversation.conversations_db, "create_audio_files_from_chunks", create_audio_files)
     monkeypatch.setattr(process_conversation.conversations_db, "update_conversation", update_conversation)
 
@@ -452,7 +462,8 @@ def test_deferred_derived_effects_emit_nothing_until_runner_invoked(monkeypatch)
     the result and hands back the entire derived-effect bundle as a deferred
     runner, emitting zero side effects inline.  Only invoking the runner (after
     the durable finalizer has transactionally claimed ownership) emits calendar,
-    usage/app, vector, action/goal, audio, webhook, and memory work.  A losing
+    usage/app, action/goal, audio, webhook, and memory work. The finalizer
+    writes the vector independently behind that same claim.  A losing
     claim that never invokes the runner is a no-side-effect outcome."""
     input_conversation = MagicMock()
     input_conversation.source = "omi"
@@ -478,7 +489,7 @@ def test_deferred_derived_effects_emit_nothing_until_runner_invoked(monkeypatch)
     monkeypatch.setattr(process_conversation, "_get_conversation_obj", lambda *args, **kwargs: completed_conversation)
     monkeypatch.setattr(process_conversation.lifecycle_service, "persist_processed_conversation", persistence)
     monkeypatch.setattr(process_conversation, "submit_with_context", submit)
-    monkeypatch.setattr(process_conversation, "_trigger_apps", trigger_apps)
+    monkeypatch.setattr(process_conversation, "trigger_conversation_apps", trigger_apps)
     monkeypatch.setattr(process_conversation.conversations_db, "create_audio_files_from_chunks", create_audio_files)
     monkeypatch.setattr(process_conversation.conversations_db, "update_conversation", update_conversation)
     monkeypatch.setattr(process_conversation, "_extract_memories", extract_memories)
@@ -504,7 +515,156 @@ def test_deferred_derived_effects_emit_nothing_until_runner_invoked(monkeypatch)
     # Invoking the runner (ownership proven) emits every derived effect.
     captured[0]()
     trigger_apps.assert_called_once()
-    assert submit.call_count >= 4  # vectors, memory, action items, goals, webhook
+    assert submit.call_count >= 3  # action items, goals, webhook; vector belongs to finalizer
+    assert all(call.args[1] is not process_conversation.save_structured_vector for call in submit.call_args_list)
+
+
+def _run_merge_created_webhook_flow(monkeypatch, **process_kwargs):
+    """Process a MERGE run with every submitted job run inline; return (result, delivered webhooks)."""
+    input_conversation = MagicMock()
+    input_conversation.source = "omi"
+    input_conversation.get_person_ids.return_value = []
+
+    completed_conversation = MagicMock()
+    completed_conversation.id = "conversation-merged"
+    completed_conversation.dict.return_value = {"id": "conversation-merged", "status": "completed"}
+    completed_conversation.structured = None  # skip analytics counting
+    completed_conversation.apps_results = []
+    completed_conversation.suggested_summarization_apps = []
+    completed_conversation.private_cloud_sync_enabled = False
+    completed_conversation.folder_id = "existing-folder"  # skip folder assignment
+
+    delivered: list = []
+
+    async def created_webhook(uid, conversation):
+        delivered.append((uid, conversation))
+
+    monkeypatch.setattr(process_conversation, "_get_structured", lambda *args, **kwargs: (MagicMock(), False))
+    monkeypatch.setattr(process_conversation, "_get_conversation_obj", lambda *args, **kwargs: completed_conversation)
+    monkeypatch.setattr(
+        process_conversation.lifecycle_service, "persist_processed_conversation", MagicMock(return_value=True)
+    )
+    monkeypatch.setattr(
+        process_conversation,
+        "submit_with_context",
+        MagicMock(side_effect=lambda _executor, fn, *args, **kwargs: fn(*args, **kwargs)),
+    )
+    monkeypatch.setattr(process_conversation, "conversation_created_webhook", created_webhook)
+    monkeypatch.setattr(process_conversation, "trigger_conversation_apps", MagicMock())
+    monkeypatch.setattr(process_conversation, "_extract_memories", MagicMock())
+    monkeypatch.setattr(process_conversation, "save_structured_vector", MagicMock())
+    monkeypatch.setattr(process_conversation, "_save_action_items", MagicMock())
+    monkeypatch.setattr(process_conversation, "update_goal_progress", MagicMock())
+    monkeypatch.setattr(process_conversation.conversations_db, "update_conversation", MagicMock())
+
+    result = process_conversation.process_conversation(
+        "uid",
+        "en",
+        input_conversation,
+        trigger=process_conversation.ProcessingTrigger.MERGE,
+        **process_kwargs,
+    )
+    assert result is completed_conversation
+    return result, delivered
+
+
+def test_created_webhook_is_sent_during_processing_without_an_observer(monkeypatch):
+    result, delivered = _run_merge_created_webhook_flow(monkeypatch)
+
+    assert delivered == [("uid", result)]
+
+
+def test_created_webhook_observer_holds_the_webhook_until_the_caller_sends_it(monkeypatch):
+    """A merge can still delete its target after processing: a transfer conflict rolls
+    it back. Its created webhook must wait for the caller instead of going out here."""
+    held: list = []
+
+    result, delivered = _run_merge_created_webhook_flow(monkeypatch, created_webhook_observer=held.append)
+
+    assert delivered == []
+    assert len(held) == 1, "exactly one created-webhook send must be handed to the caller"
+    held[0]()
+    assert delivered == [("uid", result)]
+
+
+def _explicit_selection_flow_conversation():
+    completed = MagicMock()
+    completed.id = "conversation-explicit-selection"
+    completed.dict.return_value = {"id": "conversation-explicit-selection", "status": "completed"}
+    completed.structured = None  # skip analytics counting
+    completed.apps_results = []
+    completed.suggested_summarization_apps = []
+    completed.private_cloud_sync_enabled = False
+    completed.folder_id = "existing-folder"  # skip folder assignment
+    return completed
+
+
+def _run_explicit_selection_flow(monkeypatch, trigger_apps, update_calls, **process_kwargs):
+    """Drive process_conversation for an explicit app selection; appends each write to update_calls."""
+    input_conversation = MagicMock()
+    input_conversation.source = "omi"
+    input_conversation.get_person_ids.return_value = []
+    completed = _explicit_selection_flow_conversation()
+
+    monkeypatch.setattr(process_conversation, "_get_structured", lambda *args, **kwargs: (MagicMock(), False))
+    monkeypatch.setattr(process_conversation, "_get_conversation_obj", lambda *args, **kwargs: completed)
+    monkeypatch.setattr(
+        process_conversation.lifecycle_service, "persist_processed_conversation", MagicMock(return_value=True)
+    )
+    monkeypatch.setattr(process_conversation, "submit_with_context", MagicMock())
+    monkeypatch.setattr(process_conversation, "trigger_conversation_apps", trigger_apps)
+    monkeypatch.setattr(process_conversation, "_extract_memories", MagicMock())
+    monkeypatch.setattr(process_conversation, "_save_action_items", MagicMock())
+    monkeypatch.setattr(
+        process_conversation.conversations_db,
+        "update_conversation",
+        lambda uid, cid, updates: update_calls.append(updates),
+    )
+
+    return process_conversation.process_conversation(
+        "uid",
+        "en",
+        input_conversation,
+        trigger=process_conversation.ProcessingTrigger.USER_REPROCESS,
+        **{"app_id": "selected-app", "explicit_app": SimpleNamespace(id="selected-app"), **process_kwargs},
+    )
+
+
+def test_explicit_selection_success_persists_that_apps_result(monkeypatch):
+    """SCA-359: opt-in + explicit app_id persists the selected app's non-empty result."""
+
+    def _successful_trigger_apps(uid, conversation, **kwargs):
+        conversation.apps_results.append(process_conversation.AppResult(app_id='selected-app', content='APP SUMMARY'))
+
+    update_calls: list = []
+    result = _run_explicit_selection_flow(monkeypatch, _successful_trigger_apps, update_calls)
+
+    assert result.apps_results == [process_conversation.AppResult(app_id='selected-app', content='APP SUMMARY')]
+    assert {
+        'apps_results': [{'app_id': 'selected-app', 'content': 'APP SUMMARY'}],
+        'suggested_summarization_apps': [],
+    } in (update_calls)
+
+
+def test_explicit_selection_failure_surfaces_a_real_error_and_persists_as_today(monkeypatch):
+    """SCA-359 contract: reprocess with app_id returns the app's result or a real error.
+
+    Never a 200 whose payload quietly substitutes first-party notes for the selected
+    app's summary. The persist-as-today write-back still runs (the ed2ba41c5b opt-in
+    empty persist that clears a stale selection) so the failure contract changes the
+    response, not the durable shape."""
+
+    def _failing_trigger_apps(uid, conversation, **kwargs):
+        conversation.apps_results = []  # execution failed: nothing appended
+        raise process_conversation.ExplicitAppSelectionFailedError('selected-app produced no summary content')
+
+    update_calls: list = []
+    with pytest.raises(HTTPException) as exc_info:
+        _run_explicit_selection_flow(monkeypatch, _failing_trigger_apps, update_calls)
+
+    assert exc_info.value.status_code == 500
+    assert exc_info.value.detail == 'Error processing conversation, please try again later'
+    assert {'apps_results': [], 'suggested_summarization_apps': []} in update_calls
 
 
 def test_fresh_creation_uses_the_explicit_completed_lifecycle_owner(monkeypatch):
@@ -535,7 +695,23 @@ def test_fresh_creation_uses_the_explicit_completed_lifecycle_owner(monkeypatch)
     result = process_conversation.process_conversation('uid', 'en', new_request)
 
     assert result is completed_conversation
-    created.assert_called_once_with('uid', completed_conversation.dict(), idempotent=True)
+    # Imported here, not at module scope: sibling suites stub utils.conversations.
+    from utils.conversations.projection_payload import (
+        omit_null_processing_state,
+        strip_client_processing,
+    )
+
+    # The create path strips the untrusted client projection before persisting:
+    # a projection is display, so it must not reach a stored conversation payload.
+    # A null modeled processing_state is omitted too (flip-review F-1): persist is
+    # merge=True, so a dumped None is a real Firestore key.
+    created.assert_called_once_with(
+        'uid',
+        omit_null_processing_state(strip_client_processing(completed_conversation.dict())),
+        idempotent=True,
+    )
+    assert 'client_processing' not in created.call_args.args[1]
+    assert 'processing_state' not in created.call_args.args[1]
     persisted.assert_not_called()
 
 
@@ -564,46 +740,36 @@ def test_deferred_fresh_creation_uses_the_explicit_processing_lifecycle_owner(mo
     persisted.assert_not_called()
 
 
-def test_discard_call_uses_discard_feature_tracking():
-    """Verify should_discard_conversation is called within CONVERSATION_DISCARD context."""
-    import sys
+def test_deferred_desktop_filler_is_discarded_by_the_free_rules(monkeypatch):
+    """Free-tier desktop never reaches the model, but the rules still run."""
+    from models.transcript_segment import TranscriptSegment
 
-    captured = {}
+    new_request = CreateConversation(
+        started_at=datetime(2026, 7, 14, tzinfo=timezone.utc),
+        finished_at=datetime(2026, 7, 14, 0, 1, tzinfo=timezone.utc),
+        transcript_segments=[TranscriptSegment(text='Mm-hmm.', speaker='SPEAKER_00', is_user=False, start=0, end=1)],
+        source=ConversationSource.desktop,
+    )
+    deferred_conversation = MagicMock()
+    deferred_conversation.id = 'deferred-filler'
+    deferred_conversation.dict.return_value = {'id': 'deferred-filler', 'status': 'processing'}
+    created = MagicMock(return_value=True)
+    monkeypatch.setattr(process_conversation, '_build_deferred_structured', lambda *args: MagicMock())
+    monkeypatch.setattr(process_conversation, '_get_conversation_obj', lambda *args, **kwargs: deferred_conversation)
+    monkeypatch.setattr(process_conversation, '_calendar_overlap_retains_conversation', lambda *args: False)
+    monkeypatch.setattr(process_conversation.lifecycle_service, 'create_processing_conversation', created)
 
-    def fake_discard(*args, **kwargs):
-        captured["ctx"] = usage_tracker.get_current_context()
-        return False  # Don't discard
+    process_conversation._store_deferred_conversation('uid', new_request)
 
-    # Create a minimal conversation mock without external_data triggering CalendarMeetingContext
-    conversation = MagicMock()
-    conversation.source = "phone"
-    conversation.get_transcript.return_value = "short transcript"
-    conversation.photos = []
-    conversation.get_person_ids.return_value = []
-    conversation.external_data = None  # Prevent CalendarMeetingContext parsing
-    conversation.started_at = None
-    conversation.finished_at = None
+    payload = created.call_args.args[1]
+    assert payload['discarded'] is True
+    assert deferred_conversation.discarded is True
+    assert payload[process_conversation.RELEVANCE_DECISION_FIELD]['reason'] == 'filler_only'
 
-    # Mock notification_db
-    notifications_mod = sys.modules["database.notifications"]
-    notifications_mod.get_user_time_zone = MagicMock(return_value="UTC")
 
-    # Mock action_items_db
-    action_items_mod = sys.modules["database.action_items"]
-    action_items_mod.get_action_items = MagicMock(return_value=[])
-
-    # Patch on the process_conversation module (where it's imported/bound)
-    with patch.object(process_conversation, "should_discard_conversation", fake_discard), patch.object(
-        process_conversation, "get_transcript_structure", MagicMock()
-    ):
-        try:
-            process_conversation._get_structured("user-1", "en", conversation)
-        except Exception:
-            pass  # We only care about the context capture
-
-    assert captured.get("ctx") is not None
-    assert captured["ctx"].feature == usage_tracker.Features.CONVERSATION_DISCARD
-    assert captured["ctx"].uid == "user-1"
+def _segments_saying(text):
+    """Segments for a mocked conversation: the relevance rules read segment text."""
+    return [MagicMock(text=text, start=0.0, end=5.0)]
 
 
 def test_wake_word_marker_reaches_discard_adjudication_without_bypassing_it(monkeypatch):
@@ -624,7 +790,7 @@ def test_wake_word_marker_reaches_discard_adjudication_without_bypassing_it(monk
     )
     captured: dict[str, object] = {}
 
-    def fake_discard(transcript, photos, duration_seconds, *, trusted_wake_word_markers=False):
+    def fake_discard(transcript, photos, duration_seconds, *, trusted_wake_word_markers=False, **_kwargs: object):
         captured.update(
             transcript=transcript,
             photos=photos,
@@ -638,8 +804,8 @@ def test_wake_word_marker_reaches_discard_adjudication_without_bypassing_it(monk
         'conversation_transcripts_for_llm',
         lambda *_args, **_kwargs: (
             "Test User: Hey Omi, don't forget to send the budget.",
-            '[segment:wake-segment 0.000-5.000] '
-            "<omi-wake-word-invocation/> Test User: Hey Omi, don't forget to send the budget.",
+            "[wake-segment 0] <omi-wake-word-invocation/> Hey Omi, don't forget to send the budget.",
+            {0: 'Test User'},
         ),
     )
     monkeypatch.setattr(process_conversation, 'should_discard_conversation', fake_discard)
@@ -652,46 +818,6 @@ def test_wake_word_marker_reaches_discard_adjudication_without_bypassing_it(monk
     assert '<omi-wake-word-invocation/>' in captured['transcript']
     assert captured['trusted_wake_word_markers'] is True
     assert captured['duration_seconds'] == 5
-
-
-def test_primary_user_name_reaches_action_item_extraction(monkeypatch):
-    conversation = CreateConversation(
-        started_at=datetime(2026, 8, 20, tzinfo=timezone.utc),
-        finished_at=datetime(2026, 8, 20, 0, 0, 5, tzinfo=timezone.utc),
-        transcript_segments=[
-            TranscriptSegment(
-                id='user-request',
-                text='Send the budget.',
-                speaker='SPEAKER_00',
-                is_user=True,
-                start=0,
-                end=5,
-            )
-        ],
-        source=ConversationSource.phone,
-    )
-    structured = Structured(title='Budget', overview='Send the budget')
-    extract_mock = MagicMock(return_value=[])
-
-    monkeypatch.setattr(process_conversation, 'get_user_name', lambda *_args, **_kwargs: 'David')
-    monkeypatch.setattr(
-        process_conversation,
-        'conversation_transcripts_for_llm',
-        lambda *_args, **_kwargs: (
-            'David: Send the budget.',
-            '[segment:user-request 0.000-5.000] David: Send the budget.',
-        ),
-    )
-    monkeypatch.setattr(process_conversation, 'should_discard_conversation', lambda *_args, **_kwargs: False)
-    monkeypatch.setattr(process_conversation, 'get_transcript_structure', lambda *_args, **_kwargs: structured)
-    monkeypatch.setattr(process_conversation, 'extract_action_items', extract_mock)
-    monkeypatch.setattr(process_conversation, '_fetch_dedup_candidates', lambda *_args, **_kwargs: [])
-
-    result, discarded = process_conversation._get_structured('uid', 'en', conversation)
-
-    assert discarded is False
-    assert result is structured
-    assert extract_mock.call_args.kwargs['primary_user_name'] == 'David'
 
 
 def test_track_usage_context_resets_after_call():
@@ -717,146 +843,6 @@ def test_track_usage_context_resets_on_exception():
     assert usage_tracker.get_current_context() is None
 
 
-def test_byok_rate_limit_reaches_conversation_composition_as_safe_actionable_429(monkeypatch, caplog):
-    """The composition boundary must retain the gateway's typed BYOK outcome."""
-    sensitive_provider_body = 'provider-body-with-api-key-and-transcript'
-    conversation = MagicMock()
-    conversation.source = ConversationSource.phone
-    conversation.get_transcript.return_value = 'a conversation transcript'
-    conversation.photos = []
-    conversation.external_data = None
-    conversation.started_at = datetime(2026, 8, 4, tzinfo=timezone.utc)
-    conversation.finished_at = datetime(2026, 8, 4, 0, 1, tzinfo=timezone.utc)
-
-    monkeypatch.setattr(process_conversation, 'should_discard_conversation', MagicMock(return_value=False))
-    monkeypatch.setattr(
-        process_conversation,
-        'get_transcript_structure',
-        MagicMock(
-            side_effect=GatewayCredentialFailureError(
-                sensitive_provider_body,
-                failure_class=FailureClass.BYOK_RATE_LIMIT,
-            )
-        ),
-    )
-
-    with pytest.raises(HTTPException) as exc_info:
-        process_conversation._get_structured('uid', 'en', conversation)
-
-    assert exc_info.value.status_code == 429
-    assert exc_info.value.detail == {
-        'code': 'byok_rate_limit',
-        'message': 'The configured provider account is rate limited. Please retry later or check its limits.',
-    }
-    assert sensitive_provider_body not in str(exc_info.value.detail)
-    assert sensitive_provider_body not in caplog.text
-
-
-def test_unwrapped_openai_byok_rate_limit_reaches_conversation_composition(monkeypatch, caplog):
-    """The production SDK shape must preserve the actionable BYOK response."""
-    sensitive_provider_body = 'provider-body-with-api-key-and-transcript'
-    conversation = MagicMock()
-    conversation.source = ConversationSource.phone
-    conversation.get_transcript.return_value = 'a conversation transcript'
-    conversation.photos = []
-    conversation.external_data = None
-    conversation.started_at = datetime(2026, 8, 4, tzinfo=timezone.utc)
-    conversation.finished_at = datetime(2026, 8, 4, 0, 1, tzinfo=timezone.utc)
-
-    sdk_error = openai.RateLimitError(
-        sensitive_provider_body,
-        response=httpx.Response(429, request=httpx.Request('POST', 'http://gateway.test/v1/chat/completions')),
-        body={
-            'code': 'credential_failure',
-            'failure_class': 'byok_rate_limit',
-            'message': sensitive_provider_body,
-        },
-    )
-    monkeypatch.setattr(process_conversation, 'should_discard_conversation', MagicMock(return_value=False))
-    monkeypatch.setattr(process_conversation, 'get_transcript_structure', MagicMock(side_effect=sdk_error))
-
-    with pytest.raises(HTTPException) as exc_info:
-        process_conversation._get_structured('uid', 'en', conversation)
-
-    assert exc_info.value.status_code == 429
-    assert exc_info.value.detail == {
-        'code': 'byok_rate_limit',
-        'message': 'The configured provider account is rate limited. Please retry later or check its limits.',
-    }
-    assert sensitive_provider_body not in str(exc_info.value.detail)
-    assert sensitive_provider_body not in caplog.text
-
-
-@pytest.mark.parametrize(
-    'error',
-    [
-        GatewayCredentialFailureError('provider-body-with-api-key', failure_class=FailureClass.BYOK_QUOTA),
-        GatewayProviderFailureError('provider-body-with-transcript', failure_class=FailureClass.PROVIDER_429_OMI_PAID),
-    ],
-)
-def test_non_byok_rate_limit_failures_keep_generic_processing_error(monkeypatch, caplog, error):
-    conversation = MagicMock()
-    conversation.source = ConversationSource.phone
-    conversation.get_transcript.return_value = 'a conversation transcript'
-    conversation.photos = []
-    conversation.external_data = None
-    conversation.started_at = datetime(2026, 8, 4, tzinfo=timezone.utc)
-    conversation.finished_at = datetime(2026, 8, 4, 0, 1, tzinfo=timezone.utc)
-
-    monkeypatch.setattr(process_conversation, 'should_discard_conversation', MagicMock(return_value=False))
-    monkeypatch.setattr(process_conversation, 'get_transcript_structure', MagicMock(side_effect=error))
-
-    with pytest.raises(HTTPException) as exc_info:
-        process_conversation._get_structured('uid', 'en', conversation)
-
-    assert exc_info.value.status_code == 500
-    assert exc_info.value.detail == 'Error processing conversation, please try again later'
-    assert type(error).__name__ in caplog.text
-    assert str(error) not in caplog.text
-
-
-def test_byok_rate_limit_in_action_item_extraction_reaches_composition_boundary(monkeypatch):
-    """A BYOK rate-limit during action-item extraction must not be swallowed by extract_action_items's catch-all.
-
-    extract_action_items catches every exception and returns [] by default. A typed
-    BYOK rate-limit must escape so the composition boundary (_get_structured) maps
-    it to the actionable 429 contract instead of persisting an incomplete conversation.
-    """
-    conversation = MagicMock()
-    conversation.source = ConversationSource.phone
-    conversation.get_transcript.return_value = 'a conversation transcript'
-    conversation.photos = []
-    conversation.external_data = None
-    conversation.started_at = datetime(2026, 8, 4, tzinfo=timezone.utc)
-    conversation.finished_at = datetime(2026, 8, 4, 0, 1, tzinfo=timezone.utc)
-
-    monkeypatch.setattr(process_conversation, 'should_discard_conversation', MagicMock(return_value=False))
-    monkeypatch.setattr(
-        process_conversation,
-        'get_transcript_structure',
-        MagicMock(return_value=Structured(emoji='🧠', title='Test', overview='Overview', action_items=[])),
-    )
-    monkeypatch.setattr(
-        process_conversation,
-        'extract_action_items',
-        MagicMock(
-            side_effect=GatewayCredentialFailureError(
-                'rate limited',
-                failure_class=FailureClass.BYOK_RATE_LIMIT,
-            )
-        ),
-    )
-
-    with pytest.raises(HTTPException) as exc_info:
-        process_conversation._get_structured('uid', 'en', conversation)
-
-    assert exc_info.value.status_code == 429
-    assert exc_info.value.detail == {
-        'code': 'byok_rate_limit',
-        'message': 'The configured provider account is rate limited. Please retry later or check its limits.',
-    }
-
-
 def test_no_umbrella_conversation_processing_tracking():
     """Verify _get_structured no longer wraps everything in CONVERSATION_PROCESSING."""
     import sys
@@ -875,6 +861,7 @@ def test_no_umbrella_conversation_processing_tracking():
     conversation = MagicMock()
     conversation.source = "phone"
     conversation.get_transcript.return_value = "short transcript"
+    conversation.transcript_segments = _segments_saying("short transcript")
     conversation.photos = []
     conversation.get_person_ids.return_value = []
     conversation.external_data = None
@@ -888,7 +875,6 @@ def test_no_umbrella_conversation_processing_tracking():
     action_items_mod.get_action_items = MagicMock(return_value=[])
 
     llm_conv.should_discard_conversation = MagicMock(return_value=False)
-    llm_conv.get_transcript_structure = MagicMock()
 
     with patch.object(process_conversation, "track_usage", spy_track_usage):
         try:
@@ -905,157 +891,13 @@ def test_no_umbrella_conversation_processing_tracking():
     )
 
 
-def test_action_items_tracked_separately_from_structure():
-    """Verify action items extraction uses CONVERSATION_ACTION_ITEMS, not CONVERSATION_STRUCTURE."""
-    import sys
-
-    captured_contexts = []
-
-    original_track = process_conversation.track_usage
-
-    @contextmanager
-    def spy_track_usage(uid, feature):
-        captured_contexts.append(feature)
-        with original_track(uid, feature):
-            yield
-
-    conversation = MagicMock()
-    conversation.source = "phone"
-    conversation.get_transcript.return_value = "short transcript"
-    conversation.photos = []
-    conversation.get_person_ids.return_value = []
-    conversation.external_data = None
-    conversation.started_at = None
-    conversation.finished_at = None
-
-    notifications_mod = sys.modules["database.notifications"]
-    notifications_mod.get_user_time_zone = MagicMock(return_value="UTC")
-
-    action_items_mod = sys.modules["database.action_items"]
-    action_items_mod.get_action_items = MagicMock(return_value=[])
-
-    with patch.object(process_conversation, "should_discard_conversation", MagicMock(return_value=False)), patch.object(
-        process_conversation, "get_transcript_structure", MagicMock()
-    ), patch.object(process_conversation, "extract_action_items", MagicMock(return_value=[])), patch.object(
-        process_conversation, "track_usage", spy_track_usage
-    ):
-        try:
-            process_conversation._get_structured("user-3", "en", conversation)
-        except Exception:
-            pass
-
-    assert usage_tracker.Features.CONVERSATION_ACTION_ITEMS in captured_contexts
-    # Action items should be tracked separately from structure
-    assert captured_contexts.count(usage_tracker.Features.CONVERSATION_ACTION_ITEMS) >= 1
-    # Structure should also be tracked
-    assert usage_tracker.Features.CONVERSATION_STRUCTURE in captured_contexts
-
-
-def test_structure_and_apps_tracked_at_runtime():
-    """Verify conv_structure and conv_apps tracking at runtime call sites."""
-    import sys
-
-    captured_contexts = []
-
-    original_track = process_conversation.track_usage
-
-    @contextmanager
-    def spy_track_usage(uid, feature):
-        captured_contexts.append(feature)
-        with original_track(uid, feature):
-            yield
-
-    conversation = MagicMock()
-    conversation.source = "phone"
-    conversation.get_transcript.return_value = "a transcript with enough words to not be discarded easily"
-    conversation.photos = []
-    conversation.get_person_ids.return_value = []
-    conversation.external_data = None
-    conversation.started_at = None
-    conversation.finished_at = None
-    conversation.structured = MagicMock()
-    conversation.structured.title = "Test"
-    conversation.structured.overview = "Test overview"
-    conversation.structured.category = MagicMock()
-    conversation.structured.category.value = "other"
-    conversation.structured.action_items = []
-    conversation.structured.events = []
-    conversation.apps_results = []
-    conversation.discarded = False
-    conversation.id = "test-conv-id"
-    conversation.folder_id = None
-    conversation.suggested_summarization_apps = ["app1"]
-    conversation.is_locked = False
-
-    notifications_mod = sys.modules["database.notifications"]
-    notifications_mod.get_user_time_zone = MagicMock(return_value="UTC")
-
-    action_items_mod = sys.modules["database.action_items"]
-    action_items_mod.get_action_items = MagicMock(return_value=[])
-
-    folders_mod = sys.modules["database.folders"]
-    folders_mod.get_folders = MagicMock(return_value=[{"id": "f1", "name": "Default", "is_default": True}])
-
-    redis_mod = sys.modules["database.redis_db"]
-    redis_mod.get_user_preferred_app = MagicMock(return_value=None)
-    redis_mod.get_conversation_summary_app_ids = MagicMock(return_value=[])
-
-    with patch.object(process_conversation, "should_discard_conversation", MagicMock(return_value=False)), patch.object(
-        process_conversation, "get_transcript_structure", MagicMock()
-    ), patch.object(process_conversation, "extract_action_items", MagicMock(return_value=[])), patch.object(
-        process_conversation, "assign_conversation_to_folder", MagicMock(return_value=("f1", 0.9, "match"))
-    ), patch.object(
-        process_conversation, "track_usage", spy_track_usage
-    ):
-        try:
-            process_conversation._get_structured("user-4", "en", conversation)
-        except Exception:
-            pass
-
-    # Both structure and folder tracking should fire
-    assert usage_tracker.Features.CONVERSATION_STRUCTURE in captured_contexts
-    assert usage_tracker.Features.CONVERSATION_DISCARD in captured_contexts
-
-
-def test_action_items_skipped_on_discard():
-    """Verify extract_action_items is NOT called when conversation is discarded."""
-    import sys
-
-    conversation = MagicMock()
-    conversation.source = "phone"
-    conversation.get_transcript.return_value = "short"
-    conversation.photos = []
-    conversation.get_person_ids.return_value = []
-    conversation.external_data = None
-    conversation.started_at = None
-    conversation.finished_at = None
-
-    notifications_mod = sys.modules["database.notifications"]
-    notifications_mod.get_user_time_zone = MagicMock(return_value="UTC")
-
-    action_items_mod = sys.modules["database.action_items"]
-    action_items_mod.get_action_items = MagicMock(return_value=[])
-
-    extract_mock = MagicMock(return_value=[])
-
-    with patch.object(process_conversation, "should_discard_conversation", MagicMock(return_value=True)), patch.object(
-        process_conversation, "extract_action_items", extract_mock
-    ):
-        structured, discarded = process_conversation._get_structured("user-5", "en", conversation)
-
-    assert discarded is True
-    # extract_action_items should NOT have been called
-    extract_mock.assert_not_called()
-
-
 def test_conversation_action_items_never_fall_back_to_a_task_writer(monkeypatch):
-    """I1: conversation extraction proposes Candidates and writes nothing else.
+    """A proposing surface stays proposing when its capture path is unavailable.
 
-    The old contract (legacy batch writer on postprocess_executor) died with the
-    writer. The contract that replaces it: even when the canonical capture path
-    reports itself unavailable (``process_conversation_before_legacy`` -> False,
-    e.g. rollout control unreadable), `_save_action_items` must NOT fall back to
-    writing action items — the previous bugs were all in exactly this fallback.
+    Desktop conversations propose Candidates. Even when the canonical capture
+    path reports itself unavailable (``process_conversation_before_legacy`` ->
+    False, e.g. rollout control unreadable), `_save_action_items` must NOT fall
+    back to writing action items — the previous bugs were all in that fallback.
     """
     action_item = MagicMock()
     action_item.description = 'Send the forecast'
@@ -1068,6 +910,7 @@ def test_conversation_action_items_never_fall_back_to_a_task_writer(monkeypatch)
     conversation = MagicMock()
     conversation.id = 'conversation-1'
     conversation.is_locked = False
+    conversation.source = ConversationSource.desktop
     conversation.transcript_segments = []
     conversation.structured.action_items = [action_item]
 
@@ -1088,93 +931,6 @@ def test_conversation_action_items_never_fall_back_to_a_task_writer(monkeypatch)
     process_conversation._save_action_items('user-1', conversation)
 
     assert emitted and emitted[0]['properties']['persistence_path'] == 'canonical_candidate'
-
-
-def test_llm_calls_use_omi_qos_tier_system():
-    """Verify all LLM functions use get_llm() with correct feature keys and cache_key param."""
-    conv_proc_path = Path(__file__).resolve().parent.parent.parent / "utils" / "llm" / "conversation_processing.py"
-    conv_proc_source = conv_proc_path.read_text(encoding="utf-8")
-
-    # get_transcript_structure should use the conv_structure QoS lane.
-    struct_match = re.search(
-        r'def get_transcript_structure.*?get_llm\(\s*[\'"](\w+)[\'"]\s*,\s*cache_key=',
-        conv_proc_source,
-        re.DOTALL,
-    )
-    assert struct_match is not None
-    assert (
-        struct_match.group(1) == "conv_structure"
-    ), f"Expected get_llm('conv_structure') for structure, got {struct_match.group(1)}"
-
-    # get_app_result should use the conv_app_result QoS lane.
-    app_match = re.search(
-        r'def get_app_result.*?get_llm\(\s*[\'"](\w+)[\'"]\s*,\s*cache_key=',
-        conv_proc_source,
-        re.DOTALL,
-    )
-    assert app_match is not None
-    assert (
-        app_match.group(1) == "conv_app_result"
-    ), f"Expected get_llm('conv_app_result') for app result, got {app_match.group(1)}"
-
-    # extract_action_items should use the conv_action_items QoS lane.
-    action_match = re.search(
-        r'def extract_action_items.*?get_llm\(\s*[\'"](\w+)[\'"]\s*,\s*cache_key=',
-        conv_proc_source,
-        re.DOTALL,
-    )
-    assert action_match is not None
-    assert (
-        action_match.group(1) == "conv_action_items"
-    ), f"Expected get_llm('conv_action_items') for action items, got {action_match.group(1)}"
-
-    # Verify cache keys are passed through get_llm's cache_key param (model-safe)
-    assert 'ACTION_ITEMS_CACHE_KEY' in conv_proc_source, "Missing stable cache key for action items"
-    assert 'TRANSCRIPT_STRUCTURE_CACHE_KEY' in conv_proc_source, "Missing stable cache key for structure"
-    assert "else 'omi-app-result'" in conv_proc_source, "Missing cache_key for app result"
-    assert "cache_key='omi-daily-summary'" in conv_proc_source, "Missing cache_key for daily summary"
-
-
-def test_all_callsites_use_get_llm():
-    """Verify ALL callsites across conversation_processing, knowledge_graph, and memories use get_llm()."""
-    backend_dir = Path(__file__).resolve().parent.parent.parent
-
-    # conversation_processing.py: 9 callsites
-    conv_proc_source = (backend_dir / "utils" / "llm" / "conversation_processing.py").read_text(encoding="utf-8")
-    conv_proc_calls = re.findall(r"get_llm\(\s*'(\w+)'", conv_proc_source)
-    assert 'conv_action_items' in conv_proc_calls, "Missing get_llm('conv_action_items') in conversation_processing.py"
-    assert 'conv_app_result' in conv_proc_calls, "Missing get_llm('conv_app_result') in conversation_processing.py"
-    assert 'conv_app_select' in conv_proc_calls, "Missing get_llm('conv_app_select') in conversation_processing.py"
-    assert 'conv_folder' in conv_proc_calls, "Missing get_llm('conv_folder') in conversation_processing.py"
-    assert 'conv_discard' in conv_proc_calls, "Missing get_llm('conv_discard') in conversation_processing.py"
-    assert 'daily_summary' in conv_proc_calls, "Missing get_llm('daily_summary') in conversation_processing.py"
-    # conv_structure appears in both get_transcript_structure and get_reprocess_transcript_structure
-    assert (
-        conv_proc_calls.count('conv_structure') >= 2
-    ), f"Expected at least 2 get_llm('conv_structure') calls (structure + reprocess), got {conv_proc_calls.count('conv_structure')}"
-
-    # knowledge_graph.py: 2 callsites
-    kg_source = (backend_dir / "utils" / "llm" / "knowledge_graph.py").read_text(encoding="utf-8")
-    kg_calls = re.findall(r"get_llm\(\s*'(\w+)'", kg_source)
-    assert (
-        kg_calls.count('knowledge_graph') == 2
-    ), f"Expected 2 get_llm('knowledge_graph') calls, got {kg_calls.count('knowledge_graph')}"
-
-    # memories.py: 6 callsites (memories x3 incl. the memory-log extract SSOT, learnings x1,
-    # memory_category x1, memory_conflict x1)
-    mem_source = (backend_dir / "utils" / "llm" / "memories.py").read_text(encoding="utf-8")
-    mem_calls = re.findall(r"get_llm\(\s*'(\w+)'", mem_source)
-    assert mem_calls.count('memories') == 3, f"Expected 3 get_llm('memories') calls, got {mem_calls.count('memories')}"
-    assert 'learnings' in mem_calls, "Missing get_llm('learnings') in memories.py"
-    assert 'memory_category' in mem_calls, "Missing get_llm('memory_category') in memories.py"
-    assert 'memory_conflict' in mem_calls, "Missing get_llm('memory_conflict') in memories.py"
-
-    # Total: 11 + 2 + 6 = 19 callsites (notes v2 adds the merged note call). This was 18 while the
-    # pattern above required the feature key on the same line as `get_llm(`: one already-wrapped
-    # conv_app_result callsite was invisible to it, so the count was calibrated against a scan that
-    # silently skipped wrapped calls.
-    total = len(conv_proc_calls) + len(kg_calls) + len(mem_calls)
-    assert total == 19, f"Expected 19 total get_llm() callsites, got {total}"
 
 
 def test_no_direct_llm_instance_usage_in_wired_files():
@@ -1224,12 +980,12 @@ def test_threaded_tracking_context_isolation():
 
 
 # ---------------------------------------------------------------------------
-# Tests for _trigger_apps preferred-app shortcut (PR #4683, issue #4639)
+# Tests for trigger_conversation_apps preferred-app shortcut (PR #4683, issue #4639)
 # ---------------------------------------------------------------------------
 
 
 def _make_mock_app(app_id, name="TestApp"):
-    """Create a minimal App-like mock for _trigger_apps tests."""
+    """Create a minimal App-like mock for trigger_conversation_apps tests."""
     app = MagicMock()
     app.id = app_id
     app.name = name
@@ -1239,7 +995,7 @@ def _make_mock_app(app_id, name="TestApp"):
 
 
 def _setup_trigger_apps_mocks(preferred_app_id=None, default_apps=None, available_apps=None):
-    """Set up the module-level mocks needed by _trigger_apps."""
+    """Set up the module-level mocks needed by trigger_conversation_apps."""
     import sys
 
     redis_mod = sys.modules["database.redis_db"]
@@ -1259,7 +1015,7 @@ def _setup_trigger_apps_mocks(preferred_app_id=None, default_apps=None, availabl
 
 
 def _make_trigger_conversation(suggested_apps=None):
-    """Create a minimal conversation mock for _trigger_apps tests."""
+    """Create a minimal conversation mock for trigger_conversation_apps tests."""
     conv = MagicMock()
     conv.id = "conv-trigger-test"
     conv.get_transcript.return_value = "Speaker 0: Hello"
@@ -1270,7 +1026,7 @@ def _make_trigger_conversation(suggested_apps=None):
 
 
 def _trigger_apps_context(default_apps=None, availability_app=None):
-    """Context manager that patches all external dependencies of _trigger_apps.
+    """Context manager that patches all external dependencies of trigger_conversation_apps.
 
     `availability_app` stands in for `get_available_app_model_by_id` — the
     set-preferred route's availability authority (#10074): None models a
@@ -1303,7 +1059,7 @@ def test_trigger_apps_uses_preferred_app_skips_llm_suggestion():
     p2 = patch.object(process_conversation, "get_available_apps", return_value=[preferred])
 
     with p1, p2, p3, p4, p5, p6:
-        process_conversation._trigger_apps("user-preferred", conv)
+        process_conversation.trigger_conversation_apps("user-preferred", conv)
 
     # The suggestion LLM call must NOT have been invoked
     suggestion_mock.assert_not_called()
@@ -1313,49 +1069,18 @@ def test_trigger_apps_uses_preferred_app_skips_llm_suggestion():
     assert len(conv.apps_results) == 1
 
 
-def test_trigger_apps_stale_preferred_app_falls_through_to_suggestion():
-    """When preferred app ID exists in Redis but not in apps dict, fall through to LLM suggestion."""
-    suggestion_app = _make_mock_app("suggested-app", "SuggestedApp")
-    _setup_trigger_apps_mocks(preferred_app_id="deleted-app-999")
-    conv = _make_trigger_conversation()
-
-    suggestion_mock, app_result_mock, p1, p2, p3, p4, p5, p6 = _trigger_apps_context(default_apps=[suggestion_app])
-
-    with p1, p2, p3, p4, p5, p6:
-        process_conversation._trigger_apps("user-stale", conv)
-
-    # The suggestion LLM call SHOULD have been invoked since preferred app was invalid
-    suggestion_mock.assert_called_once()
-
-
-def test_trigger_apps_no_preferred_app_runs_suggestion():
-    """When no preferred app is set, the suggestion LLM call should run."""
-    suggestion_app = _make_mock_app("suggested-app", "SuggestedApp")
-    _setup_trigger_apps_mocks(preferred_app_id=None)
-    conv = _make_trigger_conversation()
-
-    suggestion_mock, app_result_mock, p1, p2, p3, p4, p5, p6 = _trigger_apps_context(default_apps=[suggestion_app])
-
-    with p1, p2, p3, p4, p5, p6:
-        process_conversation._trigger_apps("user-no-pref", conv)
-
-    # The suggestion LLM call SHOULD have been invoked
-    suggestion_mock.assert_called_once()
-
-
 def test_trigger_apps_opt_in_only_skips_default_and_suggestion(monkeypatch):
     """Notes v2 leaves the canonical note as the only default summary path.
 
     Apps-opt-in is derived from the pipeline mode, not separately configured, so this drives
     the one rollout switch rather than a second boolean."""
-    monkeypatch.setenv('CONVERSATION_NOTES_V2_ENABLED', 'true')
     suggestion_app = _make_mock_app('suggested-app', 'SuggestedApp')
     _setup_trigger_apps_mocks(preferred_app_id=None)
     conv = _make_trigger_conversation()
 
     suggestion_mock, app_result_mock, p1, p2, p3, p4, p5, p6 = _trigger_apps_context(default_apps=[suggestion_app])
     with p1, p2, p3, p4, p5, p6:
-        process_conversation._trigger_apps('user-opt-in-only', conv)
+        process_conversation.trigger_conversation_apps('user-opt-in-only', conv)
 
     suggestion_mock.assert_not_called()
     app_result_mock.assert_not_called()
@@ -1363,14 +1088,13 @@ def test_trigger_apps_opt_in_only_skips_default_and_suggestion(monkeypatch):
 
 
 def test_trigger_apps_counts_a_successful_explicit_reprocess_selection(monkeypatch):
-    monkeypatch.setenv('CONVERSATION_NOTES_V2_ENABLED', 'true')
     selected = _make_mock_app('selected-app', 'SelectedApp')
     _setup_trigger_apps_mocks(preferred_app_id=None)
     conv = _make_trigger_conversation()
 
     suggestion_mock, app_result_mock, p1, p2, p3, p4, p5, p6 = _trigger_apps_context()
     with p1, p2, p3, p4, p5 as record_usage, p6:
-        process_conversation._trigger_apps(
+        process_conversation.trigger_conversation_apps(
             'user-explicit',
             conv,
             is_reprocess=True,
@@ -1398,7 +1122,7 @@ def test_trigger_apps_does_not_count_non_user_reprocessing(is_reprocess):
     suggestion_mock, app_result_mock, p1, p2, p3, p4, p5, p6 = _trigger_apps_context()
     p2 = patch.object(process_conversation, 'get_available_apps', return_value=[preferred])
     with p1, p2, p3, p4, p5 as record_usage, p6:
-        process_conversation._trigger_apps(
+        process_conversation.trigger_conversation_apps(
             'user-non-selection',
             conv,
             is_reprocess=is_reprocess,
@@ -1410,26 +1134,339 @@ def test_trigger_apps_does_not_count_non_user_reprocessing(is_reprocess):
     record_usage.assert_not_called()
 
 
-def test_summary_pipeline_mode_cannot_reach_the_regressing_combination(monkeypatch):
-    """Legacy notes must never be paired with opt-in apps.
+def test_trigger_apps_opt_in_preferred_app_still_auto_runs(monkeypatch):
+    """SCA-359: under notes v2 the Redis preferred app remains the one automatic app run."""
+    preferred = _make_mock_app('preferred-app', 'PreferredApp')
+    _setup_trigger_apps_mocks(preferred_app_id='preferred-app', available_apps=[preferred])
+    conv = _make_trigger_conversation()
 
-    That pair takes the app summary away and falls back to the short legacy overview — worse
-    than either whole configuration. Deriving both from one switch makes it unrepresentable.
-    """
-    monkeypatch.delenv('CONVERSATION_NOTES_V2_ENABLED', raising=False)
-    assert process_conversation.summary_pipeline_mode() is process_conversation.SummaryPipelineMode.LEGACY_APP_PRIMARY
-    assert process_conversation._conversation_apps_opt_in_only() is False
-    assert process_conversation._conversation_notes_v2_enabled() is False
+    suggestion_mock, app_result_mock, p1, p2, p3, p4, p5, p6 = _trigger_apps_context()
+    p2 = patch.object(process_conversation, 'get_available_apps', return_value=[preferred])
+    with p1, p2, p3, p4, p5, p6:
+        process_conversation.trigger_conversation_apps('user-preferred-opt-in', conv)
 
-    monkeypatch.setenv('CONVERSATION_NOTES_V2_ENABLED', 'true')
-    assert process_conversation.summary_pipeline_mode() is process_conversation.SummaryPipelineMode.NOTES_V2_APPS_OPT_IN
-    assert process_conversation._conversation_apps_opt_in_only() is True
-    assert process_conversation._conversation_notes_v2_enabled() is True
+    suggestion_mock.assert_not_called()
+    app_result_mock.assert_called_once()
+    assert len(conv.apps_results) == 1
 
-    # A stale standalone override must not resurrect the fourth state.
-    monkeypatch.delenv('CONVERSATION_NOTES_V2_ENABLED', raising=False)
-    monkeypatch.setenv('CONVERSATION_APPS_OPT_IN_ONLY', 'true')
-    assert process_conversation._conversation_apps_opt_in_only() is False
+
+def test_trigger_apps_explicit_selection_execution_failure_is_fail_closed(monkeypatch):
+    """SCA-359: an explicitly selected app whose execution fails must not read as success."""
+    selected = _make_mock_app('selected-app', 'SelectedApp')
+    _setup_trigger_apps_mocks(preferred_app_id=None)
+    conv = _make_trigger_conversation()
+
+    suggestion_mock, app_result_mock, p1, p2, p3, p4, p5, p6 = _trigger_apps_context()
+    app_result_mock.side_effect = RuntimeError('LLM unavailable')
+    with p1, p2, p3, p4, p5, p6:
+        with pytest.raises(process_conversation.ExplicitAppSelectionFailedError):
+            process_conversation.trigger_conversation_apps(
+                'user-explicit',
+                conv,
+                is_reprocess=True,
+                app_id=selected.id,
+                explicit_app=selected,
+                usage_attribution=process_conversation.AppUsageAttribution.EXPLICIT_SELECTION,
+            )
+
+    suggestion_mock.assert_not_called()
+    assert conv.apps_results == []
+
+
+def test_trigger_apps_explicit_selection_empty_content_is_fail_closed(monkeypatch):
+    """SCA-359: empty model output is a failed selection, not a silent notes fallback."""
+    selected = _make_mock_app('selected-app', 'SelectedApp')
+    _setup_trigger_apps_mocks(preferred_app_id=None)
+    conv = _make_trigger_conversation()
+
+    suggestion_mock, app_result_mock, p1, p2, p3, p4, p5, p6 = _trigger_apps_context()
+    app_result_mock.return_value = '   '
+    with p1, p2, p3, p4, p5, p6:
+        with pytest.raises(process_conversation.ExplicitAppSelectionFailedError):
+            process_conversation.trigger_conversation_apps(
+                'user-explicit',
+                conv,
+                is_reprocess=True,
+                app_id=selected.id,
+                explicit_app=selected,
+                usage_attribution=process_conversation.AppUsageAttribution.EXPLICIT_SELECTION,
+            )
+
+    # Persist-as-today shape: the whitespace result is still appended for the
+    # write-back; the failure contract is about the response, not the persist.
+    assert [(r.app_id, r.content) for r in conv.apps_results] == [('selected-app', '')]
+
+
+# ---------------------------------------------------------------------------
+# User-reprocess result contract (CONVERSATION_REPROCESS_RESULT_CONTRACT_ENABLED):
+# replace only the selected app's result, keep the others behind it.
+# ---------------------------------------------------------------------------
+
+
+def _prior_results():
+    return [
+        process_conversation.AppResult(app_id='other-app', content='OTHER TEMPLATE'),
+        process_conversation.AppResult(app_id='selected-app', content='OLD SELECTED'),
+    ]
+
+
+def _run_explicit_replace(conv, selected):
+    process_conversation.trigger_conversation_apps(
+        'user-explicit',
+        conv,
+        is_reprocess=True,
+        app_id=selected.id,
+        explicit_app=selected,
+        usage_attribution=process_conversation.AppUsageAttribution.EXPLICIT_SELECTION,
+        replace_selected_result=True,
+    )
+
+
+def test_replace_mode_keeps_other_apps_and_puts_the_selected_result_first():
+    """Released clients display the first non-empty result, so the fresh selection leads."""
+    selected = _make_mock_app('selected-app', 'SelectedApp')
+    _setup_trigger_apps_mocks(preferred_app_id=None)
+    conv = _make_trigger_conversation()
+    conv.apps_results = _prior_results()
+
+    _suggestion, app_result_mock, p1, p2, p3, p4, p5, p6 = _trigger_apps_context()
+    with p1, p2, p3, p4, p5, p6:
+        _run_explicit_replace(conv, selected)
+
+    app_result_mock.assert_called_once()
+    assert [(r.app_id, r.content) for r in conv.apps_results] == [
+        ('selected-app', 'App result content'),
+        ('other-app', 'OTHER TEMPLATE'),
+    ]
+
+
+def test_legacy_mode_still_wipes_other_apps_results():
+    selected = _make_mock_app('selected-app', 'SelectedApp')
+    _setup_trigger_apps_mocks(preferred_app_id=None)
+    conv = _make_trigger_conversation()
+    conv.apps_results = _prior_results()
+
+    _suggestion, _app_result, p1, p2, p3, p4, p5, p6 = _trigger_apps_context()
+    with p1, p2, p3, p4, p5, p6:
+        process_conversation.trigger_conversation_apps(
+            'user-explicit',
+            conv,
+            is_reprocess=True,
+            app_id=selected.id,
+            explicit_app=selected,
+            usage_attribution=process_conversation.AppUsageAttribution.EXPLICIT_SELECTION,
+        )
+
+    assert [(r.app_id, r.content) for r in conv.apps_results] == [('selected-app', 'App result content')]
+
+
+@pytest.mark.parametrize('failure', ['raises', 'empty'])
+def test_replace_mode_failure_keeps_every_prior_result_and_fails_closed(failure):
+    """A failed or empty run must not count the stale result as success nor evict it."""
+    selected = _make_mock_app('selected-app', 'SelectedApp')
+    _setup_trigger_apps_mocks(preferred_app_id=None)
+    conv = _make_trigger_conversation()
+    conv.apps_results = _prior_results()
+
+    _suggestion, app_result_mock, p1, p2, p3, p4, p5, p6 = _trigger_apps_context()
+    if failure == 'raises':
+        app_result_mock.side_effect = RuntimeError('LLM unavailable')
+    else:
+        app_result_mock.return_value = '   '
+    with p1, p2, p3, p4, p5, p6:
+        with pytest.raises(process_conversation.ExplicitAppSelectionFailedError):
+            _run_explicit_replace(conv, selected)
+
+    assert conv.apps_results == _prior_results()
+
+
+def test_replace_mode_without_any_app_clears_results_so_the_omi_summary_shows():
+    """A plain regenerate asked for the Omi summary; a kept template would shadow it."""
+    _setup_trigger_apps_mocks(preferred_app_id=None)
+    conv = _make_trigger_conversation()
+    conv.apps_results = _prior_results()
+
+    _suggestion, app_result_mock, p1, p2, p3, p4, p5, p6 = _trigger_apps_context()
+    with p1, p2, p3, p4, p5, p6:
+        process_conversation.trigger_conversation_apps(
+            'user-plain', conv, is_reprocess=True, replace_selected_result=True
+        )
+
+    app_result_mock.assert_not_called()
+    assert conv.apps_results == []
+
+
+def test_replace_mode_preferred_app_leads_and_keeps_other_results():
+    preferred = _make_mock_app('preferred-app', 'PreferredApp')
+    _setup_trigger_apps_mocks(preferred_app_id='preferred-app', available_apps=[preferred])
+    conv = _make_trigger_conversation()
+    conv.apps_results = [
+        process_conversation.AppResult(app_id='other-app', content='OTHER TEMPLATE'),
+        process_conversation.AppResult(app_id='preferred-app', content='OLD PREFERRED'),
+    ]
+
+    _suggestion, _app_result, p1, p2, p3, p4, p5, p6 = _trigger_apps_context()
+    p2 = patch.object(process_conversation, 'get_available_apps', return_value=[preferred])
+    with p1, p2, p3, p4, p5, p6:
+        process_conversation.trigger_conversation_apps(
+            'user-preferred', conv, is_reprocess=True, replace_selected_result=True
+        )
+
+    assert [(r.app_id, r.content) for r in conv.apps_results] == [
+        ('preferred-app', 'App result content'),
+        ('other-app', 'OTHER TEMPLATE'),
+    ]
+
+
+@pytest.mark.parametrize('enabled', [False, True], ids=['flag-off', 'flag-on'])
+def test_user_reprocess_passes_the_result_contract_and_maps_app_failure(monkeypatch, enabled):
+    if enabled:
+        monkeypatch.setenv('CONVERSATION_REPROCESS_RESULT_CONTRACT_ENABLED', 'true')
+    else:
+        monkeypatch.delenv('CONVERSATION_REPROCESS_RESULT_CONTRACT_ENABLED', raising=False)
+    seen_kwargs: list = []
+
+    def _failing_trigger_apps(uid, conversation, **kwargs):
+        seen_kwargs.append(kwargs)
+        raise process_conversation.ExplicitAppSelectionFailedError('selected-app produced no summary content')
+
+    with pytest.raises(HTTPException) as exc_info:
+        _run_explicit_selection_flow(monkeypatch, _failing_trigger_apps, [])
+
+    # Keep-until-replaced is the default for every user reprocess; the flag
+    # selects only the error code.
+    assert seen_kwargs[0]['replace_selected_result'] is True
+    if enabled:
+        assert exc_info.value.status_code == 502
+        assert exc_info.value.detail['code'] == 'app_result_failed'
+    else:
+        assert exc_info.value.status_code == 500
+
+
+def test_first_party_only_never_runs_or_reads_the_preferred_app():
+    """summary-v2 F3: "Summarize with Omi" must not run the Redis preferred template."""
+    import sys
+
+    preferred = _make_mock_app('preferred-app', 'PreferredApp')
+    _setup_trigger_apps_mocks(preferred_app_id='preferred-app', available_apps=[preferred])
+    conv = _make_trigger_conversation()
+    conv.apps_results = _prior_results()
+
+    suggestion_mock, app_result_mock, p1, p2, p3, p4, p5, p6 = _trigger_apps_context()
+    p2 = patch.object(process_conversation, 'get_available_apps', return_value=[preferred])
+    with p1, p2, p3, p4, p5, p6:
+        process_conversation.trigger_conversation_apps(
+            'user-omi', conv, is_reprocess=True, replace_selected_result=True, first_party_only=True
+        )
+
+    app_result_mock.assert_not_called()
+    suggestion_mock.assert_not_called()
+    sys.modules["database.redis_db"].get_user_preferred_app.assert_not_called()
+    # Omi becomes the canonical summary for released clients (first non-empty app result wins).
+    assert conv.apps_results == []
+
+
+def test_first_party_only_rejects_an_explicit_app():
+    selected = _make_mock_app('selected-app', 'SelectedApp')
+    _setup_trigger_apps_mocks(preferred_app_id=None)
+    conv = _make_trigger_conversation()
+    _suggestion, _app_result, p1, p2, p3, p4, p5, p6 = _trigger_apps_context()
+    with p1, p2, p3, p4, p5, p6:
+        with pytest.raises(ValueError):
+            process_conversation.trigger_conversation_apps(
+                'user-omi', conv, app_id=selected.id, explicit_app=selected, first_party_only=True
+            )
+
+
+def test_user_reprocess_forwards_first_party_only(monkeypatch):
+    seen_kwargs: list = []
+
+    def _trigger(uid, conversation, **kwargs):
+        seen_kwargs.append(kwargs)
+
+    _run_explicit_selection_flow(monkeypatch, _trigger, [], app_id=None, explicit_app=None, first_party_only=True)
+
+    assert seen_kwargs[0]['first_party_only'] is True
+    assert seen_kwargs[0]['replace_selected_result'] is True
+
+
+def _goal_submissions():
+    return [
+        call
+        for call in process_conversation.submit_with_context.call_args_list
+        if process_conversation.update_goal_progress in call.args
+    ]
+
+
+def _successful_selected_app(uid, conversation, **kwargs):
+    conversation.apps_results.append(process_conversation.AppResult(app_id='selected-app', content='APP SUMMARY'))
+
+
+def _unchanged_digest():
+    # The flow's completed conversation is a MagicMock whose transcript iterates empty.
+    return process_conversation.derived_effects_transcript_digest([])
+
+
+def test_template_only_reprocess_keeps_memories_tasks_and_goals(monkeypatch):
+    """summary-v2 F4: another template on an unchanged transcript re-derives nothing."""
+    update_calls: list = []
+    _run_explicit_selection_flow(
+        monkeypatch,
+        _successful_selected_app,
+        update_calls,
+        derived_effects_transcript_sha256=_unchanged_digest(),
+    )
+
+    process_conversation._extract_memories.assert_not_called()
+    process_conversation._save_action_items.assert_not_called()
+    assert _goal_submissions() == []
+    assert not any(process_conversation.DERIVED_EFFECTS_TRANSCRIPT_FIELD in call for call in update_calls)
+
+
+def test_changed_transcript_reprocess_rederives_and_records_the_transcript(monkeypatch):
+    update_calls: list = []
+    _run_explicit_selection_flow(
+        monkeypatch,
+        _successful_selected_app,
+        update_calls,
+        derived_effects_transcript_sha256='digest-of-an-older-transcript',
+    )
+
+    process_conversation._extract_memories.assert_called_once()
+    process_conversation._save_action_items.assert_called_once()
+    assert len(_goal_submissions()) == 1
+    assert {process_conversation.DERIVED_EFFECTS_TRANSCRIPT_FIELD: _unchanged_digest()} in update_calls
+
+
+def test_failed_selected_app_never_rewrites_tasks_or_goal_progress(monkeypatch):
+    """summary-v2 F4: the task delete/replace must not follow a failed template."""
+
+    def _failing_trigger_apps(uid, conversation, **kwargs):
+        raise process_conversation.ExplicitAppSelectionFailedError('selected-app produced no summary content')
+
+    update_calls: list = []
+    with pytest.raises(HTTPException):
+        _run_explicit_selection_flow(monkeypatch, _failing_trigger_apps, update_calls)
+
+    process_conversation._save_action_items.assert_not_called()
+    assert _goal_submissions() == []
+    assert not any(process_conversation.DERIVED_EFFECTS_TRANSCRIPT_FIELD in call for call in update_calls)
+
+
+def test_trigger_apps_automatic_app_failure_stays_fail_open(monkeypatch):
+    """Only explicit selections fail closed; automatic runs keep log-and-continue."""
+    preferred = _make_mock_app('preferred-app', 'PreferredApp')
+    _setup_trigger_apps_mocks(preferred_app_id='preferred-app', available_apps=[preferred])
+    conv = _make_trigger_conversation()
+
+    suggestion_mock, app_result_mock, p1, p2, p3, p4, p5, p6 = _trigger_apps_context()
+    app_result_mock.side_effect = RuntimeError('LLM unavailable')
+    p2 = patch.object(process_conversation, 'get_available_apps', return_value=[preferred])
+    with p1, p2, p3, p4, p5, p6:
+        process_conversation.trigger_conversation_apps('user-automatic', conv)
+
+    app_result_mock.assert_called_once()
+    assert conv.apps_results == []
 
 
 def test_trigger_apps_preferred_app_outside_installed_slice_is_still_used():
@@ -1443,33 +1480,14 @@ def test_trigger_apps_preferred_app_outside_installed_slice_is_still_used():
     suggestion_mock, app_result_mock, p1, p2, p3, p4, p5, p6 = _trigger_apps_context(availability_app=preferred)
 
     with p1, p2, p3, p4, p5, p6:
-        process_conversation._trigger_apps("user-template", conv)
+        process_conversation.trigger_conversation_apps("user-template", conv)
 
     suggestion_mock.assert_not_called()
     app_result_mock.assert_called_once()
     assert len(conv.apps_results) == 1
 
 
-def test_trigger_apps_preferred_app_without_memories_capability_falls_through():
-    """A resolvable preferred app that cannot summarize (no memories capability)
-    falls back to suggestions rather than running as a summarizer."""
-    persona = _make_mock_app("persona-app-1", "ChatPersona")
-    persona.works_with_memories.return_value = False
-    suggestion_app = _make_mock_app("suggested-app", "SuggestedApp")
-    _setup_trigger_apps_mocks(preferred_app_id="persona-app-1")
-    conv = _make_trigger_conversation()
-
-    suggestion_mock, app_result_mock, p1, p2, p3, p4, p5, p6 = _trigger_apps_context(
-        default_apps=[suggestion_app], availability_app=persona
-    )
-
-    with p1, p2, p3, p4, p5, p6:
-        process_conversation._trigger_apps("user-persona", conv)
-
-    suggestion_mock.assert_called_once()
-
-
-# Regression: the durable write happens before _trigger_apps runs, so the app summary it produces
+# Regression: the durable write happens before trigger_conversation_apps runs, so its app summary
 # must be written back explicitly (like calendar_event / folder_id / audio_files already are).
 # Without that write-back the LLM output is computed and discarded: the detail view falls back to
 # structured.overview, a preferred summarization app never takes effect, the suggested-apps
@@ -1511,7 +1529,7 @@ def test_app_summary_results_reach_the_database(monkeypatch):
         updates.append(data)
 
     def fake_trigger_apps(_uid, conversation, **_kwargs):
-        # The real _trigger_apps only mutates the in-memory conversation.
+        # The real trigger_conversation_apps only mutates the in-memory conversation.
         conversation.suggested_summarization_apps = ['app-1']
         conversation.apps_results = [_FakeAppResult('app-1', 'APP SUMMARY')]
 
@@ -1523,7 +1541,7 @@ def test_app_summary_results_reach_the_database(monkeypatch):
     monkeypatch.setattr(process_conversation, '_get_conversation_obj', lambda *a, **k: completed_conversation)
     monkeypatch.setattr(process_conversation.lifecycle_service, 'persist_processed_conversation', persisted)
     monkeypatch.setattr(process_conversation.lifecycle_service, 'create_completed_conversation', persisted)
-    monkeypatch.setattr(process_conversation, '_trigger_apps', fake_trigger_apps)
+    monkeypatch.setattr(process_conversation, 'trigger_conversation_apps', fake_trigger_apps)
     monkeypatch.setattr(process_conversation, 'submit_with_context', MagicMock())
     monkeypatch.setattr(process_conversation.conversations_db, 'update_conversation', update_conversation)
     monkeypatch.setattr(
@@ -1587,7 +1605,7 @@ def test_finalization_survives_an_extraction_run_with_no_grounded_candidates(mon
     monkeypatch.setattr(process_conversation, '_get_conversation_obj', lambda *a, **k: completed_conversation)
     monkeypatch.setattr(process_conversation.lifecycle_service, 'persist_processed_conversation', lambda *a, **k: True)
     monkeypatch.setattr(process_conversation.lifecycle_service, 'create_completed_conversation', lambda *a, **k: True)
-    monkeypatch.setattr(process_conversation, '_trigger_apps', lambda *a, **k: None)
+    monkeypatch.setattr(process_conversation, 'trigger_conversation_apps', lambda *a, **k: None)
     monkeypatch.setattr(process_conversation, 'submit_with_context', submitted)
     monkeypatch.setattr(process_conversation.conversations_db, 'update_conversation', lambda *a, **k: None)
     monkeypatch.setattr(process_conversation, 'MemoryService', lambda db_client: memory_service)
@@ -1658,7 +1676,7 @@ def test_finalization_survives_an_unavailable_memory_extractor(monkeypatch):
     monkeypatch.setattr(process_conversation, '_get_conversation_obj', lambda *a, **k: completed_conversation)
     monkeypatch.setattr(process_conversation.lifecycle_service, 'persist_processed_conversation', lambda *a, **k: True)
     monkeypatch.setattr(process_conversation.lifecycle_service, 'create_completed_conversation', lambda *a, **k: True)
-    monkeypatch.setattr(process_conversation, '_trigger_apps', lambda *a, **k: None)
+    monkeypatch.setattr(process_conversation, 'trigger_conversation_apps', lambda *a, **k: None)
     monkeypatch.setattr(process_conversation, 'submit_with_context', submitted)
     monkeypatch.setattr(process_conversation.conversations_db, 'update_conversation', lambda *a, **k: None)
     monkeypatch.setattr(process_conversation, 'MemoryService', lambda db_client: memory_service)
@@ -1677,9 +1695,11 @@ def test_finalization_survives_an_unavailable_memory_extractor(monkeypatch):
     assert '_save_action_items' in {getattr(call.args[1], '__name__', '') for call in submitted.call_args_list}
 
 
-def test_custom_stt_conversation_without_llm_byok_key_skips_llm_work(monkeypatch):
-    """Regression for #7690: a custom-STT conversation with no LLM BYOK key must
-    not run any Omi-paid LLM post-processing (structure, summaries, memories)."""
+def test_custom_stt_conversation_without_llm_byok_key_runs_llm_work(monkeypatch):
+    """Regression for #7690's revert: custom-STT users transcribe on their own
+    provider, but their conversations must still get Omi summaries. The gate
+    that skipped all LLM post-processing for a custom-STT conversation with no
+    LLM BYOK key left those users with no title, overview, or memories."""
     completed_conversation = Conversation(
         id='conversation-custom-stt',
         created_at=datetime(2026, 7, 21, tzinfo=timezone.utc),
@@ -1698,33 +1718,21 @@ def test_custom_stt_conversation_without_llm_byok_key_skips_llm_work(monkeypatch
         process_conversation, '_get_structured', lambda *a, **k: structured_calls.append(1) or (MagicMock(), False)
     )
     monkeypatch.setattr(process_conversation, '_get_conversation_obj', lambda *a, **k: completed_conversation)
-    monkeypatch.setattr(process_conversation, '_trigger_apps', lambda *a, **k: None)
-    # No LLM BYOK key on this request, so Omi would pay — the gate must fire.
+    monkeypatch.setattr(process_conversation, 'trigger_conversation_apps', lambda *a, **k: None)
+    monkeypatch.setattr(process_conversation, 'submit_with_context', MagicMock())
+    # No LLM BYOK key: enrichment must run anyway, on Omi's bill.
     monkeypatch.setattr(process_conversation.users_db, 'is_byok_active', lambda _uid: False)
-    monkeypatch.setattr(process_conversation, 'get_byok_key', lambda _provider: None)
-    # The completed status must be durably persisted, not left in `processing`.
-    persisted = {}
-    monkeypatch.setattr(
-        process_conversation.lifecycle_service,
-        'persist_processed_conversation',
-        lambda uid, data: persisted.update(uid=uid, status=data.get('status')) or True,
-    )
 
-    result = process_conversation.process_conversation('uid', 'en', completed_conversation)
+    process_conversation.process_conversation('uid', 'en', completed_conversation)
 
-    # The gate returns the conversation with no LLM work, but the completed
-    # status is durably persisted so the record is not stuck in `processing`.
-    assert result is completed_conversation
-    assert structured_calls == [], 'LLM structuring ran for a custom-STT conversation without an LLM key'
-    assert completed_conversation.status == ConversationStatus.completed
-    assert (
-        persisted.get('status') == ConversationStatus.completed
-    ), f'custom-STT skip path did not durably persist the completed status: {persisted}'
+    assert structured_calls, 'LLM structuring was skipped for a custom-STT conversation'
+    process_conversation.should_skip_omi_paid_postprocessing.assert_called()
+    _, kwargs = process_conversation.should_skip_omi_paid_postprocessing.call_args
+    assert kwargs.get('uses_custom_stt') is True
 
 
 def test_custom_stt_conversation_with_llm_byok_key_runs_llm_work(monkeypatch):
-    """A custom-STT user who brings their own LLM key pays their own bill, so
-    Omi-paid enrichment must still run (BYOK escape hatch)."""
+    """A custom-STT user who brings their own LLM key keeps full enrichment."""
     completed_conversation = Conversation(
         id='conversation-custom-stt-byok',
         created_at=datetime(2026, 7, 21, tzinfo=timezone.utc),
@@ -1748,105 +1756,273 @@ def test_custom_stt_conversation_with_llm_byok_key_runs_llm_work(monkeypatch):
         process_conversation, '_get_structured', lambda *a, **k: structured_calls.append(1) or (MagicMock(), False)
     )
     monkeypatch.setattr(process_conversation, '_get_conversation_obj', lambda *a, **k: completed_conversation)
-    monkeypatch.setattr(process_conversation, '_trigger_apps', lambda *a, **k: None)
+    monkeypatch.setattr(process_conversation, 'trigger_conversation_apps', lambda *a, **k: None)
     monkeypatch.setattr(process_conversation, 'submit_with_context', MagicMock())
-    # The user carries an OpenAI key — enrichment runs on their bill.
     monkeypatch.setattr(process_conversation.users_db, 'is_byok_active', lambda _uid: True)
-    monkeypatch.setattr(
-        process_conversation, 'get_byok_key', lambda provider: 'sk-test' if provider == 'openai' else None
-    )
 
     process_conversation.process_conversation('uid', 'en', input_conversation)
 
     assert structured_calls, 'LLM structuring was skipped despite an LLM BYOK key'
 
 
-def test_omi_stt_conversation_never_reads_byok_state(monkeypatch):
-    """Regression for #7690: the deferred BYOK lookup must not fire a Firestore
-    read on the ordinary Omi-STT hot path. users_db.is_byok_active is an
-    uncached users/... document read; it must only run for custom-STT
-    conversations, whose gate decision actually depends on it."""
+def test_custom_stt_exhausted_processing_budget_skips_llm_work(monkeypatch):
+    """#7690 residual: custom-STT still hits the LLM processing gate. When that
+    budget is exhausted, Omi-paid structuring must not run — without the
+    #10962 blanket skip that removed summaries for every custom-STT user."""
     completed_conversation = Conversation(
-        id='conversation-omi-stt',
+        id='conversation-custom-stt-exhausted',
         created_at=datetime(2026, 7, 21, tzinfo=timezone.utc),
         started_at=datetime(2026, 7, 21, tzinfo=timezone.utc),
         finished_at=datetime(2026, 7, 21, 0, 1, tzinfo=timezone.utc),
         source=ConversationSource.omi,
         structured=Structured(title='Title', overview='Overview'),
         transcript_segments=[],
-        status=ConversationStatus.completed,
+        status=ConversationStatus.processing,
         discarded=False,
-        uses_custom_stt=False,
+        uses_custom_stt=True,
     )
 
     structured_calls = []
     monkeypatch.setattr(
         process_conversation, '_get_structured', lambda *a, **k: structured_calls.append(1) or (MagicMock(), False)
     )
-    monkeypatch.setattr(process_conversation, '_get_conversation_obj', lambda *a, **k: completed_conversation)
-    monkeypatch.setattr(process_conversation, '_trigger_apps', lambda *a, **k: None)
-    byok_calls = []
+    monkeypatch.setattr(process_conversation, 'should_skip_omi_paid_postprocessing', lambda *a, **k: True)
+
+    result = process_conversation.process_conversation('uid', 'en', completed_conversation)
+
+    assert not structured_calls, 'LLM structuring ran after the processing budget was exhausted'
+    assert result.status == ConversationStatus.completed
+
+
+def _ledger_gate_conversation(conversation_id: str) -> Conversation:
+    return Conversation(
+        id=conversation_id,
+        created_at=datetime(2026, 8, 25, tzinfo=timezone.utc),
+        started_at=datetime(2026, 8, 25, tzinfo=timezone.utc),
+        finished_at=datetime(2026, 8, 25, 0, 1, tzinfo=timezone.utc),
+        source=ConversationSource.omi,
+        language='en',
+        structured=Structured(title='t', overview='o'),
+        transcript_segments=[
+            TranscriptSegment(
+                id='seg-1',
+                text='hello there, this is a transcript segment',
+                speaker='SPEAKER_00',
+                speaker_id=0,
+                is_user=True,
+                start=0.0,
+                end=1.0,
+            )
+        ],
+        status=ConversationStatus.processing,
+    )
+
+
+def test_ledger_writer_mode_skips_eager_extraction(monkeypatch):
+    """A cut-over (ledger writer mode) user must not pay for per-conversation
+    L1 extraction: the compatibility write would be refused by writer admission
+    after the model call was already spent, failing finalization. The daily
+    sweep owns memory formation for those users, so the public boundary
+    returns before parity capture or any model work."""
+    import sys
+
+    from models.memory_apply import WriterMode
+
+    memory_system_stub = sys.modules['utils.memory.memory_system']
     monkeypatch.setattr(
-        process_conversation.users_db,
-        'is_byok_active',
-        lambda _uid: byok_calls.append(_uid) or True,
+        memory_system_stub,
+        'ensure_canonical_apply_control_state',
+        lambda uid, *, db_client: SimpleNamespace(writer_mode=WriterMode.ledger),
+        raising=False,
     )
-    monkeypatch.setattr(process_conversation, 'get_byok_key', lambda _provider: 'sk-test')
+    inner = MagicMock(side_effect=AssertionError('extraction must not run under ledger writer mode'))
+    monkeypatch.setattr(process_conversation, '_extract_memories_inner', inner)
+    admitted = []
 
-    process_conversation.process_conversation('uid', 'en', completed_conversation)
+    class _MemoryService:
+        def __init__(self, *, db_client):
+            pass
 
-    assert structured_calls, 'Omi-STT conversation should still run LLM enrichment'
-    assert byok_calls == [], f'BYOK Firestore read fired on the Omi-STT hot path: {byok_calls}'
+        def ensure_canonical_mutation_ready(self, uid):
+            admitted.append(uid)
+
+    monkeypatch.setattr(process_conversation, 'MemoryService', _MemoryService)
+
+    process_conversation.extract_memories('uid-ledger', _ledger_gate_conversation('conv-ledger'))
+
+    assert admitted == ['uid-ledger']
+    inner.assert_not_called()
 
 
-def test_dedup_candidates_exclude_own_and_merge_source_items():
-    """Regression: on reprocess/merge, the conversation's own previous action
-    items (and the merge sources') came back as dedup candidates — the LLM
-    suppressed re-extracting them and the save step then deleted them, so
-    tasks silently vanished. Items from the conversation being processed or
-    its merge sources must never be dedup candidates."""
-    import sys
-    from datetime import datetime, timezone
-    from types import SimpleNamespace
+def test_canonical_provider_degradation_emits_bounded_finalization_reason(monkeypatch):
+    recorded = []
+    monkeypatch.setattr(process_conversation, 'record_finalization_failure', recorded.append)
+    monkeypatch.setattr(process_conversation, 'record_fallback', lambda **_fields: None)
 
-    now = datetime.now(timezone.utc)
-    items = [
-        {'id': 'own', 'conversation_id': 'conv-1', 'completed': False, 'updated_at': now},
-        {'id': 'merged', 'conversation_id': 'src-conv', 'completed': False, 'updated_at': now},
-        {'id': 'unrelated', 'conversation_id': 'other-conv', 'completed': False, 'updated_at': now},
-    ]
-    similar = [{'action_item_id': item['id'], 'score': 0.9} for item in items]
-    action_items_mod = sys.modules["database.action_items"]
-    action_items_mod.get_action_items_by_ids = MagicMock(return_value=items)
-
-    conversation = SimpleNamespace(
-        id='conv-1',
-        external_data={'merge_metadata': {'source_conversation_ids': ['src-conv']}},
+    result = process_conversation._canonical_extraction_unavailable(
+        SimpleNamespace(id='conversation-1'),
+        process_conversation.PATH_CANONICAL,
+        RuntimeError('private provider response'),
     )
-    structured = SimpleNamespace(overview='discussed follow-ups')
 
-    with patch.object(process_conversation, "find_similar_action_items", MagicMock(return_value=similar)):
-        eligible = process_conversation._fetch_dedup_candidates('user-1', structured, conversation)
-
-    assert [item['id'] for item in eligible] == ['unrelated']
+    assert result.count == 0
+    assert recorded == [process_conversation.FinalizationFailureReason.provider]
 
 
-def test_dedup_candidates_unchanged_without_conversation_context():
-    """Without a conversation (new-conversation path has a fresh id), all open
-    recent items remain candidates."""
+def test_memory_capability_fence_precedes_sweep_owned_writer_short_circuit(monkeypatch):
+    sweep_mode = MagicMock(side_effect=AssertionError('writer mode must not bypass static capability admission'))
+    monkeypatch.setattr(process_conversation, '_sweep_owned_writer_mode', sweep_mode)
+
+    class _MemoryService:
+        def __init__(self, *, db_client):
+            pass
+
+        def ensure_canonical_mutation_ready(self, uid):
+            raise RuntimeError('static memory admission failed')
+
+    monkeypatch.setattr(process_conversation, 'MemoryService', _MemoryService)
+
+    with pytest.raises(RuntimeError, match='static memory admission failed'):
+        process_conversation.extract_memories('uid-ledger', _ledger_gate_conversation('conv-ledger'))
+
+    sweep_mode.assert_not_called()
+
+
+def test_compatibility_writer_mode_still_runs_eager_extraction(monkeypatch):
     import sys
-    from datetime import datetime, timezone
-    from types import SimpleNamespace
 
-    now = datetime.now(timezone.utc)
-    items = [{'id': 'open-item', 'conversation_id': 'other-conv', 'completed': False, 'updated_at': now}]
-    action_items_mod = sys.modules["database.action_items"]
-    action_items_mod.get_action_items_by_ids = MagicMock(return_value=items)
+    from models.memory_apply import WriterMode
 
-    similar = [{'action_item_id': 'open-item', 'score': 0.9}]
-    structured = SimpleNamespace(overview='discussed follow-ups')
+    memory_system_stub = sys.modules['utils.memory.memory_system']
+    monkeypatch.setattr(
+        memory_system_stub,
+        'ensure_canonical_apply_control_state',
+        lambda uid, *, db_client: SimpleNamespace(writer_mode=WriterMode.compatibility),
+        raising=False,
+    )
+    inner = MagicMock(
+        return_value=process_conversation.ConversationMemoryExtractionResult(
+            count=0, source='transcription', path='canonical'
+        )
+    )
+    monkeypatch.setattr(process_conversation, '_extract_memories_inner', inner)
 
-    with patch.object(process_conversation, "find_similar_action_items", MagicMock(return_value=similar)):
-        eligible = process_conversation._fetch_dedup_candidates('user-1', structured)
+    process_conversation.extract_memories('uid-compat', _ledger_gate_conversation('conv-compat'))
 
-    assert [item['id'] for item in eligible] == ['open-item']
+    inner.assert_called_once()
+
+
+def test_unreadable_writer_mode_preserves_legacy_extraction(monkeypatch):
+    import sys
+
+    memory_system_stub = sys.modules['utils.memory.memory_system']
+
+    def unavailable(uid, *, db_client):
+        raise RuntimeError('control state unreadable')
+
+    monkeypatch.setattr(memory_system_stub, 'ensure_canonical_apply_control_state', unavailable, raising=False)
+    inner = MagicMock(
+        return_value=process_conversation.ConversationMemoryExtractionResult(
+            count=0, source='transcription', path='canonical'
+        )
+    )
+    monkeypatch.setattr(process_conversation, '_extract_memories_inner', inner)
+
+    process_conversation.extract_memories('uid-err', _ledger_gate_conversation('conv-err'))
+
+    inner.assert_called_once()
+
+
+@pytest.mark.parametrize(
+    'discarded, structured, outcome',
+    [(True, True, 'skipped_discarded'), (False, False, 'skipped_no_structured'), (False, True, 'success')],
+)
+def test_summary_vector_outcomes(monkeypatch, discarded, structured, outcome):
+    from utils.metrics import OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL as metric
+
+    conversation = MagicMock(discarded=discarded, structured=MagicMock() if structured else None)
+    embed = MagicMock(return_value=[0.1])
+    upsert = MagicMock(return_value=True)
+    monkeypatch.setattr(process_conversation, 'generate_embedding', embed)
+    monkeypatch.setattr(process_conversation, 'upsert_vector2', upsert)
+    before = metric.labels(outcome=outcome)._value.get()
+    assert process_conversation.save_structured_vector('uid', conversation) is (outcome == 'success')
+    assert metric.labels(outcome=outcome)._value.get() == before + 1
+    assert embed.call_count == upsert.call_count == (1 if outcome == 'success' else 0)
+
+
+@pytest.mark.parametrize('discarded, structured', [(False, True), (True, True), (False, False)])
+def test_summary_vector_update_only_keeps_metadata_semantics(monkeypatch, discarded, structured):
+    conversation = MagicMock(discarded=discarded, structured=MagicMock() if structured else None)
+    embed = MagicMock()
+    upsert = MagicMock()
+    update = MagicMock()
+    monkeypatch.setattr(process_conversation, 'generate_embedding', embed)
+    monkeypatch.setattr(process_conversation, 'upsert_vector2', upsert)
+    monkeypatch.setattr(process_conversation, 'update_vector_metadata', update)
+    assert process_conversation.save_structured_vector('uid', conversation, update_only=True)
+    embed.assert_not_called()
+    upsert.assert_not_called()
+    update.assert_called_once()
+
+
+def test_demand_visible_completion_leaves_invisible_work_in_existing_outbox(monkeypatch):
+    """Visible notes persist while memory, vector and task writers wait for settlement."""
+    from utils.sync import reprocess
+
+    monkeypatch.setenv('DEMAND_PROCESSING_ENABLED', 'true')
+    monkeypatch.setenv('DEMAND_PROCESSING_PERCENT', '100')
+    monkeypatch.setenv('DEMAND_PROCESSING_LAZY_ENABLED', 'true')
+    incoming = MagicMock()
+    incoming.source = 'omi'
+    incoming.get_person_ids.return_value = []
+    completed = _explicit_selection_flow_conversation()
+    completed.discarded = False
+    completed.structured = None
+    notes = MagicMock(return_value=(MagicMock(), False))
+    persisted = MagicMock(return_value=True)
+    debt = MagicMock()
+    memory = MagicMock()
+    submit = MagicMock()
+    monkeypatch.setattr(process_conversation, '_get_structured', notes)
+    monkeypatch.setattr(process_conversation, '_get_conversation_obj', lambda *a, **kw: completed)
+    monkeypatch.setattr(process_conversation.lifecycle_service, 'persist_processed_conversation', persisted)
+    monkeypatch.setattr(reprocess, 'mark_effects', debt)
+    monkeypatch.setattr(process_conversation, '_extract_memories', memory)
+    monkeypatch.setattr(process_conversation, 'submit_with_context', submit)
+    monkeypatch.setattr(process_conversation, 'trigger_conversation_apps', MagicMock())
+    result = process_conversation.process_conversation('uid', 'en', incoming)
+    assert result is completed
+    notes.assert_called_once()
+    persisted.assert_called_once()
+    debt.assert_called_once_with('uid', completed.id, 'en', immediate=False)
+    memory.assert_not_called()
+    deferred = {process_conversation.save_structured_vector, process_conversation._save_action_items}
+    assert all(call.args[1] not in deferred for call in submit.call_args_list)
+
+
+def test_lazy_worker_uses_settled_notes_without_regenerating_them(monkeypatch):
+    from utils.conversations import lazy_enrichment
+
+    completed = MagicMock()
+    completed.get_person_ids.return_value = []
+    completed.model_dump.return_value = {'structured': {'title': 'settled'}, 'transcript_segments': []}
+    row = {'id': 'c', 'status': 'completed'}
+    monkeypatch.setattr(lazy_enrichment, 'deserialize_conversation', lambda _: completed)
+    monkeypatch.setattr(lazy_enrichment.conversations_db, 'get_conversation', lambda *a: row)
+    memory, tasks, vectors, notes = MagicMock(), MagicMock(), MagicMock(return_value=True), MagicMock()
+    monkeypatch.setattr(process_conversation, 'extract_memories', memory)
+    monkeypatch.setattr(process_conversation, '_save_action_items', tasks)
+    monkeypatch.setattr(process_conversation, 'save_structured_vector', vectors)
+    monkeypatch.setattr(process_conversation, '_get_structured', notes)
+    monkeypatch.setattr(
+        lazy_enrichment.conversations_db,
+        'record_demand_enrichment_checkpoint',
+        lambda uid, cid, digest: row.update({lazy_enrichment.CHECKPOINT: digest}),
+    )
+    lazy_enrichment.enrich_settled('uid', 'c', 'en')
+    lazy_enrichment.enrich_settled('uid', 'c', 'en')
+    memory.assert_called_once_with('uid', completed)
+    tasks.assert_called_once()
+    vectors.assert_called_once()
+    notes.assert_not_called()

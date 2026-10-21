@@ -6,6 +6,9 @@ struct MemoryExportStatus: Sendable {
   let detailText: String?
   let isConfigured: Bool
   let hasConnection: Bool
+  /// Owned config block points at the legacy /v1/mcp/sse alias with the current
+  /// key — a migration target that an Update action rewrites to /v1/mcp.
+  let needsUpdate: Bool
 }
 
 struct MCPSetupCompletionSummary: Equatable, Sendable {
@@ -28,6 +31,9 @@ struct MemoryExportConnectionPresentation: Equatable {
         primaryActionTitle: nil,
         completion: destination.mcpSetupCompletionSummary
       )
+    }
+    if status?.needsUpdate == true {
+      return MemoryExportConnectionPresentation(primaryActionTitle: "Update", completion: nil)
     }
 
     let title: String

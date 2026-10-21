@@ -18,7 +18,7 @@ Endpoints:
 
 import logging
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Depends, Query
@@ -27,6 +27,7 @@ from pydantic import BaseModel, Field, field_validator
 import database.vector_db as vector_db
 from utils.other.endpoints import get_current_user_uid, with_rate_limit
 from utils.conversations.transcript_chunks import hydrate_chunk_texts
+from utils.user_clock import clock_for_uid
 from utils.retrieval.safety import safe_isoformat
 from utils.retrieval.tool_services.conversations import get_conversations_text, search_conversations_text
 from utils.retrieval.tool_services.memories import get_memories_text, search_memories_text
@@ -98,6 +99,17 @@ class SearchConversationsRequest(BaseModel):
 class SearchMemoriesRequest(BaseModel):
     query: str = Field(description="Semantic search query")
     limit: int = Field(default=5, ge=1, le=20)
+    view: Literal['useful_now', 'history', 'all'] = Field(
+        default='useful_now', description='Temporal memory view; history is an explicit dated recall request'
+    )
+    as_of: Optional[datetime] = Field(default=None, description='Optional timezone-aware traversal anchor')
+
+    @field_validator('as_of')
+    @classmethod
+    def require_as_of_timezone(cls, value: Optional[datetime]) -> Optional[datetime]:
+        if value is not None and (value.tzinfo is None or value.utcoffset() is None):
+            raise ValueError('as_of must include a timezone')
+        return value
 
 
 class CreateActionItemRequest(BaseModel):
@@ -212,7 +224,7 @@ def search_conversation_chunks(
     cite verbatim evidence the same way they cite summary results.
     """
     rows = vector_db.search_transcript_chunks(uid, body.query, limit=body.limit)
-    rows = hydrate_chunk_texts(uid, rows)
+    rows = hydrate_chunk_texts(uid, rows, clock=clock_for_uid(uid))
     if not rows:
         return _ok("search_conversation_chunks", f"No transcript excerpts found matching '{body.query}'.")
     parts = []
@@ -237,6 +249,10 @@ def get_memories(
     offset: int = Query(default=0, ge=0),
     start_date: Optional[str] = Query(default=None, description="ISO date with timezone"),
     end_date: Optional[str] = Query(default=None, description="ISO date with timezone"),
+    view: Literal['useful_now', 'history', 'all'] = Query(
+        default='useful_now', description='Temporal memory view; history is an explicit dated recall request'
+    ),
+    as_of: Optional[datetime] = Query(default=None, description='Optional timezone-aware traversal anchor'),
     uid: str = Depends(get_current_user_uid),
 ):
     sources: list[dict] = []
@@ -246,6 +262,8 @@ def get_memories(
         offset=offset,
         start_date=start_date,
         end_date=end_date,
+        view=view,
+        as_of=as_of,
         source_sink=sources,
     )
     bounded_result = preserve_chat_memory_tool_result_boundary('get_memories_tool', result)
@@ -265,6 +283,8 @@ def search_memories(
         uid=uid,
         query=body.query,
         limit=body.limit,
+        view=body.view,
+        as_of=body.as_of,
         source_sink=sources,
     )
     bounded_result = preserve_chat_memory_tool_result_boundary('search_memories_tool', result)

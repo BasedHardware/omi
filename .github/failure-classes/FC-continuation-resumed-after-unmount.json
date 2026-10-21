@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "FC-continuation-resumed-after-unmount",
+  "violated_contract": "An async continuation that resumes after await is retained by the event loop, not by the State that started it. Plugin and service Futures such as Permission.notification.isGranted cannot be cancelled from dispose — unlike a Timer or Future.delayed, which FC-timer-after-dispose holds and cancels — so an unmount during the await leaves the continuation queued with no handle to drop. If that continuation then uses the State (context, setState, this-bound callbacks, or other owner-assumed side effects), it operates on a torn-down owner.",
+  "canonical_prevention": "Re-check mounted after every await before touching the State. The guard test pumps the production HomePageWrapper, holds the permission MethodChannel so isGranted does not complete, disposes, then completes the future as granted and asserts notificationsEnabled stays false. It orders dispose before the future completes; it does not run a real OS permission-dialog race.",
+  "canonical_prevention_artifact": [
+    "app/test/widgets/home_product_mounted_guard_test.dart"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "app/lib/pages/**",
+    "app/test/widgets/**"
+  ],
+  "status": "open"
+}

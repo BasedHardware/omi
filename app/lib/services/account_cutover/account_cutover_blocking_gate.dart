@@ -4,6 +4,7 @@
 /// LIFECYCLE: permanent
 library;
 
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -13,12 +14,9 @@ import 'package:omi/services/account_cutover/account_cutover_gate.dart';
 import 'package:omi/services/account_cutover/account_cutover_runtime.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
-class AccountCutoverBlockingGate extends StatelessWidget {
-  const AccountCutoverBlockingGate({
-    super.key,
-    this.productBuilder,
-    this.child,
-  }) : assert(productBuilder != null || child != null, 'productBuilder or child is required');
+class AccountCutoverBlockingGate extends StatefulWidget {
+  const AccountCutoverBlockingGate({super.key, this.productBuilder, this.child})
+      : assert(productBuilder != null || child != null, 'productBuilder or child is required');
 
   /// Preferred: built only while product traffic is allowed.
   final WidgetBuilder? productBuilder;
@@ -30,21 +28,69 @@ class AccountCutoverBlockingGate extends StatelessWidget {
   static final Uri _playStoreUrl = Uri.parse('https://play.google.com/store/apps/details?id=com.friend.ios');
 
   @override
+  State<AccountCutoverBlockingGate> createState() => _AccountCutoverBlockingGateState();
+}
+
+class _AccountCutoverBlockingGateState extends State<AccountCutoverBlockingGate> {
+  // While a fence is on screen, nothing else in the app re-fetches the cutover
+  // control (product traffic is blocked), so without this timer the fence
+  // could only ever clear on an app lifecycle event. Poll so a fence caused by
+  // a transient control-plane outage lifts on its own — and a real migration
+  // fence lifts as soon as the migration completes.
+  Timer? _fenceRefreshTimer;
+  bool _refreshInFlight = false;
+
+  static const _fenceRefreshInterval = Duration(seconds: 30);
+
+  Future<void> _refreshFence() async {
+    if (_refreshInFlight) return;
+    _refreshInFlight = true;
+    try {
+      await AccountCutoverRuntime.instance.refresh();
+    } finally {
+      _refreshInFlight = false;
+    }
+  }
+
+  void _syncFenceRefreshTimer(bool fenceVisible) {
+    if (fenceVisible && _fenceRefreshTimer == null) {
+      _fenceRefreshTimer = Timer.periodic(_fenceRefreshInterval, (_) => unawaited(_refreshFence()));
+    } else if (!fenceVisible && _fenceRefreshTimer != null) {
+      _fenceRefreshTimer!.cancel();
+      _fenceRefreshTimer = null;
+    }
+  }
+
+  @override
+  void dispose() {
+    _fenceRefreshTimer?.cancel();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
       listenable: AccountCutoverRuntime.instance,
       builder: (context, _) {
         final runtime = AccountCutoverRuntime.instance;
         final decision = runtime.decision;
-        if (decision == AccountCutoverGateDecision.allowProductTraffic) {
-          return productBuilder?.call(context) ?? child!;
+        final fenceVisible = decision != AccountCutoverGateDecision.allowProductTraffic;
+        _syncFenceRefreshTimer(fenceVisible);
+        if (!fenceVisible) {
+          return widget.productBuilder?.call(context) ?? widget.child!;
         }
 
         return AccountCutoverBlockingView(
-          decision: decision,
+          blockingReason: runtime.blockingReason,
           strandedNewData: runtime.control.strandedNewData,
-          appStoreUrl: _appStoreUrl,
-          playStoreUrl: _playStoreUrl,
+          appStoreUrl: AccountCutoverBlockingGate._appStoreUrl,
+          playStoreUrl: AccountCutoverBlockingGate._playStoreUrl,
+          onRetry: () => unawaited(_refreshFence()),
+          // An unconfirmed fence after the server had allowed the owner keeps
+          // a manual way back to that last authoritative projection. A fence
+          // the server itself decided — or one with no server allow to return
+          // to — does not.
+          onSkipUnresolvedFence: runtime.canSkipUnresolvedFence ? runtime.skipUnresolvedFence : null,
         );
       },
     );
@@ -54,27 +100,54 @@ class AccountCutoverBlockingGate extends StatelessWidget {
 class AccountCutoverBlockingView extends StatelessWidget {
   const AccountCutoverBlockingView({
     super.key,
-    required this.decision,
+    required this.blockingReason,
     required this.strandedNewData,
     required this.appStoreUrl,
     required this.playStoreUrl,
+    this.onRetry,
+    this.onSkipUnresolvedFence,
   });
 
-  final AccountCutoverGateDecision decision;
+  final AccountCutoverBlockingReason blockingReason;
   final bool strandedNewData;
   final Uri appStoreUrl;
   final Uri playStoreUrl;
+  final VoidCallback? onRetry;
+
+  /// Non-null only while this client synthesized the fence and the server had
+  /// authoritatively allowed the owner. Pressing it returns to that last
+  /// authoritative projection for this session.
+  final VoidCallback? onSkipUnresolvedFence;
 
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    final forceUpgrade = decision == AccountCutoverGateDecision.forceUpgrade;
-    final title = forceUpgrade ? l10n.accountCutoverUpdateRequiredTitle : l10n.accountCutoverMigrationInProgressTitle;
-    final message = forceUpgrade
-        ? l10n.accountCutoverUpdateRequiredMessage
-        : (strandedNewData
-            ? l10n.accountCutoverMigrationRollbackMessage
-            : l10n.accountCutoverMigrationInProgressMessage);
+    final forceUpgrade = blockingReason == AccountCutoverBlockingReason.forceUpgrade;
+    final retryable = blockingReason == AccountCutoverBlockingReason.connectionUnavailable ||
+        blockingReason == AccountCutoverBlockingReason.controlUnavailable;
+    final (title, message, icon) = switch (blockingReason) {
+      AccountCutoverBlockingReason.forceUpgrade => (
+          l10n.accountCutoverUpdateRequiredTitle,
+          l10n.accountCutoverUpdateRequiredMessage,
+          Icons.system_update,
+        ),
+      AccountCutoverBlockingReason.confirmedMigration => (
+          l10n.accountCutoverMigrationInProgressTitle,
+          strandedNewData ? l10n.accountCutoverMigrationRollbackMessage : l10n.accountCutoverMigrationInProgressMessage,
+          Icons.hourglass_top,
+        ),
+      AccountCutoverBlockingReason.checkingStatus => (l10n.loading, l10n.pleaseWait, Icons.sync),
+      AccountCutoverBlockingReason.connectionUnavailable => (
+          l10n.noInternetConnection,
+          l10n.pleaseCheckInternetConnectionAndTryAgain,
+          Icons.cloud_off_outlined,
+        ),
+      AccountCutoverBlockingReason.controlUnavailable || AccountCutoverBlockingReason.none => (
+          l10n.connectionError,
+          l10n.somethingWentWrong,
+          Icons.sync_problem_outlined,
+        ),
+    };
 
     return Semantics(
       container: true,
@@ -91,20 +164,12 @@ class AccountCutoverBlockingView extends StatelessWidget {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(
-                      forceUpgrade ? Icons.system_update : Icons.hourglass_top,
-                      color: Colors.white,
-                      size: 36,
-                    ),
+                    Icon(icon, color: Colors.white, size: 36),
                     const SizedBox(height: 16),
                     Text(
                       title,
                       textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 22,
-                        fontWeight: FontWeight.w600,
-                      ),
+                      style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w600),
                     ),
                     const SizedBox(height: 12),
                     Text(
@@ -120,6 +185,16 @@ class AccountCutoverBlockingView extends StatelessWidget {
                           await launchUrl(url, mode: LaunchMode.externalApplication);
                         },
                         child: Text(l10n.accountCutoverOpenStore),
+                      ),
+                    ] else if (retryable) ...[
+                      const SizedBox(height: 20),
+                      FilledButton(onPressed: onRetry, child: Text(l10n.retry)),
+                    ],
+                    if (!forceUpgrade && onSkipUnresolvedFence != null) ...[
+                      const SizedBox(height: 20),
+                      TextButton(
+                        onPressed: onSkipUnresolvedFence,
+                        child: Text(l10n.continueAction, style: const TextStyle(color: Colors.white70)),
                       ),
                     ],
                   ],

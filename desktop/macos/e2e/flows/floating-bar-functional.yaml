@@ -4,12 +4,25 @@ tier: 2
 description: Ask Omi open + stubbed typed turn on the floating bar (distinct from perf benchmarks)
 app: non-prod
 covers:
+  - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingBarMenuBarItem.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingBarMotion.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingBarNoticePolicy.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/NotchDismissButton.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/FirstRealApp/FirstRealAppCard.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/FirstRealApp/FirstRealAppCardCoordinator.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/FirstRealApp/FirstRealAppCardPolicy.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/FirstRealApp/AnalyticsManager+FirstRealAppCard.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/ContextReminders/ContextReminderCard.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/ContextReminders/ContextReminderCoordinator.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/ContextReminders/ContextReminderStore.swift
   - desktop/macos/Desktop/Sources/Chat/AgentCompletionVoiceDelivery.swift
   - desktop/macos/Desktop/Sources/Chat/ChatDraftStore.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/AIResponseView.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingBarNotificationCardLead.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingBarNotificationJournalCopy.swift
   - desktop/macos/Desktop/Sources/MainWindow/ClickThroughView.swift
-  - desktop/macos/Desktop/Sources/FloatingControlBar/AskAIInputView.swift
+  # Where the notch's own agent-exit routing decision lives.
+  - desktop/macos/Desktop/Sources/MainWindow/DesktopShellPresentationPolicy.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/AgentPill.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/CursorScreenTracker.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/DelayedActionScheduler.swift
@@ -17,11 +30,18 @@ covers:
   - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingBarLaunchPolicy.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingBarPresentation.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingBarVoicePlaybackService.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingBarVoicePlaybackService+ProgressiveTTS.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/ProgressiveMP3Player.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/ProgressiveTTSPlaybackPipeline.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingBarMouseInterception.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarGeometry.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingBarSurfaceFloor.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarState.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarView.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarWindow.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/HandsFreeRequestScope.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarManager+RealtimeStreamingJournal.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/NotificationDisplayTimer.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/PTTContextVocabularyProvider.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/PushToTalkManager.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController.swift
@@ -34,6 +54,12 @@ covers:
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubInputAdmission.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubSession.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubSessionPolicies.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController+WarmRecovery.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubSessionVoiceConfig.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubVoicePolicy.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController+AssistantVoice.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/AssistantVoiceStore.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/UserInputPresence.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubTestHarness.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubTools.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeSpawnReceipt.swift
@@ -46,6 +72,8 @@ covers:
   - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingBackgroundModifier.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/VoiceWaveformBars.swift
   - desktop/macos/Desktop/Sources/Services/APIClient/APIClient+Tools.swift
+  - desktop/macos/Desktop/Sources/Services/APIClient/APIClient+People.swift
+  - desktop/macos/Desktop/Sources/Services/APIClient/APIClient+AssistantVoice.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/NotchMomentsCoordinator.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarReceiptCard.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/NotchCardVoiceDelivery.swift
@@ -62,6 +90,15 @@ steps:
     state.expect:
       state.floatingBarVisible: true
 
+  - id: S1b
+    name: Idle island frame satisfies the surface floor for its state
+    bridge.action:
+      name: notch_hover
+      params:
+        action: "state"
+    expect:
+      result.detail.surfaceFloorSatisfied: "true"
+
   - id: S2
     name: Open Ask Omi
     bridge.action:
@@ -70,7 +107,7 @@ steps:
         reset: "true"
         wait: "true"
     expect:
-      result.detail.focused: "true"
+      result.detail.target: "main_chat"
 
   - id: S3
     name: Send stubbed floating-bar query

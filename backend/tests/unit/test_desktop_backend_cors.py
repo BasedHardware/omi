@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 
 import desktop_backend
 from utils.env_loader import load_backend_env
+from utils.other.endpoints import get_current_user_uid
 
 
 def _test_client(monkeypatch, app):
@@ -94,12 +95,20 @@ def test_desktop_backend_cors_middleware_enforces_allowlist(monkeypatch):
                 'Access-Control-Request-Method': 'GET',
             },
         )
+        exposed = client.get('/', headers={'Origin': 'https://app.example'})
         without_origin = client.get('/')
 
     assert allowed.status_code == 200
     assert allowed.headers['access-control-allow-origin'] == 'https://app.example'
     assert denied.status_code == 400
     assert 'access-control-allow-origin' not in denied.headers
+    exposed_headers = {name.strip().lower() for name in exposed.headers['access-control-expose-headers'].split(',')}
+    assert {
+        'x-omi-memory-next-cursor',
+        'x-omi-list-truncated',
+    } <= exposed_headers
+    assert 'x-omi-memory-belief-enabled' not in exposed_headers
+    assert 'x-omi-memory-as-of' not in exposed_headers
     assert 'access-control-allow-origin' not in without_origin.headers
 
 
@@ -167,6 +176,11 @@ def test_desktop_backend_metrics_route_is_fail_closed(monkeypatch):
 
 def test_desktop_backend_mounts_authenticated_metrics(monkeypatch):
     monkeypatch.setenv('METRICS_SECRET', 'test-metrics-secret')
+    from utils.metrics import OMI_CLIENT_JOURNEY_ACCEPTED_TOTAL
+
+    OMI_CLIENT_JOURNEY_ACCEPTED_TOTAL.labels(
+        journey='desktop_chat', client_kind='desktop_macos', app_build='unknown'
+    ).inc()
     client = _test_client(monkeypatch, desktop_backend._build_app())
 
     with client:
@@ -180,3 +194,49 @@ def test_desktop_backend_mounts_authenticated_metrics(monkeypatch):
     assert response.status_code == 200
     assert response.headers['content-type'].startswith('text/plain')
     assert 'omi_client_journey_accepted_total' in response.text
+
+
+def test_desktop_startup_and_removed_jit_routes_need_no_v2_redis(monkeypatch):
+    from unittest.mock import AsyncMock, Mock
+    from database import proactivity_redis, redis_db
+
+    for key in ('HOST', 'PORT', 'PASSWORD'):
+        monkeypatch.delenv(f'PROACTIVITY_REDIS_{key}', raising=False)
+    v2_client = Mock(side_effect=AssertionError('desktop must not acquire a v2 Redis client'))
+    monkeypatch.setattr(proactivity_redis, 'get_client', v2_client)
+    monkeypatch.setattr(desktop_backend, 'load_backend_env', lambda: None)
+    monkeypatch.setattr(desktop_backend, 'prepare_google_credentials', lambda: None)
+    monkeypatch.setattr(desktop_backend, '_initialize_firebase_admin', lambda: None)
+    monkeypatch.setattr(desktop_backend, 'start_metrics_sidecar_server', lambda: None)
+    monkeypatch.setattr(desktop_backend, 'stop_metrics_sidecar_server', lambda: None)
+    monkeypatch.setattr(desktop_backend, 'shutdown_managed_spend_ledger', AsyncMock())
+    monkeypatch.setattr(desktop_backend, 'close_all_clients', AsyncMock())
+    monkeypatch.setattr(desktop_backend.reservation_state, 'aclose', AsyncMock())
+    # Readiness continues to probe the existing desktop Redis, independent of v2.
+    monkeypatch.setenv('REDIS_DB_HOST', 'synthetic-desktop.example')
+    normal_ping = Mock(return_value=True)
+    monkeypatch.setattr(redis_db.r, 'ping', normal_ping)
+
+    app = desktop_backend.create_app()
+    app.dependency_overrides[get_current_user_uid] = lambda: 'desktop-test-user'
+    with TestClient(app) as client:
+        assert client.get('/health').status_code == 200
+        assert client.get('/ready').status_code == 200
+        assert client.post('/v1/desktop/proactivity/completions', content=b'not json').status_code == 429
+        for method, path in (
+            ('get', '/v1/jit/knowledge-ledger/prompt-snapshot'),
+            ('get', '/v1/jit/knowledge-ledger/mirror-snapshot?cursor=old&page_size=25'),
+            ('get', '/v1/jit/rollout-decision'),
+            ('get', '/v1/jit/trigger-snapshot'),
+            ('post', '/v1/jit/trigger-feedback'),
+            ('post', '/v1/jit/proactivity/reservations'),
+            ('post', '/v3/memories/old-memory/use'),
+            ('get', '/v1/frame-requests/temporary/old-request/image?account_generation=2'),
+        ):
+            response = client.request(method, path, content=b'not json')
+            assert response.status_code == 410
+            assert response.headers['cache-control'] == 'no-store'
+        assert client.get('/v1/proactivity/feed').status_code == 404
+        assert client.post('/v1/proactivity/items/item/outcomes', json={}).status_code == 404
+    normal_ping.assert_called_once()
+    v2_client.assert_not_called()

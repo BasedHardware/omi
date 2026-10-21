@@ -1,0 +1,35 @@
+version: 2
+name: ptt-durable-evidence
+tier: manual
+description: Source retention and honest recall across native PTT, typed attachments, and replacement model sessions
+app: non-prod
+covers:
+  - desktop/macos/Desktop/Sources/Chat/ConversationEvidence.swift
+  - desktop/macos/Desktop/Sources/Chat/ChatAttachmentEvidence.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeTurnEvidence.swift
+preconditions:
+  - auth_ready
+  - named_non_production_bundle_ui_lane
+  - screen_recording_permission_granted
+  - microphone_permission_granted
+steps:
+  - id: DE1
+    name: Retain a source without creating a reminder
+    do: "On a named omi-* bundle, run scripts/agent-continuity-gauntlet.sh --bundle-id <named-bundle> --port <current-bridge-port> --suite evidence. The suite renders isolated source fixtures, sends generated speech through ptt_manager_turn without a transcript override, moves the source out of view, and asks a blind typed follow-up. Verify the exact new voice row has the source body, all five selections and the exclusion are recalled, and no task/reminder/memory write occurred. Permission or fixture-readiness failure is blocked, never a pass."
+    verify: true
+  - id: DE2
+    name: Compare sources and retain a correction through reconnect
+    do: "Inspect the evidence-suite receipts for two-source comparison, the 120-day correction, and the post-reconnect follow-up. Verify exact source fields and corrected value, matching conversation ownership, completed assistant rows, and no substituted source. The suite's missing-token and embedded-instruction cases must also pass."
+    verify: true
+  - id: DE3
+    name: Typed attachment uses the same evidence contract
+    do: "Create a disposable UTF-8 text file containing a random reference code and several synthetic facts. Attach it using the named app's composer and ask for a brief acknowledgement without repeating its fields. After a model reconnect, ask by PTT for the exact reference and one fact. Verify the producing typed user row retains attachment evidence, the voice response matches it, and no source body or local file path appears in the downstream backend mirror. Delete only the disposable test file afterward."
+    verify: true
+  - id: DE4
+    name: Partial and unavailable sources stay honest
+    do: "Repeat typed attachment capture with a text file larger than 64 KiB and a nonce beyond the retained prefix. Verify partial extraction is explicit and the agent cannot claim the absent nonce was retained. Exercise an unsupported binary attachment and confirm unavailable extraction instead of invented text. Unit tests cover missing files and owner/cancellation races; do not present them as live microphone evidence."
+    verify: true
+  - id: DE5
+    name: Physical microphone path
+    do: "With a synthetic source visible, hold the named app's real PTT control and speak a source-recall request, then release. Verify one completed response and the exact producing evidence row. Repeat after moving the source away. Record this separately from generated PCM injection; neither a forced transcript nor a controller-only test is proof of physical microphone handling."
+    verify: true

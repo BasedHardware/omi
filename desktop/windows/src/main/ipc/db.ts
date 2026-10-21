@@ -113,6 +113,7 @@ import {
   rewindSampleStep,
   buildRewindSampledSql
 } from './rewindSampleSql'
+import { SCREEN_SYNTH_FRAMES_SQL, type ScreenSynthFrameRow } from './screenSynthSql'
 import type {
   AiUserProfileInput,
   AiUserProfileRecord,
@@ -930,7 +931,7 @@ export function listLocalConversations(): LocalConversation[] {
   })
 }
 
-export function deleteLocalConversation(id: string): void {
+export async function deleteLocalConversation(id: string): Promise<void> {
   cachedStmt(get(), 'DELETE FROM local_conversation WHERE id = ?').run(id)
 }
 
@@ -997,7 +998,7 @@ export function setAppMeta(key: string, value: string): void {
 // Clear every user-scoped table on sign-out (see dbWipe.ts for scope + rationale).
 // wipeUserDataOn lives in the better-sqlite3-free dbWipe.ts so it is unit-testable
 // under plain-node vitest, which can't load this module's Electron-ABI native dep.
-export function wipeUserData(): void {
+export async function wipeUserData(): Promise<void> {
   wipeUserDataOn(get())
   // BYOK provider keys live in a separate encrypted file (not SQLite), but they
   // are user-scoped too: drop them on an account wipe so a different account on
@@ -1458,6 +1459,13 @@ export function listRewindFrames(from: number, to: number): RewindFrame[] {
   )
 }
 
+export function listScreenSynthFrames(from: number, to: number): ScreenSynthFrameRow[] {
+  return timed(
+    'listScreenSynthFrames',
+    () => cachedStmt(get(), SCREEN_SYNTH_FRAMES_SQL).all(from, to) as ScreenSynthFrameRow[]
+  )
+}
+
 /**
  * A day's frames, evenly down-sampled to ~`target` (macOS getScreenshotsSampled).
  * `<= target` returns them all; a busier day returns every Nth by timestamp so the
@@ -1570,8 +1578,14 @@ export function rewindImagePathsBetween(fromMs: number, toMs: number): string[] 
 
 export function deleteRewindFramesOlderThan(cutoffTs: number): RewindFrame[] {
   const d = get()
-  const select = cachedStmt(d, `SELECT ${REWIND_COLUMNS} FROM rewind_frames WHERE ts < ?`)
-  const del = cachedStmt(d, 'DELETE FROM rewind_frames WHERE ts < ?')
+  const select = cachedStmt(
+    d,
+    `SELECT ${REWIND_COLUMNS} FROM rewind_frames WHERE ts < ?`
+  )
+  const del = cachedStmt(
+    d,
+    'DELETE FROM rewind_frames WHERE ts < ?'
+  )
   const pruneOlderThan = d.transaction((cutoff: number) => {
     const doomed = select.all(cutoff) as RewindFrame[]
     del.run(cutoff)
@@ -2075,6 +2089,20 @@ export function recentMemories(limit = 20): { content: string; category: string 
     get(),
     'SELECT content, category FROM memories ORDER BY created_at DESC, id DESC LIMIT ?'
   ).all(limit) as { content: string; category: string }[]
+}
+
+// Memories created within [from, to), newest first, capped. Unlike recentMemories
+// above (an unwindowed dedup list), the daily recap asks for a specific day — this
+// keeps today's memories out of a "Yesterday" or "Past N days" recap.
+export function recentMemoriesInWindow(
+  from: number,
+  to: number,
+  limit = 10
+): { content: string; category: string }[] {
+  return cachedStmt(
+    get(),
+    'SELECT content, category FROM memories WHERE created_at >= ? AND created_at < ? ORDER BY created_at DESC, id DESC LIMIT ?'
+  ).all(from, to, limit) as { content: string; category: string }[]
 }
 
 // --- Track 3: Local task storage (action_items + staged_tasks) ---

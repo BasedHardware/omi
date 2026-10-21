@@ -331,6 +331,22 @@ class TestHelperMethods:
         assert "[14:30:45]" in result
         assert '"A dog"' in result
 
+    def test_model_facing_photo_timestamp_uses_labelled_clock(self):
+        from models.conversation_photo import ConversationPhoto
+        from utils.model_text import DisplayClock
+
+        photos = [
+            ConversationPhoto(
+                base64='abc',
+                description='A dog',
+                created_at=datetime(2026, 9, 26, 7, 18, tzinfo=timezone.utc),
+            )
+        ]
+        result = ConversationPhoto.photos_as_string(
+            photos, include_timestamps=True, clock=DisplayClock.from_name('Asia/Ho_Chi_Minh')
+        )
+        assert 'Sat 26 Sep 2026, 14:18 Asia/Ho_Chi_Minh (UTC+07:00)' in result
+
     def test_photo_to_string_no_description(self):
         """Photos with no description should be excluded."""
         from models.conversation_photo import ConversationPhoto
@@ -345,56 +361,6 @@ class TestHelperMethods:
         d = e.as_dict_cleaned_dates()
         assert isinstance(d['start'], str)
         assert '2025-06-15' in d['start']
-
-
-class TestConversationSummary:
-    """Phase 2: ConversationSummary lightweight view model."""
-
-    def test_basic_creation(self):
-        from models.conversation_summary import ConversationSummary
-
-        s = ConversationSummary(id="test-1", title="Test", overview="Overview")
-        assert s.id == "test-1"
-        assert s.title == "Test"
-        assert s.category == "other"
-        assert s.person_ids == []
-
-    def test_from_conversation(self):
-        from models.conversation import Conversation
-        from models.conversation_enums import CategoryEnum, ConversationSource
-        from models.conversation_summary import ConversationSummary
-        from models.structured import Structured
-
-        now = datetime.now(timezone.utc)
-        conv = Conversation(
-            id="conv-1",
-            created_at=now,
-            started_at=now,
-            finished_at=now,
-            source=ConversationSource.omi,
-            structured=Structured(
-                title="Team standup",
-                overview="Daily sync",
-                category=CategoryEnum.work,
-            ),
-        )
-        summary = ConversationSummary.from_conversation(conv)
-        assert summary.id == "conv-1"
-        assert summary.title == "Team standup"
-        assert summary.overview == "Daily sync"
-        assert summary.category == "work"
-        assert summary.created_at == now
-        assert summary.person_ids == []
-
-    def test_defaults(self):
-        from models.conversation_summary import ConversationSummary
-
-        s = ConversationSummary(id="x")
-        assert s.title == ''
-        assert s.overview == ''
-        assert s.category == 'other'
-        assert s.transcript_text == ''
-        assert s.created_at is None
 
 
 class TestPhase3NarrowImports:
@@ -624,46 +590,6 @@ class TestImportedFlag:
             }
         )
         assert from_legacy.imported is False
-
-
-class TestConversationSummaryWithTranscript:
-    """ConversationSummary.from_conversation with real data."""
-
-    def test_from_conversation_with_transcript_and_person_ids(self):
-        from models.conversation import Conversation
-        from models.conversation_enums import CategoryEnum, ConversationSource
-        from models.conversation_summary import ConversationSummary
-        from models.structured import Structured
-        from models.transcript_segment import TranscriptSegment
-
-        now = datetime.now(timezone.utc)
-        conv = Conversation(
-            id="summary-1",
-            created_at=now,
-            started_at=now,
-            finished_at=now,
-            source=ConversationSource.omi,
-            structured=Structured(
-                title="Team standup",
-                overview="Daily sync",
-                category=CategoryEnum.work,
-            ),
-            transcript_segments=[
-                TranscriptSegment(
-                    text="Hello team", speaker="SPEAKER_00", start=0.0, end=1.0, is_user=True, person_id="p1"
-                ),
-                TranscriptSegment(
-                    text="Hi there", speaker="SPEAKER_01", start=1.0, end=2.0, is_user=False, person_id="p2"
-                ),
-            ],
-        )
-        summary = ConversationSummary.from_conversation(conv)
-        assert summary.id == "summary-1"
-        assert summary.title == "Team standup"
-        assert summary.category == "work"
-        assert "Hello team" in summary.transcript_text
-        assert "Hi there" in summary.transcript_text
-        assert sorted(summary.person_ids) == ["p1", "p2"]
 
 
 class TestPhase4ConsumerMigration:

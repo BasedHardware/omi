@@ -1,11 +1,17 @@
+import 'package:omi/services/on_device/on_device_background.dart';
+import 'package:omi/services/onboarding_sync_runtime.dart';
+import 'package:omi/env/physical_qualification.dart';
 import 'dart:async';
+import 'package:omi/services/proactivity/proactivity_runtime.dart';
+import 'package:omi/services/telemetry/client_telemetry.dart';
+import 'package:omi/services/telemetry/client_telemetry_flags.dart';
+import 'package:omi/services/telemetry/client_telemetry_transport.dart';
 import 'dart:ui';
-// trigger rebuild
 
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:omi/services/dev_controls/semantic_controls.dart';
 import 'package:marionette_flutter/marionette_flutter.dart';
 
 import 'package:awesome_notifications/awesome_notifications.dart';
@@ -15,6 +21,7 @@ import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:omi/gen/pigeon_communicator.g.dart';
 import 'package:omi/services/bridges/ble_bridge.dart';
+import 'package:omi/services/app_review_service.dart';
 import 'package:omi/services/account_cutover/account_cutover_runtime.dart';
 import 'package:omi/widgets/bluetooth_guidance_listener.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
@@ -22,13 +29,16 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:opus_dart/opus_dart.dart';
 import 'package:opus_flutter/opus_flutter.dart' as opus_flutter;
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:talker_flutter/talker_flutter.dart';
 
 import 'package:omi/app_globals.dart';
+import 'package:omi/backend/http/conversation_api_contract.dart';
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/coordinators/provider_capture_external_actions.dart';
 import 'package:omi/core/app_shell.dart';
+import 'package:omi/env/backend_url_override.dart';
 import 'package:omi/env/dev_env.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/env/environment_profile.dart';
@@ -38,16 +48,26 @@ import 'package:omi/firebase_options_prod.dart' as prod;
 import 'package:omi/flavors.dart';
 import 'package:omi/startup_auth.dart';
 import 'package:omi/startup_failure_app.dart';
+import 'package:omi/startup_firebase.dart';
 import 'package:omi/startup_routing.dart';
+import 'package:omi/startup/boot_crash_handlers.dart';
+import 'package:omi/startup/boot_journal.dart';
+import 'package:omi/startup/boot_recovery.dart';
+import 'package:omi/startup/boot_recovery_app.dart';
+import 'package:omi/startup/startup_error_router.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/apps/providers/add_app_provider.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/payments/payment_method_provider.dart';
-import 'package:omi/providers/action_items_provider.dart';
+import 'package:omi/backend/http/action_items_api_contract.dart';
 import 'package:omi/providers/announcement_provider.dart';
+import 'package:omi/providers/appearance_provider.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/auth_provider.dart';
 import 'package:omi/providers/capture_provider.dart';
+import 'package:omi/services/capture/capture_composition.dart';
+import 'package:omi/services/siri_integration.dart';
+import 'package:omi/services/capture/local_segment_store.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/device_provider.dart';
@@ -55,6 +75,7 @@ import 'package:omi/providers/folder_provider.dart';
 import 'package:omi/providers/goals_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/integration_provider.dart';
+import 'package:omi/providers/messaging_channels_provider.dart';
 import 'package:omi/providers/local_recordings_provider.dart';
 import 'package:omi/providers/locale_provider.dart';
 import 'package:omi/providers/mcp_provider.dart';
@@ -62,7 +83,8 @@ import 'package:omi/providers/memories_provider.dart';
 import 'package:omi/providers/message_provider.dart';
 import 'package:omi/providers/onboarding_provider.dart';
 import 'package:omi/providers/people_provider.dart';
-import 'package:omi/providers/speech_profile_provider.dart';
+import 'package:omi/providers/speaker_tag_prompts_provider.dart';
+import 'package:omi/providers/review_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/providers/task_integration_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
@@ -70,13 +92,20 @@ import 'package:omi/providers/user_provider.dart';
 import 'package:omi/providers/voice_recorder_provider.dart';
 import 'package:omi/providers/phone_call_provider.dart';
 import 'package:omi/services/auth_service.dart';
+import 'package:omi/ui/omi_theme.dart';
+import 'package:omi/ui/omi_tokens.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/services/notifications/action_item_notification_handler.dart';
+import 'package:omi/services/notifications/chat_answer_notification_handler.dart';
 import 'package:omi/services/notifications/important_conversation_notification_handler.dart';
 import 'package:omi/services/notifications/merge_notification_handler.dart';
 import 'package:omi/services/devices/connectors/limitless_connection.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/wals.dart';
+import 'package:omi/utils/analytics/app_session_telemetry.dart';
+import 'package:omi/utils/analytics/phone_battery_sample_telemetry.dart';
+import 'package:omi/utils/analytics/mobile_performance_telemetry.dart';
+import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/debugging/crashlytics_manager.dart';
 import 'package:omi/utils/environment_detector.dart';
@@ -87,10 +116,41 @@ import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/utils/notification_channel_strings.dart';
 
+/// Firebase parameters for the current flavor, resolved identically in every engine.
+FirebaseOptions _firebaseOptionsForFlavor() => Env.profile == AppEnvironmentProfile.localDev
+    ? local.DefaultFirebaseOptions.currentPlatform
+    : prod.DefaultFirebaseOptions.currentPlatform;
+
+/// The single Firebase entry point for every Flutter engine in the app.
+///
+/// See [ensureFirebaseApp] for why `Firebase.apps.isEmpty` was never a valid
+/// guard and why `[core/duplicate-app]` must not kill startup.
+Future<FirebaseApp> _ensureFirebaseApp() {
+  final options = _firebaseOptionsForFlavor();
+  return ensureFirebaseApp<FirebaseApp>(
+    existingApp: () => Firebase.apps.isEmpty ? null : Firebase.app(),
+    configuredProjectId: options.projectId,
+    initializeApp: () => Firebase.initializeApp(options: options),
+    projectIdOf: (app) => app.options.projectId,
+    validateProject: (projectId) => Env.validateFirebaseProject(projectId: projectId),
+  );
+}
+
+/// WorkManager's retained entry point uses exactly the UI Firebase profile.
+@pragma('vm:entry-point')
+Future<void> onDeviceOverflowBackground() => runOnDeviceBackground(initialize: () async {
+      await _ensureFirebaseApp();
+      initOpus(await opus_flutter.load());
+    });
+
 /// Background message handler for FCM data messages
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  await Firebase.initializeApp();
+  // Same path as _init(). This runs in a SEPARATE Flutter engine and used to call
+  // Firebase.initializeApp() with no arguments, so it could bring [DEFAULT] up
+  // from the platform resources with parameters that differ from the ones the UI
+  // engine uses. Now both engines resolve the parameters the same way.
+  await _ensureFirebaseApp();
   await NotificationChannelStrings.loadAppLocale();
 
   await AwesomeNotifications().initialize(null, [
@@ -122,53 +182,149 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
       channelKey,
       isAppInForeground: false,
     );
+  } else if (ChatAnswerNotificationHandler.isChatAnswerData(data)) {
+    // Click-to-talk / chat answers: local BigText + navigate_to (#4375).
+    // Must live in this single background entrypoint — do not re-register a
+    // second onBackgroundMessage handler from NotificationService.
+    await ChatAnswerNotificationHandler.handle(data, channelKey, isAppInForeground: false);
+  }
+}
+
+/// Set once [ServiceManager.init] has run: it refuses a second call, and Try Again on the startup
+/// failure screen re-runs [_init].
+bool _serviceManagerInitialized = false;
+
+final StartupErrorRouter _startupErrorRouter = StartupErrorRouter(
+  report: (error, stack, {required fatal, required origin}) {
+    unawaited(_reportBootCrash('platform_error', error, stack, fatal: fatal, errorOrigin: origin));
+  },
+);
+
+Future<void> _reportBootCrash(
+  String kind,
+  Object error,
+  StackTrace? stack, {
+  FlutterErrorDetails? details,
+  bool fatal = true,
+  String errorOrigin = 'boot',
+}) async {
+  if (PhysicalQualification.enabled) return;
+  unawaited(AppReviewService().recordBadExperience(AppReviewBadExperience.fatalError));
+  try {
+    await BootJournal.instance.record(kind, 'observed', error: error);
+    final breadcrumbs = await BootJournal.instance.breadcrumbs();
+    if (Firebase.apps.isEmpty) {
+      debugPrint('Boot diagnostics: $breadcrumbs');
+      return;
+    }
+    final crashlytics = FirebaseCrashlytics.instance;
+    try {
+      await crashlytics.log('boot_stages: $breadcrumbs');
+    } catch (_) {
+      // A breadcrumb transport failure must not suppress the crash report.
+    }
+    if (details != null) {
+      await crashlytics.recordFlutterError(details);
+    } else {
+      try {
+        await crashlytics.setCustomKey('error_origin', errorOrigin);
+      } catch (_) {}
+      await crashlytics.recordError(error, stack, fatal: fatal);
+    }
+  } catch (_) {
+    // Reporting must not recursively fail startup or the global error handler.
   }
 }
 
 Future _init() async {
-  // Env
-  if (F.env == Environment.prod) {
-    Env.init(ProdEnv());
-  } else {
-    Env.init(DevEnv());
+  // Env. A rejected configuration cannot be fixed by retrying; the failure screen says so.
+  try {
+    if (F.env == Environment.prod) {
+      Env.init(ProdEnv());
+    } else {
+      Env.init(DevEnv());
+    }
+    Env.validateProfilePairing();
+    validateApplicationStartupRouting();
+  } catch (error) {
+    throw StartupConfigurationError(error);
   }
-  Env.validateProfilePairing();
-  validateApplicationStartupRouting();
+  await PhysicalQualification.startupStage('isolation', PhysicalQualification.install);
 
   FlutterForegroundTask.initCommunicationPort();
 
-  // Service manager
-  await ServiceManager.init();
   LimitlessDeviceConnection.realtimeSuppressionPolicy = () => SharedPreferencesUtil().batchModeEnabled;
 
   // Firebase
-  if (Firebase.apps.isEmpty) {
-    final profile = Env.profile;
-    final options = profile == AppEnvironmentProfile.localDev
-        ? local.DefaultFirebaseOptions.currentPlatform
-        : prod.DefaultFirebaseOptions.currentPlatform;
-    Env.validateFirebaseProject(projectId: options.projectId);
-    await Firebase.initializeApp(options: options);
-  } else {
-    // Firebase may already be initialized by native SDK (macOS)
-    debugPrint('Firebase already initialized.');
-    Env.validateFirebaseProject(projectId: Firebase.app().options.projectId);
+  await PhysicalQualification.startupStage('firebase_init', _ensureFirebaseApp);
+
+  if (!PhysicalQualification.enabled) {
+    await BootCrashHandlers.install(
+      initialize: CrashlyticsManager.init,
+      flutterError: (details) {
+        if (PhysicalQualification.enabled) {
+          unawaited(
+            PhysicalQualification.runtimeEvent('flutter_error', error: details.exception, stack: details.stack),
+          );
+          return;
+        }
+        unawaited(_reportBootCrash('flutter_error', details.exception, details.stack, details: details));
+        try {
+          AnalyticsManager().recordProductError(ProductErrorKind.flutterFramework);
+          Logger.instance.talker.handle(details.exception, details.stack);
+          DebugLogManager.logError(details.exception, details.stack, 'FlutterError');
+        } catch (_) {}
+      },
+      platformError: (error, stack) {
+        if (PhysicalQualification.enabled) {
+          unawaited(PhysicalQualification.runtimeEvent('platform_error', error: error, stack: stack));
+        } else {
+          _startupErrorRouter.handlePlatformError(error, stack);
+          try {
+            AnalyticsManager().recordProductError(ProductErrorKind.uncaughtDart);
+          } catch (_) {}
+        }
+        return true;
+      },
+    );
   }
 
   if (Env.profile.usesFirebaseAuthEmulator) {
-    await FirebaseAuth.instance.useAuthEmulator(Env.firebaseAuthEmulatorHost, Env.firebaseAuthEmulatorPort);
+    await PhysicalQualification.startupStage(
+      'auth_emulator',
+      () => FirebaseAuth.instance.useAuthEmulator(Env.firebaseAuthEmulatorHost, Env.firebaseAuthEmulatorPort),
+    );
   }
 
-  await PlatformManager.initializeServices();
-  await NotificationChannelStrings.loadAppLocale();
-  await NotificationService.instance.initialize();
+  await PhysicalQualification.startupStage('platform_services', PlatformManager.initializeServices);
+  await PhysicalQualification.startupStage('notification_locale', NotificationChannelStrings.loadAppLocale);
+  await PhysicalQualification.startupStage('notification_service', NotificationService.instance.initialize);
 
   // Register FCM background message handler
   if (PlatformManager().isFCMSupported) {
     FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
   }
 
-  await SharedPreferencesUtil.init();
+  await PhysicalQualification.startupStage('shared_preferences', SharedPreferencesUtil.init);
+  // Persisted override must be live before auth resolution and product traffic.
+  BackendUrlOverride.restore(SharedPreferencesUtil().customBackendUrl);
+  // ConnectivityService snapshots its health-check URLs when ServiceManager
+  // initializes, so initialize it only after restoring (or clearing) the
+  // persisted override. This also makes release builds pin their flavor URL
+  // before the first connectivity probe.
+  if (!_serviceManagerInitialized) {
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+      await const MethodChannel('com.omi/on_device').invokeMethod<void>('awaitBackgroundIdle');
+    }
+    await PhysicalQualification.startupStage('service_manager_init', () => ServiceManager.init());
+    _serviceManagerInitialized = true;
+  }
+  await PhysicalQualification.startupStage(
+    'autoremove_default',
+    SharedPreferencesUtil().migrateAutoRemoveSyncedCopiesDefault,
+  );
+  OnboardingSyncRuntime.initialize();
+  SiriIntegration.instance.installEvents();
 
   // TestFlight remains a distribution/telemetry signal; production-family
   // builds always use the established production backend.
@@ -176,31 +332,66 @@ Future _init() async {
     Env.isTestFlight = await EnvironmentDetector.isTestFlight();
   }
 
-  bool isAuth = await resolveStartupAuth(() => AuthService.instance.getIdToken());
+  if (PhysicalQualification.enabled) {
+    final restored = FirebaseAuth.instance.currentUser;
+    if (restored != null && restored.uid != PhysicalQualification.fixtureUid) {
+      throw StateError('Physical qualification refuses a different persisted principal.');
+    }
+    if (restored == null) {
+      await PhysicalQualification.startupStage(
+        'fixture_signin',
+        () => AuthService.instance.signInWithLocalDevToken(uid: PhysicalQualification.fixtureUid),
+      );
+    }
+    SharedPreferencesUtil().onboardingCompleted = true;
+  }
+
+  bool isAuth = await PhysicalQualification.startupStage(
+    'resolve_auth',
+    () => resolveStartupAuth(() => AuthService.instance.getIdToken()),
+  );
   if (isAuth) {
-    PlatformManager.instance.analytics.identify();
+    OnboardingSyncRuntime.wake();
+    final firebaseUser = FirebaseAuth.instance.currentUser;
+    PlatformManager.instance.analytics.identify(
+      authMethod:
+          firebaseUser == null || firebaseUser.providerData.isEmpty ? null : firebaseUser.providerData.first.providerId,
+      userCreatedAt: firebaseUser?.metadata.creationTime,
+    );
     // Restore onboarding state from server if not already set locally
     // This handles the case where cached credentials are used on startup
     if (!SharedPreferencesUtil().onboardingCompleted) {
-      await AuthService.instance.restoreOnboardingState();
+      await PhysicalQualification.startupStage('restore_onboarding', AuthService.instance.restoreOnboardingState);
     }
     // Fail-closed cutover gate before product traffic / offline uploads.
     // Anonymous Firebase sessions are not cutover product owners.
     final bootstrapUser = FirebaseAuth.instance.currentUser;
     if (bootstrapUser != null && !bootstrapUser.isAnonymous) {
-      await AccountCutoverRuntime.instance.bindAuthenticatedOwner(bootstrapUser.uid);
+      await PhysicalQualification.startupStage(
+        'bind_owner',
+        () => AccountCutoverRuntime.instance.bindAuthenticatedOwner(bootstrapUser.uid),
+      );
     }
   }
-  initOpus(await opus_flutter.load());
+  initOpus(await PhysicalQualification.startupStage<dynamic>('opus_load', opus_flutter.load));
 
   // Register native BLE bridge
-  BleFlutterApi.setUp(BleBridge.instance);
-
-  BleBridge.instance.stateRestoredCallback = (List<String> peripheralUuids) {
-    Logger.debug('main: restored ${peripheralUuids.length} BLE peripherals');
-  };
-
-  await CrashlyticsManager.init();
+  if (PhysicalQualification.enabled) {
+    BleFlutterApi.setUp(BleBridge.instance);
+    BleBridge.instance.stateRestoredCallback = (List<String> peripheralUuids) {
+      Logger.debug('main: restored ${peripheralUuids.length} BLE peripherals');
+    };
+  } else {
+    await PhysicalQualification.startupStage('ble_setup', () async {
+      BleFlutterApi.setUp(BleBridge.instance);
+      BleBridge.instance.stateRestoredCallback = (List<String> peripheralUuids) {
+        Logger.debug('main: restored ${peripheralUuids.length} BLE peripherals');
+      };
+    });
+  }
+  if (PhysicalQualification.enabled) {
+    await PhysicalQualification.startupStage('crash_reporter', CrashlyticsManager.init);
+  }
   if (isAuth) {
     PlatformManager.instance.crashReporter.identifyUser(
       FirebaseAuth.instance.currentUser?.email ?? '',
@@ -208,17 +399,105 @@ Future _init() async {
       SharedPreferencesUtil().uid,
     );
   }
-  FlutterError.onError = (FlutterErrorDetails details) {
-    FirebaseCrashlytics.instance.recordFlutterFatalError(details);
-  };
-
-  PlatformDispatcher.instance.onError = (error, stack) {
-    FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
-    return true;
-  };
-
-  await ServiceManager.instance().start();
+  if (!PhysicalQualification.enabled) {
+    AnalyticsManager().bindIdentity(FirebaseAuth.instance.currentUser?.uid);
+  } else {
+    FlutterError.onError = (details) {
+      unawaited(PhysicalQualification.runtimeEvent('flutter_error', error: details.exception, stack: details.stack));
+    };
+    PlatformDispatcher.instance.onError = (error, stack) {
+      unawaited(PhysicalQualification.runtimeEvent('platform_error', error: error, stack: stack));
+      return true;
+    };
+  }
+  await PhysicalQualification.startupStage('service_manager_start', ServiceManager.instance().start);
   return;
+}
+
+/// Runs start-up and shows the app, or the failure screen (whose Try Again calls this again).
+Future<void> _start({bool forceFull = false}) async {
+  BootRecovery? recovery;
+  try {
+    if (!PhysicalQualification.enabled) {
+      _startupErrorRouter.beginStartup();
+      recovery = BootRecovery(await SharedPreferences.getInstance());
+      await recovery.countInterruptedBoot(BootJournal.instance);
+      await BootJournal.instance.record('boot', 'begin');
+      await recovery.recordSchemaUpgradeIfNeeded(BootJournal.instance);
+      BootRecovery.safeModeActive = !forceFull && recovery.shouldRecover;
+      if (BootRecovery.safeModeActive) {
+        await BootJournal.instance.record('safe_boot', 'begin');
+        await BootJournal.instance.record('full_startup', 'paused');
+        try {
+          AnalyticsManager().track('Mobile Recovery Mode Entered', properties: {'stage': recovery.failingStage});
+        } catch (_) {}
+        await BootJournal.instance.record('safe_boot', 'completed');
+        await BootJournal.instance.record('boot', 'completed');
+        runApp(BootRecoveryApp(onRetry: () => _start(forceFull: true)));
+        return;
+      }
+    }
+    await _init();
+    if (!PhysicalQualification.enabled) {
+      await recovery!.fullBootSucceeded();
+      await BootJournal.instance.record('boot', 'completed');
+    }
+  } catch (error, stack) {
+    if (!PhysicalQualification.enabled) await BootJournal.instance.record('boot', 'interrupted');
+    if (PhysicalQualification.enabled) {
+      unawaited(PhysicalQualification.runtimeEvent('startup_error', error: error, stack: stack));
+    }
+    // Startup failed before the first frame. Without this the launch
+    // storyboard stays on screen forever: runApp() is never reached, and the
+    // zone handler below only calls debugPrint, which goes nowhere in
+    // profile/release builds. A misconfigured OMI_API_BASE_URL cost about a
+    // day of investigation for exactly this reason — the app looked hung
+    // when it had in fact thrown a precise, actionable StateError.
+    if (!PhysicalQualification.enabled) unawaited(_reportBootCrash('startup_error', error, stack));
+    if (!PhysicalQualification.enabled) {
+      try {
+        AnalyticsManager().recordProductError(ProductErrorKind.startup);
+      } catch (_) {}
+    }
+    if (!PhysicalQualification.enabled && BootRecovery.countsFailure(error)) {
+      try {
+        recovery ??= BootRecovery(await SharedPreferences.getInstance());
+        final stage = BootJournal.instance.failureStage;
+        final failures = await recovery.failed(stage);
+        if (failures >= 3 && !BootRecovery.safeModeActive) {
+          BootRecovery.safeModeActive = true;
+          await BootJournal.instance.record('safe_boot', 'begin');
+          await BootJournal.instance.record('full_startup', 'paused');
+          try {
+            AnalyticsManager().track('Mobile Recovery Mode Entered', properties: {'stage': stage});
+          } catch (_) {}
+          await BootJournal.instance.record('safe_boot', 'completed');
+          await BootJournal.instance.record('boot', 'completed');
+          runApp(BootRecoveryApp(onRetry: () => _start(forceFull: true)));
+          return;
+        }
+        if (BootRecovery.safeModeActive) {
+          await BootJournal.instance.record('safe_boot', 'failed', error: error);
+          runApp(BootRecoveryApp(onRetry: () => _start(forceFull: true)));
+          return;
+        }
+      } catch (recoveryError) {
+        await BootJournal.instance.record('safe_boot', 'failed', error: recoveryError);
+      }
+    }
+    runApp(StartupFailureApp(error: error, stack: stack, onRetry: () => _start(forceFull: true)));
+    return;
+  }
+  if (PhysicalQualification.enabled) {
+    unawaited(PhysicalQualification.runtimeEvent('run_app_scheduled'));
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(PhysicalQualification.runtimeEvent('first_frame_callback'));
+    });
+  }
+  if (!PhysicalQualification.enabled) _startupErrorRouter.completeStartup();
+  runApp(const MyApp());
+  unawaited(SiriIntegration.instance.deliverPendingRoute());
+  if (PhysicalQualification.enabled) unawaited(PhysicalQualification.runtimeEvent('run_app_returned'));
 }
 
 void main() {
@@ -227,30 +506,25 @@ void main() {
       // Ensure
       if (kDebugMode) {
         MarionetteBinding.ensureInitialized();
+        // Typed semantic controls for the seeded-journey lane: same debug VM
+        // service transport as Marionette, installed only in eligible
+        // local-dev test builds (inert everywhere else, including
+        // production-flavor debug builds).
+        SemanticControls.instance.installIfEligible();
       } else {
         WidgetsFlutterBinding.ensureInitialized();
       }
-      try {
-        await _init();
-      } catch (error, stack) {
-        // Startup failed before the first frame. Without this the launch
-        // storyboard stays on screen forever: runApp() is never reached, and the
-        // zone handler below only calls debugPrint, which goes nowhere in
-        // profile/release builds. A misconfigured OMI_API_BASE_URL cost about a
-        // day of investigation for exactly this reason — the app looked hung
-        // when it had in fact thrown a precise, actionable StateError.
-        if (Firebase.apps.isNotEmpty) {
-          FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
-        }
-        runApp(StartupFailureApp(error: error, stack: stack));
-        return;
-      }
-      runApp(const MyApp());
+      await _start();
     },
     (error, stack) {
-      debugPrint('Uncaught error: $error\n$stack');
-      if (Firebase.apps.isNotEmpty) {
-        FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
+      if (PhysicalQualification.enabled) {
+        unawaited(PhysicalQualification.runtimeEvent('zone_error', error: error, stack: stack));
+      } else {
+        _startupErrorRouter.handleZoneError(error, stack);
+        try {
+          debugPrint('Uncaught error: $error\n$stack');
+          AnalyticsManager().recordProductError(ProductErrorKind.uncaughtDart);
+        } catch (_) {}
       }
     },
   );
@@ -270,11 +544,44 @@ class MyApp extends StatefulWidget {
 }
 
 class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
+  final AppSessionTelemetry _appSessionTelemetry = AppSessionTelemetry();
+  late final PhoneBatterySampleTelemetry _phoneBatteryTelemetry = PhoneBatterySampleTelemetry(
+    captureContext: () {
+      final context = globalNavigatorKey.currentContext;
+      if (context == null) return (source: 'unknown', mode: 'unknown');
+      final capture = context.read<CaptureProvider>();
+      if (capture.isPhoneMicBatchRecording) return (source: 'phone_mic', mode: 'batch');
+      if (capture.isPendantBatchRecording) return (source: 'pendant', mode: 'batch');
+      final source = capture.liveCaptureSource;
+      if (source == null) return (source: 'none', mode: 'none');
+      if (source == 'phone') return (source: 'phone_mic', mode: 'live');
+      if (source == 'apple_watch') return (source: 'watch', mode: 'live');
+      if (source == 'omi' || source == 'friend') return (source: 'pendant', mode: 'live');
+      return (source: 'other', mode: 'live');
+    },
+  );
+  late final MobilePerformanceTelemetry _performanceTelemetry = MobilePerformanceTelemetry(
+    emit: (name, properties) {
+      DebugLogManager.logEvent('mobile_render_diagnostic', {
+        for (final entry in properties.entries) entry.key: entry.value,
+      });
+    },
+    identityEpoch: () => AnalyticsManager.identityEpoch,
+    diagnosticsEnabled: () => SharedPreferencesUtil().devLogsToFileEnabled,
+  );
+
   @override
   void initState() {
     NotificationUtil.initializeNotificationsEventListeners();
     NotificationUtil.initializeIsolateReceivePort();
     WidgetsBinding.instance.addObserver(this);
+    if (!PhysicalQualification.enabled) {
+      _appSessionTelemetry.recordColdStart();
+      _performanceTelemetry.attach();
+      unawaited(_phoneBatteryTelemetry.start());
+      PlatformManager.instance.analytics.recordTelemetryHealth();
+      if (ClientTelemetryFlags.migrationEnabled) installClientTelemetryTransport();
+    }
     if (SharedPreferencesUtil().devLogsToFileEnabled) {
       DebugLogManager.setEnabled(true);
     }
@@ -282,7 +589,21 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     super.initState();
   }
 
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    if (!PhysicalQualification.enabled) _performanceTelemetry.dispose();
+    _phoneBatteryTelemetry.dispose();
+    super.dispose();
+  }
+
+  @override
+  void didChangePlatformBrightness() {
+    setState(() {});
+  }
+
   void _deinit() {
+    unawaited(OnboardingSyncRuntime.dispose());
     Logger.debug("App > _deinit");
     ServiceManager.instance().deinit();
     ApiClient.dispose();
@@ -297,6 +618,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     // legacy/allow projection cannot admit one offline upload.
     final resumeUser = FirebaseAuth.instance.currentUser;
     final resumeOwner = (resumeUser != null && !resumeUser.isAnonymous) ? resumeUser.uid : null;
+    await ProactivityRuntime.outbox.bindOwner(resumeOwner);
     await AccountCutoverRuntime.instance.bindAuthenticatedOwner(resumeOwner);
     SyncReconciler.instance.onForeground();
     unawaited(SyncUploadGate.instance.reconcileFairUseStatus());
@@ -307,11 +629,25 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     super.didChangeAppLifecycleState(state);
 
     if (state == AppLifecycleState.resumed) {
+      OnboardingSyncRuntime.setActive(true);
+      unawaited(ProactivityRuntime.outbox.flush());
+      if (!PhysicalQualification.enabled) {
+        _appSessionTelemetry.recordResumed();
+        _performanceTelemetry.setForeground(true);
+        PlatformManager.instance.analytics.recordTelemetryHealth();
+      }
       unawaited(_refreshAccountCutoverThenWakeUploads());
     } else if (state == AppLifecycleState.paused) {
+      OnboardingSyncRuntime.setActive(false);
+      ClientTelemetry.instance.onBackground();
+      if (!PhysicalQualification.enabled) {
+        _appSessionTelemetry.recordBackgrounded();
+        _performanceTelemetry.setForeground(false);
+      }
       SyncReconciler.instance.onBackground();
       _onAppPaused();
     } else if (state == AppLifecycleState.detached) {
+      ClientTelemetry.instance.onBackground();
       _deinit();
     }
   }
@@ -327,9 +663,11 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       providers: [
         ListenableProvider(create: (context) => ConnectivityProvider()),
         ChangeNotifierProvider(create: (context) => AuthenticationProvider()),
-        ChangeNotifierProvider(create: (context) => ConversationProvider()),
+        ChangeNotifierProvider(create: (context) => createProductionConversationProvider()),
         ListenableProvider(create: (context) => AppProvider()),
         ChangeNotifierProvider(create: (context) => PeopleProvider()),
+        ChangeNotifierProvider(create: (context) => SpeakerTagPromptsProvider()),
+        ChangeNotifierProvider(create: (context) => ReviewProvider()),
         ChangeNotifierProvider(create: (context) => UsageProvider()),
         ChangeNotifierProxyProvider<AppProvider, MessageProvider>(
           create: (context) => MessageProvider(),
@@ -338,7 +676,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         ),
         ChangeNotifierProxyProvider4<ConversationProvider, MessageProvider, PeopleProvider, UsageProvider,
             CaptureProvider>(
-          create: (context) => CaptureProvider(),
+          create: (context) => composeProductionCaptureProvider(localSegmentStore: LocalSegmentStore.appSupport()),
           update: (BuildContext context, conversation, message, people, usage, CaptureProvider? previous) {
             final externalActions = ProviderCaptureExternalActions(
               conversationProvider: conversation,
@@ -347,7 +685,10 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
               usageProvider: usage,
             );
             return (previous?..updateExternalActions(externalActions)) ??
-                CaptureProvider(externalActions: externalActions);
+                composeProductionCaptureProvider(
+                  externalActions: externalActions,
+                  localSegmentStore: LocalSegmentStore.appSupport(),
+                );
           },
         ),
         ChangeNotifierProxyProvider<ConversationProvider, LocalRecordingsProvider>(
@@ -356,9 +697,10 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
               (previous?..setConversationProvider(conversation)) ?? LocalRecordingsProvider(),
         ),
         ChangeNotifierProxyProvider2<CaptureProvider, LocalRecordingsProvider, DeviceProvider>(
-          create: (context) => DeviceProvider(),
+          create: (context) => DeviceProvider()..nativeLink.bindAppLifecycle(),
           update: (BuildContext context, captureProvider, localRecordings, DeviceProvider? previous) =>
-              (previous?..setProviders(captureProvider, localRecordings)) ?? DeviceProvider(),
+              (previous?..setProviders(captureProvider, localRecordings)) ??
+              (DeviceProvider()..nativeLink.bindAppLifecycle()),
         ),
         ChangeNotifierProxyProvider<DeviceProvider, OnboardingProvider>(
           create: (context) => OnboardingProvider(),
@@ -366,11 +708,6 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
               (previous?..setDeviceProvider(value)) ?? OnboardingProvider(),
         ),
         ListenableProvider(create: (context) => HomeProvider()),
-        ChangeNotifierProxyProvider<DeviceProvider, SpeechProfileProvider>(
-          create: (context) => SpeechProfileProvider(),
-          update: (BuildContext context, device, SpeechProfileProvider? previous) =>
-              (previous?..setProviders(device)) ?? SpeechProfileProvider(),
-        ),
         ChangeNotifierProxyProvider2<AppProvider, ConversationProvider, ConversationDetailProvider>(
           create: (context) => ConversationDetailProvider(),
           update: (BuildContext context, app, conversation, ConversationDetailProvider? previous) =>
@@ -387,25 +724,32 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
               (previous?..setConnectivityProvider(connectivity)) ?? MemoriesProvider(),
         ),
         ChangeNotifierProvider(create: (context) => UserProvider()),
-        ChangeNotifierProvider(lazy: true, create: (context) => ActionItemsProvider()),
+        ChangeNotifierProvider(lazy: true, create: (context) => createProductionActionItemsProvider()),
         ChangeNotifierProvider(lazy: true, create: (context) => GoalsProvider()..init()),
         ChangeNotifierProvider(create: (context) => SyncProvider()),
         ChangeNotifierProvider(lazy: true, create: (context) => TaskIntegrationProvider()),
         ChangeNotifierProvider(lazy: true, create: (context) => IntegrationProvider()),
+        ChangeNotifierProvider(lazy: true, create: (context) => MessagingChannelsProvider()),
         ChangeNotifierProvider(lazy: true, create: (context) => FolderProvider()),
         ChangeNotifierProvider(lazy: true, create: (context) => McpProvider()),
         ChangeNotifierProvider(lazy: true, create: (context) => PaymentMethodProvider()),
         ChangeNotifierProvider(create: (context) => VoiceRecorderProvider()..checkPendingRecording()),
         ChangeNotifierProvider(create: (context) => LocaleProvider()),
+        ChangeNotifierProvider(create: (context) => AppearanceProvider()),
         ChangeNotifierProvider(create: (context) => AnnouncementProvider()),
         ChangeNotifierProvider(lazy: true, create: (context) => PhoneCallProvider()),
       ],
       builder: (context, child) {
+        final mode = context.watch<AppearanceProvider>().mode;
+        final platformBrightness = WidgetsBinding.instance.platformDispatcher.platformBrightness;
+        final brightness = resolveAppearanceBrightness(mode, platformBrightness);
+        OmiColors.active = OmiColors.forBrightness(brightness);
         return WithForegroundTask(
           child: MaterialApp(
             debugShowCheckedModeBanner: F.env == Environment.dev,
             title: F.title,
             navigatorKey: MyApp.navigatorKey,
+            navigatorObservers: [if (!PhysicalQualification.enabled) _performanceTelemetry],
             locale: context.watch<LocaleProvider>().locale,
             localizationsDelegates: const [
               AppLocalizations.delegate,
@@ -414,44 +758,18 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
               GlobalCupertinoLocalizations.delegate,
             ],
             supportedLocales: AppLocalizations.supportedLocales,
-            theme: ThemeData(
-              useMaterial3: false,
-              colorScheme: const ColorScheme.dark(
-                primary: Colors.black,
-                secondary: Color(0xFF35343B),
-                surface: Colors.black38,
-              ),
-              snackBarTheme: const SnackBarThemeData(
-                backgroundColor: Color(0xFF1F1F25),
-                contentTextStyle: TextStyle(fontSize: 16, color: Colors.white, fontWeight: FontWeight.w500),
-              ),
-              textTheme: TextTheme(
-                titleLarge: const TextStyle(fontSize: 18, color: Colors.white),
-                titleMedium: const TextStyle(fontSize: 16, color: Colors.white),
-                bodyMedium: const TextStyle(fontSize: 14, color: Colors.white),
-                labelMedium: TextStyle(fontSize: 12, color: Colors.grey.shade200),
-              ),
-              textSelectionTheme: const TextSelectionThemeData(
-                cursorColor: Colors.white,
-                selectionColor: Colors.white24,
-                selectionHandleColor: Colors.white,
-              ),
-              cupertinoOverrideTheme: const CupertinoThemeData(
-                primaryColor: Colors.white, // Controls the selection handles on iOS
-              ),
-            ),
-            themeMode: ThemeMode.dark,
+            theme: buildOmiTheme(brightness: Brightness.light),
+            darkTheme: buildOmiTheme(brightness: Brightness.dark),
+            themeMode: mode,
             builder: (context, child) {
-              FlutterError.onError = (FlutterErrorDetails details) {
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  Logger.instance.talker.handle(details.exception, details.stack);
-                  DebugLogManager.logError(details.exception, details.stack, 'FlutterError');
-                });
-              };
+              syncIntlDefaultLocale(Localizations.localeOf(context));
               ErrorWidget.builder = (errorDetails) {
                 return CustomErrorWidget(errorMessage: errorDetails.exceptionAsString());
               };
-              final content = child!;
+              final content = AnnotatedRegion<SystemUiOverlayStyle>(
+                value: brightness == Brightness.dark ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark,
+                child: KeyedSubtree(key: ValueKey(brightness), child: child!),
+              );
               final guidedContent = BluetoothGuidanceListener(child: content);
               return PlatformService.isIOS && Env.posthogApiKey != null
                   ? RageClickContextTracker(child: guidedContent)

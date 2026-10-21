@@ -1,15 +1,15 @@
 # Windows release pipeline
 
 The Windows desktop app ships through `.github/workflows/desktop_windows_release.yml`.
-It mirrors the macOS auto-release shape (`.github/workflows/desktop_auto_release.yml`):
-a merge to `main` cuts a version, tags it, and publishes a beta build — the
-difference is Windows has no external CI (no Codemagic), so the same workflow also
-builds the installer on a `windows-latest` runner with electron-builder (NSIS).
+It mirrors the macOS auto-release shape (`.github/workflows/desktop_auto_release.yml`)
+in what it produces — a tagged version, a beta build — but unlike the macOS workflow
+it is **manual only** (`workflow_dispatch`, no `push` trigger): Windows has no external
+CI (no Codemagic), so the same workflow also builds the installer on a `windows-latest`
+runner with electron-builder (NSIS).
 
 ## What it does
 
-On every push to `main` that touches `desktop/windows/**` (or a manual
-`workflow_dispatch`):
+On a manual `workflow_dispatch`:
 
 1. **plan-and-tag** (Ubuntu)
    - Finds the latest `v*-windows` tag (the version source of truth).
@@ -26,14 +26,23 @@ On every push to `main` that touches `desktop/windows/**` (or a manual
 2. **build-and-publish** (Windows)
    - Checks out the `v<version>-windows` tag (so `package.json` already has the
      right version).
-   - Provisions `.env` from `.env.example` (public Firebase/PostHog config), then
-     `pnpm install --frozen-lockfile` (rebuilds `better-sqlite3`, builds the .NET
-     OCR/automation helpers).
+   - Provisions `.env` from the tracked `.env.beta.example` profile (public
+     Firebase/PostHog config plus the Beta API and desktop-backend endpoints),
+     then `pnpm install --frozen-lockfile` (rebuilds `better-sqlite3`, builds
+     the .NET OCR/automation helpers).
    - Builds the NSIS installer. **Signed** if the Azure Trusted Signing secrets
      are present, **unsigned** otherwise (the release notes say which).
    - Publishes the installer `.exe`, its `.exe.blockmap` (differential updates),
      and `latest.yml` (the electron-updater feed) to a **prerelease** GitHub
      Release named `Omi for Windows <version> (beta)`, using `gh`.
+
+The release workflow is the Windows Beta path: it copies
+`desktop/windows/.env.beta.example` to `.env` before installing and building.
+That profile points memory-enabled requests at the development serving plane
+(`api.omiapi.com` and the development desktop backend), while retaining the
+same Firebase project and analytics settings as the stable app. The checked-in
+`.env.example` remains the stable production profile for local or stable builds;
+the workflow must not be changed to copy it for a Beta release.
 
 ### electron-builder config (`--config electron-builder.config.mjs`)
 

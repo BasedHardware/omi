@@ -3,9 +3,8 @@
 Covers:
 1. create_action_item_tool rejects due dates more than 1 day in the past
 2. update_action_item_tool rejects due dates more than 1 day in the past
-3. extract_action_items passes current_time to prompt and clears past due dates
-4. Dates within 1-day grace window are accepted
-5. Future dates are accepted unchanged
+3. Dates within 1-day grace window are accepted
+4. Future dates are accepted unchanged
 """
 
 import importlib
@@ -110,6 +109,8 @@ _SYS_MODULE_NAMES = [
     "database.action_items",
     "database.notifications",
     "utils",
+    "utils.model_text",
+    "utils.user_clock",
     "utils.notifications",
     "utils.byok",
     "utils.llm",
@@ -118,14 +119,38 @@ _SYS_MODULE_NAMES = [
     "utils.llm.clients",
     "utils.llm.conversation_folder",
     "utils.llm.conversation_prompt_prefix",
+    "utils.llm.conversation_prompt_context",
     "utils.llm.conversation_processing",
+    "utils.llm.model_config",
     "utils.retrieval",
     "utils.retrieval.tools",
     "utils.retrieval.tools.action_item_tools",
+    "utils.messaging",
+    "utils.messaging.undo",
+    "utils.messaging.projection",
+    "utils.messaging.turn_context",
     "utils.retrieval.agentic",
+    "utils.retrieval.chat_scope",
+    "utils.retrieval.turn_refs",
     "utils.conversations",
     "utils.conversations.render",
     "utils.conversations.wake_word",
+    "utils.conversations.summary_selection",
+    "utils.conversations.meeting_participants",
+    "utils.llm.meeting_notes_rich_prompts",
+    "utils.llm.meeting_notes_validation",
+    "utils.llm.meeting_notes_presentation",
+    "utils.llm.action_item_normalization",
+    "utils.llm.conversation_notes_prompts",
+    "utils.observability",
+    "utils.observability.fallback",
+    "models.structured_extraction",
+    "utils.llm.conversation_title_people",
+    "models.structured",
+    "models.calendar_context",
+    "models.conversation_enums",
+    "omi_plugin_sdk",
+    "omi_plugin_sdk.models",
     "langchain_core",
     "langchain_core.tools",
     "langchain_core.runnables",
@@ -211,7 +236,6 @@ gateway_mod.BACKGROUND_CHAT_EXTRACTION_TIMEOUT_SECONDS = 35.0
 
 if "utils.llm.gateway_observability" not in sys.modules:
     gateway_observability_mod = _stub_module("utils.llm.gateway_observability")
-    gateway_observability_mod.record_gateway_shadow_comparison = MagicMock()
 
 # Stub langchain
 langchain_core = _stub_package("langchain_core")
@@ -237,8 +261,13 @@ langchain_output_parsers = _stub_module("langchain_core.output_parsers")
 langchain_output_parsers.PydanticOutputParser = MagicMock()
 langchain_prompts = _stub_module("langchain_core.prompts")
 langchain_prompts.ChatPromptTemplate = MagicMock()
+langchain_openai = _stub_package("langchain_openai")
+langchain_openai.ChatOpenAI = MagicMock()
+language_models = _stub_module("langchain_core.language_models")
+language_models.BaseChatModel = object
 langchain_messages = _stub_module("langchain_core.messages")
 langchain_messages.SystemMessage = MagicMock()
+langchain_messages.HumanMessage = MagicMock()
 
 # Stub pydantic (already installed, just need BaseModel/Field accessible)
 # pydantic is real, no stub needed
@@ -247,8 +276,11 @@ langchain_messages.SystemMessage = MagicMock()
 _stub_package("utils")
 _stub_package("utils.retrieval")
 _stub_package("utils.retrieval.tools")
+_stub_package("utils.messaging")
 _stub_package("utils.llm")
 _stub_package("utils.conversations")
+_load_module_from_file("utils.model_text", BACKEND_DIR / "utils" / "model_text.py")
+_load_module_from_file("utils.user_clock", BACKEND_DIR / "utils" / "user_clock.py")
 
 # Stub utils.conversations.render (action_item_tools imports resolve_display_tz, format_local_time)
 _render_stub = _stub_module("utils.conversations.render")
@@ -278,6 +310,22 @@ import contextvars
 agentic_stub = _stub_module("utils.retrieval.agentic")
 agentic_stub.agent_config_context = contextvars.ContextVar('agent_config', default=None)
 
+
+def _apply_chat_scope_dates(scope, start_date, end_date):
+    return start_date, end_date, None
+
+
+def _chat_scope_from_config(configurable):
+    if not isinstance(configurable, dict):
+        return None
+    scope = configurable.get("chat_scope")
+    return scope if isinstance(scope, dict) and scope else None
+
+
+_chat_scope_stub = _stub_module("utils.retrieval.chat_scope")
+_chat_scope_stub.apply_chat_scope_dates = _apply_chat_scope_dates
+_chat_scope_stub.chat_scope_from_config = _chat_scope_from_config
+
 # ---------------------------------------------------------------------------
 # Load production code
 # ---------------------------------------------------------------------------
@@ -300,6 +348,11 @@ conv_folder_stub.build_folders_context = MagicMock(return_value="")
 # Stub utils.llm.gateway_error_contract (conversation_processing imports from it)
 gateway_error_contract_stub = _stub_module("utils.llm.gateway_error_contract")
 gateway_error_contract_stub.is_byok_rate_limit_gateway_error = MagicMock(return_value=False)
+_stub_module("database.chat_edits").snapshot = MagicMock(return_value={})
+_stub_module("database.chat_edits").envelope = MagicMock(return_value={})
+_stub_module("utils.messaging.undo").record_write = MagicMock(return_value="")
+_stub_module("utils.messaging.projection").surface_runtime = types.SimpleNamespace(get=lambda: None)
+_load_module_from_file("utils.messaging.turn_context", BACKEND_DIR / "utils" / "messaging" / "turn_context.py")
 
 # Load models first
 _stub_package("models")
@@ -308,6 +361,7 @@ _load_module_from_file("models.conversation", BACKEND_DIR / "models" / "conversa
 _load_module_from_file("models.app", BACKEND_DIR / "models" / "app.py")
 
 # Load action_item_tools
+_load_module_from_file("utils.retrieval.turn_refs", BACKEND_DIR / "utils" / "retrieval" / "turn_refs.py")
 action_item_tools = _load_module_from_file(
     "utils.retrieval.tools.action_item_tools",
     BACKEND_DIR / "utils" / "retrieval" / "tools" / "action_item_tools.py",
@@ -323,8 +377,19 @@ _load_module_from_file("utils.llm.discard_parser", BACKEND_DIR / "utils" / "llm"
 # unresolvable.
 _load_module_from_file("utils.llm.prompt_cache", BACKEND_DIR / "utils" / "llm" / "prompt_cache.py")
 
+# conversation_processing imports the shaped loop at module scope. The stubbed
+# utils.llm package cannot resolve it, so load the real stdlib module first.
+_load_module_from_file("utils.llm.shaped_agent", BACKEND_DIR / "utils" / "llm" / "shaped_agent.py")
+_load_module_from_file("utils.llm.shaped_notes_transport", BACKEND_DIR / "utils" / "llm" / "shaped_notes_transport.py")
+
+# model_config pulls in gateway_client; stub the one constant conversation_processing
+# imports so the isolated load does not need the real module tree.
+model_config_stub = _stub_module("utils.llm.model_config")
+model_config_stub.FOREGROUND_REQUEST_TIMEOUT_SECONDS = 60.0
+
 prompt_prefix_stub = _stub_module("utils.llm.conversation_prompt_prefix")
-prompt_prefix_stub.ConversationPromptPrefix = MagicMock
+prompt_context_stub = _stub_module("utils.llm.conversation_prompt_context")
+prompt_context_stub.ConversationPromptPrefix = MagicMock
 prompt_prefix_stub.shared_conversation_cache_supported = MagicMock(return_value=False)
 
 # wake_word is stdlib-only; load the real trust-boundary helper before the
@@ -333,11 +398,68 @@ _load_module_from_file(
     "utils.conversations.wake_word",
     BACKEND_DIR / "utils" / "conversations" / "wake_word.py",
 )
+_load_module_from_file(
+    "utils.conversations.summary_selection",
+    BACKEND_DIR / "utils" / "conversations" / "summary_selection.py",
+)
+# relevance_rules is stdlib-only; load the real module so conversation_processing's
+# module-scope `from utils.conversations.relevance_rules import KEEP_WORD_COUNT`
+# resolves against production's threshold, not a stub package.
+_load_module_from_file(
+    "utils.conversations.relevance_rules",
+    BACKEND_DIR / "utils" / "conversations" / "relevance_rules.py",
+)
+
+# Pure helpers imported by conversation_processing; load the real modules so
+# the isolated import chain exercises production code. meeting_participants and
+# meeting_notes_validation resolve models/* through the real models.__path__.
+_load_module_from_file(
+    "utils.conversations.meeting_participants",
+    BACKEND_DIR / "utils" / "conversations" / "meeting_participants.py",
+)
+_load_module_from_file(
+    "utils.llm.meeting_notes_rich_prompts",
+    BACKEND_DIR / "utils" / "llm" / "meeting_notes_rich_prompts.py",
+)
+_load_module_from_file(
+    "utils.llm.meeting_notes_validation",
+    BACKEND_DIR / "utils" / "llm" / "meeting_notes_validation.py",
+)
+_load_module_from_file(
+    "utils.llm.meeting_notes_presentation",
+    BACKEND_DIR / "utils" / "llm" / "meeting_notes_presentation.py",
+)
+_load_module_from_file(
+    "utils.llm.conversation_title_people",
+    BACKEND_DIR / "utils" / "llm" / "conversation_title_people.py",
+)
+_load_module_from_file(
+    "utils.llm.action_item_normalization",
+    BACKEND_DIR / "utils" / "llm" / "action_item_normalization.py",
+)
+
+# Content-free receipts are stdlib-only and wrap the notes entry point.
+_load_module_from_file(
+    "utils.llm.notes_observability",
+    BACKEND_DIR / "utils" / "llm" / "notes_observability.py",
+)
+
+# Episode helpers are lazy and unused by these flag-off action-item tests.
+# Keep the isolated graph limited to the production imports exercised here.
+_stub_package("utils.observability")
+fallback_stub = _stub_module("utils.observability.fallback")
+fallback_stub.record_fallback = MagicMock()
+_load_module_from_file("utils.llm.conversation_notes_prompts", BACKEND_DIR / "utils/llm/conversation_notes_prompts.py")
 
 conversation_processing = _load_module_from_file(
     "utils.llm.conversation_processing",
     BACKEND_DIR / "utils" / "llm" / "conversation_processing.py",
 )
+
+# Retain the same extraction model graph as the isolated production module.
+# Importing it again after restoration creates incompatible Pydantic class identities.
+ActionItemsExtraction = sys.modules["models.structured_extraction"].ActionItemsExtraction
+ExtractedActionItem = sys.modules["models.structured_extraction"].ExtractedActionItem
 
 # Restore sys.modules now that the modules under test are imported and bound to
 # their stubbed dependencies. Tests below patch those module objects directly.
@@ -346,7 +468,9 @@ del _SYS_MODULES_SNAPSHOT, _SYS_MODULE_NAMES
 
 
 def _make_config(uid="test-user-123"):
-    return {"configurable": {"user_id": uid}}
+    # Chat turns always carry the resolved zone; without it DisplayClock would import the real
+    # database.notifications after the stubs above are restored.
+    return {"configurable": {"user_id": uid, "user_timezone": "UTC"}}
 
 
 # ===========================================================================
@@ -428,14 +552,23 @@ class TestCreateActionItemDateValidation:
         assert "Error" in result
         assert "Invalid due_at format" in result
 
-    def test_no_due_date_defaults_to_24h(self):
-        """No due date should default to 24h from now."""
+    def test_no_due_date_stays_undated(self):
+        """A task the user never dated must be written with no due date.
+
+        Inventing ``now + 24h`` put it in neither the overdue nor the due-today
+        bucket any reader uses, so "remind me to X" followed by "what's on my
+        list" deterministically answered that there was nothing.
+        """
+        action_items_db.create_action_item.reset_mock()
         result = create_action_item_tool(
             description="No due date task",
             due_at=None,
             config=_make_config(),
         )
         assert "in the past" not in result
+        action_items_db.create_action_item.assert_called_once()
+        written = action_items_db.create_action_item.call_args.args[1]
+        assert written.get("due_at") is None, f"expected no invented due date, got {written.get('due_at')!r}"
 
     def test_boundary_23h_ago_accepted(self):
         """Due date 23h ago should be accepted (within 1-day grace)."""
@@ -489,6 +622,9 @@ class TestUpdateActionItemDateValidation:
     def test_accepts_future_date_on_update(self):
         """Updating due date to a future date should work."""
         future_date = (datetime.now(timezone.utc) + timedelta(days=3)).strftime('%Y-%m-%dT%H:%M:%S+00:00')
+        action_items_db.update_action_item.side_effect = (
+            lambda *args, **kwargs: kwargs['expected_chat_state'].update(after={}) or True
+        )
         result = update_action_item_tool(
             action_item_id="test-item-id",
             due_at=future_date,
@@ -530,265 +666,4 @@ class TestUpdateActionItemDateValidation:
 
 
 # ===========================================================================
-# extract_action_items prompt and post-validation tests
 # ===========================================================================
-
-
-class TestExtractActionItemsPostValidation:
-    def test_prompt_contains_current_time_and_staleness_rule(self):
-        """The extraction prompt source should contain current_time and staleness logic."""
-        source = inspect.getsource(conversation_processing.extract_action_items)
-        assert 'current_time' in source, "extract_action_items must pass current_time"
-        assert '7 days' in source or 'HISTORICAL' in source, "must contain staleness rule"
-
-    def test_clears_past_due_dates_from_extraction(self):
-        """Due dates more than 1 day in the past should be cleared after extraction."""
-        from models.structured_extraction import ActionItemsExtraction, ExtractedActionItem
-
-        past_due = datetime(2025, 9, 15, 10, 0, tzinfo=timezone.utc)
-        future_due = datetime.now(timezone.utc) + timedelta(days=3)
-
-        mock_response = ActionItemsExtraction(
-            action_items=[
-                ExtractedActionItem(description="Past task", due_at=past_due),
-                ExtractedActionItem(description="Future task", due_at=future_due),
-            ]
-        )
-
-        mock_chain = MagicMock()
-        mock_chain.invoke.return_value = mock_response
-        mock_chain.__or__ = MagicMock(return_value=mock_chain)
-
-        conv_proc = conversation_processing
-
-        mock_llm = MagicMock()
-        mock_llm.bind.return_value = mock_llm
-        mock_llm.__or__ = MagicMock(return_value=mock_chain)
-        with patch.object(conv_proc, 'get_llm', return_value=mock_llm) as mock_get_llm, patch.object(
-            conv_proc, 'PydanticOutputParser'
-        ) as mock_parser_cls, patch.object(conv_proc, 'ChatPromptTemplate') as mock_prompt_cls:
-            mock_parser = MagicMock()
-            mock_parser.get_format_instructions.return_value = "format"
-            mock_parser_cls.return_value = mock_parser
-
-            mock_prompt = MagicMock()
-            mock_prompt.__or__ = MagicMock(return_value=mock_chain)
-            mock_prompt_cls.from_messages.return_value = mock_prompt
-
-            result = conv_proc.extract_action_items(
-                transcript="Call venue by Friday, submit report",
-                started_at=datetime(2025, 9, 10, 10, 0, tzinfo=timezone.utc),
-                language_code="en",
-                tz="UTC",
-            )
-
-        assert len(result) == 2
-        assert result[0].due_at is None, "Past due date should be cleared"
-        assert result[1].due_at is not None, "Future due date should be preserved"
-
-    def test_passes_current_time_to_invoke(self):
-        """extract_action_items should pass current_time in the invoke payload."""
-        from models.structured_extraction import ActionItemsExtraction
-
-        mock_response = ActionItemsExtraction(action_items=[])
-        mock_chain = MagicMock()
-        mock_chain.invoke.return_value = mock_response
-        mock_chain.__or__ = MagicMock(return_value=mock_chain)
-
-        conv_proc = conversation_processing
-
-        mock_llm = MagicMock()
-        mock_llm.bind.return_value = mock_llm
-        mock_llm.__or__ = MagicMock(return_value=mock_chain)
-        with patch.object(conv_proc, 'get_llm', return_value=mock_llm) as mock_get_llm, patch.object(
-            conv_proc, 'PydanticOutputParser'
-        ) as mock_parser_cls, patch.object(conv_proc, 'ChatPromptTemplate') as mock_prompt_cls:
-            mock_parser = MagicMock()
-            mock_parser.get_format_instructions.return_value = "format"
-            mock_parser_cls.return_value = mock_parser
-
-            mock_prompt = MagicMock()
-            mock_prompt.__or__ = MagicMock(return_value=mock_chain)
-            mock_prompt_cls.from_messages.return_value = mock_prompt
-
-            conv_proc.extract_action_items(
-                transcript="Test transcript",
-                started_at=datetime(2025, 6, 1, 10, 0, tzinfo=timezone.utc),
-                language_code="en",
-                tz="UTC",
-            )
-
-        invoke_args = mock_chain.invoke.call_args[0][0]
-        assert 'current_time_local' in invoke_args, "Must pass current_time (local) to prompt"
-        assert 'started_at_local' in invoke_args, "Must still pass started_at (local)"
-
-    def test_preserves_none_due_dates(self):
-        """Action items with no due date should remain unchanged."""
-        from models.structured_extraction import ActionItemsExtraction, ExtractedActionItem
-
-        mock_response = ActionItemsExtraction(
-            action_items=[ExtractedActionItem(description="No due date task", due_at=None)]
-        )
-        mock_chain = MagicMock()
-        mock_chain.invoke.return_value = mock_response
-        mock_chain.__or__ = MagicMock(return_value=mock_chain)
-
-        conv_proc = conversation_processing
-
-        mock_llm = MagicMock()
-        mock_llm.bind.return_value = mock_llm
-        mock_llm.__or__ = MagicMock(return_value=mock_chain)
-        with patch.object(conv_proc, 'get_llm', return_value=mock_llm) as mock_get_llm, patch.object(
-            conv_proc, 'PydanticOutputParser'
-        ) as mock_parser_cls, patch.object(conv_proc, 'ChatPromptTemplate') as mock_prompt_cls:
-            mock_parser = MagicMock()
-            mock_parser.get_format_instructions.return_value = "format"
-            mock_parser_cls.return_value = mock_parser
-
-            mock_prompt = MagicMock()
-            mock_prompt.__or__ = MagicMock(return_value=mock_chain)
-            mock_prompt_cls.from_messages.return_value = mock_prompt
-
-            result = conv_proc.extract_action_items(
-                transcript="Do something",
-                started_at=datetime.now(timezone.utc),
-                language_code="en",
-                tz="UTC",
-            )
-
-        assert len(result) == 1
-        assert result[0].due_at is None
-
-    def test_preserves_due_date_within_grace_boundary(self):
-        """Due date 23h ago should be preserved (within 1-day grace window)."""
-        from models.structured_extraction import ActionItemsExtraction, ExtractedActionItem
-
-        boundary_due = datetime.now(timezone.utc) - timedelta(hours=23)
-        mock_response = ActionItemsExtraction(
-            action_items=[ExtractedActionItem(description="Boundary task", due_at=boundary_due)]
-        )
-        mock_chain = MagicMock()
-        mock_chain.invoke.return_value = mock_response
-        mock_chain.__or__ = MagicMock(return_value=mock_chain)
-
-        conv_proc = conversation_processing
-
-        mock_llm = MagicMock()
-        mock_llm.bind.return_value = mock_llm
-        mock_llm.__or__ = MagicMock(return_value=mock_chain)
-        with patch.object(conv_proc, 'get_llm', return_value=mock_llm) as mock_get_llm, patch.object(
-            conv_proc, 'PydanticOutputParser'
-        ) as mock_parser_cls, patch.object(conv_proc, 'ChatPromptTemplate') as mock_prompt_cls:
-            mock_parser = MagicMock()
-            mock_parser.get_format_instructions.return_value = "format"
-            mock_parser_cls.return_value = mock_parser
-
-            mock_prompt = MagicMock()
-            mock_prompt.__or__ = MagicMock(return_value=mock_chain)
-            mock_prompt_cls.from_messages.return_value = mock_prompt
-
-            result = conv_proc.extract_action_items(
-                transcript="Boundary test",
-                started_at=datetime.now(timezone.utc),
-                language_code="en",
-                tz="UTC",
-            )
-
-        assert len(result) == 1
-        # At exact boundary, strict < means it should NOT be cleared
-        assert result[0].due_at is not None
-
-
-class TestActionItemTimezoneConversion:
-    """#7059: the LLM emits naive LOCAL due dates; the server must convert them to UTC in Python."""
-
-    def _zone_info(self, key):
-        if key == "Asia/Kolkata":
-            return IST_TZ
-        return ZoneInfo(key)
-
-    def _run(self, due_at, tz):
-        from models.structured_extraction import ActionItemsExtraction, ExtractedActionItem
-
-        mock_response = ActionItemsExtraction(action_items=[ExtractedActionItem(description="Task", due_at=due_at)])
-        mock_chain = MagicMock()
-        mock_chain.invoke.return_value = mock_response
-        mock_chain.__or__ = MagicMock(return_value=mock_chain)
-
-        conv_proc = conversation_processing
-
-        mock_llm = MagicMock()
-        mock_llm.bind.return_value = mock_llm
-        mock_llm.__or__ = MagicMock(return_value=mock_chain)
-        with patch.object(conv_proc, 'get_llm', return_value=mock_llm), patch.object(
-            conv_proc, 'PydanticOutputParser'
-        ) as mock_parser_cls, patch.object(conv_proc, 'ChatPromptTemplate') as mock_prompt_cls, patch.object(
-            conv_proc, 'ZoneInfo', side_effect=self._zone_info
-        ):
-            mock_parser = MagicMock()
-            mock_parser.get_format_instructions.return_value = "format"
-            mock_parser_cls.return_value = mock_parser
-            mock_prompt = MagicMock()
-            mock_prompt.__or__ = MagicMock(return_value=mock_chain)
-            mock_prompt_cls.from_messages.return_value = mock_prompt
-            result = conv_proc.extract_action_items(
-                transcript="t",
-                started_at=datetime.now(timezone.utc),
-                language_code="en",
-                tz=tz,
-            )
-        return result, mock_chain
-
-    def test_naive_local_due_converted_to_utc_for_ist(self):
-        # LLM emits naive local 10:00 IST tomorrow -> server stores 04:30 UTC (the #7059 bug).
-        naive_local = (datetime.now(timezone.utc).astimezone(IST_TZ) + timedelta(days=1)).replace(
-            hour=10, minute=0, second=0, microsecond=0, tzinfo=None
-        )
-        result, _ = self._run(naive_local, tz="Asia/Kolkata")
-        assert len(result) == 1 and result[0].due_at is not None
-        due = result[0].due_at
-        assert due.utcoffset() == timedelta(0)  # stored as UTC
-        assert (due.hour, due.minute) == (4, 30)  # 10:00 IST == 04:30 UTC
-
-    def test_utc_tz_no_shift(self):
-        naive_local = (datetime.now(timezone.utc) + timedelta(days=1)).replace(
-            hour=15, minute=0, second=0, microsecond=0, tzinfo=None
-        )
-        result, _ = self._run(naive_local, tz="UTC")
-        due = result[0].due_at
-        assert due.utcoffset() == timedelta(0)
-        assert (due.hour, due.minute) == (15, 0)  # no shift for UTC
-
-    def test_invalid_tz_falls_back_to_utc_without_crashing(self):
-        naive_local = (datetime.now(timezone.utc) + timedelta(days=1)).replace(
-            hour=9, minute=0, second=0, microsecond=0, tzinfo=None
-        )
-        result, _ = self._run(naive_local, tz="Not/AZone")
-        due = result[0].due_at
-        assert due is not None and due.utcoffset() == timedelta(0)
-        assert (due.hour, due.minute) == (9, 0)  # treated as UTC on fallback
-
-    def test_passes_local_reference_times_to_prompt(self):
-        naive_local = (datetime.now(timezone.utc) + timedelta(days=1)).replace(microsecond=0, tzinfo=None)
-        _, mock_chain = self._run(naive_local, tz="Asia/Kolkata")
-        invoke_args = mock_chain.invoke.call_args[0][0]
-        assert 'started_at_local' in invoke_args and 'current_time_local' in invoke_args
-        ct = invoke_args['current_time_local']
-        assert 'Z' not in ct and '+' not in ct  # naive local string, no offset/suffix
-
-    def test_aware_datetime_is_normalized_to_utc(self):
-        # Regression guard for the else-branch: if the LLM ignores the prompt and emits a tz-aware
-        # value, it must be normalized to UTC (not shifted again, not trusted at a non-UTC offset).
-        base = datetime.now(timezone.utc) + timedelta(days=1)
-        # (a) already-UTC aware value stays UTC unchanged
-        aware_utc = base.replace(hour=4, minute=30, second=0, microsecond=0)
-        r1, _ = self._run(aware_utc, tz="Asia/Kolkata")
-        d1 = r1[0].due_at
-        assert d1 is not None and d1.utcoffset() == timedelta(0)
-        assert (d1.hour, d1.minute) == (4, 30)
-        # (b) aware +05:30 value is converted to UTC, not trusted as-is
-        aware_ist = base.replace(hour=10, minute=0, second=0, microsecond=0, tzinfo=IST_TZ)
-        r2, _ = self._run(aware_ist, tz="UTC")
-        d2 = r2[0].due_at
-        assert d2 is not None and d2.utcoffset() == timedelta(0)
-        assert (d2.hour, d2.minute) == (4, 30)  # 10:00 IST -> 04:30 UTC

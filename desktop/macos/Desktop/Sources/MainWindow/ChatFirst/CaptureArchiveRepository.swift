@@ -1,5 +1,30 @@
 import Foundation
 
+/// Adapts an Omi-capture deep link to the canonical Conversations detail.
+/// The capture repository resolves provenance; this policy keeps focus
+/// acknowledgement tied to the exact record and playback preparation.
+enum CaptureConversationFocusRoutingPolicy {
+  static func initialMoment(
+    for focus: ChatFirstPendingFocus?,
+    conversationID: String
+  ) -> TimeInterval? {
+    guard case .capture(let id, let momentTimestamp) = focus, id == conversationID else { return nil }
+    return momentTimestamp
+  }
+
+  static func resolvedFocus(
+    for focus: ChatFirstPendingFocus?,
+    conversationID: String,
+    didResolve: Bool
+  ) -> ChatFirstPendingFocus? {
+    guard didResolve,
+      case .capture(let id, let momentTimestamp) = focus,
+      id == conversationID
+    else { return nil }
+    return .capture(id: id, momentTs: momentTimestamp)
+  }
+}
+
 /// The capture archive has a single, non-negotiable provenance query. It is
 /// intentionally separate from `ConversationListQuery`, whose legacy callers
 /// may display mixed desktop, phone, and hardware conversations.
@@ -28,7 +53,11 @@ private enum CaptureArchiveRepositoryError: Error {
 }
 
 extension ServerConversation {
-  fileprivate var isOmiCaptureArchiveRecord: Bool {
+  /// The archive's provenance contract. Beyond the repository itself, the only
+  /// legitimate reader is citation routing: a chat citation names whatever the
+  /// agent retrieved, and this predicate decides whether the capture focus may
+  /// carry it or it must open as the exact fetched record.
+  var isOmiCaptureArchiveRecord: Bool {
     source == .omi && !discarded && (status == .completed || status == .processing)
   }
 }
@@ -109,6 +138,7 @@ final class CaptureArchiveRepository: ObservableObject {
   private var hasLoaded = false
   private var activeDetailLoadToken = 0
   private var activeListLoadToken = 0
+  private nonisolated(unsafe) var ownerChangeObserver: NSObjectProtocol?
 
   init(
     remote: any CaptureArchiveRemoteDataSource = LiveCaptureArchiveRemoteDataSource(),
@@ -116,6 +146,19 @@ final class CaptureArchiveRepository: ObservableObject {
   ) {
     self.remote = remote
     self.local = local
+    ownerChangeObserver = NotificationCenter.default.addObserver(
+      forName: .runtimeOwnerDidChange, object: nil, queue: nil
+    ) { [weak self] _ in
+      MainActor.assumeIsolated {
+        self?.resetForRuntimeOwnerChange()
+      }
+    }
+  }
+
+  deinit {
+    if let ownerChangeObserver {
+      NotificationCenter.default.removeObserver(ownerChangeObserver)
+    }
   }
 
   var hasMore: Bool {
@@ -176,6 +219,28 @@ final class CaptureArchiveRepository: ObservableObject {
 
   func select(_ capture: ServerConversation) {
     selectedCapture = capture
+  }
+
+  /// Selection is the archive's only detail-presentation state. Clearing it
+  /// also fences any detail request that was still resolving for the old row.
+  func clearSelection() {
+    activeDetailLoadToken += 1
+    selectedCapture = nil
+  }
+
+  /// An in-place account switch only posts `runtimeOwnerDidChange`. Fence all
+  /// in-flight work and discard the previous owner's source-scoped projection
+  /// before the next appearance reloads it for the new owner.
+  private func resetForRuntimeOwnerChange() {
+    activeDetailLoadToken += 1
+    activeListLoadToken += 1
+    hasLoaded = false
+    captures = []
+    selectedCapture = nil
+    count = nil
+    isLoading = false
+    isLoadingMore = false
+    errorMessage = nil
   }
 
   /// Detail always revalidates from the source-scoped list's selected capture.

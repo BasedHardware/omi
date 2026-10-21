@@ -5,8 +5,8 @@
     func registerProactiveCaptureStatusSnapshot() {
       register(
         name: "proactive_capture_status_snapshot",
-        summary: "Read coarse screen-capture and context-bucket monitoring state without content",
-        safety: "read_only",
+        effects: [],
+        summary: "Read coarse screen-capture monitoring state without content",
         sideEffects: [
           "read-only local state",
           "does not capture a screenshot, call a model/backend, or deliver notifications",

@@ -24,4 +24,5 @@ final class AgentRuntimeFailureTests: XCTestCase {
 
     XCTAssertEqual(failure?.failureCode, .unknown)
   }
+
 }

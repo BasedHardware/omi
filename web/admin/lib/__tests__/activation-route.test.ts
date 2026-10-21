@@ -1,239 +1,113 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-// The route reaches Firestore through getDb(); faking it here exercises the
-// real cohort/pagination/maturity logic without a service account.
-const getDb = vi.fn();
-vi.mock("@/lib/firebase/admin", () => ({ getDb: () => getDb() }));
+const posthogResults = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/posthog", () => ({ posthogResults }));
 vi.mock("@/lib/auth", () => ({ verifyAdmin: vi.fn() }));
 vi.mock("@/lib/payload-cache", () => ({
   getPayload: vi.fn(),
   setPayload: vi.fn(),
+  withFreshness: (data: object, freshAt: number) => ({ ...data, freshAt }),
 }));
 
-import { computeActivation } from "@/app/api/omi/stats/activation/route";
+import {
+  ACTIVATION_QUESTIONS,
+  ACTIVATION_WINDOW_HOURS,
+  computeActivation,
+  rollUpDaily,
+} from "@/app/api/omi/stats/activation/route";
 
-const DAY = 86_400_000;
+const ENV_KEYS = ["POSTHOG_PERSONAL_API_KEY", "POSTHOG_PROJECT_ID"] as const;
+const originalEnv = Object.fromEntries(
+  ENV_KEYS.map((key) => [key, process.env[key]]),
+);
 
-type UserSeed = {
-  uid: string;
-  signupOs: string;
-  signupDaysAgo: number;
-  conversationOffsetsDays?: number[];
-  throwOnRead?: boolean;
-};
-
-function fakeDb(users: UserSeed[]) {
-  const now = Date.now();
-  const docs = users.map((u) => ({
-    id: u.uid,
-    seed: u,
-    signupAt: new Date(now - u.signupDaysAgo * DAY),
-  }));
-  docs.sort((a, b) => a.signupAt.getTime() - b.signupAt.getTime());
-
-  // The route's own predicates decide the count. If it filtered the wrong
-  // field, or shifted either bound, the returned count changes -- so the
-  // 7-day window is a real contract here rather than something the fake
-  // re-implements and always agrees with.
-  const conversationsFor = (uid: string) => {
-    const seed = users.find((u) => u.uid === uid)!;
-    const signupAt = new Date(now - seed.signupDaysAgo * DAY);
-    const timestamps = (seed.conversationOffsetsDays ?? []).map(
-      (off) => signupAt.getTime() + off * DAY,
-    );
-    const bounds: { field: string; op: string; value: Date }[] = [];
-    const api = {
-      where(field: string, op: string, value: Date) {
-        bounds.push({ field, op, value });
-        return api;
-      },
-      count() {
-        return {
-          async get() {
-            if (seed.throwOnRead) throw new Error("permission denied");
-            for (const b of bounds) {
-              if (b.field !== "created_at") {
-                throw new Error(`unexpected filter field: ${b.field}`);
-              }
-            }
-            const n = timestamps.filter((t) =>
-              bounds.every((b) =>
-                b.op === ">="
-                  ? t >= b.value.getTime()
-                  : b.op === "<="
-                    ? t <= b.value.getTime()
-                    : true,
-              ),
-            ).length;
-            return { data: () => ({ count: n }) };
-          },
-        };
-      },
-    };
-    return api;
-  };
-
-  // Honours the caller's limit(), so the route's own PAGE size drives paging.
-  function usersQuery(after = 0, pageSize = docs.length) {
-    return {
-      where: () => usersQuery(after, pageSize),
-      orderBy: () => usersQuery(after, pageSize),
-      limit: (n: number) => usersQuery(after, n),
-      startAfter(cursorDoc: any) {
-        return usersQuery(
-          docs.findIndex((d) => d.id === cursorDoc.id) + 1,
-          pageSize,
-        );
-      },
-      async get() {
-        const slice = docs.slice(after, after + pageSize);
-        return {
-          empty: slice.length === 0,
-          size: slice.length,
-          docs: slice.map((d) => ({
-            id: d.id,
-            data: () => ({
-              signup_os: d.seed.signupOs,
-              signup_platform_at: { toDate: () => d.signupAt },
-            }),
-          })),
-        };
-      },
-    };
+afterEach(() => {
+  posthogResults.mockReset();
+  for (const key of ENV_KEYS) {
+    if (originalEnv[key] == null) delete process.env[key];
+    else process.env[key] = originalEnv[key];
   }
+});
 
-  return {
-    collection(name: string) {
-      if (name !== "users") throw new Error("unexpected collection " + name);
-      return {
-        ...usersQuery(),
-        doc: (uid: string) => ({
-          collection: (sub: string) => {
-            if (sub !== "conversations") throw new Error("unexpected sub " + sub);
-            return conversationsFor(uid);
-          },
-        }),
-      };
-    },
-  };
+function configure() {
+  process.env.POSTHOG_PERSONAL_API_KEY = "phx_test";
+  process.env.POSTHOG_PROJECT_ID = "1";
 }
 
-beforeEach(() => getDb.mockReset());
+// PostHog returns "YYYY-MM-DD HH:MM:SS" strings (UTC) for toString(ts).
+function ph(daysAgo: number): string {
+  return new Date(Date.now() - daysAgo * 86_400_000)
+    .toISOString()
+    .slice(0, 19)
+    .replace("T", " ");
+}
 
-describe("computeActivation", () => {
-  it("counts a macOS signup as activated only on a conversation inside its 7-day window", async () => {
-    getDb.mockReturnValue(
-      fakeDb([
-        { uid: "in-window", signupOs: "macos", signupDaysAgo: 30, conversationOffsetsDays: [3] },
-        { uid: "too-late", signupOs: "macos", signupDaysAgo: 30, conversationOffsetsDays: [9] },
-        { uid: "none", signupOs: "macos", signupDaysAgo: 30 },
-      ]),
-    );
+describe("computeActivation (2+ questions within 48h)", () => {
+  it("activation = questions >= threshold; rate over the matured cohort", async () => {
+    configure();
+    // 4 matured signups: 2 activated (>=2 questions in window), 2 not.
+    posthogResults.mockResolvedValue([
+      [ph(10), 5],
+      [ph(9), 2],
+      [ph(8), 1],
+      [ph(7), 0],
+    ]);
+    const series = await computeActivation(60);
 
-    const result = await computeActivation(60);
-
-    expect(result.signups).toBe(3);
-    expect(result.activated).toBe(1);
-    expect(result.rate).toBe(33.3);
+    expect(series.signups).toBe(4);
+    expect(series.activated).toBe(2);
+    expect(series.rate).toBeCloseTo(50);
+    expect(series.erroredUsers).toBe(0);
+    // Weekly rollup preserved for the existing signup→activated chart.
+    expect(series.weeks.length).toBeGreaterThan(0);
+    // Daily series for the new daily-rate chart.
+    expect(series.daily.reduce((a, d) => a + d.signups, 0)).toBe(4);
+    expect(series.daily.every((d) => d.rate >= 0 && d.rate <= 100)).toBe(true);
   });
 
-  it("treats the 7-day window as closed at both ends", async () => {
-    getDb.mockReturnValue(
-      fakeDb([
-        { uid: "at-signup", signupOs: "macos", signupDaysAgo: 30, conversationOffsetsDays: [0] },
-        { uid: "at-day-seven", signupOs: "macos", signupDaysAgo: 30, conversationOffsetsDays: [7] },
-        { uid: "just-after", signupOs: "macos", signupDaysAgo: 30, conversationOffsetsDays: [7.001] },
-        { uid: "just-before", signupOs: "macos", signupDaysAgo: 30, conversationOffsetsDays: [-0.001] },
-      ]),
+  it("sends the definition to PostHog: macOS cohort, maturity, Chat Message Sent window", async () => {
+    configure();
+    posthogResults.mockResolvedValue([]);
+    await computeActivation(30);
+    const query = posthogResults.mock.calls[0][3] as string;
+    expect(query).toContain("properties.$os_name = 'macOS'");
+    expect(query).toContain(
+      `first_ts <= now() - INTERVAL ${ACTIVATION_WINDOW_HOURS} HOUR`,
     );
-
-    const result = await computeActivation(60);
-
-    // Inclusive at signup and at signup+7d; anything outside is not activation.
-    expect(result.signups).toBe(4);
-    expect(result.activated).toBe(2);
+    // Questions = typed chat AND floating-bar/PTT queries — counting only
+    // one of them undercounts activation by ~a third (user-reported).
+    expect(query).toContain("'Chat Message Sent', 'floating_bar_query_sent'");
+    // Only post-onboarding questions count; a user who never completed
+    // onboarding cannot activate (onboarding-chat questions are not product
+    // usage).
+    expect(query).toContain("Onboarding Completed");
+    expect(query).toContain("e.timestamp >= o.onb_ts");
+    expect(query).toContain("o.onb_ts > toDateTime(0)");
+    expect(query).toContain(
+      `f.first_ts + INTERVAL ${ACTIVATION_WINDOW_HOURS} HOUR`,
+    );
+    expect(ACTIVATION_QUESTIONS).toBe(2);
   });
 
-  it("excludes non-macOS signups", async () => {
-    getDb.mockReturnValue(
-      fakeDb([
-        { uid: "mac", signupOs: "macos", signupDaysAgo: 20, conversationOffsetsDays: [1] },
-        { uid: "ios", signupOs: "ios", signupDaysAgo: 20, conversationOffsetsDays: [1] },
-        { uid: "web", signupOs: "web", signupDaysAgo: 20 },
-      ]),
+  it("throws without PostHog credentials so the caller returns an honest 500", async () => {
+    delete process.env.POSTHOG_PERSONAL_API_KEY;
+    delete process.env.POSTHOG_PROJECT_ID;
+    await expect(computeActivation(60)).rejects.toThrow(
+      "PostHog credentials not configured",
     );
-
-    const result = await computeActivation(60);
-
-    expect(result.signups).toBe(1);
-    expect(result.activated).toBe(1);
   });
+});
 
-  it("excludes signups whose 7-day window has not elapsed", async () => {
-    getDb.mockReturnValue(
-      fakeDb([
-        { uid: "matured", signupOs: "macos", signupDaysAgo: 10, conversationOffsetsDays: [1] },
-        { uid: "yesterday", signupOs: "macos", signupDaysAgo: 1 },
-        { uid: "day-six", signupOs: "macos", signupDaysAgo: 6 },
-      ]),
-    );
-
-    const result = await computeActivation(60);
-
-    expect(result.signups).toBe(1);
-    expect(result.rate).toBe(100);
-  });
-
-  it("paginates past the 500-doc page instead of stopping at the first page", async () => {
-    // 1,200 > 2 full pages, so a missing cursor advance truncates the cohort --
-    // the exact shape that would silently undercount a real 10k-signup window.
-    const many: UserSeed[] = Array.from({ length: 1200 }, (_, i) => ({
-      uid: `u${i}`,
-      signupOs: "macos",
-      signupDaysAgo: 10 + (i % 40),
-      conversationOffsetsDays: i % 2 === 0 ? [1] : [],
-    }));
-    getDb.mockReturnValue(fakeDb(many));
-
-    const result = await computeActivation(60);
-
-    expect(result.signups).toBe(1200);
-    expect(result.activated).toBe(600);
-  });
-
-  it("drops unreadable users from the denominator instead of scoring them as not activated", async () => {
-    getDb.mockReturnValue(
-      fakeDb([
-        { uid: "ok", signupOs: "macos", signupDaysAgo: 30, conversationOffsetsDays: [1] },
-        { uid: "broken", signupOs: "macos", signupDaysAgo: 30, throwOnRead: true },
-      ]),
-    );
-
-    const result = await computeActivation(60);
-
-    // Counting the unreadable user would report 50% -- the same "absence of
-    // evidence read as evidence of absence" mistake this metric exists to undo.
-    expect(result.erroredUsers).toBe(1);
-    expect(result.signups).toBe(1);
-    expect(result.activated).toBe(1);
-    expect(result.rate).toBe(100);
-  });
-
-  it("keeps a week's rate honest when only some of its users are unreadable", async () => {
-    getDb.mockReturnValue(
-      fakeDb([
-        { uid: "a", signupOs: "macos", signupDaysAgo: 30, conversationOffsetsDays: [1] },
-        { uid: "b", signupOs: "macos", signupDaysAgo: 30 },
-        { uid: "c", signupOs: "macos", signupDaysAgo: 30, throwOnRead: true },
-        { uid: "d", signupOs: "macos", signupDaysAgo: 30, throwOnRead: true },
-      ]),
-    );
-
-    const result = await computeActivation(60);
-
-    expect(result.erroredUsers).toBe(2);
-    expect(result.weeks).toHaveLength(1);
-    expect(result.weeks[0].signups).toBe(2);
-    expect(result.weeks[0].rate).toBe(50);
+describe("rollUpDaily", () => {
+  it("groups by NYC day and rounds rate to one decimal", () => {
+    const day = "2026-08-20T15:00:00.000Z";
+    const daily = rollUpDaily([
+      { signupAt: day, activated: true },
+      { signupAt: day, activated: true },
+      { signupAt: day, activated: false },
+    ]);
+    expect(daily).toEqual([
+      { date: "2026-08-20", signups: 3, activated: 2, rate: 66.7 },
+    ]);
   });
 });

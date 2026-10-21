@@ -33,7 +33,7 @@ def _stub_module(name):
 # Stub database package
 database_mod = _stub_module("database")
 if not hasattr(database_mod, '__path__'):
-    database_mod.__path__ = []
+    database_mod.__path__ = [str(Path(__file__).resolve().parents[2] / "database")]
 for sub in [
     "redis_db",
     "memories",
@@ -42,6 +42,7 @@ for sub in [
     "tasks",
     "trends",
     "action_items",
+    "action_items_cache",
     "folders",
     "calendar_meetings",
     "vector_db",
@@ -58,6 +59,9 @@ for sub in [
     "notifications",
     "workstreams",
     "firestore_transaction_retry",
+    # Landing with #15099: routers/account_cutover.py imports this submodule at
+    # module scope; collection of this file fails without the stub.
+    "account_cutover",
 ]:
     mod = _stub_module(f"database.{sub}")
     setattr(database_mod, sub, mod)
@@ -68,6 +72,18 @@ sys.modules["database.firestore_transaction_retry"].FirestoreContentionExhausted
     {},
 )
 sys.modules["database.task_intelligence_control"].get_task_workflow_control = MagicMock()
+
+# The action-items router imports the list-cache seams at module scope. Keep
+# this sharing test's database package stubbed and provide inert implementations
+# for the unrelated list endpoint cache.
+action_items_cache_mod = sys.modules["database.action_items_cache"]
+action_items_cache_mod.compute_etag = MagicMock()
+action_items_cache_mod.get_action_items_list_version = MagicMock(return_value=None)
+action_items_cache_mod.if_none_match_matches = MagicMock(return_value=False)
+action_items_cache_mod.list_cache_key = MagicMock()
+action_items_cache_mod.list_cache_ttl_seconds = MagicMock(return_value=0)
+action_items_cache_mod.read_cached_list = MagicMock(return_value=None)
+action_items_cache_mod.write_cached_list = MagicMock()
 
 # Stub vector_db functions used by routers.action_items
 vector_db_mod = sys.modules["database.vector_db"]
@@ -88,6 +104,12 @@ clients_mod.llm_large = MagicMock()
 
 # Stub other utils that import heavy dependencies
 _stub_module("utils.llm.notifications")
+# routers/action_items.py imports product_metrics (#15099); its real import
+# chain reaches database.read_boundary, unresolvable under the stubbed
+# "database" package, so stub it before the router import.
+product_metrics_mod = _stub_module("utils.product_metrics")
+product_metrics_mod.record_product_event = MagicMock()
+product_metrics_mod.extract_app_build = MagicMock(return_value='unknown')
 notif_mod = _stub_module("utils.notifications")
 notif_mod.send_notification = MagicMock()
 notif_mod.send_action_item_data_message = MagicMock()
@@ -102,6 +124,7 @@ sys.modules["utils.task_sync"].auto_sync_action_item = MagicMock()
 # Stub redis_db.r so Redis helper tests can patch it
 redis_mod = sys.modules["database.redis_db"]
 redis_mod.r = MagicMock()
+redis_mod.check_rate_limit = MagicMock(return_value=(True, 0, 0))
 redis_mod.try_catch_decorator = lambda f: f
 redis_mod.TASK_SHARE_TTL = 60 * 60 * 24 * 30
 redis_mod.json = __import__("json")
@@ -271,7 +294,7 @@ class TestAcceptEndpoint:
                 "description": "Review PR",
                 "due_at": None,
             }
-            mock_db.create_action_item.return_value = "new_t1"
+            mock_db.create_action_items_batch.return_value = ["new_t1"]
 
             result = accept_shared_action_items(request, uid="uid_bob")
 
@@ -279,8 +302,8 @@ class TestAcceptEndpoint:
         assert result["created"] == ["new_t1"]
 
         # Verify shared_from was set
-        create_call = mock_db.create_action_item.call_args
-        new_item = create_call[0][1]
+        create_call = mock_db.create_action_items_batch.call_args
+        new_item = create_call[0][1][0]
         assert new_item["shared_from"]["sender_uid"] == "uid_alice"
         assert new_item["shared_from"]["sender_name"] == "Alice"
         assert new_item["shared_from"]["original_task_id"] == "t1"
@@ -328,6 +351,37 @@ class TestAcceptEndpoint:
             except Exception as e:
                 assert e.status_code == 503
 
+    def _accept_one(self, original):
+        request = AcceptSharedTasksRequest(token="tok1")
+        with patch("routers.action_items.redis_db") as mock_redis, patch(
+            "routers.action_items.action_items_db"
+        ) as mock_db, patch("routers.action_items.send_action_item_data_message") as reminder:
+            mock_redis.get_task_share.return_value = self._mock_share_data()
+            mock_redis.try_accept_task_share.return_value = True
+            mock_db.get_action_item.return_value = original
+            mock_db.create_action_items_batch.return_value = ["new_t1"]
+            accept_shared_action_items(request, uid="uid_bob")
+        return reminder
+
+    def test_accept_schedules_reminder_for_task_with_due_date(self):
+        due = datetime(2026, 9, 20, 9, 0, tzinfo=timezone.utc)
+        reminder = self._accept_one({"id": "t1", "description": "Review PR", "due_at": due})
+
+        reminder.assert_called_once_with(
+            user_id="uid_bob",
+            action_item_id="new_t1",
+            description="Review PR",
+            due_at=due.isoformat(),
+            completed=False,
+            status=None,
+            deleted=False,
+        )
+
+    def test_accept_schedules_no_reminder_without_due_date(self):
+        reminder = self._accept_one({"id": "t1", "description": "Review PR", "due_at": None})
+
+        reminder.assert_not_called()
+
 
 class TestCompletionNotification:
     """Completing a shared task notifies the sender."""
@@ -370,6 +424,26 @@ class TestCompletionNotification:
             mock_db.get_action_item.side_effect = [
                 {"id": "t1", "description": "My own task", "completed": False},
                 {"id": "t1", "description": "My own task", "completed": True},
+            ]
+            mock_db.mark_action_item_completed.return_value = True
+
+            toggle_action_item_completion("t1", completed=True, uid="uid_bob")
+
+            mock_notify.assert_not_called()
+
+    def test_no_duplicate_notification_when_already_completed(self):
+        """Re-completing an already-completed shared task should NOT notify sender again."""
+        with patch("routers.action_items.action_items_db") as mock_db, patch(
+            "routers.action_items.send_notification"
+        ) as mock_notify:
+            mock_db.get_action_item.side_effect = [
+                {
+                    "id": "t1",
+                    "description": "Review PR #4711",
+                    "completed": True,
+                    "shared_from": {"sender_uid": "uid_alice"},
+                },
+                {"id": "t1", "description": "Review PR #4711", "completed": True},
             ]
             mock_db.mark_action_item_completed.return_value = True
 
@@ -559,7 +633,7 @@ class TestAcceptSkipsLocked:
                 # Copy pass (only t1 is eligible)
                 {"id": "t1", "description": "OK", "due_at": None, "is_locked": False},
             ]
-            mock_db.create_action_item.return_value = "new_t1"
+            mock_db.create_action_items_batch.return_value = ["new_t1"]
 
             result = accept_shared_action_items(request, uid="uid_bob")
 
@@ -736,6 +810,7 @@ class TestSyncBatchSkipsLocked:
         assert call_args[1][0]['id'] == 't1'
 
     def test_sync_batch_distinguishes_explicit_due_date_clear_from_omission(self):
+        original_due = datetime(2030, 1, 1, 12, tzinfo=timezone.utc)
         batch_result = types.SimpleNamespace(
             updated_ids=["t1"],
             missing_ids=[],
@@ -749,17 +824,34 @@ class TestSyncBatchSkipsLocked:
             "noop_ids": [],
         }
 
-        with patch.object(action_items_router, 'action_items_db') as mock_db:
+        with patch.object(action_items_router, 'action_items_db') as mock_db, patch.object(
+            action_items_router, 'sync_action_item_reminder'
+        ) as reminder:
             mock_db.get_action_item.side_effect = [
                 {
                     "id": "t1",
                     "description": "Clear the deadline",
                     "is_locked": False,
+                    "completed": False,
+                    "status": "active",
+                    "due_at": original_due,
                 },
                 {
                     "id": "t2",
                     "description": "Leave the deadline unchanged",
                     "is_locked": False,
+                    "completed": False,
+                    "status": "active",
+                    "due_at": original_due,
+                },
+                {
+                    # Authoritative post-write state, after the explicit clear.
+                    "id": "t1",
+                    "description": "Clear the deadline",
+                    "is_locked": False,
+                    "completed": False,
+                    "status": "active",
+                    "due_at": None,
                 },
             ]
             mock_db.batch_sync_update_action_items.return_value = batch_result
@@ -776,3 +868,13 @@ class TestSyncBatchSkipsLocked:
         assert updates == [
             {'id': 't1', 'data': {'due_at': None}}
         ], 'an explicit null due_at must reach storage instead of being treated as an omitted field'
+        assert mock_db.get_action_item.call_count == 3
+        reminder.assert_called_once_with(
+            user_id='test-uid',
+            action_item_id='t1',
+            description='Clear the deadline',
+            completed=False,
+            due_at=None,
+            status='active',
+            deleted=False,
+        )

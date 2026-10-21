@@ -39,13 +39,29 @@ extension APIClient {
   /// - Parameters:
   ///   - messageId: The message ID to rate
   ///   - rating: 1 for thumbs up, -1 for thumbs down, nil to clear rating
-  func rateMessage(messageId: String, rating: Int?) async throws {
+  ///   - reason: why the answer was rated down; nil when not asked or skipped
+  ///   - surface: "text" for main-window chat, "voice" for floating-bar answers
+  func rateMessage(
+    messageId: String,
+    rating: Int?,
+    reason: ChatFeedbackReason? = nil,
+    surface: String = "text"
+  ) async throws {
     struct RateRequest: Encodable {
       let rating: Int?
       let app_version: String?
+      let reason: String?
+      let surface: String
     }
     let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String
-    let body = RateRequest(rating: rating, app_version: version)
+    // A reason only ever accompanies a thumbs-down. Sending one with a
+    // thumbs-up or a cleared rating would put a nonsense row in the report.
+    let body = RateRequest(
+      rating: rating,
+      app_version: version,
+      reason: rating == -1 ? reason?.rawValue : nil,
+      surface: surface
+    )
     let _: MessageStatusResponse = try await patch(
       "v2/desktop/messages/\(messageId)/rating", body: body)
   }
@@ -91,6 +107,62 @@ extension APIClient {
       body.append(Data("Content-Type: \(upload.mimeType)\(lineBreak)\(lineBreak)".utf8))
       body.append(upload.data)
       body.append(Data(lineBreak.utf8))
+    }
+    body.append(Data("--\(boundary)--\(lineBreak)".utf8))
+    request.httpBody = body
+
+    return try await performRequest(request)
+  }
+
+  /// Upload a video as frames sampled on device (plus its audio track) to `/v2/files/video`.
+  /// The backend tiles the most distinct frames into one numbered image and transcribes the
+  /// audio; the response has the same shape as `/v2/files`.
+  func uploadChatVideo(
+    _ video: SampledChatVideo,
+    fileName: String,
+    appId: String? = nil
+  ) async throws -> [ChatFileResponse] {
+    var endpoint = "v2/files/video"
+    if let appId = appId, !appId.isEmpty, appId != "no_selected" {
+      endpoint += "?app_id=\(appId)"
+    }
+    guard let url = URL(string: baseURL + endpoint),
+      let timesJSON = try? JSONSerialization.data(withJSONObject: video.times)
+    else {
+      throw APIError.invalidResponse
+    }
+
+    let boundary = "Boundary-\(UUID().uuidString)"
+    var request = URLRequest(url: url)
+    request.httpMethod = "POST"
+    request.allHTTPHeaderFields = try await buildHeaders(requireAuth: true)
+    request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+
+    var body = Data()
+    let lineBreak = "\r\n"
+    func field(_ name: String, _ value: String) {
+      body.append(Data("--\(boundary)\(lineBreak)".utf8))
+      body.append(Data("Content-Disposition: form-data; name=\"\(name)\"\(lineBreak)\(lineBreak)".utf8))
+      body.append(Data(value.utf8))
+      body.append(Data(lineBreak.utf8))
+    }
+    func file(_ name: String, _ fileName: String, _ mimeType: String, _ data: Data) {
+      body.append(Data("--\(boundary)\(lineBreak)".utf8))
+      body.append(
+        Data(
+          "Content-Disposition: form-data; name=\"\(name)\"; filename=\"\(fileName)\"\(lineBreak)".utf8))
+      body.append(Data("Content-Type: \(mimeType)\(lineBreak)\(lineBreak)".utf8))
+      body.append(data)
+      body.append(Data(lineBreak.utf8))
+    }
+    field("frame_times", String(decoding: timesJSON, as: UTF8.self))
+    field("duration_seconds", String(video.duration))
+    field("name", fileName)
+    for (index, frame) in video.frames.enumerated() {
+      file("frames", "frame-\(index).jpg", "image/jpeg", frame)
+    }
+    if let audio = video.audio {
+      file("audio", audio.fileName, audio.mimeType, audio.data)
     }
     body.append(Data("--\(boundary)--\(lineBreak)".utf8))
     request.httpBody = body

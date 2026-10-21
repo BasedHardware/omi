@@ -35,7 +35,7 @@ jobs:
               "",
               "Before your next PR, please skim:",
               "- [PRODUCT.md](https://github.com/BasedHardware/Omi/blob/main/PRODUCT.md) — product north star",
-              "- [Product invariants](https://github.com/BasedHardware/Omi/tree/main/docs/product/invariants) — locked rules (shared chat, memory tiers, agent control plane, integrations, brand)",
+              "- [Product invariants](https://github.com/BasedHardware/Omi/tree/main/product/invariants) — locked rules (shared chat, memory tiers, agent control plane, integrations, brand)",
               "",
               "If this was declined for direction or taste, maintainers should cite an invariant ID or open a proposed one — ask if that citation is missing.",
               "",

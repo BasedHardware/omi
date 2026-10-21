@@ -15,8 +15,9 @@
 //  glass (see its doc comment — it is arithmetic, not taste). Every secondary run here is
 //  `Ink.secondary`, including the ones a three-rung ladder would have set fainter.
 //
-//  Brand: system semantics and neutrals only (INV-UI-1). The single accent is `Ink.accent`, and it is
-//  spent on selection state — never on a filled button, which inverts the label ladder instead.
+//  Brand: system semantics and neutrals only (INV-UI-1). Selection and on-state are neutral ink
+//  (`SettingsSelection`); the single accent, `Ink.accent`, is reserved for the one actionable link on
+//  a surface — never selection, and never a filled button, which inverts the label ladder instead.
 //
 
 import AppKit
@@ -34,19 +35,19 @@ import SwiftUI
 enum SettingsGlassMetrics {
   /// Pane gutters. The horizontal value is the one rows are inset by; the vertical pair is
   /// deliberately asymmetric — a pane scrolls, so the foot needs more room than the head.
-  static let paneHorizontalPadding: CGFloat = 22
-  static let paneTopPadding: CGFloat = 18
-  static let paneBottomPadding: CGFloat = 26
+  static let paneHorizontalPadding: CGFloat = 16
+  static let paneTopPadding: CGFloat = 12
+  static let paneBottomPadding: CGFloat = 18
 
   /// Between two sections. The one vertical gap on a pane that is allowed to be large.
-  static let sectionSpacing: CGFloat = 22
+  static let sectionSpacing: CGFloat = 14
   /// Between a section's title and its card.
   static let sectionTitleSpacing: CGFloat = 6
   /// Between two rows *inside* a card. Nearly nothing: the hairline separates them, not the gap.
   static let rowSpacing: CGFloat = 2
 
-  static let rowVerticalPadding: CGFloat = 9
-  static let rowHorizontalPadding: CGFloat = 12
+  static let rowVerticalPadding: CGFloat = 7
+  static let rowHorizontalPadding: CGFloat = 10
   /// Between the icon tile and the copy beside it.
   static let rowContentSpacing: CGFloat = 11
 

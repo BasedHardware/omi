@@ -64,28 +64,35 @@ describe('public shared conversation chat frontend safety contract', () => {
     );
   });
 
-  it('maps 429 retry-after and 503 into safe UI results', () => {
+  it('maps structured limits and 503 into safe UI results', () => {
     assert.match(actionSource, /response\.status === 429/);
     assert.match(actionSource, /Retry-After/i);
     assert.match(actionSource, /status:\s*'rate_limited'/);
     assert.match(actionSource, /response\.status === 503/);
     assert.match(actionSource, /status:\s*'unavailable'/);
-    assert.doesNotMatch(
-      actionSource,
-      /if \(response\.status === 429\)[\s\S]{0,400}response\.(text|json)\(/,
-    );
+    assert.match(actionSource, /parsedReason\(payload\)/);
+    assert.match(actionSource, /LIMIT_REASONS/);
+    assert.match(actionSource, /remaining_free_questions/);
+    assert.match(actionSource, /X-Omi-User-Id-Token/);
   });
 
   it('owns the Cloud Run ingress, identity, and frontend-only HMAC deployment contract', () => {
     const frontend = publicBuildContract.targets.frontend;
-    assert.ok(
-      frontend.deployment.flags.includes('--ingress=internal-and-cloud-load-balancing'),
+    const flags = frontend.deployment.flags;
+    const prodFlags = Array.isArray(flags) ? flags : flags.prod || [];
+    const developmentFlags = Array.isArray(flags) ? flags : flags.development || [];
+    assert.ok(prodFlags.includes('--ingress=internal-and-cloud-load-balancing'));
+    assert.equal(
+      developmentFlags.includes('--ingress=internal-and-cloud-load-balancing'),
+      false,
     );
     assert.equal(
       frontend.deployment.runtime_secrets.PUBLIC_SHARED_CONVERSATION_CHAT_IP_HMAC_KEY,
       'PUBLIC_SHARED_CONVERSATION_CHAT_IP_HMAC_KEY:latest',
     );
     assert.equal(frontend.deployment.runtime_secrets.OPENAI_API_KEY, undefined);
+    assert.ok(frontend.deployment.remove_runtime_env_vars.includes('OPENAI_API_KEY'));
+    assert.equal(frontend.deployment.runtime_secrets.DD_API_KEY, 'DD_API_KEY:latest');
     assert.match(deployActionSource, /service_account/);
     assert.match(deployActionSource, /runtime_env_vars/);
     assert.match(
@@ -96,12 +103,31 @@ describe('public shared conversation chat frontend safety contract', () => {
       frontendWorkflowSource,
       /PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE/,
     );
+    assert.doesNotMatch(
+      frontendWorkflowSource,
+      /test -n "\$PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_INVOKER_SA"/,
+    );
+    assert.match(frontendWorkflowSource, /iam\\.gserviceaccount\\.com/);
   });
 
   it('passes only conversation id, bounded history, and the current question to the action', () => {
     assert.match(componentSource, /conversationId/);
-    assert.match(componentSource, /history:\s*messages\.slice\(-8\)/);
+    assert.match(componentSource, /history:\s*history\.slice\(-8\)/);
     assert.match(componentSource, /question:/);
     assert.doesNotMatch(componentSource, /chatWithMemory\(\{[^}]*transcript:/s);
+  });
+
+  it('offers the shared-chat limit options and emits integration events without PostHog', () => {
+    assert.match(componentSource, /Sign in with Omi to keep asking/);
+    assert.match(componentSource, /getOmiInstallLink\(userAgent\)/);
+    assert.match(componentSource, /pages\/download\?/);
+    assert.match(componentSource, /products\/omi\?/);
+    assert.match(componentSource, /withCampaign\(APP_STORE\)/);
+    assert.match(componentSource, /withCampaign\(PLAY_STORE\)/);
+    assert.match(componentSource, /utm_source=omi_share/);
+    assert.match(componentSource, /question_asked/);
+    assert.match(componentSource, /limit_card_shown/);
+    assert.match(componentSource, /upsell_clicked/);
+    assert.doesNotMatch(componentSource, /posthog/i);
   });
 });

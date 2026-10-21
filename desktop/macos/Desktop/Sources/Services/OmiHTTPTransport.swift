@@ -78,6 +78,7 @@ struct OmiHTTPTransport {
     var headers: [String: String] = [
       "Content-Type": "application/json",
       "X-App-Platform": "macos",
+      "X-Omi-Plan-Identity": "1",
       "X-App-Version": Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown",
       "X-App-Build": Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "unknown",
       "X-Device-Id-Hash": ClientDeviceService.shared.deviceIdHash,
@@ -114,7 +115,7 @@ struct OmiHTTPTransport {
     // calls this request triggers. Sent per-request; never stored server-side.
     if includeBYOK, APIKeyService.isByokActive {
       let health = await MainActor.run { CredentialHealthManager.shared }
-      let snapshot = APIKeyService.byokSnapshot
+      let snapshot = APIKeyService.activeBYOKSnapshot
       for (provider, entry) in snapshot {
         let canAttach = await MainActor.run {
           health.canUseBYOK(provider: provider, fingerprint: entry.fingerprint)
@@ -308,6 +309,10 @@ enum APIError: LocalizedError {
   case syncRateLimited(retryAfterSeconds: Int?)
   case syncUploadRejected(reason: String)
   case accountCutoverOfflineQueueBlocked
+  /// The backend's account-wide destructive-operation gate is held (409
+  /// `account_gate_busy`): the delete is retryable after `retryAfterSeconds`
+  /// (from the response's `Retry-After` header), not refused.
+  case memoryDeleteGateBusy(retryAfterSeconds: Int?)
 
   var detail: String? {
     switch self {
@@ -342,6 +347,11 @@ enum APIError: LocalizedError {
       return reason
     case .accountCutoverOfflineQueueBlocked:
       return "Account cutover offline upload gate closed"
+    case .memoryDeleteGateBusy(let retryAfterSeconds):
+      if let retryAfterSeconds {
+        return "Memory delete is delayed by another account operation (retry after \(retryAfterSeconds)s)"
+      }
+      return "Memory delete is delayed by another account operation"
     }
   }
 }

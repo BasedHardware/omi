@@ -46,11 +46,14 @@ def gmail_module(monkeypatch):
     monkeypatch.setitem(sys.modules, "utils.retrieval.agentic", agentic)
 
     database = types.ModuleType("database")
-    database.__path__ = []
+    database.__path__ = [str(BACKEND_DIR / "database")]
     users_db = types.ModuleType("database.users")
     users_db.get_integration = MagicMock()
     monkeypatch.setitem(sys.modules, "database", database)
     monkeypatch.setitem(sys.modules, "database.users", users_db)
+    notifications_db = types.ModuleType("database.notifications")
+    notifications_db.get_user_time_zone = lambda _uid: "UTC"
+    monkeypatch.setitem(sys.modules, "database.notifications", notifications_db)
 
     tools_mod = types.ModuleType("langchain_core.tools")
     tools_mod.tool = _ToolWrapper
@@ -115,10 +118,12 @@ async def test_gmail_tool_exercises_async_interface_and_refreshes_once(gmail_mod
     monkeypatch.setattr(gmail_module, "get_gmail_messages", fake_get_gmail_messages)
     monkeypatch.setattr(gmail_module, "refresh_google_token", fake_refresh)
 
-    result = await gmail_module.get_gmail_messages_tool.coroutine(query="subject:async", config={})
+    result = await gmail_module.get_gmail_messages_tool.coroutine(
+        query="subject:async", config={"configurable": {"user_timezone": "UTC"}}
+    )
 
     assert calls == ["old-token", "new-token"]
-    assert "Gmail Messages (1 found)" in result
+    assert "Gmail Messages (1 found, Gmail search order)" in result
     assert "Async" in result
 
 
@@ -165,59 +170,6 @@ async def test_retry_on_auth_async_preserves_refresh_flow(gmail_module):
 
     assert (result, err) == ("ok", None)
     assert attempts == ["old-token", "new-token"]
-
-
-def test_speech_profile_closes_audio_file_handle(monkeypatch, tmp_path):
-    storage = types.ModuleType("utils.other.storage")
-    for attr in (
-        "get_profile_audio_if_exists",
-        "get_additional_profile_recordings",
-        "get_user_people_ids",
-        "get_user_person_speech_samples",
-    ):
-        setattr(storage, attr, MagicMock())
-    monkeypatch.setitem(sys.modules, "utils.other.storage", storage)
-
-    http_client = types.ModuleType("utils.http_client")
-    http_client.get_stt_client = MagicMock()
-    monkeypatch.setitem(sys.modules, "utils.http_client", http_client)
-
-    executors = types.ModuleType("utils.executors")
-    executors.storage_executor = MagicMock()
-    executors.run_blocking = MagicMock()
-    monkeypatch.setitem(sys.modules, "utils.executors", executors)
-
-    log_sanitizer = types.ModuleType("utils.log_sanitizer")
-    log_sanitizer.sanitize = lambda value: value
-    monkeypatch.setitem(sys.modules, "utils.log_sanitizer", log_sanitizer)
-
-    pydub = types.ModuleType("pydub")
-    setattr(pydub, "AudioSegment", MagicMock())
-    monkeypatch.setitem(sys.modules, "pydub", pydub)
-
-    module_name = "utils.stt.speech_profile"
-    module = _load_module(module_name, BACKEND_DIR / "utils" / "stt" / "speech_profile.py")
-    try:
-        audio_path = tmp_path / "sample.wav"
-        audio_path.write_bytes(b"RIFF....WAVEfmt ")
-        captured = {}
-
-        def fake_post(url, data=None, files=None, **kwargs):
-            assert files is not None
-            captured["fh"] = files[0][1][1]
-            response = MagicMock()
-            response.status_code = 200
-            response.json.return_value = [False]
-            return response
-
-        monkeypatch.setenv("HOSTED_SPEECH_PROFILE_API_URL", "http://speech.test/match")
-        monkeypatch.setattr(module.httpx, "post", fake_post)
-
-        module.get_speech_profile_matching_predictions("uid-1", str(audio_path), [{"text": "hi"}])
-
-        assert captured["fh"].closed is True
-    finally:
-        sys.modules.pop(module_name, None)
 
 
 def test_scan_async_blockers_treats_run_blocking_lambda_as_safe():

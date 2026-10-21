@@ -8,19 +8,22 @@ from pydantic import BaseModel
 from pydub import AudioSegment
 
 from database.redis_db import set_speech_profile_duration, get_speech_profile_duration
-from database.users import set_user_speaker_embedding
+from database.users import get_person, invalidate_person_speech_profile, set_user_speaker_embedding
 from utils.other import endpoints as auth
 from utils.other.storage import (
     upload_profile_audio,
     get_profile_audio_if_exists,
     delete_additional_profile_audio,
     get_additional_profile_recordings,
+    delete_speech_profile_blob,
     delete_user_person_speech_sample,
     get_user_person_speech_samples,
     get_user_has_speech_profile,
 )
 from utils.multipart import MultipartMaxPartSizeRoute, SPEECH_PROFILE_MAX_PART_SIZE, max_part_size
+from utils.speech_profile_deletion import teaching_segment_ids_for_deleted_sample
 from utils.stt.speaker_embedding import extract_embedding
+from utils.stt.streaming import is_stt_available
 from utils.stt.vad import apply_vad_for_speech_profile, VADEmptyError
 import logging
 
@@ -52,9 +55,23 @@ class SpeechProfileStatusResponse(BaseModel):
     url: Optional[str] = None
 
 
+class SttAvailabilityResponse(BaseModel):
+    available: bool
+
+
 @router.get('/v3/speech-profile', tags=['v3'], response_model=HasSpeechProfileResponse)
 def has_speech_profile(uid: str = Depends(auth.get_current_user_uid)):
     return {'has_profile': get_user_has_speech_profile(uid)}
+
+
+@router.get('/v3/speech-profile/stt-availability', tags=['v3'], response_model=SttAvailabilityResponse)
+def get_speech_profile_stt_availability(uid: str = Depends(auth.get_current_user_uid)):
+    """Pre-flight check the client uses before entering the recording UI, so a
+    known-down streaming primary (whichever provider STT_SERVICE_MODELS
+    currently leads with) surfaces as an upfront error dialog instead of a
+    dead recording screen with no questions/progress.
+    """
+    return {'available': is_stt_available()}
 
 
 @router.get('/v4/speech-profile', tags=['v3'], response_model=SpeechProfileResponse)
@@ -87,7 +104,7 @@ def get_speech_profile_status(uid: str = Depends(auth.get_current_user_uid)):
 # ******************************************
 
 # Consist of bytes (for initiating deepgram)
-# and audio itself, which we use on post-processing to use speechbrain model
+# and audio itself, which post-processing embeds for speaker identification
 
 
 @router.post('/v3/upload-audio', tags=['v3'], response_model=SpeechProfileUploadResponse)
@@ -105,8 +122,11 @@ def upload_profile(file: UploadFile, uid: str = Depends(auth.get_current_user_ui
     if aseg.frame_rate != 16000:
         raise HTTPException(status_code=400, detail="Invalid codec, must be opus 16khz.")
 
-    if aseg.duration_seconds < 5 or aseg.duration_seconds > 120:
-        raise HTTPException(status_code=400, detail="Audio duration is invalid (must be 5-120 seconds)")
+    # Upper bound must stay >= the app's onboarding recording cap (maxDuration = 150 in
+    # app/lib/providers/speech_profile_provider.dart) plus headroom: a 120s cap rejected
+    # ~28% of prod onboarding uploads (users whose Q&A ran past 2 minutes).
+    if aseg.duration_seconds < 5 or aseg.duration_seconds > 180:
+        raise HTTPException(status_code=400, detail="Audio duration is invalid (must be 5-180 seconds)")
 
     try:
         apply_vad_for_speech_profile(file_path)
@@ -117,18 +137,27 @@ def upload_profile(file: UploadFile, uid: str = Depends(auth.get_current_user_ui
     with av.open(file_path) as container:
         duration = (float(container.duration) / av.time_base) + 5 if container.duration else 0
 
+    # Extract before upload so a 200 means the same embedding stack used for
+    # live/post-process matching actually stored a voiceprint (#12765).
+    try:
+        embedding = extract_embedding(file_path)
+    except Exception as e:
+        logger.error(f"Speech profile: failed to extract speaker embedding for {uid}: {e}")
+        raise HTTPException(status_code=503, detail="Failed to extract speaker embedding") from e
+
+    # Persist the voiceprint before overwriting GCS audio. A Firestore miss
+    # must not leave a new profile blob live without a matching embedding.
+    try:
+        set_user_speaker_embedding(uid, embedding.flatten().tolist())
+    except Exception as e:
+        logger.error(f"Speech profile: failed to store speaker embedding for {uid}: {e}")
+        raise HTTPException(status_code=503, detail="Failed to store speaker embedding") from e
+
     url = upload_profile_audio(file_path, uid)
     # Cache the duration only once the profile blob is actually stored: a failed
     # overwrite must not leave the cache describing an upload that never landed.
     set_speech_profile_duration(uid, duration)
-
-    # Extract and store speaker embedding for user identification in listen sessions
-    try:
-        embedding = extract_embedding(file_path)
-        set_user_speaker_embedding(uid, embedding.flatten().tolist())
-        logger.info(f"Speech profile: stored speaker embedding for {uid}")
-    except Exception as e:
-        logger.error(f"Speech profile: failed to extract/store speaker embedding for {uid}: {e}")
+    logger.info("Speech profile: stored speaker embedding for %s", uid)
 
     return {"url": url}
 
@@ -149,6 +178,10 @@ def delete_extra_speech_profile_sample(
 
     if person_id:
         delete_user_person_speech_sample(uid, person_id, file_name)
+        segment_ids = teaching_segment_ids_for_deleted_sample(get_person(uid, person_id), memory_id)
+        if segment_ids:
+            for path in invalidate_person_speech_profile(uid, person_id, memory_id, segment_ids):
+                delete_speech_profile_blob(path)
     else:
         delete_additional_profile_audio(uid, file_name)
 

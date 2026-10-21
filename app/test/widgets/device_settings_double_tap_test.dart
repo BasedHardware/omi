@@ -30,6 +30,18 @@ class _StubDeviceProvider extends ChangeNotifier implements DeviceProvider {
   BtDevice? get pairedDevice => null;
 
   @override
+  int get batteryLevel => 0;
+
+  @override
+  bool get isCharging => false;
+
+  @override
+  bool get havingNewFirmware => false;
+
+  @override
+  String get latestStableFirmwareVersion => '';
+
+  @override
   Future<void> getDeviceInfo() async {}
 
   @override
@@ -51,6 +63,11 @@ Widget _app(DeviceProvider provider) {
       GlobalCupertinoLocalizations.delegate,
     ],
     supportedLocales: AppLocalizations.supportedLocales,
+    // The device picture pulses while connected; Reduce Motion stops it so pumpAndSettle settles.
+    builder: (context, child) => MediaQuery(
+      data: MediaQuery.of(context).copyWith(disableAnimations: true),
+      child: child!,
+    ),
     home: ChangeNotifierProvider<DeviceProvider>.value(value: provider, child: const DeviceSettings()),
   );
 }

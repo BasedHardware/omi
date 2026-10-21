@@ -1,0 +1,7 @@
+{
+  "version": "0.12.212",
+  "date": "2026-08-23",
+  "changes": [
+    "Kept signed desktop releases moving when debug-symbol publishing is temporarily unavailable"
+  ]
+}

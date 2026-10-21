@@ -16,3 +16,5 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^5.0.0
+  # Imported by test/stt_test.dart; keep direct so depend_on_referenced_packages holds.
+  stream_channel: ^2.1.4

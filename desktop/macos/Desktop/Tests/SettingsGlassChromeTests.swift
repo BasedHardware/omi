@@ -73,8 +73,8 @@ final class SettingsGlassChromeTests: XCTestCase {
       SettingsGlassMetrics.rowDividerInset,
       SettingsGlassMetrics.rowHorizontalPadding + SettingsGlassMetrics.iconTile
         + SettingsGlassMetrics.rowContentSpacing)
-    // The measured value from the settings kit these metrics come from: 12 + 26 + 11.
-    XCTAssertEqual(SettingsGlassMetrics.rowDividerInset, 49)
+    // The compact settings kit uses 10 + 26 + 11, keeping the divider aligned while reclaiming 2 pt.
+    XCTAssertEqual(SettingsGlassMetrics.rowDividerInset, 47)
   }
 
   /// A card drawn inside the glass must round *tighter* than the glass does.

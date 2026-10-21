@@ -14,6 +14,7 @@ extension KeyPath: @retroactive @unchecked Sendable {}
 extension TaskActionItem: @unchecked Sendable {}
 extension ToolChatResult: @unchecked Sendable {}
 extension ServerConversation: @unchecked Sendable {}
+extension ServerMemoryEvidence: @unchecked Sendable {}
 
 extension OmiAPI.EvidenceRef: @unchecked Sendable {}
 extension OmiAPI.TaskWorkflowControl: @unchecked Sendable {}
@@ -38,11 +39,18 @@ extension OmiAPI.WorkstreamDetailProjection: @unchecked Sendable {}
 extension AssistantSettingsResponse: @unchecked Sendable {}
 extension OmiAPI.RecommendationSubjectKind: @unchecked Sendable {}
 extension OmiAPI.GoalStatus: @unchecked Sendable {}
-extension DashboardRecommendation: @unchecked Sendable {}
-extension DashboardRecommendationDestination: @unchecked Sendable {}
 extension OmiAPI.FeedbackSubjectKind: @unchecked Sendable {}
 extension OmiAPI.ArtifactDescriptorCreate: @unchecked Sendable {}
 extension OmiAPI.ContinuationCheckpointUpsert: @unchecked Sendable {}
 extension GeminiRequest.GenerationConfig.ResponseSchema: @unchecked Sendable {}
 extension GeminiRequest.GenerationConfig.ResponseSchema.Property: @unchecked Sendable {}
 extension OmiAPI.TaskIntelligenceFeedbackReason: @unchecked Sendable {}
+
+// Generated immutable value types: only strings, booleans, integers and arrays
+// of the same value types. Keep conformances outside regenerated source.
+extension OmiAPI.OmiApiClient: @unchecked Sendable {}
+extension OmiAPI.ProactivityTarget: @unchecked Sendable {}
+extension OmiAPI.ProactivityFeedItem: @unchecked Sendable {}
+extension OmiAPI.ProactivityFeedResponse: @unchecked Sendable {}
+extension OmiAPI.ProactivityOutcomeRequest: @unchecked Sendable {}
+extension OmiAPI.ProactivityOutcomeResponse: @unchecked Sendable {}

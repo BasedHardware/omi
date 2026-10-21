@@ -46,6 +46,35 @@ DELIBERATELY_REMOVED_ENDPOINTS: frozenset[str] = frozenset(
     }
 )
 
+# GET /v2/payments/plans schema_version 1 landed on main in #21367 behind
+# STOREFRONT_LADDER_V1_ENABLED (default off) and never reached a released
+# decoder. The first consumer is #21363, which accepts only schema_version 2
+# on this same route. The predicate below ignores response drift only for that
+# 1→2 replacement. Once main serves schema 2, any later response break on this
+# route fails the gate again. Do not widen this to other routes.
+UNRELEASED_STOREFRONT_V1_ROUTE = '/v2/payments/plans'
+
+# Released-client status restorations. The merge-base spec is normally the
+# released-clients truth, but a spec-only wire-contract regression can ship to
+# main without clients being rebuilt: e22938ac78 (2026-07-04) flipped
+# DELETE /v1/conversations/{conversation_id} from the released 204 No Content
+# to 200 + StatusResponse, while every released mobile client still gates
+# delete success on exactly 204
+# (app/lib/backend/http/api/conversations.dart::deleteConversationServer,
+# #10446 recurrence). An entry here records (route, method, status) whose
+# released-client contract is the pre-regression status, so restoring that
+# status is not flagged as a brand-new success status. Each entry must cite
+# the restoring change and the released-client evidence; never add
+# speculatively.
+RELEASED_STATUS_RESTORES: frozenset[tuple[str, str, str]] = frozenset(
+    {
+        # Restored by "fix(backend): restore the released 204 delete contract
+        # for conversation deletion" (this branch). Evidence: the released
+        # client decoder returns `response.statusCode == 204` for this call.
+        ('/v1/conversations/{conversation_id}', 'delete', '204'),
+    }
+)
+
 
 class OpenAPICompatibilityError(RuntimeError):
     """The contracts cannot be compared safely."""
@@ -128,11 +157,20 @@ class CompatibilityChecker:
                     operation_path,
                 )
                 self._check_request_body(base_operation, head_operation, operation_path)
-                self._check_responses(base_operation, head_operation, operation_path)
+                if not self._unreleased_storefront_v1_to_v2(route, method, base_operation, head_operation):
+                    self._check_responses(base_operation, head_operation, operation_path)
         return sorted(set(self.issues))
 
     def _issue(self, path: str, message: str) -> None:
         self.issues.append(CompatibilityIssue(path, message))
+
+    def _unreleased_storefront_v1_to_v2(self, route: str, method: str, base_op: Schema, head_op: Schema) -> bool:
+        """True only while this route's published response moves from schema 1 to 2."""
+        if route != UNRELEASED_STOREFRONT_V1_ROUTE or method != 'get':
+            return False
+        return (
+            _schema_version_const(base_op, self.base_refs) == 1 and _schema_version_const(head_op, self.head_refs) == 2
+        )
 
     def _check_security(self, base_op: Schema, head_op: Schema, path: str) -> None:
         if 'security' not in head_op:
@@ -263,6 +301,13 @@ class CompatibilityChecker:
             response_path = f'{path}.responses.{status}'
             old_match = _matching_response_key(old_responses, str(status), include_default=True)
             if old_match is None:
+                # A recorded restoration means the released clients were built
+                # against this exact status and a later spec-only regression
+                # removed it from the merge-base baseline; restoring it is not
+                # a new client-visible surface (see RELEASED_STATUS_RESTORES).
+                route, _, method = path.rpartition('.')
+                if (route.removeprefix('paths.'), method, str(status)) in RELEASED_STATUS_RESTORES:
+                    continue
                 self._issue(response_path, 'new success response status is not modeled by the released client')
                 continue
             self._compare_response_content(
@@ -491,7 +536,11 @@ class CompatibilityChecker:
             for name in sorted(old_properties):
                 property_path = f'{path}.properties.{name}'
                 if name not in new_properties:
-                    self._issue(property_path, 'released request property was removed')
+                    additional = new.get('additionalProperties', True)
+                    if additional is False:
+                        self._issue(property_path, 'released request property was removed')
+                    elif isinstance(additional, dict):
+                        self._compare_schema(old_properties[name], additional, direction, property_path, seen)
                 else:
                     self._compare_schema(old_properties[name], new_properties[name], direction, property_path, seen)
             for name in sorted(new_required - old_required):
@@ -576,6 +625,20 @@ class CompatibilityChecker:
 
 def _mapping(value: object) -> Schema:
     return cast(Schema, value) if isinstance(value, dict) else {}
+
+
+def _schema_version_const(operation: Schema, resolver: LocalReferenceResolver) -> object:
+    """Return the 200 JSON body's schema_version const, or None when it is absent."""
+    response = _mapping(_mapping(operation.get('responses')).get('200'))
+    media = _mapping(_mapping(response.get('content')).get('application/json'))
+    schema = media.get('schema')
+    if schema is None:
+        return None
+    resolved = _mapping(resolver.resolve(schema))
+    version = _mapping(resolved.get('properties')).get('schema_version')
+    if version is None:
+        return None
+    return _mapping(resolver.resolve(version)).get('const')
 
 
 def _list(value: object) -> list[Any]:
@@ -698,6 +761,7 @@ def main(argv: list[str] | None = None) -> int:
     source.add_argument('--base-spec', type=Path, help='released/base app-client OpenAPI JSON')
     source.add_argument('--base-ref', help='git ref whose merge-base with HEAD contains the released contract')
     parser.add_argument('--head-spec', type=Path, default=DEFAULT_SPEC, help='candidate app-client OpenAPI JSON')
+    parser.add_argument('--label', default='App-client', help='contract name used in messages')
     args = parser.parse_args(argv)
 
     try:
@@ -715,15 +779,15 @@ def main(argv: list[str] | None = None) -> int:
 
     if issues:
         print(
-            f'App-client OpenAPI compatibility failed: {len(issues)} breaking change(s) relative to {base_label}.',
+            f'{args.label} OpenAPI compatibility failed: {len(issues)} breaking change(s) relative to {base_label}.',
             file=sys.stderr,
         )
         for issue in issues:
             print(f'  BREAKING {issue}', file=sys.stderr)
-        print('Version the endpoint instead of breaking a released app-client contract.', file=sys.stderr)
+        print(f'Version the endpoint instead of breaking a released {args.label} contract.', file=sys.stderr)
         return 1
 
-    print(f'App-client OpenAPI compatibility passed against {base_label}.')
+    print(f'{args.label} OpenAPI compatibility passed against {base_label}.')
     return 0
 
 

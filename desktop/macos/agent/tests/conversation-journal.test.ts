@@ -14,10 +14,13 @@ import {
   beginBackendReconcile,
   beginBackendReconcilesForOwner,
   clearJournalConversation,
+  chatFirstMaterializationDeferrals,
+  chatFirstWireRejectionMessage,
   classifyBackendTurnResultDisposition,
   drainBackendConversationDeleteOutbox,
   drainBackendTurnOutbox,
   drainChatFirstDeferralOutbox,
+  enqueueChatFirstDeferral,
   failBackendTurnOutbox,
   failBackendReconcile,
   getJournalObservability,
@@ -52,208 +55,127 @@ afterEach(() => {
 });
 
 describe("kernel conversation journal", () => {
-  it("materializes each server intent once, persists its receipt, and stops at an unanswered tail question", () => {
-    const fixture = newSurface("main_chat", "chat", "chat-first-materialization");
-    const first = materializeChatFirstIntent(fixture.store, {
-      ownerId: fixture.ownerId,
-      conversationId: fixture.conversationId,
-      controlGeneration: 7,
-      intentId: "intent-open",
-      continuityKey: "intent-open",
-      source: "daily_opener",
-      blocks: [{ type: "taskCard", task_id: "task-1" }],
-      nowMs: 100,
-    });
-    expect(first).toMatchObject({
-      accepted: true,
-      duplicate: false,
-      turn: { role: "assistant", status: "completed", content: "" },
-      receipt: { intentId: "intent-open" },
-    });
-    expect(first.turn?.contentBlocks).toEqual([{ type: "taskCard", id: expect.any(String), taskId: "task-1" }]);
-
-    const replay = materializeChatFirstIntent(fixture.store, {
-      ownerId: fixture.ownerId,
-      conversationId: fixture.conversationId,
-      controlGeneration: 7,
-      intentId: "intent-open",
-      continuityKey: "intent-open",
-      source: "daily_opener",
-      blocks: [{ type: "taskCard", task_id: "task-1" }],
-      nowMs: 101,
-    });
-    expect(replay).toMatchObject({ accepted: true, duplicate: true, turn: { turnId: first.turn?.turnId } });
-    expect(listChatFirstMaterializationReceipts(fixture.store, {
-      ownerId: fixture.ownerId, controlGeneration: 7,
-    })).toEqual({
-      materializationReceipts: [first.receipt],
-      coldStartSequenceTerminalReceipts: [],
-    });
-
-    recordTerminalQuestion(fixture, "tail-question", [
-      { optionId: "later", label: "Later", preparedAnswer: "Ask me later.", defer: true },
-    ], 102);
-    const suppressed = materializeChatFirstIntent(fixture.store, {
-      ownerId: fixture.ownerId,
-      conversationId: fixture.conversationId,
-      controlGeneration: 7,
-      intentId: "intent-capture",
-      continuityKey: "intent-capture",
-      source: "capture_arrival",
-      blocks: [{ type: "captureLink", conversation_id: "capture-1", summary: "Capture" }],
-      nowMs: 103,
-    });
-    expect(suppressed).toMatchObject({ accepted: false, suppressedByTailQuestion: true, turn: null, receipt: null });
-
-    expect(acknowledgeChatFirstMaterializationReceipts(fixture.store, {
-      ownerId: fixture.ownerId,
-      controlGeneration: 7,
-      receipts: [first.receipt!],
-      coldStartSequenceTerminalReceipts: [],
-    })).toBe(1);
-    expect(listChatFirstMaterializationReceipts(fixture.store, {
-      ownerId: fixture.ownerId, controlGeneration: 7,
-    })).toEqual({ materializationReceipts: [], coldStartSequenceTerminalReceipts: [] });
-    fixture.store.close();
+  it("rejects daily, cold-start, meeting and deferred intents without a journal write", () => {
+    const fixture = newSurface("main_chat", "chat", "no-automatic-cards");
+    for (const source of ["daily_opener", "cold_start_rich", "cold_start_sparse", "capture_arrival", "agent_judgment", "deferral_reraise"] as const) {
+      const input = { ownerId: fixture.ownerId, conversationId: fixture.conversationId,
+        controlGeneration: 7, intentId: source, continuityKey: source, source,
+        blocks: [{ type: "taskCard", task_id: "task" }] };
+      expect(materializeChatFirstIntent(fixture.store, input)).toMatchObject({
+        accepted: false, rejected: true, turn: null, receipt: null,
+      });
+      expect(materializeChatFirstIntents(fixture.store, [input])).toMatchObject({
+        results: [{ accepted: false, rejected: true, turn: null }], stoppedByTail: false,
+      });
+    }
+    expect(fixture.store.getRow("SELECT COUNT(*) AS count FROM conversation_turns").count).toBe(0);
+    expect(fixture.store.getRow("SELECT COUNT(*) AS count FROM chat_first_materialization_receipts").count).toBe(0);
   });
 
-  it("materializes a meeting receipt with the exact conversation identity", () => {
-    const fixture = newSurface("main_chat", "chat", "meeting-arrival");
-    const result = materializeChatFirstIntent(fixture.store, {
-      ownerId: fixture.ownerId,
-      conversationId: fixture.conversationId,
-      controlGeneration: 7,
-      intentId: "intent-meeting",
-      continuityKey: "capture:conversation-1",
-      source: "capture_arrival",
-      blocks: [{
-        type: "conversationLink",
-        conversation_id: "conversation-1",
-        summary: "Weekly planning",
-        recommended_action_items: [
-          { description: "Send the deck", task_id: "task-1" },
-          { description: "Book the follow-up" },
-        ],
-      }],
-      nowMs: 100,
-    });
-
-    expect(result.turn?.contentBlocks).toEqual([{
-      type: "conversationLink",
-      id: expect.any(String),
-      conversationId: "conversation-1",
-      summary: "Weekly planning",
-      recommendedActionItems: [
-        { description: "Send the deck", taskId: "task-1" },
-        { description: "Book the follow-up" },
-      ],
-    }]);
-    expect(result.turn?.conversationId).toBe(fixture.conversationId);
-    expect(result).toMatchObject({
-      accepted: true,
-      duplicate: false,
-      receipt: { intentId: "intent-meeting" },
-    });
-    const [delivery] = drainBackendTurnOutbox(fixture.store, {
-      ownerId: fixture.ownerId,
-      nowMs: 100,
-    });
-    expect(delivery.payload).toMatchObject({
-      text: "Meeting notes ready - Weekly planning",
-      contentBlocks: [{
-        type: "conversationLink",
-        conversationId: "conversation-1",
-      }],
-    });
-    expect(delivery.payload.metadata).not.toContain("content_blocks");
-    failBackendTurnOutbox(fixture.store, {
-      ownerId: fixture.ownerId,
-      turnId: delivery.turnId,
-      deliveryGeneration: delivery.deliveryGeneration,
-      attemptCount: delivery.attemptCount,
-      conversationGeneration: delivery.conversationGeneration,
-      payloadHash: delivery.payloadHash,
-      errorCode: "test_retry",
-      retryAtMs: 101,
-      nowMs: 100,
-    });
-    const duplicate = materializeChatFirstIntent(fixture.store, {
-      ownerId: fixture.ownerId,
-      conversationId: fixture.conversationId,
-      controlGeneration: 7,
-      intentId: "intent-meeting",
-      continuityKey: "capture:conversation-1",
-      source: "capture_arrival",
-      blocks: [{
-        type: "conversationLink",
-        conversation_id: "conversation-1",
-        summary: "Weekly planning",
-        recommended_action_items: [
-          { description: "Send the deck", task_id: "task-1" },
-          { description: "Book the follow-up" },
-        ],
-      }],
-      nowMs: 101,
-    });
-    expect(duplicate).toMatchObject({
-      accepted: true,
-      duplicate: true,
-      turn: { conversationId: fixture.conversationId },
-      receipt: { intentId: "intent-meeting" },
-    });
-    fixture.store.close();
-  });
-
-  it("commits an ordered materialization batch once, stops after its question, and preserves a block-only outbox payload", () => {
-    const fixture = newSurface("main_chat", "chat", "chat-first-batch");
-    const batch = materializeChatFirstIntents(fixture.store, [
-      {
-        ownerId: fixture.ownerId, conversationId: fixture.conversationId, controlGeneration: 9,
-        intentId: "intent-first", continuityKey: "intent-first", source: "daily_opener",
-        blocks: [{ type: "taskCard", task_id: "task-1" }], nowMs: 100,
-      },
-      {
-        ownerId: fixture.ownerId, conversationId: fixture.conversationId, controlGeneration: 9,
-        intentId: "intent-question", continuityKey: "intent-question", source: "deferral_reraise",
-        blocks: [{
-          type: "questionCard", question_id: "question-1", text: "Continue?",
-          subject: { kind: "goal", id: "goal-1" },
-          options: [{ option_id: "yes", label: "Yes", prepared_answer: "Yes" }],
-        }], nowMs: 101,
-      },
-      {
-        ownerId: fixture.ownerId, conversationId: fixture.conversationId, controlGeneration: 9,
-        intentId: "intent-after-question", continuityKey: "intent-after-question", source: "capture_arrival",
-        blocks: [{ type: "captureLink", conversation_id: "capture-1", summary: "Capture" }], nowMs: 102,
-      },
+  it("deferral poison reaches failed within the attempt budget without blocking a later claim", () => {
+    const fixture = newSurface("main_chat", "chat", "deferral-poison-budget");
+    recordTerminalQuestion(fixture, "turn-question", [
+      { optionId: "later", label: "Ask me later", preparedAnswer: "Ask me again later.", defer: true },
     ]);
-
-    expect(batch.stoppedByTail).toBe(true);
-    expect(batch.results).toHaveLength(2);
-    expect(batch.results.map((result) => result.turn?.turnId)).toEqual([
-      expect.stringMatching(/^turn_cfi_/), expect.stringMatching(/^turn_cfi_/),
-    ]);
-    const deliveries = drainBackendTurnOutbox(fixture.store, { ownerId: fixture.ownerId, nowMs: 103 });
-    expect(deliveries).toHaveLength(2);
-    expect(deliveries.map((delivery) => delivery.payload.text)).toEqual(["Task", "Continue?"]);
-    expect(deliveries.every((delivery) => delivery.payload.contentBlocks.length === 1)).toBe(true);
-    expect(deliveries.every((delivery) => !delivery.payload.metadata?.includes("content_blocks"))).toBe(true);
-
+    recordQuestionInteractionReply(fixture.store, {
+      ownerId: fixture.ownerId,
+      sessionId: fixture.sessionId,
+      questionId: "question-1",
+      optionId: "later",
+      controlGeneration: 11,
+      nowMs: 200,
+    });
+    for (let attempt = 1; attempt <= 5; attempt += 1) {
+      const [claim] = drainChatFirstDeferralOutbox(fixture.store, {
+        ownerId: fixture.ownerId,
+        nowMs: 200 + attempt * 60_000,
+      });
+      expect(claim).toBeDefined();
+      expect(settleChatFirstDeferralOutbox(fixture.store, {
+        ownerId: fixture.ownerId,
+        continuityKey: claim.continuityKey,
+        deliveryGeneration: claim.deliveryGeneration,
+        payloadHash: claim.payloadHash,
+        ok: false,
+        errorCode: "canonical hash mismatch",
+        nowMs: 201 + attempt * 60_000,
+      })).toBe(true);
+    }
+    const row = fixture.store.getRow(
+      "SELECT status, last_error_code, attempt_count FROM chat_first_deferral_outbox",
+    );
+    expect(row).toMatchObject({
+      status: "failed",
+      last_error_code: "canonical hash mismatch",
+      attempt_count: 5,
+    });
+    expect(drainChatFirstDeferralOutbox(fixture.store, {
+      ownerId: fixture.ownerId,
+      nowMs: 200 + 6 * 60_000,
+    })).toEqual([]);
     fixture.store.close();
   });
 
-  it("suppresses a materialization batch behind a streaming assistant tail", () => {
-    const fixture = newSurface("main_chat", "chat", "chat-first-streaming-tail");
-    recordStreamingAssistantPlaceholder(fixture, "streaming-tail");
-    const batch = materializeChatFirstIntents(fixture.store, [{
-      ownerId: fixture.ownerId, conversationId: fixture.conversationId, controlGeneration: 4,
-      intentId: "intent-late", continuityKey: "intent-late", source: "capture_arrival",
-      blocks: [{ type: "captureLink", conversation_id: "capture-1", summary: "Capture" }], nowMs: 100,
-    }]);
-    expect(batch).toMatchObject({ stoppedByTail: true, results: [{
-      accepted: false, suppressedByStreamingTail: true, turn: null,
-    }] });
+  it("adopts a duplicate deferral by continuity key instead of raising", () => {
+    const fixture = newSurface("main_chat", "chat", "deferral-adopt-identity");
+    recordTerminalQuestion(fixture, "turn-question", [
+      { optionId: "later", label: "Ask me later", preparedAnswer: "Ask me again later.", defer: true },
+    ]);
+    const first = recordQuestionInteractionReply(fixture.store, {
+      ownerId: fixture.ownerId,
+      sessionId: fixture.sessionId,
+      questionId: "question-1",
+      optionId: "later",
+      controlGeneration: 11,
+      nowMs: 200,
+    });
+    const second = recordQuestionInteractionReply(fixture.store, {
+      ownerId: fixture.ownerId,
+      sessionId: fixture.sessionId,
+      questionId: "question-1",
+      optionId: "later",
+      controlGeneration: 11,
+      nowMs: 201,
+    });
+    expect(second.continuityKey).toBe(first.continuityKey);
+    expect(fixture.store.getRow("SELECT COUNT(*) AS count FROM chat_first_deferral_outbox").count).toBe(1);
     fixture.store.close();
+  });
+
+  it("adopts a reused continuity key with a different payload and keeps the first question", () => {
+    const fixture = newSurface("main_chat", "chat", "deferral-adopt-mismatch-payload");
+    const firstQuestion = {
+      type: "questionCard" as const,
+      id: "question-card-1",
+      questionId: "question-1",
+      text: "first payload",
+      subject: { kind: "goal" as const, id: "goal-1" },
+      options: [{ optionId: "later", label: "Ask me later", preparedAnswer: "Ask me again later.", defer: true }],
+    };
+    enqueueChatFirstDeferral(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      controlGeneration: 11,
+      continuityKey: "shared-continuity",
+      question: firstQuestion,
+      nowMs: 200,
+    });
+    expect(() => enqueueChatFirstDeferral(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      controlGeneration: 11,
+      continuityKey: "shared-continuity",
+      question: { ...firstQuestion, text: "second payload" },
+      nowMs: 201,
+    })).not.toThrow();
+    const row = fixture.store.getRow("SELECT question_json AS question_json, COUNT(*) AS count FROM chat_first_deferral_outbox");
+    expect(row.count).toBe(1);
+    expect(JSON.parse(String(row.question_json)).text).toBe("first payload");
+    fixture.store.close();
+  });
+
+  it("wire rejection messages are bounded before leaving the kernel", () => {
+    expect(chatFirstWireRejectionMessage(new Error("x".repeat(500)))).toHaveLength(300);
   });
 
   it("atomically binds the one current main-chat placeholder and replays validated chat-first blocks", () => {
@@ -292,6 +214,82 @@ describe("kernel conversation journal", () => {
       ownerId: fixture.ownerId,
       conversationId: fixture.conversationId,
     }).turns.at(-1)).toMatchObject({ contentBlocks: blocks });
+    fixture.store.close();
+  });
+
+  it("keeps the cards the agent rendered when the surface terminalizes its own projection", () => {
+    // The live failure this pins: `render_chat_blocks` appended three task
+    // cards, the tool answered `ok`, and about three seconds later the turn
+    // terminalized with the projection Swift built from the adapter stream —
+    // text and tool calls, and no card, because the append was a journal
+    // mutation the surface never saw. The replace then deleted all three.
+    const fixture = newSurface("main_chat", "chat", "chat-first-survives-terminal");
+    const { run, attempt } = insertActiveRunAttempt(fixture, "chat-first-survives-terminal");
+    recordStreamingAssistantPlaceholder(fixture, "turn-chat-first-survives");
+    const cards: ConversationContentBlock[] = [
+      { type: "taskCard", id: "cfb-task-1", taskId: "task-1" },
+      { type: "goalLink", id: "cfb-goal-1", goalId: "goal-1", summary: "Ship the desktop beta" },
+      { type: "memoryLink", id: "cfb-memory-1", memoryId: "memory-1", summary: "Prefers morning reviews" },
+    ];
+    appendChatFirstBlocksToProducingTurn(fixture.store, {
+      ownerId: fixture.ownerId,
+      sessionId: fixture.sessionId,
+      runId: run.runId,
+      attemptId: attempt.attemptId,
+      blocks: cards,
+    });
+
+    fixture.store.execute("UPDATE runs SET status = 'succeeded' WHERE run_id = ?", [run.runId]);
+    fixture.store.execute("UPDATE run_attempts SET status = 'succeeded' WHERE attempt_id = ?", [attempt.attemptId]);
+    const surfaceProjection: ConversationContentBlock[] = [
+      { type: "text", id: "turn-chat-first-survives:terminal", text: "Here are your three most urgent tasks." },
+    ];
+    const terminalized = terminalizeJournalTurn(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      turnId: "turn-chat-first-survives",
+      producingRunId: run.runId,
+      producingAttemptId: attempt.attemptId,
+      disposition: "accept",
+      content: "Here are your three most urgent tasks.",
+      replaceContentBlocks: surfaceProjection,
+      nowMs: 20,
+    });
+
+    expect(terminalized.contentBlocks).toEqual([...surfaceProjection, ...cards]);
+    fixture.store.close();
+  });
+
+  it("keeps the cards the agent rendered when the surface replaces its blocks mid-turn", () => {
+    // Terminalization is not the only replace. The streaming projection pushes
+    // the surface's own block list several times a turn, and each one used to
+    // take the agent's cards with it — the append survived the commit and died
+    // to the very next update.
+    const fixture = newSurface("main_chat", "chat", "chat-first-survives-update");
+    const { run, attempt } = insertActiveRunAttempt(fixture, "chat-first-survives-update");
+    recordStreamingAssistantPlaceholder(fixture, "turn-chat-first-update");
+    appendChatFirstBlocksToProducingTurn(fixture.store, {
+      ownerId: fixture.ownerId,
+      sessionId: fixture.sessionId,
+      runId: run.runId,
+      attemptId: attempt.attemptId,
+      blocks: [{ type: "taskCard", id: "cfb-task-1", taskId: "task-1" }],
+    });
+
+    const updated = updateJournalTurn(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      turnId: "turn-chat-first-update",
+      replaceContentBlocks: [
+        { type: "text", id: "turn-chat-first-update:terminal", text: "Here they are." },
+      ],
+      nowMs: 30,
+    });
+
+    expect(updated.contentBlocks).toEqual([
+      { type: "text", id: "turn-chat-first-update:terminal", text: "Here they are." },
+      { type: "taskCard", id: "cfb-task-1", taskId: "task-1" },
+    ]);
     fixture.store.close();
   });
 
@@ -412,215 +410,6 @@ describe("kernel conversation journal", () => {
       [fixture.conversationId],
     ).count).toBe(3);
     fixture.store.close();
-  });
-
-  it("advances sparse cold start only after the selected normal answer terminalizes and retires on unrelated input", () => {
-    const fixture = newSurface("main_chat", "chat", "cold-start-sequence");
-    const first = materializeChatFirstIntent(fixture.store, {
-      ownerId: fixture.ownerId,
-      conversationId: fixture.conversationId,
-      controlGeneration: 7,
-      intentId: "cold-start-intent",
-      continuityKey: "cold-start:7",
-      source: "cold_start_sparse",
-      blocks: [{
-        type: "questionCard",
-        question_id: "cold-start:7:step:1",
-        text: "What matters now?",
-        subject: { kind: "cold_start", id: "cold-start:7" },
-        cold_start_sequence: { sequence_id: "cold-start:7", step: 1 },
-        options: [{ option_id: "progress", label: "Make progress", prepared_answer: "I want to make progress." }],
-      }],
-      nowMs: 10,
-    });
-    const selected = recordQuestionInteractionReply(fixture.store, {
-      ownerId: fixture.ownerId,
-      sessionId: fixture.sessionId,
-      questionId: "cold-start:7:step:1",
-      optionId: "progress",
-      controlGeneration: 7,
-      nowMs: 20,
-    });
-    const { run, attempt } = insertActiveRunAttempt(fixture, "cold-start-sequence");
-    updateJournalTurn(fixture.store, {
-      ownerId: fixture.ownerId,
-      conversationId: fixture.conversationId,
-      turnId: selected.assistantTurn!.turnId,
-      producingRunId: run.runId,
-      producingAttemptId: attempt.attemptId,
-      nowMs: 21,
-    });
-    fixture.store.execute("UPDATE runs SET status = 'succeeded' WHERE run_id = ?", [run.runId]);
-    fixture.store.execute("UPDATE run_attempts SET status = 'succeeded' WHERE attempt_id = ?", [attempt.attemptId]);
-    terminalizeJournalTurn(fixture.store, {
-      ownerId: fixture.ownerId,
-      conversationId: fixture.conversationId,
-      turnId: selected.assistantTurn!.turnId,
-      producingRunId: run.runId,
-      producingAttemptId: attempt.attemptId,
-      disposition: "accept",
-      content: "Let us shape that together.",
-      nowMs: 22,
-    });
-    const turns = listJournalTurns(fixture.store, {
-      ownerId: fixture.ownerId,
-      conversationId: fixture.conversationId,
-    }).turns;
-    expect(turns.at(-1)?.contentBlocks).toContainEqual(expect.objectContaining({
-      type: "questionCard",
-      questionId: "cold-start:7:step:2",
-      coldStartSequence: { sequenceId: "cold-start:7", step: 2 },
-    }));
-
-    const second = recordQuestionInteractionReply(fixture.store, {
-      ownerId: fixture.ownerId,
-      sessionId: fixture.sessionId,
-      questionId: "cold-start:7:step:2",
-      optionId: "cold-start:7:goal:create",
-      controlGeneration: 7,
-      nowMs: 30,
-    });
-    const secondRunAttempt = insertActiveRunAttempt(fixture, "cold-start-sequence-step-2");
-    updateJournalTurn(fixture.store, {
-      ownerId: fixture.ownerId,
-      conversationId: fixture.conversationId,
-      turnId: second.assistantTurn!.turnId,
-      producingRunId: secondRunAttempt.run.runId,
-      producingAttemptId: secondRunAttempt.attempt.attemptId,
-      nowMs: 31,
-    });
-    fixture.store.execute("UPDATE runs SET status = 'succeeded' WHERE run_id = ?", [secondRunAttempt.run.runId]);
-    fixture.store.execute("UPDATE run_attempts SET status = 'succeeded' WHERE attempt_id = ?", [secondRunAttempt.attempt.attemptId]);
-    terminalizeJournalTurn(fixture.store, {
-      ownerId: fixture.ownerId,
-      conversationId: fixture.conversationId,
-      turnId: second.assistantTurn!.turnId,
-      producingRunId: secondRunAttempt.run.runId,
-      producingAttemptId: secondRunAttempt.attempt.attemptId,
-      disposition: "accept",
-      content: "I will turn that into a goal.",
-      nowMs: 32,
-    });
-
-    // Backend acknowledgements are journal revisions, not new conversation
-    // turns. Reproduce the live race by acknowledging the newly appended step
-    // three card first and the older step-two response last. The older response
-    // now has the highest revision sequence, but the step-three card remains
-    // the canonical user-visible tail and must stay actionable.
-    const stepThreeQuestion = currentJournalTurns(fixture).find((turn) => (
-      turn.contentBlocks.some((block) => (
-        block.type === "questionCard" && block.questionId === "cold-start:7:step:3"
-      ))
-    ));
-    expect(stepThreeQuestion).toBeDefined();
-    const claims = drainBackendTurnOutbox(fixture.store, { nowMs: 33 });
-    const stepThreeClaim = claims.find((claim) => claim.turnId === stepThreeQuestion!.turnId);
-    const olderResponseClaim = claims.find((claim) => claim.turnId === second.assistantTurn!.turnId);
-    expect(stepThreeClaim).toBeDefined();
-    expect(olderResponseClaim).toBeDefined();
-    for (const [claim, remoteId, nowMs] of [
-      [stepThreeClaim!, "remote-step-three-question", 34],
-      [olderResponseClaim!, "remote-step-two-response", 35],
-    ] as const) {
-      ackBackendTurnOutbox(fixture.store, {
-        ownerId: fixture.ownerId,
-        turnId: claim.turnId,
-        remoteId,
-        attemptCount: claim.attemptCount,
-        deliveryGeneration: claim.deliveryGeneration,
-        conversationGeneration: claim.conversationGeneration,
-        payloadHash: claim.payloadHash,
-        nowMs,
-      });
-    }
-    expect(fixture.store.getRow(
-      `SELECT turn_id FROM conversation_turns
-       WHERE conversation_id = ? ORDER BY turn_seq DESC LIMIT 1`,
-      [fixture.conversationId],
-    ).turn_id).toBe(second.assistantTurn!.turnId);
-
-    const third = recordQuestionInteractionReply(fixture.store, {
-      ownerId: fixture.ownerId,
-      sessionId: fixture.sessionId,
-      questionId: "cold-start:7:step:3",
-      optionId: "cold-start:7:tasks:draft",
-      controlGeneration: 7,
-      nowMs: 40,
-    });
-    const thirdRunAttempt = insertActiveRunAttempt(fixture, "cold-start-sequence-step-3");
-    updateJournalTurn(fixture.store, {
-      ownerId: fixture.ownerId,
-      conversationId: fixture.conversationId,
-      turnId: third.assistantTurn!.turnId,
-      producingRunId: thirdRunAttempt.run.runId,
-      producingAttemptId: thirdRunAttempt.attempt.attemptId,
-      nowMs: 41,
-    });
-    fixture.store.execute("UPDATE runs SET status = 'succeeded' WHERE run_id = ?", [thirdRunAttempt.run.runId]);
-    fixture.store.execute("UPDATE run_attempts SET status = 'succeeded' WHERE attempt_id = ?", [thirdRunAttempt.attempt.attemptId]);
-    terminalizeJournalTurn(fixture.store, {
-      ownerId: fixture.ownerId,
-      conversationId: fixture.conversationId,
-      turnId: third.assistantTurn!.turnId,
-      producingRunId: thirdRunAttempt.run.runId,
-      producingAttemptId: thirdRunAttempt.attempt.attemptId,
-      disposition: "accept",
-      content: "I will draft those first tasks.",
-      nowMs: 42,
-    });
-    expect(listChatFirstMaterializationReceipts(fixture.store, {
-      ownerId: fixture.ownerId, controlGeneration: 7,
-    }).coldStartSequenceTerminalReceipts).toEqual([
-      expect.objectContaining({ sequenceId: "cold-start:7", terminalState: "completed" }),
-    ]);
-
-    const unrelated = newSurface("main_chat", "chat", "cold-start-unrelated");
-    materializeChatFirstIntent(unrelated.store, {
-      ownerId: unrelated.ownerId,
-      conversationId: unrelated.conversationId,
-      controlGeneration: 7,
-      intentId: "cold-start-unrelated-intent",
-      continuityKey: "cold-start:7",
-      source: "cold_start_sparse",
-      blocks: [{
-        type: "questionCard",
-        question_id: "cold-start:7:step:1",
-        text: "What matters now?",
-        subject: { kind: "cold_start", id: "cold-start:7" },
-        cold_start_sequence: { sequence_id: "cold-start:7", step: 1 },
-        options: [{ option_id: "progress", label: "Make progress", prepared_answer: "I want to make progress." }],
-      }],
-      nowMs: 10,
-    });
-    recordJournalTurn(unrelated.store, {
-      ownerId: unrelated.ownerId,
-      conversationId: unrelated.conversationId,
-      role: "user",
-      surfaceKind: "main_chat",
-      origin: "typed_chat",
-      status: "completed",
-      content: "Actually, help me with something else.",
-      contentBlocks: [{ type: "text", id: "unrelated:text", text: "Actually, help me with something else." }],
-      createdAtMs: 20,
-    });
-    const currentUnrelatedTurns = currentJournalTurns(unrelated);
-    expect(currentUnrelatedTurns.map((turn) => turn.role)).toEqual(["assistant", "user"]);
-    const retired = currentUnrelatedTurns[0]!.contentBlocks[0] as Extract<ConversationContentBlock, { type: "questionCard" }>;
-    expect(retired.coldStartSequence?.retired).toBe(true);
-    expect(listChatFirstMaterializationReceipts(unrelated.store, {
-      ownerId: unrelated.ownerId, controlGeneration: 7,
-    }).coldStartSequenceTerminalReceipts).toEqual([
-      expect.objectContaining({ sequenceId: "cold-start:7", terminalState: "abandoned" }),
-    ]);
-    expect(recordQuestionInteractionReply(unrelated.store, {
-      ownerId: unrelated.ownerId,
-      sessionId: unrelated.sessionId,
-      questionId: "cold-start:7:step:1",
-      optionId: "progress",
-      controlGeneration: 7,
-    })).toMatchObject({ accepted: false });
-    fixture.store.close();
-    unrelated.store.close();
   });
 
   it("rejects stale or conflicting question selections without mutating the journal", () => {
@@ -1920,6 +1709,137 @@ describe("kernel conversation journal", () => {
       "SELECT status, last_error_code FROM backend_turn_outbox WHERE turn_id = ?",
       ["turn-discard-guard"],
     )).toEqual({ status: "failed", last_error_code: "discarded_terminal_projection" });
+    fixture.store.close();
+  });
+
+  // Characterization of the accept/reject boundary the desktop failed-turn
+  // fallback runs into. The Swift side reconstructs a failure notice and asks
+  // the journal to record it; whether that survives relaunch depends entirely
+  // on whether the runtime already terminalized the row.
+  it("rejects a late failure notice on a pre-terminalized empty failed turn but accepts one on a live turn", () => {
+    const fixture = newSurface("main_chat", "chat", "failure-notice");
+    const notice = "Omi's AI service declined this request.";
+
+    // (1) REJECT — the runtime discarded the turn first (user Stop, watchdog,
+    // owner revocation, or a throw escaping the run), leaving an empty
+    // `failed` row. This is the state the Swift fallback is written for.
+    const cancelledRun = fixture.store.insertRun({
+      sessionId: fixture.sessionId,
+      runId: "run_notice_cancelled",
+      clientId: "main-chat",
+      requestId: "failure-notice-cancelled",
+      status: "cancelled",
+      mode: "act",
+    });
+    const cancelledAttempt = fixture.store.insertAttempt({
+      attemptId: "att_notice_cancelled",
+      runId: cancelledRun.runId,
+      attemptNo: 1,
+      status: "cancelled",
+      adapterId: "fake",
+      adapterInstanceId: "fake:notice-cancelled",
+    });
+    recordJournalTurn(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      turnId: "turn-notice-discarded",
+      role: "assistant",
+      surfaceKind: "main_chat",
+      origin: "agent_runtime",
+      status: "streaming",
+      content: "",
+      contentBlocks: [],
+      producingRunId: cancelledRun.runId,
+      producingAttemptId: cancelledAttempt.attemptId,
+      createdAtMs: 50,
+    });
+    terminalizeJournalTurn(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      turnId: "turn-notice-discarded",
+      producingRunId: cancelledRun.runId,
+      producingAttemptId: cancelledAttempt.attemptId,
+      disposition: "discard",
+      nowMs: 51,
+    });
+
+    // The `journal_update_turn` route Swift takes when it has no correlated
+    // terminal result. (`index.ts` refuses it even earlier, because the turn
+    // carries a producing run id at all.)
+    expect(() => assertPublicJournalUpdatePolicy(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      turnId: "turn-notice-discarded",
+      status: "failed",
+      content: notice,
+    })).toThrow(/rejects every public update/i);
+
+    // And the terminalize route cannot re-terminalize it with new material.
+    expect(() => terminalizeJournalTurn(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      turnId: "turn-notice-discarded",
+      producingRunId: cancelledRun.runId,
+      producingAttemptId: cancelledAttempt.attemptId,
+      disposition: "accept",
+      content: notice,
+      nowMs: 52,
+    })).toThrow(/already terminalized with different canonical material/i);
+
+    // So the durable row stays the empty `failed` placeholder that the desktop
+    // journal projection deletes on the next refresh — the notice is lost.
+    expect(fixture.store.getRow(
+      "SELECT status, content FROM conversation_turns WHERE turn_id = ?",
+      ["turn-notice-discarded"],
+    )).toEqual({ status: "failed", content: "" });
+
+    // (2) ACCEPT — an ordinary upstream failure never pre-terminalizes, so the
+    // same notice reaches durable storage through the terminalize route.
+    const failedRun = fixture.store.insertRun({
+      sessionId: fixture.sessionId,
+      runId: "run_notice_failed",
+      clientId: "main-chat",
+      requestId: "failure-notice-failed",
+      status: "failed",
+      mode: "act",
+    });
+    const failedAttempt = fixture.store.insertAttempt({
+      attemptId: "att_notice_failed",
+      runId: failedRun.runId,
+      attemptNo: 1,
+      status: "failed",
+      adapterId: "fake",
+      adapterInstanceId: "fake:notice-failed",
+    });
+    recordJournalTurn(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      turnId: "turn-notice-live",
+      role: "assistant",
+      surfaceKind: "main_chat",
+      origin: "agent_runtime",
+      status: "streaming",
+      content: "",
+      contentBlocks: [],
+      producingRunId: failedRun.runId,
+      producingAttemptId: failedAttempt.attemptId,
+      createdAtMs: 60,
+    });
+    terminalizeJournalTurn(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      turnId: "turn-notice-live",
+      producingRunId: failedRun.runId,
+      producingAttemptId: failedAttempt.attemptId,
+      disposition: "accept",
+      content: notice,
+      nowMs: 61,
+    });
+
+    expect(fixture.store.getRow(
+      "SELECT status, content FROM conversation_turns WHERE turn_id = ?",
+      ["turn-notice-live"],
+    )).toEqual({ status: "failed", content: notice });
     fixture.store.close();
   });
 
@@ -3839,60 +3759,140 @@ describe("kernel conversation journal", () => {
     fixture.store.close();
   });
 
-  it("ties equal created_at_ms conversation tails by turn_seq rather than turn_id", () => {
-    const fixture = newSurface("main_chat", "chat", "tail-tie-break");
-    // Lexicographically larger older turn_id would win without a turn_seq tie-break.
-    recordTerminalQuestion(
-      fixture,
-      "turn_zzzz_older",
-      [
-        { optionId: "older:a", label: "Older A", preparedAnswer: "Older A" },
-        { optionId: "older:b", label: "Older B", preparedAnswer: "Older B" },
-      ],
-      100,
-    );
+  it("revises an optimistically sealed completion to failed without touching payload or canonical metadata", () => {
+    // #12743: the desktop voice funnel seals a `.success` row `completed` at
+    // provider-response-finish while playback is still draining. When the
+    // reducer later proves the answer never reached the user, the revision
+    // must downgrade the row to `failed` while preserving exactly what the
+    // funnel sealed — content, blocks, resources, and canonical metadata such
+    // as model attribution and the continuity key.
+    const fixture = newSurface("main_chat", "chat", "sealed-terminal-revision");
+    const continuityKey = "voice:sealed-revision";
+    const turnId = `turn_${createHash("sha256")
+      .update(`${continuityKey}\0assistant`)
+      .digest("hex")
+      .slice(0, 32)}`;
     recordJournalTurn(fixture.store, {
       ownerId: fixture.ownerId,
       conversationId: fixture.conversationId,
-      turnId: "turn_aaaa_newer",
+      turnId,
       role: "assistant",
       surfaceKind: "main_chat",
-      origin: "typed_chat",
+      origin: "realtime_voice",
       status: "completed",
-      content: "Later answer without a question.",
-      contentBlocks: [
-        {
-          type: "text",
-          id: "later:text",
-          text: "Later answer without a question.",
-        },
-      ],
-      createdAtMs: 100,
+      content: "Take the blue potion at 12:45.",
+      contentBlocks: [{ type: "text", id: `${turnId}:text`, text: "Take the blue potion at 12:45." }],
+      resources: [],
+      metadataJson: JSON.stringify({
+        continuityKey,
+        modelsUsed: ["gemini-3.1-flash-live-preview"],
+      }),
+      createdAtMs: 10,
     });
 
-    expect(fixture.store.getRow(
-      `SELECT turn_id FROM conversation_turns
-       WHERE conversation_id = ?
-       ORDER BY created_at_ms DESC, turn_seq DESC, turn_id DESC LIMIT 1`,
-      [fixture.conversationId],
-    ).turn_id).toBe("turn_aaaa_newer");
-
-    // If the older unanswered question remained the tail (lexicographic turn_id),
-    // materialization would be suppressed.
-    const materialization = materializeChatFirstIntent(fixture.store, {
+    const revised = updateJournalTurn(fixture.store, {
       ownerId: fixture.ownerId,
       conversationId: fixture.conversationId,
-      controlGeneration: 7,
-      intentId: "intent-after-tie",
-      continuityKey: "intent-after-tie",
-      source: "daily_opener",
-      blocks: [{ type: "taskCard", task_id: "task-after-tie" }],
-      nowMs: 110,
+      turnId,
+      status: "failed",
+      metadataJson: JSON.stringify({ terminalReason: "answer_not_delivered" }),
+      terminalRevision: true,
+      nowMs: 11,
     });
-    expect(materialization).toMatchObject({
-      accepted: true,
-      suppressedByTailQuestion: false,
-      suppressedByStreamingTail: false,
+
+    expect(revised.status).toBe("failed");
+    expect(revised.content).toBe("Take the blue potion at 12:45.");
+    expect(revised.contentBlocks).toEqual([
+      { type: "text", id: `${turnId}:text`, text: "Take the blue potion at 12:45." },
+    ]);
+    expect(revised.resources).toEqual([]);
+    expect(JSON.parse(revised.metadataJson)).toMatchObject({
+      continuityKey,
+      modelsUsed: ["gemini-3.1-flash-live-preview"],
+      terminalReason: "answer_not_delivered",
+    });
+    fixture.store.close();
+  });
+
+  it("rejects a completed-to-failed downgrade without the terminal revision authority", () => {
+    const fixture = newSurface("main_chat", "chat", "sealed-downgrade-authority");
+    const turnId = "turn-downgrade-plain";
+    recordJournalTurn(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      turnId,
+      role: "assistant",
+      surfaceKind: "main_chat",
+      origin: "realtime_voice",
+      status: "completed",
+      content: "sealed",
+      contentBlocks: [],
+      resources: [],
+      metadataJson: "{}",
+      createdAtMs: 10,
+    });
+
+    expect(() => updateJournalTurn(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      turnId,
+      status: "failed",
+      metadataJson: JSON.stringify({ terminalReason: "answer_not_delivered" }),
+      nowMs: 11,
+    })).toThrow(/Invalid journal turn status transition completed -> failed/);
+    fixture.store.close();
+  });
+
+  it("rejects a terminal revision that mutates payload or targets a non-failed status", () => {
+    const fixture = newSurface("main_chat", "chat", "sealed-revision-shape");
+    const turnId = "turn-revision-shape";
+    recordJournalTurn(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      turnId,
+      role: "assistant",
+      surfaceKind: "main_chat",
+      origin: "realtime_voice",
+      status: "completed",
+      content: "sealed",
+      contentBlocks: [],
+      resources: [],
+      metadataJson: JSON.stringify({ continuityKey: "voice:shape" }),
+      createdAtMs: 10,
+    });
+
+    expect(() => updateJournalTurn(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      turnId,
+      status: "failed",
+      content: "rewritten answer",
+      terminalRevision: true,
+      nowMs: 11,
+    })).toThrow(/payload-free downgrade/);
+    expect(() => updateJournalTurn(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      turnId,
+      status: "completed",
+      metadataJson: JSON.stringify({ terminalReason: "x" }),
+      terminalRevision: true,
+      nowMs: 11,
+    })).toThrow(/payload-free downgrade/);
+    // The well-formed revision of the same sealed row still lands.
+    const revised = updateJournalTurn(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      turnId,
+      status: "failed",
+      metadataJson: JSON.stringify({ terminalReason: "playback_failed" }),
+      terminalRevision: true,
+      nowMs: 12,
+    });
+    expect(revised.status).toBe("failed");
+    expect(JSON.parse(revised.metadataJson)).toMatchObject({
+      continuityKey: "voice:shape",
+      terminalReason: "playback_failed",
     });
     fixture.store.close();
   });

@@ -97,3 +97,14 @@ def test_query_memory_vector_candidates_requires_explicit_archive_mode_for_archi
     vector_db.query_memory_vector_candidates("uid-1", "query text", mode=SearchMode.archive_explicit)
 
     assert {"memory_layer": {"$eq": "archive"}} in fake_index.queries[0]["filter"]["$and"]
+
+
+def test_query_memory_vector_candidates_bounds_provider_top_k(monkeypatch):
+    vector_db = _load_vector_db_with_stubs()
+    fake_index = _FakeIndex()
+    monkeypatch.setattr(vector_db, "index", fake_index)
+    monkeypatch.setattr(vector_db, "embeddings", _FakeEmbeddings())
+
+    vector_db.query_memory_vector_candidates("uid-1", "query text", limit=10_000)
+
+    assert fake_index.queries[0]["top_k"] == 60

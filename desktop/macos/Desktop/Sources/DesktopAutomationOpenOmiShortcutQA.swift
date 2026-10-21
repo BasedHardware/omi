@@ -7,20 +7,36 @@ extension DesktopAutomationActionRegistry {
     #if DEBUG
       register(
         name: "proactive_assistant_proxy_routes",
+        effects: [],
         summary: "Resolve the Gemini and embedding proxy routes through their production clients. DEBUG non-prod only."
       ) { _ in
         guard AppBuild.isNonProduction else {
           return ["error": "proactive_assistant_proxy_routes is disabled on production bundles"]
         }
+        guard let geminiURL = URL(string: GeminiClient.proxyBaseURL) else {
+          return ["error": "invalid gemini proxy base url"]
+        }
+        var geminiRequest = URLRequest(url: geminiURL)
+        geminiRequest.applyGeminiProxyHeaders(
+          lane: .taskExtraction,
+          workload: .extraction,
+          authorization: ""
+        )
+        // These echo the fixed sample this probe sends through the shared
+        // header helper — they verify the helper contract, not that each real
+        // request path (focus, memory, embedding, …) carries its own lane.
         return [
           "gemini_proxy_base_url": GeminiClient.proxyBaseURL,
           "embedding_proxy_base_url": EmbeddingService.proxyBaseURL,
-          "proactivity_base_url": ProactiveLaneClient.backendBaseURL,
+          "gemini_helper_sample_lane": geminiRequest.value(forHTTPHeaderField: "X-Omi-Lane") ?? "",
+          "gemini_helper_sample_workload": geminiRequest.value(forHTTPHeaderField: "X-Omi-Workload") ?? "",
+          "gemini_helper_sample_client_platform": geminiRequest.value(forHTTPHeaderField: "X-App-Platform") ?? "",
         ]
       }
 
       register(
         name: "set_open_omi_shortcut",
+        effects: [.localState],
         summary: "Select an Open Omi shortcut preset through the production settings mutation. DEBUG non-prod only.",
         params: ["preset"]
       ) { params in
@@ -59,6 +75,7 @@ extension DesktopAutomationActionRegistry {
 
       register(
         name: "trigger_open_omi_shortcut",
+        effects: [.localState],
         summary: "Trigger the registered Open Omi shortcut action. DEBUG non-prod only."
       ) { _ in
         guard AppBuild.isNonProduction else {

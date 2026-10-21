@@ -8,18 +8,19 @@
 // `import type` is erased at runtime, so importing the Memory type back from the
 // hook creates no runtime cycle (localAgentMemoryCache.ts does the same).
 import type { Memory } from '../hooks/useMemories'
-import { readPersistedCache, writePersistedCache } from './persistentCache'
+import {
+  readPersistedCache,
+  writePersistedCache,
+} from './persistentCache'
 
 export const cache = {
   list: null as Memory[] | null,
   error: null as string | null,
   loaded: false,
-  // Whether the server exposes canonical memory tiering for this account
-  // (X-Omi-Memory-Canonical-Lifecycle-Exposed). Prod runs MEMORY_MODE=off, so
-  // this stays false and the tier/device filters never render. Set from the
-  // fetch response immediately BEFORE publish(), so the list re-render that
-  // publish triggers reads the fresh value.
-  canonicalLifecycleExposed: false
+  // The device-scope capability also establishes canonical lifecycle on this
+  // route, including for an empty account. Set before publish() so its
+  // re-render sees the value.
+  canonicalLifecycleExposed: false,
 }
 
 // Persist at most this many memories to the per-uid cold-start snapshot. The page
@@ -49,10 +50,10 @@ export function publish(list: Memory[]): void {
 // last-known memories immediately instead of a spinner. `loaded` stays false, so
 // the revalidating fetch still runs and overwrites with fresh data. Runs at
 // hook-mount time (not module load) so the signed-in uid is already set.
-let hydratedFromDisk = false
+let hydratedSurface: string | null = null
 export function hydrateFromDisk(): void {
-  if (hydratedFromDisk) return
-  hydratedFromDisk = true
+  if (hydratedSurface === CACHE_SURFACE) return
+  hydratedSurface = CACHE_SURFACE
   if (cache.list !== null) return
   const persisted = readPersistedCache<Memory>(CACHE_SURFACE)
   if (persisted && persisted.length > 0) cache.list = persisted
@@ -67,7 +68,7 @@ export function resetMemoriesCache(): void {
   cache.error = null
   cache.loaded = false
   cache.canonicalLifecycleExposed = false
-  hydratedFromDisk = false
+  hydratedSurface = null
   // Notify any mounted Memories view so it clears the prior user's list without a
   // relaunch, matching invalidateConversationsCache's teardown broadcast (the
   // teardown's whole point is to reflect the wipe in the current window).

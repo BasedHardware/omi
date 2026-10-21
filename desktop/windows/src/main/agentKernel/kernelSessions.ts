@@ -22,6 +22,7 @@ import {
 import {
   clearOwnerMainChatTurns,
   conversationIdForSession,
+  conversationIdsForDeletion,
   getMainChatTurnTail,
   importConversationTurnsForSurface,
   projectCrossSurfaceTurn,
@@ -272,6 +273,14 @@ export class KernelSessions extends KernelArtifacts {
    *  no surface conversation. */
   conversationIdForSession(sessionId: string): string | null {
     return conversationIdForSession(this.store, sessionId)
+  }
+
+  /** Resolve any real renderer/backend chat deletion key to canonical kernel
+   * conversation ownership ids.  This is deliberately read-only: deletion
+   * callers enqueue durable cleanup against the returned ids before retiring
+   * their source rows. */
+  conversationIdsForDeletion(ownerId: string, deletionKey: string): string[] {
+    return conversationIdsForDeletion(this.store, ownerId, deletionKey)
   }
 
   /** Resolve the stamp inputs a spawn writes onto a background run so its terminal

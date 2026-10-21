@@ -7,16 +7,54 @@ final class BrowserGoogleSessionTests: XCTestCase {
 
   override func setUpWithError() throws {
     try super.setUpWithError()
+    BrowserKeychainCache.resetTestHooks()
     tempRoot = FileManager.default.temporaryDirectory
       .appendingPathComponent("browser-google-session-\(UUID().uuidString)", isDirectory: true)
     try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true)
   }
 
   override func tearDownWithError() throws {
+    BrowserKeychainCache.resetTestHooks()
     if let tempRoot {
       try? FileManager.default.removeItem(at: tempRoot)
     }
     try super.tearDownWithError()
+  }
+
+  func testNonProductionBundlesSkipBrowserSafeStorageKeychain() {
+    var providerCalls = 0
+    BrowserKeychainCache.allowsBrowserKeychainImport = { false }
+    BrowserKeychainCache.safeStoragePasswordProvider = { _, _, _ in
+      providerCalls += 1
+      return "should-not-be-read"
+    }
+
+    XCTAssertNil(
+      BrowserKeychainCache.nativeSafeStoragePassword(
+        for: "Chrome Safe Storage",
+        account: "Chrome",
+        userInitiated: true))
+    XCTAssertEqual(providerCalls, 0)
+  }
+
+  func testProductionBundlesReadBrowserSafeStorageThroughInjectedProvider() {
+    var providerCalls = 0
+    BrowserKeychainCache.allowsBrowserKeychainImport = { true }
+    BrowserKeychainCache.safeStoragePasswordProvider = { service, account, userInitiated in
+      providerCalls += 1
+      XCTAssertEqual(service, "Chrome Safe Storage")
+      XCTAssertEqual(account, "Chrome")
+      XCTAssertTrue(userInitiated)
+      return "browser-secret"
+    }
+
+    XCTAssertEqual(
+      BrowserKeychainCache.nativeSafeStoragePassword(
+        for: "Chrome Safe Storage",
+        account: "Chrome",
+        userInitiated: true),
+      "browser-secret")
+    XCTAssertEqual(providerCalls, 1)
   }
 
   func testCookiePathsPreferChromiumNetworkCookieStore() throws {

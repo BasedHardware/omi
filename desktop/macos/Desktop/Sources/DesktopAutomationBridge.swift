@@ -138,6 +138,10 @@ enum DesktopAutomationLaunchOptions {
 }
 
 struct DesktopAutomationSnapshot: Codable, Sendable {
+  /// The app has one shell. Flows and the navigation-visibility policy still read
+  /// `shellVariant`, so it is pinned here rather than removed from the contract.
+  static let singleShellVariant = "chat_first"
+
   var bridgeEnabled: Bool
   var bridgePort: UInt16
   var bundleIdentifier: String
@@ -146,14 +150,14 @@ struct DesktopAutomationSnapshot: Codable, Sendable {
   var selectedTabIndex: Int?
   var selectedSettingsSection: String?
   var highlightedSettingId: String?
-  var usesLegacyHomeDesign: Bool
-  /// Home stage mode: `hub`, `chat`, or `connect`. Written only by `DashboardPage`, which is the only
-  /// view that renders the stage; nil whenever nothing on screen has one — which includes the whole
-  /// legacy shell, whose Home is the query surface. Never defaulted: see `HomeStageAutomationPolicy`.
+  /// Home stage mode: `hub`, `chat`, or `connect`. `DashboardPage` was the only view that ever
+  /// rendered that stage and it no longer exists, so this is now always nil. Kept in the snapshot
+  /// so an older flow reading it sees "no stage" rather than a missing key.
   var homeMode: String?
-  /// `loading`, `legacy`, or `chat_first`; never a local rollout preference.
+  /// Always `chat_first` on a mounted shell: the app has exactly one. Nil only before the shell has
+  /// reported state. Never a local preference.
   var shellVariant: String?
-  /// Stable typed route for the Chat-first shell. Nil for the legacy shell.
+  /// Stable typed route for the one shell.
   var chatFirstRoute: String?
   /// Set only by the mounted Chat-first destination after it has appeared. This
   /// keeps a successful navigation response equivalent to the target being
@@ -167,18 +171,39 @@ struct DesktopAutomationSnapshot: Codable, Sendable {
   /// never an analytics dimension or a persisted navigation value.
   var focusedEntityID: String?
   var isFocusedEntityAcknowledged: Bool
+  /// Retained for snapshot compatibility; the legacy sidebar shell is gone, so it is always false.
   var showsPrimarySidebar: Bool
   var isSidebarCollapsed: Bool
   var hasCompletedOnboarding: Bool
   var isSignedIn: Bool
+  /// Which account this bundle is actually signed into.
+  ///
+  /// `isSignedIn` alone cannot answer "is this the account I think it is", and
+  /// a named bundle's identity is not stable across rebuilds: `run.sh` reseeds
+  /// auth from a source bundle, so reinstalling a QA bundle can silently swap
+  /// the signed-in account. On 2026-09-18 that turned a free-tier verification
+  /// into a managed-path run against a different account, and nothing in the
+  /// snapshot could have revealed it.
+  ///
+  /// The uid is the machine-checkable half — it is what rollout cohorts are
+  /// keyed on, so a harness can assert the bundle is the account it configured.
+  /// Non-production bundles only, like the rest of this bridge.
+  var accountUserID: String?
+  /// Human-readable half, for a developer reading `omi-ctl state` rather than
+  /// asserting on it.
+  var accountEmail: String?
   var isRestoringAuth: Bool
   var isAppActive: Bool
   var mainWindowTitle: String?
   var floatingBarVisible: Bool
+  /// True when the chat-first Chat route is selected, so the main-window composer is the typed Ask Omi surface.
   var askOmiOpen: Bool
+  /// True when that composer’s text view is first responder.
   var askOmiFocused: Bool
   var floatingBarFrame: String?
   var floatingBarVoiceListening: Bool
+  /// The current hold has been recognised as a dictation (the notch's red tint).
+  var floatingBarVoiceDictating: Bool
   var floatingBarVoiceResponseActive: Bool
   var floatingBarUsesNotchIsland: Bool
   var updatedAt: String
@@ -226,7 +251,9 @@ struct DesktopAutomationActionDescriptor: Codable {
   let category: String
   /// Screens or app surfaces this action is meant to replace AX interaction on.
   let surfaces: [String]
-  /// Agent-facing risk label; the bridge is still non-production only.
+  /// Explicit effect union, sorted for stable discovery JSON. Empty means read-only.
+  let effects: [DesktopAutomationActionEffect]
+  /// Derived coarse risk label for discovery clients.
   let safety: String
   /// Plain-language effects so callers can prefer read-only probes before clicks.
   let sideEffects: [String]
@@ -237,11 +264,11 @@ struct DesktopAutomationActionDescriptor: Codable {
 
   init(
     name: String,
+    effects: Set<DesktopAutomationActionEffect>,
     summary: String,
     params: [String] = [],
     category: String? = nil,
     surfaces: [String]? = nil,
-    safety: String? = nil,
     sideEffects: [String]? = nil,
     examples: [String] = [],
     preferSemantic: Bool = true
@@ -249,10 +276,12 @@ struct DesktopAutomationActionDescriptor: Codable {
     self.name = name
     self.summary = summary
     self.params = params
-    self.category = category ?? Self.inferCategory(name)
+    let inferredCategory = Self.inferCategory(name)
+    self.category = category ?? (effects.isEmpty ? "read" : (inferredCategory == "read" ? "write" : inferredCategory))
     self.surfaces = surfaces ?? Self.inferSurfaces(name)
-    self.safety = safety ?? Self.inferSafety(name)
-    self.sideEffects = sideEffects ?? Self.inferSideEffects(name)
+    self.effects = effects.sorted { $0.rawValue < $1.rawValue }
+    self.safety = DesktopAutomationActionEffect.safety(for: effects)
+    self.sideEffects = self.effects.map(\.description) + (sideEffects ?? [])
     self.examples = examples.isEmpty ? [Self.commandExample(name: name, params: params)] : examples
     self.preferSemantic = preferSemantic
   }
@@ -312,45 +341,6 @@ struct DesktopAutomationActionDescriptor: Codable {
     return ["app"]
   }
 
-  private static func inferSafety(_ name: String) -> String {
-    if name.contains("delete") {
-      return "remote_write"
-    }
-    if name.contains("snapshot") || name.contains("probe") || name.contains("state")
-      || name.contains("tail") || name.contains("evidence") || name.contains("qa_export")
-    {
-      return "read_only"
-    }
-    if name.hasPrefix("capture") {
-      return "local_artifact"
-    }
-    if name.contains("ask") || name.contains("omni") || name.contains("import") {
-      return "network_or_model"
-    }
-    return "local_ui_state"
-  }
-
-  private static func inferSideEffects(_ name: String) -> [String] {
-    if name.contains("delete") {
-      return ["may mutate remote user data"]
-    }
-    if name.hasPrefix("capture") {
-      return ["writes local artifact file"]
-    }
-    if name.contains("ask") || name.contains("omni") {
-      return ["may call model/backend services"]
-    }
-    if name.contains("import") {
-      return ["may read local connector data", "may save imported memory data"]
-    }
-    if name.contains("toggle") || name.contains("debug") || name.contains("open") || name.contains("close")
-      || name.contains("seed") || name.contains("swap") || name.contains("clear")
-    {
-      return ["mutates non-production app state"]
-    }
-    return []
-  }
-
   private static func commandExample(name: String, params: [String]) -> String {
     var pieces = ["./scripts/omi-ctl", "action", name]
     for param in params {
@@ -377,24 +367,6 @@ struct DesktopAutomationCapabilities: Codable {
   let actions: [DesktopAutomationActionDescriptor]
 }
 
-private struct DesktopAutomationHealth: Codable {
-  let ok: Bool
-  let name: String
-  let bundleIdentifier: String
-  let processID: Int32
-  let logFilePath: String
-  let logLaunchID: String
-  let bridgePort: UInt16
-  let requiresAuth: Bool
-  let backendEnvironment: String
-  let pythonBackendURL: String
-  let rustBackendURL: String
-  let agentRuntimeRunning: Bool
-  let agentRuntimeExpectedProtocolVersion: Int
-  let agentRuntimeProtocolVersion: Int?
-  let agentRuntimeVersion: String?
-}
-
 struct DesktopAutomationRouteTrace: Codable {
   let method: String
   let path: String
@@ -405,11 +377,13 @@ struct DesktopAutomationRouteTrace: Codable {
 
 enum DesktopAutomationActionError: LocalizedError {
   case unknownAction(String)
+  case requiresEffects(String)
   case invalidParams(String)
 
   var errorDescription: String? {
     switch self {
     case .unknownAction(let name): return "unknown_action: \(name)"
+    case .requiresEffects(let name): return "action_requires_effects: \(name)"
     case .invalidParams(let detail): return "invalid_params: \(detail)"
     }
   }
@@ -464,7 +438,6 @@ final class DesktopAutomationStateStore {
     selectedTabIndex: nil,
     selectedSettingsSection: nil,
     highlightedSettingId: nil,
-    usesLegacyHomeDesign: false,
     homeMode: nil,
     shellVariant: nil,
     chatFirstRoute: nil,
@@ -477,6 +450,8 @@ final class DesktopAutomationStateStore {
     isSidebarCollapsed: true,
     hasCompletedOnboarding: false,
     isSignedIn: false,
+    accountUserID: nil,
+    accountEmail: nil,
     isRestoringAuth: true,
     isAppActive: false,
     mainWindowTitle: nil,
@@ -485,6 +460,7 @@ final class DesktopAutomationStateStore {
     askOmiFocused: false,
     floatingBarFrame: nil,
     floatingBarVoiceListening: false,
+    floatingBarVoiceDictating: false,
     floatingBarVoiceResponseActive: false,
     floatingBarUsesNotchIsland: false,
     updatedAt: ISO8601DateFormatter().string(from: Date())
@@ -579,10 +555,11 @@ private func liveAutomationSnapshotFromMainActor() async -> DesktopAutomationSna
     let floating = FloatingControlBarManager.shared.automationState
     return (
       isVisible: floating.isVisible,
-      isAskOmiOpen: floating.isAskOmiOpen,
-      isAskOmiFocused: floating.isAskOmiFocused,
+      isAskOmiOpen: OpenAskOmiAutomation.isComposerPresented(),
+      isAskOmiFocused: OpenAskOmiAutomation.isComposerFocused(),
       frame: floating.frame,
       isVoiceListening: floating.isVoiceListening,
+      isVoiceDictating: floating.isVoiceDictating,
       isVoiceResponseActive: floating.isVoiceResponseActive,
       usesNotchIsland: floating.usesNotchIsland,
       isAppActive: NSApp.isActive
@@ -594,6 +571,7 @@ private func liveAutomationSnapshotFromMainActor() async -> DesktopAutomationSna
     snapshot.askOmiFocused = floating.isAskOmiFocused
     snapshot.floatingBarFrame = floating.frame
     snapshot.floatingBarVoiceListening = floating.isVoiceListening
+    snapshot.floatingBarVoiceDictating = floating.isVoiceDictating
     snapshot.floatingBarVoiceResponseActive = floating.isVoiceResponseActive
     snapshot.floatingBarUsesNotchIsland = floating.usesNotchIsland
     snapshot.isAppActive = floating.isAppActive
@@ -644,7 +622,7 @@ actor DesktopAutomationTraceStore {
 /// "command channel" equivalent of the Flutter app's Marionette driver.
 ///
 /// Built-ins are registered at bridge startup. Feature code can register more via
-/// `register(name:summary:params:handler:)` (e.g. from a view model's lifecycle) and
+/// `register(name:effects:summary:params:handler:)` (e.g. from a view model's lifecycle) and
 /// remove them with `unregister(_:)`.
 @MainActor
 private func ensureConversationsTabVisibleForAutomation() async throws {
@@ -681,6 +659,12 @@ final class DesktopAutomationActionRegistry {
     let run: Handler
   }
 
+  /// A 1x1 PNG, for the hermetic half of `screen_frame_quick_look_probe`. Literal bytes rather
+  /// than a rendered image so the probe has no dependency on capture history, a backend, or AppKit
+  /// drawing — the thing it is verifying is the panel, not the picture.
+  static let onePixelPNGBase64 =
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+
   private var entries: [String: Entry] = [:]
   private var didRegisterBuiltins = false
   /// Non-prod harness latch so race probes stay busy without relying on LLM latency.
@@ -711,11 +695,11 @@ final class DesktopAutomationActionRegistry {
 
   func register(
     name: String,
+    effects: Set<DesktopAutomationActionEffect>,
     summary: String,
     params: [String] = [],
     category: String? = nil,
     surfaces: [String]? = nil,
-    safety: String? = nil,
     sideEffects: [String]? = nil,
     examples: [String] = [],
     preferSemantic: Bool = true,
@@ -724,11 +708,11 @@ final class DesktopAutomationActionRegistry {
     entries[name] = Entry(
       descriptor: DesktopAutomationActionDescriptor(
         name: name,
+        effects: effects,
         summary: summary,
         params: params,
         category: category,
         surfaces: surfaces,
-        safety: safety,
         sideEffects: sideEffects,
         examples: examples,
         preferSemantic: preferSemantic
@@ -742,9 +726,15 @@ final class DesktopAutomationActionRegistry {
     entries.values.map(\.descriptor).sorted { $0.name < $1.name }
   }
 
-  func perform(_ name: String, params: [String: String]) async throws -> [String: String]? {
+  func perform(
+    _ name: String, params: [String: String], readOnly: Bool = false
+  ) async throws -> [String: String]? {
     guard let entry = entries[name] else {
       throw DesktopAutomationActionError.unknownAction(name)
+    }
+    // Check before invoking the handler, including handlers that launch Tasks.
+    guard !readOnly || entry.descriptor.effects.isEmpty else {
+      throw DesktopAutomationActionError.requiresEffects(name)
     }
     return try await entry.run(params)
   }
@@ -756,14 +746,15 @@ final class DesktopAutomationActionRegistry {
     guard !didRegisterBuiltins else { return }
     didRegisterBuiltins = true
     registerOpenOmiShortcutActionsForQA()
+    registerProactiveCaptureStatusSnapshot()
     register(
       name: "set_automation_ui_presentation",
+      effects: [.localState],
       summary:
         "Park automation windows quietly, reveal them briefly for Accessibility, or restore normal user presentation",
       params: ["mode", "activate"],
       category: "app_control",
       surfaces: ["app"],
-      safety: "local_ui_state",
       sideEffects: ["changes non-production window placement and input handling"],
       examples: [
         "./scripts/omi-ctl ui quiet",
@@ -793,11 +784,19 @@ final class DesktopAutomationActionRegistry {
         "activated": activate ? "true" : "false",
       ]
     }
-    // The five cursor-free Home-stage drivers, together because they share a failure mode:
-    // see DesktopAutomationHomeStageActions.swift.
+    // Cursor-free Home-stage and first-use-popup drivers: see their own files for the shared failure mode.
     registerHomeStageActions()
+    registerActivationActions()
+    registerOpenAskOmiActions()
+    registerCloseAskOmiActions()
+    registerPTTRecoveryActions()
+    registerFirstUsePopupActions()
+    registerItemLinkActions()
+    registerConversationRecordingActions()
+    registerCaptureRecoveryActions()
     register(
       name: "refresh_all_data",
+      effects: [.localState, .networkOrModel, .remoteWrite],
       summary: "Refresh conversations, chat, tasks, and memories (same as Cmd+R)"
     ) { _ in
       NotificationCenter.default.post(name: .refreshAllData, object: nil)
@@ -810,6 +809,7 @@ final class DesktopAutomationActionRegistry {
     // Accessibility permission or a frontmost window. Non-prod only.
     register(
       name: "post_key",
+      effects: [.localState, .localArtifact, .networkOrModel, .remoteWrite],
       summary:
         "Post a keyDown+keyUp NSEvent through the app event queue (e.g. key_code=124 for right arrow). Non-prod only.",
       params: ["key_code", "modifiers"]
@@ -866,14 +866,25 @@ final class DesktopAutomationActionRegistry {
     // prove the counter is deterministic without spending LLM calls. Read-only.
     register(
       name: "usage_limiter_snapshot",
+      effects: [],
       summary: "Read the free-tier monthly chat usage-limiter state (deterministic counter) — CHAT-05 harness read."
     ) { _ in
       await MainActor.run {
         let limiter = FloatingBarUsageLimiter.shared
+        let banner = ChatQuotaBanner.current(
+          quota: limiter.serverQuota,
+          optimisticDelta: limiter.optimisticDelta,
+          dismissed: ChatQuotaBannerDismissals.shared.dismissed)
         return [
           "is_limit_reached": limiter.isLimitReached ? "true" : "false",
           "remaining_queries": "\(limiter.remainingQueries)",
           "limit_description": limiter.limitDescription,
+          "banner_threshold": banner.map { "\($0.threshold)" } ?? "none",
+          "rendered_banner_threshold": ChatQuotaBannerPresentation.shared.rendered
+            .map { "\($0.threshold)" } ?? "none",
+          "rendered_banner_title": ChatQuotaBannerPresentation.shared.rendered?.title ?? "",
+          "banner_title": banner?.title ?? "",
+          "banner_message": banner?.message ?? "",
         ]
       }
     }
@@ -882,6 +893,7 @@ final class DesktopAutomationActionRegistry {
     // dev-resettable (the criterion's second half) without driving real LLM usage.
     register(
       name: "reset_usage_limiter",
+      effects: [.localState],
       summary: "Reset the free-tier monthly chat usage-limiter counter (dev-resettable proof) — CHAT-05. Non-prod only."
     ) { _ in
       guard AppBuild.isNonProduction else {
@@ -897,8 +909,53 @@ final class DesktopAutomationActionRegistry {
         ]
       }
     }
+    // Seeds the quota snapshot the chat-quota warnings key off, so a harness can
+    // walk 90/100 without spending a month of real questions. Non-prod only.
+    register(
+      name: "apply_usage_quota",
+      effects: [.localState],
+      summary: "Seed the chat usage-quota snapshot (threshold-warning harness). Non-prod only.",
+      params: ["used", "limit", "plan", "unit", "is_overage_plan", "reset_at"]
+    ) { params in
+      guard AppBuild.isNonProduction else {
+        return ["error": "apply_usage_quota is disabled on production bundles"]
+      }
+      guard let used = params["used"].flatMap(Double.init) else {
+        throw DesktopAutomationActionError.invalidParams("used must be a number")
+      }
+      var json: [String: Any] = [
+        "plan": params["plan"] ?? "Operator",
+        "plan_type": "operator",
+        "unit": params["unit"] ?? "questions",
+        "used": used,
+        "percent": 0,
+        "allowed": true,
+      ]
+      if let limit = params["limit"].flatMap(Double.init) {
+        json["limit"] = limit
+        json["allowed"] = used < limit
+      }
+      if let resetAt = params["reset_at"].flatMap(Int.init) { json["reset_at"] = resetAt }
+      if let overage = params["is_overage_plan"] { json["is_overage_plan"] = overage == "true" }
+      let data = try JSONSerialization.data(withJSONObject: json)
+      let quota = try JSONDecoder().decode(APIClient.ChatUsageQuota.self, from: data)
+      return await MainActor.run {
+        let limiter = FloatingBarUsageLimiter.shared
+        limiter.applyQuota(quota)
+        // Seeding a cycle must produce the banner it asks for; a dismissal left
+        // over from an earlier run would silently suppress it.
+        ChatQuotaBannerDismissals.shared.reset()
+        return [
+          "applied": "true",
+          "used": "\(quota.used)",
+          "limit": "\(quota.limit ?? -1)",
+          "is_limit_reached": limiter.isLimitReached ? "true" : "false",
+        ]
+      }
+    }
     register(
       name: "task_capture_fixture",
+      effects: [],
       summary: "Evaluate canonical screen-capture policy facts without screenshot bytes",
       params: ["facts_json"]
     ) { params in
@@ -931,16 +988,15 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "configure_contextual_task_interruptions",
+      effects: [.localState],
       summary: "Configure the non-production contextual task interruption gate",
       params: [
-        "enabled", "shipped_cohorts_enabled", "daily_limit", "minimum_spacing_seconds",
+        "enabled", "daily_limit", "minimum_spacing_seconds",
         "notifications_enabled", "frequency", "task_notifications_enabled",
       ]
     ) { params in
       var configuration = ProactiveTaskInterruptionSettings.load()
       configuration.userOptedIn = boolParam(params["enabled"], default: false)
-      configuration.shippedCohortsEnabled = boolParam(
-        params["shipped_cohorts_enabled"], default: false)
       configuration.dailyLimit = max(0, intParam(params["daily_limit"], default: configuration.dailyLimit))
       configuration.minimumSpacing = TimeInterval(
         max(
@@ -964,13 +1020,13 @@ final class DesktopAutomationActionRegistry {
       }
       return [
         "enabled": configuration.userOptedIn ? "true" : "false",
-        "shipped_cohorts_enabled": configuration.shippedCohortsEnabled ? "true" : "false",
         "cohort": ProactiveTaskCohort.current.rawValue,
       ]
     }
 
     register(
       name: "probe_contextual_task_interruption",
+      effects: [.localState],
       summary: "Evaluate a synthetic bounded recommendation through the real interruption gate",
       params: ["can_wait", "expires_in_seconds"]
     ) { params in
@@ -1003,9 +1059,9 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "probe_suggestion_nudge",
+      effects: [.localState, .networkOrModel],
       summary: "Run the real suggestion grounding/evaluation/delivery path on the latest frame",
       params: ["app", "window_title"],
-      safety: "network_or_model",
       sideEffects: [
         "may call model/backend services",
         "may deliver a user-visible suggestion when notification controls allow",
@@ -1019,9 +1075,9 @@ final class DesktopAutomationActionRegistry {
       )
     }
 
-    registerContextBucketDirectorProbe()
     register(
       name: "set_contextual_task_focus",
+      effects: [.localState],
       summary: "Set deterministic focus suppression for contextual task interruptions",
       params: ["suppressed"]
     ) { params in
@@ -1033,6 +1089,7 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "observe_task_context",
+      effects: [.localState, .networkOrModel, .remoteWrite],
       summary: "Submit a normalized task-context event and optionally flush re-evaluation",
       params: [
         "kind", "reference", "subject_kind", "subject_id", "workstream_id", "urgency", "flush",
@@ -1080,6 +1137,7 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "prepare_task_artifact_fixture",
+      effects: [.localState, .localArtifact],
       summary: "Persist an allowlisted prepared artifact through the workstream kernel",
       params: ["workstream_id", "logical_key", "kind", "content", "execution_ready", "grant_id"]
     ) { params in
@@ -1196,9 +1254,16 @@ final class DesktopAutomationActionRegistry {
     // TextEditor. Writes real memories on success, like the sheet would.
     register(
       name: "memory_log_import_probe",
+      effects: [.localState, .networkOrModel, .remoteWrite],
       summary:
         "Import a ChatGPT/Claude memory-log text through the real connector pipeline and return the outcome message",
-      params: ["source", "text", "fixture"]
+      params: ["source", "text", "fixture"],
+      category: "write",
+      surfaces: ["import_connectors"],
+      sideEffects: [
+        "may call model/backend services",
+        "may save imported memory data",
+      ]
     ) { params in
       guard let raw = params["source"], let source = OnboardingMemoryLogSource(rawValue: raw) else {
         throw DesktopAutomationActionError.invalidParams("source must be chatgpt or claude")
@@ -1239,6 +1304,7 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "toggle_transcription",
+      effects: [.localState, .networkOrModel, .remoteWrite],
       summary: "Enable or disable live transcription (mirrors the menu-bar toggle)",
       params: ["enabled"]
     ) { params in
@@ -1249,6 +1315,7 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "capture_test_transcript",
+      effects: [.localState, .networkOrModel, .remoteWrite],
       summary: "Hermetic capture seam: start/inject/stop a test recording session without mic/STT",
       params: ["phase", "text", "segments"]
     ) { params in
@@ -1280,7 +1347,128 @@ final class DesktopAutomationActionRegistry {
     }
 
     register(
+      name: "local_summary_benchmark",
+      effects: [.localArtifact, .networkOrModel],
+      summary:
+        "S12: run the local summarizer over the last K GRDB sessions and write schema-validity + timings JSON",
+      params: ["limit", "engine", "output"],
+      category: "debug",
+      surfaces: ["app"],
+      sideEffects: ["writes a JSON report under Application Support; does not persist projections"],
+      examples: [
+        "./scripts/omi-ctl action local_summary_benchmark limit=5 engine=local-server"
+      ]
+    ) { params in
+      guard AppBuild.isNonProduction else {
+        return ["error": "local_summary_benchmark is disabled on production bundles"]
+      }
+      let limit = max(1, min(LocalSummaryBenchmark.maxSessions, intParam(params["limit"], default: 5)))
+      let engineRaw = (params["engine"] ?? "local-server").trimmingCharacters(in: .whitespacesAndNewlines)
+      guard let engineID = LocalInferenceEngineID.parse(engineRaw) else {
+        throw DesktopAutomationActionError.invalidParams("engine must be local-server or afm")
+      }
+      guard let queue = await RewindDatabase.shared.getDatabaseQueue() else {
+        return ["error": "rewind database unavailable"]
+      }
+      let sessions: [LocalSummaryBenchmark.Session]
+      do {
+        sessions = try await queue.read { db in
+          try LocalSummaryBenchmark.loadRecentSessions(from: db, limit: limit)
+        }
+      } catch {
+        return ["error": "session_load_failed"]
+      }
+      guard !sessions.isEmpty else {
+        return ["error": "no_sessions", "limit": "\(limit)"]
+      }
+      let runtime = LocalInferenceRuntime.makeDefault(
+        killSwitches: LocalInferenceKillSwitches(isDisabled: false, forcedEngineRaw: engineID.rawValue)
+      )
+      let summarizer = ConversationChunkSummarizer(
+        runtime: runtime,
+        store: MemoryLocalProjectionStore()
+      )
+      let report = await LocalSummaryBenchmark.run(
+        sessions: sessions,
+        summarizer: summarizer,
+        engineID: engineID.rawValue
+      )
+      let output: URL
+      if let raw = params["output"]?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty {
+        output = URL(fileURLWithPath: raw)
+      } else {
+        output = LocalSummaryBenchmark.defaultReportURL()
+      }
+      do {
+        try LocalSummaryBenchmark.write(report, to: output)
+      } catch {
+        return ["error": "report_write_failed"]
+      }
+      let valid = report.cases.filter(\.schemaValid).count
+      return [
+        "path": output.path,
+        "engine": engineID.rawValue,
+        "case_count": "\(report.cases.count)",
+        "schema_valid_count": "\(valid)",
+        "kind": report.kind,
+      ]
+    }
+
+    register(
+      name: "local_embedding_benchmark",
+      effects: [.localArtifact],
+      summary: "Run synthetic local hybrid retrieval metrics (recall@10 / nDCG@10) and write JSON",
+      params: ["output"],
+      category: "debug",
+      surfaces: ["app"],
+      sideEffects: ["writes a JSON report under Application Support; uses an in-memory synthetic DB"],
+      examples: ["./scripts/omi-ctl action local_embedding_benchmark"]
+    ) { params in
+      guard AppBuild.isNonProduction else {
+        return ["error": "local_embedding_benchmark is disabled on production bundles"]
+      }
+      let runtime = LocalEmbeddingRuntime.makeDefault()
+      _ = await ChatLocalHybridTool.execute(
+        ["query": "synthetic"], runID: nil, attemptID: nil, expectedOwnerID: nil,
+        sourceKinds: [.transcriptChunk], runtime: runtime)
+      guard case .engine(let engine) = await runtime.selectEngine() else {
+        return [
+          "kind": LocalEmbeddingBenchmark.reportKind,
+          "error": "local_engine_unavailable",
+        ]
+      }
+      let report: LocalEmbeddingBenchmark.Report
+      do {
+        report = try await LocalEmbeddingBenchmark.runSynthetic(engine: engine, runtime: runtime)
+      } catch {
+        return [
+          "kind": LocalEmbeddingBenchmark.reportKind,
+          "error": "benchmark_failed",
+        ]
+      }
+      let output: URL
+      if let raw = params["output"]?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty {
+        output = URL(fileURLWithPath: raw)
+      } else {
+        output = LocalEmbeddingBenchmark.defaultReportURL()
+      }
+      do {
+        try LocalEmbeddingBenchmark.write(report, to: output)
+      } catch {
+        return ["error": "report_write_failed"]
+      }
+      return [
+        "path": output.path,
+        "engine": engine.engineID,
+        "kind": report.kind,
+        "fixture": report.fixture,
+        "metric_count": "\(report.metrics.count)",
+      ]
+    }
+
+    register(
       name: "conversation_list_snapshot",
+      effects: [.localState, .networkOrModel],
       summary: "Return conversation list counts and recent titles for harness assertions",
       params: ["limit"]
     ) { params in
@@ -1323,6 +1511,7 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "conversation_reconciliation_snapshot",
+      effects: [.localState, .networkOrModel],
       summary: "Exercise cache-first list/detail reconciliation and open the canonical detail",
       params: []
     ) { _ in
@@ -1356,6 +1545,7 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "memories_snapshot",
+      effects: [.localState, .networkOrModel],
       summary: "Return memories page load state for harness assertions",
       params: []
     ) { _ in
@@ -1392,6 +1582,7 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "tasks_snapshot",
+      effects: [.localState, .networkOrModel, .remoteWrite],
       summary: "Return tasks store counts for harness assertions",
       params: []
     ) { _ in
@@ -1435,13 +1626,23 @@ final class DesktopAutomationActionRegistry {
     // the shortcut handler calls, so no synthetic key events or cursor are involved.
     register(
       name: "ptt_start",
-      summary: "Begin a push-to-talk capture (mirrors the PTT shortcut key-down)"
+      effects: [.localState, .localArtifact, .networkOrModel, .remoteWrite],
+      summary:
+        "Begin a push-to-talk capture after admission (mirrors the PTT shortcut key-down). Returns after capture admission; provider/hub readiness and screen evidence are polled via ptt_turn_snapshot"
     ) { _ in
       PushToTalkManager.shared.beginPushToTalkForAutomation()
     }
 
     register(
+      name: "ptt_quick_tap",
+      effects: [.localState, .localArtifact, .networkOrModel, .remoteWrite],
+      summary: "Mirror one quick tap of a modifier-only PTT key; two inside the double-tap window lock"
+    ) { _ in
+      PushToTalkManager.shared.quickTapPushToTalkForAutomation()
+    }
+    register(
       name: "ptt_stop",
+      effects: [.localState, .localArtifact, .networkOrModel, .remoteWrite],
       summary: "Finalize the in-progress push-to-talk capture (mirrors a long-hold release)"
     ) { _ in
       PushToTalkManager.shared.endPushToTalkForAutomation()
@@ -1451,20 +1652,34 @@ final class DesktopAutomationActionRegistry {
     // routing decision, realtime admission, warm buffering, and replay seam.
     // Unlike `ptt_test_turn`, it does not bypass PushToTalkManager; unlike a
     // physical test, it needs neither microphone permission nor a device.
+    // `pace_ms` spaces the 100 ms chunks in wall time (pass 100 for a real-time
+    // hold), which is what lets the wake-word probes and the hub's warm
+    // deadline run on the timeline a physical hold has. `settle_ms` waits after
+    // release for the closing transcription, polish, and paste to land.
     register(
       name: "ptt_manager_turn",
+      effects: [.localState, .localArtifact, .networkOrModel, .remoteWrite],
       summary:
         "Inject a PCM16/16k mono hold through PushToTalkManager and realtime admission; returns lifecycle diagnostics",
-      params: ["pcm"]
+      params: ["pcm", "pace_ms", "settle_ms", "chunk_bytes"]
     ) { params in
       guard let path = params["pcm"],
         let pcm16k = try? Data(contentsOf: URL(fileURLWithPath: path)),
         !pcm16k.isEmpty
       else { return ["error": "missing or unreadable 'pcm' file (expected raw s16le 16k mono)"] }
+      // Bounded so the nanosecond conversion below cannot trap on a typo.
+      let maxWaitMs: UInt64 = 10 * 60 * 1_000
+      let paceMs = min(UInt64(params["pace_ms"] ?? "") ?? 0, maxWaitMs)
+      let settleMs = min(UInt64(params["settle_ms"] ?? "") ?? 0, maxWaitMs)
+      // Default 100 ms. Pass 342 to mimic what the CoreAudio IOProc hands a
+      // 48 kHz device's capture after resampling — chunk size has already
+      // hidden one bug that only a real microphone showed. Always a whole
+      // number of 16-bit samples, so an odd size cannot shear the PCM framing.
+      let requestedChunk = Int(params["chunk_bytes"] ?? "") ?? 3_200
+      let chunkSize = max(2, requestedChunk - requestedChunk % 2)
 
       var result = PushToTalkManager.shared.beginRealtimePushToTalkForAutomation()
       guard result["listening"] == "true" else { return result }
-      let chunkSize = 3_200
       var offset = 0
       var injected = 0
       while offset < pcm16k.count {
@@ -1473,18 +1688,43 @@ final class DesktopAutomationActionRegistry {
           injected += end - offset
         }
         offset = end
+        if paceMs > 0 { try? await Task.sleep(nanoseconds: paceMs * 1_000_000) }
       }
       let stopped = PushToTalkManager.shared.endPushToTalkForAutomation()
+      if settleMs > 0 { try? await Task.sleep(nanoseconds: settleMs * 1_000_000) }
       result["injected_bytes"] = "\(injected)"
       result["finalized"] = stopped["finalized"] ?? "false"
       for (key, value) in RealtimeHubController.shared.automationPTTDiagnostics() {
         result[key] = value
       }
+      for (key, value) in PushToTalkManager.shared.voiceTypingAutomationDiagnostics() {
+        result[key] = value
+      }
       return result
+    }
+
+    // The dictation pipeline without a voice turn: transcribe a recording the
+    // way a key-up does (backend, then on-device; on-device only with
+    // network=false), clean it up, and paste it into the frontmost app. Lets a
+    // harness verify the paste and the fallback order with no microphone and,
+    // with network=false, no sign-in.
+    register(
+      name: "voice_typing_dictate",
+      effects: [.localState, .localArtifact, .networkOrModel, .remoteWrite],
+      summary: "Run a PCM16/16k recording through the dictation pipeline and paste the result into the frontmost app",
+      params: ["pcm", "network"]
+    ) { params in
+      guard let path = params["pcm"],
+        let pcm16k = try? Data(contentsOf: URL(fileURLWithPath: path)),
+        !pcm16k.isEmpty
+      else { return ["error": "missing or unreadable 'pcm' file (expected raw s16le 16k mono)"] }
+      let allowNetwork = (params["network"] ?? "true").lowercased() != "false"
+      return await PushToTalkManager.shared.dictateForAutomation(pcm16k: pcm16k, allowNetwork: allowNetwork)
     }
 
     register(
       name: "ptt_turn_snapshot",
+      effects: [],
       summary: "Return typed PTT lifecycle state, pending-tool fences, and safe screen-evidence diagnostics"
     ) { _ in
       RealtimeHubController.shared.automationPTTDiagnostics()
@@ -1494,6 +1734,7 @@ final class DesktopAutomationActionRegistry {
     // real realtime omni STT path and return the transcript. No mic, no human.
     register(
       name: "omni_test_turn",
+      effects: [.networkOrModel],
       summary: "Inject a raw PCM16/16kHz mono file through the omni STT path; returns the transcript",
       params: ["pcm", "timeout", "provider"]
     ) { params in
@@ -1524,6 +1765,7 @@ final class DesktopAutomationActionRegistry {
     // without driving the onboarding UI or the cursor.
     register(
       name: "onboarding_local_file_import",
+      effects: [.localState, .networkOrModel, .remoteWrite],
       summary: "Run the post-scan local-file memory import from the indexed snapshot; returns saved count"
     ) { _ in
       let coordinator = OnboardingPagedIntroCoordinator()
@@ -1540,6 +1782,7 @@ final class DesktopAutomationActionRegistry {
     // only when the save succeeded — mirroring OnboardingLanguageStepView.
     register(
       name: "onboarding_confirm_languages",
+      effects: [.localState, .networkOrModel, .remoteWrite],
       summary: "Select languages on the live onboarding coordinator and run the real Continue save",
       params: ["languages"]
     ) { params in
@@ -1565,6 +1808,7 @@ final class DesktopAutomationActionRegistry {
     // driving menus or the cursor.
     register(
       name: "reset_onboarding",
+      effects: [.localState],
       summary: "Reset onboarding state and restart the app (same path as the Reset Onboarding menu item)"
     ) { _ in
       await MainActor.run {
@@ -1575,6 +1819,7 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "sign_out",
+      effects: [.localState, .networkOrModel, .remoteWrite],
       summary: "Sign out via AuthService (local Auth emulator harness only)",
       params: ["accepted_account_deletion"]
     ) { params in
@@ -1594,31 +1839,9 @@ final class DesktopAutomationActionRegistry {
       ]
     }
 
-    // Send a typed query through the real floating-bar AI path
-    // (openAIInputWithQuery → routeQuery → sendAIQuery → ChatProvider → bridge).
-    // Used to drive cache/latency benchmarks without a mic or the cursor.
-    register(
-      name: "open_ask_omi",
-      summary: "Open the Ask Omi input panel and return app-side open/focus timing",
-      params: ["reset", "wait"]
-    ) { params in
-      let reset = boolParam(params["reset"], default: false)
-      let wait = boolParam(params["wait"], default: true)
-      return await FloatingControlBarManager.shared.openAskOmiForAutomation(
-        reset: reset, wait: wait)
-    }
-
-    register(
-      name: "close_ask_omi",
-      summary: "Close the Ask Omi input panel if it is open",
-      params: ["wait"]
-    ) { params in
-      let wait = boolParam(params["wait"], default: true)
-      return await FloatingControlBarManager.shared.closeAskOmiForAutomation(wait: wait)
-    }
-
     register(
       name: "ask",
+      effects: [.localState, .localArtifact, .networkOrModel, .remoteWrite],
       summary: "Send a query to the floating-bar AI (typed path); exercises the full chat pipeline",
       params: ["query"]
     ) { params in
@@ -1646,6 +1869,7 @@ final class DesktopAutomationActionRegistry {
     // turn sets; non-prod bridge only. state = idle|listening|thinking|answering.
     register(
       name: "debug_bar_state",
+      effects: [.localState],
       summary: "Force floating-bar state: idle|listening|thinking|answering (visual verification)",
       params: ["state"]
     ) { params in
@@ -1664,6 +1888,7 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "debug_reach_error",
+      effects: [.localState],
       summary: "Show the actionable 'Couldn't reach Omi' card on the bar (Retry/Skip) for visual verification",
       params: []
     ) { _ in
@@ -1681,6 +1906,7 @@ final class DesktopAutomationActionRegistry {
     // share card). Same NotificationCenter signal the finalization service posts.
     register(
       name: "trigger_meeting_completion",
+      effects: [.localState],
       summary:
         "Post the real meeting-completion signal for a conversation id (presents the meeting summary share card). Non-prod only.",
       params: ["conversation_id"]
@@ -1701,6 +1927,7 @@ final class DesktopAutomationActionRegistry {
     // person actually sees rather than trusting that a trigger fired.
     register(
       name: "notification_state",
+      effects: [],
       summary: "Read the notch notification currently on screen (title, message, persistence).",
       params: []
     ) { _ in
@@ -1721,6 +1948,7 @@ final class DesktopAutomationActionRegistry {
     // posts once a detected meeting has rotated into its recording session.
     register(
       name: "trigger_meeting_started_notice",
+      effects: [.localState],
       summary:
         "Present the meeting-started note-taking notice (the card shown when a meeting is detected). Non-prod only.",
       params: []
@@ -1737,6 +1965,7 @@ final class DesktopAutomationActionRegistry {
     // card's buttons call, `close` is the user dismissal path.
     register(
       name: "meeting_summary_share",
+      effects: [.localState, .networkOrModel, .remoteWrite],
       summary:
         "Inspect or drive the presented meeting summary share card (action=state|copy|send|close). Non-prod only.",
       params: ["action"]
@@ -1796,6 +2025,7 @@ final class DesktopAutomationActionRegistry {
     // click X and nothing happens" is otherwise undiagnosable without synthesizing real clicks.
     register(
       name: "debug_hit_probe",
+      effects: [],
       summary: "Report topmost window + hit-tested view at screen point (top-left coords)",
       params: ["x", "y"]
     ) { params in
@@ -1859,6 +2089,7 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "reset_main_chat",
+      effects: [.localState, .networkOrModel, .remoteWrite],
       summary: "Clear main-window chat messages and start a fresh session (harness flow isolation)",
       params: []
     ) { _ in
@@ -1875,7 +2106,27 @@ final class DesktopAutomationActionRegistry {
     }
 
     register(
+      name: "clear_main_chat",
+      effects: [.localState, .networkOrModel, .remoteWrite],
+      summary: "Run the main chat's Clear Chat action (the menu item's path, without its confirmation)",
+      params: []
+    ) { _ in
+      guard AppBuild.isNonProduction else {
+        return ["error": "clear_main_chat is disabled on production bundles"]
+      }
+      guard let provider = ChatProvider.mainInstance else {
+        return ["error": "main ChatProvider not yet initialized"]
+      }
+      await provider.clearChat()
+      if let error = provider.errorMessage, !error.isEmpty {
+        return ["error": error]
+      }
+      return ["cleared": "true"]
+    }
+
+    register(
       name: "present_onboarding_opener",
+      effects: [.localState, .networkOrModel],
       summary: "Compose and show the post-onboarding opener in the empty-chat slot (QA rendering seam)",
       params: []
     ) { _ in
@@ -1897,13 +2148,24 @@ final class DesktopAutomationActionRegistry {
     // or keyboard input, so it never touches the user's actual cursor.
     register(
       name: "ask_main_chat",
+      effects: [.localState, .localArtifact, .networkOrModel, .remoteWrite],
       summary: "Send a query to the main-window chat (typed path); exercises the full chat pipeline",
       params: ["query"]
     ) { params in
       let query = (params["query"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-      guard !query.isEmpty else { return ["error": "missing 'query'"] }
       guard let provider = ChatProvider.mainInstance else {
-        return ["error": "main ChatProvider not yet initialized"]
+        return query.isEmpty
+          ? ["error": "missing 'query'"]
+          : ["error": "main ChatProvider not yet initialized"]
+      }
+      guard
+        ChatProvider.hasSendableSubject(
+          text: query,
+          attachmentCount: provider.pendingAttachments.count,
+          referenceCount: provider.pendingComposerReferences.count
+        )
+      else {
+        return ["error": "missing 'query'"]
       }
       // Report the provider's own admission decision. This used to answer
       // `sent` unconditionally, so a send the busy guard refused was reported
@@ -1931,13 +2193,24 @@ final class DesktopAutomationActionRegistry {
     // latency keeping isSending true.
     register(
       name: "ask_main_chat_no_wait",
+      effects: [.localState, .localArtifact, .networkOrModel, .remoteWrite],
       summary: "Fire-and-forget main-chat send; returns immediately without waiting for the turn",
       params: ["query", "hold_busy_ms"]
     ) { params in
       let query = (params["query"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-      guard !query.isEmpty else { return ["error": "missing 'query'"] }
       guard let provider = ChatProvider.mainInstance else {
-        return ["error": "main ChatProvider not yet initialized"]
+        return query.isEmpty
+          ? ["error": "missing 'query'"]
+          : ["error": "main ChatProvider not yet initialized"]
+      }
+      guard
+        ChatProvider.hasSendableSubject(
+          text: query,
+          attachmentCount: provider.pendingAttachments.count,
+          referenceCount: provider.pendingComposerReferences.count
+        )
+      else {
+        return ["error": "missing 'query'"]
       }
       let isSending = provider.isSending
       let isStreaming = provider.messages.contains(where: { $0.isStreaming })
@@ -1980,6 +2253,7 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "main_chat_busy_state",
+      effects: [.localState],
       summary: "Return whether main chat is currently sending or streaming (race/busy probes)",
       params: []
     ) { _ in
@@ -2001,6 +2275,7 @@ final class DesktopAutomationActionRegistry {
     // and run one assembled-context probe turn. Non-production bundles only.
     register(
       name: "swap_test_owner",
+      effects: [.localState, .localArtifact, .networkOrModel, .remoteWrite],
       summary: "Clear owner A kernel state, swap to synthetic owner B, and run one probe turn",
       params: ["owner_b", "query"]
     ) { params in
@@ -2018,6 +2293,7 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "restore_test_owner",
+      effects: [.localState, .networkOrModel, .remoteWrite],
       summary: "Restore the real owner after swap_test_owner (harness cleanup; no-op if no swap active)",
       params: []
     ) { _ in
@@ -2032,6 +2308,7 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "main_chat_snapshot",
+      effects: [],
       summary: "Export main-chat transcript, session ids, and stream state for continuity harnesses",
       params: ["limit"]
     ) { params in
@@ -2044,11 +2321,11 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "set_chat_drafts",
+      effects: [.localState],
       summary: "Set main and floating composer drafts without sending (non-prod persistence harness)",
       params: ["main", "floating"],
       category: "chat",
       surfaces: ["main_chat", "ask_omi"],
-      safety: "local",
       sideEffects: ["local_storage"],
       examples: ["./scripts/omi-ctl action set_chat_drafts main=main-draft floating=notch-draft"]
     ) { params in
@@ -2081,10 +2358,10 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "chat_drafts_snapshot",
+      effects: [],
       summary: "Read current main and floating composer drafts (non-prod persistence harness)",
       category: "chat",
       surfaces: ["main_chat", "ask_omi"],
-      safety: "read_only"
     ) { _ in
       guard AppBuild.isNonProduction else {
         return ["error": "chat_drafts_snapshot is disabled on production bundles"]
@@ -2099,8 +2376,15 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "clear_owner_surface_state",
+      effects: [.localState, .networkOrModel, .remoteWrite],
       summary: "Clear kernel main_chat turns for the active owner (non-prod continuity harness hygiene)",
-      params: ["chatId"]
+      params: ["chatId"],
+      category: "write",
+      surfaces: ["main_chat"],
+      sideEffects: [
+        "clears the local non-production main-chat projection",
+        "may delete the active owner's main-chat journal turns from the backend",
+      ]
     ) { params in
       guard AppBuild.isNonProduction else {
         return ["error": "clear_owner_surface_state is disabled on production bundles"]
@@ -2114,6 +2398,7 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "kernel_turn_tail",
+      effects: [.localState, .localArtifact, .networkOrModel],
       summary: "Return the last N kernel main_chat turns for continuity harness evidence",
       params: ["limit"]
     ) { params in
@@ -2126,6 +2411,7 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "suspend_agent_stream",
+      effects: [.localState],
       summary:
         "Freeze the agent stdio stream (SIGSTOP) to induce a chat stall; auto-resumes after durationMs. Non-prod only.",
       params: ["durationMs"]
@@ -2133,14 +2419,15 @@ final class DesktopAutomationActionRegistry {
       guard AppBuild.isNonProduction else {
         return ["error": "suspend_agent_stream is disabled on production bundles"]
       }
-      // Default just past the 180s send watchdog so CHAT-02 can assert the
+      // Default just past the 60s send watchdog so CHAT-02 can assert the
       // "Response took too long" error + recoverable retry; capped at 300s.
-      let durationMs = intParam(params["durationMs"], default: 190_000)
+      let durationMs = intParam(params["durationMs"], default: 70_000)
       return await AgentRuntimeProcess.shared.debugSuspendStream(durationMs: durationMs)
     }
 
     register(
       name: "resume_agent_stream",
+      effects: [.localState],
       summary: "Resume a suspended agent stdio stream (SIGCONT) immediately. Non-prod only.",
       params: []
     ) { _ in
@@ -2154,6 +2441,7 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "floating_bar_chat_snapshot",
+      effects: [],
       summary: "Export floating-bar chat transcript and stream state for harness assertions",
       params: ["limit"]
     ) { params in
@@ -2163,6 +2451,7 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "wait_floating_bar_chat_idle",
+      effects: [.localState],
       summary: "Block until the latest submitted floating-bar turn is observed and becomes idle",
       params: ["timeoutMs", "pollMs"]
     ) { params in
@@ -2206,6 +2495,7 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "wait_main_chat_idle",
+      effects: [.localState],
       summary: "Block until main chat is not sending or streaming (continuity harness)",
       params: ["timeoutMs", "pollMs"]
     ) { params in
@@ -2234,6 +2524,7 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "agent_runtime_evidence",
+      effects: [],
       summary: "Return omi-agentd.sqlite3 path and SHA-256 for continuity harness evidence bundles"
     ) { _ in
       let stateDir = AgentRuntimeProcess.defaultStateDirectory()
@@ -2256,6 +2547,7 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "memories_qa_export",
+      effects: [.networkOrModel],
       summary: "Export memory counts by tier from the live API (local QA automation)",
       params: ["limit"]
     ) { params in
@@ -2284,6 +2576,7 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "apple_notes_read_probe",
+      effects: [.localState],
       summary: "Probe Apple Notes access without importing or saving memories",
       params: ["folderPath", "maxResults", "remember"]
     ) { params in
@@ -2347,7 +2640,17 @@ final class DesktopAutomationActionRegistry {
     }
 
     register(
+      name: "device_tools_probe",
+      effects: [],
+      summary: "Probe the on-device tool surface without reading real messages or sending anything",
+      params: ["messagesDbPath"]
+    ) { params in
+      await DeviceToolsProbe.run(messagesDbPath: params["messagesDbPath"])
+    }
+
+    register(
       name: "delete_conversation",
+      effects: [.localState, .networkOrModel, .remoteWrite],
       summary: "Delete conversation with cascade (API + conversationDeleted notification)",
       params: ["id"]
     ) { params in
@@ -2371,6 +2674,7 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "capture_main_window_png",
+      effects: [.localArtifact],
       summary: "Write PNG of the frontmost Omi window (in-process capture)",
       params: ["path", "surface"]
     ) { params in
@@ -2428,6 +2732,7 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "capture_floating_bar_png",
+      effects: [.localArtifact],
       summary: "Write PNG of the floating control bar window (in-process capture)",
       params: ["path"]
     ) { params in
@@ -2463,8 +2768,37 @@ final class DesktopAutomationActionRegistry {
       }
     }
 
+    // Cursor-free notch hover driver: enter/exit run the same pointer update
+    // the tracking view calls from mouse events; state reads the island's
+    // visibility inputs so a stuck reveal or menu can be caught mechanically.
+    register(
+      name: "notch_hover",
+      effects: [.localState],
+      summary: "Simulate notch pointer enter/exit or read island state (non-prod). action=enter|exit|state",
+      params: ["action"]
+    ) { params in
+      guard AppBuild.isNonProduction else {
+        return ["error": "notch_hover is disabled on production bundles"]
+      }
+      guard let bar = FloatingControlBarManager.shared.window else {
+        return ["error": "no floating bar window"]
+      }
+      switch params["action"] ?? "state" {
+      case "enter":
+        bar.automationSimulateNotchPointer(inside: true)
+      case "exit":
+        bar.automationSimulateNotchPointer(inside: false)
+      case "state":
+        break
+      default:
+        throw DesktopAutomationActionError.invalidParams("action must be enter, exit, or state")
+      }
+      return bar.automationNotchStateSnapshot
+    }
+
     register(
       name: "seed_subagents",
+      effects: [.localState],
       summary: "Seed synthetic floating-bar subagents for deterministic UI benchmarks",
       params: ["count"]
     ) { params in
@@ -2474,6 +2808,7 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "open_seeded_subagent",
+      effects: [.localState],
       summary: "Open a seeded subagent in the floating-bar chat",
       params: ["index", "wait"]
     ) { params in
@@ -2484,6 +2819,7 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "back_from_subagent",
+      effects: [.localState],
       summary: "Return from the selected subagent to the main Ask Omi chat",
       params: ["wait"]
     ) { params in
@@ -2493,6 +2829,7 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "spatial_overlay_present_fixture",
+      effects: [.localState],
       summary: "Present a deterministic spatial-overlay fixture for dogfood harnesses",
       params: ["fixture", "settleMs"]
     ) { params in
@@ -2507,6 +2844,7 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "spatial_overlay_state",
+      effects: [],
       summary: "Return the current spatial-overlay dogfood state"
     ) { _ in
       CloudConnectorGuidanceOverlay.shared.automationState()
@@ -2514,6 +2852,7 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "spatial_overlay_dismiss",
+      effects: [.localState],
       summary: "Dismiss the current spatial-overlay dogfood overlay"
     ) { _ in
       CloudConnectorGuidanceOverlay.shared.dismiss()
@@ -2522,11 +2861,11 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "integration_nudge_evaluate",
+      effects: [.localState],
       summary:
         "Read-only: which integration a given frontmost app/window maps to, and whether a nudge would fire",
       params: ["bundle_id", "window_title"],
       category: "read",
-      safety: "read_only"
     ) { params in
       await IntegrationNudgeAutomation.evaluate(
         bundleID: params["bundle_id"],
@@ -2536,17 +2875,18 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "integration_nudge_present",
+      effects: [.localState],
       summary: "Present the integration-connect card for one catalog entry (QA of the real card path)",
       params: ["telemetry_id"],
       category: "write",
       surfaces: ["floating_bar"],
-      safety: "presents_ui"
     ) { params in
       await MainActor.run { IntegrationNudgeAutomation.present(telemetryID: params["telemetry_id"] ?? "") }
     }
 
     register(
       name: "cloud_connector_guidance_probe",
+      effects: [],
       summary: "Read-only diagnostic of the live Claude Add detection (no overlay, no clicks)"
     ) { _ in
       await MainActor.run { CloudConnectorFormAutomation.claudeAddGuidanceDiagnostics() }
@@ -2554,6 +2894,7 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "coordinator_awareness_snapshot",
+      effects: [.localState, .localArtifact, .networkOrModel],
       summary: "Read the Swift coordinator awareness projection for Agents & Attention debugging",
       params: ["limit"]
     ) { params in
@@ -2564,11 +2905,11 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "agent_lifecycle_convergence_snapshot",
+      effects: [.localState, .localArtifact, .networkOrModel],
       summary: "Read canonical child-run status alongside the rendered pill and journal-completion projection",
       params: ["runIds"],
       category: "read",
       surfaces: ["floating_bar", "main_chat", "realtime"],
-      safety: "read_only"
     ) { params in
       let runIDs = Set(
         (params["runIds"] ?? "")
@@ -2582,6 +2923,7 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "coordinator_inspect_run",
+      effects: [.localState, .localArtifact, .networkOrModel],
       summary: "Inspect one owner-scoped kernel run and its bounded tool-invocation ledger",
       params: ["runId"]
     ) { params in
@@ -2596,6 +2938,7 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "coordinator_continue_agent",
+      effects: [.localState, .localArtifact, .networkOrModel, .remoteWrite],
       summary: "Continue one owner-scoped canonical agent session and return its new run handles",
       params: ["sessionId", "prompt", "surfaceKind"]
     ) { params in
@@ -2627,6 +2970,7 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "coordinator_action_queue",
+      effects: [.localState, .localArtifact, .networkOrModel],
       summary: "Read the derived Swift coordinator attention queue",
       params: ["limit"]
     ) { params in
@@ -2637,6 +2981,7 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "coordinator_open_loops",
+      effects: [.localState, .localArtifact, .networkOrModel],
       summary: "Read unresolved agent/coordinator loops from the Swift projection"
     ) { _ in
       let loops = try await DesktopCoordinatorService.shared.openLoopsJSON()
@@ -2645,6 +2990,7 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "coordinator_route_intent",
+      effects: [.localState, .localArtifact, .networkOrModel, .remoteWrite],
       summary: "Route a structured proposal through the canonical agent kernel",
       params: [
         "intent", "surfaceKind", "taskId", "proposal", "snapshotVersion",
@@ -2678,6 +3024,7 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "coordinator_create_dispatch",
+      effects: [.localState],
       summary: "Create a coordinator dispatch through the runtime control path for Agents & Attention testing",
       params: ["kind", "title", "decisionPrompt", "recommendedDefault", "sourceSessionId", "sourceRunId"]
     ) { params in
@@ -2694,6 +3041,7 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "coordinator_resolve_dispatch",
+      effects: [.localState],
       summary: "Resolve a coordinator dispatch through the runtime control path",
       params: ["dispatchId", "resolution"]
     ) { params in
@@ -2709,6 +3057,7 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "calendar_read_probe",
+      effects: [.localState, .networkOrModel],
       summary: "Read Google Calendar through the real connector path and return classified status",
       params: ["daysBack", "daysForward", "maxResults"]
     ) { params in
@@ -2767,6 +3116,7 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "gmail_read_probe",
+      effects: [.localState, .networkOrModel],
       summary: "Read Gmail through the real connector path and return classified status",
       params: ["maxResults", "query"]
     ) { params in
@@ -2824,6 +3174,7 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "spatial_overlay_present_instruction",
+      effects: [.localState],
       summary: "Present the Screen Recording fallback instruction card (dogfood/visual)"
     ) { params in
       let title = params["title"] ?? "Allow Screen Recording for Omi"
@@ -2838,6 +3189,7 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "preview_screen_recording_drag_helper",
+      effects: [.localState],
       summary: "Open Screen Recording settings and show the drag-to-enable helper"
     ) { _ in
       await MainActor.run { ScreenCaptureService.openScreenRecordingPreferences() }
@@ -2846,6 +3198,7 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "open_conversation",
+      effects: [.localState, .networkOrModel],
       summary: "Open a conversation detail view (same path as POST /conversation/open)",
       params: ["conversationId", "showTranscript", "timeoutMs"]
     ) { params in
@@ -2873,6 +3226,7 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "set_conversations_search",
+      effects: [.localState, .networkOrModel],
       summary: "Set the Conversations page search query (drives the real debounced search path)",
       params: ["query"]
     ) { params in
@@ -2887,6 +3241,7 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "open_latest_conversation",
+      effects: [.localState, .networkOrModel],
       summary: "Open the most recently loaded conversation detail view",
       params: ["showTranscript", "timeoutMs"]
     ) { params in
@@ -2918,6 +3273,7 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "conversation_detail_snapshot",
+      effects: [.localState, .networkOrModel],
       summary: "Return open conversation detail fields for harness assertions",
       params: ["conversationId"]
     ) { params in
@@ -2975,6 +3331,7 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "create_test_memory",
+      effects: [.localState, .networkOrModel, .remoteWrite],
       summary: "Create a hermetic test memory via the real API",
       params: ["content", "source"]
     ) { params in
@@ -2987,7 +3344,7 @@ final class DesktopAutomationActionRegistry {
         source: params["source"] ?? "harness"
       )
       if let page = try? await APIClient.shared.getMemoriesPage(limit: 100, offset: 0) {
-        try? await MemoryStorage.shared.syncServerMemories(page.memories)
+        _ = try? await MemoryStorage.shared.syncServerMemories(page.memories)
       }
       let memoryCount = (try? await MemoryStorage.shared.getLocalMemoriesCount()) ?? 0
       return [
@@ -2999,6 +3356,7 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "edit_test_memory",
+      effects: [.localState, .networkOrModel, .remoteWrite],
       summary: "Edit a hermetic test memory via the real API",
       params: ["id", "marker", "content"]
     ) { params in
@@ -3023,7 +3381,7 @@ final class DesktopAutomationActionRegistry {
       }
       try await APIClient.shared.editMemory(id: id, content: content)
       if let page = try? await APIClient.shared.getMemoriesPage(limit: 100, offset: 0) {
-        try? await MemoryStorage.shared.syncServerMemories(page.memories)
+        _ = try? await MemoryStorage.shared.syncServerMemories(page.memories)
       }
       return [
         "edited": id,
@@ -3033,6 +3391,7 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "delete_test_memory",
+      effects: [.localState, .networkOrModel, .remoteWrite],
       summary: "Delete a hermetic test memory via the real API",
       params: ["id", "marker"]
     ) { params in
@@ -3054,7 +3413,7 @@ final class DesktopAutomationActionRegistry {
       try await APIClient.shared.deleteMemory(id: id)
       try? await MemoryStorage.shared.deleteMemoryByBackendId(id)
       if let page = try? await APIClient.shared.getMemoriesPage(limit: 100, offset: 0) {
-        try? await MemoryStorage.shared.syncServerMemories(page.memories)
+        _ = try? await MemoryStorage.shared.syncServerMemories(page.memories)
       }
       let memoryCount = (try? await MemoryStorage.shared.getLocalMemoriesCount()) ?? 0
       return [
@@ -3065,6 +3424,7 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "vocabulary_snapshot",
+      effects: [],
       summary: "Return transcription custom vocabulary for harness assertions"
     ) { _ in
       let terms = AssistantSettings.shared.transcriptionVocabulary
@@ -3084,6 +3444,7 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "vocabulary_set_terms",
+      effects: [.localState, .networkOrModel, .remoteWrite],
       summary: "Set transcription custom vocabulary (local + backend)",
       params: ["terms"]
     ) { params in
@@ -3104,6 +3465,7 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "goals_snapshot",
+      effects: [.networkOrModel],
       summary: "Return dashboard goals state for harness assertions"
     ) { _ in
       let goals: [Goal]
@@ -3131,6 +3493,7 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "create_test_goal",
+      effects: [.localState, .networkOrModel, .remoteWrite],
       summary: "Create a hermetic dashboard goal via the real API",
       params: ["title", "targetValue", "currentValue"]
     ) { params in
@@ -3158,6 +3521,7 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "apps_catalog_snapshot",
+      effects: [.networkOrModel],
       summary: "Return apps marketplace catalog counts for harness assertions"
     ) { _ in
       let v2 = try await APIClient.shared.getAppsV2()
@@ -3173,6 +3537,7 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "subscription_snapshot",
+      effects: [.networkOrModel],
       summary: "Return cached subscription/plan info from the billing API"
     ) { _ in
       let response = try await APIClient.shared.getUserSubscription()
@@ -3188,6 +3553,7 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "settings_privacy_snapshot",
+      effects: [.networkOrModel],
       summary: "Return privacy toggle defaults (store recordings, cloud sync, tracking)"
     ) { _ in
       async let recordingTask = APIClient.shared.getRecordingPermission()
@@ -3201,12 +3567,15 @@ final class DesktopAutomationActionRegistry {
       ]
     }
 
-    register(name: "permissions_snapshot", summary: "Every permission row the Permissions page shows") {
+    register(
+      name: "permissions_snapshot", effects: [.localState], summary: "Every permission row the Permissions page shows"
+    ) {
       _ in await PermissionsSnapshot.capture()
     }
 
     register(
       name: "create_test_folder",
+      effects: [.localState, .networkOrModel, .remoteWrite],
       summary: "Create a hermetic conversation folder via the real API",
       params: ["name"]
     ) { params in
@@ -3230,6 +3599,7 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "set_conversation_starred",
+      effects: [.localState, .networkOrModel, .remoteWrite],
       summary: "Set conversation starred status via the real API",
       params: ["conversationId", "starred"]
     ) { params in
@@ -3267,6 +3637,7 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "set_conversation_folder",
+      effects: [.localState, .networkOrModel, .remoteWrite],
       summary: "Move a conversation into a folder via the real API",
       params: ["conversationId", "folderId"]
     ) { params in
@@ -3303,6 +3674,7 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "set_transcription_language",
+      effects: [.localState, .networkOrModel, .remoteWrite],
       summary: "Set transcription language (local + backend)",
       params: ["language", "autoDetect"]
     ) { params in
@@ -3327,6 +3699,7 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "transcription_language_snapshot",
+      effects: [],
       summary: "Return transcription language settings for harness assertions"
     ) { _ in
       let settings = AssistantSettings.shared
@@ -3339,6 +3712,7 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "memory_graph_rebuild",
+      effects: [.localState, .networkOrModel, .remoteWrite],
       summary:
         "Regenerate the server-side knowledge graph from the signed-in account's memories",
       params: []
@@ -3364,6 +3738,7 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "memory_graph_snapshot",
+      effects: [.networkOrModel],
       summary: "Return knowledge graph node/edge counts (no SceneKit rendering)",
       params: ["label"]
     ) { params in
@@ -3407,6 +3782,7 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "memory_atlas_select",
+      effects: [.localState],
       summary: "Select a Brain Map entity or connection so the inspector can be checked cursor-free",
       params: ["target", "node_id", "label", "edge_id", "clear"]
     ) { params in
@@ -3435,6 +3811,7 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "memories_open_detail",
+      effects: [.localState, .networkOrModel],
       summary: "Open a memory's detail panel by backend id (omit the id to close it)",
       params: ["memory_id"]
     ) { params in
@@ -3451,6 +3828,7 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "open_memory_atlas",
+      effects: [.localState, .networkOrModel],
       summary: "Open the canonical memory atlas page for non-production UI and performance harnesses"
     ) { _ in
       await MainActor.run {
@@ -3464,6 +3842,7 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "memory_atlas_set_viewport",
+      effects: [.localState],
       summary: "Set memory atlas zoom and pan for deterministic non-production performance sweeps",
       params: ["target", "zoom", "pan_x", "pan_y", "reset"]
     ) { params in
@@ -3491,6 +3870,7 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "memory_atlas_enter_region",
+      effects: [.localState],
       summary: "Go into a Brain Map neighbourhood by caption, or leave the one you are in",
       params: ["target", "caption", "leave"]
     ) { params in
@@ -3513,6 +3893,7 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "memory_atlas_set_time",
+      effects: [.localState],
       summary: "Scrub or play the memory atlas time axis for deterministic non-production checks",
       params: ["target", "fraction", "play", "reset_to_start", "reset"]
     ) { params in
@@ -3539,17 +3920,20 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "open_quick_note",
+      effects: [.localState],
       summary: "Open Quick Note via Rewind notes path (same as dashboard Quick Note button)"
     ) { _ in
       NotificationCenter.default.post(name: .navigateToRewindNotes, object: nil)
       return [
         "posted": "navigateToRewindNotes",
-        "expected_tab_index": "\(SidebarNavItem.rewind.rawValue)",
+        "expected_tab_index": "\(SidebarNavItem.conversations.rawValue)",
+        "expected_memory_destination": "\(MemoryHubDestination.rewind.rawValue)",
       ]
     }
 
     register(
       name: "about_snapshot",
+      effects: [],
       summary: "Return About settings version/build/bundle metadata"
     ) { _ in
       let updater = UpdaterViewModel.shared
@@ -3561,9 +3945,81 @@ final class DesktopAutomationActionRegistry {
       ]
     }
 
+    register(
+      name: "client_telemetry_flag_snapshot",
+      effects: [],
+      summary: "Return the client telemetry migration/retirement flag state (e2e flow: client-telemetry-shadow)"
+    ) { _ in
+      [
+        "transport_shadow_enabled": ClientTelemetryFlags.transportShadowEnabled ? "true" : "false",
+        "posthog_retirement_enabled": ClientTelemetryFlags.postHogRetirementEnabled ? "true" : "false",
+        "retires_infrastructure_posthog": ClientTelemetryFlags.retiresInfrastructurePostHog ? "true" : "false",
+      ]
+    }
+
+    register(
+      name: "client_telemetry_shadow_probe",
+      effects: [.localState],
+      summary:
+        "Enqueue one shadow observation, reload the store from disk, and prove the wire payload stays owner-free (e2e flow: client-telemetry-shadow)",
+      params: ["owner_id", "population"]
+    ) { params in
+      let ownerID = params["owner_id"] ?? "e2e-telemetry-owner"
+      let population = params["population"] ?? "physical_shortcut"
+      let directory = FileManager.default.temporaryDirectory
+        .appendingPathComponent("e2e-client-telemetry", isDirectory: true)
+      let limits = ClientTelemetryLimits.production
+      let now = Date()
+      let operationID = UUID()
+      let observation = ClientTelemetryObservation(
+        eventID: UUID(),
+        occurredAt: now,
+        platform: "macos",
+        channel: "e2e",
+        family: "voice_turn",
+        attributes: [
+          "operation_id": .string(operationID.uuidString.lowercased()),
+          "phase": .string("terminal"),
+          "population": .string(population),
+          "route": .string("hub"),
+          "intent": .string("hold"),
+          "outcome": .string("success"),
+          "latency_ms": .int(1200),
+        ],
+        ownerID: ownerID,
+        enqueuedAt: now,
+        attemptCount: 0
+      )
+      let store = ClientTelemetryStore(directory: directory, limits: limits)
+      // Enqueue through the same validation path the transport uses.
+      let enqueueOK = store.enqueue(observation, now: now)
+      let pendingAfterEnqueue = store.observations(ownerID: ownerID)
+      // Reload from disk through a second store instance (restart semantics).
+      let reloadedStore = ClientTelemetryStore(directory: directory, limits: limits)
+      let pendingAfterReload = reloadedStore.observations(ownerID: ownerID)
+      let reloadedAttempts = pendingAfterReload.first?.attemptCount
+      // Build the wire body exactly as the transport does and assert it is owner-free.
+      var wireContainsOwnerID = false
+      if let body = ClientTelemetryCodec.batchData(batchID: UUID(), observations: pendingAfterReload) {
+        wireContainsOwnerID = String(data: body, encoding: .utf8)?.contains(ownerID) == true
+      }
+      return [
+        "enqueued": enqueueOK ? "true" : "false",
+        "pending_count": "\(pendingAfterEnqueue.count)",
+        "reloaded_pending_count": "\(pendingAfterReload.count)",
+        "wire_contains_owner_id": wireContainsOwnerID ? "true" : "false",
+        "attempt_count_after_reload": "\(reloadedAttempts ?? -1)",
+      ]
+    }
+
     registerNotificationActions()
+    registerRatingPromptActions()
+    registerGlassTransparencyActions()
+    registerRemotePromptActions()
+    registerRealtimeHubActions()
     register(
       name: "rewind_settings_snapshot",
+      effects: [],
       summary: "Return Rewind settings retention and excluded-app counts"
     ) { _ in
       let settings = RewindSettings.shared
@@ -3580,33 +4036,43 @@ final class DesktopAutomationActionRegistry {
     registerRewindArtifactRecoveryGauntlet()
     register(
       name: "navigate_via_shortcut",
-      summary: "Post the same sidebar navigation notification as Cmd+1..6 / Cmd+, shortcuts",
+      effects: [.localState],
+      summary: "Post the same navigation notification as the Cmd+1..4 / Cmd+, shortcuts",
       params: ["shortcut"]
     ) { params in
       let shortcut = (params["shortcut"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         .lowercased()
       guard !shortcut.isEmpty else {
-        return ["error": "missing shortcut (1-6 or comma)"]
+        return ["error": "missing shortcut (1-4 or comma)"]
       }
       let item: SidebarNavItem?
+      // ⌘1…⌘4 are the top bar's pills; ⌘2 opens Memories on Activity. Hub pages also by name.
+      let hub: MemoryHubDestination? = shortcut == "2" ? .activity : nil
       switch shortcut {
-      case "1", "home", "dashboard": item = .dashboard
+      case "1", "home", "dashboard", "chat": item = .dashboard
       case "2", "conversations": item = .conversations
-      case "3", "memories": item = .memories
-      case "4", "tasks": item = .tasks
-      case "5", "rewind": item = .rewind
-      case "6", "apps": item = .apps
+      case "memories": item = .memories
+      case "3", "tasks": item = .tasks
+      case "rewind": item = .rewind
+      case "4", "apps": item = .apps
       case ",", "comma", "settings": item = .settings
+      // Settings sub-sections ride the same notifications the app already posts
+      // for its own deep-links (the Tasks gear, the floating-bar context menu),
+      // so QA can land on a specific pane without any cursor input.
+      case "tasksettings", "advancedsettings":
+        NotificationCenter.default.post(name: .navigateToTaskSettings, object: nil)
+        return ["navigated": "Settings › Advanced"]
+      case "floatingbarsettings":
+        NotificationCenter.default.post(name: .navigateToFloatingBarSettings, object: nil)
+        return ["navigated": "Settings › Floating Bar"]
       default: item = nil
       }
       guard let item else {
         return ["error": "unsupported shortcut '\(shortcut)'"]
       }
-      NotificationCenter.default.post(
-        name: .navigateToSidebarItem,
-        object: nil,
-        userInfo: ["rawValue": item.rawValue]
-      )
+      var info: [String: Any] = ["rawValue": item.rawValue]
+      if let hub { info["hubDestination"] = hub.rawValue }
+      NotificationCenter.default.post(name: .navigateToSidebarItem, object: nil, userInfo: info)
       return [
         "navigated": item.title,
         "selected_tab_index": "\(item.rawValue)",
@@ -3615,42 +4081,40 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "advanced_settings_snapshot",
+      effects: [],
       summary: "Return safe Advanced settings booleans (never raw BYOK keys)",
       params: []
     ) { _ in
       let task = TaskAssistantSettings.shared
-      let insight = InsightAssistantSettings.shared
       let memory = MemoryAssistantSettings.shared
       let assistant = AssistantSettings.shared
       return [
         "task_enabled": task.isEnabled ? "true" : "false",
         "task_chat_agent_enabled": TaskAgentSettings.shared.isChatEnabled ? "true" : "false",
-        "insight_enabled": insight.isEnabled ? "true" : "false",
         "memory_enabled": memory.isEnabled ? "true" : "false",
         "screen_analysis_enabled": assistant.screenAnalysisEnabled ? "true" : "false",
         "transcription_enabled": assistant.audioRecordingMode != .off ? "true" : "false",
         "audio_recording_mode": assistant.audioRecordingMode.rawValue,
-        "multi_chat_enabled": UserDefaults.standard.bool(forKey: .multiChatEnabled) ? "true" : "false",
       ]
     }
 
     register(
       name: "settings_aichat_snapshot",
+      effects: [],
       summary: "Return AI Chat settings safe fields (provider mode, working directory presence)",
       params: []
     ) { _ in
       let bridgeMode = UserDefaults.standard.string(forKey: .chatBridgeMode) ?? "piMono"
       let workingDirectory = UserDefaults.standard.string(forKey: .aiChatWorkingDirectory) ?? ""
-      let multiChat = UserDefaults.standard.bool(forKey: .multiChatEnabled)
       return [
         "bridge_mode": bridgeMode,
         "working_directory_set": workingDirectory.isEmpty ? "false" : "true",
-        "multi_chat_enabled": multiChat ? "true" : "false",
       ]
     }
 
     register(
       name: "assign_speaker_fixture",
+      effects: [.localState, .networkOrModel, .remoteWrite],
       summary: "Assign a person name to a conversation segment (hermetic speaker naming)",
       params: ["conversationId", "segmentIndex", "personName"]
     ) { params in
@@ -3664,6 +4128,31 @@ final class DesktopAutomationActionRegistry {
         params["personName"]?.trimmingCharacters(in: .whitespacesAndNewlines)
         ?? "[[MARKER:speaker-naming]] Harness Speaker"
       let segmentIndex = max(0, Int(params["segmentIndex"] ?? "") ?? 0)
+
+      // Raw mode: drive assignSpeakerToSegments with the ids exactly as given,
+      // without resolving the conversation first — the seam that exercises the
+      // local-first fallback for conversations the backend does not have yet.
+      if let rawConversationId = params["rawConversationId"]?.trimmingCharacters(
+        in: .whitespacesAndNewlines), !rawConversationId.isEmpty
+      {
+        let rawSegmentIds = (params["rawSegmentIds"] ?? "").split(separator: ",").map(String.init)
+        guard !rawSegmentIds.isEmpty else { return ["error": "rawSegmentIds required in raw mode"] }
+        guard let person = await appState.createPerson(name: personName) else {
+          return ["error": "failed to create person"]
+        }
+        let assigned = await appState.assignSpeakerToSegments(
+          conversationId: rawConversationId,
+          segmentIds: rawSegmentIds,
+          personId: person.id,
+          isUser: false
+        )
+        return [
+          "raw_mode": "true",
+          "assigned": assigned ? "true" : "false",
+          "conversation_id": rawConversationId,
+          "person_id": person.id,
+        ]
+      }
 
       var conversationId = params["conversationId"]?.trimmingCharacters(in: .whitespacesAndNewlines)
       if conversationId == "latest" || conversationId?.isEmpty != false {
@@ -3711,7 +4200,87 @@ final class DesktopAutomationActionRegistry {
     }
 
     register(
+      name: "screen_frame_quick_look_probe",
+      effects: [.localState, .localArtifact, .networkOrModel],
+      summary: "Open screenshots in Quick Look and read the panel back",
+      params: ["conversationId", "source", "dismiss"]
+    ) { params in
+      // Quick Look's panel is a system window, so no capture path in this app can photograph it —
+      // see `ScreenFrameQuickLook.probeState()`. This is how the responder-chain claim, the
+      // materialisation of signed URLs into files, and the panel actually opening are verified.
+      if params["dismiss"] == "true" {
+        await ScreenFrameQuickLook.shared.dismissForProbe()
+        return ["dismissed": "true"]
+      }
+      // Two sources, because they materialise by completely different routes: a meeting frame is a
+      // signed URL to download, a Rewind moment is usually a frame inside a video chunk to decode.
+      // A probe that only exercised one would leave the other unproven.
+      let source = params["source"] ?? "conversation"
+      let frames: [QuickLookFrame]
+      let subject: String
+      if source == "synthetic" {
+        // The hermetic case. It needs neither a signed URL nor a Rewind chunk, so it can run on a
+        // fresh bundle with no capture history and no backend — which is what makes it usable as
+        // an e2e step. `URLSession` serves `file://` for a data task, so this reaches the panel
+        // through exactly the same materialise-then-present path a real frame does.
+        let seed = FileManager.default.temporaryDirectory
+          .appendingPathComponent("omi-quick-look-probe.png")
+        guard let png = Data(base64Encoded: Self.onePixelPNGBase64) else {
+          return ["error": "probe_seed_undecodable"]
+        }
+        do {
+          try png.write(to: seed, options: .atomic)
+        } catch {
+          return ["error": "probe_seed_unwritable: \(error.localizedDescription)"]
+        }
+        frames = [QuickLookFrame(id: "probe", source: .remote(seed), title: "Quick Look probe")]
+        subject = "synthetic"
+      } else if source == "rewind" {
+        let recent = try await RewindDatabase.shared.getRecentScreenshots(limit: 6)
+        frames = recent.map { QuickLookFrame(screenshot: $0) }
+        subject = "rewind"
+      } else {
+        let rawConversationId = params["conversationId"]?
+          .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let rawConversationId, !rawConversationId.isEmpty else {
+          return ["error": "missing conversationId"]
+        }
+        let set = try await APIClient.shared.getConversationScreenFrames(
+          conversationID: rawConversationId)
+        let ordered = (set.banner.map { [$0] } ?? []) + set.strip
+        frames = ordered.compactMap { QuickLookFrame(frame: $0) }
+        subject = rawConversationId
+      }
+      guard let first = frames.first else {
+        return ["error": "no_frames", "conversation_id": subject]
+      }
+      await MainActor.run {
+        ScreenFrameQuickLook.shared.present(frames, startingAt: first.id)
+      }
+      // `present` fetches the clicked frame before it shows anything, so the panel is not up the
+      // instant this returns. Poll rather than sleep a guessed interval.
+      // Both conditions, not just visibility: an ordered-out panel can still report itself visible
+      // while its data source is gone, so polling on `panel_visible` alone returns the *previous*
+      // presentation's window and reads zero ready items off the new one.
+      for _ in 0..<40 {
+        let state = await MainActor.run { ScreenFrameQuickLook.shared.probeState() }
+        if state["panel_visible"] == "true", state["panel_controlled"] == "true",
+          state["ready_count"] != "0"
+        {
+          break
+        }
+        try? await Task.sleep(nanoseconds: 100_000_000)
+      }
+      var result = await MainActor.run { ScreenFrameQuickLook.shared.probeState() }
+      result["conversation_id"] = subject
+      result["source"] = source
+      result["requested_count"] = "\(frames.count)"
+      return result
+    }
+
+    register(
       name: "conversation_share_probe",
+      effects: [.localState, .networkOrModel, .remoteWrite],
       summary: "Hermetic share affordance probe — fetches share link without clipboard",
       params: ["conversationId"]
     ) { params in
@@ -3750,6 +4319,7 @@ final class DesktopAutomationActionRegistry {
     // side effect and cannot drift toward a raw-log upload.
     register(
       name: "dump_feedback_payload_dryrun",
+      effects: [.localArtifact],
       summary:
         "Assemble the feedback report payload (title + redacted desktop_diagnostics.json) without submitting to Sentry; returns the diagnostics JSON for secret-scanning. Non-prod only.",
       params: ["message"]
@@ -3792,6 +4362,7 @@ final class DesktopAutomationActionRegistry {
     // `suspend_agent_stream`'s role for the agent-stall path.
     register(
       name: "debug_block_main_thread",
+      effects: [.localState],
       summary: "Block the main thread for durationMs to exercise the /state wedged-MainActor fallback. Non-prod only.",
       params: ["durationMs"]
     ) { params in
@@ -3818,6 +4389,7 @@ final class DesktopAutomationActionRegistry {
     // Non-prod only (double-gated: here and inside AuthService).
     register(
       name: "expire_auth_token",
+      effects: [.localState],
       summary:
         "Expire the stored idToken via AuthService's real storage path (keychain or UserDefaults) so a relaunch must refresh it without signing out — AUTH-03. Status only, no token material. Non-prod only.",
       params: []
@@ -3834,6 +4406,7 @@ final class DesktopAutomationActionRegistry {
     // no longer use. Presence/expiry booleans only — never token material. Non-prod only.
     register(
       name: "auth_token_status",
+      effects: [],
       summary:
         "Read-only auth token status (signed_in, storage backend, has_id_token, has_refresh_token, is_token_expired) — AUTH-03. No token material. Non-prod only.",
       params: []
@@ -3855,6 +4428,7 @@ final class DesktopAutomationActionRegistry {
     // Read-only with respect to user data; non-prod only.
     register(
       name: "simulate_system_wake",
+      effects: [.localState, .networkOrModel, .remoteWrite],
       summary:
         "Post NSWorkspace.didWakeNotification on the workspace center (the top of the real wake chain: RealtimeHub re-warm + AppState .systemDidWake re-broadcast) so post-wake restart paths run without a real sleep — CHAT-07 harness. Non-prod only.",
       params: []
@@ -3878,6 +4452,7 @@ final class DesktopAutomationActionRegistry {
     // response flushes before restartApp() terminates the process. Non-prod only.
     register(
       name: "quit_and_reopen",
+      effects: [.localState],
       summary:
         "Trigger the permission-flow Quit & Reopen restart (AppState.restartApp) — relaunches the same bundle; auth/onboarding session persists. Non-prod only.",
       params: ["delayMs"]
@@ -4094,13 +4669,18 @@ final class DesktopAutomationBridge: @unchecked Sendable {
   /// Parse a `POST /action` body: `{ "name": "...", "params": { "k": "v", ... } }`.
   /// Param values are coerced to strings (bools → "true"/"false", numbers → digits)
   /// so callers can send natural JSON types.
-  private func parseActionRequest(from body: Data) -> (name: String, params: [String: String])? {
+  private func parseActionRequest(from body: Data) -> (name: String, params: [String: String], readOnly: Bool)? {
     guard let object = try? JSONSerialization.jsonObject(with: body) as? [String: Any],
       let name = object["name"] as? String, !name.isEmpty
     else {
       return nil
     }
 
+    var readOnly = false
+    if let raw = object["readOnly"] {
+      guard let value = raw as? NSNumber, CFGetTypeID(value) == CFBooleanGetTypeID() else { return nil }
+      readOnly = value.boolValue
+    }
     var params: [String: String] = [:]
     if let raw = object["params"] as? [String: Any] {
       for (key, value) in raw {
@@ -4117,7 +4697,7 @@ final class DesktopAutomationBridge: @unchecked Sendable {
         }
       }
     }
-    return (name, params)
+    return (name, params, readOnly)
   }
 
   private func route(request: DesktopAutomationHTTPRequest) async -> DesktopAutomationHTTPResponse {
@@ -4150,6 +4730,7 @@ final class DesktopAutomationBridge: @unchecked Sendable {
           ok: true,
           name: "omi-desktop-automation",
           bundleIdentifier: Bundle.main.bundleIdentifier ?? "unknown",
+          sourceIdentity: DesktopBuildIdentity.current,
           processID: getpid(),
           logFilePath: omiLogFilePath(),
           logLaunchID: omiLogLaunchID(),
@@ -4278,7 +4859,7 @@ final class DesktopAutomationBridge: @unchecked Sendable {
       }
       do {
         let detail = try await DesktopAutomationActionRegistry.shared.perform(
-          parsed.name, params: parsed.params)
+          parsed.name, params: parsed.params, readOnly: parsed.readOnly)
         try await sleepForAutomationSettle(intParam(parsed.params["settleMs"], default: 0))
         let snapshot = await liveAutomationSnapshot()
         let result = DesktopAutomationActionResult(

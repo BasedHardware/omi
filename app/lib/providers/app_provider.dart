@@ -39,7 +39,7 @@ class AppProvider extends BaseProvider {
 
   /// Test seam — overrides [disableAppServer] in [toggleApp].
   @visibleForTesting
-  Future<void> Function(String appId)? disableAppOverride;
+  Future<bool> Function(String appId)? disableAppOverride;
 
   @visibleForTesting
   Future<List<Map<String, dynamic>>> Function()? retrieveAppsGroupedOverride;
@@ -505,6 +505,13 @@ class AppProvider extends BaseProvider {
     notifyListeners();
   }
 
+  /// Loads what the app catalog (Settings → Integrations) draws. Keyed on [groupedApps], not [apps]:
+  /// start-up fills [apps] from the cache, but only a catalog fetch fills the groups.
+  Future<void> ensureCatalogLoaded() async {
+    if (groupedApps.isEmpty) await getApps();
+    if (popularApps.isEmpty) await getPopularApps();
+  }
+
   Future<void> getApps() {
     final inFlight = _appsLoad;
     if (inFlight != null) return inFlight;
@@ -688,9 +695,18 @@ class AppProvider extends BaseProvider {
     }
   }
 
-  void toggleAppPublic(String appId, bool value) {
+  Future<void> toggleAppPublic(String appId, bool value) async {
+    final updated = await changeAppVisibilityServer(appId, value);
+    if (updated != true) {
+      final context = globalNavigatorKey.currentState?.context;
+      AppSnackbar.showSnackbarError(
+        context != null && context.mounted
+            ? context.l10n.somethingWentWrong
+            : 'Something went wrong! Please try again later.',
+      );
+      return;
+    }
     appPublicToggled = value;
-    changeAppVisibilityServer(appId, value);
     var appIndex = apps.indexWhere((app) => app.id == appId);
     if (appIndex != -1) {
       apps[appIndex].private = !value;
@@ -701,7 +717,7 @@ class AppProvider extends BaseProvider {
       }
       final context = globalNavigatorKey.currentState?.context;
       AppSnackbar.showSnackbarSuccess(
-        context != null
+        context != null && context.mounted
             ? context.l10n.appVisibilityChangedSuccessfully
             : 'App visibility changed successfully. It may take a few minutes to reflect.',
       );
@@ -728,7 +744,7 @@ class AppProvider extends BaseProvider {
 
   Future<void> refreshAppsAfterChange() async {
     try {
-      Logger.debug('Refreshing apps after installation/change...');
+      Logger.debug('Refreshing apps after installation/change…');
       // Fetch grouped apps and user's enabled app IDs in parallel
       final results = await Future.wait([
         retrieveAppsGrouped(offset: 0, limit: 20, includeReviews: true),
@@ -908,7 +924,11 @@ class AppProvider extends BaseProvider {
 
   /// Enable/disable [appId] server-side, keeping prefs, local app state, and
   /// failure UX (error dialog) in one owner. Returns whether the toggle stuck.
+  /// Apps whose disable waits on an Undo toast; enabling one again cancels the pending disable.
+  final Set<String> pendingDisables = {};
+
   Future<bool> toggleApp(String appId, bool isEnabled, int? idx) async {
+    if (isEnabled) pendingDisables.remove(appId);
     int loadingIndex = -1;
     if (idx != null && idx >= 0 && idx < appLoading.length) {
       loadingIndex = idx;
@@ -941,9 +961,15 @@ class AppProvider extends BaseProvider {
           PlatformManager.instance.analytics.appEnabled(appId);
         }
       } else {
-        await (disableAppOverride ?? disableAppServer)(appId);
-        success = true;
-        PlatformManager.instance.analytics.appDisabled(appId);
+        success = await (disableAppOverride ?? disableAppServer)(appId);
+        if (success) {
+          PlatformManager.instance.analytics.appDisabled(appId);
+        } else {
+          final context = globalNavigatorKey.currentState?.context;
+          errorMessage = context != null && context.mounted
+              ? context.l10n.errorUpdatingAppStatus
+              : 'An error occurred while updating the app status.';
+        }
       }
     } catch (e) {
       print('Error toggling app $appId: $e');

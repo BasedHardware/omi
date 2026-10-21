@@ -129,7 +129,7 @@ final class MemoryLayerFilterTests: XCTestCase {
       0,
       "Device-scope fallback metadata should be returned to commitMemoryPageCapabilities(), not assigned in fetch retry code."
     )
-    XCTAssertTrue(source.contains("guard commitMemoryPageCapabilities(page, for: token) else"))
+    XCTAssertTrue(source.contains("guard\n        commitMemoryPageCapabilities("))
     XCTAssertTrue(source.contains("let fetchResult = try await fetchMemoriesPageDeviceScopeAware("))
     XCTAssertTrue(source.contains("let page = fetchResult.page"))
     XCTAssertTrue(source.contains("deviceScopeSupportedOverride: fetchResult.deviceScopeSupportedOverride"))
@@ -230,7 +230,11 @@ final class MemoryLayerFilterTests: XCTestCase {
     return try String(contentsOf: sourceURL, encoding: .utf8)
   }
 
-  private func makeMemory(id: String, tierIsExplicit: Bool) -> ServerMemory {
+  private func makeMemory(
+    id: String,
+    tierIsExplicit: Bool,
+    ledgerMetadata: [String: String] = [:]
+  ) -> ServerMemory {
     ServerMemory(
       id: id,
       content: "A cached memory",
@@ -256,7 +260,8 @@ final class MemoryLayerFilterTests: XCTestCase {
       currentActivity: nil,
       inputDeviceName: nil,
       windowTitle: nil,
-      headline: nil
+      headline: nil,
+      ledgerMetadata: ledgerMetadata
     )
   }
 }

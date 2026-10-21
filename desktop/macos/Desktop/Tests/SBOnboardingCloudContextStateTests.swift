@@ -9,16 +9,23 @@ import XCTest
 /// functional-probe failures retain sanitized, actionable copy.
 final class SBOnboardingCloudContextStateTests: XCTestCase {
   private let resumeStepKey = "sbOnboardingResumeStep"
+  // Literals: setUp/tearDown are nonisolated, the model constants are not.
+  private let resumeSchemaKey = "sbOnboardingResumeStepSchema"
+  private let currentResumeSchemaVersion = 2
 
   override func setUp() {
     super.setUp()
     DesktopDiagnosticsManager.shared.resetForTests()
     UserDefaults.standard.removeObject(forKey: resumeStepKey)
     UserDefaults.standard.removeObject(forKey: DefaultsKey.hasCompletedOnboarding.rawValue)
+    // Seeded resume values below are in the current `Step` numbering; stamp the
+    // schema so `begin()` does not renumber them as version-1 state.
+    UserDefaults.standard.set(currentResumeSchemaVersion, forKey: resumeSchemaKey)
   }
 
   override func tearDown() {
     UserDefaults.standard.removeObject(forKey: resumeStepKey)
+    UserDefaults.standard.removeObject(forKey: resumeSchemaKey)
     UserDefaults.standard.removeObject(forKey: DefaultsKey.hasCompletedOnboarding.rawValue)
     super.tearDown()
   }
@@ -195,6 +202,29 @@ final class SBOnboardingCloudContextStateTests: XCTestCase {
 
     XCTAssertEqual(model.contextStates["gmail"], "on")
     XCTAssertNil(model.contextDetails["gmail"])
+  }
+
+  func testGoogleSignInHandoffDoesNotRefocusOnboarding() {
+    let pending = ["gmail": "connecting"]
+    XCTAssertFalse(SBOnboardingModel.shouldRefocusContext(from: pending, to: ["gmail": "needsSignIn"]))
+    XCTAssertFalse(SBOnboardingModel.shouldRefocusContext(from: pending, to: pending))
+    XCTAssertTrue(SBOnboardingModel.shouldRefocusContext(from: pending, to: ["gmail": "on"]))
+    XCTAssertTrue(SBOnboardingModel.shouldRefocusContext(from: pending, to: ["gmail": "error"]))
+    XCTAssertFalse(SBOnboardingModel.shouldRefocusContext(from: pending, to: [:]))
+  }
+
+  @MainActor
+  func testContextCanAdvanceWhileGoogleConnectorsArePendingOrFailed() {
+    for state in ["connecting", "needsSignIn", "error", "on"] {
+      let appState = AppState()
+      let model = SBOnboardingModel(appState: appState, chatProvider: ChatProvider(), onComplete: nil)
+      model.step = .context
+      model.contextStates = ["gmail": state, "calendar": "connecting"]
+      model.answerContext()
+      XCTAssertEqual(model.step, .capture, "connector state must never gate Continue")
+      XCTAssertEqual(model.contextStates["calendar"], "connecting")
+      model.streamTask?.cancel()
+    }
   }
 
   private func makeDefaults() throws -> (defaults: UserDefaults, suiteName: String) {

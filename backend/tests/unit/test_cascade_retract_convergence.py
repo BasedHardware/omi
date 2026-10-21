@@ -146,7 +146,7 @@ def test_injected_control_change_conflicts_converge_instead_of_raising(monkeypat
     result = retract_conversation_sourced_memories(UID, conversation_id, db_client=db)
 
     assert result["retracted_memory_ids"] == [memory_id]
-    assert db.docs[f"users/{UID}/memory_items/{memory_id}"]["status"] == MemoryItemStatus.tombstoned.value
+    assert f"users/{UID}/memory_items/{memory_id}" not in db.docs
     assert db.docs[f"users/{UID}/memory_state/apply_control"]["source_generation"] == 2
     assert injector.calls == 4  # 3 conflicted rounds, then the converged commit
     assert sleeps == [0.05]  # bounded backoff between outer rounds only
@@ -179,12 +179,15 @@ def test_repeat_retract_with_stale_receipt_returns_already_retracted(monkeypatch
 
     result = retract_conversation_sourced_memories(UID, first_conversation, db_client=db)
 
-    assert result["retracted_memory_ids"] == []
+    # The retained source-replacement receipt returns the physical-cleanup
+    # inventory to the universal service, which retires the receipt only after
+    # historical providers are also scrubbed.
+    assert result["retracted_memory_ids"] == [first_id]
     assert result["committed_memory_ids"] == []
     assert result["source_generation"] == 3
     assert sleeps == []  # converged on the post-conflict completion check
-    # The peer conversation's retracted state is untouched.
-    assert db.docs[f"users/{UID}/memory_items/{second_id}"]["status"] == MemoryItemStatus.tombstoned.value
+    # The peer conversation's finalized deletion is untouched.
+    assert f"users/{UID}/memory_items/{second_id}" not in db.docs
 
 
 def test_exhausted_conflicts_with_live_items_fail_closed(monkeypatch):

@@ -5,6 +5,7 @@ import 'package:webview_flutter/webview_flutter.dart';
 
 import 'package:omi/env/env.dart';
 import 'package:omi/providers/usage_provider.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 
@@ -21,6 +22,7 @@ class PaymentWebViewPage extends StatefulWidget {
 class _PaymentWebViewPageState extends State<PaymentWebViewPage> {
   late final WebViewController _controller;
   bool _isLoading = true;
+  bool _hasError = false;
 
   @override
   void initState() {
@@ -34,15 +36,27 @@ class _PaymentWebViewPageState extends State<PaymentWebViewPage> {
       ..setNavigationDelegate(
         NavigationDelegate(
           onProgress: (int progress) {
-            if (progress == 100) {
+            if (progress == 100 && mounted) {
               setState(() {
                 _isLoading = false;
               });
             }
           },
           onPageStarted: (String url) {
+            if (!mounted) return;
             setState(() {
               _isLoading = true;
+            });
+          },
+          onWebResourceError: (WebResourceError error) {
+            // Sub-resource failures (an analytics pixel, a font) do not break checkout; only a
+            // failed page load leaves the reader looking at a blank or broken page.
+            if (error.isForMainFrame == false) return;
+            Logger.debug('Payment page failed to load: ${error.errorCode} ${error.description}');
+            if (!mounted) return;
+            setState(() {
+              _hasError = true;
+              _isLoading = false;
             });
           },
           onNavigationRequest: (NavigationRequest request) {
@@ -63,6 +77,19 @@ class _PaymentWebViewPageState extends State<PaymentWebViewPage> {
       ..loadRequest(Uri.parse(widget.checkoutUrl));
   }
 
+  Future<void> _retry() async {
+    setState(() {
+      _hasError = false;
+      _isLoading = true;
+    });
+    final current = await _controller.currentUrl();
+    if (current == null || current.isEmpty || current == 'about:blank') {
+      await _controller.loadRequest(Uri.parse(widget.checkoutUrl));
+    } else {
+      await _controller.reload();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     // Pop on build if the server-driven visibility flag is off, in case any
@@ -75,17 +102,23 @@ class _PaymentWebViewPageState extends State<PaymentWebViewPage> {
     }
 
     return Scaffold(
-      backgroundColor: Colors.black,
       appBar: AppBar(
+        // A pushed page: back, not close. It reports "not completed" like the cancel URL does.
+        leading: OmiBackButton(onPressed: () => Navigator.of(context).pop(false)),
         title: Text(widget.title ?? context.l10n.completeYourUpgrade),
-        backgroundColor: Colors.black,
-        elevation: 0,
-        leading: IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.of(context).pop(false)),
       ),
       body: Stack(
         children: [
           WebViewWidget(controller: _controller),
-          if (_isLoading) const Center(child: CircularProgressIndicator(color: Colors.deepPurple)),
+          if (_hasError)
+            Positioned.fill(
+              child: ColoredBox(
+                color: OmiColors.surface0,
+                child: OmiErrorState(message: context.l10n.couldNotLoadCheckout, onRetry: _retry),
+              ),
+            )
+          else if (_isLoading)
+            const Center(child: OmiSpinner(size: OmiSpinnerSize.large)),
         ],
       ),
     );

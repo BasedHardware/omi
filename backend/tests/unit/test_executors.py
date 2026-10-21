@@ -176,7 +176,18 @@ def test_get_executor_metrics_returns_all_pools():
     metrics = get_executor_metrics()
     assert len(metrics) == len(_ALL_EXECUTORS)
     names = {m['name'] for m in metrics}
-    expected = {'critical', 'db', 'llm', 'stripe', 'sync', 'postprocess', 'cleanup', 'storage'}
+    expected = {
+        'critical',
+        'db',
+        'llm',
+        'stripe',
+        'sync',
+        'postprocess',
+        'cleanup',
+        'storage',
+        'speaker_tag_verify',
+        'cimd',
+    }
     assert names == expected
 
 
@@ -248,6 +259,44 @@ async def test_start_background_task_tracks_and_removes():
     await task
     await asyncio.sleep(0)  # let done callback fire
     assert task not in _background_tasks
+
+
+@pytest.fixture
+def destructive_operation_error():
+    # Dependency initialization is setup, outside the fast-unit call budget.
+    from database.legal_holds import DestructiveOperationInProgress
+
+    return DestructiveOperationInProgress
+
+
+def test_submit_with_context_defers_destructive_operation_fence_without_traceback(caplog, destructive_operation_error):
+    """A live account gate refuses the write. That is not a background crash."""
+
+    def blocked():
+        raise destructive_operation_error('external data write blocked by destructive operation')
+
+    with caplog.at_level(logging.INFO, logger='utils.executors'):
+        future = submit_with_context(_test_executor, blocked)
+        with pytest.raises(destructive_operation_error):
+            future.result(timeout=2)
+        time.sleep(0.05)
+
+    assert any('deferred reason=destructive_operation' in record.message for record in caplog.records)
+    assert not any(record.levelno >= logging.ERROR for record in caplog.records)
+    assert not any(record.exc_info not in (None, (None, None, None)) for record in caplog.records)
+
+
+def test_submit_with_context_still_logs_unexpected_background_failures(caplog):
+    def boom():
+        raise RuntimeError('bg-boom')
+
+    with caplog.at_level(logging.ERROR, logger='utils.executors'):
+        future = submit_with_context(_test_executor, boom)
+        with pytest.raises(RuntimeError):
+            future.result(timeout=2)
+        time.sleep(0.05)
+
+    assert any(record.levelno >= logging.ERROR and 'bg-boom' in record.message for record in caplog.records)
 
 
 @pytest.mark.asyncio

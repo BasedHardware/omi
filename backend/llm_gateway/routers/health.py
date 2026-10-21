@@ -5,7 +5,7 @@ from pydantic import ValidationError
 
 from llm_gateway.gateway.auth import ServiceAuthDependency
 from llm_gateway.gateway.config_loader import ConfigValidationError, GatewayConfig
-from llm_gateway.gateway.schemas import Surface
+from llm_gateway.gateway.schemas import RolloutStage, Surface
 from llm_gateway.routers.dependencies import get_gateway_config
 
 router = APIRouter()
@@ -40,6 +40,11 @@ def get_ready(caller: ServiceAuthDependency) -> dict[str, object]:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail='llm gateway managed web search provider is not configured',
+        )
+    if _managed_systemone_provider_enabled(config) and not os.getenv('OPENROUTER_API_KEY', '').strip():
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail='llm gateway managed systemone provider is not configured',
         )
 
     return {
@@ -81,6 +86,19 @@ def _managed_perplexity_chat_enabled(config: GatewayConfig) -> bool:
             lane.surface == Surface.OPENAI_CHAT_COMPLETIONS
             and route is not None
             and route.primary.provider == 'perplexity'
+        ):
+            return True
+    return False
+
+
+def _managed_systemone_provider_enabled(config: GatewayConfig) -> bool:
+    for lane in config.lanes.values():
+        route = config.route_artifacts.get(lane.active_route)
+        if (
+            lane.surface == Surface.OPENROUTER_SYSTEMONE
+            and route is not None
+            and route.primary.provider == 'openrouter'
+            and route.rollout.stage == RolloutStage.ACTIVE
         ):
             return True
     return False

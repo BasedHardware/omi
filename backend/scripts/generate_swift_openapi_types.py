@@ -35,6 +35,18 @@ def source_label_for_path(path: PurePath, root_dir: PurePath = ROOT_DIR) -> str:
 # as the desktop Codable migration progresses. Each entry pulls in transitive
 # $ref dependencies automatically.
 TARGET_SCHEMAS = (
+    'BudgetChoiceRequest',
+    'BudgetChoiceRecord',
+    'BudgetChoiceResponse',
+    'BudgetChoiceWriteResponse',
+    'StorefrontResponse',
+    'ProactivityTarget',
+    'ProactivityFeedItem',
+    'ProactivityFeedResponse',
+    'ProactivityOutcomeRequest',
+    'ProactivityOutcomeResponse',
+    'ScreenTaskGateRequest',
+    'ScreenTaskGateResponse',
     'Conversation',
     'Structured',
     'ActionItem',
@@ -50,6 +62,8 @@ TARGET_SCHEMAS = (
     'PluginResult',
     'AudioFile',
     'MemoryDB',
+    'MemoryEditResponse',
+    'MemoryRevertRequest',
     'MemoryCategory',
     'MemoryLayer',
     'SubjectAttribution',
@@ -70,6 +84,8 @@ TARGET_SCHEMAS = (
     'TaskCancelCandidate',
     'TaskSupersedeCandidate',
     'CandidateResolutionRequest',
+    'CandidateAcceptanceRequest',
+    'SummaryTaskReference',
     'TaskWorkflowControl',
     'TaskOriginWorkIntent',
     'GoalOriginWorkIntent',
@@ -100,6 +116,15 @@ TARGET_SCHEMAS = (
     'ConversationSource',
     'ConversationStatus',
     'CategoryEnum',
+    'FrameRequestDelivery',
+    'FrameRequest',
+    'CreateFrameRequest',
+    'FrameRequestStateUpdate',
+    'FrameRequestPromotion',
+    'FrameRequestEnvelope',
+    'FrameRequestBatch',
+    'ScreenActivitySyncRequest',
+    'ScreenActivitySyncResponse',
 )
 
 PRESENCE_AWARE_PATCH_SCHEMAS = {
@@ -207,7 +232,16 @@ def _render_enum(name: str, schema: dict[str, Any]) -> str:
     lines.append('  public init(from decoder: Decoder) throws {')
     lines.append('    let c = try decoder.singleValueContainer()')
     lines.append('    let raw = try c.decode(String.self)')
-    lines.append(f'    self = {name}(rawValue: raw) ?? ._unknown')
+    # A Python enum that reaches the wire through str() arrives qualified ("GoalType.scale").
+    # The exact match comes first so a raw value that itself contained a dot would keep its
+    # meaning; only a value that matches nothing falls back to its last dotted component
+    # (#21091 wrote this by hand for GoalType).
+    lines.append(f'    if let exact = {name}(rawValue: raw) {{')
+    lines.append('      self = exact')
+    lines.append('      return')
+    lines.append('    }')
+    lines.append('    let unqualified = raw.split(separator: ".").last.map(String.init) ?? raw')
+    lines.append(f'    self = {name}(rawValue: unqualified) ?? ._unknown')
     lines.append('  }')
     lines.append('}')
     return '\n'.join(lines) + '\n\n'
@@ -304,7 +338,11 @@ def _render_struct(name: str, schema: dict[str, Any]) -> str:
         type_expr, optional = _swift_type(prop_schema, required=wire_name in required)
         fields.append((swift_name, wire_name, type_expr, optional))
 
-    lines = [f'public struct {name}: Codable {{']
+    # These immutable scalar request DTOs cross the summary UI / HTTP actor
+    # boundary. Emit checked Sendable conformance at the declaration, not an
+    # unchecked extension or a hand edit to generated code.
+    conformances = 'Codable, Sendable' if name in {'SummaryTaskReference', 'CandidateAcceptanceRequest'} else 'Codable'
+    lines = [f'public struct {name}: {conformances} {{']
     for swift_name, wire_name, type_expr, optional in fields:
         decl = f'  public let {swift_name}: {type_expr}' + ('?' if optional else '')
         lines.append(decl)
@@ -560,7 +598,6 @@ SKIP_SWIFT_CONTENT_PREFIXES = (
     'text/html',
     'application/xml',
     'audio/',
-    'image/',
     'multipart/form-data',
 )
 
@@ -570,6 +607,7 @@ _SWIFT_BUILTIN_TYPES = {
     'Double',
     'Bool',
     'OmiAnyCodable',
+    'Data',
 }
 
 
@@ -608,7 +646,7 @@ def _resolve_type(type_expr: str, emitted: set[str]) -> str:
 def _swift_response_type(operation: dict[str, Any]) -> str | None:
     """Return the Swift type for an operation's success response, or None to skip.
 
-    None => non-JSON success (binary/streaming/xml/multipart): skip the op.
+    None => non-JSON success (streaming/xml/multipart): skip the op.
     'Void' => 204-style no-content (or empty success content).
     """
     responses = operation.get('responses', {})
@@ -625,6 +663,8 @@ def _swift_response_type(operation: dict[str, Any]) -> str | None:
         if isinstance(json_content, dict):
             type_expr, _ = _swift_type(json_content.get('schema', {}), required=True)
             return type_expr
+        if any(isinstance(ct, str) and ct.startswith('image/') for ct in content):
+            return 'Data'
         # Non-JSON success response -> skip this operation entirely.
         for ct in content:
             if any(ct.startswith(p) or ct == p for p in SKIP_SWIFT_CONTENT_PREFIXES):
@@ -814,6 +854,8 @@ def generate_swift_client_methods(spec: dict[str, Any]) -> str:
             body_lines.append('  }')
             if return_type == 'Void':
                 body_lines.append('  return')
+            elif return_type == 'Data':
+                body_lines.append('  return data')
             else:
                 body_lines.append(f'  return try JSONDecoder().decode({return_type}.self, from: data)')
             body_lines.append('}')

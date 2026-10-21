@@ -13,6 +13,7 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
+from google.api_core import retry as api_retry
 
 os.environ.setdefault(
     'ENCRYPTION_SECRET',
@@ -87,6 +88,10 @@ def _install_route_stubs(monkeypatch):
     vector_db_mod.query_memory_vector_candidates = MagicMock(return_value=[])
     monkeypatch.setitem(sys.modules, 'database.vector_db', vector_db_mod)
 
+    notifications_mod = types.ModuleType('database.notifications')
+    notifications_mod.get_user_time_zone = MagicMock(return_value='UTC')
+    monkeypatch.setitem(sys.modules, 'database.notifications', notifications_mod)
+
     endpoints_mod = types.ModuleType('utils.other.endpoints')
     endpoints_mod.get_current_user_uid = MagicMock(return_value='uid-route')
     endpoints_mod.with_rate_limit = lambda dependency, policy: dependency
@@ -109,6 +114,7 @@ def _install_route_stubs(monkeypatch):
 
     client_mod = types.ModuleType('database._client')
     client_mod.get_firestore_client = MagicMock()
+    client_mod.document_id_from_seed = MagicMock(return_value='test-document-id')
     monkeypatch.setitem(sys.modules, 'database._client', client_mod)
 
     executors_mod = types.ModuleType('utils.executors')
@@ -148,6 +154,7 @@ def _install_route_stubs(monkeypatch):
     firestore_v1_mod.FieldFilter = MagicMock()
     firestore_v1_mod.transactional = lambda fn: fn
     google_api_core_mod.exceptions = google_api_exceptions_mod
+    google_api_core_mod.retry = api_retry
     google_transport_mod.requests = google_requests_mod
     google_auth_mod.transport = google_transport_mod
     google_cloud_mod.firestore = firestore_mod
@@ -158,6 +165,7 @@ def _install_route_stubs(monkeypatch):
     monkeypatch.setitem(sys.modules, 'google', google_mod)
     monkeypatch.setitem(sys.modules, 'google.api_core', google_api_core_mod)
     monkeypatch.setitem(sys.modules, 'google.api_core.exceptions', google_api_exceptions_mod)
+    monkeypatch.setitem(sys.modules, 'google.api_core.retry', api_retry)
     monkeypatch.setitem(sys.modules, 'google.auth', google_auth_mod)
     monkeypatch.setitem(sys.modules, 'google.auth.transport', google_transport_mod)
     monkeypatch.setitem(sys.modules, 'google.auth.transport.requests', google_requests_mod)

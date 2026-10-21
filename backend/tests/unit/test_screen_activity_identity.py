@@ -147,6 +147,29 @@ class TestRealCaptureFf8b9998:
         assert context.calendar_source == 'screen_activity'
         assert context.platform == 'Google Chrome'
 
+    def test_a_supplied_transcript_span_drives_duration_minutes(self):
+        context = context_from_screen_activity(
+            _rows(PRE_JOIN_OCR),
+            started_at=CONVERSATION_START,
+            finished_at=CONVERSATION_END,
+            duration_seconds=90.0,
+        )
+
+        assert context is not None
+        # 90 seconds of transcript, not the ~29-minute screen-activity window (#4056).
+        assert context.duration_minutes == 1
+
+    def test_without_a_span_the_window_stays_the_fallback(self):
+        context = context_from_screen_activity(
+            _rows(PRE_JOIN_OCR),
+            started_at=CONVERSATION_START,
+            finished_at=CONVERSATION_END,
+        )
+
+        assert context is not None
+        window_minutes = int((CONVERSATION_END - CONVERSATION_START).total_seconds() / 60)
+        assert context.duration_minutes == max(1, window_minutes)
+
     def test_the_roster_frame_is_reached_even_when_it_is_not_first(self):
         # The 12k character budget used to be spent on whichever full-desktop frames
         # came first chronologically, so the pre-join card could fall outside it.
@@ -240,6 +263,63 @@ class TestPrecisionFirst:
             finished_at=CONVERSATION_END,
         )
         assert context is None
+
+    def test_telegram_call_window_title_with_call_control_yields_participant(self):
+        context = context_from_screen_activity(
+            [
+                {
+                    'appName': 'Telegram',
+                    'windowTitle': 'Alice Chen',
+                    'ocrText': 'Mute\nEnd Call\nVideo',
+                }
+            ],
+            started_at=CONVERSATION_START,
+            finished_at=CONVERSATION_END,
+        )
+        assert context is not None
+        assert [p.name for p in context.participants] == ['Alice Chen']
+        assert context.platform == 'Telegram'
+        assert context.calendar_source == 'screen_activity'
+
+    def test_telegram_chat_titles_without_call_control_yield_no_participants(self):
+        context = context_from_screen_activity(
+            [
+                {'appName': 'Telegram', 'windowTitle': 'Saved Messages', 'ocrText': 'sticker'},
+                {'appName': 'Telegram', 'windowTitle': 'Alice Chen', 'ocrText': 'yesterday'},
+                {'appName': 'Telegram', 'windowTitle': 'Bob Martinez', 'ocrText': 'photo'},
+                {'appName': 'Telegram', 'windowTitle': 'Design Review', 'ocrText': 'ok'},
+                {'appName': 'Telegram', 'windowTitle': 'Nikita Petrov', 'ocrText': 'typing'},
+            ],
+            started_at=CONVERSATION_START,
+            finished_at=CONVERSATION_END,
+        )
+        assert context is None
+
+    def test_chrome_calendar_tile_without_meet_roster_yields_no_participants(self):
+        context = context_from_screen_activity(
+            [
+                {
+                    'appName': 'Google Chrome',
+                    'windowTitle': 'Meet - amc-iajq-asx',
+                    'ocrText': 'Aryan Gupta and Nik\nBlocked users\nCoinflow Portal',
+                }
+            ],
+            started_at=CONVERSATION_START,
+            finished_at=CONVERSATION_END,
+        )
+        assert context is None
+
+    def test_telegram_call_control_does_not_ingest_unrelated_chat_titles(self):
+        context = context_from_screen_activity(
+            [
+                {'appName': 'Telegram', 'windowTitle': 'Alice Chen', 'ocrText': 'Mute\nEnd Call'},
+                {'appName': 'Telegram', 'windowTitle': 'Bob Martinez', 'ocrText': 'hey'},
+            ],
+            started_at=CONVERSATION_START,
+            finished_at=CONVERSATION_END,
+        )
+        assert context is not None
+        assert [p.name for p in context.participants] == ['Alice Chen']
 
     def test_participants_are_capped(self):
         roster = ', '.join(f'Person Number{index}' for index in range(20)) + ' are in this call'

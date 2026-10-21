@@ -7,6 +7,7 @@ many conversations (and how many characters) it returns and appends a note telli
 summarize what it has and offer to narrow. These tests cover the two pure bounding helpers.
 """
 
+import importlib
 import importlib.util
 import os
 import sys
@@ -50,8 +51,9 @@ def _load(module_name, rel_path):
     return mod
 
 
-# Stub the heavy leaves conversation_tools imports; langchain_core is used for real (the @tool
-# decorator needs it). None of these are exercised by the pure helpers under test.
+# Keep the real package namespaces importable for tests collected later in the same
+# process. Only the heavy leaf modules are replaced below; replacing ``utils`` or
+# ``utils.retrieval.tools`` here makes unrelated modules impossible to import.
 for _p in [
     "database",
     "models",
@@ -61,16 +63,17 @@ for _p in [
     "utils.retrieval",
     "utils.retrieval.tools",
 ]:
-    _pkg(_p)
+    importlib.import_module(_p)
 for _name, _attrs in {
     "database.conversations": [],
-    "database.notifications": ["get_user_time_zone"],
+    "database.auth": ["get_user_name"],
     "database.users": ["get_people_by_ids"],
     "database.vector_db": [],
     "models.conversation": ["Conversation"],
     "models.other": ["Person"],
     "utils.conversations.factory": ["deserialize_conversation"],
-    "utils.conversations.render": ["conversations_to_string"],
+    "utils.conversations.render": ["conversation_to_citation_card", "conversations_to_string"],
+    "utils.conversations.mcp_transcript_search": ["build_transcript_match_snippets"],
     "utils.conversations.search": [
         "keyword_search_conversation_ids",
         "merge_conversation_search_ids",
@@ -84,7 +87,47 @@ for _name, _attrs in {
     for _a in _attrs:
         setattr(_m, _a, MagicMock())
 
-ct = _load("utils.retrieval.tools.conversation_tools", "utils/retrieval/tools/conversation_tools.py")
+sys.modules["database.auth"].get_user_name.return_value = "Test User"
+
+
+class _ChatTranscriptSearch:
+    def __init__(self, rows, searched):
+        self.rows = rows
+        self.searched = searched
+
+    @property
+    def conversation_ids(self):
+        return list(dict.fromkeys(row['conversation_id'] for row in self.rows))
+
+
+_transcript_search = sys.modules['utils.conversations.mcp_transcript_search']
+_transcript_search.ChatTranscriptSearch = _ChatTranscriptSearch
+_transcript_search.chat_transcript_coverage_note = MagicMock(return_value='Transcript coverage is partial.')
+_transcript_search.chat_transcript_excerpts = MagicMock(return_value={})
+_transcript_search.merge_chat_conversation_ids = MagicMock(return_value=[])
+_transcript_search.search_chat_transcript_chunks = MagicMock(return_value=_ChatTranscriptSearch([], False))
+
+
+def _apply_chat_scope_dates(scope, start_date, end_date):
+    """Pass-through stub: date-range bound tests do not exercise hard-scope intersection."""
+    return start_date, end_date, None
+
+
+def _chat_scope_from_config(configurable):
+    if not isinstance(configurable, dict):
+        return None
+    scope = configurable.get("chat_scope")
+    return scope if isinstance(scope, dict) and scope else None
+
+
+_chat_scope = _mod("utils.retrieval.chat_scope")
+_chat_scope.apply_chat_scope_dates = _apply_chat_scope_dates
+_chat_scope.chat_scope_from_config = _chat_scope_from_config
+
+ct = _load(
+    "utils.retrieval.tools._conversation_tools_date_range_test",
+    "utils/retrieval/tools/conversation_tools.py",
+)
 
 
 class TestExactConversationReference:
@@ -92,27 +135,38 @@ class TestExactConversationReference:
         conversation_id = "e8c05000-52f0-4a95-951c-ccd715523429"
         ct.parse_exact_conversation_reference.return_value = conversation_id
         ct.conversation_matches_date_range.return_value = True
-        ct.keyword_search_conversation_ids.reset_mock()
+        # Rebind: sibling unit files may have already loaded conversation_tools with a real
+        # keyword_search_conversation_ids (not a MagicMock), so reset_mock is unsafe here.
+        ct.keyword_search_conversation_ids = MagicMock()
         ct.vector_db.query_vectors = MagicMock(return_value=[])
         ct.conversations_db.get_conversations_by_id = MagicMock(
             return_value=[{"id": conversation_id, "transcript_segments": [], "is_locked": False}]
         )
         ct.deserialize_conversation = MagicMock(
-            return_value=SimpleNamespace(transcript_segments=[], model_dump=lambda: {"id": conversation_id})
+            return_value=SimpleNamespace(
+                id=conversation_id, transcript_segments=[], model_dump=lambda: {"id": conversation_id}
+            )
         )
         ct.conversations_to_string = MagicMock(return_value="[formatted]")
-        ct.notification_db.get_user_time_zone = MagicMock(return_value="UTC")
 
         result = ct.search_conversations_tool.invoke(
             {"query": conversation_id},
-            config={"configurable": {"user_id": "test-uid", "conversations_collected": []}},
+            config={
+                "configurable": {
+                    "user_id": "test-uid",
+                    "user_timezone": "UTC",
+                    "conversations_collected": [],
+                }
+            },
         )
 
         assert "matching exactly" in result
         assert "[formatted]" in result
         ct.keyword_search_conversation_ids.assert_not_called()
         ct.vector_db.query_vectors.assert_not_called()
-        ct.conversations_db.get_conversations_by_id.assert_called_once_with("test-uid", [conversation_id])
+        ct.conversations_db.get_conversations_by_id.assert_called_once_with(
+            "test-uid", [conversation_id], include_discarded=True
+        )
 
 
 class TestCapConversationsForLlm:
@@ -143,8 +197,8 @@ class TestBoundedResult:
     def test_truncated_appends_guidance_note(self):
         out = ct._bounded_result("Conversation #1\nsome summary", total_found=150, truncated=True)
         assert "150 conversations" in out
-        assert "Summarize what is shown" in out
-        assert "narrow" in out
+        assert "remaining 149 were omitted, not absent" in out
+        assert "Narrow the date range" in out
 
     def test_not_truncated_short_result_unchanged(self):
         body = "Conversation #1\nshort"
@@ -157,4 +211,4 @@ class TestBoundedResult:
         assert "Conversation #2" not in out
         assert "yyyy" not in out
         assert len(out) <= ct.MAX_RESULT_CHARS + 400  # budget plus the appended note
-        assert "Summarize what is shown" in out
+        assert "remaining 1 were omitted, not absent" in out

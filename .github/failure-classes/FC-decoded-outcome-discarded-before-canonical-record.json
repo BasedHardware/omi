@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "id": "FC-decoded-outcome-discarded-before-canonical-record",
+  "violated_contract": "When a boundary already decodes an outcome signal \u2014 an interrupted flag, an is_error bit, a synthetic-input marker, a real measurement \u2014 the record that downstream consumers treat as canonical must carry it. Accepting the signal and then dropping it lets the record assert an outcome nothing witnessed, and every consumer that trusts the record inherits the false claim without any way to detect it.",
+  "canonical_prevention": "Make the canonical record's outcome a total function of the decoded signal rather than a value callers supply: require the signal in the writing funnel's signature so omitting it cannot compile, derive the stored status inside that funnel, and represent unknown explicitly instead of substituting a confident default.",
+  "canonical_prevention_artifact": [
+    "desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController+SessionLifecycle.swift",
+    "desktop/macos/Desktop/Sources/FloatingControlBar/PTTAttemptLifecycleRecorder.swift"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController+SessionLifecycle.swift",
+    "desktop/macos/Desktop/Sources/Providers/ChatToolExecutor.swift",
+    "desktop/macos/Desktop/Sources/FloatingControlBar/PTTAttemptLifecycleRecorder.swift",
+    "desktop/macos/agent/src/runtime/agent-spawn-journal.ts"
+  ],
+  "status": "open"
+}

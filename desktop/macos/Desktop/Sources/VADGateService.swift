@@ -283,21 +283,6 @@ final class VADGateService {
   // Fail-open flag
   let modelAvailable: Bool
 
-  // Shared wall-clock timestamp of the most recent frame classified as speech.
-  // Used by the Sparkle updater gate to defer restarts during active conversations.
-  private static let lastSpeechLock = NSLock()
-  private nonisolated(unsafe) static var _lastSpeechAt: Date?
-  static var lastSpeechAt: Date? {
-    lastSpeechLock.lock()
-    defer { lastSpeechLock.unlock() }
-    return _lastSpeechAt
-  }
-  fileprivate static func markSpeechDetected(at date: Date = Date()) {
-    lastSpeechLock.lock()
-    _lastSpeechAt = date
-    lastSpeechLock.unlock()
-  }
-
   init() {
     let mic = SileroVADModel()
     let sys = SileroVADModel()
@@ -394,7 +379,6 @@ final class VADGateService {
 
     if isSpeech {
       lastSpeechMs = audioCursorMs
-      VADGateService.markSpeechDetected()
     }
 
     if isSpeech {
@@ -641,7 +625,6 @@ final class VADGateService {
     }
     if isSpeech {
       batchLastSpeechMs = batchAudioCursorMs
-      VADGateService.markSpeechDetected()
     }
 
     // Batch state machine

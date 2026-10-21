@@ -1,0 +1,7 @@
+{
+  "version": "0.12.297",
+  "date": "2026-09-05",
+  "changes": [
+    "Improved proactive notification timing when your device and profile use different time zones"
+  ]
+}

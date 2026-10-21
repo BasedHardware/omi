@@ -21,7 +21,19 @@ on:
       - 'backend/scripts/verify_pusher_live_deployment_gate.py'
       - 'backend/scripts/verify_pusher_dev_observability.py'
       - 'backend/scripts/verify_pusher_promotion_evidence.py'
+      - 'backend/scripts/pusher_release_receipt.py'
+      - 'backend/scripts/pusher_semantic_probe.py'
+      - 'backend/scripts/pusher_prod_canary.py'
+      - 'backend/scripts/verify_pusher_live_alert_route.py'
+      - 'backend/scripts/runtime_env_capability_contracts.py'
+      - 'backend/scripts/runtime_env_validation/**'
+      - 'backend/scripts/validate-backend-runtime-env.py'
+      - 'backend/deploy/runtime_env/**'
+      - 'backend/scripts/firebase_release_probe_token.py'
+      - 'backend/testing/release_fixtures/transcription-release-probe.json'
+      - 'backend/testing/release_fixtures/transcription-release-probe.wav'
       - '.github/workflows/gcp_backend_pusher_auto_deploy.yml'
+      - '.github/workflows/gcp_backend_pusher.yml'
 
 # Share the development pusher lock with manual deployments.
 concurrency:
@@ -29,6 +41,10 @@ concurrency:
   cancel-in-progress: false
 
 env:
+  # Abort a git HTTP transfer that stays under 1 KB/s for 60 s, so actions/checkout
+  # retries instead of hanging 7-10 min until the TCP reset (#22890).
+  GIT_HTTP_LOW_SPEED_LIMIT: "1000"
+  GIT_HTTP_LOW_SPEED_TIME: "60"
   SERVICE: pusher
   REGION: us-central1
 
@@ -48,11 +64,32 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
+      - name: Checkout immutable Firestore gate controls
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: .github/firestore-workflow
+          persist-credentials: false
+          fetch-depth: 1
+          sparse-checkout: |
+            .github/actions/firestore-readiness
+            backend/scripts
+            backend/database
+
+      - name: Verify serving Firestore indexes
+        uses: ./.github/firestore-workflow/.github/actions/firestore-readiness
+        with:
+          source_sha: ${{ github.sha }}
+          project_id: ${{ vars.RUNTIME_GCP_PROJECT_ID }}
+          credentials_json: ${{ secrets.GCP_FIRESTORE_READONLY_CREDENTIALS }}
+
       - name: Google Auth
         id: auth
         uses: 'google-github-actions/auth@v3'
         with:
-          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+          # Development: GitHub WIF as the dev deployer, no JSON key (credential hygiene WS-D).
+          workload_identity_provider: projects/1031333818730/locations/global/workloadIdentityPools/omi-gha-deploy-dev/providers/github
+          service_account: omi-ci-deployer-dev@based-hardware-dev.iam.gserviceaccount.com
 
       - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@v3
@@ -62,6 +99,74 @@ jobs:
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
+
+      - name: Validate Pusher runtime capability admission before publishing
+        run: |
+          python3 -m pip install -q pyyaml
+          python3 backend/scripts/validate-backend-runtime-env.py --env "${{ vars.ENV }}"
+
+      - name: Validate Firebase probe signer configuration before publishing
+        env:
+          FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT: ${{ vars.FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT" ]]; then
+            echo "Development Pusher semantic probe requires FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT." >&2
+            exit 1
+          fi
+          case "$FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT" in
+            *@based-hardware.iam.gserviceaccount.com) ;;
+            *)
+              echo "FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT must belong to the based-hardware Firebase project." >&2
+              exit 1
+              ;;
+          esac
+          # The deploy identity must be able to sign as the Firebase project's
+          # signer. Discovering a denial only after the build and rollout
+          # wastes the whole lane on a run that cannot pass; a rotated
+          # credential for the wrong service account fails this same check, so
+          # fail fast with the resolved caller and both possible causes.
+          caller="$(gcloud auth list --filter=status:ACTIVE --format='value(account)')"
+          # gcloud cannot dry-run service-account permissions, so prove the
+          # grant by signing a throwaway JWT exactly the way the probe
+          # minter will. A denial here fails the lane before build+rollout
+          # with the resolved caller named.
+          probe_payload="$(mktemp "$RUNNER_TEMP/omi-signjwt-probe.XXXXXX")"
+          probe_signed="$(mktemp "$RUNNER_TEMP/omi-signjwt-probe.XXXXXX")"
+          cleanup_signing_probe() { rm -f "$probe_payload" "$probe_signed"; }
+          trap cleanup_signing_probe EXIT
+          probe_now="$(date +%s)"
+          printf '{"aud":"pusher-preflight-probe","exp":%s,"iat":%s}\n' \
+            "$((probe_now + 300))" "$probe_now" > "$probe_payload"
+          if ! gcloud iam service-accounts sign-jwt \
+            "$probe_payload" "$probe_signed" \
+            --iam-account="$FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT" >/dev/null 2>&1; then
+              echo "Deploy identity '$caller' cannot sign a Firebase custom token as $FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT." >&2
+              echo "Check the active identity first: a GCP_CREDENTIALS key rotated to another" >&2
+              echo "service account produces this same denial. If '$caller' is the intended deploy" >&2
+              echo "identity, apply the one-time grant (project owner):" >&2
+              echo "  gcloud iam service-accounts add-iam-policy-binding $FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT \\" >&2
+              echo "    --member='serviceAccount:$caller' \\" >&2
+              echo "    --role='roles/iam.serviceAccountTokenCreator' --project=based-hardware" >&2
+              exit 1
+          fi
+
+      - name: Verify live finalization alert route before publishing
+        env:
+          # Dest ops Grafana (monitor.omiapi.com). Use the monitor token above.
+          MONITOR_GRAFANA_TOKEN: ${{ secrets.MONITOR_GRAFANA_TOKEN }}
+        run: |
+          set -euo pipefail
+          umask 077
+          token_file="$(mktemp "$RUNNER_TEMP/omi-grafana-token.XXXXXX")"
+          cleanup() { rm -f "$token_file"; unset MONITOR_GRAFANA_TOKEN; }
+          trap cleanup EXIT
+          test -n "$MONITOR_GRAFANA_TOKEN"
+          printf '%s' "$MONITOR_GRAFANA_TOKEN" > "$token_file"
+          python3 backend/scripts/verify_pusher_live_alert_route.py \
+            --grafana-url https://monitor.omiapi.com \
+            --token-file "$token_file" \
+            --phase prepublish
 
       - name: Build and Push Docker image
         run: |
@@ -86,6 +191,7 @@ jobs:
         run: |
           python3 backend/scripts/verify_pusher_rollout_budget.py
           python3 backend/scripts/verify_pusher_rollout_gate.py preflight
+          python3 backend/scripts/verify_pusher_cohost_env_diff.py
           python3 backend/scripts/verify_pusher_dev_observability.py
 
       - name: Get GKE credentials
@@ -119,38 +225,176 @@ jobs:
           fi
           python3 backend/scripts/deploy_status_report.py --env ${{ vars.ENV }} --include-gke --gke-service pusher
 
-      - name: Record successful development Pusher qualification
+      - name: Record exact live development Pusher deployment receipt
         run: |
-          python3 - <<'PY'
-          import json
-          import os
-          from pathlib import Path
+          python3 backend/scripts/pusher_release_receipt.py record-live \
+            --environment "${{ vars.ENV }}" \
+            --namespace "${{ vars.ENV }}-omi-backend" \
+            --repository "$PUSHER_IMAGE_REPOSITORY" \
+            --digest "$PUSHER_IMAGE_DIGEST" \
+            --source-sha "$GITHUB_SHA" \
+            --run-id "$GITHUB_RUN_ID" \
+            --output pusher-dev-deployment-receipt.json
 
-          Path("pusher-dev-qualification.json").write_text(
-              json.dumps(
-                  {
-                      "schema_version": 1,
-                      "environment": "development",
-                      "image_digest": os.environ["PUSHER_IMAGE_DIGEST"],
-                      "image_repository": os.environ["PUSHER_IMAGE_REPOSITORY"],
-                      "run_id": int(os.environ["GITHUB_RUN_ID"]),
-                      "source_sha": os.environ["GITHUB_SHA"],
-                      "workflow": "gcp_backend_pusher_auto_deploy.yml",
-                  },
-                  sort_keys=True,
-              )
-              + "\n",
-              encoding="utf-8",
-          )
-          PY
+      - name: Verify deployed development finalization telemetry and alert route
+        env:
+          MONITOR_GRAFANA_TOKEN: ${{ secrets.MONITOR_GRAFANA_TOKEN }}
+        run: |
+          set -euo pipefail
+          umask 077
+          token_file="$(mktemp "$RUNNER_TEMP/omi-grafana-postrollout-token.XXXXXX")"
+          cleanup() { rm -f "$token_file"; unset MONITOR_GRAFANA_TOKEN; }
+          trap cleanup EXIT
+          test -n "$MONITOR_GRAFANA_TOKEN"
+          printf '%s' "$MONITOR_GRAFANA_TOKEN" > "$token_file"
+          python3 backend/scripts/verify_pusher_live_alert_route.py \
+            --grafana-url https://monitor.omiapi.com \
+            --token-file "$token_file" \
+            --phase postrollout \
+            --attempts 12
+
+      - name: Probe deployed development Pusher finalization semantics
+        env:
+          # The development backend authenticates against production Firebase
+          # (--firebase-project based-hardware below), while this lane's deploy
+          # identity belongs to based-hardware-dev, so signing as the deploy
+          # identity can never pass firebase_release_probe_token.py's closed
+          # signer/project_mismatch check -- the failure that froze this lane
+          # on every run since 2026-08-31. Name the Firebase project's own
+          # signer and impersonate it via IAM signJwt instead: no
+          # service-account key is staged on this backend image builder
+          # (the key-secret guard
+          # test_backend_deploy_workflows_do_not_materialize_an_ignored_service_account_key
+          # forbids one here). The deploy identity needs
+          # roles/iam.serviceAccountTokenCreator on that signer.
+          FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT: ${{ vars.FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT }}
+        run: |
+          set -euo pipefail
+          umask 077
+          python3 -m pip install -q websockets==12.0
+          token_file="$(mktemp "$RUNNER_TEMP/omi-pusher-probe-token.XXXXXX")"
+          port_forward_log="$(mktemp "$RUNNER_TEMP/omi-pusher-probe-forward.XXXXXX")"
+          cleanup() {
+            if [[ -n "${port_forward_pid:-}" ]]; then
+              kill "$port_forward_pid" 2>/dev/null || true
+              wait "$port_forward_pid" 2>/dev/null || true
+            fi
+            rm -f "$token_file" "$port_forward_log"
+          }
+          trap cleanup EXIT
+          # api.omiapi.com intentionally forwards Beta clients to production.
+          # Bind BOTH the WebSocket and readback to the authenticated dev cluster.
+          producer_context="$(kubectl config current-context)"
+          if [[ "${{ vars.GCP_PROJECT_ID }}" != based-hardware-dev || "${{ vars.ENV }}" != dev || "$producer_context" != gke_based-hardware-dev_* ]]; then
+            echo "Pusher semantic probe status=FAIL failure_stage=producer_environment_mismatch" >&2
+            exit 1
+          fi
+          if [[ "$(kubectl --context "$producer_context" -n dev-omi-backend auth can-i create pods --subresource=portforward)" != yes ]]; then
+            echo "Development Pusher semantic probe requires pods/portforward permission." >&2
+            exit 1
+          fi
+          # Dev listen is one replica, and its rollouts (gcp_backend_auto_dev.yml,
+          # gcp_backend_listen_helm.yml) hold the deploy-backend-stack lock, not
+          # this one. A listen rollout that lands mid-probe terminates the pod this
+          # port-forward is pinned to, and the probe fails listen_closed_early
+          # (6 runs on 2026-10-19/20, each 15-17 s after a listen helm upgrade).
+          # Retry once, only for that stage and only when the generation of the listen
+          # Deployment changed during the attempt (both reads numeric); every other
+          # failure, including an unreadable generation, is final.
+          listen_generation() {
+            kubectl --context "$producer_context" -n dev-omi-backend get deploy/dev-omi-backend-listen \
+              --request-timeout=30s -o jsonpath='{.metadata.generation}' || echo unknown
+          }
+          probe_attempt() {
+            if [[ -n "${port_forward_pid:-}" ]]; then
+              kill "$port_forward_pid" 2>/dev/null || true
+              wait "$port_forward_pid" 2>/dev/null || true
+            fi
+            kubectl --context "$producer_context" -n dev-omi-backend port-forward \
+              --address=127.0.0.1 service/dev-omi-backend-listen 18080:8080 \
+              >"$port_forward_log" 2>&1 &
+            port_forward_pid=$!
+            ready=false
+            for _ in $(seq 1 30); do
+              if ! kill -0 "$port_forward_pid" 2>/dev/null; then break; fi
+              if grep -q '^Forwarding from 127.0.0.1:18080 -> 8080' "$port_forward_log" && \
+                curl --fail --silent --max-time 2 http://127.0.0.1:18080/health >/dev/null; then
+                ready=true
+                break
+              fi
+              sleep 1
+            done
+            # Setup failures exit the step outright: they are never retried.
+            if [[ "$ready" != true ]]; then
+              echo "Development listen port-forward did not become healthy." >&2
+              exit 1
+            fi
+            # Mint only after tunnel readiness; keep the five-minute token budget
+            # for paced audio and finalization rather than Kubernetes setup.
+            if [[ -z "$FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT" ]]; then
+              echo "Development Pusher semantic probe requires FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT:" >&2
+              echo "a based-hardware signer this lane's deploy identity may impersonate." >&2
+              exit 1
+            fi
+            python3 backend/scripts/firebase_release_probe_token.py \
+              --secret-project "${{ vars.GCP_PROJECT_ID }}" \
+              --firebase-project based-hardware \
+              --signer-service-account "$FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT" \
+              --token-output "$token_file" || exit 1
+            python3 backend/scripts/pusher_semantic_probe.py \
+              --api-url http://127.0.0.1:18080 \
+              --allow-local-http \
+              --bearer-token-file "$token_file" \
+              --deployment-receipt pusher-dev-deployment-receipt.json \
+              --project "${{ vars.GCP_PROJECT_ID }}" \
+              --namespace "${{ vars.ENV }}-omi-backend" \
+              --run-id "$GITHUB_RUN_ID" \
+              --output pusher-dev-semantic-probe.json
+          }
+          kubectl --context "$producer_context" -n dev-omi-backend rollout status deploy/dev-omi-backend-listen --timeout=600s
+          generation_before="$(listen_generation)"
+          if ! probe_attempt; then
+            stage="$(jq -r '.failure_stage // "unknown"' pusher-dev-semantic-probe.json 2>/dev/null || echo unknown)"
+            close_code="$(jq -r '.listen_close_code // "none"' pusher-dev-semantic-probe.json 2>/dev/null || echo none)"
+            generation_after="$(listen_generation)"
+            if [[ "$stage" != listen_closed_early || ! "$generation_before" =~ ^[0-9]+$ || ! "$generation_after" =~ ^[0-9]+$ || "$generation_after" == "$generation_before" ]]; then
+              exit 1
+            fi
+            cp pusher-dev-semantic-probe.json pusher-dev-semantic-probe.attempt1.json
+            echo "::warning title=Pusher probe retried once::attempt 1 failure_stage=$stage listen_close_code=$close_code; dev listen rolled out mid-probe (generation $generation_before -> $generation_after)"
+            kubectl --context "$producer_context" -n dev-omi-backend rollout status deploy/dev-omi-backend-listen --timeout=600s
+            probe_attempt
+          fi
+
+      - name: Upload development Pusher probe diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: pusher-dev-probe-diagnostics
+          path: |
+            pusher-dev-deployment-receipt.json
+            pusher-dev-semantic-probe.json
+            pusher-dev-semantic-probe.attempt1.json
+          if-no-files-found: ignore
+          retention-days: 30
+
+      - name: Record development Pusher qualification evidence
+        run: |
+          python3 backend/scripts/pusher_release_receipt.py record-qualification \
+            --deployment-receipt pusher-dev-deployment-receipt.json \
+            --semantic-probe-evidence pusher-dev-semantic-probe.json \
+            --output pusher-dev-qualification.json
 
       - name: Upload development Pusher qualification
         uses: actions/upload-artifact@v7
         with:
           name: pusher-dev-qualification
-          path: pusher-dev-qualification.json
+          path: |
+            pusher-dev-qualification.json
+            pusher-dev-deployment-receipt.json
+            pusher-dev-semantic-probe.json
           if-no-files-found: error
           retention-days: 30
 
       - name: Show Output
-        run: echo "Pusher deployed to development environment"
+        run: echo "Pusher deployed and semantically qualified in development; production still requires a protected attributable-canary receipt"

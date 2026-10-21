@@ -8,6 +8,7 @@ import re
 from typing import Any
 
 from models.memories import SubjectAttribution
+from utils.conversations.owner_attribution import OwnerTrust
 
 MEMORY_DECISION_PATH_EVENT = "canonical_memory_decision_path.v1"
 
@@ -30,6 +31,9 @@ def classify_model_about(
     normalized_user_name = _normalized_subject_label(user_name)
     if normalized_user_name:
         user_aliases.add(normalized_user_name)
+        first_name = normalized_user_name.split(" ", 1)[0]
+        if len(first_name) >= 2:
+            user_aliases.add(first_name)
     if normalized in user_aliases:
         return "primary_user"
     if normalized in {"unknown", "unclear", "uncertain"}:
@@ -74,6 +78,8 @@ def emit_memory_capture_decision(
     model_about: str,
     attribution_disagreed: bool,
     distinct_speaker_ids: int,
+    owner_speaker_ids: int,
+    owner_trust: OwnerTrust,
 ) -> None:
     _emit(
         logger,
@@ -87,6 +93,13 @@ def emit_memory_capture_decision(
             "model_about": model_about,
             "attribution_disagreed": attribution_disagreed,
             "distinct_speaker_ids": distinct_speaker_ids,
+            # How many distinct speakers the diarizer marked as the account owner.
+            # An account has exactly one owner, so 0 means the owner was never
+            # identified in this conversation and >1 is ambiguous owner attribution --
+            # neither is derivable from distinct_speaker_ids alone, and both are the
+            # states that decide whether a memory can ever be promoted.
+            "owner_speaker_ids": owner_speaker_ids,
+            "owner_trust": owner_trust,
         },
     )
 
@@ -118,6 +131,31 @@ def emit_memory_promotion_decision(
             "aboutness": aboutness,
             "basis_for_memory": basis_for_memory,
             "confidence": confidence,
+        },
+    )
+
+
+def emit_memory_sweep_decision(
+    logger: logging.Logger,
+    *,
+    uid: str,
+    local_date: str,
+    dropped_subjectless: int,
+    dropped_basis_proposed: int,
+    demoted_owner_untrusted: int,
+    skipped_duplicate_lookup: int,
+) -> None:
+    """Emit text-free candidate-gate counters for one completed-day sweep."""
+    _emit(
+        logger,
+        {
+            "stage": "sweep",
+            "uid": uid,
+            "local_date": local_date,
+            "dropped_subjectless": dropped_subjectless,
+            "dropped_basis_proposed": dropped_basis_proposed,
+            "demoted_owner_untrusted": demoted_owner_untrusted,
+            "skipped_duplicate_lookup": skipped_duplicate_lookup,
         },
     )
 

@@ -36,7 +36,6 @@ def configure_embedding_fakes(httpserver):
       - POST /v2/embedding  (speaker embedding)
       - POST /v1/diarization (speaker diarization)
       - POST /v1/vad         (voice activity detection)
-      - POST /v1/speaker-identification (speaker matching)
     """
 
     # Speaker embedding (hosted diarizer)
@@ -54,11 +53,4 @@ def configure_embedding_fakes(httpserver):
     # VAD
     httpserver.expect_request("/v1/vad", method="POST").respond_with_json(
         make_vad_response(), status=200, content_type="application/json"
-    )
-
-    # Speaker identification
-    httpserver.expect_request("/v1/speaker-identification", method="POST").respond_with_json(
-        {"matched_speaker_id": None, "confidence": 0.0, "candidates": []},
-        status=200,
-        content_type="application/json",
     )

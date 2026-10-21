@@ -1,0 +1,10 @@
+{
+  "version": "0.12.352",
+  "date": "2026-09-15",
+  "changes": [
+    "Claude Code chat sessions now persist across reboot and sign-in again after your session expires, instead of clearing the session list.",
+    "Offline voice dictation no longer waits indefinitely when its on-device speech model cannot finish loading — the turn now stops after a bounded wait instead of leaving Omi stuck",
+    "Fixed custom API keys being cleared without explanation and stopped unvalidated or rotated keys from being used before enrollment",
+    "On-device transcription now closes on a pause in a noisy room instead of waiting out its 10-second window, so spoken commands reach Omi sooner"
+  ]
+}

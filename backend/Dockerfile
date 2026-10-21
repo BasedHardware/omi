@@ -9,30 +9,13 @@ RUN python -m venv /opt/venv
 RUN python3 -m pip install --no-cache-dir "uv==${UV_VERSION}"
 ENV PATH="/opt/venv/bin:$PATH"
 
-# Install build dependencies for liblc3
+# Build locked source distributions such as webrtcvad.
 RUN apt-get update && apt-get install -y \
     git \
     gcc \
     g++ \
-    meson \
-    ninja-build \
     python3-dev \
     && rm -rf /var/lib/apt/lists/*
-
-# Build liblc3 and create wheel
-WORKDIR /tmp
-RUN git clone https://github.com/google/liblc3.git && \
-    cd liblc3 && \
-    meson setup build && \
-    cd build && \
-    meson install && \
-    ldconfig && \
-    # Stage shared libs to a fixed path (meson install path varies by arch)
-    mkdir -p /opt/liblc3 && \
-    cp /usr/local/lib/*/liblc3.so* /opt/liblc3/ 2>/dev/null || \
-    cp /usr/local/lib/liblc3.so* /opt/liblc3/ && \
-    cd /tmp/liblc3 && \
-    python3 -m pip wheel --no-cache-dir --wheel-dir /tmp/wheels .
 
 # Install Python requirements from the checked-in runtime lock.
 WORKDIR /opt/venv
@@ -43,7 +26,6 @@ FROM ${PYTHON_BASE_IMAGE}
 
 WORKDIR /app
 ENV PATH="/opt/venv/bin:$PATH"
-ENV LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH
 
 # Patch OS packages in this layer before installing runtime deps (#7136).
 RUN apt-get update && apt-get -y dist-upgrade \
@@ -55,27 +37,27 @@ RUN apt-get update && apt-get -y dist-upgrade \
 # Use soname-only form so ld.so resolves via standard search paths (arch-portable)
 ENV LD_PRELOAD=libjemalloc.so.2
 
-# Copy compiled liblc3 library from builder staging dir
-COPY --from=builder /opt/liblc3/ /usr/local/lib/
-COPY --from=builder /tmp/wheels /tmp/wheels
-
-# Install liblc3 Python package and set library path
-RUN ldconfig && \
-    pip install --no-cache-dir /tmp/wheels/*.whl && \
-    rm -rf /tmp/wheels
-
 COPY --from=builder /opt/venv /opt/venv
 COPY .github/scripts/desktop_release_manifest.py /app/desktop_release_manifest_contract.py
 COPY backend/ .
 
+# Precompile first-party bytecode. site-packages is already compiled by
+# `uv pip sync --compile-bytecode`, but /app was not, so every cold instance
+# recompiled ~800 imported modules (~11 MB of source) before uvicorn could
+# bind. Timestamp-mode .pyc files stay valid for this immutable image; a
+# bind-mounted or edited source still invalidates and recompiles normally.
+# Kept in the same RUN as the chown so the .pyc files are not duplicated
+# across two layers.
+#
 # Run as a non-root user: a compromise of the app process (e.g. via a
 # dependency RCE) shouldn't hand the attacker root inside the container by
 # default. /app needs to stay writable — sync.py writes uploaded audio to a
 # relative `syncing/<uid>/` directory under the working dir at runtime.
-RUN groupadd --system --gid 10001 omi && \
+RUN python -m compileall -q -j 0 -x '(^|/)tests/' /app && \
+    groupadd --system --gid 10001 omi && \
     useradd --system --uid 10001 --gid omi --no-create-home omi && \
     chown -R omi:omi /app
 USER omi
 
 EXPOSE 8080
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080", "--loop", "uvloop"]
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080", "--loop", "uvloop", "--timeout-graceful-shutdown", "60"]

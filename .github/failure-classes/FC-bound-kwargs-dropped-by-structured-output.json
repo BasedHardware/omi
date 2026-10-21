@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "FC-bound-kwargs-dropped-by-structured-output",
+  "violated_contract": "Keyword arguments bound onto a LangChain chat model before with_structured_output must still reach the provider. RunnableBinding does not define with_structured_output, so the lookup forwards to the unbound model and the bound kwargs are silently dropped. On GPT-5.6 this drops prompt_cache_options, which is the difference between a readable cached prefix and a full-price uncached call.",
+  "canonical_prevention": "Bind extra_body and prompt_cache_key after with_structured_output (prompt_cache.bind_explicit_cache / with_cache_write_opt_out). Guard with a test that asserts the invoked runnable's kwargs, not the arguments passed to get_llm.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_prompt_cache_wire_payload.py",
+    "backend/tests/unit/test_mentor_gate_prompt_cache.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/llm/"
+  ],
+  "status": "open"
+}

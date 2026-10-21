@@ -5,8 +5,11 @@ description: Proactive model clients resolve through the non-production desktop 
 app: non-prod
 covers:
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/GeminiClient.swift
-  - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ProactiveLaneClient.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/GeminiLane.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/GeminiProxyRequestHeaders.swift
+  - desktop/macos/Desktop/Sources/Services/SubscriptionEntitlementService.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Services/EmbeddingService.swift
+  - desktop/macos/Desktop/Sources/Rewind/Core/MemoryLedgerMetadata.swift
   - desktop/macos/Desktop/Sources/DesktopAutomationOpenOmiShortcutQA.swift
 preconditions:
   - automation_bridge_ready
@@ -20,6 +23,9 @@ steps:
       result.detail.gemini_proxy_base_url: https://desktop-backend-dt5lrfkkoa-uc.a.run.app/
       result.detail.embedding_proxy_base_url: https://desktop-backend-dt5lrfkkoa-uc.a.run.app/
       result.detail.proactivity_base_url: https://desktop-backend-dt5lrfkkoa-uc.a.run.app/
+      result.detail.gemini_helper_sample_lane: task_extraction
+      result.detail.gemini_helper_sample_workload: extraction
+      result.detail.gemini_helper_sample_client_platform: macos
 
   - id: S2
     name: Logs are clean

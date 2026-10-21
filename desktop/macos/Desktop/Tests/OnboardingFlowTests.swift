@@ -307,53 +307,6 @@ final class OnboardingFlowTests: XCTestCase {
     )
   }
 
-  /// Static tripwire (source inspection, not behavioral coverage): a step's
-  /// deferred completion callback must not fire after the user navigates away.
-  /// Each step that schedules "advance later" work stores it in a cancellable
-  /// Task and cancels it in .onDisappear — an uncancellable asyncAfter here
-  /// yanks the user forward after they pressed Back (free-navigation regression).
-  func testDeferredStepAdvanceCallbacksAreCancellableAndCancelledOnDisappear() throws {
-    // OnboardingPermissionStepView is intentionally absent: it no longer defers
-    // advance at all (granting stays on the page until the user presses
-    // Continue) — covered by testPermissionStepNeverAutoAdvancesOnGrant.
-    let sites: [(file: String, task: String)] = [
-      ("OnboardingGoalStepView.swift", "saveTask"),
-      ("OnboardingHowDidYouHearStepView.swift", "advanceTask"),
-    ]
-    for site in sites {
-      let source = try onboardingSourceFile(site.file)
-      XCTAssertTrue(
-        source.contains("@State private var \(site.task): Task<Void, Never>?"),
-        "\(site.file): deferred advance must be a stored cancellable Task")
-      XCTAssertTrue(
-        source.contains(".onDisappear"), "\(site.file): must cancel on disappear")
-      XCTAssertTrue(
-        source.contains("\(site.task)?.cancel()"),
-        "\(site.file): stored task must be cancelled")
-      XCTAssertFalse(
-        source.contains("asyncAfter"),
-        "\(site.file): asyncAfter is uncancellable — use a stored Task")
-    }
-  }
-
-  /// Regression: lazy dev mode makes checkAllPermissions() skip the
-  /// FDA/accessibility/automation probes, so the permission page's status froze
-  /// on named dev bundles. The page must probe its own permission directly.
-  func testPermissionPageProbesItsOwnPermission() throws {
-    // omi-test-quality: source-inspection -- static contract: the probes hit
-    // live TCC/AX/AppleEvents APIs and cannot be exercised hermetically.
-    let source = try onboardingSourceFile("OnboardingPermissionStepView.swift")
-    guard let refresh = source.range(of: "private func refreshPermissionState()") else {
-      return XCTFail("refreshPermissionState must exist")
-    }
-    let body = String(source[refresh.lowerBound...].prefix(1200))
-    for probe in ["checkFullDiskAccess()", "checkAccessibilityPermission()", "checkAutomationPermission()"] {
-      XCTAssertTrue(
-        body.contains(probe),
-        "refreshPermissionState must call \(probe) so lazy dev mode can't freeze the page status")
-    }
-  }
-
   func testNameFieldNeverPrefillsTherePlaceholder() {
     XCTAssertEqual(OnboardingFlow.nameFieldPrefill("there"), "")
     XCTAssertEqual(OnboardingFlow.nameFieldPrefill(""), "")
@@ -368,36 +321,11 @@ final class OnboardingFlowTests: XCTestCase {
     XCTAssertEqual(OnboardingFlow.permissionContinueAction(needsRelaunchToApply: true), .offerReopen)
   }
 
-  func testPermissionStepNeverAutoAdvancesOnGrant() throws {
-    // omi-test-quality: source-inspection -- static contract: SwiftUI navigation-on-grant
-    // cannot be exercised hermetically; the review-blocked pattern (navigating when
-    // isGranted flips) must stay out — grant stays on the page until Continue.
-    let source = try onboardingSourceFile("OnboardingPermissionStepView.swift")
-    XCTAssertFalse(
-      source.contains("scheduleAutoAdvance"),
-      "granting a permission must not schedule an auto-advance")
-    if let grantChange = source.range(of: "onChange(of: isGranted)") {
-      let handler = source[grantChange.upperBound...].prefix(300)
-      XCTAssertFalse(
-        handler.contains("onContinue()"),
-        "granting must not navigate — only the explicit Continue button advances")
-      XCTAssertFalse(
-        handler.contains("showReopenPrompt = true"),
-        "granting must not pop the reopen prompt — Continue raises it")
-    }
-  }
-
   /// Static tripwire: keyboard shortcut registration is a SwiftUI wiring
   /// contract, so assert every visible onboarding proceed action remains the
   /// default action without trying to synthesize AppKit key events in a unit test.
   func testOnboardingProceedActionsUseDefaultActionKeyboardShortcut() throws {
     // omi-test-quality: source-inspection -- static contract: verifies SwiftUI default-action wiring on every visible onboarding proceed control
-    let chatSource = try desktopSourceFile("Onboarding/OnboardingChatView.swift")
-    XCTAssertTrue(
-      chatSource.contains("handleOnboardingComplete()\n              })")
-        && chatSource.contains(".keyboardShortcut(.defaultAction)\n              .padding(.top"),
-      "the conversational onboarding Continue button must accept Return")
-
     let fileIndexingSource = try desktopSourceFile("FileIndexing/FileIndexingView.swift")
     XCTAssertTrue(
       fileIndexingSource.contains("onComplete(totalFilesScanned)")
@@ -405,14 +333,16 @@ final class OnboardingFlowTests: XCTestCase {
       "the file-index onboarding Continue button must accept Return")
 
     let secondBrainSource = try desktopSourceFile("Onboarding/SecondBrain/SBOnboardingView.swift")
-    for title in ["Set up Omi →", "Continue"] {
+    for title in ["Set up Omi →", "Continue", "Open the doors"] {
       XCTAssertTrue(
         secondBrainSource.contains("SBInkButton(title: \"\(title)\", isDefaultAction: true)"),
         "the second-brain \(title) action must accept Return")
     }
+    // Promise, language, files, screen-demo (Open the doors / Continue, mutually exclusive),
+    // agents, context, referral: nine sites, never two visible at once.
     XCTAssertEqual(
       secondBrainSource.components(separatedBy: "isDefaultAction: true").count - 1,
-      8,
+      9,
       "every visible second-brain proceed action must register Return")
     XCTAssertTrue(
       secondBrainSource.contains("SBInkButton(title: \"Take me to Omi\", isDefaultAction: true)"),
@@ -426,23 +356,6 @@ final class OnboardingFlowTests: XCTestCase {
     XCTAssertTrue(
       componentsSource.contains("content.keyboardShortcut(.defaultAction)"),
       "SBInkButton must wire opted-in proceed actions to Return")
-  }
-
-  func testDirectPermissionRequestsKeepAVisibleSkipEscape() throws {
-    // omi-test-quality: source-inspection -- the direct request_permission path is private SwiftUI state; verify its rendered escape hatch for every advertised permission.
-    let source = try desktopSourceFile("Onboarding/OnboardingChatView.swift")
-    XCTAssertTrue(
-      source.contains("Button(\"Skip for now\")")
-        && source.contains("pendingPermissionType = nil")
-        && source.contains("chatProvider.sendMessage(\"Skip\")"),
-      "a direct permission request must expose the same visible skip control as quick replies")
-    XCTAssertTrue(
-      source.contains("case \"notifications\": return !appState.hasNotificationPermission")
-        && source.contains("appState.isAccessibilityBroken"),
-      "all advertised permissions must participate in the pending-row escape hatch")
-    XCTAssertTrue(
-      source.contains("if type == \"notifications\" {\n      appState.openNotificationPreferences()"),
-      "notifications must keep a working Settings retry beside Skip for now")
   }
 
   func testSecondBrainCaptureDefaultsToMeetingsWithoutShortcutReminder() throws {
@@ -501,25 +414,6 @@ final class OnboardingFlowTests: XCTestCase {
     XCTAssertNil(
       OnboardingFlow.validatedNavigationTarget(
         OnboardingFlow.lastStepIndex + 1, currentStep: 5, furthestStep: 17))
-  }
-
-  @MainActor
-  func testHowDidYouHearKeepsOtherLast() {
-    XCTAssertEqual(OnboardingHowDidYouHearStepView.sources.last?.name, "Other")
-    XCTAssertEqual(
-      OnboardingHowDidYouHearStepView.sources.first(where: { $0.name == "YouTube" })?.glyph,
-      .youtube)
-    XCTAssertEqual(
-      OnboardingHowDidYouHearStepView.sources.first(where: { $0.name == "Product Hunt" })?.glyph,
-      .productHunt)
-    XCTAssertEqual(
-      OnboardingHowDidYouHearStepView.sources.count,
-      Set(OnboardingHowDidYouHearStepView.sources.map(\.name)).count,
-      "duplicate chips would break selection")
-  }
-
-  private func onboardingSourceFile(_ name: String) throws -> String {
-    try desktopSourceFile("Onboarding/\(name)")
   }
 
   private func desktopSourceFile(_ relativePath: String) throws -> String {

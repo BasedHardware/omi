@@ -170,6 +170,47 @@ import XCTest
         "WS reconnect must force-refresh auth after the first attempt")
     }
 
+    func testLongLivedModelRequestsRecoverAfterExpiryAndOfflineRefresh() async throws {
+      let auth = makeAuthWithUserDefaultsStorage()
+      var now = Date(timeIntervalSince1970: 1_000_000)
+      auth.tokenRefreshHooks.now = { now }
+      let payload = Data("{\"user_id\":\"model-owner\"}".utf8).base64EncodedString()
+      let initial = "test.\(payload).initial"
+      let renewed = "test.\(payload).renewed"
+      try auth.saveTokens(idToken: initial, refreshToken: "inert-refresh", expiresIn: 3600, userId: "model-owner")
+      UserDefaults.standard.set("model-owner", forKey: .authUserId)
+      var online = false
+      var refreshCount = 0
+      auth.tokenRefreshHooks.dataForRequest = { request in
+        refreshCount += 1
+        guard online else { throw URLError(.notConnectedToInternet) }
+        let body = try JSONSerialization.data(withJSONObject: [
+          "id_token": renewed, "refresh_token": "inert-refresh", "expires_in": "3600", "user_id": "model-owner",
+        ])
+        let url = try XCTUnwrap(request.url)
+        let response = try XCTUnwrap(HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil))
+        return (body, response)
+      }
+      let request = {
+        await AgentModelCredentials.resolve(
+          isCurrent: { true },
+          fetch: {
+            ["Authorization": try await auth.getAuthHeader(expectedUserId: "model-owner")]
+          })
+      }
+      let first = await request()
+      XCTAssertNotNil(first.headers)
+      now = now.addingTimeInterval(15 * 3600)
+      let offline = await request()
+      XCTAssertNil(offline.headers)
+      XCTAssertEqual(offline.failureCode, "transport_interruption")
+      online = true
+      let recovered = await request()
+      XCTAssertNil(recovered.failureCode)
+      XCTAssertTrue(recovered.headers?["Authorization"] == "Bearer \(renewed)")
+      XCTAssertEqual(refreshCount, 2)
+    }
+
     private func makeAuthWithUserDefaultsStorage() -> AuthService {
       let auth = AuthService()
       auth.tokenStorageHooks = AuthService.TokenStorageHooks(

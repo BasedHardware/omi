@@ -34,7 +34,11 @@ export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams;
     const days = Math.min(parseInt(searchParams.get("days") || "30", 10), 90);
 
-    if (cache && cache.days === days && Date.now() - cache.timestamp < CACHE_TTL) {
+    if (
+      cache &&
+      cache.days === days &&
+      Date.now() - cache.timestamp < CACHE_TTL
+    ) {
       return NextResponse.json({ data: cache.data, days });
     }
 
@@ -80,7 +84,8 @@ export async function GET(request: NextRequest) {
       const last = data[data.length - 1];
       last.crashes = Number(rollCrashes);
       last.users = Number(rollUsers);
-      last.crashFreeRate = Math.round((1 - Number(rollCrashes) / Number(rollUsers)) * 1000) / 10;
+      last.crashFreeRate =
+        Math.round((1 - Number(rollCrashes) / Number(rollUsers)) * 1000) / 10;
     }
     cache = { data, days, timestamp: Date.now() };
     return NextResponse.json({ data, days });
@@ -93,17 +98,23 @@ export async function GET(request: NextRequest) {
   }
 }
 
-function buildDateSeries(
+export function buildDateSeries(
   days: number,
   crashMap: Record<string, number>,
   dauMap: Record<string, number>
 ): CrashRatePoint[] {
   const toDate = new Date();
-  const fromDate = new Date();
-  fromDate.setDate(fromDate.getDate() - days);
+  const fromDate = new Date(toDate);
+  fromDate.setUTCDate(fromDate.getUTCDate() - days);
 
+  // UTC getters, because PostHog buckets these rows with `toDate(timestamp)`,
+  // which is UTC. Local-time keys shifted every bucket by a day on any runtime
+  // west of Greenwich, so the joined counts landed on the wrong dates.
   const formatDate = (d: Date) =>
-    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(
+      2,
+      "0"
+    )}-${String(d.getUTCDate()).padStart(2, "0")}`;
 
   const data: CrashRatePoint[] = [];
   const current = new Date(fromDate);
@@ -111,9 +122,10 @@ function buildDateSeries(
     const dateStr = formatDate(current);
     const crashes = crashMap[dateStr] ?? 0;
     const users = dauMap[dateStr] ?? 0;
-    const crashFreeRate = users > 0 ? Math.round((1 - crashes / users) * 1000) / 10 : 100;
+    const crashFreeRate =
+      users > 0 ? Math.round((1 - crashes / users) * 1000) / 10 : 100;
     data.push({ date: dateStr, crashes, users, crashFreeRate });
-    current.setDate(current.getDate() + 1);
+    current.setUTCDate(current.getUTCDate() + 1);
   }
   return data;
 }

@@ -52,6 +52,50 @@ final class ChatSentenceSpacingTests: XCTestCase {
     )
   }
 
+  func testDoesNotMangleDoubleBacktickSpan() {
+    // A double-backtick span is one span: its contents are code, not prose
+    // between single backticks.
+    XCTAssertEqual(
+      ChatProvider.normalizeAssistantSentenceSpacing("Call ``foo.Bar`` here.Next"),
+      "Call ``foo.Bar`` here. Next"
+    )
+  }
+
+  func testPreservesSpanCrossingLineBreak() {
+    // The renderer pairs a span across a soft line break, so the words inside
+    // the span stay code on the later line too.
+    XCTAssertEqual(
+      ChatProvider.normalizeAssistantSentenceSpacing("Use `pd\n.DataFrame` now.Next"),
+      "Use `pd\n.DataFrame` now. Next"
+    )
+    // And when the span never closes, the whole tail stays code, as before.
+    XCTAssertEqual(
+      ChatProvider.normalizeAssistantSentenceSpacing("Use `pd\n.DataFrame now.Next"),
+      "Use `pd\n.DataFrame now.Next"
+    )
+  }
+
+  func testFenceClosesOnlyOnMatchingFenceCharacter() {
+    // A ~~~ line inside a ``` block is fenced content, not a closer.
+    let input = """
+      Here is code.Read it:
+      ```python
+      ~~~ tiles
+      df = pd.DataFrame()
+      ```
+      Runs fine.Enjoy
+      """
+    let expected = """
+      Here is code. Read it:
+      ```python
+      ~~~ tiles
+      df = pd.DataFrame()
+      ```
+      Runs fine. Enjoy
+      """
+    XCTAssertEqual(ChatProvider.normalizeAssistantSentenceSpacing(input), expected)
+  }
+
   func testUnterminatedInlineBacktickTreatsRemainderAsCode() {
     // A backtick still open mid-stream: everything after it stays verbatim.
     XCTAssertEqual(

@@ -1,0 +1,7 @@
+{
+  "version": "0.12.233",
+  "date": "2026-08-28",
+  "changes": [
+    "Settings is lighter: the Task, Insight, and Memory Assistant panes and three floating-bar rows are hidden"
+  ]
+}

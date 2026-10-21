@@ -5,8 +5,10 @@
 // and the copy the UI shows can never drift apart.
 //
 // Mirrors macOS's memory-export MCP flow: a hosted MCP key authenticates the
-// external tool against Omi's hosted MCP SSE endpoint, and each config-write
-// agent (Claude Code, Codex, OpenClaw, Hermes) points its MCP client there.
+// external tool against Omi's canonical hosted MCP endpoint (Streamable HTTP;
+// the backend keeps /v1/mcp/sse as a permanent compatibility alias), and each
+// config-write agent (Claude Code, Codex, OpenClaw, Hermes) points its MCP
+// client there.
 
 /** The MCP server entry key every config writer uses (Mac parity). */
 export const MCP_SERVER_KEY = 'omi-memory'
@@ -14,21 +16,30 @@ export const MCP_SERVER_KEY = 'omi-memory'
 /** Display name the hosted MCP key is minted under. */
 export const MCP_KEY_NAME = 'Omi Desktop'
 
-/** Path of Omi's hosted MCP SSE endpoint, appended to the API base. */
-export const MCP_SSE_PATH = '/v1/mcp/sse'
+/** Path of Omi's canonical hosted MCP endpoint (Streamable HTTP). */
+export const MCP_PATH = '/v1/mcp'
+
+/** Legacy SSE-alias path older installs may still point at — a migration
+ *  target ("needs update"), never the canonical endpoint. */
+export const MCP_LEGACY_SSE_PATH = '/v1/mcp/sse'
 
 /** Path of the hosted MCP key REST collection. */
 export const MCP_KEYS_PATH = '/v1/mcp/keys'
 
-/** Build the hosted MCP SSE URL an external tool connects to. */
+/** Build the canonical hosted MCP URL an external tool connects to. */
 export function mcpServerUrl(apiBase: string): string {
-  return `${apiBase.replace(/\/+$/, '')}${MCP_SSE_PATH}`
+  return `${apiBase.replace(/\/+$/, '')}${MCP_PATH}`
+}
+
+/** The legacy SSE-alias URL older installs may still carry. */
+export function mcpLegacyServerUrl(apiBase: string): string {
+  return `${apiBase.replace(/\/+$/, '')}${MCP_LEGACY_SSE_PATH}`
 }
 
 /**
  * The `mcpServers["omi-memory"]` entry written into an HTTP-transport MCP client
- * config (Claude Code's ~/.claude.json). `type: "http"` is Omi's hosted SSE
- * transport; the hosted key rides as a Bearer header.
+ * config (Claude Code's ~/.claude.json). `type: "http"` is Omi's hosted
+ * Streamable HTTP transport; the hosted key rides as a Bearer header.
  */
 export interface McpHttpServerEntry {
   type: 'http'
@@ -90,6 +101,7 @@ export const MCP_CONFIG_CONNECTORS: readonly McpConfigConnector[] = [
 /** The per-connector runtime state the UI renders. */
 export type McpConnectorStatusKind =
   | 'connected' // MCP entry present in the tool's config
+  | 'needsUpdate' // entry present with the SAME key but the legacy /sse URL → "Update"
   | 'available' // tool present, not yet connected → offer "Connect"
   | 'requiresTool' // CLI/config not detected → "requires <tool>" (no shell attempt)
 

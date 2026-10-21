@@ -1,13 +1,17 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import time
 from collections.abc import Mapping
 from copy import deepcopy
+from functools import lru_cache
+from openai import AsyncOpenAI, OpenAI
 from typing import Any, TypeVar, cast
 
 import httpx
+import tiktoken
 from jsonschema import ValidationError as JsonSchemaValidationError
 from jsonschema import validate as validate_json_schema
 from langchain_openai import ChatOpenAI
@@ -17,6 +21,8 @@ from utils.http_client import get_llm_gateway_client, get_llm_gateway_semaphore
 from utils.llm.gateway_observability import record_direct_exception_surface, record_gateway_request_result
 from utils.llm.gateway_resilience import gateway_circuit, gateway_transport_timeout, observe_gateway_first_byte
 from utils.llm.usage_tracker import get_current_context
+
+logger = logging.getLogger(__name__)
 
 LLM_GATEWAY_SERVICE_TOKEN_ENV_VAR = 'OMI_LLM_GATEWAY_SERVICE_TOKEN'
 LEGACY_LLM_GATEWAY_SERVICE_TOKEN_ENV_VAR = 'LLM_GATEWAY_SERVICE_TOKEN'
@@ -40,6 +46,11 @@ _CHAT_AGENT_ROUTE_GATEWAY_VALUES = frozenset({'gateway', '1', 'true', 'yes', 'lu
 LLM_GATEWAY_CALLER = 'backend'
 LLM_GATEWAY_USER_UID_HEADER = 'X-Omi-User-Uid'
 LLM_GATEWAY_USAGE_FEATURE_HEADER = 'X-Omi-LLM-Feature'
+LLM_GATEWAY_APP_PLATFORM_HEADER = 'X-Omi-App-Platform'
+# Closed enum, mirroring the gateway's own normalization. Client-supplied platform
+# strings are never forwarded verbatim: unknown values are dropped so accounting
+# stays aggregatable and arbitrary client text never reaches an outbound header.
+LLM_GATEWAY_APP_PLATFORMS = frozenset({'desktop', 'mobile', 'web'})
 CHAT_EXTRACTION_TIMEOUT_SECONDS = 10.0
 BACKGROUND_CHAT_EXTRACTION_TIMEOUT_SECONDS = 35.0
 GATEWAY_TRANSPORT_STATUS_CODES = frozenset({502, 504})
@@ -47,6 +58,13 @@ GATEWAY_TRANSPORT_STATUS_CODES = frozenset({502, 504})
 StructuredOutput = TypeVar('StructuredOutput', bound=BaseModel)
 JsonDict = dict[str, Any]
 JsonList = list[Any]
+_BYOK_GATEWAY_HEADER_PREFIX = 'X-Omi-Byok-'
+_BYOK_GATEWAY_HEADER_SUFFIX = '-Key'
+
+
+def byok_gateway_header_name(provider: str) -> str:
+    """Envelope header that forwards a user's BYOK key to the gateway."""
+    return f'{_BYOK_GATEWAY_HEADER_PREFIX}{provider.strip().lower()}{_BYOK_GATEWAY_HEADER_SUFFIX}'
 
 
 class PublicSharedConversationChatGatewayUnavailable(Exception):
@@ -81,6 +99,22 @@ class GatewayContextChatOpenAI(ChatOpenAI):
         super().__init__(*args, **kwargs)
         self._omi_gateway_feature = omi_gateway_feature
 
+    def _convert_chunk_to_generation_chunk(self, chunk, default_chunk_class, base_generation_info):
+        result = super()._convert_chunk_to_generation_chunk(chunk, default_chunk_class, base_generation_info)
+        usage = chunk.get('usage')
+        if result is not None and isinstance(usage, dict):
+            # LangChain currently drops GPT-5.6 cache-write tokens from UsageMetadata.
+            # Preserve only numeric usage, never provider text or arbitrary metadata.
+            details = usage.get('prompt_tokens_details') or {}
+            if isinstance(chunk.get('model'), str):
+                result.message.response_metadata.setdefault('model_name', chunk['model'])
+            result.message.response_metadata['omi_token_usage'] = {
+                'prompt_tokens': usage.get('prompt_tokens', 0),
+                'completion_tokens': usage.get('completion_tokens', 0),
+                'prompt_tokens_details': {k: details.get(k, 0) for k in ('cached_tokens', 'cache_write_tokens')},
+            }
+        return result
+
     def _get_request_payload(self, input_: Any, *, stop: list[str] | None = None, **kwargs: Any) -> dict:
         payload = super()._get_request_payload(input_, stop=stop, **kwargs)
         raw_headers = payload.get('extra_headers')
@@ -101,6 +135,50 @@ class GatewayContextChatOpenAI(ChatOpenAI):
 
 def is_gateway_transport_status_code(status_code: object) -> bool:
     return isinstance(status_code, int) and status_code in GATEWAY_TRANSPORT_STATUS_CODES
+
+
+def is_gateway_route_absent(error: object) -> bool:
+    """Whether a gateway failure means the deployed gateway has no such route.
+
+    A gateway older than its caller answers an unknown path with Starlette's
+    bare ``{"detail": "Not Found"}``. A gateway that owns the route answers a
+    real rejection with an OpenAI-shaped ``{"error": {...}}`` body -- and
+    ``model_not_found`` is also a 404. So the *body*, not the status, is what
+    separates "server predates client" from "server rejected this request";
+    treating every 404 as route-absence would silently swallow lane
+    misconfiguration.
+    """
+    if not isinstance(error, httpx.HTTPStatusError):
+        return False
+    if error.response.status_code != 404:
+        return False
+    try:
+        body: object = error.response.json()
+    except Exception:
+        # A non-JSON 404 is not something this gateway's error path can emit.
+        return True
+    return not (isinstance(body, Mapping) and isinstance(body.get('error'), Mapping))
+
+
+def is_gateway_model_not_found(error: object) -> bool:
+    """Whether an OpenAI-compatible gateway rejected an unknown lane id.
+
+    The OpenAI SDK exposes the gateway's ``error.code`` as ``error.code``;
+    direct-provider file 404s have the same HTTP status but no
+    ``model_not_found`` code. Keep that distinction closed so deploy skew can
+    degrade without misclassifying a genuinely deleted attachment.
+    """
+    if getattr(error, 'status_code', None) != 404:
+        return False
+    if getattr(error, 'code', None) == 'model_not_found':
+        return True
+    body = getattr(error, 'body', None)
+    if not isinstance(body, Mapping):
+        return False
+    if body.get('code') == 'model_not_found':
+        return True
+    nested_error = body.get('error')
+    return isinstance(nested_error, Mapping) and nested_error.get('code') == 'model_not_found'
 
 
 def _as_json_dict(value: object) -> JsonDict | None:
@@ -147,6 +225,17 @@ def should_route_features_through_gateway() -> bool:
         raise RuntimeError(
             f'{LLM_GATEWAY_FEATURE_MODE_ENV_VAR}=gateway outside dev/local requires {LLM_GATEWAY_URL_ENV_VAR}'
         )
+    return True
+
+
+def should_route_company_paid_features_through_gateway() -> bool:
+    """Company-paid generation is gateway-only; the rollout flag is no longer a fallback.
+
+    Keep ``should_route_features_through_gateway`` for compatibility surfaces
+    that still have an explicit migration state. Core ``get_llm`` callers use
+    this invariant so an unset flag or gateway outage can never send paid
+    requests directly to a provider.
+    """
     return True
 
 
@@ -350,7 +439,7 @@ def record_chat_extraction_gateway_result(*, feature: str, outcome: str, reason:
     record_gateway_request_result(feature=feature, outcome=outcome, reason=reason, mode=mode)
 
 
-def _gateway_headers(*, feature: str | None = None) -> dict[str, str]:
+def _gateway_headers(*, feature: str | None = None, platform: str | None = None) -> dict[str, str]:
     headers = {
         'Content-Type': 'application/json',
         'X-Omi-Service-Caller': LLM_GATEWAY_CALLER,
@@ -358,12 +447,18 @@ def _gateway_headers(*, feature: str | None = None) -> dict[str, str]:
     service_token = get_llm_gateway_service_token()
     if service_token is not None:
         headers['Authorization'] = f'Bearer {service_token}'
-    headers.update(_gateway_usage_headers(feature=feature))
+    headers.update(_gateway_usage_headers(feature=feature, platform=platform))
     return headers
 
 
-def llm_gateway_headers(*, feature: str | None = None) -> dict[str, str]:
-    return _gateway_headers(feature=feature)
+def llm_gateway_headers(*, feature: str | None = None, platform: str | None = None) -> dict[str, str]:
+    """Gateway headers for one request.
+
+    ``platform`` is the client app platform when the caller knows it. It is
+    normalized to ``LLM_GATEWAY_APP_PLATFORMS``; an absent or unrecognized value
+    sends no header at all, so the attempt stays unattributed rather than guessed.
+    """
+    return _gateway_headers(feature=feature, platform=platform)
 
 
 def _chat_structured_payload(prompt: str, output_model: type[BaseModel], *, feature: str) -> JsonDict:
@@ -541,7 +636,252 @@ def generate_image_via_gateway(
     return cast('Mapping[str, object]', body)
 
 
-def _gateway_usage_headers(*, feature: str | None) -> dict[str, str]:
+FILE_CHAT_VISION_FEATURE = 'file_chat_vision'
+FILE_CHAT_DOCUMENTS_FEATURE = 'file_chat_documents'
+FILE_CHAT_VISION_AUTO_LANE_ID = feature_auto_lane_id(FILE_CHAT_VISION_FEATURE)
+FILE_CHAT_DOCUMENTS_AUTO_LANE_ID = feature_auto_lane_id(FILE_CHAT_DOCUMENTS_FEATURE)
+OPENAI_EMBEDDINGS_AUTO_LANE_ID = 'omi:auto:openai-embeddings'
+GEMINI_EMBEDDINGS_AUTO_LANE_ID = 'omi:auto:gemini-embeddings'
+EMBEDDINGS_TIMEOUT_SECONDS = 30.0
+# text-embedding-3-large rejects a single input over 8192 tokens and a request
+# over 300_000 tokens with HTTP 400. The gateway forwards that 400. LangChain's
+# direct embeddings client already splits under these limits; this hop must too.
+# 8191 matches LangChain's embedding_ctx_length (one under the hard maximum).
+_OPENAI_EMBEDDING_MAX_INPUT_TOKENS = 8191
+_OPENAI_EMBEDDING_MAX_BATCH_TOKENS = 300_000
+_OPENAI_EMBEDDING_MAX_BATCH_ITEMS = 2048
+_FILE_CHAT_GATEWAY_TIMEOUT_SECONDS = 120.0
+
+_file_chat_gateway_async_client: AsyncOpenAI | None = None
+_file_chat_gateway_sync_client: OpenAI | None = None
+
+
+def file_chat_auto_lane_id(*, pdf: bool) -> str:
+    """The gateway file-chat lane for a request: PDFs take the file-part lane."""
+    return FILE_CHAT_DOCUMENTS_AUTO_LANE_ID if pdf else FILE_CHAT_VISION_AUTO_LANE_ID
+
+
+def _file_chat_gateway_default_headers() -> dict[str, str]:
+    headers = {'X-Omi-Service-Caller': LLM_GATEWAY_CALLER}
+    service_token = get_llm_gateway_service_token()
+    if service_token:
+        headers['Authorization'] = f'Bearer {service_token}'
+    return headers
+
+
+def get_file_chat_gateway_async_client() -> AsyncOpenAI:
+    """Async OpenAI SDK client pointed at the gateway's chat-completions surface.
+
+    The gateway is OpenAI-compatible, so file chat keeps its SDK streaming and
+    typed-error handling (``openai.NotFoundError`` / ``BadRequestError`` map to
+    the gateway's OpenAI-shaped error bodies) while the model call lands in the
+    gateway ledger.
+    """
+    global _file_chat_gateway_async_client
+    if _file_chat_gateway_async_client is None:
+        _file_chat_gateway_async_client = AsyncOpenAI(
+            api_key=get_llm_gateway_service_token() or 'omi-gateway',
+            base_url=f'{get_llm_gateway_base_url()}/v1',
+            default_headers=_file_chat_gateway_default_headers(),
+            timeout=_gateway_timeout(_FILE_CHAT_GATEWAY_TIMEOUT_SECONDS),
+            max_retries=0,
+        )
+    return _file_chat_gateway_async_client
+
+
+def get_file_chat_gateway_sync_client() -> OpenAI:
+    """Sync counterpart of :func:`get_file_chat_gateway_async_client`."""
+    global _file_chat_gateway_sync_client
+    if _file_chat_gateway_sync_client is None:
+        _file_chat_gateway_sync_client = OpenAI(
+            api_key=get_llm_gateway_service_token() or 'omi-gateway',
+            base_url=f'{get_llm_gateway_base_url()}/v1',
+            default_headers=_file_chat_gateway_default_headers(),
+            timeout=_gateway_timeout(_FILE_CHAT_GATEWAY_TIMEOUT_SECONDS),
+            max_retries=0,
+        )
+    return _file_chat_gateway_sync_client
+
+
+def file_chat_feature_header(lane_id: str, *, uid: str | None = None) -> dict[str, str]:
+    """Per-request file-chat headers: feature plus the user the spend belongs to.
+
+    The cached SDK client only carries service auth. Attribution has to go on
+    the request or the gateway ledger row is unattributed.
+    """
+    feature = FILE_CHAT_DOCUMENTS_FEATURE if lane_id == FILE_CHAT_DOCUMENTS_AUTO_LANE_ID else FILE_CHAT_VISION_FEATURE
+    headers = _gateway_usage_headers(feature=feature)
+    if uid:
+        headers[LLM_GATEWAY_USER_UID_HEADER] = uid
+    return headers
+
+
+@lru_cache(maxsize=1)
+def _openai_embedding_encoding() -> Any:
+    # text-embedding-3-large uses cl100k. encoding_for_model is the hermetic
+    # test seam (tests/conftest.py stubs tiktoken); get_encoding is not.
+    return tiktoken.encoding_for_model('text-embedding-3-large')
+
+
+def _fit_openai_embedding_text(text: str) -> tuple[str, int]:
+    """Return a provider-accepted string and its token count.
+
+    Empty strings and NUL bytes are rejected by the embeddings gateway / OpenAI
+    with HTTP 400, which aborts the whole batch. A single space keeps positional
+    alignment with the caller's inputs. Over-long text is prefix-truncated to
+    the model context instead of failing the request.
+    """
+    cleaned = text.replace('\x00', '')
+    if not cleaned:
+        return ' ', 1
+    encoding = _openai_embedding_encoding()
+    token_count = len(encoding.encode_ordinary(cleaned))
+    if token_count <= _OPENAI_EMBEDDING_MAX_INPUT_TOKENS:
+        return cleaned, token_count
+    lo, hi = 1, len(cleaned)
+    while lo < hi:
+        mid = (lo + hi + 1) // 2
+        if len(encoding.encode_ordinary(cleaned[:mid])) <= _OPENAI_EMBEDDING_MAX_INPUT_TOKENS:
+            lo = mid
+        else:
+            hi = mid - 1
+    truncated = cleaned[:lo]
+    if not truncated:
+        return ' ', 1
+    return truncated, len(encoding.encode_ordinary(truncated))
+
+
+def _openai_embedding_batches(texts: list[str]) -> list[list[str]]:
+    """Split embedding inputs into requests the gateway and OpenAI will accept."""
+    batches: list[list[str]] = []
+    current: list[str] = []
+    current_tokens = 0
+    changed = 0
+    for text in texts:
+        fitted, token_count = _fit_openai_embedding_text(text)
+        if fitted != text:
+            changed += 1
+        if current and (
+            len(current) >= _OPENAI_EMBEDDING_MAX_BATCH_ITEMS
+            or current_tokens + token_count > _OPENAI_EMBEDDING_MAX_BATCH_TOKENS
+        ):
+            batches.append(current)
+            current = []
+            current_tokens = 0
+        current.append(fitted)
+        current_tokens += token_count
+    if current:
+        batches.append(current)
+    if changed:
+        logger.warning(
+            'normalized openai embedding inputs before gateway post changed=%d batches=%d',
+            changed,
+            len(batches),
+        )
+    return batches
+
+
+def _embedding_vectors(body: object) -> list[list[float]]:
+    if not isinstance(body, Mapping):
+        raise ValueError('gateway embeddings response must be an object')
+    data = body.get('data')
+    if not isinstance(data, list) or not data:
+        raise ValueError('gateway embeddings response has no data')
+    vectors: list[list[float]] = []
+    for item in data:
+        embedding = item.get('embedding') if isinstance(item, Mapping) else None
+        if not isinstance(embedding, list) or not embedding:
+            raise ValueError('gateway embeddings response has an empty vector')
+        vectors.append([float(value) for value in embedding])
+    return vectors
+
+
+def _post_openai_embedding_batch(response: httpx.Response) -> list[list[float]]:
+    response.raise_for_status()
+    body: object = response.json()
+    return _embedding_vectors(body)
+
+
+def invoke_openai_embeddings_gateway(
+    texts: list[str],
+    *,
+    timeout_seconds: float = EMBEDDINGS_TIMEOUT_SECONDS,
+    byok_api_key: str | None = None,
+) -> list[list[float]]:
+    """Sync OpenAI text-embedding-3-large hop through the gateway embeddings lane."""
+    batches = _openai_embedding_batches(texts)
+    if not batches:
+        return []
+    headers = _gateway_headers(feature='openai_embeddings')
+    if byok_api_key:
+        headers[byok_gateway_header_name('openai')] = byok_api_key
+    vectors: list[list[float]] = []
+    with httpx.Client(timeout=_gateway_timeout(timeout_seconds)) as client:
+        for batch in batches:
+            response = client.post(
+                f'{get_llm_gateway_base_url()}/v1/embeddings',
+                headers=headers,
+                json={'model': OPENAI_EMBEDDINGS_AUTO_LANE_ID, 'input': batch},
+            )
+            vectors.extend(_post_openai_embedding_batch(response))
+    return vectors
+
+
+async def ainvoke_openai_embeddings_gateway(
+    texts: list[str],
+    *,
+    timeout_seconds: float = EMBEDDINGS_TIMEOUT_SECONDS,
+    byok_api_key: str | None = None,
+) -> list[list[float]]:
+    """Async counterpart of :func:`invoke_openai_embeddings_gateway`."""
+    batches = _openai_embedding_batches(texts)
+    if not batches:
+        return []
+    headers = _gateway_headers(feature='openai_embeddings')
+    if byok_api_key:
+        headers[byok_gateway_header_name('openai')] = byok_api_key
+    vectors: list[list[float]] = []
+    async with get_llm_gateway_semaphore():
+        client = get_llm_gateway_client()
+        for batch in batches:
+            response = await client.post(
+                f'{get_llm_gateway_base_url()}/v1/embeddings',
+                headers=headers,
+                json={'model': OPENAI_EMBEDDINGS_AUTO_LANE_ID, 'input': batch},
+                timeout=_gateway_timeout(timeout_seconds),
+            )
+            vectors.extend(_post_openai_embedding_batch(response))
+    return vectors
+
+
+def invoke_gemini_embedding_gateway(
+    text: str,
+    *,
+    task_type: str,
+    title: str | None = None,
+    timeout_seconds: float = EMBEDDINGS_TIMEOUT_SECONDS,
+) -> list[float]:
+    """Sync Gemini embedding hop through the gateway (Vertex stays an upstream adapter)."""
+    payload: dict[str, object] = {
+        'model': GEMINI_EMBEDDINGS_AUTO_LANE_ID,
+        'input': [text],
+        'task_type': task_type,
+    }
+    if title:
+        payload['title'] = title
+    with httpx.Client(timeout=_gateway_timeout(timeout_seconds)) as client:
+        response = client.post(
+            f'{get_llm_gateway_base_url()}/v1/embeddings',
+            headers=_gateway_headers(feature='gemini_screen_activity_query_embedding'),
+            json=payload,
+        )
+        response.raise_for_status()
+        body: object = response.json()
+    vectors = _embedding_vectors(body)
+    return vectors[0]
+
+
+def _gateway_usage_headers(*, feature: str | None, platform: str | None = None) -> dict[str, str]:
     context = get_current_context()
     headers: dict[str, str] = {}
     if context is not None and context.uid:
@@ -549,6 +889,9 @@ def _gateway_usage_headers(*, feature: str | None) -> dict[str, str]:
     resolved_feature = context.feature if context is not None and context.feature else feature
     if resolved_feature:
         headers[LLM_GATEWAY_USAGE_FEATURE_HEADER] = resolved_feature
+    normalized_platform = platform.strip().lower() if isinstance(platform, str) else None
+    if normalized_platform in LLM_GATEWAY_APP_PLATFORMS:
+        headers[LLM_GATEWAY_APP_PLATFORM_HEADER] = normalized_platform
     return headers
 
 
@@ -557,3 +900,47 @@ def _gateway_feature_for_current_request(default: str | None) -> str | None:
     if context is not None and context.feature:
         return context.feature
     return default
+
+
+async def run_proactivity_gateway(
+    *, uid: str, item_id: str, producer: str, call_id: str, step: str, request: dict[str, Any]
+) -> dict[str, Any]:
+    """One authenticated v2 call. No retries or direct-provider fallback."""
+    headers = llm_gateway_headers(feature=f'proactivity_v2_{producer}')
+    headers.update(
+        {
+            'X-Omi-User-Uid': uid,
+            'X-Omi-Request-Id': call_id,
+            'X-Omi-Proactivity-Item': item_id,
+            LLM_GATEWAY_USAGE_FEATURE_HEADER: f'proactivity_v2_{producer}',
+            'X-Omi-Proactivity-Producer': producer,
+            'X-Omi-Proactivity-Call': call_id,
+            'X-Omi-Proactivity-Step': step,
+        }
+    )
+    payload = dict(request)
+    payload['model'] = (
+        'omi:auto:jev-decisions' if step in {'prefilter', 'dedupe', 'usefulness'} else 'omi:auto:proactive-notification'
+    )
+    path = '/v1/systemone' if step in {'prefilter', 'dedupe', 'usefulness'} else '/v1/chat/completions'
+    async with get_llm_gateway_semaphore():
+        response = await get_llm_gateway_client().post(
+            get_llm_gateway_base_url() + path,
+            headers=headers,
+            json=payload,
+            timeout=60,
+        )
+    if response.is_error:
+        try:
+            error = response.json().get('error', {})
+        except (ValueError, AttributeError):
+            error = {}
+        if error.get('param') == 'proactivity_admission':
+            from config.proactivity_v2 import ProactivityDenied
+
+            raise ProactivityDenied('gateway_admission_denied')
+    response.raise_for_status()
+    result = response.json()
+    if not isinstance(result, dict):
+        raise ValueError('invalid proactivity gateway response')
+    return result

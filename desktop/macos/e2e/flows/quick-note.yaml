@@ -15,7 +15,7 @@ steps:
     bridge.action:
       name: open_quick_note
     wait:
-      state.selectedTabIndex: 7
+      state.chatFirstRoute: more.rewind
 
   - id: S2
     name: Logs clean

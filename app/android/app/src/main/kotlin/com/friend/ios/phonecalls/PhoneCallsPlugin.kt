@@ -32,11 +32,32 @@ class PhoneCallsPlugin private constructor(
     private var isMuted: Boolean = false
     private var isSpeakerOn: Boolean = false
     private val audioDevice = OmiRecordingAudioDevice()
+    private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
+
+    // Audio emissions drain through ONE main-looper post at a time carrying a
+    // bounded queue of coalesced batches: a blocked main thread delays audio
+    // instead of accumulating queued Handler runnables without bound (the
+    // coalescer's byte caps cannot bound posts that are already queued).
+    // Entries are tagged with a generation so batches queued before call
+    // teardown can never reach the next call's sink.
+    private val audioEmitLock = Any()
+    private val pendingAudioEmissions = ArrayDeque<Triple<Int, ByteArray, Int>>()
+    private var audioEmissionGeneration = 0
+    private var audioDrainPosted = false
+
+    private val audioEventCoalescer = AudioEventCoalescer { data, channel ->
+        offerAudioEmission(data, channel)
+    }
 
     companion object {
         private const val TAG = "PhoneCallsPlugin"
         private const val METHOD_CHANNEL = "com.omi/phone_calls"
         private const val EVENT_CHANNEL = "com.omi/phone_calls/events"
+
+        // Bound on coalesced audio batches queued for main-thread delivery
+        // (each ~100 ms per channel): a blocked main looper drops the oldest
+        // queued batches instead of growing the queue without limit.
+        private const val MAX_PENDING_AUDIO_EMISSIONS = 32
 
         fun registerWith(flutterEngine: FlutterEngine, context: Context) {
             val activity = context as? Activity
@@ -98,6 +119,16 @@ class PhoneCallsPlugin private constructor(
 
         override fun onDisconnected(call: Call, callException: CallException?) {
             resetAudioMode()
+            // Invalidate audio batches already queued for main-thread delivery
+            // BEFORE flushing: a quickly-following new call must not receive
+            // this call's stale queued batches, while the flush's own tail
+            // emission below (the final ~100 ms) still delivers because it is
+            // queued after the bump, under the new generation.
+            synchronized(audioEmitLock) {
+                audioEmissionGeneration++
+            }
+            audioEventCoalescer.flush()
+            audioEventCoalescer.reset()
             if (callException != null) {
                 Log.e(TAG, "Call disconnected with error: ${callException.message}")
                 sendCallStateEvent("failed")
@@ -277,10 +308,60 @@ class PhoneCallsPlugin private constructor(
         }
     }
 
-    private fun sendAudioDataEvent(data: ByteArray, channel: Int) {
-        android.os.Handler(android.os.Looper.getMainLooper()).post {
-            eventSink?.success(mapOf("type" to "audioData", "data" to data, "channel" to channel))
+    /**
+     * Queue one coalesced audio batch for main-thread delivery. Hard cap on
+     * queued entries (oldest dropped) so a blocked main looper delays audio
+     * rather than accumulating queued work; posts at most one drainer at a
+     * time. Entries carry the generation they were queued at so teardown
+     * invalidates anything not yet drained.
+     */
+    private fun offerAudioEmission(data: ByteArray, channel: Int) {
+        synchronized(audioEmitLock) {
+            val entryGeneration = audioEmissionGeneration
+            if (pendingAudioEmissions.size >= MAX_PENDING_AUDIO_EMISSIONS) {
+                pendingAudioEmissions.removeFirst()
+                Log.w(
+                    TAG,
+                    "dropping oldest queued audio emission; main looper stalled (queue=${pendingAudioEmissions.size})"
+                )
+            }
+            pendingAudioEmissions.addLast(Triple(entryGeneration, data, channel))
+            if (!audioDrainPosted) {
+                audioDrainPosted = true
+                mainHandler.post { drainAudioEmissions() }
+            }
         }
+    }
+
+    /**
+     * Drain queued audio emissions on the main thread. Runs at most one at a
+     * time; stale-generation entries (queued before teardown) are skipped.
+     */
+    private fun drainAudioEmissions() {
+        while (true) {
+            val entry: Triple<Int, ByteArray, Int>? = synchronized(audioEmitLock) {
+                // Stale (pre-teardown) entries sit at the head; skip them but
+                // keep draining — current-generation entries (e.g. the flush
+                // tail queued after teardown's bump) may sit behind them.
+                while (pendingAudioEmissions.isNotEmpty() && pendingAudioEmissions.first().first != audioEmissionGeneration) {
+                    pendingAudioEmissions.removeFirst()
+                }
+                if (pendingAudioEmissions.isEmpty()) {
+                    audioDrainPosted = false
+                    null
+                } else {
+                    pendingAudioEmissions.removeFirst()
+                }
+            }
+            if (entry == null) return
+            eventSink?.success(mapOf("type" to "audioData", "data" to entry.second, "channel" to entry.third))
+        }
+    }
+
+    private fun sendAudioDataEvent(data: ByteArray, channel: Int) {
+        // Coalesce ~100 ms per channel; per-buffer main-looper posts could not
+        // keep up with 48 kHz dual-channel call audio.
+        audioEventCoalescer.append(data, channel)
     }
 
     // MARK: - EventChannel.StreamHandler
@@ -291,5 +372,68 @@ class PhoneCallsPlugin private constructor(
 
     override fun onCancel(arguments: Any?) {
         eventSink = null
+    }
+}
+
+/**
+ * Batches 20 ms call-audio buffers into bounded events before they cross the
+ * EventChannel: one main-looper post per ~100 ms per channel instead of one
+ * per buffer. The hard cap is checked FIRST so it can never be shadowed by the
+ * flush threshold; a saturated consumer drops the pending batch rather than
+ * growing without bound. A generation counter invalidates work queued by a
+ * previous call after [reset], so a new call cannot emit the old call's tail.
+ */
+private class AudioEventCoalescer(
+    private val flushBytes: Int = 10_240,
+    private val maxPendingBytes: Int = 40_960,
+    private val emit: (ByteArray, Int) -> Unit
+) {
+    private val lock = Any()
+    private val pending = HashMap<Int, java.io.ByteArrayOutputStream>()
+    private var generation = 0
+
+    fun append(data: ByteArray, channel: Int) {
+        val entryGeneration = generation
+        var toEmit: ByteArray? = null
+        synchronized(lock) {
+            val stream = pending.getOrPut(channel) { java.io.ByteArrayOutputStream() }
+            stream.write(data)
+            when {
+                // Hard cap first: it must win when both thresholds would match.
+                stream.size() > maxPendingBytes -> {
+                    Log.w("AudioEventCoalescer", "dropping ${stream.size()} stalled bytes (channel $channel)")
+                    pending.remove(channel)
+                }
+                stream.size() >= flushBytes -> {
+                    toEmit = stream.toByteArray()
+                    pending.remove(channel)
+                }
+            }
+        }
+        // A reset()/flush() that landed while this frame was coalescing ends the
+        // previous call's emission eligibility; drop instead of crossing calls.
+        if (toEmit != null && generation == entryGeneration) emit(toEmit!!, channel)
+    }
+
+    /** Emit each channel's partial buffer now (teardown must not lose the last ~100 ms),
+     * then invalidate everything still associated with this call. */
+    fun flush() {
+        val toEmit = mutableListOf<Pair<ByteArray, Int>>()
+        synchronized(lock) {
+            for ((channel, stream) in pending) {
+                toEmit.add(stream.toByteArray() to channel)
+            }
+            pending.clear()
+            generation++
+        }
+        toEmit.forEach { (bytes, channel) -> emit(bytes, channel) }
+    }
+
+    /** Drop any partial buffer and invalidate everything still queued for this call. */
+    fun reset() {
+        synchronized(lock) {
+            pending.clear()
+            generation++
+        }
     }
 }

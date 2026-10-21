@@ -8,7 +8,6 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from types import SimpleNamespace
 from typing import Any, Dict, List, Optional
-from unittest.mock import patch
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -43,16 +42,29 @@ def _item(
 class _FakeDoc:
     def __init__(self, data: Dict[str, Any]):
         self.id = data['id']
-        self._data = {k: v for k, v in data.items() if k != 'id'}
+        self.data = {k: v for k, v in data.items() if k != 'id'}
 
     def to_dict(self):
-        return dict(self._data)
+        return dict(self.data)
+
+
+class _FakeAggregation:
+    def __init__(self, count: int, error: Exception | None):
+        self.count = count
+        self.error = error
+
+    def get(self, **kwargs):
+        del kwargs
+        if self.error is not None:
+            raise self.error
+        return [[SimpleNamespace(value=self.count)]]
 
 
 class _FakeQuery:
-    def __init__(self, docs: List[_FakeDoc], filters: Optional[List] = None):
+    def __init__(self, docs: List[_FakeDoc], filters: Optional[List] = None, *, count_error: Any = None):
         self._docs = docs
         self._filters = list(filters or [])
+        self._count_error = count_error
         self._limit = None
         self._offset = 0
         self._select: Optional[List[str]] = None
@@ -61,7 +73,7 @@ class _FakeQuery:
 
     def where(self, *args, **kwargs):
         filt = kwargs.get('filter') or (args[0] if args else None)
-        q = _FakeQuery(self._docs, self._filters + [filt])
+        q = _FakeQuery(self._docs, self._filters + [filt], count_error=self._count_error)
         q._limit = self._limit
         q._offset = self._offset
         q._select = self._select
@@ -71,7 +83,7 @@ class _FakeQuery:
         return self
 
     def select(self, fields):
-        q = _FakeQuery(self._docs, self._filters)
+        q = _FakeQuery(self._docs, self._filters, count_error=self._count_error)
         q._limit = self._limit
         q._offset = self._offset
         q._select = list(fields)
@@ -79,20 +91,20 @@ class _FakeQuery:
         return q
 
     def offset(self, n: int):
-        q = _FakeQuery(self._docs, self._filters)
+        q = _FakeQuery(self._docs, self._filters, count_error=self._count_error)
         q._limit = self._limit
         q._offset = n
         q._select = self._select
         return q
 
     def limit(self, n: int):
-        q = _FakeQuery(self._docs, self._filters)
+        q = _FakeQuery(self._docs, self._filters, count_error=self._count_error)
         q._limit = n
         q._offset = self._offset
         q._select = self._select
         return q
 
-    def stream(self):
+    def _filtered_docs(self):
         docs = self._docs
         for filt in self._filters:
             # FieldFilter duck: .field_path / .op_string / .value
@@ -100,29 +112,40 @@ class _FakeQuery:
             op = getattr(filt, 'op_string', None) or getattr(filt, 'op', '==')
             value = getattr(filt, 'value', None)
             if field == 'completed' and op == '==':
-                docs = [d for d in docs if bool(d._data.get('completed')) is bool(value)]
+                docs = [d for d in docs if 'completed' in d.data and d.data.get('completed') is value]
+            elif field == 'completed' and op == 'in' and isinstance(value, (list, tuple, set, frozenset)):
+                docs = [d for d in docs if 'completed' in d.data and d.data.get('completed') in value]
             elif field == 'conversation_id' and op == '==':
-                docs = [d for d in docs if d._data.get('conversation_id') == value]
+                docs = [d for d in docs if d.data.get('conversation_id') == value]
+        return docs
+
+    def count(self):
+        error = self._count_error(self) if callable(self._count_error) else self._count_error
+        return _FakeAggregation(len(self._filtered_docs()), error)
+
+    def stream(self):
+        docs = self._filtered_docs()
         if self._offset:
             docs = docs[self._offset :]
         if self._limit is not None:
             docs = docs[: self._limit]
         # yield copies so callers can mutate safely
         for d in docs:
-            yield _FakeDoc({'id': d.id, **d._data})
+            yield _FakeDoc({'id': d.id, **d.data})
 
 
 class _FakeCollection:
-    def __init__(self, docs: List[_FakeDoc]):
+    def __init__(self, docs: List[_FakeDoc], *, count_error: Any = None):
         self._docs = docs
+        self._count_error = count_error
 
     def document(self, uid: str):
-        return SimpleNamespace(collection=lambda name: _FakeQuery(self._docs))
+        return SimpleNamespace(collection=lambda name: _FakeQuery(self._docs, count_error=self._count_error))
 
 
 class _FakeDB:
-    def __init__(self, docs: List[_FakeDoc]):
-        self._coll = _FakeCollection(docs)
+    def __init__(self, docs: List[_FakeDoc], *, count_error: Any = None):
+        self._coll = _FakeCollection(docs, count_error=count_error)
 
     def collection(self, name: str):
         assert name == 'users'
@@ -175,16 +198,149 @@ def test_get_action_items_active_first_without_full_scan(ai_mod, monkeypatch):
             )
         )
     monkeypatch.setattr(ai, 'db', _FakeDB(docs))
+    budget = ai.ListReadBudget(deadline_monotonic=10, max_documents=100, clock=lambda: 0, started_monotonic=0)
 
-    page = ai.get_action_items('uid', limit=10, offset=0)
+    page = ai.get_action_items('uid', limit=10, offset=0, budget=budget)
     assert [x['id'] for x in page[:5]] == ['a0', 'a1', 'a2', 'a3', 'a4']
     assert all(not x['completed'] for x in page[:5])
     # Completed only after actives fill
     assert all(x['completed'] for x in page[5:])
     assert recorded
     assert recorded[0][1] == metrics.FirestoreReadMode.BOUNDED
-    # Must not stream the entire 305-doc collection for a 10-row page
-    assert recorded[0][2] < 400  # two-bucket + legacy harvest, still << full 305+ stream
+    # Two one-read count aggregations prove there are no missing/null completion
+    # fields, so the old 128-document compatibility scan over this 305-row
+    # collection is skipped.
+    assert recorded[0][2] <= 5 + ai._list_scan_budget(5) + 2
+    assert budget.docs_scanned == recorded[0][2]
+
+
+def test_get_action_items_keeps_legacy_rows_when_probe_finds_them(ai_mod, monkeypatch):
+    ai, recorded, _metrics = ai_mod
+    missing = _item('missing')
+    missing.pop('completed')
+    null = _item('null')
+    null['completed'] = None
+    docs = [
+        _FakeDoc(_item('active', completed=False)),
+        _FakeDoc(missing),
+        _FakeDoc(null),
+        _FakeDoc(_item('done', completed=True)),
+    ]
+    monkeypatch.setattr(ai, 'db', _FakeDB(docs))
+
+    page = ai.get_action_items('uid', limit=4)
+
+    assert [item['id'] for item in page] == ['active', 'missing', 'null', 'done']
+    assert all(isinstance(item['completed'], bool) for item in page)
+    # The compatibility scan remains charged when the aggregation detects a
+    # missing/null completion field.
+    assert recorded[0][2] == 8
+
+
+def test_get_action_items_aggregation_failure_recovers_with_legacy_scan(ai_mod, monkeypatch):
+    ai, _recorded, _metrics = ai_mod
+    legacy = _item('legacy')
+    legacy.pop('completed')
+    fallbacks = []
+    monkeypatch.setattr(ai, 'db', _FakeDB([_FakeDoc(legacy)], count_error=TypeError('aggregation unavailable')))
+    monkeypatch.setattr(ai, 'record_fallback', lambda **kwargs: fallbacks.append(kwargs))
+
+    page = ai.get_action_items('uid', limit=3)
+
+    assert [item['id'] for item in page] == ['legacy']
+    assert fallbacks == [
+        {
+            'component': 'firestore_read',
+            'from_mode': 'legacy_completion_probe',
+            'to_mode': 'bounded_legacy_scan',
+            'reason': 'other',
+            'outcome': 'recovered',
+            'log': ai.logger,
+        }
+    ]
+
+
+def test_get_action_items_unbudgeted_aggregation_timeout_recovers_with_legacy_scan(ai_mod, monkeypatch):
+    ai, recorded, _metrics = ai_mod
+    legacy = _item('legacy')
+    legacy.pop('completed')
+    fallbacks = []
+
+    def _fail_collection_total(query):
+        if not query._filters:
+            return ai.FirestoreDeadlineExceeded('aggregation timeout')
+        return None
+
+    monkeypatch.setattr(ai, 'db', _FakeDB([_FakeDoc(legacy)], count_error=_fail_collection_total))
+    monkeypatch.setattr(ai, 'record_fallback', lambda **kwargs: fallbacks.append(kwargs))
+
+    page = ai.get_action_items('uid', limit=3)
+
+    assert [item['id'] for item in page] == ['legacy']
+    assert recorded[0][2] == 2  # successful canonical count + compatibility scan
+    assert fallbacks == [
+        {
+            'component': 'firestore_read',
+            'from_mode': 'legacy_completion_probe',
+            'to_mode': 'bounded_legacy_scan',
+            'reason': 'timeout',
+            'outcome': 'recovered',
+            'log': ai.logger,
+        }
+    ]
+
+
+def test_get_action_items_attributes_partial_probe_billing_before_fallback(ai_mod, monkeypatch):
+    ai, recorded, _metrics = ai_mod
+    legacy = _item('legacy')
+    legacy.pop('completed')
+
+    def _fail_collection_total(query):
+        if not query._filters:
+            return TypeError('second aggregation unavailable')
+        return None
+
+    monkeypatch.setattr(ai, 'db', _FakeDB([_FakeDoc(legacy)], count_error=_fail_collection_total))
+
+    page = ai.get_action_items('uid', limit=3)
+
+    assert [item['id'] for item in page] == ['legacy']
+    assert recorded[0][2] == 2  # successful canonical count + compatibility scan
+
+
+def test_get_action_items_attributes_partial_probe_billing_before_budget_truncation(ai_mod, monkeypatch):
+    ai, recorded, _metrics = ai_mod
+    legacy = _item('legacy')
+    legacy.pop('completed')
+
+    def _timeout_collection_total(query):
+        if not query._filters:
+            return ai.FirestoreDeadlineExceeded('request-derived timeout')
+        return None
+
+    monkeypatch.setattr(ai, 'db', _FakeDB([_FakeDoc(legacy)], count_error=_timeout_collection_total))
+    budget = ai.ListReadBudget(deadline_monotonic=10, max_documents=10, clock=lambda: 0, started_monotonic=0)
+
+    page = ai.get_action_items('uid', limit=3, budget=budget)
+
+    assert page == []
+    assert budget.truncated is True
+    assert budget.exhaustion_reason == 'deadline'
+    assert recorded[0][2] == 1  # successful canonical count before the timed-out total
+
+
+def test_legacy_probe_charges_firestore_aggregation_batches(ai_mod):
+    ai, _recorded, _metrics = ai_mod
+    docs = [_FakeDoc(_item(f'item-{index}', completed=False)) for index in range(1001)]
+    budget = ai.ListReadBudget(deadline_monotonic=10, max_documents=10, clock=lambda: 0, started_monotonic=0)
+
+    probe = ai._probe_legacy_completion_rows(_FakeQuery(docs), budget=budget)
+
+    assert probe.has_legacy_rows is False
+    # Each count crosses the 1,000-entry billing boundary: two reads for the
+    # canonical count plus two for the collection total.
+    assert probe.billed_reads == 4
+    assert budget.docs_scanned == 4
 
 
 def test_get_action_items_hard_caps_document_iteration(ai_mod, monkeypatch):

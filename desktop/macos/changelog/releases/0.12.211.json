@@ -1,0 +1,8 @@
+{
+  "version": "0.12.211",
+  "date": "2026-08-23",
+  "changes": [
+    "Tasks Omi writes down now arrive as suggestions you add with one click instead of appearing in your list on their own, unaccepted suggestions expire after two days, meeting summaries show action items right under the summary with Add to Tasks, selecting tasks keeps them grouped by category, and running an agent on a task has been removed",
+    "Added a Disconnect action for ChatGPT and Claude cloud connections so Omi shows them as disconnected after authorization is revoked"
+  ]
+}

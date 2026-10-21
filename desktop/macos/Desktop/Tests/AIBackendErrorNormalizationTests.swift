@@ -113,7 +113,7 @@ final class AIBackendErrorNormalizationTests: XCTestCase {
   /// costs one extra inference and nothing else.
   func testTransportFailuresAreReplayedWithoutBackendAuthorization() {
     for code in [
-      URLError.Code.networkConnectionLost, .timedOut, .cannotConnectToHost,
+      URLError.Code.networkConnectionLost, .cannotConnectToHost,
       .notConnectedToInternet, .dnsLookupFailed, .cannotFindHost,
     ] {
       XCTAssertTrue(
@@ -125,9 +125,68 @@ final class AIBackendErrorNormalizationTests: XCTestCase {
   /// The widened replay must stay bounded to transport failures. A cancelled request is the
   /// user or a superseding evaluation withdrawing the work, and replaying it would resurrect
   /// work nobody is waiting for.
+  func testLocalGeminiTimeoutIsTerminalWithoutBackendAuthorization() {
+    let timeout = URLError(.timedOut)
+    XCTAssertFalse(GeminiClient.shouldAutoRetry(timeout))
+    XCTAssertFalse(
+      GeminiClient.shouldAutoRetry(GeminiClient.GeminiClientError.networkError(timeout)))
+    XCTAssertFalse(
+      GeminiClient.shouldAutoRetry(NSError(domain: NSURLErrorDomain, code: NSURLErrorTimedOut)))
+  }
+
   func testNonTransportURLErrorsAreStillNotReplayed() {
     XCTAssertFalse(GeminiClient.shouldAutoRetry(URLError(.cancelled)))
     XCTAssertFalse(GeminiClient.shouldAutoRetry(URLError(.badURL)))
     XCTAssertFalse(GeminiClient.shouldAutoRetry(URLError(.userAuthenticationRequired)))
+  }
+
+  func testGeminiPlanGatedIsNotRetriedAndIsExpectedProductState() {
+    let error = GeminiClient.GeminiClientError.planGated
+    XCTAssertFalse(error.shouldAutoRetry)
+    XCTAssertFalse(error.isTransient)
+    XCTAssertTrue(error.isExpectedProductState)
+    XCTAssertFalse(GeminiClient.shouldAutoRetry(error))
+    XCTAssertEqual(error.localizedDescription, "AI features require an active plan or BYOK keys.")
+  }
+
+  func testGeminiHTTP402PlanGatedBodyMapsToPlanGatedAndIsNotRetried() throws {
+    let body = Data(#"{"detail":{"error":"plan_gated","plan_type":"basic"}}"#.utf8)
+    let response = try XCTUnwrap(
+      HTTPURLResponse(
+        url: URL(string: "https://api.omi.me/v1/proxy/gemini")!,
+        statusCode: 402,
+        httpVersion: nil,
+        headerFields: ["X-Omi-Retryable": "true"]
+      ))
+    let error = try XCTUnwrap(GeminiClient.httpError(response: response, data: body))
+    guard case .planGated = error else {
+      return XCTFail("expected planGated, got \(error)")
+    }
+    XCTAssertFalse(GeminiClient.shouldAutoRetry(error))
+  }
+
+  func testGeminiHTTP402ChatQuotaBodyStaysApiError() throws {
+    let body = Data(#"{"error":"trial_expired"}"#.utf8)
+    let response = try XCTUnwrap(
+      HTTPURLResponse(
+        url: URL(string: "https://api.omi.me/v1/proxy/gemini")!,
+        statusCode: 402,
+        httpVersion: nil,
+        headerFields: nil
+      ))
+    let error = try XCTUnwrap(GeminiClient.httpError(response: response, data: body))
+    guard case .apiError(let message, _) = error else {
+      return XCTFail("expected apiError for non-plan_gated 402, got \(error)")
+    }
+    XCTAssertTrue(message.contains("trial_expired"))
+  }
+
+  func testRequireManagedProactivityThrowsOnlyWhenGated() {
+    XCTAssertNoThrow(try GeminiClient.requireManagedProactivity(.allowManagedProactivity))
+    XCTAssertThrowsError(try GeminiClient.requireManagedProactivity(.planGated)) { error in
+      guard case GeminiClient.GeminiClientError.planGated = error else {
+        return XCTFail("expected planGated")
+      }
+    }
   }
 }

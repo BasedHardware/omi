@@ -25,13 +25,19 @@ vi.mock('@/components/auth/AuthProvider', () => ({
     signOut: vi.fn(),
   }),
 }));
+const notificationState = vi.hoisted(() => ({ unreadCount: 0 }));
+
 vi.mock('@/components/notifications/NotificationContext', () => ({
-  useNotificationContext: () => ({ toggleNotificationCenter: vi.fn(), unreadCount: 0 }),
+  useNotificationContext: () => ({
+    toggleNotificationCenter: vi.fn(),
+    unreadCount: notificationState.unreadCount,
+  }),
 }));
 
 beforeEach(() => {
   localStorage.clear();
   vi.clearAllMocks();
+  notificationState.unreadCount = 0;
   reducedMotion = false;
   Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1440 });
   Object.defineProperty(window, 'innerHeight', { configurable: true, value: 900 });
@@ -63,6 +69,20 @@ describe('collapsed desktop sidebar alignment', () => {
   });
 });
 
+describe('developers destination', () => {
+  it('gives connecting an agent its own rail entry instead of a settings row', async () => {
+    localStorage.setItem('sidebar-expanded', 'true');
+    render(<Sidebar isOpen onClose={vi.fn()} />);
+
+    expect(await screen.findByRole('link', { name: 'Developers' })).toHaveAttribute(
+      'href',
+      '/developers',
+    );
+    fireEvent.click(await screen.findByRole('button', { name: /Omi User/ }));
+    expect(screen.queryByRole('link', { name: 'Developer' })).toBeNull();
+  });
+});
+
 describe('profile menu row shape', () => {
   it('matches every item radius to the outer menu container', async () => {
     localStorage.setItem('sidebar-expanded', 'true');
@@ -73,7 +93,6 @@ describe('profile menu row shape', () => {
     const items = [
       'Connectors',
       'Privacy',
-      'Developer',
       'Account',
       'Download',
       'Help',
@@ -127,5 +146,23 @@ describe('macOS promotion dismissal', () => {
     await act(async () => {
       await new Promise((resolve) => window.setTimeout(resolve, 430));
     });
+  });
+});
+
+describe('notification badge', () => {
+  it('opens the t-badge when there is unread mail', async () => {
+    notificationState.unreadCount = 4;
+    const { container } = render(<Sidebar isOpen onClose={vi.fn()} />);
+    await screen.findByTitle('Home');
+    const badge = container.querySelector('.t-badge');
+    expect(badge).toHaveAttribute('data-open', 'true');
+    expect(container.querySelector('.t-badge-dot')).toHaveTextContent('4');
+  });
+
+  it('keeps the t-badge closed when there is no unread mail', async () => {
+    notificationState.unreadCount = 0;
+    const { container } = render(<Sidebar isOpen onClose={vi.fn()} />);
+    await screen.findByTitle('Home');
+    expect(container.querySelector('.t-badge')).toHaveAttribute('data-open', 'false');
   });
 });

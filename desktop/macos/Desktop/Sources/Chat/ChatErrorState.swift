@@ -109,7 +109,7 @@ extension ChatErrorState {
   var userFacingSummary: String {
     switch self {
     case .authRequired:
-      return "Please sign in to continue."
+      return "Your session expired. Sign in to continue."
     case .timeout:
       return "AI took too long to respond."
     case .bridgeUnavailable(let reason):
@@ -184,7 +184,9 @@ extension ChatErrorState {
       return .authRequired
     case .agentError(let message):
       return BridgeError.agentError(message).isSessionAuthenticationFailure ? .authRequired : nil
-    case .encodingError, .quotaExceeded, .agentRuntimeFailure, .requestAlreadyActive:
+    case .agentRuntimeFailure:
+      return bridgeError.isSessionAuthenticationFailure ? .authRequired : nil
+    case .encodingError, .quotaExceeded, .requestAlreadyActive:
       return nil
     }
   }

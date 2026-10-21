@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-bridge-liveness-without-data-path-proof",
+  "violated_contract": "A component whose only purpose is to move data between two systems is healthy only when a datum has recently crossed the whole path. Process availability, HTTP readiness, and a downstream scrape's `up` describe the relay's own endpoint, not its cargo, so they must never be allowed to classify it as healthy while every upstream query is rejected or every selector matches nothing. A relay that answers its own liveness probe while importing zero rows is indistinguishable, at the destination, from a source that is simply idle -- and idle is the reading an operator will take.",
+  "canonical_prevention": "Alert on the relay's own upstream outcome and on arrival, never on its liveness: the count of failed upstream queries, and the presence of at least one imported series under the name the destination actually queries. Execute the composed upstream expression against the real vendor endpoint before shipping the config that produces it -- a filter or query assembled in values is a program whose only compiler is the vendor API, and it is never exercised by rendering, unit tests, or deployment success.",
+  "canonical_prevention_artifact": [
+    "backend/charts/monitoring/alert-rules.json",
+    "backend/docs/runbooks/cloud-run-metrics-ingestion.md"
+  ],
+  "evidence_prs": [11998],
+  "scope_hints": [
+    "backend/charts/monitoring/prometheus-stackdriver-exporter/**",
+    "backend/charts/monitoring/kube-prometheus-stack/**",
+    ".github/workflows/gcp_cloud_run_metrics_egress.yml"
+  ],
+  "status": "open"
+}

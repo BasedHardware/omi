@@ -42,8 +42,11 @@ final class FloatingBarUsageLimiter: ObservableObject {
   /// Fetch the user's subscription plan and usage quota from the backend.
   /// Call on app launch, sign-in, and after checkout completes.
   func fetchPlan() async {
+    guard let authorization = RuntimeOwnerIdentity.captureAuthorizationSnapshot() else { return }
     do {
-      let response = try await APIClient.shared.getUserSubscription()
+      let response = try await APIClient.shared.getUserSubscription(authorizationSnapshot: authorization)
+      guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else { return }
+      ScreenCloudEntitlementService.shared.accept(response, authorization: authorization)
       applyPlan(
         plan: response.subscription.plan,
         status: response.subscription.status,
@@ -117,6 +120,8 @@ final class FloatingBarUsageLimiter: ObservableObject {
   }
 
   var isLimitReached: Bool {
+    if let pause = serverQuota?.chatAtCap { return pause.active }
+    if serverQuota?.usesSharedBudget == true { return serverQuota?.allowed == false }
     // BYOK users pay their own LLM bill and are never limited. Honor local
     // BYOK state so a heartbeat-lagged server quota (allowed=false right
     // after activation) can't block chat for a fully-configured BYOK user.
@@ -125,6 +130,12 @@ final class FloatingBarUsageLimiter: ObservableObject {
     }
     guard let quota = serverQuota else {
       // No server data yet — allow the query (server will enforce).
+      return false
+    }
+    // An overage plan bills the excess instead of refusing it: the server serves
+    // the request and `enforce_chat_quota` never raises, so blocking here would
+    // deny a send the backend would have answered.
+    if quota.isOveragePlan == true {
       return false
     }
     if quota.allowed {

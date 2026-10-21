@@ -77,6 +77,40 @@ def test_review_resolution_mutations_and_correction_record(monkeypatch):
     assert record['final_correction'] == {'location': 'Oakland'}
 
 
+def test_rejected_correction_receipt_never_recreates_deleted_review_content(monkeypatch):
+    monkeypatch.setattr(review_queue, 'db', MagicMock())
+    item = {
+        'review_id': 'review-private',
+        'fact_id': 'fact-private',
+        'candidate': {
+            'id': 'fact-private',
+            'content': 'private rejected candidate',
+            'evidence': [{'quote': 'private quote', 'source_id': 'conversation-private'}],
+        },
+        'conflict_with': ['fact-other'],
+    }
+
+    record = review_queue.record_correction(
+        'uid-1',
+        item=item,
+        decision='reject',
+        prior_head_diff=[{'fact_id': 'fact-private', 'content': 'private prior state'}],
+        final_correction={'content': 'private correction'},
+        reason='private free-text reason',
+    )
+
+    assert record['status'] == 'privacy_scrubbed'
+    assert record['review_id'] is None
+    assert record['fact_id'] is None
+    assert record['candidate'] == {}
+    assert record['evidence_set'] == []
+    assert record['prior_head_state'] == []
+    assert record['final_correction'] == {}
+    assert record['referenced_memory_ids'] == []
+    assert record['reason'] == 'review_queue_reject'
+    assert 'private' not in repr(record)
+
+
 def test_review_queue_lists_pending_items_by_impact(monkeypatch):
     class FakeDoc:
         def __init__(self, doc_id, data):
@@ -131,8 +165,15 @@ def test_review_queue_resolve_accept_appends_commit_updates_queue_and_records_co
     monkeypatch.setattr(review_queue, 'get_review_conflict', lambda uid, review_id: item)
     monkeypatch.setattr(review_queue, 'db', MagicMock(collection=MagicMock(return_value=users_ref)))
     from utils.memory import memory_service as memory_service_module
+    from utils.memory import canonical_memory_adapter as canonical_adapter_module
 
     monkeypatch.setattr(memory_service_module, 'MemoryService', lambda db_client: service)
+    accepted_payloads = []
+    monkeypatch.setattr(
+        canonical_adapter_module,
+        'write_canonical_external_memory',
+        lambda uid, payload, **kwargs: accepted_payloads.append((uid, payload, kwargs)) or payload['id'],
+    )
     service._canonical_status = None
     monkeypatch.setattr(
         review_queue.memory_ledger,
@@ -154,14 +195,16 @@ def test_review_queue_resolve_accept_appends_commit_updates_queue_and_records_co
 
     assert result['status'] == 'resolved'
     assert result['decision'] == 'accept'
-    accepted = service.write.call_args.args[1]
+    accepted = accepted_payloads[0][1]
     assert accepted['status'] == 'accepted'
     assert accepted['qualifiers']['epistemic_status'] == 'accepted'
+    assert accepted_payloads[0][2]['review_resolution'].review_id == 'review1'
     service.delete_batch.assert_called_once_with('uid-1', ['old'])
-    assert updates[0]['status'] == 'accepted'
-    assert updates[0]['resolution_commit_id'] == 'commit-review'
-    assert corrections[0]['decision'] == 'accept'
-    assert marked_short_term == [('st-new', 'commit-review')]
+    assert updates == []
+    assert corrections == []
+    assert result['correction']['status'] == 'content_free_audit'
+    assert result['correction']['candidate'] == {}
+    assert marked_short_term == [('st-new', None)]
 
 
 def test_canonical_review_resolution_uses_canonical_authority_and_redacts_projection(monkeypatch):
@@ -272,7 +315,7 @@ def test_review_queue_reject_tombstones_through_universal_service(monkeypatch):
     assert result['decision'] == 'reject'
     assert result['item']['status'] == 'rejected'
     service.delete_batch.assert_called_once_with('uid-1', ['new'])
-    assert marked_short_term == [('st-new', 'commit-review')]
+    assert marked_short_term == [('st-new', None)]
 
 
 def test_review_queue_timeout_accepts_or_drops_by_current_evidence(monkeypatch):

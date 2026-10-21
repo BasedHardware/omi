@@ -7,42 +7,8 @@ import { useNotificationContext } from './NotificationContext';
 import { NotificationItem } from './NotificationItem';
 import { NotificationPermissionBanner } from './NotificationPermissionBanner';
 import { cn } from '@/lib/utils';
-import type { OmiNotification } from '@/types/notification';
-
-/**
- * Group notifications by date (Today, Yesterday, Earlier)
- */
-function groupNotificationsByDate(notifications: OmiNotification[]) {
-  const now = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000);
-
-  const groups: { label: string; notifications: OmiNotification[] }[] = [
-    { label: 'Today', notifications: [] },
-    { label: 'Yesterday', notifications: [] },
-    { label: 'Earlier', notifications: [] },
-  ];
-
-  notifications.forEach((notification) => {
-    const notifDate = new Date(notification.timestamp);
-    const notifDay = new Date(
-      notifDate.getFullYear(),
-      notifDate.getMonth(),
-      notifDate.getDate(),
-    );
-
-    if (notifDay.getTime() >= today.getTime()) {
-      groups[0].notifications.push(notification);
-    } else if (notifDay.getTime() >= yesterday.getTime()) {
-      groups[1].notifications.push(notification);
-    } else {
-      groups[2].notifications.push(notification);
-    }
-  });
-
-  // Filter out empty groups
-  return groups.filter((g) => g.notifications.length > 0);
-}
+import { PanelReveal } from '@/components/ui/PanelReveal';
+import { groupNotificationsByDate } from '@/lib/notificationGroups';
 
 export function NotificationCenter() {
   const {
@@ -94,7 +60,7 @@ export function NotificationCenter() {
               'max-sm:fixed max-sm:inset-0 max-sm:z-50 max-sm:w-full',
             )}
           >
-            <div className={cn('w-[400px] h-full flex flex-col', 'max-sm:w-full')}>
+            <PanelReveal className={cn('w-[400px] h-full flex flex-col', 'max-sm:w-full')}>
               {/* Header */}
               <div className="flex items-center justify-between p-4 border-b border-bg-tertiary">
                 <div className="flex items-center gap-3">
@@ -198,7 +164,7 @@ export function NotificationCenter() {
                   </div>
                 )}
               </div>
-            </div>
+            </PanelReveal>
           </motion.div>
         </>
       )}

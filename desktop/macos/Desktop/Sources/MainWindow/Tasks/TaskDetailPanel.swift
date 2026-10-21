@@ -71,7 +71,7 @@ struct TaskDetailPanel: View {
   private var header: some View {
     HStack(spacing: OmiSpacing.sm) {
       VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
-        Text("Task details")
+        Text("Task Details")
           .scaledFont(size: OmiType.subheading, weight: .semibold)
           .foregroundColor(Ink.primary)
         Text(content.status)
@@ -163,46 +163,61 @@ struct TaskDetailPanel: View {
       }
 
       if content.linkedSources.isEmpty {
-        Text("No navigable source was attached to this task.")
+        Text("This task has no source to open.")
           .scaledFont(size: OmiType.caption)
           .foregroundColor(Ink.secondary)
       } else {
         VStack(spacing: OmiSpacing.xs) {
           ForEach(content.linkedSources) { source in
-            Button {
-              TaskDetailSourceNavigator.open(source.route)
-            } label: {
-              HStack(spacing: OmiSpacing.sm) {
-                Image(systemName: source.systemImage)
-                  .scaledFont(size: OmiType.body)
-                  .foregroundColor(Ink.secondary)
-                  .frame(width: 20)
-                VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
-                  Text(source.title)
-                    .scaledFont(size: OmiType.caption, weight: .medium)
-                    .foregroundColor(Ink.primary)
-                  Text(source.subtitle)
-                    .scaledFont(size: OmiType.micro)
-                    .foregroundColor(Ink.secondary)
-                    .lineLimit(1)
-                }
-                Spacer(minLength: OmiSpacing.xs)
-                Image(systemName: "arrow.up.right")
-                  .scaledFont(size: OmiType.micro, weight: .semibold)
-                  .foregroundColor(Ink.secondary)
-              }
-              .padding(OmiSpacing.sm)
-              .frame(maxWidth: .infinity, alignment: .leading)
-              .background(
-                RoundedRectangle(cornerRadius: OmiChrome.elementRadius, style: .continuous)
-                  .fill(Ink.rowFillHover)
-              )
-            }
-            .buttonStyle(.plain)
-            .accessibilityIdentifier("task-detail-source-\(source.id)")
+            linkedSourceButton(source)
           }
         }
       }
+    }
+  }
+
+  @ViewBuilder
+  private func linkedSourceButton(_ source: TaskDetailSourceLink) -> some View {
+    if case .rewindFrame(let screenshotID) = source.route {
+      RewindEvidenceCardView(
+        card: RewindEvidenceCardModel(screenshotID: screenshotID),
+        onOpen: { lease in
+          TaskDetailSourceNavigator.open(source.route, rewindLease: lease)
+        }
+      )
+      .accessibilityIdentifier("task-detail-source-\(source.id)")
+    } else {
+      Button {
+        TaskDetailSourceNavigator.open(source.route)
+      } label: {
+        HStack(spacing: OmiSpacing.sm) {
+          Image(systemName: source.systemImage)
+            .scaledFont(size: OmiType.body)
+            .foregroundColor(Ink.secondary)
+            .frame(width: 20)
+          VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
+            Text(source.title)
+              .scaledFont(size: OmiType.caption, weight: .medium)
+              .foregroundColor(Ink.primary)
+            Text(source.subtitle)
+              .scaledFont(size: OmiType.micro)
+              .foregroundColor(Ink.secondary)
+              .lineLimit(1)
+          }
+          Spacer(minLength: OmiSpacing.xs)
+          Image(systemName: "arrow.up.right")
+            .scaledFont(size: OmiType.micro, weight: .semibold)
+            .foregroundColor(Ink.secondary)
+        }
+        .padding(OmiSpacing.sm)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+          RoundedRectangle(cornerRadius: OmiChrome.elementRadius, style: .continuous)
+            .fill(Ink.rowFillHover)
+        )
+      }
+      .buttonStyle(.plain)
+      .accessibilityIdentifier("task-detail-source-\(source.id)")
     }
   }
 
@@ -265,7 +280,7 @@ struct TaskDetailPanel: View {
 
         if let onOpenChat {
           actionButton(
-            title: task.workstreamId == nil ? "Work on this with Omi" : "Open thread",
+            title: task.workstreamId == nil ? "Work on This with Omi" : "Open Thread",
             systemImage: task.workstreamId == nil ? "sparkles" : "bubble.left",
             action: onOpenChat,
             identifier: "task-detail-chat"
@@ -273,7 +288,7 @@ struct TaskDetailPanel: View {
         }
         if let onDecrementIndent {
           actionButton(
-            title: "Decrease indent",
+            title: "Decrease Indent",
             systemImage: "arrow.left.to.line",
             action: onDecrementIndent,
             identifier: "task-detail-outdent"
@@ -281,26 +296,26 @@ struct TaskDetailPanel: View {
         }
         if let onIncrementIndent {
           actionButton(
-            title: "Increase indent",
+            title: "Increase Indent",
             systemImage: "arrow.right.to.line",
             action: onIncrementIndent,
             identifier: "task-detail-indent"
           )
         }
         actionButton(
-          title: isCopyingLink ? "Copying link…" : (copyStatus ?? "Copy task link"),
-          systemImage: copyStatus == nil ? "arrowshape.turn.up.right" : "checkmark",
+          title: isCopyingLink ? "Copying Link…" : (copyStatus ?? "Copy Task Link"),
+          systemImage: copyStatus == nil ? "link" : "checkmark",
           action: copyShareLink,
           identifier: "task-detail-copy-link"
         )
         .disabled(isCopyingLink)
 
         Button(role: .destructive, action: onDelete) {
-          Label("Delete task", systemImage: "trash")
+          Label("Delete Task", systemImage: "trash")
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .buttonStyle(.plain)
-        .foregroundColor(Ink.secondary)
+        .foregroundColor(Ink.errorRed)
         .padding(.vertical, OmiSpacing.xs)
         .accessibilityIdentifier("task-detail-delete")
       }
@@ -351,10 +366,17 @@ struct TaskDetailPanel: View {
       defer { isCopyingLink = false }
       do {
         let response = try await APIClient.shared.shareTasks(taskIds: [task.id])
+        let url = DesktopBackendEnvironment.tagShareURL(response.url)
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
-        pasteboard.setString(response.url, forType: .string)
-        copyStatus = "Link copied"
+        if pasteboard.setString(url, forType: .string) {
+          copyStatus = "Link copied"
+          if let sid = DesktopBackendEnvironment.shareID(from: url) {
+            AnalyticsManager.shared.shareAction(category: "task", properties: ["share_id": sid, "target_app": "copy"])
+          }
+        } else {
+          copyStatus = "Copy failed"
+        }
       } catch {
         copyStatus = "Copy failed"
         log("Failed to get task share link: \(error)")

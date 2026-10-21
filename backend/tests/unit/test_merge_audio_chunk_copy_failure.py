@@ -48,7 +48,9 @@ def _install(monkeypatch, *, chunks_by_conv, bucket, list_raises_for=()):
     storage_client.bucket.return_value = bucket
     monkeypatch.setattr(merge, "_get_storage_client", lambda: storage_client)
 
-    def _list_audio_chunks(uid, conv_id):
+    def _list_audio_chunks(uid, conv_id, **kwargs):
+        # Source deletion follows the copy: only a complete listing may drive it.
+        assert kwargs == {'require_archive': True}
         if conv_id in list_raises_for:
             raise Exception(f"simulated transient GCS listing error for {conv_id}")
         return chunks_by_conv.get(conv_id, [])
@@ -102,9 +104,9 @@ def test_no_chunks_anywhere_returns_empty(monkeypatch):
 
 def test_merge_propagates_custom_stt_marker_from_any_source(monkeypatch):
     """Regression for #7690: a merged conversation must carry `uses_custom_stt=True`
-    when ANY source was custom-STT, so process_conversation keeps the merged row
-    behind the Omi-paid LLM gate. A custom-STT source must not shed the marker by
-    merging with a normal-STT one (default False would bypass the gate)."""
+    when ANY source was custom-STT, so the merged row keeps accurate custom-STT
+    provenance. A custom-STT source must not shed the marker by merging with a
+    normal-STT one (default False would misreport the merged row)."""
     from datetime import datetime, timedelta, timezone
 
     now = datetime.now(timezone.utc)

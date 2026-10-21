@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'package:omi/backend/http/api/integrations.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/pages/settings/integrations_page.dart';
 import 'package:omi/utils/logger.dart';
+import 'package:omi/utils/analytics/product_telemetry.dart';
 
 typedef IntegrationStatusFetcher = Future<IntegrationResponse?> Function(String appKey);
 typedef IntegrationSaver = Future<bool> Function(String appKey, Map<String, dynamic> details);
@@ -16,6 +19,7 @@ class IntegrationProvider extends ChangeNotifier {
     IntegrationSaver? saveStatus,
     IntegrationDeleter? deleteStatus,
     IntegrationPrefWriter? persistPref,
+    this.statusTimeout = const Duration(seconds: 45),
   })  : _fetchStatus = fetchStatus ?? getIntegration,
         _saveStatus = saveStatus ?? saveIntegration,
         _deleteStatus = deleteStatus ?? deleteIntegration,
@@ -25,16 +29,22 @@ class IntegrationProvider extends ChangeNotifier {
   final IntegrationSaver _saveStatus;
   final IntegrationDeleter _deleteStatus;
   final IntegrationPrefWriter _persistPref;
+  final Duration statusTimeout;
+  final Set<String> _statusErrors = {};
+  int _readGeneration = 0;
 
   final Map<String, bool> _integrations = {};
   bool _isLoading = false;
   bool _hasLoaded = false;
+  bool _needsRetry = false;
   int _sessionGeneration = 0;
   Future<void>? _inFlightLoad;
 
   Map<String, bool> get integrations => _integrations;
   bool get isLoading => _isLoading;
   bool get hasLoaded => _hasLoaded;
+  bool get hasLoadError => _statusErrors.isNotEmpty;
+  bool hasStatusError(IntegrationApp app) => _statusErrors.contains(app.key);
 
   static List<String> get trackedAppKeys => IntegrationApp.values.map((app) => app.key).toList(growable: false);
 
@@ -46,49 +56,99 @@ class IntegrationProvider extends ChangeNotifier {
 
   bool _isCurrent(int generation) => generation == _sessionGeneration;
 
-  Future<void> loadFromBackend() {
+  Future<void> loadFromBackend({bool forceRefresh = false}) {
     final existing = _inFlightLoad;
-    if (existing != null) return existing;
+    if (existing != null && !forceRefresh) return existing;
     late final Future<void> started;
-    started = _loadFromBackendBody().whenComplete(() {
+    started = _loadFromBackendBody(++_readGeneration).whenComplete(() {
       if (identical(_inFlightLoad, started)) _inFlightLoad = null;
     });
     _inFlightLoad = started;
     return started;
   }
 
-  Future<void> _loadFromBackendBody() async {
+  Future<void> _loadFromBackendBody(int readGeneration) async {
     final generation = _sessionGeneration;
+    bool isCurrent() => _isCurrent(generation) && readGeneration == _readGeneration;
+    final syncAttempt = ProductTelemetry.instance.start(
+      ProductJourney.integrationSync,
+      surface: ProductSurface.integration,
+    );
+    var syncCompleted = false;
+    void completeSync(ProductOutcome outcome, {ProductFailure failure = ProductFailure.none}) {
+      if (syncCompleted) return;
+      syncCompleted = true;
+      syncAttempt.complete(outcome, failure: failure);
+    }
+
     _isLoading = true;
     notifyListeners();
 
     try {
       final keys = trackedAppKeys;
-      final responses = await Future.wait(keys.map(_fetchStatus));
-      if (!_isCurrent(generation)) return;
-
-      for (var i = 0; i < keys.length; i++) {
-        final connected = responses[i]?.connected ?? false;
-        _integrations[keys[i]] = connected;
-        await _persistPref(prefKeyFor(keys[i]), connected);
-        if (!_isCurrent(generation)) return;
+      // A malformed or unresponsive service must not strand all other rows.
+      final responses = await Future.wait(keys.map((key) async {
+        try {
+          final response = await Future.sync(() => _fetchStatus(key)).timeout(statusTimeout);
+          return response?.appKey == key ? response : null;
+        } catch (_) {
+          return null;
+        }
+      }));
+      if (!isCurrent()) {
+        completeSync(ProductOutcome.superseded);
+        return;
       }
 
-      if (!_isCurrent(generation)) return;
+      var allFetched = true;
+      for (var i = 0; i < keys.length; i++) {
+        final key = keys[i];
+        final response = responses[i];
+        if (response == null) {
+          allFetched = false;
+          _statusErrors.add(key);
+          _integrations.putIfAbsent(key, () => SharedPreferencesUtil().getBool(prefKeyFor(key)));
+          continue;
+        }
+        _statusErrors.remove(key);
+        _integrations[key] = response.connected;
+        await _persistPref(prefKeyFor(key), response.connected);
+        if (!isCurrent()) {
+          completeSync(ProductOutcome.superseded);
+          return;
+        }
+      }
+
+      if (!isCurrent()) {
+        completeSync(ProductOutcome.superseded);
+        return;
+      }
       _hasLoaded = true;
+      _needsRetry = !allFetched;
+      completeSync(
+        allFetched ? ProductOutcome.success : ProductOutcome.failure,
+        failure: allFetched ? ProductFailure.none : ProductFailure.network,
+      );
     } catch (e) {
-      if (!_isCurrent(generation)) return;
-      Logger.debug('Error loading integrations from backend: $e');
+      if (!isCurrent()) {
+        completeSync(ProductOutcome.superseded);
+        return;
+      }
+      completeSync(ProductOutcome.failure, failure: ProductFailure.network);
+      _needsRetry = true;
+      _statusErrors.addAll(trackedAppKeys);
+      Logger.debug('Error loading integration statuses');
     } finally {
-      if (_isCurrent(generation)) {
+      if (isCurrent()) {
         _isLoading = false;
+        _hasLoaded = true;
         notifyListeners();
       }
     }
   }
 
   Future<void> ensureLoaded() async {
-    if (_hasLoaded) return;
+    if (_hasLoaded && !_needsRetry) return;
     await loadFromBackend();
   }
 
@@ -132,10 +192,13 @@ class IntegrationProvider extends ChangeNotifier {
 
   void clearUserData() {
     _sessionGeneration++;
+    _readGeneration++;
+    _statusErrors.clear();
     _inFlightLoad = null;
     _integrations.clear();
     _isLoading = false;
     _hasLoaded = false;
+    _needsRetry = false;
     for (final key in trackedAppKeys) {
       _persistPref(prefKeyFor(key), false);
     }

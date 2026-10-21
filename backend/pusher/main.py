@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+from collections.abc import Mapping
 from contextlib import asynccontextmanager
 from typing import Any, AsyncIterator
 
@@ -15,22 +16,47 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, Response
 from firebase_admin import credentials
 
+from database.firestore_tier_context import FirestoreTierMiddleware
+from utils.rollout_cohorts import configure_rollout_runtime
+from utils.stt_cap_cohort import refresh_stt_cap_cohort_forever
 from routers import pusher, metrics
+from config.memory_rollout import MemoryRolloutMode, rollout_mode_env_value
 from utils.http_client import close_all_clients
+from utils.sync.cap_hold_lifecycle import flush_active
 from utils.executors import drain_background_tasks, log_executor_health, start_background_task
 from utils.readiness import ReadinessGate
+from utils.env_loader import firebase_admin_options
+from utils.stt.streaming import validate_streaming_stt_env
 
 if os.environ.get('SERVICE_ACCOUNT_JSON'):
     service_account_info = json.loads(os.environ["SERVICE_ACCOUNT_JSON"])
     firebase_credentials = credentials.Certificate(service_account_info)
     firebase_admin_sdk: Any = firebase_admin
-    firebase_admin_sdk.initialize_app(firebase_credentials)
+    firebase_admin_sdk.initialize_app(firebase_credentials, options=firebase_admin_options())
 else:
     firebase_admin_sdk = firebase_admin
-    firebase_admin_sdk.initialize_app()
+    firebase_admin_sdk.initialize_app(options=firebase_admin_options())
+
+
+def _validate_static_capabilities(env: Mapping[str, str] | None = None) -> None:
+    """Reject a Pusher revision that cannot complete its mandatory finalizer.
+
+    This is a static configuration admission check only. Transient memory or
+    datastore availability must not flap process readiness.
+    """
+
+    memory_mode = rollout_mode_env_value(env)
+    if memory_mode not in {MemoryRolloutMode.write.value, MemoryRolloutMode.read.value}:
+        raise RuntimeError(
+            'pusher static capability admission failed: '
+            'conversation.finalize.persisted requires memory.canonical.mutate'
+        )
+    validate_streaming_stt_env(env)
 
 
 async def startup_event() -> None:
+    _validate_static_capabilities()
+    start_background_task(refresh_stt_cap_cohort_forever(), name='pusher:stt_cap_cohort_refresh')
     start_background_task(log_executor_health(), name='pusher:executor_health')
 
 
@@ -39,6 +65,7 @@ async def shutdown_event() -> None:
     # even if the chart preStop hook did not run. Existing in-flight sessions are
     # then drained by drain_background_tasks within the bounded grace period.
     ReadinessGate.begin_drain()
+    await flush_active(timeout=30.0)
     await drain_background_tasks(timeout=10.0)
     await close_all_clients()
 
@@ -53,7 +80,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         await shutdown_event()
 
 
+# Bind private cohort resolution once at the serving composition root.
+configure_rollout_runtime()
 app = FastAPI(lifespan=lifespan)
+app.add_middleware(FirestoreTierMiddleware)
 app.include_router(pusher.router)
 app.include_router(metrics.router)
 

@@ -5,9 +5,15 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import type { OutboundMessageDraft, QueryMessage } from "../src/protocol.js";
-import { JsonlTransport, type McpServerBuilder } from "../src/runtime/jsonl-transport.js";
+import {
+  JsonlTransport,
+  type McpServerBuilder,
+  type QueryActivityLeaseScheduler,
+} from "../src/runtime/jsonl-transport.js";
 import { updateContextSource } from "../src/runtime/context-snapshot.js";
+import { stableJsonHash } from "../src/runtime/kernel-support.js";
 import { recordJournalTurn, terminalizeJournalTurn } from "../src/runtime/conversation-journal.js";
+import { readSessionExecutionProfile } from "../src/runtime/session-execution-profile.js";
 import { createKernelHarness, waitUntil } from "./kernel-fakes.js";
 
 const roots: string[] = [];
@@ -16,12 +22,16 @@ afterEach(() => {
   while (roots.length) rmSync(roots.pop()!, { recursive: true, force: true });
 });
 
-function fixture(buildMcpServers?: McpServerBuilder) {
+function fixture(
+  buildMcpServers?: McpServerBuilder,
+  scheduleQueryActivity?: QueryActivityLeaseScheduler,
+  owner = "owner",
+) {
   const root = mkdtempSync(join(tmpdir(), "omi-jsonl-"));
   roots.push(root);
   const { store, adapter, kernel } = createKernelHarness(join(root, "agent.sqlite"), "fake");
   const session = store.insertSession({
-    ownerId: "owner",
+    ownerId: owner,
     surfaceKind: "main_chat",
     externalRefKind: "chat",
     externalRefId: "default",
@@ -30,14 +40,15 @@ function fixture(buildMcpServers?: McpServerBuilder) {
     modelProfile: "pinned-model",
   });
   const sent: OutboundMessageDraft[] = [];
-  let activeOwner = "owner";
+  let activeOwner = owner;
   const transport = new JsonlTransport({
     kernel,
-    ownerId: "owner",
+    ownerId: owner,
     defaultAdapterId: "fake",
     activeOwnerId: () => activeOwner,
     send: (message) => sent.push(message),
     buildMcpServers,
+    scheduleQueryActivity,
   });
   return {
     store,
@@ -66,6 +77,43 @@ function query(sessionId: string, overrides: Partial<QueryMessage> = {}): QueryM
 }
 
 describe("JsonlTransport kernel-owned query contract", () => {
+  it("leases a quiet admitted query until its terminal result", async () => {
+    let emitActivity: (() => void) | undefined;
+    let leaseStops = 0;
+    const scheduleQueryActivity: QueryActivityLeaseScheduler = (emit) => {
+      emitActivity = emit;
+      return () => { leaseStops += 1; };
+    };
+    const { store, adapter, session, sent, transport } = fixture(undefined, scheduleQueryActivity);
+    adapter.deferResult();
+
+    const running = transport.handleQuery(query(session.sessionId, {
+      requestId: "request-quiet-round",
+    }));
+    await waitUntil(() => adapter.executed.length === 1);
+    sent.splice(0);
+
+    expect(emitActivity).toBeTypeOf("function");
+    emitActivity?.();
+    expect(sent).toContainEqual(expect.objectContaining({
+      type: "turn_activity",
+      phase: "running",
+      protocolVersion: 2,
+      requestId: "request-quiet-round",
+      clientId: "client-1",
+      sessionId: session.sessionId,
+    }));
+
+    adapter.resolveDeferred({ terminalStatus: "succeeded", text: "finished after a quiet round" });
+    await running;
+    expect(leaseStops).toBe(1);
+
+    const terminalMessageCount = sent.length;
+    emitActivity?.();
+    expect(sent).toHaveLength(terminalMessageCount);
+    store.close();
+  });
+
   it("accepts the reasoningEffort wire field and threads it into run metadata", async () => {
     const { store, session, transport } = fixture();
     await transport.handleQuery(query(session.sessionId, {
@@ -532,15 +580,16 @@ describe("JsonlTransport kernel-owned query contract", () => {
     });
     store.close();
   });
-  it("requires a canonical session and uses its pinned adapter/model/cwd", async () => {
+  it("requires a canonical session and uses its pinned adapter/cwd", async () => {
     const { store, adapter, session, sent, transport } = fixture();
     await transport.handleQuery(query(session.sessionId));
 
     expect(adapter.opened).toHaveLength(1);
     expect(adapter.opened[0]).toMatchObject({
       cwd: "/tmp/pinned-workspace",
-      model: "pinned-model",
     });
+    expect(adapter.opened[0].model).toBeUndefined();
+    expect(readSessionExecutionProfile(store, session.sessionId).modelProfile).toBe("pinned-model");
     expect(adapter.opened[0].systemPrompt).toContain("desktop kernel is the authority");
     expect(sent.at(-1)).toMatchObject({
       type: "result",

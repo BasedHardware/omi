@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "catalog_revision": 2,
+  "catalog_revision": 10,
   "authority": {
     "plan_identity": "catalog",
     "price_identity": "repository_ledger",
@@ -13,27 +13,15 @@
     "desktop": {
       "desktop_free": {
         "full_desktop": false,
-        "cloud_screen_vectors": false,
-        "proactivity_daily": {
-          "proactive_extraction": 150,
-          "proactive_reasoning": 60
-        }
+        "cloud_screen_vectors": false
       },
       "desktop_full": {
         "full_desktop": true,
-        "cloud_screen_vectors": true,
-        "proactivity_daily": {
-          "proactive_extraction": 1000,
-          "proactive_reasoning": 500
-        }
+        "cloud_screen_vectors": true
       },
       "desktop_architect": {
         "full_desktop": true,
-        "cloud_screen_vectors": true,
-        "proactivity_daily": {
-          "proactive_extraction": 2000,
-          "proactive_reasoning": 1000
-        }
+        "cloud_screen_vectors": true
       }
     },
     "fair_use": {
@@ -334,7 +322,7 @@
     },
     {
       "id": "operator",
-      "display_name": "Operator",
+      "display_name": "Pro",
       "wire_aliases": [],
       "wire_fallback_plan": null,
       "lifecycle": "current",
@@ -573,115 +561,176 @@
       "price_id": "price_1RrxXL1F8wnoWYvwIddzR902",
       "plan_id": "unlimited",
       "interval": "month",
-      "environment": "dev"
+      "environment": "dev",
+      "entitlement_version": "legacy"
     },
     {
       "price_id": "price_1RrxXL1F8wnoWYvw3kDbWmjs",
       "plan_id": "unlimited",
       "interval": "year",
-      "environment": "dev"
+      "environment": "dev",
+      "entitlement_version": "legacy"
     },
     {
       "price_id": "price_1RtJPm1F8wnoWYvwhVJ38kLb",
       "plan_id": "unlimited",
       "interval": "month",
-      "environment": "prod"
+      "environment": "prod",
+      "entitlement_version": "legacy"
     },
     {
       "price_id": "price_1RtJQ71F8wnoWYvwKMPaGlGY",
       "plan_id": "unlimited",
       "interval": "year",
-      "environment": "prod"
+      "environment": "prod",
+      "entitlement_version": "legacy"
     },
     {
       "price_id": "price_1TNIHd1F8wnoWYvwkIrekcQZ",
       "plan_id": "unlimited",
       "interval": "month",
-      "environment": "prod"
+      "environment": "prod",
+      "entitlement_version": "legacy"
     },
     {
       "price_id": "price_1TNIHd1F8wnoWYvwlKywJ8TO",
       "plan_id": "unlimited",
       "interval": "year",
-      "environment": "prod"
+      "environment": "prod",
+      "entitlement_version": "legacy"
+    },
+    {
+      "price_id": "price_1RrFym1F8wnoWYvwQgIFhRWD",
+      "plan_id": "unlimited",
+      "interval": "month",
+      "environment": "prod",
+      "entitlement_version": "legacy"
+    },
+    {
+      "price_id": "price_1RrG6k1F8wnoWYvwORsU26Mr",
+      "plan_id": "unlimited",
+      "interval": "year",
+      "environment": "prod",
+      "entitlement_version": "legacy"
     },
     {
       "price_id": "price_1TLFXK1F8wnoWYvwG1TaUkZ3",
       "plan_id": "architect",
       "interval": "month",
-      "environment": "dev"
+      "environment": "dev",
+      "entitlement_version": "legacy"
     },
     {
       "price_id": "price_1TN7s21F8wnoWYvwG6JuEFm6",
       "plan_id": "architect",
       "interval": "month",
-      "environment": "dev"
+      "environment": "dev",
+      "entitlement_version": "legacy"
     },
     {
       "price_id": "price_1TN7sF1F8wnoWYvwd0QaLZNA",
       "plan_id": "architect",
       "interval": "year",
-      "environment": "dev"
+      "environment": "dev",
+      "entitlement_version": "legacy"
     },
     {
       "price_id": "price_1TAfBB1F8wnoWYvw8XBFM1dX",
       "plan_id": "architect",
       "interval": "month",
-      "environment": "prod"
+      "environment": "prod",
+      "entitlement_version": "legacy"
     },
     {
       "price_id": "price_1TLFac1F8wnoWYvwtPxZhtzE",
       "plan_id": "architect",
       "interval": "year",
-      "environment": "prod"
+      "environment": "prod",
+      "entitlement_version": "legacy"
     },
     {
       "price_id": "price_1TN7jS1F8wnoWYvwM5GqfxDw",
       "plan_id": "operator",
       "interval": "month",
-      "environment": "dev"
+      "environment": "dev",
+      "entitlement_version": "legacy"
     },
     {
       "price_id": "price_1TN7jo1F8wnoWYvw6Xu1zAtC",
       "plan_id": "operator",
       "interval": "year",
-      "environment": "dev"
+      "environment": "dev",
+      "entitlement_version": "legacy"
     },
     {
       "price_id": "price_1TMxVM1F8wnoWYvw9uaoYX7V",
       "plan_id": "operator",
       "interval": "month",
-      "environment": "prod"
+      "environment": "prod",
+      "entitlement_version": "legacy"
     },
     {
       "price_id": "price_1TMxVM1F8wnoWYvwNfXdF6LW",
       "plan_id": "operator",
       "interval": "year",
-      "environment": "prod"
+      "environment": "prod",
+      "entitlement_version": "legacy"
     },
     {
       "price_id": "price_1TuH6z1F8wnoWYvw7Siv61SX",
       "plan_id": "plus",
       "interval": "month",
-      "environment": "prod"
+      "environment": "prod",
+      "entitlement_version": "legacy"
     },
     {
       "price_id": "price_1TuHCw1F8wnoWYvwZvKu86sI",
       "plan_id": "plus",
       "interval": "year",
-      "environment": "prod"
+      "environment": "prod",
+      "entitlement_version": "legacy"
     },
     {
       "price_id": "price_1TuIa81F8wnoWYvw0iX0j5M8",
       "plan_id": "unlimited_v2",
       "interval": "month",
-      "environment": "prod"
+      "environment": "prod",
+      "entitlement_version": "legacy"
     },
     {
       "price_id": "price_1TuIap1F8wnoWYvwHWq0EvNU",
       "plan_id": "unlimited_v2",
       "interval": "year",
-      "environment": "prod"
+      "environment": "prod",
+      "entitlement_version": "legacy"
+    },
+    {
+      "price_id": "price_1ULq501F8wnoWYvwwN56CHzO",
+      "plan_id": "unlimited_v2",
+      "interval": "month",
+      "environment": "prod",
+      "entitlement_version": "legacy"
+    },
+    {
+      "price_id": "price_1ULq5e1F8wnoWYvwQT8XQ4Uw",
+      "plan_id": "unlimited_v2",
+      "interval": "year",
+      "environment": "prod",
+      "entitlement_version": "legacy"
+    },
+    {
+      "price_id": "price_1ULq6b1F8wnoWYvwtchjjNqq",
+      "plan_id": "plus",
+      "interval": "month",
+      "environment": "prod",
+      "entitlement_version": "legacy"
+    },
+    {
+      "price_id": "price_1ULq7H1F8wnoWYvwC1poOtd5",
+      "plan_id": "plus",
+      "interval": "year",
+      "environment": "prod",
+      "entitlement_version": "legacy"
     }
   ],
   "recognized_stripe_products": [
@@ -709,5 +758,125 @@
       "product_id": "prod_Uu6nrHIKWnnTWL",
       "plan_id": "unlimited_v2"
     }
-  ]
+  ],
+  "proactivity_v2_budget": {
+    "fraction_basis_points": 1000,
+    "days_per_month": 30,
+    "monthly_reference_cents": {
+      "basic": 0,
+      "operator": 4900,
+      "architect": 19900,
+      "unlimited_v2": 2999,
+      "unlimited": 2000,
+      "plus": 2000
+    }
+  },
+  "entitlement_versions": {
+    "legacy": {
+      "budget": null,
+      "capabilities": {
+        "basic": {
+          "cloud_screen_vectors": false
+        },
+        "plus": {
+          "cloud_screen_vectors": true
+        },
+        "unlimited": {
+          "cloud_screen_vectors": true
+        },
+        "unlimited_v2": {
+          "cloud_screen_vectors": true
+        },
+        "operator": {
+          "cloud_screen_vectors": true
+        },
+        "architect": {
+          "cloud_screen_vectors": true
+        }
+      }
+    },
+    "ladder_v1": {
+      "rate_card_version": "v1",
+      "unit_usd_micros": 1000,
+      "monthly_budgets": {
+        "basic": {
+          "kind": "rate_card_mix",
+          "speech_seconds": 18000,
+          "chat_messages": 30,
+          "chat_tier": "standard"
+        },
+        "plus": {
+          "kind": "units",
+          "value": 16360
+        },
+        "operator": {
+          "kind": "units",
+          "value": 44090
+        },
+        "architect": {
+          "kind": "units",
+          "value": 189463
+        }
+      },
+      "mcp_daily_caps": {
+        "basic": 100,
+        "plus": 500,
+        "operator": 5000,
+        "architect": 5000
+      },
+      "api_max_reads_per_request": {
+        "basic": 2000,
+        "plus": 5000,
+        "operator": 25000,
+        "architect": 25000
+      },
+      "capabilities": {
+        "basic": {
+          "cloud_screen_vectors": false
+        },
+        "plus": {
+          "cloud_screen_vectors": false
+        },
+        "operator": {
+          "cloud_screen_vectors": true
+        },
+        "architect": {
+          "cloud_screen_vectors": true
+        }
+      }
+    }
+  },
+  "ladder_v1_stripe_prices": [],
+  "ladder_v1_price_bindings": {
+    "ladder_v1_plus_month": {
+      "plan_id": "plus",
+      "interval": "month",
+      "env_var": "LADDER_V1_PLUS_MONTH_PRICE_ID"
+    },
+    "ladder_v1_plus_year": {
+      "plan_id": "plus",
+      "interval": "year",
+      "env_var": "LADDER_V1_PLUS_YEAR_PRICE_ID"
+    },
+    "ladder_v1_pro_month": {
+      "plan_id": "operator",
+      "interval": "month",
+      "env_var": "LADDER_V1_PRO_MONTH_PRICE_ID"
+    },
+    "ladder_v1_pro_year": {
+      "plan_id": "operator",
+      "interval": "year",
+      "env_var": "LADDER_V1_PRO_YEAR_PRICE_ID"
+    },
+    "ladder_v1_architect_month": {
+      "plan_id": "architect",
+      "interval": "month",
+      "env_var": "LADDER_V1_ARCHITECT_MONTH_PRICE_ID"
+    },
+    "ladder_v1_architect_year": {
+      "plan_id": "architect",
+      "interval": "year",
+      "env_var": "LADDER_V1_ARCHITECT_YEAR_PRICE_ID"
+    }
+  }
 }

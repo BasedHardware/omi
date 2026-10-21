@@ -1,0 +1,19 @@
+{
+  "id": "mobile-product-outcomes",
+  "kind": "question",
+  "owner": "Mobile product",
+  "question": "Are the registered journey and value signals present in the selected namespace/build? Outcome and retention calculations live in the product-telemetry scorecard and preserve unknown observations.",
+  "query": "contracts/analytics/consumers/mobile-product-outcomes.sql",
+  "events": [
+    "productJourneyStarted",
+    "productJourneyFirstResult",
+    "productJourneyOutcome",
+    "productValueEvent"
+  ],
+  "namespace_property": "$app_namespace",
+  "dimensions": [
+    "git_sha",
+    "build_number"
+  ],
+  "zero_policy": "Absence is missing evidence, never successful zero failures or churn."
+}

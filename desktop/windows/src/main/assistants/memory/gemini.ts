@@ -7,6 +7,8 @@
 // API key lives on the server and never touches the device.
 import { net } from 'electron'
 import { getAbortSignal, type BackendSession } from '../core/session'
+import { GeminiLane } from '../../../shared/geminiAttribution'
+import { geminiClientPlatform, geminiProxyFetch } from '../../../shared/geminiProxy'
 import {
   MEMORY_RESPONSE_SCHEMA,
   parseMemoryExtraction,
@@ -110,38 +112,37 @@ async function attempt(
   return withTimeout(
     REQUEST_TIMEOUT_MS,
     async (signal) => {
-      const res = await net.fetch(
-        `${session.desktopApiBase}/v1/proxy/gemini/models/${MODEL}:generateContent`,
-        {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${session.token}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            contents: [
-              {
-                role: 'user',
-                parts: [
-                  { text: prompt },
-                  // The TRUE encoding. Mac hardcodes `image/webp` here whatever
-                  // the bytes actually are — a Mac bug we are not porting.
-                  { inlineData: { mimeType: 'image/jpeg', data: imageBase64 } }
-                ]
-              }
-            ],
-            systemInstruction: { parts: [{ text: systemPrompt }] },
-            generationConfig: {
-              responseMimeType: 'application/json',
-              responseSchema: MEMORY_RESPONSE_SCHEMA,
-              // Flash's minimum (Mac passes 0 for memory extraction). No reasoning
-              // budget — it needs to be cheap enough to run every 10 minutes all day.
-              thinkingConfig: { thinkingBudget: 0 }
+      const res = await geminiProxyFetch(net.fetch, {
+        baseURL: session.desktopApiBase,
+        model: MODEL,
+        action: 'generateContent',
+        token: session.token,
+        lane: GeminiLane.memory,
+        workload: 'extraction',
+        platform: geminiClientPlatform(process.platform),
+        signal,
+        body: JSON.stringify({
+          contents: [
+            {
+              role: 'user',
+              parts: [
+                { text: prompt },
+                // The TRUE encoding. Mac hardcodes `image/webp` here whatever
+                // the bytes actually are — a Mac bug we are not porting.
+                { inlineData: { mimeType: 'image/jpeg', data: imageBase64 } }
+              ]
             }
-          }),
-          signal
-        }
-      )
+          ],
+          systemInstruction: { parts: [{ text: systemPrompt }] },
+          generationConfig: {
+            responseMimeType: 'application/json',
+            responseSchema: MEMORY_RESPONSE_SCHEMA,
+            // Flash's minimum (Mac passes 0 for memory extraction). No reasoning
+            // budget — it needs to be cheap enough to run every 10 minutes all day.
+            thinkingConfig: { thinkingBudget: 0 }
+          }
+        })
+      })
       if (!res.ok)
         throw new GeminiHttpError(res.status, res.headers?.get?.('x-omi-retryable') === 'true')
       return extractText(await res.json())

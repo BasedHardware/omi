@@ -133,7 +133,7 @@ final class SBPostOnboardingGuidanceWiringTests: XCTestCase {
     let saved = PostOnboardingPromptSuggestions.suggestions()
     XCTAssertEqual(saved, SBPostOnboardingGuidance.suggestions(for: model.postOnboardingSetup))
     XCTAssertFalse(saved.isEmpty, "The dashboard popup and banner are gated on this being non-empty")
-    XCTAssertTrue(saved.contains("What's on my screen right now?"))
+    XCTAssertTrue(saved.contains(DayZeroChips.summarizeScreen))
     XCTAssertTrue(saved.contains("What's on my calendar today?"))
     XCTAssertTrue(PostOnboardingPromptSuggestions.shouldShowPopup)
     XCTAssertFalse(PostOnboardingPromptSuggestions.isDismissed)
@@ -150,6 +150,30 @@ final class SBPostOnboardingGuidanceWiringTests: XCTestCase {
     let saved = PostOnboardingPromptSuggestions.suggestions()
     XCTAssertEqual(saved, SBPostOnboardingGuidance.suggestions(for: model.postOnboardingSetup))
     XCTAssertTrue(PostOnboardingPromptSuggestions.shouldShowPopup)
+  }
+
+  func testPersistedMidOnboardingStateResumesAndCompletes() {
+    let model = makeConfiguredModel()
+    let previousCompletion = appState?.hasCompletedOnboarding ?? false
+    appState?.hasCompletedOnboarding = false
+    defer {
+      appState?.hasCompletedOnboarding = previousCompletion
+      UserDefaults.standard.removeObject(forKey: SBOnboardingModel.resumeStepSchemaKey)
+    }
+
+    UserDefaults.standard.set(
+      SBOnboardingModel.Step.notifications.rawValue, forKey: SBOnboardingModel.resumeStepKey)
+    UserDefaults.standard.set(
+      SBOnboardingModel.resumeStepSchemaVersion, forKey: SBOnboardingModel.resumeStepSchemaKey)
+    model.begin()
+    XCTAssertEqual(model.step, .notifications, "a persisted resume step must be honored")
+
+    model.finishOnboardingHandoff(clearOnboardingChatFlag: true)
+
+    XCTAssertTrue(try XCTUnwrap(appState).hasCompletedOnboarding)
+    XCTAssertNil(
+      UserDefaults.standard.object(forKey: sbOnboardingResumeStepKey),
+      "completing onboarding must clear the persisted resume step")
   }
 
   func testCaptureChoiceAdvancesToOptionalReferralBeforeCompletion() {
@@ -171,6 +195,14 @@ final class SBPostOnboardingGuidanceWiringTests: XCTestCase {
     XCTAssertFalse(try XCTUnwrap(appState).hasCompletedOnboarding)
   }
 
+  func testReferralRewardCopyStaysPlanAgnostic() {
+    let model = makeModel()
+
+    XCTAssertEqual(
+      model.message(for: .referral),
+      "Want to invite a friend? They'll get one free month.")
+  }
+
   func testSkippedSetupStillProducesAnswerableGuidance() {
     let model = makeModel()
 
@@ -179,7 +211,7 @@ final class SBPostOnboardingGuidanceWiringTests: XCTestCase {
     let saved = PostOnboardingPromptSuggestions.suggestions()
     XCTAssertEqual(
       saved,
-      [HomeSuggestionComposer.universalFirstQuestion, SBPostOnboardingGuidance.universalFallback],
+      [HomeSuggestionComposer.universalFirstQuestion, SBPostOnboardingGuidance.teachMeDraft],
       "A user who skipped everything still needs a next step, and it must not name a skipped connector")
     XCTAssertTrue(PostOnboardingPromptSuggestions.shouldShowPopup)
   }

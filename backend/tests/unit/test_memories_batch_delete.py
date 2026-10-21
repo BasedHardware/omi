@@ -6,6 +6,7 @@ import pytest
 from fastapi import HTTPException
 from pydantic import ValidationError
 
+from database.legal_holds import DestructiveGateTakeover, DestructiveOperationInProgress, LegalHoldAuthorityUnavailable
 from routers import memories as mem_mod
 
 
@@ -80,3 +81,64 @@ def test_batch_delete_rate_limit_and_route_order_are_preserved():
     assert RATE_POLICIES["memories:delete_batch"] == (10, 3600)
     delete_paths = [route.path for route in mem_mod.router.routes if "DELETE" in getattr(route, "methods", set())]
     assert delete_paths.index("/v3/memories/batch") < delete_paths.index("/v3/memories/{memory_id}")
+
+
+def test_delete_memory_maps_gate_busy_to_409_not_500(monkeypatch):
+    service = MagicMock()
+    service.delete.side_effect = DestructiveOperationInProgress("another destructive operation owns the account gate")
+    monkeypatch.setattr(mem_mod, "MemoryService", lambda **_kwargs: service)
+    with pytest.raises(HTTPException) as error:
+        mem_mod.delete_memory(memory_id="mem-1", uid="uid-gate")
+    assert error.value.status_code == 409
+    assert error.value.detail == "account_gate_busy"
+    assert error.value.headers["Retry-After"] == "2"
+
+
+def test_batch_delete_maps_gate_busy_to_409_not_500(monkeypatch):
+    service = _service(
+        monkeypatch,
+        error=DestructiveOperationInProgress("another destructive operation owns the account gate"),
+    )
+    with pytest.raises(HTTPException) as error:
+        mem_mod.delete_memories_batch(
+            data=mem_mod.BatchDeleteMemoriesRequest(memory_ids=["a", "b"]),
+            uid="uid-gate",
+        )
+    assert error.value.status_code == 409
+    assert error.value.detail == "account_gate_busy"
+    assert error.value.headers["Retry-After"] == "2"
+    service.delete_batch.assert_called_once_with("uid-gate", ["a", "b"])
+
+
+@pytest.mark.parametrize(
+    "error_type", [DestructiveGateTakeover, DestructiveOperationInProgress, LegalHoldAuthorityUnavailable]
+)
+@pytest.mark.parametrize("path", ["single", "batch", "all", "default"])
+def test_memory_delete_routes_map_transaction_fence_with_retry_after(monkeypatch, error_type, path):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    fence = error_type("canonical mutation blocked by destructive operation")
+    service = MagicMock()
+    method = {"single": "delete", "batch": "delete_batch", "all": "delete_all", "default": "delete_default"}[path]
+    getattr(service, method).side_effect = fence
+    monkeypatch.setattr(mem_mod, "MemoryService", lambda **_kwargs: service)
+    app = FastAPI()
+    app.include_router(mem_mod.router)
+    app.dependency_overrides[mem_mod.auth.get_current_user_uid] = lambda: "uid-gate"
+    # The route dependencies wrap auth with the released rate-limit policy.
+    for route in mem_mod.router.routes:
+        if "DELETE" in getattr(route, "methods", set()):
+            for dependency in route.dependant.dependencies:
+                if dependency.name == "uid":
+                    app.dependency_overrides[dependency.call] = lambda: "uid-gate"
+    client = TestClient(app)
+    if path == "batch":
+        response = client.request("DELETE", "/v3/memories/batch", json={"memory_ids": ["mem-1"]})
+    elif path == "single":
+        response = client.delete("/v3/memories/mem-1")
+    else:
+        response = client.delete(f"/v3/memories?scope={path}")
+    assert response.status_code == 409
+    assert response.json() == {"detail": "account_gate_busy"}
+    assert response.headers["Retry-After"] == "2"

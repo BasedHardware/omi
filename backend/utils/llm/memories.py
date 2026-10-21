@@ -1,4 +1,6 @@
+import re
 from collections.abc import Sequence
+from datetime import datetime
 from typing import Any, Dict, List, Literal, Optional, cast
 
 from langchain_core.output_parsers import PydanticOutputParser
@@ -8,9 +10,11 @@ from database import users as users_db
 from models.memories import Memory, MemoryCategory
 from models.memory_contracts import L1MemoryArchiveClass, MemoryExtractionError
 from models.other import Person
-from utils.llm.conversation_prompt_prefix import ConversationPromptPrefix, shared_conversation_cache_supported
+from utils.llm.conversation_prompt_context import ConversationPromptPrefix
+from utils.llm.conversation_prompt_prefix import shared_conversation_cache_supported
 from models.transcript_segment import TranscriptSegment
 from database.users import get_user_language_preference
+from utils.conversations.owner_attribution import OwnerAttributionEvidence, may_attribute_to_owner
 from utils.prompts import extract_memories_prompt, extract_learnings_prompt, extract_memories_text_content_prompt
 from utils.llms.memory import get_prompt_memories
 from utils.llm.temporal import current_date_for_uid
@@ -19,6 +23,20 @@ from .clients import get_llm
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+def _scoped_claim_arguments(value: Any, *, basis: Optional[str] = None) -> Dict[str, Any]:
+    """Normalize existing proposition arguments at the LLM boundary.
+
+    The implementation lives with the working-observation extractor to keep
+    one contract for both conversation intake and daily reconciliation.  The
+    lazy import preserves the lightweight import path used by API tests that
+    stub the extractor dependencies.
+    """
+
+    from utils.llm.working_observations import normalize_scoped_claim_arguments
+
+    return normalize_scoped_claim_arguments(value, basis=basis)
 
 
 def _get_language_instruction(uid: str, language: Optional[str] = None) -> str:
@@ -83,9 +101,25 @@ class CanonicalL1MemoryCandidate(BaseModel):
     content: str
     archive_class: L1MemoryArchiveClass = L1MemoryArchiveClass.general
     evidence_quotes: List[str] = Field(default_factory=list)
+    source_refs: List[Dict[str, Any]] = Field(default_factory=list)
+    # Capture provenance is carried with the transient candidate so the
+    # canonical caller can construct MemoryEvidence from the original
+    # conversation. It must not fall back to the generic API family.
+    source_id: Optional[str] = None
+    source_type: str = "conversation"
+    source_signal: str = "transcription"
+    lineage_id: Optional[str] = None
+    independence_group: Optional[str] = None
+    attribution: Optional[
+        Literal["unknown", "assistant", "inferred", "third_party", "screen", "user_spoken", "user_written"]
+    ] = None
     speaker_label: Optional[str] = None
     speaker_scope: str = "session-local"
     about: str = ""
+    subject_scope: Optional[str] = None
+    valid_to: Optional[datetime] = None
+    predicate: Optional[str] = None
+    arguments: Dict[str, Any] = Field(default_factory=dict)
     confidence: str = "medium"
     risk_flags: List[str] = Field(default_factory=list)
 
@@ -144,7 +178,12 @@ def extract_canonical_l1_memory_candidates(
     person_ids = sorted({segment.person_id for segment in segments if segment.person_id})
     people_records = cast(List[Dict[str, Any]], users_db.get_people_by_ids(uid, person_ids)) if person_ids else []
     people = Person.deserialize_many_safe(people_records)
-    content = TranscriptSegment.segments_as_string(segments, user_name=user_name, people=people)
+    # Imported here rather than at module load: the renderer pulls in ``database.auth``,
+    # and ``utils.llm.memories`` must stay importable under the stubbed ``database`` package
+    # the memory-validation unit tests install.
+    from utils.conversations.transcript_for_llm import memory_transcript_from_segments
+
+    content = memory_transcript_from_segments(segments, user_name=user_name, people=people)
     if not content or not content.strip():
         return []
 
@@ -153,6 +192,8 @@ def extract_canonical_l1_memory_candidates(
     # must not transitively import the working-observation provider stack.
     from utils.llm.working_observations import extract_l1_memory_archive_items_from_text
 
+    # This is a cache candidate, not provider admission: the extractor resolves
+    # memory_l1 through get_llm before marking content, including BYOK profiles.
     items = extract_l1_memory_archive_items_from_text(
         uid=uid,
         source_id=source_id,
@@ -163,22 +204,57 @@ def extract_canonical_l1_memory_candidates(
         persist_route_outcomes=False,
         strict=strict,
         prompt_prefix=prompt_prefix,
-        prompt_cache_enabled=bool(prompt_prefix and shared_conversation_cache_supported()),
+        prompt_cache_enabled=shared_conversation_cache_supported(),
         rejected_memory_examples=tuple(rejected_memory_examples),
     )
-    return [
-        CanonicalL1MemoryCandidate(
-            content=item.text,
-            archive_class=item.archive_class,
-            evidence_quotes=item.evidence_quotes,
-            speaker_label=item.speaker_label,
-            speaker_scope=item.speaker_scope,
-            about=item.about,
-            confidence=item.confidence,
-            risk_flags=item.risk_flags,
+    owner_evidence = OwnerAttributionEvidence.from_segments(segments)
+
+    def owner_spoken_for_quotes(quotes: Sequence[str]) -> bool:
+        """Confirm that every cited quote came from the uniquely known owner."""
+
+        if not quotes or not may_attribute_to_owner(owner_evidence):
+            return False
+        for raw_quote in quotes:
+            normalized_quote = re.sub(r"[\W_]+", " ", str(raw_quote or "").casefold()).strip()
+            if not normalized_quote:
+                return False
+            matched = [
+                segment
+                for segment in segments
+                if f" {normalized_quote} "
+                in " " + re.sub(r"[\W_]+", " ", str(getattr(segment, "text", "") or "").casefold()).strip() + " "
+            ]
+            if len(matched) != 1 or not may_attribute_to_owner(owner_evidence, segment=matched[0]):
+                return False
+        return True
+
+    candidates: List[CanonicalL1MemoryCandidate] = []
+    for item in items:
+        quotes = list(getattr(item, "evidence_quotes", None) or [])
+        candidates.append(
+            CanonicalL1MemoryCandidate(
+                content=item.text,
+                archive_class=item.archive_class,
+                source_refs=list(getattr(item, "source_refs", None) or []),
+                source_id=source_id,
+                source_type="conversation",
+                source_signal="transcription",
+                lineage_id=source_id,
+                independence_group=source_id,
+                attribution="user_spoken" if owner_spoken_for_quotes(quotes) else None,
+                evidence_quotes=quotes,
+                speaker_label=item.speaker_label,
+                speaker_scope=item.speaker_scope,
+                about=item.about,
+                subject_scope=item.subject_scope,
+                valid_to=item.valid_to,
+                predicate=getattr(item, "predicate", None),
+                arguments=_scoped_claim_arguments(getattr(item, "arguments", {})),
+                confidence=item.confidence,
+                risk_flags=item.risk_flags,
+            )
         )
-        for item in items
-    ]
+    return candidates
 
 
 def new_memories_extractor(
@@ -200,12 +276,8 @@ def new_memories_extractor(
     if not content or len(content) < 25:  # less than 5 words, probably nothing
         return []
     # TODO: later, focus a lot on user said things, rn is hard because of speech profile accuracy
-    # TODO: include negative facts too? Things the user doesn't like?
-    # TODO: make it more strict?
-
-    language_instruction = _get_language_instruction(uid, language)
-
     try:
+        language_instruction = _get_language_instruction(uid, language)
         parser = PydanticOutputParser(pydantic_object=HighRecallMemories if high_recall else Memories)
         with track_usage(uid, Features.MEMORIES):
             chain = extract_memories_prompt | get_llm('memories') | parser
@@ -328,6 +400,7 @@ def extract_memories_from_text(
     *,
     strict: bool = False,
     llm: Optional[Any] = None,
+    known_spellings: str = '',
 ) -> List[Memory]:
     """Extract memories from external integration text sources like email, posts, messages"""
     if user_name is None or memories_str is None:
@@ -336,9 +409,10 @@ def extract_memories_from_text(
     if not text or len(text) == 0:
         return []
 
-    language_instruction = _get_language_instruction(uid, language)
-
     try:
+        language_instruction = _get_language_instruction(uid, language)
+        if known_spellings:
+            language_instruction += f'\n\n{known_spellings}'
         parser = PydanticOutputParser(pydantic_object=MemoriesByTexts)
         with track_usage(uid, Features.MEMORIES):
             prompt_input = {
@@ -400,9 +474,8 @@ def new_learnings_extractor(
     if not content or len(content) < 100:
         return []
 
-    language_instruction = _get_language_instruction(uid, language)
-
     try:
+        language_instruction = _get_language_instruction(uid, language)
         parser = PydanticOutputParser(pydantic_object=Learnings)
         with track_usage(uid, Features.MEMORIES):
             chain = extract_learnings_prompt | get_llm('learnings') | parser
@@ -459,139 +532,3 @@ Respond with ONLY "system" or "interesting" - nothing else."""
     except Exception as e:
         logger.error(f'Error identifying category for memory: {e}')
         return MemoryCategory.system
-
-
-class MemoryResolution(BaseModel):
-    """Result of resolving a new memory against similar existing memories.
-
-    Drives the "constantly updated brain": when a new fact changes the truth of an
-    older one (e.g. loved ice cream -> now hates it, lived in NYC -> now LA, age 25 -> 26),
-    the older memory is listed in `supersedes` so it gets invalidated, while the new fact
-    is stored as the current truth.
-    """
-
-    action: str = Field(
-        description=(
-            "One of: 'add' (store the new memory; existing facts stay untouched), "
-            "'skip' (new is a duplicate / already known — do not store), "
-            "'update' (new fact makes one or more existing facts outdated/false — store new AND list them in supersedes), "
-            "'merge' (new + existing should become a single richer fact — provide merged_content AND list the ones it replaces in supersedes), "
-            "'keep_both' (related but BOTH remain true at the same time — store new, supersede nothing)"
-        )
-    )
-    supersedes: List[int] = Field(
-        default=[],
-        description=(
-            "1-based indices (from the numbered EXISTING list) of memories that are now "
-            "OUTDATED or FALSE and must be invalidated. Only for 'update' / 'merge'. "
-            "Never include a fact that can still be true alongside the new one."
-        ),
-    )
-    merged_content: Optional[str] = Field(
-        default=None, description="If action is 'merge', the combined/refined memory content. Keep under 12 words."
-    )
-    merged_predicate: Optional[str] = Field(
-        default=None, description="If action is 'merge', the canonical predicate for the merged fact."
-    )
-    merged_arguments: Optional[Dict[str, Any]] = Field(
-        default=None, description="If action is 'merge', argument-level slots for the merged fact."
-    )
-    merged_qualifiers: Optional[Dict[str, Any]] = Field(
-        default=None, description="If action is 'merge', qualifier-level slots for the merged fact."
-    )
-    reasoning: str = Field(default="", description="Brief explanation of why this action was chosen")
-
-
-# Backwards-compatible action aliases (older callers/tests used these names).
-_LEGACY_ACTION_ALIASES = {'keep_new': 'add', 'keep_existing': 'skip'}
-
-
-class TypedMemoryResolution(BaseModel):
-    relationship: Literal['contradict', 'refine', 'extend', 'coexist', 'duplicate', 'review_conflict'] = Field(
-        description=(
-            "Typed relationship between the new fact and candidates. Use contradict only when an existing fact "
-            "is false/outdated, refine for argument-level narrowing, extend for unrelated additions, coexist for "
-            "related facts that remain true together, duplicate when already captured, and review_conflict when "
-            "a low-veracity new contradiction should not auto-merge."
-        )
-    )
-    candidate_id: Optional[str] = Field(default=None, description="Existing fact id this decision targets, if any")
-    supersedes: List[str] = Field(default_factory=list, description="Existing fact ids superseded by this decision")
-    arg_changes: Dict[str, Any] = Field(
-        default_factory=dict, description="Argument/content changes for refine_fact mutations"
-    )
-    valid_interval: Dict[str, Any] = Field(
-        default_factory=dict, description="Valid-time interval for supersession, distinct from commit time"
-    )
-    review_required: bool = Field(default=False, description="Whether this relationship must be routed to review")
-    reasoning: str = Field(default="", description="Brief evidence-weighted justification")
-
-
-def resolve_memory_conflict(
-    new_memory: str,
-    similar_memories: List[Dict[str, Any]],
-    language: Optional[str] = None,
-) -> MemoryResolution:
-    """
-    Use an LLM to decide how a newly extracted memory relates to existing similar ones,
-    and which (if any) existing memories it makes outdated.
-
-    Args:
-        new_memory: The newly extracted memory content
-        similar_memories: Ordered list of similar existing memories, each a dict with at
-            least 'content' (and usually 'memory_id', 'score'). The 1-based position in
-            this list is what `MemoryResolution.supersedes` refers to.
-        language: Language code for merged content output
-
-    Returns:
-        MemoryResolution with action, supersedes indices, and optional merged content.
-    """
-    if not similar_memories:
-        return MemoryResolution(action='add', reasoning='No similar memories found')
-
-    existing_str = "\n".join(
-        [f"{i + 1}. \"{m['content']}\" (similarity: {m.get('score', 0):.2f})" for i, m in enumerate(similar_memories)]
-    )
-
-    language_note = ""
-    if language and language != 'en':
-        language_note = f"\n- If action is 'merge', write merged_content in {language} (same language as the memories)."
-
-    prompt = f"""You maintain a personal knowledge base of true facts about a user. A NEW fact was just learned.
-Decide how it relates to the EXISTING facts so the knowledge base always reflects the CURRENT truth.
-
-NEW FACT: "{new_memory}"
-
-EXISTING FACTS (numbered):
-{existing_str}
-
-Choose ONE action:
-- "add": the new fact is genuinely new and does not change any existing fact. Store it.
-- "skip": the new fact is already captured by an existing fact (a duplicate / no new info). Do not store it.
-- "update": the new fact makes one or more existing facts OUTDATED or FALSE (the same attribute now has a different value). Store the new fact AND put the indices of every outdated fact in "supersedes".
-- "merge": the new fact and an existing one should become a SINGLE richer fact. Provide "merged_content" and, when possible, merged_predicate / merged_arguments / merged_qualifiers. Put the replaced indices in "supersedes".
-- "keep_both": the new fact and the existing ones are all still TRUE at the same time. Store the new fact, supersede nothing.
-
-CRITICAL — only put a fact in "supersedes" if it is now genuinely FALSE or OUTDATED. Two preferences that can both be true at once must NEVER supersede each other.{language_note}
-
-EXAMPLES:
-- New: "Hates ice cream" | Existing: 1."Loves ice cream" → update, supersedes [1] (preference flipped — the old one is now false)
-- New: "Lives in Los Angeles" | Existing: 1."Lives in New York City" → update, supersedes [1] (moved — can't live in both)
-- New: "Is 26 years old" | Existing: 1."Is 25 years old" → update, supersedes [1] (age changed)
-- New: "Works at Google as engineer" | Existing: 1."Works at Google" → merge: "Works at Google as engineer", supersedes [1]
-- New: "Enjoys hiking" | Existing: 1."Enjoys hiking" → skip (duplicate)
-- New: "Likes tennis" | Existing: 1."Likes basketball" → keep_both (can like both sports)
-- New: "Has a dog named Max" | Existing: 1."Has a dog", 2."Lives in NYC" → merge: "Has a dog named Max", supersedes [1]
-
-Respond with action, supersedes (indices), merged_content (only for merge), and reasoning."""
-
-    try:
-        parser = PydanticOutputParser(pydantic_object=MemoryResolution)
-        chain = get_llm('memory_conflict') | parser
-        response: MemoryResolution = chain.invoke(prompt + f"\n\n{parser.get_format_instructions()}")
-        response.action = _LEGACY_ACTION_ALIASES.get(response.action, response.action)
-        return response
-    except Exception as e:
-        logger.error(f'Error resolving memory conflict: {e}')
-        # Default to storing the new memory if resolution fails (never lose information).
-        return MemoryResolution(action='add', reasoning=f'Resolution failed: {e}')

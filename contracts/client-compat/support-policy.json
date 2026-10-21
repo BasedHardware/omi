@@ -1,0 +1,6 @@
+{
+  "version": 1,
+  "owner": "Backend and mobile release maintainers",
+  "minimum_build": {"ios": null, "android": null},
+  "enforcement_receipt": null
+}

@@ -1,6 +1,8 @@
-from typing import Optional
+import json
+from datetime import datetime
+from typing import Any, Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
 
 class Geolocation(BaseModel):
@@ -9,6 +11,33 @@ class Geolocation(BaseModel):
     longitude: float = Field(ge=-180, le=180)
     address: Optional[str] = None
     location_type: Optional[str] = None
+    captured_at: Optional[datetime] = None
+    capture_source: Optional[Literal['current_position', 'last_known_position', 'manual', 'integration']] = None
+    accuracy: Optional[float] = Field(default=None, ge=0, allow_inf_nan=False)
+    altitude: Optional[float] = Field(default=None, allow_inf_nan=False)
+
+    @classmethod
+    def deserialize_safe(cls, data: Any) -> Optional['Geolocation']:
+        """Safely deserialize a Geolocation instance from a raw stored or cached record.
+
+        Handles legacy cached dicts (e.g. {'lat': ..., 'lng': ...}), and returns None
+        on validation failure or corrupted data instead of raising unhandled ValidationError.
+        """
+        if not data:
+            return None
+        if isinstance(data, cls):
+            return data
+        if not isinstance(data, dict):
+            return None
+        payload = dict(data)
+        if 'latitude' not in payload and 'lat' in payload:
+            payload['latitude'] = payload.pop('lat')
+        if 'longitude' not in payload and 'lng' in payload:
+            payload['longitude'] = payload.pop('lng')
+        try:
+            return cls(**payload)
+        except (ValidationError, TypeError, ValueError):
+            return None
 
 
 class GeolocationInput(BaseModel):
@@ -24,6 +53,10 @@ class GeolocationInput(BaseModel):
     longitude: float
     address: Optional[str] = None
     location_type: Optional[str] = None
+    captured_at: Optional[datetime] = None
+    capture_source: Optional[Literal['current_position', 'last_known_position', 'manual', 'integration']] = None
+    accuracy: Optional[float] = Field(default=None, ge=0, allow_inf_nan=False)
+    altitude: Optional[float] = Field(default=None, allow_inf_nan=False)
 
 
 def validated_geolocation_or_none(geolocation: Optional[GeolocationInput]) -> Optional[Geolocation]:
@@ -31,5 +64,18 @@ def validated_geolocation_or_none(geolocation: Optional[GeolocationInput]) -> Op
         return None
     try:
         return Geolocation.model_validate(geolocation.model_dump())
-    except ValueError:
+    except (RecursionError, ValueError):
+        return None
+
+
+def geolocation_from_private_header(value: Optional[str]) -> Optional[Geolocation]:
+    """Parse a bounded, authenticated transport header without ever logging coordinates."""
+    # Direct endpoint calls in tests (and internal callers) can leave FastAPI's
+    # Header sentinel in place. Treat every non-string as absent.
+    if not isinstance(value, str) or not value or len(value) > 4096:
+        return None
+    try:
+        payload = json.loads(value)
+        return validated_geolocation_or_none(GeolocationInput.model_validate(payload))
+    except (RecursionError, json.JSONDecodeError, TypeError, ValueError):
         return None

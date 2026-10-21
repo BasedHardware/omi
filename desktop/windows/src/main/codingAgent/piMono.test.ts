@@ -11,6 +11,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { spawn } from 'child_process'
+import { app } from 'electron'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   PiMonoAdapter,
@@ -58,6 +59,7 @@ function newFakeProc(): FakeProc {
 // and inspect internal state without `any` (lint forbids explicit any).
 interface PiInternals {
   sendCommand: (cmd: Record<string, unknown>) => void
+  handleEvent: (line: string) => void
   handleTurnEnd: (event: Record<string, unknown>) => void
   handleToolStart: (event: Record<string, unknown>) => void
   handleToolEnd: (event: Record<string, unknown>) => void
@@ -248,14 +250,16 @@ describe('PiMonoAdapter prompt correlation', () => {
     })
     seedSessions(adapter, 'session-1')
     const runtime = new PiMonoRuntimeAdapter(adapter)
+    const sinkEvents: AdapterStreamEvent[] = []
 
     await expect(
       runtime.executeAttempt(
         makeAttemptContext({ attemptId: 'att_error' }),
-        () => {},
+        (event) => sinkEvents.push(event),
         new AbortController().signal
       )
     ).rejects.toThrow('adapter send failed')
+    expect(sinkEvents).toEqual([])
     expect(existsSync(internals(adapter).contextFilePath)).toBe(false)
   })
 
@@ -401,6 +405,29 @@ describe('PiMonoAdapter prompt correlation', () => {
       cacheWriteTokens: 2
     })
     expect(events.some((event) => event.type === 'result')).toBe(false)
+  })
+
+  it('treats agent_settled as advisory and waits for the authoritative turn_end', async () => {
+    const { adapter } = createAdapter()
+    seedSessions(adapter, 'session-1')
+
+    const prompt = adapter.sendPrompt(
+      'session-1',
+      [{ type: 'text', text: 'wait for the child' }],
+      [],
+      'act',
+      () => {},
+      async () => ''
+    )
+
+    internals(adapter).handleEvent(JSON.stringify({ type: 'agent_settled' }))
+
+    expect(internals(adapter).activePromptGeneration).toBe(1)
+    expect(internals(adapter).pendingRequests.size).toBe(1)
+
+    internals(adapter).handleTurnEnd(makeTurnEndEvent('authoritative terminal result'))
+
+    await expect(prompt).resolves.toMatchObject({ text: 'authoritative terminal result' })
   })
 
   it('rejects turn_end errors instead of resolving success', async () => {
@@ -908,6 +935,47 @@ describe('PiMonoAdapter spawn shape (behavioral, Windows)', () => {
       delete process.env.OMI_BYOK_OPENAI
     }
   })
+
+  it('gates OMI_YOLO_MODE reinjection on unpackaged builds only', async () => {
+    const stubApp = app as { isPackaged: boolean }
+    const wasPackaged = stubApp.isPackaged
+    const prevYolo = process.env.OMI_YOLO_MODE
+    process.env.OMI_YOLO_MODE = '1'
+    try {
+      stubApp.isPackaged = true
+      const packaged = new PiMonoAdapter(
+        { authToken: 'firebase-id-token-xyz' },
+        { piPath: '/fake/pi.js', extensionPath: '/fake/ext.ts', nodeBin: '/fake/node' }
+      )
+      await packaged.start()
+      let [, , options] = vi.mocked(spawn).mock.calls[0] as [
+        string,
+        string[],
+        { env: Record<string, string> }
+      ]
+      expect(options.env.OMI_YOLO_MODE).toBeUndefined()
+      await packaged.stop()
+
+      stubApp.isPackaged = false
+      vi.mocked(spawn).mockClear()
+      const unpackaged = new PiMonoAdapter(
+        { authToken: 'firebase-id-token-xyz' },
+        { piPath: '/fake/pi.js', extensionPath: '/fake/ext.ts', nodeBin: '/fake/node' }
+      )
+      await unpackaged.start()
+      ;[, , options] = vi.mocked(spawn).mock.calls[0] as [
+        string,
+        string[],
+        { env: Record<string, string> }
+      ]
+      expect(options.env.OMI_YOLO_MODE).toBe('1')
+      await unpackaged.stop()
+    } finally {
+      stubApp.isPackaged = wasPackaged
+      if (prevYolo === undefined) delete process.env.OMI_YOLO_MODE
+      else process.env.OMI_YOLO_MODE = prevYolo
+    }
+  })
 })
 
 describe('PiMonoAdapter image channel (no bytes leak into text)', () => {
@@ -1021,6 +1089,7 @@ describe('PiMonoRuntimeAdapter sink event forwarding', () => {
     await expect(execution).resolves.toMatchObject({ terminalStatus: 'succeeded' })
 
     const types = sinkEvents.map((e) => e.type)
+    expect(types[0]).toBe('hosted_request_started')
     expect(types).toContain('tool_activity')
     expect(types).toContain('text_delta')
     expect(types).not.toContain('tool_use')

@@ -17,6 +17,7 @@ enum TaskDetailSourceRoute: Equatable {
   case capture(id: String)
   case memory(id: String)
   case rewind
+  case rewindFrame(id: Int64)
   case external(URL)
 }
 
@@ -78,13 +79,14 @@ struct TaskDetailPanelState: Equatable {
 enum TaskDetailPanelPresentationPolicy {
   static func showsHoverActions(
     isRowHovering: Bool,
+    isKeyboardSelected: Bool = false,
     isMultiSelectMode: Bool,
     isDeletedTask: Bool,
     isTextFieldFocused: Bool,
     isDetailPanelPresented: Bool
   ) -> Bool {
     guard !isDetailPanelPresented else { return false }
-    return isRowHovering
+    return (isRowHovering || isKeyboardSelected)
       && !isMultiSelectMode
       && !isDeletedTask
       && !isTextFieldFocused
@@ -135,10 +137,13 @@ enum TaskDetailSourceLinkPolicy {
 
       switch evidence.kind {
       case .conversation:
-        let destinationID = normalizedOptional(task.conversationId) ?? evidenceID
-        route = conversationRoute(task: task, id: destinationID)
+        // Each conversation evidence ref is independently navigable. A task can
+        // intentionally coalesce the same commitment across conversations, while
+        // `conversationId` remains the original/canonical source. Routing every
+        // ref through that one field makes later provenance open the wrong row.
+        route = conversationRoute(task: task, id: evidenceID)
         title = task.source == "transcription:omi" ? "Omi capture" : "Conversation"
-        subtitle = destinationID
+        subtitle = evidenceID
         systemImage = "bubble.left.and.bubble.right"
       case .chat_message:
         // A message ref is only navigable when the task's canonical
@@ -155,12 +160,25 @@ enum TaskDetailSourceLinkPolicy {
         subtitle = evidenceID
         systemImage = "brain.head.profile"
       case .local_screen:
-        // Rewind is the established desktop source surface. The current
-        // Rewind page has no selection/deep-link contract for a frame id, so
-        // do not pretend the opaque evidence id selects a particular frame.
-        route = .rewind
-        title = "Screen context"
-        subtitle = "Open Rewind"
+        if let screenshotID = RewindEvidenceCardPolicy.card(
+          for: evidence,
+          currentDeviceID: ClientDeviceService.shared.clientDeviceId
+        )?.screenshotID {
+          route = .rewindFrame(id: screenshotID)
+          title = "Screen evidence"
+          subtitle = "Open Rewind · frame \(screenshotID)"
+        } else {
+          // Every screen ref this policy cannot resolve to an exact frame —
+          // `capture.v2` rows written before the frame contract existed, refs
+          // from another Mac, legacy nil versions — still had a source row
+          // before the frame deep link shipped. Rewind is the established
+          // desktop surface and the page itself is always a valid
+          // destination, so fall back to it rather than dropping the only
+          // provenance the task has.
+          route = .rewind
+          title = "Screen context"
+          subtitle = "Open Rewind"
+        }
         systemImage = "rectangle.dashed.and.paperclip"
       case .external:
         guard let url = URL(string: evidenceID), url.scheme != nil else { continue }
@@ -210,7 +228,7 @@ enum TaskDetailSourceLinkPolicy {
       return "You added this task directly."
     }
     if task.source?.contains("screen") == true || task.source == "screenshot" {
-      return "It matched context on this Mac."
+      return "Omi spotted it on your screen."
     }
     if task.source?.contains("transcription") == true || task.source?.contains("conversation") == true {
       return "It came from a conversation you captured."
@@ -298,6 +316,7 @@ enum TaskDetailSourceLinkPolicy {
     case .capture(let id): return "capture:\(id)"
     case .memory(let id): return "memory:\(id)"
     case .rewind: return "rewind"
+    case .rewindFrame(let id): return "rewind:\(id)"
     case .external(let url): return "external:\(url.absoluteString)"
     }
   }

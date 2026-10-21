@@ -41,6 +41,7 @@ final class OnboardingPersistenceClearingTests: XCTestCase {
       "sbOnboardingResumeStep",
       "sbOnboardingShortcutsCompleted",
       "onboardingRole",
+      DefaultsKey.onboardingSystemAudioSkipped.rawValue,
       OnboardingFlow.completionOwnerKey,
     ]
     for key in required {

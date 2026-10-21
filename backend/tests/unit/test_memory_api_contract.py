@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from models.memories import MemoryDB
+from models.memories import Memory, MemoryDB
 from models.product_memory import MemoryTier
 from utils.memory.memory_api_contract import MemoryApiExposure, memory_api_payload, memory_write_payload
 from utils.memory.memory_api_response import memory_batch_response, memory_item_response, memory_list_response
@@ -88,3 +88,28 @@ def test_memory_response_builders_apply_public_projection():
     assert b"memory_tier" not in listed.body
     assert b"memory_only" not in batch.body
     assert b"created_count" in batch.body
+
+
+def test_canonical_api_payload_never_exposes_retired_belief_fields():
+    payload = memory_api_payload(_memory(), MemoryApiExposure.CANONICAL)
+    assert "currency" not in payload
+    assert "currency_band" not in payload
+    assert "as_of" not in payload
+    assert "belief_computed_at" not in payload
+    assert "half_life_days" not in payload
+    assert "belief_class" not in payload
+
+
+def test_released_belief_write_fields_are_accepted_but_ignored():
+    memory = Memory.model_validate(
+        {
+            "content": "User lives in Boston",
+            "belief_class": "stable_fact",
+            "half_life_days": 365,
+        }
+    )
+
+    assert not hasattr(memory, "belief_class")
+    assert not hasattr(memory, "half_life_days")
+    assert "belief_class" not in memory_write_payload(memory, MemoryApiExposure.CANONICAL)
+    assert "half_life_days" not in memory_write_payload(memory, MemoryApiExposure.CANONICAL)

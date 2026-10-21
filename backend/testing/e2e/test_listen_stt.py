@@ -3,6 +3,8 @@
 import json
 import uuid
 
+import pytest
+
 from fakes.firestore import get_mock_firestore, read_conversation
 from fakes.stt import fake_suggested_transcript_event, install_streaming_stt_fake
 from listen_test_helpers import (
@@ -41,6 +43,7 @@ def test_web_listen_custom_stt_dispatches_to_stream_handler(client, monkeypatch)
         call_id=None,
         client_conversation_id=None,
         client_device_context=None,
+        geolocation=None,
     ):
         captured.update(
             {
@@ -59,6 +62,7 @@ def test_web_listen_custom_stt_dispatches_to_stream_handler(client, monkeypatch)
                 "client_conversation_id": client_conversation_id,
                 "client_device_id": getattr(client_device_context, "client_device_id", None),
                 "client_platform": getattr(client_device_context, "platform", None),
+                "geolocation": geolocation.model_dump(mode="json") if geolocation else None,
             }
         )
         await websocket.send_json({"type": "fake_stt_ready", "uid": uid, "custom_stt": captured["custom_stt_mode"]})
@@ -68,7 +72,17 @@ def test_web_listen_custom_stt_dispatches_to_stream_handler(client, monkeypatch)
     monkeypatch.setattr(transcribe_router, "_stream_handler", fake_stream_handler)
 
     with client.websocket_connect(
-        "/v4/web/listen?custom_stt=enabled&sample_rate=8000&codec=pcm8&conversation_timeout=1&source=e2e"
+        "/v4/web/listen?custom_stt=enabled&sample_rate=8000&codec=pcm8&conversation_timeout=1&source=e2e",
+        headers={
+            "X-Omi-Conversation-Geolocation": json.dumps(
+                {
+                    "latitude": 37.7749,
+                    "longitude": -122.4194,
+                    "captured_at": "2026-08-01T12:30:00Z",
+                    "capture_source": "current_position",
+                }
+            )
+        },
     ) as websocket:
         websocket.send_text(json.dumps({"type": "auth", "token": "dev-token", "device_id_hash": "a1b2c3d4"}))
         auth_response = websocket.receive_json()
@@ -88,6 +102,17 @@ def test_web_listen_custom_stt_dispatches_to_stream_handler(client, monkeypatch)
     assert captured["custom_stt_mode"] == "enabled"
     assert captured["client_device_id"] == "web_a1b2c3d4"
     assert captured["client_platform"] == "web"
+    assert captured["geolocation"] == {
+        "latitude": 37.7749,
+        "longitude": -122.4194,
+        "altitude": None,
+        "accuracy": None,
+        "captured_at": "2026-08-01T12:30:00Z",
+        "capture_source": "current_position",
+        "google_place_id": None,
+        "address": None,
+        "location_type": None,
+    }
 
 
 def test_web_listen_custom_stt_suggested_transcript_is_emitted_and_persisted(client, auth_headers, test_uid):
@@ -325,7 +350,13 @@ def test_web_listen_streaming_stt_send_failure_emits_terminal_status_then_closes
     test_uid,
     monkeypatch,
 ):
-    """A provider death is explicit and terminal instead of leaving a green socket."""
+    """With no provider left to fail over to, a death is explicit and terminal.
+
+    The fake's default ``failover_selection`` models an exhausted chain, so the
+    send path's failover attempt (#12469) finds nothing and the session must
+    still end with the bounded ``stt_failed``/1011 wire contract instead of
+    leaving a green socket.
+    """
 
     seed_listen_user(test_uid, uses_custom_stt=False)
     sockets = install_streaming_stt_fake(monkeypatch, die_on_first_send=True)
@@ -375,6 +406,57 @@ def test_web_listen_streaming_stt_send_failure_emits_terminal_status_then_closes
     }
     assert len(sockets) == 1
     assert len(sockets[0].sent_chunks) == 1
+
+
+@pytest.mark.parametrize('primary_circuit_was_open', [False, True])
+def test_web_listen_streaming_stt_send_failure_fails_over_and_the_session_survives(
+    client,
+    test_uid,
+    monkeypatch,
+    primary_circuit_was_open,
+):
+    """A provider death with a provider left in the chain moves the session, not ends it.
+
+    The send path observes the death on the very next audio chunk — before the
+    1s death-monitor poll — and must hand the session to the next provider
+    (#12459's chain, made reachable by #12469): the buffered audio reaches the
+    replacement socket in the same flush, a transcript flows from it, and the
+    client socket never sees ``stt_failed``.
+    """
+    from utils.stt.streaming import STTService
+    from utils.stt import streaming as st
+    from utils.stt.provider_resilience import ProviderCircuitBreaker
+
+    if primary_circuit_was_open:
+        circuit = ProviderCircuitBreaker(failure_threshold=1, cooldown_seconds=30)
+        circuit.record_serve_failure()
+        monkeypatch.setattr(st, '_parakeet_circuit', circuit)
+        assert not circuit.allow_request()
+
+    seed_listen_user(test_uid, uses_custom_stt=False)
+    sockets = install_streaming_stt_fake(
+        monkeypatch,
+        die_on_first_send=True,
+        failover_selection=(STTService.modulate, "en", "modulate-velma-2"),
+    )
+
+    with client.websocket_connect("/v4/web/listen?sample_rate=8000&codec=pcm8&source=desktop") as websocket:
+        websocket.send_text(json.dumps({"type": "auth", "token": "dev-token"}))
+        assert websocket.receive_json() == {"type": "auth_response", "success": True}
+        receive_until(websocket, is_conversation_session_event)
+        receive_until(websocket, is_ready_event)
+
+        assert sockets[0].provider == 'parakeet'
+
+        websocket.send_bytes(b"\x80" * 320)
+
+        segments = receive_until(websocket, is_streaming_segment_batch)
+
+    assert segments[0]["text"] == "Hermetic streaming STT transcript from the fake socket."
+    assert len(sockets) == 2
+    # The dead socket's buffered audio was retried against the replacement.
+    assert sockets[1].sent_chunks == sockets[0].sent_chunks
+    assert sockets[0].finish_calls >= 1
 
 
 def test_web_listen_reconnect_reuses_active_conversation_id(client, test_uid, monkeypatch):

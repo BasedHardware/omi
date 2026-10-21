@@ -13,6 +13,8 @@ import { ConnectorBrandMark } from './ConnectorBrandMark'
 // One config-write export connector row (Claude Code, Codex, OpenClaw, Hermes).
 // Every state resolves to a real affordance — never a dead button:
 //   • connected    → "Connected" + a Disconnect pill
+//   • needsUpdate  → the entry points at the legacy /sse URL with the current
+//                    key → an Update pill that re-runs the same connect rewrite
 //   • available    → the tool is present → a Connect pill (mints the hosted key
 //                    on first use and writes the tool's MCP config)
 //   • requiresTool → the CLI/config isn't on this machine → a plain "requires
@@ -29,6 +31,8 @@ function description(
   switch (status.kind) {
     case 'connected':
       return 'Connected — reading your Omi memory'
+    case 'needsUpdate':
+      return 'Using the old endpoint — update to the new URL'
     case 'available':
       return `Give ${connector.tool} access to your Omi memory`
     case 'requiresTool':
@@ -130,6 +134,13 @@ export function McpConfigConnectorRow({
             {busy ? '…' : 'Disconnect'}
           </PillButton>
         )
+      case 'needsUpdate':
+        // Same write path as Connect — it rewrites the legacy /sse entry in place.
+        return (
+          <PillButton tone="primary" disabled={busy} onClick={doConnect}>
+            {busy ? 'Updating…' : 'Update'}
+          </PillButton>
+        )
       case 'available':
         return (
           <PillButton tone="primary" disabled={busy} onClick={doConnect}>
@@ -145,7 +156,7 @@ export function McpConfigConnectorRow({
   return (
     <ConnectorRow
       iconNode={<ConnectorBrandMark brand={connector.brand} />}
-      title={connector.title}
+      title={connector.tool}
       description={description(connector, status)}
       action={action}
     >

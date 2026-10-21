@@ -19,12 +19,18 @@ import os
 os.environ.setdefault("ENCRYPTION_SECRET", "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv")
 os.environ.setdefault("OPENAI_API_KEY", "sk-test-not-real")
 
+from datetime import datetime, timezone
+
 import pytest
-from fastapi import HTTPException
+from fastapi import FastAPI, HTTPException
+from fastapi.testclient import TestClient
 
 import routers.conversations as conv
 
 _FIRESTORE_IN_LIMIT = 30
+
+_START = datetime(2026, 9, 1, tzinfo=timezone.utc)
+_END = datetime(2026, 9, 29, tzinfo=timezone.utc)
 
 
 class _FirestoreLikeDB:
@@ -33,16 +39,31 @@ class _FirestoreLikeDB:
     def __init__(self):
         self.last_statuses = None
         self.last_sources = None
+        self.last_include_discarded = None
+        self.last_folder_id = None
+        self.last_starred = None
+        self.last_start_date = None
+        self.last_end_date = None
+
+    def _record(self, kwargs):
+        self.last_folder_id = kwargs.get('folder_id')
+        self.last_starred = kwargs.get('starred')
+        self.last_start_date = kwargs.get('start_date')
+        self.last_end_date = kwargs.get('end_date')
 
     def get_conversations_without_photos(self, uid, limit, offset, *, statuses=(), **kwargs):
         self.last_statuses = list(statuses)
-        if len(statuses) > _FIRESTORE_IN_LIMIT:
+        self.last_sources = list(kwargs.get('sources') or [])
+        self.last_include_discarded = kwargs.get('include_discarded')
+        self._record(kwargs)
+        if len(statuses) > _FIRESTORE_IN_LIMIT or len(self.last_sources) > _FIRESTORE_IN_LIMIT:
             raise Exception("'in' filters support a maximum of 30 elements.")
         return []
 
     def get_conversations_count(self, uid, *, statuses=(), sources=(), **kwargs):
         self.last_statuses = list(statuses)
         self.last_sources = list(sources)
+        self._record(kwargs)
         if len(statuses) > _FIRESTORE_IN_LIMIT or len(sources) > _FIRESTORE_IN_LIMIT:
             raise Exception("'in' filters support a maximum of 30 elements.")
         return 0
@@ -79,6 +100,25 @@ def test_list_normal_statuses_reach_db(db):
     assert db.last_statuses == ["processing", "completed"]
 
 
+def test_list_hides_discarded_rows_by_default(db):
+    conv.get_conversations(statuses="processing,completed", sources=None, start_date=None, end_date=None, uid="u1")
+
+    assert db.last_include_discarded is False
+
+
+def test_list_can_explicitly_include_discarded_rows(db):
+    conv.get_conversations(
+        statuses="processing,completed",
+        sources=None,
+        start_date=None,
+        end_date=None,
+        include_discarded=True,
+        uid="u1",
+    )
+
+    assert db.last_include_discarded is True
+
+
 # --- count endpoint ----------------------------------------------------------------------
 
 
@@ -109,3 +149,217 @@ def test_count_normal_filters_reach_db(db):
 
     assert result == {"count": 0}
     assert db.last_statuses == ["processing", "completed"]
+
+
+def test_list_multi_source_multi_status_rejected_before_db(db):
+    with pytest.raises(HTTPException) as ei:
+        conv.get_conversations(
+            statuses="processing,completed",
+            sources="omi,friend",
+            start_date=None,
+            end_date=None,
+            uid="u1",
+        )
+
+    assert ei.value.status_code == 400
+    assert db.last_statuses is None
+
+
+def test_count_multi_source_multi_status_rejected_before_db(db):
+    with pytest.raises(HTTPException) as ei:
+        conv.get_conversations_count(
+            statuses="processing,completed",
+            sources="omi,friend",
+            start_date=None,
+            end_date=None,
+            uid="u1",
+        )
+
+    assert ei.value.status_code == 400
+    assert db.last_statuses is None
+    assert db.last_sources is None
+
+
+def test_list_single_source_multi_status_accepted(db):
+    result = conv.get_conversations(
+        statuses="processing,completed",
+        sources="omi",
+        start_date=_START,
+        end_date=_END,
+        folder_id="folder-a",
+        starred=False,
+        uid="u1",
+    )
+
+    assert result == []
+    assert db.last_sources == ["omi"]
+    assert db.last_statuses == ["processing", "completed"]
+    assert db.last_folder_id == "folder-a"
+    assert db.last_starred is False
+    assert db.last_start_date == _START
+    assert db.last_end_date == _END
+
+
+def test_list_multi_source_single_status_accepted(db):
+    result = conv.get_conversations(
+        statuses="completed",
+        sources="omi,friend",
+        start_date=_START,
+        end_date=_END,
+        folder_id="folder-a",
+        starred=False,
+        uid="u1",
+    )
+
+    assert result == []
+    assert db.last_sources == ["omi", "friend"]
+    assert db.last_statuses == ["completed"]
+    assert db.last_starred is False
+
+
+def test_count_single_source_multi_status_accepted_and_echoed(db):
+    result = conv.get_conversations_count(
+        statuses="processing,completed",
+        sources="omi",
+        start_date=_START,
+        end_date=_END,
+        folder_id="folder-a",
+        starred=False,
+        uid="u1",
+    )
+
+    assert result == {"count": 0, "sources": ["omi"]}
+    assert db.last_sources == ["omi"]
+    assert db.last_statuses == ["processing", "completed"]
+    assert db.last_folder_id == "folder-a"
+    assert db.last_starred is False
+    assert db.last_start_date == _START
+    assert db.last_end_date == _END
+
+
+def test_count_multi_source_single_status_accepted_and_echoed(db):
+    result = conv.get_conversations_count(
+        statuses="completed",
+        sources="omi,friend",
+        start_date=_START,
+        end_date=_END,
+        folder_id="folder-a",
+        starred=False,
+        uid="u1",
+    )
+
+    assert result == {"count": 0, "sources": ["omi", "friend"]}
+    assert db.last_sources == ["omi", "friend"]
+    assert db.last_statuses == ["completed"]
+    assert db.last_starred is False
+
+
+@pytest.fixture
+def client(db):
+    app = FastAPI()
+    app.include_router(conv.router)
+    app.dependency_overrides[conv.auth.get_current_user_uid] = lambda: "u1"
+    with TestClient(app) as test_client:
+        yield test_client
+
+
+def test_wire_list_omitted_statuses_defaults_to_processing_completed(client, db):
+    response = client.get("/v1/conversations")
+
+    assert response.status_code == 200
+    assert response.json() == []
+    assert db.last_statuses == ["processing", "completed"]
+    assert db.last_sources == []
+
+
+def test_wire_list_empty_statuses_defaults_to_processing_completed(client, db):
+    response = client.get("/v1/conversations", params={"statuses": ""})
+
+    assert response.status_code == 200
+    assert db.last_statuses == ["processing", "completed"]
+
+
+def test_wire_count_omitted_statuses_counts_all_statuses(client, db):
+    response = client.get("/v1/conversations/count")
+
+    assert response.status_code == 200
+    assert response.json() == {"count": 0, "sources": None}
+    assert db.last_statuses == []
+
+
+def test_wire_count_empty_statuses_counts_all_statuses(client, db):
+    response = client.get("/v1/conversations/count", params={"statuses": ""})
+
+    assert response.status_code == 200
+    assert db.last_statuses == []
+
+
+def test_wire_count_source_filter_echoed(client, db):
+    response = client.get("/v1/conversations/count", params={"sources": "omi"})
+
+    assert response.status_code == 200
+    assert response.json() == {"count": 0, "sources": ["omi"]}
+    assert db.last_sources == ["omi"]
+
+
+def test_wire_list_dual_multi_rejected_before_db(client, db):
+    response = client.get("/v1/conversations", params={"statuses": "processing,completed", "sources": "omi,friend"})
+
+    assert response.status_code == 400
+    assert db.last_statuses is None
+
+
+def test_wire_count_dual_multi_rejected_before_db(client, db):
+    response = client.get(
+        "/v1/conversations/count", params={"statuses": "processing,completed", "sources": "omi,friend"}
+    )
+
+    assert response.status_code == 400
+    assert db.last_statuses is None
+    assert db.last_sources is None
+
+
+def test_wire_count_single_axis_combinations_with_folder_starred_false_and_dates(client, db):
+    response = client.get(
+        "/v1/conversations/count",
+        params={
+            "statuses": "completed",
+            "sources": "omi,friend",
+            "folder_id": "folder-a",
+            "starred": "false",
+            "start_date": _START.isoformat(),
+            "end_date": _END.isoformat(),
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"count": 0, "sources": ["omi", "friend"]}
+    assert db.last_statuses == ["completed"]
+    assert db.last_sources == ["omi", "friend"]
+    assert db.last_folder_id == "folder-a"
+    assert db.last_starred is False
+    assert db.last_start_date == _START
+    assert db.last_end_date == _END
+
+
+def test_wire_list_single_source_multi_status_with_folder_starred_false_and_dates(client, db):
+    response = client.get(
+        "/v1/conversations",
+        params={
+            "statuses": "processing,completed",
+            "sources": "omi",
+            "folder_id": "folder-a",
+            "starred": "false",
+            "start_date": _START.isoformat(),
+            "end_date": _END.isoformat(),
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json() == []
+    assert db.last_statuses == ["processing", "completed"]
+    assert db.last_sources == ["omi"]
+    assert db.last_folder_id == "folder-a"
+    assert db.last_starred is False
+    assert db.last_start_date == _START
+    assert db.last_end_date == _END

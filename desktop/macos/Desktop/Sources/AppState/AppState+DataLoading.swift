@@ -17,6 +17,9 @@ extension AppState {
   /// the cached projection immediately and quietly replaces it with server truth.
   func loadConversations() async {
     await conversationRepository.load(query: currentConversationQuery)
+    // Every capture-stop path ends here; the Saving card has held the Live
+    // card's slot until this load could show the conversation as a row.
+    isFinalizingCapture = false
     NotificationCenter.default.post(name: .conversationsPageDidLoad, object: nil)
   }
 
@@ -187,6 +190,17 @@ extension AppState {
     )) ?? conversation
   }
 
+  /// Loads a conversation by id through the repository, for callers that hold
+  /// only an id (a capture-group member the list has not loaded). Nil on failure.
+  func loadConversation(id: String) async -> ServerConversation? {
+    do {
+      return try await conversationRepository.detail(id: id)
+    } catch {
+      logError("Conversations: Failed to load conversation by id", error: error)
+      return nil
+    }
+  }
+
   func searchConversations(_ query: String) async throws -> [ServerConversation] {
     try await conversationRepository.search(text: query)
   }
@@ -201,6 +215,19 @@ extension AppState {
       return true
     } catch {
       logError("Conversations: Failed to delete conversation", error: error)
+      return false
+    }
+  }
+
+  /// Splits a recording out of the event it was grouped into, then refetches so
+  /// every member's membership reflects the server.
+  func separateConversationFromCaptureGroup(_ conversationId: String) async -> Bool {
+    do {
+      try await APIClient.shared.separateConversationFromCaptureGroup(id: conversationId)
+      await refreshConversations()
+      return true
+    } catch {
+      logError("Conversations: Failed to separate conversation from its capture group", error: error)
       return false
     }
   }
@@ -243,11 +270,44 @@ extension AppState {
   }
 
   /// Assigns segments to a person or user via bulk API
+  /// When a backend bulk-assign fails, only "the conversation does not exist
+  /// there yet" may fall back to a local-first assignment — any other failure
+  /// (auth, validation, server error) must surface to the user, because the
+  /// backend HAS the conversation and rejected the change.
+  enum SpeakerAssignmentFallbackPolicy {
+    static func keepsAssignmentLocally(statusCode: Int) -> Bool {
+      statusCode == 404
+    }
+  }
+
+  /// The wire targets a caller may send: backend segment ids, or `#index:N`
+  /// positional fallbacks for segments stored without ids (the same contract
+  /// the backend's `_resolve_bulk_segment_indices` accepts). The local half of
+  /// an assignment must resolve BOTH — matching only ids silently drops every
+  /// positional target on the floor.
+  enum SpeakerAssignmentTargets {
+    static let indexPrefix = "#index:"
+
+    static func parse(_ targets: [String]) -> (ids: [String], orders: [Int]) {
+      var ids: [String] = []
+      var orders: [Int] = []
+      for target in targets {
+        if target.hasPrefix(indexPrefix), let order = Int(target.dropFirst(indexPrefix.count)) {
+          orders.append(order)
+        } else {
+          ids.append(target)
+        }
+      }
+      return (ids, orders)
+    }
+  }
+
   func assignSpeakerToSegments(
     conversationId: String,
     segmentIds: [String],
     personId: String?,
-    isUser: Bool
+    isUser: Bool,
+    isCurrent: @MainActor () -> Bool = { true }
   ) async -> Bool {
     do {
       try await APIClient.shared.assignSegmentsBulk(
@@ -257,37 +317,195 @@ extension AppState {
         personId: personId
       )
       log("People: Assigned \(segmentIds.count) segments in conversation \(conversationId)")
-      // Update in-memory conversations list so the prop is fresh on next open
-      let idSet = Set(segmentIds)
-      if let idx = conversations.firstIndex(where: { $0.id == conversationId }) {
-        for segIdx in conversations[idx].transcriptSegments.indices
-        where idSet.contains(conversations[idx].transcriptSegments[segIdx].id) {
-          let old = conversations[idx].transcriptSegments[segIdx]
-          conversations[idx].transcriptSegments[segIdx] = TranscriptSegment(
-            id: old.id,
-            backendId: old.backendId,
-            text: old.text,
-            speaker: old.speaker,
-            isUser: isUser,
-            personId: isUser ? nil : personId,
-            start: old.start,
-            end: old.end,
-            translations: old.translations
-          )
-        }
-      }
-      // Also update local SQLite cache so changes persist across app restarts
-      try? await TranscriptionStorage.shared.updateSegmentSpeakerAssignment(
-        backendConversationId: conversationId,
-        segmentIds: segmentIds,
-        personId: personId,
-        isUser: isUser
+    } catch let APIError.httpError(statusCode, _)
+      where SpeakerAssignmentFallbackPolicy.keepsAssignmentLocally(statusCode: statusCode)
+    {
+      // The conversation has not reached the backend yet (a pending local session,
+      // or one recovering from local fallback data). The assignment is still the
+      // user's decision: keep it locally — the finalization sync uploads every
+      // segment's person_id/is_user with the conversation itself, so the backend
+      // converges once the session syncs. Failing here surfaced as the
+      // "Couldn't assign this speaker" report on Beta.
+      log("People: Conversation \(conversationId) not on backend yet; keeping speaker assignment local")
+      guard isCurrent() else { return false }
+      // Here the local store is the ONLY holder of the user's decision — if the
+      // write did not land (no matching session, no matching segment, or a
+      // storage error) reporting success would silently drop the assignment.
+      let persisted = await applySpeakerAssignmentLocally(
+        conversationId: conversationId, segmentIds: segmentIds, personId: personId, isUser: isUser)
+      DesktopDiagnosticsManager.shared.recordFallback(
+        area: "speaker_assignment",
+        from: "backend_bulk_assign",
+        to: "local_store",
+        reason: "conversation_not_synced",
+        outcome: persisted ? .degraded : .exhausted
       )
-      return true
+      if !persisted {
+        log(
+          "People: Conversation \(conversationId) is neither on the backend (\(statusCode)) nor in local storage — assignment failed"
+        )
+      }
+      return persisted
     } catch {
       logError("People: Failed to assign segments", error: error)
       return false
     }
+    // Backend accepted the change — it owns the assignment now. The local
+    // mirror is best-effort: a conversation recorded on another device has no
+    // local session, and 0 updated rows is expected there.
+    guard isCurrent() else { return true }
+    _ = await applySpeakerAssignmentLocally(
+      conversationId: conversationId, segmentIds: segmentIds, personId: personId, isUser: isUser)
+    return true
+  }
+
+  /// Apply the same assignment to any conversation copy, including the detail and list.
+  static func assigningSpeaker(
+    _ conversation: ServerConversation, targets: [String], personId: String?, isUser: Bool
+  ) -> ServerConversation {
+    var updated = conversation
+    let parsed = SpeakerAssignmentTargets.parse(targets)
+    let ids = Set(parsed.ids)
+    let orders = Set(parsed.orders)
+    for index in updated.transcriptSegments.indices
+    where ids.contains(updated.transcriptSegments[index].id)
+      || updated.transcriptSegments[index].backendId.map(ids.contains) == true
+      || orders.contains(index)
+    {
+      let old = updated.transcriptSegments[index]
+      updated.transcriptSegments[index] = TranscriptSegment(
+        id: old.id, backendId: old.backendId, text: old.text, speaker: old.speaker,
+        isUser: isUser, personId: isUser ? nil : personId, start: old.start,
+        end: old.end, translations: old.translations)
+    }
+    return updated
+  }
+
+  /// The local SQLite cache survives restarts and carries assignments for pending sessions.
+  /// - Returns: whether the SQLite write actually updated at least one segment.
+  ///   False means nothing durable holds the assignment (no local session, no
+  ///   matching segment, or a storage error).
+  @discardableResult
+  private func applySpeakerAssignmentLocally(
+    conversationId: String,
+    segmentIds: [String],
+    personId: String?,
+    isUser: Bool
+  ) async -> Bool {
+    let targets = SpeakerAssignmentTargets.parse(segmentIds)
+    // Also update the local SQLite cache so the assignment survives restarts —
+    // and, for a conversation the backend does not have yet, so the finalization
+    // sync can carry person_id/is_user up with the session. Awaited: returning
+    // success before the write lands would let a quit drop the user's decision.
+    do {
+      let updatedRows = try await TranscriptionStorage.shared.updateSpeakerAssignmentByBackendId(
+        conversationId,
+        segmentIds: targets.ids,
+        fallbackSegmentOrders: targets.orders,
+        isUser: isUser,
+        personId: isUser ? nil : personId
+      )
+      return updatedRows > 0
+    } catch {
+      logError("People: Failed to persist speaker assignment locally", error: error)
+      return false
+    }
+  }
+
+  enum LiveSpeakerAssignment {
+    struct Context {
+      let backendConversationId: String?
+      let sessionId: Int64?
+    }
+
+    @MainActor
+    static func run(
+      context: Context,
+      isCurrent: @MainActor () -> Bool,
+      persistBackend: (String) async throws -> [String],
+      persistLocal: (Int64) async throws -> Int,
+      flushPendingWrites: () async -> Void,
+      notifySocket: ([String]) -> Void,
+      applyAssignment: @MainActor () -> Void
+    ) async -> Bool {
+      guard isCurrent() else { return false }
+      if let backendId = context.backendConversationId {
+        let acknowledgedIds: [String]
+        do {
+          acknowledgedIds = try await persistBackend(backendId)
+        } catch {
+          return false
+        }
+        guard isCurrent() else { return false }
+        notifySocket(acknowledgedIds)
+        applyAssignment()
+        if isCurrent(), let sessionId = context.sessionId {
+          _ = try? await persistLocal(sessionId)
+        }
+        return true
+      }
+
+      await flushPendingWrites()
+      guard isCurrent() else { return false }
+      guard let sessionId = context.sessionId else { return false }
+      let updated: Int
+      do {
+        updated = try await persistLocal(sessionId)
+      } catch {
+        return false
+      }
+      guard updated > 0 else { return false }
+      guard isCurrent() else { return false }
+      applyAssignment()
+      return true
+    }
+  }
+
+  func assignLiveSpeaker(speakerId: Int, personId: String) async -> Bool {
+    guard isTranscribing else { return false }
+    let context = LiveSpeakerAssignment.Context(
+      backendConversationId: currentBackendConversationId ?? pendingBackendConversationId,
+      sessionId: currentSessionId
+    )
+    let ownerGeneration = ownerScopeGeneration
+    let generation = recordingGeneration
+    let useLocalSTT = sttSession.useLocalSTT
+    let isCurrent: @MainActor () -> Bool = { [weak self] in
+      guard let self else { return false }
+      return self.isTranscribing
+        && self.ownerScopeGeneration == ownerGeneration
+        && self.recordingGeneration == generation
+        && self.currentSessionId == context.sessionId
+        && (self.currentBackendConversationId ?? self.pendingBackendConversationId)
+          == context.backendConversationId
+        && self.sttSession.useLocalSTT == useLocalSTT
+    }
+
+    return await LiveSpeakerAssignment.run(
+      context: context,
+      isCurrent: isCurrent,
+      persistBackend: { backendId in
+        let updated = try await APIClient.shared.assignConversationSpeaker(
+          conversationId: backendId, speakerId: speakerId, personId: personId)
+        guard updated.id == backendId else { throw APIError.invalidResponse }
+        return updated.transcriptSegments
+          .filter { $0.speakerId == speakerId && $0.personId == personId && !$0.isUser }
+          .compactMap(\.id)
+      },
+      persistLocal: { sessionId in
+        try await TranscriptionStorage.shared.updateLiveSpeakerAssignment(
+          sessionId: sessionId, speakerId: speakerId, personId: personId)
+      },
+      flushPendingWrites: { await flushTranscriptPersistence() },
+      notifySocket: { [weak self] segmentIds in
+        self?.transcriptionService?.notifySpeakerAssigned(
+          personId: personId, segmentIds: segmentIds)
+      },
+      applyAssignment: { [weak self] in
+        self?.liveSpeakerPersonMap[speakerId] = personId
+        self?.liveManualSpeakerPersonMap[speakerId] = personId
+      }
+    )
   }
 
   // MARK: - Backend Segment Handling

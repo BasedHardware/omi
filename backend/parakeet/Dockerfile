@@ -73,6 +73,9 @@ RUN pip install --no-cache-dir --no-deps "pyannote.audio==3.3.2" && \
     /usr/local/lib/python3.12/dist-packages/pyannote/audio/telemetry/__init__.py
 
 COPY backend/parakeet/ .
+# NeMo already imports a top-level `utils` package, so this module cannot live at
+# /app/utils or the process loads NeMo's package and never sees logging_config.
+COPY backend/utils/logging_config.py ./omi_logging_config.py
 COPY backend/tests/container/ tests/container/
 
 ENV NVIDIA_VISIBLE_DEVICES=all

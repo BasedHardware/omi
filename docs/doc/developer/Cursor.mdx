@@ -19,10 +19,10 @@ If you’re contributing to Omi and using Cursor, understanding `.cursor/` makes
 
 ## `.cursor/` vs `docs/` (important)
 
-- **`docs/`** is the **single source of truth for user-facing documentation** and is what gets deployed to `docs.omi.me`.
-- **`.cursor/`** is **editor/agent configuration** intended to help contributors and AI tooling inside this repo.
+- **`docs/`** is the public Mintlify site at `docs.omi.me`. What belongs there is defined in `docs/AGENTS.md`: how to use the app, hardware/DIY, and how to build on Omi. Unlisted MDX or MD under `docs/` is still a public URL.
+- **`.cursor/`** is **editor/agent configuration** for contributors and AI tooling inside this repo.
 
-In other words: **we document `.cursor/` publicly here (so contributors can use it), but `.cursor/docs/` is not the public documentation site**.
+Do not dump a runbook, flag table, invariant, or agent-only rule into `docs/` "temporarily." Those live next to the owning code (`backend/docs/`, `desktop/macos/docs/`, `.github/agent-docs/`, `product/invariants/`) or in a private tracker. We document `.cursor/` publicly here so contributors can use it; `.cursor/docs/` is not the public site.
 
 ---
 
@@ -65,7 +65,7 @@ Optional hook scripts/config to observe and extend the agent loop. Useful for en
 
 ### MCP config (`.cursor/mcp.json`)
 
-Configuration for MCP servers that provide external tools (e.g. browser testing, GitHub automation, Notion/Figma integration if enabled).
+Configuration for MCP servers that provide external tools (e.g. browser testing, Notion/Figma integration if enabled).
 
 ---
 
@@ -85,10 +85,10 @@ Configuration for MCP servers that provide external tools (e.g. browser testing,
 
 ### Update public documentation
 
-If your change affects user-facing behavior or developer APIs:
+If your change affects how people use the app, hardware, or public developer APIs:
 
-- Update `docs/` (public)
-- Add/adjust nav entries in `docs/docs.json` if you add a new page
+- Read `docs/AGENTS.md` first. Only then update `docs/` and `docs/docs.json`.
+- Operator runbooks, flags, and invariants do not go on the public site.
 
 ---
 
@@ -96,5 +96,5 @@ If your change affects user-facing behavior or developer APIs:
 
 - **Don’t put secrets** (tokens, keys, credentials) in `.cursor/` files.
 - Keep rules **layer-aware** (e.g. don’t encourage importing from `routers/` inside `utils/`).
-- Prefer linking to **public docs in `docs/`** when something is user-facing, and keep `.cursor/docs/` for internal agent context.
+- Prefer linking to **public docs in `docs/`** only when the page fits `docs/AGENTS.md`. Keep `.cursor/docs/` for internal agent context.
 

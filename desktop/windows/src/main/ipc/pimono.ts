@@ -9,7 +9,10 @@
 
 import { ipcMain } from 'electron'
 import { configurePiMonoSession, getPiMonoSession } from '../codingAgent/piMonoSession'
-import { ensurePiMonoAdapterRegistered, setControlPlaneOwner } from '../agentKernel/controlPlane'
+import {
+  ensurePiMonoAdapterRegistered,
+  setControlPlaneOwner
+} from '../agentKernel/controlPlane'
 import { verifyFirebaseIdToken } from '../auth/firebaseIdToken'
 
 /** Registers the `pimono:*` IPC handlers backing the session store. */
@@ -40,4 +43,5 @@ export function registerPiMonoHandlers(): void {
     // DARK: registration only — nothing routes chat to pi-mono until PR-E.
     ensurePiMonoAdapterRegistered()
   })
+
 }

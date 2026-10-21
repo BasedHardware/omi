@@ -10,6 +10,7 @@ before copying, mirroring the decrypt-then-reencrypt pattern already used by mig
 """
 
 import os
+from contextlib import contextmanager
 from unittest.mock import MagicMock
 
 import pytest
@@ -25,6 +26,7 @@ os.environ.setdefault(
 # so no client is constructed and no network is touched on import. Fakes are injected per-test via
 # the firestore_client parameter and monkeypatch on the module's encryption singleton.
 from database import memories  # noqa: E402
+from database.legal_holds import DestructiveOperationInProgress  # noqa: E402
 
 
 class FakeEnc:
@@ -48,6 +50,14 @@ class FakeEnc:
 def enc(monkeypatch):
     """Inject the per-user keyed fake encryption onto the module's lazy singleton (no sys.modules mutation)."""
     monkeypatch.setattr(memories, "encryption", FakeEnc)
+
+    @contextmanager
+    def allow_external_write(uid, *, firestore_client=None):
+        assert uid == "newuid"
+        assert firestore_client is not None
+        yield None
+
+    monkeypatch.setattr(memories, "external_write_fence", allow_external_write)
     return FakeEnc
 
 
@@ -122,3 +132,76 @@ def test_mixed_batch_rekeys_only_enhanced(enc):
     written = _written(batch)
     assert enc.decrypt(written[0]["content"], "newuid") == "alpha"
     assert written[1]["content"] == "beta"
+
+
+def test_destination_deletion_fence_blocks_background_migration_before_any_copy(enc, monkeypatch):
+    @contextmanager
+    def blocked_external_write(uid, *, firestore_client=None):
+        assert uid == "newuid"
+        raise DestructiveOperationInProgress("account deletion owns destination")
+        yield  # pragma: no cover
+
+    monkeypatch.setattr(memories, "external_write_fence", blocked_external_write)
+    db, batch = _make_db([{"id": "m1", "content": "private", "data_protection_level": "standard"}])
+
+    with pytest.raises(DestructiveOperationInProgress, match="account deletion"):
+        memories.migrate_memories("prevuid", "newuid", firestore_client=db)
+    batch.set.assert_not_called()
+    batch.commit.assert_not_called()
+
+
+class _PlainDoc:
+    """Cheaper than MagicMock for the bulk tests: thousands of docs must stay inside the fast-unit budget."""
+
+    def __init__(self, data):
+        self._data = data
+
+    def to_dict(self):
+        return self._data
+
+
+class _CappedBatch:
+    """Stand-in for a Firestore WriteBatch: commit() refuses more than 500 writes, as the server does."""
+
+    def __init__(self, committed):
+        self._writes = []
+        self._committed = committed
+
+    def set(self, ref, data):
+        self._writes.append(data)
+
+    def commit(self):
+        if len(self._writes) > 500:
+            raise ValueError("maximum 500 writes allowed per request")
+        self._committed.append(list(self._writes))
+        self._writes = []
+
+
+def _make_capped_db(source_dicts):
+    db = MagicMock()
+    memories_ref = db.collection.return_value.document.return_value.collection.return_value
+    memories_ref.stream.return_value = [_PlainDoc(d) for d in source_dicts]
+    committed = []
+    db.batch.side_effect = lambda: _CappedBatch(committed)
+    return db, committed
+
+
+def test_more_memories_than_one_batch_holds_are_all_migrated(enc):
+    src = [{"id": f"m{i}", "content": f"memory {i}", "data_protection_level": "standard"} for i in range(1201)]
+    db, committed = _make_capped_db(src)
+
+    count = memories.migrate_memories("prevuid", "newuid", firestore_client=db)
+
+    assert count == 1201
+    assert [len(chunk) for chunk in committed] == [500, 500, 201]
+    migrated = [memory["id"] for chunk in committed for memory in chunk]
+    assert migrated == [f"m{i}" for i in range(1201)]
+
+
+def test_an_exact_multiple_of_the_limit_does_not_commit_an_empty_batch(enc):
+    src = [{"id": f"m{i}", "content": "x", "data_protection_level": "standard"} for i in range(1000)]
+    db, committed = _make_capped_db(src)
+
+    memories.migrate_memories("prevuid", "newuid", firestore_client=db)
+
+    assert [len(chunk) for chunk in committed] == [500, 500]

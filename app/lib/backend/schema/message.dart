@@ -1,7 +1,10 @@
 import 'dart:convert';
 
 import 'package:collection/collection.dart';
+import 'package:omi/backend/schema/chat_content_block.dart';
 import 'package:omi/backend/schema/gen/messages_wire.g.dart' as wire;
+import 'package:omi/backend/schema/memory_review.dart';
+import 'package:omi/models/chat_evidence_reference.dart';
 import 'package:uuid/uuid.dart';
 
 enum MessageSender { ai, human }
@@ -230,6 +233,9 @@ class ServerMessage {
   MessageType type;
 
   String? appId;
+  String? messageSource;
+  String? metadata;
+  String? wireType;
   bool fromIntegration;
 
   List<MessageFile> files;
@@ -246,6 +252,13 @@ class ServerMessage {
   Map<String, dynamic>? rawChartData;
   List<Map<String, dynamic>> contentBlocks;
 
+  /// Receipt for a successful memory write in this streamed reply.
+  String? memoryAction;
+
+  /// Optional supplemental references. Text remains authoritative when this
+  /// envelope is absent, malformed, unavailable, or from a future version.
+  ChatEvidenceReferenceEnvelope? evidenceEnvelope;
+
   ServerMessage(
     this.id,
     this.createdAt,
@@ -257,11 +270,15 @@ class ServerMessage {
     this.files,
     this.filesId,
     this.memories, {
+    this.messageSource,
+    this.metadata,
+    this.wireType,
     this.askForNps = true,
     this.rating,
     this.chartData,
     this.rawChartData,
     this.contentBlocks = const [],
+    this.evidenceEnvelope,
   });
 
   static ServerMessage fromJson(Map<String, dynamic> json) {
@@ -269,22 +286,35 @@ class ServerMessage {
   }
 
   static ServerMessage fromGeneratedWireJson(Map<String, dynamic> json) {
-    final generated = wire.GeneratedMessage.fromJson(json);
+    // Evidence and content blocks are deliberately fail-soft UI chrome. Decode
+    // them through the bounded compatibility parsers below instead of letting
+    // the strict generated DTO reject an otherwise valid text answer — an FCM
+    // push carries `content_blocks` as JSON text, which the generated
+    // `List<Map>` reader rejects outright.
+    final generatedJson = Map<String, dynamic>.from(json)
+      ..remove('evidence')
+      ..remove('content_blocks');
+    final generated = wire.GeneratedMessage.fromJson(generatedJson);
     final fromIntegration = (json['from_integration'] as bool?) ?? generated.fromExternalIntegration;
     return ServerMessage.fromGenerated(
       generated,
       fromIntegration: fromIntegration,
       contentBlocks: _decodeContentBlocks(json['content_blocks'], generated.metadata),
+      evidenceEnvelope: _decodeEvidenceEnvelope(json, generated.metadata),
     );
   }
 
   static ServerMessage fromResponseJson(Map<String, dynamic> json) {
-    final generated = wire.GeneratedResponseMessage.fromJson(json);
+    final generatedJson = Map<String, dynamic>.from(json)
+      ..remove('evidence')
+      ..remove('content_blocks');
+    final generated = wire.GeneratedResponseMessage.fromJson(generatedJson);
     final fromIntegration = (json['from_integration'] as bool?) ?? generated.fromExternalIntegration;
     return ServerMessage.fromGeneratedResponse(
       generated,
       fromIntegration: fromIntegration,
       contentBlocks: _decodeContentBlocks(json['content_blocks'], generated.metadata),
+      evidenceEnvelope: _decodeEvidenceEnvelope(json, generated.metadata),
     );
   }
 
@@ -294,6 +324,7 @@ class ServerMessage {
     bool askForNps = true,
     ChartData? chartData,
     List<Map<String, dynamic>> contentBlocks = const [],
+    ChatEvidenceReferenceEnvelope? evidenceEnvelope,
   }) {
     final rawChartData = generated.chartData;
     final parsedChartData = chartData ?? ChartData.tryFromJson(rawChartData);
@@ -308,11 +339,15 @@ class ServerMessage {
       generated.files.map(MessageFile.fromGenerated).toList(),
       generated.filesId,
       generated.memories.map(MessageConversation.fromGenerated).toList(),
+      messageSource: generated.messageSource,
+      metadata: generated.metadata,
+      wireType: generated.type,
       askForNps: askForNps,
       rating: generated.rating,
       chartData: parsedChartData,
       rawChartData: rawChartData,
       contentBlocks: contentBlocks,
+      evidenceEnvelope: evidenceEnvelope,
     );
   }
 
@@ -321,6 +356,7 @@ class ServerMessage {
     bool? fromIntegration,
     ChartData? chartData,
     List<Map<String, dynamic>> contentBlocks = const [],
+    ChatEvidenceReferenceEnvelope? evidenceEnvelope,
   }) {
     final rawChartData = generated.chartData;
     final parsedChartData = chartData ?? ChartData.tryFromJson(rawChartData);
@@ -335,11 +371,15 @@ class ServerMessage {
       generated.files.map(MessageFile.fromGenerated).toList(),
       generated.filesId,
       generated.memories.map(MessageConversation.fromGenerated).toList(),
+      messageSource: generated.messageSource,
+      metadata: generated.metadata,
+      wireType: generated.type,
       askForNps: generated.askForNps ?? false,
       rating: generated.rating,
       chartData: parsedChartData,
       rawChartData: rawChartData,
       contentBlocks: contentBlocks,
+      evidenceEnvelope: evidenceEnvelope,
     );
   }
 
@@ -354,7 +394,9 @@ class ServerMessage {
       'created_at': createdAt.toUtc().toIso8601String(),
       'text': text,
       'sender': sender.toString().split('.').last,
-      'type': type.toString().split('.').last,
+      'type': wireType ?? type.value,
+      if (messageSource != null) 'message_source': messageSource,
+      if (metadata != null) 'metadata': metadata,
       'plugin_id': appId,
       'from_integration': fromIntegration,
       'memories': memories.map((m) => m.toJson()).toList(),
@@ -363,12 +405,49 @@ class ServerMessage {
       'rating': rating,
       'chart_data': chartJson,
       'content_blocks': contentBlocks,
+      if (evidenceEnvelope != null) 'evidence': evidenceEnvelope!.toJson(),
     };
   }
 
+  /// Decode only additive evidence fields. A malformed or unknown payload is
+  /// treated as absent so released text/chat behavior remains unchanged.
+  static ChatEvidenceReferenceEnvelope? _decodeEvidenceEnvelope(Map<String, dynamic> json, String? metadata) {
+    final direct =
+        json['evidence'] ?? json['evidence_envelope'] ?? json['evidence_refs'] ?? json['evidence_references'];
+    final parsedDirect = _tryEvidenceEnvelope(direct);
+    if (parsedDirect != null) return parsedDirect;
+
+    if (metadata == null || metadata.isEmpty) return null;
+    try {
+      final decoded = jsonDecode(metadata);
+      if (decoded is! Map) return null;
+      final metadataMap = Map<String, dynamic>.from(decoded);
+      return _tryEvidenceEnvelope(
+        metadataMap['evidence'] ??
+            metadataMap['evidence_envelope'] ??
+            metadataMap['evidence_refs'] ??
+            metadataMap['evidence_references'],
+      );
+    } on FormatException {
+      return null;
+    } on TypeError {
+      return null;
+    }
+  }
+
+  static ChatEvidenceReferenceEnvelope? _tryEvidenceEnvelope(Object? value) {
+    if (value is List) return ChatEvidenceReferenceEnvelope.tryFromJson({'references': value});
+    return ChatEvidenceReferenceEnvelope.tryFromJson(value);
+  }
+
   static List<Map<String, dynamic>> _decodeContentBlocks(dynamic firstClass, String? metadata) {
-    final direct = _mapList(firstClass);
-    if (direct.isNotEmpty || firstClass is List) return direct;
+    // FCM data payloads are Dict[str, str], so a push (the only transport that
+    // carries a `day_summary` message today) delivers `content_blocks` as JSON
+    // text. Decode it here so both transports have one decoder; anything
+    // malformed degrades to "no blocks", never to a lost message.
+    final firstClassValue = firstClass is String ? _tryDecodeJson(firstClass) : firstClass;
+    final direct = _mapList(firstClassValue);
+    if (direct.isNotEmpty || firstClassValue is List) return direct;
     if (metadata == null || metadata.isEmpty) return const [];
     try {
       final decoded = jsonDecode(metadata);
@@ -383,36 +462,64 @@ class ServerMessage {
     return value.whereType<Map>().map((item) => Map<String, dynamic>.from(item)).toList(growable: false);
   }
 
-  static const _desktopChatChromeTypes = {
-    'goalLink',
-    'goal_link',
-    'taskCard',
-    'task_card',
-    'questionCard',
-    'question_card',
-  };
+  List<ChatContentBlock>? _typedContentBlocks;
+  static Object? _tryDecodeJson(String value) {
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) return null;
+    try {
+      return jsonDecode(trimmed);
+    } on FormatException {
+      return null;
+    }
+  }
 
-  /// Desktop Chat-first cards (goal/task/question) are interactive shell chrome.
-  /// Mobile has no renderer for them, so fallback dumps like
-  /// `Goal - … Task Task Task` should not appear in the phone timeline.
-  bool get hideFromMobileChat {
-    if (sender != MessageSender.ai) return false;
-    if (type != MessageType.text) return false;
-    if (files.isNotEmpty || memories.isNotEmpty) return false;
+  /// The `memoryReviewCard` block for this message, when it carries a usable one.
+  MemoryReviewCardBlock? get memoryReviewCard {
+    for (final block in contentBlocks) {
+      final card = MemoryReviewCardBlock.tryFromBlock(block);
+      if (card != null) return card;
+    }
+    return null;
+  }
+
+  /// The one grounded follow-up question the answer invites, when present.
+  String? get followUpQuestion {
+    for (final block in contentBlocks) {
+      if (!_followUpTypes.contains(block['type'])) continue;
+      final text = block['text'];
+      if (text is String && text.trim().isNotEmpty) return text.trim();
+    }
+    return null;
+  }
+
+  static const _followUpTypes = {'followUp', 'follow_up'};
+
+  /// Typed projection of [contentBlocks], decoded once per message.
+  ///
+  /// The raw list stays authoritative on the wire (see [toJson]); this is the
+  /// renderable view used by the chat content-block widgets.
+  List<ChatContentBlock> get typedContentBlocks => _typedContentBlocks ??= ChatContentBlock.decodeList(contentBlocks);
+
+  /// True when [text] carries nothing beyond the fallback text synthesized from
+  /// [contentBlocks]. The interactive blocks then replace the body instead of
+  /// repeating it.
+  bool get textIsStructuredFallback {
     if (contentBlocks.isEmpty) return false;
-    if (!_blocksAreDesktopChatChromeOnly(contentBlocks)) return false;
     final fallback = _structuredFallbackText(contentBlocks);
     if (fallback.isEmpty) return false;
     final body = text.trim();
     return body.isEmpty || _normalizeWhitespace(body) == _normalizeWhitespace(fallback);
   }
 
-  static List<ServerMessage> visibleOnMobile(Iterable<ServerMessage> messages) {
-    return messages.where((message) => !message.hideFromMobileChat).toList();
-  }
-
-  static bool _blocksAreDesktopChatChromeOnly(List<Map<String, dynamic>> blocks) {
-    return blocks.every((block) => _desktopChatChromeTypes.contains(block['type']));
+  /// Returns the canonical body fallback for one raw wire block.
+  ///
+  /// A rich block can replace the ordinary message body on clients that know
+  /// how to render it. Unrecognised or display-only blocks still need their
+  /// synthesized line in that mode; otherwise a mixed turn silently loses
+  /// thinking, tool, citation, or future block content.
+  String? structuredFallbackTextForRawBlock(Map<String, dynamic> block) {
+    final fallback = _blockFallbackText(block).trim();
+    return fallback.isEmpty ? null : fallback;
   }
 
   static String _normalizeWhitespace(String value) {
@@ -430,8 +537,11 @@ class ServerMessage {
   }
 
   static String _blockFallbackText(Map<String, dynamic> block) {
-    String value(String camel, [String? snake]) =>
-        ((block[camel] ?? (snake == null ? null : block[snake])) as String? ?? '').trim();
+    String value(String camel, [String? snake]) {
+      final candidate = block[camel] ?? (snake == null ? null : block[snake]);
+      return candidate is String ? candidate.trim() : '';
+    }
+
     String labelled(String label, Iterable<String> details) {
       final unique = details.where((detail) => detail.isNotEmpty).toSet().toList(growable: false);
       return unique.isEmpty ? label : '$label - ${unique.join(' - ')}';
@@ -451,6 +561,17 @@ class ServerMessage {
       case 'questionCard':
       case 'question_card':
         return value('text').isEmpty ? 'Question' : value('text');
+      case 'memoryReviewCard':
+      case 'memory_review_card':
+      case 'followUp':
+      case 'follow_up':
+        // Both render natively on mobile — MemoryReviewCard draws its own
+        // "Things I learned today" heading, and ChatFollowUpChip draws the
+        // question. Inventing the same words as fallback prose says them
+        // twice; and when the block is malformed enough that no card renders
+        // (MemoryReviewCardBlock.tryFromBlock returns null for an item-less
+        // block), a bare heading over nothing is worse than no heading.
+        return '';
       case 'taskCard':
       case 'task_card':
         return 'Task';
@@ -466,8 +587,17 @@ class ServerMessage {
       case 'memoryLink':
       case 'memory_link':
         return labelled('Memory', [value('summary')]);
+      case 'editReceipt':
+      case 'edit_receipt':
+        // The summary already reads as a sentence ("Renamed the task to …").
+        return value('summary').isEmpty ? 'Change' : value('summary');
       case 'citation':
         return labelled('Source', [value('title'), value('preview')]);
+      case 'evidence':
+      case 'evidence_envelope':
+        // Evidence is optional UI chrome. Never invent fallback answer text for
+        // a reference-only block.
+        return '';
       case 'agentSpawn':
       case 'agent_spawn':
         return labelled('Agent started', [value('title'), value('objective')]);
@@ -507,15 +637,36 @@ class ServerMessage {
     );
   }
 
+  /// Automatic journal entries are hidden on history, cache, and push replay.
+  /// A user reply can contain any of these same rich block types.
+  bool get isAutomaticChatEntry {
+    final decoded = metadata == null ? null : _tryDecodeJson(metadata!);
+    final origin = decoded is Map ? decoded : const {};
+    return origin['chatFirstIntentId'] != null ||
+        origin['chatFirstIntentSource'] != null ||
+        origin['origin'] == 'proactive_notification' ||
+        messageSource == 'proactive_notification' ||
+        (sender == MessageSender.ai &&
+            origin['continuityKey'] is String &&
+            (origin['continuityKey'] as String).startsWith('notification:')) ||
+        (type == MessageType.daySummary || const {'task', 'goal', 'question'}.contains(wireType)) ||
+        contentBlocks.any((block) => block['coldStartSequence'] != null || block['cold_start_sequence'] != null);
+  }
+
   bool get isEmpty => id == '0000';
 }
 
 enum MessageChunkType {
   think('think'),
+  memory('memory'),
   data('data'),
   done('done'),
   error('error'),
-  message('message');
+  message('message'),
+
+  /// The server is asking this client to run a tool that only exists on the
+  /// device. The turn stays open while the user answers.
+  tool('tool');
 
   final String value;
 
@@ -527,8 +678,9 @@ class ServerMessageChunk {
   MessageChunkType type;
   String text;
   ServerMessage? message;
+  String? errorCode;
 
-  ServerMessageChunk(this.messageId, this.text, this.type, {this.message});
+  ServerMessageChunk(this.messageId, this.text, this.type, {this.message, this.errorCode});
 
   static ServerMessageChunk failedMessage() {
     return ServerMessageChunk(

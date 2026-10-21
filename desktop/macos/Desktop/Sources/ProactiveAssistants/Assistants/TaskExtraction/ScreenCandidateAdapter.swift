@@ -330,6 +330,7 @@ protocol CanonicalScreenCandidateClient {
 }
 
 struct APICanonicalScreenCandidateClient: CanonicalScreenCandidateClient {
+  var authorization: RuntimeOwnerAuthorizationSnapshot? = nil
   func create(
     _ candidate: OmiAPI.CandidateCreate,
     idempotencyKey: String,
@@ -338,7 +339,8 @@ struct APICanonicalScreenCandidateClient: CanonicalScreenCandidateClient {
     let record = try await APIClient.shared.createCanonicalCandidate(
       candidate,
       idempotencyKey: idempotencyKey,
-      accountGeneration: accountGeneration
+      accountGeneration: accountGeneration,
+      authorizationSnapshot: authorization
     )
     return CanonicalScreenCandidateState(
       candidateID: record.candidateId,
@@ -399,9 +401,13 @@ enum CandidateOutboxRetryPolicy {
   /// Transient failures stay retryable forever; validation-class rejections
   /// are counted per row and the row is poisoned after a small number of
   /// attempts so a permanently rejected capture cannot wedge the outbox drain.
-  static func handleDeliveryFailure(_ error: Error, localID: Int64) async {
+  static func handleDeliveryFailure(
+    _ error: Error, localID: Int64, authorization: LocalMutationAuthorization = .unrestricted
+  ) async {
+    guard (try? authorization.require()) != nil else { return }
     guard isPermanentRejection(error),
-      let outcome = try? await StagedTaskStorage.shared.recordCanonicalOutboxRejection(id: localID)
+      let outcome = try? await StagedTaskStorage.shared.recordCanonicalOutboxRejection(
+        id: localID, authorization: authorization)
     else {
       logError("Task: Candidate outbox delivery failed; will retry", error: error)
       return
@@ -422,6 +428,13 @@ enum CandidateOutboxRetryPolicy {
 }
 
 enum ScreenCandidateAdapter {
+  /// The legacy capture contract may identify a staged task rather than a Rewind screenshot.
+  static let captureEvidenceVersion = "capture.v2"
+
+  static func evidenceVersion(for screenshotID: Int64?) -> String {
+    screenshotID == nil ? captureEvidenceVersion : RewindEvidenceCardPolicy.supportedVersion
+  }
+
   static func idempotencyKey(deviceID: String, localID: Int64) -> String {
     "screen:\(deviceID):\(localID)"
   }
@@ -474,7 +487,8 @@ enum ScreenCandidateAdapter {
     task: ExtractedTask,
     dueAt: Date?,
     localEvidenceID: String,
-    deviceID: String
+    deviceID: String,
+    evidenceVersion: String = ScreenCandidateAdapter.captureEvidenceVersion
   ) -> ScreenCandidateDecision {
     let facts = facts(for: task)
     let outcome = ScreenCapturePolicy.evaluate(facts)
@@ -488,7 +502,7 @@ enum ScreenCandidateAdapter {
       id: localEvidenceID,
       kind: .local_screen,
       scope: .device_local,
-      version: "capture.v2"
+      version: evidenceVersion
     )
     let owner = OmiAPI.TaskOwner(rawValue: facts.owner) ?? .unknown
     let priority = OmiAPI.TaskPriority(rawValue: task.priority.rawValue)

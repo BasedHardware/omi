@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-guard-reads-unproduced-signal",
+  "violated_contract": "A safety gate must read a signal that the live path it protects actually produces. When the producer is deleted or never constructed, a gate that treats a missing value as 'no activity' keeps compiling and passing its own tests while permanently allowing the action it exists to prevent.",
+  "canonical_prevention": "Have the protected path publish the gate's signal where the path itself runs, not through an optional service that may never be constructed, and add a behavioral test that drives the production state change and asserts the gate observes it. Timing-only unit tests of the gate's arithmetic do not count.",
+  "canonical_prevention_artifact": [
+    "desktop/macos/Desktop/Sources/Updater/UpdateInstallActivity.swift",
+    "desktop/macos/Desktop/Tests/UpdateInstallActivityTests.swift"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "desktop/macos/Desktop/Sources/Updater/**",
+    "desktop/macos/Desktop/Sources/UpdaterViewModel.swift"
+  ],
+  "status": "open"
+}

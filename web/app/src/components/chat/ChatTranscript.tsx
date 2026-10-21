@@ -6,7 +6,15 @@ import Image from '@tschk/moonshine-next/image';
 import { Brain } from 'lucide-react';
 import type { ClientMessage } from '@/types/conversation';
 import { cn } from '@/lib/utils';
+import { parseChatEvidenceFromRecord } from '@/lib/chatEvidence';
+import {
+  nearestVerticalScroller,
+  scrollEdgesOf,
+  shouldFollowLiveEdge,
+} from '@/lib/scrollEdges';
 import { ChatMarkdown } from './ChatMarkdown';
+import { ChatCitationCards } from './ChatCitationCards';
+import { ChatEvidenceCard } from './ChatEvidenceCard';
 
 /**
  * The chat transcript, with no chrome of its own.
@@ -27,7 +35,7 @@ function formatMessageTime(isoDate: string): string {
 
 function OmiAvatar() {
   return (
-    <div className="flex-shrink-0 w-10 h-10">
+    <div className="h-10 w-10 flex-shrink-0">
       <Image src="/logo.png" alt="Omi" width={40} height={40} className="rounded-full" />
     </div>
   );
@@ -39,7 +47,7 @@ function BouncingDots({ size = 'w-2 h-2' }: { size?: string }) {
       {[0, 150, 300].map((delay) => (
         <div
           key={delay}
-          className={cn(size, 'bg-text-quaternary rounded-full animate-bounce')}
+          className={cn(size, 'animate-bounce rounded-full bg-text-quaternary')}
           style={{ animationDelay: `${delay}ms` }}
         />
       ))}
@@ -65,11 +73,31 @@ export function ChatTranscript({
   autoScroll = true,
 }: ChatTranscriptProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const placedExchangeRef = useRef(false);
 
-  // Scroll to bottom when messages change or streaming text updates
+  // Follow the live edge only while the reader is already there. Home's
+  // history sits in the same overflow ancestor, so a blanket scrollIntoView
+  // here is what yanks an upward history gesture back down.
   useEffect(() => {
-    if (autoScroll) messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [autoScroll, messages, streamingText]);
+    if (!autoScroll) {
+      placedExchangeRef.current = false;
+      return;
+    }
+    const end = messagesEndRef.current;
+    if (!end) return;
+    const scroller = nearestVerticalScroller(end.parentElement);
+    const pinnedToBottom = scroller
+      ? scrollEdgesOf({
+          scrollTop: scroller.scrollTop,
+          scrollHeight: scroller.scrollHeight,
+          clientHeight: scroller.clientHeight,
+        }).atBottom
+      : true;
+    const force = !placedExchangeRef.current;
+    if (!shouldFollowLiveEdge({ pinnedToBottom, force })) return;
+    placedExchangeRef.current = true;
+    end.scrollIntoView({ behavior: force ? 'auto' : 'smooth' });
+  }, [autoScroll, messages, streamingText, isStreaming, currentThinking]);
 
   if (isLoading && messages.length === 0) {
     return (
@@ -94,26 +122,28 @@ export function ChatTranscript({
         >
           {message.sender === 'ai' ? (
             /* AI message with Omi icon */
-            <div className="flex gap-3 max-w-[85%] sm:max-w-[75%]">
+            <div className="flex max-w-[85%] gap-3 sm:max-w-[75%]">
               <OmiAvatar />
-              <div className="flex-1 min-w-0">
-                <div className="rounded-2xl px-5 py-3 bg-bg-secondary border border-stroke text-text-primary">
+              <div className="min-w-0 flex-1">
+                <div className="rounded-2xl border border-stroke bg-bg-secondary px-5 py-3 text-text-primary">
                   {/* Show attached files if any */}
                   {message.files && message.files.length > 0 && (
-                    <div className="flex flex-wrap gap-2 mb-2">
+                    <div className="mb-2 flex flex-wrap gap-2">
                       {message.files.map((file) => (
                         <div
                           key={file.id}
-                          className="text-xs px-2 py-1 rounded bg-bg-tertiary"
+                          className="rounded bg-bg-tertiary px-2 py-1 text-xs"
                         >
                           {file.name}
                         </div>
                       ))}
                     </div>
                   )}
-                  <ChatMarkdown>{message.text}</ChatMarkdown>
+                  <ChatMarkdown memories={message.memories}>{message.text}</ChatMarkdown>
                 </div>
-                <span className="text-xs text-text-quaternary mt-1 block">
+                <ChatCitationCards memories={message.memories} />
+                <ChatEvidenceCard envelope={parseChatEvidenceFromRecord(message)} />
+                <span className="mt-1 block text-xs text-text-quaternary">
                   {formatMessageTime(message.created_at)}
                 </span>
               </div>
@@ -123,25 +153,25 @@ export function ChatTranscript({
             <div className="max-w-[85%] sm:max-w-[75%]">
               {/* Desktop's user bubble is a neutral raised surface
                   (OmiColors.chatUserBubble #2C2C33), not a coloured fill. */}
-              <div className="rounded-2xl px-5 py-3 bg-[#2C2C33] text-text-primary">
+              <div className="rounded-2xl bg-[#2C2C33] px-5 py-3 text-text-primary">
                 {/* Show attached files if any */}
                 {message.files && message.files.length > 0 && (
-                  <div className="flex flex-wrap gap-2 mb-2">
+                  <div className="mb-2 flex flex-wrap gap-2">
                     {message.files.map((file) => (
                       <div
                         key={file.id}
-                        className="text-xs px-2 py-1 rounded bg-white/10"
+                        className="rounded bg-white/10 px-2 py-1 text-xs"
                       >
                         {file.name}
                       </div>
                     ))}
                   </div>
                 )}
-                <p className="text-sm whitespace-pre-wrap leading-relaxed">
+                <p className="whitespace-pre-wrap text-sm leading-relaxed">
                   {message.text}
                 </p>
               </div>
-              <span className="text-xs text-text-quaternary mt-1 block text-right">
+              <span className="mt-1 block text-right text-xs text-text-quaternary">
                 {formatMessageTime(message.created_at)}
               </span>
             </div>
@@ -156,14 +186,14 @@ export function ChatTranscript({
           animate={{ opacity: 1, y: 0 }}
           className="flex justify-start"
         >
-          <div className="flex gap-3 max-w-[85%] sm:max-w-[75%]">
+          <div className="flex max-w-[85%] gap-3 sm:max-w-[75%]">
             <OmiAvatar />
-            <div className="rounded-2xl px-5 py-3 bg-bg-secondary/50 border border-stroke">
-              <div className="flex items-center gap-2 text-text-secondary mb-2">
-                <Brain className="w-4 h-4" />
+            <div className="rounded-2xl border border-stroke bg-bg-secondary/50 px-5 py-3">
+              <div className="mb-2 flex items-center gap-2 text-text-secondary">
+                <Brain className="h-4 w-4" />
                 <span className="text-sm font-medium">Thinking...</span>
               </div>
-              <p className="text-xs text-text-quaternary whitespace-pre-wrap line-clamp-4">
+              <p className="line-clamp-4 whitespace-pre-wrap text-xs text-text-quaternary">
                 {currentThinking}
               </p>
             </div>
@@ -178,9 +208,9 @@ export function ChatTranscript({
           animate={{ opacity: 1, y: 0 }}
           className="flex justify-start"
         >
-          <div className="flex gap-3 max-w-[85%] sm:max-w-[75%]">
+          <div className="flex max-w-[85%] gap-3 sm:max-w-[75%]">
             <OmiAvatar />
-            <div className="rounded-2xl px-5 py-3 bg-bg-secondary border border-stroke text-text-primary">
+            <div className="rounded-2xl border border-stroke bg-bg-secondary px-5 py-3 text-text-primary">
               <ChatMarkdown isStreaming>{streamingText}</ChatMarkdown>
             </div>
           </div>
@@ -192,7 +222,7 @@ export function ChatTranscript({
         <div className="flex justify-start">
           <div className="flex gap-3">
             <OmiAvatar />
-            <div className="bg-bg-secondary border border-stroke rounded-2xl px-5 py-4">
+            <div className="rounded-2xl border border-stroke bg-bg-secondary px-5 py-4">
               <BouncingDots />
             </div>
           </div>

@@ -51,14 +51,21 @@ export function isPartialFirestoreActivation(
 /** Grafana omi-tv selectors: top-level `rate`, `weeks[]` with week/date. */
 export type GrafanaActivationPayload = ActivationSeries & {
   weeks: Array<ActivationSeries["weeks"][number] & { date: string }>;
+  /**
+   * Cohort members whose per-user read failed and were dropped from the
+   * sample. Non-zero means the rate is computed over a shrunken cohort, so it
+   * must travel with the rate rather than being typed away here.
+   */
+  erroredUsers?: number;
 };
 
 export function toGrafanaActivationPayload(
-  series: ActivationSeries,
+  series: ActivationSeries & { erroredUsers?: number },
 ): GrafanaActivationPayload {
   return {
     ...series,
     weeks: series.weeks.map((week) => ({ ...week, date: week.week })),
+    erroredUsers: series.erroredUsers ?? 0,
   };
 }
 

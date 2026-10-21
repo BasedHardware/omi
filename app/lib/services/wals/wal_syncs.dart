@@ -3,12 +3,14 @@ import 'dart:async';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/models/sync_state.dart';
+import 'package:omi/services/devices/ring_protocol.dart';
 import 'package:omi/services/wals/flash_page_wal_sync.dart';
 import 'package:omi/services/wals/local_wal_sync.dart';
 import 'package:omi/services/wals/ring_storage_sync.dart';
 import 'package:omi/services/wals/sdcard_wal_sync.dart';
 import 'package:omi/services/wals/storage_sync.dart';
 import 'package:omi/services/wals/wal.dart';
+import 'package:omi/services/wals/sync_upload_gate.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/logger.dart';
@@ -61,19 +63,26 @@ class WalSyncs implements IWalSync {
 
   /// Firmware >= 3.0.20 speaks the ring-buffer protocol; older multi-file
   /// firmware (3.0.17–3.0.19) keeps using StorageSync.
-  static bool isRingBufferFirmware(String? version) {
-    if (version == null || version.isEmpty || version == 'Unknown') return false;
-    final parts = version.split('.').map((p) => int.tryParse(p) ?? 0).toList();
-    if (parts.length < 3) return false;
-    if (parts[0] > 3) return true;
-    if (parts[0] < 3) return false;
-    if (parts[1] > 0) return true;
-    if (parts[1] < 0) return false;
-    return parts[2] >= 20;
-  }
+  static bool isRingBufferFirmware(String? version) => RingProtocol.isRingBufferFirmware(version);
 
-  WalSyncs(this.listener) {
-    _phoneSync = LocalWalSyncImpl(listener);
+  WalSyncs(
+    this.listener, {
+    SyncUploadGate? phoneUploadGate,
+    DateTime Function()? phoneNow,
+    Timer Function(Duration, void Function(Timer))? phonePeriodic,
+    Future<SyncJobFetch> Function(String jobId)? phoneJobStatusFetcher,
+    WalCoverageTelemetryEmitter? phoneCoverageTelemetry,
+    Future<int?> Function()? phoneFreeDiskBytes,
+  }) {
+    _phoneSync = LocalWalSyncImpl(
+      listener,
+      uploadGate: phoneUploadGate,
+      now: phoneNow,
+      periodic: phonePeriodic,
+      freeDiskBytes: phoneFreeDiskBytes,
+      jobStatusFetcher: phoneJobStatusFetcher,
+      coverageTelemetry: phoneCoverageTelemetry,
+    );
     _sdcardSync = SDCardWalSyncImpl(listener);
     _flashPageSync = FlashPageWalSyncImpl(listener);
     _storageSync = StorageSyncImpl(listener);
@@ -189,23 +198,7 @@ class WalSyncs implements IWalSync {
   }
 
   int _estimateWalSize(Wal wal) {
-    int bytesPerSecond;
-    switch (wal.codec) {
-      case BleAudioCodec.opusFS320:
-        bytesPerSecond = 16000;
-      case BleAudioCodec.opus:
-        bytesPerSecond = 8000;
-        break;
-      case BleAudioCodec.pcm16:
-        bytesPerSecond = wal.sampleRate * 2 * wal.channel;
-        break;
-      case BleAudioCodec.pcm8:
-        bytesPerSecond = wal.sampleRate * 1 * wal.channel;
-        break;
-      default:
-        bytesPerSecond = 8000;
-    }
-    return bytesPerSecond * wal.seconds;
+    return wal.codec.estimatedRecordingBytes(seconds: wal.seconds, sampleRate: wal.sampleRate, channels: wal.channel);
   }
 
   Future<void> deleteAllSyncedWals() async {
@@ -227,6 +220,10 @@ class WalSyncs implements IWalSync {
   /// Terminal corruption is produced by the phone-local WAL owner. Device
   /// stores keep their existing pending-deletion semantics.
   Future<void> deleteAllCorruptedWals() => _phoneSync.deleteAllCorruptedWals();
+
+  /// Bounded phone-only drain used while iOS/Android grants background time.
+  Future<SyncLocalFilesResponse?> syncLiveCaptureOnly({IWalSyncProgressListener? progress}) =>
+      _phoneSync.syncLiveCaptureOnly(progress: progress);
 
   @override
   void start() {
@@ -379,6 +376,9 @@ class WalSyncs implements IWalSync {
       if (wal.fileNum == -1) {
         return _ringSync.syncWal(wal: wal, progress: progress);
       }
+      if (_storageSync.owns(wal)) {
+        return _storageSync.syncWal(wal: wal, progress: progress);
+      }
       return _sdcardSync.syncWal(wal: wal, progress: progress);
     } else if (wal.storage == WalStorage.flashPage) {
       progress?.onWalSyncedProgress(0.0, phase: SyncPhase.downloadingFromDevice);
@@ -399,6 +399,11 @@ class WalSyncs implements IWalSync {
     _phoneSync.cancelSync();
   }
 
+  void clearUserData() {
+    _phoneSync.clearUserData();
+    cancelSync();
+  }
+
   bool get isStorageSyncing => _storageSync.isSyncing || _ringSync.isSyncing;
 
   double get storageSpeedKBps => _ringSync.isSyncing ? _ringSync.currentSpeedKBps : _storageSync.currentSpeedKBps;
@@ -408,6 +413,11 @@ class WalSyncs implements IWalSync {
   double get sdCardSpeedKBps => _sdcardSync.currentSpeedKBps;
 
   bool get isFlashPageSyncing => _flashPageSync.isSyncing;
+
+  /// Why the last flash-page drain pass stopped early (reset at the start of
+  /// each flash sync). Lets the UI distinguish "pendant is recording" from a
+  /// plain transfer lull instead of reporting silent success.
+  FlashSyncStallReason get flashStallReason => _flashPageSync.lastStallReason;
 
   /// Get conversation IDs accumulated so far from completed upload batches.
   /// Returns null if no sync is in progress or no batches have completed.

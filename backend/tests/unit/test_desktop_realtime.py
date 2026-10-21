@@ -36,7 +36,7 @@ async def test_openai_mint_returns_ephemeral_token_and_persists_no_secret(monkey
 
     monkeypatch.setattr(desktop_realtime, "_persist_session", persist)
 
-    async def run(_executor, function, *_args):
+    async def run(_executor, function, *_args, **_kwargs):
         assert function is desktop_realtime.enforce_desktop_chat_quota
         return False
 
@@ -60,7 +60,7 @@ async def test_mint_classifies_provider_quota_error(monkeypatch):
         ),
     )
 
-    async def run(_executor, function, *_args):
+    async def run(_executor, function, *_args, **_kwargs):
         assert function is desktop_realtime.enforce_desktop_chat_quota
         return False
 
@@ -84,7 +84,7 @@ async def test_mint_classifies_provider_quota_error(monkeypatch):
 async def test_usage_clamps_negative_tokens_and_records_realtime_breakdown(monkeypatch):
     calls = []
 
-    async def run(_executor, function, *args):
+    async def run(_executor, function, *args, **_kwargs):
         if function is desktop_realtime.enforce_desktop_chat_quota:
             return False
         calls.append((function, args))
@@ -105,6 +105,20 @@ async def test_usage_clamps_negative_tokens_and_records_realtime_breakdown(monke
     _, args = calls[0]
     assert args[0] == "user-1"
     assert args[2:] == (10, 5, 0, 15, 0.00044)
+
+
+def test_usage_cost_uses_the_server_issued_gemini_model(monkeypatch):
+    models = []
+
+    def cost(provider, model, turn):
+        models.append((provider, model))
+        return 0.25
+
+    monkeypatch.setattr(desktop_realtime, 'client_reported_cost_usd', cost)
+    report = desktop_realtime.UsageReport(provider='gemini', model='gemini-2.5-flash-native-audio-preview-12-2025')
+
+    assert desktop_realtime._usage_cost(report) == 0.25
+    assert models == [('gemini', 'models/gemini-3.1-flash-live-preview')]
 
 
 def test_realtime_writer_marks_full_provider_cost_complete(monkeypatch):
@@ -134,7 +148,7 @@ def test_realtime_writer_marks_full_provider_cost_complete(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_usage_with_no_positive_tokens_skips_firestore(monkeypatch):
-    async def fail(_executor, function, *_args):
+    async def fail(_executor, function, *_args, **_kwargs):
         if function is desktop_realtime.enforce_desktop_chat_quota:
             return False
         raise AssertionError("usage write should not run")
@@ -152,7 +166,7 @@ async def test_usage_with_no_positive_tokens_skips_firestore(monkeypatch):
 async def test_mint_blocks_quota_before_provider_token_request(monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY", "platform-key")
 
-    async def run(_executor, function, *_args):
+    async def run(_executor, function, *_args, **_kwargs):
         assert function is desktop_realtime.enforce_desktop_chat_quota
         raise HTTPException(status_code=402, detail={"error": "quota_exceeded"})
 
@@ -170,7 +184,7 @@ async def test_mint_blocks_quota_before_provider_token_request(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_usage_blocks_quota_before_recording(monkeypatch):
-    async def run(_executor, function, *_args):
+    async def run(_executor, function, *_args, **_kwargs):
         assert function is desktop_realtime.enforce_desktop_chat_quota
         raise HTTPException(status_code=402, detail={"error": "quota_exceeded"})
 

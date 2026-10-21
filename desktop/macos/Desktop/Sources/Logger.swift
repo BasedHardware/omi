@@ -27,6 +27,7 @@ enum OmiLogPathResolver {
 
 private let logBundleIdentifier = Bundle.main.bundleIdentifier ?? "unknown"
 private let logProcessID = getpid()
+
 private let logFile: String = OmiLogPathResolver.logPath(
   isNonProduction: AppBuild.isNonProduction,
   bundleIdentifier: logBundleIdentifier,
@@ -194,7 +195,8 @@ private func ensureLogParentDirectories() -> Bool {
 }
 
 private func logLine(timestamp: String, category: String, message: String) -> String {
-  "[\(timestamp)] [\(category)] [bundle_id=\(logBundleIdentifier) pid=\(logProcessID)] \(message)"
+  return
+    "[\(timestamp)] [\(category)] [bundle_id=\(logBundleIdentifier) pid=\(logProcessID)] \(message)"
 }
 
 func writeToLogFile(
@@ -238,6 +240,11 @@ private func writeToLogFile(_ data: Data) {
 
 /// Log a performance event with timing info - writes to omi.log with [perf] tag
 func logPerf(_ message: String, duration: Double? = nil, cpu: Bool = false) {
+  guard !DesktopLogPrivacy.suppressContent else { return }
+  if let sink = DesktopLogPrivacy.sink {
+    sink(message)
+    return
+  }
   let timestamp = dateFormatter.string(from: Date())
   var parts = [logLine(timestamp: timestamp, category: "perf", message: message)]
 
@@ -308,6 +315,11 @@ private let isDevBuild: Bool = AppBuild.isNonProduction
 /// Write to log file synchronously — guaranteed to persist even if the app terminates immediately after.
 /// Use sparingly (blocks the calling thread); prefer `log()` for normal logging.
 func logSync(_ message: String) {
+  guard !DesktopLogPrivacy.suppressContent else { return }
+  if let sink = DesktopLogPrivacy.sink {
+    sink(message)
+    return
+  }
   let timestamp = dateFormatter.string(from: Date())
   let line = logLine(timestamp: timestamp, category: "app", message: message)
   print(line)
@@ -321,6 +333,11 @@ func logSync(_ message: String) {
 
 /// Write to log file, stdout, and Sentry breadcrumbs
 func log(_ message: String) {
+  guard !DesktopLogPrivacy.suppressContent else { return }
+  if let sink = DesktopLogPrivacy.sink {
+    sink(message)
+    return
+  }
   let timestamp = dateFormatter.string(from: Date())
   let line = logLine(timestamp: timestamp, category: "app", message: message)
   print(line)
@@ -438,6 +455,11 @@ private func shouldCaptureToSentry(_ message: String) -> Bool {
   return true
 }
 
+/// App-module Swift error used only to prove `typeFamily` tokens stay bounded.
+enum DesktopErrorTelemetryAppModuleProbe: Error {
+  case fixture
+}
+
 /// Privacy-safe, bounded ownership for the shared `logError` Sentry boundary.
 ///
 /// `logError` has hundreds of callers, including failures without an underlying
@@ -451,13 +473,22 @@ struct DesktopErrorTelemetryDescriptor: Equatable {
   let errorType: String
   let errorDomain: String
   let errorCode: String
+  let site: String
 
   var eventTitle: String {
-    "Desktop error [\(area)/\(failureClass)/\(phase)]"
+    if area == "onboarding" {
+      return "Desktop error [\(area)/\(failureClass)/\(phase)/\(site)]"
+    }
+    return "Desktop error [\(area)/\(failureClass)/\(phase)]"
   }
 
-  static func make(error: Error?, fileID: StaticString) -> Self {
+  static func make(
+    error: Error?,
+    fileID: StaticString,
+    function: StaticString = #function
+  ) -> Self {
     let area = area(for: String(describing: fileID))
+    let site = errorSite(fileID: String(describing: fileID), function: String(describing: function))
     guard let error else {
       return Self(
         area: area,
@@ -465,7 +496,8 @@ struct DesktopErrorTelemetryDescriptor: Equatable {
         phase: "runtime",
         errorType: "none",
         errorDomain: "none",
-        errorCode: "none")
+        errorCode: "none",
+        site: site)
     }
 
     let nsError = error as NSError
@@ -476,7 +508,8 @@ struct DesktopErrorTelemetryDescriptor: Equatable {
       phase: "runtime",
       errorType: typeFamily(error, domainFamily: domain),
       errorDomain: domain,
-      errorCode: codeBucket(nsError.code, domainFamily: domain))
+      errorCode: codeBucket(nsError.code, domainFamily: domain),
+      site: site)
   }
 
   private static func area(for fileID: String) -> String {
@@ -489,6 +522,12 @@ struct DesktopErrorTelemetryDescriptor: Equatable {
     }
     if value.contains("audio") || value.contains("microphone") || value.contains("transcription") {
       return "audio"
+    }
+    // Onboarding files such as `OnboardingChatView.swift` contain "chat"; match
+    // the more specific onboarding area first so those sites stay in the
+    // onboarding Sentry group instead of collapsing into chat.
+    if value.contains("onboarding") {
+      return "onboarding"
     }
     if value.contains("chat") || value.contains("conversation") {
       return "chat"
@@ -507,9 +546,6 @@ struct DesktopErrorTelemetryDescriptor: Equatable {
     }
     if value.contains("memory") || value.contains("rewind") {
       return "memory"
-    }
-    if value.contains("onboarding") {
-      return "onboarding"
     }
     if value.contains("recording") || value.contains("listen") {
       return "recording"
@@ -554,9 +590,50 @@ struct DesktopErrorTelemetryDescriptor: Equatable {
     if error is URLError { return "url" }
     if error is CocoaError { return "cocoa" }
     if error is POSIXError { return "posix" }
-    let reflected = String(reflecting: type(of: error))
-    if reflected.hasPrefix("Omi_Computer.") { return "app" }
+    if let appType = appModuleTypeToken(String(reflecting: type(of: error))) {
+      return appType
+    }
     return domainFamily
+  }
+
+  /// Last path component + function, stripped to `[a-z0-9]` so Sentry never
+  /// receives a filesystem path, message, or user content.
+  private static func errorSite(fileID: String, function: String) -> String {
+    let fileToken = boundedToken(lastPathComponent(fileID).replacingOccurrences(of: ".swift", with: ""))
+    let functionToken = boundedToken(functionName(function))
+    switch (fileToken.isEmpty, functionToken.isEmpty) {
+    case (true, true):
+      return "unknown"
+    case (true, false):
+      return String(functionToken.prefix(48))
+    case (false, true):
+      return String(fileToken.prefix(48))
+    case (false, false):
+      return String("\(fileToken).\(functionToken)".prefix(64))
+    }
+  }
+
+  private static func lastPathComponent(_ fileID: String) -> String {
+    fileID.split(separator: "/").last.map(String.init) ?? fileID
+  }
+
+  private static func functionName(_ function: String) -> String {
+    let beforeParen = function.split(separator: "(", maxSplits: 1).first.map(String.init) ?? function
+    return beforeParen.split(separator: " ").last.map(String.init) ?? beforeParen
+  }
+
+  private static func boundedToken(_ raw: String) -> String {
+    String(raw.lowercased().filter { $0.isLetter || $0.isNumber }.prefix(40))
+  }
+
+  private static func appModuleTypeToken(_ reflected: String) -> String? {
+    guard reflected.hasPrefix("Omi_Computer.") else { return nil }
+    let short = reflected.split(separator: ".").last.map(String.init) ?? ""
+    let token = boundedToken(short)
+    if token.isEmpty || token == "nserror" || token == "error" {
+      return "app"
+    }
+    return token
   }
 
   private static func codeBucket(_ code: Int, domainFamily: String) -> String {
@@ -593,8 +670,14 @@ func logError(
   _ message: String,
   error: Error? = nil,
   context: DesktopErrorDiagnosticContext? = nil,
-  fileID: StaticString = #fileID
+  fileID: StaticString = #fileID,
+  function: StaticString = #function
 ) {
+  guard !DesktopLogPrivacy.suppressContent else { return }
+  if let sink = DesktopLogPrivacy.sink {
+    sink(error.map { "\(message): \($0.localizedDescription)" } ?? message)
+    return
+  }
   let timestamp = dateFormatter.string(from: Date())
   let errorDesc = error?.localizedDescription ?? ""
   let fullMessage = error != nil ? "\(message): \(errorDesc)" : message
@@ -627,7 +710,10 @@ func logError(
 
   // Free-form error text stays local. Cloud capture is a stable title plus typed
   // error metadata and a redacted diagnostic attachment.
-  let telemetry = DesktopErrorTelemetryDescriptor.make(error: error, fileID: fileID)
+  let telemetry = DesktopErrorTelemetryDescriptor.make(
+    error: error,
+    fileID: fileID,
+    function: function)
   let attachmentURL = DesktopDiagnosticsManager.shared.writeIncidentDiagnosticsAttachment(
     area: telemetry.area,
     failureClass: telemetry.failureClass,
@@ -645,6 +731,7 @@ func logError(
     scope.setTag(value: telemetry.errorType, key: "error_type")
     scope.setTag(value: telemetry.errorDomain, key: "error_domain")
     scope.setTag(value: telemetry.errorCode, key: "error_code")
+    scope.setTag(value: telemetry.site, key: "error_site")
     scope.setContext(
       value: [
         "area": telemetry.area,
@@ -653,6 +740,7 @@ func logError(
         "error_type": telemetry.errorType,
         "error_domain": telemetry.errorDomain,
         "error_code": telemetry.errorCode,
+        "error_site": telemetry.site,
       ], key: "app_context")
     if let context {
       scope.setContext(value: context.values, key: "failure_diagnostics")

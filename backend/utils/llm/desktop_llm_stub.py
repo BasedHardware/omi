@@ -15,8 +15,25 @@ from dataclasses import dataclass
 from datetime import date
 from typing import Any, Literal
 
+from utils.chat_followup import FOLLOWUP_DELIMITER
+
 DEFAULT_ASSISTANT_TEXT = 'Hermetic LLM stub response.'
 EXACT_MEMORY_AGENT_REQUEST = "Have an agent look through my memories today and surface one surprising insight."
+
+# The one deterministic answer that carries a grounded follow-up tail.
+#
+# Every other steerable path here is unusable for the follow-up chip:
+# ``exact_reply_token`` strips trailing non-alphanumerics, so it cannot even
+# produce the ``?`` a chip question requires, and no other branch emits the
+# delimiter at all. Without this the hermetic chat lane could never produce a
+# chip, so nothing about the tail — that the question leaves the prose, that the
+# chip carries it, that tapping it is attributed — was reachable from an e2e
+# flow. Both halves are asserted verbatim by ``chat-hermetic.yaml``: change them
+# and change the flow in the same commit.
+FOLLOWUP_PROBE_TRIGGER = 'end with a grounded follow-up question'
+FOLLOWUP_PROBE_ANSWER = 'Priya flagged the storage migration in the Tuesday review.'
+FOLLOWUP_PROBE_QUESTION = 'What did Priya say about the storage migration?'
+
 _USER_MESSAGE_BOUNDARY = '\n\n# User Message\n'
 _HARNESS_TOKEN_RE = re.compile(r'(?:GAUNTLET|RESILIENCE)-[A-Z0-9_-]*')
 _MARKER_RE = re.compile(r'\[\[MARKER:([^\]]+)\]\]')
@@ -158,6 +175,16 @@ def exact_reply_token(user_text: str) -> str | None:
     return token or None
 
 
+def followup_probe_answer() -> str:
+    """A grounded answer plus one follow-up tail, in the model's own wire shape.
+
+    The delimiter is imported from ``utils.chat_followup`` rather than repeated
+    so a change to the marker cannot leave the stub emitting the old one and the
+    flow silently asserting a chip that no longer appears.
+    """
+    return f'{FOLLOWUP_PROBE_ANSWER}\n\n{FOLLOWUP_DELIMITER} {FOLLOWUP_PROBE_QUESTION}'
+
+
 def quoted_title(user_text: str) -> str | None:
     lowercase = user_text.lower()
     marker_start = lowercase.find('background agent titled')
@@ -267,6 +294,11 @@ def stub_directive(body: Mapping[str, object]) -> StubDirective:
 
     if 'single word probe only' in normalized:
         return _TextDirective('PROBE')
+
+    # Checked before `exact_reply_token` because that path would otherwise claim
+    # a probe query that also contains "reply with".
+    if FOLLOWUP_PROBE_TRIGGER in normalized:
+        return _TextDirective(followup_probe_answer())
 
     exact = exact_reply_token(user_text)
     if exact:

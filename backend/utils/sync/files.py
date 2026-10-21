@@ -1,3 +1,4 @@
+from utils.observability.sync_phases import sync_phase
 import logging
 import os
 import re
@@ -12,6 +13,7 @@ from models.conversation_enums import ConversationSource
 from utils.log_sanitizer import sanitize
 from utils.request_validation import parse_sync_filename_timestamp
 from utils.sync import playback as sync_playback
+from utils.sync.input_limits import BackfillStoragePressure, raise_sync_storage_pressure, sync_pcm_format
 
 try:
     from opuslib import Decoder
@@ -36,7 +38,12 @@ def _get_opus_decoder_class() -> Any:
 
 
 def decode_opus_file_to_wav(
-    opus_file_path: str, wav_file_path: str, sample_rate: int = 16000, channels: int = 1, frame_size: int = 160
+    opus_file_path: str,
+    wav_file_path: str,
+    sample_rate: int = 16000,
+    channels: int = 1,
+    frame_size: int = 160,
+    decoded_frame_samples: Optional[list[int]] = None,
 ) -> bool:
     """Decode an Opus file with length-prefixed frames to WAV format.
 
@@ -78,8 +85,13 @@ def decode_opus_file_to_wav(
                 try:
                     pcm_frame = decoder.decode(opus_data, frame_size=frame_size)
                     wav_file.writeframes(pcm_frame)
+                    if decoded_frame_samples is not None:
+                        decoded_frame_samples.append(len(pcm_frame) // (2 * channels))
                     frame_count += 1
                 except Exception as e:
+                    # A full volume is capacity pressure, never a corrupt frame:
+                    # keeping the decoded prefix would complete a truncated recording.
+                    raise_sync_storage_pressure(e)
                     logger.warning('Opus decode: frame failed exception_type=%s', type(e).__name__)
                     corrupt_stream = True
                     break
@@ -89,7 +101,7 @@ def decode_opus_file_to_wav(
                 logger.warning(
                     'Opus decode: keeping %d frames decoded before the stream became unreadable', frame_count
                 )
-            logger.info(f"Decoded audio saved to {sanitize(wav_file_path)}")
+            logger.debug(f"Decoded audio saved to {sanitize(wav_file_path)}")
             return True
 
         logger.info("No PCM data was decoded.")
@@ -97,9 +109,19 @@ def decode_opus_file_to_wav(
             os.remove(wav_file_path)
         return False
     except Exception as e:
+        # Capacity pressure must leave as itself (never as a corrupt-stream
+        # False) so the worker defers instead of consuming the staged audio.
+        pressure = e if isinstance(e, BackfillStoragePressure) else None
+        if pressure is None:
+            try:
+                raise_sync_storage_pressure(e)
+            except BackfillStoragePressure as mapped:
+                pressure = mapped
         logger.error(f"Error during decode: {e}")
         if os.path.exists(wav_file_path):
             os.remove(wav_file_path)
+        if pressure is not None:
+            raise pressure
         return False
 
 
@@ -136,7 +158,8 @@ def retrieve_file_paths(files: List[UploadFile], uid: str) -> List[str]:
         except Exception as e:
             if os.path.exists(path):
                 os.remove(path)
-            raise HTTPException(status_code=500, detail=f"Failed to write file {filename}: {str(e)}")
+            logger.error(f"Failed to write file {filename}: {type(e).__name__}")
+            raise HTTPException(status_code=500, detail=f"Failed to write file {filename}") from e
     return paths
 
 
@@ -153,7 +176,12 @@ def get_wav_duration(wav_path: str) -> float:
 
 
 def decode_pcm_file_to_wav(
-    pcm_file_path: str, wav_file_path: str, sample_rate: int = 16000, channels: int = 1, sample_width: int = 2
+    pcm_file_path: str,
+    wav_file_path: str,
+    sample_rate: int = 16000,
+    channels: int = 1,
+    sample_width: int = 2,
+    decoded_frame_samples: Optional[list[int]] = None,
 ) -> bool:
     """Decode a length-prefixed PCM .bin file to WAV.
 
@@ -186,6 +214,8 @@ def decode_pcm_file_to_wav(
                     corrupt_stream = True
                     break
                 pcm_data.extend(frame_data)
+                if decoded_frame_samples is not None:
+                    decoded_frame_samples.append(frame_length // (sample_width * channels))
 
         if not pcm_data:
             logger.info('PCM decode: stream is empty or malformed')
@@ -204,6 +234,7 @@ def decode_pcm_file_to_wav(
         pcm_data.clear()
         return True
     except Exception as e:
+        raise_sync_storage_pressure(e)
         logger.error('PCM decode failed exception_type=%s', type(e).__name__)
         if os.path.exists(wav_file_path):
             os.remove(wav_file_path)
@@ -234,7 +265,8 @@ def detect_source_from_filenames(filenames: List[Optional[str]]) -> Conversation
     return ConversationSource.omi
 
 
-def decode_files_to_wav(files_path: List[str]) -> List[str]:
+@sync_phase('decode_vad')
+def decode_files_to_wav(files_path: List[str], decoded_frames: Optional[dict[str, list[int]]] = None) -> List[str]:
     """Decode each uploaded sync file, isolating unreadable files from their batch.
 
     A batch shares one sync job, so failing the whole batch on a single bad file
@@ -246,25 +278,38 @@ def decode_files_to_wav(files_path: List[str]) -> List[str]:
     unreadable: List[str] = []
     for path in files_path:
         wav_path = path.replace('.bin', '.wav')
+        frame_samples: Optional[list[int]] = [] if decoded_frames is not None else None
         filename = os.path.basename(path)
         frame_size = 160
         match = re.search(r'_fs(\d+)', filename)
         if match:
             try:
                 frame_size = int(match.group(1))
-                logger.info(f"Found frame size {frame_size} in filename: {filename}")
+                logger.debug(f"Found frame size {frame_size} in filename: {filename}")
             except ValueError:
                 logger.error(f"Invalid frame size format in filename: {filename}, using default {frame_size}")
 
         if _is_pcm_codec(filename):
-            sample_rate_match = re.search(r'_pcm(?:8|16)_(\d+)_', filename)
-            sample_rate = (
-                int(sample_rate_match.group(1)) if sample_rate_match else (16000 if '_pcm16_' in filename else 8000)
+            pcm_format = sync_pcm_format(filename)
+            assert pcm_format is not None
+            sample_rate, sample_width = pcm_format
+            success = decode_pcm_file_to_wav(
+                path,
+                wav_path,
+                sample_rate=sample_rate,
+                sample_width=sample_width,
+                decoded_frame_samples=frame_samples,
             )
-            sample_width = 1 if '_pcm8_' in filename else 2
-            success = decode_pcm_file_to_wav(path, wav_path, sample_rate=sample_rate, sample_width=sample_width)
         else:
-            success = decode_opus_file_to_wav(path, wav_path, frame_size=frame_size)
+            success = decode_opus_file_to_wav(
+                path,
+                wav_path,
+                frame_size=frame_size,
+                decoded_frame_samples=frame_samples,
+            )
+
+        if success and decoded_frames is not None and frame_samples is not None:
+            decoded_frames[wav_path] = frame_samples
 
         if os.path.exists(path):
             os.remove(path)

@@ -9,7 +9,7 @@
 // (authSession.forceReauth) and never wipes data.
 import { clearMemoryCache } from './localAgentMemoryCache'
 import { clearPendingConversations, invalidateConversationsCache } from './pageCache'
-import { clearUserScopedPreferences } from './preferences'
+import { clearUserScopedPreferences, resetOnboarding } from './preferences'
 import { CHAT_INFINITE_ID_KEY } from './chatStorageKeys'
 import { POST_HISTORY_KEY } from './sync/backfillStorageKey'
 import { resetByokKeys } from './byokKeys'
@@ -43,6 +43,11 @@ export async function teardownUserData(): Promise<void> {
     await window.omi?.byokClearAll?.()
   } catch (e) {
     console.warn('[auth-teardown] byokClearAll failed:', (e as Error).message)
+  }
+  try {
+    await window.omi?.byokClearCodex?.()
+  } catch (e) {
+    console.warn('[auth-teardown] byokClearCodex failed:', (e as Error).message)
   }
   resetByokKeys()
   // 2b. Hosted MCP export key: same rationale as BYOK — it lives in its own
@@ -117,7 +122,10 @@ export async function reconcileAccountForSignIn(uid: string | null): Promise<voi
   } catch {
     /* privacy mode */
   }
-  if (stored && stored !== uid) await teardownUserData()
+  if (stored && stored !== uid) {
+    resetOnboarding()
+    await teardownUserData()
+  }
   try {
     localStorage.setItem(LAST_UID_KEY, uid)
   } catch {

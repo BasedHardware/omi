@@ -501,7 +501,8 @@ final class KnowledgeGraphPaginationTests: XCTestCase {
         fetches.increment()
         return response
       },
-      initialGraphResponse: KnowledgeGraphResponse(nodes: [], edges: []))
+      initialGraphResponse: KnowledgeGraphResponse(nodes: [], edges: []),
+      ownerNameProvider: { nil })
 
     await viewModel.prepareCanonicalAtlas()
     await viewModel.prepareCanonicalAtlas()

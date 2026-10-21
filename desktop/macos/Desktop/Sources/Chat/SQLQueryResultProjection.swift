@@ -6,7 +6,19 @@ enum SQLQueryResultProjection {
   private static let maxCellCharacters = 500
   private static let maxOutputCharacters = 12_000
 
-  nonisolated static func format(rows: [Row], query: String) -> (text: String, count: Int) {
+  nonisolated static func format(
+    rows: [Row],
+    query: String,
+    timeZone: TimeZone = .current
+  ) -> (text: String, count: Int) {
+    if projectsSQLiteLocalTime(query) {
+      return (
+        "Error: keep timestamp result expressions in UTC. "
+          + "Select raw timestamp/*At columns so execute_sql can localize them once with an explicit zone. "
+          + "Use localtime only when computing UTC WHERE bounds.",
+        rows.count
+      )
+    }
     guard let firstRow = rows.first else {
       let hint =
         referencesScreenshots(query)
@@ -30,7 +42,9 @@ enum SQLQueryResultProjection {
     var truncated = false
 
     for row in rows.prefix(maxRows) {
-      let line = row.map { (_, value) in renderedValue(value) }.joined(separator: " | ")
+      let line = columns.map { name in
+        renderedValue(row[name], column: name, timeZone: timeZone)
+      }.joined(separator: " | ")
       guard characterCount + line.count + 1 <= maxOutputCharacters else {
         truncated = true
         break
@@ -52,6 +66,33 @@ enum SQLQueryResultProjection {
 
   private nonisolated static func referencesScreenshots(_ query: String) -> Bool {
     query.range(of: #"\bscreenshots\b"#, options: [.regularExpression, .caseInsensitive]) != nil
+  }
+
+  /// Timestamp-shaped result columns are localized below. Applying SQLite's
+  /// `localtime` modifier inside the SELECT projection would apply the offset
+  /// twice. WHERE-clause boundary conversion remains valid and is not rejected.
+  private nonisolated static func projectsSQLiteLocalTime(_ query: String) -> Bool {
+    let options: NSRegularExpression.Options = [.caseInsensitive, .dotMatchesLineSeparators]
+    guard
+      let selectRegex = try? NSRegularExpression(
+        pattern: #"\bselect\b(.*?)(?=\bfrom\b|$)"#,
+        options: options
+      ),
+      let localTimeFunctionRegex = try? NSRegularExpression(
+        pattern: #"\b(?:date|time|datetime|julianday|unixepoch|strftime)\s*\([^;]*?['\"]localtime['\"]"#,
+        options: options
+      )
+    else {
+      return false
+    }
+
+    let queryRange = NSRange(query.startIndex..<query.endIndex, in: query)
+    return selectRegex.matches(in: query, range: queryRange).contains { match in
+      guard let projectionRange = Range(match.range(at: 1), in: query) else { return false }
+      let projection = String(query[projectionRange])
+      let range = NSRange(projection.startIndex..<projection.endIndex, in: projection)
+      return localTimeFunctionRegex.firstMatch(in: projection, range: range) != nil
+    }
   }
 
   private nonisolated static func projectsUnboundedOCR(_ query: String, columns: [String]) -> Bool {
@@ -97,7 +138,16 @@ enum SQLQueryResultProjection {
     }
   }
 
-  private nonisolated static func renderedValue(_ databaseValue: DatabaseValue) -> String {
+  private nonisolated static func renderedValue(
+    _ databaseValue: DatabaseValue,
+    column: String,
+    timeZone: TimeZone
+  ) -> String {
+    if let formatted = DesktopChatTimestampFormat.formatSQLCell(
+      column: column, value: databaseValue, timeZone: timeZone)
+    {
+      return formatted
+    }
     let value: String
     switch databaseValue.storage {
     case .null:
@@ -114,4 +164,5 @@ enum SQLQueryResultProjection {
     guard value.count > maxCellCharacters else { return value }
     return String(value.prefix(maxCellCharacters)) + "..."
   }
+
 }

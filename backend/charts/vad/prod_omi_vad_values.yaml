@@ -69,8 +69,6 @@ ingress:
       paths:
         - path: /v1/vad
           pathType: Prefix
-        - path: /v1/speaker-identification
-          pathType: Prefix
   tls: []
   #  - secretName: chart-example-tls
   #    hosts:
@@ -192,3 +190,8 @@ strategy:
   rollingUpdate:
     maxUnavailable: 1
     maxSurge: 0
+
+# Route activation does not switch callers. Install the shared Gateway first.
+gateway:
+  enabled: true
+  name: prod-omi-internal-gateway

@@ -1,6 +1,12 @@
 import { cp, mkdir } from 'node:fs/promises';
 import { categoryMetadata } from '../src/components/marketplace/category';
 
+// Bun.serve closes a connection after 10s with no response bytes. In-flight
+// /api/proxy calls are still awaiting the API at that point, so the socket
+// dies and Cloud Run reports a malformed response / instance connection error.
+// 255s is Bun's maximum and stays inside the Cloud Run request limit (300s).
+export const BUN_REQUEST_TIMEOUT_SECONDS = 255;
+
 export function deriveWebSocketBaseUrl(
   apiBaseUrl: string,
   webSocketBaseUrl = '',
@@ -31,7 +37,8 @@ export function buildPublicEnvironment(
       'NEXT_PUBLIC_FIREBASE_APP_ID',
       'NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID',
       'NEXT_PUBLIC_FIREBASE_VAPID_KEY',
-      'NEXT_PUBLIC_MIXPANEL_TOKEN',
+      'NEXT_PUBLIC_POSTHOG_KEY',
+      'NEXT_PUBLIC_POSTHOG_HOST',
     ].map((key) => [key, environment[key] ?? '']),
   );
   publicEnvironment.NEXT_PUBLIC_WS_BASE_URL = webSocketBaseUrl;
@@ -41,7 +48,6 @@ export function buildPublicEnvironment(
 async function buildAssets(): Promise<void> {
   await mkdir('.moonshine/public', { recursive: true });
   await cp('public', '.moonshine/public', { recursive: true, force: true });
-  await cp('node_modules/leaflet/dist/leaflet.css', '.moonshine/public/leaflet.css');
 
   const publicEnvironment = buildPublicEnvironment(process.env);
   const clientPath = '.moonshine/public/client.js';
@@ -253,7 +259,6 @@ const renderer = {
       image ? '<meta name="twitter:image" content="' + escapeHtml(image) + '">' : '',
       '<link rel="icon" href="/favicon.png">',
       '<link rel="stylesheet" href="/styles.css">',
-      '<link rel="stylesheet" href="/leaflet.css">',
     ].join('');
     const headers = new Headers(response.headers);
     const body = injectServerContent(html, marketplace?.content);
@@ -272,7 +277,14 @@ const handler = createRequestHandler({
 });
 // Prevent clickjacking: disallow embedding any page (incl. /login) in a frame.
 const fetch = async (request) => {
+  // Arm before the handler awaits. The SSE branch below only runs after a
+  // response exists, which is too late for a proxy still waiting on the API.
+  server.timeout(request, ${BUN_REQUEST_TIMEOUT_SECONDS});
   const response = await handler(request);
+  // Streamed chat replies can pause for 25s during a tool call, longer than Bun's 10s idle default.
+  if (response.headers.get('content-type')?.includes('text/event-stream')) {
+    server.timeout(request, 60);
+  }
   const headers = new Headers(response.headers);
   headers.set('X-Frame-Options', 'DENY');
   headers.set('Content-Security-Policy', "frame-ancestors 'none'");

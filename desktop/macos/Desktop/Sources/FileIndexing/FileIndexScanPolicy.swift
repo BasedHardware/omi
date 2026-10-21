@@ -1,6 +1,13 @@
 import Foundation
 
 struct FileIndexScanPolicy {
+  struct AutomaticScanPlan: Equatable {
+    let roots: [URL]
+    /// Existing index rows under roots omitted solely because TCC is unavailable
+    /// must survive this partial scan's deletion pass.
+    let retainedPrefixes: Set<String>
+  }
+
   enum DirectoryEntryPlan: Equatable {
     case skipSubtree
     case descend
@@ -51,6 +58,50 @@ struct FileIndexScanPolicy {
       applicationsURL,
       homeURL.appendingPathComponent("Applications", isDirectory: true),
     ]
+  }
+
+  /// Home subfolders macOS protects with per-folder TCC (Files and Folders):
+  /// enumerating them without Full Disk Access raises a system consent dialog.
+  static let tccProtectedFolderNames: Set<String> = ["Documents", "Desktop", "Downloads"]
+
+  /// Roots the **automatic** indexer (initial backfill, periodic rescan) may
+  /// enumerate. Without Full Disk Access the protected roots are dropped rather
+  /// than scanned — a background scan must never be the thing that throws a
+  /// "grant access to Documents?" sheet at the user. Explicit user-initiated scans
+  /// (Settings → Rescan files) keep the full root set.
+  func automaticScanRoots(
+    homeURL: URL,
+    applicationsURL: URL = URL(fileURLWithPath: "/Applications", isDirectory: true),
+    fullDiskAccessGranted: Bool
+  ) -> [URL] {
+    automaticScanPlan(
+      homeURL: homeURL,
+      applicationsURL: applicationsURL,
+      fullDiskAccessGranted: fullDiskAccessGranted
+    ).roots
+  }
+
+  func automaticScanPlan(
+    homeURL: URL,
+    applicationsURL: URL = URL(fileURLWithPath: "/Applications", isDirectory: true),
+    fullDiskAccessGranted: Bool
+  ) -> AutomaticScanPlan {
+    let roots = standardScanRoots(homeURL: homeURL, applicationsURL: applicationsURL)
+    guard !fullDiskAccessGranted else {
+      return AutomaticScanPlan(roots: roots, retainedPrefixes: [])
+    }
+    let allowedRoots = roots.filter { root in
+      guard root.deletingLastPathComponent().standardizedFileURL == homeURL.standardizedFileURL else {
+        return true
+      }
+      return !Self.tccProtectedFolderNames.contains(root.lastPathComponent)
+    }
+    let allowedPaths = Set(allowedRoots.map(\.standardizedFileURL))
+    let retainedPrefixes = Set(
+      roots
+        .filter { !allowedPaths.contains($0.standardizedFileURL) }
+        .map { relativePath(for: $0, homePath: homeURL.path) })
+    return AutomaticScanPlan(roots: allowedRoots, retainedPrefixes: retainedPrefixes)
   }
 
   func shouldScanDirectory(atDepth depth: Int) -> Bool {

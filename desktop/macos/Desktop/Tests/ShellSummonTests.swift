@@ -1,4 +1,5 @@
 import AppKit
+import OmiTheme
 import XCTest
 
 @testable import Omi_Computer
@@ -125,6 +126,13 @@ final class ShellSummonTests: XCTestCase {
       ShellSummonPlacement.defaultSize.width, DesktopWindowLayoutPolicy.minimumContentSize.width)
     XCTAssertGreaterThanOrEqual(
       ShellSummonPlacement.defaultSize.height, DesktopWindowLayoutPolicy.minimumContentSize.height)
+  }
+
+  func testResetWindowSizeReturnsToTheActualSummonedPanelSize() {
+    XCTAssertEqual(
+      WindowSizeResetPolicy.defaultSize,
+      ShellSummonPlacement.defaultSize,
+      "reset must not revive the obsolete 1200×800 managed-window geometry")
   }
 
   /// A remembered frame already at the hug size is restored exactly. This is the payoff of

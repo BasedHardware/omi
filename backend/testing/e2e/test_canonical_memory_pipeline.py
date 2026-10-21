@@ -8,6 +8,7 @@ from types import SimpleNamespace
 import pytest
 
 from database.memory_vector_metadata import canonical_memory_provider_id
+from database.memory_apply_store import privacy_deletion_receipt_id
 from fakes.firestore import seed_conversation
 from fakes.vector_search import install_vector_search_fakes
 from models.memories import MemoryCategory
@@ -28,7 +29,11 @@ from tests.unit.fixtures.memory_adapter_fakes import (
     stored_item,
 )
 from tests.unit.fixtures.canonical_memory_fakes import _sample_memory_payload
-from utils.memory.canonical_consolidation import ConsolidationAgentBatch, ConsolidationAgentDecision
+from utils.memory.canonical_consolidation import (
+    ConsolidationAgentDecision,
+    apply_consolidation_decision,
+    _read_control_state,
+)
 from utils.memory.canonical_memory_adapter import (
     delete_canonical_memory,
     extraction_memory_id,
@@ -66,11 +71,6 @@ def _trusted_generation_patch(monkeypatch) -> None:
 
 
 def _consolidation_side_effect_patches(monkeypatch) -> None:
-    monkeypatch.setattr(
-        "utils.memory.canonical_consolidation.query_memory_vector_candidates",
-        lambda *args, **kwargs: SimpleNamespace(hits=[], rejected_count=0),
-        raising=False,
-    )
     # Typesense has focused provider tests; this E2E keeps that network boundary
     # hermetic while exercising the normal canonical outbox and vector path.
     monkeypatch.setattr("utils.memory.short_term_promotion.sync_atom_keyword_index_for_item", lambda *_, **__: True)
@@ -111,15 +111,7 @@ def _read_memory_item(db, uid: str, memory_id: str) -> dict:
     return snapshot.to_dict()
 
 
-def _list_outbox_records(db, uid: str) -> list[dict]:
-    records = []
-    for snapshot in db.collection("users").document(uid).collection("memory_outbox").stream():
-        if snapshot.exists:
-            records.append(snapshot.to_dict())
-    return records
-
-
-def _scripted_consolidation_llm(_prompt: str) -> str:
+def _fixture_intake_decision():
     source_memory_id = extraction_memory_id(
         uid=PIPELINE_UID,
         source_id=CONV_ID,
@@ -140,13 +132,11 @@ def _scripted_consolidation_llm(_prompt: str) -> str:
         confidence="high",
         rationale="Explicit user-authored preference.",
     )
-    return json.dumps(ConsolidationAgentBatch(decisions=[decision]).model_dump(mode="json"))
+    return decision
 
 
 def _configure_universal_pipeline(monkeypatch, uid: str = PIPELINE_UID) -> None:
     configure_universal_memory(monkeypatch, uid)
-    monkeypatch.setenv("MEMORY_CANONICAL_CONSOLIDATION_BATCH_THRESHOLD", "1")
-    monkeypatch.setattr("utils.memory.canonical_consolidation.consolidation_batch_threshold", lambda: 1)
     monkeypatch.setattr("utils.other.endpoints._enforce_rate_limit", lambda *args, **kwargs: None)
     _trusted_generation_patch(monkeypatch)
     _consolidation_side_effect_patches(monkeypatch)
@@ -243,17 +233,25 @@ class TestCanonicalMemoryPipelineE2E:
         assert short_term["tier"] == MemoryTier.short_term.value
         assert short_term["status"] == MemoryItemStatus.active.value
 
+        source = MemoryItem.model_validate(short_term)
+        applied = apply_consolidation_decision(
+            PIPELINE_UID,
+            decision=_fixture_intake_decision(),
+            pending_by_id={memory_id: source},
+            control=_read_control_state(PIPELINE_UID, db_client=db),
+            db_client=db,
+            now=NOW,
+            run_id="e2e-canonical-pipeline",
+        )
         maintenance = run_canonical_short_term_maintenance(
             PIPELINE_UID,
             db_client=db,
             now=NOW,
             run_id="e2e-canonical-pipeline",
-            llm_invoke=_scripted_consolidation_llm,
         )
         assert maintenance.skipped_reason is None
-        assert maintenance.consolidation.skipped_reason is None
-        assert maintenance.promoted_count == 1
-        assert maintenance.routed_count == 1
+        assert memory_id in applied
+        assert maintenance.promoted_count == 0
 
         promoted = _read_memory_item(db, PIPELINE_UID, memory_id)
         assert promoted["memory_id"] == memory_id
@@ -339,29 +337,26 @@ class TestCanonicalMemoryPipelineE2E:
         assert "visible-long-term" in product_ids
 
         delete_canonical_memory(PIPELINE_UID, memory_id, db_client=db)
-        tombstoned = _read_memory_item(db, PIPELINE_UID, memory_id)
-        assert tombstoned["status"] == MemoryItemStatus.tombstoned.value
-
-        outbox_records = _list_outbox_records(db, PIPELINE_UID)
-        durable_delete_records = [
-            record
-            for record in outbox_records
-            if record.get("memory_id") == memory_id
-            and record.get("payload", {}).get("action") == "delete"
-            and record.get("event_type") in {"projection_sync", "vector_sync"}
-        ]
-        assert {record["event_type"] for record in durable_delete_records} == {"projection_sync", "vector_sync"}
-        assert {record["payload"]["reason"] for record in durable_delete_records} == {"canonical_memory_delete"}
-
-        cleanup = _drain_canonical_outbox(
-            PIPELINE_UID,
-            db_client=db,
-            run_id="e2e-canonical-pipeline-delete",
-            now=OUTBOX_DUE_AT,
+        assert (
+            not db.collection("users")
+            .document(PIPELINE_UID)
+            .collection("memory_items")
+            .document(memory_id)
+            .get()
+            .exists
         )
-        assert cleanup["errors"] == []
-        assert cleanup["retryable_failure_count"] == 0
-        assert {action["action"] for action in cleanup["actions"]} >= {"projection_delete", "vector_delete"}
+        receipt_id = privacy_deletion_receipt_id(PIPELINE_UID, memory_id)
+        receipt = (
+            db.collection("users")
+            .document(PIPELINE_UID)
+            .collection("memory_deletion_receipts")
+            .document(receipt_id)
+            .get()
+        )
+        assert receipt.exists
+        receipt_payload = receipt.to_dict()
+        assert receipt_payload["schema_version"] == "memory_deletion_receipt.v2"
+        assert memory_id not in repr(receipt_payload)
         assert provider_id not in vectors
 
     def test_universal_repository_failure_fails_closed_without_historical_bleed(

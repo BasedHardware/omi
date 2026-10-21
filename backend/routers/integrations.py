@@ -1,3 +1,5 @@
+from utils.generated_compute import require_generated_compute, generated_compute_configured
+
 # async-blockers: no-import-scope
 # async-blockers: no-changed-range-scope  # pre-existing patterns surfaced by type-annotation import changes
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -142,11 +144,15 @@ def validate_and_consume_oauth_state(state_token: Optional[str]) -> Optional[Dic
 
 # Request/Response models
 class IntegrationData(BaseModel):
-    """Data for an integration connection"""
+    """Compatibility input for integrations without a server OAuth flow.
+
+    Deprecated credential fields remain in the released app-client schema, but
+    registered OAuth providers are rejected before any value is persisted.
+    """
 
     connected: bool = True
-    access_token: Optional[str] = None
-    refresh_token: Optional[str] = None
+    access_token: Optional[str] = Field(default=None, deprecated=True)
+    refresh_token: Optional[str] = Field(default=None, deprecated=True)
 
 
 class AppleHealthSyncData(BaseModel):
@@ -254,6 +260,8 @@ async def synthesize_connector_data(
     their own prompts and inventing memories via Anthropic Haiku chat completions, then
     persist through the normal memory/task write APIs.
     """
+    if generated_compute_configured():
+        await run_blocking(db_executor, require_generated_compute, uid, 'memories')
     from utils.llm import connector_synthesis
 
     if await run_blocking(db_executor, is_trial_paywalled, uid, 'desktop'):
@@ -308,7 +316,15 @@ def get_integration(app_key: str, uid: str = Depends(auth.get_current_user_uid))
 
 @router.put("/v1/integrations/{app_key}", tags=['integrations'], response_model=IntegrationMutationResponse)
 def save_integration(app_key: str, data: IntegrationData, uid: str = Depends(auth.get_current_user_uid)):
-    """Save or update an integration connection."""
+    """Save non-secret state for integrations without server-managed OAuth.
+
+    OAuth credentials are accepted only from a provider callback into the
+    encrypted control plane. This legacy compatibility route cannot inject or
+    replace a provider token.
+    """
+    resolved = resolve_integration_provider(app_key)
+    if resolved and resolved[1]['kind'] == 'oauth':
+        raise HTTPException(status_code=409, detail='oauth_integration_requires_authorization_flow')
     # Convert Pydantic model to dict, excluding None values
     integration_data = data.model_dump(exclude_none=True)
 
@@ -345,9 +361,17 @@ def sync_apple_health_data(data: AppleHealthSyncData, uid: str = Depends(auth.ge
 
     Unlike other integrations that use OAuth, Apple Health data is pushed from the device.
     """
-    # Build the health data structure
+    # Build the health data structure. Every category starts empty: the write below
+    # merges into the stored map, so a category the device no longer sends (a week
+    # without workouts, a revoked HealthKit category) would otherwise keep being
+    # served, stamped with a fresh last_synced.
     health_data: Dict[str, Any] = {
         'period_days': data.period_days,
+        'steps': {},
+        'sleep': {},
+        'heart_rate': {},
+        'active_energy': {},
+        'workouts': [],
     }
 
     # Steps
@@ -403,7 +427,7 @@ def sync_apple_health_data(data: AppleHealthSyncData, uid: str = Depends(auth.ge
         "status": "ok",
         "app_key": "apple_health",
         "synced_at": integration_data['last_synced'],
-        "data_types_synced": list(health_data.keys()),
+        "data_types_synced": [key for key, value in health_data.items() if value or key == 'period_days'],
     }
 
 

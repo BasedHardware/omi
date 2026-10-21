@@ -4,29 +4,26 @@ The local kernel owns its journal. This route validates capability and
 canonical references only; it never creates, updates, or syncs a chat row.
 """
 
-import inspect
 from typing import Annotated, Any
 
 from datetime import datetime, timezone
-import logging
+from uuid import NAMESPACE_URL, uuid5
 
 from fastapi import APIRouter, Body, Depends, HTTPException, status
 from pydantic import ValidationError
 
 import database.action_items as action_items_db
 import database._client as db_client_module
-import database.chat_first_intents as chat_first_intents_db
-import database.conversation_finalization_jobs as finalization_jobs_db
 import database.conversations as conversations_db
 import database.goals as goals_db
+from database.firestore_read_metrics import FirestoreReadSite
 import database.task_intelligence_control as task_control_db
 from models.chat_first import (
     CaptureLinkSpec,
     ConversationLinkSpec,
-    ChatFirstBlockSpec,
+    ChatFirstJournalBlockSpec,
     ChatFirstBlockValidationReceipt,
     ChatFirstBlockValidationRequest,
-    ChatFirstSubject,
     DeferralCreateRequest,
     DeferralReceipt,
     GoalLinkSpec,
@@ -35,23 +32,18 @@ from models.chat_first import (
     MaterializePromptsRequest,
     MaterializePromptsResponse,
     MemoryLinkSpec,
+    MemoryReviewCardSpec,
     TaskCardSpec,
     stable_block_id,
 )
-from utils.metrics import CHAT_FIRST_PROACTIVE_TOTAL
-from utils.log_sanitizer import sanitize_pii
 from utils.memory.memory_service import fetch_memory_dict
 from utils.other import endpoints as auth
-from utils.task_intelligence.chat_first_eligibility import resolve_chat_first_eligibility
-from utils.task_intelligence.proactive_engine import (
-    classify_cold_start_profile,
-    persist_cold_start_intent,
-    persist_daily_opener_intent,
+from utils.task_intelligence.chat_first_eligibility import (
+    resolve_chat_first_eligibility,
+    resolve_task_intelligence_for_user,
 )
-from utils.task_intelligence.rollout import resolve_task_intelligence_for_user
 
 router = APIRouter()
-logger = logging.getLogger(__name__)
 
 
 def _eligibility(uid: str):
@@ -81,98 +73,16 @@ def _require_materialization_capability(uid: str, *, owner_fence: str, control_g
     return eligibility
 
 
-def _daily_opener_blocks(uid: str) -> tuple[list[ChatFirstBlockSpec], ChatFirstSubject | None]:
-    """Build the closed deterministic opener from canonical task/goal facts."""
-
-    focused_goal = goals_db.get_user_goal(uid)
-    if not focused_goal:
-        return [], None
-    goal_id = focused_goal.get('id') or focused_goal.get('goal_id')
-    if not isinstance(goal_id, str) or not goal_id:
-        return [], None
-    title = focused_goal.get('title')
-    summary = title if isinstance(title, str) and title.strip() else 'Today’s focus'
-    blocks: list[ChatFirstBlockSpec] = [GoalLinkSpec(type='goalLink', goal_id=goal_id, summary=summary[:200])]
-    for task in action_items_db.get_action_items(uid, completed=False, limit=3):
-        task_id = task.get('id')
-        if isinstance(task_id, str) and task_id:
-            blocks.append(TaskCardSpec(type='taskCard', task_id=task_id))
-    return blocks, ChatFirstSubject(kind='goal', id=goal_id)
-
-
-def _maybe_persist_daily_opener(uid: str, *, control_generation: int, now: datetime) -> None:
-    """Best-effort lazy opener preparation; a failure never breaks Chat fetch."""
-
-    try:
-        if chat_first_intents_db.has_active_sparse_cold_start_sequence(
-            uid,
-            account_generation=control_generation,
-        ):
-            # A sparse sequence is itself the deterministic Chat tail. Keep a
-            # later daily opener out of the server queue until that journaled
-            # sequence ends, rather than letting it compete behind a question.
-            return
-        if chat_first_intents_db.has_cold_start_intent_created_on(
-            uid,
-            account_generation=control_generation,
-            date_value=now.date(),
-        ):
-            # The cold-start turn is this UTC day's first opener. Do not make
-            # a second card compete with the new Chat experience.
-            return
-        blocks, subject = _daily_opener_blocks(uid)
-        if not blocks:
-            return
-        persist_daily_opener_intent(
-            uid,
-            blocks=blocks,
-            subject=subject,
-            expected_generation=control_generation,
-            now=now,
-            eligibility_resolver=_eligibility,
-        )
-    except Exception as exc:
-        # No product content enters this log. A later foreground request may retry.
-        logger.warning('chat_first_daily_opener_prepare_failed uid=%s error=%s', sanitize_pii(uid), type(exc).__name__)
-
-
-def _maybe_persist_cold_start(uid: str, *, control_generation: int, now: datetime) -> None:
-    """Persist the stable first-run intent only after capability admission."""
-
-    try:
-        # The documented decision table depends only on canonical existence,
-        # not focus scoring or model inference. Fetch the richer opener shape
-        # only when the deterministic counts admit it.
-        canonical_goals = goals_db.get_user_goals(uid, limit=1)
-        open_tasks = action_items_db.get_action_items(uid, completed=False, limit=1)
-        profile = classify_cold_start_profile(
-            canonical_goal_count=len(canonical_goals),
-            open_task_count=len(open_tasks),
-        )
-        rich_blocks, rich_subject = _daily_opener_blocks(uid) if profile == 'rich' else ([], None)
-        persist_cold_start_intent(
-            uid,
-            profile=profile,
-            rich_blocks=rich_blocks,
-            rich_subject=rich_subject,
-            expected_generation=control_generation,
-            now=now,
-            eligibility_resolver=_eligibility,
-        )
-    except Exception as exc:
-        # First-run preparation is retryable and must not turn an ordinary
-        # foreground Chat fetch into an error or leak product content.
-        logger.warning('chat_first_cold_start_prepare_failed uid=%s error=%s', sanitize_pii(uid), type(exc).__name__)
-
-
-def _entity_available(uid: str, block: ChatFirstBlockSpec) -> bool:
+def _entity_available(uid: str, block: ChatFirstJournalBlockSpec) -> bool:
     if isinstance(block, TaskCardSpec):
         task = action_items_db.get_action_item(uid, block.task_id)
         return bool(task and not task.get('is_locked', False))
     if isinstance(block, GoalLinkSpec):
         return goals_db.get_goal_by_id(uid, block.goal_id) is not None
     if isinstance(block, CaptureLinkSpec):
-        capture = conversations_db.get_conversation(uid, block.conversation_id)
+        capture = conversations_db.get_conversation(
+            uid, block.conversation_id, read_site=FirestoreReadSite.CHAT_FIRST_BLOCK_VALIDATION
+        )
         return bool(
             capture
             and capture.get('source') == 'omi'
@@ -180,7 +90,9 @@ def _entity_available(uid: str, block: ChatFirstBlockSpec) -> bool:
             and not capture.get('is_locked', False)
         )
     if isinstance(block, ConversationLinkSpec):
-        conversation = conversations_db.get_conversation(uid, block.conversation_id)
+        conversation = conversations_db.get_conversation(
+            uid, block.conversation_id, read_site=FirestoreReadSite.CHAT_FIRST_BLOCK_VALIDATION
+        )
         return bool(
             conversation
             and conversation.get('source') == 'desktop'
@@ -194,6 +106,14 @@ def _entity_available(uid: str, block: ChatFirstBlockSpec) -> bool:
             return bool(fetch_memory_dict(uid, block.memory_id, db_client=getattr(db_client_module, 'db', None)))
         except HTTPException:
             return False
+    if isinstance(block, MemoryReviewCardSpec):
+        # Every row is a claim the owner can accept or correct in place, so the
+        # card is only admissible if each one is a memory this account still owns.
+        client = getattr(db_client_module, 'db', None)
+        try:
+            return all(bool(fetch_memory_dict(uid, item.memory_id, db_client=client)) for item in block.items)
+        except HTTPException:
+            return False
     subject = block.subject
     if subject.kind == 'cold_start':
         # Synthetic cold-start subjects are admitted only through the
@@ -204,7 +124,9 @@ def _entity_available(uid: str, block: ChatFirstBlockSpec) -> bool:
         return bool(task and not task.get('is_locked', False))
     if subject.kind == 'goal':
         return goals_db.get_goal_by_id(uid, subject.id) is not None
-    capture = conversations_db.get_conversation(uid, subject.id)
+    capture = conversations_db.get_conversation(
+        uid, subject.id, read_site=FirestoreReadSite.CHAT_FIRST_BLOCK_VALIDATION
+    )
     return bool(
         capture
         and capture.get('source') == 'omi'
@@ -271,12 +193,7 @@ def materialize_prompts_v1(
 ) -> LegacyMaterializePromptsResponse:
     """Preserve the released block union; new receipt types remain pending for v2 clients."""
 
-    # Keep the narrow unit-test seam backwards-compatible with older callers
-    # that monkeypatch this helper with its original two-argument signature.
-    if 'exclude_block_types' in inspect.signature(_materialize_prompts).parameters:
-        response = _materialize_prompts(request, uid, exclude_block_types={'conversationLink'})
-    else:
-        response = _materialize_prompts(request, uid)
+    response = _materialize_prompts(request, uid, exclude_block_types={'conversationLink'})
     compatible = [
         LegacyProactiveIntent.model_validate(intent.model_dump())
         for intent in response.intents
@@ -303,96 +220,15 @@ def _materialize_prompts(
     *,
     exclude_block_types: set[str] | frozenset[str] | None = None,
 ) -> MaterializePromptsResponse:
-    """Fetch ready intents and accept kernel receipts; never writes a Chat row.
+    """Retired delivery boundary for released clients: Chat needs a user turn.
 
-    Materialization acknowledgements retire an intent account-wide after one
-    client consumes it. Canonical server-side Chat-row creation is separate
-    follow-up work; until then the consuming client's kernel sync is the writer.
+    Return no queued or historical intents, without reading or preparing the
+    proactive store. Rich blocks still use the capability-scoped validate tool.
     """
-
     _require_materialization_capability(
-        uid,
-        owner_fence=request.owner_fence,
-        control_generation=request.control_generation,
+        uid, owner_fence=request.owner_fence, control_generation=request.control_generation
     )
-    # A materialization request is meaningful only from the already-loaded
-    # rich main-Chat transcript. This keeps cold start and all proactive
-    # delivery inert for legacy, notch, and background callers.
-    if not request.initial_page_loaded or not request.window_foreground:
-        return MaterializePromptsResponse()
-    now = datetime.now(timezone.utc)
-    for receipt in request.receipts:
-        try:
-            delivered_intent = chat_first_intents_db.acknowledge_materialization(
-                uid,
-                intent_id=receipt.intent_id,
-                receipt_id=receipt.receipt_id,
-                account_generation=request.control_generation,
-                now=now,
-            )
-            for block in delivered_intent.blocks:
-                if isinstance(block, ConversationLinkSpec):
-                    try:
-                        finalization_jobs_db.mark_meeting_receipt_materialized(
-                            uid,
-                            block.conversation_id,
-                            delivered_intent.intent_id,
-                            materialized_at=now,
-                        )
-                    except Exception:
-                        logger.exception('meeting receipt materialization projection failed')
-        except chat_first_intents_db.ChatFirstIntentGenerationMismatch as exc:
-            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail='account generation mismatch') from exc
-        except (
-            chat_first_intents_db.ChatFirstIntentConflictError,
-            chat_first_intents_db.ProactiveIntentNotReady,
-        ) as exc:
-            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail='invalid materialization receipt') from exc
-        CHAT_FIRST_PROACTIVE_TOTAL.labels(event='kernel_receipt', source='materialization').inc()
-
-    # The kernel can only emit this after it durably terminalizes the scripted
-    # sequence in its canonical journal. This is an acknowledgement on the
-    # existing sparse intent, not a client-controlled rollout/completion flag.
-    for terminal_receipt in request.cold_start_sequence_terminal_receipts:
-        try:
-            chat_first_intents_db.acknowledge_sparse_cold_start_sequence_terminal(
-                uid,
-                sequence_id=terminal_receipt.sequence_id,
-                receipt_id=terminal_receipt.receipt_id,
-                terminal_state=terminal_receipt.terminal_state,
-                account_generation=request.control_generation,
-                now=now,
-            )
-        except chat_first_intents_db.ChatFirstIntentGenerationMismatch as exc:
-            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail='account generation mismatch') from exc
-        except (
-            chat_first_intents_db.ChatFirstIntentConflictError,
-            chat_first_intents_db.ProactiveIntentNotReady,
-        ) as exc:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT, detail='invalid cold-start terminal receipt'
-            ) from exc
-        CHAT_FIRST_PROACTIVE_TOTAL.labels(event='cold_start_terminal_receipt', source='cold_start_sparse').inc()
-
-    try:
-        released = chat_first_intents_db.release_due_deferrals(
-            uid,
-            account_generation=request.control_generation,
-            now=now,
-        )
-        for _intent in released:
-            CHAT_FIRST_PROACTIVE_TOTAL.labels(event='deferral_released', source='deferral_reraise').inc()
-        _maybe_persist_cold_start(uid, control_generation=request.control_generation, now=now)
-        _maybe_persist_daily_opener(uid, control_generation=request.control_generation, now=now)
-        intents = chat_first_intents_db.fetch_ready_intents(
-            uid,
-            account_generation=request.control_generation,
-            exclude_block_types=exclude_block_types,
-        )
-    except chat_first_intents_db.ChatFirstIntentGenerationMismatch as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail='account generation mismatch') from exc
-    CHAT_FIRST_PROACTIVE_TOTAL.labels(event='fetch', source='materialization').inc()
-    return MaterializePromptsResponse(intents=intents)
+    return MaterializePromptsResponse()
 
 
 @router.post(
@@ -411,19 +247,9 @@ def record_chat_deferral(
         owner_fence=request.owner_fence,
         control_generation=request.control_generation,
     )
-    try:
-        receipt, created = chat_first_intents_db.record_deferral(
-            uid,
-            continuity_key=request.continuity_key,
-            subject=request.subject,
-            question=request.question,
-            account_generation=request.control_generation,
-            now=datetime.now(timezone.utc),
-        )
-    except chat_first_intents_db.ChatFirstIntentGenerationMismatch as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail='account generation mismatch') from exc
-    except chat_first_intents_db.ChatFirstIntentConflictError as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail='deferral continuity conflict') from exc
-    if created:
-        CHAT_FIRST_PROACTIVE_TOTAL.labels(event='deferral_recorded', source='deferral_reraise').inc()
-    return receipt
+    # Acknowledge retired outboxes without scheduling a future Chat entry.
+    return DeferralReceipt(
+        deferral_id=str(uuid5(NAMESPACE_URL, f'chat-deferral:{uid}:{request.continuity_key}')),
+        due_at=datetime.now(timezone.utc),
+        state='released',
+    )

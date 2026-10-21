@@ -1,6 +1,7 @@
 // Web Worker for computing memory insights off the main thread
 // This prevents blocking the UI during expensive computations
 
+import { dayKeyOf } from '@/lib/localDay';
 import type { Memory } from '@/types/conversation';
 
 // Life balance categories with keywords for auto-categorization
@@ -161,10 +162,10 @@ function calculateStreak(memories: Memory[]): number {
   let currentDate = today;
 
   // Group memories by date
-  const memoryDates = new Set(sorted.map((m) => m.created_at.split('T')[0]));
+  const memoryDates = new Set(sorted.map((m) => dayKeyOf(new Date(m.created_at))));
 
   // Check if today has memories, if not start from yesterday
-  const todayStr = today.toISOString().split('T')[0];
+  const todayStr = dayKeyOf(today);
   if (!memoryDates.has(todayStr)) {
     currentDate = new Date(today);
     currentDate.setDate(currentDate.getDate() - 1);
@@ -172,7 +173,7 @@ function calculateStreak(memories: Memory[]): number {
 
   // Count consecutive days
   while (true) {
-    const dateStr = currentDate.toISOString().split('T')[0];
+    const dateStr = dayKeyOf(currentDate);
     if (memoryDates.has(dateStr)) {
       streak++;
       currentDate.setDate(currentDate.getDate() - 1);
@@ -271,7 +272,7 @@ function computeInsights(memories: Memory[]) {
 
     for (const memory of memories) {
       const date = new Date(memory.created_at);
-      const dateStr = date.toISOString().split('T')[0];
+      const dateStr = dayKeyOf(date);
       dailyCounts.set(dateStr, (dailyCounts.get(dateStr) || 0) + 1);
 
       const dayOfWeek = date.getDay();
@@ -406,9 +407,6 @@ function computeInsights(memories: Memory[]) {
 
   // ==================== 7. ACTIVITY CALENDAR ====================
   const activityCalendar = (() => {
-    const last90Days = new Date(now);
-    last90Days.setDate(last90Days.getDate() - 90);
-
     const calendar: Array<{
       date: string;
       count: number;
@@ -419,7 +417,7 @@ function computeInsights(memories: Memory[]) {
     for (let i = 90; i >= 0; i--) {
       const date = new Date(now);
       date.setDate(date.getDate() - i);
-      const dateStr = date.toISOString().split('T')[0];
+      const dateStr = dayKeyOf(date);
       const count = dateMetrics.dailyCounts.get(dateStr) || 0;
 
       calendar.push({
@@ -473,5 +471,4 @@ self.onmessage = (e: MessageEvent) => {
   }
 };
 
-// For TypeScript
-export {};
+export { computeInsights };

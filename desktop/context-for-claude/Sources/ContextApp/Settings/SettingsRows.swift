@@ -192,7 +192,7 @@ struct SettingsRowStack<Item: Identifiable, RowContent: View>: View {
 ///
 /// `Toggle(title, isOn:).labelsHidden()` is the one-word idiom that fixes it, and this type is what
 /// makes it unskippable: the pane cannot spell a switch without a title, because there is no
-/// initialiser that takes none. `docs/product/invariants` asks for compiler-first boundaries before
+/// initialiser that takes none. `product/invariants` asks for compiler-first boundaries before
 /// source scrapes, and this is one — the empty label is no longer expressible.
 struct SettingsToggle: View {
     /// The row's own title, verbatim. Two names for one control is worse than one.

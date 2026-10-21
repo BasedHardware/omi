@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import json
 
+import httpx
+import pytest
+
 from omi_cli.main import app
 
 
@@ -56,3 +59,111 @@ def test_action_item_get_missing_returns_not_found_exit_code(authed_profile, res
     result = cli_runner.invoke(app, ["action-item", "get", "missing"])
     assert result.exit_code == 5  # EXIT_NOT_FOUND
     assert "not found" in result.stderr.lower()
+
+
+@pytest.mark.parametrize("found", [True, False])
+def test_action_item_get_searches_beyond_five_pages(authed_profile, respx_mock, cli_runner, found) -> None:
+    """A full fifth page cannot establish that an action item does not exist."""
+    offsets = []
+
+    def respond(request):
+        offset = int(request.url.params["offset"])
+        offsets.append(offset)
+        assert request.url.params["limit"] == "200"
+        if offset < 1000:
+            return httpx.Response(200, json=[{"id": f"a{i}"} for i in range(offset, offset + 200)])
+        assert offset == 1000
+        return httpx.Response(200, json=[{"id": "target"}] if found else [])
+
+    respx_mock.get("/v1/dev/user/action-items").mock(side_effect=respond)
+    result = cli_runner.invoke(app, ["--json", "action-item", "get", "target"])
+    assert offsets == [0, 200, 400, 600, 800, 1000]
+    assert result.exit_code == (0 if found else 5)
+    if found:
+        assert json.loads(result.stdout) == {"id": "target"}
+
+
+def test_action_item_get_continues_past_short_pages(authed_profile, respx_mock, cli_runner) -> None:
+    """A short page is not exhaustion: the API filters locked records after paging (#13214)."""
+    offsets = []
+
+    def respond(request):
+        offset = int(request.url.params["offset"])
+        offsets.append(offset)
+        if offset == 0:
+            # 199 items after one locked record was filtered from a 200-row page.
+            return httpx.Response(200, json=[{"id": f"a{i}"} for i in range(199)])
+        if offset == 200:
+            return httpx.Response(200, json=[{"id": "target"}])
+        return httpx.Response(200, json=[])
+
+    respx_mock.get("/v1/dev/user/action-items").mock(side_effect=respond)
+    result = cli_runner.invoke(app, ["--json", "action-item", "get", "target"])
+    assert result.exit_code == 0
+    assert json.loads(result.stdout) == {"id": "target"}
+    assert offsets == [0, 200]
+
+
+def test_action_item_get_stops_on_empty_page(authed_profile, respx_mock, cli_runner) -> None:
+    route = respx_mock.get("/v1/dev/user/action-items").respond(json=[])
+    result = cli_runner.invoke(app, ["--json", "action-item", "get", "missing"])
+    assert result.exit_code == 5
+    assert route.call_count == 1
+
+
+def test_action_item_list_invalid_date_range_raises_usage_error(authed_profile, cli_runner) -> None:
+    result = cli_runner.invoke(
+        app,
+        ["action-item", "list", "--start-date", "2026-10-01T00:00:00Z", "--end-date", "2026-09-01T00:00:00Z"],
+    )
+    assert result.exit_code == 1
+    assert "Invalid date range" in result.stderr
+
+
+def test_action_item_list_mixed_timezone_date_range_raises_usage_error(authed_profile, cli_runner) -> None:
+    result = cli_runner.invoke(
+        app,
+        ["action-item", "list", "--start-date", "2026-10-02", "--end-date", "2026-10-01T00:00:00Z"],
+    )
+    assert result.exit_code == 1
+    assert "Invalid date range" in result.stderr
+
+
+def test_action_item_list_handles_non_list_payload(authed_profile, respx_mock, cli_runner) -> None:
+    respx_mock.get("/v1/dev/user/action-items").respond(json={"detail": "Unexpected envelope"})
+    result = cli_runner.invoke(app, ["action-item", "list"])
+    assert result.exit_code == 0
+    assert "Unexpected API response envelope" in result.stderr
+
+
+def test_action_item_list_handles_non_dict_elements(authed_profile, respx_mock, cli_runner) -> None:
+    respx_mock.get("/v1/dev/user/action-items").respond(json=["malformed", 123, {"id": "valid1", "description": "ok"}])
+    result = cli_runner.invoke(app, ["action-item", "list"])
+    assert result.exit_code == 0
+    assert "valid1" in result.stdout
+
+
+def test_action_item_get_handles_non_list_page(authed_profile, respx_mock, cli_runner) -> None:
+    respx_mock.get("/v1/dev/user/action-items").respond(json={"detail": "malformed page"})
+    result = cli_runner.invoke(app, ["action-item", "get", "item_xyz"])
+    assert result.exit_code == 5
+    assert "not found" in result.stderr.lower()
+
+
+def test_action_item_get_handles_non_dict_elements_in_page(authed_profile, respx_mock, cli_runner) -> None:
+    respx_mock.get("/v1/dev/user/action-items").respond(json=["raw_string", {"id": "target", "description": "found"}])
+    result = cli_runner.invoke(app, ["--json", "action-item", "get", "target"])
+    assert result.exit_code == 0
+    assert json.loads(result.stdout)["id"] == "target"
+
+
+def test_action_item_create_rejects_empty_or_whitespace_description(authed_profile, cli_runner) -> None:
+    result = cli_runner.invoke(app, ["action-item", "create", "   "])
+    assert result.exit_code == 1
+    assert "Invalid description" in result.stderr
+
+
+def test_action_item_update_rejects_empty_or_whitespace_description(authed_profile, cli_runner) -> None:
+    result = cli_runner.invoke(app, ["action-item", "update", "a1", "--description", "   "])
+    assert result.exit_code == 1
+    assert "Invalid description" in result.stderr

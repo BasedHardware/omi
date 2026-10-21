@@ -18,6 +18,7 @@ from utils.memory_ingestion.models import (
     UserStateSnapshot,
 )
 from utils.memory_ingestion.pipeline import CoreMemoryPipeline
+from utils.llm.model_config import LUNA_MODEL
 
 
 def _input(event, *, run_id="prodlike-test"):
@@ -65,7 +66,7 @@ def test_memory_llm_omits_unsupported_luna_temperature_by_default(monkeypatch):
     llm = FakeLlm()
     monkeypatch.setattr(production_like_model, "get_llm", lambda _feature: llm)
     monkeypatch.setattr(production_like_model, "get_provider", lambda _feature: "openai")
-    monkeypatch.setattr(production_like_model, "get_model", lambda _feature: "gpt-5.6-luna")
+    monkeypatch.setattr(production_like_model, "get_model", lambda _feature: LUNA_MODEL)
     monkeypatch.setattr(production_like_model, "_memory_llm_logged", False)
 
     assert production_like_model._memory_llm() is llm

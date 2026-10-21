@@ -12,6 +12,7 @@ import { join } from 'path'
 import { appendFileSync } from 'fs'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { supportsMica } from './windowsVersion'
+import { defaultOzonePlatform } from './linuxCompositor'
 import { APP_BG_HEX, HOME_BG_HEX, WCO_SYMBOL_HEX } from '../shared/chrome'
 import iconPath from '../../resources/icon.png?asset'
 import { listCaptureSources } from './ipc/capture'
@@ -44,6 +45,7 @@ import {
   registerBarIpc,
   destroyBar,
   handleSummonPress,
+  summonFromTray,
   setSummonGestureAccelerator,
   setBarEnabled,
   setPeekWatchSuspended,
@@ -73,6 +75,7 @@ import { registerAssistantSettingsHandlers } from './ipc/assistantSettings'
 import { registerBillingIpc } from './billing/checkoutWindow'
 import { registerAppsIpc } from './apps/checkAppSetup'
 import { helperProcess } from './ocr/helperProcess'
+import { registerProactivityConsumer } from './proactivity/register'
 import { registerInsightHandlers } from './ipc/insight'
 import {
   createInsightToastWindow,
@@ -120,7 +123,6 @@ import { maybeGenerateOnStartup as maybeGenerateAiProfileOnStartup } from './ass
 import { setTokenRefresher } from './assistants/core/session'
 import { makeRendererTokenRefresher } from './assistants/core/tokenPull'
 import { registerFocusAssistant } from './assistants/focus/register'
-import { registerInsightAssistant } from './assistants/insight/register'
 import { registerMemoryAssistant } from './assistants/memory/register'
 import { registerTaskAssistant, bringUpTaskEmbeddingIndex } from './assistants/tasks/register'
 import { startTaskPromotionService } from './assistants/tasks/promotionService'
@@ -131,7 +133,7 @@ import {
   startRewindForegroundCaptureTrigger,
   stopRewindForegroundCaptureTrigger
 } from './rewind/foregroundCaptureTrigger'
-import { startRewindOcr } from './rewind/ocrService'
+import { startRewindOcr, stopRewindOcr } from './rewind/ocrService'
 import { startRewindEmbedding } from './rewind/embeddingService'
 import { startRewindRetention } from './rewind/retentionRunner'
 import { startOrphanSweep } from './rewind/orphanSweep'
@@ -422,12 +424,13 @@ if (gotSingleInstanceLock) initCrashSentinel()
 
 // Linux: default to XWayland (x11 ozone). On a native Wayland session Electron
 // cannot register global shortcuts (push-to-talk / overlay summon) and the X11
-// active-window path is blind, so XWayland gives the fullest experience. Set
-// OMI_OZONE=wayland to run natively (accepting those limitations). Also enable
-// the PipeWire capturer (portal screen share) and PulseAudio monitor-source
-// loopback for system-audio capture when pipewire-pulse/Pulse is present.
+// active-window path is blind, so XWayland gives the fullest experience where
+// it's available. On compositors known to lack reliable XWayland support
+// (niri, sway, hyprland — see linuxCompositor.ts) XWayland can instead fail to
+// map the main window at all, so those default to native Wayland despite its
+// own limitations. Set OMI_OZONE=wayland/x11 to override either way.
 if (process.platform === 'linux') {
-  app.commandLine.appendSwitch('ozone-platform', process.env.OMI_OZONE || 'x11')
+  app.commandLine.appendSwitch('ozone-platform', process.env.OMI_OZONE || defaultOzonePlatform())
   app.commandLine.appendSwitch(
     'enable-features',
     'WebRTCPipeWireCapturer,PulseaudioLoopbackForScreenShare'
@@ -902,6 +905,7 @@ app.whenReady().then(async () => {
     }
   })
   registerInsightHandlers()
+  registerProactivityConsumer(() => mainWindow)
   registerMeetingHandlers()
   // What's-new toast (Phase 8): the renderer pulls the pending payload on mount
   // (push-during-load race), and opens the release notes in the system browser.
@@ -1052,6 +1056,13 @@ app.whenReady().then(async () => {
       surfaceMainWindow()
       withMainWindow((win) => win.webContents.send('tray:open-settings'))
     },
+    // Manual bar fallback: the bar is otherwise summon-only via the global
+    // hotkey (see bar/window.ts), which can't register on native Wayland
+    // (no XWayland grab semantics) — see AGENTS.md's Linux dev environment
+    // section. Uses summonFromTray() rather than handleSummonPress() so the
+    // click does not enter the gesture machine or emit PTT phases — a tray
+    // click has no physical key to sample.
+    openBar: () => summonFromTray(),
     // Manual update check (mirrors Settings → About and Mac's "Check for Updates").
     // checkForUpdatesNow never throws; log the outcome for a manual tester.
     checkForUpdates: () => {
@@ -1222,10 +1233,6 @@ app.whenReady().then(async () => {
         // that turns the proactive stack on. The glow window above is pre-created; the
         // renderer relays a session that Focus (and the AI profile) read.
         { name: 'focusAssistant', run: () => registerFocusAssistant() },
-        // Track 3 (Insight assistant): Mac's two-phase tool-calling "Advice" pipeline.
-        // A coordinator peer to Focus (same shared loop); the sole Insight engine now
-        // that the renderer bootstrap no longer runs one.
-        { name: 'insightAssistant', run: () => registerInsightAssistant() },
         // Track 3 (Memory assistant): Mac's interval-based single-shot memory
         // extractor. A coordinator peer to Focus/Insight (same shared loop); no glow,
         // no notification — it records durable facts silently.
@@ -1247,7 +1254,7 @@ app.whenReady().then(async () => {
         // peer — it's a time-triggered job (no screen frames). Registers the manual
         // Suggest IPC and starts the periodic scheduler; both no-op until a session is
         // relayed and the goalAutoGenerationEnabled toggle is on (default OFF).
-        { name: 'goalGeneration', run: () => registerGoalGeneration() }
+        { name: 'goalGeneration', run: () => registerGoalGeneration() },
       ],
       undefined,
       undefined,
@@ -1531,6 +1538,10 @@ app.on('will-quit', () => {
   automationBridge.dispose()
   stopAutomationTargetTracker()
   stopRewindForegroundCaptureTrigger()
+  // Stop the Rewind OCR backfill sweep BEFORE disposing the helper below — a
+  // tick firing after dispose() would otherwise lazily respawn a fresh helper
+  // that nothing is left to kill, orphaning it past app exit.
+  stopRewindOcr()
   // Kill the long-running OCR/window-info helper subprocess. Without this it
   // outlives the app on every quit, so orphaned omi-*-ocr-helper.exe processes
   // pile up across launches (no production dispose() call site before this).

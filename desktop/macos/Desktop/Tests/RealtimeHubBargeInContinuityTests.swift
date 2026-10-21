@@ -1151,7 +1151,10 @@ final class RealtimeHubBargeInContinuityTests: XCTestCase {
     let source = try realtimeHubControllerSource()
     let physicalCommit = try XCTUnwrap(source.range(of: "func commitClaimedHubInput(turnID: VoiceTurnID)"))
     let tail = source[physicalCommit.lowerBound...]
-    let begin = try XCTUnwrap(tail.range(of: "s.beginInputTurn("))
+    // `beginLiveInputTurn(s,…)` is the controller's wrapper around
+    // `session.beginInputTurn(…)`; it carries the parked trusted-turn
+    // instruction. The ordering contract is on the wrapper's call site.
+    let begin = try XCTUnwrap(tail.range(of: "beginLiveInputTurn("))
     let providerCommit = try XCTUnwrap(tail.range(of: "s.commitInputTurn()"))
 
     XCTAssertLessThan(begin.lowerBound, providerCommit.lowerBound)

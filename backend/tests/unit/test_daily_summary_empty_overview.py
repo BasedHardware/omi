@@ -5,7 +5,13 @@ str(summary_data.get('overview', 'Tap to see your daily summary')). get's defaul
 an ABSENT key. DailySummaryPayload.overview defaults to "", so a thin day yields a present-but-empty
 overview -> get returns "" -> the fallback string is dead code -> an empty daily-summary push. The
 body now falls back to the default text when overview is empty.
+
+The day under test carries a conversation with a real overview so the pre-LLM summary-content
+gate (flip-review F-12) lets generation through: this file pins the *delivery* fallback for a
+generator that returned an empty overview, not the titles-only decline.
 """
+
+from types import SimpleNamespace
 
 import utils.other.notifications as notif
 
@@ -13,14 +19,19 @@ import utils.other.notifications as notif
 class _FakeConvo:
     transcript_segments = [object()]
     discarded = False
+    apps_results: list = []
+
+    def __init__(self) -> None:
+        self.structured = SimpleNamespace(overview='You had 3 conversations today.')
 
 
 def _drive(monkeypatch, overview):
     sent = []
     monkeypatch.setattr(notif, 'try_acquire_daily_summary_lock', lambda *a, **k: True)
     monkeypatch.setattr(notif.daily_summaries_db, 'get_daily_summary_by_date', lambda *a, **k: None)
+    monkeypatch.setattr(notif.daily_summaries_db, 'mark_daily_summary_delivery_completed', lambda *a, **k: None)
     monkeypatch.setattr(notif.conversations_db, 'get_conversations', lambda *a, **k: [{'is_locked': False, 'id': 'c1'}])
-    monkeypatch.setattr(notif, 'deserialize_conversation', lambda d: _FakeConvo())
+    monkeypatch.setattr(notif, 'deserialize_conversations', lambda items: [_FakeConvo() for _ in items])
     monkeypatch.setattr(
         notif,
         'generate_comprehensive_daily_summary',
@@ -29,10 +40,16 @@ def _drive(monkeypatch, overview):
     monkeypatch.setattr(notif.daily_summaries_db, 'create_daily_summary', lambda *a, **k: 'sid')
     monkeypatch.setattr(notif.postprocess_executor, 'submit', lambda *a, **k: None)
     monkeypatch.setattr(notif, 'day_summary_webhook', lambda *a, **k: None)
-    monkeypatch.setattr(notif, 'send_notification', lambda *a, **k: sent.append(a))
+    # The scheduled send now selects the day's learned memories for the review
+    # card. Without a stub this reaches the real MemoryService and issues a live
+    # Firestore query from a unit test, which hangs under api_core's retry.
+    monkeypatch.setattr(notif, 'memories_learned_payload', lambda *a, **k: [])
+    # Scheduled delivery now uses the result-bearing send API so it can retain
+    # recipients when no device accepted the push.
+    monkeypatch.setattr(notif, 'send_notification_result', lambda *a, **k: sent.append(a) or 1)
 
     notif._send_summary_notification(('u1', ['tok1']))
-    assert sent, 'send_notification was not called'
+    assert sent, 'send_notification_result was not called'
     return sent[0][2]  # summary_body is the 3rd positional arg
 
 

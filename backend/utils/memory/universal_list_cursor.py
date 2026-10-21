@@ -46,6 +46,7 @@ class StreamKeyset:
 
     updated_at_us: int
     memory_id: str
+    index_window_cursor: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -63,6 +64,10 @@ class UniversalListCursorState:
     canonical_exhausted: bool
     historical_updated_exhausted: bool
     historical_created_exhausted: bool
+    # Additive temporal-read binding.  Defaults preserve decoding of cursors
+    # minted before the belief beta shipped.
+    view: str = 'released'
+    as_of: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -111,7 +116,10 @@ def _signature(payload_segment: str, secret: bytes) -> str:
 def _keyset_payload(keyset: Optional[StreamKeyset]) -> Optional[dict[str, Any]]:
     if keyset is None:
         return None
-    return {'updated_at_us': keyset.updated_at_us, 'memory_id': keyset.memory_id}
+    payload = {'updated_at_us': keyset.updated_at_us, 'memory_id': keyset.memory_id}
+    if keyset.index_window_cursor is not None:
+        payload['index_window_cursor'] = keyset.index_window_cursor
+    return payload
 
 
 def _parse_keyset(payload: Any) -> Optional[StreamKeyset]:
@@ -126,7 +134,10 @@ def _parse_keyset(payload: Any) -> Optional[StreamKeyset]:
         raise UniversalListCursorError('malformed_cursor')
     if not isinstance(memory_id, str) or not memory_id.strip():
         raise UniversalListCursorError('malformed_cursor')
-    return StreamKeyset(updated_at_us=updated_at_us, memory_id=memory_id)
+    window_cursor = data.get('index_window_cursor')
+    if window_cursor is not None and (not isinstance(window_cursor, str) or len(window_cursor) > 4096):
+        raise UniversalListCursorError('malformed_cursor')
+    return StreamKeyset(updated_at_us=updated_at_us, memory_id=memory_id, index_window_cursor=window_cursor)
 
 
 def encode_universal_list_cursor(
@@ -155,6 +166,8 @@ def encode_universal_list_cursor(
         'canonical_exhausted': bool(state.canonical_exhausted),
         'historical_updated_exhausted': bool(state.historical_updated_exhausted),
         'historical_created_exhausted': bool(state.historical_created_exhausted),
+        'view': state.view,
+        'as_of': state.as_of,
         'expires_at_epoch_seconds': now + max(1, ttl),
     }
     payload_segment = _b64encode(_canonical_json(payload))
@@ -170,6 +183,8 @@ def decode_universal_list_cursor(
     device_scope: str,
     client_device_id: Optional[str],
     secret: bytes,
+    view: str = 'released',
+    as_of: Optional[str] = None,
     now_epoch_seconds: Optional[int] = None,
 ) -> UniversalListCursorClaims:
     parts = cursor.split('.') if cursor else []
@@ -230,6 +245,8 @@ def decode_universal_list_cursor(
             canonical_exhausted=bool(data.get('canonical_exhausted')),
             historical_updated_exhausted=bool(data.get('historical_updated_exhausted')),
             historical_created_exhausted=bool(data.get('historical_created_exhausted')),
+            view=str(data.get('view') or 'released'),
+            as_of=data.get('as_of') if isinstance(data.get('as_of'), str) else None,
         )
     except UniversalListCursorError:
         raise
@@ -249,6 +266,12 @@ def decode_universal_list_cursor(
         raise UniversalListCursorError('device_scope_mismatch')
     if (state.client_device_id or None) != (client_device_id or None):
         raise UniversalListCursorError('device_scope_mismatch')
+    if state.view != view:
+        raise UniversalListCursorError('view_mismatch')
+    # A continuation may carry the server-issued snapshot anchor in the
+    # token; callers may omit the redundant query value on later pages.
+    if as_of is not None and (state.as_of or None) != as_of:
+        raise UniversalListCursorError('as_of_mismatch')
     return UniversalListCursorClaims(state=state, expires_at_epoch_seconds=expires_at)
 
 

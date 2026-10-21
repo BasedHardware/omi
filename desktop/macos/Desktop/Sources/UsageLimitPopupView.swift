@@ -46,15 +46,7 @@ struct UsageLimitPopupView: View {
         // Close X in the top-right corner
         HStack {
           Spacer()
-          Button(action: onDismiss) {
-            Image(systemName: "xmark")
-              .scaledFont(size: OmiType.body, weight: .semibold)
-              // `secondary` and not the glance rung: this card is glass, which carries two rungs.
-              .foregroundColor(Ink.secondary)
-              .padding(OmiSpacing.sm)
-              .contentShape(Rectangle())
-          }
-          .buttonStyle(.plain)
+          DismissButton(action: onDismiss)
         }
         .padding(.horizontal, OmiSpacing.sm)
         .padding(.top, OmiSpacing.sm)
@@ -101,6 +93,11 @@ struct UsageLimitPopupView: View {
       .inkGlassPanel()
     }
     .transition(.opacity.animation(OmiMotion.gated(.easeInOut(duration: 0.2))))
+    .onAppear {
+      AnalyticsManager.shared.paywallOpened(
+        source: "macos_usage_limit",
+        currentPlan: UserDefaults.standard.string(forKey: .floatingBarCachedPlan) ?? "unknown")
+    }
   }
 }
 

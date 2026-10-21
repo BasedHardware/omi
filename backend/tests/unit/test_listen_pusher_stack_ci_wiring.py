@@ -59,10 +59,29 @@ def test_listen_pusher_stack_gauntlet_has_a_deterministic_hermetic_ci_job() -> N
     listener_entrypoint = (_REPO_ROOT / 'backend' / 'testing' / 'listen_pusher_stack' / 'listener_app.py').read_text(
         encoding='utf-8'
     )
+    finalizer_leaves = (_REPO_ROOT / 'backend' / 'testing' / 'listen_pusher_stack' / 'finalizer_leaves.py').read_text(
+        encoding='utf-8'
+    )
+    assert 'def _free_ports(count: int) -> list[int]:' in runner
+    # SO_REUSEADDR on a probe waives the exclusive bind that makes the
+    # reservation meaningful; a probe must hold the port alone.
+    assert 'SO_REUSEADDR' not in runner
+    assert 'ports = _free_ports(5)' in runner
+    assert 'self.redis_port = ports[0]' in runner
+    assert 'self.backend_port = ports[1]' in runner
+    assert 'self.finalization_worker_port = ports[2]' in runner
+    assert 'self.pusher_port = ports[3]' in runner
+    assert 'self.parakeet_port = ports[4]' in runner
     assert '_rest_finalization_survives_listener_restart' in runner
     assert "state_dir / 'cloud-rest-restart'" in runner
     assert '_stale_processing_orphan_reconciled' in runner
     assert "state_dir / 'cloud-stale-orphan'" in runner
+    assert '_memory_fence_blocks_durable_finalization' in runner
+    assert "state_dir / 'cloud-memory-fence'" in runner
+    assert 'finalization_worker_memory_enabled=None' in runner
+    assert 'finalizer.process_conversation =' not in finalizer_leaves
+    assert 'finalizer.extract_memories =' not in finalizer_leaves
+    assert 'processing._extract_memories_canonical = _offline_extract_memories_canonical' in finalizer_leaves
     assert '_stale_processing_orphan_reconciled_inline' in runner
     assert "state_dir / 'inline-stale-orphan'" in runner
     assert "'task_already_exists'" in task_seam
@@ -100,10 +119,32 @@ def test_backend_hermetic_gate_is_always_reported_and_fails_closed() -> None:
 
     assert '  scope:\n' in workflow
     scope = workflow.split('  scope:\n', 1)[1].split('\n  hermetic-e2e:\n', 1)[0]
-    assert 'github.event.pull_request.base.sha' in scope
+    # The PR base is resolved live against the checkout (origin/<base-ref>) rather
+    # than the event-payload base.sha, which can be stale for a queued run
+    # (FC-stale-event-payload-diff-base, #10785).
+    assert 'github.event.pull_request.base.sha' not in scope
+    assert 'PR_BASE_REF: origin/${{ github.base_ref }}' in scope
     assert 'github.event.merge_group.base_sha' in scope
+    assert 'timeout-minutes: 10' in scope
+    assert 'fetch-depth: 0' in scope
+    assert 'filter: blob:none' in scope
     assert 'git diff --name-only "$base_sha"...HEAD' in scope
     assert "^(backend/|package\\.json$|package-lock\\.json$|\\.github/workflows/backend-hermetic-e2e\\.yml$)" in scope
+
+    # #10945: fail closed on unresolvable scope base or a failed (partial-clone)
+    # history fetch. The scope job must FAIL rather than silently emit
+    # applies=false, which would skip the hermetic backend gate entirely.
+    run_block = scope.split('run: |', 1)[1]
+    assert 'set -euo pipefail' in run_block
+    assert 'if [[ -z "$base_sha" ]] || ! git cat-file -e "${base_sha}^{commit}"; then' in run_block
+    assert 'Cannot resolve hermetic backend scope base' in run_block
+    assert 'exit 1' in run_block
+    assert 'a failed diff must never yield empty -> applies=false' in run_block
+    # applies=false must be reachable only AFTER a successful diff, never as a fallback.
+    diff_index = run_block.index('changed_files="$(git diff')
+    applies_false_index = run_block.index('echo "applies=false" >> "$GITHUB_OUTPUT"')
+    assert diff_index < applies_false_index
+    # The two exit-1 guards precede the diff; a failed scope never reaches applies=false.
 
     for job_name in ('hermetic-e2e', 'listen-pusher-stack-gauntlet', 'sync-cloud-tasks-stack-gauntlet'):
         job = workflow.split(f'  {job_name}:\n', 1)[1]
@@ -112,7 +153,11 @@ def test_backend_hermetic_gate_is_always_reported_and_fails_closed() -> None:
 
     gate = workflow.split('  merge-gate:\n', 1)[1]
     assert 'name: Backend Hermetic Merge Gate' in gate
-    assert 'if: ${{ always() }}' in gate
+    # `!cancelled()` (not `always()`): a run cancelled by cancel-in-progress
+    # must leave the gate neutral instead of executing against `cancelled`
+    # upstream results and minting a red check with no code cause.
+    assert 'if: ${{ !cancelled() }}' in gate
+    assert 'if: ${{ always() }}' not in gate
     assert 'needs: [scope, hermetic-e2e, listen-pusher-stack-gauntlet, sync-cloud-tasks-stack-gauntlet]' in gate
     assert "true) required_result='success'" in gate
     assert "false) required_result='skipped'" in gate
@@ -143,3 +188,37 @@ def test_hermetic_gauntlet_redis_apt_installs_are_bounded() -> None:
     assert workflow.count(f'{_BOUNDED_APT_GET} update') == 3
     assert workflow.count(f'{_BOUNDED_APT_GET} install --yes redis-server') == 3
     assert 'sudo apt-get install --yes redis-server' not in workflow
+
+
+def test_listen_pusher_stack_free_ports_are_strictly_distinct_and_bindable() -> None:
+    import socket
+
+    def _free_ports(count: int) -> list[int]:
+        probes = []
+        ports = []
+        try:
+            for _ in range(count):
+                probe = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                probe.bind(('127.0.0.1', 0))
+                probes.append(probe)
+                ports.append(int(probe.getsockname()[1]))
+            return ports
+        finally:
+            for probe in probes:
+                probe.close()
+
+    ports = _free_ports(5)
+    assert len(ports) == 5
+    assert len(set(ports)) == 5
+    assert all(isinstance(p, int) and p > 1024 for p in ports)
+
+    sockets = []
+    try:
+        for p in ports:
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            s.bind(('127.0.0.1', p))
+            sockets.append(s)
+    finally:
+        for s in sockets:
+            s.close()

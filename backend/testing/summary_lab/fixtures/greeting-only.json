@@ -1,0 +1,36 @@
+{
+  "id": "greeting-only",
+  "kind": "trivial",
+  "started_at": "2026-09-03T12:01:00-04:00",
+  "timezone": "America/New_York",
+  "language": "en",
+  "transcript": "[s1 0] Hey.\n[s2 1] Hey.\n[s1 0] Okay bye.",
+  "expected_facts": [],
+  "must_not_contain": ["Speaker 1", "pause the song"],
+  "owner_threads": [],
+  "token_estimate": {"input": 120, "output": 40},
+  "recorded": {
+    "notes_v2": {
+      "title": "Brief Greeting",
+      "overview": "A short hello and goodbye with no decisions.",
+      "sections": [
+        {"heading": "Exchange", "body_markdown": "- Brief greeting, then goodbye."}
+      ],
+      "action_items": []
+    },
+    "legacy": {
+      "title": "Hi",
+      "overview": "Greeting.",
+      "sections": [],
+      "action_items": []
+    },
+    "defective": {
+      "title": "Speaker 1 Hello",
+      "overview": "Speaker 1 said hey then pause the song.",
+      "sections": [
+        {"heading": "Noise", "body_markdown": "- Speaker 1\n- pause the song"}
+      ],
+      "action_items": []
+    }
+  }
+}

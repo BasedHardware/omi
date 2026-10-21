@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "id": "FC-privileged-consent-resampled-on-timer",
+  "violated_contract": "A privileged OS authorization \u2014 a TCC-gated capture session, a cross-process Accessibility query, an Apple Events permission lookup \u2014 must be acquired once and held for as long as the work lasts, never re-acquired per unit of work on a timer. The OS treats each acquisition as a fresh consent decision it may re-confirm, so sampling an already-granted permission thousands of times an hour converts a re-confirmation the OS intends to surface rarely into one the user sees constantly. A permission-denied result from such a call is a terminal state for the loop that produced it, not a transient error to retry on the next tick: retrying re-arms the same consent dialog the user just dismissed.",
+  "canonical_prevention": "Hold one long-lived privileged session and mutate it in place (SCStream + updateContentFilter rather than a new SCContentFilter and SCScreenshotManager.captureImage per frame); or, where a session is not the shape, stagger the privileged probe off the UI tick so cheap local lookups stay responsive while cross-process checks run at human cadence. Classify permission-denied distinctly from transient failure and route it to a handler that stops the loop and asks the user once, instead of feeding it back into the retry path.",
+  "evidence_prs": [
+    12239
+  ],
+  "scope_hints": [
+    "desktop/macos/**"
+  ],
+  "status": "open"
+}

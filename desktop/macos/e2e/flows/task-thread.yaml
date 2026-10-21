@@ -7,10 +7,16 @@ covers:
   # scenario-13-task-thread-e2e.sh opens the real TaskChatPanel for first,
   # second, and resumed workstream projections and captures each mounted UI.
   - desktop/macos/Desktop/Sources/MainWindow/Components/TaskChatPanel.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskAgent/TaskChatState.swift
   # The panel the scenario opens is driven by TaskChatCoordinator: it resolves
   # the workstream, mounts the thread, and sends into it. The first/second/
   # resumed projections above are its behaviour.
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskAgent/TaskChatCoordinator.swift
+  # The sends above reach the kernel through TaskChatRuntime.query, which grounds
+  # each user turn in the current time (SCA-358 datetime injector).
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskAgent/TaskChatRuntime.swift
+  # The scenario prepares, persists, and reopens continuity through this facade.
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskAgent/TaskWorkstreamContinuity.swift
 preconditions:
   - named_non_production_bundle_ui_lane
   - task_thread_scenario_13_fixture_available
@@ -28,3 +34,10 @@ steps:
     do: "Inspect the first-task.png, second-task.png, and resumed-task.png evidence written by the script. Each capture must show the task-scoped chat header and the 'Continue this work...' composer, with no route or bridge failure."
     expect:
       interactive_count: { min: 1 }
+
+  - id: S3
+    name: Recover a saved Claude thread using Omi AI
+    do: "With AI Provider set to Omi AI, open an existing Claude task thread that reports a billing failure. Verify the banner names Claude and offers 'Use Omi AI for This Thread'. Press that action, verify the switch confirmation and retained earlier messages, then explicitly submit a new message. The old request must not be resent automatically."
+    expect:
+      text_visible:
+        - Thread now uses Omi AI

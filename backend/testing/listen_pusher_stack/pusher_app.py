@@ -79,7 +79,9 @@ _send_bytes = pusher_router.WebSocket.send_bytes
 _drain_tasks = pusher_router.drain_tasks
 
 
-def _offline_store_audio_chunks(chunks: list[dict[str, Any]], _uid: str, conversation_id: str, _level: str) -> None:
+def _offline_store_audio_chunks(
+    chunks: list[dict[str, Any]], _uid: str, conversation_id: str, _level: str, *, sample_rate: int
+) -> None:
     """Keep the real pusher queue/flush path local when 101 frames are enabled."""
     _record(
         {
@@ -87,6 +89,7 @@ def _offline_store_audio_chunks(chunks: list[dict[str, Any]], _uid: str, convers
             'conversation_id': conversation_id,
             'chunks': len(chunks),
             'bytes': sum(len(chunk.get('data') or b'') for chunk in chunks),
+            'sample_rate': sample_rate,
         }
     )
 

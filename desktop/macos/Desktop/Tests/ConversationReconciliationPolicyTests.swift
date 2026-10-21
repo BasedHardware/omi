@@ -3,6 +3,19 @@ import XCTest
 @testable import Omi_Computer
 
 final class ConversationReconciliationPolicyTests: XCTestCase {
+  func testPendingMutationPreservesUnrecognizedVisibilityForSiriScope() {
+    let server = makeConversation(id: "hidden", visibility: "hidden")
+    var mutation = ConversationPendingMutation()
+    mutation.setTitle("Changed title")
+    let result = ConversationReconciliationPolicy.apply(mutation: mutation, to: server)
+    XCTAssertEqual(result.visibility, "hidden")
+  }
+
+  func testAudioClockCopyPreservesUnrecognizedVisibilityForSiriScope() {
+    let server = makeConversation(id: "hidden", visibility: "hidden")
+    XCTAssertEqual(server.onAudioClock(segments: [], startedAt: server.createdAt).visibility, "hidden")
+  }
+
   func testServerStatusAndSummaryWinOverStaleCache() {
     let local = makeConversation(
       id: "c1",
@@ -24,6 +37,37 @@ final class ConversationReconciliationPolicyTests: XCTestCase {
     XCTAssertEqual(result.conversations[0].structured.overview, "fresh summary")
     XCTAssertEqual(result.conversations[0].structured.title, "Server title")
     XCTAssertTrue(result.pendingMutations.isEmpty)
+  }
+
+  func testServerListWithoutTranscriptKeepsLoadedLocalTranscript() {
+    let segment = TranscriptSegment(
+      id: "s1", text: "the first line of the meeting transcript", speaker: "SPEAKER_00", isUser: false,
+      personId: nil, start: 0, end: 1)
+    var local = makeConversation(id: "c1", title: "", status: .processing)
+    local.transcriptSegments = [segment]
+    local.transcriptSegmentsIncluded = true
+    var server = makeConversation(id: "c1", title: "", status: .processing)
+    server.transcriptSegmentsIncluded = false
+
+    let result = ConversationReconciliationPolicy.mergeList(server: [server], current: [local])
+
+    XCTAssertEqual(result.conversations[0].transcriptSegments.map(\.id), ["s1"])
+    XCTAssertTrue(result.conversations[0].transcriptSegmentsIncluded)
+    XCTAssertEqual(result.conversations[0].displayTitle, "The first line of the meeting transcript")
+  }
+
+  func testServerListWithTranscriptWinsOverLocal() {
+    var local = makeConversation(id: "c1", status: .processing)
+    local.transcriptSegments = [
+      TranscriptSegment(
+        id: "old", text: "old words", speaker: nil, isUser: false, personId: nil, start: 0, end: 1)
+    ]
+    var server = makeConversation(id: "c1", status: .completed)
+    server.transcriptSegmentsIncluded = true
+    server.transcriptSegments = []
+
+    let result = ConversationReconciliationPolicy.mergeList(server: [server], current: [local])
+    XCTAssertTrue(result.conversations[0].transcriptSegments.isEmpty, "An included empty transcript is authoritative")
   }
 
   func testStaleLocalTitleDoesNotMaskServerWithoutPendingMutation() {
@@ -218,6 +262,7 @@ final class ConversationReconciliationPolicyTests: XCTestCase {
     overview: String = "Overview",
     status: ConversationStatus = .completed,
     starred: Bool = false,
+    visibility: String = "private",
     folderId: String? = nil,
     createdAt: Date = Date(timeIntervalSince1970: 1_000)
   ) -> ServerConversation {
@@ -245,6 +290,7 @@ final class ConversationReconciliationPolicyTests: XCTestCase {
       discarded: false,
       deleted: false,
       isLocked: false,
+      visibility: visibility,
       starred: starred,
       folderId: folderId,
       inputDeviceName: nil,

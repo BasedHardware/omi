@@ -6,13 +6,15 @@ import uuid
 from datetime import datetime, timezone
 from typing import Iterable, List, Optional
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+from weakref import WeakValueDictionary
+
+import httpx
 
 from database.redis_db import (
     get_user_webhook_db,
     user_webhook_status_db,
     disable_user_webhook_db,
     enable_user_webhook_db,
-    set_user_webhook_db,
 )
 from database.webhook_health import (
     record_dev_webhook_failure,
@@ -21,12 +23,18 @@ from database.webhook_health import (
     _DEV_FAILURE_THRESHOLD,
 )
 from models.conversation import Conversation
+from models.transcript_segment import transcript_segment_for_client
 from models.users import WebhookType, webhook_url_from_setting
-import database.notifications as notification_db
 from utils.conversations.render import populate_speaker_names, populate_folder_names
-from utils.conversations.render import conversation_to_dict
+from utils.conversations.render import conversation_to_dict, redact_conversation_for_integration
 from utils.executors import db_executor, run_blocking
-from utils.http_client import get_webhook_client, get_webhook_circuit_breaker, get_webhook_semaphore
+from utils.http_client import (
+    UnsafeWebhookURLError,
+    get_pinned_delivery_client,
+    get_webhook_circuit_breaker,
+    get_webhook_semaphore,
+    safe_request_targets,
+)
 from utils.journey_metrics_contract import ClientKind, bounded_client_kind, resolve_client_kind
 from utils.observability.journeys import ClientJourneyAttempt
 from utils.notifications import send_notification
@@ -36,6 +44,18 @@ logger = logging.getLogger(__name__)
 
 _DEV_WEBHOOK_RETRY_DELAYS = (1.0, 5.0, 30.0)
 
+# Deterministic rejections will not change on a repeat post — retrying a 400
+# can only reproduce it. 408 and 429 are the transient 4xx members and keep
+# the retry schedule. (2026-09-05: one dead developer webhook endpoint
+# returning 400 produced 3,282 delivery attempts in 30 minutes because every
+# delivery walked the full 4-attempt schedule.)
+_DEV_WEBHOOK_NO_RETRY_STATUSES = frozenset(range(400, 500)) - {408, 429}
+
+
+def _is_deterministic_rejection(status_code: int) -> bool:
+    return status_code in _DEV_WEBHOOK_NO_RETRY_STATUSES
+
+
 _AUDIO_BYTES_WEBHOOK_CHUNK_SECONDS = 1
 _AUDIO_BYTES_WEBHOOK_MIN_SAMPLE_RATE = 1000
 _AUDIO_BYTES_WEBHOOK_MAX_SAMPLE_RATE = 192000
@@ -44,10 +64,11 @@ _HTTP_WEBHOOK_URL_RE = re.compile(
     r'(?:'
     r'(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,}|'
     r'localhost|'
-    r'\d{1,3}(?:\.\d{1,3}){3}'
+    r'\d{1,3}(?:\.\d{1,3}){3}|'
+    r'\[[0-9a-fA-F:.]+\]'
     r')'
     r'(?::\d{1,5})?'
-    r'(?:/[^\s]*)?$',
+    r'(?:[/?#][^\s]*)?$',
     re.IGNORECASE,
 )
 _UID_RE = re.compile(r'^[A-Za-z0-9_-]{1,128}$')
@@ -55,6 +76,8 @@ _SAMPLE_RATE_RE = re.compile(r'^[1-9]\d{2,5}$')
 
 _audio_bytes_send_locks: dict[str, asyncio.Lock] = {}
 _audio_bytes_send_locks_guard = asyncio.Lock()
+_button_event_send_locks: WeakValueDictionary[str, asyncio.Lock] = WeakValueDictionary()
+_button_event_send_locks_guard = asyncio.Lock()
 
 
 async def _get_audio_bytes_send_lock(uid: str) -> asyncio.Lock:
@@ -66,13 +89,26 @@ async def _get_audio_bytes_send_lock(uid: str) -> asyncio.Lock:
         return lock
 
 
+async def _get_button_event_send_lock(uid: str, device_id: str) -> asyncio.Lock:
+    key = f'{uid}:{device_id}'
+    async with _button_event_send_locks_guard:
+        lock = _button_event_send_locks.get(key)
+        if lock is None:
+            lock = asyncio.Lock()
+            _button_event_send_locks[key] = lock
+        return lock
+
+
 def _is_valid_audio_bytes_webhook_url(url: str) -> bool:
-    if not url:
+    if not url or not isinstance(url, str):
         return False
     candidate = url.strip()
     if not _HTTP_WEBHOOK_URL_RE.fullmatch(candidate):
         return False
-    parts = urlsplit(candidate)
+    try:
+        parts = urlsplit(candidate)
+    except ValueError:
+        return False
     return parts.scheme in ('http', 'https') and bool(parts.netloc)
 
 
@@ -118,6 +154,15 @@ def _append_query_params(url: str, params: dict) -> str:
     return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(query_items), parts.fragment))
 
 
+def _redact_webhook_url(url: str) -> str:
+    """Keep the destination visible without logging URL credentials or query secrets."""
+    try:
+        parts = urlsplit(url)
+    except ValueError:
+        return '<invalid webhook URL>'
+    return urlunsplit((parts.scheme, parts.netloc.rsplit('@', 1)[-1], parts.path, '', ''))
+
+
 async def _post_dev_webhook(
     webhook_name: str,
     webhook_url: str,
@@ -134,26 +179,69 @@ async def _post_dev_webhook(
     headers.setdefault('Idempotency-Key', idempotency_key or str(uuid.uuid4()))
     request_kwargs['headers'] = headers
 
-    client = get_webhook_client()
+    client = get_pinned_delivery_client()
     attempts = len(retry_delays) + 1
     last_response = None
     last_exception = None
+    log_url = _redact_webhook_url(webhook_url)
 
     for attempt_index in range(attempts):
         attempt_number = attempt_index + 1
         failure_reason = None
         try:
             async with get_webhook_semaphore():
-                response = await client.post(webhook_url, **request_kwargs)
-            last_response = response
-            last_exception = None
-            if 200 <= response.status_code < 300:
-                logger.info(
-                    f'{webhook_name}: delivery succeeded status={response.status_code} '
-                    f'attempt={attempt_number}/{attempts} url={webhook_url}'
-                )
-                return response
-            failure_reason = f'HTTP {response.status_code}'
+                try:
+                    pinned_targets = await run_blocking(db_executor, safe_request_targets, webhook_url)
+                except (UnsafeWebhookURLError, ValueError):
+                    # Treat invalid stored targets like a deterministic rejection:
+                    # no network or retries, with the existing DLQ/health path.
+                    last_response = httpx.Response(400)
+                    last_exception = None
+                    break
+                response = None
+                connect_error = None
+                for pinned_url, pin_kwargs in pinned_targets:
+                    attempt_kwargs = dict(request_kwargs)
+                    attempt_kwargs['headers'] = {key: value for key, value in headers.items() if key.lower() != 'host'}
+                    attempt_kwargs['headers'].update(pin_kwargs['headers'])
+                    attempt_kwargs['extensions'] = {
+                        **(request_kwargs.get('extensions') or {}),
+                        **pin_kwargs['extensions'],
+                    }
+                    attempt_kwargs['follow_redirects'] = False
+                    try:
+                        response = await client.post(pinned_url, **attempt_kwargs)
+                    except Exception as exc:
+                        # Try the next safe resolved address before giving up
+                        # on this attempt: dual-stack or multi-A records would
+                        # otherwise see avoidable delivery outages.
+                        logger.info(
+                            f'{webhook_name}: pinned target unreachable reason={type(exc).__name__} '
+                            f'attempt={attempt_number}/{attempts}; trying next resolved address'
+                        )
+                        connect_error = exc
+                        response = None
+                        continue
+                    if 200 <= response.status_code < 300 or _is_deterministic_rejection(response.status_code):
+                        break
+                if response is None:
+                    # Every safe address failed to connect.
+                    raise connect_error or httpx.ConnectError('all pinned addresses failed')
+                last_response = response
+                last_exception = None
+                if 200 <= response.status_code < 300:
+                    logger.debug(
+                        f'{webhook_name}: delivery succeeded status={response.status_code} '
+                        f'attempt={attempt_number}/{attempts} url={log_url}'
+                    )
+                    return response
+                failure_reason = f'HTTP {response.status_code}'
+                if _is_deterministic_rejection(response.status_code):
+                    # Deterministic rejection: a repeat post cannot converge. Fall
+                    # through to the final handling below (ERROR log + DLQ) with
+                    # this response as the last one — DLQ, circuit breaker, and
+                    # auto-disable all fire off the final response unchanged.
+                    break
         except Exception as e:
             last_response = None
             last_exception = e
@@ -169,7 +257,7 @@ async def _post_dev_webhook(
 
     if last_response is not None:
         logger.error(
-            f'{webhook_name}: delivery failed status={last_response.status_code} attempts={attempts} url={webhook_url}'
+            f'{webhook_name}: delivery failed status={last_response.status_code} attempts={attempts} url={log_url}'
         )
         await run_blocking(
             db_executor,
@@ -219,7 +307,7 @@ async def _handle_dev_webhook_disable(uid: str, wtype: str, should_disable: bool
 
 
 def _build_conversation_webhook_payload_sync(uid: str, memory: Conversation) -> dict:
-    payload = conversation_to_dict(memory)
+    payload = redact_conversation_for_integration(conversation_to_dict(memory))
     populate_speaker_names(uid, [payload])
     populate_folder_names(uid, [payload])
     return payload
@@ -243,7 +331,7 @@ async def conversation_created_webhook(uid, memory: Conversation):
         cb = get_webhook_circuit_breaker(webhook_url)
         if not cb.allow_request():
             journey_attempt.fail('dependency_unavailable')
-            logger.info(f'memory_created_webhook: circuit breaker open for {webhook_url[:80]}')
+            logger.info(f'memory_created_webhook: circuit breaker open for {_redact_webhook_url(webhook_url)[:80]}')
             return
         try:
             payload = await run_blocking(db_executor, _build_conversation_webhook_payload_sync, uid, memory)
@@ -277,7 +365,7 @@ async def conversation_created_webhook(uid, memory: Conversation):
                 db_executor, record_dev_webhook_failure, uid, WebhookType.memory_created, 0, type(e).__name__
             )
             await _handle_dev_webhook_disable(uid, WebhookType.memory_created, should_disable)
-            logger.error(f"Error sending memory created to developer webhook: {e}")
+            logger.error(f"Error sending memory created to developer webhook: {type(e).__name__}")
     else:
         return
 
@@ -298,7 +386,7 @@ async def day_summary_webhook(uid, summary: str, summary_json: Optional[dict] = 
         webhook_url = _append_query_params(webhook_url, {'uid': uid})
         cb = get_webhook_circuit_breaker(webhook_url)
         if not cb.allow_request():
-            logger.info(f'day_summary_webhook: circuit breaker open for {webhook_url[:80]}')
+            logger.info(f'day_summary_webhook: circuit breaker open for {_redact_webhook_url(webhook_url)[:80]}')
             return
         try:
             response = await _post_dev_webhook(
@@ -333,13 +421,13 @@ async def day_summary_webhook(uid, summary: str, summary_json: Optional[dict] = 
                 db_executor, record_dev_webhook_failure, uid, WebhookType.day_summary, 0, type(e).__name__
             )
             await _handle_dev_webhook_disable(uid, WebhookType.day_summary, should_disable)
-            logger.error(f"Error sending day summary to developer webhook: {e}")
+            logger.error(f"Error sending day summary to developer webhook: {type(e).__name__}")
     else:
         return
 
 
 async def realtime_transcript_webhook(uid, segments: List[dict], *, client_kind: ClientKind = 'unknown'):
-    logger.info(f"realtime_transcript_webhook {uid}")
+    logger.debug(f"realtime_transcript_webhook {uid}")
     toggled = await run_blocking(db_executor, user_webhook_status_db, uid, WebhookType.realtime_transcript)
 
     if toggled:
@@ -351,13 +439,15 @@ async def realtime_transcript_webhook(uid, segments: List[dict], *, client_kind:
         cb = get_webhook_circuit_breaker(webhook_url)
         if not cb.allow_request():
             journey_attempt.fail('dependency_unavailable')
-            logger.info(f'realtime_transcript_webhook: circuit breaker open for {webhook_url[:80]}')
+            logger.info(
+                f'realtime_transcript_webhook: circuit breaker open for {_redact_webhook_url(webhook_url)[:80]}'
+            )
             return
         try:
             response = await _post_dev_webhook(
                 'realtime_transcript_webhook',
                 webhook_url,
-                json={'segments': segments, 'session_id': uid},
+                json={'segments': [transcript_segment_for_client(s) for s in segments], 'session_id': uid},
                 headers={'Content-Type': 'application/json'},
                 dlq_uid=uid,
             )
@@ -394,7 +484,7 @@ async def realtime_transcript_webhook(uid, segments: List[dict], *, client_kind:
                 db_executor, record_dev_webhook_failure, uid, WebhookType.realtime_transcript, 0, type(e).__name__
             )
             await _handle_dev_webhook_disable(uid, WebhookType.realtime_transcript, should_disable)
-            logger.error(f"Error sending realtime transcript to developer webhook: {e}")
+            logger.error(f"Error sending realtime transcript to developer webhook: {type(e).__name__}")
     else:
         return
 
@@ -417,7 +507,7 @@ def get_audio_bytes_webhook_seconds(uid: str):
 
 
 async def send_audio_bytes_developer_webhook(uid: str, sample_rate: int, data: bytearray):
-    logger.info(f"send_audio_bytes_developer_webhook {uid}")
+    logger.debug(f"send_audio_bytes_developer_webhook {uid}")
     if not data:
         return
     if not _is_valid_audio_bytes_payload_fields(uid, sample_rate):
@@ -441,7 +531,9 @@ async def send_audio_bytes_developer_webhook(uid: str, sample_rate: int, data: b
     webhook_url = _append_query_params(webhook_url, {'sample_rate': sample_rate, 'uid': uid})
     cb = get_webhook_circuit_breaker(webhook_url)
     if not cb.allow_request():
-        logger.info(f'send_audio_bytes_developer_webhook: circuit breaker open for {webhook_url[:80]}')
+        logger.info(
+            f'send_audio_bytes_developer_webhook: circuit breaker open for {_redact_webhook_url(webhook_url)[:80]}'
+        )
         return
 
     lock = await _get_audio_bytes_send_lock(uid)
@@ -475,7 +567,88 @@ async def send_audio_bytes_developer_webhook(uid: str, sample_rate: int, data: b
                 db_executor, record_dev_webhook_failure, uid, WebhookType.audio_bytes, 0, type(e).__name__
             )
             await _handle_dev_webhook_disable(uid, WebhookType.audio_bytes, should_disable)
-            logger.error(f"Error sending audio bytes to developer webhook: {e}")
+            logger.error(f"Error sending audio bytes to developer webhook: {type(e).__name__}")
+
+
+async def button_event_webhook(
+    uid: str,
+    *,
+    button_event: str,
+    device_id: str,
+    event_id: str,
+    timestamp: str,
+    session_id: Optional[str] = None,
+) -> None:
+    """Forward an opt-in hardware button gesture to the developer webhook (#11719)."""
+    lock = await _get_button_event_send_lock(uid, device_id)
+    async with lock:
+        await _button_event_webhook_serialized(
+            uid,
+            button_event=button_event,
+            device_id=device_id,
+            event_id=event_id,
+            timestamp=timestamp,
+            session_id=session_id,
+        )
+
+
+async def _button_event_webhook_serialized(
+    uid: str,
+    *,
+    button_event: str,
+    device_id: str,
+    event_id: str,
+    timestamp: str,
+    session_id: Optional[str] = None,
+) -> None:
+    toggled = await run_blocking(db_executor, user_webhook_status_db, uid, WebhookType.button_event)
+    if not toggled:
+        return
+    webhook_url = await run_blocking(db_executor, get_user_webhook_db, uid, WebhookType.button_event)
+    if not webhook_url:
+        return
+    webhook_url = _append_query_params(webhook_url, {'uid': uid})
+    cb = get_webhook_circuit_breaker(webhook_url)
+    if not cb.allow_request():
+        logger.info(f'button_event_webhook: circuit breaker open for {_redact_webhook_url(webhook_url)[:80]}')
+        return
+    payload = {
+        'event_type': 'button_event',
+        'button_event': button_event,
+        'device_id': device_id,
+        'event_id': event_id,
+        'timestamp': timestamp,
+        'session_id': session_id,
+    }
+    try:
+        response = await _post_dev_webhook(
+            'button_event_webhook',
+            webhook_url,
+            json=payload,
+            headers={'Content-Type': 'application/json'},
+            idempotency_key=event_id,
+        )
+        if 200 <= response.status_code < 300:
+            cb.record_success()
+            await run_blocking(db_executor, record_dev_webhook_success, uid, WebhookType.button_event)
+        else:
+            cb.record_failure()
+            should_disable = await run_blocking(
+                db_executor,
+                record_dev_webhook_failure,
+                uid,
+                WebhookType.button_event,
+                response.status_code,
+                f'HTTP {response.status_code}',
+            )
+            await _handle_dev_webhook_disable(uid, WebhookType.button_event, should_disable)
+    except Exception as e:
+        cb.record_failure()
+        should_disable = await run_blocking(
+            db_executor, record_dev_webhook_failure, uid, WebhookType.button_event, 0, type(e).__name__
+        )
+        await _handle_dev_webhook_disable(uid, WebhookType.button_event, should_disable)
+        logger.error(f'Error sending button_event developer webhook: {type(e).__name__}')
 
 
 def webhook_first_time_setup(uid: str, wType: WebhookType) -> bool:

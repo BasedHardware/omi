@@ -41,6 +41,9 @@ SHIPBOB_API_URL=https://api.shipbob.com
 
 # Redis (for production)
 REDIS_URL=redis://localhost:6379
+
+# Shared secret guarding the chat-tool endpoints (see below)
+SHIPBOB_TOOLS_SECRET=change-me
 ```
 
 ### Local Development
@@ -84,6 +87,15 @@ When creating the Omi app, use these URLs (replace `YOUR_DOMAIN` with your deplo
 5. **cancel_wro** - Cancel a pending WRO
 6. **get_orders** - View recent orders
 7. **get_fulfillment_centers** - List fulfillment centers
+
+## Chat Tool Authentication
+
+All chat-tool endpoints (`/select-channel` and `/tools/*`) require a shared
+secret so only the trusted Omi backend can invoke them. The caller presents
+`SHIPBOB_TOOLS_SECRET` either as an `Authorization: Bearer <secret>` header or
+a `shipbob_tools_token` query parameter. Requests without a valid secret are
+rejected with `401` (or `503` when the secret is not configured).
+
 
 ## Example Voice Commands
 

@@ -5,6 +5,7 @@ description: Exercise accepted account-deletion cleanup and sign-out via the loc
 app: com.omi.computer-macos
 covers:
   - desktop/macos/Desktop/Sources/Auth/AuthOwnerTransition.swift
+  - desktop/macos/Desktop/Sources/Providers/ChatProvider+AuthSession.swift
   - desktop/macos/Desktop/Sources/Auth/FirebaseAuthAvailability.swift
   - desktop/macos/Desktop/Sources/AuthService.swift
   - desktop/macos/Desktop/Sources/Chat/RuntimeOwnerIdentity.swift

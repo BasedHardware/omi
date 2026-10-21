@@ -2,9 +2,10 @@ import AppKit
 import OmiTheme
 import SwiftUI
 
-enum ChatResourceOrigin: Equatable {
+enum ChatResourceOrigin: String, Equatable {
   case userAttachment
   case generatedArtifact
+  case conversationReference
 }
 
 /// Surface-neutral resource shown in chat. User attachments and agent artifacts
@@ -31,6 +32,40 @@ struct ChatResource: Identifiable, Equatable {
   let sessionId: String?
   let runId: String?
   let state: State
+  /// Typed source metadata for a conversation attached to a user turn. This
+  /// stays distinct from file URIs and generated-artifact identifiers while
+  /// sharing the journal resource lifecycle and transcript rendering path.
+  let conversationReference: ChatComposerReference?
+
+  init(
+    id: String,
+    origin: ChatResourceOrigin,
+    title: String,
+    subtitle: String?,
+    mimeType: String?,
+    thumbnailURL: String?,
+    imageData: Data?,
+    uri: String?,
+    artifactId: String?,
+    sessionId: String?,
+    runId: String?,
+    state: State,
+    conversationReference: ChatComposerReference? = nil
+  ) {
+    self.id = id
+    self.origin = origin
+    self.title = title
+    self.subtitle = subtitle
+    self.mimeType = mimeType
+    self.thumbnailURL = thumbnailURL
+    self.imageData = imageData
+    self.uri = uri
+    self.artifactId = artifactId
+    self.sessionId = sessionId
+    self.runId = runId
+    self.state = state
+    self.conversationReference = conversationReference
+  }
 
   var isImage: Bool {
     if let mimeType {
@@ -45,6 +80,9 @@ struct ChatResource: Identifiable, Equatable {
   }
 
   var canOpen: Bool {
+    if let conversationReference {
+      return !conversationReference.sourceID.isEmpty
+    }
     guard let fileURL else { return false }
     return FileManager.default.fileExists(atPath: fileURL.path)
   }
@@ -101,6 +139,42 @@ struct ChatResource: Identifiable, Equatable {
       runId: nil,
       state: state
     )
+  }
+
+  static func conversation(_ reference: ChatComposerReference) -> ChatResource {
+    ChatResource(
+      id: "reference:\(reference.id)",
+      origin: .conversationReference,
+      title: reference.displayTitle,
+      subtitle: reference.displaySubtitle,
+      mimeType: nil,
+      thumbnailURL: nil,
+      imageData: nil,
+      uri: nil,
+      artifactId: nil,
+      sessionId: nil,
+      runId: nil,
+      state: .ready,
+      conversationReference: reference
+    )
+  }
+
+  static func userMessageResources(
+    attachments: [ChatAttachment],
+    references: [ChatComposerReference]
+  ) -> [ChatResource] {
+    attachments.map(ChatResource.attachment) + references.map(ChatResource.conversation)
+  }
+
+  /// Re-attach in-memory image bytes, matched by resource id, from rows the
+  /// journal cannot carry them through (see `carryingImageData(from:)`).
+  static func carryingImageData(_ resources: [ChatResource], from local: [ChatResource]) -> [ChatResource] {
+    guard !resources.isEmpty, !local.isEmpty else { return resources }
+    // omi-collection-safety: explicit-non-trapping-merge -- duplicate local ids
+    // (a legacy row echoed twice) keep the first entry; ids are otherwise unique.
+    let localByID = Dictionary(
+      local.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+    return resources.map { $0.carryingImageData(from: localByID[$0.id]) }
   }
 
   static func artifact(_ artifact: AgentArtifactProjection) -> ChatResource {
@@ -193,6 +267,37 @@ struct ChatResource: Identifiable, Equatable {
     return markingUnavailableOnDisk()
   }
 
+  /// Returns `self` with in-memory image bytes that this (replayed) resource
+  /// lost at the persistence boundary re-attached from a same-id local row.
+  ///
+  /// The journal and message metadata persist resource metadata only —
+  /// `imageData` is never encoded — so every replayed row arrives with nil
+  /// bytes even when the row it replaces was rendering its thumbnail from
+  /// memory. Without those bytes the tile falls back to the original file path
+  /// (which for a temp export may already be gone) or the server thumbnail,
+  /// and a sent attachment can go blank mid-session. The replay stays the
+  /// authority for every field it does carry; only the bytes come back.
+  func carryingImageData(from local: ChatResource?) -> ChatResource {
+    guard imageData == nil, let local, local.id == id, let bytes = local.imageData else {
+      return self
+    }
+    return ChatResource(
+      id: id,
+      origin: origin,
+      title: title,
+      subtitle: subtitle,
+      mimeType: mimeType,
+      thumbnailURL: thumbnailURL,
+      imageData: bytes,
+      uri: uri,
+      artifactId: artifactId,
+      sessionId: sessionId,
+      runId: runId,
+      state: state,
+      conversationReference: conversationReference
+    )
+  }
+
   func markingUnavailableOnDisk() -> ChatResource {
     ChatResource(
       id: id,
@@ -206,7 +311,8 @@ struct ChatResource: Identifiable, Equatable {
       artifactId: artifactId,
       sessionId: sessionId,
       runId: runId,
-      state: .failed(Self.unavailableOnDiskMessage)
+      state: .failed(Self.unavailableOnDiskMessage),
+      conversationReference: conversationReference
     )
   }
 
@@ -224,9 +330,24 @@ struct ChatResource: Identifiable, Equatable {
         let title = dict["title"] as? String
       else { return nil }
       let origin =
-        (dict["origin"] as? String) == "generatedArtifact"
-        ? ChatResourceOrigin.generatedArtifact
-        : ChatResourceOrigin.userAttachment
+        (dict["origin"] as? String).flatMap(ChatResourceOrigin.init(rawValue:))
+        ?? .userAttachment
+      let conversationReference: ChatComposerReference?
+      if origin == .conversationReference,
+        let rawKind = dict["referenceKind"] as? String,
+        let kind = ChatComposerReference.Kind(rawValue: rawKind),
+        let sourceID = dict["sourceID"] as? String
+      {
+        conversationReference = ChatComposerReference(
+          kind: kind,
+          sourceID: sourceID,
+          title: title,
+          preview: dict["preview"] as? String ?? "",
+          momentTimestampMs: dict["momentTimestampMs"] as? Int
+        )
+      } else {
+        conversationReference = nil
+      }
       return ChatResource(
         id: id,
         origin: origin,
@@ -239,7 +360,8 @@ struct ChatResource: Identifiable, Equatable {
         artifactId: dict["artifactId"] as? String,
         sessionId: dict["sessionId"] as? String,
         runId: dict["runId"] as? String,
-        state: persistenceState(from: dict["state"] as? String)
+        state: persistenceState(from: dict["state"] as? String),
+        conversationReference: conversationReference
       )
     }
   }
@@ -247,7 +369,7 @@ struct ChatResource: Identifiable, Equatable {
   private static func persistenceDictionary(for resource: ChatResource) -> [String: Any] {
     var dict: [String: Any] = [
       "id": resource.id,
-      "origin": resource.origin == .generatedArtifact ? "generatedArtifact" : "userAttachment",
+      "origin": resource.origin.rawValue,
       "title": resource.title,
       "state": persistenceStateString(resource.state),
     ]
@@ -260,6 +382,14 @@ struct ChatResource: Identifiable, Equatable {
     if let artifactId = resource.artifactId { dict["artifactId"] = artifactId }
     if let sessionId = resource.sessionId { dict["sessionId"] = sessionId }
     if let runId = resource.runId { dict["runId"] = runId }
+    if let reference = resource.conversationReference {
+      dict["referenceKind"] = reference.kind.rawValue
+      dict["sourceID"] = reference.sourceID
+      dict["preview"] = reference.preview
+      if let momentTimestampMs = reference.momentTimestampMs {
+        dict["momentTimestampMs"] = momentTimestampMs
+      }
+    }
     return dict
   }
 
@@ -341,12 +471,19 @@ struct ChatResourceStrip: View {
       // "d...ml" / "te...KB", which looked broken with 2+ artifacts.
       VStack(alignment: alignment, spacing: OmiSpacing.xs) {
         ForEach(resources) { resource in
-          ChatResourceCard(
-            resource: resource,
-            density: density,
-            onOpen: onOpen ?? ChatResourceActions.open,
-            onReveal: onReveal ?? ChatResourceActions.revealInFinder
-          )
+          if let reference = resource.conversationReference {
+            ChatConversationReferencePill(
+              reference: reference,
+              onOpen: { (onOpen ?? ChatResourceActions.open)(resource) }
+            )
+          } else {
+            ChatResourceCard(
+              resource: resource,
+              density: density,
+              onOpen: onOpen ?? ChatResourceActions.open,
+              onReveal: onReveal ?? ChatResourceActions.revealInFinder
+            )
+          }
         }
       }
       .frame(maxWidth: maxWidth, alignment: frameAlignment)
@@ -660,9 +797,8 @@ enum ChatResourceActions {
     NSWorkspace.shared.activateFileViewerSelecting([url])
   }
 
-  static func copyPath(_ resource: ChatResource) {
+  @MainActor static func copyPath(_ resource: ChatResource) {
     guard let uri = resource.uri, !uri.isEmpty else { return }
-    NSPasteboard.general.clearContents()
-    NSPasteboard.general.setString(resource.fileURL?.path ?? uri, forType: .string)
+    OmiToastCenter.shared.copy(resource.fileURL?.path ?? uri, confirming: "Path copied")
   }
 }

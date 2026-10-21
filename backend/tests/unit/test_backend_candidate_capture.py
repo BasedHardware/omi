@@ -1,4 +1,5 @@
 import os
+from copy import deepcopy
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
@@ -7,6 +8,7 @@ import pytest
 os.environ.setdefault('TYPESENSE_API_KEY', 'test-key-not-real')
 
 from models.candidate import CandidateRecord, CandidateStatus
+from models.conversation_enums import ConversationSource
 from models.task_intelligence import TaskWorkflowControl
 from utils.conversations import process_conversation
 from utils.task_intelligence.backend_capture import BackendCaptureSignals, adapt_backend_capture
@@ -54,10 +56,12 @@ def _action(
     )
 
 
-def _conversation(*actions):
+def _conversation(*actions, source=ConversationSource.desktop):
+    """Desktop by default: this file covers the surface that still proposes Candidates."""
     return SimpleNamespace(
         id='conversation-1',
         is_locked=False,
+        source=source,
         structured=SimpleNamespace(action_items=list(actions)),
     )
 
@@ -69,6 +73,26 @@ def _record(proposal, index):
         account_generation=3,
         idempotency_key=f'idem-{index}',
         created_at=datetime(2026, 7, 9, tzinfo=timezone.utc),
+    )
+
+
+def _mock_saved_batch(monkeypatch, create):
+    """The reminder read sees the synthetic rows this test's write actually persisted."""
+    saved = {}
+
+    def persist(uid, rows, **kwargs):
+        ids = create(uid, rows, **kwargs)
+        for task_id, row in zip(ids, rows):
+            saved[(uid, task_id)] = process_conversation.action_items_db.prepare_action_item_for_read(
+                deepcopy({**row, 'id': task_id})
+            )
+        return ids
+
+    monkeypatch.setattr(process_conversation.action_items_db, 'create_action_items_batch', persist)
+    monkeypatch.setattr(
+        process_conversation.action_items_db,
+        'get_action_items_by_ids',
+        lambda uid, ids: [deepcopy(saved[(uid, task_id)]) for task_id in ids if (uid, task_id) in saved],
     )
 
 
@@ -447,6 +471,7 @@ def test_wake_word_adjudication_logs_question_descope_and_task_omission_without_
 def test_save_action_items_runs_wake_adjudication_even_when_extractor_returned_no_items(monkeypatch):
     conversation = SimpleNamespace(
         id='conversation-1',
+        source=ConversationSource.desktop,
         structured=SimpleNamespace(action_items=[]),
     )
     prepare = SimpleNamespace(calls=0)
@@ -531,72 +556,6 @@ def test_zero_confidence_values_are_not_replaced_by_defaults():
 
     assert signals.capture_confidence == 0.0
     assert signals.ownership_confidence == 0.0
-
-
-def test_canonical_prompt_and_parser_preserve_no_deadline_requests_and_completion_targets(monkeypatch):
-    captured = {}
-    response = ActionItemsExtraction.model_validate(
-        {
-            'action_items': [
-                {
-                    'description': 'Review the forecast',
-                    'capture_kind': 'direct_request',
-                    'capture_owner': 'user',
-                    'capture_confidence': 0.8,
-                    'ownership_confidence': 1,
-                    'candidate_action': 'create',
-                },
-                {
-                    'description': 'Send the budget',
-                    'capture_kind': 'direct_request',
-                    'capture_owner': 'user',
-                    'capture_confidence': 0.95,
-                    'ownership_confidence': 1,
-                    'candidate_action': 'complete',
-                    'target_task_id': 'task-budget',
-                },
-            ]
-        }
-    )
-
-    class FakePrompt:
-        def __or__(self, other):
-            return FakeChain()
-
-    class FakeChain:
-        def __or__(self, other):
-            return self
-
-        def invoke(self, values):
-            captured['values'] = values
-            return response
-
-    def from_messages(messages):
-        captured['instructions'] = messages[0][1]
-        return FakePrompt()
-
-    monkeypatch.setattr(conversation_processing.ChatPromptTemplate, 'from_messages', from_messages)
-    monkeypatch.setattr(conversation_processing, 'get_llm', lambda *args, **kwargs: object())
-
-    items = conversation_processing.extract_action_items(
-        transcript='Please review the forecast. The budget task is done.',
-        started_at=datetime(2026, 7, 9, tzinfo=timezone.utc),
-        language_code='en',
-        tz='UTC',
-        existing_action_items=[{'id': 'task-budget', 'description': 'Send the budget', 'completed': False}],
-        task_intelligence_capture=True,
-    )
-    rendered = captured['instructions'].format(**captured['values'])
-
-    assert 'do not require a deadline for a concrete explicit' in rendered
-    assert 'emit candidate_action=complete' in rendered
-    assert 'A concrete request addressed directly to the primary user' in rendered
-    assert 'capture_owner=user' in rendered
-    assert 'do not modify the existing one' not in rendered
-    assert items[0].due_at is None
-    assert items[0].capture_kind == 'direct_request'
-    assert items[1].candidate_action == 'complete'
-    assert items[1].target_task_id == 'task-budget'
 
 
 def test_rejected_item_is_dropped_alone_and_never_falls_back_to_a_writer(monkeypatch):
@@ -708,10 +667,86 @@ def test_extraction_only_proposes_and_never_accepts_or_writes_a_task(monkeypatch
                 'task_count': 2,
                 'conversation_id': 'conversation-1',
                 'task_source': 'transcript',
+                'source_platform': 'unknown',
                 'persistence_path': 'canonical_candidate',
             },
         }
     ]
+
+
+@pytest.mark.parametrize(
+    'source',
+    [
+        ConversationSource.omi,
+        ConversationSource.phone,
+        ConversationSource.phone_call,
+        ConversationSource.apple_watch,
+        ConversationSource.sdcard,
+    ],
+)
+def test_non_desktop_conversation_writes_tasks_and_never_proposes(monkeypatch, source):
+    """A client with no Suggested surface gets tasks, not proposals that expire unseen."""
+    monkeypatch.setattr(
+        conversation_capture.candidate_service,
+        'create_candidate',
+        lambda *a, **kw: pytest.fail('a client with no Suggested surface must not be proposed to'),
+    )
+    monkeypatch.setattr(
+        process_conversation.conversation_capture,
+        'prepare_wake_word_capture_gate',
+        lambda *a, **kw: pytest.fail('wake adjudication belongs to the Candidate path'),
+    )
+    monkeypatch.setattr(process_conversation.action_items_db, 'get_action_items_by_conversation', lambda *a, **kw: [])
+    monkeypatch.setattr(process_conversation.action_items_db, 'delete_action_items_for_conversation', lambda *a: 0)
+    monkeypatch.setattr(process_conversation, 'upsert_action_item_vectors_batch', lambda *a: None)
+    monkeypatch.setattr(process_conversation, 'submit_with_context', lambda *a, **kw: None)
+    monkeypatch.setattr(process_conversation, 'emit_product_event', lambda **event: None)
+    written = []
+
+    def create_batch(uid, action_items_data, **kwargs):
+        written.extend(action_items_data)
+        return [f'action-item-{index}' for index, _ in enumerate(action_items_data)]
+
+    _mock_saved_batch(monkeypatch, create_batch)
+
+    process_conversation._save_action_items(
+        'user-1',
+        _conversation(
+            _action('Send the budget', capture_kind='clear_commitment', capture_owner='user'),
+            _action('Call the dentist', capture_kind='explicit_command', capture_owner='user'),
+            source=source,
+        ),
+    )
+
+    assert [item['description'] for item in written] == ['Send the budget', 'Call the dentist']
+    assert {item['conversation_id'] for item in written} == {'conversation-1'}
+    assert {item['source'] for item in written} == {'conversation'}
+
+
+def test_non_desktop_reprocess_replaces_the_conversations_previous_tasks(monkeypatch):
+    deleted = []
+    monkeypatch.setattr(
+        process_conversation.action_items_db,
+        'get_action_items_by_conversation',
+        lambda *a, **kw: [{'id': 'stale-1'}],
+    )
+    monkeypatch.setattr(
+        process_conversation.action_items_db,
+        'delete_action_items_for_conversation',
+        lambda uid, conversation_id: deleted.append(conversation_id),
+    )
+    monkeypatch.setattr(process_conversation, 'delete_action_item_vectors_batch', lambda uid, ids: deleted.extend(ids))
+    monkeypatch.setattr(process_conversation, 'upsert_action_item_vectors_batch', lambda *a: None)
+    monkeypatch.setattr(process_conversation, 'submit_with_context', lambda *a, **kw: None)
+    monkeypatch.setattr(process_conversation, 'emit_product_event', lambda **event: None)
+    _mock_saved_batch(monkeypatch, lambda uid, data, **kw: ['action-item-0'])
+
+    process_conversation._save_action_items(
+        'user-1',
+        _conversation(_action('Send the budget'), source=ConversationSource.phone),
+    )
+
+    assert deleted == ['stale-1', 'conversation-1']
 
 
 def test_off_mode_still_only_proposes_and_never_reaches_a_writer(monkeypatch):

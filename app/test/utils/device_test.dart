@@ -1,8 +1,27 @@
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/utils/device.dart';
 
 void main() {
+  group('DeviceUtils.analyticsHardwareFamily', () {
+    BtDevice device(DeviceType type, String model, {String name = 'Omi'}) =>
+        BtDevice(id: 'device-id', name: name, type: type, rssi: -50, modelNumber: model);
+
+    test('normalizes Omi hardware variants', () {
+      expect(DeviceUtils.analyticsHardwareFamily(device(DeviceType.omi, 'Omi CV 1')), 'omi_cv1');
+      expect(DeviceUtils.analyticsHardwareFamily(device(DeviceType.omi, 'Omi DevKit 2')), 'omi_devkit');
+      expect(DeviceUtils.analyticsHardwareFamily(device(DeviceType.omi, 'Omi Neo')), 'omi_neo');
+      expect(DeviceUtils.analyticsHardwareFamily(device(DeviceType.openglass, 'Unknown')), 'omi_glass');
+    });
+
+    test('normalizes partner hardware without using arbitrary model text', () {
+      expect(DeviceUtils.analyticsHardwareFamily(device(DeviceType.limitless, 'Limitless Pendant')), 'limitless');
+      expect(DeviceUtils.analyticsHardwareFamily(device(DeviceType.friendPendant, 'Model 1')), 'friend_pendant');
+      expect(DeviceUtils.analyticsHardwareFamily(device(DeviceType.raybanMeta, 'Ray-Ban Meta')), 'rayban_meta');
+    });
+  });
+
   group('DeviceUtils.isOmiDevKit', () {
     test('detects DevKit 2 by model number', () {
       expect(DeviceUtils.isOmiDevKit(modelNumber: 'OMI DEVKIT 2'), isTrue);

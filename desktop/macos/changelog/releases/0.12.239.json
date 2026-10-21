@@ -1,0 +1,9 @@
+{
+  "version": "0.12.239",
+  "date": "2026-08-29",
+  "changes": [
+    "Improved difficult spoken questions with immediate acknowledgements in Omi's realtime voice and more reliable playback of long answers",
+    "Fixed push-to-talk answers failing to read recent conversations when their summaries were detailed",
+    "Fixed push-to-talk answers failing to search the web for weather and other current information"
+  ]
+}

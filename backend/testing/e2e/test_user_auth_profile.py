@@ -179,7 +179,7 @@ def test_notification_assistant_ai_profile_and_byok_state(client, auth_headers):
 
     bad_byok = client.post(
         "/v1/users/me/byok-active",
-        json={"fingerprints": {"openai": "a" * 64}},
+        json={"fingerprints": {"deepgram": "a" * 64}},
         headers=auth_headers,
     )
     assert bad_byok.status_code == 400

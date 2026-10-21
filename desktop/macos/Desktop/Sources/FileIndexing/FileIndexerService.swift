@@ -6,9 +6,7 @@ import Foundation
 actor FileIndexerService {
   static let shared = FileIndexerService()
 
-  private var _dbQueue: DatabasePool?
-  /// Shared Rewind pool epoch. `nil` denotes an explicitly injected test pool.
-  private var _dbGeneration: Int?
+  private let repository: RewindRepository
   private var isScanning = false
   private var activeScanOperations = 0
   private var scanCompletionWaiters: [CheckedContinuation<Void, Never>] = []
@@ -18,12 +16,13 @@ actor FileIndexerService {
   private let batchSize: Int
 
   private init() {
+    repository = RewindRepository(owner: "FileIndexerService")
     scanPolicy = .standard
     batchSize = 500
   }
 
   init(databasePool: DatabasePool, scanPolicy: FileIndexScanPolicy = .standard, batchSize: Int = 500) {
-    _dbQueue = databasePool
+    repository = RewindRepository(owner: "FileIndexerService", initialPool: databasePool)
     self.scanPolicy = scanPolicy
     self.batchSize = batchSize
   }
@@ -31,21 +30,10 @@ actor FileIndexerService {
   // MARK: - Database Access
 
   private func ensureDB() async throws -> DatabasePool {
-    if let db = _dbQueue {
-      guard let generation = _dbGeneration else { return db }
-      if await RewindDatabase.shared.poolGeneration() == generation {
-        return db
-      }
-    }
-
-    try await RewindDatabase.shared.initialize()
-    let (queue, generation) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
-    guard let db = queue else {
+    guard let databasePool = try await repository.databasePool() else {
       throw FileIndexerError.databaseNotInitialized
     }
-    _dbQueue = db
-    _dbGeneration = generation
-    return db
+    return databasePool
   }
 
   func invalidateCache() async {
@@ -54,8 +42,7 @@ actor FileIndexerService {
         scanCompletionWaiters.append(continuation)
       }
     }
-    _dbQueue = nil
-    _dbGeneration = nil
+    await repository.invalidate()
   }
 
   private func finishScanning() {
@@ -140,9 +127,14 @@ actor FileIndexerService {
 
   // MARK: - Background Re-scan
 
-  /// Incremental background re-scan of all standard folders.
+  /// Incremental background re-scan of the standard folders.
   /// Updates metadata for existing files and adds new ones.
-  func backgroundRescan() async {
+  ///
+  /// - Parameter fullDiskAccessGranted: Automatic callers probe and pass the real
+  ///   answer; without it the TCC-protected roots (Documents/Desktop/Downloads) are
+  ///   skipped so a background scan never raises a per-folder consent sheet. Pass
+  ///   `true` for explicit user-initiated rescans, which may scan everything.
+  func backgroundRescan(fullDiskAccessGranted: Bool = true) async {
     guard !isScanning else {
       log("FileIndexer: Scan already in progress, skipping background rescan")
       return
@@ -154,9 +146,14 @@ actor FileIndexerService {
     log("FileIndexer: Starting background rescan")
 
     let home = FileManager.default.homeDirectoryForCurrentUser
-    let folders = scanPolicy.standardScanRoots(homeURL: home)
+    let scanPlan = scanPolicy.automaticScanPlan(
+      homeURL: home,
+      fullDiskAccessGranted: fullDiskAccessGranted)
 
-    let count = await scanFolders(folders, incremental: true)
+    let count = await scanFolders(
+      scanPlan.roots,
+      incremental: true,
+      retentionProtectedPrefixes: scanPlan.retainedPrefixes)
     log("FileIndexer: Background rescan complete, \(count) files indexed")
   }
 
@@ -168,6 +165,7 @@ actor FileIndexerService {
   func scanFolders(
     _ folders: [URL],
     incremental: Bool = false,
+    retentionProtectedPrefixes: Set<String> = [],
     shouldContinue: @escaping @Sendable () -> Bool = { !Task.isCancelled }
   ) async -> Int {
     activeScanOperations += 1
@@ -184,11 +182,14 @@ actor FileIndexerService {
     // For incremental scans, load existing index for O(1) lookup
     let existingIndex: [String: Date?] = incremental ? loadExistingIndex(from: db) : [:]
     var scannedPaths = Set<String>()
-    // ~-relative prefixes of directories whose enumeration FAILED (permission
-    // revoked, transient I/O). Files under these were not scanned, but that is
-    // a read error — not deletion — so they must be excluded from the retention
-    // diff (otherwise a single unreadable folder purges its whole index subtree).
-    var failedDirectories = Set<String>()
+    // ~-relative prefixes of subtrees that were NOT scanned, for either of two
+    // reasons: enumeration failed (permission revoked, transient I/O), or the
+    // caller deliberately omitted a TCC-protected root it has no access to and
+    // passed it in as `retentionProtectedPrefixes`. Neither is deletion, so both
+    // must be excluded from the retention diff — otherwise one unreadable folder,
+    // or one root left out for want of Full Disk Access, purges its whole index
+    // subtree.
+    var failedDirectories = retentionProtectedPrefixes
 
     if incremental {
       log("FileIndexer: Loaded \(existingIndex.count) existing paths for incremental scan")

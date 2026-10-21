@@ -1,3 +1,4 @@
+from utils.generated_compute import generated_compute_allowed, generated_compute_configured
 import asyncio
 import hashlib
 import math
@@ -41,7 +42,6 @@ from database.apps import (
 )
 from database.auth import get_user_name
 from database.conversations import get_conversations
-from database.memories import get_memories
 from database._client import db as firestore_db
 from utils.memory.memory_service import MemoryService
 from database.redis_db import (
@@ -80,12 +80,28 @@ from utils.llm.persona import condense_conversations, condense_memories, generat
 from utils.llm.usage_tracker import track_usage, Features
 from utils.executors import run_blocking, db_executor, llm_executor
 from utils.social import get_twitter_timeline
+from utils.marketplace_reviewers import parse_marketplace_reviewers, is_marketplace_reviewer
 import logging
 
 logger = logging.getLogger(__name__)
 
 _reviewers_env: Optional[str] = os.getenv('MARKETPLACE_APP_REVIEWERS')
-MarketplaceAppReviewUIDs: List[str] = _reviewers_env.split(',') if _reviewers_env else []
+MarketplaceAppReviewUIDs: List[str] = parse_marketplace_reviewers(_reviewers_env)
+
+
+def _records_with_ids(records: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Drop marketplace records with no id, logging how many were skipped.
+
+    `_safe_build_app` already skips a record the `App` model rejects, but every list builder reads
+    `app['id']` first — to batch the installs and reviews lookups, and again per app — on the raw
+    dicts the Redis cache hands back. That is upstream of any model construction, so one legacy
+    document without an id raises KeyError out of a builder that is cached and shared across users.
+    """
+    usable = [record for record in records if record.get('id')]
+    skipped = len(records) - len(usable)
+    if skipped:
+        logger.warning("Skipping %d marketplace app record(s) without an id", skipped)
+    return usable
 
 
 def _safe_build_app(app_dict: dict[str, Any]) -> Optional[App]:
@@ -301,13 +317,15 @@ def get_popular_apps() -> List[App]:
             set_generic_cache(cache_key, reduced_apps, 60 * 30)  # 30 minutes cached
             popular_apps = reduced_apps
 
+        usable_apps = _records_with_ids(popular_apps)
+
         # Process apps (add installs, reviews, ratings)
-        app_ids = [app['id'] for app in popular_apps]
+        app_ids = [app['id'] for app in usable_apps]
         apps_install = get_apps_installs_count(app_ids)
         apps_reviews = get_apps_reviews(app_ids)
 
         apps: List[App] = []
-        for app in popular_apps:
+        for app in usable_apps:
             app_dict = app
             app_dict['installs'] = apps_install.get(app['id'], 0)
             reviews = apps_reviews.get(app['id'], {})
@@ -370,7 +388,20 @@ def get_available_apps(uid: str, include_reviews: bool = False) -> List[App]:
     tester_apps: List[Dict[str, Any]] = cast(List[Dict[str, Any]], user_slice.get('tester_apps', []))
 
     user_enabled: Set[str] = set(get_enabled_apps(uid))
-    all_apps: List[Dict[str, Any]] = private_data + public_approved_data + public_unapproved_data + tester_apps
+    public_approved_ids = {app.get('id') for app in public_approved_data if app.get('id')}
+    combined_records = (
+        [app for app in private_data if app.get('id') not in public_approved_ids]
+        + public_approved_data
+        + public_unapproved_data
+        + tester_apps
+    )
+    seen_ids: Set[str] = set()
+    all_apps: List[Dict[str, Any]] = []
+    for record in _records_with_ids(combined_records):
+        app_id = record['id']
+        if app_id not in seen_ids:
+            seen_ids.add(app_id)
+            all_apps.append(record)
     apps: List[App] = []
 
     app_ids = [app['id'] for app in all_apps]
@@ -383,7 +414,7 @@ def get_available_apps(uid: str, include_reviews: bool = False) -> List[App]:
         # Copy dict to avoid mutating cached objects
         app_dict = dict(app)
         app_dict['enabled'] = app['id'] in user_enabled
-        app_dict['rejected'] = app['approved'] is False
+        app_dict['rejected'] = app.get('approved') is False
         app_dict['installs'] = apps_install.get(app['id'], 0)
         if include_reviews:
             reviews = apps_review.get(app['id'], {})
@@ -461,39 +492,21 @@ def get_available_app_by_id_with_reviews(app_id: str, uid: str | None) -> Dict[s
 
 
 def get_public_unapproved_apps(uid: str) -> List[Dict[str, Any]]:
-    data = get_public_unapproved_apps_db(uid)
-    return data
+    return get_public_unapproved_apps_db(uid)
 
 
 def get_private_apps(uid: str) -> List[Dict[str, Any]]:
-    data = get_private_apps_db(uid)
-    return data
+    return get_private_apps_db(uid)
 
 
 def invalidate_approved_apps_cache() -> None:
-    """
-    Invalidate the approved apps cache across all backend instances.
-
-    This function:
-    1. Invalidates memory cache on local instance
-    2. Invalidates Redis cache
-    3. Publishes invalidation message to all other instances via pub/sub
-    """
-    # Get cache instances
+    """Invalidate the approved apps cache across all backend instances (local memory, Redis, and pub/sub)."""
     memory_cache = get_memory_cache()
     pubsub_manager = get_pubsub_manager()
-
-    # Invalidate both cache key variants (with and without reviews)
-    cache_keys = [f'{PUBLIC_APPROVED_APPS_CACHE_KEY}:reviews={n}' for n in (0, 1)]
-
-    # Clear local memory cache
+    cache_keys = [PUBLIC_APPROVED_APPS_CACHE_KEY, *(f'{PUBLIC_APPROVED_APPS_CACHE_KEY}:reviews={n}' for n in (0, 1))]
     for key in cache_keys:
         memory_cache.delete(key)
-
-    # Clear Redis cache
     delete_generic_cache(PUBLIC_APPROVED_APPS_CACHE_KEY)
-
-    # Notify all other instances to clear their memory cache
     pubsub_manager.publish_invalidation(cache_keys)
 
 
@@ -519,13 +532,15 @@ def get_approved_available_apps(include_reviews: bool = False) -> list[App]:
             set_generic_cache(redis_cache_key, reduced_apps, 60 * 10)  # 10 minutes cached
             all_apps = reduced_apps
 
+        usable_apps = _records_with_ids(all_apps)
+
         # Process apps (add installs, reviews, etc.)
-        app_ids = [app['id'] for app in all_apps]
+        app_ids = [app['id'] for app in usable_apps]
         apps_installs = get_apps_installs_count(app_ids)
         apps_reviews = get_apps_reviews(app_ids) if include_reviews else {}
 
         apps: List[App] = []
-        for app in all_apps:
+        for app in usable_apps:
             if app.get('disabled'):
                 continue
             app_dict = app
@@ -670,7 +685,10 @@ def upsert_app_payment_link(
         logger.warning(f"App is not found, app_id: {app_id}")
         return None
 
-    app = App(**app_data)
+    app = _safe_build_app(app_data)
+    if not app:
+        logger.warning(f"Cannot upsert payment link for malformed app, app_id: {app_id}")
+        return None
 
     if previous_price and previous_price == price:
         logger.info(f"App price is existing, app_id: {app_id}")
@@ -708,20 +726,25 @@ def upsert_app_payment_link(
 
 
 def get_is_user_paid_app(app_id: str, uid: str):
-    if uid in MarketplaceAppReviewUIDs:
+    if is_marketplace_reviewer(uid) or uid in MarketplaceAppReviewUIDs:
         return True
     return get_user_paid_app(app_id, uid) is not None
 
 
 def is_permit_payment_plan_get(uid: str):
-    if uid in MarketplaceAppReviewUIDs:
+    if is_marketplace_reviewer(uid) or uid in MarketplaceAppReviewUIDs:
         return False
-
     return True
 
 
-def paid_app(app_id: str, uid: str):
+_PAID_APP_RENEWAL_GRACE_SECONDS = 60 * 60 * 24
+
+
+def paid_app(app_id: str, uid: str, current_period_end: Optional[int] = None):
     expired_seconds = 60 * 60 * 24 * 30  # 30 days
+    if current_period_end:
+        period_remaining = current_period_end - int(datetime.now(timezone.utc).timestamp())
+        expired_seconds = max(period_remaining, 0) + _PAID_APP_RENEWAL_GRACE_SECONDS
     set_user_paid_app(app_id, uid, expired_seconds)
 
 
@@ -796,8 +819,14 @@ async def generate_persona_prompt(uid: str, persona: Dict[str, Any]):
     """Generate a persona prompt based on user memories and conversations."""
 
     # Get latest memories and user info — exclude locked content
-    all_memories = await run_blocking(db_executor, get_memories, uid, limit=250)
-    memories = [m for m in all_memories if not m.get('is_locked')]
+    universal_memories = await run_blocking(
+        db_executor,
+        MemoryService(db_client=firestore_db).read,
+        uid,
+        limit=250,
+        offset=0,
+    )
+    memories = [m.dict() for m in universal_memories if not m.is_locked]
     user_name = await run_blocking(db_executor, get_user_name, uid)
 
     # Get and condense recent conversations — exclude locked content
@@ -881,14 +910,28 @@ async def generate_persona_prompt(uid: str, persona: Dict[str, Any]):
 
 def generate_persona_desc(uid: str, persona_name: str):
     """Generate a persona description based on user memories."""
-    memories = get_memories(uid, limit=250)
+    universal_memories = MemoryService(db_client=firestore_db).read(uid, limit=250, offset=0)
+    memories = [m.dict() for m in universal_memories]
 
     with track_usage(uid, Features.PERSONA):
         persona_description = generate_persona_description(memories, persona_name)
     return persona_description
 
 
+def _persona_gate_zone(uid: str):
+    """Resolved lazily: database.notifications reaches for Firestore symbols at import time."""
+    from zoneinfo import ZoneInfo
+    from database.notifications import resolve_user_timezone
+
+    try:
+        return ZoneInfo(resolve_user_timezone(uid))
+    except Exception:
+        return None
+
+
 def update_personas_async(uid: str):
+    if not generated_compute_allowed(uid, 'persona_clone', allow_byok=False):
+        return
     if not can_update_persona(uid):
         logger.info(f"[PERSONAS] Rate limited - uid={uid} already updated today")
         return
@@ -896,7 +939,7 @@ def update_personas_async(uid: str):
     logger.info(f"[PERSONAS] Starting persona updates in background thread for uid={uid}")
     personas = get_omi_personas_by_uid_db(uid)
     if personas:
-        set_persona_update_timestamp(uid)
+        set_persona_update_timestamp(uid, _persona_gate_zone(uid))
 
         async def _batch():
             await asyncio.gather(*[update_persona_prompt(persona) for persona in personas])
@@ -916,6 +959,10 @@ def update_personas_async(uid: str):
 
 async def update_persona_prompt(persona: Dict[str, Any]):
     """Update a persona's chat prompt with latest memories and conversations."""
+    if generated_compute_configured() and not await run_blocking(
+        db_executor, generated_compute_allowed, persona['uid'], 'persona_clone', allow_byok=False
+    ):
+        return
     uid = persona['uid']
     universal_memories = await run_blocking(
         db_executor,
@@ -1311,7 +1358,7 @@ def build_capability_groups_response(
     id_to_title: Dict[Any, Any] = {c['id']: c['title'] for c in capabilities}
 
     ordered_keys: List[Any] = [c['id'] for c in capabilities]
-    for key in grouped_apps.keys():
+    for key in grouped_apps:
         if key not in ordered_keys:
             ordered_keys.append(key)
 
@@ -1431,7 +1478,7 @@ def build_capability_category_groups_response(
     id_to_title: Dict[str, str] = {c['id']: c['title'] for c in master_categories}
 
     ordered_keys: List[str] = [c['id'] for c in master_categories]
-    for key in grouped_apps.keys():
+    for key in grouped_apps:
         if key not in ordered_keys:
             ordered_keys.append(key)
 
@@ -1565,10 +1612,15 @@ def fetch_app_chat_tools_from_manifest(
         if isinstance(chat_messages_raw, dict):
             chat_messages: Dict[str, Any] = cast(Dict[str, Any], chat_messages_raw)
             if chat_messages.get('enabled', False):
+                # A present null (or out-of-contract value) must behave like absent: the stored
+                # doc feeds ExternalIntegration.chat_messages_target: Literal['main','app'] and
+                # chat_messages_notify: bool, so a raw null poisons every App(**doc) read.
+                target = chat_messages.get('target')
+                notify = chat_messages.get('notify')
                 chat_messages_config = {
                     'enabled': True,
-                    'target': chat_messages.get('target', 'app'),  # 'main' or 'app', default 'app'
-                    'notify': chat_messages.get('notify', True),  # send push notification, default True
+                    'target': target if target in ('main', 'app') else 'app',  # 'main' or 'app', default 'app'
+                    'notify': notify if isinstance(notify, bool) else True,  # send push notification, default True
                 }
 
         logger.info(

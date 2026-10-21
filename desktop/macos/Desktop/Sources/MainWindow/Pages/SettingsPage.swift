@@ -76,22 +76,8 @@ struct SettingsPage: View {
     ScrollViewReader { proxy in
       ScrollView {
         VStack(spacing: 0) {
-          // The pane's own heading. Open Runde at display size — the one run on this surface above
-          // `Font.inkDisplayThreshold`, which is what decides the face; everything below it stays SF
-          // Pro, because that is what a native macOS app sets a settings pane in.
-          HStack {
-            Text(selectedSection.displayTitle)
-              .inkStyle(.stepHeadline, color: Ink.primary)
-              .id(selectedSection)
-              .transition(.opacity)
-              .omiAnimation(.easeInOut(duration: 0.15), value: selectedSection)
-
-            Spacer()
-          }
-          .padding(.horizontal, SettingsGlassMetrics.paneHorizontalPadding)
-          .padding(.top, SettingsGlassMetrics.paneTopPadding)
-          .padding(.bottom, SettingsGlassMetrics.sectionSpacing)
-
+          // The selected sidebar row already names the destination. Repeating
+          // it as a large page title consumed a row without adding context.
           SettingsContentView(
             appState: appState,
             selectedSection: $selectedSection,
@@ -100,6 +86,7 @@ struct SettingsPage: View {
             showResetOnboardingConfirm: $showResetOnboardingConfirm
           )
           .padding(.horizontal, SettingsGlassMetrics.paneHorizontalPadding)
+          .padding(.top, SettingsGlassMetrics.paneTopPadding)
           .padding(.bottom, SettingsGlassMetrics.paneBottomPadding)
 
           Spacer()
@@ -178,6 +165,7 @@ struct SettingsContentView: View {
   // ChatProvider for browser extension setup
   var chatProvider: ChatProvider? = nil
   @StateObject var viewModel = SettingsViewModel()
+  @StateObject var dataExportModel = AccountDataExportModel()
 
   // Updater view model
   @ObservedObject var updaterViewModel = UpdaterViewModel.shared
@@ -197,6 +185,24 @@ struct SettingsContentView: View {
   @AppStorage(DefaultsKey.chatScreenshotSharingEnabled.rawValue)
   var chatScreenshotSharingEnabled: Bool = true
 
+  // Offline cache of the server's `meeting_note_screenshots_enabled` account setting; read
+  // synchronously by MeetingNoteScreenshotsFeature.isEnabled so the feature gate never blocks on
+  // the network. The account setting itself (GET/PATCH `v1/screen-frame-egress/settings`) is
+  // authoritative — see `loadMeetingNoteScreenshotsSetting()` /
+  // `updateMeetingNoteScreenshotsSetting(enabled:)` in SettingsContentView+Rewind.swift. Default on.
+  @AppStorage(DefaultsKey.meetingNoteScreenshotsEnabled.rawValue)
+  var meetingNoteScreenshotsEnabled: Bool = true
+
+  @AppStorage(DefaultsKey.meetingMemoryBriefsEnabled.rawValue)
+  var meetingMemoryBriefsEnabled: Bool = false
+  @State var meetingBriefAccessRequestGeneration = 0
+  @State var meetingBriefCalendarAccessUnavailable = false
+
+  // Guards against the read-on-appear (`loadMeetingNoteScreenshotsSetting`) reconciling
+  // `meetingNoteScreenshotsEnabled` with the server's value from also being mistaken for a user
+  // edit and PATCHed straight back — see the toggle's `onChange` in SettingsContentView+Rewind.swift.
+  @State var isSyncingMeetingNoteScreenshotsFromServer = false
+
   // The sole ambient-audio preference. Runtime activity remains on AppState.
   @AppStorage(AssistantSettings.audioRecordingModeDefaultsKey) var audioRecordingModeRaw =
     AssistantSettings.AudioRecordingMode.onlyMeetings.rawValue
@@ -214,17 +220,13 @@ struct SettingsContentView: View {
   @State var taskAgentWorkingDirectory: String
   @State var taskExtractionInterval: Double
   @State var taskMinConfidence: Double
+  @State var goalReminderNotificationsEnabled = NotificationService.goalReminderNotificationsEnabled
   @State var taskNotificationsEnabled: Bool
   @State var taskAllowedApps: Set<String>
   @State var taskBrowserKeywords: [String]
   @State var isRescoringTasks = false
 
   // Advice Assistant states
-  @State var insightEnabled: Bool
-  @State var insightExtractionInterval: Double
-  @State var insightMinConfidence: Double
-  @State var insightNotificationsEnabled: Bool
-  @State var insightExcludedApps: Set<String>
 
   // Meeting summary share notification
   @State var meetingSummaryNotificationsEnabled: Bool
@@ -263,6 +265,8 @@ struct SettingsContentView: View {
   @State var aiProfileDataSourcesUsed: Int = 0
   @State var isGeneratingAIProfile = false
   @State var isEditingAIProfile = false
+  @State var isConfirmingAIProfileDelete = false
+  @State var isConfirmingNudgeReset = false
   @State var aiProfileEditText: String = ""
 
   // Selected section (passed in from parent)
@@ -271,25 +275,49 @@ struct SettingsContentView: View {
 
   // Notification settings (from backend)
   @State var dailySummaryEnabled: Bool = true
+  /// The value the account last confirmed for `dailySummaryEnabled`, or `nil` until Settings has
+  /// read it. A failed save puts the toggle back; see `updateDailySummarySettings(enabled:)`.
+  @State var savedDailySummaryEnabled: Bool?
+  @State var dailySummaryEnabledError: String?
   @State var dailySummaryHour: Int = 22
+  @State var dailySummaryDepth: DailySummaryDepth = .brief
+  @State var savedDailySummaryDepth: DailySummaryDepth = .brief
+  @State var dailySummaryDepthSaving = false
+  @State var dailySummaryDepthRevision = 0
+  @State var dailySummaryDepthError: String?
   // UI-only date for the Summary Time stepper field; the backend stores whole hours,
   // so this glides freely while only the hour component is persisted.
   @State var dailySummaryTime: Date = SettingsControlMetrics.dailySummaryDate(
     forHour: 22, referenceDate: Date())
   @State var notificationsEnabled: Bool = NotificationService.areNotificationsEnabled()
+  /// When proactive notifications are silenced until, or `nil`. Held here rather than read
+  /// per-render so choosing a duration updates the row immediately.
+  @State var notificationsSnoozedUntil: Date? = NotificationService.currentSnoozeExpiry()
   // Start from the synchronous persisted mirror so reopening Settings never flashes
   // Balanced while the authoritative backend value is still hydrating.
   @State var notificationFrequency: Int = NotificationService.currentFrequencyLevel()
 
   // Privacy settings (from backend)
   @State var recordingPermissionEnabled: Bool = false
+  @State var savedRecordingPermissionEnabled: Bool?
+  @State var recordingPermissionError: String?
   @State var privateCloudSyncEnabled: Bool = true
+  @State var savedPrivateCloudSyncEnabled: Bool?
+  @State var privateCloudSyncError: String?
   @State var isTrackingExpanded: Bool = false
 
   // Transcription settings (from backend)
   @State var singleLanguageMode: Bool = false
+  /// The custom vocabulary the account last confirmed it holds, or `nil` until Settings has read it.
+  /// A failed save puts it back; see `TranscriptionVocabularySaver`.
+  @State var savedVocabularyList: [String]?
+  @State var vocabularySaveError: String?
   @State var newVocabularyWord: String = ""
   @State var vocabularyList: [String] = []
+  /// Whether `vocabularyList` was read from the account rather than shown from the local copy.
+  /// A save replaces the account's whole list; see `TranscriptionVocabularyWriter`.
+  @State var vocabularyLoadedFromAccount: Bool = false
+  @State var isReadingVocabulary: Bool = false
 
   // Language setting
   @State var userLanguage: String = "en"
@@ -311,6 +339,8 @@ struct SettingsContentView: View {
   @State var activeBillingWebFlow: BillingWebFlow?
   @State var pendingSubscriptionPriceId: String?
   @State var pendingCheckoutSessionId: String?
+  @State var pendingCheckoutPlanId: String = "unknown"
+  @State var pendingCheckoutInterval: String = "unknown"
 
   var isLoadingSettings: Bool {
     get { viewModel.isLoadingBackendSettings }
@@ -325,6 +355,11 @@ struct SettingsContentView: View {
   var subscriptionError: String? {
     get { viewModel.subscriptionError }
     nonmutating set { viewModel.subscriptionError = newValue }
+  }
+
+  var subscriptionConfirmation: String? {
+    get { viewModel.subscriptionConfirmation }
+    nonmutating set { viewModel.subscriptionConfirmation = newValue }
   }
 
   let cooldownOptions = [1, 2, 5, 10, 15, 30, 60]
@@ -358,11 +393,7 @@ struct SettingsContentView: View {
   @State var transcriptionLanguage: String = "en"
   @State var vadGateEnabled: Bool = false
 
-  // Multi-chat mode setting
-  @AppStorage("multiChatEnabled") var multiChatEnabled = false
   @AppStorage("conversationsCompactView") var conversationsCompactView = true
-  @AppStorage("useLegacyHomeDesign") var useLegacyHomeDesign = false
-  @AppStorage("useOldestHomeDesign") var useOldestHomeDesign = false
   @AppStorage("speakNotificationsAloud") var speakNotificationsAloud = false
   @AppStorage(DefaultsKey.integrationNudgesEnabled.rawValue) var integrationNudgesEnabled = true
 
@@ -387,6 +418,7 @@ struct SettingsContentView: View {
   // Dev Mode setting
   @AppStorage("devModeEnabled") var devModeEnabled = false
   @AppStorage(BetaEnhancedDiagnosticsConfiguration.defaultsKey) var betaEnhancedDiagnosticsEnabled = true
+  @State var advancedDetailsExpanded = false
 
   // Browser Extension settings
   @AppStorage("playwrightUseExtension") var playwrightUseExtension = true
@@ -440,7 +472,8 @@ struct SettingsContentView: View {
     var displayTitle: String {
       switch self {
       case .account, .planUsage: return "Account & Plan"
-      case .notifications, .privacy: return "Notifications & Privacy"
+      case .notifications, .privacy: return "Alerts & Privacy"
+      case .advanced: return "AI & Automation"
       default: return rawValue
       }
     }
@@ -487,7 +520,6 @@ struct SettingsContentView: View {
     case stats = "Your Stats"
     case focusAssistant = "Focus Assistant"
     case taskAssistant = "Task Assistant"
-    case insightAssistant = "Insight Assistant"
     case memoryAssistant = "Memory Assistant"
     case analysisThrottle = "Analysis Throttle"
     case goals = "Goals"
@@ -495,7 +527,7 @@ struct SettingsContentView: View {
     case troubleshooting = "Troubleshooting"
     case gmailReader = "Gmail Reader"
     case calendarSync = "Calendar Sync"
-    case developerKeys = "Developer API Keys"
+    case developerKeys = "Model Provider Keys"
 
     var icon: String {
       switch self {
@@ -504,7 +536,6 @@ struct SettingsContentView: View {
       case .stats: return "chart.bar"
       case .focusAssistant: return "eye.fill"
       case .taskAssistant: return "checklist"
-      case .insightAssistant: return ProactiveNotificationBadge.insightSystemImage
       case .memoryAssistant: return "brain.head.profile"
       case .analysisThrottle: return "clock.arrow.2.circlepath"
       case .goals: return "target"
@@ -551,7 +582,9 @@ struct SettingsContentView: View {
   @AppStorage("dev_gemini_api_key") var devGeminiKey: String = ""
   @AppStorage("dev_anthropic_api_key") var devAnthropicKey: String = ""
   @AppStorage("dev_openai_api_key") var devOpenAIKey: String = ""
+  @AppStorage("dev_openrouter_api_key") var devOpenRouterKey: String = ""
   @AppStorage("dev_deepgram_api_key") var devDeepgramKey: String = ""
+  @AppStorage(DefaultsKey.byokLLMProvider.rawValue) var devBYOKLLMProvider: String = ""
   @State var byokKeyStatuses: [BYOKProvider: BYOKValidator.Status] = [:]
   @State var byokActivationError: String?
 
@@ -582,13 +615,7 @@ struct SettingsContentView: View {
       initialValue: TaskAssistantSettings.shared.notificationsEnabled)
     _taskAllowedApps = State(initialValue: TaskAssistantSettings.shared.allowedApps)
     _taskBrowserKeywords = State(initialValue: TaskAssistantSettings.shared.browserKeywords)
-    _insightEnabled = State(initialValue: InsightAssistantSettings.shared.isEnabled)
-    _insightExtractionInterval = State(
-      initialValue: InsightAssistantSettings.shared.extractionInterval)
-    _insightMinConfidence = State(initialValue: InsightAssistantSettings.shared.minConfidence)
-    _insightNotificationsEnabled = State(
-      initialValue: InsightAssistantSettings.shared.notificationsEnabled)
-    _insightExcludedApps = State(initialValue: InsightAssistantSettings.shared.excludedApps)
+
     _memoryEnabled = State(initialValue: MemoryAssistantSettings.shared.isEnabled)
     _memoryExtractionInterval = State(
       initialValue: MemoryAssistantSettings.shared.extractionInterval)
@@ -682,6 +709,11 @@ struct SettingsContentView: View {
       appState.checkNotificationPermission()
       screenCaptureHealth = ProactiveAssistantsPlugin.shared.screenCaptureHealth
     }
+    .onReceive(NotificationCenter.default.publisher(for: .floatingBarEnabledDidChange)) { _ in
+      // The notch's Hide control, the bar's own hide path, and a Push-to-Talk reveal all move
+      // this preference without going through the switch; keep the switch honest.
+      showAskOmiBar = FloatingControlBarManager.shared.isEnabled
+    }
     .onReceive(NotificationCenter.default.publisher(for: .assistantMonitoringStateDidChange)) {
       notification in
       if let userInfo = notification.userInfo, let state = userInfo["isMonitoring"] as? Bool {
@@ -707,9 +739,17 @@ struct SettingsContentView: View {
       }
     }
     .onReceive(NotificationCenter.default.publisher(for: .navigateToTaskSettings)) { _ in
+      // The whole transition is data from SettingsDeepLinkTransition, so the test
+      // that pins it drives this exact production value. While the Task Assistant
+      // pane is hidden the highlight is nil — a highlight that targets a card that
+      // does not render scrolls to nothing, which is how the pane got "fixed back"
+      // once before.
+      let transition = SettingsDeepLinkTransition.taskSettings()
       selectedSection = .advanced
-      DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
-        highlightedSettingId = "advanced.taskassistant"
+      if let target = transition.highlight {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+          highlightedSettingId = target
+        }
       }
     }
     .onReceive(NotificationCenter.default.publisher(for: .navigateToFloatingBarSettings)) { _ in
@@ -744,6 +784,8 @@ struct SettingsContentView: View {
   }
 
   @ObservedObject var fontScaleSettings = FontScaleSettings.shared
+  @ObservedObject var glassTransparencySettings = InkGlassTransparencySettings.shared
+  @ObservedObject var reduceTransparencyObserver = InkReduceTransparencyObserver.shared
   @ObservedObject var rewindSettings = RewindSettings.shared
   @State var rewindStats: (total: Int, indexed: Int, storageSize: Int64)? = nil
 }

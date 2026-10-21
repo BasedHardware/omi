@@ -146,7 +146,7 @@ final class TopNavigationBarLayoutTests: XCTestCase {
     )
   }
 
-  /// The bar carries five flat destination pills and no destination menu. The claim worth holding is not the pill count —
+  /// The bar carries four flat destination pills and no destination menu. The claim worth holding is not the pill count —
   /// it is that **nothing was stranded when the menu was deleted** (INV-NAV-1). `reach` names the one
   /// mechanism responsible for each destination, so this fails the moment a pill is removed without
   /// the destination being moved somewhere that exists.
@@ -157,12 +157,12 @@ final class TopNavigationBarLayoutTests: XCTestCase {
         SidebarNavItem.dashboard.rawValue,
         SidebarNavItem.conversations.rawValue,
         SidebarNavItem.tasks.rawValue,
-        SidebarNavItem.rewind.rawValue,
         SidebarNavItem.apps.rawValue,
       ]
     )
     XCTAssertEqual(
-      TopNavigationRoutes.memoryDestinations, [.memories, .conversations, .brainMap, .activity])
+      TopNavigationRoutes.memoryDestinations,
+      [.memories, .conversations, .brainMap, .activity, .rewind])
 
     // No pill may instruct the user how to operate it. The retired menu's tooltip read "hover for
     // conversations, memories, tasks, Rewind", which is chrome apologising for itself.
@@ -177,12 +177,12 @@ final class TopNavigationBarLayoutTests: XCTestCase {
       ShellDestination.unreachable(), [],
       "a destination lost the only mechanism that reached it")
 
-    // The hub's other three pages are reached from Activity's chip row, on the page the pill opens.
+    // The hub's other four pages are reached from Brain's section row, on the page the pill opens.
     // `Activity` itself is what the pill opens, so the bar is its own door.
     XCTAssertEqual(
       ShellDestination.allCases.filter { $0.reach == .activityChipRow }
         .compactMap(\.memoryDestination),
-      [.conversations, .memories, .brainMap])
+      [.conversations, .memories, .brainMap, .rewind])
     // The claim is checkable because the row and the model read one value. A page dropped from the
     // chip row is unreachable here rather than silently stranded in the app.
     for destination in ShellDestination.allCases where destination.reach == .activityChipRow {
@@ -200,10 +200,10 @@ final class TopNavigationBarLayoutTests: XCTestCase {
     let hubPill = TopNavigationRoutes.primaryItems.first {
       $0.index == SidebarNavItem.conversations.rawValue
     }
-    XCTAssertEqual(hubPill?.title, "Brain")
+    XCTAssertEqual(hubPill?.title, "Memories")
     XCTAssertNotEqual(
       hubPill?.icon, "clock.arrow.circlepath",
-      "the hub pill must not wear Rewind's glyph two pills away from Rewind")
+      "the Brain pill must not wear Rewind's section glyph")
     // Chat is a peer pill, not a brand mark: the eight-dot mark belongs to the query bar, where it
     // animates while Omi is answering. The pill wears a chat glyph because the page IS the chat.
     XCTAssertEqual(ShellDestination.home.navItem, .dashboard)
@@ -258,29 +258,24 @@ final class TopNavigationBarLayoutTests: XCTestCase {
     )
   }
 
-  func testReferAFriendSitsImmediatelyAfterAdvancedInSettings() {
+  func testReferAFriendRemainsAvailableAfterAIAndAutomationInSettings() {
     guard
       let advanced = SettingsSidebarRoutes.visibleSections.firstIndex(of: .advanced),
       let referral = SettingsSidebarRoutes.visibleSections.firstIndex(of: .referral)
     else {
-      return XCTFail("Advanced and Refer a Friend must both be visible Settings rows")
+      return XCTFail("AI & Automation and Refer a Friend must both be visible Settings rows")
     }
 
     XCTAssertEqual(referral, advanced + 1)
   }
 
-  func testReferControlIsPinnedImmediatelyBeforeTheMicrophoneControl() {
+  func testOperationalStatusFollowsUpdateStatusWithoutPromotionalChrome() {
     let recorder = TopNavigationLayoutRecorder()
     let host = NSHostingView(
       rootView: TopNavigationTrailingControlsLayout(
         updateStatus: {
           TopNavigationLayoutProbe(recorder: recorder, slot: .updateStatus) {
             Color.clear.frame(width: 100, height: 32)
-          }
-        },
-        referral: {
-          TopNavigationLayoutProbe(recorder: recorder, slot: .referral) {
-            Color.clear.frame(width: 78, height: 30)
           }
         },
         statusControls: {
@@ -298,33 +293,24 @@ final class TopNavigationBarLayoutTests: XCTestCase {
 
     guard
       let updateStatus = recorder.frame(of: .updateStatus),
-      let referral = recorder.frame(of: .referral),
       let microphone = recorder.frame(of: .microphone)
     else {
       return XCTFail("expected every trailing control to be laid out")
     }
 
-    XCTAssertEqual(referral.minX, updateStatus.maxX + OmiSpacing.sm, accuracy: 0.5)
-    XCTAssertEqual(microphone.minX, referral.maxX + OmiSpacing.sm, accuracy: 0.5)
+    XCTAssertEqual(microphone.minX, updateStatus.maxX + OmiSpacing.sm, accuracy: 0.5)
   }
 
   /// A destination whose `reach` points at a page the bar does not have a pill for is exactly the
   /// stranding INV-NAV-1 forbids, so the checker has to *see* it rather than pass vacuously.
   func testTheReachabilityCheckerCatchesADestinationWhosePillWasRemoved() {
-    let barWithoutRewind = TopNavigationRoutes.primaryItems.filter {
-      $0.index != SidebarNavItem.rewind.rawValue
-    }
-    XCTAssertEqual(
-      ShellDestination.unreachable(fromBarItems: barWithoutRewind), [.rewind],
-      "Rewind lost its pill and nothing noticed")
-
     let barWithoutLibrary = TopNavigationRoutes.primaryItems.filter {
       $0.index != SidebarNavItem.conversations.rawValue
     }
     XCTAssertEqual(
       Set(ShellDestination.unreachable(fromBarItems: barWithoutLibrary)),
-      [.conversations, .memories, .brainMap, .activity],
-      "without the Activity pill the hub's views have no way in")
+      [.conversations, .memories, .brainMap, .rewind, .activity],
+      "without the Brain pill the section's views have no way in")
   }
 
   /// **The bridge's destination vocabulary, now that a test can reach it.** This mapping was a
@@ -439,11 +425,8 @@ final class TopNavigationBarLayoutTests: XCTestCase {
           }
         },
         persistentControls: {
-          HStack(spacing: OmiSpacing.sm) {
-            ReferralTopBarButton {}
-            Color.clear.frame(
-              width: TopNavigationLayoutMetrics.persistentControlsWidth, height: 32)
-          }
+          Color.clear.frame(
+            width: TopNavigationLayoutMetrics.persistentControlsWidth, height: 32)
         },
         settings: {
           Color.clear.frame(width: TopNavigationLayoutMetrics.settingsControlWidth, height: 32)
@@ -571,7 +554,6 @@ private enum TopNavigationLayoutSlot: Hashable {
   case persistentControls
   case settings
   case updateStatus
-  case referral
   case microphone
 }
 

@@ -1,7 +1,9 @@
 """Luna Flex cost model for canonical short-term maintenance (dreaming).
 
-Rates match ``openai.gpt-5.6-luna.2026-07-30`` short-context prices. Flex is
-priced at the gateway's batch/Flex multiplier (50%). Token defaults are
+Rates match the gpt-x-luna card dated 2026-09-22 short-context prices: half of
+gpt-5.6-luna per operator directive (David Zhang, 2026-09-23), pending
+official published rates. Flex is priced at the
+gateway's batch/Flex multiplier (50%). Token defaults are
 planning estimates for one required-processing call and one consolidation
 batch; live spend is the gateway ``llm_gateway_attempts`` ledger after a job run.
 """
@@ -11,8 +13,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from math import ceil
 
-LUNA_SHORT_INPUT_USD_PER_MILLION = 0.20
-LUNA_SHORT_OUTPUT_USD_PER_MILLION = 1.20
+LUNA_SHORT_INPUT_USD_PER_MILLION = 0.10
+LUNA_SHORT_OUTPUT_USD_PER_MILLION = 0.60
 FLEX_MULTIPLIER = 0.50
 
 DEFAULT_L2_INPUT_TOKENS = 2_500

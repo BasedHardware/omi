@@ -60,6 +60,8 @@ _RESTORED_MODULES = tuple(
         "utils.llm",
         "utils.llms",
         "utils.llms.memory",
+        "utils.memory",
+        "utils.memory.memory_service",
         "utils.llm.clients",
         "utils.llm.usage_tracker",
         "utils.llm.goals",
@@ -71,6 +73,8 @@ _PARENT_ATTRS = tuple(
         ("utils", "llm"),
         ("utils", "llms"),
         ("utils.llms", "memory"),
+        ("utils", "memory"),
+        ("utils.memory", "memory_service"),
         ("utils.llm", "clients"),
         ("utils.llm", "usage_tracker"),
         ("utils.llm", "goals"),
@@ -123,6 +127,7 @@ sys.modules["database.conversations"].get_conversations = MagicMock(return_value
 sys.modules["database.conversations"].get_conversations_by_id = MagicMock(return_value=[])
 sys.modules["database.chat"].get_messages = MagicMock(return_value=[])
 sys.modules["database.vector_db"].query_vectors = MagicMock(return_value=[])
+sys.modules["database._client"].db = MagicMock()
 
 # Stub utils.llms.memory
 llms_mod = _stub_module("utils.llms")
@@ -130,6 +135,25 @@ if not hasattr(llms_mod, '__path__'):
     llms_mod.__path__ = []
 _stub_module("utils.llms.memory")
 sys.modules["utils.llms.memory"].get_prompt_memories = MagicMock(return_value=("TestUser", "some memories"))
+
+# Stub utils.memory.memory_service.MemoryService (canonical memory read path;
+# extract_and_update_goal_progress does not read memories, so a static empty
+# read is enough to satisfy goals.py's module-level import).
+memory_mod = _stub_module("utils.memory")
+if not hasattr(memory_mod, '__path__'):
+    memory_mod.__path__ = []
+memory_service_mod = _stub_module("utils.memory.memory_service")
+
+
+class _StubMemoryService:
+    def __init__(self, *args, **kwargs):
+        pass
+
+    def read(self, uid, *, limit=100, offset=0, **kwargs):
+        return []
+
+
+memory_service_mod.MemoryService = _StubMemoryService
 
 # Ensure clients module has mocks (but don't create new ones if already set)
 clients_mod = _stub_module("utils.llm.clients")

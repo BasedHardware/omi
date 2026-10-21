@@ -4,116 +4,6 @@ import Combine
 import OmiTheme
 import SwiftUI
 
-// MARK: - Safe Dismiss Button
-/// A dismiss button that prevents click-through to underlying views on macOS.
-/// Uses onTapGesture with async delay to ensure the click is fully consumed before dismissing.
-/// The key is to wait for the full mouse event cycle to complete before triggering dismiss.
-struct SafeDismissButton: View {
-  let dismiss: DismissAction
-  var icon: String = "xmark"
-  var showBackground: Bool = true
-
-  @State private var isPressed = false
-
-  var body: some View {
-    Image(systemName: icon)
-      .scaledFont(size: OmiType.body, weight: .medium)
-      .foregroundColor(Ink.secondary)
-      .frame(width: 28, height: 28)
-      .background(showBackground ? Ink.wash : Color.clear)
-      .clipShape(Circle())
-      .contentShape(Circle())
-      .opacity(isPressed ? 0.7 : 1.0)
-      .onTapGesture {
-        guard !isPressed else { return }  // Prevent double-tap
-        isPressed = true
-
-        let mouseLocation = NSEvent.mouseLocation
-        log("DISMISS: Tap gesture fired at mouse position: \(mouseLocation)")
-
-        // Consume the click by resigning first responder
-        NSApp.keyWindow?.makeFirstResponder(nil)
-
-        // Post a mouse-up event to ensure any pending click is consumed
-        if let window = NSApp.keyWindow {
-          let event = NSEvent.mouseEvent(
-            with: .leftMouseUp,
-            location: window.mouseLocationOutsideOfEventStream,
-            modifierFlags: [],
-            timestamp: ProcessInfo.processInfo.systemUptime,
-            windowNumber: window.windowNumber,
-            context: nil,
-            eventNumber: 0,
-            clickCount: 1,
-            pressure: 0
-          )
-          if let event = event {
-            window.sendEvent(event)
-            log("DISMISS: Sent synthetic mouse-up event")
-          }
-        }
-
-        // Use async with longer delay to ensure mouse event fully completes
-        Task { @MainActor in
-          log("DISMISS: Starting 250ms delay before dismiss")
-          // Longer delay to ensure mouse-up event is fully processed
-          try? await Task.sleep(nanoseconds: 250_000_000)  // 250ms
-          log("DISMISS: Delay complete, calling dismiss()")
-          log("DISMISS: Mouse position before dismiss: \(NSEvent.mouseLocation)")
-          dismiss()
-          log("DISMISS: dismiss() called")
-        }
-      }
-  }
-}
-
-// MARK: - Dismiss Button (Action-based)
-/// A dismiss button that takes a closure instead of a DismissAction.
-/// Used for overlay-based sheets where the dismiss is controlled externally.
-/// A real Button (not a tap gesture) so accessibility exposes it as a labeled
-/// "Close" control and keyboard users can reach it.
-struct DismissButton: View {
-  let action: () -> Void
-  var icon: String = "xmark"
-  var showBackground: Bool = true
-  var accessibilityLabel: String = "Close"
-
-  var body: some View {
-    Button {
-      log("DISMISS_BUTTON: Activated")
-
-      // Commit any in-progress field editing before tearing the sheet down.
-      NSApp.keyWindow?.makeFirstResponder(nil)
-
-      OmiMotion.withGated(.easeOut(duration: 0.2)) {
-        action()
-      }
-    } label: {
-      Image(systemName: icon)
-        .scaledFont(size: OmiType.body, weight: .medium)
-        .foregroundColor(Ink.secondary)
-        .frame(width: 28, height: 28)
-        .background(showBackground ? Ink.wash : Color.clear)
-        .clipShape(Circle())
-        .contentShape(Circle())
-    }
-    .buttonStyle(DismissButtonPressStyle())
-    .accessibilityLabel(accessibilityLabel)
-  }
-}
-
-private struct DismissButtonPressStyle: ButtonStyle {
-  func makeBody(configuration: ButtonStyleConfiguration) -> some View {
-    configuration.label
-      .opacity(configuration.isPressed ? 0.7 : 1.0)
-  }
-}
-
-enum AppsCatalogInitialSection {
-  case imports
-  case exports
-}
-
 enum AppsPageCategoryFilter {
   static let allCategoriesOptionId = ""
   static let allCategoriesTitle = "All Categories"
@@ -158,18 +48,39 @@ enum AppsFilteredResultsPresentation: Equatable {
   }
 }
 
+enum AppsAllSearchPresentation: Equatable {
+  case loading
+  case empty
+  case results(total: Int)
+  case failure
+
+  static func resolve(
+    importsCount: Int,
+    exportsCount: Int,
+    appsCount: Int,
+    marketplace: AppsFilteredResultsPresentation
+  ) -> AppsAllSearchPresentation {
+    let localCount = importsCount + exportsCount
+    let visibleAppsCount = marketplace == .results ? appsCount : 0
+    let total = localCount + visibleAppsCount
+
+    if total > 0 { return .results(total: total) }
+    switch marketplace {
+    case .loading: return .loading
+    case .failure: return .failure
+    case .empty, .results: return .empty
+    }
+  }
+}
+
 struct AppsPage: View {
   @ObservedObject var appProvider: AppProvider
   var appState: AppState? = nil
+  var onOpenChatApp: ((OmiApp, OmiAppDetails?) async -> Void)? = nil
   @ObservedObject var connectorStatusStore: ImportConnectorStatusStore = ImportConnectorStatusStore()
   @ObservedObject private var automationPresentationCoordinator =
     DesktopAutomationPresentationCoordinator.shared
-  var initialSection: AppsCatalogInitialSection = .imports
   var handlesAutomationPresentations = false
-  var onDismiss: (() -> Void)? = nil
-  var onSelectApp: ((OmiApp) -> Void)? = nil
-  var onSelectConnector: ((ImportConnector) -> Void)? = nil
-  var onSelectDestination: ((MemoryExportDestination) -> Void)? = nil
   @State private var searchText = ""
   @State private var selectedApp: OmiApp?
   @State private var selectedConnector: ImportConnector?
@@ -178,111 +89,126 @@ struct AppsPage: View {
   @State private var visibleAutomationPresentationTarget: DesktopAutomationPresentationTarget?
   @State private var exportStatuses: [MemoryExportDestination: MemoryExportStatus] = [:]
   @State private var viewAllSection: String? = nil  // "featured", "integrations", "notifications"
+  @State private var selectedKind: AppsCatalogKind = .all
+  @State private var showAddMcpServerSheet = false
+  @State private var selectedLocalMcpServer: LocalMcpStore.Entry?
+  @State private var showAddSkillSheet = false
+  @State private var editingSkill: LocalSkillsStore.Skill?
+  @State private var selectedCatalogEntry: ExtensionCatalog.Entry?
+  @AppStorage(AppsSectionDestination.storageKey) private var selectedSectionRawValue =
+    AppsSectionDestination.apps.rawValue
+
+  private var selectedSection: AppsSectionDestination {
+    AppsSectionDestination(rawValue: selectedSectionRawValue) ?? .apps
+  }
 
   var body: some View {
-    VStack(spacing: 0) {
-      // Search bar
-      searchBar
-        .padding()
+    GeometryReader { proxy in
+      let lane = QueryShellLayout.laneWidth(for: proxy.size.width)
 
-      Ink.separator
-        .frame(height: 1)
+      VStack(spacing: QueryShellLayout.panelGap) {
+        QuerySearchBar(
+          text: $searchText,
+          accessibilityID: "apps-search-field",
+          placeholder: searchPlaceholder, searchSurface: .apps
+        )
 
-      // Content
-      if appProvider.isLoading {
-        loadingShimmerView
-      } else {
-        // Always render the page (Imports/Exports are local connectors
-        // and must show even when the marketplace API returned no apps).
-        // The marketplace sections inside the else branch are each
-        // self-gated and skip when empty.
-        ScrollView {
-          LazyVStack(alignment: .leading, spacing: OmiSpacing.xxl) {
-            if hasActiveFilters {
-              filteredAppsContent
-            } else {
-              switch initialSection {
-              case .imports:
-                ImportsSection(statusStore: connectorStatusStore) { connector in
-                  selectConnector(connector)
-                }
+        VStack(spacing: 0) {
+          appsControlsBar
+            .pagePanelFirstRowInsets()
 
-                ExportsSection(statuses: exportStatuses) { destination in
-                  selectDestination(destination)
-                }
-              case .exports:
-                ExportsSection(statuses: exportStatuses) { destination in
-                  selectDestination(destination)
-                }
-
-                ImportsSection(statusStore: connectorStatusStore) { connector in
-                  selectConnector(connector)
-                }
+          // Content is scoped by Kind. Marketplace-only filters never replace
+          // the local Imports/Exports catalog with an empty app result.
+          if appProvider.isLoading {
+            loadingShimmerView
+          } else {
+            ScrollView {
+              LazyVStack(alignment: .leading, spacing: PagePanelVerticalRhythm.sectionGap) {
+                catalogContent
               }
-
-              // Featured section (apps marked as is_popular in backend)
-              if !appProvider.popularApps.isEmpty {
-                AppGridSection(
-                  title: "Other",
-                  apps: Array(appProvider.popularApps.prefix(6)),
-                  appProvider: appProvider,
-                  onSelectApp: selectApp,
-                  showSeeMore: appProvider.popularApps.count > 6,
-                  onSeeMore: { viewAllSection = "featured" }
-                )
-              }
-
-              // Integrations section (external_integration capability)
-              if !appProvider.integrationApps.isEmpty {
-                AppGridSection(
-                  title: "Integrations",
-                  apps: Array(appProvider.integrationApps.prefix(6)),
-                  appProvider: appProvider,
-                  onSelectApp: selectApp,
-                  showSeeMore: appProvider.integrationApps.count > 6,
-                  onSeeMore: { viewAllSection = "integrations" }
-                )
-              }
-
-              // Realtime Notifications section (proactive_notification capability)
-              if !appProvider.notificationApps.isEmpty {
-                AppGridSection(
-                  title: "Realtime Notifications",
-                  apps: Array(appProvider.notificationApps.prefix(6)),
-                  appProvider: appProvider,
-                  onSelectApp: selectApp,
-                  showSeeMore: appProvider.notificationApps.count > 6,
-                  onSeeMore: { viewAllSection = "notifications" }
-                )
-              }
+              .padding(.horizontal, PagePanelVerticalRhythm.horizontalPadding)
+              .padding(.top, PagePanelVerticalRhythm.contentGap)
+              .padding(.bottom, PagePanelVerticalRhythm.contentBottomPadding)
             }
           }
-          .padding()
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .inkGlassPanel(cornerRadius: QueryShellLayout.panelCornerRadius, shadow: .ambient)
       }
+      .frame(width: lane)
+      .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+      .padding(.top, QueryShellLayout.surfaceTopInset)
     }
     .background(Color.clear)
+    .marketplaceSetupFixture { selectedCatalogEntry = $0 }
+    // Esc leaves "See more", then clears the search, before the shell sees it.
+    .onEscapeKey(priority: .content) {
+      if viewAllSection != nil {
+        viewAllSection = nil
+        return true
+      }
+      if !searchText.isEmpty {
+        searchText = ""
+        return true
+      }
+      return false
+    }
     .onChange(of: searchText) { _, newValue in
+      // Search never changes scope on the user's behalf. In All, the same
+      // query is applied to apps, imports, and exports; a narrower Kind keeps
+      // the query local to that catalog.
+      guard selectedSection == .apps else { return }
+      guard selectedKind == .apps || selectedKind == .all else {
+        SearchAnalytics.scheduleQueryEntered(surface: .apps, query: newValue) { appsSearchResultCount }
+        return
+      }
       appProvider.searchQuery = newValue
-      // Clear filters when searching
       if !newValue.isEmpty {
         viewAllSection = nil
         appProvider.clearCategoryFilter()
       }
-      Task {
-        // Debounce search
-        try? await Task.sleep(for: .milliseconds(300))
-        if appProvider.searchQuery == newValue {
-          await appProvider.searchApps()
-        }
-      }
+      scheduleAppSearch(for: newValue)
+    }
+    .dismissableSheet(isPresented: $showAddMcpServerSheet) {
+      AddMcpServerSheet(appProvider: appProvider, onDismiss: { showAddMcpServerSheet = false })
+        .frame(width: 460, height: 424)
+    }
+    .dismissableSheet(item: $selectedLocalMcpServer) { server in
+      LocalMcpDetailSheet(
+        server: server, appProvider: appProvider, onDismiss: { selectedLocalMcpServer = nil }
+      )
+      .frame(width: 460, height: 420)
+    }
+    .dismissableSheet(isPresented: $showAddSkillSheet) {
+      SkillEditorSheet(appProvider: appProvider, editingSkill: nil, onDismiss: { showAddSkillSheet = false })
+        .frame(width: 520, height: 460)
+    }
+    .dismissableSheet(item: $selectedCatalogEntry) { entry in
+      ExtensionDetailSheet(
+        entry: entry, appProvider: appProvider, onDismiss: { selectedCatalogEntry = nil }
+      )
+      .frame(width: 460, height: ExtensionDetailSheet.preferredHeight(for: entry.install))
+    }
+    .dismissableSheet(item: $editingSkill) { skill in
+      SkillEditorSheet(appProvider: appProvider, editingSkill: skill, onDismiss: { editingSkill = nil })
+        .frame(width: 520, height: 460)
     }
     .dismissableSheet(item: $selectedApp) { app in
-      AppDetailSheet(app: app, appProvider: appProvider, onDismiss: { selectedApp = nil })
-        .frame(width: 500, height: 650)
-        .onAppear {
-          AnalyticsManager.shared.appDetailViewed(appId: app.id, appName: app.name)
-        }
+      AppDetailSheet(
+        app: app,
+        appProvider: appProvider,
+        onOpenChat: onOpenChatApp == nil
+          ? nil
+          : { details in
+            guard let onOpenChatApp else { return }
+            await onOpenChatApp(app, details)
+          },
+        onDismiss: { selectedApp = nil }
+      )
+      .frame(width: 480, height: 560)
+      .onAppear {
+        AnalyticsManager.shared.appDetailViewed(appId: app.id, appName: app.name)
+      }
     }
     .dismissableSheet(item: $selectedConnector) { connector in
       ImportConnectorSheet(
@@ -293,7 +219,7 @@ struct AppsPage: View {
           selectedConnector = nil
         }
       )
-      .frame(width: 520, height: 620)
+      .frame(width: 500, height: 540)
       .onAppear {
         automationPresentationDidAppear(.importConnector(connector.id))
       }
@@ -309,7 +235,7 @@ struct AppsPage: View {
           selectedExportDestination = nil
         }
       )
-      .frame(width: 520, height: 620)
+      .frame(width: 500, height: 540)
       .onAppear {
         automationPresentationDidAppear(.exportDestination(destination.rawValue))
       }
@@ -326,6 +252,7 @@ struct AppsPage: View {
     }
     .onAppear {
       consumeAutomationPresentationCommand()
+      Task { await appProvider.fetchUserExtensions() }
       // If apps are already loaded, notify sidebar to clear loading indicator
       if !appProvider.isLoading {
         NotificationCenter.default.post(name: .appsPageDidLoad, object: nil)
@@ -353,27 +280,24 @@ struct AppsPage: View {
   }
 
   private func selectApp(_ app: OmiApp) {
-    if let onSelectApp {
-      onSelectApp(app)
-    } else {
-      selectedApp = app
-    }
+    SearchAnalytics.resultOpened(
+      surface: .apps, resultIndex: filteredApps.firstIndex { $0.id == app.id },
+      searchIsActive: hasSearchQuery)
+    selectedApp = app
   }
 
   private func selectConnector(_ connector: ImportConnector) {
-    if let onSelectConnector {
-      onSelectConnector(connector)
-    } else {
-      selectedConnector = connector
-    }
+    SearchAnalytics.resultOpened(
+      surface: .apps, resultIndex: visibleImportConnectors.firstIndex { $0.id == connector.id },
+      searchIsActive: hasSearchQuery)
+    selectedConnector = connector
   }
 
   private func selectDestination(_ destination: MemoryExportDestination) {
-    if let onSelectDestination {
-      onSelectDestination(destination)
-    } else {
-      selectedExportDestination = destination
-    }
+    SearchAnalytics.resultOpened(
+      surface: .apps, resultIndex: visibleExportEntries.firstIndex { $0.destination == destination },
+      searchIsActive: hasSearchQuery)
+    selectedExportDestination = destination
   }
 
   private func consumeAutomationPresentationCommand() {
@@ -447,110 +371,467 @@ struct AppsPage: View {
     activeAutomationCommand = nil
   }
 
-  private var searchBar: some View {
-    AppsHeaderRow(
-      search: { searchField },
-      filters: { filterControls },
-      create: { createAppButton },
-      dismiss: { dismissControl }
-    )
-  }
-
-  private var searchField: some View {
-    HStack(spacing: OmiSpacing.sm) {
-      Image(systemName: "magnifyingglass")
-        .scaledFont(size: OmiType.body, weight: .medium)
-        .frame(width: AppsHeaderMetrics.controlIconSize, height: AppsHeaderMetrics.controlIconSize)
-        .foregroundColor(Ink.secondary)
-
-      TextField("Search apps...", text: $searchText)
-        .textFieldStyle(.plain)
-        .scaledFont(size: OmiType.body)
-        .foregroundColor(Ink.primary)
-        .accessibilityLabel("Search apps")
-
-      if !searchText.isEmpty {
-        Button(action: { searchText = "" }) {
-          Image(systemName: "xmark.circle.fill")
-            .scaledFont(size: OmiType.body)
-            .foregroundColor(Ink.secondary)
+  private var appsControlsBar: some View {
+    PageQueryToolbar(
+      refinement: {
+        if selectedSection == .apps {
+          kindMenu
+          if selectedKind == .apps {
+            appsFiltersMenu
+          }
         }
-        .buttonStyle(.plain)
-        .help("Clear search")
-        .accessibilityLabel("Clear search")
-      }
-    }
-    .padding(.horizontal, OmiSpacing.md)
-    .frame(height: AppsHeaderMetrics.controlHeight)
-    .background(
-      Capsule(style: .continuous)
-        .fill(Ink.rowFill)
-        .overlay(
-          Capsule(style: .continuous)
-            .stroke(Ink.separator, lineWidth: 1)
+      },
+      activeFilters: {
+        ActivePageFilterStrip(filters: activeAppFilters, onClearAll: clearAppFilters)
+      },
+      actions: {
+        AppsSectionNavigation(
+          selected: selectedSection,
+          onSelect: { selectedSectionRawValue = $0.rawValue }
         )
+        appsMoreMenu
+      }
     )
   }
 
-  private var filterControls: some View {
-    HStack(spacing: OmiSpacing.sm) {
-      FilterToggle(
-        icon: "arrow.down.circle",
-        label: "Installed",
-        isActive: appProvider.showInstalledOnly
-      ) {
-        viewAllSection = nil
-        appProvider.showInstalledOnly.toggle()
-        Task { await appProvider.searchApps() }
-      }
-
-      categoryMenu
+  private var searchPlaceholder: String {
+    switch selectedSection {
+    case .mcp: return "Search MCP servers"
+    case .skills: return "Search skills"
+    case .apps: break
+    }
+    switch selectedKind {
+    case .all: return "Search apps, imports, and exports"
+    case .apps: return "Search apps"
+    case .imports: return "Search imports"
+    case .exports: return "Search exports"
     }
   }
 
-  private var categoryMenu: some View {
-    SearchableDropdown(
-      title: "Category",
-      label: "Category",
-      options: AppsPageCategoryFilter.categoryDropdownOptions(categories: appProvider.categories),
-      selectedId: AppsPageCategoryFilter.selectedCategoryDropdownId(appProvider.selectedCategory),
-      minWidth: 180,
-      controlHeight: AppsHeaderMetrics.controlHeight,
-      usesHeaderChrome: true
-    ) { option in
-      viewAllSection = nil
-      switch AppsPageCategoryFilter.categorySelection(forOptionId: option.id) {
-      case .allCategories:
-        appProvider.clearCategoryFilter()
-      case .category(let categoryId):
-        appProvider.selectedCategory = categoryId
-      }
-      Task { await appProvider.searchApps() }
+  private var activeAppFilters: [PageActiveFilter] {
+    guard selectedKind == .apps else { return [] }
+    var filters: [PageActiveFilter] = []
+
+    if appProvider.showInstalledOnly {
+      filters.append(
+        PageActiveFilter(id: "installed", title: "Installed") {
+          setConnectionFilter(installedOnly: false)
+        })
     }
-    .fixedSize()
+
+    if appProvider.selectedCategory != nil {
+      filters.append(
+        PageActiveFilter(id: "category", title: selectedCategoryTitle) {
+          appProvider.clearCategoryFilter()
+          scheduleAppSearch(for: searchText)
+        })
+    }
+
+    return filters
   }
 
-  private var createAppButton: some View {
-    SmallHeaderButton(
-      icon: "app.badge.fill",
-      label: "Create App",
-      color: Ink.secondary
-    ) {
-      if let url = URL(string: "https://docs.omi.me/docs/developer/apps/Introduction") {
-        NSWorkspace.shared.open(url)
+  private var kindMenu: some View {
+    Menu {
+      ForEach(AppsCatalogKind.allCases) { kind in
+        Button {
+          selectKind(kind)
+        } label: {
+          Label(kind.rawValue, systemImage: kind.icon)
+        }
+      }
+    } label: {
+      PageQueryControlLabel(
+        icon: selectedKind.icon,
+        dimension: "Kind",
+        value: selectedKind.rawValue,
+        isActive: selectedKind != .all
+      )
+    }
+    .menuStyle(.button)
+    .buttonStyle(.plain)
+    .accessibilityIdentifier("apps-kind-filter")
+    .help("Choose which app catalog to show")
+  }
+
+  private var appsFiltersMenu: some View {
+    Menu {
+      Section("Connection") {
+        Button {
+          setConnectionFilter(installedOnly: false)
+        } label: {
+          Label("All apps", systemImage: "square.grid.2x2")
+        }
+        Button {
+          setConnectionFilter(installedOnly: true)
+        } label: {
+          Label("Installed", systemImage: "checkmark.circle")
+        }
+      }
+
+      Section("Category") {
+        ForEach(AppsPageCategoryFilter.categoryDropdownOptions(categories: appProvider.categories)) { option in
+          Button(option.title) {
+            viewAllSection = nil
+            switch AppsPageCategoryFilter.categorySelection(forOptionId: option.id) {
+            case .allCategories:
+              appProvider.clearCategoryFilter()
+            case .category(let categoryId):
+              appProvider.selectedCategory = categoryId
+            }
+            scheduleAppSearch(for: searchText)
+          }
+        }
+      }
+
+      if !activeAppFilters.isEmpty {
+        Divider()
+        Button("Clear all filters", action: clearAppFilters)
+      }
+    } label: {
+      PageQueryControlLabel(
+        icon: "line.3.horizontal.decrease",
+        dimension: activeAppFilters.isEmpty ? nil : "Filter",
+        value: activeAppFilters.isEmpty ? "Filter" : "\(activeAppFilters.count)",
+        isActive: !activeAppFilters.isEmpty,
+        dimensionSeparator: " ·"
+      )
+    }
+    .menuStyle(.button)
+    .buttonStyle(.plain)
+    .accessibilityIdentifier("apps-filter-menu")
+    .help("Filter apps by connection or category")
+  }
+
+  private var selectedCategoryTitle: String {
+    guard let selectedCategory = appProvider.selectedCategory,
+      let category = appProvider.categories.first(where: { $0.id == selectedCategory })
+    else {
+      return "All"
+    }
+    return category.title
+  }
+
+  private func selectKind(_ kind: AppsCatalogKind) {
+    guard selectedKind != kind else { return }
+    viewAllSection = nil
+    selectedKind = kind
+
+    // Connection and Category are marketplace dimensions. Search is a page-
+    // wide intent, so changing scope never discards what the user typed.
+    if kind != .apps {
+      clearMarketplaceFiltersPreservingSearch()
+    }
+
+    if kind == .apps || kind == .all {
+      appProvider.searchQuery = searchText
+      scheduleAppSearch(for: searchText)
+    }
+  }
+
+  private func setConnectionFilter(installedOnly: Bool) {
+    guard selectedKind == .apps else { return }
+    viewAllSection = nil
+    appProvider.showInstalledOnly = installedOnly
+    scheduleAppSearch(for: searchText)
+  }
+
+  private func clearAppFilters() {
+    viewAllSection = nil
+    clearMarketplaceFiltersPreservingSearch()
+    scheduleAppSearch(for: searchText)
+  }
+
+  private func clearMarketplaceFiltersPreservingSearch() {
+    let query = searchText
+    appProvider.clearFilters()
+    appProvider.searchQuery = query
+  }
+
+  private func scheduleAppSearch(for query: String) {
+    Task {
+      // Debounce search and keep the provider's current query authoritative.
+      try? await Task.sleep(for: .milliseconds(300))
+      guard selectedKind == .apps || selectedKind == .all,
+        appProvider.searchQuery == query
+      else { return }
+      await appProvider.searchApps()
+      SearchAnalytics.queryEntered(surface: .apps, query: query, resultsCount: appsSearchResultCount)
+    }
+  }
+
+  private var appsMoreMenu: some View {
+    PageMoreMenu(help: "More app actions", accessibilityIdentifier: "apps-more-actions") {
+      Button {
+        if let url = URL(string: "https://docs.omi.me/doc/developer/apps/Introduction") {
+          NSWorkspace.shared.open(url)
+        }
+      } label: {
+        Label("Build an app…", systemImage: "app.badge.fill")
       }
     }
   }
 
   @ViewBuilder
-  private var dismissControl: some View {
-    if let onDismiss {
-      DismissButton(action: onDismiss)
+  private var catalogContent: some View {
+    switch selectedSection {
+    case .apps:
+      appsCatalogContent
+    case .mcp:
+      McpServersSection(
+        appProvider: appProvider,
+        searchText: searchText,
+        onAdd: { showAddMcpServerSheet = true },
+        onSelectLocal: { selectedLocalMcpServer = $0 },
+        onSelectCatalogEntry: { selectedCatalogEntry = $0 }
+      )
+    case .skills:
+      SkillsSection(
+        appProvider: appProvider,
+        searchText: searchText,
+        onAdd: { showAddSkillSheet = true },
+        onSelect: { editingSkill = $0 },
+        onSelectCatalogEntry: { selectedCatalogEntry = $0 }
+      )
     }
   }
 
-  private var hasActiveFilters: Bool {
+  @ViewBuilder
+  private var appsCatalogContent: some View {
+    switch selectedKind {
+    case .imports:
+      ImportsSection(
+        statusStore: connectorStatusStore,
+        onSelectConnector: { connector in
+          selectConnector(connector)
+        },
+        connectors: visibleImportConnectors,
+        searchText: searchText,
+        onClearSearch: { searchText = "" }
+      )
+    case .exports:
+      ExportsSection(statuses: exportStatuses, searchText: searchText) { destination in
+        selectDestination(destination)
+      }
+    case .apps:
+      marketplaceContent
+    case .all:
+      if hasSearchQuery {
+        allCatalogSearchContent
+      } else {
+        localAndMarketplaceContent
+      }
+    }
+  }
+
+  @ViewBuilder
+  private var allCatalogSearchContent: some View {
+    switch allSearchPresentation {
+    case .loading:
+      searchLoadingState
+    case .failure:
+      searchFailureState
+    case .empty:
+      globalSearchEmptyState
+    case .results(let total):
+      Text("Search Results (\(total))")
+        .scaledFont(size: OmiType.heading, weight: .semibold)
+        .foregroundStyle(Ink.primary)
+
+      if !visibleImportConnectors.isEmpty {
+        ImportsSection(
+          statusStore: connectorStatusStore,
+          onSelectConnector: { connector in selectConnector(connector) },
+          connectors: visibleImportConnectors,
+          title: "Imports (\(visibleImportConnectors.count))"
+        )
+      }
+
+      if !visibleExportEntries.isEmpty {
+        ExportsSection(
+          statuses: exportStatuses,
+          title: "Exports (\(visibleExportEntries.count))",
+          entriesOverride: visibleExportEntries
+        ) { destination in
+          selectDestination(destination)
+        }
+      }
+
+      if !visibleMarketplaceSearchApps.isEmpty {
+        AppGridSection(
+          title: "Apps (\(visibleMarketplaceSearchApps.count))",
+          apps: visibleMarketplaceSearchApps,
+          appProvider: appProvider,
+          onSelectApp: selectApp,
+          titleSize: OmiType.subheading
+        )
+      }
+
+      if filteredAppsPresentation == .loading {
+        marketplaceSearchProgress
+      } else if filteredAppsPresentation == .failure {
+        marketplaceSearchFailure
+      }
+    }
+  }
+
+  @ViewBuilder
+  private var localAndMarketplaceContent: some View {
+    ImportsSection(statusStore: connectorStatusStore) { connector in
+      selectConnector(connector)
+    }
+    ExportsSection(statuses: exportStatuses) { destination in
+      selectDestination(destination)
+    }
+
+    marketplaceSections
+  }
+
+  @ViewBuilder
+  private var marketplaceContent: some View {
+    if hasMarketplaceQuery {
+      filteredAppsContent
+    } else {
+      marketplaceSections
+    }
+  }
+
+  @ViewBuilder
+  private var marketplaceSections: some View {
+    if !appProvider.popularApps.isEmpty {
+      AppGridSection(
+        title: "Other",
+        apps: Array(appProvider.popularApps.prefix(6)),
+        appProvider: appProvider,
+        onSelectApp: selectApp,
+        showSeeMore: appProvider.popularApps.count > 6,
+        onSeeMore: {
+          selectedKind = .apps
+          viewAllSection = "featured"
+        }
+      )
+    }
+
+    if !appProvider.integrationApps.isEmpty {
+      AppGridSection(
+        title: "Integrations",
+        apps: Array(appProvider.integrationApps.prefix(6)),
+        appProvider: appProvider,
+        onSelectApp: selectApp,
+        showSeeMore: appProvider.integrationApps.count > 6,
+        onSeeMore: {
+          selectedKind = .apps
+          viewAllSection = "integrations"
+        }
+      )
+    }
+
+    if !appProvider.notificationApps.isEmpty {
+      AppGridSection(
+        title: "Realtime Notifications",
+        apps: Array(appProvider.notificationApps.prefix(6)),
+        appProvider: appProvider,
+        onSelectApp: selectApp,
+        showSeeMore: appProvider.notificationApps.count > 6,
+        onSeeMore: {
+          selectedKind = .apps
+          viewAllSection = "notifications"
+        }
+      )
+    }
+  }
+
+  private var hasMarketplaceQuery: Bool {
     appProvider.hasActiveFilters || viewAllSection != nil
+  }
+
+  private var hasSearchQuery: Bool {
+    !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+  }
+
+  private var appsSearchResultCount: Int {
+    selectedKind.searchResultCount(
+      apps: filteredApps.count, imports: visibleImportConnectors.count,
+      exports: visibleExportEntries.count)
+  }
+
+  private var visibleImportConnectors: [ImportConnector] {
+    let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !query.isEmpty else { return ImportConnector.all }
+    return ImportConnector.all
+      .filter { connector in
+        [connector.title, connector.subtitle, connector.description]
+          .contains { $0.localizedCaseInsensitiveContains(query) }
+      }
+      .sorted { catalogMatchRank($0.title, query: query) < catalogMatchRank($1.title, query: query) }
+  }
+
+  private var visibleExportEntries: [MemoryExportCatalogEntry] {
+    MemoryExportCatalog.matching(searchText)
+  }
+
+  private var visibleMarketplaceSearchApps: [OmiApp] {
+    guard filteredAppsPresentation == .results else { return [] }
+    let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+    return filteredApps.sorted {
+      catalogMatchRank($0.name, query: query) < catalogMatchRank($1.name, query: query)
+    }
+  }
+
+  private var allSearchPresentation: AppsAllSearchPresentation {
+    AppsAllSearchPresentation.resolve(
+      importsCount: visibleImportConnectors.count,
+      exportsCount: visibleExportEntries.count,
+      appsCount: filteredApps.count,
+      marketplace: filteredAppsPresentation
+    )
+  }
+
+  private func catalogMatchRank(_ title: String, query: String) -> Int {
+    if title.localizedCaseInsensitiveCompare(query) == .orderedSame { return 0 }
+    if title.range(of: query, options: [.anchored, .caseInsensitive, .diacriticInsensitive]) != nil {
+      return 1
+    }
+    return 2
+  }
+
+  private var searchLoadingState: some View {
+    GlassLoadingState(label: "Searching apps, imports, and exports…", placement: .scrolling)
+  }
+
+  private var searchFailureState: some View {
+    GlassErrorState(
+      title: "Couldn't Finish Searching Apps", placement: .scrolling,
+      retry: { Task { await appProvider.searchApps() } })
+  }
+
+  private var globalSearchEmptyState: some View {
+    GlassEmptyState(
+      systemImage: "magnifyingglass",
+      title: "No results for “\(searchText.trimmingCharacters(in: .whitespacesAndNewlines))”",
+      placement: .scrolling
+    ) {
+      Button("Clear Search") { searchText = "" }
+        .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
+    }
+  }
+
+  private var marketplaceSearchProgress: some View {
+    HStack(spacing: OmiSpacing.sm) {
+      ProgressView().controlSize(.small)
+      Text("Searching marketplace apps…")
+        .scaledFont(size: OmiType.caption)
+        .foregroundStyle(Ink.secondary)
+    }
+  }
+
+  private var marketplaceSearchFailure: some View {
+    HStack(spacing: OmiSpacing.sm) {
+      Text("Marketplace apps couldn't be loaded.")
+        .scaledFont(size: OmiType.caption)
+        .foregroundStyle(Ink.secondary)
+      Button(GlassPageState.retryTitle) { Task { await appProvider.searchApps() } }
+        .buttonStyle(GlassPageState.retryStyle)
+    }
   }
 
   /// Apps for the selected filter/search result set or "See more" section.
@@ -606,38 +887,13 @@ struct AppsPage: View {
   private var filteredAppsContent: some View {
     switch filteredAppsPresentation {
     case .loading:
-      VStack(spacing: OmiSpacing.lg) {
-        ProgressView()
-          .scaleEffect(1.2)
-        Text("Searching...")
-          .scaledFont(size: OmiType.body)
-          .foregroundColor(Ink.secondary)
-      }
-      .frame(maxWidth: .infinity, minHeight: 200)
+      GlassLoadingState(label: "Searching…", placement: .scrolling)
     case .empty:
-      VStack(spacing: OmiSpacing.md) {
-        Image(systemName: "magnifyingglass")
-          .scaledFont(size: 32)
-          .foregroundColor(Ink.secondary)
-        Text("No apps found")
-          .scaledFont(size: OmiType.subheading, weight: .medium)
-          .foregroundColor(Ink.secondary)
-      }
-      .frame(maxWidth: .infinity, minHeight: 200)
+      GlassEmptyState(systemImage: "magnifyingglass", title: "No Apps Found", placement: .scrolling)
     case .failure:
-      VStack(spacing: OmiSpacing.md) {
-        Image(systemName: "exclamationmark.circle")
-          .scaledFont(size: 32)
-          .foregroundColor(Ink.secondary)
-        Text("Couldn't load apps")
-          .scaledFont(size: OmiType.subheading, weight: .medium)
-          .foregroundColor(Ink.secondary)
-        Button("Try Again") {
-          Task { await appProvider.searchApps() }
-        }
-        .buttonStyle(.bordered)
-      }
-      .frame(maxWidth: .infinity, minHeight: 200)
+      GlassErrorState(
+        title: "Couldn't Load Apps", placement: .scrolling,
+        retry: { Task { await appProvider.searchApps() } })
     case .results:
       filteredAppsGrid
     }
@@ -647,16 +903,7 @@ struct AppsPage: View {
   private var filteredAppsGrid: some View {
     // Back button for "See more" view.
     if viewAllSection != nil {
-      Button(action: { viewAllSection = nil }) {
-        HStack(spacing: OmiSpacing.xs) {
-          Image(systemName: "chevron.left")
-            .scaledFont(size: OmiType.caption, weight: .medium)
-          Text("Back")
-            .scaledFont(size: OmiType.body, weight: .medium)
-        }
-        .foregroundColor(Ink.secondary)
-      }
-      .buttonStyle(.plain)
+      BackChip("Apps") { viewAllSection = nil }
     }
 
     AppGridSection(
@@ -672,8 +919,8 @@ struct AppsPage: View {
         Spacer()
         if appProvider.isLoadingMore {
           ProgressView()
-            .scaleEffect(0.8)
-          Text("Loading more...")
+            .controlSize(.small)
+          Text("Loading more…")
             .scaledFont(size: OmiType.body)
             .foregroundColor(Ink.secondary)
         } else {
@@ -693,7 +940,7 @@ struct AppsPage: View {
 
   private var loadingShimmerView: some View {
     ScrollView {
-      VStack(alignment: .leading, spacing: OmiSpacing.xxl) {
+      VStack(alignment: .leading, spacing: PagePanelVerticalRhythm.sectionGap) {
         // Shimmer sections
         ForEach(0..<3, id: \.self) { _ in
           VStack(alignment: .leading, spacing: OmiSpacing.md) {
@@ -711,34 +958,10 @@ struct AppsPage: View {
           }
         }
       }
-      .padding()
+      .padding(.horizontal, PagePanelVerticalRhythm.horizontalPadding)
+      .padding(.top, PagePanelVerticalRhythm.contentGap)
+      .padding(.bottom, PagePanelVerticalRhythm.contentBottomPadding)
     }
-  }
-
-  private var emptyView: some View {
-    VStack(spacing: OmiSpacing.lg) {
-      Image(systemName: "square.grid.2x2")
-        .scaledFont(size: 48)
-        .foregroundColor(Ink.secondary)
-
-      Text("No apps found")
-        .scaledFont(size: OmiType.heading, weight: .semibold)
-        .foregroundColor(Ink.primary)
-
-      if !searchText.isEmpty {
-        Text("Try a different search term")
-          .foregroundColor(Ink.secondary)
-
-        Button("Clear Search") {
-          searchText = ""
-        }
-        .buttonStyle(.bordered)
-      } else {
-        Text("Apps will appear here once available")
-          .foregroundColor(Ink.secondary)
-      }
-    }
-    .frame(maxWidth: .infinity, maxHeight: .infinity)
   }
 }
 
@@ -793,7 +1016,7 @@ struct ImportConnector: Identifiable {
       id: "apple-notes",
       title: "Apple Notes",
       subtitle: "Private notes",
-      description: "Import notes and private written context.",
+      description: "Import your notes.",
       brand: .appleNotes,
       statusText: "Not connected",
       metricText: nil,
@@ -950,6 +1173,10 @@ final class ImportConnectorStatusStore: ObservableObject {
     // Clear this integration's nudge history so a later disconnect is allowed
     // to make the pitch again instead of finding a spent lifetime budget.
     IntegrationNudgeCoordinator.shared.noteConnected(route: .importConnector(connectorID))
+  }
+
+  func markDisconnected(connectorID: String) {
+    clearStoredMetrics(for: connectorID)
   }
 
   private func clearStoredMetrics(for connectorID: String) {
@@ -1274,27 +1501,47 @@ final class ImportConnectorStatusStore: ObservableObject {
 }
 
 struct ImportsSection: View {
-  private let connectors = ImportConnector.all
   @ObservedObject var statusStore: ImportConnectorStatusStore
   let onSelectConnector: (ImportConnector) -> Void
+  var connectors: [ImportConnector] = ImportConnector.all
+  var searchText: String = ""
+  var onClearSearch: (() -> Void)? = nil
+  var title = "Imports"
+
+  private var normalizedSearchText: String {
+    searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+  }
 
   var body: some View {
-    VStack(alignment: .leading, spacing: OmiSpacing.md) {
-      Text("Imports")
-        .scaledFont(size: OmiType.heading, weight: .semibold)
+    VStack(alignment: .leading, spacing: OmiSpacing.sm) {
+      Text(title)
+        .scaledFont(size: OmiType.subheading, weight: .semibold)
         .foregroundColor(Ink.primary)
 
-      LazyVGrid(
-        columns: [GridItem(.adaptive(minimum: 260), spacing: OmiSpacing.md)],
-        alignment: .leading,
-        spacing: OmiSpacing.md
-      ) {
-        ForEach(connectors) { connector in
-          ImportConnectorCard(
-            connector: connector,
-            snapshot: statusStore.snapshot(for: connector)
-          ) {
-            onSelectConnector(connector)
+      if connectors.isEmpty && !normalizedSearchText.isEmpty {
+        GlassEmptyState(
+          systemImage: "magnifyingglass",
+          title: "No imports match “\(normalizedSearchText)”",
+          placement: .scrolling
+        ) {
+          if let onClearSearch {
+            Button("Clear Search", action: onClearSearch)
+              .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
+          }
+        }
+      } else {
+        LazyVGrid(
+          columns: [GridItem(.adaptive(minimum: 260), spacing: OmiSpacing.md)],
+          alignment: .leading,
+          spacing: OmiSpacing.md
+        ) {
+          ForEach(connectors) { connector in
+            ImportConnectorCard(
+              connector: connector,
+              snapshot: statusStore.snapshot(for: connector)
+            ) {
+              onSelectConnector(connector)
+            }
           }
         }
       }
@@ -1350,9 +1597,9 @@ struct ImportConnectorCard: View {
 
   var body: some View {
     Button(action: action) {
-      VStack(alignment: .leading, spacing: OmiSpacing.sm) {
+      VStack(alignment: .leading, spacing: OmiSpacing.xs) {
         HStack(spacing: OmiSpacing.md) {
-          ConnectorBrandIcon(brand: connector.brand, size: 50, cornerRadius: OmiChrome.smallControlRadius)
+          ConnectorBrandIcon(brand: connector.brand, size: 38, cornerRadius: OmiChrome.smallControlRadius)
 
           VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
             Text(connector.title)
@@ -1372,7 +1619,7 @@ struct ImportConnectorCard: View {
         Text(connector.description)
           .scaledFont(size: OmiType.caption)
           .foregroundColor(Ink.secondary)
-          .lineLimit(2)
+          .lineLimit(1)
           .multilineTextAlignment(.leading)
 
         HStack {
@@ -1394,7 +1641,7 @@ struct ImportConnectorCard: View {
           ImportConnectorActionButton(title: snapshot.actionTitle, isConnected: snapshot.isConnected)
         }
       }
-      .padding(OmiSpacing.md)
+      .padding(OmiSpacing.sm)
       .background(isHovering ? Ink.rowFillHover : Ink.rowFill)
       .cornerRadius(OmiChrome.smallControlRadius)
       .overlay(
@@ -1409,21 +1656,15 @@ struct ImportConnectorCard: View {
   }
 }
 
+/// Labels drawn inside a caller's plain `Button` (the whole card is the click target), so they cannot
+/// take a `ButtonStyle`. They draw `OmiButtonStyle`'s compact capsule from its own decisions instead,
+/// so a connector's Connect reads as the same control as every other compact button.
 struct ImportConnectorActionButton: View {
   let title: String
   let isConnected: Bool
 
   var body: some View {
-    Text(title)
-      .scaledFont(size: OmiType.caption, weight: .medium)
-      .foregroundColor(isConnected ? Ink.primary : Ink.surface)
-      .frame(width: isConnected ? 84 : 72, height: 28)
-      .background(isConnected ? Ink.wash : Ink.primary)
-      .cornerRadius(OmiChrome.chipRadius)
-      .overlay(
-        RoundedRectangle(cornerRadius: OmiChrome.chipRadius)
-          .stroke(Ink.separator, lineWidth: 1)
-      )
+    OmiCompactButtonLabel(title: title, kind: isConnected ? .secondary : .primary)
   }
 }
 
@@ -1432,19 +1673,23 @@ struct ConnectionModalActionButton: View {
   var isConnected = false
 
   var body: some View {
+    OmiCompactButtonLabel(title: title, kind: isConnected ? .secondary : .primary)
+  }
+}
+
+private struct OmiCompactButtonLabel: View {
+  let title: String
+  let kind: OmiButtonStyle.Kind
+
+  var body: some View {
     Text(title)
-      .scaledFont(size: OmiType.caption, weight: .medium)
-      .foregroundColor(isConnected ? Ink.primary : Ink.surface)
+      .scaledFont(size: OmiType.body, weight: .semibold)
+      .foregroundStyle(OmiButtonStyle.label(kind))
       .lineLimit(1)
-      .padding(.horizontal, OmiSpacing.md)
-      .frame(minWidth: isConnected ? 84 : 72)
-      .frame(height: 28)
-      .background(isConnected ? Ink.wash : Ink.primary)
-      .cornerRadius(OmiChrome.chipRadius)
-      .overlay(
-        RoundedRectangle(cornerRadius: OmiChrome.chipRadius)
-          .stroke(Ink.separator, lineWidth: 1)
-      )
+      .padding(.horizontal, OmiButtonStyle.horizontalPadding(.compact))
+      .frame(minHeight: OmiButtonStyle.minHeight(.compact))
+      .background(Capsule(style: .continuous).fill(OmiButtonStyle.fill(kind, pressed: false)))
+      .overlay(Capsule(style: .continuous).strokeBorder(OmiButtonStyle.border(kind), lineWidth: 1))
   }
 }
 
@@ -1460,6 +1705,13 @@ struct ImportConnectorSheet: View {
   /// only ever wipe the text the run actually imported, never a newer paste.
   @State private var submittedDraft: String?
   @FocusState private var draftFocused: Bool
+  @State private var isDisconnecting = false
+  @State private var showingDisconnectConfirmation = false
+  @State private var disconnectStatusMessage: String?
+  @State private var disconnectErrorMessage: String?
+  @State private var calendarGrantConnected = false
+  @State private var calendarGrantProbeGeneration = 0
+  @State private var disconnectAuthorizationSnapshot: RuntimeOwnerAuthorizationSnapshot?
 
   private var snapshot: ImportConnectorStatusStore.Snapshot {
     statusStore.snapshot(for: connector)
@@ -1529,12 +1781,26 @@ struct ImportConnectorSheet: View {
         }
         submittedDraft = nil
       }
+      if connector.id == "calendar", newPhase == .succeeded || newPhase == .failed {
+        Task { await refreshCalendarGrantState() }
+      }
+    }
+    .task(id: "\(connector.id):\(RuntimeOwnerIdentity.currentOwnerId() ?? "signed-out")") {
+      await refreshCalendarGrantState()
     }
     .onDisappear {
       // A seen success is done with: clear it so the next open shows
       // the persisted snapshot status instead of stale success text.
       // Failures stay until the next start so they can't be missed.
       runner.acknowledgeSuccess(connectorID: connector.id)
+    }
+    .shellConfirmation(
+      isPresented: $showingDisconnectConfirmation,
+      title: "Disconnect Google Calendar?",
+      message: "Omi will stop syncing and using your Google Calendar. Memories already imported into Omi will remain.",
+      confirmTitle: "Disconnect"
+    ) {
+      disconnectCalendar()
     }
   }
 
@@ -1551,14 +1817,25 @@ struct ImportConnectorSheet: View {
       } label: {
         ConnectionModalActionButton(
           title: primaryActionTitle,
-          isConnected: snapshot.isConnected
+          isConnected: connector.id == "calendar" ? calendarHasRevocableGrant : snapshot.isConnected
         )
       }
       .buttonStyle(.plain)
-      .disabled(isRunning)
+      .disabled(isRunning || isDisconnecting)
+
+      if connector.id == "calendar", calendarHasRevocableGrant {
+        Button {
+          beginCalendarDisconnectConfirmation()
+        } label: {
+          Text("Disconnect…")
+        }
+        .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
+        .disabled(isRunning || isDisconnecting)
+        .accessibilityIdentifier("calendar-import-disconnect")
+      }
 
       if connector.id == "local-files" {
-        Text("Local files are indexed on-device and used to build your memory graph.")
+        Text("Omi reads files on this Mac to learn about your work. Nothing is uploaded.")
           .scaledFont(size: OmiType.caption)
           .foregroundColor(Ink.secondary)
       }
@@ -1639,7 +1916,7 @@ struct ImportConnectorSheet: View {
   private var primaryActionTitle: String {
     switch connector.id {
     case "calendar":
-      return isRunning ? "Importing…" : (snapshot.isConnected ? "Sync now" : "Connect Calendar")
+      return isRunning ? "Importing…" : (calendarHasRevocableGrant ? "Sync now" : "Connect Calendar")
     case "email":
       return isRunning ? "Importing…" : (snapshot.isConnected ? "Sync now" : "Connect Gmail")
     case "apple-notes":
@@ -1654,11 +1931,13 @@ struct ImportConnectorSheet: View {
   }
 
   private func startConnectorImport() {
+    disconnectStatusMessage = nil
+    disconnectErrorMessage = nil
     switch connector.id {
     case "calendar":
       startRun(
         title: "Connecting to Calendar",
-        detail: "Reading past events and upcoming commitments for memory extraction."
+        detail: "Reading your past and upcoming events."
       ) { progress in
         await ConnectorImportOperations.importCalendar(progress: progress)
       }
@@ -1695,6 +1974,106 @@ struct ImportConnectorSheet: View {
       }
     default:
       break
+    }
+  }
+
+  private func disconnectCalendar() {
+    guard connector.id == "calendar", !isRunning, !isDisconnecting,
+      let authorizationSnapshot = disconnectAuthorizationSnapshot,
+      RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot)
+    else {
+      disconnectErrorMessage = "Your account changed. Reopen Calendar and try again."
+      return
+    }
+    isDisconnecting = true
+    disconnectStatusMessage = nil
+    disconnectErrorMessage = nil
+    let connectorID = connector.id
+    let statusStore = statusStore
+    let startedAt = Date()
+    calendarGrantProbeGeneration &+= 1
+    AnalyticsManager.shared.integrationConnectAttempted(
+      integrationName: IntegrationConnectTelemetry.integrationName(forConnectorID: connectorID),
+      connectorID: connectorID,
+      surface: .apps,
+      stage: "disconnect")
+
+    Task { @MainActor in
+      let outcome = await ConnectorImportOperations.disconnectCalendar {
+        try await APIClient.shared.disconnectGoogleCalendarGrant(
+          authorizationSnapshot: authorizationSnapshot)
+      }
+      guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
+        isDisconnecting = false
+        disconnectAuthorizationSnapshot = nil
+        return
+      }
+      let durationMs = max(0, Int(Date().timeIntervalSince(startedAt) * 1000))
+      switch outcome {
+      case .success(_, let message):
+        runner.acknowledgeSuccess(connectorID: connectorID)
+        statusStore.markDisconnected(connectorID: connectorID)
+        calendarGrantConnected = false
+        disconnectStatusMessage = message
+        AnalyticsManager.shared.integrationConnectSucceeded(
+          integrationName: IntegrationConnectTelemetry.integrationName(forConnectorID: connectorID),
+          connectorID: connectorID,
+          surface: .apps,
+          stage: "disconnect",
+          durationMs: durationMs)
+      case .failure(let message, let failureClass):
+        disconnectErrorMessage = message
+        AnalyticsManager.shared.integrationConnectFailed(
+          integrationName: IntegrationConnectTelemetry.integrationName(forConnectorID: connectorID),
+          connectorID: connectorID,
+          surface: .apps,
+          stage: "disconnect",
+          errorClass: failureClass ?? .unknown,
+          durationMs: durationMs)
+      }
+      isDisconnecting = false
+      disconnectAuthorizationSnapshot = nil
+    }
+  }
+
+  private var calendarHasRevocableGrant: Bool {
+    Self.shouldShowCalendarDisconnect(
+      localSyncConnected: snapshot.isConnected,
+      backendGrantConnected: calendarGrantConnected)
+  }
+
+  static func shouldShowCalendarDisconnect(
+    localSyncConnected: Bool,
+    backendGrantConnected: Bool
+  ) -> Bool {
+    localSyncConnected || backendGrantConnected
+  }
+
+  private func beginCalendarDisconnectConfirmation() {
+    guard let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot() else {
+      disconnectErrorMessage = "Your session changed. Sign in again before disconnecting Calendar."
+      return
+    }
+    disconnectAuthorizationSnapshot = authorizationSnapshot
+    showingDisconnectConfirmation = true
+  }
+
+  private func refreshCalendarGrantState() async {
+    guard connector.id == "calendar",
+      let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot()
+    else { return }
+    calendarGrantProbeGeneration &+= 1
+    let generation = calendarGrantProbeGeneration
+    do {
+      let connected = try await APIClient.shared.googleCalendarGrantConnected(
+        authorizationSnapshot: authorizationSnapshot)
+      guard generation == calendarGrantProbeGeneration,
+        RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot)
+      else { return }
+      calendarGrantConnected = connected
+    } catch {
+      // Local successful-sync evidence remains a safe fallback when the grant
+      // probe is temporarily unavailable; never overwrite it with a failed read.
     }
   }
 
@@ -1785,7 +2164,34 @@ struct ImportConnectorSheet: View {
 
   @ViewBuilder
   private var statusSection: some View {
-    if let run = runState, run.phase == .running {
+    if isDisconnecting {
+      statusCard {
+        HStack(alignment: .top, spacing: OmiSpacing.md) {
+          ProgressView()
+            .controlSize(.small)
+            .padding(.top, OmiSpacing.hairline)
+
+          VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
+            Text("Disconnecting Google Calendar")
+              .scaledFont(size: OmiType.caption, weight: .semibold)
+              .foregroundColor(Ink.primary)
+
+            Text("Revoking Omi's future Calendar access. Imported memories will remain.")
+              .scaledFont(size: OmiType.caption)
+              .foregroundColor(Ink.secondary)
+              .fixedSize(horizontal: false, vertical: true)
+          }
+        }
+      }
+    } else if let disconnectStatusMessage {
+      Text(disconnectStatusMessage)
+        .scaledFont(size: OmiType.caption, weight: .medium)
+        .foregroundColor(Ink.primary)
+    } else if let disconnectErrorMessage {
+      Text(disconnectErrorMessage)
+        .scaledFont(size: OmiType.caption, weight: .medium)
+        .foregroundColor(SettingsInk.notice)
+    } else if let run = runState, run.phase == .running {
       statusCard {
         HStack(alignment: .top, spacing: OmiSpacing.md) {
           ProgressView()
@@ -1973,6 +2379,7 @@ struct AppGridSection: View {
   let apps: [OmiApp]
   let appProvider: AppProvider
   let onSelectApp: (OmiApp) -> Void
+  var titleSize = OmiType.heading
   var showSeeMore: Bool = false
   var onSeeMore: (() -> Void)? = nil
 
@@ -1980,7 +2387,7 @@ struct AppGridSection: View {
     VStack(alignment: .leading, spacing: OmiSpacing.md) {
       HStack {
         Text(title)
-          .scaledFont(size: OmiType.heading, weight: .semibold)
+          .scaledFont(size: titleSize, weight: .semibold)
           .foregroundColor(Ink.primary)
 
         Spacer()
@@ -2069,7 +2476,7 @@ struct CompactAppCard: View {
         }
 
         // Get/Open button
-        SmallAppButton(app: app, appProvider: appProvider, onOpen: onSelect)
+        AppActionButton(app: app, appProvider: appProvider, onOpen: onSelect)
       }
       .frame(width: 90)
       .padding(.vertical, OmiSpacing.sm)
@@ -2090,45 +2497,6 @@ struct CompactAppCard: View {
   }
 }
 
-// MARK: - Small App Button
-
-struct SmallAppButton: View {
-  let app: OmiApp
-  let appProvider: AppProvider
-  var onOpen: (() -> Void)? = nil
-
-  var body: some View {
-    Button(action: {
-      if app.enabled {
-        // If already enabled, open the app detail
-        onOpen?()
-      } else {
-        // If not enabled, enable it
-        Task { await appProvider.toggleApp(app) }
-      }
-    }) {
-      if appProvider.isAppLoading(app.id) {
-        ProgressView()
-          .scaleEffect(0.6)
-          .frame(width: 50, height: 22)
-      } else {
-        Text(app.enabled ? "Open" : "Install")
-          .scaledFont(size: OmiType.caption, weight: .medium)
-          .foregroundColor(Ink.surface)
-          .frame(width: 50, height: 22)
-          .background(Ink.primary)
-          .cornerRadius(OmiChrome.smallControlRadius)
-          .overlay(
-            RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
-              .stroke(Ink.separator, lineWidth: 1)
-          )
-      }
-    }
-    .buttonStyle(.plain)
-    .disabled(appProvider.isAppLoading(app.id))
-  }
-}
-
 // MARK: - App Card (Full)
 
 struct AppCard: View {
@@ -2140,7 +2508,7 @@ struct AppCard: View {
 
   var body: some View {
     Button(action: onSelect) {
-      VStack(alignment: .leading, spacing: OmiSpacing.sm) {
+      VStack(alignment: .leading, spacing: OmiSpacing.xs) {
         HStack(spacing: OmiSpacing.md) {
           // App icon
           AsyncImage(url: URL(string: app.image)) { phase in
@@ -2153,7 +2521,7 @@ struct AppCard: View {
               appIconPlaceholder
             }
           }
-          .frame(width: 50, height: 50)
+          .frame(width: 38, height: 38)
           .clipShape(RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius))
 
           VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
@@ -2174,7 +2542,7 @@ struct AppCard: View {
         Text(app.description)
           .scaledFont(size: OmiType.caption)
           .foregroundColor(Ink.secondary)
-          .lineLimit(2)
+          .lineLimit(1)
           .multilineTextAlignment(.leading)
 
         HStack {
@@ -2208,7 +2576,7 @@ struct AppCard: View {
           AppActionButton(app: app, appProvider: appProvider, onOpen: onSelect)
         }
       }
-      .padding(OmiSpacing.md)
+      .padding(OmiSpacing.sm)
       .background(isHovering ? Ink.rowFill : Ink.wash)
       .cornerRadius(OmiChrome.smallControlRadius)
     }
@@ -2230,40 +2598,29 @@ struct AppCard: View {
 
 // MARK: - App Action Button
 
+/// The one Open/Install button, at one size, on every app card. The label keeps its width while the
+/// spinner shows so the card does not reflow under the pointer.
 struct AppActionButton: View {
   let app: OmiApp
   let appProvider: AppProvider
   var onOpen: (() -> Void)? = nil
 
   var body: some View {
-    Button(action: {
+    let isLoading = appProvider.isAppLoading(app.id)
+    Button {
       if app.enabled {
-        // If already enabled, open the app detail
         onOpen?()
       } else {
-        // If not enabled, enable it
         Task { await appProvider.toggleApp(app) }
       }
-    }) {
-      if appProvider.isAppLoading(app.id) {
-        ProgressView()
-          .scaleEffect(0.7)
-          .frame(width: 60, height: 28)
-      } else {
-        Text(app.enabled ? "Open" : "Install")
-          .scaledFont(size: OmiType.caption, weight: .medium)
-          .foregroundColor(Ink.surface)
-          .frame(width: 60, height: 28)
-          .background(Ink.primary)
-          .cornerRadius(OmiChrome.chipRadius)
-          .overlay(
-            RoundedRectangle(cornerRadius: OmiChrome.chipRadius)
-              .stroke(Ink.separator, lineWidth: 1)
-          )
+    } label: {
+      ZStack {
+        Text(app.enabled ? "Open" : "Install").opacity(isLoading ? 0 : 1)
+        if isLoading { ProgressView().controlSize(.small) }
       }
     }
-    .buttonStyle(.plain)
-    .disabled(appProvider.isAppLoading(app.id))
+    .buttonStyle(OmiButtonStyle(.primary, size: .compact))
+    .disabled(isLoading)
   }
 }
 
@@ -2410,72 +2767,12 @@ struct FilterChip: View {
 
 // MARK: - Category Apps Sheet
 
-struct CategoryAppsSheet: View {
-  let category: OmiAppCategory
-  let appProvider: AppProvider
-  let onSelectApp: (OmiApp) -> Void
-  var onDismiss: (() -> Void)? = nil
-
-  @Environment(\.dismiss) private var environmentDismiss
-
-  private func dismissSheet() {
-    if let onDismiss = onDismiss {
-      onDismiss()
-    } else {
-      environmentDismiss()
-    }
-  }
-
-  var categoryApps: [OmiApp] {
-    appProvider.apps(forCategory: category.id)
-  }
-
-  var body: some View {
-    VStack(spacing: 0) {
-      // Header
-      HStack {
-        DismissButton(
-          action: dismissSheet, icon: "chevron.left", showBackground: false,
-          accessibilityLabel: "Back")
-
-        Text(category.title)
-          .scaledFont(size: OmiType.heading, weight: .semibold)
-          .foregroundColor(Ink.primary)
-
-        Spacer()
-
-        Text("\(categoryApps.count) apps")
-          .scaledFont(size: OmiType.body)
-          .foregroundColor(Ink.secondary)
-      }
-      .padding()
-
-      Divider()
-        .background(Ink.rowFill)
-
-      ScrollView {
-        LazyVGrid(
-          columns: [
-            GridItem(.flexible(), spacing: OmiSpacing.lg),
-            GridItem(.flexible(), spacing: OmiSpacing.lg),
-          ], spacing: OmiSpacing.lg
-        ) {
-          ForEach(categoryApps) { app in
-            AppCard(app: app, appProvider: appProvider, onSelect: { onSelectApp(app) })
-          }
-        }
-        .padding()
-      }
-    }
-    .background(Color.clear)
-  }
-}
-
 // MARK: - App Detail Sheet
 
 struct AppDetailSheet: View {
   let app: OmiApp
   @ObservedObject var appProvider: AppProvider
+  var onOpenChat: ((OmiAppDetails?) async -> Void)? = nil
   var onDismiss: (() -> Void)? = nil
 
   @Environment(\.dismiss) private var environmentDismiss
@@ -2501,12 +2798,19 @@ struct AppDetailSheet: View {
   enum PrimaryAppAction: Equatable {
     case install  // not enabled → install / enable
     case open  // enabled external integration → open in browser
+    case chat  // enabled chat-capable app → open its app-scoped conversation
     case hidden  // enabled non-external → no primary action (disable is the trash button)
   }
 
-  nonisolated static func primaryAppAction(isEnabled: Bool, worksExternally: Bool) -> PrimaryAppAction {
+  nonisolated static func primaryAppAction(
+    isEnabled: Bool,
+    worksExternally: Bool,
+    worksWithChat: Bool = false,
+    hasChatAction: Bool = false
+  ) -> PrimaryAppAction {
     if !isEnabled { return .install }
-    return worksExternally ? .open : .hidden
+    if worksExternally { return .open }
+    return worksWithChat && hasChatAction ? .chat : .hidden
   }
 
   private func dismissSheet() {
@@ -2579,7 +2883,12 @@ struct AppDetailSheet: View {
             Spacer()
 
             // Action button
-            let primaryAction = Self.primaryAppAction(isEnabled: isEnabled, worksExternally: app.worksExternally)
+            let primaryAction = Self.primaryAppAction(
+              isEnabled: isEnabled,
+              worksExternally: app.worksExternally,
+              worksWithChat: app.worksWithChat,
+              hasChatAction: onOpenChat != nil
+            )
             HStack(spacing: OmiSpacing.sm) {
               // Only render a primary button when there is a real action:
               // install/enable, or open an external integration. An enabled
@@ -2599,52 +2908,40 @@ struct AppDetailSheet: View {
                       } else {
                         await appProvider.toggleApp(app)
                       }
+                    case .chat:
+                      if appDetails == nil {
+                        await loadAppDetails()
+                      }
+                      await onOpenChat?(appDetails)
+                      dismissSheet()
                     case .hidden:
                       break
                     }
                   }
                 }) {
                   if appProvider.isAppLoading(app.id) {
-                    ProgressView()
-                      .frame(width: 100, height: 36)
+                    ProgressView().controlSize(.small)
                   } else if isSettingUp {
                     HStack(spacing: OmiSpacing.xs) {
-                      ProgressView()
-                        .scaleEffect(0.7)
-                      Text("Setting up...")
-                        .scaledFont(size: OmiType.caption, weight: .semibold)
+                      ProgressView().controlSize(.small)
+                      Text("Setting up…")
                     }
-                    .foregroundColor(Ink.secondary)
-                    .frame(width: 120, height: 36)
                   } else {
-                    Text(primaryAction == .open ? "Open" : "Install")
-                      .scaledFont(size: OmiType.body, weight: .semibold)
-                      .foregroundColor(Ink.surface)
-                      .frame(width: 100, height: 36)
-                      .background(Ink.primary)
-                      .cornerRadius(OmiChrome.controlRadius)
-                      .overlay(
-                        RoundedRectangle(cornerRadius: OmiChrome.controlRadius)
-                          .stroke(Ink.separator, lineWidth: 1)
-                      )
+                    Text(primaryAction == .open ? "Open" : primaryAction == .chat ? "Chat" : "Install")
                   }
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(OmiButtonStyle(.primary))
+                .disabled(appProvider.isAppLoading(app.id) || isSettingUp)
               }
 
               // Disable button shown only when app is enabled
               if isEnabled && !appProvider.isAppLoading(app.id) && !isSettingUp {
-                Button(action: {
+                // Disabling is reversible, so it is not drawn as a delete (a red trash can).
+                Button("Disable") {
                   Task { await appProvider.toggleApp(app) }
-                }) {
-                  Image(systemName: "trash")
-                    .scaledFont(size: OmiType.body)
-                    .foregroundColor(Ink.errorRed)
-                    .frame(width: 36, height: 36)
-                    .background(Ink.errorRed.opacity(0.1))
-                    .cornerRadius(OmiChrome.controlRadius)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
+                .help("Disable this app. You can enable it again any time.")
               }
             }
           }
@@ -2670,7 +2967,7 @@ struct AppDetailSheet: View {
               ForEach(Array(integration.authSteps.enumerated()), id: \.offset) { index, step in
                 Button(action: {
                   if let uid = AuthState.shared.userId,
-                    let url = URL(string: "\(step.url)?uid=\(uid)")
+                    let url = AppSetupURL.withUID(step.url, uid: uid)
                   {
                     NSWorkspace.shared.open(url)
                   }
@@ -2895,7 +3192,7 @@ struct AppDetailSheet: View {
     if let homeUrl = integration?.appHomeUrl, !homeUrl.isEmpty, let url = URL(string: homeUrl) {
       NSWorkspace.shared.open(url)
     } else if let authSteps = integration?.authSteps, !authSteps.isEmpty,
-      let url = URL(string: "\(authSteps[0].url)?uid=\(uid)")
+      let url = AppSetupURL.withUID(authSteps[0].url, uid: uid)
     {
       NSWorkspace.shared.open(url)
     }
@@ -2920,8 +3217,7 @@ struct AppDetailSheet: View {
 
     // Open auth step or setup instructions URL in browser
     if let authSteps = integration?.authSteps, !authSteps.isEmpty {
-      let rawUrl = "\(authSteps[0].url)?uid=\(uid)"
-      if let url = URL(string: rawUrl) {
+      if let url = AppSetupURL.withUID(authSteps[0].url, uid: uid) {
         NSWorkspace.shared.open(url)
       }
     } else if let instructionsPath = integration?.setupInstructionsFilePath, !instructionsPath.isEmpty {
@@ -3099,7 +3395,7 @@ struct AddReviewSheet: View {
                 }
 
               if reviewText.isEmpty {
-                Text("Share your experience with this app...")
+                Text("Share your experience with this app…")
                   .scaledFont(size: OmiType.body)
                   .foregroundColor(Ink.secondary)
                   .padding(.leading, OmiSpacing.lg)
@@ -3122,27 +3418,16 @@ struct AddReviewSheet: View {
 
           // Submit button
           Button(action: submitReview) {
-            HStack {
+            Group {
               if isSubmitting {
-                ProgressView()
-                  .scaleEffect(0.8)
-                  .tint(PageGlass.primaryActionLabel)
+                ProgressView().controlSize(.small)
               } else {
                 Text(existingReview != nil ? "Update Review" : "Submit Review")
-                  .scaledFont(size: OmiType.body, weight: .semibold)
               }
             }
-            .foregroundColor(PageGlass.primaryActionLabel)
             .frame(maxWidth: .infinity)
-            .frame(height: 44)
-            .background(isFormValid ? Ink.primary : Ink.primary.opacity(0.45))
-            .cornerRadius(OmiChrome.smallControlRadius)
-            .overlay(
-              RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
-                .stroke(Ink.separator, lineWidth: 1)
-            )
           }
-          .buttonStyle(.plain)
+          .buttonStyle(OmiButtonStyle(.primary))
           .disabled(!isFormValid || isSubmitting)
         }
         .padding()

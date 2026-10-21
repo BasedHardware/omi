@@ -7,7 +7,7 @@ class LaunchAtLoginManager: ObservableObject {
   static let shared = LaunchAtLoginManager()
 
   @Published private(set) var isEnabled: Bool = false
-  @Published private(set) var statusDescription: String = "Checking..."
+  @Published private(set) var statusDescription: String = "Checking…"
 
   private init() {
     // Check current status on init

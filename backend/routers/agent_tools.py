@@ -9,6 +9,9 @@ Endpoints:
 import logging
 from typing import Any
 
+from utils.messaging.contracts import Principal
+from utils.messaging.projection import ToolProjection
+
 from utils.executors import db_executor, run_blocking
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -62,8 +65,8 @@ def _tool_schema(t) -> dict:
 def list_tools(uid: str = Depends(get_current_user_uid)):
     """Return all available tool definitions for a user."""
     tools = []
-
-    for t in CORE_TOOLS:
+    core_projection = ToolProjection.build(CORE_TOOLS, (), (), principal=Principal(uid))
+    for t in core_projection.registry.values():
         tools.append(_tool_schema(t))
 
     degraded = False
@@ -109,6 +112,13 @@ async def execute_tool(
     uid: str = Depends(with_rate_limit(get_current_user_uid, "agent:execute_tool")),
 ):
     """Execute a named tool and return its result."""
+    return await execute_tool_for_principal(body, Principal(uid))
+
+
+async def execute_tool_for_principal(body: ExecuteToolRequest, principal: Principal):
+    """Internal broker seam. The caller authenticates the task token before entry."""
+    uid = principal.uid
+    principal.authorize(uid, body.tool_name)
     # Set up agent_config_context so tools can resolve the UID
     config = {
         "configurable": {
@@ -134,14 +144,11 @@ async def execute_tool(
             outcome='degraded',
         )
 
-    target = None
-    for t in all_tools:
-        if t.name == body.tool_name:
-            target = t
-            break
-
-    if target is None:
-        raise HTTPException(status_code=404, detail=f"Tool '{body.tool_name}' not found")
+    projection = ToolProjection.build(all_tools, (), (), principal=principal)
+    try:
+        target = projection.authorize(uid, body.tool_name)
+    except PermissionError:
+        raise HTTPException(status_code=404, detail=f"Tool '{body.tool_name}' not found") from None
 
     # Strip config param if caller accidentally included it
     params = {k: v for k, v in body.params.items() if k != "config"}

@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "id": "FC-meeting-identity-catalog-split",
+  "violated_contract": "The catalog that classifies a desktop session as a meeting must be the same catalog identity extractors use to look for participants, and conversation notes must not persist diarization placeholders as if they were people. MeetingDetector already treated Telegram (and Discord/Slack/WhatsApp) as native call apps, but on-device and backend identity extractors only searched Meet/Zoom/Teams/Webex/FaceTime, so a Telegram desktop call produced empty identity and notes copied Speaker 1. Prompt wording that already forbade narrating Speaker 1 said that is not a storage boundary.",
+  "canonical_prevention": "Share ConferencingApps.messagingCallApps with the on-device extractor and mirror the same app-name catalog in meeting_context.py. Treat a name-shaped native-call window title as roster-equivalent only with in-call chrome or one dominant call window, keep rejecting bare Chrome calendar-tile names, and strip leftover Speaker N / SPEAKER_00 tokens from Structured notes after parse.",
+  "canonical_prevention_artifact": [
+    "desktop/macos/Desktop/Tests/OnDeviceMeetingIdentityExtractorTests.swift",
+    "backend/tests/unit/test_screen_activity_identity.py",
+    "backend/tests/unit/test_conversation_notes_v2.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "desktop/macos/Desktop/Sources/CalendarMeetingContext/**",
+    "desktop/macos/Desktop/Sources/ConferencingApps.swift",
+    "backend/utils/conversations/meeting_context.py",
+    "backend/utils/llm/conversation_processing.py"
+  ],
+  "status": "open"
+}

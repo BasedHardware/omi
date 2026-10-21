@@ -1,3 +1,4 @@
+import { AdapterRuntimeError, isRuntimeFailureCode, type RuntimeFailureCode } from "../runtime/failures.js";
 // PiMonoAdapter — pi-mono harness adapter using SDK in-process
 //
 // Uses createAgentSession() from pi-mono SDK to run the agent loop
@@ -9,7 +10,7 @@
 import { ChildProcess, spawn } from "child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
-import { dirname, join } from "path";
+import { dirname, join, resolve } from "path";
 import { createInterface, Interface as ReadlineInterface } from "readline";
 import { adapterCapabilitiesFor, HarnessFeature } from "./interface.js";
 import type {
@@ -59,6 +60,8 @@ interface PiMonoRelayContext {
   requestId: string;
   /** Per-turn effort lane ("adaptive" | "fast") relayed to the gateway. */
   reasoningEffort?: string;
+  /** Kernel-derived adapter-native capability policy. */
+  builtInToolPolicy: "default" | "read_only";
 }
 
 interface PiAssistantMessageEvent {
@@ -79,6 +82,12 @@ interface PiAssistantMessage {
   usage?: PiUsage;
   stopReason?: string;
   errorMessage?: string;
+  /** Requested model id (e.g. "omi-sonnet"). */
+  model?: string;
+  /** SERVED model from the provider response stream when it differs from the
+   *  requested id (pi-ai captures chunk.model). This is the honest identity. */
+  responseModel?: string;
+  provider?: string;
 }
 
 interface PiContentBlock {
@@ -416,47 +425,14 @@ type PublicWebTurnState = {
 /// the instruction here guarantees public-web queries keep working for main
 /// agents and subagents while the backend fleet rolls forward independently.
 export function routePromptForPublicWeb(message: string): string {
-  // The adapter receives the full rendered prompt, including inherited context
-  // and prior turns. Inspect only the current user instruction when deciding
-  // whether this particular turn requires a public-web lookup.
-  const normalized = normalizedLookupText(currentUserInstruction(message));
-  if (!normalized) return message;
-  const hasExplicitWebReference = explicitlyRequestsPublicWeb(normalized);
-  if (explicitlyProhibitsPublicWeb(normalized, hasExplicitWebReference)) {
-    return message;
-  }
-  const hasExplicitPrivateContext = EXPLICIT_PRIVATE_CONTEXT.some(
-    (phrase) => normalized.includes(phrase)
-  );
-  if (hasExplicitPrivateContext && !hasExplicitWebReference) return message;
-
-  const isShortLookup = utf8ByteLength(normalized) <= MAX_GENERIC_LOOKUP_CHARS;
-  const hasFreshPublicTemporalLookup = isShortLookup
-    && containsWholeTerm(normalized, FRESH_PUBLIC_TEMPORAL_QUALIFIERS)
-    && containsWholeTerm(normalized, FRESH_PUBLIC_LOOKUP_TERMS);
-  const hasResearchIntentLookup = isShortLookup
-    && containsWholeTerm(normalized, PUBLIC_WEB_LOCUS)
-    && RESEARCH_INTENT_VERBS.some((verb) => normalized.includes(verb));
-  const requiresWeb = hasExplicitWebReference
-    || containsWholeTerm(normalized, FRESH_PUBLIC_REQUESTS)
-    || CURRENT_WEATHER_PREFIXES.some((phrase) => normalized.includes(phrase))
-    || hasFreshPublicTemporalLookup
-    || hasResearchIntentLookup;
-  return requiresWeb ? `${PUBLIC_WEB_ROUTING_INSTRUCTION}\n\n${message}` : message;
+  // Public-web lookup is a real `web_search` tool on desktop chat. The former
+  // phrase-gate prefix manufactured a capability claim without a tool call.
+  return message;
 }
 
 export function stripFalsePublicWebAvailabilityDisclaimers(text: string): string {
-  const sentences = text.match(/[^.!?]+(?:[.!?]+|$)/g) ?? [text];
-  return sentences
-    .map((sentence) => {
-      if (!PUBLIC_WEB_ACCESS_DENIAL.test(sentence)) return sentence;
-      // Keep a true continuation such as "but I can retrieve it with the
-      // terminal" while removing only the contradictory no-access clause.
-      return sentence.replace(/^\s*(?:I\s+)?(?:do\s+not|don't|cannot|can't|can not)[^.?!]*?\b(?:but|however)\s+/i, "");
-    })
-    .filter((sentence) => !PUBLIC_WEB_ACCESS_DENIAL.test(sentence))
-    .join("")
-    .replace(/^\s+/, "");
+  // Honesty is the tool result. Do not edit the model's account of itself.
+  return text;
 }
 
 export class PiMonoAdapter implements HarnessAdapter {
@@ -498,6 +474,19 @@ export class PiMonoAdapter implements HarnessAdapter {
   /** State for projecting gateway-owned public-web progress without waiting for
    * the terminal turn before forwarding model text. */
   private activePublicWebTurn: PublicWebTurnState | null = null;
+  /** Last character forwarded to the host as answer text this prompt, so an
+   *  iteration boundary can tell whether the two sides would render as one
+   *  run-on line. Null until this prompt has forwarded any answer text. */
+  private lastForwardedTextChar: string | null = null;
+  /** Set once the provider pauses on a tool mid-prompt. The next text delta
+   *  opens a new provider iteration; without a separator the host renders the
+   *  pre-tool sentence and the continuation joined together
+   *  ("…handle it.Capture the…"). */
+  private awaitingContinuationText = false;
+  /** Served models observed on the in-flight prompt, deduplicated. Reported
+   *  once per identity through the adapter event sink (`model_used`) so the
+   *  Response Context popover can attribute the answer honestly. */
+  private reportedPromptModels = new Set<string>();
   private piPath: string;
   private extensionPath: string;
   private readonly contextFilePath = join(
@@ -507,6 +496,9 @@ export class PiMonoAdapter implements HarnessAdapter {
   /** Current system prompt baked into the spawned pi process via --system-prompt.
    *  Pi has no set_system_prompt RPC, so changing this requires a subprocess restart. */
   private currentSystemPrompt: string | undefined;
+  /** Kernel-admitted directory bound to this pinned worker process. Pi's
+   * native file tools resolve relative paths from the subprocess cwd. */
+  private currentWorkingDirectory: string | undefined;
   private currentExecutionRole: "coordinator" | "leaf" = "coordinator";
   private currentToolProjection: {
     surfaceKind?: string;
@@ -514,8 +506,9 @@ export class PiMonoAdapter implements HarnessAdapter {
     controlGeneration: number | null;
   } = { chatFirstUi: false, controlGeneration: null };
   private readonly sessionPrefix: string;
-  /** True when a token refresh was deferred because a prompt was active */
-  private pendingTokenRefresh = false;
+  /** Numeric HTTP classification correlated with the active provider request. */
+  private providerFailureCode: RuntimeFailureCode | undefined;
+  private providerRequestId: string | undefined;
   /** True when a system-prompt change was deferred because a prompt was active */
   private pendingSystemPromptRefresh = false;
 
@@ -550,22 +543,10 @@ export class PiMonoAdapter implements HarnessAdapter {
       args.push("--system-prompt", this.currentSystemPrompt);
     }
 
-    // SECURITY: require a Firebase ID token. We MUST NOT fall back to
-    // ANTHROPIC_API_KEY — the Omi backend rejects provider keys and forwarding
-    // one here would leak the upstream secret to api.omi.me.
-    if (!this.config.authToken) {
-      throw new Error(
-        "pi-mono adapter requires config.authToken (Firebase ID token)"
-      );
+    const env: Record<string, string> = { ...process.env as Record<string, string> };
+    for (const key of Object.keys(env)) {
+      if (["ANTHROPIC_API_KEY", "OMI_AUTH_TOKEN", "OMI_API_KEY"].includes(key) || key.startsWith("OMI_BYOK_")) delete env[key];
     }
-
-    // Scrub any ANTHROPIC_API_KEY from the child env so the extension cannot
-    // accidentally read it as a credential. pi-mono talks to api.omi.me with
-    // OMI_API_KEY only.
-    const env: Record<string, string> = {
-      ...process.env as Record<string, string>,
-    };
-    delete env.ANTHROPIC_API_KEY;
 
     // SECURITY: OMI_YOLO_MODE bypasses the extension's entire tool denylist.
     // Scrub it from the subprocess env, then only re-inject when explicitly
@@ -578,10 +559,6 @@ export class PiMonoAdapter implements HarnessAdapter {
       process.stderr.write("[pi-mono] WARNING: OMI_YOLO_MODE=1 — denylist bypass active\n");
     }
 
-    // Pass the raw Firebase ID token. pi's openai-completions client already
-    // prepends `Authorization: Bearer ${apiKey}` — adding our own "Bearer "
-    // prefix here would produce a malformed `Bearer Bearer <token>` header.
-    env.OMI_API_KEY = this.config.authToken;
     if (this.config.omiApiBaseUrl) {
       env.OMI_API_BASE_URL = this.config.omiApiBaseUrl;
     }
@@ -611,6 +588,12 @@ export class PiMonoAdapter implements HarnessAdapter {
       delete env.OMI_CHAT_FIRST_CONTROL_GENERATION;
     }
     env.OMI_CONTEXT_FILE = this.contextFilePath;
+    // User-authored skills from the Apps page: point pi's agent dir at the
+    // managed plugin root so pi's native skill catalog discovers
+    // skills/<slug>/SKILL.md there (auth/provider still come from env above).
+    if (process.env.OMI_USER_SKILLS_DIR) {
+      env.PI_CODING_AGENT_DIR = process.env.OMI_USER_SKILLS_DIR;
+    }
     // Forward OMI_BRIDGE_PIPE so the extension can register omi-tools
     // (execute_sql, semantic_search, etc.) that forward to Swift.
     // The shared runtime process sets the pipe in process.env before starting pi-mono.
@@ -618,6 +601,7 @@ export class PiMonoAdapter implements HarnessAdapter {
     this.process = spawn(this.piPath, args, {
       stdio: ["pipe", "pipe", "pipe"],
       env,
+      ...(this.currentWorkingDirectory ? { cwd: this.currentWorkingDirectory } : {}),
     });
 
     if (!this.process.stdout || !this.process.stdin) {
@@ -696,6 +680,18 @@ export class PiMonoAdapter implements HarnessAdapter {
     const mapped = opts.model ? mapModel(opts.model) : undefined;
     await this.setExecutionRole(opts.executionRole ?? "coordinator");
 
+    const admittedWorkingDirectory = resolve(opts.cwd);
+    if (
+      this.currentWorkingDirectory !== undefined
+      && this.currentWorkingDirectory !== admittedWorkingDirectory
+      && this.process
+    ) {
+      // A pinned worker may be reassigned only while idle. Process-local Pi
+      // sessions cannot cross artifact roots, so restart before rebinding it.
+      await this.stop();
+    }
+    this.currentWorkingDirectory = admittedWorkingDirectory;
+
     // Pi bakes the system prompt at spawn time via --system-prompt. If the
     // caller requested a different prompt than the currently-running process,
     // restart the subprocess with the new flag. Callers that want this handled
@@ -707,7 +703,7 @@ export class PiMonoAdapter implements HarnessAdapter {
 
     const sessionId = `${this.sessionPrefix}-session-${this.nextSessionId++}`;
     this.sessions.set(sessionId, {
-      cwd: opts.cwd,
+      cwd: admittedWorkingDirectory,
       model: mapped,
       systemPrompt: opts.systemPrompt,
     });
@@ -755,7 +751,10 @@ export class PiMonoAdapter implements HarnessAdapter {
             ? projection.controlGeneration
             : null,
         }
-      : { chatFirstUi: false, controlGeneration: null };
+      : {
+          chatFirstUi: false,
+          controlGeneration: null,
+        };
     if (
       normalized.surfaceKind === this.currentToolProjection.surfaceKind
       && normalized.chatFirstUi === this.currentToolProjection.chatFirstUi
@@ -786,6 +785,9 @@ export class PiMonoAdapter implements HarnessAdapter {
     }
 
     this.eventHandler = onEvent;
+    this.reportedPromptModels.clear();
+    this.lastForwardedTextChar = null;
+    this.awaitingContinuationText = false;
     this.toolExecutor = onToolCall;
     this.requiredAgentControlFailures.clear();
     this.requiredControlInputs.clear();
@@ -793,6 +795,8 @@ export class PiMonoAdapter implements HarnessAdapter {
     this.writeRelayContext(relayContext);
 
     const generation = this.nextPromptGeneration++;
+    this.providerFailureCode = undefined;
+    this.providerRequestId = relayContext?.requestId;
     this.activePromptGeneration = generation;
 
     if (signal) {
@@ -819,22 +823,7 @@ export class PiMonoAdapter implements HarnessAdapter {
 
     const rawMessage = textParts.join("\n");
     const message = routePromptForPublicWeb(rawMessage);
-    this.activePublicWebTurn = message === rawMessage
-      ? null
-      : {
-          bufferedText: "",
-          emittedText: "",
-          progressToolUseId: `gateway-public-web-${generation}`,
-        };
-    if (this.activePublicWebTurn) {
-      this.eventHandler?.({
-        type: "tool_activity",
-        name: "web_search",
-        status: "started",
-        toolUseId: this.activePublicWebTurn.progressToolUseId,
-        input: { executor: "gateway" },
-      });
-    }
+    this.activePublicWebTurn = null;
 
     const cmd: PiRpcCommand = {
       type: "prompt",
@@ -972,45 +961,22 @@ export class PiMonoAdapter implements HarnessAdapter {
     return true;
   }
 
-  /** Update auth token by restarting the subprocess when idle.
-   *  The pi-mono extension bakes OMI_API_KEY at startup, so the only way
-   *  to refresh is to restart the process. If a prompt is active, marks a
-   *  pending restart that handleTurnEnd will execute after the prompt completes.
-   *  Returns true if restart happened immediately, false if deferred. */
-  async updateAuthToken(token: string): Promise<boolean> {
-    this.config.authToken = token;
-    if (this.pendingRequests.size > 0) {
-      this.pendingTokenRefresh = true;
-      process.stderr.write("[pi-mono] auth token stored (restart deferred, prompt active)\n");
-      return false;
-    }
-    await this.stop();
-    await this.start();
-    this.config.onRestart?.("token_refresh");
-    this.pendingTokenRefresh = false;
-    process.stderr.write("[pi-mono] subprocess restarted with refreshed auth token\n");
-    return true;
-  }
-
   /** Whether a prompt is currently in-flight */
   get isIdle(): boolean {
     return this.pendingRequests.size === 0;
   }
 
-  /** Whether a deferred restart is pending (token or system prompt) */
+  /** Whether a system-prompt restart is pending. */
   get hasPendingRestart(): boolean {
-    return this.pendingTokenRefresh || this.pendingSystemPromptRefresh;
+    return this.pendingSystemPromptRefresh;
   }
 
   /** Execute the deferred restart (call after prompt completes).
-   *  Handles both token refresh and system-prompt change — both baked at
-   *  spawn time, both requiring a restart. */
+   *  System prompts are baked at spawn time. Credentials are request-scoped. */
   async executePendingRestart(): Promise<void> {
-    if (!this.pendingTokenRefresh && !this.pendingSystemPromptRefresh) return;
+    if (!this.pendingSystemPromptRefresh) return;
     const reasons: string[] = [];
-    if (this.pendingTokenRefresh) reasons.push("token");
     if (this.pendingSystemPromptRefresh) reasons.push("systemPrompt");
-    this.pendingTokenRefresh = false;
     this.pendingSystemPromptRefresh = false;
     await this.stop();
     await this.start();
@@ -1094,6 +1060,7 @@ export class PiMonoAdapter implements HarnessAdapter {
         capabilityRef: context.capabilityRef,
         requestId: context.requestId,
         ...(context.reasoningEffort ? { reasoningEffort: context.reasoningEffort } : {}),
+        builtInToolPolicy: context.builtInToolPolicy,
       })
     );
   }
@@ -1136,6 +1103,10 @@ export class PiMonoAdapter implements HarnessAdapter {
     }
 
     switch (event.type) {
+      case "omi_provider_status":
+        if (!this.activePromptGeneration || event.requestId !== this.providerRequestId) return;
+        this.providerFailureCode = isRuntimeFailureCode(event.failureCode) ? event.failureCode : undefined;
+        return;
       case "message_update":
         this.handleMessageUpdate(event);
         break;
@@ -1156,11 +1127,14 @@ export class PiMonoAdapter implements HarnessAdapter {
         this.handleTurnEnd(event);
         break;
 
+      case "message_end":
+        this.recordServedModel(event.message as PiAssistantMessage | undefined);
+        break;
+
       case "agent_start":
       case "agent_end":
       case "turn_start":
       case "message_start":
-      case "message_end":
       case "response":
       case "compaction_start":
       case "compaction_end":
@@ -1188,6 +1162,24 @@ export class PiMonoAdapter implements HarnessAdapter {
     }
   }
 
+  /** Report the model that actually served an assistant message — ONLY the
+   *  response-observed identity (pi-ai's `responseModel`, captured from the
+   *  provider stream's chunk.model). A response that names no model gets no
+   *  attribution: the requested id here is always the "omi-sonnet" alias, and
+   *  presenting it as the served model is the exact lie #11521 removed. */
+  private recordServedModel(message: PiAssistantMessage | undefined): void {
+    if (!message || message.role !== "assistant") return;
+    const served = message.responseModel;
+    if (!served || this.reportedPromptModels.has(served)) return;
+    this.reportedPromptModels.add(served);
+    this.eventHandler?.({
+      type: "model_used",
+      model: served,
+      requestedModel: message.model,
+      provider: message.provider,
+    });
+  }
+
   private handleMessageUpdate(event: PiRpcEvent): void {
     const msgEvent = event.assistantMessageEvent as
       | PiAssistantMessageEvent
@@ -1201,7 +1193,12 @@ export class PiMonoAdapter implements HarnessAdapter {
             this.activePublicWebTurn.bufferedText += msgEvent.delta;
             this.emitPublicWebText(this.activePublicWebTurn);
           } else {
-            this.eventHandler?.({ type: "text_delta", text: msgEvent.delta });
+            if (this.awaitingContinuationText) {
+              this.awaitingContinuationText = false;
+              const gap = this.iterationGapDelta(msgEvent.delta);
+              if (gap) this.forwardAnswerDelta(gap);
+            }
+            this.forwardAnswerDelta(msgEvent.delta);
           }
         }
         break;
@@ -1247,6 +1244,60 @@ export class PiMonoAdapter implements HarnessAdapter {
         // Handled by turn_end
         break;
     }
+  }
+
+  /** Forward answer text to the host, remembering the last character so a
+   *  later iteration boundary can tell whether the two sides run together. */
+  private forwardAnswerDelta(delta: string): void {
+    const last = delta[delta.length - 1];
+    if (last !== undefined) this.lastForwardedTextChar = last;
+    this.eventHandler?.({ type: "text_delta", text: delta });
+  }
+
+  /** The separator to emit before a continuation's first text delta, empty
+   *  when either side already carries whitespace so the provider's own line
+   *  breaks are never doubled. Same rule the backend chat agent loop applies
+   *  between its own tool-loop iterations. */
+  private iterationGapDelta(nextDelta: string): string {
+    const previous = this.lastForwardedTextChar;
+    const next = nextDelta[0];
+    if (!previous || !next) return "";
+    // Whitespace of any kind (\t, \r, …) counts as an existing break — the
+    // provider's own separator must never be doubled by a blank paragraph.
+    const carriesBreak = (c: string) => /\s/.test(c);
+    return carriesBreak(previous) || carriesBreak(next) ? "" : "\n\n";
+  }
+
+  /** Terminal answer text for the prompt result: every text block of the
+   *  provider's final message, with an iteration separator where a tool block
+   *  splits two text runs that would otherwise join into one line. */
+  static terminalText(content: PiContentBlock[] | undefined): string {
+    if (!content) return "";
+    let text = "";
+    let separated = false;
+    for (const block of content) {
+      if (block.type === "text") {
+        const blockText = block.text || "";
+        if (blockText) {
+          // Same whitespace contract as iterationGapDelta: any whitespace
+          // character counts as an existing break.
+          const carriesBreak = (c: string) => /\s/.test(c);
+          if (
+            separated &&
+            text &&
+            !carriesBreak(text[text.length - 1]) &&
+            !carriesBreak(blockText[0])
+          ) {
+            text += "\n\n";
+          }
+          text += blockText;
+        }
+        separated = false;
+      } else {
+        separated = true;
+      }
+    }
+    return text;
   }
 
   private handleToolStart(event: PiRpcEvent): void {
@@ -1361,7 +1412,17 @@ export class PiMonoAdapter implements HarnessAdapter {
       this.pendingRequests.delete(generation);
       this.activePromptGeneration = 0;
       this.activePublicWebTurn = null;
-      pending.reject(new Error(errorMessage));
+      pending.reject(this.providerFailureCode ? new AdapterRuntimeError({
+        code: this.providerFailureCode === "authentication" ? "omi_session_authentication" : "omi_provider_failed",
+        failureCode: this.providerFailureCode,
+        provider: "omi",
+        adapterId: "pi-mono",
+        source: "adapter_execution",
+        userMessage: this.providerFailureCode === "authentication" ? "Your session expired. Sign in to continue." : errorMessage,
+        technicalMessage: errorMessage,
+        retryable: !["authentication", "provider_setup_needed", "quota_exceeded"].includes(this.providerFailureCode),
+      }) : new Error(errorMessage));
+      this.providerFailureCode = undefined;
       this.eventHandler = null;
       this.toolExecutor = null;
       return;
@@ -1375,6 +1436,10 @@ export class PiMonoAdapter implements HarnessAdapter {
     // snake_case "tool_use". Check both for robustness.
     const stopReason = message?.stopReason;
     if (stopReason === "toolUse" || stopReason === "tool_use") {
+      // The continuation's text opens a new provider iteration. If text was
+      // already forwarded this prompt, the two sides must not render as one
+      // run-on line — the next text delta carries the separator.
+      this.awaitingContinuationText = true;
       process.stderr.write(
         `[pi-mono] intermediate turn_end (${stopReason}) — keeping prompt alive\n`
       );
@@ -1401,14 +1466,11 @@ export class PiMonoAdapter implements HarnessAdapter {
     const publicWebTurn = this.activePublicWebTurn;
     this.activePublicWebTurn = null;
 
-    // Extract text from content blocks
-    let text = "";
-    if (message?.content) {
-      text = message.content
-        .filter((b) => b.type === "text")
-        .map((b) => b.text || "")
-        .join("");
-    }
+    // Extract text from content blocks. A provider that keeps its whole loop
+    // in one message puts tool blocks between the text blocks; joining only
+    // the text runs the iterations together ("…handle it.Capture the…"), so
+    // the separator mirrors what the streamed deltas carry.
+    let text = PiMonoAdapter.terminalText(message?.content);
     if (publicWebTurn) {
       text = publicWebTurn.bufferedText || text;
       // A terminal public-web turn proves the gateway completed the required
@@ -1418,6 +1480,8 @@ export class PiMonoAdapter implements HarnessAdapter {
       this.emitPublicWebText(publicWebTurn, true);
       this.finishPublicWebProgress(publicWebTurn, "completed");
     }
+
+    this.recordServedModel(message ?? undefined);
 
     // Extract usage
     const usage = message?.usage;
@@ -1497,7 +1561,7 @@ function relayReasoningEffort(metadata: Record<string, unknown> | undefined): st
   return raw === "adaptive" || raw === "fast" ? raw : undefined;
 }
 
-function toolProjectionFromMetadata(metadata: Record<string, unknown> | undefined): {
+export function toolProjectionFromMetadata(metadata: Record<string, unknown> | undefined): {
   surfaceKind?: string;
   chatFirstUi: boolean;
   controlGeneration: number | null;
@@ -1513,8 +1577,15 @@ function toolProjectionFromMetadata(metadata: Record<string, unknown> | undefine
     && Number.isSafeInteger(generation)
     && generation >= 0;
   return typedSurface
-    ? { surfaceKind: typedSurface, chatFirstUi: enabled, controlGeneration: enabled ? generation : null }
-    : { chatFirstUi: false, controlGeneration: null };
+    ? {
+        surfaceKind: typedSurface,
+        chatFirstUi: enabled,
+        controlGeneration: enabled ? generation : null,
+      }
+    : {
+        chatFirstUi: false,
+        controlGeneration: null,
+      };
 }
 
 export class PiMonoRuntimeAdapter implements RuntimeAdapter {
@@ -1566,19 +1637,33 @@ export class PiMonoRuntimeAdapter implements RuntimeAdapter {
     sink: AdapterEventSink,
     signal: AbortSignal
   ): Promise<AdapterAttemptResult> {
+    const providerTargets = new Set<string>();
+    const modelsUsed = new Set<string>();
+    const observingSink: AdapterEventSink = (event) => {
+      if (event.type === "model_used") {
+        if (typeof event.provider === "string" && event.provider.length > 0) {
+          providerTargets.add(event.provider);
+        }
+        if (typeof event.model === "string" && event.model.length > 0) {
+          modelsUsed.add(event.model);
+        }
+      }
+      sink(event);
+    };
     try {
       const result = await this.harness.sendPrompt(
         context.binding.adapterNativeSessionId,
         context.prompt,
         context.tools ?? [],
         context.mode,
-        sink,
+        observingSink,
         async () => "",
         signal,
         {
           capabilityRef: context.toolCapabilityRef,
           requestId: context.requestId,
           reasoningEffort: relayReasoningEffort(context.metadata),
+          builtInToolPolicy: context.builtInToolPolicy,
         }
       );
 
@@ -1589,6 +1674,8 @@ export class PiMonoRuntimeAdapter implements RuntimeAdapter {
         outputTokens: result.outputTokens,
         cacheReadTokens: result.cacheReadTokens,
         cacheWriteTokens: result.cacheWriteTokens,
+        providerTargets: [...providerTargets],
+        modelsUsed: [...modelsUsed],
         adapterSessionId: result.sessionId,
         terminalStatus: signal.aborted || this.cancelledAttempts.has(context.attemptId) ? "cancelled" : "succeeded",
       };

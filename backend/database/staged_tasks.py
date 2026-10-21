@@ -6,15 +6,17 @@ Collection: users/{uid}/staged_tasks
 import logging
 import uuid
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from google.api_core.exceptions import AlreadyExists, Conflict, FailedPrecondition
 from google.cloud import firestore
 from google.cloud.firestore_v1.base_query import FieldFilter
 
 from ._client import db, get_firestore_client
+from .action_items_cache import bump_action_items_list_version
 from .firestore_index_registry import LEGACY_CONVERSATION_RECOVERY_QUERY
 import database.action_items as action_items_db
+from database.staged_promote_cache import invalidate_around_write
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +42,7 @@ def _commit_batch(batch, count):
     return batch, count
 
 
+@invalidate_around_write
 def create_staged_task(uid: str, description: str, **kwargs) -> dict:
     """Create a staged task.  Deduplicates by normalized description.
 
@@ -93,10 +96,10 @@ def get_staged_tasks(uid: str, limit: int = 100, offset: int = 0) -> List[dict]:
     return items
 
 
-def get_all_staged_tasks_for_migration(uid: str) -> List[dict]:
+def get_all_staged_tasks_for_migration(uid: str) -> List[dict[str, Any]]:
     """Read active and terminal staged rows for idempotent Candidate reconciliation."""
 
-    items: List[dict] = []
+    items: List[dict[str, Any]] = []
     for snapshot in _user_col(uid, 'staged_tasks').stream():
         data = snapshot.to_dict() or {}
         data['id'] = snapshot.id
@@ -151,6 +154,7 @@ def get_top_staged_task_for_promotion(uid: str) -> Optional[dict]:
     return row
 
 
+@invalidate_around_write
 def delete_staged_task(uid: str, task_id: str) -> bool:
     ref = _user_col(uid, 'staged_tasks').document(task_id)
     if not ref.get().exists:
@@ -159,6 +163,7 @@ def delete_staged_task(uid: str, task_id: str) -> bool:
     return True
 
 
+@invalidate_around_write
 def complete_staged_task_promotion(
     uid: str,
     staged_id: str,
@@ -176,6 +181,7 @@ def complete_staged_task_promotion(
     _user_col(uid, 'staged_tasks').document(staged_id).update(patch)
 
 
+@invalidate_around_write
 def suppress_staged_task_for_terminal_candidate(uid: str, staged_id: str, *, reason: str) -> None:
     """Close a legacy row whose canonical sidecar is already terminal without creating a task."""
 
@@ -190,6 +196,7 @@ def suppress_staged_task_for_terminal_candidate(uid: str, staged_id: str, *, rea
     )
 
 
+@invalidate_around_write
 def batch_update_staged_scores(uid: str, scores: List[dict]) -> None:
     """Update relevance_score for staged tasks in batches of 500.
 
@@ -216,6 +223,7 @@ def batch_update_staged_scores(uid: str, scores: List[dict]) -> None:
         batch.commit()
 
 
+@invalidate_around_write
 def promote_staged_task(
     uid: str,
     task_id: Optional[str] = None,
@@ -362,6 +370,7 @@ def promote_staged_task(
     return {**action_item, '_staged_task_id': staged['id']} if include_staged_id else action_item
 
 
+@invalidate_around_write
 def clear_staged_tasks(uid: str) -> int:
     """Delete all active (uncompleted) staged tasks for a user in one call.
 
@@ -383,6 +392,7 @@ def clear_staged_tasks(uid: str) -> int:
     return total
 
 
+@invalidate_around_write
 def restore_legacy_conversation_items(
     uid: str,
     *,
@@ -472,6 +482,11 @@ def restore_legacy_conversation_items(
             else:
                 restored += 1
                 break
+
+    if restored:
+        # Recovery creates action items directly (not through
+        # database.action_items), so the list cache is invalidated here too.
+        bump_action_items_list_version(uid)
 
     return {
         'restored': restored,

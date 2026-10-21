@@ -230,14 +230,6 @@ def _promote_decision(
     )
 
 
-@pytest.fixture(autouse=True)
-def _canonical_runtime(monkeypatch):
-    monkeypatch.setattr(
-        "utils.memory.canonical_consolidation.resolve_memory_system",
-        lambda uid, db_client=None: MemorySystem.CANONICAL,
-    )
-
-
 def _apply(source: MemoryItem, decision, db: _FakeDb, *, quarantine: bool = False):
     control = MemoryControlState(**db.docs[f"users/{UID}/memory_state/apply_control"])
     return apply_consolidation_decision(
@@ -348,6 +340,47 @@ def test_nonpromote_routes_are_terminal_archive_outcomes(route: str, expected_st
         assert review_path not in db.docs
     assert stored.graph_ready is False
     assert f"users/{UID}/memory_graph_assertions/{source.memory_id}" not in db.docs
+
+
+def test_reject_hides_after_consolidation():
+    source = _item("mem_reject_off", "A broad but non-durable observation.")
+    db = _db_for_items(source)
+    decision = ConsolidationAgentDecision(
+        source_memory_id=source.memory_id,
+        route="reject",
+        evidence_ids=[],
+        relationship_to_user="unclear",
+        basis_for_memory="weak_or_none",
+        rationale="Not safe or useful enough for durable memory.",
+    )
+    _apply(source, decision, db)
+    stored = MemoryItem(**db.docs[f"users/{UID}/memory_items/{source.memory_id}"])
+    assert stored.tier == MemoryTier.archive
+    assert stored.status == MemoryItemStatus.hidden
+
+
+def test_expired_review_is_not_requeued_by_consolidation_replay():
+    source = _item('mem_expired_review', 'A synthetic review candidate.')
+    db = _db_for_items(source)
+    decision = ConsolidationAgentDecision(
+        source_memory_id=source.memory_id,
+        route='review',
+        evidence_ids=[],
+        relationship_to_user='unclear',
+        basis_for_memory='weak_or_none',
+        rationale='Needs review.',
+    )
+    _apply(source, decision, db)
+    stored = MemoryItem(**db.docs[f'users/{UID}/memory_items/{source.memory_id}'])
+    review_path = f'users/{UID}/memory_review_queue/review:{source.memory_id}:r{stored.item_revision}:'
+    db.docs[review_path].update({'status': 'expired', 'permitted_uses': []})
+    before = {path: dict(row) for path, row in db.docs.items()}
+
+    assert stored.tier == MemoryTier.archive
+    _apply(source, decision, db)
+
+    assert db.docs == before
+    assert db.docs[review_path]['status'] == 'expired'
 
 
 def test_quarantine_review_is_a_canonical_blocked_commit_with_projection_deletes():

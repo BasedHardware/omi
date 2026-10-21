@@ -7,6 +7,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+# Keep the database package real so shared persistence telemetry remains importable.
 _HEAVY_MOCKS = {
     'anthropic': MagicMock(),
     'firebase_admin': MagicMock(),
@@ -15,7 +16,6 @@ _HEAVY_MOCKS = {
     'google.cloud.firestore_v1': MagicMock(),
     'google.cloud.firestore_v1.base_query': MagicMock(),
     'tiktoken': MagicMock(encoding_for_model=MagicMock(return_value=MagicMock())),
-    'database': MagicMock(),
     'database._client': MagicMock(),
     'database.llm_usage': MagicMock(),
 }
@@ -41,6 +41,15 @@ if 'langchain_google_genai' not in sys.modules:
 
     setattr(google_genai_stub, 'ChatGoogleGenerativeAI', ChatGoogleGenerativeAI)
     sys.modules['langchain_google_genai'] = google_genai_stub
+
+if 'langchain_anthropic' not in sys.modules:
+    anthropic_stub = types.ModuleType('langchain_anthropic')
+
+    class ChatAnthropic:
+        pass
+
+    setattr(anthropic_stub, 'ChatAnthropic', ChatAnthropic)
+    sys.modules['langchain_anthropic'] = anthropic_stub
 
 if 'langchain_openai' not in sys.modules:
     openai_stub = types.ModuleType('langchain_openai')

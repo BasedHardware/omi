@@ -1,18 +1,25 @@
 #!/usr/bin/env python3
 """Reject unapproved growth of oversized product-source files.
 
-The target branch is the ratchet. For every changed Swift, Rust, or backend
-Python source, this check compares ``--base`` with the synthetic merge of
-``--base`` and ``--head``.
+The target branch is the ratchet. For every changed Swift, Rust, backend
+Python, or hand-written Dart under ``app/lib`` source, this check compares
+``--base`` with the synthetic merge of ``--base`` and ``--head``.
 Reductions therefore become the next ceiling automatically after merge, and
 unrelated pull requests never edit a shared line-count ledger.
 
-Exceptional growth must be declared precisely in pull-request metadata:
+Exceptional growth must be declared in pull-request metadata:
 
 ``Line-Count-Exception: path | BASE -> CURRENT | reason``
 
-The path and both counts must match the actual diff. Stale, duplicate, unused,
-or malformed declarations fail closed.
+The declaration approves a *growth allowance* of ``CURRENT - BASE`` lines for
+that path. The check passes while the diff's actual growth stays within that
+allowance, so a correct declaration survives the target branch moving under an
+open pull request: both absolute counts shift with the base, but the delta the
+author actually authored does not. Growth beyond the declared allowance, and
+duplicate, unsupported-path, or malformed declarations, fail closed. A
+declaration the diff no longer needs -- because the target branch absorbed an
+equivalent edit, or the author trimmed the growth away -- is reported as a
+warning rather than a failure.
 """
 
 from __future__ import annotations
@@ -33,6 +40,7 @@ EXCEPTION_RE = re.compile(
 )
 DESKTOP_ROOT = "desktop/macos/"
 BACKEND_ROOT = "backend/"
+APP_LIB_ROOT = "app/lib/"
 VENDORED_PARTS = {
     ".git",
     ".build",
@@ -48,6 +56,27 @@ VENDORED_PARTS = {
     "target",
 }
 TEST_PARTS = {"test", "tests", "Tests"}
+# Dart-only generated path parts. Swift already uses the capital-G ``Generated``
+# directory; Flutter writes ``lib/gen/`` and ``lib/backend/schema/gen/``.
+DART_GENERATED_PATH_PARTS = {"gen"}
+DART_GENERATED_NAME_PREFIXES = ("firebase_options",)
+
+
+def _is_generated_app_dart(path: PurePosixPath) -> bool:
+    """Match the generated Dart the existing ``.g.`` / ``.gen.`` / ``Generated`` filters miss."""
+
+    if any(part in DART_GENERATED_PATH_PARTS for part in path.parts):
+        return True
+    name = path.name
+    if name.startswith(DART_GENERATED_NAME_PREFIXES):
+        return True
+    # Hand-written ``app_localizations_helper.dart`` must stay in scope; only
+    # the flutter_gen_l10n outputs under ``l10n/`` / ``gen_l10n/`` are generated.
+    if name.startswith("app_localizations") and any(part in {"l10n", "gen_l10n"} for part in path.parts):
+        return True
+    return False
+
+
 @dataclass(frozen=True)
 class LineCountException:
     path: str
@@ -84,6 +113,8 @@ def is_product_source(relative: str) -> bool:
         return path.suffix == ".py"
     if relative.startswith(DESKTOP_ROOT):
         return path.suffix in {".swift", ".rs"}
+    if relative.startswith(APP_LIB_ROOT) and path.suffix == ".dart":
+        return not _is_generated_app_dart(path)
     return False
 
 
@@ -233,17 +264,26 @@ def evaluate_changes(
             )
             continue
         used.add(relative)
-        if exception.base_count != expected_base or exception.current_count != current:
+        # Compare growth, not endpoints. The target branch moves under an open pull request, so the
+        # absolute counts a correct declaration was written against go stale with no author action,
+        # while the growth the author is actually asking approval for does not.
+        declared_growth = exception.current_count - exception.base_count
+        actual_growth = current - expected_base
+        if actual_growth > declared_growth:
             failures.append(
-                f"PR body line {exception.line_number}: {relative} declares "
-                f"{exception.base_count} -> {exception.current_count}, but the diff is {expected_base} -> {current}"
+                f"PR body line {exception.line_number}: {relative} declares growth of {declared_growth} line(s) "
+                f"({exception.base_count} -> {exception.current_count}), but the diff grows {actual_growth} line(s) "
+                f"({expected_base} -> {current})"
             )
 
+    # An approval nobody needs is not a defect, and whether one is still needed is not stable while the
+    # pull request is open: the target branch can absorb an equivalent edit, erasing the growth a correct
+    # declaration was written for. Report the leftovers, do not fail on them.
     for relative, exception in exceptions.items():
         if relative in used:
             continue
         if relative not in changed:
-            failures.append(f"PR body line {exception.line_number}: unused exception for unchanged source {relative}")
+            print(f"WARN: PR body line {exception.line_number}: unused exception for unchanged source {relative}")
             continue
         current = (
             source_count_at_ref(root, candidate_ref, relative)
@@ -251,8 +291,8 @@ def evaluate_changes(
             else source_count(root, relative)
         )
         base_value = source_count_at_ref(root, base, relative)
-        failures.append(
-            f"PR body line {exception.line_number}: unused exception for {relative}; current/base counts "
+        print(
+            f"WARN: PR body line {exception.line_number}: unused exception for {relative}; current/base counts "
             f"{current}/{base_value or 0} do not require approval"
         )
     return failures

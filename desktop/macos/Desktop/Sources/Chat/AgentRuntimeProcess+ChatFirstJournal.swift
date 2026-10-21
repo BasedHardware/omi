@@ -107,6 +107,8 @@ extension AgentRuntimeProcess {
     let suppressedByStreamingTail: Bool
     let materializationStoppedByTail: Bool
     let materializationReceipts: [ChatFirstMaterializationReceipt]
+    let materializationRejections: [ChatFirstMaterializationRejection]
+    let materializationDeferrals: [ChatFirstMaterializationDeferral]
     let coldStartSequenceTerminalReceipts: [ChatFirstColdStartSequenceTerminalReceipt]
     let acknowledgedReceiptCount: Int
 
@@ -126,6 +128,8 @@ extension AgentRuntimeProcess {
       suppressedByStreamingTail: Bool = false,
       materializationStoppedByTail: Bool = false,
       materializationReceipts: [ChatFirstMaterializationReceipt] = [],
+      materializationRejections: [ChatFirstMaterializationRejection] = [],
+      materializationDeferrals: [ChatFirstMaterializationDeferral] = [],
       coldStartSequenceTerminalReceipts: [ChatFirstColdStartSequenceTerminalReceipt] = [],
       acknowledgedReceiptCount: Int = 0
     ) {
@@ -144,6 +148,8 @@ extension AgentRuntimeProcess {
       self.suppressedByStreamingTail = suppressedByStreamingTail
       self.materializationStoppedByTail = materializationStoppedByTail
       self.materializationReceipts = materializationReceipts
+      self.materializationRejections = materializationRejections
+      self.materializationDeferrals = materializationDeferrals
       self.coldStartSequenceTerminalReceipts = coldStartSequenceTerminalReceipts
       self.acknowledgedReceiptCount = acknowledgedReceiptCount
     }
@@ -162,6 +168,8 @@ extension AgentRuntimeProcess {
     let accepted: Bool
     let stoppedByTail: Bool
     let receipts: [ChatFirstMaterializationReceipt]
+    let rejections: [ChatFirstMaterializationRejection]
+    let deferrals: [ChatFirstMaterializationDeferral]
   }
 
   /// Append server-validated structured blocks to exactly the assistant turn
@@ -324,46 +332,7 @@ extension AgentRuntimeProcess {
     intentsJSON: String,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
   ) async throws -> ChatFirstIntentsMaterialization {
-    guard let intentsData = intentsJSON.data(using: .utf8),
-      let intents = try? JSONDecoder().decode([ChatFirstPromptIntent].self, from: intentsData),
-      surface.surfaceKind == "main_chat",
-      controlGeneration >= 0,
-      !intents.isEmpty,
-      intents.count <= 8,
-      intents.allSatisfy({ $0.accountGeneration == controlGeneration && $0.kernelBlocks != nil }),
-      !sessionID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-    else {
-      throw BridgeError.agentError("Invalid chat-first materialization")
-    }
-    let result = try await journalOperation(
-      type: "materialize_chat_first_intents",
-      operation: "materialize_chat_first_intents",
-      clientId: clientId,
-      surface: surface,
-      ownerID: ownerID,
-      payload: [
-        "sessionId": sessionID,
-        "controlGeneration": controlGeneration,
-        "intents": intents.compactMap { intent -> [String: Any]? in
-          guard let blocks = intent.kernelBlocks else { return nil }
-          return [
-            "intentId": intent.intentID,
-            "continuityKey": intent.continuityKey,
-            "source": intent.source.rawValue,
-            "blocks": blocks,
-          ] as [String: Any]
-        },
-      ],
-      authorizationSnapshot: authorizationSnapshot
-    )
-    for turn in result.turns {
-      recordLifecycleJournalMutation(turn)
-    }
-    return ChatFirstIntentsMaterialization(
-      accepted: result.accepted == true,
-      stoppedByTail: result.materializationStoppedByTail,
-      receipts: result.materializationReceipts
-    )
+    throw BridgeError.agentError("Automatic Chat entries are no longer supported")
   }
 
   func listChatFirstMaterializationReceipts(
@@ -446,6 +415,41 @@ extension AgentRuntimeProcess {
       else { return nil }
       return ChatFirstMaterializationReceipt(intentID: intentID, receiptID: receiptID)
     }
+  }
+
+  nonisolated static func chatFirstRejections(
+    from payload: Any?
+  ) -> [ChatFirstMaterializationRejection] {
+    guard let values = payload as? [[String: Any]] else { return [] }
+    return values.compactMap { value in
+      guard let intentID = value["intentId"] as? String,
+        !intentID.isEmpty,
+        let code = value["code"] as? String,
+        !code.isEmpty
+      else { return nil }
+      return ChatFirstMaterializationRejection(
+        intentID: intentID,
+        code: code,
+        message: value["message"] as? String
+      )
+    }
+  }
+
+  nonisolated static func chatFirstDeferrals(from payload: Any?) -> [ChatFirstMaterializationDeferral] {
+    guard let values = payload as? [[String: Any]] else { return [] }
+    return values.compactMap { value in
+      guard let intentID = value["intentId"] as? String, !intentID.isEmpty,
+        let code = value["code"] as? String, ["tail_question", "streaming_tail"].contains(code)
+      else { return nil }
+      return ChatFirstMaterializationDeferral(intentID: intentID, code: code)
+    }
+  }
+
+  nonisolated static func chatFirstJournalFailureLog(
+    failure: AgentRuntimeFailure?, payload: [String: Any], raw: String
+  ) -> String {
+    let code = failure?.code ?? payload["errorCode"] as? String ?? "journal_operation_failed"
+    return "AgentRuntimeProcess: journal operation failed code=\(code) message=\(raw)"
   }
 
   nonisolated static func chatFirstColdStartSequenceTerminalReceipts(

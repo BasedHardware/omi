@@ -198,6 +198,18 @@ struct RewindSearchResultCard: View {
     // The matched text, whole, for the two readers a 231 pt card cannot serve: somebody hovering to
     // check *why* this frame came back, and somebody who cannot see the picture at all.
     .help(snippet ?? title)
+    // Clicking the card opens the group on the timeline, which is what someone searching usually
+    // wants — the moment in its context, scrubable. Quick Look is the other thing they might want,
+    // reading the frame itself, and a right-click is where a second action on a tile belongs.
+    .contextMenu {
+      Button("Quick Look") {
+        let frames = group.screenshots.map { QuickLookFrame(screenshot: $0) }
+        guard let first = frames.first else { return }
+        ScreenFrameQuickLook.shared.present(frames, startingAt: first.id)
+      }
+      Divider()
+      Button("Open on Timeline", action: onOpen)
+    }
     .accessibilityLabel(Text(readAloud))
     .accessibilityHint(Text(Self.activationHint))
     .accessibilityAddTraits(isSelected ? [.isSelected] : [])

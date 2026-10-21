@@ -10,8 +10,10 @@ import pytest
 from starlette.requests import Request
 
 from llm_gateway.gateway.auth import ServiceCaller
+from llm_gateway.gateway.accounting import UsageStatus
 from llm_gateway.gateway.config_loader import load_gateway_config
 from llm_gateway.gateway.credentials import build_omi_managed_credential_context
+from llm_gateway.gateway import executor as gateway_executor
 from llm_gateway.gateway.executor import ProviderRegistry, provider_request_for
 from llm_gateway.gateway.providers import FakeChatCompletionProvider, ProviderFailure
 from llm_gateway.gateway.resolver import resolve_chat_completion_route
@@ -21,6 +23,7 @@ from llm_gateway.routers import dependencies, openai_compatible
 from models.structured_extraction import ActionItemsExtraction, ConversationStructureExtraction
 from utils.llm.gateway_client import _chat_structured_payload
 from utils.llm.gateway_error_contract import is_byok_rate_limit_gateway_error
+from utils.llm.model_config import LUNA_MODEL
 
 LANE_ID = 'omi:auto:chat-structured'
 
@@ -84,10 +87,10 @@ def test_chat_completions_success_uses_lane_model_and_hides_route_metadata(monke
     assert 'selected_route_artifact_id' not in body
     # The checked-in active route is in shadow rollout (percent 0), so live
     # traffic is served by the last-known-good route. The LKG primary uses the
-    # gateway-only chat_extraction policy (gpt-5.6-luna), aligned with the
+    # gateway-only chat_extraction policy (gpt-x-luna), aligned with the
     # direct product route while shadow-only.
-    assert provider.calls[0].model == 'gpt-5.6-luna'
-    assert provider.calls[0].request['model'] == 'gpt-5.6-luna'
+    assert provider.calls[0].model == LUNA_MODEL
+    assert provider.calls[0].request['model'] == LUNA_MODEL
     # Live OpenAI (gpt-5.6-luna, 2026-08): non-default temperature is rejected with
     # invalid_request_error param=temperature ("Only the default (1) value is supported").
     # Gateway strips non-default temperatures so callers cannot trip that 400.
@@ -133,11 +136,14 @@ def test_provider_rejection_preserves_exact_terminal_class_and_bounded_member(
 
     assert response.status_code == 400
     assert response.json()['error']['code'] == expected_code
+    # The bounded classifier must survive the wire so backend composition
+    # boundaries can tell request-shape 400s from unreadable attachments.
+    assert response.json()['error']['provider_rejection'] == provider_rejection.value
     assert len(recorded) == 1
     error = recorded[0]['error']
     assert error.failure_class == failure_class
     assert error.provider == 'openai'
-    assert error.model == 'gpt-5.6-luna'
+    assert error.model == LUNA_MODEL
     assert error.provider_rejection == provider_rejection
 
 
@@ -212,7 +218,7 @@ def test_chat_completions_persists_cache_aware_attempt_with_authenticated_attrib
                 'id': 'chatcmpl-accounted',
                 'object': 'chat.completion',
                 'created': 1,
-                'model': 'gpt-5.6-luna',
+                'model': LUNA_MODEL,
                 'choices': [{'index': 0, 'message': {'role': 'assistant', 'content': '{}'}, 'finish_reason': 'stop'}],
                 'usage': {
                     'prompt_tokens': 100,
@@ -262,7 +268,7 @@ def test_gateway_provider_body_forwards_validated_gpt56_cache_fields_unchanged()
         ],
     )
     resolved = resolve_chat_completion_route(load_gateway_config(prod_mode=True), request)
-    forwarded = provider_request_for(resolved, ProviderRef(provider='openai', model='gpt-5.6-luna'))
+    forwarded = provider_request_for(resolved, ProviderRef(provider='openai', model=LUNA_MODEL))
 
     assert forwarded['prompt_cache_key'] == 'omi-extract-actions-v1-b0'
     assert forwarded['prompt_cache_options'] == {'mode': 'explicit', 'ttl': '30m'}
@@ -710,7 +716,7 @@ async def test_streaming_midstream_provider_failure_records_error_exactly_once(m
         first_chunk=b'data: {"choices":[]}\n\n',
         stream=failing_stream(),
         provider='openai',
-        model='gpt-5.6-luna',
+        model=LUNA_MODEL,
         fallback_used=False,
         fallback_reason=None,
     )
@@ -748,7 +754,7 @@ async def test_streaming_consumer_abandonment_records_cancelled_exactly_once(mon
             first_chunk=b'data: {"choices":[]}\n\n',
             stream=remaining_stream(),
             provider='openai',
-            model='gpt-5.6-luna',
+            model=LUNA_MODEL,
             fallback_used=False,
             fallback_reason=None,
         ),
@@ -852,10 +858,57 @@ async def test_streaming_successful_fallback_is_classified_as_actual_fallback(mo
     assert recorded[0]['route_serving_class'] == openai_compatible.RouteServingClass.ACTUAL_FALLBACK
 
 
+@pytest.mark.asyncio
+async def test_normal_stream_returns_provider_chunks_byte_for_byte():
+    raw_chunks = [b'data: hello\r', b'\n\r\ndata: [DONE]\r\n\r\n']
+
+    async def remaining_stream():
+        yield raw_chunks[1]
+
+    config = _streaming_enabled_gateway_config()
+    resolved = resolve_chat_completion_route(config, valid_request(stream=True))
+    route = openai_compatible.selected_serving_route(resolved)
+    output = b''.join(
+        [
+            chunk
+            async for chunk in openai_compatible._stream_with_terminal_metrics(
+                openai_compatible._PreparedStream(
+                    first_chunk=raw_chunks[0],
+                    stream=remaining_stream(),
+                    provider='openai',
+                    model=LUNA_MODEL,
+                    fallback_used=False,
+                    fallback_reason=None,
+                ),
+                resolved_route=resolved,
+                credentials=build_omi_managed_credential_context(ServiceCaller(name='backend')),
+                route=route,
+                started_at=openai_compatible.time_request(),
+                request_id='non-jit-passthrough',
+            )
+        ]
+    )
+
+    assert output == b''.join(raw_chunks)
+
+
 def _streaming_enabled_gateway_config():
     config = load_gateway_config(prod_mode=True)
     lane = config.lanes[LANE_ID]
     capabilities = lane.capabilities.model_copy(update={'streaming': True})
+    lane = lane.model_copy(update={'capabilities': capabilities})
+    route_artifacts = dict(config.route_artifacts)
+    for route_id in (lane.active_route, lane.last_known_good):
+        route_artifacts[route_id] = route_artifacts[route_id].model_copy(update={'capabilities': capabilities})
+    lanes = dict(config.lanes)
+    lanes[LANE_ID] = lane
+    return config.model_copy(update={'lanes': lanes, 'route_artifacts': route_artifacts})
+
+
+def _tools_enabled_gateway_config():
+    config = load_gateway_config(prod_mode=True)
+    lane = config.lanes[LANE_ID]
+    capabilities = lane.capabilities.model_copy(update={'tools': True})
     lane = lane.model_copy(update={'capabilities': capabilities})
     route_artifacts = dict(config.route_artifacts)
     for route_id in (lane.active_route, lane.last_known_good):

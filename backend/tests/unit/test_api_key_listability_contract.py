@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 from unittest.mock import MagicMock
 
+from google.api_core.exceptions import NotFound
 from google.cloud import firestore
 import pytest
 
@@ -14,6 +15,18 @@ os.environ.setdefault(
 
 import database.dev_api_key as dev_api_key_db
 import database.mcp_api_key as mcp_api_key_db
+import database.api_key_cache as api_key_cache
+from tests.unit.fixtures.api_key_revocation_fakes import AtomicKeyBatch, RedisStore
+
+
+@pytest.fixture(autouse=True)
+def _local_revocation_store(monkeypatch):
+    store = RedisStore()
+    monkeypatch.setattr(redis_db, "r", store)
+    monkeypatch.setattr(api_key_cache, "_redis", lambda: redis_db.r)
+    return store
+
+
 import database.redis_db as redis_db
 from database.api_key_metadata import (
     ApiKeyAuthRepair,
@@ -53,7 +66,9 @@ class _DocumentReference:
     def collection(self, name: str) -> "_Collection":
         return self._collection._db.collection(f"{self._collection.name}/{self.id}/{name}")
 
-    def get(self) -> _DocumentSnapshot:
+    # ``**_read_options`` mirrors the real Firestore signature: reads on the MCP
+    # auth path pass retry/timeout to bound their deadline (database/mcp_auth_read.py).
+    def get(self, **_read_options: object) -> _DocumentSnapshot:
         record = self._collection._records.get(self.id)
         return _DocumentSnapshot(
             self,
@@ -69,7 +84,9 @@ class _DocumentReference:
         self._collection._records[self.id] = {"data": dict(data), "create_time": None}
 
     def update(self, data: dict[str, Any]) -> None:
-        record = self._collection._records.setdefault(self.id, {"data": {}, "create_time": None})
+        record = self._collection._records.get(self.id)
+        if record is None:
+            raise NotFound("update requires an existing document")
         target = record["data"]
         for path, value in data.items():
             parts = path.split(".")
@@ -98,7 +115,7 @@ class _Query:
     def limit(self, limit: int) -> "_Query":
         return _Query(self._collection, self._conditions, limit)
 
-    def stream(self) -> list[_DocumentSnapshot]:
+    def stream(self, **_read_options: object) -> list[_DocumentSnapshot]:
         docs = []
         for doc_id, record in self._collection._records.items():
             data = record["data"]
@@ -122,6 +139,9 @@ class _Collection:
 
 
 class _Firestore:
+    def batch(self):
+        return AtomicKeyBatch()
+
     def __init__(self):
         self._collections: dict[str, _Collection] = {}
 
@@ -207,13 +227,14 @@ class _Redis:
         return True
 
 
-class _RedisKeyValueStore:
+class _RedisKeyValueStore(RedisStore):
     def __init__(self):
         self.values: dict[str, object] = {}
 
-    def set(self, key: str, value: object, ex: Optional[int] = None) -> None:
+    def set(self, key: str, value: object, ex: Optional[int] = None) -> bool:
         del ex
         self.values[key] = value
+        return True
 
     def get(self, key: str) -> object:
         value = self.values.get(key)
@@ -232,7 +253,8 @@ class _FailingRedisKeyValueStore(_RedisKeyValueStore):
 
 class _ReadFailingRedisKeyValueStore(_RedisKeyValueStore):
     def get(self, key: str) -> object:
-        del key
+        if key.startswith("api_key:revoked:"):
+            return super().get(key)
         raise RuntimeError("redis read unavailable")
 
 
@@ -394,6 +416,45 @@ def test_developer_key_authentication_metadata_projection_and_revocation_share_d
 
     assert removed_grants == [("user-1", "canonical-dev-id")]
     assert dev_api_key_db.get_user_and_scopes_by_api_key(raw_token) is None
+
+
+def test_malformed_dev_api_keys_are_rejected_before_any_redis_or_firestore_io(monkeypatch):
+    """GH #13505: junk Bearer tokens on /v1/dev/* must cost nothing.
+
+    Every issued Developer API key is ``omi_dev_`` + 32 lowercase hex chars, so
+    anything else can never match a stored row. Scripted abuse presents
+    prefixed junk; rejecting it at the format gate keeps the Redis read and the
+    Firestore ``where(hashed_key)`` query off the hot path entirely.
+    """
+
+    def _forbidden_lookup() -> None:
+        raise AssertionError("malformed key must not reach the Firestore client")
+
+    monkeypatch.setattr(dev_api_key_db, "get_firestore_client", _forbidden_lookup)
+    # A plain MagicMock would silently absorb Redis reads, so the test could
+    # pass even if a regression routed malformed tokens through the cache. The
+    # Redis handle must be a MagicMock (attribute access works) whose read
+    # method fails loudly: the format gate has to short-circuit before any IO.
+    forbidden_redis = MagicMock()
+    forbidden_redis.read_cached_dev_api_key_data.side_effect = AssertionError(
+        "malformed key must not reach the Redis cache"
+    )
+    monkeypatch.setattr(dev_api_key_db, "redis_db", forbidden_redis)
+
+    malformed = [
+        "",  # no credential at all
+        "omi_dev_secret",  # right family, not hex, wrong length
+        "omi_dev_0123456789ABCDEF0123456789ABCDEF",  # uppercase is never issued
+        "omi_dev_" + "0" * 31,  # one char short
+        "omi_dev_" + "0" * 33,  # one char long
+        "omi_mcp_" + "0" * 32,  # wrong family
+        "firebase-id-token",  # not an API key
+    ]
+    for token in malformed:
+        assert dev_api_key_db.get_api_key_auth_result(token).context is None, token
+
+    well_formed = "omi_dev_0123456789abcdef0123456789abcdef"
+    assert dev_api_key_db._DEV_API_KEY_PATTERN.fullmatch(well_formed)
 
 
 def test_mcp_present_poisoned_app_identity_fails_auth_but_remains_safely_listable(monkeypatch):
@@ -651,7 +712,7 @@ def test_developer_auth_reports_cache_read_error_after_firestore_recovery(monkey
     assert auth_result.repairs == {ApiKeyAuthRepair.CACHE_READ}
 
 
-def test_cache_delete_failure_preserves_mcp_document_grant_and_current_auth(monkeypatch):
+def test_cache_delete_failure_preserves_mcp_document_grant_but_fences_auth(monkeypatch):
     raw_token = "omi_mcp_dddddddddddddddddddddddddddddddd"
     hashed_key = mcp_api_key_db.hash_api_key(raw_token.removeprefix("omi_mcp_"))
     db = _Firestore()
@@ -690,10 +751,10 @@ def test_cache_delete_failure_preserves_mcp_document_grant_and_current_auth(monk
     ]
     assert db.collection("mcp_api_keys").document("mcp-revoke-failure").get().exists is True
     assert set(_mcp_grant_keys(db, "user-1")) == {"mcp-revoke-failure"}
-    assert mcp_api_key_db.get_user_and_scopes_by_api_key(raw_token)["key_id"] == "mcp-revoke-failure"
+    assert mcp_api_key_db.get_user_and_scopes_by_api_key(raw_token) is None
 
 
-def test_cache_delete_failure_preserves_developer_document_and_current_auth(monkeypatch):
+def test_cache_delete_failure_preserves_developer_document_but_fences_auth(monkeypatch):
     raw_token = "omi_dev_eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
     hashed_key = dev_api_key_db.hash_dev_api_key(raw_token.removeprefix("omi_dev_"))
     db = _Firestore()
@@ -727,7 +788,7 @@ def test_cache_delete_failure_preserves_developer_document_and_current_auth(monk
     assert store.delete_calls == [(f"dev_api_key:{hashed_key}",)]
     assert db.collection("dev_api_keys").document("dev-revoke-failure").get().exists is True
     remove_grant.assert_not_called()
-    assert dev_api_key_db.get_user_and_scopes_by_api_key(raw_token)["key_id"] == "dev-revoke-failure"
+    assert dev_api_key_db.get_user_and_scopes_by_api_key(raw_token) is None
 
 
 @pytest.mark.parametrize("corrupt_hash", [None, "", " ", 7, "not-a-hash"])

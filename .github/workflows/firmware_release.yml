@@ -60,6 +60,12 @@ permissions:
   # separate, contents:write-scoped Omi Bot app token in the publish step.
   contents: read
 
+env:
+  # Abort a git HTTP transfer that stays under 1 KB/s for 60 s, so actions/checkout
+  # retries instead of hanging 7-10 min until the TCP reset (#22890).
+  GIT_HTTP_LOW_SPEED_LIMIT: "1000"
+  GIT_HTTP_LOW_SPEED_TIME: "60"
+
 jobs:
   build-cv1:
     name: Omi CV1 (nRF5340)
@@ -68,7 +74,7 @@ jobs:
       group: firmware-release-cv1
       cancel-in-progress: false
     env:
-      # Zephyr CI image blessed by omi/firmware/omi/BUILD.md; bundles the
+      # Zephyr CI image blessed by omi/firmware/BUILD_AND_OTA_FLASH.md; bundles the
       # toolchain for the NCS 2.9.0 sysbuild + MCUboot signing build.
       # Pinned by digest for reproducible, supply-chain-safe builds (tag kept
       # for readability). Digest = the v0.26.13 multi-arch index; re-resolve with
@@ -161,7 +167,7 @@ jobs:
             To update your device in the Omi app:
             1. Open the Omi app.
             2. Go to **Settings** > **Device Settings**.
-            3. Select **Update Latest Version**.
+            3. Select **Product Update**.
         run: |
           OUT="$RUNNER_TEMP/cv1-body.md"
           OUT="$OUT" bash omi/firmware/scripts/ci/make-release-body.sh

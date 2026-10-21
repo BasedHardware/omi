@@ -36,6 +36,6 @@ Run this loop only in response to a failed Codemagic build. Do not create a repl
 
 If a signed candidate did not reach Beta, rerun the same Codemagic tag build. Candidate publication and Beta promotion are idempotent; the backend rechecks immutable signed-smoke evidence, admission state, and the pointer transaction.
 
-To make that exact current Beta candidate Stable, run **Promote Desktop Beta to Stable** with `release_tag` and `confirm=promote-stable`. It reads the current pointer, uses its generation for the atomic transition, and verifies the published pointer, hashes, and appcast. It only changes the desktop Stable channel; backend production deployment remains a separate approval plane.
+To make that exact current Beta candidate Stable, run **Promote Desktop Beta to Stable** with `release_tag` and `confirm=promote-stable`. It reads the current pointer, uses its generation for the atomic transition, and verifies the published pointer, hashes, and appcast. It only changes the desktop Stable channel; backend production deployment remains a separate approval plane. The promotion records the live backend SHAs it observed on the pointer (`serving_backends`) and prints a drift table against `origin/main` in the run summary. That table is provenance, not a new promotion block.
 
 Do not edit release bodies, pointers, static routes, or legacy bridges manually.

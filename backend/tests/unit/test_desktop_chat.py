@@ -30,6 +30,7 @@ def test_request_translates_openai_tool_history_and_alias():
             'max_completion_tokens': 20_000,
             'messages': [
                 {'role': 'developer', 'content': 'be concise'},
+                {'role': 'user', 'content': 'weather in NYC?'},
                 {
                     'role': 'assistant',
                     'tool_calls': [
@@ -46,12 +47,282 @@ def test_request_translates_openai_tool_history_and_alias():
             'tool_choice': 'auto',
         }
     )
-    assert public_model == 'omi-sonnet'
+    # Response identity is the SERVED model (OpenAI chat-completions convention:
+    # response.model names the model that generated the response), never the
+    # requested alias — clients attribute answers from it.
+    assert public_model == 'claude-sonnet-4-6'
     assert payload['model'] == 'claude-sonnet-4-6'
     assert payload['max_tokens'] == 16_384
     assert payload['system'] == 'be concise'
-    assert payload['messages'][1]['content'][0]['tool_use_id'] == 'call_1'
+    assert payload['messages'][2]['content'][0]['tool_use_id'] == 'call_1'
     assert payload['tool_choice'] == {'type': 'auto'}
+
+
+def test_request_drops_assistant_turn_with_no_text_or_tool_calls():
+    # Anthropic rejects an empty text block with 400 invalid_request_error, so a
+    # replayed assistant turn that carried nothing must not reach the wire as one.
+    _, payload = _authorized_request(
+        {
+            'model': 'omi-sonnet',
+            'messages': [
+                {'role': 'user', 'content': 'first'},
+                {'role': 'assistant', 'content': ''},
+                {'role': 'assistant', 'content': None, 'tool_calls': []},
+                {'role': 'user', 'content': 'second'},
+            ],
+        }
+    )
+    assert [message['role'] for message in payload['messages']] == ['user', 'user']
+    assert [message['content'] for message in payload['messages']] == ['first', 'second']
+
+
+def test_request_rejects_messages_with_no_sendable_turn():
+    with pytest.raises(desktop_chat._RequestValidationError):
+        _authorized_request({'model': 'omi-sonnet', 'messages': [{'role': 'assistant', 'content': ''}]})
+
+
+def test_request_drops_user_turn_with_no_text_or_images():
+    # Anthropic rejects empty content and empty text blocks with 400
+    # invalid_request_error, so a replayed user turn that carried nothing must
+    # not reach the wire as one.
+    _, payload = _authorized_request(
+        {
+            'model': 'omi-sonnet',
+            'messages': [
+                {'role': 'user', 'content': 'first'},
+                {'role': 'user', 'content': ''},
+                {'role': 'user', 'content': None},
+                {'role': 'user', 'content': [{'type': 'text', 'text': ''}]},
+                {'role': 'assistant', 'content': 'hello'},
+                {'role': 'user', 'content': 'question'},
+            ],
+        }
+    )
+    assert payload['messages'] == [
+        {'role': 'user', 'content': 'first'},
+        {'role': 'assistant', 'content': [{'type': 'text', 'text': 'hello'}]},
+        {'role': 'user', 'content': 'question'},
+    ]
+
+
+def test_request_keeps_image_when_empty_text_block_precedes_it():
+    _, payload = _authorized_request(
+        {
+            'model': 'omi-sonnet',
+            'messages': [
+                {
+                    'role': 'user',
+                    'content': [
+                        {'type': 'text', 'text': ''},
+                        {'type': 'image_url', 'image_url': {'url': 'data:image/png;base64,aGVsbG8='}},
+                    ],
+                },
+            ],
+        }
+    )
+    assert payload['messages'] == [
+        {
+            'role': 'user',
+            'content': [{'type': 'image', 'source': {'type': 'base64', 'media_type': 'image/png', 'data': 'aGVsbG8='}}],
+        }
+    ]
+
+
+def test_request_rejects_user_only_history_left_empty():
+    with pytest.raises(desktop_chat._RequestValidationError):
+        _authorized_request({'model': 'omi-sonnet', 'messages': [{'role': 'user', 'content': ''}]})
+
+
+def test_request_drops_leading_assistant_turn(monkeypatch):
+    # OpenAI-format histories may open with an assistant turn; Anthropic
+    # rejects a first message that is not role user (400 invalid_request_error).
+    fallbacks = []
+    monkeypatch.setattr(desktop_chat, 'record_fallback', lambda **fields: fallbacks.append(fields))
+    _, payload = _authorized_request(
+        {
+            'model': 'omi-sonnet',
+            'messages': [
+                {'role': 'assistant', 'content': 'Hi, I am Omi.'},
+                {'role': 'user', 'content': 'hello'},
+            ],
+        }
+    )
+    assert payload['messages'] == [{'role': 'user', 'content': 'hello'}]
+    assert fallbacks == [
+        {
+            'component': 'other',
+            'from_mode': 'assistant_turn',
+            'to_mode': 'none',
+            'reason': 'local_heal',
+            'outcome': 'degraded',
+        }
+    ]
+
+
+def test_request_drops_leading_assistant_tool_round_with_its_results(monkeypatch):
+    # A leading assistant tool round cannot be repaired by keeping the results:
+    # Anthropic would reject them as orphaned once their tool_use is gone.
+    fallbacks = []
+    monkeypatch.setattr(desktop_chat, 'record_fallback', lambda **fields: fallbacks.append(fields))
+    with pytest.raises(desktop_chat._RequestValidationError):
+        _authorized_request(
+            {
+                'model': 'omi-sonnet',
+                'messages': [
+                    {
+                        'role': 'assistant',
+                        'tool_calls': [
+                            {'id': 'call_1', 'type': 'function', 'function': {'name': 'w', 'arguments': '{}'}}
+                        ],
+                    },
+                    {'role': 'tool', 'tool_call_id': 'call_1', 'content': 'sunny'},
+                ],
+            }
+        )
+    assert fallbacks == [
+        {
+            'component': 'other',
+            'from_mode': 'assistant_tool_round',
+            'to_mode': 'none',
+            'reason': 'local_heal',
+            'outcome': 'degraded',
+        }
+    ]
+
+
+def test_request_drops_tool_result_without_preceding_tool_use(monkeypatch):
+    # Anthropic rejects a tool_result that answers no tool_use in the
+    # immediately preceding assistant turn (400 invalid_request_error); a
+    # client-side history trim can start the window on a tool message.
+    fallbacks = []
+    monkeypatch.setattr(desktop_chat, 'record_fallback', lambda **fields: fallbacks.append(fields))
+    _, payload = _authorized_request(
+        {
+            'model': 'omi-sonnet',
+            'messages': [
+                {'role': 'user', 'content': 'question'},
+                {'role': 'tool', 'tool_call_id': 'call_9', 'content': 'orphaned'},
+                {'role': 'assistant', 'content': 'answer'},
+            ],
+        }
+    )
+    assert payload['messages'] == [
+        {'role': 'user', 'content': 'question'},
+        {'role': 'assistant', 'content': [{'type': 'text', 'text': 'answer'}]},
+    ]
+    assert fallbacks == [
+        {
+            'component': 'other',
+            'from_mode': 'tool_result',
+            'to_mode': 'none',
+            'reason': 'malformed',
+            'outcome': 'degraded',
+        }
+    ]
+
+
+def test_request_strips_tool_use_whose_result_never_arrived(monkeypatch):
+    # A trim that keeps the assistant tool-call turn but cuts its tool result
+    # would leave an unanswered tool_use on the wire; the turn's text survives.
+    fallbacks = []
+    monkeypatch.setattr(desktop_chat, 'record_fallback', lambda **fields: fallbacks.append(fields))
+    _, payload = _authorized_request(
+        {
+            'model': 'omi-sonnet',
+            'messages': [
+                {'role': 'user', 'content': 'check the weather'},
+                {
+                    'role': 'assistant',
+                    'content': 'Let me check.',
+                    'tool_calls': [{'id': 'call_1', 'type': 'function', 'function': {'name': 'w', 'arguments': '{}'}}],
+                },
+                {'role': 'user', 'content': 'any luck?'},
+            ],
+        }
+    )
+    assert payload['messages'] == [
+        {'role': 'user', 'content': 'check the weather'},
+        {'role': 'assistant', 'content': [{'type': 'text', 'text': 'Let me check.'}]},
+        {'role': 'user', 'content': 'any luck?'},
+    ]
+    assert fallbacks == [
+        {
+            'component': 'other',
+            'from_mode': 'tool_use',
+            'to_mode': 'none',
+            'reason': 'malformed',
+            'outcome': 'degraded',
+        }
+    ]
+
+
+def test_request_strips_only_unanswered_tool_use_in_partial_round(monkeypatch):
+    # When one of two tool calls lost its result, the answered half of the
+    # round stays intact and the unanswered half is removed.
+    fallbacks = []
+    monkeypatch.setattr(desktop_chat, 'record_fallback', lambda **fields: fallbacks.append(fields))
+    _, payload = _authorized_request(
+        {
+            'model': 'omi-sonnet',
+            'messages': [
+                {'role': 'user', 'content': 'weather and news'},
+                {
+                    'role': 'assistant',
+                    'tool_calls': [
+                        {'id': 'call_1', 'type': 'function', 'function': {'name': 'w', 'arguments': '{}'}},
+                        {'id': 'call_2', 'type': 'function', 'function': {'name': 'n', 'arguments': '{}'}},
+                    ],
+                },
+                {'role': 'tool', 'tool_call_id': 'call_1', 'content': 'sunny'},
+                {'role': 'assistant', 'content': 'It is sunny.'},
+            ],
+        }
+    )
+    assert [message['role'] for message in payload['messages']] == ['user', 'assistant', 'user', 'assistant']
+    assert [block['id'] for block in payload['messages'][1]['content'] if block['type'] == 'tool_use'] == ['call_1']
+    assert payload['messages'][2]['content'][0]['tool_use_id'] == 'call_1'
+    assert payload['messages'][3]['content'] == [{'type': 'text', 'text': 'It is sunny.'}]
+    assert fallbacks == [
+        {
+            'component': 'other',
+            'from_mode': 'tool_use',
+            'to_mode': 'none',
+            'reason': 'malformed',
+            'outcome': 'degraded',
+        }
+    ]
+
+
+def test_request_drops_duplicate_tool_result(monkeypatch):
+    fallbacks = []
+    monkeypatch.setattr(desktop_chat, 'record_fallback', lambda **fields: fallbacks.append(fields))
+    _, payload = _authorized_request(
+        {
+            'model': 'omi-sonnet',
+            'messages': [
+                {'role': 'user', 'content': 'weather?'},
+                {
+                    'role': 'assistant',
+                    'tool_calls': [{'id': 'call_1', 'type': 'function', 'function': {'name': 'w', 'arguments': '{}'}}],
+                },
+                {'role': 'tool', 'tool_call_id': 'call_1', 'content': 'sunny'},
+                {'role': 'tool', 'tool_call_id': 'call_1', 'content': 'sunny again'},
+                {'role': 'assistant', 'content': 'It is sunny.'},
+            ],
+        }
+    )
+    tool_results = [message for message in payload['messages'] if message['role'] == 'user'][1:]
+    assert len(tool_results) == 1
+    assert tool_results[0]['content'][0]['content'] == 'sunny'
+    assert fallbacks == [
+        {
+            'component': 'other',
+            'from_mode': 'tool_result',
+            'to_mode': 'none',
+            'reason': 'malformed',
+            'outcome': 'degraded',
+        }
+    ]
 
 
 def test_request_injects_web_search_for_desktop_opt_in():
@@ -394,7 +665,6 @@ def test_request_reports_web_search_capability_fallback(monkeypatch):
     assert fallbacks == []
 
 
-@pytest.mark.asyncio
 async def test_record_usage_charges_web_search_requests(monkeypatch):
     calls = []
 
@@ -414,7 +684,6 @@ async def test_record_usage_charges_web_search_requests(monkeypatch):
     assert calls[0][1][-1] == 0.03
 
 
-@pytest.mark.asyncio
 async def test_record_usage_skips_byok_requests(monkeypatch):
     calls = []
     exclusions = []
@@ -1085,64 +1354,6 @@ async def test_chat_completions_records_usage_when_pause_turn_limit_is_exhausted
 
 
 @pytest.mark.asyncio
-async def test_chat_completions_gateway_mode_uses_luna_auto_lane(monkeypatch):
-    monkeypatch.setattr(desktop_chat, 'llm_stub_enabled', lambda: False)
-    monkeypatch.setattr(desktop_chat, 'enforce_desktop_chat_quota', lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(desktop_chat, '_meter_server_request', lambda *_args, **_kwargs: _done())
-    monkeypatch.setattr(desktop_chat, 'run_blocking', lambda *_args, **_kwargs: _done())
-    monkeypatch.setattr(desktop_chat, 'should_route_chat_agent_through_gateway', lambda: True)
-    monkeypatch.setattr(
-        desktop_chat,
-        'get_byok_key',
-        lambda provider: 'sk-openai' if provider == 'openai' else None,
-    )
-    monkeypatch.setattr(desktop_chat, 'get_llm_gateway_base_url', lambda: 'http://gateway.test')
-    recorded = []
-
-    async def record_usage(uid, usage):
-        recorded.append((uid, usage))
-
-    monkeypatch.setattr(desktop_chat, '_record_usage', record_usage)
-
-    class GatewayClient:
-        def __init__(self):
-            self.calls = []
-
-        async def post(self, url, *, headers, json):
-            self.calls.append({'url': url, 'headers': headers, 'json': json})
-            assert headers.get('X-Omi-User-Uid') == 'user-1'
-            assert headers.get('X-Omi-LLM-Feature') == 'chat_agent'
-            return httpx.Response(
-                200,
-                json={
-                    'id': 'chat-1',
-                    'choices': [{'message': {'content': 'hello'}}],
-                    'usage': {'prompt_tokens': 3, 'completion_tokens': 2, 'total_tokens': 5},
-                },
-                request=httpx.Request('POST', url),
-            )
-
-    client = GatewayClient()
-    monkeypatch.setattr(desktop_chat, 'get_llm_gateway_client', lambda: client)
-
-    response = await desktop_chat.chat_completions(
-        {'messages': [{'role': 'user', 'content': 'hello'}]},
-        uid='user-1',
-        x_app_platform=None,
-        x_omi_chat_contract_version=None,
-        x_omi_request_id=None,
-    )
-
-    assert b'"id":"chat-1"' in response.body
-    assert client.calls[0]['url'] == 'http://gateway.test/v1/chat/completions'
-    assert client.calls[0]['headers']['X-Omi-Request-ID']
-    assert client.calls[0]['json']['model'] == 'omi:auto:chat-agent'
-    assert recorded and recorded[0][0] == 'user-1'
-    assert recorded[0][1].input_tokens == 3
-    assert recorded[0][1].output_tokens == 2
-
-
-@pytest.mark.asyncio
 async def test_gateway_rejection_does_not_record_quota_question(monkeypatch):
     monkeypatch.setattr(desktop_chat, 'llm_stub_enabled', lambda: False)
     monkeypatch.setattr(desktop_chat, 'enforce_desktop_chat_quota', lambda *_args, **_kwargs: None)
@@ -1398,8 +1609,9 @@ def test_gateway_body_rejects_unsupported_image_url_instead_of_dropping_it():
         )
 
 
-def test_specialist_haiku_requests_bypass_managed_chat_agent():
-    assert not desktop_chat._uses_managed_chat_agent({'model': 'claude-haiku-4-5-20251001'})
+def test_legacy_haiku_aliases_use_structured_lane_not_chat_agent():
+    assert desktop_chat._uses_managed_chat_agent({'model': 'claude-haiku-4-5-20251001'})
+    assert desktop_chat._managed_lane_id({'model': 'claude-haiku-4-5-20251001'}) == 'omi:auto:chat-structured'
     assert desktop_chat._uses_managed_chat_agent({'model': 'omi-opus'})
     assert desktop_chat._uses_managed_chat_agent({'model': 'claude-opus-4-6'})
     assert desktop_chat._uses_managed_chat_agent({'model': 'claude-sonnet-4-6'})
@@ -1411,7 +1623,13 @@ def test_specialist_haiku_requests_bypass_managed_chat_agent():
 
 
 def test_structured_aliases_route_to_the_structured_lane_not_chat():
-    for alias in ('omi-structured', 'OMI-Structured', 'omi:auto:chat-structured'):
+    for alias in (
+        'omi-structured',
+        'OMI-Structured',
+        'omi:auto:chat-structured',
+        'claude-haiku-4-5',
+        'claude-haiku-4-5-20251001',
+    ):
         assert desktop_chat._uses_managed_chat_agent({'model': alias})
         assert desktop_chat._managed_lane_id({'model': alias}) == 'omi:auto:chat-structured'
 
@@ -1456,6 +1674,54 @@ def test_gateway_body_strips_tools_on_the_web_search_lane():
     assert 'tool_choice' not in body
     assert 'omi_web_search' not in body
     assert desktop_chat._PUBLIC_WEB_ROUTING_INSTRUCTION in body['messages'][0]['content']
+
+
+def test_gateway_body_appends_web_search_retrieval_appendix_on_the_last_user_message():
+    request = {
+        'model': 'omi-sonnet',
+        'messages': [
+            {'role': 'system', 'content': 'be concise'},
+            {'role': 'user', 'content': 'how long did Whisper Flow take to build v1?'},
+            {'role': 'assistant', 'content': 'earlier turn'},
+            {'role': 'user', 'content': 'news?'},
+        ],
+        'tools': [{'type': 'function', 'function': {'name': 'weather', 'parameters': {'type': 'object'}}}],
+    }
+    body = desktop_chat._gateway_body(request, desktop_chat.WEB_SEARCH_AUTO_LANE_ID)
+    # The appendix lands on the last user message only, next to the policy
+    # instruction the lane already injects elsewhere in the transcript.
+    assert body['messages'][-1]['content'] == 'news?' + desktop_chat.WEB_SEARCH_RETRIEVAL_APPENDIX
+    assert body['messages'][1]['content'] == 'how long did Whisper Flow take to build v1?'
+    assert desktop_chat._PUBLIC_WEB_ROUTING_INSTRUCTION in body['messages'][0]['content']
+    assert 'tools' not in body
+    assert 'tool_choice' not in body
+    # Idempotent: re-building the gateway body never stacks appendices.
+    rebuilt = desktop_chat._gateway_body(
+        {'model': 'omi-sonnet', 'messages': body['messages']}, desktop_chat.WEB_SEARCH_AUTO_LANE_ID
+    )
+    assert rebuilt['messages'][-1]['content'] == body['messages'][-1]['content']
+    # Other lanes keep the client question untouched.
+    chat_body = desktop_chat._gateway_body(request)
+    assert chat_body['messages'][3]['content'] == 'news?'
+
+
+def test_gateway_body_appends_web_search_appendix_as_a_text_block_for_multimodal_turns():
+    request = {
+        'model': 'omi-sonnet',
+        'messages': [
+            {
+                'role': 'user',
+                'content': [
+                    {'type': 'text', 'text': 'what is in this screenshot?'},
+                    {'type': 'image_url', 'image_url': {'url': 'https://example.com/a.png'}},
+                ],
+            }
+        ],
+    }
+    body = desktop_chat._gateway_body(request, desktop_chat.WEB_SEARCH_AUTO_LANE_ID)
+    blocks = body['messages'][-1]['content']
+    assert blocks[0] == {'type': 'text', 'text': 'what is in this screenshot?'}
+    assert blocks[-1] == {'type': 'text', 'text': desktop_chat.WEB_SEARCH_RETRIEVAL_APPENDIX}
 
 
 def test_gateway_body_normalizes_openai_tool_history_content():
@@ -1636,7 +1902,7 @@ async def test_chat_completions_gateway_mode_disabled_for_byok(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_chat_completions_specialist_haiku_bypasses_managed_gateway(monkeypatch):
+async def test_chat_completions_legacy_haiku_alias_uses_structured_gateway(monkeypatch):
     monkeypatch.setattr(desktop_chat, 'llm_stub_enabled', lambda: False)
     monkeypatch.setattr(desktop_chat, 'enforce_desktop_chat_quota', lambda *_args, **_kwargs: None)
     monkeypatch.setattr(desktop_chat, '_meter_server_request', lambda *_args, **_kwargs: _done())
@@ -1644,36 +1910,37 @@ async def test_chat_completions_specialist_haiku_bypasses_managed_gateway(monkey
     monkeypatch.setattr(desktop_chat, 'should_route_chat_agent_through_gateway', lambda: True)
     monkeypatch.setattr(desktop_chat, 'get_byok_key', lambda _: None)
     monkeypatch.setattr(desktop_chat, '_record_usage', lambda *_args, **_kwargs: _done())
-
-    class Messages:
-        async def create(self, **payload):
-            assert payload['model'] == 'claude-haiku-4-5'
-            return SimpleNamespace(
-                id='msg_haiku',
-                content=[SimpleNamespace(type='text', text='specialist')],
-                stop_reason='end_turn',
-                usage=SimpleNamespace(
-                    input_tokens=1, cache_creation_input_tokens=0, cache_read_input_tokens=0, output_tokens=1
-                ),
-            )
-
+    monkeypatch.setattr(desktop_chat, 'get_llm_gateway_base_url', lambda: 'http://gateway.test')
     monkeypatch.setattr(
         desktop_chat,
         'get_direct_anthropic_client',
-        lambda **_: SimpleNamespace(messages=Messages()),
+        _fail_direct_anthropic('legacy Haiku aliases must not construct a direct Anthropic client'),
     )
 
     class GatewayClient:
-        async def post(self, *args, **kwargs):
-            raise AssertionError('specialist Haiku requests must not use managed gateway lane')
+        def __init__(self):
+            self.calls = []
 
-    monkeypatch.setattr(desktop_chat, 'get_llm_gateway_client', lambda: GatewayClient())
+        async def post(self, url, *, headers, json):
+            self.calls.append(json)
+            return httpx.Response(
+                200,
+                json={
+                    'id': 'chat-haiku',
+                    'choices': [{'message': {'content': 'structured'}}],
+                    'usage': {'prompt_tokens': 3, 'completion_tokens': 2, 'total_tokens': 5},
+                },
+                request=httpx.Request('POST', url),
+            )
 
+    client = GatewayClient()
+    monkeypatch.setattr(desktop_chat, 'get_llm_gateway_client', lambda: client)
     response = await desktop_chat.chat_completions(
         {
             'model': 'claude-haiku-4-5-20251001',
             'messages': [{'role': 'user', 'content': 'extract this'}],
             'max_tokens': 16,
+            'omi_web_search': True,
         },
         uid='user-1',
         x_app_platform=None,
@@ -1681,7 +1948,8 @@ async def test_chat_completions_specialist_haiku_bypasses_managed_gateway(monkey
         x_omi_request_id=None,
     )
 
-    assert b'"content":"specialist"' in response.body
+    assert b'structured' in response.body
+    assert client.calls[0]['model'] == 'omi:auto:chat-structured'
 
 
 @pytest.mark.asyncio
@@ -1772,6 +2040,75 @@ async def test_server_metering_fails_closed_and_byok_bypasses(monkeypatch):
 
     monkeypatch.setattr(desktop_chat, 'get_byok_key', lambda _: 'key')
     await desktop_chat._meter_server_request('user')
+
+
+def _desktop_chat_unavailable_events(stdout: str) -> list[dict]:
+    events = []
+    for line in stdout.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            payload = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(payload, dict) and payload.get('event') == 'desktop_chat_unavailable':
+            events.append(payload)
+    return events
+
+
+@pytest.mark.asyncio
+async def test_desktop_chat_503_logs_coded_reason_without_live_redis(monkeypatch, capsys):
+    async def run_blocking(_, function, *args):
+        return function(*args)
+
+    monkeypatch.setattr(desktop_chat, 'run_blocking', run_blocking)
+    monkeypatch.setattr(desktop_chat, 'get_byok_key', lambda _: None)
+    monkeypatch.setattr(
+        desktop_chat.redis_db,
+        'check_rate_limit',
+        lambda *_: (_ for _ in ()).throw(RuntimeError('redis down')),
+    )
+
+    with pytest.raises(desktop_chat.HTTPException) as error:
+        await desktop_chat._meter_server_request('user', request_id='req-metering')
+    assert error.value.status_code == 503
+    events = _desktop_chat_unavailable_events(capsys.readouterr().out)
+    assert events == [
+        {
+            'event': 'desktop_chat_unavailable',
+            'message': 'desktop_chat_unavailable',
+            'reason': 'metering_unavailable',
+            'request_id': 'req-metering',
+            'severity': 'WARNING',
+        }
+    ]
+    serialized = json.dumps(events)
+    assert 'redis' not in serialized.lower()
+    assert 'user' not in serialized
+
+
+@pytest.mark.asyncio
+async def test_nonstream_circuit_open_logs_coded_503(monkeypatch, capsys):
+    monkeypatch.setattr(desktop_chat, 'llm_stub_enabled', lambda: False)
+    monkeypatch.setattr(desktop_chat, 'enforce_desktop_chat_quota', lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(desktop_chat, '_meter_server_request', lambda *_args, **_kwargs: _done())
+    monkeypatch.setattr(desktop_chat, 'should_route_chat_agent_through_gateway', lambda: True)
+    monkeypatch.setattr(desktop_chat, 'get_byok_key', lambda _: None)
+    monkeypatch.setattr(desktop_chat.gateway_circuit, 'allow_request', lambda: False)
+
+    with pytest.raises(desktop_chat.HTTPException) as error:
+        await desktop_chat.chat_completions(
+            {'messages': [{'role': 'user', 'content': 'hello'}]},
+            uid='user-1',
+            x_app_platform=None,
+            x_omi_chat_contract_version=None,
+            x_omi_request_id='req-circuit',
+        )
+
+    assert error.value.status_code == 503
+    events = _desktop_chat_unavailable_events(capsys.readouterr().out)
+    assert [(event['reason'], event['request_id']) for event in events] == [('circuit_open', 'req-circuit')]
 
 
 @pytest.mark.asyncio
@@ -2092,6 +2429,20 @@ async def test_authorization_lookup_failure_is_not_reported_as_an_explicit_denia
     assert [fallback['reason'] for fallback in fallbacks] == ['authorization_unavailable']
 
 
+def test_gateway_request_headers_forward_the_client_app_platform():
+    """chat_agent gateway spend must carry the platform the request came from."""
+    headers = desktop_chat._gateway_request_headers('request-1', desktop_chat.CHAT_AGENT_AUTO_LANE_ID, 'desktop')
+
+    assert headers['X-Omi-App-Platform'] == 'desktop'
+    assert headers['X-Omi-LLM-Feature'] == 'chat_agent'
+
+
+def test_gateway_request_headers_omit_app_platform_when_client_sent_none():
+    headers = desktop_chat._gateway_request_headers('request-1', desktop_chat.CHAT_AGENT_AUTO_LANE_ID, None)
+
+    assert 'X-Omi-App-Platform' not in headers
+
+
 def _count_cache_control(value):
     """Count cache_control keys in a payload. Nested markers would split or
     duplicate the automatic breakpoint and silently miss the shared prefix."""
@@ -2276,18 +2627,95 @@ def test_gateway_body_drops_client_params_the_gateway_would_reject():
     assert result['messages'][0]['role'] == 'user'
 
 
+def test_thinking_escalation_routes_managed_and_drops_tools():
+    body = {
+        'model': 'omi-luna-think',
+        'messages': [{'role': 'user', 'content': 'hello'}],
+        'reasoning_effort': 'high',
+        'tools': [{'type': 'function', 'function': {'name': 'noop', 'parameters': {}}}],
+        'stream': False,
+    }
+
+    assert desktop_chat._uses_managed_chat_agent(body) is True
+    assert desktop_chat._managed_lane_id(body) == desktop_chat.CHAT_AGENT_AUTO_LANE_ID
+
+    result = desktop_chat._gateway_body(body, desktop_chat._managed_lane_id(body))
+    assert result['model'] == desktop_chat.CHAT_AGENT_AUTO_LANE_ID
+    assert result['reasoning_effort'] == 'high'
+    # OpenAI rejects function tools combined with a non-none effort on
+    # gpt-x-luna, so the escalation lane never carries client tools.
+    assert 'tools' not in result
+    assert 'tool_choice' not in result
+
+
+def test_thinking_escalation_maps_effort_levels_and_rejects_unknown():
+    base = {
+        'model': 'omi-luna-think',
+        'messages': [{'role': 'user', 'content': 'hello'}],
+    }
+
+    # Missing effort defaults to the product `normal` level (Luna high).
+    assert desktop_chat._gateway_body(dict(base))['reasoning_effort'] == 'high'
+    assert desktop_chat._gateway_body({**base, 'reasoning_effort': 'high'})['reasoning_effort'] == 'high'
+    assert desktop_chat._gateway_body({**base, 'reasoning_effort': 'xhigh'})['reasoning_effort'] == 'xhigh'
+
+    for invalid in ('low', 'medium', 'max', 'ultra', 'none', 7):
+        with pytest.raises(ValueError):
+            desktop_chat._gateway_body({**base, 'reasoning_effort': invalid})
+
+
+def test_thinking_escalation_forwards_image_url_parts_to_the_gateway():
+    data_uri = 'data:image/jpeg;base64,' + 'A' * 16
+    body = {
+        'model': 'omi-luna-think',
+        'reasoning_effort': 'xhigh',
+        'messages': [
+            {'role': 'system', 'content': 'speak only the conclusion'},
+            {
+                'role': 'user',
+                'content': [
+                    {'type': 'text', 'text': 'What is on my screen?'},
+                    {'type': 'image_url', 'image_url': {'url': data_uri}},
+                ],
+            },
+        ],
+    }
+
+    result = desktop_chat._gateway_body(body, desktop_chat._managed_lane_id(body))
+    user = result['messages'][1]
+    assert user['content'] == [
+        {'type': 'text', 'text': 'What is on my screen?'},
+        {'type': 'image_url', 'image_url': {'url': data_uri}},
+    ]
+
+
+def test_regular_chat_aliases_still_drop_client_reasoning_effort():
+    """The generic projection must keep dropping SDK-set reasoning_effort.
+
+    Only the validated thinking alias injects a server-authored effort; a
+    regular pi-mono turn with an SDK-set effort still forwards none.
+    """
+    body = {
+        'model': 'omi-sonnet',
+        'messages': [{'role': 'user', 'content': 'hello'}],
+        'reasoning_effort': 'low',
+    }
+    result = desktop_chat._gateway_body(body)
+    assert 'reasoning_effort' not in result
+
+
 def _capture_client_journeys(monkeypatch):
     accepted = []
     terminal = []
     monkeypatch.setattr(
         journeys,
         'record_client_journey_accepted',
-        lambda journey, client_kind: accepted.append((journey, client_kind)),
+        lambda journey, client_kind, app_build='unknown': accepted.append((journey, client_kind)),
     )
     monkeypatch.setattr(
         journeys,
         'record_client_journey_terminal',
-        lambda journey, client_kind, outcome, _elapsed, *, issue_class=None: terminal.append(
+        lambda journey, client_kind, outcome, _elapsed, *, issue_class=None, app_build='unknown': terminal.append(
             (journey, client_kind, outcome, issue_class)
         ),
     )

@@ -13,5 +13,6 @@
     "backend/deploy/cloud_run_gmp_sidecar.yaml",
     ".github/actions/deploy-backend-stack/action.yml"
   ],
-  "status": "open"
+  "status": "dormant",
+  "dormant_since": "2026-09-07T09:27:14.544381Z"
 }

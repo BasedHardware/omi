@@ -29,6 +29,7 @@ from utils.llm.desktop_llm_stub import (
     stub_chat_completions_json,
     stub_chat_completions_stream,
 )
+from utils.llm.prompt_cache import apply_cache_write_opt_out
 from utils.llm.gateway_client import (
     CHAT_AGENT_AUTO_LANE_ID,
     CHAT_STRUCTURED_AUTO_LANE_ID,
@@ -49,7 +50,9 @@ from utils.llm.usage_tracker import reset_usage_context, set_usage_context
 from utils.journey_metrics_contract import ClientKind, resolve_client_kind_from_headers
 from utils.observability.fallback import record_fallback
 from utils.observability.journeys import ClientJourneyAttempt
+from utils.product_metrics import extract_app_build, record_product_event
 from utils.other import endpoints as auth
+from utils.retrieval.tools.perplexity_tools import WEB_SEARCH_RETRIEVAL_APPENDIX
 from utils.subscription import enforce_desktop_chat_quota
 
 _MAX_BODY_BYTES = 16 * 1024 * 1024
@@ -254,10 +257,24 @@ _MANAGED_CHAT_ALIASES = {
 # Non-conversational desktop callers (the automation planner and the local-agent
 # loop) ask for a single-shot structured completion, not a chat turn. They select
 # the structured lane explicitly so they never inherit chat-agent routing.
+# Legacy Haiku specialist aliases used the company Anthropic key on this
+# router; remap them onto the same structured lane so leftover fielded clients
+# stop billing direct Haiku. Kill-switch / BYOK still resolve Haiku via
+# _MODEL_ROUTES when gateway_mode is off.
 _MANAGED_STRUCTURED_ALIASES = {
     'omi-structured',
     CHAT_STRUCTURED_AUTO_LANE_ID,
+    'claude-haiku-4-5-20251001',
+    'claude-haiku-4-5',
 }
+# The realtime voice `think_deeper` escalation: a single-shot, no-tools Luna
+# completion with an explicit reasoning effort. OpenAI rejects function tools
+# combined with a non-none reasoning_effort on gpt-x-luna (/v1/chat/completions),
+# so this alias deliberately carries no client tools and the effort travels as a
+# per-request parameter instead of the tooled chat-agent lane's pinned `none`.
+THINKING_MODEL_ALIAS = 'omi-luna-think'
+_THINKING_REASONING_EFFORTS = frozenset({'high', 'xhigh'})
+_MANAGED_THINKING_ALIASES = {THINKING_MODEL_ALIAS}
 WEB_SEARCH_AUTO_LANE_ID = feature_auto_lane_id('web_search')
 _MAX_TOKENS = 16_384
 # Top-level automatic prompt caching. Anthropic places this breakpoint on the last
@@ -277,15 +294,24 @@ def _managed_lane_id(body: Mapping[str, object]) -> str:
     return CHAT_AGENT_AUTO_LANE_ID
 
 
+def _is_thinking_escalation(body: Mapping[str, object]) -> bool:
+    """True when this request is a no-tools Luna thinking escalation."""
+    model = body.get('model')
+    if not isinstance(model, str):
+        return False
+    return model.strip().lower() in _MANAGED_THINKING_ALIASES
+
+
 def _uses_managed_chat_agent(body: Mapping[str, object]) -> bool:
-    """Route managed conversational traffic to Luna, but preserve specialist calls.
+    """Route managed desktop traffic onto gateway lanes.
 
     Desktop conversational traffic uses the managed Luna chat agent for Sonnet
-    and leftover Opus aliases plus explicit auto/Luna lane ids. Extraction jobs
-    still use Haiku; those legacy Anthropic calls must not inherit the chat-agent
-    personality/system prompt or have their requested model rewritten to Luna.
-    An omitted model uses the managed chat-agent default; an explicit unknown
-    model fails closed in the normal request validation path.
+    and leftover Opus aliases plus explicit auto/Luna lane ids. Legacy Haiku
+    extraction aliases join the structured lane so they do not inherit the
+    chat-agent personality or keep using the company Anthropic key. The voice
+    thinking escalation joins the chat-agent lane without tools. An omitted
+    model uses the managed chat-agent default; an explicit unknown model fails
+    closed in the normal request validation path.
     """
     if 'model' not in body:
         return True
@@ -295,7 +321,11 @@ def _uses_managed_chat_agent(body: Mapping[str, object]) -> bool:
     normalized = model.strip().lower()
     if not normalized:
         return True
-    if normalized in _MANAGED_CHAT_ALIASES or normalized in _MANAGED_STRUCTURED_ALIASES:
+    if (
+        normalized in _MANAGED_CHAT_ALIASES
+        or normalized in _MANAGED_STRUCTURED_ALIASES
+        or normalized in _MANAGED_THINKING_ALIASES
+    ):
         return True
     if normalized in _MODEL_ROUTES:
         return normalized in _MANAGED_CHAT_ALIASES
@@ -461,6 +491,31 @@ def _with_public_web_routing_instruction(messages: list[dict[str, object]]) -> l
     return [{'role': 'system', 'content': _PUBLIC_WEB_ROUTING_INSTRUCTION}, *updated]
 
 
+def _append_web_search_retrieval_appendix(messages: list[dict[str, object]]) -> list[dict[str, object]]:
+    """Append the fixed primary-source retrieval hint to the last user message.
+
+    The managed web-search lane sends the raw client question to sonar-pro,
+    which retrieves what the query describes — product-history questions stop
+    at the vendor marketing site (live RCA 2026-09-02). The same appendix the
+    agentic tool's hop-2 uses redirects retrieval at founder interviews,
+    Product Hunt launch posts, and postmortems. Idempotent.
+    """
+    updated = [dict(message) for message in messages]
+    for message in reversed(updated):
+        if message.get('role') != 'user':
+            continue
+        content = message.get('content')
+        if isinstance(content, str):
+            if WEB_SEARCH_RETRIEVAL_APPENDIX not in content:
+                message['content'] = f'{content}{WEB_SEARCH_RETRIEVAL_APPENDIX}'
+        elif isinstance(content, list) and not any(
+            isinstance(block, Mapping) and block.get('text') == WEB_SEARCH_RETRIEVAL_APPENDIX for block in content
+        ):
+            message['content'] = [*content, {'type': 'text', 'text': WEB_SEARCH_RETRIEVAL_APPENDIX}]
+        return updated
+    return updated
+
+
 def _carries_private_tool_output(messages: object) -> bool:
     # The desktop hub also inlines tool output into the user turn behind a
     # literal marker instead of sending an OpenAI `tool` message, so the same
@@ -519,7 +574,8 @@ def _user_content(content: object) -> object:
         if not isinstance(block, Mapping):
             continue
         if block.get('type') == 'text' and isinstance(block.get('text'), str):
-            blocks.append({'type': 'text', 'text': block['text']})
+            if block['text']:
+                blocks.append({'type': 'text', 'text': block['text']})
         elif block.get('type') == 'image_url' and isinstance(block.get('image_url'), Mapping):
             url = block['image_url'].get('url')
             if isinstance(url, str) and url.startswith('data:') and ';base64,' in url:
@@ -638,6 +694,45 @@ def _log_gateway_rejection(response: httpx.Response, *, lane_id: str, request_id
     sys.stdout.write(json.dumps(event, separators=(',', ':'), sort_keys=True) + '\n')
 
 
+_DESKTOP_CHAT_UNAVAILABLE_REASONS = frozenset({'metering_unavailable', 'circuit_open'})
+
+
+def _log_desktop_chat_unavailable(*, reason: str, request_id: str) -> None:
+    """Record why this router returned HTTP 503.
+
+    The 2026-09-09 desktop-chat outage returned 503 in ~105ms with no traceback
+    and no coded reason, so operators could not tell metering and circuit
+    open apart. Log one warning with a closed reason plus request_id. Never log
+    request/response bodies, UIDs, or prompts.
+    """
+    if reason not in _DESKTOP_CHAT_UNAVAILABLE_REASONS:
+        reason = 'unknown'
+    event = {
+        'event': 'desktop_chat_unavailable',
+        'message': 'desktop_chat_unavailable',
+        'reason': reason,
+        'request_id': request_id,
+        'severity': 'WARNING',
+    }
+    sys.stdout.write(json.dumps(event, separators=(',', ':'), sort_keys=True) + '\n')
+
+
+def _thinking_escalation_effort(body: Mapping[str, object]) -> str:
+    """Validated Luna reasoning effort for a thinking escalation.
+
+    The desktop client owns the product-level mapping (`normal` -> high,
+    `heavy` -> xhigh); this router only accepts the two wire values the
+    escalation surface defines. Anything else fails closed with a 400 rather
+    than silently billing an unintended effort tier.
+    """
+    effort = body.get('reasoning_effort')
+    if effort is None or (isinstance(effort, str) and not effort.strip()):
+        return 'high'
+    if isinstance(effort, str) and effort.strip() in _THINKING_REASONING_EFFORTS:
+        return effort.strip()
+    raise ValueError('unsupported reasoning_effort for omi-luna-think')
+
+
 def _gateway_body(body: Mapping[str, object], lane_id: str = CHAT_AGENT_AUTO_LANE_ID) -> dict[str, object]:
     messages = body.get('messages')
     if not isinstance(messages, list):
@@ -660,7 +755,22 @@ def _gateway_body(body: Mapping[str, object], lane_id: str = CHAT_AGENT_AUTO_LAN
         # are a live lookup, not a client-tool continuation.
         result.pop('tools', None)
         result.pop('tool_choice', None)
-        result['messages'] = _with_public_web_routing_instruction(translated)
+        result['messages'] = _append_web_search_retrieval_appendix(_with_public_web_routing_instruction(translated))
+    if _is_thinking_escalation(body):
+        # Single-shot Luna reasoning: OpenAI rejects function tools combined
+        # with a non-none reasoning_effort on gpt-x-luna, so the escalation
+        # never carries client tools. The validated effort is server-authored
+        # here, not a verbatim client passthrough.
+        result.pop('tools', None)
+        result.pop('tool_choice', None)
+        result.pop('reasoning_effort', None)
+        result['reasoning_effort'] = _thinking_escalation_effort(body)
+    if lane_id == CHAT_STRUCTURED_AUTO_LANE_ID:
+        # Single-shot planner/local-agent prompts, unique from the first token: the
+        # ledger billed 2.6M of 3.0M prompt tok/day as cache writes against 0.01M reads.
+        # Scan the CLIENT's messages for a breakpoint, not the translated copy:
+        # _gateway_user_content rebuilds user blocks as {type, text} and drops it.
+        apply_cache_write_opt_out(result, marked_messages=messages)
     return result
 
 
@@ -695,27 +805,88 @@ def _anthropic_client_tools(tools: object) -> list[dict[str, object]]:
     ]
 
 
+class _RequestValidationError(ValueError):
+    pass
+
+
+def _record_history_repair(*, dropped: str, reason: str) -> None:
+    # The direct-path translation silently adapts malformed or Anthropic-
+    # incompatible history shapes (see _request); the fallback telemetry
+    # contract (backend/AGENTS.md, .github/agent-docs/fallback-telemetry.md)
+    # requires every fail-open repair to stay observable through the shared
+    # counter instead of inventing a new one.
+    record_fallback(
+        component='other',
+        from_mode=dropped,
+        to_mode='none',
+        reason=reason,
+        outcome='degraded',
+    )
+
+
 def _request(
     body: object, *, web_search_authorization: WebSearchAuthorization = 'unavailable'
 ) -> tuple[str, dict[str, object]]:
     if not isinstance(body, Mapping):
-        raise ValueError('request body must be an object')
+        raise _RequestValidationError('request body must be an object')
     model = body.get('model')
     messages = body.get('messages')
     if not isinstance(model, str) or model not in _MODEL_ROUTES:
-        raise ValueError('unsupported model')
+        raise _RequestValidationError('unsupported model')
     if not isinstance(messages, list):
-        raise ValueError('messages must be an array')
+        raise _RequestValidationError('messages must be an array')
     system: str | None = None
     translated: list[dict[str, object]] = []
+    # An assistant turn that issued tool calls is held back until its results
+    # arrive. Anthropic rejects with 400 invalid_request_error: a tool_result
+    # with no preceding tool_use, a tool_use whose tool_result does not arrive
+    # before the next turn of another role, and a conversation that does not
+    # open with a user turn — all shapes an OpenAI-format replay can carry
+    # after client-side trimming or persistence (an OpenAI history may legally
+    # open with an assistant turn).
+    pending_assistant: dict[str, object] | None = None
+    pending_unanswered: set[str] = set()
+    pending_results: list[dict[str, object]] = []
+
+    def _flush_pending_assistant() -> None:
+        nonlocal pending_assistant, pending_unanswered, pending_results
+        if pending_assistant is None:
+            return
+        assistant, unanswered, results = pending_assistant, pending_unanswered, pending_results
+        pending_assistant, pending_unanswered, pending_results = None, set(), []
+        if not translated:
+            # The conversation must open with a user turn, so an assistant turn
+            # with nothing before it is dropped together with the tool results that
+            # already answered it — kept, they would arrive without their tool_use.
+            _record_history_repair(dropped='assistant_tool_round', reason='local_heal')
+            return
+        if unanswered:
+            _record_history_repair(dropped='tool_use', reason='malformed')
+            assistant['content'] = [
+                block
+                for block in cast(list[dict[str, object]], assistant['content'])
+                if block.get('id') not in unanswered
+            ]
+        if assistant['content']:
+            translated.append(assistant)
+            translated.extend(results)
+
     for message in messages:
         if not isinstance(message, Mapping) or not isinstance(message.get('role'), str):
-            raise ValueError('messages must contain role objects')
+            raise _RequestValidationError('messages must contain role objects')
         role = message['role']
         if role in {'system', 'developer'}:
             system = _text(message.get('content'))
         elif role == 'user':
-            translated.append({'role': 'user', 'content': _user_content(message.get('content', ''))})
+            user_content = _user_content(message.get('content', ''))
+            if not user_content:
+                # Anthropic rejects empty content and empty text blocks with 400
+                # invalid_request_error; a user turn with no text and no images
+                # carries nothing, and the provider merges the adjacent turns the
+                # drop leaves behind.
+                continue
+            _flush_pending_assistant()
+            translated.append({'role': 'user', 'content': user_content})
         elif role == 'assistant':
             content: list[dict[str, object]] = []
             text = _text(message.get('content'))
@@ -725,22 +896,44 @@ def _request(
             if isinstance(tool_calls, list):
                 for call in tool_calls:
                     if not isinstance(call, Mapping) or not isinstance(call.get('function'), Mapping):
-                        raise ValueError('invalid assistant tool call')
+                        raise _RequestValidationError('invalid assistant tool call')
                     function = call['function']
                     name, arguments, call_id = function.get('name'), function.get('arguments'), call.get('id')
                     if not all(isinstance(value, str) for value in (name, arguments, call_id)):
-                        raise ValueError('invalid assistant tool call')
+                        raise _RequestValidationError('invalid assistant tool call')
                     try:
                         input_value = json.loads(arguments)
                     except ValueError:
                         input_value = {}
                     content.append({'type': 'tool_use', 'id': call_id, 'name': name, 'input': input_value})
-            translated.append({'role': 'assistant', 'content': content or [{'type': 'text', 'text': ''}]})
+            if not content:
+                # Anthropic rejects empty text blocks (400 invalid_request_error); an
+                # assistant turn with no text and no tool calls carries nothing, and
+                # the provider merges the adjacent user turns it leaves behind.
+                continue
+            _flush_pending_assistant()
+            if any(block['type'] == 'tool_use' for block in content):
+                pending_assistant = {'role': 'assistant', 'content': content}
+                pending_unanswered = {cast(str, block['id']) for block in content if block['type'] == 'tool_use'}
+            elif translated:
+                translated.append({'role': 'assistant', 'content': content})
+            else:
+                # A legal OpenAI history may open with an assistant turn; Anthropic
+                # requires the first message to use the user role, so it is dropped.
+                _record_history_repair(dropped='assistant_turn', reason='local_heal')
         elif role == 'tool':
             tool_call_id = message.get('tool_call_id')
             if not isinstance(tool_call_id, str):
-                raise ValueError('tool message missing tool_call_id')
-            translated.append(
+                raise _RequestValidationError('tool message missing tool_call_id')
+            if tool_call_id not in pending_unanswered:
+                # Anthropic requires every tool_result to answer the tool_use in
+                # the immediately preceding assistant turn; a result that lost
+                # its assistant half (client-side trimming, or a duplicate)
+                # must not reach the wire.
+                _record_history_repair(dropped='tool_result', reason='malformed')
+                continue
+            pending_unanswered.discard(tool_call_id)
+            pending_results.append(
                 {
                     'role': 'user',
                     'content': [
@@ -749,10 +942,13 @@ def _request(
                 }
             )
         else:
-            raise ValueError(f'unsupported message role: {role}')
+            raise _RequestValidationError(f'unsupported message role: {role}')
+    _flush_pending_assistant()
+    if not translated:
+        raise _RequestValidationError('messages must contain at least one user or assistant message')
     maximum = body.get('max_completion_tokens', body.get('max_tokens', 8192))
     if not isinstance(maximum, int) or isinstance(maximum, bool) or maximum < 1:
-        raise ValueError('max_tokens must be a positive integer')
+        raise _RequestValidationError('max_tokens must be a positive integer')
     result: dict[str, object] = {
         'model': _MODEL_ROUTES[model],
         'max_tokens': min(maximum, _MAX_TOKENS),
@@ -790,7 +986,7 @@ def _request(
     if choice is not None and result.get('tools'):
         result['tool_choice'] = choice
     result['cache_control'] = dict(_PROMPT_CACHE_CONTROL)
-    return model, result
+    return cast(str, result['model']), result  # response.model = SERVED model, never the alias
 
 
 def _usage_field(usage: object, field: str) -> int:
@@ -1319,8 +1515,12 @@ def _gateway_feature_for_lane(lane_id: str) -> str:
     return 'chat_agent'
 
 
-def _gateway_request_headers(request_id: str, lane_id: str = CHAT_AGENT_AUTO_LANE_ID) -> dict[str, str]:
-    headers = llm_gateway_headers(feature=_gateway_feature_for_lane(lane_id))
+def _gateway_request_headers(
+    request_id: str,
+    lane_id: str = CHAT_AGENT_AUTO_LANE_ID,
+    platform: str | None = None,
+) -> dict[str, str]:
+    headers = llm_gateway_headers(feature=_gateway_feature_for_lane(lane_id), platform=platform)
     headers['X-Omi-Request-ID'] = request_id
     return headers
 
@@ -1374,7 +1574,7 @@ async def _stream_gateway(
             async with get_llm_gateway_client().stream(
                 'POST',
                 f'{get_llm_gateway_base_url()}/v1/chat/completions',
-                headers=_gateway_request_headers(request_id, lane_id),
+                headers=_gateway_request_headers(request_id, lane_id, platform),
                 json=gateway_payload,
             ) as response:
                 if response.status_code >= 400:
@@ -1446,7 +1646,7 @@ def _sse(value: dict[str, object]) -> str:
     return f'data: {json.dumps(value, separators=(",", ":"))}\n\n'
 
 
-async def _meter_server_request(uid: str) -> None:
+async def _meter_server_request(uid: str, *, request_id: str = 'unknown') -> None:
     if get_byok_key('anthropic'):
         return
     try:
@@ -1454,6 +1654,7 @@ async def _meter_server_request(uid: str) -> None:
             critical_executor, redis_db.check_rate_limit, uid, 'desktop_chat', _RATE_LIMIT_PER_MINUTE, 60
         )
     except Exception as exc:
+        _log_desktop_chat_unavailable(reason='metering_unavailable', request_id=request_id)
         raise HTTPException(status_code=503, detail='Chat metering is temporarily unavailable') from exc
     if not allowed:
         raise HTTPException(
@@ -1601,7 +1802,10 @@ async def _chat_completions_unobserved(
     payload: dict[str, object] = {}
     try:
         gateway_mode = should_route_chat_agent_through_gateway() and _uses_managed_chat_agent(body)
-        if gateway_mode and get_byok_key('anthropic'):
+        # A BYOK Anthropic key cannot serve the managed Luna thinking lane, so
+        # thinking escalations stay on the gateway instead of falling back to
+        # direct Anthropic (which would 400 on the Luna alias).
+        if gateway_mode and not _is_thinking_escalation(body) and get_byok_key('anthropic'):
             record_fallback(
                 component='llm_gateway',
                 from_mode='managed_gateway',
@@ -1614,7 +1818,11 @@ async def _chat_completions_unobserved(
             public_model = _managed_lane_id(body)
             # Structured single-shot callers must not inherit the web-search
             # lane even if a leftover client still sets omi_web_search.
-            if public_model == CHAT_AGENT_AUTO_LANE_ID and _web_search_requested(body):
+            if (
+                public_model == CHAT_AGENT_AUTO_LANE_ID
+                and not _is_thinking_escalation(body)
+                and _web_search_requested(body)
+            ):
                 web_search_authorization = await _web_search_authorized(uid, from_mode='managed_web_search')
                 if _web_search_eligible(body, authorization=web_search_authorization):
                     public_model = WEB_SEARCH_AUTO_LANE_ID
@@ -1632,14 +1840,17 @@ async def _chat_completions_unobserved(
                 web_search_authorization = await _web_search_authorized(uid)
             public_model, payload = _request(body, web_search_authorization=web_search_authorization)
             gateway_payload = {}
-        enforce_desktop_chat_quota(uid, platform=x_app_platform)
-        await _meter_server_request(uid)
+        await run_blocking(db_executor, enforce_desktop_chat_quota, uid, platform=x_app_platform)
+        await _meter_server_request(uid, request_id=request_id)
     except HTTPException:
         raise
     except RuntimeError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
+        raise HTTPException(status_code=503, detail="Service temporarily unavailable. Please try again.") from exc
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=400,
+            detail=(str(exc) if isinstance(exc, _RequestValidationError) else "Invalid request parameters."),
+        ) from exc
     if body.get('stream') is True:
         if gateway_mode:
             return StreamingResponse(
@@ -1676,11 +1887,12 @@ async def _chat_completions_unobserved(
                     lane_id=public_model, outcome='error', reason='circuit_open', request_id=request_id
                 )
                 result_recorded = True
+                _log_desktop_chat_unavailable(reason='circuit_open', request_id=request_id)
                 raise HTTPException(status_code=503, detail='Upstream provider unavailable')
             async with get_llm_gateway_semaphore():
                 response = await get_llm_gateway_client().post(
                     f'{get_llm_gateway_base_url()}/v1/chat/completions',
-                    headers=_gateway_request_headers(request_id, public_model),
+                    headers=_gateway_request_headers(request_id, public_model, x_app_platform),
                     json=gateway_payload,
                 )
             response.raise_for_status()
@@ -1693,12 +1905,13 @@ async def _chat_completions_unobserved(
             _record_gateway_result(lane_id=public_model, outcome='success', reason='ok', request_id=request_id)
             result_recorded = True
             await _record_usage(uid, _openai_usage_as_anthropic(response_body.get('usage')))
+            response_headers = {
+                'X-Omi-Chat-Contract-Version': '1',
+                'X-Request-Id': request_id,
+            }
             return JSONResponse(
                 response_body,
-                headers={
-                    'X-Omi-Chat-Contract-Version': '1',
-                    'X-Request-Id': request_id,
-                },
+                headers=response_headers,
             )
         except HTTPException:
             raise
@@ -1748,6 +1961,7 @@ async def chat_completions(
     body: dict[str, object],
     uid: str = Depends(auth.get_current_user_uid),
     x_app_platform: str | None = Header(None, alias='X-App-Platform'),
+    x_app_version: str | None = Header(None, alias='X-App-Version'),
     x_omi_chat_contract_version: str | None = Header(None, alias='X-Omi-Chat-Contract-Version'),
     x_omi_request_id: str | None = Header(None, alias='X-Omi-Request-Id'),
     user_agent: str | None = Header(None, alias='User-Agent'),
@@ -1756,6 +1970,15 @@ async def chat_completions(
         'desktop_chat',
         _desktop_chat_client_kind(x_app_platform, user_agent),
     )
+
+    def _record_desktop_chat_product() -> None:
+        record_product_event(
+            'desktop_chat_completion',
+            client_kind=attempt.client_kind,
+            outcome=attempt.outcome or 'unknown',
+            app_build=extract_app_build({'x-app-version': x_app_version or ''}),
+        )
+
     try:
         response = await _chat_completions_unobserved(
             body,
@@ -1766,9 +1989,11 @@ async def chat_completions(
         )
     except asyncio.CancelledError:
         attempt.cancel()
+        _record_desktop_chat_product()
         raise
     except Exception as exc:
         attempt.fail(_desktop_chat_issue_class(exc))
+        _record_desktop_chat_product()
         raise
 
     if isinstance(response, StreamingResponse):
@@ -1793,4 +2018,5 @@ async def chat_completions(
             attempt.succeed()
         else:
             attempt.fail('empty_answer')
+    _record_desktop_chat_product()
     return response

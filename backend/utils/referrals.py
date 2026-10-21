@@ -16,6 +16,7 @@ REFERRAL_COOKIE_MAX_AGE_SECONDS = 30 * 24 * 60 * 60
 REFERRAL_TRIAL_DAYS = 30
 REFERRAL_SIGNUP_URL = 'https://app.omi.me/login'
 REFERRAL_NEW_USER_WINDOW_SECONDS = 15 * 60
+REFERRAL_PROGRAM = 'desktop_operator_month_v1'
 
 _CODE_PREFIX = 'ref1'
 _UID_PATTERN = re.compile(r'^[A-Za-z0-9:_-]{1,128}$')
@@ -119,18 +120,20 @@ def referral_claim_patch(
     is_new_user: bool,
     user_data: Optional[dict[str, Any]],
     now: Optional[datetime] = None,
-) -> Optional[dict[str, Any]]:
-    """Return the one-time referral entitlement, or None when the account is ineligible."""
-    if not is_new_user or referred_uid == referrer_uid:
-        return None
+) -> tuple[Optional[dict[str, Any]], str]:
+    """Return the referral entitlement patch and its privacy-safe outcome reason."""
+    if not is_new_user:
+        return None, 'existing_account'
+    if referred_uid == referrer_uid:
+        return None, 'self_refer'
 
     existing = user_data or {}
     if existing.get('referral'):
-        return None
+        return None, 'already_claimed'
 
     subscription = existing.get('subscription')
     if isinstance(subscription, dict) and subscription.get('plan') in _PAID_PLAN_VALUES:
-        return None
+        return None, 'paid'
 
     started_at = now or datetime.now(timezone.utc)
     if started_at.tzinfo is None:
@@ -146,9 +149,9 @@ def referral_claim_patch(
             'cancel_at_period_end': True,
         },
         'referral': {
-            'program': 'desktop_operator_month_v1',
+            'program': REFERRAL_PROGRAM,
             'referrer_uid': referrer_uid,
             'claimed_at': started_epoch,
             'trial_ends_at': ends_epoch,
         },
-    }
+    }, 'granted'

@@ -590,3 +590,237 @@ def test_unawaited_sync_db_call_is_still_blocking(scanner, tmp_path):
     )
 
     assert len(results["async_helpers_with_blocking"]) == 1
+
+
+def test_coroutines_handed_to_asyncio_are_not_blocking(scanner, tmp_path):
+    """Awaiting through asyncio is the same handoff as `await`, so it is not blocking either.
+
+    `_awaited_call_ids` only sees a call that is the direct operand of an `await`. Awaiting two
+    accessors at once, or one with a deadline, means writing `asyncio.gather(...)`,
+    `asyncio.create_task(...)` or `asyncio.wait_for(...)`, and the inner call stops being that
+    operand — so the same async accessor the previous fix cleared was reported again the moment
+    a second one was awaited beside it.
+    """
+    for form in (
+        "await asyncio.gather(get_async_redis_client(), get_async_cache_client())",
+        "await asyncio.wait_for(get_async_redis_client(), timeout=5)",
+        "await asyncio.wait([get_async_redis_client(), get_async_cache_client()])",
+        "await asyncio.create_task(get_async_redis_client())",
+        "await asyncio.shield(get_async_redis_client())",
+    ):
+        _source_path, results = _scan_source(
+            scanner,
+            tmp_path,
+            f"""
+            import asyncio
+
+            from database.redis_db import get_async_cache_client, get_async_redis_client
+
+            async def dispatcher():
+                return {form}
+            """,
+        )
+
+        assert results["async_helpers_with_blocking"] == [], form
+
+
+def test_task_group_create_task_is_not_blocking(scanner, tmp_path):
+    """A TaskGroup drives its argument on the event loop exactly as `asyncio.create_task` does."""
+    _source_path, results = _scan_source(
+        scanner,
+        tmp_path,
+        """
+        import asyncio
+
+        from database.redis_db import get_async_redis_client
+
+        async def dispatcher():
+            async with asyncio.TaskGroup() as group:
+                group.create_task(get_async_redis_client())
+        """,
+    )
+
+    assert results["async_helpers_with_blocking"] == []
+
+
+def test_a_sync_db_call_beside_a_handoff_on_one_line_is_still_blocking(scanner, tmp_path):
+    """The skip stays keyed on the call node: only the handed-off half of a line is cleared."""
+    _source_path, results = _scan_source(
+        scanner,
+        tmp_path,
+        """
+        import asyncio
+
+        from database.redis_db import get_async_redis_client, get_redis_client
+
+        async def dispatcher():
+            return await asyncio.gather(get_async_redis_client()), get_redis_client()
+        """,
+    )
+
+    assert [call["call"] for finding in results["async_helpers_with_blocking"] for call in finding["db_calls"]] == [
+        "get_redis_client"
+    ]
+
+
+def test_a_call_asyncio_never_receives_is_still_blocking(scanner, tmp_path):
+    """The guard must not widen: importing asyncio near a sync DB call does not clear it."""
+    _source_path, results = _scan_source(
+        scanner,
+        tmp_path,
+        """
+        import asyncio
+
+        from database.redis_db import get_redis_client
+
+        async def dispatcher():
+            await asyncio.sleep(1)
+            return get_redis_client()
+        """,
+    )
+
+    assert len(results["async_helpers_with_blocking"]) == 1
+
+
+@pytest.fixture
+def database_context_source(tmp_path):
+    database_dir = tmp_path / 'database'
+    database_dir.mkdir()
+    (database_dir / 'scopes.py').write_text(
+        textwrap.dedent('''\
+            from contextlib import contextmanager as cm
+            import contextlib as contexts
+            from database.users import get_user
+
+            @cm
+            def memo_scope(uid):
+                yield {}
+
+            @contexts.contextmanager
+            def other_scope(uid):
+                yield {}
+
+            def read_user(uid):
+                return get_user(uid)
+
+            @cm
+            def blocking_scope(uid):
+                yield read_user(uid)
+
+            @cm
+            def blocking_exit_scope(uid):
+                try:
+                    yield
+                finally:
+                    read_user(uid)
+
+            def not_a_context_manager(uid):
+                return object()
+            '''),
+        encoding='utf-8',
+    )
+
+
+@pytest.mark.parametrize('export', ['memo_scope', 'other_scope'])
+def test_database_context_manager_with_target_is_not_blocking(scanner, tmp_path, database_context_source, export):
+    _, results = _scan_source(
+        scanner,
+        tmp_path,
+        f'''
+        from database.scopes import {export} as scope
+
+        async def helper(uid):
+            with scope(uid):
+                await checkpoint()
+        ''',
+    )
+    assert results['async_helpers_with_blocking'] == []
+    assert results['mixed_await_sync_db'] == []
+
+
+@pytest.mark.parametrize(
+    'export', ['memo_scope', 'not_a_context_manager', 'unknown_scope', 'blocking_scope', 'blocking_exit_scope']
+)
+def test_plain_database_call_remains_blocking(scanner, tmp_path, database_context_source, export):
+    _, results = _scan_source(
+        scanner,
+        tmp_path,
+        f'''
+        from database.scopes import {export}
+
+        async def helper(uid):
+            await checkpoint()
+            return {export}(uid)
+        ''',
+    )
+    assert [call['call'] for finding in results['async_helpers_with_blocking'] for call in finding['db_calls']] == [
+        export
+    ]
+
+
+@pytest.mark.parametrize('export', ['not_a_context_manager', 'unknown_scope', 'blocking_scope', 'blocking_exit_scope'])
+def test_unproven_or_blocking_with_target_stays_blocking(scanner, tmp_path, database_context_source, export):
+    _, results = _scan_source(
+        scanner,
+        tmp_path,
+        f'''
+        from database.scopes import {export}
+
+        async def helper(uid):
+            with {export}(uid):
+                await checkpoint()
+        ''',
+    )
+    assert len(results['async_helpers_with_blocking']) == 1
+
+
+def test_missing_database_source_is_not_exempt(scanner, tmp_path):
+    _, results = _scan_source(
+        scanner,
+        tmp_path,
+        '''
+        from database.missing import scope
+
+        async def helper(uid):
+            with scope(uid):
+                await checkpoint()
+        ''',
+    )
+    assert len(results['async_helpers_with_blocking']) == 1
+
+
+def test_context_exemption_does_not_hide_calls_in_arguments_or_body(scanner, tmp_path, database_context_source):
+    _, results = _scan_source(
+        scanner,
+        tmp_path,
+        '''
+        from database.scopes import memo_scope
+        from database.users import get_user
+
+        async def helper(uid):
+            with memo_scope(get_user(uid)):
+                await checkpoint()
+                memo_scope(uid)
+        ''',
+    )
+    calls = results['async_helpers_with_blocking'][0]['db_calls']
+    assert {call['call'] for call in calls} == {'get_user', 'memo_scope'}
+    assert len(calls) == 2
+
+
+def test_context_exemption_does_not_hide_blocking_calls_in_with_body(scanner, tmp_path, database_context_source):
+    _, results = _scan_source(
+        scanner,
+        tmp_path,
+        '''
+        from database.scopes import memo_scope
+        from database.users import get_user
+
+        @router.get('/user')
+        async def endpoint(uid):
+            with memo_scope(uid):
+                await checkpoint()
+                return get_user(uid)
+        ''',
+    )
+    assert [call['call'] for finding in results['mixed_await_sync_db'] for call in finding['db_calls']] == ['get_user']

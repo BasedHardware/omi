@@ -549,27 +549,37 @@ actor RewindStorage {
 
   /// Find ffmpeg executable path
   private func findFFmpegPath() -> String {
-    // Bundled ffmpeg first for users without Homebrew
-    // SwiftPM resources are in a nested bundle, but avoid Bundle.resourceBundle
-    // here because that accessor fatal-errors in test contexts with no app bundle.
-    let bundleName = "Omi Computer_Omi Computer.bundle"
-    let resourceBundlePath = Bundle.main.bundleURL
-      .appendingPathComponent("Contents/Resources")
-      .appendingPathComponent(bundleName)
-      .appendingPathComponent("ffmpeg")
-      .path
-    let developmentBundlePath = Bundle.main.bundleURL
-      .appendingPathComponent(bundleName)
-      .appendingPathComponent("ffmpeg")
-      .path
+    Self.findFFmpegPath(in: Bundle.main.bundleURL)
+  }
 
-    let possiblePaths = [
-      resourceBundlePath,
-      developmentBundlePath,
+  static func findFFmpegPath(
+    in appBundleURL: URL,
+    fallbackPaths: [String] = [
       "/opt/homebrew/bin/ffmpeg",
       "/usr/local/bin/ffmpeg",
       "/usr/bin/ffmpeg",
     ]
+  ) -> String {
+    // Bundled ffmpeg first for users without Homebrew
+    // SwiftPM resources are in a nested bundle, but avoid Bundle.resourceBundle
+    // here because that accessor fatal-errors in test contexts with no app bundle.
+    let bundleName = "Omi Computer_Omi Computer.bundle"
+    let resourceBundle =
+      appBundleURL
+      .appendingPathComponent("Contents/Resources")
+      .appendingPathComponent(bundleName)
+    let developmentBundlePath =
+      appBundleURL
+      .appendingPathComponent(bundleName)
+      .appendingPathComponent("ffmpeg")
+      .path
+
+    let possiblePaths =
+      [
+        resourceBundle.appendingPathComponent("Contents/Resources/ffmpeg").path,
+        resourceBundle.appendingPathComponent("ffmpeg").path,
+        developmentBundlePath,
+      ] + fallbackPaths
 
     for path in possiblePaths {
       if FileManager.default.fileExists(atPath: path) {

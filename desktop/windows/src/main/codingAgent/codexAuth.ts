@@ -21,7 +21,7 @@ import type { CodexKeyResult, CodexKeyStatus } from '../../shared/types'
 
 /** The subset of ByokKeyStore this module needs (so tests can inject a fake
  *  without Electron safeStorage). */
-type CodexKeyBackingStore = Pick<ByokKeyStore, 'getKey' | 'setKey' | 'clearKey'>
+type CodexKeyBackingStore = Pick<ByokKeyStore, 'getCodexKey' | 'setCodexKey' | 'clearCodexKey'>
 
 // Lazily constructed so this module stays import-pure (ByokKeyStore's default
 // constructor calls app.getPath, which isn't ready at import time).
@@ -35,7 +35,7 @@ function getStore(): CodexKeyBackingStore {
 /** The stored Codex OpenAI key, or null. Read by the adapter registry at spawn. */
 export function getCodexApiKey(): string | null {
   try {
-    return getStore().getKey('openai')
+    return getStore().getCodexKey()
   } catch {
     return null
   }
@@ -98,14 +98,14 @@ export async function saveCodexApiKey(
 ): Promise<CodexKeyResult> {
   const trimmed = key.trim()
   if (!trimmed) {
-    getStore().clearKey('openai')
+    getStore().clearCodexKey()
     return { ok: true, hasKey: false }
   }
   const result = await validate(trimmed)
   if (result.status === 401) {
     return { ok: false, hasKey: codexApiKeyStatus().hasKey, error: result.error }
   }
-  getStore().setKey('openai', trimmed)
+  getStore().setCodexKey(trimmed)
   return { ok: true, hasKey: true, warning: result.ok ? undefined : result.error }
 }
 

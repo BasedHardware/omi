@@ -25,6 +25,7 @@ extension DesktopAutomationActionRegistry {
   func registerHomeStageActions() {
     register(
       name: "home_open_chat",
+      effects: [.localState],
       summary: "Open the inline chat on Home (same path as clicking the ask bar)"
     ) { _ in
       NotificationCenter.default.post(name: .homeStageOpenChat, object: nil)
@@ -42,14 +43,15 @@ extension DesktopAutomationActionRegistry {
     // watch the wrong surface and call it a pass — the same lie in new clothes.
     register(
       name: "home_connect_toggle",
+      effects: [.localState],
       summary:
         "Toggle the Connect tray on the Home stage (same path as the ask-bar Connect button). "
         + "Errors on shells whose Home has no stage; connectors live on the Apps page there."
     ) { _ in
       // `homeMode` is the stage's own answer to "is there a Connect tray here". It is written only
-      // by the view that renders the stage and is nil everywhere else (`HomeStageAutomationPolicy`),
-      // so this cannot succeed silently on a Home that has no tray to toggle — which is exactly what
-      // it did, answering "ok" and doing nothing, from the query-shell Home landing until now.
+      // by the view that renders the stage. `DashboardPage` was that view and no longer exists, so
+      // this is now always nil and the action always refuses — rather than answering "ok" and doing
+      // nothing, which is what it did from the query-shell Home landing until this guard.
       guard DesktopAutomationStateStore.shared.current().homeMode != nil else {
         return [
           "error": "no Home stage on this shell, so there is no Connect tray to toggle — "
@@ -62,6 +64,7 @@ extension DesktopAutomationActionRegistry {
 
     register(
       name: "home_close_panel",
+      effects: [.localState],
       summary: "Collapse Home back to its resting surface (same as Esc / the close buttons)"
     ) { _ in
       NotificationCenter.default.post(name: .homeStageClose, object: nil)
@@ -70,6 +73,7 @@ extension DesktopAutomationActionRegistry {
 
     register(
       name: "home_ask",
+      effects: [.localState, .localArtifact, .networkOrModel, .remoteWrite],
       summary: "Send a query through the Home ask bar (opens the inline chat and sends)",
       params: ["query"]
     ) { params in
@@ -82,6 +86,7 @@ extension DesktopAutomationActionRegistry {
 
     register(
       name: "home_attach",
+      effects: [.localState],
       summary: "Stage a file in the Home ask bar (same wiring as the paperclip/drag-drop)",
       params: ["path"]
     ) { params in

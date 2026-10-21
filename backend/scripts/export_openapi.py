@@ -20,6 +20,7 @@ initialization, and blocks non-local network while importing the app.
 from __future__ import annotations
 
 import argparse
+import copy
 import ipaddress
 import json
 import logging
@@ -52,6 +53,15 @@ INTEGRATION_PUBLIC_PATHS = (
     '/v2/integrations/{app_id}/tasks',
 )
 APP_CLIENT_PREFIXES = (
+    '/v1/pending-work',
+    '/v1/attention-items',
+    '/v1/messaging/links',
+    '/v1/messaging/link-proofs',
+    '/v1/review',
+    '/v2/review',
+    '/v1/entities',
+    '/v1/proactivity',
+    '/memory/search',
     '/v1/account/cutover',
     '/v1/action-items',
     '/v1/agent',
@@ -65,25 +75,37 @@ APP_CLIENT_PREFIXES = (
     '/v1/chat',
     '/v1/connectors',
     '/v1/conversations',
+    '/v1/csat',
     '/v1/dev',
+    '/v1/dream/runs',
     '/v1/fair-use',
+    '/v1/frame-requests',
     '/v1/folders',
     '/v1/goals',
     '/v1/import',
     '/v1/integrations',
+    # Released JIT paths remain static 410 tombstones for client compatibility.
+    '/v1/jit',
     '/v1/knowledge-graph',
     '/v1/mcp',
     '/v1/memories',
     '/v1/payment-methods',
     '/v1/payments',
+    '/v2/payments',
     '/v1/paypal',
     '/v1/persons',
     '/v1/phone',
+    '/v1/mobile',
     '/v1/screen-activity',
+    '/v1/screen-task',
+    '/v1/screen-frame-egress',
+    '/v1/search',
+    '/v1/speaker-tag-prompts',
     '/v1/stripe',
     '/v1/sync',
     '/v1/task-integrations',
     '/v1/task-intelligence',
+    '/v1/tts',
     '/v1/users',
     '/v1/wrapped',
     '/v1/work-intents',
@@ -91,6 +113,7 @@ APP_CLIENT_PREFIXES = (
     '/v1/workstreams',
     '/v1/what-matters-now',
     '/v2/apps',
+    '/v2/chat-sessions',
     '/v2/chat/materialize-prompts',
     '/v2/files',
     '/v2/firmware',
@@ -136,6 +159,10 @@ UNDOCUMENTED_PUBLIC_ROUTES: dict[tuple[str, str], str] = {
         '/v1/conversations/{conversation_id}',
     ): 'Firebase-authenticated first-party app route; public docs expose the Developer API key conversation detail route.',
     (
+        'GET',
+        '/v1/conversations/{conversation_id}/entities',
+    ): 'Firebase-authenticated first-party Review route; not part of the Developer API key contract.',
+    (
         'PATCH',
         '/v1/conversations/{conversation_id}/title',
     ): 'Firebase-authenticated first-party app route; not part of the Developer API key contract.',
@@ -148,6 +175,26 @@ UNDOCUMENTED_PUBLIC_ROUTES: dict[tuple[str, str], str] = {
         '/v1/conversations/{conversation_id}/share-recipients',
     ): 'Firebase-authenticated first-party app route; not part of the Developer API key contract.',
     (
+        'GET',
+        '/v1/conversations/{conversation_id}/screenshots',
+    ): 'Firebase-authenticated first-party app route, deliberately NOT on the Developer API surface: these return signed URLs to private screen capture, and the screen-frame egress design scopes that material to first-party clients. Exposing it to third-party API keys is a privacy expansion nobody has approved, and it is the direction that cannot be undone once keys exist.',
+    (
+        'DELETE',
+        '/v1/conversations/{conversation_id}/screenshots',
+    ): 'Firebase-authenticated first-party app route, deliberately NOT on the Developer API surface: these return signed URLs to private screen capture, and the screen-frame egress design scopes that material to first-party clients. Exposing it to third-party API keys is a privacy expansion nobody has approved, and it is the direction that cannot be undone once keys exist.',
+    (
+        'DELETE',
+        '/v1/conversations/{conversation_id}/screenshots/{frame_id}',
+    ): 'Firebase-authenticated first-party app route, deliberately NOT on the Developer API surface: these return signed URLs to private screen capture, and the screen-frame egress design scopes that material to first-party clients. Exposing it to third-party API keys is a privacy expansion nobody has approved, and it is the direction that cannot be undone once keys exist.',
+    (
+        'PATCH',
+        '/v1/conversations/{conversation_id}/screenshot-sharing',
+    ): 'Firebase-authenticated first-party app route, deliberately NOT on the Developer API surface: these return signed URLs to private screen capture, and the screen-frame egress design scopes that material to first-party clients. Exposing it to third-party API keys is a privacy expansion nobody has approved, and it is the direction that cannot be undone once keys exist.',
+    (
+        'GET',
+        '/v1/conversations/{conversation_id}/shared/screenshots',
+    ): 'Firebase-authenticated first-party app route, deliberately NOT on the Developer API surface: these return signed URLs to private screen capture, and the screen-frame egress design scopes that material to first-party clients. Exposing it to third-party API keys is a privacy expansion nobody has approved, and it is the direction that cannot be undone once keys exist.',
+    (
         'POST',
         '/v1/conversations/{conversation_id}/share-email',
     ): 'Firebase-authenticated first-party app route; not part of the Developer API key contract.',
@@ -155,6 +202,10 @@ UNDOCUMENTED_PUBLIC_ROUTES: dict[tuple[str, str], str] = {
         'PATCH',
         '/v1/conversations/{conversation_id}/starred',
     ): 'Firebase-authenticated first-party app route; not part of the Developer API key contract.',
+    (
+        'POST',
+        '/v1/conversations/{conversation_id}/mutations',
+    ): 'Firebase-authenticated first-party sync route; not part of the Developer API key contract.',
     (
         'PATCH',
         '/v1/conversations/{conversation_id}/folder',
@@ -192,6 +243,10 @@ UNDOCUMENTED_PUBLIC_ROUTES: dict[tuple[str, str], str] = {
         '/v1/conversations/{conversation_id}/assign-speaker/{speaker_id}',
     ): 'Firebase-authenticated first-party app route; not part of the Developer API key contract.',
     (
+        'POST',
+        '/v1/conversations/{conversation_id}/speakers/{speaker_id}/reject',
+    ): 'Firebase-authenticated first-party app route; not part of the Developer API key contract.',
+    (
         'DELETE',
         '/v1/conversations/{conversation_id}',
     ): 'Firebase-authenticated first-party app route; not part of the Developer API key contract.',
@@ -205,6 +260,10 @@ UNDOCUMENTED_PUBLIC_ROUTES: dict[tuple[str, str], str] = {
     ): 'Firebase-authenticated first-party app route; not part of the Developer API key contract.',
     (
         'GET',
+        '/v1/conversations/{conversation_id}/photos/{photo_id}/image',
+    ): 'Firebase-authenticated first-party app evidence route; not part of the Developer API key contract.',
+    (
+        'GET',
         '/v1/conversations/{conversation_id}/transcripts',
     ): 'Firebase-authenticated first-party app route; not part of the Developer API key contract.',
     (
@@ -213,7 +272,15 @@ UNDOCUMENTED_PUBLIC_ROUTES: dict[tuple[str, str], str] = {
     ): 'Firebase-authenticated first-party app route; not part of the Developer API key contract.',
     (
         'GET',
+        '/v1/conversations/{conversation_id}/entities',
+    ): 'Firebase-authenticated first-party Review route; included in the app-client contract, not the Developer API key contract.',
+    (
+        'GET',
         '/v1/conversations/{conversation_id}/finalization',
+    ): 'Firebase-authenticated first-party app route; not part of the Developer API key contract.',
+    (
+        'POST',
+        '/v1/conversations/{conversation_id}/capture-group/separate',
     ): 'Firebase-authenticated first-party app route; not part of the Developer API key contract.',
     (
         'PATCH',
@@ -280,6 +347,25 @@ APP_CLIENT_PUBLIC_PATHS = frozenset(
         '/v2/messages/shared/{token}',
     }
 )
+# Developer-API-key-only routes that must not appear in the Firebase app-client
+# contract. The app-client exporter stamps firebaseBearer on every included path;
+# leaking these would teach generated clients and agents the wrong auth scheme.
+APP_CLIENT_EXCLUDED_ROUTES: dict[tuple[str, str], str] = {
+    (
+        'POST',
+        '/v1/dev/user/ask',
+    ): (
+        'Developer API key + conversations:read only (dev:ask); public OpenAPI is the '
+        'authoritative contract. App-client firebaseBearer would mis-document auth.'
+    ),
+    (
+        'GET',
+        '/v1/dev/key',
+    ): (
+        'Developer API key only (dev:key_read); public OpenAPI is the authoritative contract. '
+        'App-client firebaseBearer would mis-document auth.'
+    ),
+}
 
 HTTP_METHODS = {'GET', 'POST', 'PUT', 'PATCH', 'DELETE'}
 
@@ -390,6 +476,7 @@ def configure_hermetic_environment() -> None:
         'BUCKET_SPEECH_PROFILES',
         'BUCKET_POSTPROCESSING',
         'BUCKET_PRIVATE_CLOUD_SYNC',
+        'BUCKET_FRAME_REQUESTS',
         'BUCKET_TEMPORAL_SYNC_LOCAL',
         'BUCKET_MEMORIES_RECORDINGS',
         'BUCKET_APP_THUMBNAILS',
@@ -698,6 +785,10 @@ def is_app_client_contract_path(path: str) -> bool:
     return False
 
 
+def is_app_client_excluded_route(method: str, path: str) -> bool:
+    return (method.upper(), path) in APP_CLIENT_EXCLUDED_ROUTES
+
+
 def is_integration_public_contract_path(path: str) -> bool:
     return path in INTEGRATION_PUBLIC_PATHS
 
@@ -721,11 +812,19 @@ def public_contract_routes(app) -> list[APIRoute]:
 
 
 def app_client_contract_routes(app) -> list[APIRoute]:
-    return [
-        route
-        for route in app.routes
-        if isinstance(route, APIRoute) and is_app_client_contract_path(route.path) and route.include_in_schema
-    ]
+    routes: list[APIRoute] = []
+    for route in app.routes:
+        if (
+            not isinstance(route, APIRoute)
+            or not is_app_client_contract_path(route.path)
+            or not route.include_in_schema
+        ):
+            continue
+        methods = {m.upper() for m in (route.methods or set()) if m.upper() in HTTP_METHODS}
+        if methods and all(is_app_client_excluded_route(method, route.path) for method in methods):
+            continue
+        routes.append(route)
+    return routes
 
 
 def integration_public_contract_routes(app) -> list[APIRoute]:
@@ -869,6 +968,42 @@ def _normalize_component_names(schema: dict[str, Any]) -> None:
         _rewrite_refs(schema, ref_map)
 
 
+def _publish_negotiated_plan_identity(schema: dict[str, Any]) -> None:
+    """Keep the default released contract; publish the opt-in catalog response.
+
+    The runtime model accepts catalog IDs. The route's capability/floor gate
+    continues to send the legacy projection to callers without a safe decoder.
+    Keeping distinct schemas lets the unchanged compatibility checker validate
+    that default response, without widening any installed decoder's contract.
+    """
+    from config.plan_catalog import LEGACY_WIRE_PLAN_VALUES
+
+    operation = schema.get('paths', {}).get('/v1/users/me/subscription', {}).get('get')
+    components = schema.get('components', {}).get('schemas', {})
+    if operation is None or 'Subscription' not in components or 'UserSubscriptionResponse' not in components:
+        return
+    components['PlanIdentitySubscription'] = copy.deepcopy(components['Subscription'])
+    components['PlanIdentitySubscription']['title'] = 'PlanIdentitySubscription'
+    components['PlanIdentityUserSubscriptionResponse'] = copy.deepcopy(components['UserSubscriptionResponse'])
+    capable = components['PlanIdentityUserSubscriptionResponse']
+    capable['title'] = 'PlanIdentityUserSubscriptionResponse'
+    capable['properties']['subscription'] = {'$ref': '#/components/schemas/PlanIdentitySubscription'}
+    components['Subscription']['properties']['plan']['enum'] = list(LEGACY_WIRE_PLAN_VALUES)
+    operation.setdefault('parameters', []).append(
+        {
+            'name': 'X-Omi-Plan-Identity',
+            'in': 'header',
+            'required': False,
+            'schema': {'type': 'string'},
+            'description': 'Value 1 declares catalog plan IDs and lossless unknown-plan decoding on a recognized client platform. Otherwise the platform release floor determines capability; older or unidentified clients retain legacy labels.',
+        }
+    )
+    operation['x-omi-plan-identity-response'] = {
+        'schema': {'$ref': '#/components/schemas/PlanIdentityUserSubscriptionResponse'},
+        'description': 'application/json response when the server plan-identity capability predicate accepts the header or platform/version floor. The default 200 schema is the legacy projection.',
+    }
+
+
 def build_openapi(app, surface: str) -> dict[str, Any]:
     if surface == 'public':
         routes = public_contract_routes(app)
@@ -879,6 +1014,9 @@ def build_openapi(app, surface: str) -> dict[str, Any]:
     elif surface == 'integration-public':
         routes = integration_public_contract_routes(app)
         title = INTEGRATION_PUBLIC_OPENAPI_TITLE
+    elif surface == 'dream':
+        routes = [route for route in app.routes if isinstance(route, APIRoute) and route.path == '/v1/dream/runs']
+        title = 'Omi Dream API'
     else:
         raise OpenAPIContractError(f'unknown OpenAPI surface: {surface}')
 
@@ -894,11 +1032,13 @@ def build_openapi(app, surface: str) -> dict[str, Any]:
     )
     if surface == 'public':
         _normalize_bearer_security(schema)
-    elif surface == 'app-client':
+    elif surface in {'app-client', 'dream'}:
         _normalize_app_client_security(schema)
     elif surface == 'integration-public':
         _normalize_integration_public_security(schema)
     _normalize_component_names(schema)
+    if surface == 'app-client':
+        _publish_negotiated_plan_identity(schema)
     validate_contract(app, schema, surface)
     return schema
 
@@ -970,6 +1110,15 @@ def validate_contract(app, schema: dict[str, Any], surface: str = 'public') -> N
         for path in schema.get('paths', {}):
             if not is_app_client_contract_path(path):
                 raise OpenAPIContractError(f'non-app-client route leaked into app-client OpenAPI: {path}')
+        for method, path in documented_route_keys(schema):
+            if is_app_client_excluded_route(method, path):
+                raise OpenAPIContractError(
+                    f'Developer-API-only route leaked into app-client OpenAPI: {method} {path} '
+                    f'({APP_CLIENT_EXCLUDED_ROUTES[(method, path)]})'
+                )
+    elif surface == 'dream':
+        if set(documented_route_keys(schema)) != {('GET', '/v1/dream/runs'), ('POST', '/v1/dream/runs')}:
+            raise OpenAPIContractError('Dream surface must contain exactly the owner GET and POST routes')
     elif surface == 'integration-public':
         documented = set(documented_route_keys(schema))
         expected = set(
@@ -1003,7 +1152,7 @@ def stable_json(schema: dict[str, Any]) -> str:
 
 def write_spec(path: Path, generated: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(generated)
+    path.write_text(generated, encoding='utf-8', newline='\n')
 
 
 def regenerate_hint(path: Path, surface: str) -> str:
@@ -1023,7 +1172,7 @@ def check_spec(path: Path, generated: str, *, surface: str = 'public') -> None:
     hint = regenerate_hint(path, surface)
     if not path.exists():
         raise OpenAPIContractError(f'{path} does not exist; run {hint}')
-    current = path.read_text()
+    current = path.read_text(encoding='utf-8')
     if current != generated:
         raise OpenAPIContractError(f'{path} is stale; run {hint}')
 
@@ -1032,7 +1181,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description='Export or verify an Omi OpenAPI contract.')
     parser.add_argument(
         '--surface',
-        choices=('public', 'app-client', 'integration-public'),
+        choices=('public', 'app-client', 'integration-public', 'dream'),
         default='public',
         help='contract surface to export; defaults to public Developer API',
     )
@@ -1057,6 +1206,8 @@ def default_spec_path(surface: str) -> Path:
         return DEFAULT_APP_CLIENT_SPEC_PATH
     if surface == 'integration-public':
         return DEFAULT_INTEGRATION_PUBLIC_SPEC_PATH
+    if surface == 'dream':
+        return BACKEND_DIR / 'docs' / 'api' / 'dream-openapi.json'
     raise OpenAPIContractError(f'unknown OpenAPI surface: {surface}')
 
 

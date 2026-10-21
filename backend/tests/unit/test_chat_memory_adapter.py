@@ -35,6 +35,8 @@ def _empty_historical_store(monkeypatch):
     monkeypatch.setattr(memories_db, 'get_memories', lambda *args, **kwargs: [])
     monkeypatch.setattr(memories_db, 'list_memory_updated_or_created_index', lambda *args, **kwargs: [])
     monkeypatch.setattr(memories_db, 'get_memories_by_ids', lambda *args, **kwargs: [])
+    monkeypatch.setattr(memories_db, 'scan_memories_updated_at_page', lambda *args, **kwargs: ([], [], True))
+    monkeypatch.setattr(memories_db, 'scan_memories_created_at_page', lambda *args, **kwargs: ([], [], True))
 
 
 def _memory_item(memory_id: str, *, tier=MemoryTier.short_term, now=None, captured_at=None, content=None, **overrides):
@@ -57,7 +59,9 @@ def test_chat_memory_tool_uses_universal_memory_service_without_legacy_vector_se
     memory_tools_py = Path(__file__).resolve().parents[2] / 'utils' / 'retrieval' / 'tools' / 'memory_tools.py'
     contents = memory_tools_py.read_text(encoding='utf-8')
     legacy_call = 'vector_db.find_similar_memories(uid, query, threshold=0.0, limit=fetch_limit)'
-    assert 'MemoryService(db_client=firestore_db).search(uid, query, limit=limit)' in contents
+    assert 'MemoryService(db_client=firestore_db).search(' in contents
+    assert 'limit=limit' in contents
+    assert 'candidate_limit=' in contents
     assert legacy_call not in contents
     assert 'chat_legacy_read_authorized' not in contents
     assert 'read_default_read_rollout' not in contents

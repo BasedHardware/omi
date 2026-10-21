@@ -102,6 +102,10 @@ class CreateIssueRequest(ChatToolRequest):
     description: Optional[str] = ""
     priority: Optional[str] = None
     team_id: Optional[str] = None
+    # alias for the manifest's `team` parameter (key, name, or UUID)
+    team: Optional[str] = None
+    # optional initial workflow state name (e.g. "In Progress")
+    status: Optional[str] = None
 
 
 class ListMyIssuesRequest(ChatToolRequest):

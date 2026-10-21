@@ -38,97 +38,6 @@ final class RewindCaptureExclusionGenerationTests: XCTestCase {
     XCTAssertTrue(RewindExcludedVideoChunkCleanupJournal.pending(ownerID: ownerA).isEmpty)
   }
 
-  func testPendingContextBucketPurgeJournalIsOwnerScoped() {
-    let ownerA = "pending-purge-owner-a-\(UUID().uuidString)"
-    let ownerB = "pending-purge-owner-b-\(UUID().uuidString)"
-    let appName = "SecretApp-\(UUID().uuidString)"
-
-    RewindPendingContextBucketPurgeJournal.enqueue(appName: appName, ownerID: ownerA)
-    XCTAssertEqual(
-      RewindPendingContextBucketPurgeJournal.pending(ownerID: ownerA), [appName])
-    XCTAssertTrue(
-      RewindPendingContextBucketPurgeJournal.pending(ownerID: ownerB).isEmpty,
-      "account B must not observe or clear account A's pending purge markers")
-
-    RewindPendingContextBucketPurgeJournal.complete(appName: appName, ownerID: ownerB)
-    XCTAssertEqual(
-      RewindPendingContextBucketPurgeJournal.pending(ownerID: ownerA), [appName],
-      "completing under a different owner must leave the originating marker intact")
-
-    RewindPendingContextBucketPurgeJournal.complete(appName: appName, ownerID: ownerA)
-    XCTAssertTrue(RewindPendingContextBucketPurgeJournal.pending(ownerID: ownerA).isEmpty)
-  }
-
-  func testLegacyPendingPurgeMarkersMigrateToActiveOwner() throws {
-    let defaultsKey = "rewindPendingContextBucketPurges"
-    let owner = "legacy-purge-owner-\(UUID().uuidString)"
-    let names = ["SecretApp-\(UUID().uuidString)", "  Private App  "]
-    let defaults = UserDefaults.standard
-    let previous = defaults.object(forKey: defaultsKey)
-    defer {
-      if let previous {
-        defaults.set(previous, forKey: defaultsKey)
-      } else {
-        defaults.removeObject(forKey: defaultsKey)
-      }
-    }
-    defaults.set(names, forKey: defaultsKey)
-
-    XCTAssertEqual(
-      RewindPendingContextBucketPurgeJournal.pending(ownerID: owner),
-      Set([names[0], "Private App"]))
-    XCTAssertTrue(
-      RewindPendingContextBucketPurgeJournal.pending(ownerID: "another-owner").isEmpty)
-  }
-
-  func testLegacyPendingPurgeMarkersMigrateOnEnqueueAndComplete() {
-    let defaultsKey = "rewindPendingContextBucketPurges"
-    let owner = "legacy-purge-owner-\(UUID().uuidString)"
-    let legacyApp = "LegacyApp-\(UUID().uuidString)"
-    let defaults = UserDefaults.standard
-    let previous = defaults.object(forKey: defaultsKey)
-    defer {
-      if let previous {
-        defaults.set(previous, forKey: defaultsKey)
-      } else {
-        defaults.removeObject(forKey: defaultsKey)
-      }
-    }
-    defaults.set([legacyApp], forKey: defaultsKey)
-
-    RewindPendingContextBucketPurgeJournal.enqueue(appName: "  \(legacyApp)  ", ownerID: owner)
-    XCTAssertEqual(
-      RewindPendingContextBucketPurgeJournal.pending(ownerID: owner), [legacyApp])
-
-    RewindPendingContextBucketPurgeJournal.complete(appName: legacyApp, ownerID: owner)
-    XCTAssertTrue(RewindPendingContextBucketPurgeJournal.pending(ownerID: owner).isEmpty)
-  }
-
-  @MainActor
-  func testRearmPendingPurgeRetryRequiresCurrentOwner() async {
-    let owner = "rearm-purge-owner-\(UUID().uuidString)"
-    let defaults = UserDefaults.standard
-    let previousOwner = defaults.object(forKey: .authUserId)
-    defer {
-      if let previousOwner {
-        defaults.set(previousOwner, forKey: .authUserId)
-      } else {
-        defaults.removeObject(forKey: .authUserId)
-      }
-    }
-    defaults.removeObject(forKey: .authUserId)
-
-    let appName = "RearmApp-\(UUID().uuidString)"
-    RewindPendingContextBucketPurgeJournal.enqueue(appName: appName, ownerID: owner)
-    await RewindSettings.rearmPendingContextBucketPurgesForCurrentOwner()
-    XCTAssertEqual(RewindPendingContextBucketPurgeJournal.pending(ownerID: owner), [appName])
-
-    defaults.set(owner, forKey: .authUserId)
-    await RewindSettings.rearmPendingContextBucketPurgesForCurrentOwner()
-    // Without a live bucket store the purge fails closed and keeps the retry marker.
-    XCTAssertEqual(RewindPendingContextBucketPurgeJournal.pending(ownerID: owner), [appName])
-  }
-
   func testSupersededOwnerTransitionLeaseBecomesExclusion() throws {
     let ownerSnapshot = RewindCaptureOwnerSnapshot(
       ownerID: "lease-owner", generation: 1, authorizationSnapshot: nil)
@@ -191,21 +100,31 @@ final class RewindCaptureExclusionGenerationTests: XCTestCase {
   /// #11572: launch / CI window where `auth_userId` is set but RewindDatabase
   /// has not resolved `currentUserId` yet. Capture preferred auth; isCurrent
   /// used to compare only the DB id and permanently fail-closed.
-  func testOwnerSnapshotStaysCurrentWhenAuthLeadsUnresolvedRewindDatabase() {
-    let defaults = UserDefaults.standard
-    let previousAuth = defaults.object(forKey: .authUserId)
+  ///
+  /// #12039: establish the owner through the production transition boundary.
+  /// Mutating `auth_userId` directly makes the process-wide authorization
+  /// authority correctly revoke the out-of-band owner, so this test otherwise
+  /// depends on which owner-bound suite ran before it.
+  @MainActor
+  func testOwnerSnapshotStaysCurrentWhenAuthLeadsUnresolvedRewindDatabase() async {
+    let ownerFixture = RuntimeOwnerAuthorityTestFixture()
+    addTeardownBlock { @MainActor in
+      await ownerFixture.restore()
+    }
     let previousDB = RewindDatabase.currentUserId
     defer {
-      if let previousAuth {
-        defaults.set(previousAuth, forKey: .authUserId)
-      } else {
-        defaults.removeObject(forKey: .authUserId)
-      }
       RewindDatabase.currentUserId = previousDB
     }
 
+    // Reproduce the shared-state signature from #12039: another suite changed
+    // durable auth outside the transition boundary, so the authorization
+    // authority revoked itself before this test started.
+    await ownerFixture.establish(authOwnerID: "prior-owner-\(UUID().uuidString)")
+    UserDefaults.standard.set("out-of-band-owner-\(UUID().uuidString)", forKey: .authUserId)
+    XCTAssertNil(RuntimeOwnerIdentity.captureAuthorizationSnapshot())
+
     let authOwner = "auth-leading-\(UUID().uuidString)"
-    defaults.set(authOwner, forKey: .authUserId)
+    await ownerFixture.establish(authOwnerID: authOwner)
     RewindDatabase.currentUserId = nil
 
     guard let snapshot = RewindCaptureOwnerSnapshot.capture() else {

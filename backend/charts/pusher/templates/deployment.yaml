@@ -64,13 +64,23 @@ spec:
           {{- end }}
           image: "{{ if $digest }}{{ $repository }}@{{ $digest }}{{ else }}{{ $repository }}:{{ required "image.tag is required when image.digest is absent" .Values.image.tag }}{{ end }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
-          {{- with .Values.envFrom }}
+          {{- $runtimeConfigMapName := required "runtimeConfigMapName is required" .Values.runtimeConfigMapName }}
           envFrom:
-            {{- toYaml . | nindent 12 }}
-          {{- end }}
+            - configMapRef:
+                name: {{ $runtimeConfigMapName | quote }}
           {{- with .Values.env }}
           env:
-            {{- toYaml . | nindent 12 }}
+            {{- range . }}
+            {{- $entry := deepCopy . }}
+            {{- $valueFrom := get $entry "valueFrom" }}
+            {{- if and (kindIs "map" $valueFrom) (hasKey $valueFrom "configMapKeyRef") }}
+            {{- $configMapKeyRef := get $valueFrom "configMapKeyRef" }}
+            {{- if kindIs "map" $configMapKeyRef }}
+            {{- $_ := set $configMapKeyRef "name" $runtimeConfigMapName }}
+            {{- end }}
+            {{- end }}
+            {{- toYaml (list $entry) | nindent 12 }}
+            {{- end }}
           {{- end }}
           ports:
             - name: http

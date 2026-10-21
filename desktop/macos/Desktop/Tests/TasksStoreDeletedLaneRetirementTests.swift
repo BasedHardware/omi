@@ -18,8 +18,19 @@ import XCTest
 /// live tasks. Deleting a task on one device and then signing in on a new
 /// machine un-deleted it.
 ///
-/// The lane is the authority on retirement, so `fetchDeletedPage` stamps it
-/// rather than asking the projection to infer it.
+/// The lane was therefore treated as the authority and `fetchDeletedPage`
+/// stamped every row it returned. That went wrong in the other direction, and
+/// far more expensively: `GET /v1/action-items` has no `deleted` parameter.
+/// FastAPI drops the unknown query item and the handler's stream skips
+/// soft-deleted documents outright, so the "deleted lane" answered with the
+/// owner's *live* first page — and each visit to Removed tombstoned a hundred
+/// live tasks in the local cache. Completing one of them from a chat task card
+/// read the tombstone back and rendered "Task is no longer available" over the
+/// task the reader had just ticked.
+///
+/// So the contract is now the other way round: the lane keeps the rows the
+/// response itself reports retired and drops the rest. Showing fewer rows in
+/// Removed is a gap; manufacturing retirement is data loss.
 @MainActor
 private final class DeletedLaneProbe {
   var syncedPages: [[TaskActionItem]] = []
@@ -31,17 +42,21 @@ private final class DeletedLaneProbe {
 
 final class TasksStoreDeletedLaneRetirementTests: XCTestCase {
 
-  /// The regression: a deleted-lane row that carries neither legacy `deleted`
-  /// nor a recognized retired status must still reach the cache retired.
+  /// The regression this file now guards: a row the response reports as **live**
+  /// must not be written to the local cache retired, however it was fetched.
+  ///
+  /// This is the shape the real endpoint returns for every row, because it
+  /// ignores `deleted=true` entirely. Stamping it retired is what tombstoned
+  /// the owner's live tasks a page at a time.
   @MainActor
-  func testDeletedLaneRowIsRetiredBeforeItReachesTheLocalCache() async throws {
+  func testLiveRowFromTheDeletedLaneIsNeverTombstonedLocally() async throws {
     let store = TasksStore.shared
     await prepareStore(store)
 
-    let serverRow = task(id: "deleted-on-phone", taskStatus: "active")
+    let serverRow = task(id: "still-open", taskStatus: "active")
     XCTAssertFalse(
       serverRow.isRetired,
-      "fixture must reproduce the server shape that made this bug: retired by lane, live by projection")
+      "fixture must reproduce what the endpoint actually answers with: an ordinary live task")
 
     let probe = DeletedLaneProbe()
     let operations = TasksStore.OwnerBoundOperations(
@@ -54,15 +69,16 @@ final class TasksStoreDeletedLaneRetirementTests: XCTestCase {
 
     await store.loadDeletedTasks(operations: operations)
 
-    let synced = try XCTUnwrap(probe.syncedPages.first, "the deleted page must be synced to the cache")
-    XCTAssertEqual(synced.map(\.id), ["deleted-on-phone"])
+    let synced = probe.syncedPages.first ?? []
     XCTAssertTrue(
-      synced.allSatisfy { $0.isRetired },
-      "a row from the deleted lane must never be written to the local cache as live — that is the resurrection")
-    XCTAssertEqual(
-      store.deletedTasks.map(\.id),
-      ["deleted-on-phone"],
-      "the retired row must show up in the deleted list instead of vanishing from every surface")
+      synced.allSatisfy { !$0.isRetired },
+      "a live row must reach the cache live — writing it retired is what took the owner's tasks away")
+    XCTAssertTrue(
+      probe.cache.isEmpty,
+      "nothing may be tombstoned locally on the strength of the lane it was fetched from")
+    XCTAssertTrue(
+      store.deletedTasks.isEmpty,
+      "Removed showing nothing is the honest answer here; showing live tasks is not")
   }
 
   /// A row the server already marked retired keeps its own marker: the lane

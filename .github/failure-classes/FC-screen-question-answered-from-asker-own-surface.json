@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-screen-question-answered-from-asker-own-surface",
+  "violated_contract": "An explicit question about the user's screen must be answered from pixels of the subject the user means. When the asking surface is itself on screen — the main chat window is frontmost by construction of a typed send — a capture taken at answer time photographs the asker, so the evidence must instead come from the most recent stored frame of a non-asker app, or the turn must answer that no honest evidence exists.",
+  "canonical_prevention": "Route explicit screen questions through a decision layer keyed on the asking surface: self-referential surfaces answer from the newest stored frame of a non-asker app with the frame's app, window, and age named as provenance; every other surface keeps a turn-scoped live capture; and the no-frame case ships an honest failure payload that tells the user to switch apps instead of shipping the asker's own window with a disclaimer.",
+  "canonical_prevention_artifact": [
+    "desktop/macos/Desktop/Tests/ScreenContextFallbackPolicyTests.swift",
+    "desktop/macos/Desktop/Tests/ScreenContextTelemetryTests.swift"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "desktop/macos/Desktop/Sources/Chat/ScreenContextFallbackPolicy.swift",
+    "desktop/macos/Desktop/Sources/Chat/ScreenContextTelemetry.swift",
+    "desktop/macos/Desktop/Sources/Providers/ChatProvider.swift"
+  ],
+  "status": "open"
+}

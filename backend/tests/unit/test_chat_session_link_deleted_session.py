@@ -127,14 +127,3 @@ def test_add_files_to_deleted_session_does_not_raise(live_session):
 def test_add_files_still_links_onto_live_session(live_session):
     chat_db.add_files_to_chat_session(UID, SESSION_ID, ['f1'])
     assert 'file_ids' in live_session[SESSION_ID]
-
-
-def test_update_openai_ids_on_deleted_session_does_not_raise(live_session):
-    _delete(live_session)
-    assert chat_db.update_chat_session_openai_ids(UID, SESSION_ID, 'thread', 'assistant') is None
-
-
-def test_update_openai_ids_still_writes_to_live_session(live_session):
-    chat_db.update_chat_session_openai_ids(UID, SESSION_ID, 'thread', 'assistant')
-    assert live_session[SESSION_ID]['openai_thread_id'] == 'thread'
-    assert live_session[SESSION_ID]['openai_assistant_id'] == 'assistant'

@@ -146,6 +146,10 @@ final class DeviceProvider: ObservableObject {
       self?.startDiscovery(timeout: 5)
     }
     coordinator.onSessionEnded = { [weak self] in
+      // Authoritative disconnect telemetry: one event per ended session.
+      // Unpair of an already-disconnected device does not fire this callback,
+      // so it cannot emit a phantom Device Disconnected.
+      AnalyticsManager.shared.deviceDisconnected()
       self?.resetSessionPresentation()
     }
     coordinator.onFallDetected = { [weak self] data in
@@ -332,8 +336,7 @@ final class DeviceProvider: ObservableObject {
 
       logger.info("Connected to \(device.displayName)")
 
-      // TODO: Track analytics when AnalyticsManager supports device events
-      // AnalyticsManager.shared.deviceConnected(deviceType: device.type.rawValue, deviceName: device.name)
+      AnalyticsManager.shared.deviceConnected(device: device)
 
     } catch DeviceSessionCoordinatorError.connectionAlreadyActive {
       logger.debug("Ignored duplicate connection request for \(device.displayName)")
@@ -384,9 +387,6 @@ final class DeviceProvider: ObservableObject {
     isDeviceStorageSupported = false
     hasFirmwareUpdate = false
     hasLowBatteryAlerted = false
-
-    // TODO: Track analytics when AnalyticsManager supports device events
-    // AnalyticsManager.shared.deviceDisconnected()
 
     if scheduleReconnectNotification {
       scheduleDisconnectNotification()
@@ -452,7 +452,7 @@ final class DeviceProvider: ObservableObject {
     // Send low battery notification
     let content = UNMutableNotificationContent()
     content.title = "Low Battery Alert"
-    content.body = "Your omi device is running low on battery. Time for a recharge! 🔋"
+    content.body = "Your Omi device is running low on battery. Time for a recharge! 🔋"
     content.sound = .default
 
     let request = UNNotificationRequest(
@@ -552,8 +552,8 @@ final class DeviceProvider: ObservableObject {
 
   private func sendDisconnectNotification() {
     let content = UNMutableNotificationContent()
-    content.title = "Your omi Device Disconnected"
-    content.body = "Please reconnect to continue using your omi."
+    content.title = "Your Omi Device Disconnected"
+    content.body = "Please reconnect to continue using your Omi."
     content.sound = .default
 
     let request = UNNotificationRequest(
@@ -570,7 +570,7 @@ final class DeviceProvider: ObservableObject {
 
     let content = UNMutableNotificationContent()
     content.title = "Fall Detected"
-    content.body = "A potential fall was detected by your omi device."
+    content.body = "A potential fall was detected by your Omi device."
     content.sound = .default
 
     let request = UNNotificationRequest(

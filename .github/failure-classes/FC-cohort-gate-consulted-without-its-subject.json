@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-cohort-gate-consulted-without-its-subject",
+  "violated_contract": "A rollout gate that decides per subject must be told which subject it is deciding about. Cohort-scoped gates are fail-closed by design: asked without the account, they admit nobody. So a bare call does not merely lose attribution, it makes the branch behind the gate unreachable in every environment, whatever the flag and cohort are set to. The rollout then looks configurable and enabled while being permanently dark, and the only symptom is the absence of behaviour nobody is watching for.",
+  "canonical_prevention": "Pass the subject at every call site, and make the test doubles carry the same signature as the function they replace. A suite that swaps the gate for a zero-argument stub cannot observe how production calls it, and will stay green across exactly this defect, so at least one test must assert the argument rather than replace the function. Where a registry or runbook records rollout reach, it must describe the call sites as they are, since 'this site passes no subject yet' is the defect written down rather than a note about it.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_process_conversation_free_tier_branch.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/free_tier_cohort.py",
+    "backend/utils/free_tier_processing_policy.py",
+    "backend/utils/free_tier_memory_policy.py",
+    "backend/utils/conversations/process_conversation.py"
+  ],
+  "status": "open"
+}

@@ -6,14 +6,21 @@ import 'package:flutter/material.dart';
 import 'package:omi/backend/http/api/speech_profile.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/schema/person.dart';
 import 'package:omi/app_globals.dart';
 import 'package:omi/pages/settings/language_selection_dialog.dart';
 import 'package:omi/providers/user_provider.dart';
 import 'package:omi/utils/logger.dart';
 
 class HomeProvider extends ChangeNotifier {
+  /// The two pages of the Home shell, switched at the top of the screen.
+  static const int homeTab = 0;
+  static const int tasksTab = 1;
+  static const int tabCount = 2;
+
   int _sessionGeneration = 0;
-  int selectedIndex = 0;
+  bool _languageDialogOffered = false;
+  int selectedIndex = homeTab;
   Function(int idx)? onSelectedIndexChanged;
   final FocusNode chatFieldFocusNode = FocusNode();
   final FocusNode appsSearchFieldFocusNode = FocusNode();
@@ -87,6 +94,7 @@ class HomeProvider extends ChangeNotifier {
     'Marathi': 'mr',
     'Norwegian': 'no',
     'Persian': 'fa',
+    'Punjabi': 'pa',
     'Polish': 'pl',
     'Romanian': 'ro',
     'Serbian': 'sr',
@@ -155,7 +163,8 @@ class HomeProvider extends ChangeNotifier {
 
   void clearUserData() {
     _sessionGeneration++;
-    selectedIndex = 0;
+    _languageDialogOffered = false;
+    selectedIndex = homeTab;
     isAppsSearchFieldFocused = false;
     isChatFieldFocused = false;
     isConvoSearchFieldFocused = false;
@@ -250,23 +259,27 @@ class HomeProvider extends ChangeNotifier {
     await setupUserPrimaryLanguage();
   }
 
-  Future<void> setupUserPrimaryLanguage() async {
+  Future<void> setupUserPrimaryLanguage({Future<String?> Function()? fetchPrimaryLanguage}) async {
     if (SharedPreferencesUtil().hasSetPrimaryLanguage && SharedPreferencesUtil().userPrimaryLanguage.isNotEmpty) {
       return;
     }
 
     final generation = _sessionGeneration;
     try {
-      final language = await getUserPrimaryLanguage();
+      final language = await (fetchPrimaryLanguage ?? getUserPrimaryLanguage)();
       if (generation != _sessionGeneration) return;
       if (language == null) {
         // User hasn't set a primary language yet
         userPrimaryLanguage = '';
         hasSetPrimaryLanguage = false;
 
-        // Show language dialog after a short delay to ensure UI is ready
+        // Show language dialog after a short delay to ensure UI is ready. Not during onboarding:
+        // it has its own language step, and the required sheet would cover whichever step a
+        // relaunch resumed on, consent included (#20788).
         Future.delayed(const Duration(milliseconds: 500), () {
-          if (generation == _sessionGeneration && globalNavigatorKey.currentContext != null) {
+          if (generation == _sessionGeneration &&
+              SharedPreferencesUtil().onboardingCompleted &&
+              globalNavigatorKey.currentContext != null) {
             showLanguageDialogIfNeeded(globalNavigatorKey.currentContext!);
           }
         });
@@ -288,10 +301,13 @@ class HomeProvider extends ChangeNotifier {
     return;
   }
 
+  /// Opens the language picker once per session when no language is saved.
+  /// The sheet is closable; closing it keeps the default language and this
+  /// does not reopen it on the next Home rebuild.
   void showLanguageDialogIfNeeded(BuildContext context) {
-    if (!hasSetPrimaryLanguage) {
-      LanguageSelectionDialog.show(context, isRequired: true);
-    }
+    if (hasSetPrimaryLanguage || _languageDialogOffered) return;
+    _languageDialogOffered = true;
+    LanguageSelectionDialog.show(context);
   }
 
   Future<bool> updateUserPrimaryLanguage(String languageCode, {UserProvider? userProvider}) async {
@@ -330,7 +346,11 @@ class HomeProvider extends ChangeNotifier {
   }
 
   Future setUserPeople() async {
-    SharedPreferencesUtil().cachedPeople = await getAllPeople();
+    final response = await getAllPeople();
+    if (response != null) {
+      SharedPreferencesUtil().cachedPeople =
+          preserveCachedPeopleStats(response.people, SharedPreferencesUtil().cachedPeople);
+    }
     notifyListeners();
   }
 

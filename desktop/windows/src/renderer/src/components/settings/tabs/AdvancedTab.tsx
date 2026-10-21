@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Download, Upload, Wrench, FolderSearch, Network, RotateCcw } from 'lucide-react'
-import { omiApi } from '../../../lib/apiClient'
+import { auth } from '../../../lib/firebase'
 import { toast } from '../../../lib/toast'
 import { type MemorySource } from '../../../lib/memoryExtract'
 import {
@@ -188,56 +188,30 @@ export function AdvancedTab(): React.JSX.Element {
       )
     )
       return
+    const token = await auth.currentUser?.getIdToken(true)
+    if (!token) {
+      toast('Sign in required to delete memories', { tone: 'warn' })
+      return
+    }
     setMemDeleting(true)
     setMemDeleteProgress(0)
-    const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
-    let deleted = 0
-    let failed = 0
-    let firstError = ''
-    let paceMs = 1100
 
-    const deleteIdPaced = async (id: string): Promise<'ok' | 'gone' | 'fail'> => {
-      for (let attempt = 0; attempt < 30; attempt++) {
-        try {
-          await omiApi.delete(`/v3/memories/${id}`, { ...({ __noRetry: true } as object) })
-          return 'ok'
-        } catch (e) {
-          const resp = (e as { response?: { status?: number; headers?: Record<string, string> } })
-            .response
-          const status = resp?.status
-          if (status === 404) return 'gone'
-          if (status === 429) {
-            paceMs = 1100
-            const ra = Number(resp?.headers?.['retry-after'])
-            await sleep(
-              Number.isFinite(ra) && ra > 0 ? ra * 1000 : Math.min(3000 * 1.6 ** attempt, 60_000)
-            )
-            continue
-          }
-          if (!firstError) firstError = status ? `HTTP ${status}` : (e as Error).message
-          return 'fail'
-        }
-      }
-      return 'fail'
-    }
-
+    // Main-process bulk delete via DELETE /v3/memories/batch: one gate hold per
+    // 100-id chunk instead of N single deletes colliding on the account-wide
+    // destructive-operation gate (409) and the 60/hour single-delete limiter.
+    const offProgress = window.omi.onMemoriesDeleteProgress((p) => setMemDeleteProgress(p.deleted))
     try {
-      for (let i = 0; i < ids.length; i++) {
-        const r = await deleteIdPaced(ids[i])
-        if (r === 'ok' || r === 'gone') deleted++
-        else failed++
-        if (i % 10 === 0 || i === ids.length - 1) setMemDeleteProgress(deleted)
-        if (paceMs) await sleep(paceMs)
-      }
-      toast(`Deleted ${deleted} of ${ids.length} memories`, {
-        tone: failed ? 'warn' : 'success',
-        body: failed
-          ? `${failed} failed${firstError ? ` — ${firstError}` : ''}. Analyze again to retry.`
+      const result = await window.omi.memoriesBulkDelete({ token, ids })
+      toast(`Deleted ${result.deleted} of ${ids.length} memories`, {
+        tone: result.failed ? 'warn' : 'success',
+        body: result.failed
+          ? `${result.failed} failed${result.firstError ? ` — ${result.firstError}` : ''}. Analyze again to retry.`
           : undefined
       })
     } catch (e) {
       toast('Delete failed', { tone: 'error', body: (e as Error).message })
     } finally {
+      offProgress()
       setMemDeleting(false)
     }
     await refresh()

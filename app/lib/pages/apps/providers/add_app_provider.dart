@@ -17,11 +17,20 @@ import 'package:omi/backend/schema/app.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/app_globals.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
+import 'package:omi/utils/error_message.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/widgets/extensions/string.dart';
 
 class AddAppProvider extends ChangeNotifier {
+  final Future<bool> Function(String appId, String keyId) _deleteApiKeyServer;
+  final Future<List<AppApiKey>> Function(String appId) _listApiKeysServer;
+
+  AddAppProvider({
+    Future<bool> Function(String appId, String keyId)? deleteApiKeyServerFn,
+    Future<List<AppApiKey>> Function(String appId)? listApiKeysServerFn,
+  })  : _deleteApiKeyServer = deleteApiKeyServerFn ?? deleteApiKeyServer,
+        _listApiKeysServer = listApiKeysServerFn ?? listApiKeysServer;
   AppProvider? appProvider;
 
   GlobalKey<FormState> formKey = GlobalKey<FormState>();
@@ -552,7 +561,7 @@ class AddAppProvider extends ChangeNotifier {
         (cap) => cap.id == 'external_integration' || cap.id == 'proactive_notification',
       );
       if (needsSourceCode && sourceCodeUrlController.text.trim().isEmpty) {
-        AppSnackbar.showSnackbarError('GitHub repository URL is required for this app type');
+        AppSnackbar.showSnackbarError(globalNavigatorKey.currentContext!.l10n.githubRepositoryUrlRequired);
         return false;
       }
       return true;
@@ -650,8 +659,9 @@ class AddAppProvider extends ChangeNotifier {
   }
 
   Future<bool> refreshManifest() async {
+    final l10n = globalNavigatorKey.currentContext?.l10n;
     if (updateAppId == null) {
-      AppSnackbar.showSnackbarError('App ID not found');
+      AppSnackbar.showSnackbarError(l10n?.appIdNotFoundError ?? 'App ID not found');
       return false;
     }
 
@@ -661,10 +671,10 @@ class AddAppProvider extends ChangeNotifier {
       var app = await getAppDetailsServer(updateAppId!);
       if (app != null) {
         appProvider!.updateLocalApp(App.fromJson(app));
-        AppSnackbar.showSnackbarSuccess('Manifest refreshed successfully');
+        AppSnackbar.showSnackbarSuccess(l10n?.manifestRefreshedSuccess ?? 'Manifest refreshed successfully');
       }
     } else {
-      AppSnackbar.showSnackbarError('Failed to refresh manifest');
+      AppSnackbar.showSnackbarError(l10n?.manifestRefreshFailed ?? 'Failed to refresh manifest');
     }
     setIsRefreshingManifest(false);
     return success;
@@ -751,7 +761,7 @@ class AddAppProvider extends ChangeNotifier {
             type: FileType.custom,
             allowedExtensions: ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'],
             allowMultiple: false,
-            dialogTitle: 'Select an image file',
+            dialogTitle: globalNavigatorKey.currentContext!.l10n.selectImageFileTitle,
             withData: false,
             withReadStream: false,
           );
@@ -771,7 +781,7 @@ class AddAppProvider extends ChangeNotifier {
         } catch (e) {
           Logger.debug('🖼️ FilePicker general error: $e');
           AppSnackbar.showSnackbarError(
-            globalNavigatorKey.currentContext!.l10n.addAppErrorSelectingImage(e.toString()),
+            globalNavigatorKey.currentContext!.l10n.addAppErrorSelectingImage(readableError(e)),
           );
         }
       } else {
@@ -818,7 +828,7 @@ class AddAppProvider extends ChangeNotifier {
             type: FileType.custom,
             allowedExtensions: ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'],
             allowMultiple: false,
-            dialogTitle: 'Select a thumbnail image',
+            dialogTitle: globalNavigatorKey.currentContext!.l10n.selectThumbnailImageTitle,
             withData: false,
             withReadStream: false,
           );
@@ -839,7 +849,7 @@ class AddAppProvider extends ChangeNotifier {
         } catch (e) {
           Logger.debug('🖼️ FilePicker general error (thumbnail): $e');
           AppSnackbar.showSnackbarError(
-            globalNavigatorKey.currentContext!.l10n.addAppErrorSelectingThumbnail(e.toString()),
+            globalNavigatorKey.currentContext!.l10n.addAppErrorSelectingThumbnail(readableError(e)),
           );
           return;
         }
@@ -906,7 +916,7 @@ class AddAppProvider extends ChangeNotifier {
           type: FileType.custom,
           allowedExtensions: ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'],
           allowMultiple: false,
-          dialogTitle: 'Select an image file',
+          dialogTitle: globalNavigatorKey.currentContext!.l10n.selectImageFileTitle,
           withData: false,
           withReadStream: false,
         );
@@ -1039,7 +1049,9 @@ class AddAppProvider extends ChangeNotifier {
   Future<void> generateDescription() async {
     setIsGenratingDescription(true);
     var res = await getGenratedDescription(appNameController.text, appDescriptionController.text);
-    appDescriptionController.text = res.decodeString;
+    if (res.isNotEmpty) {
+      appDescriptionController.text = res.decodeString;
+    }
     checkValidity();
     setIsGenratingDescription(false);
     notifyListeners();
@@ -1055,7 +1067,7 @@ class AddAppProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      apiKeys = await listApiKeysServer(appId);
+      apiKeys = await _listApiKeysServer(appId);
     } catch (e) {
       print('Error loading provider API keys: $e');
     } finally {
@@ -1071,7 +1083,10 @@ class AddAppProvider extends ChangeNotifier {
   }
 
   Future<void> deleteApiKey(String appId, String keyId) async {
-    await deleteApiKeyServer(appId, keyId);
+    final deleted = await _deleteApiKeyServer(appId, keyId);
+    if (!deleted) {
+      throw Exception('API key revocation was rejected by the server');
+    }
     await loadApiKeys(appId);
   }
 }

@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import 'package:provider/provider.dart';
 
 import 'package:omi/pages/settings/task_integrations_page.dart';
 import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/providers/task_integration_provider.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/other/temp.dart';
 
 /// Bottom-anchored selection action bar for the action items page.
 /// Same visual language as `MergeActionBar` for the conversations page —
@@ -15,9 +16,8 @@ import 'package:omi/utils/l10n_extensions.dart';
 ///
 /// Mounted at the home page's outer Stack so it paints above the bottom
 /// nav bar (mirrors `MergeActionBar`). Selection state lives in
-/// `ActionItemsProvider`. Bulk-delete is intentionally not part of the bar:
-/// per-row swipe-left handles individual delete, and the section header's
-/// clear-completed path covers bulk-delete of completed tasks.
+/// `ActionItemsProvider`. Bulk delete confirms (it cannot be undone); single
+/// deletes elsewhere are immediate with Undo.
 class TaskSelectionActionBar extends StatefulWidget {
   const TaskSelectionActionBar({super.key});
 
@@ -32,7 +32,7 @@ class _TaskSelectionActionBarState extends State<TaskSelectionActionBar> with Si
   @override
   void initState() {
     super.initState();
-    _animationController = AnimationController(vsync: this, duration: const Duration(milliseconds: 280));
+    _animationController = AnimationController(vsync: this, duration: OmiMotion.standardDuration);
     _slideAnimation = Tween<Offset>(
       begin: const Offset(0, 1),
       end: Offset.zero,
@@ -65,8 +65,8 @@ class _TaskSelectionActionBarState extends State<TaskSelectionActionBar> with Si
             position: _slideAnimation,
             child: Container(
               decoration: BoxDecoration(
-                color: const Color(0xFF1A1A1C),
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                color: OmiColors.surface1,
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(OmiRadius.lg)),
                 boxShadow: [
                   BoxShadow(color: Colors.black.withValues(alpha: 0.5), blurRadius: 20, offset: const Offset(0, -4)),
                 ],
@@ -74,41 +74,31 @@ class _TaskSelectionActionBarState extends State<TaskSelectionActionBar> with Si
               child: SafeArea(
                 top: false,
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
+                  padding: const EdgeInsets.fromLTRB(12, 16, 20, 16),
                   child: Row(
                     children: [
-                      // Cancel
-                      GestureDetector(
-                        onTap: () {
-                          HapticFeedback.lightImpact();
+                      OmiButton.tertiary(
+                        label: context.l10n.cancel,
+                        onPressed: () {
+                          OmiHaptics.light();
                           provider.endSelection();
                         },
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                          child: Text(
-                            context.l10n.cancel,
-                            style: const TextStyle(color: Color(0xFF8E8E93), fontSize: 17, fontWeight: FontWeight.w500),
-                          ),
-                        ),
                       ),
                       const Spacer(),
-                      // Destructive secondary: bulk delete. Icon-only on purpose
-                      // so the Export pill stays the visual primary; the count
-                      // lives on that pill instead of in the centre to keep this
-                      // row from feeling crowded.
-                      _IconActionButton(
-                        icon: Icons.delete_outline_rounded,
-                        enabled: canExport,
-                        tint: const Color(0xFFFF453A),
-                        onTap: () => _handleDelete(context, provider, taskCount),
+                      // Destructive secondary: bulk delete. Icon-only on purpose so Export stays
+                      // the visual primary; the count lives on that button.
+                      OmiIconButton(
+                        icon: const Icon(Icons.delete_outline_rounded),
+                        label: context.l10n.deleteSelected,
+                        isDestructive: true,
+                        onPressed: canExport ? () => _handleDelete(context, provider, taskCount) : null,
                       ),
                       const SizedBox(width: 8),
-                      _ActionPillButton(
+                      OmiButton(
                         icon: Icons.ios_share_rounded,
-                        label: canExport ? '${context.l10n.exportButton}  ·  $taskCount' : context.l10n.exportButton,
-                        enabled: canExport,
-                        accent: const Color(0xFF7C3AED),
-                        onTap: () => _handleExport(context, provider),
+                        size: OmiButtonSize.compact,
+                        label: canExport ? '${context.l10n.exportButton} · $taskCount' : context.l10n.exportButton,
+                        onPressed: canExport ? () => _handleExport(context, provider) : null,
                       ),
                     ],
                   ),
@@ -122,7 +112,7 @@ class _TaskSelectionActionBarState extends State<TaskSelectionActionBar> with Si
   }
 
   Future<void> _handleExport(BuildContext context, ActionItemsProvider provider) async {
-    HapticFeedback.lightImpact();
+    OmiHaptics.light();
 
     // Users connect one task app at a time. If none connected, nudge to
     // Settings; otherwise export directly to the connected app.
@@ -130,19 +120,11 @@ class _TaskSelectionActionBarState extends State<TaskSelectionActionBar> with Si
     final connected = TaskIntegrationApp.values.where(integrations.isAppConnected).toList(growable: false);
 
     if (connected.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(context.l10n.connectTaskAppToExport),
-          backgroundColor: const Color(0xFF2C2C2E),
-          duration: const Duration(seconds: 4),
-          action: SnackBarAction(
-            label: context.l10n.connectAction,
-            textColor: Colors.white,
-            onPressed: () {
-              Navigator.of(context).push(MaterialPageRoute(builder: (_) => const TaskIntegrationsPage()));
-            },
-          ),
-        ),
+      OmiFeedback.error(
+        context,
+        context.l10n.connectTaskAppToExport,
+        actionLabel: context.l10n.connectAction,
+        onAction: () => routeToPage(context, const TaskIntegrationsPage()),
       );
       return;
     }
@@ -150,118 +132,18 @@ class _TaskSelectionActionBarState extends State<TaskSelectionActionBar> with Si
     await provider.bulkExportSelected(context, connected.first);
   }
 
+  /// Bulk delete cannot be undone: confirm every time (docs/ux-contract.md §4).
   Future<void> _handleDelete(BuildContext context, ActionItemsProvider provider, int taskCount) async {
-    HapticFeedback.lightImpact();
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        backgroundColor: const Color(0xFF1F1F25),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-        title: Text(
-          context.l10n.deleteSelectedItemsTitle,
-          style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w600),
-        ),
-        content: Text(
-          context.l10n.deleteSelectedItemsMessage(taskCount, taskCount > 1 ? 's' : ''),
-          style: const TextStyle(color: Color(0xFFB0B0B5), fontSize: 14),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: Text(
-              context.l10n.cancel,
-              style: const TextStyle(color: Color(0xFF8E8E93), fontWeight: FontWeight.w500),
-            ),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: Text(
-              context.l10n.delete,
-              style: const TextStyle(color: Color(0xFFFF453A), fontWeight: FontWeight.w600),
-            ),
-          ),
-        ],
-      ),
+    OmiHaptics.light();
+    final l10n = context.l10n;
+    final confirmed = await showOmiConfirm(
+      context,
+      title: l10n.deleteTasksTitle(taskCount),
+      message: l10n.thisActionCannotBeUndone,
+      confirmLabel: l10n.delete,
+      destructive: true,
     );
-    if (confirmed != true) return;
-    if (!context.mounted) return;
+    if (!confirmed || !context.mounted) return;
     await provider.deleteSelectedItems(context: context);
-  }
-}
-
-class _IconActionButton extends StatelessWidget {
-  final IconData icon;
-  final bool enabled;
-  final Color tint;
-  final VoidCallback onTap;
-
-  const _IconActionButton({
-    required this.icon,
-    required this.enabled,
-    required this.tint,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: enabled ? onTap : null,
-      child: Container(
-        width: 44,
-        height: 44,
-        alignment: Alignment.center,
-        child: Icon(
-          icon,
-          size: 22,
-          color: enabled ? tint : const Color(0xFF636366),
-        ),
-      ),
-    );
-  }
-}
-
-class _ActionPillButton extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final bool enabled;
-  final Color accent;
-  final VoidCallback onTap;
-
-  const _ActionPillButton({
-    required this.icon,
-    required this.label,
-    required this.enabled,
-    required this.accent,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: enabled ? onTap : null,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-        decoration: BoxDecoration(
-          color: enabled ? accent : const Color(0xFF2C2C2E),
-          borderRadius: BorderRadius.circular(22),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 18, color: enabled ? Colors.white : const Color(0xFF636366)),
-            const SizedBox(width: 8),
-            Text(
-              label,
-              style: TextStyle(
-                color: enabled ? Colors.white : const Color(0xFF636366),
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
   }
 }

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -27,6 +28,24 @@ def _fields(release_id: str, generation: int) -> dict:
 
 
 class StablePromotionVerifierTests(unittest.TestCase):
+    def test_release_tag_is_encoded_as_one_firestore_path_segment(self):
+        result = subprocess.run(
+            [
+                "bash",
+                "-c",
+                'RELEASE_TAG="$1"; ENCODED_RELEASE_TAG="${RELEASE_TAG/+/%2B}"; printf %s "$ENCODED_RELEASE_TAG"',
+                "--",
+                "v0.12.208+12208-macos",
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(
+            result.stdout,
+            "v0.12.208%2B12208-macos",
+        )
+
     def test_lost_response_retry_accepts_only_the_expected_next_generation(self):
         POINTER.verify(
             beta=_fields("target", 4),

@@ -13,6 +13,7 @@ actually import and call the real production functions to verify:
 """
 
 import asyncio
+import json
 import os
 import sys
 import types
@@ -109,7 +110,7 @@ def _stub_module(name: str) -> types.ModuleType:
 # --- database stubs ---
 database_mod = _stub_module("database")
 if not hasattr(database_mod, "__path__"):
-    database_mod.__path__ = []
+    database_mod.__path__ = [str(BACKEND_DIR / "database")]
 for submodule in [
     "redis_db",
     "memories",
@@ -131,9 +132,12 @@ for submodule in [
     "mem_db",
     "notifications",
     "auth",
+    "messaging",
 ]:
     mod = _stub_module(f"database.{submodule}")
     setattr(database_mod, submodule, mod)
+
+sys.modules["database.messaging"].MessagingStore = MagicMock()
 
 sys.modules["database.llm_usage"].record_llm_usage = MagicMock()
 sys.modules["database.notifications"].get_mentor_notification_frequency = MagicMock(return_value=3)
@@ -142,9 +146,8 @@ sys.modules["database.auth"].get_user_name = MagicMock(return_value="Alice")
 sys.modules["database.goals"].get_user_goal = MagicMock(return_value=None)
 sys.modules["database.goals"].get_user_goals = MagicMock(return_value=[])
 sys.modules["database.redis_db"].get_enabled_apps = MagicMock(return_value=[])
-sys.modules["database.redis_db"].get_filter_category_items = MagicMock(return_value=[])
-sys.modules["database.redis_db"].add_filter_category_item = MagicMock()
 sys.modules["database.redis_db"].get_cached_user_geolocation = MagicMock(return_value=None)
+sys.modules["database.redis_db"].r = MagicMock()
 sys.modules["database.users"].get_user_location_context_consent = MagicMock(return_value=None)
 sys.modules["database.conversations"].get_conversations = MagicMock(return_value=[])
 sys.modules["database.memories"].get_memories = MagicMock(return_value=[])
@@ -195,11 +198,13 @@ tracker_mod.track_usage = MagicMock()
 gateway_mod = _stub_module("utils.llm.gateway_client")
 gateway_mod.invoke_chat_structured_gateway = MagicMock(return_value=None)
 gateway_mod.is_auto_lane_id = lambda value: isinstance(value, str) and value.startswith('omi:auto:')
+# perplexity_tools.py is imported under this harness and names the gateway surface
+# it depends on; mirror the real module's members so the import succeeds.
+gateway_mod.feature_auto_lane_id = lambda feature: f"omi:auto:{feature.replace('_', '-')}"
+gateway_mod.get_llm_gateway_base_url = MagicMock(return_value='https://llm-gateway.test')
+gateway_mod.llm_gateway_headers = MagicMock(return_value={})
 gateway_mod.record_chat_extraction_gateway_result = MagicMock()
 gateway_mod.raise_if_gateway_feature_mode_blocks_direct_model_surface = MagicMock()
-
-gateway_shadow_mod = _stub_module("utils.llm.gateway_shadow")
-gateway_shadow_mod.maybe_wrap_dev_gateway_shadow = MagicMock(side_effect=lambda legacy_model, **_kwargs: legacy_model)
 
 gateway_serving_mod = _stub_module("utils.llm.gateway_serving")
 
@@ -211,6 +216,31 @@ langchain_runnables_mod = _stub_module("langchain_core.runnables")
 langchain_runnables_mod.RunnableConfig = dict
 langchain_callbacks_mod = _stub_module("langchain_core.callbacks")
 langchain_callbacks_mod.BaseCallbackHandler = type("BaseCallbackHandler", (), {})
+
+
+def _passthrough_tool(target=None, **_kwargs):
+    # Mirrors the langchain @tool decorator shape for module-import compatibility only:
+    # production tool modules (e.g. utils/retrieval/tools/perplexity_tools.py) decorate
+    # their tools with @tool at import time. The harness never invokes these tools, so
+    # the real wrapper is not needed here.
+    if callable(target):
+        return target
+    return lambda fn: fn
+
+
+_langchain_tools_was_stubbed = "langchain_core.tools" not in sys.modules
+langchain_tools_mod = _stub_module("langchain_core.tools")
+# Installed on the stub itself rather than through an autouse fixture. The fixture only ran
+# for tests in this file, so any other module that imports a langchain-@tool-decorated module
+# here (test_chat_agent_provider_retry.py) reached its import-time `from langchain_core.tools
+# import tool` against a bare stub and failed collection with ImportError.
+# Only patched when this file created the stub: when the real langchain_core.tools is already
+# imported, its own @tool works and overwriting it here would leak a passthrough decorator into
+# every production tool module imported afterwards in the same process.
+if _langchain_tools_was_stubbed:
+    langchain_tools_mod.tool = _passthrough_tool
+
+langchain_tools_mod.StructuredTool = MagicMock()
 
 # --- LLMs/memory stubs ---
 llms_mod = _stub_module("utils.llms")
@@ -257,7 +287,7 @@ location_mod.async_get_google_maps_city = AsyncMock(return_value=None)
 
 retrieval_mod = _stub_module("utils.retrieval")
 if not hasattr(retrieval_mod, "__path__"):
-    retrieval_mod.__path__ = []
+    retrieval_mod.__path__ = [str(BACKEND_DIR / "utils" / "retrieval")]
 
 # utils.retrieval.safety is import-light (typing/os/time/logging only) and its full public surface
 # is shared with test_chat_input_guard.py via the same sys.modules entry, so a partial hand-rolled
@@ -385,12 +415,36 @@ def _test_zone_info(name: str):
     raise KeyError(name)
 
 
-def _get_agentic_module():
-    """Load and return the real utils.retrieval.agentic module."""
-    agentic_stub = sys.modules.get("utils.retrieval.agentic")
-    if agentic_stub is not None and not hasattr(agentic_stub, "CORE_TOOLS"):
-        sys.modules.pop("utils.retrieval.agentic", None)
+_AGENTIC_MODULE_CACHE = None
 
+
+def _get_agentic_module():
+    """Load and return this file's stub-graph utils.retrieval.agentic module.
+
+    The module is loaded once and cached: every call must see the same module
+    object so tests that mutate module state hold across calls. When another
+    test file in the same pytest process has already imported the production
+    ``utils.retrieval.agentic`` (``test_device_tools.py`` imports it at module
+    scope, and collection order puts it first), that real module is dropped
+    from ``sys.modules`` before loading — reusing it would bind ``CORE_TOOLS``
+    to the real tool objects, whose schema shape does not match this harness's
+    mock expectations.
+    Direct references captured by the other file keep working.
+    """
+    global _AGENTIC_MODULE_CACHE
+    if _AGENTIC_MODULE_CACHE is not None:
+        return _AGENTIC_MODULE_CACHE
+
+    sys.modules.pop("utils.retrieval.agentic", None)
+
+    # Pure routing/ref helpers must load before chat_mount in this empty-path stub graph.
+    _load_module_from_file("utils.retrieval.chat_scope", BACKEND_DIR / "utils" / "retrieval" / "chat_scope.py")
+    _load_module_from_file("utils.retrieval.turn_refs", BACKEND_DIR / "utils" / "retrieval" / "turn_refs.py")
+    _load_module_from_file("utils.retrieval.chat_mount", BACKEND_DIR / "utils" / "retrieval" / "chat_mount.py")
+    _load_module_from_file(
+        "database.firestore_transaction_retry",
+        BACKEND_DIR / "database" / "firestore_transaction_retry.py",
+    )
     # First make sure tool submodules are stubbed (they import from database)
     tools_pkg = _stub_module("utils.retrieval.tools")
     if not hasattr(tools_pkg, "__path__"):
@@ -398,6 +452,10 @@ def _get_agentic_module():
 
     # Create mock tools with names that look like real LangChain tools
     tool_names = [
+        "update_conversation",
+        "rename_person",
+        "edit_memory",
+        "delete_memory",
         "get_conversations_tool",
         "search_conversations_tool",
         "get_memories_tool",
@@ -424,6 +482,7 @@ def _get_agentic_module():
         "save_user_preference_tool",
         "fetch_url_tool",
         "traverse_knowledge_graph_tool",
+        "process_recent_conversations",
     ]
     for name in tool_names:
         mock_tool = MagicMock()
@@ -451,7 +510,10 @@ def _get_agentic_module():
     langsmith_mod = _stub_module("langsmith")
     langsmith_mod.traceable = lambda **kwargs: lambda func: func
 
-    return _load_module_from_file("utils.retrieval.agentic", BACKEND_DIR / "utils" / "retrieval" / "agentic.py")
+    _AGENTIC_MODULE_CACHE = _load_module_from_file(
+        "utils.retrieval.agentic", BACKEND_DIR / "utils" / "retrieval" / "agentic.py"
+    )
+    return _AGENTIC_MODULE_CACHE
 
 
 # ---------------------------------------------------------------------------
@@ -657,10 +719,10 @@ def test_static_prefix_exceeds_minimum_cache_tokens():
 # ---------------------------------------------------------------------------
 
 
-def test_core_tools_has_26_tools():
-    """CORE_TOOLS must contain exactly 26 tools (web search is now a built-in server tool)."""
+def test_core_tools_has_31_tools():
+    """The stable core tool set excludes retired on-demand ledger and frame tools."""
     agentic_mod = _get_agentic_module()
-    assert len(agentic_mod.CORE_TOOLS) == 26, f"CORE_TOOLS has {len(agentic_mod.CORE_TOOLS)} tools, expected 26"
+    assert len(agentic_mod.CORE_TOOLS) == 31, f"CORE_TOOLS has {len(agentic_mod.CORE_TOOLS)} tools, expected 31"
 
 
 def test_core_tools_list_creates_independent_copy():
@@ -683,9 +745,9 @@ def test_core_tools_list_creates_independent_copy():
     mock_app_tool.name = "custom_app_tool"
     tools_a.append(mock_app_tool)
 
-    assert len(tools_a) == 27
-    assert len(tools_b) == 26
-    assert len(agentic_mod.CORE_TOOLS) == 26, "CORE_TOOLS was mutated!"
+    assert len(tools_a) == 32
+    assert len(tools_b) == 31
+    assert len(agentic_mod.CORE_TOOLS) == 31, "CORE_TOOLS was mutated!"
 
 
 def test_core_tools_order_matches_exports():
@@ -703,6 +765,10 @@ def test_core_tools_order_matches_exports():
         "get_action_items_tool",
         "create_action_item_tool",
         "update_action_item_tool",
+        "update_conversation",
+        "rename_person",
+        "edit_memory",
+        "delete_memory",
         "get_omi_product_info_tool",
         "get_calendar_events_tool",
         "create_calendar_event_tool",
@@ -722,6 +788,7 @@ def test_core_tools_order_matches_exports():
         "save_user_preference_tool",
         "fetch_url_tool",
         "traverse_knowledge_graph_tool",
+        "process_recent_conversations",
     ]
 
     actual_names = [t.name for t in agentic_mod.CORE_TOOLS]
@@ -742,38 +809,33 @@ def test_core_tools_not_accidentally_duplicated():
 # ---------------------------------------------------------------------------
 
 
-def test_convert_tools_produces_valid_anthropic_schemas():
-    """
-    _convert_tools should produce valid Anthropic tool schemas from CORE_TOOLS,
-    filtering out the 'config' parameter and preserving tool order.
-    """
+def _openai_tool_name(schema: dict) -> str:
+    return schema.get('function', {}).get('name') or schema.get('name')
+
+
+def test_convert_tools_produces_valid_openai_schemas():
+    """_convert_tools produces OpenAI chat-completions function schemas from CORE_TOOLS."""
     agentic_mod = _get_agentic_module()
 
     tool_schemas, tool_registry = agentic_mod._convert_tools(agentic_mod.CORE_TOOLS)
 
-    # +1 for web_search server tool
-    assert len(tool_schemas) == len(agentic_mod.CORE_TOOLS) + 1, "Should produce one schema per tool + web_search"
+    assert len(tool_schemas) == len(agentic_mod.CORE_TOOLS), "Should produce one schema per core tool"
     assert len(tool_registry) == len(agentic_mod.CORE_TOOLS), "Should register all client tools"
+    assert all(schema.get('type') != 'web_search_20260209' for schema in tool_schemas)
 
-    # First schema should be web_search server tool
-    assert tool_schemas[0]["type"] == "web_search_20260209"
-
-    for schema in tool_schemas[1:]:  # Skip web_search server tool
-        assert "name" in schema, "Schema must have a name"
-        assert "description" in schema, "Schema must have a description"
-        assert "input_schema" in schema, "Schema must have input_schema"
-        # Config parameter should be filtered out
-        props = schema["input_schema"].get("properties", {})
-        assert "config" not in props, f"Tool {schema['name']} should not expose 'config' parameter"
-        # Core tools should NOT have defer_loading
-        assert "defer_loading" not in schema, f"Core tool {schema['name']} should not have defer_loading"
+    for schema in tool_schemas:
+        function = schema['function']
+        assert schema['type'] == 'function'
+        assert function['name']
+        assert 'description' in function
+        assert 'parameters' in function
+        props = function['parameters'].get('properties', {})
+        assert 'config' not in props, f"Tool {function['name']} should not expose 'config' parameter"
+        assert 'defer_loading' not in schema, f"Core tool {function['name']} should not have defer_loading"
 
 
-def test_convert_tools_defers_app_tools():
-    """
-    App tools should be marked with defer_loading=True and tool_search_tool
-    should be added when app tools are present.
-    """
+def test_convert_tools_exposes_app_tools_directly():
+    """Live chat-agent lane exposes app tools by name; no Anthropic tool_search."""
     agentic_mod = _get_agentic_module()
 
     mock_app_tool = MagicMock()
@@ -785,19 +847,10 @@ def test_convert_tools_defers_app_tools():
 
     tool_schemas, tool_registry = agentic_mod._convert_tools(agentic_mod.CORE_TOOLS, [mock_app_tool])
 
-    # Should have web_search + tool_search_tool + core tools + 1 app tool
-    assert len(tool_schemas) == len(agentic_mod.CORE_TOOLS) + 3  # +1 web_search, +1 search tool, +1 app tool
-
-    # First should be web_search server tool
-    assert tool_schemas[0]["type"] == "web_search_20260209"
-    # Second should be tool_search_tool
-    assert tool_schemas[1]["type"] == "tool_search_tool_regex_20251119"
-
-    # Last should be the deferred app tool
-    assert tool_schemas[-1]["name"] == "custom_weather_app"
-    assert tool_schemas[-1]["defer_loading"] is True
-
-    # Registry should include all tools
+    assert len(tool_schemas) == len(agentic_mod.CORE_TOOLS) + 1
+    assert all(schema.get('type') == 'function' for schema in tool_schemas)
+    assert _openai_tool_name(tool_schemas[-1]) == "custom_weather_app"
+    assert "defer_loading" not in tool_schemas[-1]
     assert "custom_weather_app" in tool_registry
 
 
@@ -810,21 +863,21 @@ def test_convert_tools_preserves_core_tool_order():
 
     tool_schemas, _ = agentic_mod._convert_tools(agentic_mod.CORE_TOOLS)
 
-    # Skip web_search server tool (first element) when checking core tool order
-    schema_names = [s["name"] for s in tool_schemas[1:]]
+    schema_names = [_openai_tool_name(s) for s in tool_schemas]
     core_names = [t.name for t in agentic_mod.CORE_TOOLS]
     assert schema_names == core_names, "Tool schema order must match CORE_TOOLS order"
 
 
 # ---------------------------------------------------------------------------
-# Tests: Persona app bypasses cache optimization (expected)
+# Tests: Persona app keeps the shared prompt (overlay, not replacement)
 # ---------------------------------------------------------------------------
 
 
-def test_persona_app_overrides_system_prompt():
+def test_persona_app_keeps_shared_prompt_with_overlay():
     """
-    When app.is_a_persona() is True, the entire system prompt is replaced,
-    bypassing the cache-optimized structure. This is expected behavior.
+    When app.is_a_persona() is True, the persona text is appended inside a
+    <selected_chat_app> overlay; the shared cache-optimized prompt structure
+    is preserved rather than replaced.
     """
     chat_mod = _get_chat_module()
     fn = chat_mod._get_agentic_qa_prompt
@@ -833,13 +886,20 @@ def test_persona_app_overrides_system_prompt():
 
     mock_app = MagicMock()
     mock_app.is_a_persona.return_value = True
+    mock_app.name = "CaptainPersona"
+    mock_app.description = "A pirate persona"
     mock_app.persona_prompt = "You are a pirate captain. Talk like a pirate."
     mock_app.chat_prompt = "fallback"
 
     prompt = fn("uid_test", app=mock_app)
 
-    assert prompt == "You are a pirate captain. Talk like a pirate."
-    assert "<response_style>" not in prompt, "Persona prompt should not contain cache-optimized structure"
+    assert "<response_style>" in prompt, "Persona must not drop the shared prompt structure"
+    assert "<selected_chat_app>" in prompt
+    assert (
+        "<selected_app_instructions>\nYou are a pirate captain. Talk like a pirate.\n</selected_app_instructions>"
+        in prompt
+    )
+    assert "fallback" not in prompt, "persona_prompt must win over chat_prompt"
 
 
 # ---------------------------------------------------------------------------
@@ -865,6 +925,8 @@ def test_plugin_app_does_not_break_static_prefix():
     mock_app.is_a_persona.return_value = False
     mock_app.name = "WeatherBot"
     mock_app.description = "A weather assistant"
+    mock_app.chat_prompt = "CHAT_APP_MARKER"
+    mock_app.persona_prompt = None
 
     prompt_with_app = fn("uid_test", app=mock_app)
 
@@ -1114,7 +1176,13 @@ def test_datetime_injected_into_user_turn_not_system():
         {"role": "assistant", "content": "let me check"},
         {"role": "user", "content": "thanks, and today?"},
     ]
-    block = "<current_datetime>\nCurrent date time in UTC: 2024-01-19 14:23:45\n</current_datetime>"
+    block = (
+        "<current_datetime>\nCurrent date time in UTC: Fri 19 Jan 2024, 14:23 UTC\n"
+        "Current date time ISO format: 2024-01-19T14:23:45+00:00\n"
+        "Tool timestamps are already converted and labelled with their zone; report them as written and do not convert them again. "
+        "Transcript times like [+H:MM:SS] are elapsed offsets, not clock times. Relative time words (morning, afternoon, evening, tonight) are in UTC.\n"
+        "</current_datetime>"
+    )
     result = agentic_mod._inject_current_datetime(list(messages), block)
 
     # The block must be attached to the LAST user message, not the earlier one.
@@ -1135,7 +1203,13 @@ def test_datetime_injected_into_list_content_user_turn():
         {"role": "assistant", "content": "ok"},
         {"role": "user", "content": [{"type": "image", "source": {"type": "base64", "data": "..."}}]},
     ]
-    block = "<current_datetime>\nCurrent date time in UTC: 2024-01-19 14:23:45\n</current_datetime>"
+    block = (
+        "<current_datetime>\nCurrent date time in UTC: Fri 19 Jan 2024, 14:23 UTC\n"
+        "Current date time ISO format: 2024-01-19T14:23:45+00:00\n"
+        "Tool timestamps are already converted and labelled with their zone; report them as written and do not convert them again. "
+        "Transcript times like [+H:MM:SS] are elapsed offsets, not clock times. Relative time words (morning, afternoon, evening, tonight) are in UTC.\n"
+        "</current_datetime>"
+    )
     result = agentic_mod._inject_current_datetime(list(messages), block)
 
     # No extra trailing message was appended; the last turn is still the image turn.

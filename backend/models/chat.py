@@ -1,9 +1,13 @@
 import json
 from datetime import datetime
 from enum import Enum
+from pathlib import Path
 from typing import Any, Callable, Dict, List, Literal, Optional, Union
+from zoneinfo import ZoneInfo
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, ValidationInfo, field_validator, model_validator
+
+from models.feedback import MAX_COMMENT_LENGTH, FeedbackReason
 
 # App display names are resolved by an injected callable, never by importing the database
 # layer here: models/ must stay import-pure so a Pydantic module cannot drag the Firestore
@@ -31,6 +35,348 @@ class MessageConversation(BaseModel):
     structured: MessageConversationStructured
     created_at: datetime
 
+    @classmethod
+    def safe_build_many(cls, items, on_error=None) -> list['MessageConversation']:
+        """Build members without raising on a malformed item.
+
+        Chat callers hand in memory docs as dicts, partially-filled documents,
+        or live pydantic objects, and run this AFTER the chat message is already
+        persisted — a throw there orphans the persisted id while a fresh
+        in-memory id desyncs the client. Bad members skip; ``on_error(member,
+        exc)`` is invoked per skip so drops stay visible in logs.
+        """
+        out: list['MessageConversation'] = []
+        for m in items:
+            try:
+                if isinstance(m, cls):
+                    out.append(m)
+                elif isinstance(m, dict):
+                    out.append(cls.model_validate(m))
+                else:
+                    out.append(cls.model_validate(m.model_dump() if hasattr(m, 'model_dump') else vars(m)))
+            except Exception as exc:
+                if on_error is not None:
+                    on_error(m, exc)
+        return out
+
+
+# Chat Completions `file` content parts (purpose=user_data) accept these document
+# types. Images stay on the separate vision / image_url path and are not listed here.
+# Source: https://platform.openai.com/docs/guides/pdf-files
+# (File inputs → "Accepted file types" and "Full list of accepted file types").
+# Read 2026-09-08 from a saved copy of that page. Non-PDF documents are
+# text-extracted only; spreadsheets use a 1,000-row augmentation flow.
+CHAT_FILE_DOCUMENT_EXTENSIONS: frozenset[str] = frozenset(
+    {
+        # PDF
+        'pdf',
+        # Spreadsheets
+        'xla',
+        'xlb',
+        'xlc',
+        'xlm',
+        'xls',
+        'xlsx',
+        'xlt',
+        'xlw',
+        'csv',
+        'tsv',
+        'iif',
+        # Rich documents
+        'doc',
+        'docx',
+        'dot',
+        'odt',
+        'rtf',
+        # Presentations
+        'pot',
+        'ppa',
+        'pps',
+        'ppt',
+        'pptx',
+        'pwz',
+        'wiz',
+        # Text and code
+        'asm',
+        'bat',
+        'c',
+        'cc',
+        'conf',
+        'cpp',
+        'css',
+        'cxx',
+        'def',
+        'dic',
+        'eml',
+        'h',
+        'hh',
+        'htm',
+        'html',
+        'ics',
+        'ifb',
+        'in',
+        'js',
+        'json',
+        'ksh',
+        'list',
+        'log',
+        'markdown',
+        'md',
+        'mht',
+        'mhtml',
+        'mime',
+        'mjs',
+        'nws',
+        'pl',
+        'py',
+        'rst',
+        's',
+        'sql',
+        'srt',
+        'text',
+        'txt',
+        'vcf',
+        'vtt',
+        'xml',
+        # The provider's Text-and-code MIME column also documents types whose
+        # canonical suffixes are missing from its Extensions column (e.g.
+        # 'text/x-rust' -> 'rs', 'text/x-yaml' -> 'yaml'). Keep them
+        # allowlisted so the extension-first branch cannot reject a file whose
+        # MIME the provider explicitly documents.
+        'astro',
+        'awk',
+        'c++',
+        'clj',
+        'cmake',
+        'cs',
+        'dart',
+        'diff',
+        'dockerfile',
+        'ejs',
+        'elixir',
+        'erb',
+        'erlang',
+        'go',
+        'gradle',
+        'graphql',
+        'groovy',
+        'hbs',
+        'hcl',
+        'hs',
+        'ini',
+        'j2',
+        'jade',
+        'java',
+        'jl',
+        'json5',
+        'jsx',
+        'kt',
+        'lisp',
+        'liquid',
+        'lua',
+        'm',
+        'mk',
+        'mustache',
+        'ndjson',
+        'patch',
+        'php',
+        'ps1',
+        'proto',
+        'pug',
+        'r',
+        'rb',
+        'rs',
+        'sass',
+        'scala',
+        'scss',
+        'sh',
+        'swift',
+        'terraform',
+        'tf',
+        'tex',
+        'tmpl',
+        'toml',
+        'ts',
+        'tsx',
+        'vbs',
+        'yaml',
+        'yml',
+        'zsh',
+    }
+)
+CHAT_FILE_DOCUMENT_MIME_TYPES: frozenset[str] = frozenset(
+    {
+        'application/csv',
+        'application/graphql',
+        'application/javascript',
+        'application/json',
+        'application/json5',
+        'application/msword',
+        'application/pdf',
+        'application/rtf',
+        'application/toml',
+        'application/typescript',
+        'application/vnd.apple.iwork',
+        'application/vnd.apple.keynote',
+        'application/vnd.apple.pages',
+        'application/vnd.google-apps.document',
+        'application/vnd.google-apps.presentation',
+        'application/vnd.google-apps.spreadsheet',
+        'application/vnd.ms-excel',
+        'application/vnd.ms-powerpoint',
+        'application/vnd.oasis.opendocument.text',
+        'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'application/x-awk',
+        'application/x-bash',
+        'application/x-graphql',
+        'application/x-httpd-php',
+        'application/x-httpd-php-source',
+        'application/x-iif',
+        'application/x-json5',
+        'application/x-ndjson',
+        'application/x-patch',
+        'application/x-php',
+        'application/x-powershell',
+        'application/x-protobuf',
+        'application/x-rust',
+        'application/x-scala',
+        'application/x-sql',
+        'application/x-subrip',
+        'application/x-terraform',
+        'application/x-toml',
+        'application/x-yaml',
+        'application/yaml',
+        'message/rfc822',
+        'text/calendar',
+        'text/css',
+        'text/csv',
+        'text/html',
+        'text/javascript',
+        'text/jsx',
+        'text/markdown',
+        'text/plain',
+        'text/rtf',
+        'text/srt',
+        'text/tsv',
+        'text/tsx',
+        'text/vbscript',
+        'text/vtt',
+        'text/x-R',
+        'text/x-asm',
+        'text/x-astro',
+        'text/x-awk',
+        'text/x-bash',
+        'text/x-c',
+        'text/x-c++',
+        'text/x-clojure',
+        'text/x-cmake',
+        'text/x-csharp',
+        'text/x-dart',
+        'text/x-diff',
+        'text/x-dockerfile',
+        'text/x-ejs',
+        'text/x-elixir',
+        'text/x-erb',
+        'text/x-erlang',
+        'text/x-go',
+        'text/x-golang',
+        'text/x-gradle',
+        'text/x-graphql',
+        'text/x-groovy',
+        'text/x-handlebars',
+        'text/x-haskell',
+        'text/x-hcl',
+        'text/x-iif',
+        'text/x-ini',
+        'text/x-jade',
+        'text/x-java',
+        'text/x-jinja2',
+        'text/x-julia',
+        'text/x-kotlin',
+        'text/x-less',
+        'text/x-lisp',
+        'text/x-liquid',
+        'text/x-lua',
+        'text/x-makefile',
+        'text/x-mustache',
+        'text/x-objectivec',
+        'text/x-objectivec++',
+        'text/x-patch',
+        'text/x-perl',
+        'text/x-php',
+        'text/x-properties',
+        'text/x-protobuf',
+        'text/x-pug',
+        'text/x-python',
+        'text/x-r',
+        'text/x-rst',
+        'text/x-ruby',
+        'text/x-rust',
+        'text/x-sass',
+        'text/x-scala',
+        'text/x-script.python',
+        'text/x-scss',
+        'text/x-sh',
+        'text/x-shellscript',
+        'text/x-sql',
+        'text/x-subrip',
+        'text/x-swift',
+        'text/x-terraform',
+        'text/x-tex',
+        'text/x-tmpl',
+        'text/x-toml',
+        'text/x-twig',
+        'text/x-typescript',
+        'text/x-vcard',
+        'text/x-yaml',
+        'text/x-zsh',
+        'text/xml',
+    }
+)
+
+
+def _chat_file_normalized_mime(mime_type: Optional[str]) -> str:
+    """Lowercase MIME, treating missing values and str(None)=='None' as empty."""
+    if mime_type is None:
+        return ''
+    mime = str(mime_type).strip().lower()
+    if mime in ('', 'none', 'null'):
+        return ''
+    return mime
+
+
+def chat_file_is_document(name: str, mime_type: Optional[str]) -> bool:
+    """True for any OpenAI-allowlisted chat document type, including PDF.
+
+    Images are not in this allowlist. Extension is checked first and wins when
+    present; MIME is the fallback so a missing MIME neither admits nor rejects
+    on its own.
+    """
+    ext = Path(name or '').suffix.lower().lstrip('.')
+    if ext:
+        return ext in CHAT_FILE_DOCUMENT_EXTENSIONS
+    mime = _chat_file_normalized_mime(mime_type)
+    return bool(mime) and mime in CHAT_FILE_DOCUMENT_MIME_TYPES
+
+
+class ChatFileVideo(BaseModel):
+    """A video attachment stored as stills (utils.media.video_frames); the clip itself is not kept.
+
+    The FileChat's own file is the overview contact sheet. The filmstrip holds every sampled
+    frame for closer looks at a time window. ``transcript`` is encrypted at rest like chat text.
+    """
+
+    duration_seconds: float
+    frame_times: List[float] = Field(default_factory=list)
+    strip_file_id: str = ''
+    strip_times: List[float] = Field(default_factory=list)
+    strip_columns: int = 0
+    strip_cell_width: int = 0
+    strip_cell_height: int = 0
+    transcript: str = ''
+
 
 class FileChat(BaseModel):
     id: str
@@ -40,13 +386,24 @@ class FileChat(BaseModel):
     openai_file_id: str
     created_at: datetime
     thumb_name: Optional[str] = ""
+    video: Optional[ChatFileVideo] = None
 
     def is_image(self):
         return self.mime_type.startswith("image")
 
+    def is_document(self) -> bool:
+        return chat_file_is_document(self.name, self.mime_type)
+
     def model_dump(self, **kwargs):
         exclude_fields = {'thumb_name'}
         return super().model_dump(exclude=exclude_fields, **kwargs)
+
+    def client_dump(self) -> Dict[str, Any]:
+        """Upload response: clients get the video length, never the transcript or filmstrip ids."""
+        row = self.model_dump()
+        if self.video:
+            row['video'] = {'duration_seconds': self.video.duration_seconds}
+        return row
 
 
 class ChartDataPoint(BaseModel):
@@ -66,6 +423,138 @@ class ChartData(BaseModel):
     x_label: Optional[str] = None
     y_label: Optional[str] = None
     datasets: List[ChartDataset]
+
+
+class ChatEvidenceReference(BaseModel):
+    """One bounded, optional source reference attached to a chat answer.
+
+    The answer text remains authoritative.  Clients may render these references
+    as supplemental chrome, but an unavailable or future reference must never
+    make the answer itself unreadable.
+    """
+
+    id: str = Field(..., min_length=1, max_length=256)
+    kind: str
+    state: str
+    title: Optional[str] = Field(None, max_length=160)
+    summary: Optional[str] = Field(None, max_length=600)
+    conversation_id: Optional[str] = Field(None, max_length=256)
+    segment_id: Optional[str] = Field(None, max_length=256)
+    frame_id: Optional[str] = Field(None, max_length=256)
+    request_id: Optional[str] = Field(None, max_length=256)
+    start_ms: Optional[int] = Field(None, ge=0)
+    end_ms: Optional[int] = Field(None, ge=0)
+    captured_at_ms: Optional[int] = Field(None, ge=0)
+    error_code: Optional[str] = Field(None, max_length=128)
+    error_message: Optional[str] = Field(None, max_length=600)
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator('id')
+    @classmethod
+    def _normalize_evidence_id(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError('evidence id must not be blank')
+        return normalized
+
+    @field_validator('kind')
+    @classmethod
+    def _normalize_evidence_kind(cls, value: str) -> str:
+        normalized = (value or '').strip().lower()
+        return (
+            normalized
+            if normalized in {'conversation_summary', 'conversation_segment', 'screen', 'keyframe', 'request'}
+            else 'unknown'
+        )
+
+    @field_validator('state')
+    @classmethod
+    def _normalize_evidence_state(cls, value: str) -> str:
+        normalized = (value or '').strip().lower()
+        return normalized if normalized in {'available', 'loading', 'offline', 'pruned', 'failed'} else 'unknown'
+
+    @field_validator(
+        'title',
+        'summary',
+        'conversation_id',
+        'segment_id',
+        'frame_id',
+        'request_id',
+        'error_code',
+        'error_message',
+    )
+    @classmethod
+    def _strip_evidence_strings(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        normalized = value.strip()
+        return normalized or None
+
+    @model_validator(mode='after')
+    def _validate_evidence_identity(self) -> 'ChatEvidenceReference':
+        try:
+            serialized_metadata = json.dumps(self.metadata, sort_keys=True, separators=(',', ':'))
+        except (TypeError, ValueError) as exc:
+            raise ValueError('evidence metadata must be JSON serializable') from exc
+        if len(self.metadata) > 16 or len(serialized_metadata) > 2_000:
+            raise ValueError('evidence metadata exceeds the bounded transport limit')
+        if self.end_ms is not None and self.start_ms is not None and self.end_ms < self.start_ms:
+            raise ValueError('end_ms must be greater than or equal to start_ms')
+        if self.kind == 'conversation_summary' and not self.conversation_id:
+            raise ValueError('conversation_summary requires conversation_id')
+        if self.kind == 'conversation_segment' and not (self.conversation_id and self.segment_id):
+            raise ValueError('conversation_segment requires conversation_id and segment_id')
+        if self.kind in {'screen', 'keyframe'} and not self.frame_id:
+            raise ValueError(f'{self.kind} requires frame_id')
+        if self.kind == 'request' and not self.request_id:
+            raise ValueError('request requires request_id')
+        return self
+
+
+class ChatEvidenceEnvelope(BaseModel):
+    """Versioned transport envelope for supplemental chat evidence."""
+
+    schema_version: int = Field(default=1, ge=1, le=2_147_483_647)
+    request_id: Optional[str] = Field(None, max_length=256)
+    references: List[ChatEvidenceReference] = Field(default_factory=list, max_length=24)
+
+    @field_validator('request_id')
+    @classmethod
+    def _strip_request_id(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        normalized = value.strip()
+        return normalized or None
+
+    @model_validator(mode='after')
+    def _reject_duplicate_reference_ids(self) -> 'ChatEvidenceEnvelope':
+        identities = [reference.id for reference in self.references]
+        if len(identities) != len(set(identities)):
+            raise ValueError('evidence reference ids must be unique')
+        if self.schema_version != 1:
+            self.references = [
+                reference.model_copy(update={'kind': 'unknown', 'state': 'unknown'}) for reference in self.references
+            ]
+        return self
+
+
+class EditReceiptBlock(BaseModel):
+    """Server-authored write receipt. IDs and URLs never encode item content."""
+
+    type: Literal['editReceipt'] = 'editReceipt'
+    id: str
+    receiptId: str
+    targetKind: Literal['conversation', 'memory', 'task', 'person']
+    action: Literal['created', 'updated', 'deleted', 'completed', 'uncompleted', 'renamed']
+    targetId: str
+    summary: str = Field(min_length=1, max_length=300)
+    undoable: bool = True
+    undoneAt: Optional[datetime] = None
+
+
+class UndoChatReceiptResponse(BaseModel):
+    status: Literal['undone', 'already_undone', 'unavailable']
+    block: EditReceiptBlock
 
 
 class Message(BaseModel):
@@ -102,6 +591,7 @@ class Message(BaseModel):
             'legacy rows are projected from metadata.content_blocks.'
         ),
     )
+    evidence: Optional[ChatEvidenceEnvelope] = None
     client_message_id: Optional[str] = None
     message_source: Optional[str] = None
     journal_revision: Optional[int] = None
@@ -246,17 +736,87 @@ class ResponseMessage(Message):
 
 
 class PageContext(BaseModel):
-    """Page context for chat - indicates what the user is currently viewing."""
+    """Page context for chat - indicates what the user is currently viewing.
+
+    When ``type`` is ``conversation`` with an ``id``, and/or ``start_date`` /
+    ``end_date`` are set, retrieval tools hard-scope to that conversation and/or
+    timeframe (#4515). Dates must include a timezone offset
+    (YYYY-MM-DDTHH:MM:SS+HH:MM).
+    """
 
     type: Literal["conversation", "task", "memory", "recap"]
     id: Optional[str] = None
     title: Optional[str] = None
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+
+    @staticmethod
+    def _require_aware_iso(value: str, field_name: str) -> Optional[str]:
+        stripped = value.strip()
+        if not stripped:
+            return None
+        try:
+            parsed = datetime.fromisoformat(stripped.replace("Z", "+00:00"))
+        except ValueError as exc:
+            raise ValueError(
+                f"{field_name} must be ISO-8601 with timezone " f"(YYYY-MM-DDTHH:MM:SS+HH:MM), got {value!r}"
+            ) from exc
+        if parsed.tzinfo is None:
+            raise ValueError(
+                f"{field_name} must include a timezone offset " f"(YYYY-MM-DDTHH:MM:SS+HH:MM), got {value!r}"
+            )
+        return stripped
+
+    @field_validator("start_date", "end_date", mode="before")
+    @classmethod
+    def _validate_scope_dates(cls, value: Any, info: ValidationInfo) -> Optional[str]:
+        if value is None:
+            return None
+        if not isinstance(value, str):
+            raise ValueError(f"{info.field_name or 'date'} must be an ISO-8601 string with timezone offset")
+        field_name = info.field_name if isinstance(info.field_name, str) else "date"
+        return cls._require_aware_iso(value, field_name)
 
 
 class SendMessageRequest(BaseModel):
     text: str
     file_ids: Optional[List[str]] = []
     context: Optional[PageContext] = None
+    time_zone: Optional[str] = None
+
+    # Tools this client can execute on the device itself. Declared per request
+    # because it depends on the device in hand: an iPad with no messaging
+    # service, or a denied Contacts grant, advertises fewer than an iPhone.
+    # A tool the client did not declare is never offered to the model.
+    device_tools: Optional[List[str]] = None
+
+    @field_validator("time_zone", mode="before")
+    @classmethod
+    def _validate_time_zone(cls, value: Any) -> Optional[str]:
+        if value is None:
+            return None
+        if not isinstance(value, str):
+            raise ValueError("time_zone must be a string")
+        stripped = value.strip()
+        if not stripped:
+            return None
+        try:
+            ZoneInfo(stripped)
+        except Exception as exc:
+            raise ValueError("time_zone must be a valid IANA timezone") from exc
+        return stripped
+
+
+class DeviceToolResultRequest(BaseModel):
+    """A client's result for one in-flight device tool call."""
+
+    result: Dict[str, Any]
+
+
+class DeviceToolResultResponse(BaseModel):
+    """Acknowledgement that a device tool result was handed over."""
+
+    status: str
 
 
 class GenerateReplyTurn(BaseModel):
@@ -279,6 +839,10 @@ class GenerateReplyResponse(BaseModel):
 
 class RateMessageRequest(BaseModel):
     rating: Optional[int] = None
+    # Optional so existing clients keep working; a thumbs-down that arrives
+    # without a reason is recorded as "not captured", never as "no reason".
+    reason: Optional[FeedbackReason] = None
+    comment: Optional[str] = Field(None, max_length=MAX_COMMENT_LENGTH)
 
 
 class ShareChatMessagesRequest(BaseModel):
@@ -292,6 +856,7 @@ class ChatSession(BaseModel):
     app_id: Optional[str] = None
     plugin_id: Optional[str] = None
     created_at: datetime
+    # Legacy Assistants IDs remain readable on old session docs; nothing writes them.
     openai_thread_id: Optional[str] = None
     openai_assistant_id: Optional[str] = None
 

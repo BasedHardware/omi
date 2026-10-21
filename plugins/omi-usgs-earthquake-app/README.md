@@ -29,6 +29,15 @@ Use these values when creating the Omi app:
 | `nearby_earthquakes` | `POST /tools/nearby_earthquakes` | Find earthquakes near coordinates within a radius |
 | `earthquake_details` | `POST /tools/earthquake_details` | Look up one USGS event by event ID |
 
+Both search tools accept negative `min_magnitude` values (for example, `-1`).
+The default is `2.5`; values above `10` are capped at `10`.
+
+Run the hermetic component tests from the repository root:
+
+```bash
+python3 -m unittest discover -s plugins/omi-usgs-earthquake-app -p test_main.py
+```
+
 ## Example prompts
 
 - "Show me earthquakes over magnitude 5 in the last day."

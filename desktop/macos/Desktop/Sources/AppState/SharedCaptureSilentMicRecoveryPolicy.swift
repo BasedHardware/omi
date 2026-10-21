@@ -1,12 +1,35 @@
 import AVFoundation
 import CoreAudio
 
+struct CoreAudioCaptureRecoveryRequest {
+  enum Scope { case microphone, allSources }
+  let reason: String
+  let scope: Scope
+}
+
+/// Only the physical creation/arming effects are substituted by hermetic tests.
+/// Session, source ownership and teardown decisions stay in AppState.
+@MainActor
+struct CoreAudioCaptureRecoveryEffects {
+  var makeMicrophone: (AudioDeviceID?) -> AudioCaptureService
+  var armCapture: (AppState) async -> Void
+
+  static var live: Self {
+    Self(
+      makeMicrophone: { deviceID in
+        deviceID.map { AudioCaptureService(overrideDeviceID: $0) } ?? AudioCaptureService()
+      },
+      armCapture: { await $0.startMicrophoneAudioCapture() })
+  }
+}
+
 /// Terminal policy for the shared microphone capture path used by listening,
 /// manual recording, and Quick Note. `AudioCaptureService` is deliberately
 /// recreated during recovery, so the cross-rebuild cap belongs here.
 enum SharedCaptureSilentMicRecoveryPolicy {
   enum Action: Equatable {
     case rebuild
+    case continueSystemAudio
     case stopAndSurfaceError
   }
 
@@ -19,8 +42,11 @@ enum SharedCaptureSilentMicRecoveryPolicy {
     capture.detectSilentMicOnAnyTransport = true
   }
 
-  static func action(for recoveryAttempt: Int) -> Action {
-    recoveryAttempt >= maximumRecoveryAttempts ? .stopAndSurfaceError : .rebuild
+  static func action(for recoveryAttempt: Int, systemAudioLive: Bool = false) -> Action {
+    guard recoveryAttempt >= maximumRecoveryAttempts else { return .rebuild }
+    // A silent microphone must not take a proven-live, independently owned tap
+    // down with it. Keep the mic open so unmuting it can recover without a restart.
+    return systemAudioLive ? .continueSystemAudio : .stopAndSurfaceError
   }
 }
 
@@ -39,6 +65,11 @@ enum MicrophoneCaptureAuthorizationPolicy {
     /// The user (or MDM) said no — tell them the real problem instead of arming a
     /// zero-sample stream that ends in a hardware alert.
     case surfacePermissionAlert
+    /// This start was automatic (launch, reactivation, key load, settings sync, wake,
+    /// post-onboarding) and authorization is not settled in the app's favor. Automatic
+    /// paths never show a TCC sheet or an alert; they abandon the start and let the
+    /// persisted intent wait for an explicit Listen/Grant action.
+    case abandonAutomaticStart
   }
 
   static func action(for status: AVAuthorizationStatus) -> Action {
@@ -50,8 +81,20 @@ enum MicrophoneCaptureAuthorizationPolicy {
     case .denied, .restricted:
       return .surfacePermissionAlert
     @unknown default:
-      return .proceed
+      // A future authorization state is not proof of consent. Fail closed so an
+      // automatic start cannot arm capture under a status this build does not
+      // understand, and an explicit start can surface the permission path.
+      return .surfacePermissionAlert
     }
+  }
+
+  /// The single rule behind "skipped or denied permissions must not auto-reprompt":
+  /// only an explicit user action may raise the system sheet (or surface the denied
+  /// alert). Everything automatic abandons the start instead.
+  static func action(for status: AVAuthorizationStatus, userInitiated: Bool) -> Action {
+    let resolved = action(for: status)
+    if resolved == .proceed { return .proceed }
+    return userInitiated ? resolved : .abandonAutomaticStart
   }
 
   static func action(afterRequestGranted granted: Bool) -> Action {

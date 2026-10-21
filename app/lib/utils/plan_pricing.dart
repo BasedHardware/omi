@@ -34,6 +34,22 @@ int? bestAnnualDiscountPercent(Iterable<List<Map<String, dynamic>>> tiers) {
   return percents.isEmpty ? null : percents.reduce((a, b) => a > b ? a : b);
 }
 
+/// Resolve the price for the exact selected tier and billing period.
+///
+/// Older single-tier catalogs have no tier selection, so matching by interval
+/// remains valid there. A multi-tier catalog must never fall back to another
+/// tier: that could send a Plus price to checkout after the user chose Unlimited.
+Map<String, dynamic>? planForCheckout(
+  List<Map<String, dynamic>> plans, {
+  required String interval,
+  String? selectedTierId,
+}) {
+  if (selectedTierId == null && plans.map((plan) => plan['plan_id']).toSet().length > 1) return null;
+  return plans.firstWhereOrNull(
+    (plan) => plan['interval'] == interval && (selectedTierId == null || plan['plan_id'] == selectedTierId),
+  );
+}
+
 int? _annualMonthsFree(List<Map<String, dynamic>> plans) {
   final prices = _monthlyAndYearly(plans);
   if (prices == null) return null;
@@ -54,7 +70,7 @@ int? _annualMonthsFree(List<Map<String, dynamic>> plans) {
 
 /// Whether the mobile plans sheet should show Continue / Upgrade.
 ///
-/// Locked (docs/agents/plan-catalog.md) — do not restore `!isOnAnnualPlan`:
+/// Locked (.github/agent-docs/plan-catalog.md) — do not restore `!isOnAnnualPlan`:
 /// that hid Continue for every annual subscriber and blocked Plus → Unlimited.
 /// Hide only when the user is already on the selected tier's annual price.
 /// Desktop-entitled plans are manage-only on this sheet: same-tier
@@ -68,8 +84,9 @@ bool shouldShowPlanContinueButton({
   String? selectedTierId,
   String? currentTierId,
   bool currentGrantsDesktop = false,
+  bool selectedPriceIsCurrent = false,
 }) {
-  if (!plansLoaded || isCancelled || hasScheduledUpgrade) return false;
+  if (!plansLoaded || isCancelled || hasScheduledUpgrade || selectedPriceIsCurrent) return false;
   if (currentGrantsDesktop && selectedTierId != null && currentTierId != null && selectedTierId != currentTierId) {
     return false;
   }

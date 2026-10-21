@@ -4,7 +4,10 @@ tier: fault
 description: Main chat surfaces a structured error when the Python backend returns HTTP 5xx (omi-fault-inject)
 app: non-prod
 covers:
+  - desktop/macos/Desktop/Sources/Chat/AgentModelCredentials.swift
   - desktop/macos/Desktop/Sources/Providers/ChatProvider.swift
+  - desktop/macos/Desktop/Sources/Providers/ChatProvider+AutomationSnapshot.swift
+  - desktop/macos/Desktop/Sources/Chat/AgentQueryResult.swift
   - desktop/macos/Desktop/Sources/Chat/ChatErrorState.swift
   - desktop/macos/Desktop/Sources/Chat/AgentRuntimeFailure.swift
   - desktop/macos/agent/src/runtime/failures.ts
@@ -27,7 +30,7 @@ steps:
       target: chat
       activateApp: false
     wait:
-      state.selectedTabIndex: 0
+      state.chatFirstRoute: chat
 
   - id: S3
     name: Send chat query against fault backend

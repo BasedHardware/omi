@@ -8,6 +8,7 @@ struct TaskChatPanel: View {
   @ObservedObject var coordinator: TaskChatCoordinator
   let task: TaskActionItem?
   let onClose: () -> Void
+  let onOpenRewindEvidence: ((Int64) -> Void)?
   @State private var showsThreadContext = true
   @ObservedObject private var runtimeStatusStore = AgentRuntimeStatusStore.shared
 
@@ -28,7 +29,7 @@ struct TaskChatPanel: View {
           Spacer()
           ProgressView()
             .scaleEffect(0.8)
-          Text("Setting up chat...")
+          Text("Setting up chat…")
             .scaledFont(size: OmiType.caption)
             .foregroundColor(Ink.secondary)
           Spacer()
@@ -41,7 +42,8 @@ struct TaskChatPanel: View {
             runtimeProjection: runtimeStatusStore.projection(
               for: .workstream(workstreamId: projection.workstreamID)
             ),
-            isExpanded: $showsThreadContext
+            isExpanded: $showsThreadContext,
+            onOpenRewindEvidence: onOpenRewindEvidence
           )
           Divider().background(Ink.rowFillHover)
         }
@@ -60,9 +62,20 @@ struct TaskChatPanel: View {
           isLoadingInitial: false,
           app: nil,
           onLoadMore: {},
-          onRate: { _, _ in },
+          onRate: { _, _, _ in },
           localSendToken: taskState.localSendToken,
+          // The task panel renders the same interactable content blocks as the
+          // main window; taps route the one shell (`ChatFirstRichBlockContext.auxiliary`).
+          chatFirstRichBlockContext: .auxiliary(chatProvider: coordinator.chatProvider),
+          // The compact window, like the main chat's host: without it this panel
+          // mounts the 500-row default eagerly, which measured 910 ms and 607
+          // native views for 400 messages against 114 ms and 84 compact (see the
+          // comment on QueryAnswerThread's host). "Show older messages" is the
+          // way back to the rest of a long thread.
+          transcriptWindowPolicy: .compactHome,
           enablesPromptTimeline: false,
+          // This thread is about one task; the day's summary belongs in the main chat.
+          showsDailySummary: false,
           welcomeContent: { taskWelcome }
         )
         .frame(maxHeight: .infinity)
@@ -70,22 +83,29 @@ struct TaskChatPanel: View {
           VStack(spacing: 0) {
             // Error banner
             if let error = taskState.errorMessage {
-              HStack(spacing: OmiSpacing.sm) {
-                Image(systemName: "exclamationmark.triangle.fill")
-                  .foregroundColor(PageGlass.warning)
-                  .scaledFont(size: OmiType.body)
-                Text(error)
-                  .scaledFont(size: OmiType.body)
-                  .foregroundColor(Ink.secondary)
-                Spacer()
-                Button {
-                  taskState.errorMessage = nil
-                } label: {
-                  Image(systemName: "xmark")
-                    .scaledFont(size: OmiType.caption)
+              VStack(alignment: .leading, spacing: OmiSpacing.sm) {
+                HStack(spacing: OmiSpacing.sm) {
+                  Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundColor(PageGlass.warning)
+                    .scaledFont(size: OmiType.body)
+                  Text(error)
+                    .scaledFont(size: OmiType.body)
                     .foregroundColor(Ink.secondary)
+                  Spacer()
+                  DismissButton(
+                    action: { taskState.errorMessage = nil }, showBackground: false,
+                    accessibilityLabel: "Dismiss Error", size: .compact)
                 }
-                .buttonStyle(.plain)
+                if taskState.canUseOmiAI {
+                  Button("Use Omi AI for This Thread") {
+                    Task { await taskState.useOmiAI() }
+                  }
+                  .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
+                  .disabled(taskState.isSending || taskState.isSwitchingProvider)
+                  .help(
+                    "Switch this thread to Omi AI and keep its messages. Your request will not be resent automatically."
+                  )
+                }
               }
               .padding(.horizontal, OmiSpacing.lg)
               .padding(.vertical, OmiSpacing.sm)
@@ -95,11 +115,14 @@ struct TaskChatPanel: View {
             // Input area
             ChatInputView(
               onSend: { text in
-                AnalyticsManager.shared.chatMessageSent(messageLength: text.count, source: "task_chat")
                 Task {
                   await taskState.sendMessage(
                     text,
-                    taskContext: coordinator.activeContextPacket
+                    taskContext: coordinator.activeContextPacket,
+                    onAcceptedWithAttemptID: { attemptID in
+                      AnalyticsManager.shared.chatMessageSent(
+                        messageLength: text.count, source: "task_chat", attemptID: attemptID)
+                    }
                   )
                   await coordinator.refreshActiveThread()
                 }
@@ -109,7 +132,7 @@ struct TaskChatPanel: View {
               },
               isSending: taskState.isSending,
               isStopping: taskState.isStopping,
-              placeholder: "Continue this work...",
+              placeholder: "Continue this work…",
               mode: $taskState.chatMode,
               pendingText: $coordinator.pendingInputText,
               inputText: $taskState.draftText,
@@ -117,6 +140,7 @@ struct TaskChatPanel: View {
               // composer from exposing the global push-to-talk route here.
               showsPushToTalk: false
             )
+            .disabled(taskState.isSwitchingProvider)
             .padding(OmiSpacing.md)
           }
           .background(Ink.rowFill)
@@ -150,17 +174,11 @@ struct TaskChatPanel: View {
           .foregroundColor(Ink.primary)
           .lineLimit(1)
           .truncationMode(.tail)
+          .help(task?.description ?? coordinator.activeThreadProjection?.title ?? "Omi thread")
 
         Spacer()
 
-        Button(action: onClose) {
-          Image(systemName: "xmark")
-            .scaledFont(size: OmiType.caption, weight: .medium)
-            .foregroundColor(Ink.secondary)
-            .frame(width: 20, height: 20)
-        }
-        .buttonStyle(.plain)
-        .help("Close chat panel")
+        DismissButton(action: onClose, accessibilityLabel: "Close Chat Panel")
       }
 
       // Workspace path indicator (only when a task is active)
@@ -172,6 +190,7 @@ struct TaskChatPanel: View {
             .scaledFont(size: OmiType.micro)
             .lineLimit(1)
             .truncationMode(.middle)
+            .help(coordinator.workspacePath)
           Spacer()
         }
         .foregroundColor(Ink.secondary)
@@ -220,7 +239,7 @@ struct TaskChatPanel: View {
         .scaledFont(size: OmiType.body, weight: .medium)
         .foregroundColor(Ink.secondary)
 
-      Text("Continue the same work as context changes, without starting over.")
+      Text("Keep chatting about this task. Omi remembers what you've already discussed here.")
         .scaledFont(size: OmiType.caption)
         .foregroundColor(Ink.secondary)
         .multilineTextAlignment(.center)
@@ -236,6 +255,7 @@ private struct TaskThreadOverview: View {
   let projection: TaskThreadProjection
   let runtimeProjection: AgentRunProjection?
   @Binding var isExpanded: Bool
+  let onOpenRewindEvidence: ((Int64) -> Void)?
 
   var body: some View {
     DisclosureGroup(isExpanded: $isExpanded) {
@@ -348,11 +368,27 @@ private struct TaskThreadOverview: View {
   @ViewBuilder
   private func evidenceRow(_ refs: [OmiAPI.EvidenceRef]) -> some View {
     if !refs.isEmpty {
-      HStack(spacing: OmiSpacing.xxs) {
-        Image(systemName: "link")
-        Text(refs.prefix(3).map { "\($0.kind.userFacingLabel):\($0.id)" }.joined(separator: " · "))
-          .lineLimit(1)
-          .truncationMode(.middle)
+      VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
+        let visibleRefs = Array(refs.prefix(3))
+        let currentDeviceID = ClientDeviceService.shared.clientDeviceId
+        ForEach(Array(visibleRefs.enumerated()), id: \.offset) { _, ref in
+          if let card = RewindEvidenceCardPolicy.card(for: ref, currentDeviceID: currentDeviceID) {
+            RewindEvidenceCardView(
+              card: card,
+              onOpen: RewindEvidenceCardPolicy.openHandler(
+                for: card.screenshotID,
+                onOpen: onOpenRewindEvidence
+              )
+            )
+          } else {
+            HStack(spacing: OmiSpacing.xxs) {
+              Image(systemName: "link")
+              Text("\(ref.kind.userFacingLabel):\(ref.id)")
+                .lineLimit(1)
+                .truncationMode(.middle)
+            }
+          }
+        }
       }
       .scaledFont(size: OmiType.micro)
       .foregroundColor(Ink.secondary)
@@ -376,14 +412,7 @@ struct TaskChatPanelPlaceholder: View {
           .scaledFont(size: OmiType.body, weight: .semibold)
           .foregroundColor(Ink.primary)
         Spacer()
-        Button(action: onClose) {
-          Image(systemName: "xmark")
-            .scaledFont(size: OmiType.caption, weight: .medium)
-            .foregroundColor(Ink.secondary)
-            .frame(width: 20, height: 20)
-        }
-        .buttonStyle(.plain)
-        .help("Close chat panel")
+        DismissButton(action: onClose, accessibilityLabel: "Close Chat Panel")
       }
       .padding(.horizontal, OmiSpacing.md)
       .padding(.vertical, OmiSpacing.sm)

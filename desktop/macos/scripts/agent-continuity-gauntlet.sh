@@ -41,6 +41,7 @@
 #   ./scripts/agent-continuity-gauntlet.sh --suite prompts       # fast typed-only prompt probes (P1-P4, including live public-web)
 #   ./scripts/agent-continuity-gauntlet.sh --suite continuity    # steps 1-3 only (includes PTT)
 #   ./scripts/agent-continuity-gauntlet.sh --suite agents        # exact voice-memory authority + agent probes
+#   ./scripts/agent-continuity-gauntlet.sh --suite evidence     # real speech + visual evidence journeys
 #   ./scripts/agent-continuity-gauntlet.sh --suite resilience    # startup/resilience probes (R1-R4)
 #   ./scripts/agent-continuity-gauntlet.sh --suite all           # core + prompt + resilience probes
 #   OMI_AUTOMATION_PORT=47778 ./scripts/agent-continuity-gauntlet.sh --bundle-id com.omi.omi-gauntlet

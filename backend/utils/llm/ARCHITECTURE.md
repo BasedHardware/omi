@@ -21,7 +21,6 @@ The shared plumbing every feature call goes through.
   direct-transport fallback.
 - `gateway_byok.py` — BYOK (bring-your-own-key) credential envelope helpers for
   gateway routing.
-- `gateway_shadow.py` — dev/shadow comparison wrapping (sampled, prod-gated).
 - `gateway_observability.py` — records gateway vs. direct outcomes for
   comparison and health.
 - `clients.py` — LLM client construction plus the shared error callback wiring.
@@ -34,7 +33,8 @@ The shared plumbing every feature call goes through.
 
 - `chat.py` — chat prompt assembly, context handling, response normalization.
 - `conversation_processing.py` — post-conversation structuring (speaker id
-  matching, discard detection, summarization).
+  matching, discard detection, summarization). The section writer uses
+  [readable, grounded note guidance](../../docs/conversation-note-style.md).
 - `conversation_folder.py` — conversation → folder assignment.
 - `followup.py` — follow-up question generation.
 - `persona.py` — persona chat, memory condensation for personas.
@@ -43,12 +43,8 @@ The shared plumbing every feature call goes through.
 ## Memory & knowledge graph
 
 - `memories.py` — memory extraction (standard + high-recall).
-- `working_observations.py` — working-observation batch synthesis
-  (`working_memory.py` is a backward-compatible shim, WS-G11).
+- `working_observations.py` — working-observation batch synthesis.
 - `knowledge_graph.py` — node/edge extraction from memories.
-- `promotion_proposals.py` / `promotion_routes.py` — durable-memory patch
-  proposals and their routing (`durable_memory_patches.py` and
-  `l2_memory_routes.py` are backward-compatible shims, WS-G11).
 
 ## Proactive, notifications & insights
 
@@ -68,9 +64,6 @@ The shared plumbing every feature call goes through.
 
 - Prefer routing new calls through the gateway core above; do not add a new
   direct-provider path.
-- Backward-compatible shims (`working_memory.py`, `durable_memory_patches.py`,
-  `l2_memory_routes.py`) only re-export from their real modules — put
-  implementation in the target module, not the shim.
 - Keep prompts and provider selection separate from route and auth handling.
 - Construct provider clients lazily and sanitize provider responses before
   logging them.

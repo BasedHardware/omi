@@ -4,6 +4,8 @@ Verifies that trigger_realtime_audio_bytes and trigger_realtime_integrations
 use asyncio.gather + httpx instead of Thread+join + requests.
 """
 
+import inspect
+import logging
 import os
 import sys
 import types
@@ -48,6 +50,7 @@ _utils_stubs = [
     "utils.llm",
     "utils.llm.clients",
     "utils.llm.proactive_notification",
+    "utils.llm.temporal",
     "utils.llm.usage_tracker",
     "utils.llms",
     "utils.llms.memory",
@@ -150,6 +153,7 @@ sys.modules["database.redis_db"].set_proactive_noti_sent_at = MagicMock()
 sys.modules["database.redis_db"].get_proactive_noti_sent_at_ttl = MagicMock(return_value=0)
 sys.modules["database.redis_db"].incr_daily_notification_count = MagicMock()
 sys.modules["database.redis_db"].get_daily_notification_count = MagicMock(return_value=0)
+sys.modules["database.redis_db"].publish_proactive_message = MagicMock()
 sys.modules["database.vector_db"].query_vectors_by_metadata = MagicMock(return_value=[])
 sys.modules["database.apps"].record_app_usage = MagicMock()
 sys.modules["database.apps"].get_app_by_id_db = MagicMock(return_value=None)
@@ -189,6 +193,9 @@ for name in _utils_stubs:
     _install_module(name, module)
 
 sys.modules["utils.conversations"].__path__ = [os.path.join(_BACKEND_DIR, "utils", "conversations")]
+# The real utils.llm package is imported as a package (utils.llm.temporal).
+# A ModuleType stub without __path__ makes that import fail collection.
+sys.modules["utils.llm"].__path__ = [os.path.join(_BACKEND_DIR, "utils", "llm")]
 
 sys.modules["utils.apps"].get_available_apps = MagicMock(return_value=[])
 sys.modules["utils.notifications"].send_notification = MagicMock()
@@ -196,6 +203,17 @@ sys.modules["utils.notifications"].send_notification_async = AsyncMock()
 sys.modules["utils.conversations.factory"].deserialize_conversations = MagicMock(return_value=[])
 sys.modules["utils.conversations.render"].conversations_to_string = MagicMock(return_value="")
 sys.modules["utils.conversations.render"].conversation_to_dict = MagicMock(return_value={})
+
+
+def _stub_redact_conversation_for_integration(conv):
+    redacted = dict(conv)
+    redacted.pop('geolocation', None)
+    return redacted
+
+
+sys.modules["utils.conversations.render"].redact_conversation_for_integration = (
+    _stub_redact_conversation_for_integration
+)
 sys.modules["utils.conversations.render"].populate_speaker_names = MagicMock()
 sys.modules["utils.conversations.render"].populate_folder_names = MagicMock()
 sys.modules["utils.conversations.render"].serialize_datetimes = MagicMock(side_effect=lambda value: value)
@@ -214,6 +232,11 @@ _proactive_mod.validate_notification = MagicMock(return_value=False)
 _proactive_mod.FREQUENCY_TO_BASE_THRESHOLD = {1: 0.5, 2: 0.4, 3: 0.3}
 _proactive_mod.MAX_DAILY_NOTIFICATIONS = 10
 _proactive_mod.Record = MagicMock
+
+# Stub the current-date helper imported by utils.app_integrations. Keeping it
+# inside this harness avoids pulling the real timezone/database path into this
+# otherwise hermetic unit test.
+sys.modules["utils.llm.temporal"].current_date_for_uid = MagicMock(return_value="2026-01-01")
 
 # Stub usage tracker
 _usage_mod = sys.modules["utils.llm.usage_tracker"]
@@ -326,6 +349,28 @@ class TestDurableExternalIntegrationFanout:
         journey_factory.assert_called_once_with('app_webhook_delivery', 'mobile_ios')
         attempt.succeed.assert_called_once_with()
         attempt.fail.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_creation_webhook_payload_strips_geolocation(self):
+        app = _make_app('app-1', 'https://app.test/hook')
+        app.triggers_on_conversation_creation.return_value = True
+        conversation = types.SimpleNamespace(id='conversation-1', discarded=False, is_locked=False, source=None)
+        response = MagicMock(status_code=200)
+        response.json.return_value = {}
+        client = AsyncMock()
+        client.post = AsyncMock(return_value=response)
+
+        with patch.object(app_integrations, 'get_available_apps', return_value=[app]), patch.object(
+            app_integrations, 'get_webhook_client', return_value=client
+        ), patch.object(
+            app_integrations,
+            'conversation_to_dict',
+            return_value={'id': 'conversation-1', 'geolocation': {'latitude': 1.0, 'longitude': 2.0}},
+        ):
+            await app_integrations.trigger_external_integrations('uid-1', conversation)
+
+        payload = client.post.call_args.kwargs['json']
+        assert 'geolocation' not in payload
 
     @pytest.mark.asyncio
     async def test_finalization_delivery_failure_remains_retryable(self):
@@ -505,6 +550,32 @@ class TestAsyncTriggerRealtimeAudioBytes:
         assert mock_client.post.call_count == 2
 
     @pytest.mark.asyncio
+    async def test_success_status_is_debug_and_http_error_stays_warning(self, caplog):
+        app = _make_app("a1", "https://app1.test/hook", triggers_audio=True)
+        ok = MagicMock()
+        ok.status_code = 200
+        failed = MagicMock()
+        failed.status_code = 502
+        mock_client = AsyncMock()
+        mock_client.post = AsyncMock(side_effect=[ok, failed])
+
+        with caplog.at_level(logging.DEBUG, logger="utils.app_integrations"):
+            with patch.object(app_integrations, "get_available_apps", return_value=[app]), patch.object(
+                app_integrations, "get_webhook_client", return_value=mock_client
+            ):
+                await app_integrations.trigger_realtime_audio_bytes("uid-1", 8000, bytearray(b'\x00' * 10))
+                await app_integrations.trigger_realtime_audio_bytes("uid-1", 8000, bytearray(b'\x00' * 10))
+
+        status_records = [record for record in caplog.records if "status:" in record.getMessage()]
+        assert any(
+            record.levelno == logging.DEBUG and "status: 200" in record.getMessage() for record in status_records
+        )
+        assert any(
+            record.levelno == logging.WARNING and "status: 502" in record.getMessage() for record in status_records
+        )
+        assert not any(record.levelno == logging.INFO for record in status_records)
+
+    @pytest.mark.asyncio
     async def test_audio_url_with_existing_query_string_uses_ampersand(self):
         """A webhook_url that already carries a query string must not get a second '?'."""
         app = _make_app("a1", "https://example.com/hook?token=abc", triggers_audio=True)
@@ -576,7 +647,13 @@ class TestAsyncTriggerRealtimeAudioBytes:
 
     @pytest.mark.asyncio
     async def test_no_threading_used(self):
-        """Verify threading.Thread is NOT used in the async path."""
+        """Verify realtime audio fan-out stays async (no threading import/use)."""
+        # Static tripwire on the real fan-out implementation (not the thin wrapper).
+        code = app_integrations._async_trigger_realtime_audio_bytes.__code__
+        assert "threading" not in code.co_names
+        assert "Thread" not in code.co_names
+        assert "gather_safe" in code.co_names
+
         app1 = _make_app("a1", "https://app1.test/hook", triggers_audio=True)
 
         mock_response = MagicMock()
@@ -587,9 +664,9 @@ class TestAsyncTriggerRealtimeAudioBytes:
 
         with patch.object(app_integrations, "get_available_apps", return_value=[app1]), patch.object(
             app_integrations, "get_webhook_client", return_value=mock_client
-        ), patch.object(app_integrations, "threading") as mock_threading:
+        ):
             await app_integrations.trigger_realtime_audio_bytes("uid-1", 8000, bytearray(b'\x00'))
-            mock_threading.Thread.assert_not_called()
+            mock_client.post.assert_awaited()
 
 
 class TestAudioBytesChunkedFanOut:

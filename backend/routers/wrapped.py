@@ -4,6 +4,8 @@ Wrapped 2025 API endpoints.
 Provides generation and retrieval of yearly recap data.
 """
 
+from utils.generated_compute import require_generated_compute
+
 from typing import Any, Dict, Optional
 
 from utils.executors import llm_executor
@@ -41,8 +43,10 @@ def _run_wrapped_generation(uid: str, year: int):
     try:
         generate_wrapped_2025(uid, year)
     except Exception as e:
-        logger.error(f"Error in wrapped generation for user {uid}: {e}")
-        wrapped_db.update_wrapped_status(uid, year, WrappedStatus.ERROR, error=str(e))
+        logger.error(f"Error in wrapped generation for user {uid}: {type(e).__name__}")
+        wrapped_db.update_wrapped_status(
+            uid, year, WrappedStatus.ERROR, error="Failed to generate Wrapped. Please try again later."
+        )
 
 
 @router.get('/v1/wrapped/{year}', response_model=WrappedStatusResponse, tags=['wrapped'])
@@ -68,11 +72,19 @@ def get_wrapped_status(year: int, uid: str = Depends(auth.get_current_user_uid))
             year=year,
         )
 
+    raw_error = wrapped.get('error')
+    error = None
+    if raw_error:
+        if raw_error == "Failed to generate Wrapped. Please try again later.":
+            error = raw_error
+        else:
+            error = "Failed to generate Wrapped. Please try again later."
+
     return WrappedStatusResponse(
-        status=wrapped.get('status', WrappedStatus.NOT_GENERATED),
+        status=wrapped.get('status') or WrappedStatus.NOT_GENERATED,
         year=year,
         result=wrapped.get('result'),
-        error=wrapped.get('error'),
+        error=error,
         progress=wrapped.get('progress'),
     )
 
@@ -106,6 +118,7 @@ def generate_wrapped(
     # Already processing - check if stuck
     if wrapped and wrapped.get('status') == WrappedStatus.PROCESSING:
         if wrapped_db.is_wrapped_stuck(wrapped):
+            require_generated_compute(uid, 'wrapped_analysis', allow_byok=False)
             # Restart stuck job
             wrapped_db.reset_wrapped_for_regeneration(uid, year)
             llm_executor.submit(_run_wrapped_generation, uid, year)
@@ -119,6 +132,7 @@ def generate_wrapped(
                 message="Generation is already in progress",
             )
 
+    require_generated_compute(uid, 'wrapped_analysis', allow_byok=False)
     # Error or not generated - start fresh
     if wrapped and wrapped.get('status') == WrappedStatus.ERROR:
         wrapped_db.reset_wrapped_for_regeneration(uid, year)

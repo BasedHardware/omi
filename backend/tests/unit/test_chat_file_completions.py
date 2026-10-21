@@ -1,0 +1,387 @@
+"""Behavioral coverage for Assistants sunset → Chat Completions file chat.
+
+SCA-362 / SCA-361: non-vision file chat must not touch beta.threads / beta.assistants,
+and provider 4xx must become a single typed error frame (no canned second answer).
+"""
+
+import logging
+import os
+from datetime import datetime, timezone
+from types import SimpleNamespace
+import openai
+import pytest
+
+os.environ.setdefault('OPENAI_API_KEY', 'sk-test-not-real')
+os.environ.setdefault(
+    'ENCRYPTION_SECRET',
+    'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv',
+)
+
+from models.chat import FileChat  # noqa: E402
+from utils.other import chat_file  # noqa: E402
+from utils.retrieval import graph  # noqa: E402
+from utils.retrieval.agentic import AGENT_STREAM_FAILURE_MESSAGE  # noqa: E402
+import utils.retrieval.tools.file_tools as file_tools  # noqa: E402
+from utils.llm.model_config import LUNA_MODEL
+
+
+class _Callback:
+    def __init__(self) -> None:
+        self.chunks: list[str] = []
+        self.ended = False
+
+    async def put_data(self, text: str) -> None:
+        self.chunks.append(text)
+
+    async def end(self) -> None:
+        self.ended = True
+
+    def end_nowait(self) -> None:
+        self.ended = True
+
+
+class _AsyncStream:
+    def __init__(self, chunks: list[object]) -> None:
+        self._chunks = iter(chunks)
+
+    def __aiter__(self):
+        return self
+
+    async def __anext__(self):
+        try:
+            return next(self._chunks)
+        except StopIteration as error:
+            raise StopAsyncIteration from error
+
+
+class _ForbiddenAssistants:
+    def __getattr__(self, name: str):
+        raise AssertionError(f'Assistants API {name} must not be called')
+
+
+def _pdf_file() -> FileChat:
+    return FileChat(
+        id='file-1',
+        name='note.pdf',
+        mime_type='application/pdf',
+        openai_file_id='openai-file-1',
+        created_at=datetime.now(timezone.utc),
+    )
+
+
+def _token(text: str) -> SimpleNamespace:
+    return SimpleNamespace(choices=[SimpleNamespace(delta=SimpleNamespace(content=text))])
+
+
+def _not_found() -> openai.NotFoundError:
+    return openai.NotFoundError(
+        message='Error code: 404 - No such File object',
+        response=SimpleNamespace(request=None, status_code=404, headers={}),
+        body={'error': {'param': 'file_id', 'message': 'No such File object'}},
+    )
+
+
+@pytest.mark.asyncio
+async def test_doc_file_chat_uses_completions_and_never_assistants(monkeypatch):
+    request: dict[str, object] = {}
+
+    async def create_completion(**kwargs):
+        request.update(kwargs)
+        return _AsyncStream([_token('PDF summary')])
+
+    client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create_completion)))
+    monkeypatch.setattr(chat_file, '_get_async_openai', lambda: client)
+    monkeypatch.setattr(chat_file.openai, 'beta', _ForbiddenAssistants())
+    monkeypatch.setattr(
+        chat_file.chat_db,
+        'get_chat_files_desc',
+        lambda *_args, **_kwargs: [_pdf_file().model_dump()],
+    )
+    tool = object.__new__(chat_file.FileChatTool)
+    tool.uid = 'user-1'
+    tool.chat_session_id = 'session-1'
+    callback = _Callback()
+
+    answer = await tool.process_chat_with_file_stream('summarize', ['file-1'], callback)
+
+    assert answer == 'PDF summary'
+    assert callback.chunks == ['PDF summary']
+    assert callback.ended is True
+    assert request['model'] == LUNA_MODEL
+    assert request['max_completion_tokens'] == 2048
+    assert 'max_tokens' not in request
+    assert request['messages'][0]['content'][1] == {'type': 'file', 'file': {'file_id': 'openai-file-1'}}
+    assert getattr(tool, 'thread_id', None) is None
+    assert getattr(tool, 'assistant_id', None) is None
+    assert not hasattr(chat_file.chat_db, 'update_chat_session_openai_ids')
+
+
+def test_upload_pdf_uses_user_data_and_rejects_unsupported(tmp_path, monkeypatch):
+    created: dict[str, object] = {}
+
+    def _create(*, file, purpose):
+        created['purpose'] = purpose
+        return SimpleNamespace(id='file-1', filename='note.pdf')
+
+    monkeypatch.setattr(chat_file.openai, 'files', SimpleNamespace(create=_create))
+
+    pdf_path = tmp_path / 'note.pdf'
+    pdf_path.write_bytes(b'%PDF-1.1\n%%EOF\n')
+    result = chat_file.FileChatTool.upload(pdf_path)
+    assert result['file_id'] == 'file-1'
+    assert created['purpose'] == 'user_data'
+
+    zip_path = tmp_path / 'archive.zip'
+    zip_path.write_bytes(b'PK\x03\x04')
+    with pytest.raises(chat_file.UnsupportedChatFileError, match='zip'):
+        chat_file.FileChatTool.upload(zip_path)
+
+
+@pytest.mark.parametrize(
+    'name,mime_type',
+    [
+        ('note.txt', 'text/plain'),
+        (
+            'brief.docx',
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        ),
+    ],
+)
+def test_completion_messages_send_file_part_for_documents(name, mime_type):
+    tool = object.__new__(chat_file.FileChatTool)
+    attached = FileChat(
+        id='file-1',
+        name=name,
+        mime_type=mime_type,
+        openai_file_id='openai-file-doc',
+        created_at=datetime.now(timezone.utc),
+    )
+    messages = tool._completion_messages_sync('summarize', [attached])
+    assert messages[0]['content'][1] == {'type': 'file', 'file': {'file_id': 'openai-file-doc'}}
+
+
+def test_completion_messages_reject_legacy_unsupported_type():
+    tool = object.__new__(chat_file.FileChatTool)
+    attached = FileChat(
+        id='file-1',
+        name='note.ogg',
+        mime_type='audio/ogg',
+        openai_file_id='openai-file-ogg',
+        created_at=datetime.now(timezone.utc),
+    )
+    with pytest.raises(chat_file.UnsupportedChatFileError, match='ogg'):
+        tool._completion_messages_sync('summarize', [attached])
+
+
+def test_search_files_tool_provider_failure_is_soft(monkeypatch):
+    session = {
+        'id': 's1',
+        'created_at': datetime.now(timezone.utc),
+        'file_ids': ['f1'],
+    }
+    monkeypatch.setattr(file_tools.chat_db, 'get_chat_session_by_id', lambda *_args: session)
+
+    class _Boom:
+        def __init__(self, *_args, **_kwargs):
+            pass
+
+        def process_chat_with_file(self, *_args, **_kwargs):
+            raise RuntimeError('failed to create OpenAI thread')
+
+    monkeypatch.setattr(file_tools, 'FileChatTool', _Boom)
+
+    result = file_tools.search_files_tool.func(
+        question='what does this say?',
+        config={'configurable': {'user_id': 'u1', 'chat_session_id': 's1'}},
+    )
+    assert isinstance(result, str)
+    assert result.startswith('I encountered an error while searching the files')
+
+
+def test_search_files_tool_provider_rejection_is_not_a_server_error(monkeypatch, caplog):
+    session = {
+        'id': 's1',
+        'created_at': datetime.now(timezone.utc),
+        'file_ids': ['f1'],
+    }
+    monkeypatch.setattr(file_tools.chat_db, 'get_chat_session_by_id', lambda *_args: session)
+
+    class _Rejected:
+        def __init__(self, *_args, **_kwargs):
+            pass
+
+        def process_chat_with_file(self, *_args, **_kwargs):
+            raise chat_file.ProviderRejectedChatFileError('The file could not be processed.')
+
+    monkeypatch.setattr(file_tools, 'FileChatTool', _Rejected)
+
+    with caplog.at_level(logging.DEBUG, logger='utils.retrieval.tools.file_tools'):
+        result = file_tools.search_files_tool.func(
+            question='what does this say?',
+            config={'configurable': {'user_id': 'u1', 'chat_session_id': 's1'}},
+        )
+
+    assert result == 'The file could not be processed.'
+    assert not any(record.levelno >= logging.ERROR for record in caplog.records)
+    assert any(
+        record.levelno == logging.WARNING and 'provider rejected the file' in record.getMessage()
+        for record in caplog.records
+    )
+    assert all(record.exc_info in (None, (None, None, None)) for record in caplog.records)
+
+
+def _bad_request_error(body: object) -> openai.BadRequestError:
+    return openai.BadRequestError(
+        message='Error code: 400 - rejected',
+        response=SimpleNamespace(request=None, status_code=400, headers={}),
+        body=body,
+    )
+
+
+def _run_search_files_tool_rejection(monkeypatch, caplog, error: Exception):
+    session = {
+        'id': 's1',
+        'created_at': datetime.now(timezone.utc),
+        'file_ids': ['f1'],
+    }
+    monkeypatch.setattr(file_tools.chat_db, 'get_chat_session_by_id', lambda *_args: session)
+
+    class _Rejected:
+        def __init__(self, *_args, **_kwargs):
+            pass
+
+        def process_chat_with_file(self, *_args, **_kwargs):
+            raise chat_file.ProviderRejectedChatFileError('The file could not be processed.') from error
+
+    monkeypatch.setattr(file_tools, 'FileChatTool', _Rejected)
+    with caplog.at_level(logging.DEBUG, logger='utils.retrieval.tools.file_tools'):
+        return file_tools.search_files_tool.func(
+            question='what does this say?',
+            config={'configurable': {'user_id': 'u1', 'chat_session_id': 's1'}},
+        )
+
+
+def test_search_files_tool_request_shape_400_stays_a_server_error(monkeypatch, caplog):
+    # A 400 naming a field our request constructs (bad model id, unsupported
+    # token budget) is a deployment fault: it must stay error-level with the
+    # traceback instead of masquerading as a rejected user file.
+    cause = _bad_request_error({'error': {'param': 'model', 'message': "Invalid 'model'"}})
+
+    result = _run_search_files_tool_rejection(monkeypatch, caplog, cause)
+
+    assert result == 'I encountered an error while searching the files. Please try again or rephrase your question.'
+    error_records = [record for record in caplog.records if record.levelno >= logging.ERROR]
+    assert error_records, 'request-shape 400 must be reported at ERROR'
+    assert any(record.exc_info for record in error_records), 'traceback must be preserved'
+    assert not any(
+        record.levelno == logging.WARNING and 'provider rejected the file' in record.getMessage()
+        for record in caplog.records
+    )
+
+
+def test_search_files_tool_attachment_shaped_400_stays_soft(monkeypatch, caplog):
+    # A 400 whose param points at the attachment itself (stale file id inside
+    # the message content) is unreadable user input, not a deployment fault.
+    cause = _bad_request_error(
+        {'error': {'param': 'messages[0].content[1].file.file_id', 'message': 'No such File object'}}
+    )
+
+    result = _run_search_files_tool_rejection(monkeypatch, caplog, cause)
+
+    assert result == 'The file could not be processed.'
+    assert not any(record.levelno >= logging.ERROR for record in caplog.records)
+    assert any(
+        record.levelno == logging.WARNING and 'provider rejected the file' in record.getMessage()
+        for record in caplog.records
+    )
+
+
+def test_search_files_tool_gateway_request_shape_400_stays_a_server_error(monkeypatch, caplog):
+    # Gateway-normalized 400: the gateway collapses every provider rejection to
+    # param='provider' code='provider_request_rejected' but now serializes its
+    # bounded provider_rejection classifier. A request-shape member must stay
+    # error-level; the attachment-shaped members must not match it.
+    cause = _bad_request_error(
+        {
+            'error': {
+                'param': 'provider',
+                'code': 'provider_request_rejected',
+                'provider_rejection': 'invalid_model',
+            }
+        }
+    )
+
+    result = _run_search_files_tool_rejection(monkeypatch, caplog, cause)
+
+    assert result == 'I encountered an error while searching the files. Please try again or rephrase your question.'
+    error_records = [record for record in caplog.records if record.levelno >= logging.ERROR]
+    assert error_records, 'gateway request-shape 400 must be reported at ERROR'
+    assert any(record.exc_info for record in error_records), 'traceback must be preserved'
+
+
+def test_search_files_tool_gateway_attachment_rejection_stays_soft(monkeypatch, caplog):
+    # Gateway-normalized 400 whose bounded classifier is not request-shaped
+    # (e.g. context_length_exceeded from a huge attachment) stays soft.
+    cause = _bad_request_error(
+        {
+            'error': {
+                'param': 'provider',
+                'code': 'provider_request_rejected',
+                'provider_rejection': 'context_length_exceeded',
+            }
+        }
+    )
+
+    result = _run_search_files_tool_rejection(monkeypatch, caplog, cause)
+
+    assert result == 'The file could not be processed.'
+    assert not any(record.levelno >= logging.ERROR for record in caplog.records)
+    assert any(
+        record.levelno == logging.WARNING and 'provider rejected the file' in record.getMessage()
+        for record in caplog.records
+    )
+
+
+def test_search_files_tool_gateway_nested_attachment_rejection_stays_soft(monkeypatch, caplog):
+    # The gateway preserves a bounded attachment-specific classification for
+    # nested attachment params (messages[...]....file.file_id): an unreadable
+    # user file must stay soft, not collapse into invalid_messages.
+    cause = _bad_request_error(
+        {
+            'error': {
+                'param': 'provider',
+                'code': 'provider_request_rejected',
+                'provider_rejection': 'invalid_attachment',
+            }
+        }
+    )
+
+    result = _run_search_files_tool_rejection(monkeypatch, caplog, cause)
+
+    assert result == 'The file could not be processed.'
+    assert not any(record.levelno >= logging.ERROR for record in caplog.records)
+    assert any(
+        record.levelno == logging.WARNING and 'provider rejected the file' in record.getMessage()
+        for record in caplog.records
+    )
+
+
+def test_search_files_tool_gateway_injected_option_rejection_stays_a_server_error(monkeypatch, caplog):
+    # The gateway injects reasoning_effort on the file-chat lanes; a provider
+    # rejecting that option is a gateway-config fault and stays error-level.
+    cause = _bad_request_error(
+        {
+            'error': {
+                'param': 'provider',
+                'code': 'provider_request_rejected',
+                'provider_rejection': 'unsupported_reasoning_effort',
+            }
+        }
+    )
+
+    result = _run_search_files_tool_rejection(monkeypatch, caplog, cause)
+
+    assert result == 'I encountered an error while searching the files. Please try again or rephrase your question.'
+    error_records = [record for record in caplog.records if record.levelno >= logging.ERROR]
+    assert error_records, 'gateway-injected option rejection must be reported at ERROR'
+    assert any(record.exc_info for record in error_records), 'traceback must be preserved'

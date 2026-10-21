@@ -1,4 +1,5 @@
 import 'package:omi/backend/schema/gen/users_wire.g.dart' as wire;
+import 'package:omi/backend/schema/memory_review.dart';
 // Phase 4.1 — none of these classes typedef to their GeneratedDailySummary* types.
 // The generated fields are all nullable (String?/bool?/int?/double?) while these
 // classes coerce them to non-null with defaults (?? '', ?? 'medium', ?? false,
@@ -104,8 +105,20 @@ class DayStats {
   final int totalConversations; // Excluding discarded
   final int totalDurationMinutes; // Excluding discarded
   final int actionItemsCount;
+  final int? memoriesCreated;
+  final int? actionItemsCreated;
+  final int? watchingMinutes;
+  final int? proactiveMoments;
 
-  DayStats({this.totalConversations = 0, this.totalDurationMinutes = 0, this.actionItemsCount = 0});
+  DayStats({
+    this.totalConversations = 0,
+    this.totalDurationMinutes = 0,
+    this.actionItemsCount = 0,
+    this.memoriesCreated,
+    this.actionItemsCreated,
+    this.watchingMinutes,
+    this.proactiveMoments,
+  });
 
   factory DayStats.fromJson(Map<String, dynamic> json) {
     return DayStats.fromGenerated(wire.GeneratedDailySummaryDayStats.fromJson(json));
@@ -116,15 +129,23 @@ class DayStats {
       totalConversations: generated.totalConversations ?? 0,
       totalDurationMinutes: generated.totalDurationMinutes ?? 0,
       actionItemsCount: generated.actionItemsCount ?? 0,
+      memoriesCreated: generated.memoriesCreated,
+      actionItemsCreated: generated.actionItemsCreated,
+      watchingMinutes: generated.watchingMinutes,
+      proactiveMoments: generated.proactiveMoments,
     );
   }
 
-  String get formattedDuration {
-    if (totalDurationMinutes < 60) {
-      return '${totalDurationMinutes}m';
+  String get formattedDuration => _formatMinutes(totalDurationMinutes);
+
+  String? get formattedWatchingDuration => watchingMinutes == null ? null : _formatMinutes(watchingMinutes!);
+
+  static String _formatMinutes(int minutes) {
+    if (minutes < 60) {
+      return '${minutes}m';
     }
-    final hours = totalDurationMinutes ~/ 60;
-    final mins = totalDurationMinutes % 60;
+    final hours = minutes ~/ 60;
+    final mins = minutes % 60;
     return mins > 0 ? '${hours}h ${mins}m' : '${hours}h';
   }
 }
@@ -158,6 +179,10 @@ class DailySummary {
   final String date; // YYYY-MM-DD
   final DateTime createdAt;
 
+  /// False when the server sent no creation time and [createdAt] is the parse time: it moves on
+  /// every fetch, so it must not be read as when the recap arrived.
+  final bool createdAtKnown;
+
   // Headline & Overview
   final String headline;
   final String overview;
@@ -173,6 +198,11 @@ class DailySummary {
   final List<DecisionMade> decisionsMade; // Max 3
   final List<KnowledgeNugget> knowledgeNuggets; // Max 3
 
+  /// Memories this day actually produced, with identity so the owner can
+  /// confirm, drop, or correct them. Unlike [knowledgeNuggets] (LLM prose),
+  /// each entry points at a real memory row. Max 3.
+  final List<MemoryReviewItem> memoriesLearned;
+
   // Locations
   final List<LocationPin> locations;
 
@@ -180,6 +210,7 @@ class DailySummary {
     required this.id,
     required this.date,
     required this.createdAt,
+    this.createdAtKnown = true,
     required this.headline,
     required this.overview,
     this.dayEmoji = '📅',
@@ -189,6 +220,7 @@ class DailySummary {
     this.unresolvedQuestions = const [],
     this.decisionsMade = const [],
     this.knowledgeNuggets = const [],
+    this.memoriesLearned = const [],
     this.locations = const [],
   });
 
@@ -202,6 +234,7 @@ class DailySummary {
         id: '',
         date: '',
         createdAt: DateTime.now(),
+        createdAtKnown: false,
         headline: 'Your Day in Review',
         overview: '',
         dayEmoji: '📅',
@@ -215,6 +248,7 @@ class DailySummary {
       id: generated.id ?? '',
       date: generated.date ?? '',
       createdAt: createdAt ?? generated.createdAt ?? DateTime.now(),
+      createdAtKnown: createdAt != null || generated.createdAt != null,
       headline: generated.headline ?? 'Your Day in Review',
       overview: generated.overview ?? '',
       dayEmoji: generated.dayEmoji ?? '📅',
@@ -224,6 +258,12 @@ class DailySummary {
       unresolvedQuestions: generated.unresolvedQuestions?.map(UnresolvedQuestion.fromGenerated).toList() ?? [],
       decisionsMade: generated.decisionsMade?.map(DecisionMade.fromGenerated).toList() ?? [],
       knowledgeNuggets: generated.knowledgeNuggets?.map(KnowledgeNugget.fromGenerated).toList() ?? [],
+      memoriesLearned: generated.memoriesLearned
+              ?.map(MemoryReviewItem.fromGenerated)
+              .where((item) => item.memoryId.isNotEmpty && item.content.trim().isNotEmpty)
+              .take(MemoryReviewCardBlock.maxItems)
+              .toList() ??
+          [],
       locations: generated.locations?.map(LocationPin.fromGenerated).toList() ?? [],
     );
   }

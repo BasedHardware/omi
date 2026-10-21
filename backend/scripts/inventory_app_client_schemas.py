@@ -37,6 +37,7 @@ LOCAL_NON_REST_SCHEMA_FILES = frozenset(
 # and must not be used to exempt normal HTTP response DTO decoding.
 STREAM_PROTOCOL_DECODER_FUNCTIONS = frozenset(
     {
+        (APP_API_DIR / 'messages.dart', 'parseMessageChunk'),
         (APP_API_DIR / 'messages.dart', 'parseVoiceMessageStreamChunk'),
     }
 )
@@ -47,6 +48,8 @@ STREAM_PROTOCOL_DECODER_FUNCTIONS = frozenset(
 NON_REST_RESPONSE_DECODER_FUNCTIONS = frozenset(
     {
         (APP_API_DIR / 'conversations.dart', 'isSyncRecoveryWindowExceededResponse'),
+        (APP_API_DIR / 'conversations.dart', 'separateConversationFromCaptureGroup'),
+        (APP_API_DIR / 'speech_profile.dart', '_errorDetail'),
     }
 )
 NON_REST_DECODE_CONTEXTS = frozenset({'stream_protocol', 'error_discriminator'})
@@ -69,6 +72,11 @@ RAW_DECODE_RE = re.compile(
 WIRE_DECODE_RE = re.compile(r'wire\.Generated[A-Za-z0-9_]+\.fromJson|\.fromGenerated\s*\(|fromGeneratedWireJson')
 
 
+def repo_relative_path(path: Path) -> str:
+    """Return a stable repository path for JSON reports and diagnostics."""
+    return path.relative_to(ROOT_DIR).as_posix()
+
+
 def _collect_wire_backed_type_names() -> list[str]:
     """Collect Dart type names whose fromJson delegates to wire.Generated* parsers.
 
@@ -87,7 +95,7 @@ def _collect_wire_backed_type_names() -> list[str]:
     for path in sorted(APP_SCHEMA_DIR.rglob('*.dart')):
         if path.name.endswith('.g.dart') or path.name.endswith('.gen.dart'):
             continue
-        text = path.read_text()
+        text = path.read_text(encoding='utf-8')
         names.update(typedef_re.findall(text))
         names.update(adapter_re.findall(text))
     return sorted(names, key=len, reverse=True)  # longest first for alternation
@@ -113,7 +121,7 @@ class DartSchemaFile:
 
     def to_report(self) -> dict[str, Any]:
         return {
-            'path': str(self.path.relative_to(ROOT_DIR)),
+            'path': repo_relative_path(self.path),
             'classes': self.classes,
             'enums': self.enums,
             'fromJson': self.from_json_count,
@@ -137,7 +145,7 @@ class AppRoute:
 
     def to_report(self) -> dict[str, Any]:
         return {
-            'path': str(self.path.relative_to(ROOT_DIR)),
+            'path': repo_relative_path(self.path),
             'route': self.route,
             'normalized_route': self.normalized_route,
             'line': self.line,
@@ -185,7 +193,7 @@ class DartDecodeSite:
 
     def to_report(self) -> dict[str, Any]:
         return {
-            'path': str(self.path.relative_to(ROOT_DIR)),
+            'path': repo_relative_path(self.path),
             'line': self.line,
             'kind': self.kind,
             'snippet': self.snippet,
@@ -220,7 +228,7 @@ class AppOperationManifestItem:
         raw_request_sites = [site for site in raw_sites if site.context == 'request_encode']
         generated_backed_sites = [site for site in self.decode_sites if site.generated_backed]
         return {
-            'path': str(self.path.relative_to(ROOT_DIR)),
+            'path': repo_relative_path(self.path),
             'route': self.route,
             'normalized_route': self.normalized_route,
             'line': self.line,
@@ -249,8 +257,52 @@ class AppOperationManifestItem:
         }
 
 
+def _has_generated_wire_consumer(path: Path, classes: list[str]) -> bool:
+    """Recognize display adapters fed by generated decoders at their REST call sites.
+
+    Every external fromJson call must receive a generated decoder's toJson,
+    directly or through a straight-line local final binding. A raw consumer stays manual.
+    """
+    if not classes or not path.is_relative_to(APP_SCHEMA_DIR):
+        return False
+    import_uri = 'package:omi/backend/schema/' + path.relative_to(APP_SCHEMA_DIR).as_posix()
+    calls = re.compile(r'\b(?:' + '|'.join(re.escape(name) for name in classes) + r')\.fromJson\s*\(')
+    wire_value = re.compile(r'wire\.Generated\w+\.fromJson\s*\(')
+    observed = False
+    for consumer in sorted(APP_API_DIR.glob('*.dart')):
+        text = _mask_dart_comments(consumer.read_text(encoding='utf-8'))
+        if import_uri not in text:
+            continue
+        for call in calls.finditer(text):
+            observed = True
+            close = _matching_delimiter_offset(text, call.end() - 1, '(', ')')
+            if close is None:
+                return False
+            argument = text[call.end() : close].strip()
+            if re.fullmatch(r'[A-Za-z_]\w*', argument):
+                bindings = list(re.finditer(r'\bfinal\s+' + re.escape(argument) + r'\s*=\s*', text[: call.start()]))
+                if not bindings:
+                    return False
+                value_start = bindings[-1].end()
+                value_end = text.find(';', value_start, call.start())
+                if value_end < 0:
+                    return False
+                # Refuse reassignment or a closed scope between the binding and consumer.
+                between = text[value_end + 1 : call.start()]
+                if '}' in between or re.search(r'\b' + re.escape(argument) + r'\s*=', between):
+                    return False
+                argument = text[value_start:value_end].strip()
+            wire_call = wire_value.match(argument)
+            if wire_call is None:
+                return False
+            wire_close = _matching_delimiter_offset(argument, wire_call.end() - 1, '(', ')')
+            if wire_close is None or argument[wire_close + 1 :].strip() != '.toJson()':
+                return False
+    return observed
+
+
 def scan_dart_schema_file(path: Path) -> DartSchemaFile:
-    text = path.read_text()
+    text = path.read_text(encoding='utf-8')
     return DartSchemaFile(
         path=path,
         classes=CLASS_RE.findall(text),
@@ -259,7 +311,10 @@ def scan_dart_schema_file(path: Path) -> DartSchemaFile:
         to_json_count=len(TO_JSON_RE.findall(text)),
         generated=any(marker in text[:500] for marker in GENERATED_MARKERS) or path.name.endswith('.g.dart'),
         generated_backed=bool(
-            GENERATED_WIRE_RE.search(text) or WIRE_DECODE_RE.search(text) or _WIRE_BACKED_DECODE_RE.search(text)
+            GENERATED_WIRE_RE.search(text)
+            or WIRE_DECODE_RE.search(text)
+            or _WIRE_BACKED_DECODE_RE.search(text)
+            or _has_generated_wire_consumer(path, CLASS_RE.findall(text))
         ),
     )
 
@@ -316,8 +371,8 @@ def scan_dart_decode_sites() -> list[DartDecodeSite]:
     for path in paths:
         if path.name.endswith('.gen.dart') or path.name.endswith('.g.dart') or path in LOCAL_NON_REST_SCHEMA_FILES:
             continue
-        lines = path.read_text().splitlines()
-        functions = _function_ranges(path.read_text())
+        lines = path.read_text(encoding='utf-8').splitlines()
+        functions = _function_ranges(path.read_text(encoding='utf-8'))
         for index, line in enumerate(lines, start=1):
             stripped = line.strip()
             if not stripped or stripped.startswith('//') or not RAW_DECODE_RE.search(line):
@@ -746,7 +801,7 @@ def _mask_dart_comments(text: str) -> str:
 def scan_app_routes() -> list[AppRoute]:
     routes: list[AppRoute] = []
     for path in sorted(APP_API_DIR.glob('*.dart')):
-        original_text = path.read_text()
+        original_text = path.read_text(encoding='utf-8')
         text = _mask_dart_comments(original_text)
         functions = _function_ranges(original_text)
         env_routes = _scan_marker_route_occurrences(text, 'Env.apiBaseUrl', must_start_with='v')
@@ -800,14 +855,14 @@ def scan_app_routes() -> list[AppRoute]:
 def load_openapi_schema_names(path: Path) -> list[str]:
     if not path.exists():
         return []
-    spec = json.loads(path.read_text())
+    spec = json.loads(path.read_text(encoding='utf-8'))
     return sorted(spec.get('components', {}).get('schemas', {}).keys())
 
 
 def load_openapi_paths(path: Path) -> list[str]:
     if not path.exists():
         return []
-    spec = json.loads(path.read_text())
+    spec = json.loads(path.read_text(encoding='utf-8'))
     return sorted(spec.get('paths', {}).keys())
 
 
@@ -877,7 +932,7 @@ def operation_request_schema_name(operation: dict[str, Any]) -> str | None:
 def load_openapi_operations(path: Path) -> list[OpenApiOperation]:
     if not path.exists():
         return []
-    spec = json.loads(path.read_text())
+    spec = json.loads(path.read_text(encoding='utf-8'))
     operations = []
     for route, methods in spec.get('paths', {}).items():
         for method, operation in methods.items():
@@ -984,11 +1039,11 @@ def build_report(spec_path: Path) -> dict[str, Any]:
     unmodeled_operations = [operation for operation in openapi_operations if operation.unmodeled_success_response]
     return {
         'dart_schema_dirs': [
-            str(APP_SCHEMA_DIR.relative_to(ROOT_DIR)),
-            str(APP_API_DIR.relative_to(ROOT_DIR)),
-            *(str(path.relative_to(ROOT_DIR)) for path in MODEL_REST_DTO_FILES if path.exists()),
+            repo_relative_path(APP_SCHEMA_DIR),
+            repo_relative_path(APP_API_DIR),
+            *(repo_relative_path(path) for path in MODEL_REST_DTO_FILES if path.exists()),
         ],
-        'app_client_openapi': str(spec_path.relative_to(ROOT_DIR)),
+        'app_client_openapi': repo_relative_path(spec_path),
         'openapi_schema_count': len(load_openapi_schema_names(spec_path)),
         'openapi_schemas': load_openapi_schema_names(spec_path),
         'openapi_path_count': len(openapi_paths),

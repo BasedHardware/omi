@@ -11,6 +11,7 @@ os.environ.setdefault(
 
 from models.chat import FileChat  # noqa: E402
 from utils.other import chat_file  # noqa: E402
+from utils.llm.model_config import LUNA_MODEL
 
 
 class _Callback:
@@ -68,42 +69,11 @@ async def test_vision_chat_uses_luna_completion_budget_field(monkeypatch):
         created_at=datetime.now(timezone.utc),
     )
 
-    answer = await tool._ask_vision_stream('What do you see?', [image], callback)
+    answer = await tool._ask_files_stream('What do you see?', [image], callback)
 
     assert answer == 'A test image.'
     assert callback.chunks == ['A test image.']
     assert callback.ended is True
-    assert request['model'] == 'gpt-5.6-luna'
+    assert request['model'] == LUNA_MODEL
     assert request['max_completion_tokens'] == 2048
     assert 'max_tokens' not in request
-
-
-def test_file_search_assistant_uses_assistants_compatible_model(monkeypatch):
-    assistant_request: dict[str, object] = {}
-
-    def create_assistant(**kwargs):
-        assistant_request.update(kwargs)
-        return SimpleNamespace(id='assistant-1')
-
-    monkeypatch.setattr(
-        chat_file.openai,
-        'beta',
-        SimpleNamespace(
-            threads=SimpleNamespace(create=lambda **_kwargs: SimpleNamespace(id='thread-1')),
-            assistants=SimpleNamespace(create=create_assistant),
-        ),
-    )
-    monkeypatch.setattr(chat_file.chat_db, 'update_chat_session_openai_ids', lambda *_args: None)
-
-    tool = object.__new__(chat_file.FileChatTool)
-    tool.uid = 'user-1'
-    tool.chat_session_id = 'session-1'
-    tool.thread_id = None
-    tool.assistant_id = None
-
-    tool._ensure_thread_and_assistant()
-
-    assert tool.thread_id == 'thread-1'
-    assert tool.assistant_id == 'assistant-1'
-    assert assistant_request['model'] == 'gpt-4.1'
-    assert assistant_request['tools'] == [{'type': 'file_search'}]

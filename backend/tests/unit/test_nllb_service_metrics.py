@@ -11,9 +11,11 @@ import os
 import sys
 import time
 import unittest
-from functools import partial
+import asyncio
 from types import ModuleType
 from unittest.mock import MagicMock, patch
+
+from fastapi import HTTPException
 
 os.environ.setdefault("NLLB_MODEL_DIR", "/tmp/fake-nllb-model")
 os.environ.setdefault("CT2_DEVICE", "cpu")
@@ -103,11 +105,7 @@ class TestEndpointQueueWaitPassthrough(unittest.TestCase):
     def test_translate_endpoint_passes_t_queued_to_executor(self):
         import asyncio
 
-        captured_partials = []
-        original_partial = partial
-
-        def capturing_run_in_executor(pool, func):
-            captured_partials.append(func)
+        def capturing_run_in_executor(pool, func, *args):
             fake_result = MagicMock()
             fake_result.hypotheses = [["▁hola", "</s>"]]
             fake_translator = MagicMock()
@@ -117,7 +115,7 @@ class TestEndpointQueueWaitPassthrough(unittest.TestCase):
                 "_tokenizer",
                 MagicMock(Encode=lambda t, out_type=str: ["▁hello"], Decode=lambda tokens: "hola"),
             ):
-                result = func()
+                result = func(*args)
             fut = asyncio.get_event_loop().create_future()
             fut.set_result(result)
             return fut
@@ -128,15 +126,13 @@ class TestEndpointQueueWaitPassthrough(unittest.TestCase):
             mock_loop = MagicMock()
             mock_loop.run_in_executor = MagicMock(side_effect=capturing_run_in_executor)
 
-            with patch("asyncio.get_running_loop", return_value=mock_loop):
-                result = loop.run_until_complete(_nllb_main.translate(req))
+            with patch.object(_nllb_main, "_translate_batch", wraps=_nllb_main._translate_batch) as worker, patch(
+                "asyncio.get_running_loop", return_value=mock_loop
+            ):
+                loop.run_until_complete(_nllb_main.translate(req))
 
-            assert len(captured_partials) == 1, "Expected one executor call"
-            func = captured_partials[0]
-            assert isinstance(func, partial), "Executor func should be a partial"
-            assert func.keywords.get('t_queued', 0) > 0 or (
-                len(func.args) >= 4 and func.args[3] > 0
-            ), "t_queued must be passed to _translate_batch via partial()"
+            assert worker.call_count == 1
+            assert worker.call_args.args[3] > 0, "t_queued must reach the actual worker"
         finally:
             loop.close()
 
@@ -177,5 +173,151 @@ class TestSlowBurnAlertVolumeGate(unittest.TestCase):
         ), "Slow burn alert must have volume gate to prevent noisy alerts during low traffic"
 
 
+class TestAdmissionControl(unittest.TestCase):
+    """503-at-cap admission (SCA-439): reject immediately instead of queueing forever."""
+
+    def _request(self):
+        return _nllb_main.TranslateRequest(contents=["hello"], target_language_code="es")
+
+    def test_max_in_flight_at_least_worker_count(self):
+        assert _nllb_main.MAX_IN_FLIGHT >= _nllb_main.INFERENCE_WORKERS
+        assert _nllb_main.MAX_IN_FLIGHT == _nllb_main.INFERENCE_WORKERS * 2  # default cap
+
+    def test_translate_rejects_503_at_cap_without_executor(self):
+        drained = asyncio.Semaphore(0)  # locked(): admission full
+        mock_loop = MagicMock()
+        with patch.object(_nllb_main, "_admission", drained), patch.object(
+            _nllb_main, "_translate_batch", MagicMock()
+        ) as mock_batch, patch("asyncio.get_running_loop", return_value=mock_loop):
+            with self.assertRaises(HTTPException) as ctx:
+                asyncio.run(_nllb_main.translate(self._request()))
+        assert ctx.exception.status_code == 503
+        assert ctx.exception.detail == "admission_full"
+        mock_batch.assert_not_called()
+        mock_loop.run_in_executor.assert_not_called()
+
+    def test_active_requests_gauge_not_incremented_on_reject(self):
+        drained = asyncio.Semaphore(0)
+        with patch.object(_nllb_main, "_admission", drained), patch.object(
+            _nllb_main.ACTIVE_REQUESTS, "inc"
+        ) as mock_inc, patch.object(_nllb_main.ACTIVE_REQUESTS, "dec") as mock_dec:
+            with self.assertRaises(HTTPException):
+                asyncio.run(_nllb_main.translate(self._request()))
+        mock_inc.assert_not_called()
+        mock_dec.assert_not_called()
+
+
+class TestReadinessShed(unittest.TestCase):
+    """/ready sheds load when saturated so kube drops the pod from Endpoints."""
+
+    def test_ready_503_when_model_not_loaded(self):
+        with patch.object(_nllb_main, "_translator", None), patch.object(_nllb_main, "_tokenizer", None):
+            with self.assertRaises(HTTPException) as ctx:
+                asyncio.run(_nllb_main.ready())
+        assert ctx.exception.status_code == 503
+
+    def test_ready_503_when_in_flight_at_cap(self):
+        model = MagicMock()
+        with patch.object(_nllb_main, "_translator", model), patch.object(
+            _nllb_main, "_tokenizer", model
+        ), patch.object(_nllb_main, "_in_flight", _nllb_main.MAX_IN_FLIGHT):
+            with self.assertRaises(HTTPException) as ctx:
+                asyncio.run(_nllb_main.ready())
+        assert ctx.exception.status_code == 503
+        assert ctx.exception.detail == "saturated"
+
+    def test_ready_200_when_model_loaded_and_below_cap(self):
+        model = MagicMock()
+        with patch.object(_nllb_main, "_translator", model), patch.object(
+            _nllb_main, "_tokenizer", model
+        ), patch.object(_nllb_main, "_in_flight", _nllb_main.MAX_IN_FLIGHT - 1):
+            assert asyncio.run(_nllb_main.ready()) == {"status": "ready"}
+
+
+class TestLivenessSaturation(unittest.TestCase):
+    """/live kills the pod only when saturation is continuous past the window."""
+
+    def test_live_200_on_short_saturation_burst(self):
+        with patch.object(_nllb_main, "_saturation_since", time.monotonic()):
+            assert asyncio.run(_nllb_main.live()) == {"status": "alive"}
+
+    def test_live_200_when_not_saturated(self):
+        with patch.object(_nllb_main, "_saturation_since", None):
+            assert asyncio.run(_nllb_main.live()) == {"status": "alive"}
+
+    def test_live_503_after_continuous_saturation_window(self):
+        started = time.monotonic() - (_nllb_main.SATURATED_LIVE_SECONDS + 1)
+        with patch.object(_nllb_main, "_saturation_since", started):
+            with self.assertRaises(HTTPException) as ctx:
+                asyncio.run(_nllb_main.live())
+        assert ctx.exception.status_code == 503
+        assert ctx.exception.detail == "saturated"
+
+    def test_live_503_immediately_when_threshold_is_zero(self):
+        with patch.object(_nllb_main, "_saturation_since", time.monotonic()), patch.object(
+            _nllb_main, "SATURATED_LIVE_SECONDS", 0
+        ):
+            with self.assertRaises(HTTPException) as ctx:
+                asyncio.run(_nllb_main.live())
+        assert ctx.exception.status_code == 503
+
+    def test_saturation_tracker_stamps_on_crossing_and_clears_below_cap(self):
+        with patch.object(_nllb_main, "_in_flight", _nllb_main.MAX_IN_FLIGHT), patch.object(
+            _nllb_main, "_saturation_since", None
+        ):
+            _nllb_main._update_saturation()
+            self.assertIsNotNone(_nllb_main._saturation_since)
+        with patch.object(_nllb_main, "_in_flight", _nllb_main.MAX_IN_FLIGHT - 1):
+            _nllb_main._update_saturation()
+            self.assertIsNone(_nllb_main._saturation_since)
+
+
+class TestHealthUnaffectedBySaturation(unittest.TestCase):
+    """/health must stay 200 while saturated — the startup probe cannot die."""
+
+    def test_health_200_while_saturated(self):
+        with patch.object(_nllb_main, "_in_flight", _nllb_main.MAX_IN_FLIGHT), patch.object(
+            _nllb_main, "_saturation_since", time.monotonic() - 3600
+        ):
+            result = asyncio.run(_nllb_main.health())
+        assert result["status"] == "ok"
+
+
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestRequestContextInInferenceWorker(unittest.TestCase):
+    def test_concurrent_submissions_keep_separate_request_contexts(self):
+        import contextvars
+        import threading
+        from concurrent.futures import ThreadPoolExecutor
+
+        marker = contextvars.ContextVar('nllb_test_request', default='missing')
+        rendezvous = threading.Barrier(2)
+        caller_thread = threading.get_ident()
+
+        def worker(*args):
+            assert threading.get_ident() != caller_thread
+            rendezvous.wait(timeout=2)
+            return [_nllb_main.TranslationResult(translated_text=marker.get(), detected_language_code='en')]
+
+        async def submit(label):
+            token = marker.set(label)
+            try:
+                response = await _nllb_main.translate(
+                    _nllb_main.TranslateRequest(contents=['test'], target_language_code='es')
+                )
+                return response.translations[0].translated_text
+            finally:
+                marker.reset(token)
+
+        async def run():
+            with patch.object(_nllb_main, '_admission', asyncio.Semaphore(2)):
+                return await asyncio.gather(submit('first'), submit('second'))
+
+        with ThreadPoolExecutor(max_workers=2) as pool, patch.object(_nllb_main, '_inference_pool', pool), patch.object(
+            _nllb_main, '_translate_batch', worker
+        ):
+            assert asyncio.run(run()) == ['first', 'second']
+        assert marker.get() == 'missing'

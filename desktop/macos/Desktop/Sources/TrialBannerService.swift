@@ -39,7 +39,8 @@ final class TrialBannerService {
         title: title,
         message: message,
         assistantId: "trial",
-        sound: .default
+        sound: .default,
+        kind: .trial
       )
     }
   ) {

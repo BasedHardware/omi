@@ -4,66 +4,41 @@ project(omi_device VERSION 0.1.0 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-option(OMI_DEVICE_BLE "Build optional SimpleBLE client (scan/listen)" OFF)
-set(OMI_DEVICE_SIMPLEBLE_SOURCE_DIR "" CACHE PATH
-  "Path to a vendored SimpleBLE source tree (overrides the pinned FetchContent download)")
+option(OMI_DEVICE_BUILD_TESTS "Build omi_device tests" OFF)
 
-set(OMI_DEVICE_SOURCES src/protocol.cpp)
-
-if(OMI_DEVICE_BLE)
-  set(OMI_DEVICE_BLE_LINKED OFF)
-
-  find_package(simpleble CONFIG QUIET)
-  if(simpleble_FOUND)
-    set(OMI_DEVICE_BLE_LINKED ON)
-    message(STATUS "OMI_DEVICE_BLE: using installed simpleble")
-  else()
-    # Explicit vendored or pinned FetchContent path for SimpleBLE.
-    if(OMI_DEVICE_SIMPLEBLE_SOURCE_DIR)
-      set(_omi_simpleble_src "${OMI_DEVICE_SIMPLEBLE_SOURCE_DIR}")
-      message(STATUS "OMI_DEVICE_BLE: using vendored SimpleBLE at ${_omi_simpleble_src}")
-    else()
-      include(FetchContent)
-      FetchContent_Declare(
-        simpleble
-        GIT_REPOSITORY https://github.com/simpleble/simpleble.git
-        GIT_TAG        v0.10.3
-        GIT_SHALLOW    TRUE
-        GIT_PROGRESS   TRUE
-      )
-      FetchContent_MakeAvailable(simpleble)
-      set(_omi_simpleble_src "${simpleble_SOURCE_DIR}")
-      message(STATUS "OMI_DEVICE_BLE: using fetched SimpleBLE v0.10.3 from ${_omi_simpleble_src}")
-    endif()
-
-    set(_omi_simpleble_cmake "${_omi_simpleble_src}/simpleble/CMakeLists.txt")
-    if(NOT EXISTS "${_omi_simpleble_cmake}")
-      message(FATAL_ERROR
-        "OMI_DEVICE_BLE=ON but SimpleBLE was not found.\n"
-        "Install simpleble (find_package simpleble), set "
-        "-DOMI_DEVICE_SIMPLEBLE_SOURCE_DIR=<path>, or ensure network access for the "
-        "pinned FetchContent download from https://github.com/simpleble/simpleble.git (v0.10.3).")
-    endif()
-
-    set(SIMPLEBLE_INSTALL OFF CACHE BOOL "" FORCE)
-    add_subdirectory("${_omi_simpleble_src}/simpleble" "${CMAKE_BINARY_DIR}/_deps/simpleble-build")
-    set(OMI_DEVICE_BLE_LINKED ON)
+# The SimpleBLE-backed BLE client was removed (BUSL-1.1). A consumer that still
+# passes the retired flags must fail here, not silently configure and then throw
+# BleDisabled at runtime on the first Scan/Listen.
+foreach(_omi_retired_ble_var OMI_DEVICE_BLE OMI_DEVICE_SIMPLEBLE_SOURCE_DIR)
+  if(DEFINED ${_omi_retired_ble_var})
+    message(FATAL_ERROR
+      "${_omi_retired_ble_var} was removed along with the SimpleBLE dependency.\n"
+      "omi_device now takes the BLE stack from the application: implement "
+      "omi::device::BleBackend against CoreBluetooth, Windows.Devices.Bluetooth, "
+      "or BlueZ and install it with omi::device::SetBleBackend(). Scan/Listen/"
+      "ListenPayload are otherwise unchanged.\n"
+      "Migration guide: sdks/device/cpp/README.md")
   endif()
+endforeach()
 
-  if(OMI_DEVICE_BLE_LINKED)
-    list(APPEND OMI_DEVICE_SOURCES src/ble.cpp)
-  endif()
-endif()
+# This package has no third-party dependencies. The BLE surface in
+# include/omi/device/ble.hpp is an interface the embedding application binds to
+# its own platform stack (CoreBluetooth, WinRT, BlueZ) via SetBleBackend().
+add_library(omi_device
+  src/protocol.cpp
+  src/ble.cpp
+)
 
-add_library(omi_device ${OMI_DEVICE_SOURCES})
 target_include_directories(omi_device PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>
 )
 
-if(OMI_DEVICE_BLE AND OMI_DEVICE_BLE_LINKED)
-  target_link_libraries(omi_device PUBLIC simpleble::simpleble)
-  target_compile_definitions(omi_device PUBLIC OMI_DEVICE_BLE=1)
+if(OMI_DEVICE_BUILD_TESTS)
+  enable_testing()
+  add_executable(omi_device_tests tests/ble_test.cpp)
+  target_link_libraries(omi_device_tests PRIVATE omi_device)
+  add_test(NAME omi_device_tests COMMAND omi_device_tests)
 endif()
 
 install(TARGETS omi_device)

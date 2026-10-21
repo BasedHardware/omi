@@ -34,7 +34,7 @@ final class TaskChatKernelIdentityTests: XCTestCase {
 
     XCTAssertTrue(
       source.contains(
-        "Self.applyFailureTextIfNeeded(to: &messages[index], errorDescription: error.localizedDescription)"))
+        "errorDescription: AgentFailureTranscriptFormatter.taskQueryFailure(for: error)"))
     XCTAssertTrue(source.contains("try await terminalizeJournalMessage("))
     XCTAssertFalse(source.contains("persistMessage("))
     XCTAssertTrue(source.contains("observeRuntimeProjectionFailures()"))
@@ -44,6 +44,7 @@ final class TaskChatKernelIdentityTests: XCTestCase {
   func testTaskChatSendsRawPromptAndSurfaceContextToKernel() throws {
     // omi-test-quality: source-inspection -- static contract: task chat cannot reintroduce deprecated query authority fields
     let source = try sourceFile("ProactiveAssistants/Assistants/TaskAgent/TaskChatState.swift")
+
     let runtime = try sourceFile("ProactiveAssistants/Assistants/TaskAgent/TaskChatRuntime.swift")
 
     XCTAssertTrue(source.contains("prompt: trimmedText"))
@@ -54,6 +55,16 @@ final class TaskChatKernelIdentityTests: XCTestCase {
     XCTAssertFalse(runtime.contains("systemPrompt:"))
     XCTAssertFalse(source.contains("buildContextPacketSummary("))
     XCTAssertFalse(source.contains("build_desktop_context_packet"))
+  }
+
+  func testTaskChatRuntimeGroundsUserPromptInTheCurrentTime() throws {
+    // omi-test-quality: source-inspection -- static contract: the wrap is a one-line
+    // passthrough into the runtime bridge call; behavioral coverage would need the full
+    // bridge harness. Pins the SCA-358 contract that task chat gets the same
+    // current-time grounding main chat applies (ChatProvider.query).
+    let runtime = try sourceFile("ProactiveAssistants/Assistants/TaskAgent/TaskChatRuntime.swift")
+
+    XCTAssertTrue(runtime.contains("currentTimePrompt(for: prompt)"))
   }
 
   @MainActor
@@ -131,8 +142,21 @@ final class TaskChatKernelIdentityTests: XCTestCase {
     let source = try sourceFile("ProactiveAssistants/Assistants/TaskAgent/TaskChatState.swift")
 
     XCTAssertTrue(source.contains("await failUnboundJournalMessage(messageId: aiMessageId, lease: lease)"))
-    XCTAssertTrue(source.contains("status: .failed"))
     XCTAssertTrue(source.contains("once query admission links a producer"))
+    guard let functionRange = source.range(of: "private func failUnboundJournalMessage(") else {
+      return XCTFail("failUnboundJournalMessage missing")
+    }
+    let rest = source[functionRange.lowerBound...]
+    guard let nextMark = rest.range(of: "\n  // MARK: - Send Message") else {
+      return XCTFail("failUnboundJournalMessage body end missing")
+    }
+    let body = String(rest[..<nextMark.lowerBound])
+
+    XCTAssertTrue(body.contains("updateJournalMessageOperation("))
+    XCTAssertTrue(body.contains(".failed"))
+    XCTAssertFalse(
+      body.contains("terminalizeJournalMessage"),
+      "query-pre-producer failures must use the unbound journal update, not exact terminalization")
   }
 
   func testTaskChatSendSignalsLocalSendOnlyAfterAtomicExchangeAcceptance() throws {
@@ -194,6 +218,31 @@ final class TaskChatKernelIdentityTests: XCTestCase {
       AgentFailureTranscriptFormatter.transcriptText(for: "Failed: OpenClaw failed"),
       "Failed: OpenClaw failed"
     )
+  }
+
+  func testBillingFailuresExplainKnownProviderWithoutBlamingAnUnknownAccount() {
+    let raw = "Internal error: Credit balance is too low"
+    let generic = AgentFailureTranscriptFormatter.userFacingFailure(raw)
+    XCTAssertTrue(generic.contains("provider account"))
+    XCTAssertFalse(generic.contains("Internal error"))
+    XCTAssertFalse(generic.contains("Your Anthropic"))
+    let otherError = BridgeError.agentError("You've reached your free plan limit; open Plan and Usage to upgrade.")
+    XCTAssertEqual(AgentFailureTranscriptFormatter.taskQueryFailure(for: otherError), otherError.localizedDescription)
+    for adapter in ["acp", "pi-mono"] {
+      let message = AgentFailureTranscriptFormatter.userFacingFailure(
+        for: BridgeError.agentRuntimeFailure(
+          AgentRuntimeFailure(
+            code: "adapter_execution_failed",
+            userMessage: "Send your message again.",
+            technicalMessage: raw,
+            adapterId: adapter,
+            retryable: false
+          ))
+      )
+      XCTAssertTrue(message.contains(adapter == "acp" ? "Claude" : "Omi AI"))
+      XCTAssertFalse(message.contains("Internal error"))
+      XCTAssertFalse(message.contains("Send your message again"))
+    }
   }
 
   func testRuntimeFailureProjectionSurfacingDoesNotReRecordStatus() throws {

@@ -1,0 +1,7 @@
+{
+  "version": "0.12.214",
+  "date": "2026-08-24",
+  "changes": [
+    "Fixed the app hanging indefinitely on \"Preparing your data...\" during startup"
+  ]
+}

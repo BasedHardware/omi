@@ -1,4 +1,8 @@
+from config.stt_cap_dispatch import any_legacy_admission_enabled as stt_cap_dispatch_enabled
+from utils.observability.stt_cap_dispatch import CONFIG_ERRORS
 import os
+from database.fsr_read_cache import fresh_reader
+from dataclasses import dataclass
 import time
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Set, Tuple, cast
@@ -6,6 +10,8 @@ from typing import Any, Dict, List, Optional, Set, Tuple, cast
 from fastapi import HTTPException
 from firebase_admin import auth as firebase_auth
 import stripe
+from utils import screen_vector_entitlements
+from utils.observability.fallback import record_fallback
 
 import database.users as users_db
 import database.user_usage as user_usage_db
@@ -13,6 +19,7 @@ from database import redis_db
 from database._client import get_customer_firestore_client
 from database.announcements import compare_versions
 from config.plan_catalog import (
+    configured_ladder_prices,
     DESKTOP_ENTITLED_PLAN_TYPES,
     MOBILE_PLAN_TYPES,
     PAID_PLAN_TYPES,
@@ -25,10 +32,14 @@ from config.plan_catalog import (
     resolve_stripe_price_plan,
 )
 from models.users import PlanType, SubscriptionStatus, Subscription, PlanLimits, TrialMetadata
-from utils.byok import get_byok_key, get_byok_keys
+from utils.byok import get_byok_key, get_byok_uid, get_cached_byok_state, has_validated_byok_keys
 from utils.log_sanitizer import sanitize
+from utils.plan_wire_capabilities import understands_plan_identity
+from utils.transcription_allowance import TranscriptionAllowance
 from utils.observability.fallback import record_fallback
 import logging
+from config import ladder_v1 as ladder_policy
+from utils import ladder_v1
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +74,9 @@ def plan_grants_desktop(plan: PlanType, subscription: Optional[Subscription] = N
     subs without the field set are treated as legacy until their next webhook
     populates the field).
     """
+    if ladder_policy.enabled('LADDER_V1_PRO_GATES_ENABLED') and subscription is not None:
+        if ladder_policy.entitlements(subscription) is not None:
+            return plan != PlanType.basic
     if plan in DESKTOP_ENTITLED_PLAN_TYPES:
         return True
     if plan == PlanType.unlimited and subscription is not None:
@@ -121,38 +135,27 @@ def neo_grandfather_until(subscription: Optional[Subscription]) -> Optional[int]
 #
 # Because the rows are retained, a user who upgrades can have their vectors backfilled from the
 # stored OCR text: this gate defers the cost, it does not destroy the ability to recover.
-_SCREEN_VECTOR_ENTITLEMENT_CACHE_TTL_SECONDS = 300
-_screen_vector_entitlement_cache: Dict[str, Tuple[bool, float]] = {}
-
-
-def grants_cloud_screen_vectors(uid: str) -> bool:
-    """True when this user's synced screen rows should also be written to the vector store.
-
-    Uses the desktop access tier rather than `is_paid_plan`, because screen activity is a
-    desktop capability: a mobile-only paid plan did not buy it. BYOK does NOT grant it either
-    — BYOK means the user supplies their own LLM keys, but the vector store is ours and the
-    cost being avoided here is ours.
-
-    Fails OPEN (writes the vector) on any lookup error, matching
-    `should_defer_desktop_processing`: a Firestore blip must never silently strip a paying
-    user's screen search. The failure mode is a small overspend, not a lost capability.
-    """
-    cached = _screen_vector_entitlement_cache.get(uid)
-    if cached is not None and time.monotonic() - cached[1] < _SCREEN_VECTOR_ENTITLEMENT_CACHE_TTL_SECONDS:
-        return cached[0]
+async def grants_cloud_screen_vectors(uid: str) -> bool:
+    """Return established capability; unknown authority requires a batch retry."""
     try:
-        subscription = users_db.get_user_valid_subscription(uid)
-        plan = subscription.plan if subscription else PlanType.basic
-        entitled = effective_desktop_access_tier(plan, subscription) != DESKTOP_ACCESS_TIER_FREE
-    except Exception as e:
-        logger.warning("grants_cloud_screen_vectors lookup failed for uid=%s: %s", uid, e)
-        return True
-    _screen_vector_entitlement_cache[uid] = (entitled, time.monotonic())
-    return entitled
+        entitlement = await screen_vector_entitlements.resolve_for_uid(uid)
+        return entitlement['capabilities']['cloud_screen_vectors']
+    except Exception as error:
+        record_fallback(
+            component='firestore_read',
+            from_mode='screen_vectors',
+            to_mode='retry',
+            reason='authorization_unavailable',
+            outcome='degraded',
+            log=logger,
+        )
+        raise screen_vector_entitlements.ScreenVectorAuthorityUnavailable(
+            'Screen vector authority unavailable'
+        ) from error
 
 
 def clear_cloud_screen_vector_entitlement_cache(uid: str) -> None:
-    _screen_vector_entitlement_cache.pop(uid, None)
+    screen_vector_entitlements.clear(uid)
 
 
 def should_defer_desktop_processing(uid: str) -> bool:
@@ -168,7 +171,7 @@ def should_defer_desktop_processing(uid: str) -> bool:
     summaries.
     """
     try:
-        if users_db.is_byok_active(uid):
+        if users_db.is_byok_active(uid) and get_byok_key('openai'):
             return False
         subscription = users_db.get_user_valid_subscription(uid)
         plan = subscription.plan if subscription else PlanType.basic
@@ -190,10 +193,10 @@ TRIAL_LENGTH_SECONDS = 3 * 24 * 60 * 60  # 3 days
 # Master switch for the desktop trial paywall. Default OFF: basic/Neo desktop users are
 # never locked out (no 402) AND the client never sees `trial_expired=True`, so the
 # "you've hit your monthly limit" upgrade popup does not fire just from account age — only
-# the actual chat-question quota (30/mo) gates them. Set TRIAL_PAYWALL_ENABLED=true to
-# restore the 3-day trial lockout. NOTE: this changes ONLY the trial paywall — plan limits
-# (Neo questions, data-intake caps) are untouched.
-TRIAL_PAYWALL_ENABLED = os.getenv('TRIAL_PAYWALL_ENABLED', 'false').lower() == 'true'
+# the actual chat-question quota (30/mo) gates them. The paywall is permanently off; the
+# paywalled branches below are retained pending removal. NOTE: this gate covers ONLY the
+# trial paywall — plan limits (Neo questions, data-intake caps) are untouched.
+TRIAL_PAYWALL_ENABLED = False
 
 # X-App-Platform header values that identify a desktop client. macOS and Windows
 # are the two desktop OSes; both get the desktop plan catalog, the desktop trial
@@ -201,6 +204,10 @@ TRIAL_PAYWALL_ENABLED = os.getenv('TRIAL_PAYWALL_ENABLED', 'false').lower() == '
 # for "is this a desktop platform" — every desktop-vs-mobile gate below reads
 # from here so a new desktop OS is wired in one place.
 DESKTOP_PLATFORMS = {'macos', 'windows'}
+
+# Desktop typed chat consumes Anthropic BYOK, not an arbitrary enrolled LLM
+# key. Reporting and enforcement must project the same provider capability.
+DESKTOP_CHAT_BYOK_PROVIDER = 'anthropic'
 
 # Platform identifiers that count as desktop for paywall purposes. The desktop
 # clients send X-App-Platform: macos / windows and the listen WS uses
@@ -212,64 +219,116 @@ _TRIAL_PAYWALL_DESKTOP_TOKENS = DESKTOP_PLATFORMS | {"desktop"}
 # so chat-quota polling doesn't fan out to Firebase on every request.
 _TRIAL_PAYWALL_CACHE_TTL_SECONDS = 300
 
-# Providers a fully-enrolled BYOK desktop client always sends headers for.
-# Used by the request-level escape hatch in `_is_trial_expired_cached`.
-_BYOK_REQUIRED_PROVIDERS = ("openai", "anthropic", "gemini", "deepgram")
+
+def request_has_llm_byok_key() -> bool:
+    """True when request carries validated LLM BYOK keys matching active enrollment."""
+    uid = get_byok_uid()
+    if not uid or not has_validated_byok_keys():
+        return False
+    try:
+        fingerprints = get_cached_byok_state(uid).get('fingerprints', {})
+    except Exception:
+        return any(get_byok_key(provider) for provider in ('openrouter', 'openai', 'anthropic', 'gemini'))
+    return any(
+        provider in fingerprints and bool(get_byok_key(provider))
+        for provider in ('openrouter', 'openai', 'anthropic', 'gemini')
+    )
 
 
-def _request_has_all_byok_keys() -> bool:
-    """True if the *current request* carries headers for all 4 enrolled BYOK
-    providers.
-
-    Firestore BYOK state is the source of truth for fingerprint validation,
-    but it can be temporarily stale — heartbeat just expired, activation
-    POST hasn't landed yet, cross-region read replica lag, etc. A user who is
-    literally sending all 4 valid API keys on this request should never be
-    paywalled because of a Firestore sync gap. The actual fingerprint check
-    in `utils.byok._check_byok_validity` runs separately and still rejects
-    forged headers (mismatched SHA-256 against the enrolled fingerprints) —
-    we trust the headers' *presence* here, not their *contents*.
-    """
-    keys = get_byok_keys()
-    return all(p in keys and keys[p] for p in _BYOK_REQUIRED_PROVIDERS)
+_request_has_llm_byok_key = request_has_llm_byok_key
 
 
-def _is_trial_expired_uncached(uid: str, *, firestore_client: Any | None = None, provision: bool = True) -> bool:
+def request_has_byok_provider(provider: str) -> bool:
+    """Whether the request carries a validated key for this exact provider."""
+    return has_validated_byok_keys() and bool(get_byok_key(provider))
+
+
+def _is_trial_expired_uncached(
+    uid: str,
+    *,
+    firestore_client: Any | None = None,
+    provision: bool = True,
+    required_byok_provider: str | None = None,
+    byok_exempt: bool = True,
+    strict: bool = False,
+) -> bool:
     """Is this user past their 3-day desktop trial?
 
     The trial applies only to the Free Desktop tier. Neo may use that tier for
     non-premium capabilities, but is paid and must never be reduced to zero
-    access. BYOK users are also bypassed. Returns False on any lookup error so
-    a Firebase blip never paywalls a paying user.
+    access. BYOK users are also bypassed unless ``byok_exempt`` is false for a
+    managed-credential surface. Returns False on any lookup error so a Firebase
+    blip never paywalls a paying user — unless ``strict``, the mode for a caller
+    that must fail closed (a billed socket): there, a lookup error or an
+    unreadable account record propagates, and a BYOK exemption needs a validated
+    key on this request, never a stored fingerprint alone.
     """
     try:
+        if byok_exempt and required_byok_provider and request_has_byok_provider(required_byok_provider):
+            return False
         subscription = users_db.get_user_valid_subscription(uid, firestore_client=firestore_client, provision=provision)
         plan = subscription.plan if subscription else PlanType.basic
         if not desktop_trial_paywall_eligible(plan, subscription):
             return False
-        if users_db.is_byok_active(uid, firestore_client=firestore_client):
-            return False
+        if byok_exempt and users_db.is_byok_active(uid, firestore_client=firestore_client):
+            if not required_byok_provider:
+                return False
+            # A stored fingerprint exempts ordinary callers; the strict caller
+            # already required the key on this request (checked first above).
+            if not strict:
+                fingerprints = users_db.get_byok_state(uid, firestore_client=firestore_client).get('fingerprints')
+                if isinstance(fingerprints, dict) and fingerprints.get(required_byok_provider):
+                    return False
         user_record = _get_user(uid)
         creation_ms: int = cast(int, user_record.user_metadata.creation_timestamp)
         if not creation_ms:
+            if strict:
+                raise ValueError('account creation timestamp unavailable')
             return False
         age_seconds = time.time() - (creation_ms / 1000)
         return age_seconds > TRIAL_LENGTH_SECONDS
     except Exception as e:
+        if strict:
+            raise
         logger.warning("trial paywall lookup failed for uid=%s: %s", uid, e)
         return False
 
 
-def _is_trial_expired_cached(uid: str, *, firestore_client: Any | None = None, provision: bool = True) -> bool:
-    # Request-level escape hatch: a request carrying all 4 BYOK provider
-    # headers is never paywalled, regardless of cached Firestore state. The
-    # cache TTL is 5 min and Firestore's BYOK `is_active` heartbeat is 24 h,
+def _is_trial_expired_cached(
+    uid: str,
+    *,
+    firestore_client: Any | None = None,
+    provision: bool = True,
+    required_byok_provider: str | None = None,
+    byok_exempt: bool = True,
+    strict: bool = False,
+) -> bool:
+    # Request-level escape hatch: a request carrying an enrolled LLM BYOK
+    # provider header is never paywalled, regardless of cached Firestore state.
+    # The cache TTL is 5 min and Firestore's BYOK `is_active` heartbeat is 24 h,
     # so even a perfectly-configured BYOK user can transiently look stale to
     # Firestore. Trust the live request.
-    if _request_has_all_byok_keys():
-        return False
+    if byok_exempt:
+        if required_byok_provider:
+            if request_has_byok_provider(required_byok_provider):
+                return False
+        elif _request_has_llm_byok_key():
+            return False
 
-    cache_key = f"trial_paywall:expired:{uid}"
+    cache_key = (
+        f"trial_paywall:expired:{uid}:{required_byok_provider}"
+        if required_byok_provider
+        else f"trial_paywall:expired:{uid}"
+    )
+    if strict:
+        # Strict answers are computed under stricter rules (no fingerprint-only
+        # exemption, unreadable record is an error) and must never consume a
+        # False that an ordinary caller cached under the lenient ones.
+        cache_key = f"{cache_key}:strict"
+    if not byok_exempt:
+        # A managed-credential surface must not consume a permissive answer
+        # cached by a BYOK-funded surface for the same user.
+        cache_key = f"{cache_key}:managed"
     cached = redis_db.get_generic_cache(cache_key)
     if cached is not None:
         # A cache entry may have been written before an entitlement correction
@@ -293,6 +352,8 @@ def _is_trial_expired_cached(uid: str, *, firestore_client: Any | None = None, p
                     )
                     return False
             except Exception as e:
+                if strict:
+                    raise
                 # Match the uncached lookup's fail-open behavior. An
                 # entitlement lookup outage must not preserve a zero-access
                 # decision for a paid subscriber from stale cache state.
@@ -307,7 +368,14 @@ def _is_trial_expired_cached(uid: str, *, firestore_client: Any | None = None, p
                 )
                 return False
         return bool(cached)
-    expired = _is_trial_expired_uncached(uid, firestore_client=firestore_client, provision=provision)
+    expired = _is_trial_expired_uncached(
+        uid,
+        firestore_client=firestore_client,
+        provision=provision,
+        required_byok_provider=required_byok_provider,
+        byok_exempt=byok_exempt,
+        strict=strict,
+    )
     try:
         redis_db.set_generic_cache(cache_key, expired, ttl=_TRIAL_PAYWALL_CACHE_TTL_SECONDS)
     except Exception as e:
@@ -321,23 +389,48 @@ def is_trial_paywalled(
     *,
     firestore_client: Any | None = None,
     provision: bool = True,
+    required_byok_provider: str | None = None,
+    byok_exempt: bool = True,
+    strict: bool = False,
 ) -> bool:
     """True iff the request is from a desktop client AND the user has used
-    their full 3-day free trial without subscribing or activating BYOK.
+    their full 3-day free trial without subscribing or an allowed BYOK exemption.
 
     `platform` is the X-App-Platform header for HTTP requests or the
     `source` query param for the listen WebSocket. Mobile (ios/android),
     Omi devices, and any unknown/missing platform are never paywalled.
+
+    A lookup failure answers False (fail open: a Firebase blip never paywalls
+    a paying user) unless ``strict``, where it propagates to the caller, an
+    unreadable account record counts as a failure, and a BYOK exemption needs
+    a validated key on this request rather than a stored fingerprint.
+    ``byok_exempt=False`` makes BYOK irrelevant for surfaces that consume an Omi
+    managed credential.
     """
     if not TRIAL_PAYWALL_ENABLED:
         return False  # trial paywall disabled — never block on account age
     if not platform or platform.lower() not in _TRIAL_PAYWALL_DESKTOP_TOKENS:
         return False
-    return _is_trial_expired_cached(uid, firestore_client=firestore_client, provision=provision)
+    return _is_trial_expired_cached(
+        uid,
+        firestore_client=firestore_client,
+        provision=provision,
+        required_byok_provider=required_byok_provider,
+        byok_exempt=byok_exempt,
+        strict=strict,
+    )
 
 
 def clear_trial_paywall_cache(uid: str) -> None:
+    # Every key `_is_trial_expired_cached` can write: the LLM providers, Deepgram
+    # (the transcription allowance's key) and that allowance's strict variant.
+    for provider in ("openrouter", "openai", "anthropic", "gemini", "deepgram"):
+        redis_db.delete_generic_cache(f"trial_paywall:expired:{uid}:{provider}")
+        redis_db.delete_generic_cache(f"trial_paywall:expired:{uid}:{provider}:managed")
+    redis_db.delete_generic_cache(f"trial_paywall:expired:{uid}:deepgram:strict")
+    redis_db.delete_generic_cache(f"trial_paywall:expired:{uid}:deepgram:strict:managed")
     redis_db.delete_generic_cache(f"trial_paywall:expired:{uid}")
+    redis_db.delete_generic_cache(f"trial_paywall:expired:{uid}:managed")
 
 
 def get_trial_metadata(uid: str) -> TrialMetadata:
@@ -369,12 +462,12 @@ def get_trial_metadata(uid: str) -> TrialMetadata:
         # BYOK users, has usable Desktop access. In particular, Neo's Free
         # Desktop tier is a floor, not a trial-only or zero-access state.
         # Same request-level escape hatch as `_is_trial_expired_cached`: a request
-        # carrying all 4 BYOK provider headers is treated as BYOK-active even if
-        # Firestore hasn't caught up yet.
+        # carrying an enrolled LLM BYOK provider header is treated as BYOK-active
+        # even if Firestore hasn't caught up yet.
         if (
             not desktop_trial_paywall_eligible(plan, subscription)
             or users_db.is_byok_active(uid)
-            or _request_has_all_byok_keys()
+            or _request_has_llm_byok_key()
         ):
             return TrialMetadata(
                 trial_expired=False,
@@ -451,7 +544,7 @@ def get_paid_plan_definitions() -> List[Dict[str, Any]]:
         {
             "plan_type": PlanType.operator,
             "plan_id": "operator",
-            "title": "Operator",
+            "title": "Operator",  # Released macOS title parsers infer price ownership from this.
             "subtitle": f"{_chat_allowance_text(PlanType.operator)}",
             "description": f"{_chat_allowance_text(PlanType.operator)}. Shared with mobile and web.",
             "eyebrow": "Most popular",
@@ -515,7 +608,7 @@ def _platform_hidden_plans(platform: Optional[str]) -> Set[PlanType]:
     all four. Neo is deprecated everywhere and hidden on every platform. A
     subscriber on a hidden plan still sees it via `filter_plans_for_user`'s
     current-plan escape (Neo) or the mobile manage-only fast path (Operator /
-    Architect). See docs/agents/plan-catalog.md.
+    Architect). See .github/agent-docs/plan-catalog.md.
     """
     p = (platform or '').lower()
     if p in _MOBILE_PLATFORM_TOKENS:
@@ -534,7 +627,7 @@ def desktop_to_consumer_plan_change_error(current_plan: PlanType, target_plan: P
     period. Immediate proration onto Plus / Unlimited / Neo strips desktop.
     Same-family desktop changes (Operator ↔ Architect) stay allowed for the
     desktop and web storefronts. Do not add a "user confirmed in the app"
-    exception — confirmation is not this boundary. See docs/agents/plan-catalog.md.
+    exception — confirmation is not this boundary. See .github/agent-docs/plan-catalog.md.
     """
     if current_plan in DESKTOP_ENTITLED_PLAN_TYPES and target_plan not in DESKTOP_ENTITLED_PLAN_TYPES:
         return (
@@ -551,7 +644,7 @@ def filter_plans_for_user(
 ) -> List[Dict[str, Any]]:
     """Drop legacy / platform-hidden plans from the purchase catalog.
 
-    Locked audience rules (docs/agents/plan-catalog.md) — do not re-widen:
+    Locked audience rules (.github/agent-docs/plan-catalog.md) — do not re-widen:
 
     1. Neo (`unlimited`) is shown only when `current_plan` is already Neo
        (active or cancel-at-period-end). Never gate it on "has ever paid".
@@ -642,36 +735,13 @@ def should_show_new_plans(platform: Optional[str], app_version: Optional[str]) -
     return False
 
 
-# Minimum client build whose plan enum includes `plus`/`max`. Defaulted ahead of
-# any shipped build so every current client is remapped today (see
-# wire_plan_for_client); lower once a plus/unlimited_v2-aware client ships.
-PLUS_UNLIMITED_V2_MIN_MOBILE_VERSION = os.getenv('PLUS_UNLIMITED_V2_MIN_MOBILE_VERSION', '99.0.0')
-PLUS_UNLIMITED_V2_MIN_DESKTOP_VERSION = os.getenv('PLUS_UNLIMITED_V2_MIN_DESKTOP_VERSION', '99.0.0')
-
-
-def client_understands_plus_unlimited_v2(platform: Optional[str], app_version: Optional[str]) -> bool:
-    if not platform or not app_version:
-        return False
-    platform_lower = platform.lower()
-    if platform_lower in _MOBILE_PLATFORM_TOKENS:
-        floor = PLUS_UNLIMITED_V2_MIN_MOBILE_VERSION
-    elif platform_lower in DESKTOP_PLATFORMS:
-        floor = PLUS_UNLIMITED_V2_MIN_DESKTOP_VERSION
-    else:
-        return False
-    try:
-        return compare_versions(app_version, floor) >= 0
-    except Exception:
-        return False
-
-
-def wire_plan_for_client(plan: PlanType, platform: Optional[str], app_version: Optional[str]) -> PlanType:
-    """Serialize `plus`/`max` as `unlimited` for clients whose enum predates them.
-
-    Only the label is remapped — real entitlement/limits are computed from the
-    true plan before this is called. Mirrors the `operator`→`unlimited` remap.
-    """
-    if plan in MOBILE_PLAN_TYPES and not client_understands_plus_unlimited_v2(platform, app_version):
+def wire_plan_for_client(
+    plan: PlanType, platform: Optional[str], app_version: Optional[str], plan_identity_version: Optional[str] = None
+) -> PlanType:
+    """Remap labels for old decoders; entitlement/limits use the true plan."""
+    if plan in MOBILE_PLAN_TYPES and not understands_plan_identity(
+        platform, app_version, plan_identity_version, compare_versions
+    ):
         return PlanType.unlimited
     return plan
 
@@ -739,7 +809,10 @@ def price_ids_match_plan_and_interval(
     except ValueError:
         return False
 
-    target_interval = RECOGNIZED_STRIPE_PRICE_INTERVALS.get(target_price_id)
+    configured_intervals = {price: row['interval'] for price, row in configured_ladder_prices().items()}
+    target_interval = RECOGNIZED_STRIPE_PRICE_INTERVALS.get(target_price_id) or configured_intervals.get(
+        target_price_id
+    )
     for definition in get_paid_plan_definitions():
         if target_price_id == definition['monthly_price_id']:
             target_interval = 'month'
@@ -751,7 +824,9 @@ def price_ids_match_plan_and_interval(
         return False
 
     if not current_interval:
-        current_interval = RECOGNIZED_STRIPE_PRICE_INTERVALS.get(current_price_id)
+        current_interval = RECOGNIZED_STRIPE_PRICE_INTERVALS.get(current_price_id) or configured_intervals.get(
+            current_price_id
+        )
     if not current_interval:
         for definition in get_paid_plan_definitions():
             if current_price_id == definition['monthly_price_id']:
@@ -782,6 +857,8 @@ def is_purchasable_price_id(price_id: str) -> bool:
     """
     if not price_id:
         return False
+    if price_id in configured_ladder_prices():
+        return os.getenv('STOREFRONT_LADDER_V1_ENABLED', 'false') == 'true'
     for definition in get_paid_plan_definitions():
         if price_id in (definition["monthly_price_id"], definition["annual_price_id"]):
             return True
@@ -1009,6 +1086,7 @@ def get_chat_quota_snapshot(
     *,
     firestore_client: Any | None = None,
     provision: bool = True,
+    required_llm_provider: str | None = None,
 ) -> Dict[str, Any]:
     """Cheap computation of `is_allowed / used / limit / unit / plan` — shared
     between the `/v1/users/me/usage-quota` endpoint and the enforcement helper.
@@ -1017,10 +1095,25 @@ def get_chat_quota_snapshot(
     desktop callers can be paywalled; mobile callers fall through to the
     real plan logic.
     """
+    # Flagged quota display and admission share the same authority, including
+    # Free accounts whose older desktop trial status is exhausted.
+    enforcing = ladder_policy.budget_enforcement_enabled()
+    subscription = None
+    shared_budget = None
+    if enforcing:
+        subscription = users_db.get_user_valid_subscription(uid, firestore_client=firestore_client, provision=provision)
+        shared_budget = ladder_v1.budget_snapshot(uid, subscription, firestore_client=firestore_client)
+
     # Paywall test override — surface as exhausted Free-plan quota so the
     # client renders the same over-limit popup it shows for normal users
     # past 30/mo.
-    if is_trial_paywalled(uid, platform, firestore_client=firestore_client, provision=provision):
+    if shared_budget is None and is_trial_paywalled(
+        uid,
+        platform,
+        firestore_client=firestore_client,
+        provision=provision,
+        required_byok_provider=required_llm_provider,
+    ):
         usage = user_usage_db.get_monthly_chat_usage(uid, firestore_client=firestore_client)
         free_chat_limit = _effective_chat_limit(PlanType.basic)
         if free_chat_limit is None:
@@ -1034,7 +1127,9 @@ def get_chat_quota_snapshot(
             'reset_at': usage['reset_at'],
         }
 
-    subscription = users_db.get_user_valid_subscription(uid, firestore_client=firestore_client, provision=provision)
+    if not enforcing:
+        subscription = users_db.get_user_valid_subscription(uid, firestore_client=firestore_client, provision=provision)
+        shared_budget = ladder_v1.budget_snapshot(uid, subscription, firestore_client=firestore_client)
     plan = subscription.plan if subscription else PlanType.basic
     limits = get_plan_limits(plan)
     usage = user_usage_db.get_monthly_chat_usage(uid, firestore_client=firestore_client)
@@ -1055,7 +1150,7 @@ def get_chat_quota_snapshot(
     if limit_value is not None:
         allowed = used < limit_value
 
-    return {
+    result = {
         'plan': plan,
         'unit': unit,
         'used': used,
@@ -1063,6 +1158,17 @@ def get_chat_quota_snapshot(
         'allowed': allowed,
         'reset_at': usage['reset_at'],
     }
+    if shared_budget is not None:
+        # Preserve the installed-client unit enum; the v2 sheet owns the shared meter.
+        result['allowed'] = shared_budget['budget_percent'] < 100
+        result['reset_at'] = shared_budget['reset_at']
+        result['is_overage_plan'] = False
+        result['uses_shared_budget'] = True
+        if not result['allowed']:
+            from utils.storefront_copy import chat_at_cap
+
+            result['chat_at_cap'] = chat_at_cap(shared_budget['plan_id'], shared_budget['reset_at'])
+    return result
 
 
 def enforce_chat_quota(
@@ -1071,28 +1177,64 @@ def enforce_chat_quota(
     *,
     firestore_client: Any | None = None,
     provision: bool = True,
+    required_llm_provider: str | None = None,
+    byok_exempt: bool = True,
 ) -> None:
     """Block or allow a chat request based on the user's plan + usage.
 
-    - BYOK users with an LLM key attached: always allowed, no Omi-side cost.
-    - Plans whose catalog exhaustion policy is overage: ALLOWED — the call is
+    - Flagged ladder/Free shared budgets pause chat at 100%, including BYOK.
+    - Shared funded-compute admission also pauses legacy/overage tiers at cap.
+    - Otherwise BYOK users with a validated LLM provider key attached: allowed —
+      unless ``byok_exempt`` is False, for surfaces that only ever spend Omi's
+      own key regardless of the user's (the realtime hub mints platform tokens).
+    - Below the funded cap, plans whose catalog exhaustion policy is overage
+      are ALLOWED — the call is
       served and the excess accrues a charge. See ``utils.overage``.
     - Hard-capped plans: blocked → 402, which the chat endpoint converts into
       a canned AI reply for mobile UX. Plus and Unlimited-v2 are explicitly
       hard-capped by the catalog.
     """
-    # Release-probe traffic is the deploy gate proving the candidate can chat at
-    # all — never paywall it, or the gate hard-blocks its own deploys once the
-    # probe's turns exhaust the Free cap.
+    # Import at call time: funded_processing imports this module's allowance
+    # resolver, so importing its adapter at module scope would close a cycle.
+    from utils.generated_compute import require_generated_compute
+
+    funded_kwargs = {'firestore_client': firestore_client} if firestore_client is not None else {}
+
+    # Release probes retain their legacy question-quota exemption. The flagged
+    # funded cap still applies, so denial cannot first occur inside their stream.
     if uid == RELEASE_PROBE_UID:
+        require_generated_compute(
+            uid, 'chat_agent', allow_byok=byok_exempt, provider=required_llm_provider, **funded_kwargs
+        )
         return
+
+    # The flagged shared budget pauses chat on every ladder tier, including Free.
+    if ladder_v1.enforce_chat_budget(uid, firestore_client=firestore_client):
+        return
+
+    # Admission must fail before chat persists a turn or constructs an SSE
+    # response, including legacy/overage tiers under funded-seconds enforcement.
+    # Keep ladder's existing chat_at_cap detail above and the both-off path.
+    require_generated_compute(
+        uid, 'chat_agent', allow_byok=byok_exempt, provider=required_llm_provider, **funded_kwargs
+    )
 
     # Paywall test override — bypass BYOK + plan checks so the same 402
     # surfaces that a free user past 30 questions would hit. Desktop only;
     # mobile callers continue down the normal plan path.
-    if is_trial_paywalled(uid, platform, firestore_client=firestore_client, provision=provision):
+    if is_trial_paywalled(
+        uid,
+        platform,
+        firestore_client=firestore_client,
+        provision=provision,
+        required_byok_provider=required_llm_provider,
+    ):
         snapshot = get_chat_quota_snapshot(
-            uid, platform=platform, firestore_client=firestore_client, provision=provision
+            uid,
+            platform=platform,
+            firestore_client=firestore_client,
+            provision=provision,
+            required_llm_provider=required_llm_provider,
         )
         raise HTTPException(
             status_code=402,
@@ -1111,12 +1253,19 @@ def enforce_chat_quota(
     # Require an LLM provider key on this request (not just any BYOK header)
     # so a user can't activate with fake fingerprints or send only x-byok-deepgram
     # to bypass chat quota while chat falls back to Omi's OpenAI/Anthropic keys.
-    if users_db.is_byok_active(uid, firestore_client=firestore_client) and (
-        get_byok_key('openai') or get_byok_key('anthropic')
-    ):
+    has_exempt_llm = (
+        request_has_byok_provider(required_llm_provider) if required_llm_provider else _request_has_llm_byok_key()
+    )
+    if byok_exempt and users_db.is_byok_active(uid, firestore_client=firestore_client) and has_exempt_llm:
         return
 
-    snapshot = get_chat_quota_snapshot(uid, platform=platform, firestore_client=firestore_client, provision=provision)
+    snapshot = get_chat_quota_snapshot(
+        uid,
+        platform=platform,
+        firestore_client=firestore_client,
+        provision=provision,
+        required_llm_provider=required_llm_provider,
+    )
     if snapshot['allowed']:
         return
 
@@ -1140,21 +1289,35 @@ def enforce_chat_quota(
     )
 
 
-def enforce_desktop_chat_quota(uid: str, platform: Optional[str] = None) -> None:
+def enforce_desktop_chat_quota(uid: str, platform: Optional[str] = None, *, byok_exempt: bool = True) -> None:
     """Quota for the desktop serving plane: production customer data, no Free provision.
 
     Development desktop-backend ADC stays on the compute project for ``agentVm``.
     Entitlements read the customer SA (``SERVICE_ACCOUNT_JSON`` or the Auth file).
+    ``byok_exempt=False`` is for surfaces that hand out Omi's own credential no
+    matter what key the user holds (the realtime hub); a user's Anthropic key
+    must not buy them a managed OpenAI or Gemini session past the cap.
     """
+    # Desktop agent chat only consumes Anthropic. An OpenRouter/Gemini/OpenAI
+    # key must not exempt this path while the request still uses Omi's managed
+    # Anthropic credential.
     enforce_chat_quota(
         uid,
         platform,
         firestore_client=get_customer_firestore_client(),
         provision=False,
+        required_llm_provider=DESKTOP_CHAT_BYOK_PROVIDER,
+        byok_exempt=byok_exempt,
     )
 
 
-def is_desktop_trial_paywalled(uid: str, platform: Optional[str]) -> bool:
+def is_desktop_trial_paywalled(
+    uid: str,
+    platform: Optional[str],
+    *,
+    required_byok_provider: str | None = None,
+    byok_exempt: bool = True,
+) -> bool:
     """Desktop trial gate against the customer Firestore, never a compute-project shadow.
 
     The decisions that need no Firestore run first: resolving the customer client
@@ -1170,6 +1333,8 @@ def is_desktop_trial_paywalled(uid: str, platform: Optional[str]) -> bool:
         platform,
         firestore_client=get_customer_firestore_client(),
         provision=False,
+        required_byok_provider=required_byok_provider,
+        byok_exempt=byok_exempt,
     )
 
 
@@ -1369,6 +1534,7 @@ def is_pending_cancellation(subscription: Optional[Subscription], now: Optional[
     return subscription.current_period_end > (now or int(time.time()))
 
 
+@fresh_reader
 def can_user_make_payment(uid: str, target_price_id: Optional[str] = None) -> Tuple[bool, str]:
     """
     Checks if a user can make a new payment based on their current subscription status.
@@ -1381,6 +1547,9 @@ def can_user_make_payment(uid: str, target_price_id: Optional[str] = None) -> Tu
         tuple: (can_pay: bool, reason: str)
     """
     subscription = users_db.get_user_valid_subscription(uid)
+    if target_price_id in configured_ladder_prices() and subscription is not None:
+        if subscription.plan != PlanType.basic and ladder_policy.entitlements(subscription) is None:
+            return False, "Legacy subscriptions keep their current plan"
 
     # If no subscription or basic plan, check Stripe as source of truth
     # to guard against Firestore read-after-write lag
@@ -1466,9 +1635,15 @@ def get_monthly_usage_for_subscription(uid: str) -> Dict[str, Any]:
     """
     Gets the current monthly usage for subscription purposes, considering the launch date from env variables.
     The launch date format is expected to be YYYY-MM-DD.
-    If the launch date is not set, not valid, or in the future, usage is considered zero.
+    Legacy mode treats unset, invalid and future dates as zero usage. Dispatch
+    enforcement rejects missing/invalid configuration; an explicit future date
+    is the intentionally unlaunched policy in both modes.
     """
     subscription_launch_date_str = os.getenv('SUBSCRIPTION_LAUNCH_DATE')
+    if stt_cap_dispatch_enabled(uid) and not subscription_launch_date_str:
+        CONFIG_ERRORS.labels(reason='missing').inc()
+        logger.error('event=stt_cap_launch_config outcome=invalid reason=missing')
+        raise ValueError('missing subscription launch date')
     if not subscription_launch_date_str:
         # Subscription not launched, so no usage is counted against limits.
         return {}
@@ -1477,6 +1652,10 @@ def get_monthly_usage_for_subscription(uid: str) -> Dict[str, Any]:
         # Use strptime to enforce YYYY-MM-DD format
         launch_date = datetime.strptime(subscription_launch_date_str, '%Y-%m-%d').replace(tzinfo=timezone.utc)
     except ValueError:
+        if stt_cap_dispatch_enabled(uid):
+            CONFIG_ERRORS.labels(reason='invalid').inc()
+            logger.error('event=stt_cap_launch_config outcome=invalid reason=invalid')
+            raise
         # Invalid date format, treat as not launched.
         return {}
 
@@ -1488,119 +1667,384 @@ def get_monthly_usage_for_subscription(uid: str) -> Dict[str, Any]:
     return user_usage_db.get_monthly_usage_stats_since(uid, now, launch_date)
 
 
+# --- transcription allowance: one answer -------------------------------------------------------
+
+TRANSCRIPTION_MODE_MANAGED = 'managed'
+TRANSCRIPTION_MODE_ON_DEVICE = 'on_device'
+TRANSCRIPTION_MODE_BLOCKED = 'blocked'
+# Sentinel for "the caller did not pass one; read it" — distinct from None,
+# which is a real answer (no valid subscription).
+_UNRESOLVED: Any = object()
+
+
+def _closed(reason: str, *, limit_seconds: Optional[int] = 0) -> TranscriptionAllowance:
+    """No managed minutes; preserve a known total without reopening enforcement.
+
+    A zero total here means unresolved, not unlimited. Snapshot serialization
+    retains its existing finite plan cap when this result has no known total.
+    """
+    return TranscriptionAllowance(TRANSCRIPTION_MODE_ON_DEVICE, 0, reason, limit_seconds=limit_seconds)
+
+
+# resolve_transcription_allowance() reasons meaning "this lookup could not be
+# trusted", as opposed to "the plan's minutes are actually exhausted". Failing
+# closed on these is right for a live listen socket (refusing one costs
+# nothing) but wrong for a decision written durably to storage, since nothing
+# routinely re-checks it later (#15232 — see should_lock in routers/sync.py).
+TRANSCRIPTION_ALLOWANCE_TRANSIENT_REASONS = frozenset({'allowance_unavailable', 'usage_invalid'})
+
+
+def transcription_allowance_seconds(plan: PlanType) -> Optional[int]:
+    """The plan's managed transcription allowance, from the catalog alone.
+
+    ``None`` is unlimited. Deliberately not ``get_plan_limits``: that path lets
+    the ``BASIC_TIER_MINUTES_LIMIT_PER_MONTH`` / ``PLUS_TIER_MINUTES_LIMIT_PER_MONTH``
+    environment overlays outrank the catalog, and no plan quota may be read
+    from the environment (NOW.md item 4). Production's overlay equals the
+    catalog today (basic 300 min, plus 1,500 min), so this changes no served
+    number there; only a divergent overlay (dev's) stops applying.
+    """
+    return allocation_limit(plan, 'transcription')
+
+
+def _usage_seconds(usage: Any) -> Optional[int]:
+    """Transcription seconds used this month, or ``None`` when the record is not trustworthy."""
+    if not isinstance(usage, dict):
+        return None
+    value = usage.get('transcription_seconds', 0)
+    if value is None:
+        return 0
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        return None
+    return value
+
+
+from utils.marketplace_reviewers import is_marketplace_reviewer
+
+
+def resolve_transcription_allowance(
+    uid: str,
+    source: Optional[str] = None,
+    *,
+    subscription: Any = _UNRESOLVED,
+    usage: Any = _UNRESOLVED,
+    byok_active: Any = _UNRESOLVED,
+    omi_funded: bool = False,
+    usage_cache: Any = None,
+) -> TranscriptionAllowance:
+    """Resolve the managed-transcription allowance for one uid, once. Never raises.
+
+    ``source`` is the listen-WS ``source`` query param (``desktop``, ``omi``,
+    ``phone_call``, ...) or the HTTP ``X-App-Platform`` header. It gates only
+    the desktop trial paywall, so phone-call / Omi-device traffic for cohort
+    UIDs is unaffected.
+
+    ``subscription`` / ``usage`` / ``byok_active`` let a caller that has
+    already read the valid subscription (``None`` when there is none), the
+    monthly usage and the BYOK enrolment pass them in, so the startup snapshot
+    and this answer come from the same reads. (The trial paywall keeps its own
+    cached reads; they are not shared.)
+
+    Order: reviewer → paywall → BYOK → plan → unlimited → remaining. A
+    subscription the lookup calls invalid (an inactive basic account) has no
+    managed minutes; an expired paid subscription is downgraded to a fresh
+    basic one by that lookup and gets basic's minutes. Any dependency that
+    cannot be read — including the paywall's, which fails open for every
+    other caller — and any usage record that cannot be trusted, resolves to
+    the free local path rather than a billed socket.
+    """
+    known_limit_seconds: Optional[int] = 0
+    try:
+        # The reviewer identities the subscription snapshot already treats as
+        # unlimited; resolved first so the paywall cannot contradict that snapshot.
+        if is_marketplace_reviewer(uid):
+            return TranscriptionAllowance(TRANSCRIPTION_MODE_MANAGED, None, 'marketplace_reviewer', limit_seconds=None)
+        # A Deepgram BYOK request is exempt from the trial paywall, as it is
+        # from the quota: the user pays Deepgram directly. strict: a paywall
+        # lookup failure must not open a billed socket for a paywalled account,
+        # and only a validated key on this request (not a stored fingerprint)
+        # exempts.
+        paywall_kwargs = {'byok_exempt': False} if omi_funded else {}
+        if is_trial_paywalled(uid, source, required_byok_provider='deepgram', strict=True, **paywall_kwargs):
+            return TranscriptionAllowance(TRANSCRIPTION_MODE_BLOCKED, 0, 'trial_paywalled')
+        # Require the Deepgram header on this request so a user cannot activate
+        # BYOK with fake fingerprints and then omit x-byok-deepgram to ride Omi's key.
+        if omi_funded:
+            byok_active = False
+        if byok_active is _UNRESOLVED:
+            byok_active = users_db.is_byok_active(uid)
+        if byok_active and get_byok_key('deepgram'):
+            return TranscriptionAllowance(TRANSCRIPTION_MODE_MANAGED, None, 'byok', limit_seconds=None)
+        if subscription is _UNRESOLVED:
+            subscription = users_db.get_user_valid_subscription(uid)
+        if not subscription:
+            return _closed('subscription_inactive')
+        budget_kwargs = {'session_cache': usage_cache} if usage_cache is not None else {}
+        ladder_budget = ladder_v1.budget_snapshot(uid, subscription, **budget_kwargs)
+        if ladder_budget is not None:
+            exhausted = ladder_budget['budget_percent'] >= 100
+            return TranscriptionAllowance(
+                TRANSCRIPTION_MODE_ON_DEVICE if exhausted else TRANSCRIPTION_MODE_MANAGED,
+                0 if exhausted else None,
+                'usage_budget_exhausted' if exhausted else 'usage_budget_available',
+                limit_seconds=None,
+                remaining_units=max(0, ladder_budget['budget_units'] - ladder_budget['used_units']),
+                budget_units=ladder_budget['budget_units'],
+            )
+        allowance = transcription_allowance_seconds(subscription.plan)
+        known_limit_seconds = allowance
+        # The catalog's explicit unlimited marker projects to None. A finite
+        # zero is a real zero allowance and must therefore fail closed.
+        if allowance is None:
+            return TranscriptionAllowance(TRANSCRIPTION_MODE_MANAGED, None, 'plan_unlimited', limit_seconds=None)
+        if usage is _UNRESOLVED:
+            usage = get_monthly_usage_for_subscription(uid)
+        used = _usage_seconds(usage)
+        if used is None:
+            logger.warning('transcription allowance: untrusted usage record for uid=%s', uid)
+            return _closed('usage_invalid', limit_seconds=allowance)
+        remaining = max(0, allowance - used)
+        if remaining > 0:
+            return TranscriptionAllowance(
+                TRANSCRIPTION_MODE_MANAGED, remaining, 'plan_within_allowance', limit_seconds=allowance
+            )
+        return TranscriptionAllowance(
+            TRANSCRIPTION_MODE_ON_DEVICE, 0, 'plan_allowance_exhausted', limit_seconds=allowance
+        )
+    except Exception as exc:  # fail closed: a billed socket is never the default
+        logger.warning('transcription allowance unavailable for uid=%s: %s', uid, type(exc).__name__)
+        return _closed('allowance_unavailable', limit_seconds=known_limit_seconds)
+
+
 def has_transcription_credits(uid: str, source: Optional[str] = None) -> bool:
+    """Whether the user may open Omi's managed STT right now — a thin wrapper over the one resolver.
+
+    ``source`` is the listen-WS ``source`` query param (see
+    :func:`resolve_transcription_allowance`).
     """
-    Checks if a user has transcribing credits by verifying their valid subscription and usage.
+    return resolve_transcription_allowance(uid, source).managed
 
-    `source` is the listen-WS `source` query param (`desktop`, `omi`, `phone_call`,
-    etc). The paywall test override only fires for desktop sources so that
-    phone-call / Omi-device traffic for cohort UIDs is unaffected.
+
+CONVERSATION_PROCESSING_MODE_ALLOWED = 'allowed'
+CONVERSATION_PROCESSING_MODE_SKIPPED = 'skipped'
+
+
+@dataclass(frozen=True)
+class ConversationProcessingAllowance:
+    """The one answer to "may Omi run paid structuring/summary/memory right now?".
+
+    Independent of managed-STT credits. Custom-STT users skip
+    :func:`has_transcription_credits` at listen connect; they still hit this
+    gate before Omi-paid post-processing (#7690). ``remaining_seconds`` is
+    ``None`` when the processing budget is unlimited (unlimited plans, LLM
+    BYOK, reviewers).
     """
-    # Desktop trial paywall: paywalled users have zero transcription credits.
-    if is_trial_paywalled(uid, source):
+
+    mode: str
+    remaining_seconds: Optional[int]
+    reason: str
+
+    @property
+    def allowed(self) -> bool:
+        return self.mode == CONVERSATION_PROCESSING_MODE_ALLOWED
+
+
+def _processing_closed(reason: str) -> ConversationProcessingAllowance:
+    return ConversationProcessingAllowance(CONVERSATION_PROCESSING_MODE_SKIPPED, 0, reason)
+
+
+def _usage_speech_seconds(usage: Any) -> Optional[int]:
+    """Speech seconds attributed this month, or ``None`` when the record is not trustworthy.
+
+    Custom-STT sessions record ``speech_seconds`` without ``transcription_seconds``
+    so the LLM processing budget can move independently of STT billing.
+    """
+    if not isinstance(usage, dict):
+        return None
+    value = usage.get('speech_seconds', 0)
+    if value is None:
+        return 0
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        return None
+    return value
+
+
+def resolve_conversation_processing_allowance(
+    uid: str,
+    source: Optional[str] = None,
+    *,
+    subscription: Any = _UNRESOLVED,
+    usage: Any = _UNRESOLVED,
+    byok_active: Any = _UNRESOLVED,
+) -> ConversationProcessingAllowance:
+    """Resolve the Omi-paid conversation-processing budget for one uid. Never raises.
+
+    Uses the catalog's monthly listening allowance as the processing budget and
+    meters it from ``speech_seconds`` (not ``transcription_seconds``). Lookup
+    failures fail open so a Firestore blip cannot strip summaries from fair
+    paid use (#12663).
+    """
+    try:
+        _ = source  # plan-wide budget; signature matches the transcription resolver
+        if is_marketplace_reviewer(uid):
+            return ConversationProcessingAllowance(CONVERSATION_PROCESSING_MODE_ALLOWED, None, 'marketplace_reviewer')
+        if byok_active is _UNRESOLVED:
+            byok_active = users_db.is_byok_active(uid)
+        if byok_active and _request_has_llm_byok_key():
+            return ConversationProcessingAllowance(CONVERSATION_PROCESSING_MODE_ALLOWED, None, 'llm_byok')
+        if subscription is _UNRESOLVED:
+            subscription = users_db.get_user_valid_subscription(uid)
+        if not subscription:
+            return _processing_closed('subscription_inactive')
+        ladder_budget = ladder_v1.budget_snapshot(uid, subscription)
+        if ladder_budget is not None:
+            if ladder_budget['budget_percent'] >= 100:
+                return _processing_closed('usage_budget_exhausted')
+            return ConversationProcessingAllowance(CONVERSATION_PROCESSING_MODE_ALLOWED, None, 'usage_budget_available')
+        allowance = transcription_allowance_seconds(subscription.plan)
+        if allowance is None:
+            return ConversationProcessingAllowance(CONVERSATION_PROCESSING_MODE_ALLOWED, None, 'plan_unlimited')
+        if usage is _UNRESOLVED:
+            usage = get_monthly_usage_for_subscription(uid)
+        used = _usage_speech_seconds(usage)
+        if used is None:
+            logger.warning('conversation processing allowance: untrusted usage record for uid=%s', uid)
+            record_fallback(
+                component='conversation_finalization',
+                from_mode='processing_gate',
+                to_mode='fail_open',
+                reason='malformed_doc',
+                outcome='degraded',
+                log=logger,
+            )
+            return ConversationProcessingAllowance(CONVERSATION_PROCESSING_MODE_ALLOWED, None, 'usage_invalid')
+        remaining = max(0, allowance - used)
+        if remaining > 0:
+            return ConversationProcessingAllowance(
+                CONVERSATION_PROCESSING_MODE_ALLOWED, remaining, 'plan_within_allowance'
+            )
+        return _processing_closed('plan_allowance_exhausted')
+    except Exception as exc:
+        logger.warning('conversation processing allowance unavailable for uid=%s: %s', uid, type(exc).__name__)
+        record_fallback(
+            component='conversation_finalization',
+            from_mode='processing_gate',
+            to_mode='fail_open',
+            reason='authorization_unavailable',
+            outcome='degraded',
+            log=logger,
+        )
+        return ConversationProcessingAllowance(CONVERSATION_PROCESSING_MODE_ALLOWED, None, 'allowance_unavailable')
+
+
+def has_conversation_processing_credits(uid: str, source: Optional[str] = None) -> bool:
+    """Whether Omi may run paid structuring/summary/memory for this user right now.
+
+    Custom-STT does not skip this check. See :func:`resolve_conversation_processing_allowance`.
+    """
+    return resolve_conversation_processing_allowance(uid, source).allowed
+
+
+def should_skip_omi_paid_postprocessing(
+    uid: str,
+    *,
+    uses_custom_stt: bool,
+    source: Optional[str] = None,
+) -> bool:
+    """Skip Omi-paid structuring/summary/memory for an exhausted custom-STT session.
+
+    Regular conversations stay bounded by transcription credits at listen
+    time and are never skipped here. Custom-STT skips those credits, so this
+    is the remaining cap. Fail-open on errors so a lookup blip cannot strip
+    summaries (#12663).
+    """
+    if not uses_custom_stt:
         return False
-
-    # BYOK users pay Deepgram directly — there's no Omi-side transcription quota to enforce.
-    # Require the Deepgram header on this request so a user can't activate BYOK
-    # with fake fingerprints then omit x-byok-deepgram to ride Omi's key.
-    if users_db.is_byok_active(uid) and get_byok_key('deepgram'):
-        return True
-
-    subscription = users_db.get_user_valid_subscription(uid)
-    if not subscription:
+    try:
+        return not has_conversation_processing_credits(uid, source)
+    except Exception as exc:
+        logger.warning('custom-STT LLM gate unavailable for uid=%s: %s', uid, type(exc).__name__)
+        record_fallback(
+            component='conversation_finalization',
+            from_mode='processing_gate',
+            to_mode='fail_open',
+            reason='authorization_unavailable',
+            outcome='degraded',
+            log=logger,
+        )
         return False
-
-    limits = get_plan_limits(subscription.plan)
-
-    # The catalog's explicit unlimited marker projects to None. A finite zero
-    # is a real zero allowance and must therefore fail closed.
-    if limits.transcription_seconds is None:
-        return True
-
-    usage = get_monthly_usage_for_subscription(uid)
-    if usage.get('transcription_seconds', 0) >= limits.transcription_seconds:
-        return False
-
-    return True
 
 
 def get_remaining_transcription_seconds(uid: str, source: Optional[str] = None) -> int | None:
+    """Managed transcription seconds left this month — a thin wrapper over the one resolver.
+
+    ``None`` means unlimited (unlimited plans, BYOK, reviewers); ``0`` means
+    spent, inactive, paywalled or unresolvable. Used for the freemium switch to
+    on-device transcription.
     """
-    Get remaining transcription seconds for the user.
-    Returns None if unlimited, otherwise the remaining seconds (>= 0).
-    Used for freemium auto-switch to on-device transcription.
+    return resolve_transcription_allowance(uid, source).remaining_seconds
 
-    `source` gates the desktop-only paywall test override (see
-    `is_trial_paywalled`).
-    """
-    # Single-user paywall test override — surface 0 so the freemium-threshold
-    # event fires and the client renders its usage-limit popup.
-    if is_trial_paywalled(uid, source):
-        return 0
 
-    # BYOK: user brings their own Deepgram — no Omi quota, no freemium threshold.
-    # Require the Deepgram header to prevent fake-fingerprint abuse.
-    if users_db.is_byok_active(uid) and get_byok_key('deepgram'):
-        return None
-
-    subscription = users_db.get_user_valid_subscription(uid)
-    if not subscription:
-        # No subscription = use basic limits
-        limits = get_basic_plan_limits()
-    else:
-        # Resolve the plan's limits and let the transcription_seconds check below decide
-        # unlimited-ness. Do NOT short-circuit on is_paid_plan(): Plus is a paid plan that
-        # still carries a bounded monthly transcription cap,
-        # so treating every paid plan as unlimited leaked its cap and never triggered the
-        # freemium on-device switch. This mirrors has_transcription_credits().
-        limits = get_plan_limits(subscription.plan)
-
-    if limits.transcription_seconds is None:
-        return None  # The catalog explicitly declared this allocation unlimited.
-
-    usage = get_monthly_usage_for_subscription(uid)
-    used_seconds = usage.get('transcription_seconds', 0)
-
-    return max(0, limits.transcription_seconds - used_seconds)
+def _stored_paid_period_lapsed(subscription: Subscription) -> bool:
+    end = subscription.current_period_end
+    return not end or datetime.fromtimestamp(end, tz=timezone.utc) < datetime.now(timezone.utc)
 
 
 def reconcile_basic_plan_with_stripe(uid: str, subscription: Subscription | None) -> Subscription | None:
     """
-    If Firestore says `basic` but there is a Stripe subscription with a future period end
-    that actually maps to an unlimited plan, fix it once by reconciling with Stripe.
+    If Firestore says `basic`, or a paid plan whose period has passed, but Stripe holds an
+    active paid subscription, fix it once by reconciling with Stripe.
     """
-    if not subscription or subscription.plan != PlanType.basic:
+    if not subscription:
+        return subscription
+    # A stored paid plan whose period has passed reads as Basic everywhere
+    # (get_user_valid_subscription), so heal it the same way: a missed renewal
+    # webhook otherwise leaves a paying subscriber on Free indefinitely.
+    if subscription.plan != PlanType.basic and not _stored_paid_period_lapsed(subscription):
         return subscription
 
     try:
-        if subscription.stripe_subscription_id and subscription.current_period_end:
-            period_end_dt = datetime.fromtimestamp(subscription.current_period_end, tz=timezone.utc)
-            if period_end_dt >= datetime.now(timezone.utc):
+        if subscription.stripe_subscription_id:
+            try:
                 stripe_sub = stripe.Subscription.retrieve(subscription.stripe_subscription_id)
-                stripe_sub_dict: Optional[Dict[str, Any]] = stripe_sub.to_dict() if stripe_sub else None  # type: ignore[reportDeprecated]  # stripe public serialization API
-                if stripe_sub_dict:
-                    items: List[Dict[str, Any]] = stripe_sub_dict.get('items', {}).get('data') or []
-                    price_id: Optional[str] = None
-                    if items and items[0].get('price'):
-                        price_id = items[0]['price'].get('id')
+            except Exception as e:
+                logger.warning(
+                    f"[reconcile_basic_plan_with_stripe] Could not retrieve sub {subscription.stripe_subscription_id}: {e}"
+                )
+                stripe_sub = None
+            stripe_sub_dict: Optional[Dict[str, Any]] = (
+                stripe_sub.to_dict() if stripe_sub else None  # type: ignore[reportDeprecated]  # stripe public serialization API
+            )
+            if stripe_sub_dict:
+                items: List[Dict[str, Any]] = stripe_sub_dict.get('items', {}).get('data') or []
+                price_id: Optional[str] = None
+                if items and items[0].get('price'):
+                    price_id = items[0]['price'].get('id')
 
-                    stripe_status = stripe_sub_dict.get('status')
-                    if stripe_status in ('active', 'trialing') and price_id:
-                        try:
-                            plan_type = get_plan_type_from_price_id(price_id)
-                        except ValueError:
-                            plan_type = None
+                stripe_status = stripe_sub_dict.get('status')
+                if stripe_status in ('active', 'trialing') and price_id:
+                    try:
+                        plan_type = get_plan_type_from_price_id(price_id)
+                    except ValueError:
+                        plan_type = None
 
-                        if plan_type and is_paid_plan(plan_type):
-                            subscription.plan = plan_type
-                            subscription.status = SubscriptionStatus.active
-                            subscription.current_period_end = stripe_sub_dict.get('current_period_end')
-                            subscription.current_period_start = stripe_sub_dict.get('current_period_start')
-                            subscription.cancel_at_period_end = stripe_sub_dict.get('cancel_at_period_end', False)
-                            subscription.current_price_id = price_id
-                            subscription.limits = get_plan_limits(plan_type)
-                            users_db.update_user_subscription(uid, subscription.model_dump())
-                            return subscription
+                    if plan_type and is_paid_plan(plan_type):
+                        sub_period_end = stripe_sub_dict.get('current_period_end')
+                        if sub_period_end:
+                            period_end_dt = datetime.fromtimestamp(sub_period_end, tz=timezone.utc)
+                            if period_end_dt >= datetime.now(timezone.utc):
+                                subscription.plan = plan_type
+                                subscription.status = SubscriptionStatus.active
+                                subscription.current_period_end = sub_period_end
+                                subscription.current_period_start = stripe_sub_dict.get('current_period_start')
+                                subscription.cancel_at_period_end = stripe_sub_dict.get('cancel_at_period_end', False)
+                                subscription.current_price_id = price_id
+                                subscription.limits = get_plan_limits(plan_type)
+                                customer_id = stripe_sub_dict.get('customer')
+                                if customer_id and isinstance(customer_id, str):
+                                    users_db.set_stripe_customer_id(uid, customer_id)
+                                users_db.update_user_subscription(uid, subscription.model_dump())
+                                return subscription
 
         active = find_active_paid_subscription_for_user(uid)
         if active:
@@ -1612,3 +2056,8 @@ def reconcile_basic_plan_with_stripe(uid: str, subscription: Subscription | None
         logger.error(f"[reconcile_basic_plan_with_stripe] Error reconciling Stripe subscription for user {uid}: {e}")
 
     return subscription
+
+
+def get_usage_units(uid: str) -> dict:
+    """Storefront display projection; enforcement remains separately flagged."""
+    return ladder_v1.usage_snapshot(uid) or {}

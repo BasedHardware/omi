@@ -17,6 +17,8 @@ import Foundation
 /// `forKey:` string literals from being introduced elsewhere (the baseline
 /// may only shrink).
 enum DefaultsKey: String {
+  /// Retired unowned value, retained only for regression fixtures; never sync authority.
+  case screenActivitySyncLegacyCursor = "screenActivitySync_lastId"
   case authIsSignedIn = "auth_isSignedIn"
   case authUserEmail = "auth_userEmail"
   case authUserId = "auth_userId"
@@ -39,9 +41,12 @@ enum DefaultsKey: String {
   case automationOwnerABackup = "automation_swap_owner_a_backup"
   case chatBridgeMode = "chatBridgeMode"
   case preferredMicrophoneDeviceUID = "preferredMicrophoneDeviceUID"
+  /// Retired "Multiple Chat Sessions" toggle; only cleared from disk, never written now.
   case multiChatEnabled = "multiChatEnabled"
   /// Opt-in: proactive notifications are also spoken out loud on delivery.
   case speakNotificationsAloud = "speakNotificationsAloud"
+  /// Retained goal/reminder preference; keep the historical persisted key after Advice retirement.
+  case goalReminderNotificationsEnabled = "adviceNotificationsEnabled"
   /// Opt-out (defaults to on): the post-meeting summary share notification —
   /// the persistent notch card offering "Copy link" / "Send to <participant>".
   case meetingSummaryNotificationsEnabled = "meetingSummaryNotificationsEnabled"
@@ -50,15 +55,67 @@ enum DefaultsKey: String {
   /// budgets in `IntegrationNudgePolicy` are what keep that from being noise.
   case integrationNudgesEnabled = "integrationNudgesEnabled"
   case aiChatWorkingDirectory = "aiChatWorkingDirectory"
+  /// JSON array of skill names the user disabled in Settings. Absent or empty
+  /// means every skill is enabled. Read by the skill-catalog projection and
+  /// exported to the agent runtime as `OMI_DISABLED_SKILLS`, so the toggle
+  /// hides a skill from the catalog and from load_skill/search_skills alike.
+  case disabledSkillsJSON = "disabledSkillsJSON"
+  /// Presence-only marker: the user turned Launch at Login OFF in Settings on
+  /// a build that has this key. Absent means "no recorded decline" — the
+  /// default-on migration (`OmiApp.migrateLaunchAtLoginDefault`) enables once;
+  /// a decline made before this key existed is indistinguishable from a fresh
+  /// install and is re-enabled by that one shot. Present means the user's
+  /// choice wins and no migration ever re-enables it. Re-enabling from Settings
+  /// removes the marker. Never written `false`.
+  case launchAtLoginUserDeclined = "launchAtLoginUserDeclined"
   case hasCompletedOnboarding = "hasCompletedOnboarding"
+  /// Three-state marker for the one-time first-real-app tap-to-ask card
+  /// (`FirstRealAppCardState`): absent = this build has never looked at this
+  /// install, `pending` = a fresh install still owes the card, `consumed` = it
+  /// fired, or the install gate retired it for a user who was already onboarded
+  /// when this build arrived. A `Bool` cannot express the first state, and
+  /// conflating "never written" with `false` is the exact ambiguity that made
+  /// the launch-at-login V1 migration re-enable a setting the user turned off.
+  case firstRealAppCardState = "firstRealAppCardState"
   case onboardingStep = "onboardingStep"
   case onboardingFurthestStep = "onboardingFurthestStep"
   case onboardingMemoryImportOwnerUserId = "onboardingMemoryImportOwnerUserID"
   case onboardingHowDidYouHearSource = "onboardingHowDidYouHearSource"
   case onboardingRole = "onboardingRole"
   case onboardingJustCompleted = "onboardingJustCompleted"
+  /// Legacy onboarding ACP session id (pre-kernel `surface_conversations`).
+  case onboardingACPSessionId = "onboardingACPSessionId"
+  /// Legacy locally persisted onboarding chat messages; kernel journal owns this now.
+  case onboardingChatMessages = "onboardingChatMessages"
+  /// Mid-onboarding restart marker kept by `OnboardingChatPersistence`.
+  case onboardingMidOnboarding = "onboardingMidOnboarding"
+  /// Retired-wizard exploration text; only cleared from disk, never written now.
+  case onboardingExplorationText = "onboardingExplorationText"
+  /// Retired-wizard exploration completion; only cleared from disk, never written now.
+  case onboardingExplorationCompleted = "onboardingExplorationCompleted"
+  /// `complete_onboarding` tool-call marker kept by `OnboardingChatPersistence`.
+  case onboardingToolCompleted = "onboardingToolCompleted"
+  /// Monthly-goal answered marker kept by `OnboardingChatPersistence`.
+  case onboardingGoalCompleted = "onboardingGoalCompleted"
   case hasCompletedFileIndexing = "hasCompletedFileIndexing"
+  /// Durable record that the user skipped Accessibility during onboarding. Absent
+  /// means "no recorded skip" (pre-marker onboarding or an Allow); macOS exposes no
+  /// denied/notDetermined distinction for AX, so this is the only signal that keeps
+  /// the sidebar from pulsing a deliberate skip as "denied".
+  case onboardingAccessibilitySkipped = "onboardingAccessibilitySkipped"
+  /// System-audio process taps have no preflight API. Preserve an onboarding
+  /// skip separately so later microphone sessions do not test the tap anyway.
+  case onboardingSystemAudioSkipped = "onboardingSystemAudioSkipped"
   case screenAnalysisEnabled = "screenAnalysisEnabled"
+  case ratingPromptQuestionCount = "ratingPromptQuestionCount"
+  case ratingPromptSubmittedRating = "ratingPromptSubmittedRating"
+  case ratingPromptDismissed = "ratingPromptDismissed"
+  /// One-shot marker: the question counter was seeded from server chat
+  /// history so long-time users see the rating ask without three NEW questions.
+  case ratingPromptHistorySeeded = "ratingPromptHistorySeeded"
+  /// Last-good server CSAT config (JSON), so a cold start renders the right
+  /// copy before the first config poll lands. Product-wide, not owner-scoped.
+  case csatConfigLastGood = "csatConfigLastGood"
   case screenAnalysisAutoStartFixedV2 = "screenAnalysisAutoStartFixed_v2"
   case screenAnalysisAutoStartFixedV3 = "screenAnalysisAutoStartFixed_v3"
   case homeOmiDeviceAccountHistory = "home-omi-device-account-history"
@@ -66,17 +123,42 @@ enum DefaultsKey: String {
   case pairedDeviceName = "pairedDeviceName"
   case pairedDeviceType = "pairedDeviceType"
   case chatScreenshotSharingEnabled = "chatScreenshotSharingEnabled"
+  /// Client-side mirror of the server's `meeting_note_screenshots_enabled` account setting
+  /// (contract §3/§9). Absent key means enabled (default on) — see
+  /// `MeetingNoteScreenshotsFeature.isEnabled`.
+  case meetingNoteScreenshotsEnabled = "meetingNoteScreenshotsEnabled"
+  /// Explicit local opt-in for read-only pre-meeting context in Conversations.
+  case meetingMemoryBriefsEnabled = "meetingMemoryBriefsEnabled"
+  /// Last meeting brief dismissed on this Mac; includes owner identity to prevent cross-account carryover.
+  case meetingMemoryBriefDismissedKey = "meetingMemoryBriefDismissedKey"
   /// Test hook: forces TTS playback start to report failure (non-prod gauntlets).
   case forceTTSPlaybackStartFalse = "forceTTSPlaybackStartFalse"
   case shortcutPTTInputDeviceUID = "shortcut_pttInputDeviceUID"
   /// One-shot marker: the PTT-only microphone choice has been folded into the shared
   /// `preferredMicrophoneDeviceUID`, so it is never carried over twice.
   case shortcutPTTMicrophoneMergedIntoPreferred = "shortcut_pttMicrophoneMergedIntoPreferred"
+  /// Silent Type: a dictation still types into the focused app, but the turn is
+  /// never written to the chat transcript. Absent means off.
+  case shortcutSilentTypeEnabled = "shortcut_silentTypeEnabled"
+  /// Ambient capture mutes its microphone contribution while a dictation app (Wispr Flow,
+  /// superwhisper, macOS Dictation) holds the mic. Absent means on.
+  case transcriptionIgnoreDictationApps = "transcription_ignoreDictationApps"
+  /// Current local day's per-bundle call-audio aggregates. The meeting detector
+  /// flushes the previous day as `Desktop Call App Audio Summary` on the first
+  /// tick of a new day and when it starts after a relaunch.
+  case callAppAudioDailyLedger = "callAppAudioDailyLedger"
   case floatingBarNotificationPreviewsEnabled = "shortcut_floatingBarNotificationPreviewsEnabled"
   case floatingBarCachedPlan = "floatingBar_cachedPlan"
   case floatingBarCachedDesktopGrandfatherUntil = "floatingBar_cachedDesktopGrandfatherUntil"
   case desktopIsPaywalled = "desktop_isPaywalled"
   case askOmiBarEnabled = "askOmiBarEnabled"
+  case byokLLMProvider = "dev_byok_llm_provider"
+  /// Provider → SHA-256 fingerprint last enrolled after BYOKValidator .ok.
+  case byokEnrolledFingerprints = "byok_enrolled_fingerprints"
+  /// UID that last owned persisted BYOK keys on this Mac.
+  case byokOwnerUid = "byok_owner_uid"
+  /// Durable, owner-scoped explanation shown after unsafe legacy/foreign BYOK keys are cleared.
+  case byokOwnerResetNotice = "byok_owner_reset_notice"
   case rewindDisableContentCache = "rewindDisableContentCache"
   // Task-order migration keys are typed so TasksPage and its tests share the
   // migration contract instead of repeating raw UserDefaults literals.
@@ -93,12 +175,22 @@ enum DefaultsKey: String {
   /// `PUT /v1/users/preferences/app`. Same name mobile uses in SharedPreferences.
   case preferredSummarizationAppId = "preferredSummarizationAppId"
   case disableSystemAudioCapture = "disableSystemAudioCapture"
+  /// Hard kill local vectors. Entitled plans retain Gemini search; other plans retain FTS.
+  case disableLocalEmbeddings = "disableLocalEmbeddings"
+  /// Local hybrid search defaults on in every channel; `OMI_LOCAL_EMBEDDINGS` overrides.
+  case localEmbeddingsEnabled = "localEmbeddingsEnabled"
+  /// Local embedding runtime: pin an engine id. Unknown ids fail closed to keyword-only.
+  case forceLocalEmbeddingEngine = "forceLocalEmbeddingEngine"
 }
 
 /// Compile-checked owner-scoped defaults keys whose final storage key is
 /// derived at runtime.
 struct ScopedDefaultsKey {
   fileprivate let rawValue: String
+
+  static func screenActivitySyncCursor(ownerID: String) -> Self {
+    Self(rawValue: "screenActivitySync_lastId_\(ownerID)")
+  }
 
   static func taskContextSubjectMatches(ownerHash: String) -> Self {
     Self(rawValue: "taskContextSubjectMatches.v1.\(ownerHash)")
@@ -107,6 +199,18 @@ struct ScopedDefaultsKey {
   static func trialNudge(_ kind: String, ownerHash: String) -> Self {
     Self(rawValue: "trial_nudge.v1.\(kind).\(ownerHash)")
   }
+
+  /// Dismissed chat-quota warnings. Entries carry their own billing cycle, so
+  /// the set expires on its own instead of needing a sweep.
+  static func chatQuotaBannerDismissals(ownerHash: String) -> Self {
+    Self(rawValue: "chat_quota_banner_dismissals.v1.\(ownerHash)")
+  }
+
+  static func assistantVoiceID(ownerID: String) -> Self {
+    Self(rawValue: "assistantVoiceID.\(ownerID)")
+  }
+
+  static let legacyShortcutSelectedVoiceID = Self(rawValue: "shortcut_selectedVoiceID")
 
   static func tasksFullSyncCompleted(ownerID: String) -> Self {
     Self(rawValue: "tasksFullSyncCompleted_v9_\(ownerID)")
@@ -150,6 +254,20 @@ struct ScopedDefaultsKey {
     Self(rawValue: "integrationNudgeBudget.v1.\(field).\(ownerID)")
   }
 
+  /// Owner-scoped id of the newest daily summary the owner has already been shown a notch card
+  /// for. Desktop receives no `daily_summary` push, so this is what keeps the announcement at
+  /// most once per summary, and per account on a shared Mac.
+  static func dailySummaryLastSeenID(ownerID: String) -> Self {
+    Self(rawValue: "dailySummary.lastSeenID.v1.\(ownerID)")
+  }
+
+  /// Owner-scoped id of the daily summary that was on screen when the owner last cleared Chat.
+  /// The card is chrome rather than a turn (INV-CHAT-1), so clearing the transcript cannot
+  /// delete it — this is what makes Clear take it away anyway, until a newer summary arrives.
+  static func dailySummaryClearedID(ownerID: String) -> Self {
+    Self(rawValue: "dailySummary.clearedID.v1.\(ownerID)")
+  }
+
   static func importConnectorAvailabilityText(connectorID: String) -> Self {
     Self(rawValue: "appsImportConnectorAvailabilityText.\(connectorID)")
   }
@@ -158,9 +276,28 @@ struct ScopedDefaultsKey {
     Self(rawValue: "appsImportConnectorSourceCount.\(connectorID)")
   }
 
+  /// Per-prompt, per-account resolution of a remote (admin-authored) prompt:
+  /// "answered" or "dismissed". Absent = still eligible. Owner-scoped so one
+  /// account's answer never suppresses prompts for another account on the
+  /// same Mac (the #9821 account-switch-bleed class).
+  static func remotePromptResolution(promptId: String, ownerID: String) -> Self {
+    Self(rawValue: "remotePrompt.resolution.v2.\(ownerID).\(promptId)")
+  }
+
+  /// Owner-scoped rating-prompt state (count / submitted / dismissed /
+  /// historySeeded) — same bleed class as above.
+  static func ratingPrompt(_ field: String, ownerID: String) -> Self {
+    Self(rawValue: "ratingPrompt.v2.\(field).\(ownerID)")
+  }
+
   static func taskInterruptionLedger(ownerID: String) -> Self {
     Self(rawValue: "proactiveTaskInterruptionLedger.v1.\(ownerID)")
   }
+
+  static func suggestionTaskNudgeLedger(ownerID: String) -> Self {
+    Self(rawValue: "suggestionTaskNudgeLedger.v1.\(ownerID)")
+  }
+
 }
 
 /// Typed accessors that take a `DefaultsKey` instead of a `String`.
@@ -171,9 +308,11 @@ struct ScopedDefaultsKey {
 /// compiler-checked.
 extension UserDefaults {
   func string(forKey key: DefaultsKey) -> String? { string(forKey: key.rawValue) }
+  func data(forKey key: DefaultsKey) -> Data? { data(forKey: key.rawValue) }
   func bool(forKey key: DefaultsKey) -> Bool { bool(forKey: key.rawValue) }
   func integer(forKey key: DefaultsKey) -> Int { integer(forKey: key.rawValue) }
   func double(forKey key: DefaultsKey) -> Double { double(forKey: key.rawValue) }
+  func string(forKey key: ScopedDefaultsKey) -> String? { string(forKey: key.rawValue) }
   func data(forKey key: ScopedDefaultsKey) -> Data? { data(forKey: key.rawValue) }
   func bool(forKey key: ScopedDefaultsKey) -> Bool { bool(forKey: key.rawValue) }
   func integer(forKey key: ScopedDefaultsKey) -> Int { integer(forKey: key.rawValue) }

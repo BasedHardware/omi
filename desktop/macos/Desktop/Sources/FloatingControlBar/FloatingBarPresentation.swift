@@ -184,3 +184,10 @@ extension FloatingControlBarManager {
     }
   }
 }
+
+extension Notification.Name {
+  /// Posted on the main thread when `FloatingControlBarManager.isEnabled` actually changes value,
+  /// from whichever surface changed it. Mirrors of the preference (the Settings switch) re-read
+  /// `isEnabled` on receipt instead of trusting their own last write.
+  static let floatingBarEnabledDidChange = Notification.Name("floatingBarEnabledDidChange")
+}

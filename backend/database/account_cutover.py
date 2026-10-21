@@ -22,7 +22,7 @@ class AccountCutoverConcurrencyError(RuntimeError):
 
 
 def _control_ref(uid: str, *, firestore_client: Any = None):
-    client = firestore_client if firestore_client is not None else _client.get_firestore_client()
+    client = firestore_client if firestore_client is not None else _client.get_data_plane_firestore_client()
     return client.collection('users').document(uid).collection(CONTROL_COLLECTION).document(CONTROL_DOCUMENT)
 
 
@@ -177,7 +177,7 @@ def cas_set_account_cutover_record(
     if record.uid != uid:
         raise ValueError('cutover record uid mismatch')
 
-    client = firestore_client if firestore_client is not None else _client.get_firestore_client()
+    client = firestore_client if firestore_client is not None else _client.get_data_plane_firestore_client()
     doc_ref = _control_ref(uid, firestore_client=client)
     payload = record.persisted_payload()
     lock = getattr(client, 'lock', None)

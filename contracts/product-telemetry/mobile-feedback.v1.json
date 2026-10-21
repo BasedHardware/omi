@@ -1,0 +1,55 @@
+{
+  "schema_version": "mobile_feedback.v1",
+  "method": "POST",
+  "path": "/v1/mobile/feedback",
+  "authentication": "Firebase ID token; target ownership is checked server-side",
+  "request": {
+    "feedback_id": "client generated stable UUID; idempotency scope is the authenticated user",
+    "kind": "summary_helpfulness | recording_quality",
+    "target_kind": "conversation | recording; new recording_quality callers should send it, while omission first preserves recording-session compatibility and then allows an authenticated conversation-id fallback for older detail pages",
+    "target_id": "conversation id for summary_helpfulness or recording_quality when target_kind=conversation; recording-session id when target_kind=recording",
+    "value": "-1 | 1",
+    "reason": {
+      "summary_helpfulness": [
+        "summary_inaccurate",
+        "summary_incomplete",
+        "summary_irrelevant",
+        "summary_wrong_context",
+        "summary_other"
+      ],
+      "recording_quality": [
+        "recording_missing_audio",
+        "recording_poor_transcription",
+        "recording_wrong_speaker",
+        "recording_delayed_or_stuck",
+        "recording_fragmented_or_duplicated",
+        "recording_other"
+      ]
+    },
+    "comment": "optional bounded user text; never logged",
+    "client_metadata": ["app_version", "app_build", "platform", "client_app_namespace", "client_app_profile", "correlation_id"],
+    "client_metadata_rule": "client_app_namespace is the bounded package namespace and client_app_profile is the bounded build profile; they aid cohort isolation and never authorize target access or override backend provenance",
+    "server_provenance_when_known": [
+      "backend_release",
+      "model_name",
+      "model_version",
+      "prompt_name",
+      "prompt_commit",
+      "trace_id"
+    ],
+    "server_provenance_rule": "These fields are read from the owned conversation/backend record. Client values cannot override them."
+  },
+  "response": {
+    "schema_version": "mobile_feedback_receipt.v1",
+    "feedback_id": "same client id",
+    "event_id": "canonical feedback_events id",
+    "created": "true for first durable write, false for idempotent retry",
+    "persisted": true
+  },
+  "errors": {
+    "404": "target is absent or not owned by the authenticated user",
+    "409": "feedback_id was previously used for a different immutable payload",
+    "503": "durability was not confirmed; retry with the same feedback_id"
+  },
+  "privacy": "The ledger stores bounded metadata and opaque pointers, never transcript or summary text."
+}

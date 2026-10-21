@@ -18,6 +18,21 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_SCAN_ROOT = Path('backend/database')
 DEFAULT_BASELINE = Path('.github/scripts/firestore_model_read_boundary_baseline.json')
 EXCLUDED_FILES = frozenset({'read_boundary.py'})
+# Every pydantic entry point that turns a stored document into a model. ``model_validate``
+# is only the politest one: ``model_construct`` skips validation outright, and the v1
+# aliases are still live on pydantic v2 models, so a reader can reach any of them.
+MODEL_FACTORY_ATTRIBUTES = frozenset(
+    {
+        'model_validate',
+        'model_validate_json',
+        'model_validate_strings',
+        'model_construct',
+        'construct',
+        'parse_obj',
+        'parse_raw',
+        'from_orm',
+    }
+)
 
 
 def _is_models_import(module: str | None) -> bool:
@@ -45,14 +60,14 @@ class _ModelConstructionVisitor(ast.NodeVisitor):
         self.generic_visit(node)
 
     def visit_Call(self, node: ast.Call) -> None:  # noqa: N802 - AST visitor name
-        if self._is_model_validate(node) or self._is_model_kwargs_constructor(node):
+        if self._is_model_factory_call(node) or self._is_model_kwargs_constructor(node):
             self.count += 1
         self.generic_visit(node)
 
-    def _is_model_validate(self, node: ast.Call) -> bool:
+    def _is_model_factory_call(self, node: ast.Call) -> bool:
         return (
             isinstance(node.func, ast.Attribute)
-            and node.func.attr == 'model_validate'
+            and node.func.attr in MODEL_FACTORY_ATTRIBUTES
             and bool(node.args or node.keywords)
             and self._is_model_reference(node.func.value)
         )

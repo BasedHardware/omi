@@ -9,9 +9,9 @@ PODS:
     - AppAuth/Core
   - audio_session (0.0.1):
     - Flutter
-  - awesome_notifications (0.10.0):
+  - awesome_notifications (0.12.0):
     - Flutter
-    - IosAwnCore (~> 0.10.0)
+    - IosAwnCore (~> 0.12.0)
   - awesome_notifications_core (0.0.1):
     - Flutter
   - connectivity_plus (0.0.1):
@@ -206,7 +206,7 @@ PODS:
   - intercom_flutter (9.0.0):
     - Flutter
     - Intercom (= 19.7.2)
-  - IosAwnCore (0.10.0)
+  - IosAwnCore (0.12.1)
   - iOSDFULibrary (4.15.3):
     - ZIPFoundation (= 0.9.19)
   - iOSMcuManagerLibrary (1.6):
@@ -228,11 +228,17 @@ PODS:
   - nordic_dfu (1.0.0):
     - Flutter
     - iOSDFULibrary (~> 4.15.3)
+  - onnxruntime-c (1.23.0)
+  - onnxruntime-objc (1.23.0):
+    - onnxruntime-objc/Core (= 1.23.0)
+  - onnxruntime-objc/Core (1.23.0):
+    - onnxruntime-c (= 1.23.0)
+  - onnxruntime_v2 (0.0.1):
+    - Flutter
+    - onnxruntime-objc (= 1.23.0)
   - opus_flutter_ios (1.4.0):
     - Flutter
   - package_info_plus (0.4.5):
-    - Flutter
-  - pasteboard (0.0.1):
     - Flutter
   - path_provider_foundation (0.0.1):
     - Flutter
@@ -313,9 +319,9 @@ DEPENDENCIES:
   - map_launcher (from `.symlinks/plugins/map_launcher/ios`)
   - mcumgr_flutter (from `.symlinks/plugins/mcumgr_flutter/ios`)
   - nordic_dfu (from `.symlinks/plugins/nordic_dfu/ios`)
+  - onnxruntime_v2 (from `.symlinks/plugins/onnxruntime_v2/ios`)
   - opus_flutter_ios (from `.symlinks/plugins/opus_flutter_ios/ios`)
   - package_info_plus (from `.symlinks/plugins/package_info_plus/ios`)
-  - pasteboard (from `.symlinks/plugins/pasteboard/ios`)
   - path_provider_foundation (from `.symlinks/plugins/path_provider_foundation/darwin`)
   - permission_handler_apple (from `.symlinks/plugins/permission_handler_apple/ios`)
   - posthog_flutter (from `.symlinks/plugins/posthog_flutter/darwin`)
@@ -358,6 +364,8 @@ SPEC REPOS:
     - iOSDFULibrary
     - iOSMcuManagerLibrary
     - nanopb
+    - onnxruntime-c
+    - onnxruntime-objc
     - PostHog
     - PromisesObjC
     - PromisesSwift
@@ -434,12 +442,12 @@ EXTERNAL SOURCES:
     :path: ".symlinks/plugins/mcumgr_flutter/ios"
   nordic_dfu:
     :path: ".symlinks/plugins/nordic_dfu/ios"
+  onnxruntime_v2:
+    :path: ".symlinks/plugins/onnxruntime_v2/ios"
   opus_flutter_ios:
     :path: ".symlinks/plugins/opus_flutter_ios/ios"
   package_info_plus:
     :path: ".symlinks/plugins/package_info_plus/ios"
-  pasteboard:
-    :path: ".symlinks/plugins/pasteboard/ios"
   path_provider_foundation:
     :path: ".symlinks/plugins/path_provider_foundation/darwin"
   permission_handler_apple:
@@ -469,7 +477,7 @@ SPEC CHECKSUMS:
   app_links: 3dbc685f76b1693c66a6d9dd1e9ab6f73d97dc0a
   AppAuth: d4f13a8fe0baf391b2108511793e4b479691fb73
   audio_session: 9bb7f6c970f21241b19f5a3658097ae459681ba0
-  awesome_notifications: 0f432b28098d193920b11a44cfa9d2d9313a3888
+  awesome_notifications: e52a8e6a8cdaca4edbd31f38f345305a377445c5
   awesome_notifications_core: 429c28df8746780a474de177e5acde33af87da63
   connectivity_plus: cb623214f4e1f6ef8fe7403d580fdad517d2f7dd
   device_info_plus: 21fcca2080fbcd348be798aa36c3e5ed849eefbe
@@ -516,7 +524,7 @@ SPEC CHECKSUMS:
   integration_test: 4a889634ef21a45d28d50d622cf412dc6d9f586e
   Intercom: 8d5ddc9d9f186c3eaeeaf3a3125c41ebef1a0987
   intercom_flutter: 3a89377cc07bb0e623c1196a3702cb727e1c5521
-  IosAwnCore: 653786a911089012092ce831f2945cd339855a89
+  IosAwnCore: ea91b2d2ee2fd3236748e1b9cdc16194f9558327
   iOSDFULibrary: 198c36ebe5a31bf2ca04ee8fb40837176a423e85
   iOSMcuManagerLibrary: 4102a4595be1c69e5286d7f1520a733c82c30b0a
   just_audio: 4e391f57b79cad2b0674030a00453ca5ce817eed
@@ -524,9 +532,11 @@ SPEC CHECKSUMS:
   mcumgr_flutter: 8c4a598cb1b4d10a9adbc0f13288334297185506
   nanopb: fad817b59e0457d11a5dfbde799381cd727c1275
   nordic_dfu: e4fb6f461f4a290b28ea4b1dfb69071665cdfa3e
+  onnxruntime-c: 3174c63a963d9abbc2bf9627e3d622819c0ed5f7
+  onnxruntime-objc: 1254d12f8160e562e7693ff17f5aa3dd17dc409e
+  onnxruntime_v2: 4efe47858784a1fd65b5fc6d71d179f1d82b029d
   opus_flutter_ios: f16ed3599997ced564ad44509e87003159a86def
   package_info_plus: af8e2ca6888548050f16fa2f1938db7b5a5df499
-  pasteboard: 3913b69d3f2be214970a8ae94e7e87fe76e47e98
   path_provider_foundation: bb55f6dbba17d0dccd6737fe6f7f34fbd0376880
   permission_handler_apple: 4ed2196e43d0651e8ff7ca3483a069d469701f2d
   PostHog: 3a3e8319a0684f78e1ae8568a1dbd42c2596061f
@@ -550,6 +560,6 @@ SPEC CHECKSUMS:
   whisper_flutter_new: 9276535665f51f845831fe94859b2cccd0334a70
   ZIPFoundation: b8c29ea7ae353b309bc810586181fd073cb3312c
 
-PODFILE CHECKSUM: d50805f2466a8408698c35197679d4188c60aecd
+PODFILE CHECKSUM: 84fa6bbe79cf6b0efbd325d0342ab408e6c5ac98
 
 COCOAPODS: 1.16.2

@@ -326,7 +326,13 @@ async function handleJsonRpc(
         }
       } else if (toolName === "load_skill") {
         const name = (args.name as string || "").trim();
-        const content = await loadSkillInstructions(name);
+        const rawPart = args.part;
+        const part = rawPart === "all" ? "all" as const : typeof rawPart === "number" ? rawPart : undefined;
+        const content = await loadSkillInstructions(
+          name,
+          process.env.OMI_WORKSPACE ?? "",
+          part === undefined ? {} : { part }
+        );
 
         if (!isNotification) {
           send({
@@ -360,6 +366,21 @@ async function handleJsonRpc(
         // This remains a relay request, not a child-process SQLite read. The
         // parent kernel rechecks the run capability then scopes the search to
         // the caller's current main-Chat journal generation.
+        const result = await requestSwiftTool(toolName, args);
+        if (!isNotification) {
+          send({
+            jsonrpc: "2.0",
+            id,
+            result: { content: [{ type: "text", text: result }] },
+          });
+        }
+      } else if (
+        toolName === "read_conversation_evidence" ||
+        toolName === "search_conversation_evidence"
+      ) {
+        // Evidence stays in the parent kernel. The child process only relays
+        // the request so the kernel can recheck capability, owner, and the
+        // exact conversation binding before reading journal metadata.
         const result = await requestSwiftTool(toolName, args);
         if (!isNotification) {
           send({
@@ -407,6 +428,15 @@ async function handleJsonRpc(
         toolName === "update_action_item"
       ) {
         // Backend RAG tools — forward to Swift which calls Python backend
+        const result = await requestSwiftTool(toolName, args);
+        if (!isNotification) {
+          send({
+            jsonrpc: "2.0",
+            id,
+            result: { content: [{ type: "text", text: result }] },
+          });
+        }
+      } else if (toolName === "get_product_kb") {
         const result = await requestSwiftTool(toolName, args);
         if (!isNotification) {
           send({

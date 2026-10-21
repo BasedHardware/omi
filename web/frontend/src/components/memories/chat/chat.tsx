@@ -2,20 +2,37 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { TranscriptSegment } from '@/src/types/memory.types';
-import chatWithMemory from '@/src/actions/memories/chat-with-memory';
+import chatWithMemory, { ChatLimitReason } from '@/src/actions/memories/chat-with-memory';
+import { getOmiInstallLink } from '@/src/lib/conversation-share-platform-link.mjs';
+import { useAuth } from '@/src/hooks/useAuth';
 import { Send, UserCircle, Message, ArrowDown } from 'iconoir-react';
 import Markdown from 'markdown-to-jsx';
+
+interface ChatMessage {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+export type SharedChatEvent =
+  | { type: 'question_asked' | 'answered' | 'signin_clicked' | 'signin_completed' }
+  | { type: 'limit_card_shown'; reason: ChatLimitReason }
+  | { type: 'upsell_clicked'; target: 'phone_app' | 'mac_app' | 'pendant' };
 
 interface ChatProps {
   conversationId: string;
   transcript: TranscriptSegment[];
   onClearChatRef?: (clearFn: () => void) => void;
   onMessagesChange?: (hasMessages: boolean) => void;
+  onChatEvent?: (event: SharedChatEvent) => void;
 }
 
-interface ChatMessage {
-  role: 'user' | 'assistant';
-  content: string;
+const APP_STORE = 'https://apps.apple.com/us/app/friend-ai-wearable/id6502156163';
+const PLAY_STORE = 'https://play.google.com/store/apps/details?id=com.friend.ios';
+const CAMPAIGN =
+  'utm_source=omi_share&utm_medium=shared_conversation&utm_campaign=ask_omi_limit';
+
+function withCampaign(url: string) {
+  return `${url}${url.includes('?') ? '&' : '?'}${CAMPAIGN}`;
 }
 
 export default function Chat({
@@ -23,110 +40,97 @@ export default function Chat({
   transcript,
   onClearChatRef,
   onMessagesChange,
+  onChatEvent,
 }: ChatProps) {
+  const { user, signIn, loading: authLoading } = useAuth();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [limitReason, setLimitReason] = useState<ChatLimitReason | null>(null);
+  const [remaining, setRemaining] = useState(3);
   const [showScrollButton, setShowScrollButton] = useState(false);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [userAgent, setUserAgent] = useState('');
+  const pendingQuestion = useRef<{ question: string; history: ChatMessage[] } | null>(
+    null,
+  );
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Add custom scrollbar styles
   useEffect(() => {
-    const style = document.createElement('style');
-    style.textContent = `
-      .chat-messages-container::-webkit-scrollbar {
-        width: 8px;
-      }
-      .chat-messages-container::-webkit-scrollbar-track {
-        background: transparent;
-      }
-      .chat-messages-container::-webkit-scrollbar-thumb {
-        background: #3f3f46;
-        border-radius: 4px;
-      }
-      .chat-messages-container::-webkit-scrollbar-thumb:hover {
-        background: #52525b;
-      }
-    `;
-    document.head.appendChild(style);
-    return () => {
-      document.head.removeChild(style);
-    };
+    setUserAgent(navigator.userAgent);
   }, []);
-
-  const scrollToBottom = (smooth = true) => {
-    if (messagesContainerRef.current) {
-      messagesContainerRef.current.scrollTo({
-        top: messagesContainerRef.current.scrollHeight,
-        behavior: smooth ? 'smooth' : 'auto',
-      });
-    }
-  };
-
-  // Handle scroll to check if user is at bottom
-  const handleScroll = () => {
-    if (messagesContainerRef.current) {
-      const { scrollTop, scrollHeight, clientHeight } = messagesContainerRef.current;
-      const isNearBottom = scrollHeight - scrollTop - clientHeight < 100;
-      setShowScrollButton(!isNearBottom && messages.length > 0);
-    }
-  };
-
   useEffect(() => {
-    scrollToBottom();
+    messagesContainerRef.current?.scrollTo({
+      top: messagesContainerRef.current.scrollHeight,
+      behavior: 'smooth',
+    });
   }, [messages, isLoading]);
-
-  // Auto-resize textarea
   useEffect(() => {
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
-      const newHeight = Math.min(textareaRef.current.scrollHeight, 120);
-      textareaRef.current.style.height = `${newHeight}px`;
+      textareaRef.current.style.height = `${Math.min(
+        textareaRef.current.scrollHeight,
+        120,
+      )}px`;
     }
   }, [input]);
+  useEffect(() => {
+    onMessagesChange?.(messages.length > 0);
+  }, [messages.length, onMessagesChange]);
 
-  const handleSend = async () => {
-    if (!input.trim() || isLoading) return;
-
-    const userMessage: ChatMessage = {
-      role: 'user',
-      content: input.trim(),
-    };
-
-    setMessages((prev) => [...prev, userMessage]);
-    setInput('');
+  const submitQuestion = async (
+    question: string,
+    history: ChatMessage[],
+    token?: string,
+    retry = false,
+  ) => {
+    if (isLoading) return;
+    if (!retry) {
+      setMessages((previous) => [...previous, { role: 'user', content: question }]);
+      setInput('');
+      onChatEvent?.({ type: 'question_asked' });
+    }
     setIsLoading(true);
-
     try {
+      const userIdToken = token ?? (user ? await user.getIdToken() : undefined);
       const response = await chatWithMemory({
         conversationId,
-        history: messages.slice(-8),
-        question: userMessage.content,
+        history: history.slice(-8),
+        question,
+        userIdToken,
       });
-
-      if (response) {
-        setMessages((prev) => [
-          ...prev,
-          {
-            role: 'assistant',
-            content: response.message,
-          },
+      if (response.status === 'ok') {
+        setMessages((previous) => [
+          ...previous,
+          { role: 'assistant', content: response.message },
         ]);
+        onChatEvent?.({ type: 'answered' });
+        pendingQuestion.current = null;
+        if (response.remainingFreeQuestions !== undefined) {
+          setRemaining(response.remainingFreeQuestions);
+          if (response.remainingFreeQuestions === 0) {
+            setLimitReason('free_questions_exhausted');
+            onChatEvent?.({
+              type: 'limit_card_shown',
+              reason: 'free_questions_exhausted',
+            });
+          }
+        } else {
+          setLimitReason(null);
+        }
+      } else if (response.status === 'rate_limited') {
+        pendingQuestion.current = { question, history };
+        setLimitReason(response.reason);
+        onChatEvent?.({ type: 'limit_card_shown', reason: response.reason });
       } else {
-        setMessages((prev) => [
-          ...prev,
-          {
-            role: 'assistant',
-            content: 'Sorry, I encountered an error. Please try again.',
-          },
+        setMessages((previous) => [
+          ...previous,
+          { role: 'assistant', content: response.message },
         ]);
       }
-    } catch (error) {
-      console.error('Error sending message:', error);
-      setMessages((prev) => [
-        ...prev,
+    } catch {
+      setMessages((previous) => [
+        ...previous,
         {
           role: 'assistant',
           content: 'Sorry, I encountered an error. Please try again.',
@@ -138,260 +142,235 @@ export default function Chat({
     }
   };
 
-  const handleClearChat = () => {
-    setMessages([]);
-    setInput('');
-    textareaRef.current?.focus();
+  const handleSend = () => {
+    const question = input.trim();
+    if (question && !isLoading && !authLoading && !limitReason)
+      void submitQuestion(question, messages);
   };
 
-  // Expose clear chat function to parent
+  const handleSignIn = async () => {
+    onChatEvent?.({ type: 'signin_clicked' });
+    const signedInUser = await signIn();
+    if (!signedInUser) return;
+    onChatEvent?.({ type: 'signin_completed' });
+    const token = await signedInUser.getIdToken();
+    const pending = pendingQuestion.current;
+    setLimitReason(null);
+    if (pending) void submitQuestion(pending.question, pending.history, token, true);
+  };
+
   useEffect(() => {
-    if (onClearChatRef) {
-      onClearChatRef(handleClearChat);
-    }
+    onClearChatRef?.(() => {
+      setMessages([]);
+      setInput('');
+      pendingQuestion.current = null;
+    });
   }, [onClearChatRef]);
-
-  // Notify parent when messages change
-  useEffect(() => {
-    if (onMessagesChange) {
-      onMessagesChange(messages.length > 0);
-    }
-  }, [messages.length, onMessagesChange]);
-
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
-    }
-  };
 
   if (transcript.length === 0) {
     return (
-      <div className="px-4 md:px-12">
-        <p className="mt-4 text-gray-400">No transcript available for chat.</p>
-      </div>
+      <p className="sn-muted" style={{ marginTop: 24 }}>
+        There&apos;s no transcript to ask about for this note.
+      </p>
     );
   }
 
+  const installLink = getOmiInstallLink(userAgent);
+  const phoneLinks =
+    installLink === APP_STORE
+      ? [{ label: 'App Store', href: withCampaign(APP_STORE) }]
+      : installLink === PLAY_STORE
+      ? [{ label: 'Play Store', href: withCampaign(PLAY_STORE) }]
+      : [
+          { label: 'App Store', href: withCampaign(APP_STORE) },
+          { label: 'Play Store', href: withCampaign(PLAY_STORE) },
+        ];
+  const showSignIn = limitReason !== 'no_omi_account';
+
   return (
-    <div className="px-4 pb-8 md:px-12">
-      <div className="flex flex-col rounded-lg border border-zinc-800/50 bg-zinc-900/20">
-        {/* Messages Container */}
-        <div
-          ref={messagesContainerRef}
-          onScroll={handleScroll}
-          className={`chat-messages-container relative overflow-y-auto ${
-            messages.length === 0 ? 'px-4 pb-2 pt-4 md:px-6 md:pt-6' : 'p-4 md:p-6'
-          }`}
-          style={{
-            height: '400px',
-            overflowY: 'auto',
-            WebkitOverflowScrolling: 'touch',
-            scrollBehavior: 'smooth',
-            // Custom scrollbar styling for Firefox
-            scrollbarWidth: 'thin',
-            scrollbarColor: '#3f3f46 transparent',
-          }}
-        >
-          <div className={messages.length === 0 ? 'space-y-0' : 'space-y-6'}>
-            {messages.length === 0 && (
-              <>
-                <div className="mb-4 flex gap-4">
-                  {/* Avatar */}
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-purple-500 to-purple-600">
-                    <Message className="h-5 w-5 text-white" />
-                  </div>
-
-                  {/* Message Content */}
-                  <div className="flex flex-col gap-1">
-                    <div className="max-w-[85%] rounded-2xl bg-zinc-800/80 px-4 py-3 text-gray-100 shadow-lg">
-                      <p className="text-sm leading-relaxed md:text-base">
-                        Hi! I can help you explore this conversation. Ask me questions
-                        about the transcript, key points, or any details you&apos;d like
-                        to know more about.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-                {/* Suggestion Questions */}
-                <div className="flex flex-wrap gap-2 pl-0 md:pl-12">
-                  {[
-                    'What are 3 key takeaways?',
-                    'What are 3 top action items?',
-                    'Write follow up email',
-                  ].map((suggestion, index) => (
-                    <button
-                      key={index}
-                      onClick={async () => {
-                        const userMessage: ChatMessage = {
-                          role: 'user',
-                          content: suggestion,
-                        };
-                        setMessages((prev) => [...prev, userMessage]);
-                        setInput('');
-                        setIsLoading(true);
-
-                        try {
-                          const response = await chatWithMemory({
-                            conversationId,
-                            history: messages.slice(-8),
-                            question: userMessage.content,
-                          });
-
-                          if (response) {
-                            setMessages((prev) => [
-                              ...prev,
-                              {
-                                role: 'assistant',
-                                content: response.message,
-                              },
-                            ]);
-                          } else {
-                            setMessages((prev) => [
-                              ...prev,
-                              {
-                                role: 'assistant',
-                                content:
-                                  'Sorry, I encountered an error. Please try again.',
-                              },
-                            ]);
-                          }
-                        } catch (error) {
-                          console.error('Error sending message:', error);
-                          setMessages((prev) => [
-                            ...prev,
-                            {
-                              role: 'assistant',
-                              content: 'Sorry, I encountered an error. Please try again.',
-                            },
-                          ]);
-                        } finally {
-                          setIsLoading(false);
-                          textareaRef.current?.focus();
-                        }
-                      }}
-                      className="inline-flex items-center rounded-full bg-zinc-800/50 px-3 py-1 text-xs text-zinc-400 ring-1 ring-inset ring-zinc-800 transition-all hover:bg-zinc-800 hover:text-zinc-300 md:text-sm"
-                    >
-                      {suggestion}
-                    </button>
-                  ))}
-                </div>
-              </>
-            )}
-            {messages.map((message, index) => (
-              <div
-                key={index}
-                className={`flex gap-4 ${
-                  message.role === 'user' ? 'flex-row-reverse' : 'flex-row'
-                }`}
-              >
-                {/* Avatar */}
-                <div
-                  className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${
-                    message.role === 'user'
-                      ? 'bg-gradient-to-br from-blue-500 to-blue-600'
-                      : 'bg-gradient-to-br from-purple-500 to-purple-600'
-                  }`}
-                >
-                  {message.role === 'user' ? (
-                    <UserCircle className="h-5 w-5 text-white" />
-                  ) : (
-                    <Message className="h-5 w-5 text-white" />
-                  )}
-                </div>
-
-                {/* Message Content */}
-                <div
-                  className={`flex min-w-0 flex-1 flex-col gap-1 ${
-                    message.role === 'user' ? 'items-end' : 'items-start'
-                  }`}
-                >
-                  <div
-                    className={`max-w-[85%] rounded-2xl px-4 py-3 ${
-                      message.role === 'user'
-                        ? 'bg-gradient-to-br from-blue-600 to-blue-700 text-white shadow-lg'
-                        : 'bg-zinc-800/80 text-gray-100 shadow-lg'
-                    }`}
-                  >
-                    {message.role === 'assistant' ? (
-                      <div className="prose prose-sm max-w-none text-gray-100 dark:prose-invert prose-headings:text-gray-100 prose-p:leading-relaxed prose-p:text-gray-100 prose-a:text-blue-400 prose-a:no-underline hover:prose-a:underline prose-blockquote:border-l-blue-500 prose-blockquote:text-gray-100 prose-strong:text-gray-100 prose-code:text-blue-300 prose-pre:bg-zinc-900 prose-pre:text-gray-200 prose-ol:text-gray-100 prose-ul:text-gray-100 prose-li:text-gray-100">
-                        <Markdown>{message.content}</Markdown>
-                      </div>
-                    ) : (
-                      <p className="whitespace-pre-wrap text-sm leading-relaxed md:text-base">
-                        {message.content}
-                      </p>
-                    )}
-                  </div>
-                </div>
+    <div className="sn-chat">
+      <div
+        ref={messagesContainerRef}
+        onScroll={(event) => {
+          const node = event.currentTarget;
+          setShowScrollButton(
+            node.scrollHeight - node.scrollTop - node.clientHeight > 100 &&
+              messages.length > 0,
+          );
+        }}
+        className="chat-messages-container sn-chat-scroll"
+      >
+        {messages.length === 0 && (
+          <>
+            <div className="sn-chat-row">
+              <span className="sn-chat-avatar" aria-hidden="true">
+                <Message />
+              </span>
+              <div className="sn-chat-bubble">
+                Ask me anything about this conversation — key points, decisions, or a
+                follow-up email.
               </div>
-            ))}
-            {isLoading && (
-              <div className="flex gap-4">
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-purple-500 to-purple-600">
-                  <Message className="h-5 w-5 text-white" />
-                </div>
-                <div className="flex flex-col gap-1">
-                  <div className="rounded-2xl bg-zinc-800/80 px-4 py-3 shadow-lg">
-                    <div className="flex items-center gap-2">
-                      <div className="flex gap-1">
-                        <div className="h-2 w-2 animate-bounce rounded-full bg-gray-400 [animation-delay:-0.3s]"></div>
-                        <div className="h-2 w-2 animate-bounce rounded-full bg-gray-400 [animation-delay:-0.15s]"></div>
-                        <div className="h-2 w-2 animate-bounce rounded-full bg-gray-400"></div>
-                      </div>
-                      <span className="text-sm text-gray-400">Thinking...</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-            <div ref={messagesEndRef} />
+            </div>
+            <div className="sn-suggestions">
+              {[
+                'What are 3 key takeaways?',
+                'What are 3 top action items?',
+                'Write follow up email',
+              ].map((suggestion) => (
+                <button
+                  key={suggestion}
+                  type="button"
+                  className="sn-suggestion"
+                  disabled={!!limitReason || isLoading || authLoading}
+                  onClick={() => void submitQuestion(suggestion, messages)}
+                >
+                  {suggestion}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+        {messages.map((message, index) => (
+          <div
+            key={index}
+            className={`sn-chat-row${message.role === 'user' ? ' sn-chat-row-user' : ''}`}
+          >
+            <span className="sn-chat-avatar" aria-hidden="true">
+              {message.role === 'user' ? <UserCircle /> : <Message />}
+            </span>
+            <div className="sn-chat-bubble">
+              {message.role === 'assistant' ? (
+                <Markdown className="sn-md">{message.content}</Markdown>
+              ) : (
+                message.content
+              )}
+            </div>
           </div>
-
-          {/* Scroll to bottom button */}
-          {showScrollButton && (
+        ))}
+        {isLoading && (
+          <div className="sn-chat-row">
+            <span className="sn-chat-avatar" aria-hidden="true">
+              <Message />
+            </span>
+            <div className="sn-chat-bubble">
+              <span className="sn-typing">
+                <span className="sn-typing-dot" />
+                <span className="sn-typing-dot" />
+                <span className="sn-typing-dot" />
+                Thinking…
+              </span>
+            </div>
+          </div>
+        )}
+        {showScrollButton && (
+          <button
+            type="button"
+            className="sn-icon-btn sn-chat-jump"
+            aria-label="Scroll to bottom"
+            onClick={() =>
+              messagesContainerRef.current?.scrollTo({
+                top: messagesContainerRef.current.scrollHeight,
+                behavior: 'smooth',
+              })
+            }
+          >
+            <ArrowDown />
+          </button>
+        )}
+      </div>
+      {limitReason ? (
+        <div className="sn-chat-limit" role="status">
+          <h3 className="sn-cta-title">Keep asking with Omi</h3>
+          <p className="sn-cta-copy">
+            You can explore this conversation further with Omi.
+          </p>
+          {showSignIn && (
             <button
-              onClick={() => scrollToBottom()}
-              className="absolute bottom-4 right-4 flex h-10 w-10 items-center justify-center rounded-full bg-blue-600 text-white shadow-lg transition-all hover:bg-blue-700 hover:shadow-xl active:scale-95"
-              aria-label="Scroll to bottom"
+              type="button"
+              className="sn-cta-button"
+              disabled={authLoading}
+              onClick={() => void handleSignIn()}
             >
-              <ArrowDown className="h-5 w-5" />
+              Sign in with Omi to keep asking
             </button>
           )}
-        </div>
-
-        {/* Input Area - Fixed at bottom */}
-        <div className="shrink-0 border-t border-zinc-800/50 bg-zinc-900/30 p-3 backdrop-blur-sm md:p-4">
-          <div className="flex items-center gap-2 md:gap-3">
-            <div className="relative flex-1">
-              <textarea
-                ref={textareaRef}
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder="Ask a question about this conversation..."
-                className="w-full resize-none rounded-xl border border-zinc-700/50 bg-zinc-900/80 px-3 py-2.5 text-sm text-white transition-all placeholder:text-gray-500 focus:border-blue-500/50 focus:bg-zinc-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 md:px-4 md:py-3 md:text-base"
-                rows={1}
-                disabled={isLoading}
-                style={{
-                  minHeight: '44px',
-                  maxHeight: '120px',
-                  overflow: 'hidden',
-                }}
-              />
+          <div className="sn-chat-upsell">
+            <strong>New to Omi?</strong>
+            <span>Get the phone app, Mac app, or pendant.</span>
+            <div className="sn-chat-upsell-links">
+              {phoneLinks.map(({ label, href }) => (
+                <a
+                  key={label}
+                  href={href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={() =>
+                    onChatEvent?.({ type: 'upsell_clicked', target: 'phone_app' })
+                  }
+                >
+                  {label}
+                </a>
+              ))}
+              <a
+                href={`https://www.omi.me/pages/download?${CAMPAIGN}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={() =>
+                  onChatEvent?.({ type: 'upsell_clicked', target: 'mac_app' })
+                }
+              >
+                Mac app
+              </a>
+              <a
+                href={`https://www.omi.me/products/omi?${CAMPAIGN}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={() =>
+                  onChatEvent?.({ type: 'upsell_clicked', target: 'pendant' })
+                }
+              >
+                Pendant
+              </a>
             </div>
+          </div>
+        </div>
+      ) : (
+        <>
+          <div className="sn-chat-compose">
+            <textarea
+              ref={textareaRef}
+              value={input}
+              onChange={(event) => setInput(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' && !event.shiftKey) {
+                  event.preventDefault();
+                  handleSend();
+                }
+              }}
+              placeholder="Ask about this conversation…"
+              aria-label="Ask about this conversation"
+              className="sn-chat-input"
+              rows={1}
+              disabled={isLoading || authLoading}
+            />
             <button
+              type="button"
               onClick={handleSend}
-              disabled={!input.trim() || isLoading}
-              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-blue-600 to-blue-700 text-white shadow-lg transition-all hover:from-blue-700 hover:to-blue-800 hover:shadow-xl active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:shadow-lg disabled:active:scale-100"
+              disabled={!input.trim() || isLoading || authLoading}
+              className="sn-chat-send"
               title="Send message"
               aria-label="Send message"
             >
-              <Send className="h-5 w-5" />
+              <Send />
             </button>
           </div>
-        </div>
-      </div>
+          <p className="sn-chat-budget" aria-live="polite">
+            {user
+              ? 'Signed in with Omi'
+              : `${remaining} free question${remaining === 1 ? '' : 's'} left`}
+          </p>
+        </>
+      )}
     </div>
   );
 }

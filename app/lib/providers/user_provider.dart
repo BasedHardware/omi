@@ -7,9 +7,23 @@ import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/geolocation.dart';
 import 'package:omi/app_globals.dart';
+import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
+
+/// The user-facing name of a data protection level id from the backend
+/// (`enhanced`, `e2ee`). An unknown id is shown as-is rather than hidden.
+String dataProtectionLevelLabel(AppLocalizations l10n, String level) {
+  switch (level) {
+    case 'enhanced':
+      return l10n.secureEncryption;
+    case 'e2ee':
+      return l10n.endToEndEncryption;
+    default:
+      return level;
+  }
+}
 
 class UserProvider with ChangeNotifier {
   static const int _migrationNotificationId = 1337;
@@ -22,11 +36,29 @@ class UserProvider with ChangeNotifier {
   /// not take effect (no response / non-200 / status != ok). Injectable for tests.
   final Future<bool> Function(bool value) _privateCloudSyncSetter;
 
+  /// Fetches the training-data opt-in record. Returns `null` on a failed fetch
+  /// so the loader can preserve the last known state. Injectable for tests.
+  final Future<Map<String, dynamic>?> Function() _trainingDataFetcher;
+
+  /// Fetches the transcription preferences. Returns `null` on a failed fetch
+  /// so the loader can keep the cached values. Injectable for tests.
+  final Future<Map<String, dynamic>?> Function() _transcriptionPreferencesFetcher;
+
+  /// Saves the custom vocabulary, replacing the whole list on the server.
+  /// Returns `false` when the write did not take effect. Injectable for tests.
+  final Future<bool> Function(List<String> vocabulary) _vocabularySetter;
+
   UserProvider({
     Future<bool?> Function()? privateCloudSyncFetcher,
     Future<bool> Function(bool value)? privateCloudSyncSetter,
+    Future<Map<String, dynamic>?> Function()? trainingDataFetcher,
+    Future<Map<String, dynamic>?> Function()? transcriptionPreferencesFetcher,
+    Future<bool> Function(List<String> vocabulary)? vocabularySetter,
   })  : _privateCloudSyncFetcher = privateCloudSyncFetcher ?? getPrivateCloudSyncEnabled,
-        _privateCloudSyncSetter = privateCloudSyncSetter ?? setPrivateCloudSyncEnabled;
+        _privateCloudSyncSetter = privateCloudSyncSetter ?? setPrivateCloudSyncEnabled,
+        _trainingDataFetcher = trainingDataFetcher ?? getTrainingDataOptIn,
+        _transcriptionPreferencesFetcher = transcriptionPreferencesFetcher ?? getTranscriptionPreferences,
+        _vocabularySetter = vocabularySetter ?? ((vocabulary) => setTranscriptionPreferences(vocabulary: vocabulary));
 
   String _dataProtectionLevel = 'standard';
   bool _isLoading = false;
@@ -50,6 +82,11 @@ class UserProvider with ChangeNotifier {
   // Transcription preferences
   bool _singleLanguageMode = false;
   List<String> _transcriptionVocabulary = [];
+
+  // Whether _transcriptionVocabulary came from the server. Until then it is the
+  // cached copy, which is empty after a reinstall or sign-out and out of date
+  // after an edit on another device.
+  bool _transcriptionVocabularyLoaded = false;
 
   // Loading states for transcription settings
   bool _isUpdatingSingleLanguageMode = false;
@@ -93,6 +130,7 @@ class UserProvider with ChangeNotifier {
     _lastKnownLocation = null;
     _singleLanguageMode = false;
     _transcriptionVocabulary = [];
+    _transcriptionVocabularyLoaded = false;
     _isUpdatingSingleLanguageMode = false;
     _isUpdatingVocabulary = false;
     notifyListeners();
@@ -215,11 +253,12 @@ class UserProvider with ChangeNotifier {
 
   Future<void> _loadTranscriptionPreferences(int generation) async {
     try {
-      final prefs = await getTranscriptionPreferences();
+      final prefs = await _transcriptionPreferencesFetcher();
       if (generation != _sessionGeneration) return;
       if (prefs != null) {
         _singleLanguageMode = prefs['single_language_mode'] ?? false;
         _transcriptionVocabulary = List<String>.from(prefs['vocabulary'] ?? []);
+        _transcriptionVocabularyLoaded = true;
         _syncToCache();
         notifyListeners();
       }
@@ -230,17 +269,24 @@ class UserProvider with ChangeNotifier {
     }
   }
 
+  @visibleForTesting
+  Future<void> loadTrainingDataOptIn() => _loadTrainingDataOptIn(_sessionGeneration);
+
   Future<void> _loadTrainingDataOptIn(int generation) async {
     try {
-      final data = await getTrainingDataOptIn();
+      final data = await _trainingDataFetcher();
       if (generation != _sessionGeneration) return;
-      _trainingDataOptedIn = data['opted_in'] ?? false;
-      _trainingDataStatus = data['status'];
+      // A failed fetch returns null — keep the last known state instead of
+      // showing the opt-in card again, which submits the user for review a
+      // second time when they tap it.
+      if (data != null) {
+        _trainingDataOptedIn = data['opted_in'] ?? false;
+        _trainingDataStatus = data['status'];
+      }
     } catch (e) {
       if (generation != _sessionGeneration) return;
       Logger.error('Failed to load training data opt-in status: $e');
-      _trainingDataOptedIn = false;
-      _trainingDataStatus = null;
+      // Keep the cached value on error, don't reset.
     }
   }
 
@@ -295,7 +341,7 @@ class UserProvider with ChangeNotifier {
     notifyListeners();
 
     try {
-      final success = await setTranscriptionPreferences(vocabulary: vocabulary);
+      final success = await _vocabularySetter(vocabulary);
       if (success) {
         _transcriptionVocabulary = vocabulary;
         _syncToCache();
@@ -310,8 +356,28 @@ class UserProvider with ChangeNotifier {
     }
   }
 
+  /// A save replaces the whole list on the server, so an edit must start from
+  /// the server's list rather than the cached copy left by a failed load. Loads
+  /// it if needed; returns false, and nothing is saved, while it can't be read.
+  Future<bool> _loadVocabularyBeforeEdit() async {
+    if (_transcriptionVocabularyLoaded) return true;
+    if (_isUpdatingVocabulary) return false;
+
+    _isUpdatingVocabulary = true;
+    notifyListeners();
+
+    try {
+      await _loadTranscriptionPreferences(_sessionGeneration);
+    } finally {
+      _isUpdatingVocabulary = false;
+      notifyListeners();
+    }
+    return _transcriptionVocabularyLoaded;
+  }
+
   Future<bool> addVocabularyWords(List<String> words) async {
     if (words.isEmpty) return false;
+    if (!await _loadVocabularyBeforeEdit()) return false;
     final trimingWords = words.map((w) => w.trim()).where((w) => !_transcriptionVocabulary.contains(w));
     if (trimingWords.isEmpty) {
       return false;
@@ -321,6 +387,7 @@ class UserProvider with ChangeNotifier {
   }
 
   Future<bool> removeVocabularyWord(String word) async {
+    if (!await _loadVocabularyBeforeEdit()) return false;
     final newVocabulary = _transcriptionVocabulary.where((w) => w != word).toList();
     return updateTranscriptionVocabulary(newVocabulary);
   }
@@ -406,10 +473,13 @@ class UserProvider with ChangeNotifier {
     try {
       await PrivacyApi.startMigration(targetLevel);
 
+      final l10n = ctx?.l10n;
       NotificationService.instance.showNotification(
         id: _migrationNotificationId,
         title: ctx?.l10n.omiSays ?? 'omi says',
-        body: ctx?.l10n.migratingToProtection(targetLevel) ?? 'Migrating to $targetLevel protection...',
+        body: l10n == null
+            ? 'Migrating to $targetLevel protection...'
+            : l10n.migratingToProtection(dataProtectionLevelLabel(l10n, targetLevel)),
         layout: NotificationLayout.Default,
         payload: {'navigate_to': '/settings/data-privacy'},
       );
@@ -473,11 +543,13 @@ class UserProvider with ChangeNotifier {
     _processedCount = 0;
     _migrationQueue = [];
 
+    final l10n = ctx?.l10n;
     NotificationService.instance.showNotification(
       id: _migrationNotificationId,
       title: ctx?.l10n.omiSays ?? 'omi says',
-      body: ctx?.l10n.dataProtectedWithSettings(targetLevel) ??
-          'Your data is now protected with the new $targetLevel settings.',
+      body: l10n == null
+          ? 'Your data is now protected with the new $targetLevel settings.'
+          : l10n.dataProtectedWithSettings(dataProtectionLevelLabel(l10n, targetLevel)),
       layout: NotificationLayout.Default,
       payload: {'navigate_to': '/settings/data-privacy'},
     );

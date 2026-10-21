@@ -45,7 +45,7 @@ export function MemoryDetailSheet({
   onToggleVisibility,
   onDelete,
   onOpenConversation,
-  togglingVisibility
+  togglingVisibility,
 }: MemoryDetailSheetProps): React.JSX.Element {
   // State initializes from the memory; the sheet is mounted with a `key` of the
   // memory id at the call site, so switching memories remounts it fresh rather

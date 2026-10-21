@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-destructive-gate-keyed-on-proxy-for-intent",
+  "violated_contract": "A destructive-operation gate must be keyed on whether the operation actually destroys something, never on a proxy that conflates it with a benign outcome. An empty replacement set means 'remove this source's rows' only when rows exist to remove; it equally means 'this source produced nothing', which is ordinary and requires no authority.",
+  "canonical_prevention": "When adding a safety precondition to a shared write boundary, enumerate every existing caller and prove each can satisfy it, rather than adding it at the boundary and assuming callers already hold the authority. Where the boundary cannot distinguish intents, either take intent as an explicit argument or return before the boundary in the provably-benign case -- and keep a test that the genuinely destructive case is still refused, so the repair cannot quietly become a relaxation.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_conversation_replacement_backoff.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/memory/canonical_memory_adapter.py",
+    "backend/database/memory_apply_store.py",
+    "backend/database/legal_holds.py"
+  ],
+  "status": "open"
+}

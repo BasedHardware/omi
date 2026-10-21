@@ -169,7 +169,14 @@ final class ChatSurfaceBoundsTests: XCTestCase {
   /// strictly better off than the list it replaced. If this ever inverts, the composer is being
   /// reserved twice.
   func testOpeningChatLeavesTheTranscriptMoreRoomThanTheListHad() {
-    let page = pageHeights(windowHeights: [ShellSummonPlacement.defaultSize.height])[0]
+    // Keep the arithmetic below the shared body ceiling so the comparison observes the room
+    // returned by removing the hero bar instead of comparing two equally capped bodies.
+    let page = min(
+      pageHeights(windowHeights: [ShellSummonPlacement.defaultSize.height])[0],
+      QueryShellLayout.maximumBodyHeight + QueryShellLayout.surfaceTopInset
+        + QueryShellLayout.panelGap
+        + QueryShellLayout.panelChromeHeight(
+          mode: .results, composerHeight: restingComposerHeight(mode: .results)))
 
     let list = QueryShellLayout.panelBodyHeight(
       availableHeight: page, composerHeight: restingComposerHeight(mode: .results), mode: .results)

@@ -8,6 +8,7 @@ from utils.other import endpoints as auth
 from utils.referrals import (
     REFERRAL_COOKIE_MAX_AGE_SECONDS,
     REFERRAL_COOKIE_NAME,
+    REFERRAL_PROGRAM,
     REFERRAL_TRIAL_DAYS,
     ReferralCodeError,
     is_new_referral_account,
@@ -15,6 +16,7 @@ from utils.referrals import (
     referral_signup_url,
     referrer_uid_from_code,
 )
+from utils.integration_telemetry import emit_posthog_event
 
 router = APIRouter(tags=['referrals'])
 
@@ -35,15 +37,17 @@ class ReferralClaimResponse(BaseModel):
 @router.get('/v1/users/me/referral', response_model=ReferralLinkResponse)
 def get_referral_link(uid: str = Depends(auth.get_current_user_uid)) -> ReferralLinkResponse:
     try:
-        return ReferralLinkResponse(referral_url=referral_link(uid))
+        response = ReferralLinkResponse(referral_url=referral_link(uid))
     except ReferralCodeError as error:
         raise HTTPException(status_code=503, detail='Referral links are temporarily unavailable') from error
+    emit_posthog_event(uid, 'Referral Link Issued', {'program': REFERRAL_PROGRAM})
+    return response
 
 
 @router.get('/r/{code}', response_class=RedirectResponse)
 def capture_referral(code: str) -> RedirectResponse:
     try:
-        referrer_uid_from_code(code)
+        referrer_uid = referrer_uid_from_code(code)
     except ReferralCodeError as error:
         raise HTTPException(status_code=404, detail='Referral link not found') from error
 
@@ -57,6 +61,7 @@ def capture_referral(code: str) -> RedirectResponse:
         samesite='lax',
         path='/',
     )
+    emit_posthog_event(referrer_uid, 'Referral Link Captured', {'program': REFERRAL_PROGRAM})
     return response
 
 
@@ -72,9 +77,14 @@ def claim_referral(
 
     user = firebase_admin.auth.get_user(uid)
     creation_timestamp = getattr(getattr(user, 'user_metadata', None), 'creation_timestamp', None)
-    claimed = claim_referral_trial(
+    claimed, reason = claim_referral_trial(
         uid,
         referrer_uid,
         is_new_user=is_new_referral_account(creation_timestamp),
+    )
+    emit_posthog_event(
+        uid,
+        'Referral Claimed',
+        {'program': REFERRAL_PROGRAM, 'claimed': claimed, 'reason': reason},
     )
     return ReferralClaimResponse(claimed=claimed, trial_days=REFERRAL_TRIAL_DAYS)

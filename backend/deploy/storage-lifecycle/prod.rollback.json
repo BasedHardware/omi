@@ -1,0 +1,10 @@
+{
+  "bucket": "omi-private-cloud-sync",
+  "project": "based-hardware",
+  "lifecycle": {
+    "rule": [
+      {"action": {"type": "Delete"}, "condition": {"age": 3, "matchesPrefix": ["merged/"]}},
+      {"action": {"type": "Delete"}, "condition": {"age": 30, "matchesPrefix": ["playback/"]}}
+    ]
+  }
+}

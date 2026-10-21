@@ -1,0 +1,76 @@
+{
+  "$comment": "The single duration a conversation reports. `started_at` is the live-socket streaming-session origin (derived from the STT stream offset plus the socket's first-audio-byte wall time), not the moment this conversation's speech began, so `finished_at - started_at` over-counts by however long the socket had already been open: on 2026-09-07 an 8-second dictation scrap measured 42m45s on macOS while mobile showed 8s (#4056). The rule under contract: when the record has usable transcript segments, the duration is the TRANSCRIPT SPAN — the largest valid segment `end` — and the wall window is used only for transcript-free records (photo-only captures). This is not summed speech time (see meeting_treatment.deduplicated_transcribed_speech_seconds) and not guaranteed elapsed capture time. `expected_seconds` is the duration in whole seconds; clients that return a non-optional integer report 0 for `expected_unavailable` cases, while the backend helper returns None. Timestamps are UTC instants; segment start/end are seconds from the capture origin. Malformed inputs (empty-text segments, non-finite or reversed segment intervals, a wall window that ends before it starts) are deliberately NOT in these vectors — the platforms disagree there; see the Divergence register in README.md.",
+  "cases": [
+    {
+      "name": "long_socket_short_dictation_scrap",
+      "$comment": "The measured defect: Astra's Cost, started_at 23:32:33, finished_at 00:15:18, 8 seconds of speech.",
+      "segments": [{ "text": "how much does astra cost", "start": 0.0, "end": 8.0 }],
+      "started_at": "2026-09-07T23:32:33Z",
+      "finished_at": "2026-09-08T00:15:18Z",
+      "expected_seconds": 8,
+      "expected_unavailable": false
+    },
+    {
+      "name": "span_is_the_max_end_not_the_last_segment",
+      "$comment": "Segments are not guaranteed to arrive sorted by end; taking the last element is wrong.",
+      "segments": [
+        { "text": "second half of the sentence", "start": 8.0, "end": 27.0 },
+        { "text": "first half", "start": 0.0, "end": 8.0 }
+      ],
+      "started_at": "2026-01-01T12:00:00Z",
+      "finished_at": "2026-01-01T12:30:00Z",
+      "expected_seconds": 27,
+      "expected_unavailable": false
+    },
+    {
+      "name": "span_wins_even_when_it_exceeds_the_wall_window",
+      "$comment": "The transcript is authoritative; a wall window shorter than the span does not clamp it.",
+      "segments": [{ "text": "still talking", "start": 0.0, "end": 90.0 }],
+      "started_at": "2026-01-01T12:00:00Z",
+      "finished_at": "2026-01-01T12:00:30Z",
+      "expected_seconds": 90,
+      "expected_unavailable": false
+    },
+    {
+      "name": "segments_without_timestamps_still_report_the_span",
+      "segments": [{ "text": "hello", "start": 0.0, "end": 15.0 }],
+      "started_at": null,
+      "finished_at": null,
+      "expected_seconds": 15,
+      "expected_unavailable": false
+    },
+    {
+      "name": "zero_length_transcript_reports_zero_not_the_wall_window",
+      "segments": [{ "text": "hm", "start": 0.0, "end": 0.0 }],
+      "started_at": "2026-01-01T12:00:00Z",
+      "finished_at": "2026-01-01T12:42:45Z",
+      "expected_seconds": 0,
+      "expected_unavailable": false
+    },
+    {
+      "name": "transcript_free_record_falls_back_to_the_wall_window",
+      "$comment": "Photo-only captures carry no transcript; the wall window is the only signal they have.",
+      "segments": [],
+      "started_at": "2026-01-01T12:00:00Z",
+      "finished_at": "2026-01-01T12:00:45Z",
+      "expected_seconds": 45,
+      "expected_unavailable": false
+    },
+    {
+      "name": "no_segments_and_one_timestamp_is_unknowable",
+      "segments": [],
+      "started_at": "2026-01-01T12:00:00Z",
+      "finished_at": null,
+      "expected_seconds": 0,
+      "expected_unavailable": true
+    },
+    {
+      "name": "no_segments_and_no_timestamps_is_unknowable",
+      "segments": [],
+      "started_at": null,
+      "finished_at": null,
+      "expected_seconds": 0,
+      "expected_unavailable": true
+    }
+  ]
+}

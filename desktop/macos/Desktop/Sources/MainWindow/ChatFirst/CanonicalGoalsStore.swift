@@ -33,6 +33,11 @@ extension APIClient: CanonicalGoalsClient {}
 /// local rollout preference or re-decides the cohort from cached goal data.
 @MainActor
 final class CanonicalGoalsStore: ObservableObject {
+  /// The one projection. `ViewModelContainer` binds it, and auxiliary Chat
+  /// surfaces reuse it so a goal link resolves against the same store the shell
+  /// activated rather than an inert second one.
+  static let shared = CanonicalGoalsStore()
+
   enum Availability: Equatable {
     case inactive
     case loading

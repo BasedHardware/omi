@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "FC-offline-rule-applied-outside-its-live-domain",
+  "violated_contract": "A rule reused offline (a backfill, migration, or reprocessing script) must be applied only to the records its live caller applies it to. The live relevance step never runs the transcript rules on app imports, workflows, or camera captures, because those sources route around it before the rules run; the backfill iterated every conversation and applied the same rules directly, so records whose content lives outside transcript_segments looked like empty transcripts. Nothing failed: dry runs reported plausible counts, unit tests passed on audio-shaped fixtures, and the first production run hid 43,741 external_integration, 1,059 workflow, and 1,340 openglass conversations before a spot check of the empty-transcript bucket by source caught it (2026-09-23; restored the same day).",
+  "canonical_prevention": "An offline pass states the live domain of every rule it reuses as an explicit eligibility predicate (here: audio-transcript sources only, and an empty transcript is unknown rather than filler), tests that predicate against each excluded source, and gates --apply on a dry run whose per-rule counts are broken down by source and reviewed before writing.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_conversation_relevance_backfill.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/scripts/conversation_relevance_backfill.py",
+    "backend/utils/conversations/relevance_rules.py"
+  ],
+  "status": "open"
+}

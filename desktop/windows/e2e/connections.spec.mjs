@@ -188,7 +188,7 @@ describe('Connections panel', () => {
       )
       // Each row resolves — never a dead button.
       for (const id of [
-        'connector-claude-claude-code',
+        'connector-claude-code',
         'connector-claude',
         'connector-memory-pack-for-claude'
       ]) {
@@ -200,7 +200,7 @@ describe('Connections panel', () => {
       }
       // The Claude Code config row must resolve to a terminal state (Claude Code
       // is installed here → "Connect"), never stay on "Checking…".
-      await waitResolved(page, 'connector-claude-claude-code')
+      await waitResolved(page, 'connector-claude-code')
       assert.ok(
         await hasText(page, 'Connect'),
         'Claude Code row resolved to a Connect affordance (installed)'
@@ -226,7 +226,7 @@ describe('Connections panel', () => {
         { timeout: 10000 }
       )
       // Codex is installed here → its row must resolve to "Connect".
-      await waitResolved(page, 'connector-chatgpt-codex')
+      await waitResolved(page, 'connector-codex')
       await new Promise((r) => setTimeout(r, 300))
       await page.screenshot({ path: path.join(shotsDir, 'connections-05-chatgpt-detail.png') })
 

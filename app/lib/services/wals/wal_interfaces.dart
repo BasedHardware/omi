@@ -1,5 +1,6 @@
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/backend/schema/geolocation.dart';
 import 'package:omi/models/sync_state.dart';
 import 'package:omi/services/audio_sources/audio_source.dart';
 import 'package:omi/services/wals/wal.dart';
@@ -14,7 +15,9 @@ export 'package:omi/backend/http/api/conversations.dart'
         SyncJobFetchOutcome,
         SyncRateLimitedException,
         SyncRateLimitKind,
-        SyncRecoveryWindowExceededException;
+        SyncUploadHttpException,
+        SyncRecoveryWindowExceededException,
+        isPacedBackfillReasonCode;
 
 abstract class IWalSyncProgressListener {
   void onWalSyncedProgress(
@@ -64,15 +67,30 @@ enum WalServiceStatus { init, ready, stop }
 
 // Forward declarations for sync types
 abstract class LocalWalSync implements IWalSync {
-  Future<void> addExternalWal(Wal wal);
+  /// Session fence observed by device downloads. Capture at download
+  /// admission and pass to [addExternalWal]; do not re-read after an await.
+  int get sessionGeneration;
+
+  int get captureEvidenceGeneration;
+
+  Future<void> addExternalWal(Wal wal, {required int admittedGeneration});
   Future<List<Wal>> getAllWals();
+
+  /// Bump the session fence and stop publishing retired-account WALs.
+  /// Durable bytes stay on disk; [getAllWals] returns the current session only.
+  void clearUserData();
   Future<void> deleteAllSyncedWals();
   Future<void> deleteAllPendingWals();
   Future<void> deleteAllCorruptedWals();
 
+  /// Applies the auto-remove synced-copies retention preference immediately
+  /// (e.g. right after the user enables it). Best-effort; returns the number
+  /// of local copies removed.
+  Future<int> applySyncedCopyRetention();
+
   /// Ingest a pre-processed audio frame from an AudioSource.
   /// The frame contains headerless payload and a source-specific sync key.
-  void onFrameCaptured(WalFrame frame);
+  WalFrame onFrameCaptured(WalFrame frame, {String? captureRoot});
 
   /// Mark a frame as synced (sent to server via WebSocket).
   /// Matches frames by sync key (source-agnostic).
@@ -83,6 +101,15 @@ abstract class LocalWalSync implements IWalSync {
 
   /// Set device metadata for WAL file naming.
   void setDeviceInfo(String? deviceId, String? deviceModel);
+
+  /// Set the snapshot inherited by WALs created for the active session.
+  void setSessionGeolocation(Geolocation? geolocation);
+
+  Future<bool> ensureStorageAdmission({required int bytes, required int admittedGeneration});
+
+  Future<bool> hasDurableWal(Wal wal, {required int admittedGeneration});
+
+  void releaseStorageAdmission(int bytes) {}
 }
 
 abstract class SDCardWalSync implements IWalSync {
@@ -117,6 +144,14 @@ abstract class RingStorageSync implements IWalSync {
   Future<void> refreshWalsFromDevice();
 }
 
+/// Why the most recent flash-page drain pass stopped before reaching the
+/// newest page enumerated from the device. A stall with the newest-page
+/// pointer still advancing means the pendant is recording (an open recording
+/// session starves the drain). A stall with zero free capture pages means the
+/// pendant is full: it halts recording but stays armed in recording mode, and
+/// serves no flash pages until the user presses the button to stop recording.
+enum FlashSyncStallReason { none, recordingSuspected, deviceFull, unknown }
+
 abstract class FlashPageWalSync implements IWalSync {
   void setDevice(BtDevice? device);
   void setLocalSync(LocalWalSync localSync);
@@ -124,4 +159,5 @@ abstract class FlashPageWalSync implements IWalSync {
   Future<void> deleteAllPendingWals();
   bool get isSyncing;
   Future<void> refreshWalsFromDevice();
+  FlashSyncStallReason get lastStallReason;
 }

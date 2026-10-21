@@ -76,6 +76,16 @@ SYNC_NETWORK_UTILITY_IMPORTS = {
     "utils.notifications": frozenset({"send_notification"}),
 }
 
+# asyncio entry points whose arguments must already be awaitables. Handing a call to one of
+# them is the same handoff as `await call()`: the coroutine is driven by the event loop, not
+# by the calling frame. Keep this list exact — a name outside it is not assumed to await.
+COROUTINE_HANDOFF_ASYNCIO_FUNCTIONS = frozenset(
+    {"as_completed", "ensure_future", "gather", "shield", "wait", "wait_for"}
+)
+# `create_task` is matched on the attribute alone because the receiver is either the asyncio
+# module or a TaskGroup/loop instance, and all three drive the argument on the event loop.
+COROUTINE_HANDOFF_METHODS = frozenset({"create_task"})
+
 
 def _node_lineno(node: ast.AST) -> int:
     """Best-effort line number for an arbitrary AST node."""
@@ -281,6 +291,117 @@ def _awaited_call_ids(node: FunctionNode) -> Set[int]:
     return awaited
 
 
+def _coroutine_handoff_call_ids(node: FunctionNode) -> Set[int]:
+    """Identities of the Call nodes handed to asyncio to be awaited on the event loop.
+
+    `await asyncio.gather(load_a(), load_b())`, `asyncio.create_task(load())` and
+    `await asyncio.wait_for(load(), timeout=5)` are the ordinary ways to await more than one
+    coroutine, or to await one with a deadline. The inner call is not the direct operand of an
+    `await`, so `_awaited_call_ids` cannot see it, yet it blocks the calling frame no more than
+    a directly awaited call does: calling an `async def` only builds a coroutine object.
+
+    Only arguments written at the call site are covered — directly, unpacked with `*`, or as
+    elements of a literal list/tuple/set, which is how `asyncio.wait` and `as_completed` take
+    their awaitables. A name passed in from elsewhere stays outside this analysis, in keeping
+    with the rest of this scanner.
+    """
+    handed_off: Set[int] = set()
+    for child in ast.walk(node):
+        if not isinstance(child, ast.Call) or not _is_coroutine_handoff(child.func):
+            continue
+        for argument in [*child.args, *(keyword.value for keyword in child.keywords)]:
+            for candidate in _handed_off_operands(argument):
+                handed_off.add(id(candidate))
+    return handed_off
+
+
+def _is_coroutine_handoff(func: ast.expr) -> bool:
+    """True for `asyncio.<awaiting entry point>` and for any `<receiver>.create_task`."""
+    if not isinstance(func, ast.Attribute):
+        return False
+    if func.attr in COROUTINE_HANDOFF_METHODS:
+        return True
+    return (
+        isinstance(func.value, ast.Name)
+        and func.value.id == "asyncio"
+        and func.attr in COROUTINE_HANDOFF_ASYNCIO_FUNCTIONS
+    )
+
+
+def _handed_off_operands(argument: ast.expr) -> Iterator[ast.Call]:
+    """Yield the calls an argument hands over: itself, `*unpacked`, or literal collection items."""
+    if isinstance(argument, ast.Starred):
+        yield from _handed_off_operands(argument.value)
+    elif isinstance(argument, (ast.List, ast.Tuple, ast.Set)):
+        for element in argument.elts:
+            yield from _handed_off_operands(element)
+    elif isinstance(argument, ast.Call):
+        yield argument
+
+
+def _database_context_manager_imports(tree: ast.Module, source_path: str, cache: Dict[Path, Set[str]]) -> Set[str]:
+    """Resolve nonblocking database context managers from source, without importing them.
+
+    A decorator alone is insufficient: __enter__/__exit__ can perform I/O.
+    Retain the existing direct/transitive blocking checks on their generator
+    bodies. Missing or ambiguous source stays conservatively classified as DB.
+    """
+    imports = [
+        node
+        for node in tree.body
+        if isinstance(node, ast.ImportFrom) and node.module and node.module.startswith('database.') and not node.level
+    ]
+    if not imports:
+        return set()
+    root = next((parent for parent in Path(source_path).resolve().parents if (parent / 'database').is_dir()), None)
+    if root is None:
+        return set()
+    names: Set[str] = set()
+    for node in imports:
+        module_path = root.joinpath(*(node.module or '').split('.')).with_suffix('.py')
+        if module_path not in cache:
+            cache[module_path] = set()
+            try:
+                source = module_path.read_text(encoding='utf-8')
+                module_tree = ast.parse(source, filename=str(module_path))
+            except (OSError, UnicodeError, SyntaxError):
+                continue
+            decorators = set()
+            contextlib_names = set()
+            for statement in module_tree.body:
+                if isinstance(statement, ast.ImportFrom) and statement.module == 'contextlib' and not statement.level:
+                    decorators.update(
+                        alias.asname or alias.name for alias in statement.names if alias.name == 'contextmanager'
+                    )
+                elif isinstance(statement, ast.Import):
+                    contextlib_names.update(
+                        alias.asname or alias.name for alias in statement.names if alias.name == 'contextlib'
+                    )
+            db_names, db_modules = get_db_imports(source)
+            utility_db, utility_network = get_sync_utility_imports(source)
+            effects = analyze_local_sync_helpers(
+                module_tree,
+                db_names | utility_db,
+                db_modules,
+                get_storage_imports(source),
+                get_prerecorded_stt_imports(source),
+                utility_network,
+            )
+            for name, function in _module_sync_helpers(module_tree).items():
+                if len(function.decorator_list) != 1 or effects[name]:
+                    continue
+                decorator = function.decorator_list[0]
+                if (isinstance(decorator, ast.Name) and decorator.id in decorators) or (
+                    isinstance(decorator, ast.Attribute)
+                    and isinstance(decorator.value, ast.Name)
+                    and decorator.value.id in contextlib_names
+                    and decorator.attr == 'contextmanager'
+                ):
+                    cache[module_path].add(name)
+        names.update(alias.asname or alias.name for alias in node.names if alias.name in cache[module_path])
+    return names
+
+
 def _scan_function_body(
     node: FunctionNode,
     db_names: Set[str],
@@ -288,6 +409,7 @@ def _scan_function_body(
     storage_names: Set[str],
     prerecorded_stt_names: Set[str],
     sync_network_names: Set[str],
+    context_manager_names: Optional[Set[str]] = None,
 ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], List[Dict[str, Any]], List[Dict[str, Any]], Set[int]]:
     """Return direct blocking calls in a function body, excluding nested scopes."""
     db_calls: List[Dict[str, Any]] = []
@@ -298,7 +420,15 @@ def _scan_function_body(
 
     offloaded = _get_offloaded_lines(node)
     nested = _collect_nested_func_lines(node)
-    awaited = _awaited_call_ids(node)
+    awaited = _awaited_call_ids(node) | _coroutine_handoff_call_ids(node)
+
+    context_calls = {
+        id(item.context_expr)
+        for statement in _walk_body(node)
+        if isinstance(statement, ast.With)
+        for item in statement.items
+        if isinstance(item.context_expr, ast.Call)
+    }
 
     for child in _walk_body(node):
         if not isinstance(child, ast.Call):
@@ -309,12 +439,15 @@ def _scan_function_body(
         # `await f()` yields to the event loop; it is the correct way to call an async
         # helper, including the async accessors in `database.*`. Counting it as blocking
         # made a correct fix unpushable and offered no way to say so — there is no
-        # allowlist or inline waiver in this scanner.
+        # allowlist or inline waiver in this scanner. The same holds when the coroutine
+        # reaches the loop through asyncio instead of a direct `await`.
         if id(child) in awaited:
             continue
         body_call_lines.add(line)
         if isinstance(child.func, ast.Name):
-            if child.func.id in db_names:
+            if child.func.id in db_names and not (
+                id(child) in context_calls and child.func.id in (context_manager_names or set())
+            ):
                 db_calls.append({"line": line, "call": child.func.id})
             if child.func.id in storage_names:
                 call_name = child.func.id
@@ -387,6 +520,7 @@ def analyze_local_sync_helpers(
     storage_names: Set[str],
     prerecorded_stt_names: Set[str],
     sync_network_names: Set[str],
+    context_manager_names: Optional[Set[str]] = None,
 ) -> LocalHelperEffects:
     """Compute the shortest blocking path reachable from each local sync helper.
 
@@ -407,6 +541,7 @@ def analyze_local_sync_helpers(
             storage_names,
             prerecorded_stt_names,
             sync_network_names,
+            context_manager_names,
         )
         direct_by_field = {
             "db_calls": db_calls,
@@ -466,6 +601,7 @@ def scan_async_function(
     local_helper_effects: Optional[LocalHelperEffects] = None,
     prerecorded_stt_names: Optional[Set[str]] = None,
     sync_network_names: Optional[Set[str]] = None,
+    context_manager_names: Optional[Set[str]] = None,
 ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], List[Dict[str, Any]], List[Dict[str, Any]], Set[int]]:
     """Scan direct and module-local transitive blocking calls on the event loop."""
     db_calls, file_io, network_io, sleeps, body_call_lines = _scan_function_body(
@@ -475,6 +611,7 @@ def scan_async_function(
         storage_names,
         prerecorded_stt_names or set(),
         sync_network_names or set(),
+        context_manager_names,
     )
     if local_helper_effects:
         propagated = _propagated_helper_calls(node, local_helper_effects)
@@ -521,6 +658,7 @@ def scan_dirs(dirs: Sequence[str]) -> Dict[str, Any]:
     total_async = 0
     files_scanned = 0
 
+    context_manager_cache: Dict[Path, Set[str]] = {}
     for fpath in collect_py_files(dirs):
         with open(fpath, encoding="utf-8") as f:
             source = f.read()
@@ -536,6 +674,7 @@ def scan_dirs(dirs: Sequence[str]) -> Dict[str, Any]:
         asyncio_module_names, asyncio_to_thread_names = get_asyncio_to_thread_imports(source)
         utility_db_names, sync_network_names = get_sync_utility_imports(source)
         db_names.update(utility_db_names)
+        context_manager_names = _database_context_manager_imports(tree, fpath, context_manager_cache)
         local_helper_effects = analyze_local_sync_helpers(
             tree,
             db_names,
@@ -543,6 +682,7 @@ def scan_dirs(dirs: Sequence[str]) -> Dict[str, Any]:
             storage_names,
             prerecorded_stt_names,
             sync_network_names,
+            context_manager_names,
         )
         module_level_nodes = set(tree.body)
         is_dependency_module = os.path.basename(fpath) == 'dependencies.py'
@@ -572,6 +712,7 @@ def scan_dirs(dirs: Sequence[str]) -> Dict[str, Any]:
                 local_helper_effects=local_helper_effects,
                 prerecorded_stt_names=prerecorded_stt_names,
                 sync_network_names=sync_network_names,
+                context_manager_names=context_manager_names,
             )
             unmanaged_offloads = _unmanaged_to_thread_calls(node, asyncio_module_names, asyncio_to_thread_names)
             endpoint_has_await = has_await(node)

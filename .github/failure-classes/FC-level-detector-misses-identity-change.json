@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-level-detector-misses-identity-change",
+  "violated_contract": "A boundary that separates records by *which* thing is happening must not be derived only from *whether* something is happening. MeetingDetector reported a boolean with an off grace, and conversations rotated only on its edges, so leaving one Google Meet and joining the next within the grace (the next Meet's green room takes the microphone within seconds) never produced an edge and both calls became one conversation.",
+  "canonical_prevention": "Carry an identity with the level signal (ConferencingApps.currentCallIdentities: Meet code from the window title, native call app bundle holding the mic) and rotate when an identity not seen earlier in the episode persists for a confirmation period. Test the same-level identity switch directly, with the off edge absent.",
+  "canonical_prevention_artifact": [
+    "desktop/macos/Desktop/Tests/MeetingCallIdentityTests.swift"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "desktop/macos/Desktop/Sources/MeetingDetector.swift",
+    "desktop/macos/Desktop/Sources/ConferencingApps.swift",
+    "desktop/macos/Desktop/Sources/AppState/AppState+MeetingBoundaries.swift",
+    "desktop/macos/Desktop/Sources/AppState/MeetingConversationBoundaryPolicy.swift"
+  ],
+  "status": "open"
+}

@@ -32,7 +32,7 @@ steps:
       activateApp: false
       waitForVisibility: false
     wait:
-      state.chatFirstRoute: conversations
+      state.chatFirstRoute: memories
   - id: S2a
     name: Conversations acknowledges input within 100 ms
     trace.expect:

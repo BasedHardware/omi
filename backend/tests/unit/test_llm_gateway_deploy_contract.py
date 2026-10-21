@@ -2,10 +2,13 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+import re
 import subprocess
 import sys
+import tempfile
 from typing import Any, cast
 
+import pytest
 import yaml
 
 from testing.shell import bash_command, bash_path
@@ -149,6 +152,61 @@ def test_gateway_ingress_timeout_can_carry_the_flex_route_deadline():
     assert '    timeoutSec: 5\n' in backend_config
 
 
+@pytest.fixture(scope='module')
+def gateway_reservation_redis_contract():
+    # Parse deployment inputs during fixture setup so the fast-unit call-phase
+    # budget measures the assertions, not repeated YAML decoding.
+    manifest = _load_yaml('deploy/runtime_env.yaml')
+    classification = _load_yaml('../config/deployment-setting-classification.json')
+    contracts = {}
+
+    for environment in ('dev', 'prod'):
+        gateway = _load_yaml(f'charts/llm-gateway/{environment}_omi_llm_gateway_values.yaml')
+        listen = _load_yaml(f'charts/backend-listen/{environment}_omi_backend_listen_values.yaml')
+        secrets = _load_yaml(f'charts/backend-secrets/{environment}_omi_backend_secrets_values.yaml')
+        gateway_env = _env_map(gateway)
+        listen_env = _env_map(listen)
+        namespace = manifest['environments'][environment]['llm_gateway']['namespace']
+        shared_config = f'{environment}-omi-backend-config'
+        shared_secret = f'{environment}-omi-backend-secrets'
+
+        expected_password_ref = {'name': shared_secret, 'key': 'REDIS_DB_PASSWORD'}
+        contracts[environment] = {
+            'namespace': namespace,
+            'listen_config': listen['envFrom'][0]['configMapRef']['name'],
+            'gateway_host': gateway_env['REDIS_DB_HOST']['valueFrom']['configMapKeyRef'],
+            'listen_port': listen_env['REDIS_DB_PORT']['value'],
+            'gateway_port': gateway_env['REDIS_DB_PORT']['value'],
+            'listen_password': listen_env['REDIS_DB_PASSWORD']['valueFrom']['secretKeyRef'],
+            'gateway_password': gateway_env['REDIS_DB_PASSWORD']['valueFrom']['secretKeyRef'],
+            'secret_keys': _secret_keys(secrets),
+            'expected_password': expected_password_ref,
+        }
+
+    # The gateway chart has no NetworkPolicy; egress is not narrowed there.
+    contracts['network_policy'] = list((BACKEND_ROOT / 'charts/llm-gateway' / 'templates').glob('*networkpolicy*'))
+    contracts['classification'] = classification
+    return contracts
+
+
+@pytest.mark.parametrize('environment', ('dev', 'prod'))
+def test_gateway_reservation_state_uses_the_shared_backend_redis(environment, gateway_reservation_redis_contract):
+    contract = gateway_reservation_redis_contract[environment]
+    shared_config = f'{environment}-omi-backend-config'
+
+    assert contract['namespace'] == f'{environment}-omi-backend'
+    assert contract['listen_config'] == shared_config
+    assert contract['gateway_host'] == {'name': shared_config, 'key': 'REDIS_DB_HOST'}
+    assert contract['listen_port'] == contract['gateway_port'] == '13151'
+    assert contract['listen_password'] == contract['gateway_password'] == contract['expected_password']
+    assert 'REDIS_DB_PASSWORD' in contract['secret_keys']
+    assert 'REDIS_DB_PASSWORD' in gateway_reservation_redis_contract['classification']['kinds']['secret']
+    assert {'REDIS_DB_HOST', 'REDIS_DB_PORT'} <= set(
+        gateway_reservation_redis_contract['classification']['kinds']['config']
+    )
+    assert not gateway_reservation_redis_contract['network_policy']
+
+
 def test_prod_gateway_wiring_promotes_cloud_run_only_after_verified_endpoint_injection():
     manifest = _load_yaml('deploy/runtime_env.yaml')
     prod = manifest['environments']['prod']
@@ -189,7 +247,15 @@ def test_prod_gateway_wiring_promotes_cloud_run_only_after_verified_endpoint_inj
     assert gateway['ingress']['annotations']['kubernetes.io/ingress.regional-static-ip-name'] == (
         'prod-omi-self-hosted-llm-ip-address'
     )
-    assert prod['llm_gateway'] == {
+    assert {
+        key: prod['llm_gateway'][key]
+        for key in (
+            'namespace',
+            'release_name',
+            'ingress_name',
+            'static_address_name',
+        )
+    } == {
         'namespace': 'prod-omi-backend',
         'release_name': 'prod-omi-llm-gateway',
         'ingress_name': 'prod-omi-llm-gateway',
@@ -267,7 +333,7 @@ def test_gateway_auto_deploy_is_folded_into_the_admitted_backend_lifecycle():
     assert build < deploy < serving < smoke < vpc_probe < caller_render
     gateway_image = 'gcr.io/${{ inputs.project_id }}/llm-gateway:${{ steps.image-tag.outputs.short_sha }}'
     assert f'gateway_image="{gateway_image}"' in workflow
-    assert f'--image "{gateway_image}"' in workflow
+    assert f'image: {gateway_image}' in workflow
     assert 'runtime_image_contracts.py" smoke' in workflow
     assert (
         'IMAGE_TAG="${{ steps.image-tag.outputs.short_sha }}" "$DEPLOY_CONTROL_SCRIPTS/deploy-llm-gateway.sh"'
@@ -279,6 +345,114 @@ def test_gateway_auto_deploy_is_folded_into_the_admitted_backend_lifecycle():
     )
     assert '--lane omi:auto:public-shared-conversation-chat' in workflow
     assert '--check-metrics' in workflow
+
+
+def test_combined_gateway_smoke_allows_cold_pull_and_keeps_failure_diagnostics():
+    action = yaml.safe_load(DEPLOY_BACKEND_STACK_ACTION.read_text(encoding='utf-8'))
+    assert isinstance(action, dict)
+    steps = action['runs']['steps']
+    smoke_step = next(step for step in steps if step.get('name') == 'Smoke LLM Gateway')
+    smoke = str(smoke_step['run'])
+
+    # The pod startup budget covers scheduling and image pulls. The smoke
+    # client's own HTTP/retry deadline starts only after the pod is Running.
+    assert 'SMOKE_STARTUP_BUDGET_SECONDS=300' in smoke
+    assert 'SMOKE_PROBE_BUDGET_SECONDS=180' in smoke
+    assert 'startup_deadline=$((SECONDS + SMOKE_STARTUP_BUDGET_SECONDS))' in smoke
+    assert 'while (( SECONDS < startup_deadline )); do' in smoke
+    assert 'probe_deadline=$((SECONDS + SMOKE_PROBE_BUDGET_SECONDS))' in smoke
+    assert 'while (( SECONDS < probe_deadline )); do' in smoke
+    assert 'kubectl --request-timeout=10s -n "$NAMESPACE" get pod "$SMOKE_POD"' in smoke
+    assert 'kubectl --request-timeout=30s -n "$NAMESPACE" apply -f -' in smoke
+    assert 'LLM gateway smoke pod could not be created' in smoke
+    assert '--rm -i' not in smoke
+
+    # Diagnostics must run before the EXIT cleanup removes the pod, including
+    # the Pending/ImagePullBackOff case that caused the original one-minute
+    # kubectl run timeout to erase the evidence.
+    assert 'trap cleanup_smoke_pod EXIT' in smoke
+    assert 'kubectl --request-timeout=30s -n "$NAMESPACE" describe pod "$SMOKE_POD" || true' in smoke
+    assert 'kubectl --request-timeout=30s -n "$NAMESPACE" logs "$SMOKE_POD" --all-containers=true || true' in smoke
+    assert (
+        'kubectl --request-timeout=30s -n "$NAMESPACE" get events --field-selector "involvedObject.name=$SMOKE_POD"'
+        in smoke
+    )
+    assert 'LLM gateway smoke pod did not start within' in smoke
+    assert 'LLM gateway smoke probe did not complete within' in smoke
+
+
+def test_combined_gateway_smoke_rendered_script_handles_pod_phases_and_preserves_env_literals():
+    action = yaml.safe_load(DEPLOY_BACKEND_STACK_ACTION.read_text(encoding='utf-8'))
+    assert isinstance(action, dict)
+    smoke_step = next(step for step in action['runs']['steps'] if step.get('name') == 'Smoke LLM Gateway')
+    smoke = re.sub(r'\$\{\{[^}]+\}\}', 'placeholder', str(smoke_step['run']))
+
+    fake_kubectl = '''#!/usr/bin/env python3
+import os
+import sys
+from pathlib import Path
+
+args = sys.argv[1:]
+with Path(os.environ["FAKE_CALLS"]).open("a", encoding="utf-8") as handle:
+    handle.write(" ".join(args) + "\\n")
+if "apply" in args:
+    Path(os.environ["FAKE_MANIFEST"]).write_text(sys.stdin.read(), encoding="utf-8")
+elif "get" in args and "pod" in args:
+    print(os.environ["FAKE_PHASE"])
+'''
+
+    def run_case(phase: str, expected_code: int, *, startup_budget: int | None = None) -> tuple[str, str]:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            kubectl = root / 'kubectl'
+            kubectl.write_text(fake_kubectl, encoding='utf-8')
+            kubectl.chmod(0o755)
+            rendered = smoke
+            if startup_budget is not None:
+                rendered = rendered.replace(
+                    'SMOKE_STARTUP_BUDGET_SECONDS=300',
+                    f'SMOKE_STARTUP_BUDGET_SECONDS={startup_budget}',
+                )
+            env = {
+                **os.environ,
+                'PATH': f'{root}{os.pathsep}{os.environ["PATH"]}',
+                'GITHUB_RUN_ID': '42',
+                'GITHUB_RUN_ATTEMPT': '1',
+                'FAKE_PHASE': phase,
+                'FAKE_MANIFEST': str(root / 'manifest.yaml'),
+                'FAKE_CALLS': str(root / 'calls.txt'),
+            }
+            result = subprocess.run(
+                ['bash', '-euo', 'pipefail', '-c', rendered],
+                check=False,
+                capture_output=True,
+                env=env,
+                text=True,
+            )
+            assert result.returncode == expected_code, result.stderr
+            return (root / 'manifest.yaml').read_text(encoding='utf-8'), (root / 'calls.txt').read_text(
+                encoding='utf-8'
+            )
+
+    manifest, succeeded_calls = run_case('Succeeded', 0)
+    assert r'--url \"$SMOKE_URL\" --token \"$SMOKE_TOKEN\"' in manifest
+    assert '--request-timeout=10s' in succeeded_calls
+    assert 'describe pod' in succeeded_calls
+    assert 'logs' in succeeded_calls
+    assert 'get events' in succeeded_calls
+    assert 'delete pod' in succeeded_calls
+
+    _, failed_calls = run_case('Failed', 1)
+    assert 'describe pod' in failed_calls
+    assert 'logs' in failed_calls
+    assert 'get events' in failed_calls
+    assert 'delete pod' in failed_calls
+
+    _, pending_calls = run_case('Pending', 1, startup_budget=1)
+    assert 'describe pod' in pending_calls
+    assert 'logs' in pending_calls
+    assert 'get events' in pending_calls
+    assert 'delete pod' in pending_calls
 
 
 def test_backend_deploy_requires_serving_and_cloud_run_vpc_gates_before_gateway_promotion():

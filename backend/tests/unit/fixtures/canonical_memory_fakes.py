@@ -28,10 +28,11 @@ def _install_heavy_import_stubs() -> None:
 
 
 class _Snapshot:
-    def __init__(self, data=None, *, exists=True, doc_id=None):
+    def __init__(self, data=None, *, exists=True, doc_id=None, reference=None):
         self._data = data
         self.exists = exists
         self.id = doc_id
+        self.reference = reference
 
     def to_dict(self):
         return self._data
@@ -80,8 +81,8 @@ class _DocRef:
     def get(self, transaction=None):
         doc_id = self.path.rsplit("/", 1)[-1]
         if self.path not in self._db.docs:
-            return _Snapshot(None, exists=False, doc_id=doc_id)
-        return _Snapshot(self._db.docs[self.path], exists=True, doc_id=doc_id)
+            return _Snapshot(None, exists=False, doc_id=doc_id, reference=self)
+        return _Snapshot(self._db.docs[self.path], exists=True, doc_id=doc_id, reference=self)
 
     def set(self, data, merge=False):
         if merge and self.path in self._db.docs:
@@ -94,6 +95,12 @@ class _DocRef:
             raise NotFound(f"Document {self.path} not found")
         self._db.docs[self.path] = self._db.docs[self.path] | data
 
+    def delete(self):
+        self._db.docs.pop(self.path, None)
+
+    def collection(self, name):
+        return _CollectionRef(self._db, f"{self.path}/{name}")
+
 
 class _CollectionRef:
     def __init__(self, db, path, *, filters=(), order_fields=(), limit_count=None, cursor=None):
@@ -103,6 +110,9 @@ class _CollectionRef:
         self._order_fields = tuple(order_fields)
         self._limit_count = limit_count
         self._cursor = cursor
+
+    def document(self, doc_id):
+        return _DocRef(self._db, f"{self.path}/{doc_id}")
 
     def where(self, field_path=None, op_string=None, value=None, *, filter=None):
         if filter is not None:
@@ -165,7 +175,15 @@ class _CollectionRef:
             rows = [row for row in rows if row[0] > cursor_key]
         if self._limit_count is not None:
             rows = rows[: self._limit_count]
-        return [_Snapshot(data, exists=True, doc_id=doc_id) for _sort_key, doc_id, data in rows]
+        return [
+            _Snapshot(
+                data,
+                exists=True,
+                doc_id=doc_id,
+                reference=_DocRef(self._db, f"{self.path}/{doc_id}"),
+            )
+            for _sort_key, doc_id, data in rows
+        ]
 
     @staticmethod
     def _nested_value(data, field_path):

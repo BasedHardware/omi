@@ -11,7 +11,7 @@
   ],
   "scope_hints": [
     "backend/utils/llm/**",
-    "llm_gateway/config/cost_rate_cards.yaml"
+    "backend/llm_gateway/config/cost_rate_cards.yaml"
   ],
   "status": "open"
 }

@@ -17,21 +17,28 @@ from models.memory_contracts import (
     derive_allowed_use,
     filter_l1_archive_for_normal_search,
 )
-from models.product_memory import MemoryAccessPolicy, MemoryLayer, MemoryItem, is_archive_access_eligible
+from models.product_memory import (
+    MemoryAccessPolicy,
+    MemoryLayer,
+    MemoryItem,
+    is_archive_access_eligible,
+)
 
 MemoryResult = Dict[str, Any]
 
 
 def _tokens(query: str) -> set[str]:
-    return {token.lower() for token in (query or "").replace(".", " ").replace(",", " ").split() if len(token) > 2}
+    words = {token.lower() for token in (query or "").replace(".", " ").replace(",", " ").split()}
+    # Words of two characters or fewer drop only beside a longer word, so "AI" alone still filters.
+    return {token for token in words if len(token) > 2} or words
 
 
 def _matches(query: str, content: str) -> bool:
-    query_tokens = _tokens(query)
-    if not query_tokens:
+    # Only a blank query matches everything; a query with no searchable word matches nothing.
+    if not (query or "").strip():
         return True
     content_lower = (content or "").lower()
-    return any(token in content_lower for token in query_tokens)
+    return any(token in content_lower for token in _tokens(query))
 
 
 def _risk_flags(raw: Any) -> List[str]:
@@ -109,7 +116,13 @@ def _tier_value(item: MemoryItem) -> str:
     return item.tier.value
 
 
-def _product_memory_result(item: MemoryItem, *, agent_use: str, access_reason: str) -> Dict[str, Any]:
+def _product_memory_result(
+    item: MemoryItem,
+    *,
+    agent_use: str,
+    access_reason: str,
+    now: Optional[datetime] = None,
+) -> Dict[str, Any]:
     return {
         "memory_id": item.memory_id,
         "memory_layer": "product_memory",
@@ -137,6 +150,7 @@ def query_default_product_memory_items(
     *,
     policy: MemoryAccessPolicy,
     now: Optional[datetime] = None,
+    view: str = 'released',
 ) -> List[Dict[str, Any]]:
     """Search memory product memory items for default-visible product output.
 
@@ -157,14 +171,22 @@ def query_default_product_memory_items(
         matching_items.append(item)
 
     results: List[MemoryResult] = []
-    for item in collapse_canonical_lineages(
+    selected_items = collapse_canonical_lineages(
         matching_items,
         lineage_context=items,
         survivor_context=visible_items,
-    ):
+    )
+    for item in selected_items:
         decision = report.decisions[item.memory_id]
         access_reason = decision.reason if decision.allowed else "default_memory_allowed"
-        results.append(_product_memory_result(item, agent_use="default_access_memory", access_reason=access_reason))
+        results.append(
+            _product_memory_result(
+                item,
+                agent_use="default_access_memory",
+                access_reason=access_reason,
+                now=current_time,
+            )
+        )
     return results
 
 
@@ -174,6 +196,7 @@ def query_archive_product_memory_items(
     *,
     policy: MemoryAccessPolicy,
     now: Optional[datetime] = None,
+    view: str = 'history',
 ) -> List[Dict[str, Any]]:
     """Search Archive product memory only for explicit archive-capable callers."""
 
@@ -187,7 +210,14 @@ def query_archive_product_memory_items(
         access = is_archive_access_eligible(item, policy, now=now)
         if not access.allowed:
             continue
-        results.append(_product_memory_result(item, agent_use="explicit_archive_memory", access_reason=access.reason))
+        results.append(
+            _product_memory_result(
+                item,
+                agent_use="explicit_archive_memory",
+                access_reason=access.reason,
+                now=now or datetime.now(timezone.utc),
+            )
+        )
     return results
 
 

@@ -7,7 +7,7 @@ Schema: users/{uid}/llm_usage/{date} -> {feature -> {model -> {input_tokens, out
 
 import hashlib
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional, cast
+from typing import Any, Callable, Dict, List, Optional, cast
 
 from google.cloud import firestore
 
@@ -82,6 +82,37 @@ def _plan_key(uid: str, firestore_client: Any | None) -> str:
     return resolve_usage_plan_id(uid, firestore_client=firestore_client) or _UNATTRIBUTED_PLAN
 
 
+def nest_usage_fields(update: Dict[str, Any]) -> Dict[str, Any]:
+    """Expand dotted field paths into nested maps, for writes that use ``set(..., merge=True)``.
+
+    Firestore treats a dot as a field PATH in ``update()`` but as a literal character in ``set()``. These
+    usage documents are written with ``set(merge=True)`` because they must be created on first use, so a
+    key like ``chat.gpt-4o.input_tokens`` lands as ONE top-level field whose name contains dots — the
+    counter still increments correctly, but nothing is nested, and every reader that walks
+    ``feature -> model -> counter`` (``get_usage_summary``, ``_aggregate_summary``,
+    ``get_plan_usage_report``) skips it and reports empty usage.
+
+    Every dot in these keys is a separator by construction: the model name, the cost-exclusion label and
+    the plan id are each sanitised of ``.`` before being interpolated, and the remaining segments are
+    literals in this module.
+    """
+    nested: Dict[str, Any] = {}
+    for path, value in update.items():
+        if '.' not in path:
+            nested[path] = value
+            continue
+        cursor = nested
+        *parents, leaf = path.split('.')
+        for segment in parents:
+            branch = cursor.get(segment)
+            if not isinstance(branch, dict):
+                branch = {}
+                cursor[segment] = branch
+            cursor = branch
+        cursor[leaf] = value
+    return nested
+
+
 def _record_plan_metadata(
     update: Dict[str, Any],
     plan_key: str,
@@ -147,6 +178,10 @@ def record_llm_usage(
     input_tokens: int,
     output_tokens: int,
     *,
+    cache_read_tokens: int = 0,
+    cache_write_tokens: int = 0,
+    surface: str | None = None,
+    turn_id: str | None = None,
     cost_usd: float | None = None,
     cost_status: str = 'missing',
     cost_exclusion: str | None = None,
@@ -160,7 +195,7 @@ def record_llm_usage(
     Args:
         uid: User ID
         feature: Feature name (e.g., "chat", "rag", "conversation_processing")
-        model: Model name (e.g., "gpt-5.6-luna", "gpt-5-nano")
+        model: Model name (e.g., "gpt-x-luna", "gpt-5-nano")
         input_tokens: Number of input/prompt tokens
         output_tokens: Number of output/completion tokens
     """
@@ -214,7 +249,36 @@ def record_llm_usage(
         cost_exclusion=cost_exclusion,
     )
 
-    usage_ref.set(update_data, merge=True)
+    for prefix in (f'{feature}.{safe_model}', plan_prefix):
+        if feature == 'chat_agent':
+            update_data[f'{prefix}.cache_read_tokens'] = firestore.Increment(cache_read_tokens)
+            update_data[f'{prefix}.cache_write_tokens'] = firestore.Increment(cache_write_tokens)
+    if feature == 'chat_agent' and surface in {'app', 'telegram', 'imessage', 'other'}:
+        counters = {
+            'input_tokens': input_tokens,
+            'output_tokens': output_tokens,
+            'cache_read_tokens': cache_read_tokens,
+            'cache_write_tokens': cache_write_tokens,
+            'call_count': 1,
+        }
+        for field, value in counters.items():
+            update_data[f'chat_agent_surfaces.{surface}.{safe_model}.{field}'] = firestore.Increment(value)
+        if turn_id:
+            batch = client.batch()
+            batch.set(usage_ref, nest_usage_fields(update_data), merge=True)
+            turn_ref = usage_ref.collection('chat_agent_turns').document(hashlib.sha256(turn_id.encode()).hexdigest())
+            batch.set(
+                turn_ref,
+                {
+                    'surface': surface,
+                    'updated_at': now,
+                    'models': {safe_model: {k: firestore.Increment(v) for k, v in counters.items()}},
+                },
+                merge=True,
+            )
+            batch.commit()
+            return
+    usage_ref.set(nest_usage_fields(update_data), merge=True)
 
 
 @transactional  # pyright: ignore[reportUntypedFunctionDecorator]
@@ -225,6 +289,7 @@ def _record_chat_quota_question_transaction(
     event_data: Dict[str, Any],
     doc_id: str,
     plan_key: str,
+    usage_update_for: Callable[[str, str], Dict[str, Any]] | None = None,
 ) -> bool:
     event_snapshot = event_ref.get(transaction=transaction)
     if getattr(event_snapshot, "exists", False):
@@ -238,8 +303,16 @@ def _record_chat_quota_question_transaction(
         'last_updated': now,
     }
     _record_plan_bucket(update, plan_key, 'backend_chat', quota_questions=1)
-    _record_plan_metadata(update, plan_key, cost_status='missing', cost_exclusion='chat_token_cost_not_recorded')
-    transaction.set(usage_ref, update, merge=True)
+    if usage_update_for is not None:
+        # The caller's token/cost telemetry is built here, on this write's own
+        # day and plan key, and lands in the same transaction as the question:
+        # a retry that finds the event recorded also finds the telemetry
+        # recorded, never one without the other, and never on a different day
+        # or plan than the question.
+        update.update(usage_update_for(plan_key, doc_id))
+    else:
+        _record_plan_metadata(update, plan_key, cost_status='missing', cost_exclusion='chat_token_cost_not_recorded')
+    transaction.set(usage_ref, nest_usage_fields(update), merge=True)
     return True
 
 
@@ -252,12 +325,19 @@ def record_chat_quota_question(
     platform: Optional[str] = None,
     *,
     firestore_client: Any | None = None,
+    usage_update_for: Callable[[str, str], Dict[str, Any]] | None = None,
 ) -> bool:
     """Record one accepted visible backend chat question exactly once.
 
     This is the product-boundary quota counter for mobile/backend chat. It is
     intentionally separate from ``chat.*.call_count``, which is LLM telemetry
     and can vary with implementation details.
+
+    ``usage_update_for(plan_key, day)`` returns token/cost telemetry (see
+    :func:`usage_bucket_update`) that must be recorded exactly when the question
+    is, in the same transaction and on the same day and plan — the realtime hub
+    uses it so a retried usage report records neither a second question nor a
+    second cost, and never one without the other.
     """
     if not idempotency_key:
         raise ValueError('idempotency_key is required')
@@ -285,7 +365,72 @@ def record_chat_quota_question(
     }
 
     transaction = client.transaction()
-    return _record_chat_quota_question_transaction(transaction, usage_ref, event_ref, event_data, doc_id, plan_key)
+    return _record_chat_quota_question_transaction(
+        transaction, usage_ref, event_ref, event_data, doc_id, plan_key, usage_update_for
+    )
+
+
+@transactional  # pyright: ignore[reportUntypedFunctionDecorator]
+def _release_chat_quota_question_transaction(
+    transaction: Any,
+    usage_ref: Any,
+    event_ref: Any,
+    doc_id: str,
+) -> bool:
+    """Give back one recorded question, exactly once.
+
+    Returns False when the event was never recorded (nothing charged) or was
+    already released — a retried failure path must not double-refund. The
+    decrement lands in the plan bucket the question was attributed to, read
+    from the stored event rather than re-resolved, so a plan change between
+    the charge and the release cannot leak the refund into the wrong bucket.
+    """
+    event_snapshot = event_ref.get(transaction=transaction)
+    if not getattr(event_snapshot, "exists", False):
+        return False
+    event = event_snapshot.to_dict() or {}
+    if event.get('released'):
+        return False
+
+    now = datetime.now(timezone.utc)
+    transaction.set(event_ref, {'released': True, 'released_at': now}, merge=True)
+    plan_key = event.get('plan_id') or _UNATTRIBUTED_PLAN
+    update: Dict[str, Any] = {
+        'backend_chat.quota_questions': firestore.Increment(-1),
+        'date': doc_id,
+        'last_updated': now,
+    }
+    _record_plan_bucket(update, plan_key, 'backend_chat', quota_questions=-1, count_call=False)
+    transaction.set(usage_ref, nest_usage_fields(update), merge=True)
+    return True
+
+
+def release_chat_quota_question(
+    uid: str,
+    idempotency_key: str,
+    *,
+    firestore_client: Any | None = None,
+) -> bool:
+    """Release one question previously recorded by :func:`record_chat_quota_question`.
+
+    Called when the billable turn failed terminally after the question was
+    charged — the user should not pay quota for a failed answer. Idempotent:
+    keyed on the same ``uid:idempotency_key`` event doc, marked ``released`` in
+    the same transaction as the decrement.
+    """
+    if not idempotency_key:
+        return False
+
+    doc_id = datetime.now(timezone.utc).strftime('%Y-%m-%d')
+    event_id = hashlib.sha256(f'{uid}:{idempotency_key}'.encode('utf-8')).hexdigest()
+
+    client = _usage_client(firestore_client)
+    user_ref = client.collection('users').document(uid)
+    usage_ref = user_ref.collection('llm_usage').document(doc_id)
+    event_ref = user_ref.collection('chat_quota_events').document(event_id)
+
+    transaction = client.transaction()
+    return _release_chat_quota_question_transaction(transaction, usage_ref, event_ref, doc_id)
 
 
 def get_daily_usage(uid: str, date: Optional[datetime] = None) -> Dict[str, Any]:
@@ -351,7 +496,9 @@ def get_usage_summary(uid: str, days: int = 30) -> Dict[str, Dict[str, int]]:
     cutoff = datetime.now(timezone.utc) - timedelta(days=days)
     cutoff_id = f"{cutoff.year}-{cutoff.month:02d}-{cutoff.day:02d}"
 
-    docs = usage_collection.where("__name__", ">=", cutoff_id).stream()
+    # The value of a `__name__` filter must be a Key, not a string: Firestore answers
+    # `400 __key__ filter value must be a Key` otherwise, so this raised on every call.
+    docs = usage_collection.where("__name__", ">=", usage_collection.document(cutoff_id)).stream()
 
     # Aggregate by feature
     summary: Dict[str, Dict[str, int]] = {}
@@ -471,11 +618,57 @@ def record_llm_usage_bucket(
     Dual-writes to both the primary bucket and a per-account alias
     (``{bucket}_{account}``) for per-account breakdown.
     """
-    if cost_status == 'complete' and cost_usd is None:
-        raise ValueError('complete cost attribution requires cost_usd')
     today = datetime.now(timezone.utc).strftime('%Y-%m-%d')
     ref = _usage_client(firestore_client).collection("users").document(uid).collection("llm_usage").document(today)
+    update = usage_bucket_update(
+        uid,
+        today=today,
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
+        cache_read_tokens=cache_read_tokens,
+        cache_write_tokens=cache_write_tokens,
+        total_tokens=total_tokens,
+        cost_usd=cost_usd,
+        bucket=bucket,
+        account=account,
+        cost_status=cost_status,
+        cost_exclusion=cost_exclusion,
+        quota_questions=quota_questions,
+        count_call=count_call,
+        firestore_client=firestore_client,
+    )
+    ref.set(nest_usage_fields(update), merge=True)
 
+
+def usage_bucket_update(
+    uid: str,
+    *,
+    input_tokens: int,
+    output_tokens: int,
+    cache_read_tokens: int = 0,
+    cache_write_tokens: int = 0,
+    total_tokens: int = 0,
+    cost_usd: float | None = None,
+    bucket: str = 'desktop_chat',
+    account: str = 'omi',
+    cost_status: str = 'missing',
+    cost_exclusion: str | None = None,
+    quota_questions: int = 0,
+    count_call: bool = True,
+    firestore_client: Any | None = None,
+    plan_key: str | None = None,
+    today: str | None = None,
+) -> Dict[str, Any]:
+    """The dotted-path increments :func:`record_llm_usage_bucket` writes, without writing them.
+
+    Pure apart from the plan lookup, so a caller can fold the same telemetry
+    into its own transaction (see :func:`record_chat_quota_question`); that
+    caller passes the transaction's own ``plan_key`` and ``today`` so the
+    telemetry cannot land on a different day or plan than the question.
+    """
+    if cost_status == 'complete' and cost_usd is None:
+        raise ValueError('complete cost attribution requires cost_usd')
+    today = today or datetime.now(timezone.utc).strftime('%Y-%m-%d')
     acct_key = f'{bucket}_{account}'
     update: Dict[str, Any] = {
         f'{bucket}.input_tokens': firestore.Increment(input_tokens),
@@ -501,7 +694,7 @@ def record_llm_usage_bucket(
         update[f'{bucket}.quota_questions'] = firestore.Increment(quota_questions)
         update[f'{acct_key}.quota_questions'] = firestore.Increment(quota_questions)
 
-    plan_key = _plan_key(uid, firestore_client)
+    plan_key = plan_key or _plan_key(uid, firestore_client)
     _record_plan_bucket(
         update,
         plan_key,
@@ -516,7 +709,7 @@ def record_llm_usage_bucket(
         count_call=count_call,
     )
     _record_plan_metadata(update, plan_key, cost_status=cost_status, cost_exclusion=cost_exclusion)
-    ref.set(update, merge=True)
+    return update
 
 
 def record_llm_cost_exclusion(
@@ -535,7 +728,7 @@ def record_llm_cost_exclusion(
     plan_key = _plan_key(uid, firestore_client)
     update: Dict[str, Any] = {'date': today, 'last_updated': datetime.now(timezone.utc)}
     _record_plan_metadata(update, plan_key, cost_status='excluded', cost_exclusion=cost_exclusion)
-    ref.set(update, merge=True)
+    ref.set(nest_usage_fields(update), merge=True)
 
 
 def _merge_cost_status(existing: str | None, observed: str) -> str:
@@ -583,7 +776,8 @@ def get_plan_usage_report(uid: str, days: int = 30) -> Dict[str, Dict[str, Any]]
     usage_collection = db.collection('users').document(uid).collection('llm_usage')
     report: Dict[str, Dict[str, Any]] = {}
 
-    for doc in usage_collection.where('__name__', '>=', cutoff_id).stream():
+    # A `__name__` filter takes a Key, not a string (see get_usage_summary above).
+    for doc in usage_collection.where('__name__', '>=', usage_collection.document(cutoff_id)).stream():
         data = _typed_doc(doc)
         plan_usage = data.get('plan_usage')
         if isinstance(plan_usage, dict):

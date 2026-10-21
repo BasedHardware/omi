@@ -14,6 +14,8 @@ extension AppState {
   }
 
   /// Keeps the probe's evidence policy aligned with settings changes during a recording.
+  /// Replacing the detector drops its call identities and any pending call change; the new
+  /// detector adopts whatever call is on as the current one.
   func ensureMeetingDetector(for mode: AssistantSettings.AudioRecordingMode) {
     if meetingDetector != nil, meetingDetectorMode != mode {
       meetingDetector?.stop()
@@ -22,50 +24,65 @@ extension AppState {
     }
     guard meetingDetector == nil, audioSource == .microphone else { return }
 
-    let meetingProbe: @Sendable () -> Bool = {
-      if #available(macOS 14.4, *) {
-        if ConferencingApps.callAppIsUsingMicrophone() { return true }
-        // On modern macOS, browser titles are only a capture-gating fallback;
-        // Always mode keeps the stronger CoreAudio mic signal authoritative.
-        return mode == .onlyMeetings && ConferencingApps.browserCallWindowPresent()
-      }
-      // macOS 14.0-14.3 has no CoreAudio process-input API. Keep the browser
-      // title signal for Always and meetings-only capture, but never construct
-      // meeting provenance while system-audio capture is disabled.
-      return mode != .off && ConferencingApps.browserCallWindowPresent()
-    }
     let detector = MeetingDetector(
-      isMeetingNow: meetingProbe,
+      mode: mode,
       onInitialStateObserved: { [weak self] in
         Task { @MainActor in
-          guard let self, let active = self.meetingDetector?.isMeetingActive else { return }
-          await self.handleMeetingObservation(active: active)
+          guard let self, let detector = self.meetingDetector else { return }
+          if let active = MeetingConversationBoundaryPolicy.initialObservation(
+            captureActive: detector.isMeetingActive, meetingConfirmed: detector.isMeetingConfirmed)
+          {
+            await self.handleMeetingObservation(active: active)
+          }
           await self.reconcileCapture()
         }
       },
+      onCallChanged: { [weak self] in
+        // A new call is a meeting start for context purposes too.
+        Self.noteMeetingContext(active: true)
+        Task { @MainActor in await self?.handleMeetingObservation(active: true) }
+      },
       onChange: { [weak self] active in
         Task { @MainActor in
-          if active, SystemCalendarMeetingContextFeature.isEnabled {
-            // Permission and calendar I/O live outside the detector/audio path. This early sync
-            // normally stores the invite before the eventual conversation finalization begins.
-            Task(priority: .utility) {
-              await SystemCalendarMeetingContextService.shared.prepareAroundNow()
-            }
-          }
-          await self?.handleMeetingObservation(active: active)
-          await self?.reconcileCapture()
+          guard let self else { return }
+          // Finalize and flush meeting tails before closing the capture gate, as before.
+          if !active { await self.handleMeetingObservation(active: false) }
+          await self.reconcileCapture()
         }
-        if let event = TaskLocalContextEvent.normalized(
-          kind: .meeting,
-          rawReference: active ? "meeting-active" : "meeting-ended"
-        ) {
-          Task { await ContextSubjectBindingService.shared.resolveAndObserve(event) }
+      },
+      onConfirmedChange: { [weak self] active in
+        Self.noteMeetingContext(active: active)
+        // Off shares the capture edge above so shutdown waits for boundary finalization.
+        if active {
+          Task { @MainActor in await self?.handleMeetingObservation(active: true) }
         }
+      },
+      onNoteTakingNoticeReady: { [weak self] in
+        guard let self, self.isTranscribing, self.currentConversationRole == .meeting else { return }
+        MeetingNoteTakingNotice.present()
       }
     )
     meetingDetector = detector
     meetingDetectorMode = mode
     detector.start()
+  }
+
+  /// Context side work for a meeting starting or ending: the early calendar-invite sync and the
+  /// context-subject event.
+  private static func noteMeetingContext(active: Bool) {
+    if active {
+      // Permission and calendar I/O live outside the detector/audio path. This early sync
+      // normally stores the invite before the eventual conversation finalization begins.
+      Task(priority: .utility) {
+        await SystemCalendarMeetingContextService.shared.prepareAroundNow()
+      }
+    }
+    if let event = TaskLocalContextEvent.normalized(
+      kind: .meeting,
+      rawReference: active ? "meeting-active" : "meeting-ended"
+    ) {
+      Task { await ContextSubjectBindingService.shared.resolveAndObserve(event) }
+    }
   }
 
   /// Serializes detector edges with session rotation. A second edge that lands
@@ -84,18 +101,32 @@ extension AppState {
       pendingMeetingState = active
       return
     }
+    let callChanged = active && meetingDetector?.hasPendingCallChange == true
     guard
       let transition = MeetingConversationBoundaryPolicy.transition(
         previousRole: currentConversationRole,
-        meetingActive: active)
+        meetingActive: active,
+        callChanged: callChanged)
     else { return }
 
+    // Starting a meeting already opens a fresh conversation for whichever call is on.
+    if active { meetingDetector?.clearPendingCallChange() }
     meetingBoundaryInProgress = true
-    log("Transcription: meeting boundary — role=\(transition.nextRole.rawValue)")
+    log("Transcription: meeting boundary — role=\(transition.nextRole.rawValue)\(callChanged ? " (call changed)" : "")")
     let result = await finishConversation(
       finalizationReason: transition.finalizationReason,
       allowEmptyRotation: true,
       nextConversationRole: transition.nextRole)
+    if case .busy = result {
+      // A non-edge rotation (deferred .meetingEnded, BLE finish, Rewind finish)
+      // holds the serializer. The edge stays pending — the in-flight rotation's
+      // session-creation task replays `pendingMeetingState` when it installs the
+      // new session id, so nothing is lost.
+      pendingMeetingState = active
+      if callChanged { meetingDetector?.restorePendingCallChange() }
+      meetingBoundaryInProgress = false
+      return
+    }
     let rotationSucceeded: Bool
     if case .error(let message) = result {
       rotationSucceeded = false
@@ -106,7 +137,13 @@ extension AppState {
         rotationSucceeded: false)
       meetingBoundaryInProgress = false
       pendingMeetingState = nil
-      _ = stopTranscription()
+      // A concurrent stop is the usual cause of a mid-rotation generation
+      // change; it owns the terminal event — stopping again would double-emit
+      // `Desktop Recording Stopped`. Only a still-live session gets torn down.
+      if isTranscribing {
+        captureAttempt?.noteErrorTerminal()
+        _ = stopTranscription(finalizationReason: .rotationFailed)
+      }
       return
     } else {
       rotationSucceeded = true
@@ -120,7 +157,7 @@ extension AppState {
     if MeetingConversationBoundaryPolicy.shouldAnnounceNoteTaking(
       committedRole: currentConversationRole, rotationSucceeded: rotationSucceeded)
     {
-      MeetingNoteTakingNotice.present()
+      meetingDetector?.requestNoteTakingNotice()
     }
 
     if let pending = pendingMeetingState {

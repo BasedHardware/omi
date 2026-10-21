@@ -1,0 +1,8 @@
+{
+  "version": "0.12.254",
+  "date": "2026-09-01",
+  "changes": [
+    "Fixed chat jumping to the latest message while you are still scrolling",
+    "Memories you delete on another device now disappear here too, and deleting a memory that is already gone no longer makes it reappear a few seconds later"
+  ]
+}

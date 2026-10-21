@@ -27,7 +27,7 @@ enum DesktopCapabilityRegistry {
     let proactiveGuidance = proactiveGuidancePrompt(availableToolNames: availableToolNames)
     let usageGuidance = usageGuidancePrompt(availableToolNames: availableToolNames)
     return """
-      These Omi data/status tools are documented for desktop chat. Use them before answering when the question depends on the user's personal data, tasks, conversations, memories, app/screen activity, or task-agent state. Do not guess when you can look it up. Do not call tools for simple chit-chat or general knowledge that does not depend on the user's data.
+      These Omi data/status tools are documented for desktop chat. Use them before answering when the question depends on the user's personal data, tasks, conversations, memories, app/screen activity, task-agent state, or how to use Omi on this Mac. Do not guess when you can look it up. Do not call tools for simple chit-chat or general knowledge that does not depend on the user's data or on how Omi itself works.
 
       \(docs)
 
@@ -47,6 +47,7 @@ enum DesktopCapabilityRegistry {
     """
     Omi capability model:
     - You can read Omi data quickly with fast tools: tasks, memories, conversations, daily recaps, and screen history.
+    - Anything the user saw or read on screen earlier (a page, riddle, message, document, error, "the first X", "what did it say") lives in screen history, not conversations: use search_screen_history. Conversations are spoken audio. If a conversation search finds nothing for a "do you remember" question, search screen history before saying it was never mentioned.
     - You can create a straightforward calendar event with create_calendar_event when the user gives the event details.
     - You can propose macOS permission checks or requests with check_permission_status and request_permission; the kernel authorizes the native action. Treat "screen share", "screen sharing", and "screen-share" as the Screen Recording permission type, screen_recording.
     - When screen access is unavailable, explicitly say that Omi needs Screen Recording permission so a next-turn request such as "request it" has one unambiguous permission referent. If the user then asks to request it, propose request_permission with type screen_recording immediately.
@@ -131,6 +132,10 @@ enum DesktopCapabilityRegistry {
       if condition { lines.append("- \(line)") }
     }
 
+    append(
+      "How to use, enable, or configure Omi on this Mac (Only Meetings, Always On, permissions, settings paths, what a screen does) -> get_product_kb. Do not use get_product_kb for the user's personal conversations, memories, tasks, or screen history.",
+      when: has("get_product_kb")
+    )
     let personalTools = ["get_memories", "search_memories", "execute_sql"]
     append(
       "Personal facts/preferences -> \(toolList(personalTools)) over memories.",
@@ -176,6 +181,10 @@ enum DesktopCapabilityRegistry {
         : " Raw screenshots.ocrText projections are refused; use only bounded OCR previews for exact inspection."
       append("Counts, aggregates, date ranges, or exact structured local stats -> execute_sql.\(boundary)", when: true)
     }
+    append(
+      "Something the user saw or read on screen earlier (a page, riddle, message, document, error; \"the first X\", \"what did it say\") -> semantic_search over screen history, not conversation tools. Conversations are spoken audio. If a conversation search finds nothing for a \"do you remember\" question, search screen history before saying it was never mentioned.",
+      when: has("semantic_search")
+    )
     append("Fuzzy screen-history questions -> semantic_search.", when: has("semantic_search"))
     append("Find tasks by meaning -> search_tasks.", when: has("search_tasks"))
     let taskWriteTools = ["create_action_item", "update_action_item", "execute_sql"]
@@ -183,6 +192,10 @@ enum DesktopCapabilityRegistry {
       "Create/update tasks -> \(toolList(taskWriteTools)); use execute_sql only for exact local inspection or legacy local writes.",
       when: !available(taskWriteTools).isEmpty
     )
+    let contextReminderGuidance =
+      "Remind the user next time they return to the current app or document -> create_context_reminder."
+      + (has("create_action_item") ? " Timed reminders stay on create_action_item." : "")
+    append(contextReminderGuidance, when: has("create_context_reminder"))
     append(
       "User explicitly asks to remember/save -> create_memory with a clean standalone fact.",
       when: has("create_memory")

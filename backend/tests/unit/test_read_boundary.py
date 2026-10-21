@@ -93,6 +93,20 @@ def test_parse_snapshot_strict_raises_typed_error_without_fallback(monkeypatch):
     assert fallback.call_count == 0
 
 
+def test_parse_payload_strict_uses_typed_redacted_boundary(caplog):
+    secret = 'private frame description must never be logged'
+
+    with pytest.raises(read_boundary.MalformedDocError, match='users/test/frame_requests/frame-1') as error:
+        read_boundary.parse_payload_strict(
+            _Record,
+            {'id': 'frame-1', 'description': secret},
+            document_path='users/test/frame_requests/frame-1',
+        )
+
+    assert error.value.error_fields == ('count',)
+    assert secret not in caplog.text
+
+
 def test_boundary_converts_type_error_from_payload_transform_to_fail_open(monkeypatch):
     with patch.object(read_boundary, 'record_fallback') as fallback:
         result = read_boundary.parse_snapshot_or_none(

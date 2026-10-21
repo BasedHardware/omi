@@ -1,11 +1,11 @@
-from fastapi import APIRouter, Request, Response, HTTPException
-from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
-from fastapi.templating import Jinja2Templates
-from pathlib import Path
-import io
-import base64
+from datetime import datetime, timezone
 import logging
-from datetime import datetime
+from pathlib import Path
+from urllib.parse import quote
+
+from fastapi import APIRouter, Request
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.templating import Jinja2Templates
 
 router = APIRouter(
     prefix="/chatgpt",
@@ -51,15 +51,13 @@ async def redirect_to_chatgpt(uid: str = ""):
         logger.info(f"Redirecting to ChatGPT with UID: {uid}")
 
         # Encode the UID for URL safety
-        from urllib.parse import quote
-
         encoded_uid = quote(uid.strip())
 
         # Redirect to ChatGPT with UID in the prompt parameter
         chatgpt_url = f"https://chatgpt.com/g/g-67e2772d0af081919a5baddf4a12aacf-omi?prompt=here%20is%20my%20omi%20uid%20{encoded_uid}"
         return RedirectResponse(url=chatgpt_url, status_code=302)
     except Exception as e:
-        logger.error(f"Error in redirect: {str(e)}")
+        logger.error(f"Error in redirect: {type(e).__name__}")
         return RedirectResponse(url="/chatgpt?error=redirect_failed", status_code=302)
 
 
@@ -69,7 +67,7 @@ async def get_stats(request: Request):
     Returns usage statistics for the ChatGPT integration
     Admin-only endpoint
     """
-    # This would be expanded with actual stats in a production environment
+    # Return UTC ISO-8601 timestamp to prevent timezone skew across deployments
     return JSONResponse(
-        {"status": "success", "timestamp": datetime.now().isoformat(), "message": "Stats endpoint is working"}
+        {"status": "success", "timestamp": datetime.now(timezone.utc).isoformat(), "message": "Stats endpoint is working"}
     )

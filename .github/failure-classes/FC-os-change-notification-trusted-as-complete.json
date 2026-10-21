@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-os-change-notification-trusted-as-complete",
+  "violated_contract": "A recorder or detector that must see every change of an OS-owned state must not rely on OS change notifications alone. On macOS 27, CoreAudio per-process IsRunningInput/IsRunningOutput property listeners registered on an already-listed process never fired: a call-boundary probe run through a full Zoom call and a Telegram call recorded no microphone events, while process-list removals still arrived, so the trace looked healthy and was empty.",
+  "canonical_prevention": "Treat the state read as ground truth: poll it at the resolution the consumer needs and deduplicate edges, keeping listeners only as a latency hint. Check every listener registration's status and surface failures. Validate the recorder against a real state change of an already-running process, not only process arrival.",
+  "canonical_prevention_artifact": [
+    "desktop/macos/scripts/call-audio-probe.swift"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "desktop/macos/scripts/call-audio-probe.swift",
+    "desktop/macos/Desktop/Sources/ConferencingApps.swift",
+    "desktop/macos/Desktop/Sources/MeetingDetector.swift"
+  ],
+  "status": "open"
+}

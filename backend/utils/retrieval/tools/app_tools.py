@@ -31,10 +31,16 @@ from models.app import App, ChatTool
 from utils.mcp_client import call_mcp_tool
 from utils.http_client import get_webhook_circuit_breaker
 from utils.executors import db_executor, run_blocking
+from utils.model_text import UNTRUSTED_LEGEND, truncation_note, untrusted_block
 from utils.notifications import send_notification
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+def _format_external_tool_result(source: str, result: str) -> str:
+    """Mark a successful third-party app or MCP response as quoted data."""
+    return f"{untrusted_block(source, result)}\n\n{UNTRUSTED_LEGEND}"
 
 
 def _notify_app_owner(app_id: str, title: str, body: str):
@@ -168,6 +174,17 @@ def _create_pydantic_model_from_schema(tool_name: str, parameters: Dict[str, Any
     return create_model(model_name, **field_definitions)
 
 
+def _supplied_arguments(kwargs: Dict[str, Any]) -> Dict[str, Any]:
+    """Drop the optional parameters the model did not supply.
+
+    Every non-required manifest parameter is typed Optional with default None, and
+    langchain forwards those defaulted fields as explicit None. The tool endpoint
+    would receive JSON null for a parameter its schema types as string or integer,
+    so an omitted parameter must be omitted on the wire too.
+    """
+    return {name: value for name, value in kwargs.items() if value is not None}
+
+
 def create_app_tool(
     app_tool: ChatTool,
     app_id: str,
@@ -214,13 +231,14 @@ def create_app_tool(
         async def mcp_tool_function(**kwargs: Any) -> str:
             """MCP tool dynamically created from MCP server."""
             kwargs.pop('config', None)
+            arguments = _supplied_arguments(kwargs)
             if await run_blocking(db_executor, is_app_webhook_disabled, app_id):
                 return f"The {app_tool.name} tool is temporarily disabled due to sustained failures."
             cb = get_webhook_circuit_breaker(_mcp_url)
             if not cb.allow_request():
                 return f"The {app_tool.name} tool is temporarily unavailable. Please try again shortly."
             try:
-                result = await call_mcp_tool(_mcp_url, app_tool.name, kwargs, _access_token, _mcp_tokens, _transport)
+                result = await call_mcp_tool(_mcp_url, app_tool.name, arguments, _access_token, _mcp_tokens, _transport)
                 if result.startswith('Error') or result.startswith('MCP error'):
                     cb.record_failure()
                     action = await run_blocking(
@@ -230,7 +248,8 @@ def create_app_tool(
                 else:
                     cb.record_success()
                     await run_blocking(db_executor, record_app_webhook_success, app_id, ENDPOINT_MCP_TOOL)
-                return result
+                    return _format_external_tool_result(f"{app_name} {app_tool.name} MCP result", result)
+                return _format_external_tool_result(f"{app_name} {app_tool.name} MCP error", result)
             except httpx.HTTPStatusError as e:
                 status_code = e.response.status_code
                 action = await run_blocking(
@@ -249,7 +268,8 @@ def create_app_tool(
                     db_executor, record_app_webhook_failure, app_id, 0, type(e).__name__, ENDPOINT_MCP_TOOL
                 )
                 await run_blocking(db_executor, _handle_app_webhook_disable, app_id, action, type(e).__name__)
-                return f"Error calling MCP tool {app_tool.name}: {e}"
+                logger.error(f"Error calling MCP tool {app_tool.name}: {e}", exc_info=True)
+                return f"Error calling MCP tool {app_tool.name}. Please try again later."
 
         return StructuredTool(
             name=tool_name,
@@ -263,7 +283,7 @@ def create_app_tool(
     async def tool_function(**kwargs: Any) -> str:
         """Tool dynamically created from app definition."""
         config_param: Optional[RunnableConfig] = kwargs.pop('config', None)
-        return await _call_tool_endpoint(kwargs, config_param, app_tool, app_id)
+        return await _call_tool_endpoint(_supplied_arguments(kwargs), config_param, app_tool, app_id)
 
     # Create StructuredTool with the schema
     return StructuredTool(
@@ -362,15 +382,15 @@ async def _call_tool_endpoint(
                     if isinstance(loaded, dict):
                         data = cast(Dict[str, Any], loaded)
                         if 'result' in data:
-                            return str(data['result'])
+                            return _format_external_tool_result(f"{app_tool.name} app result", str(data['result']))
                         if 'message' in data:
-                            return str(data['message'])
-                        return str(data)
+                            return _format_external_tool_result(f"{app_tool.name} app result", str(data['message']))
+                        return _format_external_tool_result(f"{app_tool.name} app result", str(data))
                     if isinstance(loaded, str):
-                        return loaded
-                    return str(loaded)
+                        return _format_external_tool_result(f"{app_tool.name} app result", loaded)
+                    return _format_external_tool_result(f"{app_tool.name} app result", str(loaded))
                 except ValueError:
-                    return response.text
+                    return _format_external_tool_result(f"{app_tool.name} app result", response.text)
             else:
                 cb.record_failure()
                 action = await run_blocking(
@@ -391,18 +411,32 @@ async def _call_tool_endpoint(
                         f"configuration issue on the app's side. Please try again later "
                     )
                 error_msg = f"Error calling {app_tool.name}: HTTP {response.status_code}"
+                error_detail: Optional[str] = None
+                error_detail_total: Optional[int] = None
                 try:
                     loaded_err: object = response.json()
                     if isinstance(loaded_err, dict):
                         err_data = cast(Dict[str, Any], loaded_err)
                         if 'error' in err_data:
-                            error_msg += f" - {err_data['error']}"
+                            error_detail = str(err_data['error'])
                         else:
-                            error_msg += f" - {str(err_data)}"
+                            error_detail = str(err_data)
                     else:
-                        error_msg += f" - {str(loaded_err)}"
+                        error_detail = str(loaded_err)
                 except ValueError:
-                    error_msg += f" - {response.text[:200]}"
+                    error_detail_total = len(response.text)
+                    error_detail = response.text[:200]
+                if error_detail:
+                    error_msg += "\n" + _format_external_tool_result(
+                        f"{app_tool.name} app error response", error_detail
+                    )
+                    if error_detail_total is not None and error_detail_total > len(error_detail):
+                        error_msg += "\n" + truncation_note(
+                            shown=len(error_detail),
+                            total=error_detail_total,
+                            unit="app error response characters",
+                            how_to_get_more="The app response was capped to keep this error detail short.",
+                        )
                 return error_msg
 
     except httpx.TimeoutException:
@@ -425,7 +459,8 @@ async def _call_tool_endpoint(
             db_executor, record_app_webhook_failure, app_id, 0, type(e).__name__, ENDPOINT_CHAT_TOOL
         )
         await run_blocking(db_executor, _handle_app_webhook_disable, app_id, action, type(e).__name__)
-        return f"Error calling {app_tool.name}: {str(e)}"
+        logger.error(f"Error calling {app_tool.name}: {e}", exc_info=True)
+        return f"Error calling {app_tool.name}. Please try again later."
 
 
 def load_app_tools(uid: str) -> List[BaseTool]:

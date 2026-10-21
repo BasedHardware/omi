@@ -329,6 +329,62 @@ final class AgentControlServiceTests: XCTestCase {
     XCTAssertNotNil(artifactError)
     XCTAssertTrue(artifactError!.contains("couldn't resolve"))
   }
+
+  // MARK: - currentHarnessMode persisted-preference routing (#11149)
+
+  /// The four persisted provider spellings must each resolve to their own
+  /// harness: "hermes"/"openclaw" were previously collapsed to "acp", which
+  /// bound chat sessions to the wrong adapter ("Claude sign-in is required").
+  func testCurrentHarnessModeRoutesPersistedProviderSpellings() {
+    let saved = UserDefaults.standard.string(forKey: .chatBridgeMode)
+    defer {
+      Self.restoreChatBridgeMode(saved)
+    }
+    for (persisted, expected) in [
+      (ChatProvider.BridgeMode.piMono.rawValue, "piMono"),
+      (ChatProvider.BridgeMode.userClaude.rawValue, "acp"),
+      (ChatProvider.BridgeMode.hermes.rawValue, "hermes"),
+      (ChatProvider.BridgeMode.openClaw.rawValue, "openclaw"),
+    ] {
+      UserDefaults.standard.set(persisted, forKey: .chatBridgeMode)
+      XCTAssertEqual(AgentControlService.currentHarnessMode(), expected, persisted)
+    }
+  }
+
+  /// An unset or unknown persisted value must fall back to "piMono" (the
+  /// UserDefaults default), never to another harness.
+  func testCurrentHarnessModeFallsBackToPiMonoForUnsetOrUnknownValues() {
+    let saved = UserDefaults.standard.string(forKey: .chatBridgeMode)
+    defer {
+      Self.restoreChatBridgeMode(saved)
+    }
+    for persisted in [nil, "agentSDK", "not-a-real-mode"] {
+      if let persisted {
+        UserDefaults.standard.set(persisted, forKey: .chatBridgeMode)
+      } else {
+        UserDefaults.standard.removeObject(forKey: .chatBridgeMode)
+      }
+      XCTAssertEqual(AgentControlService.currentHarnessMode(), "piMono", persisted ?? "nil")
+    }
+  }
+
+  private static func restoreChatBridgeMode(_ saved: String?) {
+    if let saved {
+      UserDefaults.standard.set(saved, forKey: .chatBridgeMode)
+    } else {
+      UserDefaults.standard.removeObject(forKey: .chatBridgeMode)
+    }
+  }
+
+  /// The raw-value routing table must recognize the persisted Claude
+  /// spelling: "claudeCode" is what Settings writes for the Claude provider,
+  /// and collapsing it to piMono would silently route Claude users to the
+  /// Omi AI agent.
+  func testHarnessModeFromRawValueRecognizesPersistedClaudeCodeSpelling() {
+    XCTAssertEqual(AgentRuntimeRouting.harnessMode(from: "claudeCode"), .acp)
+    XCTAssertEqual(AgentRuntimeRouting.harnessMode(from: "acp"), .acp)
+    XCTAssertNil(AgentRuntimeRouting.harnessMode(from: "unknown"))
+  }
 }
 
 final class RealtimeProviderToolResultPolicyTests: XCTestCase {
@@ -360,22 +416,69 @@ final class RealtimeProviderToolResultPolicyTests: XCTestCase {
     XCTAssertLessThan(result.output.utf8.count, envelope.utf8.count)
   }
 
-  func testOversizedToolResultBecomesSmallStructuredRetryError() throws {
+  func testOverBudgetPayloadIsClampedAsSuccessfulTruncation() throws {
+    let payload = String(repeating: "x", count: RealtimeProviderToolResultPolicy.maximumByteCount + 1)
+    let output = try XCTUnwrap(
+      String(
+        data: JSONSerialization.data(withJSONObject: [
+          "ok": true,
+          "payload": payload,
+          "toolResultEnvelope": [
+            "version": 1,
+            "status": "succeeded",
+            "truncated": false,
+            "originalBytes": payload.utf8.count,
+            "projectedBytes": payload.utf8.count,
+            "fullOutputRef": NSNull(),
+            "provenance": [
+              "invocationId": "invocation-over-budget",
+              "runId": "run-over-budget",
+              "attemptId": "attempt-over-budget",
+              "toolName": HubTool.listAgentSessions.rawValue,
+            ],
+          ],
+        ]), encoding: .utf8))
+
     let result = RealtimeProviderToolResultPolicy.prepare(
       name: HubTool.listAgentSessions.rawValue,
-      output: String(repeating: "x", count: RealtimeProviderToolResultPolicy.maximumByteCount + 1))
+      output: output)
 
     XCTAssertTrue(result.wasOversized)
-    XCTAssertLessThan(result.output.utf8.count, RealtimeProviderToolResultPolicy.maximumByteCount)
-    let object = try XCTUnwrap(
-      JSONSerialization.jsonObject(with: Data(result.output.utf8)) as? [String: Any])
-    let error = try XCTUnwrap(object["error"] as? [String: Any])
-    XCTAssertEqual(error["code"] as? String, "tool_result_too_large")
-    XCTAssertEqual(error["tool"] as? String, HubTool.listAgentSessions.rawValue)
+    // The kernel delivered a projected (canonical) result that is merely over
+    // the transport cap. It must not be mislabeled as an unprojected invariant
+    // violation by the controller's oversized log gate.
+    XCTAssertTrue(result.hasCanonicalEnvelope)
+    XCTAssertTrue(result.wasTruncated)
+    XCTAssertLessThanOrEqual(result.output.utf8.count, RealtimeProviderToolResultPolicy.maximumByteCount)
+    XCTAssertNotEqual(result.output, output)
+    let object = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(result.output.utf8)) as? [String: Any])
+    XCTAssertEqual(object["ok"] as? Bool, true)
     let envelope = try XCTUnwrap(object["toolResultEnvelope"] as? [String: Any])
-    XCTAssertEqual(envelope["status"] as? String, "failed")
-    XCTAssertEqual(envelope["truncated"] as? Bool, false)
-    XCTAssertNil(envelope["fullOutputRef"] as? String)
+    XCTAssertEqual(envelope["status"] as? String, "succeeded")
+    XCTAssertEqual(envelope["truncated"] as? Bool, true)
+    XCTAssertEqual(envelope["fullOutputRef"] as? String, "artifact:unavailable")
+  }
+
+  func testUnprojectedOversizedResultIsFlaggedForTheInvariantLog() throws {
+    // A raw oversized payload without any canonical envelope is the only case
+    // that may log "INVARIANT VIOLATION unprojected".
+    var payload: [String: Any] = ["ok": true]
+    var text = ""
+    for _ in 0..<(RealtimeProviderToolResultPolicy.maximumByteCount / 32) {
+      text += "0123456789abcdef0123456789abcdef"
+    }
+    payload["payload"] = text
+    let data = try XCTUnwrap(JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys]))
+    let output = try XCTUnwrap(String(data: data, encoding: .utf8))
+
+    let result = RealtimeProviderToolResultPolicy.prepare(
+      name: HubTool.listAgentSessions.rawValue,
+      output: output)
+
+    XCTAssertTrue(result.wasOversized)
+    XCTAssertFalse(result.hasCanonicalEnvelope)
+    XCTAssertTrue(result.wasTruncated)
+    XCTAssertLessThanOrEqual(result.output.utf8.count, RealtimeProviderToolResultPolicy.maximumByteCount)
   }
 
   func testOversizedProviderResultRetainsTheCanonicalArtifactReference() throws {
@@ -408,8 +511,12 @@ final class RealtimeProviderToolResultPolicyTests: XCTestCase {
     let envelope = try XCTUnwrap(object["toolResultEnvelope"] as? [String: Any])
 
     XCTAssertTrue(result.wasOversized)
-    XCTAssertEqual(object["ok"] as? Bool, false)
-    XCTAssertEqual(envelope["status"] as? String, "failed")
+    XCTAssertTrue(result.hasCanonicalEnvelope)
+    XCTAssertTrue(result.wasTruncated)
+    XCTAssertLessThanOrEqual(result.output.utf8.count, RealtimeProviderToolResultPolicy.maximumByteCount)
+    XCTAssertNotEqual(result.output, output)
+    XCTAssertEqual(object["ok"] as? Bool, true)
+    XCTAssertEqual(envelope["status"] as? String, "succeeded")
     XCTAssertEqual(envelope["truncated"] as? Bool, true)
     XCTAssertEqual(envelope["fullOutputRef"] as? String, "artifact:tool-output:provider-oversize")
   }

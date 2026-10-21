@@ -1,18 +1,31 @@
 from __future__ import annotations
 
+from database.messaging import MessagingStore
+
+import asyncio
 import logging
+from threading import Event
 import time
 from typing import Any, Callable, Literal, TypedDict, cast
 
+from firebase_admin import auth as firebase_auth
+
 from database import vector_db
+from database.sync_jobs import renew_job_run_lock
 from database import _client as database_client
+from database.legal_holds import (
+    acquire_destructive_operation,
+    assert_account_deletion_permitted,
+    finish_destructive_operation,
+)
 from database.dev_api_key import delete_dev_key, get_dev_keys_for_user
 from database.mcp_api_key import delete_mcp_key, get_mcp_keys_for_user
 from database.mcp_oauth import delete_user_oauth_credentials
 from database import users as users_db
 from database.action_items import get_action_item_ids
-from database.conversations import get_conversation_ids
+from database.conversations import get_conversation_ids, get_conversation_photos
 from database.screen_activity import get_screen_activity_ids
+from database import frame_requests as frame_requests_db
 from database.vector_db import (
     delete_action_item_vectors_batch,
     delete_conversation_vectors_batch,
@@ -21,14 +34,23 @@ from database.vector_db import (
     delete_transcript_chunk_vectors_batch,
 )
 from utils import stripe as stripe_utils
-from utils.cloud_tasks import enqueue_account_deletion_wipe, is_account_deletion_dispatch_enabled
-from utils.executors import cleanup_executor, submit_with_context
+from utils.cloud_tasks import (
+    assert_inline_account_deletion_permitted,
+    enqueue_account_deletion_wipe,
+    is_account_deletion_dispatch_enabled,
+)
+from utils.executors import cleanup_executor, db_executor, run_blocking, start_background_task, submit_with_context
 from utils.log_sanitizer import sanitize
+from utils.observability.fallback import record_fallback
 from utils.other import endpoints as auth
 from utils.memory.canonical_memory_adapter import purge_canonical_derived_user_data
 from utils.memory.memory_service import MemoryService
 from utils.memory.memory_system import delete_canonical_memory_maintenance_registry_entry
-from utils.other.storage import delete_all_conversation_recordings
+from utils.other.storage import delete_all_conversation_recordings, delete_all_user_storage_objects
+from utils.retrieval.frame_request_storage import (
+    delete_all_frame_request_pixels_for_user,
+    delete_frame_request_pixels_for_user,
+)
 from utils.twilio_service import delete_user_caller_ids_strict as delete_user_caller_ids
 from utils.integration_telemetry import emit_posthog_event
 from services.users.agent_vm_account_cleanup import delete_agent_vm_for_account
@@ -61,7 +83,7 @@ def _historical_memory_ids(uid: str) -> list[str]:
 def _delete_memory_maintenance_registry(uid: str) -> None:
     """Remove the content-free global inventory marker during account wipe."""
 
-    delete_canonical_memory_maintenance_registry_entry(uid, db_client=database_client.db)
+    delete_canonical_memory_maintenance_registry_entry(uid, db_client=database_client.get_data_plane_firestore_client())
 
 
 def delete_account_credentials(uid: str) -> None:
@@ -163,7 +185,44 @@ def purge_derived_user_data(uid: str) -> PurgeResult:
         logger.error(f'delete_account purge recordings failed for {uid}: {sanitize(str(e))}')
 
     try:
-        canonical_result = purge_canonical_derived_user_data(uid)
+        # The recordings helper covers the historical recordings bucket. The
+        # owner-prefix sweep covers private-cloud chunks/audio/merged/playback,
+        # speech-profile objects, and chat uploads that are not represented by
+        # the Firestore ID inventories below.
+        delete_all_user_storage_objects(uid)
+    except Exception as e:
+        record_failure('required_failures', 'owner_storage_objects', e)
+        logger.error(f'delete_account purge owner storage failed for {uid}: {sanitize(str(e))}')
+
+    try:
+        # Firestore metadata is removed by the recursive user wipe below, but
+        # referenced pixels live in GCS and would otherwise become orphaned.
+        photo_storage_ids = []
+        for conversation_id in get_conversation_ids(uid):
+            for photo in get_conversation_photos(uid, conversation_id) or []:
+                if isinstance(photo, dict) and isinstance(photo.get('storage_id'), str) and photo.get('storage_id'):
+                    photo_storage_ids.append(str(photo['storage_id']))
+        frame_storage_ids = frame_requests_db.list_all_frame_request_storage_ids(uid)
+        orphan_storage_ids = frame_requests_db.list_all_frame_upload_orphan_storage_ids(uid)
+        deletion_outbox_storage_ids = frame_requests_db.list_all_frame_deletion_outbox_storage_ids(uid)
+        delete_frame_request_pixels_for_user(
+            uid,
+            list(
+                dict.fromkeys(photo_storage_ids + frame_storage_ids + orphan_storage_ids + deletion_outbox_storage_ids)
+            ),
+        )
+        # Metadata inventories can be incomplete after a crashed request. The
+        # authoritative prefix sweep below removes both temporary and
+        # conversation-lifetime frame objects and verifies absence.
+        delete_all_frame_request_pixels_for_user(uid)
+    except Exception as e:
+        record_failure('required_failures', 'frame_request_pixels', e)
+        logger.error(f'delete_account purge frame request pixels failed for {uid}: {sanitize(str(e))}')
+
+    try:
+        canonical_result = purge_canonical_derived_user_data(
+            uid, db_client=database_client.get_data_plane_firestore_client()
+        )
         vector_ids = canonical_result.get('vector_ids', [])
         if isinstance(vector_ids, list):
             result['vectors_deleted'] += len(cast(list[object], vector_ids))
@@ -239,11 +298,81 @@ def _emit_deletion_telemetry(uid: str, event: str, properties: dict[str, object]
     emit_posthog_event(_ACCOUNT_DELETION_TELEMETRY_DISTINCT_ID, event, safe_properties)
 
 
-def background_wipe_user_data(uid: str, retry_count: int = 0, terminal: bool = False) -> bool:
+class DeletionBillingError(RuntimeError):
+    def __init__(self, subscription_id: str | None, error: Exception):
+        super().__init__(str(error))
+        self.subscription_id = subscription_id
+
+
+_DELETION_HEARTBEAT_INTERVAL_SECONDS = 60
+
+
+async def _renew_deletion_wipe_lease(uid: str, token: str, stop: asyncio.Event, lost: Event) -> None:
+    while not stop.is_set():
+        try:
+            if not await run_blocking(db_executor, renew_job_run_lock, f'account-deletion:{uid}', token):
+                lost.set()
+                return
+            # Also heartbeat during a single long provider/Firestore operation.
+            await run_blocking(db_executor, users_db.heartbeat_user_deletion_wipe, uid)
+        except Exception as error:
+            # Keep the Firestore freshness fence on a Redis outage. A later
+            # successful renewal or lost-token result resolves lease ownership.
+            logger.error('delete_account lease heartbeat failed: %s', sanitize(str(error)))
+            try:
+                await run_blocking(db_executor, users_db.heartbeat_user_deletion_wipe, uid)
+            except Exception as heartbeat_error:
+                logger.error('delete_account marker heartbeat failed: %s', sanitize(str(heartbeat_error)))
+        try:
+            await asyncio.wait_for(stop.wait(), timeout=_DELETION_HEARTBEAT_INTERVAL_SECONDS)
+        except asyncio.TimeoutError:
+            pass
+
+
+async def run_deletion_wipe_with_lease(uid: str, retry_count: int, terminal: bool, token: str) -> bool:
+    """Own renewal until the cleanup thread finishes, even if HTTP is cancelled."""
+
+    async def run() -> bool:
+        stop = asyncio.Event()
+        lost = Event()
+        heartbeat = start_background_task(
+            _renew_deletion_wipe_lease(uid, token, stop, lost), name='account-deletion-lease'
+        )
+        try:
+            return await run_blocking(cleanup_executor, background_wipe_user_data, uid, retry_count, terminal, lost)
+        finally:
+            stop.set()
+            await heartbeat
+
+    worker = start_background_task(run(), name='account-deletion-worker')
+    return await asyncio.shield(worker)
+
+
+def background_wipe_user_data(
+    uid: str, retry_count: int = 0, terminal: bool = False, lease_lost: Event | None = None
+) -> bool:
     started_at = time.monotonic()
     current_operation = 'wipe_running_marker'
     purge_result: object = {}
+    deletion_gate_token = f'account-deletion:{uid}'
+    deletion_gate_acquired = False
+
+    def heartbeat() -> None:
+        if lease_lost is not None and lease_lost.is_set():
+            raise RuntimeError('account deletion run-lock lost')
+        users_db.heartbeat_user_deletion_wipe(uid)
+
     try:
+        # Acquire the same transaction gate used by the server-owned legal-hold
+        # writer before any irreversible provider, Auth, storage, or Firestore
+        # mutation. A hold and this acquisition therefore have one winner.
+        current_operation = 'legal_hold_authority'
+        acquire_destructive_operation(
+            uid,
+            kind='account_deletion',
+            token=deletion_gate_token,
+        )
+        deletion_gate_acquired = True
         # Transition to ``running`` so the reconciler can distinguish a
         # genuinely orphaned ``pending`` marker (queued but never started)
         # from a wipe that is actively executing. Without this, a slow wipe
@@ -254,12 +383,19 @@ def background_wipe_user_data(uid: str, retry_count: int = 0, terminal: bool = F
         # remove Firebase Auth from the request thread: a queue NotFound must
         # leave an account usable and recoverable.
         current_operation = 'billing_subscription'
+        heartbeat()
         _cancel_subscription_for_account_deletion(uid)
         current_operation = 'agent_vm'
+        heartbeat()
         delete_agent_vm_for_account(uid)
+        current_operation = 'messaging_channels'
+        heartbeat()
+        MessagingStore().delete_account(uid)
         current_operation = 'api_credentials'
+        heartbeat()
         delete_account_credentials(uid)
         current_operation = 'firebase_auth'
+        heartbeat()
         try:
             auth.delete_account(uid)
         except Exception as e:
@@ -268,30 +404,82 @@ def background_wipe_user_data(uid: str, retry_count: int = 0, terminal: bool = F
                 logger.info('delete_account worker observed Firebase Auth user already absent')
             else:
                 raise
+        users_db.mark_user_deletion_auth_deleted(uid)
         # Twilio caller IDs first, while the phone_numbers subcollection still carries twilio_sid metadata.
         current_operation = 'twilio_caller_ids'
+        heartbeat()
         delete_user_caller_ids(uid)
         current_operation = 'derived_data'
+        heartbeat()
         purge_result = purge_derived_user_data(uid)
         required_failures = _required_failures_from_purge_result(purge_result)
         if required_failures:
             failed_operations = ', '.join(failure['operation'] for failure in required_failures)
             raise RuntimeError(f'required derived purge failed: {failed_operations}')
         current_operation = 'firestore_user_data'
+        heartbeat()
         wipe_result = users_db.delete_user_data(uid)
         if wipe_result.get('status') != 'ok':
             raise RuntimeError('authoritative Firestore user-data wipe did not complete')
+        # Best-effort Typesense conversation purge AFTER the wipe: while the
+        # Firebase extension still owns production indexing, account deletion
+        # must not fail closed on Typesense. The purge is userId-filter-based,
+        # so it stays executable (and retryable) even with the user document
+        # gone; a failure here never changes the wipe outcome.
+        current_operation = 'conversation_typesense_purge'
+        heartbeat()
+        try:
+            from utils.conversations.typesense_index import purge_user_conversation_index
+
+            purge_user_conversation_index(uid)
+        except Exception as purge_err:
+            logger.error(
+                f'delete_account post-wipe conversation typesense purge failed for {uid}: '
+                f'{sanitize(str(purge_err))}'
+            )
         current_operation = 'memory_maintenance_registry'
+        heartbeat()
         _delete_memory_maintenance_registry(uid)
         logger.info('delete_account background wipe complete')
     except Exception as e:
         logger.error(f'delete_account background wipe failed for {uid}: {sanitize(str(e))}')
-        # Mark the wipe as failed so a reconciliation worker can retry. Do NOT mark
-        # completed — that would hide a partial wipe from the recovery path.
-        try:
-            users_db.mark_user_deletion_wipe_failed(uid)
-        except Exception as persist_err:
-            logger.error(f'delete_account wipe status persist failed for {uid}: {sanitize(str(persist_err))}')
+        if deletion_gate_acquired:
+            try:
+                finish_destructive_operation(
+                    uid,
+                    kind='account_deletion',
+                    token=deletion_gate_token,
+                    outcome='failed',
+                )
+            except Exception as gate_err:
+                # An uncertain running gate intentionally remains fail-closed;
+                # never pretend a hold can be placed while deletion outcome is
+                # unknown.
+                logger.error(f'delete_account legal-hold gate finalization failed for {uid}: {sanitize(str(gate_err))}')
+        # Billing can restore access only while Auth is confirmed present.
+        # A post-Auth failure retains the existing fenced reconciliation path.
+        billing_parked = False
+        if isinstance(e, DeletionBillingError):
+            try:
+                firebase_auth.get_user(uid)
+                billing_parked = (
+                    _retry_firestore_write(
+                        lambda: users_db.mark_user_deletion_billing_failed(uid, e.subscription_id, sanitize(str(e))),
+                        uid=uid,
+                        fail_msg='delete_account billing failure status persist failed',
+                        on_failure='raise',
+                    )
+                    is True
+                )
+            except firebase_auth.UserNotFoundError:
+                pass
+            except Exception as persist_err:
+                logger.error(f'delete_account billing status persist failed for {uid}: {sanitize(str(persist_err))}')
+        if not billing_parked:
+            try:
+                users_db.mark_user_deletion_wipe_failed(uid)
+            except Exception as persist_err:
+                logger.error(f'delete_account wipe status persist failed for {uid}: {sanitize(str(persist_err))}')
         required_failures, best_effort_failures = _purge_failures(purge_result)
         failed_operations = [failure['operation'] for failure in required_failures + best_effort_failures] or [
             current_operation
@@ -308,11 +496,22 @@ def background_wipe_user_data(uid: str, retry_count: int = 0, terminal: bool = F
         return False
     else:
         try:
+            heartbeat()
             if users_db.mark_user_deletion_wipe_completed(uid) is False:
                 logger.warning('delete_account completion deferred for outstanding provider cleanup')
                 return False
         except Exception as e:
             logger.error(f'delete_account wipe status persist failed for {uid}: {sanitize(str(e))}')
+            return False
+        try:
+            finish_destructive_operation(
+                uid,
+                kind='account_deletion',
+                token=deletion_gate_token,
+                outcome='completed',
+            )
+        except Exception as e:
+            logger.error(f'delete_account legal-hold gate completion failed for {uid}: {sanitize(str(e))}')
             return False
         required_failures, best_effort_failures = _purge_failures(purge_result)
         purge_result_dict = purge_result
@@ -337,7 +536,8 @@ def enqueue_deletion_wipe(uid: str, wipe_job_id: str):
         enqueue_account_deletion_wipe(wipe_job_id)
         return
     # Inline dispatch is retained solely for deterministic local/dev/test
-    # execution. Production startup rejects this mode before serving traffic.
+    # execution, and may never reach production data whatever the stage says.
+    assert_inline_account_deletion_permitted()
     submit_with_context(cleanup_executor, background_wipe_user_data, uid)
 
 
@@ -379,38 +579,22 @@ def _retry_firestore_write(
 def _cancel_subscription_for_account_deletion(uid: str) -> None:
     subscription_id = None
     try:
-        sub = users_db.get_user_subscription(uid)
+        sub = users_db.get_existing_user_subscription(uid)
+        app_subscription_ids = stripe_utils.find_billable_app_subscription_ids(uid)
+        for subscription_id in app_subscription_ids:
+            stripe_utils.cancel_subscription_for_account_deletion(subscription_id)
         subscription_id = getattr(sub, 'stripe_subscription_id', None) if sub else None
-        if not subscription_id:
-            return
-        canceled = stripe_utils.cancel_subscription(subscription_id)
-        if not canceled:
-            # The billing step owns a goal state — the subscription no longer bills — not a
-            # particular API call. Stripe rejects `cancel_at_period_end` on an already-canceled
-            # subscription, so without this the wipe fails forever and the account is never
-            # deleted even though billing is already where it must be. Asking Stripe for the
-            # status keeps this closed: anything but a terminal status is still a real failure.
-            if not stripe_utils.is_subscription_terminal(subscription_id):
-                raise RuntimeError('stripe cancel returned no subscription')
-            logger.info('delete_account billing cancellation satisfied by an already-canceled subscription')
-    except Exception as e:
-        raw_error = str(e)
-        sanitized_error = sanitize(raw_error)
-        if not isinstance(
-            sanitized_error, str
-        ):  # pyright: ignore[reportUnnecessaryIsInstance]  # tests stub sanitize with MagicMock
-            sanitized_error = raw_error
-        _retry_firestore_write(
-            lambda: users_db.mark_user_deletion_billing_failed(uid, subscription_id, sanitized_error),
-            uid=uid,
-            fail_msg='delete_account billing failure status persist failed',
-            on_failure='log',
-        )
-        logger.error(f'delete_account billing cancellation failed for {uid}: {sanitize(str(e))}')
-        raise
+        if subscription_id and subscription_id not in app_subscription_ids:
+            stripe_utils.cancel_subscription_for_account_deletion(subscription_id)
+    except Exception as error:
+        raise DeletionBillingError(subscription_id, error) from error
 
 
 def start_account_deletion(uid: str, reason: str | None = None, reason_details: str | None = None) -> dict[str, str]:
+    # Admission is also fenced before creating a durable deletion intent. This
+    # keeps a newly-held account from entering the destructive queue at all;
+    # the worker repeats the check because holds can change while queued.
+    assert_account_deletion_permitted(uid)
     # Persist the authoritative, actionable intent before dispatch. This state
     # is enough for reconciliation to recover a failed queue handoff, while the
     # Cloud Tasks handler claim fences all destructive work. If either write or
@@ -438,7 +622,14 @@ def start_account_deletion(uid: str, reason: str | None = None, reason_details: 
         enqueue_deletion_wipe(uid, wipe_job_id)
     except Exception as e:
         _mark_wipe_failed_after_enqueue_error(uid, e)
-        logger.warning('delete_account queue acceleration failed; durable reconciliation will retry')
+        record_fallback(
+            component='other',
+            from_mode='cloud_tasks',
+            to_mode='durable_reconciliation',
+            reason='enqueue_failed',
+            outcome='degraded',
+            log=logger,
+        )
         # The actionable marker is committed. Queue dispatch is only an
         # acceleration path; reconciliation owns eventual completion.
         return {'status': 'ok', 'message': 'Account deletion started'}
@@ -519,7 +710,11 @@ def reconcile_pending_deletion_wipes(limit: int = 100) -> dict[str, int]:
             skipped += 1
             continue
         try:
-            enqueue_deletion_wipe(uid, wipe_job_id)
+            # Reconciliation re-dispatches; it never executes. Calling the
+            # mode-aware helper here made any inline process - a local run
+            # against prod data - the wipe executor for every account it could
+            # claim, which is how wipes ran outside the OIDC handler entirely.
+            enqueue_account_deletion_wipe(wipe_job_id)
         except Exception as e:
             logger.error(f'delete_account reconciliation enqueue failed for {uid}: {sanitize(str(e))}')
             _mark_wipe_failed_after_enqueue_error(uid, e)

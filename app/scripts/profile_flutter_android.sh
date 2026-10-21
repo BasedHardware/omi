@@ -110,7 +110,37 @@ if [[ "$DO_BUILD" == true ]]; then
   echo ""
   echo "=== Building profile APK ==="
   pushd "$APP_DIR" > /dev/null
-  flutter build apk --flavor "$FLAVOR" --profile
+  case "$FLAVOR" in
+    dev)
+      PROFILE='local_dev'
+      ENV_FILE='.dev.env'
+      ANDROID_DEV_HOST="${OMI_ANDROID_DEV_HOST:-${OMI_DEV_HOST:-10.0.2.2}}"
+      ;;
+    prod)
+      PROFILE='mobile_beta'
+      ENV_FILE='.env'
+      ANDROID_DEV_HOST=''
+      ;;
+    *)
+      echo "Error: unsupported mobile flavor '$FLAVOR' (expected dev or prod)" >&2
+      exit 1
+      ;;
+  esac
+  scripts/validate_mobile_build_config.sh \
+    --flavor "$FLAVOR" \
+    --profile "$PROFILE" \
+    --env-file "$ENV_FILE"
+  API_BASE_URL="$(awk -F= '$1 == "API_BASE_URL" { value = $2 } END { print value }' "$ENV_FILE")"
+  flutter_args=(
+    --flavor "$FLAVOR"
+    --profile
+    "--dart-define=OMI_APP_PROFILE=$PROFILE"
+    "--dart-define=OMI_API_BASE_URL=$API_BASE_URL"
+  )
+  if [[ -n "$ANDROID_DEV_HOST" ]]; then
+    flutter_args+=("--dart-define=OMI_FIREBASE_AUTH_EMULATOR_HOST=$ANDROID_DEV_HOST")
+  fi
+  flutter build apk "${flutter_args[@]}"
   popd > /dev/null
 fi
 

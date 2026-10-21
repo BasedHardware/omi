@@ -1,0 +1,7 @@
+{
+  "version": "0.12.485",
+  "date": "2026-10-14",
+  "changes": [
+    "Saved conversations waiting on your allowance show a waiting state instead of a padlock"
+  ]
+}

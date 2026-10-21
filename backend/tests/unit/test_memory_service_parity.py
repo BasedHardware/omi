@@ -2,6 +2,7 @@
 
 import os
 from datetime import datetime, timezone
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -71,6 +72,7 @@ def _sample_tiered_memory_dict(memory_id: str = "mem-1") -> dict:
 
 def _purge_stub_memory_modules() -> None:
     import sys
+    from types import ModuleType
 
     for name in list(sys.modules):
         if not (name.startswith("utils.memory") or name in {"database.memories", "database.vector_db"}):
@@ -78,6 +80,21 @@ def _purge_stub_memory_modules() -> None:
         mod = sys.modules.get(name)
         if not isinstance(getattr(mod, "__file__", None), str):
             sys.modules.pop(name, None)
+
+    # Pytest collects later test modules before fixture teardown.  Their real,
+    # file-backed submodules therefore remain in sys.modules even when the
+    # synthetic package shell used above is removed.  Restore the corresponding
+    # parent attributes so dotted monkeypatch resolution observes the same module
+    # graph as a normal Python import.
+    for name, mod in list(sys.modules.items()):
+        if not (name.startswith("utils.memory.") or name in {"database.memories", "database.vector_db"}):
+            continue
+        if not isinstance(getattr(mod, "__file__", None), str):
+            continue
+        parent_name, child_name = name.rsplit(".", 1)
+        parent = sys.modules.get(parent_name)
+        if isinstance(parent, ModuleType):
+            setattr(parent, child_name, mod)
 
 
 def _load_memory_service(monkeypatch):
@@ -104,6 +121,7 @@ def _load_memory_service(monkeypatch):
         database.memories = memories_db_mod
         database.vector_db = vector_db_mod
     service_mod._prod_get_memories = service_mod.memories_db.get_memories
+    service_mod._prod_get_memories_by_ids = service_mod.memories_db.get_memories_by_ids
     service_mod._prod_list_memory_updated_or_created_index = (
         service_mod.memories_db.list_memory_updated_or_created_index
     )
@@ -118,6 +136,9 @@ def _load_memory_service(monkeypatch):
     monkeypatch.setattr(service_mod.memories_db, "get_memory_ids", lambda *args, **kwargs: [])
     monkeypatch.setattr(service_mod.memories_db, "delete_memory", lambda *args, **kwargs: None)
     monkeypatch.setattr(service_mod.vector_db, "find_similar_memories", lambda *args, **kwargs: [])
+    from utils.memory import read_resilience
+
+    monkeypatch.setattr(read_resilience, '_retry_allowance', read_resilience.RetryAllowance())
     return service_mod
 
 
@@ -132,7 +153,14 @@ def _reset_universal_memory(monkeypatch):
 def service_mod(monkeypatch):
     # Import isolation and module graph repair belong to setup, not the unit
     # behavior's measured call phase.
-    return _load_memory_service(monkeypatch)
+    module = _load_memory_service(monkeypatch)
+    try:
+        yield module
+    finally:
+        # Do not leak synthetic package shells into later test modules in the
+        # same pytest process; string-based monkeypatch resolution must see the
+        # real utils.memory package topology regardless of collection order.
+        _purge_stub_memory_modules()
 
 
 def test_arbitrary_uids_share_one_universal_reader(service_mod):
@@ -184,10 +212,63 @@ def test_canonical_failure_does_not_fall_back_to_historical_writer(monkeypatch, 
     legacy_create.assert_not_called()
 
 
+def test_evidence_identity_conflict_is_a_client_conflict_not_a_server_fault(service_mod):
+    conflict = service_mod.EvidenceIdentityConflict("conflict")
+    service = service_mod.MemoryService(db_client=_FirestoreFake())
+    service._canonical_write = MagicMock(side_effect=conflict)
+    service._canonical.write_batch = MagicMock(side_effect=conflict)
+    memory_db = service_mod.MemoryDB.model_validate(_sample_memory_dict())
+    service.ensure_canonical_mutation_ready = MagicMock()
+
+    with pytest.raises(service_mod.HTTPException) as single:
+        service.create_external_memory(
+            "uid-test",
+            memory_db,
+            memory_system=service_mod.MemorySystem.CANONICAL,
+            consumer="developer_api",
+            operation="create_memory",
+        )
+    with pytest.raises(service_mod.HTTPException) as batch:
+        service.create_external_memory_batch(
+            "uid-test",
+            [memory_db],
+            memory_system=service_mod.MemorySystem.CANONICAL,
+            consumer="developer_api",
+            operation="batch_create_memories",
+        )
+
+    assert single.value.status_code == 409
+    assert batch.value.status_code == 409
+
+
+def test_manual_memory_without_route_capability_stays_on_external_contract(service_mod):
+    service = service_mod.MemoryService(db_client=_FirestoreFake())
+    memory_db = service_mod.MemoryDB.model_validate(
+        _sample_memory_dict(memory_id="manual-memory", locked=False) | {"category": "manual", "manually_added": True}
+    )
+    compatibility_result = MagicMock(return_value=memory_db)
+    direct_result = MagicMock(return_value=memory_db)
+    service._canonical_write = compatibility_result
+    service._write_direct_user_fact = direct_result
+
+    result = service.create_external_memory(
+        "uid-test",
+        memory_db,
+        memory_system=service_mod.MemorySystem.CANONICAL,
+        consumer="internal-test",
+        operation="create",
+    )
+
+    assert result is memory_db
+    compatibility_result.assert_called_once()
+    direct_result.assert_not_called()
+
+
 def test_canonical_backend_preserves_released_adapter_signatures(service_mod):
     backend = service_mod.CanonicalMemoryBackend()
     with (
-        patch.object(service_mod, "read_canonical_memories", return_value=[]),
+        patch.object(service_mod, "read_canonical_memories", side_effect=AssertionError("full fetch")),
+        patch.object(service_mod, "read_canonical_scan_page", return_value=([], True)),
         patch.object(service_mod, "search_canonical_memories", return_value=[]),
         patch.object(service_mod, "write_canonical_external_memory", return_value="mem-1"),
         patch.object(service_mod, "delete_canonical_memory"),
@@ -198,3 +279,77 @@ def test_canonical_backend_preserves_released_adapter_signatures(service_mod):
         assert backend.write("uid-test", {"id": "mem-1", "content": "x"}) == "mem-1"
         backend.delete("uid-test", "mem-1")
         backend.delete_all("uid-test")
+
+
+def test_memory_service_search_retries_transient_provider_before_503(service_mod):
+    from google.api_core.exceptions import ServiceUnavailable
+
+    service = service_mod.MemoryService(db_client=_FirestoreFake())
+    service._canonical.search = MagicMock(side_effect=[ServiceUnavailable('temporary'), []])
+    service.history.search = MagicMock(return_value=[])
+    assert service.search('uid-test', 'query') == []
+    assert service._canonical.search.call_count == 2
+
+
+def test_memory_service_search_permanent_provider_still_503(service_mod):
+    from fastapi import HTTPException
+    from google.api_core.exceptions import FailedPrecondition
+
+    service = service_mod.MemoryService(db_client=_FirestoreFake())
+    service._canonical.search = MagicMock(side_effect=FailedPrecondition('missing index'))
+    with pytest.raises(HTTPException) as exc:
+        service.search('uid-test', 'query')
+    assert exc.value.status_code == 503
+    assert service._canonical.search.call_count == 1
+
+
+def test_memory_service_list_retries_transient_provider_before_503(service_mod):
+    from google.api_core.exceptions import ServiceUnavailable
+
+    service = service_mod.MemoryService(db_client=_FirestoreFake())
+    service._canonical.read = MagicMock(side_effect=[ServiceUnavailable('temporary'), []])
+    service.history.read = MagicMock(return_value=[])
+    assert service.read('uid-test') == []
+    assert service._canonical.read.call_count == 2
+
+
+def test_memory_service_malformed_probe_stays_open_and_real_scan_success_closes(service_mod, monkeypatch):
+    from fastapi import HTTPException
+    from google.api_core.exceptions import ServiceUnavailable
+    from utils.memory import read_resilience
+
+    now = [10.0]
+    clock = lambda: now[0]
+    policy = read_resilience.MemoryReadResilience(
+        clock=clock, sleep=lambda _: None, jitter=lambda *_: 0, allowance=read_resilience.RetryAllowance(clock=clock)
+    )
+    monkeypatch.setattr(read_resilience, 'MemoryReadResilience', lambda: policy)
+    monkeypatch.setattr(
+        service_mod.MemoryService,
+        'read_page',
+        read_resilience.resilient_memory_read(service_mod.MemoryService.read_page.__wrapped__),
+    )
+    monkeypatch.setenv('MEMORY_V3_CURSOR_SECRET', 'test-secret')
+    scans = MagicMock(side_effect=ServiceUnavailable('temporary'))
+    monkeypatch.setattr(service_mod, 'read_canonical_scan_page', scans)
+    service = service_mod.MemoryService(db_client=_FirestoreFake())
+    monkeypatch.setattr(service.history, 'read_updated_scan_page', lambda *a, **k: ([], True))
+    monkeypatch.setattr(service.history, 'read_created_scan_page', lambda *a, **k: ([], True))
+    for _ in range(3):
+        with pytest.raises(HTTPException):
+            service.read_page('uid-test')
+    assert scans.call_count == 6
+    now[0] += 5
+    with pytest.raises(HTTPException) as error:
+        service.read_page('uid-test', cursor='malformed')
+    assert error.value.status_code == 400
+    assert scans.call_count == 6  # malformed probe never reached Firestore
+    with pytest.raises(read_resilience.MemoryReadCircuitOpen):
+        service.read_page('uid-test')
+    now[0] += 5
+    scans.side_effect = lambda *args, **kwargs: ([], True)
+    monkeypatch.setattr(service.history, 'read_updated_scan_page', lambda *a, **k: ([], True))
+    monkeypatch.setattr(service.history, 'read_created_scan_page', lambda *a, **k: ([], True))
+    assert service.read_page('uid-test').memories == []
+    assert service.read_page('uid-test').memories == []
+    assert scans.call_count == 8  # store-backed probe and next normal request

@@ -1,12 +1,14 @@
+from utils.generated_compute import require_generated_compute, generated_compute_configured
 import base64
+import logging
 import mimetypes
 import re
+import uuid
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Union, cast
+from typing import Any, Dict, List, NoReturn, Optional, Protocol, Sequence, Tuple, Union, cast
 
 import openai
-from openai import AsyncOpenAI, AssistantEventHandler
-from openai.types.beta.threads import TextContentBlock
+from openai import AsyncOpenAI
 from openai.types.chat import (
     ChatCompletionContentPartParam,
     ChatCompletionMessageParam,
@@ -15,15 +17,34 @@ from PIL import Image, UnidentifiedImageError
 from pydantic import ValidationError
 
 import database.chat as chat_db
-from models.chat import ChatSession, FileChat
-from utils.executors import db_executor, llm_executor, run_blocking
-from utils.llm.gateway_client import should_route_features_through_gateway
-from utils.llm.gateway_observability import record_direct_exception_surface
-import logging
+from models.chat import ChatFileVideo, ChatSession, FileChat, chat_file_is_document
+from utils import encryption
+from utils.executors import db_executor, run_blocking
+from utils.llm.gateway_client import (
+    file_chat_auto_lane_id,
+    file_chat_feature_header,
+    get_file_chat_gateway_async_client,
+    get_file_chat_gateway_sync_client,
+    is_gateway_model_not_found,
+    should_route_features_through_gateway,
+)
+from utils.llm.model_config import LUNA_MODEL
+from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
 
-_FILE_SEARCH_ASSISTANT_MODEL = "gpt-4.1"
+# Images stay on the live-verified vision lane (image_url). Document file parts stay
+# on a separate documents lane because the request shape differs ({type:file,file:{file_id}}).
+# Live probe 2026-08-28 confirmed gpt-5.6-luna accepts that file-part contract for PDF.
+# The attach allowlist now matches the provider's documented File inputs table
+# (models.chat.CHAT_FILE_DOCUMENT_EXTENSIONS / CHAT_FILE_DOCUMENT_MIME_TYPES); a
+# development documents-lane probe of .txt/.docx/.csv is still required before merge.
+# In gateway feature mode both are omi:auto:file-chat-* lanes, so the model call
+# lands in the gateway ledger; OpenAI Files upload/download stays direct
+# (file bytes/file_id lifecycle, no model tokens).
+_FILE_CHAT_VISION_MODEL = LUNA_MODEL
+_FILE_CHAT_DOCUMENT_MODEL = LUNA_MODEL
+_FILE_CHAT_COMPLETION_TOKENS = 2048
 
 
 class UnsupportedChatFileError(Exception):
@@ -35,13 +56,21 @@ class UnsupportedChatFileError(Exception):
     """
 
 
+class StaleChatFileError(Exception):
+    """Provider file_id is gone or no longer readable (deleted / 404)."""
+
+
+class ProviderRejectedChatFileError(Exception):
+    """Provider 4xx on the Chat Completions file request, before any tokens."""
+
+
 def _unsupported_chat_file_error(file_path: Union[str, Path]) -> UnsupportedChatFileError:
     suffix = Path(file_path).suffix.lstrip('.').lower()
     label = f"'{suffix}' files are" if suffix else "this file type is"
     return UnsupportedChatFileError(f"Unsupported attachment: {label} not supported in chat.")
 
 
-def _safe_file_chats(files_data: List[Dict[str, Any]]) -> List[FileChat]:
+def safe_file_chats(files_data: List[Dict[str, Any]]) -> List[FileChat]:
     """Build FileChat objects from raw file docs, skipping (not raising on) a malformed one.
 
     A legacy or partial file document (missing openai_file_id, mime_type, created_at, ...) must not
@@ -72,10 +101,28 @@ def _openai_file_ids(files_data: List[Dict[str, Any]]) -> List[str]:
         openai_file_id = f.get('openai_file_id')
         if isinstance(openai_file_id, str) and openai_file_id:
             ids.append(openai_file_id)
+        video = f.get('video')
+        strip_file_id = video.get('strip_file_id') if isinstance(video, dict) else None
+        if isinstance(strip_file_id, str) and strip_file_id:
+            ids.append(strip_file_id)
     return ids
 
 
 _async_openai: AsyncOpenAI | None = None
+
+
+def download_owned_chat_file(uid: str, file_id: str, *, max_bytes: int) -> bytes:
+    """Resolve and bound bytes for a file owned by the current user."""
+    rows = chat_db.get_chat_files(uid, [file_id])
+    if len(rows) != 1:
+        raise PermissionError('Owned file unavailable')
+    data = bytearray()
+    with _get_sync_openai().files.with_streaming_response.content(rows[0]['openai_file_id']) as response:
+        for chunk in response.iter_bytes():
+            data.extend(chunk)
+            if len(data) > max_bytes:
+                raise ValueError('Owned file too large')
+    return bytes(data)
 
 
 def _get_async_openai() -> AsyncOpenAI:
@@ -85,20 +132,61 @@ def _get_async_openai() -> AsyncOpenAI:
     return _async_openai
 
 
-def _record_direct_file_chat_surface() -> None:
-    """File chat has no gateway lane (OpenAI Files/Assistants/vision), so under gateway
-    feature mode it stays an acknowledged direct surface: counted, never blocked.
-    A misconfigured gateway rollout (should_route_features_through_gateway raising) must
-    not block it either."""
+def _get_sync_openai() -> Any:
+    """Injectable seam around the OpenAI module's lazy synchronous client."""
+    return openai
+
+
+def _file_chat_gateway_enabled() -> bool:
+    """Whether the model call uses the gateway file-chat lanes.
+
+    A misconfigured prod rollout (should_route_features_through_gateway raising)
+    must not break file chat: it degrades to the direct kill-switch path exactly
+    like FEATURE_MODE=off.
+    """
     try:
-        routed = should_route_features_through_gateway()
+        return should_route_features_through_gateway()
     except RuntimeError:
-        routed = True
-    if routed:
-        record_direct_exception_surface(surface='file_chat.openai_files_assistants_vision')
+        return False
 
 
-class _StreamingCallbackProtocol:
+def _reraise_provider_file_error(error: Exception) -> NoReturn:
+    if isinstance(error, openai.NotFoundError):
+        raise StaleChatFileError("Unsupported attachment: the uploaded file is no longer available.") from error
+    if isinstance(error, openai.BadRequestError):
+        raise ProviderRejectedChatFileError("The file could not be processed.") from error
+    raise error
+
+
+def _completion_model(files: List[FileChat]) -> str:
+    """Model id for the completions call: a gateway lane id in gateway mode."""
+    documents = bool(files) and any(f.is_document() for f in files)
+    if _file_chat_gateway_enabled():
+        return file_chat_auto_lane_id(pdf=documents)
+    return _direct_completion_model(files)
+
+
+def _direct_completion_model(files: List[FileChat]) -> str:
+    """Provider model for the feature-off and compatibility fallback paths."""
+    documents = bool(files) and any(f.is_document() for f in files)
+    if documents:
+        return _FILE_CHAT_DOCUMENT_MODEL
+    return _FILE_CHAT_VISION_MODEL
+
+
+def _record_gateway_file_chat_fallback(outcome: str) -> None:
+    """Record the terminal result of an admitted gateway compatibility fallback."""
+    record_fallback(
+        component='llm_gateway',
+        from_mode='gateway_file_chat',
+        to_mode='direct_file_chat',
+        reason='capability_mismatch',
+        outcome=outcome,
+        log=logger,
+    )
+
+
+class _StreamingCallbackProtocol(Protocol):
     """Structural protocol for streaming callbacks (AsyncStreamingCallback in retrieval.agentic)."""
 
     def put_data_nowait(self, text: str) -> None: ...
@@ -118,7 +206,7 @@ class File:
         self.thumbnail_name = ""
         self.mime_type = ""
         self.file_name = ""
-        self.purpose = "assistants"
+        self.purpose = "user_data"
 
     def generate_thumbnail(self, size: Tuple[int, int] = (128, 128)) -> None:
         with Image.open(self.file_path) as img:
@@ -141,12 +229,20 @@ class File:
     def is_image(self) -> bool:
         return self.mime_type.startswith("image")
 
+    def is_document(self) -> bool:
+        return chat_file_is_document(str(self.file_path), self.mime_type)
+
     @staticmethod
     def _to_snake_case(string: str) -> str:
         string = re.sub(r"[\s\-]+", "_", string)
         # Add an underscore before any capital letter that is preceded by a lowercase or digit
         string = re.sub(r"(?<=[a-z0-9])([A-Z])", r"_\1", string)
         return string.lower()
+
+
+def _requested_file_limit(file_ids: List[str]) -> int:
+    # Keep the recent-file default, but include a complete ten-photo channel album.
+    return min(10, max(9, len(file_ids)))
 
 
 class FileChatTool:
@@ -161,13 +257,11 @@ class FileChatTool:
 
         self.chat_session = ChatSession(**session_data)
 
-        # Get thread and assistant IDs from session (may be None)
-        self.thread_id = self.chat_session.openai_thread_id
-        self.assistant_id = self.chat_session.openai_assistant_id
-
     @staticmethod
-    def upload(file_path: Union[str, Path]) -> Dict[str, Any]:
-        _record_direct_file_chat_surface()
+    def upload(file_path: Union[str, Path], file_name: Optional[str] = None) -> Dict[str, Any]:
+        # OpenAI Files upload/download stays direct by design: it is the file
+        # bytes/file_id lifecycle, not a model call; only the completions hop
+        # is gateway-metered.
         result: Dict[str, Any] = {}
         file = File(file_path)
         file.get_mime_type()
@@ -179,11 +273,22 @@ class FileChatTool:
                 # An image mime type Pillow has no decoder for (.heic from an iPhone camera roll).
                 raise _unsupported_chat_file_error(file_path) from error
             file.purpose = "vision"
+        elif file.is_document():
+            file.purpose = "user_data"
+        else:
+            # Chat Completions file parts accept the provider's documented document
+            # set (PDF, text/code, office docs, spreadsheets). Reject anything else
+            # at attach, never after the user sends the chat.
+            raise _unsupported_chat_file_error(file_path)
 
         with open(file_path, 'rb') as f:
             # upload file to OpenAI
             try:
-                response = openai.files.create(file=f, purpose=cast(Any, file.purpose))
+                # file_path is a randomized temp name on the upload routes; send the
+                # provider the name the user picked so it is what lands on the chat
+                # record, not the temp basename the provider would echo back.
+                upload_file = (Path(file_name).name, f) if file_name else f
+                response = openai.files.create(file=upload_file, purpose=cast(Any, file.purpose))
             except openai.BadRequestError as error:
                 # The provider rejects the extension (audio/video, archives it does not index).
                 raise _unsupported_chat_file_error(file_path) from error
@@ -199,12 +304,51 @@ class FileChatTool:
                     result["thumbnail_name"] = file.thumbnail_name
         return result
 
-    def process_chat_with_file(self, question: str, file_ids: List[str]) -> str:
-        """Process chat with file attachments"""
-        _record_direct_file_chat_surface()
-        self._ensure_thread_and_assistant()
-        answer = self.ask(self.uid, question, file_ids, self.thread_id, self.assistant_id)
-        return answer
+    @staticmethod
+    def upload_video(
+        directory: Union[str, Path], file_name: str, digest: Any, transcript: str, uid: str
+    ) -> Dict[str, Any]:
+        """Store a video as its overview sheet (the chat file) plus its filmstrip.
+
+        ``digest`` is a utils.media.video_frames.VideoDigest. Returns FileChatTool.upload's
+        result with a ``video`` dict ready for FileChat(video=...).
+        """
+        # The user's name is only a display name; the file on disk has a fixed name.
+        stem = re.sub(r'[^\w .-]', '_', Path(file_name).stem).strip(' .')[:100] or 'video'
+        sheet_name = f'{stem}.jpg'
+        # Random, like the upload routes' temp names: the thumbnail's storage name derives from it.
+        sheet_path = Path(directory) / f'{uuid.uuid4().hex}.jpg'
+        sheet_path.write_bytes(digest.sheet)
+        result = FileChatTool.upload(sheet_path, file_name=sheet_name)
+        strip = digest.strip
+        try:
+            response = openai.files.create(file=('filmstrip.jpg', strip.jpeg), purpose=cast(Any, 'vision'))
+        except Exception:
+            # The overview alone still answers; a missing filmstrip only disables closer looks.
+            logger.warning('video filmstrip upload failed')
+            response = None
+        result['video'] = ChatFileVideo(
+            duration_seconds=digest.duration,
+            frame_times=list(digest.sheet_times),
+            strip_file_id=response.id if response else '',
+            strip_times=list(strip.times),
+            strip_columns=strip.columns,
+            strip_cell_width=strip.cell_width,
+            strip_cell_height=strip.cell_height,
+            transcript=encryption.encrypt(transcript, uid) if transcript else '',
+        )
+        return result
+
+    def process_chat_with_file(
+        self, question: str, file_ids: List[str], video_window: Optional[Tuple[float, float]] = None
+    ) -> str:
+        """Process chat with file attachments (non-streaming, agentic tool path).
+
+        ``video_window`` (seconds) swaps each video's overview sheet for denser frames from that span.
+        """
+        files_data = chat_db.get_chat_files_desc(self.uid, files_id=file_ids, limit=_requested_file_limit(file_ids))
+        files = safe_file_chats(files_data)
+        return self._ask_files(question, files, video_window)
 
     async def process_chat_with_file_stream(
         self,
@@ -212,58 +356,154 @@ class FileChatTool:
         file_ids: List[str],
         callback: Optional[_StreamingCallbackProtocol] = None,
     ) -> str:
-        """Process chat with file attachments (streaming)"""
-        _record_direct_file_chat_surface()
+        """Process chat with file attachments (streaming)."""
         # Offloaded: the Firestore read is sync and blocks the event loop in this async path.
         # If this pre-stream setup fails, signal the streaming callback's end before propagating
-        # (mirrors the _ensure_thread_and_assistant failure path below) so it is not left dangling.
+        # so it is not left dangling.
         assert callback is not None  # streaming path always supplies a callback
         try:
             files_data = await run_blocking(
-                db_executor, chat_db.get_chat_files_desc, self.uid, files_id=file_ids, limit=9
+                db_executor,
+                chat_db.get_chat_files_desc,
+                self.uid,
+                files_id=file_ids,
+                limit=_requested_file_limit(file_ids),
             )
-            files = _safe_file_chats(files_data)
-            all_images = all(f.is_image() for f in files) if files else False
+            files = safe_file_chats(files_data)
         except Exception:
             callback.end_nowait()
             raise
 
-        if all_images and files:
-            logger.info(f"[FileChat] All {len(files)} files are images, using Chat Completions vision API")
-            answer = await self._ask_vision_stream(question, files, callback)
-            return answer
+        return await self._ask_files_stream(question, files, callback)
 
-        # The Assistants setup and stream iterator both use the synchronous
-        # OpenAI client. Keep the complete non-vision sequence off the event
-        # loop so graph.py can enforce its first-event and total-stream bounds.
-        return await run_blocking(llm_executor, self._ensure_and_ask_stream, question, file_ids, callback)
-
-    def _ensure_and_ask_stream(self, question: str, file_ids: List[str], callback: _StreamingCallbackProtocol) -> str:
-        """Run the synchronous Assistants setup and stream in the LLM executor."""
-        try:
-            self._ensure_thread_and_assistant()
-        except Exception:
-            # ask_stream owns its callback finalizer; setup fails before that
-            # function is entered, so terminate the callback here instead.
-            callback.end_nowait()
-            raise
-        return self.ask_stream(self.uid, question, file_ids, self.thread_id, self.assistant_id, callback)
-
-    async def _ask_vision_stream(
+    async def _ask_files_stream(
         self,
         question: str,
         files: List[FileChat],
         callback: Optional[_StreamingCallbackProtocol] = None,
     ) -> str:
-        """Use Chat Completions API with vision for image-only chats (streaming)"""
+        """One Chat Completions stream: images as base64 image_url, documents as file parts."""
+        if generated_compute_configured():
+            await run_blocking(db_executor, require_generated_compute, self.uid, 'file_chat_vision', allow_byok=False)
         assert callback is not None
         output_list: List[str] = []
+        gateway_fallback_used = False
         try:
-            contents: List[ChatCompletionContentPartParam] = [{"type": "text", "text": question}]
-            openai_client = _get_async_openai()
-            for file in files:
-                file_content = await openai_client.files.content(file.openai_file_id)
-                b64 = base64.b64encode(file_content.read()).decode('utf-8')
+            try:
+                try:
+                    messages = await self._completion_messages(question, files)
+                    gateway_enabled = _file_chat_gateway_enabled()
+                    model = _completion_model(files)
+                    if gateway_enabled:
+                        # Gateway lanes accept max_completion_tokens on every model
+                        # and stay in the ledger; typed SDK errors keep their meaning.
+                        try:
+                            stream = await get_file_chat_gateway_async_client().chat.completions.create(
+                                model=model,
+                                messages=messages,
+                                stream=True,
+                                max_completion_tokens=_FILE_CHAT_COMPLETION_TOKENS,
+                                extra_headers=file_chat_feature_header(model, uid=self.uid),
+                            )
+                        except openai.NotFoundError as error:
+                            if not is_gateway_model_not_found(error):
+                                raise
+                            gateway_fallback_used = True
+                            model = _direct_completion_model(files)
+                            stream = await _get_async_openai().chat.completions.create(
+                                model=model,
+                                messages=messages,
+                                stream=True,
+                                max_completion_tokens=_FILE_CHAT_COMPLETION_TOKENS,
+                            )
+                    else:
+                        model = _direct_completion_model(files)
+                        stream = await _get_async_openai().chat.completions.create(
+                            model=model,
+                            messages=messages,
+                            stream=True,
+                            max_completion_tokens=_FILE_CHAT_COMPLETION_TOKENS,
+                        )
+                except (openai.NotFoundError, openai.BadRequestError) as error:
+                    _reraise_provider_file_error(error)
+                async for chunk in stream:
+                    delta = chunk.choices[0].delta if chunk.choices else None
+                    if delta and delta.content:
+                        await callback.put_data(delta.content)
+                        output_list.append(delta.content)
+            finally:
+                await callback.end()
+        except Exception:
+            if gateway_fallback_used:
+                _record_gateway_file_chat_fallback('exhausted')
+            raise
+        if gateway_fallback_used:
+            _record_gateway_file_chat_fallback('recovered')
+        return ''.join(output_list)
+
+    def _ask_files(
+        self, question: str, files: List[FileChat], video_window: Optional[Tuple[float, float]] = None
+    ) -> str:
+        """Non-streaming Chat Completions path used by search_files_tool."""
+        require_generated_compute(self.uid, 'file_chat_documents', allow_byok=False)
+        gateway_fallback_used = False
+        try:
+            try:
+                messages = self._completion_messages_sync(question, files, video_window)
+                gateway_enabled = _file_chat_gateway_enabled()
+                model = _completion_model(files)
+                if gateway_enabled:
+                    try:
+                        response = get_file_chat_gateway_sync_client().chat.completions.create(
+                            model=model,
+                            messages=messages,
+                            max_completion_tokens=_FILE_CHAT_COMPLETION_TOKENS,
+                            extra_headers=file_chat_feature_header(model, uid=self.uid),
+                        )
+                    except openai.NotFoundError as error:
+                        if not is_gateway_model_not_found(error):
+                            raise
+                        gateway_fallback_used = True
+                        model = _direct_completion_model(files)
+                        response = _get_sync_openai().chat.completions.create(
+                            model=model,
+                            messages=messages,
+                            max_completion_tokens=_FILE_CHAT_COMPLETION_TOKENS,
+                        )
+                else:
+                    model = _direct_completion_model(files)
+                    response = _get_sync_openai().chat.completions.create(
+                        model=model,
+                        messages=messages,
+                        max_completion_tokens=_FILE_CHAT_COMPLETION_TOKENS,
+                    )
+            except (openai.NotFoundError, openai.BadRequestError) as error:
+                _reraise_provider_file_error(error)
+            choice = response.choices[0] if response.choices else None
+            content = choice.message.content if choice and choice.message else None
+            if not content:
+                raise ProviderRejectedChatFileError("The file could not be processed.")
+        except Exception:
+            if gateway_fallback_used:
+                _record_gateway_file_chat_fallback('exhausted')
+            raise
+        if gateway_fallback_used:
+            _record_gateway_file_chat_fallback('recovered')
+        return content
+
+    async def _completion_messages(self, question: str, files: List[FileChat]) -> List[ChatCompletionMessageParam]:
+        contents: List[ChatCompletionContentPartParam] = [{"type": "text", "text": question}]
+        openai_client = _get_async_openai()
+        for file in files:
+            if file.is_image():
+                try:
+                    file_content = await openai_client.files.content(file.openai_file_id)
+                    raw = file_content.read()
+                except (openai.NotFoundError, openai.BadRequestError) as error:
+                    _reraise_provider_file_error(error)
+                if file.video:
+                    contents.append({"type": "text", "text": self._video_note(file, file.video.frame_times)})
+                b64 = base64.b64encode(raw).decode('utf-8')
                 mime = file.mime_type or 'image/png'
                 contents.append(
                     cast(
@@ -274,191 +514,99 @@ class FileChatTool:
                         },
                     )
                 )
-
-            messages: List[ChatCompletionMessageParam] = [
-                cast(ChatCompletionMessageParam, {"role": "user", "content": contents})
-            ]
-            stream = await openai_client.chat.completions.create(
-                model="gpt-5.6-luna",
-                messages=messages,
-                stream=True,
-                # Luna uses the current Chat Completions output-budget field.
-                # `max_tokens` is rejected by the provider with HTTP 400.
-                max_completion_tokens=2048,
-            )
-            async for chunk in stream:
-                delta = chunk.choices[0].delta if chunk.choices else None
-                if delta and delta.content:
-                    await callback.put_data(delta.content)
-                    output_list.append(delta.content)
-        finally:
-            await callback.end()
-        return ''.join(output_list)
-
-    def _ensure_thread_and_assistant(self) -> None:
-        """Ensure thread and assistant exist, create if needed, and save to database"""
-        created_new = False
-        timeout = 30.0  # 30 seconds timeout
-
-        # Handle thread
-        if self.thread_id:
-            # Try to retrieve existing thread
-            try:
-                thread = openai.beta.threads.retrieve(self.thread_id, timeout=timeout)  # type: ignore[reportDeprecated]  # Assistants API still in use
-                logger.info(f"Retrieved existing thread: {thread.id}")
-            except Exception as error:
-                logger.error('file chat thread retrieval failed error_type=%s', type(error).__name__)
-                self.thread_id = None
-
-        if not self.thread_id:
-            try:
-                thread = openai.beta.threads.create(timeout=timeout)  # type: ignore[reportDeprecated]  # Assistants API still in use
-                self.thread_id = thread.id
-                created_new = True
-                logger.info(f"Created new thread: {self.thread_id}")
-            except Exception as error:
-                raise RuntimeError('failed to create OpenAI thread') from error
-
-        # Handle assistant
-        if self.assistant_id:
-            # Try to retrieve existing assistant
-            try:
-                assistant = openai.beta.assistants.retrieve(self.assistant_id, timeout=timeout)  # type: ignore[reportDeprecated]  # Assistants API still in use
-                logger.info(f"Retrieved existing assistant: {assistant.id}")
-            except Exception as error:
-                logger.error('file chat assistant retrieval failed error_type=%s', type(error).__name__)
-                self.assistant_id = None
-
-        if not self.assistant_id:
-            try:
-                assistant = openai.beta.assistants.create(  # type: ignore[reportDeprecated]  # Assistants API still in use
-                    name="File Reader",
-                    instructions="You are a helpful assistant that answers questions about the provided file. Use the file_search tool to search the file contents when needed.",
-                    # Luna supports vision Chat Completions but not the
-                    # Assistants API. Keep file search on an Assistants model.
-                    model=_FILE_SEARCH_ASSISTANT_MODEL,
-                    tools=[{"type": "file_search"}],
-                    timeout=timeout,
-                )
-                self.assistant_id = assistant.id
-                created_new = True
-                logger.info(f"Created new assistant: {self.assistant_id}")
-            except Exception as error:
-                raise RuntimeError('failed to create OpenAI assistant') from error
-
-        # Save to database if we created new ones
-        if created_new:
-            try:
-                chat_db.update_chat_session_openai_ids(
-                    self.uid, self.chat_session_id, self.thread_id, self.assistant_id
-                )
-            except Exception as error:
-                logger.error('file chat identifier save failed error_type=%s', type(error).__name__)
-                # Continue anyway - IDs will be recreated next time
-
-    def _fill_question(self, uid: str, question: str, file_ids: List[str], thread_id: str) -> None:
-        # OpenAI has a limit of 10 items in content array (1 text + max 9 images)
-        files = chat_db.get_chat_files_desc(uid, files_id=file_ids, limit=9)
-
-        files_typed = _safe_file_chats(files)
-
-        contents: List[Dict[str, Any]] = []
-        attachments: List[Dict[str, Any]] = []
-
-        contents.append({"type": "text", "text": question})
-
-        for file in files_typed:
-            if file.is_image():
+            elif file.is_document():
                 contents.append(
-                    {"type": "image_file", "image_file": {"file_id": file.openai_file_id, "detail": "auto"}}
+                    cast(
+                        ChatCompletionContentPartParam,
+                        {"type": "file", "file": {"file_id": file.openai_file_id}},
+                    )
                 )
             else:
-                attachments.append({"file_id": file.openai_file_id, "tools": [{"type": "file_search"}]})
+                raise UnsupportedChatFileError(
+                    f"Unsupported attachment: '{Path(file.name).suffix.lstrip('.').lower() or 'this'}' "
+                    "files are not supported in chat."
+                )
+        return [cast(ChatCompletionMessageParam, {"role": "user", "content": contents})]
 
-        # ask question
-        openai.beta.threads.messages.create(  # type: ignore[reportDeprecated]  # Assistants API still in use
-            thread_id=thread_id,
-            role="user",
-            content=contents,  # type: ignore[arg-type]  # openai accepts a permissive dict shape here
-            attachments=attachments,  # type: ignore[arg-type]  # openai accepts a permissive dict shape here
-            timeout=30.0,
+    def _completion_messages_sync(
+        self, question: str, files: List[FileChat], video_window: Optional[Tuple[float, float]] = None
+    ) -> List[ChatCompletionMessageParam]:
+        contents: List[ChatCompletionContentPartParam] = [{"type": "text", "text": question}]
+        for file in files:
+            if file.is_image():
+                windowed = bool(file.video and video_window and file.video.strip_file_id)
+                try:
+                    source = file.video.strip_file_id if windowed and file.video else file.openai_file_id
+                    file_content = openai.files.content(source)
+                    raw = file_content.read()
+                except (openai.NotFoundError, openai.BadRequestError) as error:
+                    _reraise_provider_file_error(error)
+                mime = file.mime_type or 'image/png'
+                if file.video:
+                    times: Sequence[float] = file.video.frame_times
+                    if windowed and video_window:
+                        raw, times = self._video_window(file.video, raw, video_window)
+                        mime = 'image/jpeg'
+                    contents.append(
+                        {"type": "text", "text": self._video_note(file, times, video_window if windowed else None)}
+                    )
+                b64 = base64.b64encode(raw).decode('utf-8')
+                contents.append(
+                    cast(
+                        ChatCompletionContentPartParam,
+                        {
+                            "type": "image_url",
+                            "image_url": {"url": f"data:{mime};base64,{b64}", "detail": "auto"},
+                        },
+                    )
+                )
+            elif file.is_document():
+                contents.append(
+                    cast(
+                        ChatCompletionContentPartParam,
+                        {"type": "file", "file": {"file_id": file.openai_file_id}},
+                    )
+                )
+            else:
+                raise UnsupportedChatFileError(
+                    f"Unsupported attachment: '{Path(file.name).suffix.lstrip('.').lower() or 'this'}' "
+                    "files are not supported in chat."
+                )
+        return [cast(ChatCompletionMessageParam, {"role": "user", "content": contents})]
+
+    def _video_note(self, file: FileChat, times: Sequence[float], window: Optional[Tuple[float, float]] = None) -> str:
+        from utils.media.video_frames import describe
+
+        assert file.video is not None
+        transcript = encryption.decrypt(file.video.transcript, self.uid) if file.video.transcript else ''
+        span = f' Frames from {window[0]:g}-{window[1]:g} s.' if window else ''
+        return f'Attachment {file.name}:{span} ' + describe(
+            file.video.duration_seconds, times, transcript, tool_hint=False
         )
 
-    def ask(
-        self,
-        uid: str,
-        question: str,
-        file_ids: List[str],
-        thread_id: Optional[str],
-        assistant_id: Optional[str],
-    ) -> str:
-        assert thread_id is not None and assistant_id is not None  # caller ensures IDs are set
-        self._fill_question(uid, question, file_ids, thread_id)
+    @staticmethod
+    def _video_window(video: ChatFileVideo, strip: bytes, window: Tuple[float, float]) -> Tuple[bytes, Sequence[float]]:
+        from utils.media.video_frames import window_sheet
 
-        # Create run and poll for completion (with 2 minute timeout)
-        run = openai.beta.threads.runs.create_and_poll(  # type: ignore[reportDeprecated]  # Assistants API still in use
-            thread_id=thread_id,
-            assistant_id=assistant_id,
-            timeout=120.0,  # 2 minutes total timeout
+        return window_sheet(
+            strip,
+            video.strip_times,
+            video.strip_columns,
+            video.strip_cell_width,
+            video.strip_cell_height,
+            window[0],
+            window[1],
         )
-
-        # Check terminal status
-        if run.status == 'completed':
-            # Get the messages
-            messages = openai.beta.threads.messages.list(thread_id=thread_id, timeout=30.0)  # type: ignore[reportDeprecated]  # Assistants API still in use
-
-            # Return the latest assistant response
-            if messages.data and len(messages.data) > 0:
-                first_block = messages.data[0].content[0]
-                if isinstance(first_block, TextContentBlock):
-                    return first_block.text.value
-                # Fall back to the original attribute access for any non-text block,
-                # which raises AttributeError — matching the prior behavior.
-                return first_block.text.value  # type: ignore[union-attr]  # preserve prior crash semantics for non-text blocks
-
-            raise Exception("No response received from assistant")
-        else:
-            # Handle failed states
-            error_msg = f"Run {run.status}"
-            if hasattr(run, 'last_error') and run.last_error:
-                error_msg += f": {run.last_error.message}"
-            raise Exception(error_msg)
-
-    def ask_stream(
-        self,
-        uid: str,
-        question: str,
-        file_ids: List[str],
-        thread_id: Optional[str],
-        assistant_id: Optional[str],
-        callback: Optional[_StreamingCallbackProtocol] = None,
-    ) -> str:
-        assert thread_id is not None and assistant_id is not None and callback is not None
-
-        output_list: List[str] = []
-
-        try:
-            self._fill_question(uid, question, file_ids, thread_id)
-
-            with openai.beta.threads.runs.stream(  # type: ignore[reportDeprecated]  # Assistants API still in use
-                thread_id=thread_id,
-                assistant_id=assistant_id,
-                event_handler=AssistantEventHandler(),
-                timeout=30.0,
-            ) as stream:
-                for text in stream.text_deltas:
-                    callback.put_data_nowait(text)
-                    output_list.append(text)
-                stream.until_done()
-        finally:
-            callback.end_nowait()
-
-        return ''.join(output_list)
 
     def cleanup(self) -> None:
-        """Cleanup chat session files, thread, and assistant"""
-        logger.info("start cleanup thread chat with file")
-        files = chat_db.get_chat_files(self.uid)
+        """Cleanup chat session files on OpenAI. Thread/assistant deletes are gone with Assistants."""
+        logger.info("start cleanup chat with file")
+        # Only this session's files: get_chat_files with no ids answers with every
+        # file the account owns, so clearing one chat wiped attachments from the rest.
+        file_ids = list(self.chat_session.file_ids or [])
+        if not file_ids:
+            return
+        files = chat_db.get_chat_files(self.uid, file_ids)
         if files:
             # Delete OpenAI objects from raw docs first — do not gate on FileChat validation,
             # or a malformed doc with openai_file_id leaks after Firestore delete (#9608 follow-up).
@@ -468,14 +616,3 @@ class FileChatTool:
                 except Exception as error:
                     logger.error('file chat file deletion failed error_type=%s', type(error).__name__)
             chat_db.delete_multi_files(self.uid, files)
-
-        if self.thread_id:
-            try:
-                openai.beta.threads.delete(self.thread_id, timeout=30.0)  # type: ignore[reportDeprecated]  # Assistants API still in use
-            except Exception as error:
-                logger.error('file chat thread deletion failed error_type=%s', type(error).__name__)
-        if self.assistant_id:
-            try:
-                openai.beta.assistants.delete(self.assistant_id, timeout=30.0)  # type: ignore[reportDeprecated]  # Assistants API still in use
-            except Exception as error:
-                logger.error('file chat assistant deletion failed error_type=%s', type(error).__name__)

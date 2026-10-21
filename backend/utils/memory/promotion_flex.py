@@ -16,10 +16,9 @@ import logging
 import os
 import time
 from dataclasses import dataclass
-from typing import Any, Callable, Optional, cast
+from typing import Any, Callable, Optional
 
 from utils.llm.clients import feature_auto_lane_id, get_or_create_omi_gateway_llm
-from utils.llm.prompt_cache import EXPLICIT_CACHE_OPTIONS
 
 logger = logging.getLogger(__name__)
 
@@ -41,20 +40,11 @@ _TRANSIENT_FLEX_EXCEPTION_NAMES = frozenset(
 )
 
 
-CONSOLIDATION_FLEX_CACHE_KEY = "omi-canonical-consolidation-v1"
-
-
 def _get_gateway_flex_llm(feature: str, *, request_timeout: float) -> Any:
-    llm = get_or_create_omi_gateway_llm(
+    return get_or_create_omi_gateway_llm(
         feature_auto_lane_id(feature),
         options={"request_timeout": request_timeout, "max_retries": 0},
         feature=feature,
-    )
-    if feature != "memory_conflict_flex":
-        return llm
-    return llm.bind(
-        prompt_cache_key=CONSOLIDATION_FLEX_CACHE_KEY,
-        extra_body={"prompt_cache_options": EXPLICIT_CACHE_OPTIONS},
     )
 
 
@@ -116,10 +106,6 @@ def read_promotion_flex_control(*, db_client: Any) -> PromotionFlexControl:
     except Exception as exc:
         logger.warning("background_flex_control_invalid error=%s", type(exc).__name__)
         return _standard_control()
-
-
-def _response_text(response: Any) -> str:
-    return cast(str, getattr(response, "content", str(response)))
 
 
 class _BackgroundFlexModel:
@@ -191,17 +177,6 @@ class PromotionFlexRunRouter:
             workload=workload,
         )
 
-    def llm_invoke_for_uid(self, uid: str) -> Optional[Callable[[Any], str]]:
-        model = self.llm_for_uid(
-            uid,
-            standard_feature="memory_conflict",
-            flex_feature="memory_conflict_flex",
-            workload="memory_promotion",
-        )
-        if model is None:
-            return None
-        return lambda prompt: _response_text(model.invoke(prompt))
-
     def _read_current_control(self) -> PromotionFlexControl:
         return self._control_reader(db_client=self._db_client)
 
@@ -224,6 +199,19 @@ class PromotionFlexRunRouter:
             or isinstance(exc, (ConnectionError, TimeoutError))
         )
 
+    def job_budget_fits(self) -> bool:
+        """Whether one more Flex reservation still fits the one-hour job budget."""
+        elapsed = max(self._monotonic() - self._started_at, 0.0)
+        return (
+            elapsed + BACKGROUND_FLEX_TIMEOUT_SECONDS
+            <= BACKGROUND_FLEX_JOB_BUDGET_SECONDS - BACKGROUND_FLEX_JOB_SAFETY_SECONDS
+        )
+
+    def require_job_budget(self) -> None:
+        """Stop in-UID TTL/outbox work when the same one-hour clock is gone."""
+        if not self.job_budget_fits():
+            raise PromotionFlexDeferred("job_budget")
+
     def invoke_flex(
         self,
         *,
@@ -233,12 +221,7 @@ class PromotionFlexRunRouter:
         flex_feature: str,
         workload: str,
     ) -> Any:
-        elapsed = max(self._monotonic() - self._started_at, 0.0)
-        flex_has_time = (
-            elapsed + BACKGROUND_FLEX_TIMEOUT_SECONDS
-            <= BACKGROUND_FLEX_JOB_BUDGET_SECONDS - BACKGROUND_FLEX_JOB_SAFETY_SECONDS
-        )
-        if not flex_has_time:
+        if not self.job_budget_fits():
             raise PromotionFlexDeferred("job_budget")
 
         self.assert_control_current()

@@ -1,20 +1,10 @@
-"""API contracts for the journal-owned materialization fetch/ack boundary."""
+"""Released endpoints cannot manufacture a turn on Chat open."""
 
-from datetime import datetime, timezone
-import logging
 from types import SimpleNamespace
-
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 import pytest
-
-from models.chat_first import (
-    ChatFirstSubject,
-    ConversationLinkSpec,
-    ProactiveIntent,
-    QuestionCardSpec,
-    QuestionOption,
-)
+import database.chat_first_intents as intents_db
 from models.task_intelligence import TaskWorkflowControl
 import routers.chat_first as chat_first_router
 
@@ -35,7 +25,15 @@ def _client() -> TestClient:
     return TestClient(app)
 
 
-def _request(*, generation: int = 7, owner_fence: str = 'user-1', receipts=None, terminal_receipts=None) -> dict:
+def _request(
+    *,
+    generation: int = 7,
+    owner_fence: str = 'user-1',
+    receipts=None,
+    terminal_receipts=None,
+    rejections=None,
+    deferrals=None,
+) -> dict:
     return {
         'source_surface': 'main_chat',
         'control_generation': generation,
@@ -43,6 +41,8 @@ def _request(*, generation: int = 7, owner_fence: str = 'user-1', receipts=None,
         'window_foreground': True,
         'initial_page_loaded': True,
         'receipts': receipts or [],
+        'rejections': rejections or [],
+        'deferrals': deferrals or [],
         'cold_start_sequence_terminal_receipts': terminal_receipts or [],
     }
 
@@ -62,266 +62,53 @@ def _enable_chat_first(monkeypatch, *, generation: int = 7) -> None:
     )
 
 
-def _question() -> QuestionCardSpec:
-    return QuestionCardSpec(
-        type='questionCard',
-        question_id='question-1',
-        text='What should happen next?',
-        subject=ChatFirstSubject(kind='goal', id='goal-1'),
-        options=[QuestionOption(option_id='yes', label='Yes', prepared_answer='Yes')],
-    )
+@pytest.mark.parametrize('version', ['v1', 'v2'])
+@pytest.mark.parametrize('foreground', [False, True])
+def test_chat_open_serves_no_daily_cold_start_capture_or_queued_intents(monkeypatch, version, foreground):
+    _enable_chat_first(monkeypatch)
 
+    def forbidden(*args, **kwargs):
+        raise AssertionError('automatic producer store must remain untouched')
 
-def test_materialize_capability_off_does_zero_feature_store_or_metric_work(monkeypatch):
-    monkeypatch.setattr(
-        chat_first_router.task_control_db,
-        'get_task_workflow_control',
-        lambda uid: TaskWorkflowControl(workflow_mode='read', account_generation=7, chat_first_ui_enabled=False),
-    )
-    monkeypatch.setattr(
-        chat_first_router,
-        'resolve_task_intelligence_for_user',
-        lambda **kwargs: SimpleNamespace(intelligence_product_enabled=False),
-    )
     for name in (
-        'acknowledge_materialization',
-        'acknowledge_sparse_cold_start_sequence_terminal',
+        'create_intent',
+        'get_or_create_cold_start_intent',
+        'fetch_ready_intent_batch',
         'release_due_deferrals',
-        'fetch_ready_intents',
+        'acknowledge_materialization',
+        'record_materialization_rejection',
     ):
-        monkeypatch.setattr(
-            chat_first_router.chat_first_intents_db,
-            name,
-            lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError(f'{name} must not run')),
-        )
-    monkeypatch.setattr(
-        chat_first_router,
-        'CHAT_FIRST_PROACTIVE_TOTAL',
-        SimpleNamespace(labels=lambda **kwargs: (_ for _ in ()).throw(AssertionError('metric must not run'))),
-    )
-
-    response = _client().post('/v1/chat/materialize-prompts', json=_request())
-
-    assert response.status_code == 404
-    assert response.json() == {'detail': 'Not found'}
-
-
-def test_materialize_rejects_wrong_owner_or_generation_before_feature_store_reads(monkeypatch):
-    _enable_chat_first(monkeypatch)
-    monkeypatch.setattr(
-        chat_first_router.chat_first_intents_db,
-        'fetch_ready_intents',
-        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError('feature store must not run')),
-    )
-
-    wrong_owner = _client().post('/v1/chat/materialize-prompts', json=_request(owner_fence='another-user'))
-    stale = _client().post('/v1/chat/materialize-prompts', json=_request(generation=6))
-
-    assert wrong_owner.status_code == 404
-    assert stale.status_code == 409
-
-
-def test_materialize_returns_ready_intents_and_acknowledges_only_kernel_receipts(monkeypatch):
-    _enable_chat_first(monkeypatch)
-    intent = ProactiveIntent(
-        intent_id='intent-1',
-        continuity_key='goal-1-complete',
-        account_generation=7,
-        source='agent_judgment',
-        subject=ChatFirstSubject(kind='goal', id='goal-1'),
-        blocks=[_question()],
-        created_at=datetime(2026, 7, 15, tzinfo=timezone.utc),
-    )
-    acknowledgements = []
-    terminal_acknowledgements = []
-    monkeypatch.setattr(
-        chat_first_router.chat_first_intents_db,
-        'acknowledge_materialization',
-        lambda *args, **kwargs: acknowledgements.append(kwargs) or intent,
-    )
-    monkeypatch.setattr(
-        chat_first_router.chat_first_intents_db,
-        'acknowledge_sparse_cold_start_sequence_terminal',
-        lambda *args, **kwargs: terminal_acknowledgements.append(kwargs) or intent,
-    )
-    monkeypatch.setattr(chat_first_router.chat_first_intents_db, 'release_due_deferrals', lambda *args, **kwargs: [])
-    monkeypatch.setattr(chat_first_router, '_maybe_persist_cold_start', lambda *args, **kwargs: None)
-    monkeypatch.setattr(chat_first_router, '_maybe_persist_daily_opener', lambda *args, **kwargs: None)
-    monkeypatch.setattr(
-        chat_first_router.chat_first_intents_db, 'fetch_ready_intents', lambda *args, **kwargs: [intent]
-    )
-
+        monkeypatch.setattr(intents_db, name, forbidden)
+    monkeypatch.setattr(chat_first_router.goals_db, 'get_user_goal', forbidden)
+    monkeypatch.setattr(chat_first_router.action_items_db, 'get_action_items', forbidden)
     response = _client().post(
-        '/v1/chat/materialize-prompts',
-        json=_request(
-            receipts=[{'intent_id': 'intent-1', 'receipt_id': 'kernel-receipt-1'}],
-            terminal_receipts=[
-                {
-                    'sequence_id': 'cold-start:7',
-                    'receipt_id': 'sequence-terminal-1',
-                    'terminal_state': 'completed',
-                }
-            ],
-        ),
+        f'/{version}/chat/materialize-prompts', json={**_request(), 'window_foreground': foreground}
     )
-
     assert response.status_code == 200
-    assert len(acknowledgements) == 1
-    assert acknowledgements[0]['intent_id'] == 'intent-1'
-    assert acknowledgements[0]['receipt_id'] == 'kernel-receipt-1'
-    assert acknowledgements[0]['account_generation'] == 7
-    assert len(terminal_acknowledgements) == 1
-    assert terminal_acknowledgements[0]['sequence_id'] == 'cold-start:7'
-    assert terminal_acknowledgements[0]['receipt_id'] == 'sequence-terminal-1'
-    assert terminal_acknowledgements[0]['terminal_state'] == 'completed'
-    assert terminal_acknowledgements[0]['account_generation'] == 7
-    assert terminal_acknowledgements[0]['now'].tzinfo is not None
-    assert response.json()['intents'][0]['intent_id'] == 'intent-1'
-    assert response.json()['intents'][0]['delivery_state'] == 'ready'
+    assert response.json()['intents'] == []
 
 
-def test_v1_leaves_conversation_link_pending_and_v2_later_acknowledges_it(monkeypatch):
+def test_retired_deferral_acknowledges_without_scheduling_a_chat_entry(monkeypatch):
     _enable_chat_first(monkeypatch)
-    intent = ProactiveIntent(
-        intent_id='intent-meeting-1',
-        continuity_key='capture:conversation-1',
-        account_generation=7,
-        source='capture_arrival',
-        subject=ChatFirstSubject(kind='capture', id='conversation-1'),
-        blocks=[
-            ConversationLinkSpec(
-                type='conversationLink',
-                conversation_id='conversation-1',
-                summary='Meeting notes ready',
-            )
-        ],
-        created_at=datetime(2026, 8, 19, tzinfo=timezone.utc),
-    )
-    acknowledgements = []
-    monkeypatch.setattr(chat_first_router.chat_first_intents_db, 'release_due_deferrals', lambda *args, **kwargs: [])
-    monkeypatch.setattr(chat_first_router, '_maybe_persist_cold_start', lambda *args, **kwargs: None)
-    monkeypatch.setattr(chat_first_router, '_maybe_persist_daily_opener', lambda *args, **kwargs: None)
     monkeypatch.setattr(
-        chat_first_router.chat_first_intents_db,
-        'fetch_ready_intents',
-        lambda *args, **kwargs: [] if kwargs.get('exclude_block_types') else [intent],
+        intents_db, 'record_deferral', lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError('must not persist'))
     )
-    monkeypatch.setattr(
-        chat_first_router.chat_first_intents_db,
-        'acknowledge_materialization',
-        lambda *args, **kwargs: acknowledgements.append(kwargs)
-        or intent.model_copy(update={'delivery_state': 'delivered'}),
-    )
-    projected = []
-    monkeypatch.setattr(
-        chat_first_router.finalization_jobs_db,
-        'mark_meeting_receipt_materialized',
-        lambda *args, **kwargs: projected.append((args, kwargs)) or True,
-    )
-    client = _client()
-
-    legacy = client.post('/v1/chat/materialize-prompts', json=_request())
-    modern = client.post('/v2/chat/materialize-prompts', json=_request())
-    acknowledged = client.post(
-        '/v2/chat/materialize-prompts',
-        json=_request(receipts=[{'intent_id': intent.intent_id, 'receipt_id': 'kernel-receipt-1'}]),
-    )
-
-    assert legacy.status_code == 200 and legacy.json()['intents'] == []
-    assert modern.status_code == 200 and modern.json()['intents'][0]['intent_id'] == intent.intent_id
-    assert acknowledged.status_code == 200
-    assert len(acknowledgements) == 1
-    assert projected[0][0] == ('user-1', 'conversation-1', intent.intent_id)
-
-
-def test_daily_opener_waits_for_an_active_sparse_cold_start_sequence(monkeypatch):
-    monkeypatch.setattr(
-        chat_first_router.chat_first_intents_db,
-        'has_active_sparse_cold_start_sequence',
-        lambda *args, **kwargs: True,
-    )
-    monkeypatch.setattr(
-        chat_first_router.chat_first_intents_db,
-        'has_cold_start_intent_created_on',
-        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError('daily lookup must not run')),
-    )
-    monkeypatch.setattr(
-        chat_first_router,
-        'persist_daily_opener_intent',
-        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError('daily intent must not be created')),
-    )
-
-    chat_first_router._maybe_persist_daily_opener(
-        'user-1',
-        control_generation=7,
-        now=datetime(2026, 7, 15, tzinfo=timezone.utc),
-    )
-
-
-@pytest.mark.parametrize(
-    ('handler_name', 'failing_dependency'),
-    [
-        ('_maybe_persist_daily_opener', 'has_active_sparse_cold_start_sequence'),
-        ('_maybe_persist_cold_start', 'get_user_goals'),
-    ],
-)
-def test_preparation_failures_do_not_log_raw_authenticated_uid(monkeypatch, caplog, handler_name, failing_dependency):
-    uid = 'sensitive-user-123456'
-    if failing_dependency == 'has_active_sparse_cold_start_sequence':
-        monkeypatch.setattr(
-            chat_first_router.chat_first_intents_db,
-            failing_dependency,
-            lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError('unavailable')),
-        )
-    else:
-        monkeypatch.setattr(
-            chat_first_router.goals_db,
-            failing_dependency,
-            lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError('unavailable')),
-        )
-
-    caplog.set_level(logging.WARNING, logger=chat_first_router.__name__)
-    getattr(chat_first_router, handler_name)(
-        uid,
-        control_generation=7,
-        now=datetime(2026, 7, 15, tzinfo=timezone.utc),
-    )
-
-    assert uid not in caplog.text
-    assert 'error=RuntimeError' in caplog.text
-
-
-def test_deferral_receiver_is_capability_gated_before_its_store(monkeypatch):
-    monkeypatch.setattr(
-        chat_first_router.task_control_db,
-        'get_task_workflow_control',
-        lambda uid: TaskWorkflowControl(workflow_mode='read', account_generation=7, chat_first_ui_enabled=False),
-    )
-    monkeypatch.setattr(
-        chat_first_router,
-        'resolve_task_intelligence_for_user',
-        lambda **kwargs: SimpleNamespace(intelligence_product_enabled=False),
-    )
-    monkeypatch.setattr(
-        chat_first_router.chat_first_intents_db,
-        'record_deferral',
-        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError('deferral store must not run')),
-    )
-    monkeypatch.setattr(
-        chat_first_router,
-        'CHAT_FIRST_PROACTIVE_TOTAL',
-        SimpleNamespace(labels=lambda **kwargs: (_ for _ in ()).throw(AssertionError('metric must not run'))),
-    )
-    question = _question()
-    request = {
+    body = {
         'source_surface': 'main_chat',
         'control_generation': 7,
         'owner_fence': 'user-1',
-        'continuity_key': 'defer-goal-1',
-        'subject': question.subject.model_dump(),
-        'question': question.model_dump(),
+        'continuity_key': 'deferral-key',
+        'subject': {'kind': 'goal', 'id': 'goal-1'},
+        'question': {
+            'type': 'questionCard',
+            'question_id': 'question-1',
+            'text': 'Next?',
+            'subject': {'kind': 'goal', 'id': 'goal-1'},
+            'options': [{'option_id': 'yes', 'label': 'Yes', 'prepared_answer': 'Yes'}],
+        },
     }
-
-    response = _client().post('/v1/chat/deferrals', json=request)
-
-    assert response.status_code == 404
+    first = _client().post('/v1/chat/deferrals', json=body)
+    second = _client().post('/v1/chat/deferrals', json=body)
+    assert first.status_code == 200
+    assert first.json()['state'] == 'released'
+    assert first.json()['deferral_id'] == second.json()['deferral_id']

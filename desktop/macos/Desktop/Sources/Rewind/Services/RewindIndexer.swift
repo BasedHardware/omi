@@ -10,7 +10,19 @@ actor RewindIndexer {
   /// Capture provenance is sampled once per session so every new row carries
   /// a stable canonical-memory identity plus a user-facing computer name.
   private let currentComputerName = Host.current().localizedName
-  private let currentClientDeviceId = ClientDeviceService.shared.clientDeviceId
+  /// Resolved on first frame write, not at actor init: `ClientDeviceService`
+  /// may read the login Keychain, and `RewindIndexer.shared` is touched by
+  /// owner-transition finalization (RuntimeOwnerIdentity) that tests and
+  /// headless automation run before any UI/keychain unlock exists. The device
+  /// id is stable for the process lifetime, so deferring the read preserves
+  /// provenance while keeping init keychain-free.
+  private var cachedClientDeviceId: String?
+  private var currentClientDeviceId: String {
+    if let cachedClientDeviceId { return cachedClientDeviceId }
+    let resolved = ClientDeviceService.shared.clientDeviceId
+    cachedClientDeviceId = resolved
+    return resolved
+  }
 
   private var isInitialized = false
   private var isInitializing = false
@@ -52,6 +64,36 @@ actor RewindIndexer {
   // MARK: - Initialization
 
   private init() {}
+
+  /// Both capture variants use this boundary after storing OCR. The caller schedules
+  /// it off the capture path; no plan fetch or engine asset request blocks capture.
+  nonisolated static func indexScreenshotEmbeddings(
+    id: Int64, timestamp: Date, ocrText: String, appName: String, windowTitle: String?,
+    ownerSnapshot: RewindCaptureOwnerSnapshot,
+    runtime: LocalEmbeddingRuntime = .makeDefault(),
+    policy: @Sendable (LocalEmbeddingRuntime.Selection, LocalEmbeddingKillSwitches) -> ScreenEmbeddingPolicy = {
+      ScreenEmbeddingPolicy.cached(localRoute: $0, killSwitches: $1)
+    },
+    cloud: OCREmbeddingService = .shared,
+    localIndexer: LocalEmbeddingIndexer = .shared,
+    record: @Sendable (ScreenEmbeddingPolicy) -> Void = { $0.recordRoute() }
+  ) async {
+    guard ownerSnapshot.isCurrent() else { return }
+    let selection = await runtime.selectEngine()
+    guard ownerSnapshot.isCurrent(), !Task.isCancelled else { return }
+    let decision = policy(selection, runtime.killSwitches)
+    record(decision)
+    if decision.shouldEmbedWithGemini {
+      await cloud.embedScreenshot(
+        id: id, timestamp: timestamp, ocrText: ocrText, appName: appName,
+        windowTitle: windowTitle, ownerSnapshot: ownerSnapshot)
+    }
+    if decision.shouldIndexLocally, case .engine(let engine) = selection {
+      await localIndexer.indexScreenshot(
+        id: id, ocrText: ocrText, appName: appName, windowTitle: windowTitle,
+        owner: ownerSnapshot, runtime: runtime, engine: engine)
+    }
+  }
 
   /// Reset the indexer state so it re-initializes on the next frame.
   /// Called during sign-out to avoid stale `isInitialized = true` after the database is closed.
@@ -118,6 +160,9 @@ actor RewindIndexer {
     // Kick off OCR embedding backfill in background
     Task(priority: .background) {
       await OCREmbeddingService.shared.backfillIfNeeded()
+    }
+    Task(priority: .background) {
+      await LocalEmbeddingIndexer.shared.backfillIfNeeded()
     }
 
     // Reduce ocrDataJson float precision for existing rows (one-time migration)
@@ -325,7 +370,7 @@ actor RewindIndexer {
       // Embed OCR text for semantic search (non-blocking)
       if let ocrText = ocrText, !ocrText.isEmpty, let id = inserted.id {
         Task(priority: .utility) {
-          await OCREmbeddingService.shared.embedScreenshot(
+          await Self.indexScreenshotEmbeddings(
             id: id, timestamp: frame.captureTime, ocrText: ocrText, appName: frame.appName,
             windowTitle: frame.windowTitle,
             ownerSnapshot: snapshot.ownerSnapshot)
@@ -446,7 +491,7 @@ actor RewindIndexer {
       // Embed OCR text for semantic search (non-blocking)
       if let ocrText = ocrText, !ocrText.isEmpty, let id = inserted.id {
         Task(priority: .utility) {
-          await OCREmbeddingService.shared.embedScreenshot(
+          await Self.indexScreenshotEmbeddings(
             id: id, timestamp: captureTime, ocrText: ocrText, appName: appName, windowTitle: windowTitle,
             ownerSnapshot: snapshot.ownerSnapshot)
         }
@@ -630,6 +675,7 @@ actor RewindIndexer {
       PowerMonitor.shared.onACReconnected = {
         Task {
           await RewindIndexer.shared.backfillUnindexedScreenshots()
+          await LocalEmbeddingIndexer.shared.backfillIfNeeded()
         }
       }
     }

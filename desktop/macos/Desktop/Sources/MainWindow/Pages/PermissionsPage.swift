@@ -630,7 +630,7 @@ struct MicrophonePermissionSection: View {
 
   private func tryDirectReset() {
     isResetting = true
-    resetButtonText = "Resetting & Restarting..."
+    resetButtonText = "Resetting & Restarting…"
 
     // Capture the main-actor `appState` reference while still on the main
     // actor; the reset runs off-main to avoid blocking the UI during the
@@ -678,7 +678,7 @@ struct ScreenRecordingPermissionSection: View {
       PermissionGrantedRow(
         icon: "rectangle.inset.filled.and.person.filled",
         title: "Screen Recording",
-        subtitle: "Required for proactive monitoring and context awareness")
+        subtitle: "Lets Omi see your screen so it can pick up tasks and answer questions about what you're working on")
     } else {
       PermissionActionCard(
         symbol: appState.isScreenRecordingStale
@@ -690,7 +690,7 @@ struct ScreenRecordingPermissionSection: View {
         title: "Screen Recording",
         description: appState.isScreenRecordingStale
           ? "Permission needs re-enabling after app update"
-          : "Required for proactive monitoring and context awareness",
+          : "Lets Omi see your screen so it can pick up tasks and answer questions about what you're working on",
         descriptionColor: appState.isScreenRecordingStale ? Ink.errorRed : Ink.secondary,
         borderColor: appState.isScreenRecordingStale
           ? Ink.errorRed.opacity(0.5) : Ink.hairline,
@@ -1042,9 +1042,17 @@ struct SystemAudioPermissionSection: View {
 struct NotificationPermissionSection: View {
   @ObservedObject var appState: AppState
 
-  // Check if permission was explicitly denied
+  // What the primary action should do right now — the same policy the
+  // onboarding notifications step and `AppState.requestNotificationPermission()`
+  // read, so this card can never disagree with what a click actually does.
+  private var enableAction: NotificationPermissionEnableAction {
+    NotificationPermissionPolicy.enableAction(for: appState.notificationAuthorizationStatus)
+  }
+
+  // Only a real `.denied` answer routes to "open System Settings" — `notDetermined`
+  // must render the native-prompt copy, never the "previously denied" dead end.
   private var isPermissionDenied: Bool {
-    return appState.isNotificationPermissionDenied()
+    enableAction == .openSystemSettings
   }
 
   // Colors based on state. A refuse is still "Not Granted" in the chip; System Settings
@@ -1436,7 +1444,7 @@ struct AutomationPermissionSection: View {
       granted: appState.hasAutomationPermission,
       icon: "gearshape.2",
       title: "Automation",
-      subtitle: "Lets Omi ask System Events about the app you are in",
+      subtitle: "Lets Omi see which app you're using",
       steps: [
         "Click \"Open Settings\" below",
         "Find \"\(AppBuild.displayName)\" in the Automation list",

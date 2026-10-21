@@ -214,7 +214,7 @@ def test_reconcile_basic_subscription_without_stored_stripe_id(monkeypatch, subs
 
 
 def test_unlimited_transcription_plan_skips_monthly_usage_scan(monkeypatch, subscription_module):
-    monkeypatch.setattr(subscription_module, 'is_trial_paywalled', lambda uid, source: False)
+    monkeypatch.setattr(subscription_module, 'is_trial_paywalled', lambda uid, source=None, **kw: False)
     monkeypatch.setattr(subscription_module.users_db, 'is_byok_active', lambda uid: False, raising=False)
     monkeypatch.setattr(subscription_module, 'get_byok_key', lambda provider: None)
     monkeypatch.setattr(
@@ -231,7 +231,7 @@ def test_unlimited_transcription_plan_skips_monthly_usage_scan(monkeypatch, subs
 
 
 def test_bounded_transcription_plan_reads_monthly_usage_and_enforces_cap(monkeypatch, subscription_module):
-    monkeypatch.setattr(subscription_module, 'is_trial_paywalled', lambda uid, source: False)
+    monkeypatch.setattr(subscription_module, 'is_trial_paywalled', lambda uid, source=None, **kw: False)
     monkeypatch.setattr(subscription_module.users_db, 'is_byok_active', lambda uid: False, raising=False)
     monkeypatch.setattr(subscription_module, 'get_byok_key', lambda provider: None)
     monkeypatch.setattr(
@@ -240,7 +240,9 @@ def test_bounded_transcription_plan_reads_monthly_usage_and_enforces_cap(monkeyp
         lambda uid: SimpleNamespace(plan=PlanType.basic),
         raising=False,
     )
-    monkeypatch.setattr(subscription_module, 'get_plan_limits', lambda plan: SimpleNamespace(transcription_seconds=60))
+    # The allowance resolver reads the catalog through `transcription_allowance_seconds`
+    # (never the env overlay behind `get_plan_limits`), so that is the seam to stub.
+    monkeypatch.setattr(subscription_module, 'transcription_allowance_seconds', lambda plan: 60)
     monthly_usage = MagicMock(return_value={'transcription_seconds': 60})
     monkeypatch.setattr(subscription_module, 'get_monthly_usage_for_subscription', monthly_usage)
 
@@ -250,7 +252,7 @@ def test_bounded_transcription_plan_reads_monthly_usage_and_enforces_cap(monkeyp
 
 def test_zero_transcription_allowance_is_exhausted_not_unlimited(monkeypatch, subscription_module):
     _stub_remaining_deps(monkeypatch, subscription_module, PlanType.basic, used_seconds=0)
-    monkeypatch.setattr(subscription_module, 'get_plan_limits', lambda plan: SimpleNamespace(transcription_seconds=0))
+    monkeypatch.setattr(subscription_module, 'transcription_allowance_seconds', lambda plan: 0)
 
     assert subscription_module.has_transcription_credits('uid') is False
     assert subscription_module.get_remaining_transcription_seconds('uid') == 0
@@ -271,7 +273,7 @@ def test_malformed_transcription_allowance_fails_loudly(monkeypatch, subscriptio
 
 
 def _stub_remaining_deps(monkeypatch, subscription_module, plan, used_seconds):
-    monkeypatch.setattr(subscription_module, 'is_trial_paywalled', lambda uid, source=None: False)
+    monkeypatch.setattr(subscription_module, 'is_trial_paywalled', lambda uid, source=None, **kw: False)
     monkeypatch.setattr(subscription_module.users_db, 'is_byok_active', lambda uid: False, raising=False)
     monkeypatch.setattr(subscription_module, 'get_byok_key', lambda provider: None)
     monkeypatch.setattr(
@@ -380,3 +382,99 @@ def test_basic_feature_defaults_project_from_plan_limits(monkeypatch, subscripti
     assert '10 minutes of listening per month' in features
     assert '7 words transcribed per month' in features
     assert '9 insights per month' in features
+
+
+@pytest.mark.parametrize(
+    'platform,version,capable',
+    [
+        ('macos', '0.12.196', False),
+        ('macos', '0.12.197', True),
+        ('macos', '0.12.198', True),
+        ('macos', None, False),
+        ('windows', '1.0.35', False),
+        ('windows', None, False),
+        ('ios', '1.0.552', False),
+        ('android', '1.0.552', False),
+        ('web', '0.1.0', True),
+        ('web', '0.0.9', False),
+        ('web', None, False),
+        ('web', 'invalid', False),
+        (None, '0.1.0', False),
+        ('desktop', '99.0.0', False),
+    ],
+)
+def test_true_plan_wire_capability_boundaries(subscription_module, monkeypatch, platform, version, capable):
+    def compare(a, b):
+        left, right = tuple(map(int, a.split('.'))), tuple(map(int, b.split('.')))
+        return (left > right) - (left < right)
+
+    monkeypatch.setattr(subscription_module, 'compare_versions', compare)
+    for plan in (PlanType.plus, PlanType.unlimited_v2):
+        expected = plan if capable else PlanType.unlimited
+        assert subscription_module.wire_plan_for_client(plan, platform, version) == expected
+
+
+def test_macos_capability_floor_remains_operator_configurable(subscription_module, monkeypatch):
+    from utils import plan_wire_capabilities
+
+    monkeypatch.setattr(plan_wire_capabilities, 'MIN_MACOS_VERSION', '99.0.0')
+    monkeypatch.setattr(subscription_module, 'compare_versions', lambda a, b: -1)
+    assert subscription_module.wire_plan_for_client(PlanType.plus, 'macos', '0.12.197') == PlanType.unlimited
+
+
+@pytest.mark.parametrize('platform', ['ios', 'android', 'macos', 'windows', 'web'])
+@pytest.mark.parametrize('plan', [PlanType.plus, PlanType.unlimited_v2])
+def test_declared_safe_decoder_receives_true_plan_before_version_resolves(subscription_module, platform, plan):
+    assert subscription_module.wire_plan_for_client(plan, platform, None, '1') == plan
+
+
+@pytest.mark.parametrize('capability', [None, '', '0', '2', 'true'])
+def test_absent_or_unrecognized_capability_keeps_old_clients_safe(subscription_module, monkeypatch, capability):
+    monkeypatch.setattr(subscription_module, 'compare_versions', lambda a, b: -1)
+    assert subscription_module.wire_plan_for_client(PlanType.plus, 'ios', '1.0.0', capability) == PlanType.unlimited
+    assert subscription_module.wire_plan_for_client(PlanType.plus, 'unknown', '1.0.0', '1') == PlanType.unlimited
+
+
+@pytest.mark.parametrize('plan', [PlanType.basic, PlanType.unlimited, PlanType.operator, PlanType.architect])
+def test_capability_never_changes_plan_membership(subscription_module, plan):
+    assert subscription_module.wire_plan_for_client(plan, 'ios', None, '1') == plan
+
+
+@pytest.mark.parametrize('desktop_floor,windows_floor', [(None, None), ('0.12.197', None), ('0.12.197', '2.0.0')])
+def test_windows_import_time_floor_does_not_inherit_macos(monkeypatch, desktop_floor, windows_floor):
+    import importlib.util
+
+    for name, value in [
+        ('PLUS_UNLIMITED_V2_MIN_DESKTOP_VERSION', desktop_floor),
+        ('PLUS_UNLIMITED_V2_MIN_WINDOWS_VERSION', windows_floor),
+    ]:
+        if value is None:
+            monkeypatch.delenv(name, raising=False)
+        else:
+            monkeypatch.setenv(name, value)
+    spec = importlib.util.spec_from_file_location('windows_floor_fixture', _BACKEND / 'utils/plan_wire_capabilities.py')
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    def compare(a, b):
+        left, right = tuple(map(int, a.split('.'))), tuple(map(int, b.split('.')))
+        return (left > right) - (left < right)
+
+    assert module.MIN_WINDOWS_VERSION == (windows_floor or '99.0.0')
+    assert not module.understands_plan_identity('windows', '1.0.35', None, compare)
+    assert module.understands_plan_identity('macos', '0.12.197', None, compare)
+    if windows_floor:
+        assert module.understands_plan_identity('windows', '2.0.0', None, compare)
+
+
+@pytest.mark.parametrize('interval', ['Monthly', 'Annual'])
+def test_operator_wire_title_preserves_released_macos_price_ownership(subscription_module, interval):
+    # Released normalizedPlanId routes titles containing "pro" to Architect.
+    # Payments appends these intervals to the definition title; the old merger
+    # then unions those prices into that inferred plan, even when IDs are sent.
+    definition = next(d for d in subscription_module.get_paid_plan_definitions() if d['plan_id'] == 'operator')
+    title = f"{definition['title']} {interval}".lower()
+    assert definition['title'] == 'Operator'
+    assert 'operator' in title and 'pro' not in title
+    assert subscription_module.PLAN_DISPLAY_NAMES[PlanType.operator] == 'Pro'

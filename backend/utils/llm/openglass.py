@@ -37,7 +37,7 @@ def _response_text(response: object) -> str:
     return "" if content is None else str(content)
 
 
-async def describe_image(uid: str, base64_data: str) -> str:
+async def describe_image(uid: str, base64_data: str, content_type: str = "image/jpeg") -> str:
     """
     Generates a description for a base64 encoded image using a vision model via LangChain.
     """
@@ -51,7 +51,7 @@ async def describe_image(uid: str, base64_data: str) -> str:
         {"type": "text", "text": prompt},
         {
             "type": "image_url",
-            "image_url": {"url": f"data:image/jpeg;base64,{base64_data}"},
+            "image_url": {"url": f"data:{content_type};base64,{base64_data}"},
         },
     ]
     message: ChatMessage = {

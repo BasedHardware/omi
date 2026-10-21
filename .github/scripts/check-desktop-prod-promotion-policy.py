@@ -14,6 +14,9 @@ REQUIRED = (
     "environment: prod",
     "Verify live desktop-backend chat compatibility",
     '.chat_contract_version == "1"',
+    "Report backend drift",
+    "check_desktop_backend_drift.py",
+    "serving_backends",
     "Validate stable promotion request",
     "Fetch exact retained Beta manifest",
     '"https://api.omi.me/v2/desktop/releases/$RELEASE_TAG"',
@@ -24,7 +27,8 @@ REQUIRED = (
     "EXPECTED_RELEASE_ID",
     "EXPECTED_GENERATION",
     "desktop_update_channels/macos-stable",
-    "desktop_release_manifests/$RELEASE_TAG",
+    'ENCODED_RELEASE_TAG="${RELEASE_TAG/+/%2B}"',
+    "desktop_release_manifests/$ENCODED_RELEASE_TAG",
     "Publish immutable stable repair installer",
     "Advance explicit stable pointer",
     "Bridge stable for legacy desktop clients",
@@ -38,6 +42,7 @@ REQUIRED = (
 
 ORDERED_STEPS = (
     "Verify live desktop-backend chat compatibility",
+    "Report backend drift",
     "Validate stable promotion request",
     "Fetch exact retained Beta manifest",
     "Read current pointers and capture workflow-owned CAS inputs",

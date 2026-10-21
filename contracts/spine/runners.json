@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "runners": [
+    {
+      "path": "app/test.sh",
+      "invocations": [
+        {"argv": ["flutter", "test", "$@"]},
+        {
+          "when_registered": "app/test/spine/b0_registration_test.dart",
+          "argv": ["flutter", "test", "--dart-define=OMI_DEV_CONTROLS=1", "test/spine"]
+        },
+        {
+          "when_registered": "app/test/spine/live_signin_test.dart",
+          "argv": ["flutter", "test", "--dart-define=OMI_DEV_CONTROLS=1", "--dart-define=OMI_APP_PROFILE=local_dev", "--dart-define=LIVE_SIGNIN_CONTRACTS=true", "test/spine/live_signin_test.dart"]
+        }
+      ]
+    }
+  ]
+}

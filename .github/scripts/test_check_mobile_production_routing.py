@@ -50,7 +50,9 @@ class MobileProductionRoutingContractTests(unittest.TestCase):
             observer = root / "backend/charts/monitoring/prometheus-stackdriver-exporter/prod_cloud_run.yaml"
             observer.parent.mkdir(parents=True)
             observer.write_text(
-                "prefix: prometheus.googleapis.com/omi_\n" 'filter: resource.labels.namespace="desktop-backend"\n',
+                "prefix: prometheus.googleapis.com/omi_\n"
+                'filter: resource.labels.cluster="__run__" AND '
+                'resource.labels.namespace=one_of("backend","desktop-backend")\n',
                 encoding="utf-8",
             )
 

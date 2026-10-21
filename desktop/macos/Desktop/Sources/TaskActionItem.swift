@@ -21,8 +21,11 @@ struct TaskActionItem: Codable, Identifiable, Equatable {
   let metadata: String?
   /// Classification category: personal, work, feature, bug, code, research, communication, finance, health, other
   let category: String?
-  /// Soft-delete: true if this task has been deleted by AI dedup
-  var deleted: Bool?
+  /// Legacy soft-delete marker from older task responses.
+  ///
+  /// Keep the wire field private so lifecycle decisions cannot accidentally
+  /// ignore canonical `status`. Callers must use `isRetired` instead.
+  private var legacyDeleted: Bool?
   /// Who deleted: "user", "ai_dedup"
   let deletedBy: String?
   /// When the task was soft-deleted
@@ -49,6 +52,7 @@ struct TaskActionItem: Codable, Identifiable, Equatable {
   let dueConfidence: Double?
   let provenance: [OmiAPI.EvidenceRef]?
   let supersededBy: String?
+  let isLocked: Bool
 
   // Ordering (synced to backend)
   var sortOrder: Int?  // Sort position within category
@@ -90,7 +94,7 @@ struct TaskActionItem: Codable, Identifiable, Equatable {
   /// lifecycle status and may omit the legacy `deleted` field. Keep that
   /// projection here so every local cache and surface applies the same rule.
   var isRetired: Bool {
-    deleted == true || taskStatus == "cancelled" || taskStatus == "superseded"
+    legacyDeleted == true || taskStatus == "cancelled" || taskStatus == "superseded"
   }
 
   /// This row as the retired lane already knows it to be.
@@ -107,7 +111,7 @@ struct TaskActionItem: Codable, Identifiable, Equatable {
   func retired() -> TaskActionItem {
     guard !isRetired else { return self }
     var copy = self
-    copy.deleted = true
+    copy.legacyDeleted = true
     return copy
   }
 
@@ -117,16 +121,19 @@ struct TaskActionItem: Codable, Identifiable, Equatable {
   static func == (lhs: TaskActionItem, rhs: TaskActionItem) -> Bool {
     lhs.id == rhs.id && lhs.description == rhs.description && lhs.completed == rhs.completed
       && lhs.createdAt == rhs.createdAt && lhs.dueAt == rhs.dueAt && lhs.source == rhs.source
-      && lhs.priority == rhs.priority && lhs.category == rhs.category && lhs.deleted == rhs.deleted
+      && lhs.priority == rhs.priority && lhs.category == rhs.category
+      && lhs.legacyDeleted == rhs.legacyDeleted
       && lhs.deletedBy == rhs.deletedBy && lhs.goalId == rhs.goalId
       && lhs.recurrenceRule == rhs.recurrenceRule
       && lhs.taskId == rhs.taskId && lhs.taskStatus == rhs.taskStatus
       && lhs.taskOwner == rhs.taskOwner && lhs.workstreamId == rhs.workstreamId
       && lhs.dueConfidence == rhs.dueConfidence && lhs.supersededBy == rhs.supersededBy
+      && lhs.isLocked == rhs.isLocked
   }
 
   enum CodingKeys: String, CodingKey {
-    case id, description, completed, source, priority, metadata, category, deleted
+    case id, description, completed, source, priority, metadata, category
+    case legacyDeleted = "deleted"
     case createdAt = "created_at"
     case updatedAt = "updated_at"
     case dueAt = "due_at"
@@ -147,6 +154,7 @@ struct TaskActionItem: Codable, Identifiable, Equatable {
     case dueConfidence = "due_confidence"
     case provenance
     case supersededBy = "superseded_by"
+    case isLocked = "is_locked"
     case sortOrder = "sort_order"
     case indentLevel = "indent_level"
     case relevanceScore = "relevance_score"
@@ -182,6 +190,7 @@ struct TaskActionItem: Codable, Identifiable, Equatable {
     dueConfidence: Double? = nil,
     provenance: [OmiAPI.EvidenceRef]? = nil,
     supersededBy: String? = nil,
+    isLocked: Bool = false,
     sortOrder: Int? = nil,
     indentLevel: Int? = nil,
     relevanceScore: Int? = nil,
@@ -208,7 +217,7 @@ struct TaskActionItem: Codable, Identifiable, Equatable {
     self.priority = priority
     self.metadata = metadata
     self.category = category
-    self.deleted = deleted
+    self.legacyDeleted = deleted
     self.deletedBy = deletedBy
     self.deletedAt = deletedAt
     self.deletedReason = deletedReason
@@ -224,6 +233,7 @@ struct TaskActionItem: Codable, Identifiable, Equatable {
     self.dueConfidence = dueConfidence
     self.provenance = provenance
     self.supersededBy = supersededBy
+    self.isLocked = isLocked
     self.sortOrder = sortOrder
     self.indentLevel = indentLevel
     self.relevanceScore = relevanceScore
@@ -269,7 +279,7 @@ struct TaskActionItem: Codable, Identifiable, Equatable {
     priority = try wire?.priority?.rawValue ?? container.decodeIfPresent(String.self, forKey: .priority)
     metadata = try container.decodeIfPresent(String.self, forKey: .metadata)
     category = try container.decodeIfPresent(String.self, forKey: .category)
-    deleted = try container.decodeIfPresent(Bool.self, forKey: .deleted)
+    legacyDeleted = try container.decodeIfPresent(Bool.self, forKey: .legacyDeleted)
     deletedBy = try container.decodeIfPresent(String.self, forKey: .deletedBy)
     deletedAt = try container.decodeIfPresent(Date.self, forKey: .deletedAt)
     deletedReason = try container.decodeIfPresent(String.self, forKey: .deletedReason)
@@ -286,6 +296,7 @@ struct TaskActionItem: Codable, Identifiable, Equatable {
     dueConfidence = try wire?.dueConfidence ?? container.decodeIfPresent(Double.self, forKey: .dueConfidence)
     provenance = try wire?.provenance ?? container.decodeIfPresent([OmiAPI.EvidenceRef].self, forKey: .provenance)
     supersededBy = try wire?.supersededBy ?? container.decodeIfPresent(String.self, forKey: .supersededBy)
+    isLocked = try wire?.isLocked ?? container.decodeIfPresent(Bool.self, forKey: .isLocked) ?? false
     sortOrder = try wire?.sortOrder ?? container.decodeIfPresent(Int.self, forKey: .sortOrder)
     indentLevel = try wire?.indentLevel ?? container.decodeIfPresent(Int.self, forKey: .indentLevel)
     relevanceScore = try container.decodeIfPresent(Int.self, forKey: .relevanceScore)

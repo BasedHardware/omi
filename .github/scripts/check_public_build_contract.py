@@ -7,18 +7,20 @@ import argparse
 import json
 import re
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Iterable, Mapping
+from typing import Any, Iterable, Mapping, Sequence
 
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CONTRACT = ROOT / "config" / "public-build-contract.json"
 DEFAULT_VALUES = ROOT / "config" / "public-build-values.json"
 DEFAULT_CLASSIFICATION = ROOT / "config" / "deployment-setting-classification.json"
 NAME = re.compile(r"[A-Z][A-Z0-9_]*\Z")
+CANDIDATE_ACCEPTANCE_PATH = re.compile(r"^/[A-Za-z0-9\-._~!$&'()*+,;=:@%]*$")
 SECRET_REFERENCE = re.compile(r"[A-Za-z0-9_-]+:(?:latest|[1-9][0-9]*)\Z")
 ARG = re.compile(r"^\s*ARG\s+([A-Z][A-Z0-9_]*)\s*$", re.MULTILINE)
 GUARD = re.compile(r'^\s*ENV\s+OMI_REQUIRED_PUBLIC_BUILD_INPUTS="([A-Z0-9_ ]*)"\s*$', re.MULTILINE)
+REVISION_IDENTITY_ARGS = frozenset({"NEXT_PUBLIC_OMI_BUILD_SHA"})
 WEB_WORKFLOWS = frozenset(
     {
         ".github/workflows/gcp_admin.yml",
@@ -34,6 +36,16 @@ DEPLOY_ACTION_PATH = ".github/actions/deploy-public-build/action.yml"
 PREPARE_ACTION_PATH = ".github/actions/prepare-public-build/action.yml"
 PROMOTION_ACTION_PATH = ".github/actions/public-build-candidate-promotion/action.yml"
 JIT_PREFLIGHT_WORKFLOW_PATH = ".github/workflows/public-build-config-preflight.yml"
+DEFAULT_CANDIDATE_TIMEOUT_SECONDS = 45
+DEFAULT_RETRY_TIMEOUT_SECONDS = 19
+BROWSER_EXIT_GRACE_SECONDS = 5
+SMOKE_RETRY_ATTEMPTS = 3
+SMOKE_RETRY_SLEEP_SECONDS = 5
+MAX_BROWSER_CANDIDATES = 6
+# The requested app values need 26m30s if all six browser candidates are
+# present, every attempt reaches its subprocess fallback, and retries use
+# their grace. Keep a small, explicit ceiling above that bound.
+MAX_TOTAL_SMOKE_SECONDS = 28 * 60
 MANUAL_ENVIRONMENT_INPUT = """workflow_dispatch:
     inputs:
       environment:
@@ -65,6 +77,119 @@ class PublicInput:
 class CandidateAcceptance:
     command: tuple[str, ...]
     marker: str
+    path: str = "/"
+    timeout_seconds: int = DEFAULT_CANDIDATE_TIMEOUT_SECONDS
+    retry_timeout_seconds: int = DEFAULT_RETRY_TIMEOUT_SECONDS
+    # environment -> absolute HTTPS URL served by the load balancer in front of
+    # the service. Required for any environment whose ingress hides the tagged
+    # candidate URL from CI; see acceptance_route().
+    public_urls: dict[str, str] = field(default_factory=dict)
+
+
+# Cloud Run ingress values under which the tagged run.app candidate URL answers
+# to CI. Every other value (internal, internal-and-cloud-load-balancing) makes
+# the tagged URL 404 for CI regardless of authentication.
+OPEN_INGRESS = frozenset({"", "all"})
+
+
+@dataclass(frozen=True)
+class AcceptanceRoute:
+    route: str  # "candidate_url" or "public_url"
+    public_url: str = ""
+
+
+def _parse_public_urls(raw: Any, *, target_name: str, environments: Iterable[str]) -> dict[str, str]:
+    if raw is None:
+        return {}
+    if not isinstance(raw, Mapping):
+        raise ValueError(f"target {target_name} candidate public_urls must be an object")
+    known = set(environments)
+    public_urls: dict[str, str] = {}
+    for environment, url in raw.items():
+        if environment not in known:
+            raise ValueError(f"target {target_name} candidate public_urls names unknown environment {environment!r}")
+        if not isinstance(url, str) or not url.startswith("https://") or url != url.strip() or url.endswith("/"):
+            raise ValueError(
+                f"target {target_name} candidate public_urls[{environment!r}] must be an absolute HTTPS URL without a trailing slash"
+            )
+        public_urls[environment] = url
+    return public_urls
+
+
+def acceptance_route(target: Target, *, environment: str, ingress: str) -> AcceptanceRoute:
+    """Decide how CI can observe a candidate for browser acceptance.
+
+    Open ingress: smoke the no-traffic candidate through its tagged URL before
+    promotion. Restricted ingress: the tagged URL is unreachable, so the
+    candidate can only be observed through the declared public URL after it
+    holds traffic; the promotion action smokes it there and rolls back on
+    failure. Restricted ingress without a declared public URL is refused here
+    with its real cause instead of surfacing later as a canary that never
+    became ready.
+    """
+
+    normalized = ingress.strip()
+    if normalized in OPEN_INGRESS:
+        return AcceptanceRoute(route="candidate_url")
+    public_url = target.candidate_acceptance.public_urls.get(environment, "")
+    if not public_url:
+        raise ValueError(
+            f"target {target.name}: ingress {normalized!r} hides the tagged candidate URL from CI and "
+            f"candidate_acceptance.public_urls declares no {environment!r} URL to smoke after promotion"
+        )
+    return AcceptanceRoute(route="public_url", public_url=public_url)
+
+
+def serving_revision(service_document: Mapping[str, Any]) -> str:
+    """Return the revision holding the largest traffic share, or "" when none does."""
+
+    status = service_document.get("status")
+    traffic = status.get("traffic") if isinstance(status, Mapping) else None
+    best_name, best_percent = "", 0
+    for entry in traffic or ():
+        if not isinstance(entry, Mapping):
+            continue
+        name = entry.get("revisionName")
+        percent = entry.get("percent")
+        if isinstance(name, str) and name and isinstance(percent, int) and percent > best_percent:
+            best_name, best_percent = name, percent
+    return best_name
+
+
+def stale_candidate_tags(
+    service_document: Mapping[str, Any], *, target: str, keep_latest: int, keep_tags: Sequence[str] = ()
+) -> list[str]:
+    """Return this target's candidate tags that no longer serve a purpose.
+
+    Every promotion adds a `public-<target>-<run>-<attempt>` tag and nothing
+    removed them, so services accumulated ~80 tagged traffic entries. Keep the
+    newest `keep_latest` candidate tags (rollback targets with stable URLs), any
+    tag on a revision that holds traffic, and `keep_tags`; return the rest of
+    the tags owned by this target (`public-<target>-...` or `<target>-...`).
+    Tags owned by anything else are never returned.
+    """
+
+    spec = service_document.get("spec")
+    traffic = spec.get("traffic") if isinstance(spec, Mapping) else None
+    if not traffic:
+        status = service_document.get("status")
+        traffic = status.get("traffic") if isinstance(status, Mapping) else None
+    entries = [e for e in traffic or () if isinstance(e, Mapping) and isinstance(e.get("tag"), str) and e["tag"]]
+    serving = {
+        e.get("revisionName")
+        for e in traffic or ()
+        if isinstance(e, Mapping) and isinstance(e.get("percent"), int) and e["percent"] > 0
+    }
+    candidate = re.compile(rf"public-{re.escape(target)}-(\d+)-(\d+)")
+    owned = [e for e in entries if e["tag"].startswith((f"public-{target}-", f"{target}-"))]
+    numbered = sorted(
+        (e for e in owned if candidate.fullmatch(e["tag"])),
+        key=lambda e: tuple(int(g) for g in candidate.fullmatch(e["tag"]).groups()),
+    )
+    keep = set(keep_tags) | {e["tag"] for e in owned if e.get("revisionName") in serving}
+    if keep_latest > 0:
+        keep |= {e["tag"] for e in numbered[-keep_latest:]}
+    return [e["tag"] for e in owned if e["tag"] not in keep]
 
 
 @dataclass(frozen=True)
@@ -72,12 +197,18 @@ class Deployment:
     region: str
     build_context: str
     platforms: tuple[str, ...]
-    flags: tuple[str, ...]
+    flags_by_environment: dict[str, tuple[str, ...]]
     runtime_secrets: dict[str, str]
     preserve_runtime_secrets: tuple[str, ...]
     fallback_runtime_secrets: dict[str, str]
     runtime_env_vars: dict[str, str]
     remove_runtime_secrets: tuple[str, ...]
+    remove_runtime_env_vars: tuple[str, ...]
+
+    def flags_for(self, environment: str) -> tuple[str, ...]:
+        """Return the gcloud flags that apply to one declared environment."""
+
+        return self.flags_by_environment.get(environment, ())
 
 
 @dataclass(frozen=True)
@@ -112,6 +243,33 @@ def _require_string(value: Any, *, field: str) -> str:
     return value
 
 
+def _parse_candidate_timeouts(acceptance: Mapping[str, Any], *, target_name: str) -> tuple[int, int]:
+    timeout = acceptance.get("timeout_seconds", DEFAULT_CANDIDATE_TIMEOUT_SECONDS)
+    retry_timeout = acceptance.get("retry_timeout_seconds", DEFAULT_RETRY_TIMEOUT_SECONDS)
+    for field_name, value in (
+        ("timeout_seconds", timeout),
+        ("retry_timeout_seconds", retry_timeout),
+    ):
+        if type(value) is not int or value <= 0:
+            raise ValueError(
+                f"target {target_name} candidate_acceptance.{field_name} must be a positive integer"
+            )
+    if retry_timeout >= timeout:
+        raise ValueError(
+            f"target {target_name} candidate_acceptance.retry_timeout_seconds must be less than timeout_seconds"
+        )
+    per_browser_seconds = timeout + BROWSER_EXIT_GRACE_SECONDS + (SMOKE_RETRY_ATTEMPTS - 1) * (
+        retry_timeout + BROWSER_EXIT_GRACE_SECONDS + SMOKE_RETRY_SLEEP_SECONDS
+    )
+    worst_case_seconds = MAX_BROWSER_CANDIDATES * per_browser_seconds
+    if worst_case_seconds > MAX_TOTAL_SMOKE_SECONDS:
+        raise ValueError(
+            f"target {target_name} candidate_acceptance timeouts allow a {worst_case_seconds}s worst-case smoke, "
+            f"exceeding the {MAX_TOTAL_SMOKE_SECONDS}s ceiling"
+        )
+    return timeout, retry_timeout
+
+
 def _parse_input(raw_input: Any, *, target_name: str) -> PublicInput:
     if not isinstance(raw_input, Mapping):
         raise ValueError(f"target {target_name} inputs must be objects")
@@ -128,7 +286,44 @@ def _parse_input(raw_input: Any, *, target_name: str) -> PublicInput:
     return PublicInput(name=name, required=required, source=source, allowed_scopes=tuple(raw_scopes))
 
 
-def _parse_deployment(raw_deployment: Any, *, target_name: str) -> Deployment:
+def _parse_flag_list(raw_flags: Any, *, target_name: str, where: str) -> tuple[str, ...]:
+    if not isinstance(raw_flags, list) or not all(
+        isinstance(flag, str) and flag.startswith("--") and "\n" not in flag and "\r" not in flag for flag in raw_flags
+    ):
+        raise ValueError(f"target {target_name} {where} must be safe gcloud flags")
+    return tuple(raw_flags)
+
+
+def _parse_flags(raw_flags: Any, *, target_name: str, environments: tuple[str, ...]) -> dict[str, tuple[str, ...]]:
+    """Accept a shared flag list or an object keyed by declared environment."""
+
+    if isinstance(raw_flags, list):
+        flags = _parse_flag_list(raw_flags, target_name=target_name, where="deployment flags")
+        return {environment: flags for environment in environments}
+    if isinstance(raw_flags, Mapping):
+        unknown = sorted(str(environment) for environment in raw_flags if environment not in environments)
+        if unknown:
+            raise ValueError(f"target {target_name} deployment flags names unknown environment {unknown[0]!r}")
+        parsed = {environment: () for environment in environments}
+        for environment, env_flags in raw_flags.items():
+            if not isinstance(environment, str) or not environment:
+                raise ValueError(f"target {target_name} deployment flags must be keyed by environment name")
+            parsed[environment] = _parse_flag_list(
+                env_flags, target_name=target_name, where=f"deployment flags[{environment!r}]"
+            )
+        return parsed
+    raise ValueError(f"target {target_name} deployment flags must be a list or an object keyed by environment")
+
+
+def _parse_env_name_list(raw_names: Any, *, target_name: str, field: str) -> tuple[str, ...]:
+    if not isinstance(raw_names, list) or not all(isinstance(name, str) and NAME.fullmatch(name) for name in raw_names):
+        raise ValueError(f"target {target_name} deployment {field} must be environment names")
+    if len(set(raw_names)) != len(raw_names):
+        raise ValueError(f"target {target_name} deployment {field} must be unique")
+    return tuple(raw_names)
+
+
+def _parse_deployment(raw_deployment: Any, *, target_name: str, environments: tuple[str, ...]) -> Deployment:
     if not isinstance(raw_deployment, Mapping):
         raise ValueError(f"target {target_name} must declare deployment")
     region = _require_string(raw_deployment.get("region"), field=f"target {target_name} deployment region")
@@ -142,11 +337,7 @@ def _parse_deployment(raw_deployment: Any, *, target_name: str) -> Deployment:
         or not all(isinstance(platform, str) and platform for platform in raw_platforms)
     ):
         raise ValueError(f"target {target_name} deployment platforms must be non-empty strings")
-    raw_flags = raw_deployment.get("flags")
-    if not isinstance(raw_flags, list) or not all(
-        isinstance(flag, str) and flag.startswith("--") and "\n" not in flag and "\r" not in flag for flag in raw_flags
-    ):
-        raise ValueError(f"target {target_name} deployment flags must be safe gcloud flags")
+    flags_by_environment = _parse_flags(raw_deployment.get("flags"), target_name=target_name, environments=environments)
     raw_runtime_secrets = raw_deployment.get("runtime_secrets")
     if not isinstance(raw_runtime_secrets, Mapping) or not all(
         isinstance(name, str)
@@ -197,13 +388,32 @@ def _parse_deployment(raw_deployment: Any, *, target_name: str) -> Deployment:
             f"target {target_name} deployment runtime_env_vars must map environment names to non-empty deploy-safe values"
         )
 
-    raw_remove_runtime_secrets = raw_deployment.get("remove_runtime_secrets", [])
-    if not isinstance(raw_remove_runtime_secrets, list) or not all(
-        isinstance(name, str) and NAME.fullmatch(name) for name in raw_remove_runtime_secrets
-    ):
-        raise ValueError(f"target {target_name} deployment remove_runtime_secrets must be environment names")
-    if len(set(raw_remove_runtime_secrets)) != len(raw_remove_runtime_secrets):
-        raise ValueError(f"target {target_name} deployment remove_runtime_secrets must be unique")
+    raw_remove_runtime_secrets = _parse_env_name_list(
+        raw_deployment.get("remove_runtime_secrets", []),
+        target_name=target_name,
+        field="remove_runtime_secrets",
+    )
+    raw_remove_runtime_env_vars = _parse_env_name_list(
+        raw_deployment.get("remove_runtime_env_vars", []),
+        target_name=target_name,
+        field="remove_runtime_env_vars",
+    )
+    # preserve_runtime_secrets are retained by the merge update strategies, so a
+    # removal emitted for the same runtime name would strip the preserved
+    # binding (env-var names and secret bindings share one runtime namespace).
+    # fallback_runtime_secrets is validated to mirror preserve_runtime_secrets.
+    env_var_removal_overlaps = set(raw_remove_runtime_env_vars) & (
+        set(raw_runtime_secrets)
+        | set(raw_runtime_env_vars)
+        | set(raw_preserve_runtime_secrets)
+        | set(raw_fallback_runtime_secrets)
+    )
+    if env_var_removal_overlaps:
+        raise ValueError(
+            f"target {target_name} deployment remove_runtime_env_vars cannot overlap runtime_secrets, "
+            f"runtime_env_vars, preserve_runtime_secrets, or fallback_runtime_secrets: "
+            f"{', '.join(sorted(env_var_removal_overlaps))}"
+        )
 
     binding_groups = {
         "runtime_secrets": set(raw_runtime_secrets),
@@ -235,12 +445,13 @@ def _parse_deployment(raw_deployment: Any, *, target_name: str) -> Deployment:
         region=region,
         build_context=build_context,
         platforms=tuple(raw_platforms),
-        flags=tuple(raw_flags),
+        flags_by_environment=flags_by_environment,
         runtime_secrets=dict(raw_runtime_secrets),
         preserve_runtime_secrets=tuple(raw_preserve_runtime_secrets),
         fallback_runtime_secrets=dict(raw_fallback_runtime_secrets),
         runtime_env_vars=dict(raw_runtime_env_vars),
-        remove_runtime_secrets=tuple(raw_remove_runtime_secrets),
+        remove_runtime_secrets=raw_remove_runtime_secrets,
+        remove_runtime_env_vars=raw_remove_runtime_env_vars,
     )
 
 
@@ -285,6 +496,16 @@ def load_contract(path: Path) -> Contract:
             raise ValueError(f"{path}: target {target_name} candidate command is invalid")
         if "{base_url}" not in command:
             raise ValueError(f"{path}: target {target_name} candidate command must use {{base_url}}")
+        candidate_path = acceptance.get("path", "/")
+        if not isinstance(candidate_path, str) or CANDIDATE_ACCEPTANCE_PATH.fullmatch(candidate_path) is None:
+            raise ValueError(
+                f"{path}: target {target_name} candidate_acceptance.path must match the strict path syntax"
+            )
+        if "{sha}" in command and "--expect-sha" not in command:
+            raise ValueError(f"{path}: target {target_name} candidate command uses {{sha}} without --expect-sha")
+        timeout_seconds, retry_timeout_seconds = _parse_candidate_timeouts(
+            acceptance, target_name=target_name
+        )
         gateway_required = raw_target.get("gateway_required", False)
         if not isinstance(gateway_required, bool):
             raise ValueError(f"target {target_name} gateway_required must be boolean")
@@ -294,13 +515,22 @@ def load_contract(path: Path) -> Contract:
             dockerfile=_require_string(raw_target.get("dockerfile"), field=f"target {target_name} dockerfile"),
             workflow=_require_string(raw_target.get("workflow"), field=f"target {target_name} workflow"),
             gateway_required=gateway_required,
-            deployment=_parse_deployment(raw_target.get("deployment"), target_name=target_name),
+            deployment=_parse_deployment(
+                raw_target.get("deployment"), target_name=target_name, environments=environments
+            ),
             canary_component=_require_string(
                 raw_target.get("canary_component"), field=f"target {target_name} canary_component"
             ),
             inputs=inputs,
             candidate_acceptance=CandidateAcceptance(
-                command=tuple(command), marker=_require_string(acceptance.get("marker"), field="candidate marker")
+                command=tuple(command),
+                marker=_require_string(acceptance.get("marker"), field="candidate marker"),
+                path=candidate_path,
+                timeout_seconds=timeout_seconds,
+                retry_timeout_seconds=retry_timeout_seconds,
+                public_urls=_parse_public_urls(
+                    acceptance.get("public_urls"), target_name=target_name, environments=environments
+                ),
             ),
             traffic_promotion=_require_string(
                 raw_target.get("traffic_promotion"), field=f"target {target_name} traffic_promotion"
@@ -366,6 +596,23 @@ def build_args(target: Target, values: Mapping[str, str]) -> str:
     return "\n".join(f"{item.name}={values[item.name]}" for item in target.inputs if item.name in values)
 
 
+def render_acceptance_command(
+    command: Sequence[str],
+    *,
+    base_url: str,
+    sha: str = "",
+) -> tuple[str, ...]:
+    """Replace {base_url} and {sha} in a candidate_acceptance.command template.
+
+    Targets that omit {sha} are unchanged even when a sha is supplied. A template
+    that declares {sha} requires a non-empty sha so the rendered argv cannot drop
+    the revision identity the smoke is supposed to assert.
+    """
+    if "{sha}" in command and not sha:
+        raise ValueError("candidate command requires {sha}")
+    return tuple(part.replace("{base_url}", base_url).replace("{sha}", sha) for part in command)
+
+
 def deployment_setting_names(classification_path: Path) -> dict[str, set[str]]:
     raw = _read_json(classification_path)
     try:
@@ -388,7 +635,11 @@ def public_build_names(classification_path: Path) -> set[str]:
 
 
 def _docker_public_args(text: str, classified_public: set[str]) -> set[str]:
-    return {name for name in ARG.findall(text) if name.startswith("NEXT_PUBLIC_") or name in classified_public}
+    return {
+        name
+        for name in ARG.findall(text)
+        if (name.startswith("NEXT_PUBLIC_") or name in classified_public) and name not in REVISION_IDENTITY_ARGS
+    }
 
 
 def _guarded_names(text: str) -> set[str]:
@@ -430,11 +681,9 @@ def validate_target(
     names = all_names(target)
     unclassified = sorted(names - classified_public)
     errors.extend(f"{target.name}: input {name} is not classified public_build" for name in unclassified)
-    runtime_config_names = set(target.deployment.runtime_env_vars)
-    runtime_config_classification = classified_runtime_config or set()
     errors.extend(
         f"{target.name}: runtime env {name} is not classified config"
-        for name in sorted(runtime_config_names - runtime_config_classification)
+        for name in sorted(set(target.deployment.runtime_env_vars) - (classified_runtime_config or set()))
     )
     for item in target.inputs:
         if item.source != "repository_config":
@@ -465,6 +714,9 @@ def validate_target(
     )
     if guard_names and 'test -n "$value"' not in dockerfile:
         errors.append(f"{target.dockerfile}: public-build guard must reject empty values")
+    if "{sha}" in target.candidate_acceptance.command:
+        if "NEXT_PUBLIC_OMI_BUILD_SHA" not in set(ARG.findall(dockerfile)):
+            errors.append(f"{target.dockerfile}: missing revision-identity ARG NEXT_PUBLIC_OMI_BUILD_SHA")
 
     workflow_path = root / target.workflow
     if not workflow_path.is_file():
@@ -474,7 +726,9 @@ def validate_target(
     if DEPLOY_ACTION not in workflow:
         errors.append(f"{target.workflow}: missing centralized public-build deployment {DEPLOY_ACTION!r}")
     if target.gateway_required:
-        if "runtime_env_vars: OMI_LLM_GATEWAY_URL=${{ vars.OMI_LLM_GATEWAY_URL }}" not in workflow:
+        gateway = re.escape("OMI_LLM_GATEWAY_URL=${{ vars.OMI_LLM_GATEWAY_URL }}")
+        pattern = r"(?m)^([ \t]*)runtime_env_vars: (?:{0}$|\|[-+]?\n(?:\1[ \t]+[^\n]*\n)*?\1[ \t]+{0}$)"
+        if not re.search(pattern.format(gateway), workflow):
             errors.append(
                 f"{target.workflow}: gateway-required target must source OMI_LLM_GATEWAY_URL from GitHub environment vars"
             )
@@ -514,6 +768,8 @@ def validate_target(
         canary = canary_path.read_text(encoding="utf-8")
         if "data-omi-public-build-canary" not in canary or target.name not in canary:
             errors.append(f"{target.canary_component}: must expose {target.name} browser canary")
+        if "{sha}" in target.candidate_acceptance.command and "data-omi-public-build-sha" not in canary:
+            errors.append(f"{target.canary_component}: must expose data-omi-public-build-sha")
     return errors
 
 
@@ -530,6 +786,9 @@ def validate_shared_actions(root: Path) -> list[str]:
             "fallback_runtime_secrets",
             ".deployment.runtime_env_vars",
             ".deployment.remove_runtime_secrets",
+            ".deployment.remove_runtime_env_vars",
+            "($flags[$env] // [])",
+            "--service-account",
             PREPARE_ACTION,
             "google-github-actions/auth@",
             "preflight_public_build_runtime.py",
@@ -545,10 +804,13 @@ def validate_shared_actions(root: Path) -> list[str]:
             "--tag=",
             "inputs.environment == 'development' && '--allow-unauthenticated' || ''",
             "--remove-secrets=",
+            "--remove-env-vars=",
             "require_gateway_url",
             "OMI_LLM_GATEWAY_URL must be a non-empty HTTP(S) URL",
             "env_vars_update_strategy: merge",
             "secrets_update_strategy: merge",
+            "NEXT_PUBLIC_OMI_BUILD_SHA",
+            "steps.candidate.outputs.sha",
             PROMOTION_ACTION,
         )
         for marker in required_markers:
@@ -577,19 +839,29 @@ def validate_shared_actions(root: Path) -> list[str]:
         return errors
     promotion = promotion_path.read_text(encoding="utf-8")
     required_markers = (
+        "public_build_acceptance_route.py",
+        "run.googleapis.com/ingress",
         "resolve_cloud_run_tagged_url.py",
         "smoke_public_build_browser.py",
+        "--expect-sha",
         "status.latestCreatedRevisionName",
+        "previous_serving_revision",
         "gcloud run services update-traffic",
         "--to-revisions=",
     )
     for marker in required_markers:
         if marker not in promotion:
             errors.append(f"{PROMOTION_ACTION_PATH}: missing candidate-promotion marker {marker!r}")
+    route_index = promotion.find("public_build_acceptance_route.py")
     smoke_index = promotion.find("smoke_public_build_browser.py")
     promotion_index = promotion.find("gcloud run services update-traffic")
+    if route_index == -1 or smoke_index == -1 or route_index > smoke_index:
+        errors.append(f"{PROMOTION_ACTION_PATH}: acceptance route must be resolved before browser acceptance")
     if smoke_index == -1 or promotion_index == -1 or smoke_index > promotion_index:
         errors.append(f"{PROMOTION_ACTION_PATH}: browser acceptance must run before traffic promotion")
+    rollback_index = promotion.rfind("--to-revisions=")
+    if rollback_index == -1 or rollback_index <= promotion_index:
+        errors.append(f"{PROMOTION_ACTION_PATH}: public-URL acceptance must roll traffic back on failure")
     return errors
 
 

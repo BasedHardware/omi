@@ -11,6 +11,7 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/app_globals.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
+import 'package:omi/utils/error_message.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 
@@ -146,14 +147,14 @@ class AiAppGeneratorProvider extends ChangeNotifier {
     _errorMessage = null;
 
     // Step 1: Creating plan
-    _updateStep(GenerationStep.creatingPlan, 'Analyzing your idea...');
+    _updateStep(GenerationStep.creatingPlan, 'Analyzing your idea…');
 
     try {
       // Small delay for UX
       await Future.delayed(const Duration(milliseconds: 500));
 
       // Step 2: Developing logic
-      _updateStep(GenerationStep.developingLogic, 'Crafting app logic...');
+      _updateStep(GenerationStep.developingLogic, 'Crafting app logic…');
 
       // Generate app configuration
       final appData = await generateAppFromPrompt(prompt);
@@ -166,7 +167,7 @@ class AiAppGeneratorProvider extends ChangeNotifier {
       }
 
       // Step 3: Designing app
-      _updateStep(GenerationStep.designingApp, 'Designing your app...');
+      _updateStep(GenerationStep.designingApp, 'Designing your app…');
       await Future.delayed(const Duration(milliseconds: 300));
 
       _generatedName = appData['name'] as String?;
@@ -191,7 +192,7 @@ class AiAppGeneratorProvider extends ChangeNotifier {
       }
 
       // Step 5: Final touches
-      _updateStep(GenerationStep.finalTouches, 'Final touches...');
+      _updateStep(GenerationStep.finalTouches, 'Final touches…');
       await Future.delayed(const Duration(milliseconds: 300));
 
       _state = GenerationState.idle;
@@ -200,7 +201,7 @@ class AiAppGeneratorProvider extends ChangeNotifier {
     } catch (e) {
       Logger.debug('Error generating app: $e');
       _state = GenerationState.error;
-      _errorMessage = globalNavigatorKey.currentContext!.l10n.aiGenErrorOccurredWithDetails(e.toString());
+      _errorMessage = globalNavigatorKey.currentContext!.l10n.aiGenErrorOccurredWithDetails(readableError(e));
       notifyListeners();
       return false;
     }

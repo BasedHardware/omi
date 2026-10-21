@@ -4,11 +4,24 @@ description: >-
   surfaces, and shared release-vector evidence for manual and auto-dev deploys.
 
 inputs:
+  backend_sync_memory:
+    description: 'C023 memory trial: 8Gi baseline or 6Gi, independently reversible'
+    required: false
+    default: '8Gi'
   firebase_probe_signer_service_account:
     description: >-
       Optional service account for signing release-probe custom tokens when the
       Firebase auth project differs from project_id. Requires
       roles/iam.serviceAccountTokenCreator for the deploy identity on it.
+    required: false
+    default: ''
+  firebase_probe_signer_credentials:
+    description: >-
+      Deprecated: base64-encoded service-account key for the Firebase auth
+      project, used to sign release-probe custom tokens locally. No workflow
+      supplies it any more; every development lane signs through IAM signJwt as
+      the named no-role signer (vars.FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT).
+      Mutually exclusive with firebase_probe_signer_service_account.
     required: false
     default: ''
   deploy_profile:
@@ -33,8 +46,17 @@ inputs:
     required: false
     default: ''
   gcp_credentials:
-    description: 'GCP deployment credentials JSON'
-    required: true
+    description: 'GCP deployment credentials JSON. Required unless WIF inputs are set. Do not pass both.'
+    required: false
+    default: ''
+  workload_identity_provider:
+    description: 'WIF provider resource name. Development CD slice; mutually exclusive with gcp_credentials.'
+    required: false
+    default: ''
+  workload_identity_service_account:
+    description: 'Deployer service account email for WIF. Required when workload_identity_provider is set.'
+    required: false
+    default: ''
   project_id:
     description: 'GCP project ID for deployment'
     required: true
@@ -158,8 +180,36 @@ runs:
         printf 'DEPLOY_CONTROL_SCRIPTS=%s\n' "$control_scripts" >> "$GITHUB_ENV"
         printf 'DEPLOY_WORKFLOW_ROOT=%s\n' "$workflow_root" >> "$GITHUB_ENV"
 
-    - name: Google Auth
-      id: auth
+    - name: Validate GCP auth inputs
+      shell: bash
+      env:
+        HAS_WIF: ${{ inputs.workload_identity_provider != '' }}
+        HAS_SA: ${{ inputs.workload_identity_service_account != '' }}
+        HAS_JSON: ${{ inputs.gcp_credentials != '' }}
+      run: |
+        set -euo pipefail
+        if [[ "$HAS_WIF" == true && "$HAS_JSON" == true ]]; then
+          echo "Pass WIF or gcp_credentials, not both" >&2
+          exit 1
+        fi
+        if [[ "$HAS_WIF" != true && "$HAS_JSON" != true ]]; then
+          echo "Need workload_identity_provider or gcp_credentials" >&2
+          exit 1
+        fi
+        if [[ "$HAS_WIF" == true && "$HAS_SA" != true ]]; then
+          echo "WIF requires workload_identity_service_account" >&2
+          exit 1
+        fi
+
+    - name: Google Auth (WIF)
+      if: ${{ inputs.workload_identity_provider != '' }}
+      uses: google-github-actions/auth@v3
+      with:
+        workload_identity_provider: ${{ inputs.workload_identity_provider }}
+        service_account: ${{ inputs.workload_identity_service_account }}
+
+    - name: Google Auth (JSON)
+      if: ${{ inputs.workload_identity_provider == '' }}
       uses: google-github-actions/auth@v3
       with:
         credentials_json: ${{ inputs.gcp_credentials }}
@@ -196,6 +246,39 @@ runs:
     - name: Install Python deps for deploy scripts
       shell: bash
       run: python3 -m pip install -q pyyaml
+
+    - name: Preflight required deployment secrets before mutations
+      id: preflight-required-secrets
+      shell: bash
+      run: |
+        set -euo pipefail
+        python3 "$DEPLOY_CONTROL_SCRIPTS/preflight-cloud-run-deploy.py" \
+          --env="${{ inputs.runtime_env }}" \
+          --project="${{ inputs.project_id }}" \
+          --manifest="$GITHUB_WORKSPACE/backend/deploy/runtime_env.yaml" \
+          --check-secrets
+
+    - name: Validate backend GMP config without Secret Manager
+      id: prepare-backend-gmp-config
+      shell: bash
+      run: |
+        set -euo pipefail
+        python3 "$DEPLOY_CONTROL_SCRIPTS/attach_cloud_run_gmp_sidecar.py" \
+          --prepare-config \
+          --config-env \
+          --project="${{ inputs.project_id }}" \
+          --config="$DEPLOY_CONTROL_SCRIPTS/../deploy/cloud_run_gmp_sidecar.yaml" >> "$GITHUB_OUTPUT"
+
+    - name: Validate sync GMP config without Secret Manager
+      id: prepare-sync-gmp-config
+      shell: bash
+      run: |
+        set -euo pipefail
+        python3 "$DEPLOY_CONTROL_SCRIPTS/attach_cloud_run_gmp_sidecar.py" \
+          --prepare-config \
+          --config-env \
+          --project="${{ inputs.project_id }}" \
+          --config="$DEPLOY_CONTROL_SCRIPTS/../deploy/cloud_run_gmp_sync.yaml" >> "$GITHUB_OUTPUT"
 
     - name: Resolve production account-deletion task target
       if: ${{ inputs.runtime_env == 'prod' }}
@@ -281,18 +364,6 @@ runs:
         fi
         python3 "$DEPLOY_CONTROL_SCRIPTS/preflight-cloud-run-deploy.py" "${PREFLIGHT_ARGS[@]}"
 
-    - name: Validate backend runtime env before deploy
-      shell: bash
-      env:
-        SYNC_LEDGER_FENCE_MODE: ${{ env.SYNC_LEDGER_FENCE_MODE }}
-      run: |
-        python3 "$DEPLOY_CONTROL_SCRIPTS/validate-backend-runtime-env.py" \
-          --env ${{ inputs.runtime_env }} \
-          --manifest "$GITHUB_WORKSPACE/backend/deploy/runtime_env.yaml" \
-          --check-workflows \
-          --workflow-root "$DEPLOY_WORKFLOW_ROOT" \
-          --check-rendered-cloud-run
-
     - name: Build runtime image
       uses: docker/build-push-action@v7
       with:
@@ -366,17 +437,104 @@ runs:
       if: ${{ inputs.deploy_profile == 'auto-dev' }}
       shell: bash
       run: |
+        set -euo pipefail
         NAMESPACE="${{ inputs.runtime_env }}-omi-backend"
-        TOKEN="$(kubectl -n "$NAMESPACE" get secret ${{ inputs.runtime_env }}-omi-backend-secrets -o jsonpath='{.data.OMI_LLM_GATEWAY_SERVICE_TOKEN}' | base64 -d)"
-        METRICS_TOKEN="$(kubectl -n "$NAMESPACE" get secret ${{ inputs.runtime_env }}-omi-backend-secrets -o jsonpath='{.data.METRICS_SECRET}' | base64 -d)"
-        SMOKE_COMMAND="python scripts/smoke-llm-gateway.py --url \"\$SMOKE_URL\" --token \"\$SMOKE_TOKEN\" --check-metrics"
-        kubectl -n "$NAMESPACE" run "llm-gateway-smoke-${GITHUB_RUN_ID}" \
-          --rm -i --restart=Never \
-          --image "gcr.io/${{ inputs.project_id }}/llm-gateway:${{ steps.image-tag.outputs.short_sha }}" \
-          --env "SMOKE_URL=http://${{ inputs.runtime_env }}-omi-llm-gateway.${{ inputs.runtime_env }}-omi-backend.svc.cluster.local:8080" \
-          --env "SMOKE_TOKEN=$TOKEN" \
-          --env "METRICS_SECRET=$METRICS_TOKEN" \
-          --command -- sh -c "$SMOKE_COMMAND"
+        SMOKE_POD="llm-gateway-smoke-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT:-1}"
+        # Image pulls are independent of the smoke client's HTTP request
+        # deadline. A cold 800 MB image exceeded kubectl run's implicit
+        # one-minute pod-running timeout before the smoke process started.
+        SMOKE_STARTUP_BUDGET_SECONDS=300
+        SMOKE_PROBE_BUDGET_SECONDS=180
+
+        show_smoke_diagnostics() {
+          echo "=== llm-gateway smoke pod ==="
+          kubectl --request-timeout=30s -n "$NAMESPACE" get pod "$SMOKE_POD" -o wide || true
+          kubectl --request-timeout=30s -n "$NAMESPACE" get pod "$SMOKE_POD" -o jsonpath='{.status.phase}{"\n"}{range .status.containerStatuses[*]}{.name}{" ready="}{.ready}{" state="}{.state.waiting.reason}{.state.terminated.reason}{" exit="}{.state.terminated.exitCode}{"\n"}{end}' || true
+          kubectl --request-timeout=30s -n "$NAMESPACE" describe pod "$SMOKE_POD" || true
+          echo "=== llm-gateway smoke logs ==="
+          kubectl --request-timeout=30s -n "$NAMESPACE" logs "$SMOKE_POD" --all-containers=true || true
+          echo "=== llm-gateway smoke events ==="
+          kubectl --request-timeout=30s -n "$NAMESPACE" get events --field-selector "involvedObject.name=$SMOKE_POD" --sort-by=.lastTimestamp || true
+        }
+        cleanup_smoke_pod() {
+          kubectl --request-timeout=30s -n "$NAMESPACE" delete pod "$SMOKE_POD" --ignore-not-found=true --wait=false || true
+        }
+        trap cleanup_smoke_pod EXIT
+
+        if ! cat <<EOF | kubectl --request-timeout=30s -n "$NAMESPACE" apply -f -
+        apiVersion: v1
+        kind: Pod
+        metadata:
+          name: $SMOKE_POD
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: smoke
+              image: gcr.io/${{ inputs.project_id }}/llm-gateway:${{ steps.image-tag.outputs.short_sha }}
+              command: ["sh", "-c", "python scripts/smoke-llm-gateway.py --url \"\$SMOKE_URL\" --token \"\$SMOKE_TOKEN\" --check-metrics"]
+              env:
+                - name: SMOKE_URL
+                  value: http://${{ inputs.runtime_env }}-omi-llm-gateway.${{ inputs.runtime_env }}-omi-backend.svc.cluster.local:8080
+                - name: SMOKE_TOKEN
+                  valueFrom:
+                    secretKeyRef:
+                      name: ${{ inputs.runtime_env }}-omi-backend-secrets
+                      key: OMI_LLM_GATEWAY_SERVICE_TOKEN
+                - name: METRICS_SECRET
+                  valueFrom:
+                    secretKeyRef:
+                      name: ${{ inputs.runtime_env }}-omi-backend-secrets
+                      key: METRICS_SECRET
+        EOF
+        then
+          echo "LLM gateway smoke pod could not be created" >&2
+          show_smoke_diagnostics
+          exit 1
+        fi
+
+        phase=""
+        startup_deadline=$((SECONDS + SMOKE_STARTUP_BUDGET_SECONDS))
+        while (( SECONDS < startup_deadline )); do
+          phase="$(kubectl --request-timeout=10s -n "$NAMESPACE" get pod "$SMOKE_POD" -o jsonpath='{.status.phase}' 2>/dev/null || true)"
+          case "$phase" in
+            Running)
+              break
+              ;;
+            Succeeded)
+              show_smoke_diagnostics
+              exit 0
+              ;;
+            Failed)
+              show_smoke_diagnostics
+              exit 1
+              ;;
+          esac
+          sleep 1
+        done
+        if [[ "$phase" != "Running" ]]; then
+          echo "LLM gateway smoke pod did not start within ${SMOKE_STARTUP_BUDGET_SECONDS}s" >&2
+          show_smoke_diagnostics
+          exit 1
+        fi
+
+        probe_deadline=$((SECONDS + SMOKE_PROBE_BUDGET_SECONDS))
+        while (( SECONDS < probe_deadline )); do
+          phase="$(kubectl --request-timeout=10s -n "$NAMESPACE" get pod "$SMOKE_POD" -o jsonpath='{.status.phase}' 2>/dev/null || true)"
+          case "$phase" in
+            Succeeded)
+              show_smoke_diagnostics
+              exit 0
+              ;;
+            Failed)
+              show_smoke_diagnostics
+              exit 1
+              ;;
+          esac
+          sleep 1
+        done
+        echo "LLM gateway smoke probe did not complete within ${SMOKE_PROBE_BUDGET_SECONDS}s after pod startup" >&2
+        show_smoke_diagnostics
+        exit 1
 
     - name: Probe LLM gateway from the Cloud Run VPC before promotion
       if: >-
@@ -435,7 +593,20 @@ runs:
       run: |
         python3 "$DEPLOY_CONTROL_SCRIPTS/render_backend_runtime_env.py" \
           --env ${{ inputs.runtime_env }} \
-          --manifest "$GITHUB_WORKSPACE/backend/deploy/runtime_env.yaml" >> "$GITHUB_OUTPUT"
+          --manifest "$GITHUB_WORKSPACE/backend/deploy/runtime_env.yaml" \
+          --state-output "$RUNNER_TEMP/backend-runtime-env-state.json" >> "$GITHUB_OUTPUT"
+
+    - name: Validate backend runtime env before deploy
+      shell: bash
+      env:
+        SYNC_LEDGER_FENCE_MODE: ${{ env.SYNC_LEDGER_FENCE_MODE }}
+      run: |
+        python3 "$DEPLOY_CONTROL_SCRIPTS/validate-backend-runtime-env.py" \
+          --env ${{ inputs.runtime_env }} \
+          --manifest "$GITHUB_WORKSPACE/backend/deploy/runtime_env.yaml" \
+          --check-workflows \
+          --workflow-root "$DEPLOY_WORKFLOW_ROOT" \
+          --cloud-run-state "$RUNNER_TEMP/backend-runtime-env-state.json"
 
     - name: Migrate legacy public Cloud Run bindings
       shell: bash
@@ -472,8 +643,9 @@ runs:
           --revision-suffix=${{ steps.image-tag.outputs.revision_suffix }}-base
           ${{ inputs.transcription_candidate_tag != '' && format('--tag={0}', inputs.transcription_candidate_tag) || '' }}
           ${{ inputs.deploy_profile == 'auto-dev' && format('--tag={0}', inputs.candidate_tag) || '' }}
-          --remove-env-vars=MEMORY_ENABLED_USERS,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED
+          --remove-env-vars=MEMORY_ENABLED_USERS,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED,BASIC_TIER_MINUTES_LIMIT_PER_MONTH,BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH,BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH,BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH,CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST,CONVERSATION_RELEVANCE_JEV_ENABLED,CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT,CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP,CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT,CONVERSATION_RELEVANCE_JEV_RESCUE,MEMORY_OWNER_JEV_FLIP_ENABLED,MEMORY_OWNER_JEV_FLIP_PERCENT,MEMORY_OWNER_JEV_SHADOW_PERCENT,MEMORY_OWNER_JEV_SHADOW_DAILY_CAP,CONVERSATION_SMART_MERGE_UID_ALLOWLIST,CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE,DESKTOP_PENDANT_CALL_LINK_MODE,DESKTOP_PENDANT_CALL_LINK_PERCENT,MEETING_NOTES_EPISODE_SELECTION,MEETING_NOTES_EPISODE_JEV_THRESHOLD,MEETING_NOTES_EPISODE_SELECTION_EFFORT,MEETING_NOTES_EPISODE_SELECTION_TIMEOUT_SECONDS,CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED,CONVERSATION_OCR_CONTEXT_ENABLED,MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED,SCREEN_FRAME_EGRESS_ENABLED,MEMORY_BELIEF_MODEL_ENABLED,FREE_TIER_MEMORY_SUPPRESSION,FREE_TIER_MEMORY_SUPPRESSION_COHORT,KNOWLEDGE_LEDGER_DRAIN_ENABLED,KNOWLEDGE_LEDGER_DRAIN_UID_ALLOWLIST,MEMORY_DAILY_MEMORY_SWEEP_ENABLED,MEMORY_DAILY_MEMORY_SWEEP_KILL_SWITCH,MEMORY_DAILY_MEMORY_SWEEP_MODEL_ENABLED,MEMORY_DAILY_MEMORY_SWEEP_MODEL_NAME,MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_CANDIDATES,MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_COST_USD,MEMORY_DAILY_MEMORY_SWEEP_COHORT_ENABLED,MEMORY_DAILY_MEMORY_SWEEP_COHORT_FLAG,MEMORY_DAILY_MEMORY_SWEEP_COHORT_NAME,MEMORY_DAILY_MEMORY_SWEEP_COHORT_TIMEOUT_SECONDS,MEMORY_DAILY_MEMORY_SWEEP_TIMEZONE_RECONCILIATION_ENABLED,MEMORY_DAILY_MEMORY_SWEEP_STAGGER_SECONDS,DEEPGRAM_SELF_HOSTED_ENABLED,DEEPGRAM_SELF_HOSTED_URL${{ steps.runtime-env.outputs.backend_remove_env_extra }}
           ${{ steps.runtime-env.outputs.cloud_run_flags }}
+          ${{ steps.runtime-env.outputs.backend_identity_flags }}
         env_vars: |-
           ${{ steps.runtime-env.outputs.backend_env_vars }}
           OMI_BACKEND_RELEASE_SHA=${{ inputs.admitted_sha }}
@@ -494,6 +666,8 @@ runs:
           --final-revision="backend-${{ steps.image-tag.outputs.revision_suffix }}"
           --ingress-container=backend-1
           --config="$DEPLOY_CONTROL_SCRIPTS/../deploy/cloud_run_gmp_sidecar.yaml"
+          --config-env
+          --expected-env-state="$RUNNER_TEMP/backend-runtime-env-state.json"
         )
         if [[ -n "$GMP_CANDIDATE_TAG" ]]; then
           args+=(--tag="$GMP_CANDIDATE_TAG")
@@ -542,9 +716,47 @@ runs:
         image: gcr.io/${{ inputs.project_id }}/${{ inputs.service }}:${{ steps.image-tag.outputs.short_sha }}
         revision_suffix: ${{ steps.image-tag.outputs.revision_suffix }}
         cloud_run_flags: ${{ steps.runtime-env.outputs.cloud_run_flags }}
+        identity_flags: ${{ steps.runtime-env.outputs.backend_sync_backfill_identity_flags }}
+        forbidden_env_names: ${{ steps.runtime-env.outputs.backend_sync_backfill_forbidden_env_names }}
+        remove_env_extra: ${{ steps.runtime-env.outputs.backend_sync_backfill_remove_env_extra }}
         backfill_env_vars: ${{ steps.runtime-env.outputs.backend_sync_backfill_env_vars }}
         backfill_secrets: ${{ steps.runtime-env.outputs.backend_sync_backfill_secrets }}
         candidate_tag: ${{ inputs.deploy_profile == 'auto-dev' && inputs.candidate_tag || '' }}
+
+    - name: Validate backend-sync memory trial
+      shell: bash
+      env:
+        SYNC_MEMORY: ${{ inputs.backend_sync_memory }}
+      run: |
+        case "$SYNC_MEMORY" in 6Gi|8Gi) ;; *) echo 'backend-sync memory must be 6Gi or 8Gi' >&2; exit 1 ;; esac
+
+    - name: Resolve live sync maxScale
+      id: live-max-scale
+      shell: bash
+      env:
+        CLOUD_RUN_SERVICE: ${{ inputs.service }}-sync
+        CLOUD_RUN_PROJECT: ${{ inputs.project_id }}
+        CLOUD_RUN_REGION: ${{ inputs.region }}
+      run: |
+        set -euo pipefail
+        # Service-level caps are the live ops control; older services may only have a revision cap.
+        # Listing distinguishes a fresh service from an API/auth failure, which must stop deployment.
+        MAX_SCALE="$(gcloud run services list \
+          --project="$CLOUD_RUN_PROJECT" --region="$CLOUD_RUN_REGION" \
+          --filter="metadata.name=$CLOUD_RUN_SERVICE" \
+          --format='json(metadata.name,metadata.annotations,spec.template.metadata.annotations)' \
+          | jq -er --arg service "$CLOUD_RUN_SERVICE" '
+            [.[] | select(.metadata.name == $service)]
+            | if length > 1 then error("Duplicate Cloud Run service") else
+                (.[0].metadata.annotations["run.googleapis.com/maxScale"]
+                 // .[0].spec.template.metadata.annotations["autoscaling.knative.dev/maxScale"]
+                 // "50") end
+            | if type == "string" and test("^[1-9][0-9]*$") then .
+              else error("Invalid Cloud Run maxScale") end
+            # Bound digits before shell arithmetic; oversized annotations use the fresh-service default.
+            | if length > 3 then "50"
+              elif tonumber > 500 then "50" else . end')"
+        echo "max_scale=$MAX_SCALE" >> "$GITHUB_OUTPUT"
 
     - name: Deploy ${{ inputs.service }}-sync to Cloud Run
       id: deploy-backend-sync
@@ -556,10 +768,14 @@ runs:
         image: gcr.io/${{ inputs.project_id }}/${{ inputs.service }}:${{ steps.image-tag.outputs.short_sha }}
         no_traffic: true
         flags: >-
-          --revision-suffix=${{ steps.image-tag.outputs.revision_suffix }}
+          --revision-suffix=${{ steps.image-tag.outputs.revision_suffix }}-base
           ${{ inputs.deploy_profile == 'auto-dev' && format('--tag={0}', inputs.candidate_tag) || '' }}
-          --remove-env-vars=HOSTED_PUSHER_API_URL,MEMORY_ENABLED_USERS,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED
+          --remove-env-vars=HOSTED_PUSHER_API_URL,MEMORY_ENABLED_USERS,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED,BASIC_TIER_MINUTES_LIMIT_PER_MONTH,BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH,BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH,BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH,CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST,CONVERSATION_RELEVANCE_JEV_ENABLED,CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT,CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP,CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT,CONVERSATION_RELEVANCE_JEV_RESCUE,MEMORY_OWNER_JEV_FLIP_ENABLED,MEMORY_OWNER_JEV_FLIP_PERCENT,MEMORY_OWNER_JEV_SHADOW_PERCENT,MEMORY_OWNER_JEV_SHADOW_DAILY_CAP,CONVERSATION_SMART_MERGE_UID_ALLOWLIST,CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE,DESKTOP_PENDANT_CALL_LINK_MODE,DESKTOP_PENDANT_CALL_LINK_PERCENT,MEETING_NOTES_EPISODE_SELECTION,MEETING_NOTES_EPISODE_JEV_THRESHOLD,MEETING_NOTES_EPISODE_SELECTION_EFFORT,MEETING_NOTES_EPISODE_SELECTION_TIMEOUT_SECONDS,CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED,CONVERSATION_OCR_CONTEXT_ENABLED,MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED,SCREEN_FRAME_EGRESS_ENABLED,MEMORY_BELIEF_MODEL_ENABLED,FREE_TIER_MEMORY_SUPPRESSION,FREE_TIER_MEMORY_SUPPRESSION_COHORT,KNOWLEDGE_LEDGER_DRAIN_ENABLED,KNOWLEDGE_LEDGER_DRAIN_UID_ALLOWLIST,MEMORY_DAILY_MEMORY_SWEEP_ENABLED,MEMORY_DAILY_MEMORY_SWEEP_KILL_SWITCH,MEMORY_DAILY_MEMORY_SWEEP_MODEL_ENABLED,MEMORY_DAILY_MEMORY_SWEEP_MODEL_NAME,MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_CANDIDATES,MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_COST_USD,MEMORY_DAILY_MEMORY_SWEEP_COHORT_ENABLED,MEMORY_DAILY_MEMORY_SWEEP_COHORT_FLAG,MEMORY_DAILY_MEMORY_SWEEP_COHORT_NAME,MEMORY_DAILY_MEMORY_SWEEP_COHORT_TIMEOUT_SECONDS,MEMORY_DAILY_MEMORY_SWEEP_TIMEZONE_RECONCILIATION_ENABLED,MEMORY_DAILY_MEMORY_SWEEP_STAGGER_SECONDS,DEEPGRAM_SELF_HOSTED_ENABLED,DEEPGRAM_SELF_HOSTED_URL${{ steps.runtime-env.outputs.backend_sync_remove_env_extra }}
           ${{ steps.runtime-env.outputs.cloud_run_flags }}
+          ${{ steps.runtime-env.outputs.backend_sync_identity_flags }}
+          --cpu=2
+          --max-instances=${{ steps.live-max-scale.outputs.max_scale }}
+          --memory=${{ inputs.backend_sync_memory }}
         env_vars: |-
           ${{ steps.runtime-env.outputs.backend_sync_env_vars }}
           ${{ steps.sync-backfill.outputs.sync_backfill_env_vars }}
@@ -571,16 +787,17 @@ runs:
       run: |
         echo "revision=backend-sync-${{ steps.image-tag.outputs.revision_suffix }}" >> "$GITHUB_OUTPUT"
 
-    - name: Provision sync-backfill platform
-      if: ${{ inputs.deploy_profile == 'auto-dev' || inputs.deploy_targets == 'all' }}
+    - name: Provision sync-backfill lane
       uses: ./.deploy-workflow-source/.github/actions/sync-backfill-lifecycle
       with:
-        mode: platform
+        mode: ${{ (inputs.deploy_profile == 'auto-dev' || inputs.deploy_targets == 'all') && 'platform' || 'dispatch' }}
         project_id: ${{ inputs.project_id }}
         firestore_project_id: ${{ inputs.runtime_gcp_project_id }}
         region: ${{ inputs.region }}
         service: ${{ inputs.service }}
         provision_sync_ledger_ttl: 'true'
+        # The manifest names the live backfill queue the reconcile step manages.
+        backfill_env_vars: ${{ steps.runtime-env.outputs.backend_sync_backfill_env_vars }}
         provision_budget_alerts: ${{ inputs.sync_backfill_budget_alerts }}
         alert_notification_channels: ${{ inputs.sync_backfill_alert_channels }}
 
@@ -598,6 +815,12 @@ runs:
           --member="serviceAccount:${TASKS_INVOKER_SA}" \
           --role=roles/run.invoker \
           --quiet
+        # Every listen finalization and self-heal recovery shares this queue.
+        # At 4 dispatches the queue saturated (median dispatch delay ~6 min),
+        # which exceeds the 300s replay window: the reconciler then minted a
+        # new generation for most jobs and about half of all dispatches were
+        # stale-generation acks. 16 leaves headroom on backend-sync
+        # (min 5 x concurrency 20) for the I/O-bound handler.
         if gcloud tasks queues describe conversation-finalization \
           --location="${{ inputs.region }}" \
           --project="${{ inputs.project_id }}" >/dev/null 2>&1; then
@@ -605,14 +828,44 @@ runs:
             --location="${{ inputs.region }}" \
             --project="${{ inputs.project_id }}" \
             --max-attempts=5 \
-            --max-concurrent-dispatches=4
+            --max-concurrent-dispatches=16
         else
           gcloud tasks queues create conversation-finalization \
             --location="${{ inputs.region }}" \
             --project="${{ inputs.project_id }}" \
             --max-attempts=5 \
-            --max-concurrent-dispatches=4
+            --max-concurrent-dispatches=16
         fi
+
+    - name: Configure production batch quarantine recovery queue
+      if: ${{ inputs.runtime_env == 'prod' }}
+      shell: bash
+      run: |
+        set -euo pipefail
+        # Isolate accepted-work recovery from saturated legacy sync retries.
+        # Listing must succeed: permission/transport errors never imply absence.
+        queue=batch-quarantine-recovery
+        name="projects/${{ inputs.project_id }}/locations/${{ inputs.region }}/queues/$queue"
+        existing=$(gcloud tasks queues list \
+          --location="${{ inputs.region }}" \
+          --project="${{ inputs.project_id }}" \
+          --filter="name=$name" --format='value(name)')
+        operation=create
+        # gcloud prints the queue's short id for value(name), not the full
+        # resource path, so accept either form of this exact queue.
+        if [[ "$existing" == "$name" || "$existing" == "$queue" ]]; then
+          operation=update
+        elif [[ -n "$existing" ]]; then
+          echo 'Unexpected recovery queue inventory' >&2
+          exit 1
+        fi
+        gcloud tasks queues "$operation" "$queue" \
+          --location="${{ inputs.region }}" \
+          --project="${{ inputs.project_id }}" \
+          --max-concurrent-dispatches=16 \
+          --max-dispatches-per-second=8 \
+          --max-attempts=5 \
+          --min-backoff=5s --max-backoff=60s
 
     - name: Deploy ${{ inputs.service }}-integration to Cloud Run
       id: deploy-backend-integration
@@ -624,10 +877,18 @@ runs:
         image: gcr.io/${{ inputs.project_id }}/${{ inputs.service }}:${{ steps.image-tag.outputs.short_sha }}
         no_traffic: true
         flags: >-
-          --revision-suffix=${{ steps.image-tag.outputs.revision_suffix }}
+          --revision-suffix=${{ steps.image-tag.outputs.revision_suffix }}-base
           ${{ inputs.deploy_profile == 'auto-dev' && format('--tag={0}', inputs.candidate_tag) || '' }}
-          --remove-env-vars=HOSTED_PUSHER_API_URL,MEMORY_ENABLED_USERS,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED
+          --remove-env-vars=HOSTED_PUSHER_API_URL,MEMORY_ENABLED_USERS,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED,BASIC_TIER_MINUTES_LIMIT_PER_MONTH,BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH,BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH,BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH,CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST,CONVERSATION_RELEVANCE_JEV_ENABLED,CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT,CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP,CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT,CONVERSATION_RELEVANCE_JEV_RESCUE,MEMORY_OWNER_JEV_FLIP_ENABLED,MEMORY_OWNER_JEV_FLIP_PERCENT,MEMORY_OWNER_JEV_SHADOW_PERCENT,MEMORY_OWNER_JEV_SHADOW_DAILY_CAP,CONVERSATION_SMART_MERGE_UID_ALLOWLIST,CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE,DESKTOP_PENDANT_CALL_LINK_MODE,DESKTOP_PENDANT_CALL_LINK_PERCENT,MEETING_NOTES_EPISODE_SELECTION,MEETING_NOTES_EPISODE_JEV_THRESHOLD,MEETING_NOTES_EPISODE_SELECTION_EFFORT,MEETING_NOTES_EPISODE_SELECTION_TIMEOUT_SECONDS,CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED,CONVERSATION_OCR_CONTEXT_ENABLED,MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED,SCREEN_FRAME_EGRESS_ENABLED,MEMORY_BELIEF_MODEL_ENABLED,FREE_TIER_MEMORY_SUPPRESSION,FREE_TIER_MEMORY_SUPPRESSION_COHORT,KNOWLEDGE_LEDGER_DRAIN_ENABLED,KNOWLEDGE_LEDGER_DRAIN_UID_ALLOWLIST,MEMORY_DAILY_MEMORY_SWEEP_ENABLED,MEMORY_DAILY_MEMORY_SWEEP_KILL_SWITCH,MEMORY_DAILY_MEMORY_SWEEP_MODEL_ENABLED,MEMORY_DAILY_MEMORY_SWEEP_MODEL_NAME,MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_CANDIDATES,MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_COST_USD,MEMORY_DAILY_MEMORY_SWEEP_COHORT_ENABLED,MEMORY_DAILY_MEMORY_SWEEP_COHORT_FLAG,MEMORY_DAILY_MEMORY_SWEEP_COHORT_NAME,MEMORY_DAILY_MEMORY_SWEEP_COHORT_TIMEOUT_SECONDS,MEMORY_DAILY_MEMORY_SWEEP_TIMEZONE_RECONCILIATION_ENABLED,MEMORY_DAILY_MEMORY_SWEEP_STAGGER_SECONDS,DEEPGRAM_SELF_HOSTED_ENABLED,DEEPGRAM_SELF_HOSTED_URL${{ steps.runtime-env.outputs.backend_integration_remove_env_extra }}
           ${{ steps.runtime-env.outputs.cloud_run_flags }}
+          ${{ steps.runtime-env.outputs.backend_integration_identity_flags }}
+          ${{ steps.runtime-env.outputs.backend_integration_flags }}
+          --cpu=2
+          --memory=2Gi
+          --concurrency=40
+          --min-instances=3
+          --max-instances=50
+          --no-cpu-throttling
         env_vars: ${{ steps.runtime-env.outputs.backend_integration_env_vars }}
         secrets: ${{ steps.runtime-env.outputs.backend_integration_secrets }}
 
@@ -636,6 +897,30 @@ runs:
       shell: bash
       run: |
         echo "revision=backend-integration-${{ steps.image-tag.outputs.revision_suffix }}" >> "$GITHUB_OUTPUT"
+
+    - name: Attach Managed Prometheus to sync and integration candidates
+      shell: bash
+      env:
+        GMP_CANDIDATE_TAG: ${{ inputs.deploy_profile == 'auto-dev' && inputs.candidate_tag || '' }}
+      run: |
+        set -euo pipefail
+        for service in backend-sync backend-sync-backfill backend-integration; do
+          ingress=backend-1
+          if [[ "$service" == backend-integration ]]; then ingress=backend-integration; fi
+          args=(
+            --project="${{ inputs.project_id }}"
+            --region="${{ inputs.region }}"
+            --service="$service"
+            --base-revision="$service-${{ steps.image-tag.outputs.revision_suffix }}-base"
+            --final-revision="$service-${{ steps.image-tag.outputs.revision_suffix }}"
+            --ingress-container="$ingress"
+            --config="$DEPLOY_CONTROL_SCRIPTS/../deploy/cloud_run_gmp_sync.yaml"
+            --config-env
+            --expected-env-state="$RUNNER_TEMP/backend-runtime-env-state.json"
+          )
+          if [[ -n "$GMP_CANDIDATE_TAG" ]]; then args+=(--tag="$GMP_CANDIDATE_TAG"); fi
+          python3 "$DEPLOY_CONTROL_SCRIPTS/attach_cloud_run_gmp_sidecar.py" "${args[@]}"
+        done
 
     - name: Wait for Cloud Run revisions to become ready
       shell: bash
@@ -710,6 +995,17 @@ runs:
           --workflow-root "$DEPLOY_WORKFLOW_ROOT" \
           --check-live-cloud-run
 
+    - name: Report live Cloud Run env drift from manifest
+      shell: bash
+      run: |
+        python3 "$DEPLOY_CONTROL_SCRIPTS/check_cloud_run_env_drift.py" \
+          --env ${{ inputs.runtime_env }} \
+          --project ${{ inputs.project_id }} \
+          --region ${{ inputs.region }} \
+          --manifest "$GITHUB_WORKSPACE/backend/deploy/runtime_env.yaml" \
+          --rendered-state "$RUNNER_TEMP/backend-runtime-env-state.json" \
+          --summary-file "$GITHUB_STEP_SUMMARY"
+
     - name: Gate candidate revisions with the acceptance manifest
       if: ${{ inputs.deploy_profile == 'auto-dev' }}
       shell: bash
@@ -729,6 +1025,7 @@ runs:
           --audience backend-sync=${{ steps.candidate-urls.outputs.backend_sync_audience }} \
           --audience backend-sync-backfill=${{ steps.candidate-urls.outputs.backend_sync_backfill_audience }} \
           --audience backend-integration=${{ steps.candidate-urls.outputs.backend_integration_audience }} \
+          ${{ inputs.workload_identity_service_account != '' && format('--mint-impersonate {0}', inputs.workload_identity_service_account) || '' }} \
           --evidence-path artifacts/dev-backend-candidate-acceptance.json
 
     - name: Resolve transcription candidate URL
@@ -748,15 +1045,17 @@ runs:
       if: ${{ inputs.deploy_profile == 'manual' && inputs.environment == 'development' }}
       uses: ./.deploy-workflow-source/.github/actions/transcription-release-candidate-probe
       with:
+        probe_fleet: 'true'
         candidate_api_url: ${{ steps.transcription-candidate.outputs.url }}
         project_id: ${{ inputs.project_id }}
         firebase_auth_project_id: based-hardware
-        # A development deploy identity cannot sign a custom token for the
-        # production Firebase project this gate authenticates against, so it
-        # failed at custom_token_signing and blocked every manual development
-        # deploy. Left empty the behaviour is unchanged; set the variable to
-        # the Firebase project's signer to make this lane usable.
-        firebase_signer_service_account: ${{ inputs.firebase_probe_signer_service_account }}
+        # The development backend authenticates against production Firebase, so
+        # a development deploy identity cannot sign this gate's custom token as
+        # itself. It signs through IAM signJwt as the named no-role signer, on
+        # which the deploy identity holds roles/iam.serviceAccountTokenCreator.
+        # The deprecated key input is only consulted if a caller still passes it.
+        firebase_signer_service_account: ${{ inputs.firebase_probe_signer_credentials == '' && inputs.firebase_probe_signer_service_account || '' }}
+        firebase_signer_credentials: ${{ inputs.firebase_probe_signer_credentials }}
 
     - name: Accept no-traffic Cloud Run candidate
       id: verify-cloud-run-candidate
@@ -852,7 +1151,7 @@ runs:
           --set gcpProjectId=${{ inputs.project_id }} \
           --set runtimeGcpProjectId=${{ inputs.runtime_gcp_project_id }} \
           --set-string image.tag=${{ steps.image-tag.outputs.short_sha }}
-        if ! kubectl -n ${{ inputs.runtime_env }}-omi-backend rollout status deploy/${{ inputs.runtime_env }}-omi-backend-listen --timeout=1800s; then
+        if ! kubectl -n ${{ inputs.runtime_env }}-omi-backend rollout status deploy/${{ inputs.runtime_env }}-omi-backend-listen --timeout=4200s; then
           python3 "$DEPLOY_CONTROL_SCRIPTS/deploy_status_report.py" --env ${{ inputs.runtime_env }} --include-gke --gke-service backend-listen || true
           exit 1
         fi
@@ -958,7 +1257,10 @@ runs:
         ADMIN_KEY="$(gcloud secrets versions access latest --secret=ADMIN_KEY --project="$PROJECT_ID")"
         export ADMIN_KEY
         trap 'unset ADMIN_KEY' EXIT
-        python3 "$DEPLOY_CONTROL_SCRIPTS/smoke_what_matters_now.py" --base-url https://api.omi.dev
+        # api.omi.dev has never resolved (NXDOMAIN), so this smoke could not reach
+        # anything; api.omiapi.com is development's real public API host, matching
+        # the rest of the dev domain family (parakeet/nllb/pusher.omiapi.com).
+        python3 "$DEPLOY_CONTROL_SCRIPTS/smoke_what_matters_now.py" --base-url https://api.omiapi.com
 
     - name: Restore Cloud Run traffic snapshot after failed promotion
       if: >-

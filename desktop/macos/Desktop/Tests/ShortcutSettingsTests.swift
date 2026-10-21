@@ -4,6 +4,45 @@ import XCTest
 
 @MainActor
 final class ShortcutSettingsTests: XCTestCase {
+  func testPushToTalkGuidanceNamesHoldAndEnabledHandsFreeMode() {
+    XCTAssertEqual(
+      PushToTalkSettingsGuidance.lines(
+        pttEnabled: true,
+        doubleTapForLock: true,
+        shortcutLabel: "⌥"
+      ),
+      [
+        "Hold ⌥ to speak, then release to send.",
+        "Double-tap to keep listening hands-free; tap again to send.",
+        "Say “type…” to dictate into the focused app.",
+      ]
+    )
+  }
+
+  func testPushToTalkGuidanceExplainsDisabledHandsFreeMode() {
+    XCTAssertEqual(
+      PushToTalkSettingsGuidance.lines(
+        pttEnabled: true,
+        doubleTapForLock: false,
+        shortcutLabel: "⌘J"
+      )[1],
+      "Turn on Double-tap for Locked Mode for hands-free listening."
+    )
+  }
+
+  func testPushToTalkGuidanceRequiresPTTWhenDisabled() {
+    XCTAssertEqual(
+      PushToTalkSettingsGuidance.lines(
+        pttEnabled: false,
+        doubleTapForLock: false,
+        shortcutLabel: "⌥"
+      ),
+      [
+        "Enable Push to Talk to use voice input."
+      ]
+    )
+  }
+
   func testPushToTalkRequiresAtLeastOneModifier() {
     let bareU = ShortcutSettings.KeyboardShortcut(keyCode: 32, keyDisplay: "U")
     let commandU = ShortcutSettings.KeyboardShortcut(keyCode: 32, keyDisplay: "U", modifiers: .command)
@@ -19,11 +58,14 @@ final class ShortcutSettingsTests: XCTestCase {
     XCTAssertEqual(ShortcutSettings.defaultAskOmiShortcut.displayTokens, ["⌘", "O"])
   }
 
-  func testAskOmiPresetsShowCommandOFirst() {
-    XCTAssertEqual(ShortcutSettings.askOmiPresets.first, ShortcutSettings.askOmiCommandOShortcut)
+  func testAskOmiPresetsMatchOnboardingOrder() {
+    // Onboarding recommends ⌃⌘O first; Settings must list it, first, so the choice never reads as
+    // "Custom" afterwards.
+    XCTAssertEqual(ShortcutSettings.askOmiPresets.first, ShortcutSettings.askOmiControlCommandOShortcut)
     XCTAssertEqual(
       ShortcutSettings.askOmiPresets,
       [
+        ShortcutSettings.askOmiControlCommandOShortcut,
         ShortcutSettings.askOmiCommandOShortcut,
         ShortcutSettings.askOmiCommandReturnShortcut,
         ShortcutSettings.askOmiCommandShiftReturnShortcut,
@@ -44,7 +86,8 @@ final class ShortcutSettingsTests: XCTestCase {
     defer { ShortcutSettings.shared.askOmiShortcut = previousShortcut }
 
     let preset = ShortcutSettings.askOmiCommandJShortcut
-    OnboardingFloatingBarShortcutStepView.selectPreset(preset, settings: ShortcutSettings.shared)
+    let model = SBOnboardingModel(appState: AppState(), chatProvider: ChatProvider(), onComplete: nil)
+    model.pickShortcut(preset, isTalk: false)
 
     XCTAssertEqual(ShortcutSettings.shared.askOmiShortcut, preset)
     XCTAssertFalse(ShortcutSettings.shared.askOmiUsesCustomShortcut)
@@ -55,7 +98,8 @@ final class ShortcutSettingsTests: XCTestCase {
     defer { ShortcutSettings.shared.pttShortcut = previousShortcut }
 
     let preset = ShortcutSettings.pttPresets[0]
-    OnboardingVoiceShortcutStepView.selectPreset(preset, settings: ShortcutSettings.shared)
+    let model = SBOnboardingModel(appState: AppState(), chatProvider: ChatProvider(), onComplete: nil)
+    model.pickShortcut(preset, isTalk: true)
 
     XCTAssertEqual(ShortcutSettings.shared.pttShortcut, preset)
     XCTAssertFalse(ShortcutSettings.shared.pttUsesCustomShortcut)

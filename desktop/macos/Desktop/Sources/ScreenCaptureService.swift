@@ -215,6 +215,7 @@ final class ScreenCaptureService: Sendable {
         log("Opened Screen Recording preferences via URL scheme")
         settingsApp.activate()
         await PermissionDragGuidance.presentDragToGrantHelper(
+          for: .screenRecording,
           settingsPID: settingsApp.processIdentifier)
       } catch {
         log("Failed to open Screen Recording preferences via URL scheme — trying fallback")
@@ -845,7 +846,8 @@ final class ScreenCaptureService: Sendable {
     let focusResult = AXUIElementCopyAttributeValue(
       appElement, kAXFocusedWindowAttribute as CFString, &focusedWindow)
 
-    guard focusResult == .success, let windowElement = focusedWindow else {
+    guard focusResult == .success, let windowElement = AXAttributeCasting.element(focusedWindow)
+    else {
       if focusResult == .apiDisabled {
         // System-wide AX permission issue. Set a flag so we stop attempting
         // AX on every capture cycle — avoids spinning on a known-broken call.
@@ -888,12 +890,12 @@ final class ScreenCaptureService: Sendable {
     // Get window title from AX
     var titleValue: CFTypeRef?
     AXUIElementCopyAttributeValue(
-      windowElement as! AXUIElement, kAXTitleAttribute as CFString, &titleValue)
+      windowElement, kAXTitleAttribute as CFString, &titleValue)
     let axTitle = titleValue as? String
 
     // Try direct CGWindowID lookup first (handles multiple windows of same app correctly)
     var directWindowID: CGWindowID = 0
-    let directResult = _AXUIElementGetWindow(windowElement as! AXUIElement, &directWindowID)
+    let directResult = _AXUIElementGetWindow(windowElement, &directWindowID)
     if directResult == .success && directWindowID != 0 {
       // Verify the window ID exists in the on-screen window list
       let existsOnScreen = windowList.contains { window in
@@ -907,27 +909,27 @@ final class ScreenCaptureService: Sendable {
     // Fallback: match by position/size (for apps where _AXUIElementGetWindow fails)
     var positionValue: CFTypeRef?
     let posResult = AXUIElementCopyAttributeValue(
-      windowElement as! AXUIElement, kAXPositionAttribute as CFString, &positionValue)
+      windowElement, kAXPositionAttribute as CFString, &positionValue)
 
-    guard posResult == .success, let posRef = positionValue else {
+    guard posResult == .success, let posRef = AXAttributeCasting.value(positionValue) else {
       return nil
     }
 
     var position = CGPoint.zero
-    if !AXValueGetValue(posRef as! AXValue, .cgPoint, &position) {
+    if !AXValueGetValue(posRef, .cgPoint, &position) {
       return nil
     }
 
     var sizeValue: CFTypeRef?
     let sizeResult = AXUIElementCopyAttributeValue(
-      windowElement as! AXUIElement, kAXSizeAttribute as CFString, &sizeValue)
+      windowElement, kAXSizeAttribute as CFString, &sizeValue)
 
-    guard sizeResult == .success, let sizeRef = sizeValue else {
+    guard sizeResult == .success, let sizeRef = AXAttributeCasting.value(sizeValue) else {
       return nil
     }
 
     var size = CGSize.zero
-    if !AXValueGetValue(sizeRef as! AXValue, .cgSize, &size) {
+    if !AXValueGetValue(sizeRef, .cgSize, &size) {
       return nil
     }
 
@@ -962,7 +964,17 @@ final class ScreenCaptureService: Sendable {
 
   // MARK: - Async Capture (Primary API)
 
-  /// Async capture - main entry point
+  /// Async capture - main entry point.
+  ///
+  /// On macOS 14+ this still runs the ONE-SHOT ScreenCaptureKit path — a fresh
+  /// `SCContentFilter` and a fresh capture session, i.e. a fresh TCC authorization —
+  /// and it deliberately has no remaining macOS 14 caller: the only live call site is
+  /// the macOS 13.x fallback branch of the capture tick, which routes to the
+  /// screencapture CLI instead. Do NOT reach for this from a timer or a loop on
+  /// macOS 14+; that is exactly the per-frame authorization sampling that made the
+  /// consent dialog re-fire (see docs/screencapture-consent-reprompt.md). Use
+  /// `captureWindowCGImage`, which preserves the `.permissionDeclined` classification
+  /// this `Data?` return erases.
   func captureActiveWindowAsync() async -> Data? {
     let (_, _, windowID) = await Self.getActiveWindowInfoAsync()
     guard let windowID else {
@@ -1002,7 +1014,22 @@ final class ScreenCaptureService: Sendable {
     return (Int(configWidth), Int(configHeight))
   }
 
+  /// Keep single-window captures safe for opaque storage formats.
+  ///
+  /// ScreenCaptureKit includes window framing/shadows by default and represents
+  /// those pixels, plus any other translucent window content, with alpha. Rewind
+  /// persists JPEG and HEVC projections that cannot retain that alpha; allowing the
+  /// default clear backing through makes the transparent region become a black band.
+  /// Remove the framing and ask ScreenCaptureKit to back any remaining transparency
+  /// with its documented solid-white opaque fill before bytes reach either sink.
+  @available(macOS 14.0, *)
+  static func applySingleWindowPixelIntegrityPolicy(to configuration: SCStreamConfiguration) {
+    configuration.ignoreShadowsSingleWindow = true
+    configuration.shouldBeOpaque = true
+  }
+
   /// Aspect-preserving stream configuration, or nil if the window has no area.
+  @available(macOS 14.0, *)
   private func captureConfiguration(for window: SCWindow, maxSize: CGFloat = ScreenCaptureService.maxSize)
     -> SCStreamConfiguration?
   {
@@ -1016,6 +1043,7 @@ final class ScreenCaptureService: Sendable {
     config.showsCursor = false
     config.width = size.width
     config.height = size.height
+    Self.applySingleWindowPixelIntegrityPolicy(to: config)
     return config
   }
 
@@ -1070,7 +1098,49 @@ final class ScreenCaptureService: Sendable {
   enum WindowCaptureResult {
     case success(CGImage)
     case windowGone
+    /// ScreenCaptureKit refused the session with "The user declined TCCs…" — macOS is
+    /// re-confirming consent for app-built content filters and the dialog is (or was)
+    /// on screen. This is NOT a transient miss: every retried capture opens a fresh
+    /// session, which re-arms the very dialog the user is looking at (observed three
+    /// re-prompts in ten minutes with the grant fully intact). Callers must stop
+    /// capturing and hand the user a single repair affordance instead of retrying.
+    case permissionDeclined
     case failed
+  }
+
+  /// Coarse classification of a thrown ScreenCaptureKit capture error.
+  enum CaptureErrorClass: Equatable {
+    case permissionDeclined
+    case other
+  }
+
+  /// Classify a capture error without losing the consent-decline signal.
+  ///
+  /// tccd evidence for why this case must be separated: with the grant intact
+  /// (`Allowed (System Set)`, `DB Action: None`) macOS still re-confirms consent for
+  /// app-built `SCContentFilter(desktopIndependentWindow:)` filters (`promptType: 1`),
+  /// and while that dialog is pending every capture fails with the "user declined
+  /// TCCs" error. Collapsing it into a generic failure fed the 3 s retry loop that
+  /// kept re-arming the dialog. Matched by SCStreamError code first; the message
+  /// substring is a fallback because the same complaint has been observed under more
+  /// than one code (Exposé/Mission Control produce it too — the CALLER decides whether
+  /// a special system mode makes it transient, this only names the error).
+  nonisolated static func classifyCaptureError(
+    domain: String, code: Int, description: String
+  ) -> CaptureErrorClass {
+    if domain == SCStreamError.errorDomain && code == SCStreamError.userDeclined.rawValue {
+      return .permissionDeclined
+    }
+    if description.localizedCaseInsensitiveContains("declined TCC") {
+      return .permissionDeclined
+    }
+    return .other
+  }
+
+  nonisolated static func classifyCaptureError(_ error: Error) -> CaptureErrorClass {
+    let nsError = error as NSError
+    return classifyCaptureError(
+      domain: nsError.domain, code: nsError.code, description: nsError.localizedDescription)
   }
 
   /// Capture the active window and return the raw CGImage (no JPEG encoding).
@@ -1088,22 +1158,26 @@ final class ScreenCaptureService: Sendable {
         content = try await Self.sharedContent(forceRefresh: true)
       }
 
-      let filterAndConfig: (SCContentFilter, SCStreamConfiguration)? = autoreleasepool {
-        guard let window = content.windows.first(where: { $0.windowID == windowID }),
-          let config = captureConfiguration(for: window, maxSize: maxSize)
-        else {
-          return nil
-        }
-
-        return (SCContentFilter(desktopIndependentWindow: window), config)
-      }
-
-      guard let (filter, config) = filterAndConfig else {
+      guard let window = content.windows.first(where: { $0.windowID == windowID }),
+        Self.captureDimensions(
+          width: window.frame.width, height: window.frame.height, maxSize: maxSize) != nil
+      else {
         // Window ID no longer exists, or it reports a zero-area frame — the user
         // closed a tab, dismissed a modal, or the app destroyed the window between
         // resolution and capture. This is routine, not a capture failure. Caller
         // should re-resolve and retry.
         log("Window \(windowID) not capturable in SCShareableContent (closed or zero-area)")
+        return .windowGone
+      }
+
+      // One-shot path: a fresh filter + screenshot session per frame.
+      let filterAndConfig: (SCContentFilter, SCStreamConfiguration)? = autoreleasepool {
+        guard let config = captureConfiguration(for: window, maxSize: maxSize) else {
+          return nil
+        }
+        return (SCContentFilter(desktopIndependentWindow: window), config)
+      }
+      guard let (filter, config) = filterAndConfig else {
         return .windowGone
       }
 
@@ -1114,6 +1188,9 @@ final class ScreenCaptureService: Sendable {
       return .success(image)
     } catch {
       log("ScreenCaptureKit CGImage error for window \(windowID): \(error.localizedDescription)")
+      if Self.classifyCaptureError(error) == .permissionDeclined {
+        return .permissionDeclined
+      }
       return .failed
     }
   }

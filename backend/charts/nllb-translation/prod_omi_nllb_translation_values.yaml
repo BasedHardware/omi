@@ -32,6 +32,10 @@ ingress:
   tls: []
 
 env:
+  - name: OMI_ENV_STAGE
+    value: prod
+  - name: GOOGLE_CLOUD_PROJECT
+    value: based-hardware
   - name: NLLB_MODEL_DIR
     value: "/models/nllb-200-distilled-600M-ct2-int8"
   - name: CT2_DEVICE
@@ -60,10 +64,11 @@ resources:
     nvidia.com/gpu: 1
 
 livenessProbe:
-  tcpSocket:
+  httpGet:
+    path: /live
     port: 8080
-  failureThreshold: 10
-  periodSeconds: 30
+  failureThreshold: 3
+  periodSeconds: 10
 
 readinessProbe:
   httpGet:
@@ -116,8 +121,9 @@ affinity: {}
 strategy:
   type: RollingUpdate
   rollingUpdate:
-    maxSurge: 1
-    maxUnavailable: 0
+    # One L4 is available; maxSurge=1 could not schedule during the 2026-10-16 GCE GPU stockout.
+    maxSurge: 0
+    maxUnavailable: 1
 
 initContainers:
   - name: model-downloader
@@ -148,3 +154,8 @@ volumes:
   - name: model-data
     emptyDir:
       sizeLimit: 2Gi
+
+# Route activation does not switch callers. Install the shared Gateway first.
+gateway:
+  enabled: true
+  name: prod-omi-internal-gateway

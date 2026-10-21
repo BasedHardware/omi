@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "id": "FC-explicit-null-bypasses-documented-default",
+  "violated_contract": "A parameter documented as having a default must resolve to that default when the caller omits it. A JSON request body distinguishes an absent key from a key whose value is null, and a handler that reads it with a map lookup carrying a default gets None - not the default - for the explicit null. The null then flows into code that treats it as a real value: a slice bound of None means to-the-end rather than the documented page size, and a falsy null silently disables a default-on behaviour. The result is the documented default being unreachable on exactly the common path where the caller says nothing.",
+  "canonical_prevention": "Read loosely-typed request parameters through one shared coercion helper that maps absent, null, and unparseable input to the documented default and clamps numeric bounds, then pass the coerced value downstream. Assert the coerced value at the boundary in a hermetic test rather than inferring it from rendered output.",
+  "canonical_prevention_artifact": [
+    "plugins/omi-hive-app/test_limit_coercion.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "plugins/omi-hive-app/**"
+  ],
+  "status": "open"
+}

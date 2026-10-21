@@ -36,8 +36,11 @@ serviceAccount:
   create: true
   # Automatically mount a ServiceAccount's API credentials?
   automount: false
-  # Annotations to add to the service account
-  annotations: {}
+  # Annotations to add to the service account.
+  # Keyless runtime identity (Workload Identity). The pod mounts no service-account key:
+  # Firestore, Firebase Auth, FCM, Cloud Tasks and GCS all run as this account.
+  annotations:
+    iam.gke.io/gcp-service-account: pusher-runtime@based-hardware.iam.gserviceaccount.com
   # The name of the service account to use.
   # If not set and create is true, a name is generated using the fullname template
   name: ""
@@ -108,8 +111,145 @@ ingress:
 envFrom:
   - configMapRef:
       name: prod-omi-backend-config
+runtimeConfigMapName: prod-omi-backend-config
 
 env:
+  - name: STT_CAP_DISPATCH_ENFORCEMENT
+    value: "false"
+  - name: STT_CAP_DISPATCH_COHORT
+    value: ""
+  - name: STT_CAP_DISPATCH_LANES
+    value: "live"
+  - name: SYNC_EMPTY_MULTILINGUAL_RECOVERY_ENABLED
+    value: "false"
+  - name: FIRST_SUMMARY_DEADLINE_ENABLED
+    value: "true"
+  - name: FIRST_SUMMARY_DEADLINE_PERCENT
+    value: "100"
+  - name: BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED
+    value: "false"
+  - name: BATCH_PIPELINE_PROJECTION_TIMING_ENABLED
+    value: "false"
+  - name: FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED
+    value: "false"
+  - name: BATCH_LIVE_STT_RETIRE_PERCENT
+    value: "0"
+  - name: BATCH_PIPELINE_LIVE_ADMISSION_ENABLED
+    value: "false"
+  - name: DEMAND_PROCESSING_ENABLED
+    value: "false"
+  - name: DEMAND_PROCESSING_LAZY_ENABLED
+    value: "false"
+  - name: DEMAND_PROCESSING_TOOL_ENABLED
+    value: "false"
+  - name: DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED
+    value: "false"
+  - name: DEMAND_PROCESSING_UID_ALLOWLIST
+    value: ""
+  - name: DEMAND_PROCESSING_PERCENT
+    value: "0"
+  - name: PLAYBACK_ON_DEMAND_ENABLED
+    value: "false"
+  - name: REPEAT_WORK_REVISION_ENABLED
+    value: "false"
+  - name: REPEAT_WORK_LLM_VERSION
+    value: "2026-10-16-v1"
+  - name: SYNC_POLL_BACKOFF_ENABLED
+    value: "false"
+  - name: AUDIO_ARCHIVE_LIVE_ENABLED
+    value: "false"
+  - name: AUDIO_ARCHIVE_READ_ENABLED
+    value: "false"
+  - name: AUDIO_ARCHIVE_STOP_PCM_ENABLED
+    value: "false"
+  - name: AUDIO_ARCHIVE_SYNC_ENABLED
+    value: "false"
+  - name: AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED
+    value: "false"
+  - name: AUDIO_ARCHIVE_COALESCE_ENABLED
+    value: "true"
+  - name: AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED
+    value: "false"
+  - name: AUDIO_ARCHIVE_PERCENT
+    value: "100"
+  - name: AUDIO_ARCHIVE_UID_ALLOWLIST
+    value: ""
+  - name: BUCKET_AUDIO_DERIVED
+    value: ""
+  - name: AUDIO_MERGE_WORKER_URL
+    value: ""
+  # Bounded, process-local late identity repair coalescing; rollback with false.
+  - name: OWNER_IDENTITY_RETRY_COALESCE_ENABLED
+    value: "true"
+  - name: DREAM_AGENT_ENABLED
+    value: 'true'
+  - name: DREAM_AGENT_ELIGIBILITY
+    value: 'allowlist'
+  - name: DREAM_AGENT_UID_ALLOWLIST
+    value: 'vi7SA9ckQCe4ccobWNxlbdcNdC23'
+  - name: DREAM_ON_DEMAND_ENABLED
+    value: 'true'
+  # Public client token for v2 cohort reads only; shared backend PostHog stays disabled.
+  - name: PROACTIVITY_V2_POSTHOG_TOKEN
+    value: "phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y"
+  - name: PROACTIVITY_V2_POSTHOG_HOST
+    value: "https://us.posthog.com"
+  - name: FIRESTORE_READ_LEDGER
+    value: "1"
+  - name: FIRESTORE_READ_LEVERS
+    value: '{"action_items_page":100,"backfill_task_reads":100,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"people_scan_dedupe":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":25,"subscription_cache":100,"usage_month_cache":100}'
+  - name: FSR_QUEUE_AGE_PUBLISHER
+    value: "0"
+  - name: FSR_QUEUE_AGE_LEASE_SECONDS
+    value: "120"
+  - name: FSR_LEADER_LEASE_TTL_SECONDS
+    value: "0"
+  - name: DELETION_WIPE_RECONCILE_INTERVAL_SECONDS
+    value: "300"
+  - name: FSR_DELETION_NEGATIVE_TTL_SECONDS
+    value: "30"
+  - name: FSR_USAGE_MONTH_TTL_SECONDS
+    value: "60"
+  - name: FSR_SUBSCRIPTION_TTL_SECONDS
+    value: "60"
+  - name: FSR_SERVING_CONFIG_TTL_SECONDS
+    value: "60"
+  - name: ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS
+    value: "30"
+  - name: CANDIDATES_COMPATIBILITY_CACHE_TTL_SECONDS
+    value: "30"
+  - name: PROACTIVITY_REDIS_HOST
+    valueFrom:
+      configMapKeyRef:
+        name: prod-omi-backend-config
+        key: REDIS_DB_HOST
+  - name: PROACTIVITY_REDIS_PASSWORD
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: REDIS_DB_PASSWORD
+  - name: PROACTIVITY_REDIS_PORT
+    value: "13151"
+  - name: MENTOR_PIPELINE
+    value: cohort
+  - name: POSTHOG_HOST
+    value: https://us.posthog.com
+  # Public product-capture token; shared POSTHOG_PROJECT_API_KEY stays disabled to keep flag rollouts dark.
+  - name: POSTHOG_PRODUCT_CAPTURE_TOKEN
+    value: "phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y"
+  - name: POSTHOG_PROJECT_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: POSTHOG_PROJECT_API_KEY
+  - name: ACTION_ITEM_REFRESH_PRESERVE_ENABLED
+    value: "true"
+  - name: CONVERSATION_SMART_MERGE_FLATTEN_ENABLED
+    value: "true"
+  - name: CAPTURE_GROUP_CONTAINMENT_MODE
+    value: "shadow"
+  - name: CLIENT_SUMMARIES_AT_CAP_ENABLED
+    value: "true"
   - name: BUCKET_SPEECH_PROFILES
     value: "profiles"
   - name: GITHUB_TOKEN
@@ -122,10 +262,41 @@ env:
       secretKeyRef:
         name: prod-omi-backend-secrets
         key: OPENAI_API_KEY
+  # Read by utils/llm/managed_spend_ledger.py for direct-provider surfaces
+  # (desktop_proxy, omni_relay). Neither is mounted on the pusher today, so
+  # this is pre-positioning, not a fix for lost rows: pusher-hosted
+  # process_conversation spends through the LLM gateway, which ledgers under
+  # its own identity. Declared here so a co-host env diff cannot leave one
+  # process_conversation host silently unable to ledger if a direct surface
+  # is ever mounted (verify_pusher_cohost_env_diff.py REQUIRED_IDENTICAL_LITERALS).
+  - name: LLM_GATEWAY_ACCOUNTING_ENABLED
+    value: "true"
   - name: OMI_LLM_GATEWAY_URL
     value: "http://prod-omi-llm-gateway.prod-omi-backend.svc.cluster.local:8080"
   - name: OMI_ENV_STAGE
     value: "prod"
+  # Audio-timeline v2: one capture coordinate for segments and stored audio.
+  # Admits new eligible recordings only (single-channel, server STT);
+  # existing v1 sessions and resumed v1 conversations are unaffected.
+  - name: AUDIO_TIMELINE_V2
+    value: "false"
+  - name: LIVE_CAPTURE_WINDOW_RETENTION
+    value: 'false'
+  - name: LIVE_CAPTURE_WINDOW_STRICT_PROJECTION
+    value: 'false'
+  - name: LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION
+    value: 'false'
+  - name: LIVE_CAPTURE_WINDOW_MERGE_UNION
+    value: 'true'
+  - name: LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS
+    value: "true"
+  - name: SONIOX_WIRE_LEDGER
+    value: "true"
+  - name: SONIOX_ORDERED_FINALIZE
+    value: "false"
+  - name: SONIOX_CAPTURE_AXIS_DIAGNOSTICS
+    value: "true"
+  # Inert co-host mirror of backend-listen; pusher does not run the S1 producer.
   - name: OMI_LLM_GATEWAY_FEATURE_MODE
     value: "gateway"
   - name: OMI_LLM_CHAT_AGENT_ROUTE
@@ -139,6 +310,61 @@ env:
       secretKeyRef:
         name: prod-omi-backend-secrets
         key: OMI_LLM_GATEWAY_SERVICE_TOKEN
+  - name: MEMORY_ENABLED
+    value: "on"
+  # Shared process_conversation rollout flags. Must match backend-listen in this
+  # environment — pusher hosts the same finalizer after 2026-08-30.
+  # Cached-evidence shadow only; authoritative grouping stays incumbent.
+  - name: SPEAKER_GROUPING_SHADOW
+    value: "cohort"
+  - name: SPEAKER_GROUPING_SHADOW_PERCENT
+    value: "10"
+  - name: SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST
+    value: "vi7SA9ckQCe4ccobWNxlbdcNdC23"
+  - name: SPEAKER_GROUPING_MODE
+    value: "incumbent"
+  - name: SPEAKER_MATCH_SCORES_ENABLED
+    value: "true"
+  - name: OMI_SHAPED_AGENT_MODE
+    value: "on"
+  - name: BUCKET_SCREEN_FRAMES
+    value: "based-hardware-prod-screen-frames"
+  - name: MEETING_NOTES_EVIDENCE_WAIT_SECONDS
+    value: "25"
+  # Activate only after isolated batch install, metric and VPC route qualification.
+  - name: HOSTED_DIARIZATION_API_URL
+    value: "http://172.16.160.20/diarizer-batch"
+  - name: TRANSCRIPTION_FINAL_PASS_DIARIZER
+    value: "pyannote_shadow"
+  - name: TRANSCRIPTION_FINAL_PASS_BACKEND
+    value: "pyannote"
+  - name: TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST
+    value: "vi7SA9ckQCe4ccobWNxlbdcNdC23"
+  - name: TRANSCRIPTION_FINAL_PASS_PERCENT
+    value: "5"
+  - name: TRANSCRIPTION_FINAL_PASS_AUTHORITATIVE
+    value: "true"
+  - name: TRANSCRIPTION_SYNC_FINAL_PASS_HOURLY_AUDIO_HOURS
+    value: "150"
+  - name: TRANSCRIPTION_SYNC_FINAL_PASS_HOURLY_REQUESTS
+    value: "15000"
+  - name: TRANSCRIPTION_FINAL_PASS_SYNC_ENABLED
+    value: "true"
+  # Complete stage E: 5% cohort plus the owner UID, bounded by the daily cap.
+  - name: TRANSCRIPTION_SHADOW_ENABLED
+    value: "true"
+  - name: TRANSCRIPTION_SHADOW_KILL_SWITCH
+    value: "false"
+  - name: TRANSCRIPTION_SHADOW_UID_ALLOWLIST
+    value: "vi7SA9ckQCe4ccobWNxlbdcNdC23"
+  - name: TRANSCRIPTION_SHADOW_PERCENT
+    value: "5"
+  - name: TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS
+    value: "1200"
+  - name: CONVERSATION_RELEVANCE_JEV_PERCENT
+    value: "100"
+  - name: NOTES_TIER_ESCALATION_ENABLED
+    value: 'true'
   - name: FAL_KEY
     valueFrom:
       secretKeyRef:
@@ -149,10 +375,8 @@ env:
       secretKeyRef:
         name: prod-omi-backend-secrets
         key: GROQ_API_KEY
-  - name: HOSTED_SPEECH_PROFILE_API_URL
-    value: "http://vad.omi.me:80/v1/speaker-identification"
   - name: HOSTED_SPEAKER_EMBEDDING_API_URL
-    value: "http://diarizer.omi.me:80"
+    value: "http://172.16.160.20/diarizer"
   - name: PINECONE_API_KEY
     valueFrom:
       secretKeyRef:
@@ -179,8 +403,7 @@ env:
       secretKeyRef:
         name: prod-omi-backend-secrets
         key: ADMIN_KEY
-  # Shared Deepgram credential: this deployment reaches self-hosted dg.omi.me,
-  # while backend-listen uses the hosted API with the same key.
+  # Retain the cloud/BYOK credential; self-hosted Deepgram is retired.
   - name: DEEPGRAM_API_KEY
     valueFrom:
       secretKeyRef:
@@ -191,6 +414,12 @@ env:
       secretKeyRef:
         name: prod-omi-backend-secrets
         key: MODULATE_API_KEY
+  - name: SONIOX_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: SONIOX_API_KEY
+        optional: true
   - name: GOOGLE_MAPS_API_KEY
     valueFrom:
       secretKeyRef:
@@ -277,15 +506,13 @@ env:
         name: prod-omi-backend-secrets
         key: TYPESENSE_API_KEY
   - name: DEEPGRAM_SELF_HOSTED_ENABLED
-    value: "true"
-  - name: DEEPGRAM_SELF_HOSTED_URL
-    value: "https://dg.omi.me"
+    value: "false"
   - name: HOSTED_PARAKEET_API_URL
     value: "http://parakeet.omi.me"
   - name: STT_PRERECORDED_MODEL
     value: "parakeet,modulate-velma-2"
   - name: STT_SERVICE_MODELS
-    value: "dg-nova-3,modulate-velma-2,parakeet"
+    value: "modulate-velma-2,soniox,parakeet"
   - name: RAPID_API_KEY
     valueFrom:
       secretKeyRef:
@@ -298,12 +525,6 @@ env:
         key: OPENROUTER_API_KEY
   - name: GOOGLE_CLOUD_PROJECT
     value: "based-hardware"
-  - name: BASIC_TIER_MINUTES_LIMIT_PER_MONTH
-    value: "300"
-  - name: BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
-    value: "0"
-  - name: BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
-    value: "0"
   - name: STRIPE_UNLIMITED_MONTHLY_PRICE_ID
     value: "price_1RtJPm1F8wnoWYvwhVJ38kLb"
   - name: STRIPE_UNLIMITED_ANNUAL_PRICE_ID
@@ -318,11 +539,8 @@ env:
     value: "price_1TMxVM1F8wnoWYvwNfXdF6LW"
   - name: SUBSCRIPTION_LAUNCH_DATE
     value: "2025-08-21"
-  - name: SERVICE_ACCOUNT_JSON
-    valueFrom:
-      secretKeyRef:
-        name: prod-omi-backend-secrets
-        key: SERVICE_ACCOUNT_JSON
+  - name: OMI_CUSTOMER_DATA_PROJECT
+    value: "based-hardware"
   - name: METRICS_SECRET
     valueFrom:
       secretKeyRef:
@@ -433,6 +651,8 @@ volumeMounts: []
 #   mountPath: "/etc/foo"
 #   readOnly: true
 
+# Placement uses service/env labels, not pool names or CPU family.
+# New N4 and qualified N2 fallback pools retain the affinity labels below.
 nodeSelector: {}
 
 tolerations: []

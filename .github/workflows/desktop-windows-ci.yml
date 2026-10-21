@@ -17,16 +17,28 @@ on:
     branches: [main]
     paths:
       - 'desktop/windows/**'
+      - 'web/packages/note-shared/**'
+      - 'contracts/note_citation_contract.json'
       - '.github/workflows/desktop-windows-ci.yml'
+      - '.github/workflows/desktop_windows_release.yml'
   pull_request:
     branches: [main]
     paths:
       - 'desktop/windows/**'
+      - 'web/packages/note-shared/**'
+      - 'contracts/note_citation_contract.json'
       - '.github/workflows/desktop-windows-ci.yml'
+      - '.github/workflows/desktop_windows_release.yml'
 
 defaults:
   run:
     working-directory: desktop/windows
+
+env:
+  # Abort a git HTTP transfer that stays under 1 KB/s for 60 s, so actions/checkout
+  # retries instead of hanging 7-10 min until the TCP reset (#22890).
+  GIT_HTTP_LOW_SPEED_LIMIT: "1000"
+  GIT_HTTP_LOW_SPEED_TIME: "60"
 
 jobs:
   checks:
@@ -70,6 +82,17 @@ jobs:
           node-version: 22
           cache: pnpm
           cache-dependency-path: desktop/windows/pnpm-lock.yaml
+      # Same network-flake surface as the Linux job: electron-builder pulls
+      # nsis/winCodeSign tooling and Electron's postinstall pulls the release
+      # archive from github.com on every uncached run.
+      - name: Cache electron & electron-builder downloads
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~\AppData\Local\electron\Cache
+            ~\AppData\Local\electron-builder\Cache
+          key: electron-builder-windows-${{ hashFiles('desktop/windows/pnpm-lock.yaml') }}
+          restore-keys: electron-builder-windows-
       # OCR + UI-automation helpers are .NET projects built during install/build.
       - uses: actions/setup-dotnet@v6
         with:
@@ -82,7 +105,7 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Build unpacked app
-        run: pnpm run build:unpack
+        run: pnpm run build:win:unpack
       - name: Upload unpacked build
         uses: actions/upload-artifact@v7
         with:
@@ -111,6 +134,19 @@ jobs:
           node-version: 22
           cache: pnpm
           cache-dependency-path: desktop/windows/pnpm-lock.yaml
+      # electron-builder fetches its packaging tools (AppImage runtime, 7zip,
+      # fpm) from github.com at build time, and Electron's postinstall fetches
+      # the release archive; a transient resolver or socket failure there fails
+      # the whole job (EAI_AGAIN on main, ECONNRESET on PRs). With the tool
+      # downloads cached, steady-state builds never touch those endpoints.
+      - name: Cache electron & electron-builder downloads
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cache/electron
+            ~/.cache/electron-builder
+          key: electron-builder-linux-${{ hashFiles('desktop/windows/pnpm-lock.yaml') }}
+          restore-keys: electron-builder-linux-
       - name: Install Linux runtime dependencies
         # Bound apt's network calls explicitly: a stalled mirror connection
         # (observed against the azure.archive.ubuntu.com mirror) otherwise

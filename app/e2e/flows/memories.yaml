@@ -9,9 +9,9 @@ app: com.friend.ios.dev
 evidence:
   video: true
 covers:
-  - app/lib/pages/facts/page.dart
-  - app/lib/pages/facts/widgets/fact_card.dart
-  - app/lib/providers/memory_provider.dart
+  - app/lib/pages/memories/page.dart
+  - app/lib/pages/memories/widgets/memory_item.dart
+  - app/lib/providers/memories_provider.dart
   - app/lib/widgets/bottom_nav_bar.dart
 preconditions:
   - auth_ready  # User signed in and onboarding completed. App shows home screen.

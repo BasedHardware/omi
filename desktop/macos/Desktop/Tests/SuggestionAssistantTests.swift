@@ -415,7 +415,7 @@ final class SuggestionGroundingTests: XCTestCase {
 
   func testOnlyPopulatedSectionsAppear() {
     var grounding = SuggestionGrounding()
-    grounding.openCommitments = ["Send Sarah the deck"]
+    grounding.commitmentRecords = [SuggestionCommitment(id: "t1", text: "Send Sarah the deck")]
 
     let rendered = grounding.promptSections()
     XCTAssertTrue(rendered.contains("OPEN COMMITMENTS"))
@@ -428,7 +428,7 @@ final class SuggestionGroundingTests: XCTestCase {
   func testAllSectionsRenderWhenPopulated() {
     var grounding = SuggestionGrounding()
     grounding.memories = ["Sarah leads the platform team"]
-    grounding.openCommitments = ["Send Sarah the deck"]
+    grounding.commitmentRecords = [SuggestionCommitment(id: "t1", text: "Send Sarah the deck")]
     grounding.relatedScreens = ["Jul 24 09:12 · Slack — Sarah Chen: deck?"]
 
     let rendered = grounding.promptSections()
@@ -451,7 +451,7 @@ final class SuggestionPromptContractTests: XCTestCase {
     // The nudge is keyed to the exact section name promptSections() emits.
     XCTAssertTrue(prompt.contains("OPEN COMMITMENTS"))
     var grounding = SuggestionGrounding()
-    grounding.openCommitments = ["Send that email to Bob"]
+    grounding.commitmentRecords = [SuggestionCommitment(id: "t1", text: "Send that email to Bob")]
     XCTAssertTrue(grounding.promptSections().contains("OPEN COMMITMENTS"))
   }
 }
@@ -995,5 +995,33 @@ final class SuggestionPacingTests: XCTestCase {
     for level in [0, 1, 2, 3, 4] {
       XCTAssertEqual(SuggestionPacing.captureIdleThreshold(frequencyLevel: level, base: 60), 60)
     }
+  }
+}
+
+/// The automation probe reports `delivered` from the notification service's real presentation
+/// outcome, not from handing the card over: gates and the bar can still withhold it.
+final class SuggestionProbePresentationTests: XCTestCase {
+  private func outcomes(_ values: [Bool]) -> AsyncStream<Bool> {
+    AsyncStream { continuation in
+      values.forEach { continuation.yield($0) }
+      continuation.finish()
+    }
+  }
+
+  func testAPresentedCardIsDelivered() async {
+    let presented = await SuggestionAssistant.awaitPresentation(outcomes([true]), timeout: .seconds(1))
+    XCTAssertTrue(presented)
+  }
+
+  func testADroppedCardIsNotDelivered() async {
+    let presented = await SuggestionAssistant.awaitPresentation(outcomes([false]), timeout: .seconds(1))
+    XCTAssertFalse(presented)
+  }
+
+  func testACardThatNeverReportsIsNotDelivered() async {
+    let (silent, continuation) = AsyncStream.makeStream(of: Bool.self)
+    let presented = await SuggestionAssistant.awaitPresentation(silent, timeout: .milliseconds(50))
+    continuation.finish()
+    XCTAssertFalse(presented)
   }
 }

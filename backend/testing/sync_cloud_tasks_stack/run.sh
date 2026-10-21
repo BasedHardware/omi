@@ -22,11 +22,12 @@ if ! java -version >/dev/null 2>&1; then
   exit 1
 fi
 
-emulator_port="$(node -e 'const net = require("net"); const server = net.createServer(); server.listen(0, "127.0.0.1", () => { console.log(server.address().port); server.close(); });')"
+emulator_ports="$(node -e 'const net = require("net"); const servers = [net.createServer(), net.createServer()]; let ready = 0; for (const server of servers) server.listen(0, "127.0.0.1", () => { if (++ready === servers.length) { console.log(servers.map(item => item.address().port).join(" ")); for (const item of servers) item.close(); } });')"
+read -r emulator_port emulator_websocket_port <<< "$emulator_ports"
 emulator_config="$(mktemp "${TMPDIR:-/tmp}/omi-sync-cloud-tasks-firebase.XXXXXX")"
 trap 'rm -f "$emulator_config"' EXIT
-node -e 'require("fs").writeFileSync(process.argv[1], JSON.stringify({emulators: {firestore: {host: "127.0.0.1", port: Number(process.argv[2])}}}))' \
-  "$emulator_config" "$emulator_port"
+node -e 'require("fs").writeFileSync(process.argv[1], JSON.stringify({emulators: {firestore: {host: "127.0.0.1", port: Number(process.argv[2]), websocketPort: Number(process.argv[3])}}}))' \
+  "$emulator_config" "$emulator_port" "$emulator_websocket_port"
 
 runner_command="PYTHONPATH=backend backend/.venv/bin/python -m testing.sync_cloud_tasks_stack.run"
 for argument in "$@"; do

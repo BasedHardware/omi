@@ -1,3 +1,4 @@
+import GRDB
 import XCTest
 
 @testable import Omi_Computer
@@ -33,6 +34,174 @@ final class TranscriptionStorageRecoveryTests: XCTestCase {
     try await super.tearDown()
   }
 
+  func testDeleteMatchesExactDerivedUnsyncedIdentityAndLeavesOtherSessions() async throws {
+    let target = try await TranscriptionStorage.shared.startSession(source: "desktop")
+    let other = try await TranscriptionStorage.shared.startSession(source: "desktop")
+    try await appendEvidence(target, start: 0, end: 10)
+    try await TranscriptionStorage.shared.finishSession(id: target, reason: .userStop)
+    let stored = try await TranscriptionStorage.shared.getSession(id: target)
+    let session = try XCTUnwrap(stored)
+    let clientID = ConversationFinalizationService.localClientConversationId(session: session, sessionId: target)
+    let backendID = ConversationDeletionIdentity.fromSegmentsID(uid: testUserId, clientSessionID: clientID)
+    let cached = try await createCompletedShell(backendId: backendID, strategy: .localSegments, segmentText: "cached")
+    try await TranscriptionStorage.shared.deleteByBackendId(backendID)
+    let deleted = try await TranscriptionStorage.shared.getSession(id: target)
+    let untouched = try await TranscriptionStorage.shared.getSession(id: other)
+    XCTAssertEqual(deleted?.deleted, true)
+    XCTAssertEqual(deleted?.backendSynced, true)
+    XCTAssertEqual(untouched?.deleted, false)
+    let cachedRow = try await TranscriptionStorage.shared.getSession(id: cached)
+    XCTAssertEqual(cachedRow?.deleted, true)
+    let pending = try await TranscriptionStorage.shared.getSessionsNeedingFinalization()
+    XCTAssertFalse(pending.contains { $0.id == target })
+    let bundle = try await TranscriptionStorage.shared.getSessionWithSegments(id: target)
+    XCTAssertEqual(bundle?.segments.count, 0)
+  }
+
+  func testStaleServerHydrationCannotUndoConfirmedDelete() async throws {
+    let id = try await TranscriptionStorage.shared.startSession(source: "desktop", clientConversationId: "chosen-id")
+    try await appendEvidence(id, start: 0, end: 10)
+    try await TranscriptionStorage.shared.deleteByBackendId("chosen-id")
+    let stale = makeServerConversation(
+      id: "chosen-id", createdAt: Date(), startedAt: Date(), finishedAt: Date(),
+      title: "Stale title", overview: "Stale overview", starred: false, folderId: nil,
+      transcriptSegments: [
+        TranscriptSegment(
+          id: "stale-segment", backendId: "stale-segment", text: "Deleted transcript",
+          speaker: "SPEAKER_00", isUser: true, personId: nil, start: 0, end: 10)
+      ],
+      transcriptSegmentsIncluded: true)
+    let directHydration = try await TranscriptionStorage.shared.upsertFromServerConversation(stale)
+    XCTAssertEqual(directHydration.sessionId, id)
+    XCTAssertFalse(directHydration.changed, "Direct hydration must preserve the confirmed deletion")
+    _ = try await TranscriptionStorage.shared.syncServerConversation(stale)
+    let session = try await TranscriptionStorage.shared.getSession(id: id)
+    XCTAssertEqual(session?.deleted, true)
+    let bundle = try await TranscriptionStorage.shared.getSessionWithSegments(id: id)
+    XCTAssertEqual(bundle?.segments.count, 0)
+    let visible = try await TranscriptionStorage.shared.getSyncedSessions()
+    XCTAssertFalse(visible.contains { $0.backendId == "chosen-id" })
+  }
+
+  func testDeletionAckCannotPurgeAnotherDatabaseGeneration() async throws {
+    let generation = await RewindDatabase.shared.poolGeneration()
+    await RewindDatabase.shared.close()
+    await TranscriptionStorage.shared.invalidateCache()
+    try await RewindDatabase.shared.initialize()
+    let other = try await TranscriptionStorage.shared.startSession(source: "desktop")
+    do {
+      try await TranscriptionStorage.shared.deleteSession(id: other, expectedGeneration: generation)
+      XCTFail("Stale upload acknowledgement must be rejected")
+    } catch is CancellationError {}
+    let survivor = try await TranscriptionStorage.shared.getSession(id: other)
+    XCTAssertNotNil(survivor)
+  }
+
+  func testUUIDMatchesBackendVector() {
+    XCTAssertEqual(
+      ConversationDeletionIdentity.fromSegmentsID(uid: "uid1", clientSessionID: "deleted-session"),
+      "05aa0151-43a3-5428-a379-ca5f2573bacd")
+  }
+
+  private func ageSession(_ id: Int64, finishedAt: Date? = nil) async throws -> Date {
+    let startedAt = Date(timeIntervalSince1970: floor(Date().timeIntervalSince1970) - 4 * 86_400)
+    let pool = await RewindDatabase.shared.getDatabaseQueue()
+    let db = try XCTUnwrap(pool)
+    try await db.write { database in
+      try database.execute(
+        sql: "UPDATE transcription_sessions SET startedAt = ?, createdAt = ?, finishedAt = ? WHERE id = ?",
+        arguments: [startedAt, startedAt, finishedAt, id]
+      )
+    }
+    return startedAt
+  }
+
+  private func appendEvidence(_ id: Int64, start: Double, end: Double) async throws {
+    try await TranscriptionStorage.shared.appendSegment(
+      sessionId: id, speaker: 0, text: "Capture evidence", startTime: start, endTime: end
+    )
+  }
+
+  func testCrashRecoveryUsesMaximumValidSegmentEndAndSurvivesRepeatedRecovery() async throws {
+    let id = try await TranscriptionStorage.shared.startSession(source: "desktop")
+    let start = try await ageSession(id)
+    for (begin, end) in [(0.0, 12.0), (20, 45), (12, 18), (-1, 100), (100, 99), (0, Double.infinity)] {
+      try await appendEvidence(id, start: begin, end: end)
+    }
+    try await TranscriptionStorage.shared.finishSession(id: id, reason: .crashRecovery)
+    await RewindDatabase.shared.close()
+    await TranscriptionStorage.shared.invalidateCache()
+    try await RewindDatabase.shared.initialize()
+    try await TranscriptionStorage.shared.finishSession(id: id, reason: .crashRecovery)
+
+    let stored = try await TranscriptionStorage.shared.getSession(id: id)
+    let session = try XCTUnwrap(stored)
+    XCTAssertEqual(session.finishedAt, start.addingTimeInterval(45))
+    XCTAssertEqual(session.status, .pendingUpload)
+    XCTAssertEqual(session.finalizationReason, .crashRecovery)
+    XCTAssertEqual(session.finalizationStrategy, .cloudReconcile)
+  }
+
+  func testCrashRecoveryPreservesPersistedCaptureEnd() async throws {
+    let id = try await TranscriptionStorage.shared.startSession(source: "desktop")
+    let end = Date(timeIntervalSince1970: floor(Date().timeIntervalSince1970) - 3 * 86_400)
+    _ = try await ageSession(id, finishedAt: end)
+    try await appendEvidence(id, start: 0, end: 10)
+    try await TranscriptionStorage.shared.finishSession(id: id, reason: .crashRecovery)
+    let session = try await TranscriptionStorage.shared.getSession(id: id)
+    XCTAssertEqual(session?.finishedAt, end, "A persisted stop includes legitimate trailing silence")
+  }
+
+  func testCrashRecoveryReplacesInvalidPersistedEndWithEvidenceWithoutDurationCap() async throws {
+    let id = try await TranscriptionStorage.shared.startSession(source: "desktop")
+    let start = try await ageSession(id, finishedAt: Date(timeIntervalSince1970: 0))
+    try await appendEvidence(id, start: 0, end: 2 * 86_400)
+    try await TranscriptionStorage.shared.finishSession(id: id, reason: .crashRecovery)
+    let session = try await TranscriptionStorage.shared.getSession(id: id)
+    XCTAssertEqual(session?.finishedAt, start.addingTimeInterval(2 * 86_400))
+  }
+
+  func testCrashRecoveryWithoutValidEvidenceRetainsRowOutsideUploadQueue() async throws {
+    for invalidSegments in [false, true] {
+      let id = try await TranscriptionStorage.shared.startSession(source: "desktop")
+      _ = try await ageSession(id)
+      if invalidSegments {
+        for (start, end) in [(-1.0, 10.0), (10, 9), (0, 0), (0, Double.infinity), (0, 5 * 86_400)] {
+          try await appendEvidence(id, start: start, end: end)
+        }
+      }
+      try await TranscriptionStorage.shared.finishSession(id: id, reason: .crashRecovery)
+      let session = try await TranscriptionStorage.shared.getSession(id: id)
+      XCTAssertEqual(session?.status, .recording)
+      XCTAssertNil(session?.finishedAt)
+      let pending = try await TranscriptionStorage.shared.getSessionsNeedingFinalization()
+      XCTAssertFalse(pending.contains { $0.id == id })
+    }
+  }
+
+  func testSubsecondCrashEvidenceRetainsMinimumUploadInterval() async throws {
+    let id = try await TranscriptionStorage.shared.startSession(source: "desktop")
+    let start = try await ageSession(id)
+    try await appendEvidence(id, start: 0, end: 0.25)
+    try await TranscriptionStorage.shared.finishSession(id: id, reason: .crashRecovery)
+    let stored = try await TranscriptionStorage.shared.getSession(id: id)
+    XCTAssertEqual(stored?.finishedAt, start.addingTimeInterval(1))
+  }
+
+  func testExplicitStopStillUsesStopTimeInsteadOfLastSegment() async throws {
+    let id = try await TranscriptionStorage.shared.startSession(source: "desktop")
+    _ = try await ageSession(id)
+    try await appendEvidence(id, start: 0, end: 10)
+    let before = Date()
+    try await TranscriptionStorage.shared.finishSession(id: id, reason: .userStop)
+    let after = Date()
+    let stored = try await TranscriptionStorage.shared.getSession(id: id)
+    let end = try XCTUnwrap(stored?.finishedAt)
+    XCTAssertGreaterThanOrEqual(end.timeIntervalSince1970, before.timeIntervalSince1970 - 0.001)
+    XCTAssertLessThanOrEqual(end.timeIntervalSince1970, after.timeIntervalSince1970 + 0.001)
+    XCTAssertEqual(stored?.finalizationReason, .userStop)
+  }
+
   func testBoundRecordingSessionIsStillCrashRecoverable() async throws {
     let sessionId = try await TranscriptionStorage.shared.startSession(source: "desktop")
     try await TranscriptionStorage.shared.bindBackendConversation(
@@ -54,6 +223,8 @@ final class TranscriptionStorageRecoveryTests: XCTestCase {
       id: sessionId,
       backendId: "backend-conversation-pending"
     )
+    _ = try await ageSession(sessionId)
+    try await appendEvidence(sessionId, start: 0, end: 10)
     try await TranscriptionStorage.shared.finishSession(id: sessionId, reason: .crashRecovery)
 
     let pending = try await TranscriptionStorage.shared.getPendingUploadSessions()
@@ -104,7 +275,6 @@ final class TranscriptionStorageRecoveryTests: XCTestCase {
     )
     try await TranscriptionStorage.shared.updateStarred(id: sessionId, starred: true)
     try await TranscriptionStorage.shared.updateFolderByBackendId(backendId, folderId: "local-folder")
-    try await TranscriptionStorage.shared.deleteByBackendId(backendId)
 
     let storedLocalShell = try await TranscriptionStorage.shared.getSession(id: sessionId)
     let localShell = try XCTUnwrap(storedLocalShell)
@@ -135,7 +305,7 @@ final class TranscriptionStorageRecoveryTests: XCTestCase {
     XCTAssertEqual(hydrated.overview, "Processed backend overview")
     XCTAssertTrue(hydrated.starred, "Hydration must not erase newer local star mutations")
     XCTAssertEqual(hydrated.folderId, "local-folder", "Hydration must not erase newer local folder mutations")
-    XCTAssertTrue(hydrated.deleted, "Hydration must not resurrect locally deleted conversations")
+    XCTAssertFalse(hydrated.deleted, "Hydration must keep an active conversation visible")
   }
 
   func testBackendHydratesCompletedCloudReconcileShellEvenWhenLocalTimestampIsNewer() async throws {

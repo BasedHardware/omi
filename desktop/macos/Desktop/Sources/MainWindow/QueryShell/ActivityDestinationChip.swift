@@ -18,29 +18,31 @@
 //  test failure rather than a page someone discovers is stranded.
 //
 
-import Foundation
+import OmiTheme
+import SwiftUI
 
 /// One chip in Activity's row. Every case is a destination; none is a filter.
 enum ActivityDestinationChip: String, CaseIterable, Identifiable {
   case activity
   case conversations
   case memories
+  case rewind
   case brainMap
 
   var id: String { rawValue }
 
   var title: String {
     switch self {
-    case .activity: return "Brain"
+    case .activity: return "Activity"
     case .conversations: return "Conversations"
     case .memories: return "Memories"
+    case .rewind: return "Rewind"
     case .brainMap: return "Brain Map"
     }
   }
 
-  /// The Memory hub page this chip opens. Every chip in this row is one of the hub's four pages:
-  /// `Tasks` and `Rewind` were here too and were removed, because each already has its own pill in
-  /// the bar directly above — a second control to the same place, two inches apart.
+  /// The Brain page this chip opens. Tasks stays global because it has its own primary pill. Rewind
+  /// belongs here because it is another way to inspect captured history.
   ///
   /// **Not optional, and that is the reachability claim's teeth.** A chip that opens no hub page
   /// would be a chip that reaches nothing while `reachableHubDestinations` quietly dropped it; the
@@ -50,6 +52,7 @@ enum ActivityDestinationChip: String, CaseIterable, Identifiable {
     case .activity: return .activity
     case .conversations: return .conversations
     case .memories: return .memories
+    case .rewind: return .rewind
     case .brainMap: return .brainMap
     }
   }
@@ -58,4 +61,134 @@ enum ActivityDestinationChip: String, CaseIterable, Identifiable {
   static var reachableHubDestinations: [MemoryHubDestination] {
     allCases.map(\.hubDestination)
   }
+}
+
+/// Stable peer navigation for every Brain surface. A section selection is not a drill-in, so this
+/// row stays visible instead of making each page manufacture a way back to Activity.
+struct BrainSectionNavigation: View {
+  let selected: MemoryHubDestination
+  let onSelect: (MemoryHubDestination) -> Void
+
+  var body: some View {
+    ViewThatFits(in: .horizontal) {
+      navigationRow
+      ScrollView(.horizontal, showsIndicators: false) {
+        navigationRow
+          .padding(.trailing, QueryShellLayout.chipSpacing)
+      }
+    }
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .accessibilityElement(children: .contain)
+    .accessibilityIdentifier("brain-section-navigation")
+  }
+
+  @ViewBuilder
+  private var navigationRow: some View {
+    HStack(spacing: QueryShellLayout.chipSpacing) {
+      ForEach(ActivityDestinationChip.allCases) { chip in
+        BrainSectionButton(
+          title: chip.title,
+          isActive: chip.hubDestination == selected,
+          action: { onSelect(chip.hubDestination) }
+        )
+        .accessibilityIdentifier("brain-section-\(chip.rawValue)")
+      }
+    }
+  }
+}
+
+private struct BrainSectionButton: View {
+  let title: String
+  let isActive: Bool
+  let action: () -> Void
+
+  @State private var isHovering = false
+
+  var body: some View {
+    Button(action: action) {
+      Text(title)
+        .scaledFont(size: OmiType.caption, weight: isActive ? .semibold : .regular)
+        .foregroundStyle(GlassShell.controlLabel(isProminent: isActive || isHovering))
+        .padding(.horizontal, 12)
+        .frame(height: QueryShellLayout.chipHeight)
+        .glassChip(isActive: isActive)
+    }
+    .buttonStyle(.plain)
+    .contentShape(Capsule(style: .continuous))
+    .onHover { isHovering = $0 }
+    .animation(InkReduceMotion.animation(.easeOut(duration: InkMotion.press)), value: isActive)
+    .accessibilityAddTraits(isActive ? .isSelected : [])
+  }
+}
+
+/// The shared Brain page shape: the product-wide search surface above a content panel whose first
+/// row is Brain navigation. Search stays visually and behaviorally identical to Chat, Tasks, and
+/// Apps; section switching belongs to the thing it changes rather than decorating the query field.
+struct BrainSectionPageLayout<Search: View, Content: View>: View {
+  let selected: MemoryHubDestination
+  let onSelect: (MemoryHubDestination) -> Void
+  let search: Search
+  let content: Content
+  /// False while a detail replaces the page's list: the list's search would otherwise sit above a
+  /// single conversation, and typing in it used to close that conversation as a side effect.
+  var showsSearch: Bool
+  /// Clicking the chip you are already on returns that page to its root (closes a detail, clears a
+  /// search) — the tab-bar convention on every platform.
+  var onReselect: (() -> Void)?
+
+  init(
+    selected: MemoryHubDestination,
+    onSelect: @escaping (MemoryHubDestination) -> Void,
+    showsSearch: Bool = true,
+    onReselect: (() -> Void)? = nil,
+    @ViewBuilder search: () -> Search,
+    @ViewBuilder content: () -> Content
+  ) {
+    self.selected = selected
+    self.onSelect = onSelect
+    self.showsSearch = showsSearch
+    self.onReselect = onReselect
+    self.search = search()
+    self.content = content()
+  }
+
+  var body: some View {
+    GeometryReader { proxy in
+      let lane = QueryShellLayout.laneWidth(for: proxy.size.width)
+
+      VStack(spacing: QueryShellLayout.panelGap) {
+        if showsSearch {
+          search
+        }
+
+        VStack(alignment: .leading, spacing: 0) {
+          BrainSectionNavigation(selected: selected) { destination in
+            if destination == selected {
+              onReselect?()
+            } else {
+              onSelect(destination)
+            }
+          }
+          .padding(.horizontal, QueryShellLayout.panelPaddingHorizontal)
+          .padding(.top, BrainSectionPageMetrics.navigationTopPadding)
+          .padding(.bottom, BrainSectionPageMetrics.navigationBottomPadding)
+
+          content
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .inkGlassPanel(cornerRadius: QueryShellLayout.panelCornerRadius, shadow: .ambient)
+      }
+      .frame(width: lane)
+      .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+      .padding(.top, QueryShellLayout.surfaceTopInset)
+    }
+  }
+}
+
+enum BrainSectionPageMetrics {
+  static let navigationTopPadding = PagePanelFirstRowMetrics.topPadding
+  static let navigationBottomPadding = PagePanelVerticalRhythm.rowGap
+  static let navigationHeight: CGFloat =
+    QueryShellLayout.chipHeight + navigationTopPadding + navigationBottomPadding
 }

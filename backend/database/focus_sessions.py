@@ -21,9 +21,17 @@ def _user_col(uid: str, collection: str) -> Any:
     return db.collection('users').document(uid).collection(collection)
 
 
-def _typed_doc(doc: Any) -> Dict[str, Any]:
-    raw: object = doc.to_dict()
-    return cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
+def _typed_doc(doc: Any) -> Optional[Dict[str, Any]]:
+    doc_id = getattr(doc, 'id', 'unknown')
+    try:
+        raw: object = doc.to_dict()
+    except Exception as exc:
+        logger.warning("Skipping malformed focus session %s: %s", doc_id, type(exc).__name__)
+        return None
+    if not isinstance(raw, dict) or not raw:
+        logger.warning("Skipping malformed focus session %s: EmptyOrNonDictDocument", doc_id)
+        return None
+    return cast(Dict[str, Any], raw)
 
 
 def create_focus_session(uid: str, status: str, app_or_site: str, description: str, **kwargs: Any) -> Dict[str, Any]:
@@ -42,6 +50,64 @@ def create_focus_session(uid: str, status: str, app_or_site: str, description: s
     return doc
 
 
+def _normalize_duration_seconds(value: Any) -> Optional[int]:
+    if value is None or isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        coerced = int(value)
+        return coerced if coerced >= 0 else 0
+    if isinstance(value, str):
+        try:
+            coerced = int(float(value.strip()))
+            return coerced if coerced >= 0 else 0
+        except ValueError:
+            return None
+    return None
+
+
+def _normalize_created_at(value: Any) -> datetime:
+    if isinstance(value, datetime):
+        return value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
+    if hasattr(value, 'timestamp'):
+        try:
+            return datetime.fromtimestamp(value.timestamp(), tz=timezone.utc)
+        except Exception:
+            pass
+    if isinstance(value, str) and value.strip():
+        try:
+            parsed = datetime.fromisoformat(value.strip().replace('Z', '+00:00'))
+            return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=timezone.utc)
+        except ValueError:
+            pass
+    return datetime.fromtimestamp(0, tz=timezone.utc)
+
+
+def _normalize_focus_session_doc(doc_id: str, data: Dict[str, Any]) -> Dict[str, Any]:
+    raw_app = data.get('app_or_site')
+    app_or_site = str(raw_app).strip() if raw_app is not None and str(raw_app).strip() else 'Unknown'
+    raw_status = data.get('status')
+    status = str(raw_status).strip() if raw_status is not None and str(raw_status).strip() else 'focused'
+    raw_description = data.get('description')
+    description = str(raw_description) if raw_description is not None else ''
+    raw_message = data.get('message')
+    message = str(raw_message) if raw_message is not None else None
+    return {
+        **data,
+        'id': str(doc_id or data.get('id') or ''),
+        'status': status,
+        'app_or_site': app_or_site,
+        'description': description,
+        'message': message,
+        'created_at': _normalize_created_at(data.get('created_at')),
+        'duration_seconds': _normalize_duration_seconds(data.get('duration_seconds')),
+    }
+
+
+#: Upper bound on stored rows one read may walk while refilling a page around
+#: poison documents. Matches the history cap ``get_focus_stats`` already reads.
+_MAX_FOCUS_SESSION_SCAN_ROWS = 5000
+
+
 def get_focus_sessions(uid: str, date: Optional[str] = None, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
     col = _user_col(uid, 'focus_sessions')
     query = col.order_by('created_at', direction=firestore.Query.DESCENDING)
@@ -52,12 +118,40 @@ def get_focus_sessions(uid: str, date: Optional[str] = None, limit: int = 100, o
         query = query.where(filter=FieldFilter('created_at', '>=', day_start))
         query = query.where(filter=FieldFilter('created_at', '<', day_end))
 
-    query = query.offset(offset).limit(limit)
+    # Skipped poison rows used to shrink the page without saying so: a caller
+    # asking for `limit` rows got fewer, and the rows that fell off the end were
+    # never returned by a later `offset` page. Scan forward until the page is
+    # full or the collection is exhausted, so `offset` keeps counting stored
+    # rows while callers still receive `limit` readable ones.
     items: List[Dict[str, Any]] = []
-    for doc in query.stream():
-        data = _typed_doc(doc)
-        data['id'] = doc.id
-        items.append(data)
+    window = max(limit, 1)
+    cursor = max(offset, 0)
+    scanned = 0
+
+    while len(items) < limit and scanned < _MAX_FOCUS_SESSION_SCAN_ROWS:
+        page = list(query.offset(cursor).limit(window).stream())
+        if not page:
+            break
+        scanned += len(page)
+        cursor += len(page)
+
+        for doc in page:
+            raw = _typed_doc(doc)
+            if raw is None:
+                continue
+
+            doc_id = getattr(doc, 'id', 'unknown')
+            try:
+                items.append(_normalize_focus_session_doc(str(doc_id), raw))
+            except Exception as exc:
+                logger.warning("Skipping malformed focus session %s: %s", doc_id, type(exc).__name__)
+                continue
+            if len(items) >= limit:
+                break
+
+        if len(page) < window:
+            break
+
     return items
 
 
@@ -70,7 +164,14 @@ def delete_focus_session(uid: str, session_id: str) -> bool:
 
 
 def get_focus_stats(uid: str, date: Optional[str] = None) -> Dict[str, Any]:
-    sessions = get_focus_sessions(uid, date=date, limit=5000, offset=0)
+    # A day's stats need a day.  Passing date=None straight through meant
+    # get_focus_sessions applied no created_at filter at all, so the totals
+    # below were summed from the user's entire history -- up to the 5000-row
+    # cap -- and then labelled with a single date.  Anyone opening focus
+    # stats without picking a day saw months of focus reported as today's.
+    # get_daily_score resolves the same way: no date means today.
+    day = date or datetime.now(timezone.utc).strftime('%Y-%m-%d')
+    sessions = get_focus_sessions(uid, date=day, limit=5000, offset=0)
     focused_count = 0
     distracted_count = 0
     total_focus_seconds = 0
@@ -78,21 +179,24 @@ def get_focus_stats(uid: str, date: Optional[str] = None) -> Dict[str, Any]:
     distractions: Dict[str, Dict[str, int]] = {}
 
     for s in sessions:
+        duration = _normalize_duration_seconds(s.get('duration_seconds'))
         if s.get('status') == 'focused':
             focused_count += 1
-            total_focus_seconds += s.get('duration_seconds') or 0
+            total_focus_seconds += 0 if duration is None else duration
         elif s.get('status') == 'distracted':
             distracted_count += 1
-            total_distracted_seconds += s.get('duration_seconds') or 60
-            app = str(s.get('app_or_site', 'Unknown'))
+            distracted_duration = 60 if duration is None else duration
+            total_distracted_seconds += distracted_duration
+            raw_app = s.get('app_or_site')
+            app = str(raw_app).strip() if raw_app is not None and str(raw_app).strip() else 'Unknown'
             entry = distractions.setdefault(app, {'total_seconds': 0, 'count': 0})
-            entry['total_seconds'] += s.get('duration_seconds') or 60
+            entry['total_seconds'] += distracted_duration
             entry['count'] += 1
 
     top = sorted(distractions.items(), key=lambda x: x[1]['total_seconds'], reverse=True)[:5]
 
     return {
-        'date': date or datetime.now(timezone.utc).strftime('%Y-%m-%d'),
+        'date': day,
         'focused_minutes': total_focus_seconds // 60,
         'distracted_minutes': total_distracted_seconds // 60,
         'session_count': focused_count + distracted_count,

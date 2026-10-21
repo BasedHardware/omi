@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import 'package:video_player/video_player.dart';
 
 import 'package:omi/pages/onboarding/wrapper.dart';
+import 'package:omi/ui/omi_tokens.dart';
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/temp.dart';
 
 class DeviceSelectionPage extends StatefulWidget {
@@ -32,6 +34,7 @@ class _DeviceSelectionPageState extends State<DeviceSelectionPage> with SingleTi
     ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
 
     _initializeVideo();
+    PlatformManager.instance.analytics.onboardingWelcomeShown();
   }
 
   void _initializeVideo() async {
@@ -47,7 +50,7 @@ class _DeviceSelectionPageState extends State<DeviceSelectionPage> with SingleTi
       // Listen to video progress
       _videoController.addListener(_updateVideoProgress);
     } catch (e) {
-      print('Error initializing video: $e');
+      Logger.debug('Error initializing video: $e');
     }
   }
 
@@ -144,7 +147,8 @@ class _DeviceSelectionPageState extends State<DeviceSelectionPage> with SingleTi
                           height: 56,
                           child: ElevatedButton(
                             onPressed: () async {
-                              HapticFeedback.mediumImpact();
+                              OmiHaptics.selection();
+                              PlatformManager.instance.analytics.onboardingGetStartedTapped();
                               if (mounted) {
                                 routeToPage(context, const OnboardingWrapper());
                               }
