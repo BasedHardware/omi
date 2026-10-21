@@ -1,4 +1,5 @@
 import hmac
+import logging
 import os
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
@@ -22,9 +23,16 @@ from database.announcements import (
     update_announcement,
 )
 from models.announcement import Announcement, AnnouncementType, Display, Targeting
+from utils.log_sanitizer import sanitize
 from utils.other import endpoints as auth_endpoints
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
+
+# Firestore rejects document ids that are empty, that contain a path separator,
+# that use a reserved __name__ form, or that exceed 1500 bytes.
+MAX_ANNOUNCEMENT_ID_BYTES = 1500
+MAX_CHANGELOG_LIMIT = 100
 
 
 class AnnouncementDeleteResponse(BaseModel):
@@ -59,10 +67,19 @@ def get_changelogs(
     # non-positive limit only needs to stop reaching the negative-slice path below.
     if limit < 1:
         raise HTTPException(status_code=422, detail="limit must be at least 1")
-    if from_version and to_version:
-        changelogs = get_app_changelogs(from_version, to_version)
-    else:
-        changelogs = get_recent_changelogs(limit=limit, max_version=max_version)
+    # Upper clamp stays in the handler as well, so the published query schema keeps its
+    # current shape and only the effective page size is bounded.
+    effective_limit = min(limit, MAX_CHANGELOG_LIMIT)
+    try:
+        if from_version and to_version:
+            changelogs = get_app_changelogs(from_version, to_version)
+        else:
+            changelogs = get_recent_changelogs(limit=effective_limit, max_version=max_version)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error(f"Failed to load changelogs: {sanitize(str(exc))}")
+        raise HTTPException(status_code=500, detail="Failed to load changelogs")
     return changelogs
 
 
@@ -78,11 +95,22 @@ def get_features(
     For firmware updates: returns features explaining new device behavior.
     For app updates: returns features explaining major new app functionality.
     """
-    if version_type == "firmware":
-        features = get_firmware_features(version, device_model)
-    else:
-        features = get_app_features(version)
-
+    if not (version or "").strip():
+        raise HTTPException(status_code=400, detail="version must not be empty")
+    # version_type is a closed set. Silently treating an unknown value as 'app'
+    # hides client bugs behind plausible looking feature lists.
+    if version_type not in ("app", "firmware"):
+        raise HTTPException(status_code=400, detail="version_type must be 'app' or 'firmware'")
+    try:
+        if version_type == "firmware":
+            features = get_firmware_features(version, device_model)
+        else:
+            features = get_app_features(version)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error(f"Failed to load features: {sanitize(str(exc))}")
+        raise HTTPException(status_code=500, detail="Failed to load features")
     return features
 
 
@@ -107,7 +135,13 @@ def get_announcements(
         except ValueError:
             pass
 
-    announcements = get_general_announcements(checked_at)
+    try:
+        announcements = get_general_announcements(checked_at)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error(f"Failed to load announcements: {sanitize(str(exc))}")
+        raise HTTPException(status_code=500, detail="Failed to load announcements")
     return announcements
 
 
@@ -152,14 +186,23 @@ def get_pending_announcements_endpoint(
             status_code=400, detail="Trigger must be 'app_launch', 'version_upgrade', or 'firmware_upgrade'"
         )
 
-    announcements = get_pending_announcements(
-        uid=uid,
-        app_version=app_version,
-        platform=platform,
-        trigger=trigger,
-        firmware_version=firmware_version,
-        device_model=device_model,
-    )
+    if not (app_version or "").strip():
+        raise HTTPException(status_code=400, detail="app_version must not be empty")
+
+    try:
+        announcements = get_pending_announcements(
+            uid=uid,
+            app_version=app_version,
+            platform=platform,
+            trigger=trigger,
+            firmware_version=firmware_version,
+            device_model=device_model,
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error(f"Failed to load pending announcements: {sanitize(str(exc))}")
+        raise HTTPException(status_code=500, detail="Failed to load pending announcements")
     return announcements
 
 
@@ -190,12 +233,19 @@ def dismiss_announcement_endpoint(
     This prevents the announcement from being shown again if show_once is True.
     The cta_clicked field can be used to track whether the user engaged with the call-to-action.
     """
-    # Verify announcement exists
-    announcement = get_announcement_by_id(announcement_id)
-    if not announcement:
-        raise HTTPException(status_code=404, detail="Announcement not found")
+    announcement_id = _require_announcement_id(announcement_id)
+    try:
+        # Verify announcement exists
+        announcement = get_announcement_by_id(announcement_id)
+        if not announcement:
+            raise HTTPException(status_code=404, detail="Announcement not found")
 
-    success = dismiss_announcement(uid, announcement_id, data.cta_clicked)
+        success = dismiss_announcement(uid, announcement_id, data.cta_clicked)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error(f"Failed to dismiss announcement: {sanitize(str(exc))}")
+        raise HTTPException(status_code=500, detail="Failed to dismiss announcement")
     return {"success": success, "message": "Announcement dismissed"}
 
 
@@ -207,8 +257,35 @@ def dismiss_announcement_endpoint(
 def _verify_admin_key(secret_key: str):
     """Verify the secret key matches the ADMIN_KEY environment variable."""
     admin_key = os.getenv("ADMIN_KEY")
-    if not admin_key or not hmac.compare_digest(secret_key, admin_key):
+    # An unset or whitespace only ADMIN_KEY must never authorize anyone, and the
+    # comparison itself is constant time so the key cannot be recovered by timing.
+    if not admin_key or not admin_key.strip():
         raise HTTPException(status_code=403, detail="You are not authorized to perform this action")
+    try:
+        matched = hmac.compare_digest(secret_key, admin_key)
+    except TypeError:
+        # compare_digest refuses non ASCII strings, so fall back to the encoded
+        # forms instead of turning a misconfigured key into a server error.
+        matched = hmac.compare_digest(secret_key.encode("utf-8"), admin_key.encode("utf-8"))
+    if not matched:
+        raise HTTPException(status_code=403, detail="You are not authorized to perform this action")
+
+
+def _require_announcement_id(announcement_id: str) -> str:
+    """Validate an announcement id before it reaches Firestore as a document id."""
+    candidate = (announcement_id or "").strip()
+    if not candidate:
+        raise HTTPException(status_code=400, detail="announcement_id must not be empty")
+    if candidate in (".", "..") or "/" in candidate:
+        raise HTTPException(status_code=400, detail="announcement_id must not contain path segments")
+    if candidate.startswith("__") and candidate.endswith("__"):
+        raise HTTPException(status_code=400, detail="announcement_id must not use a reserved document name")
+    if len(candidate.encode("utf-8")) > MAX_ANNOUNCEMENT_ID_BYTES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"announcement_id must be at most {MAX_ANNOUNCEMENT_ID_BYTES} bytes",
+        )
+    return candidate
 
 
 class CreateAnnouncementRequest(BaseModel):
@@ -257,10 +334,16 @@ def list_all_announcements(
     """
     _verify_admin_key(secret_key)
 
-    announcements = get_all_announcements(
-        announcement_type=announcement_type,
-        active_only=active_only,
-    )
+    try:
+        announcements = get_all_announcements(
+            announcement_type=announcement_type,
+            active_only=active_only,
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error(f"Failed to list announcements: {sanitize(str(exc))}")
+        raise HTTPException(status_code=500, detail="Failed to list announcements")
     return announcements
 
 
@@ -274,10 +357,17 @@ def get_announcement(
     Requires admin authentication via secret-key header.
     """
     _verify_admin_key(secret_key)
+    announcement_id = _require_announcement_id(announcement_id)
 
-    announcement = get_announcement_by_id(announcement_id)
-    if not announcement:
-        raise HTTPException(status_code=404, detail="Announcement not found")
+    try:
+        announcement = get_announcement_by_id(announcement_id)
+        if not announcement:
+            raise HTTPException(status_code=404, detail="Announcement not found")
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error(f"Failed to load announcement: {sanitize(str(exc))}")
+        raise HTTPException(status_code=500, detail="Failed to load announcement")
 
     return announcement
 
@@ -297,27 +387,34 @@ def create_announcement_endpoint(
     - announcement: {"title": "...", "body": "...", "image_url": "...", "cta": {"text": "...", "action": "..."}}
     """
     _verify_admin_key(secret_key)
+    announcement_id = _require_announcement_id(data.id)
 
-    # Check if announcement with this ID already exists
-    existing = get_announcement_by_id(data.id)
-    if existing:
-        raise HTTPException(status_code=409, detail=f"Announcement with ID '{data.id}' already exists")
+    try:
+        # Check if announcement with this ID already exists
+        existing = get_announcement_by_id(announcement_id)
+        if existing:
+            raise HTTPException(status_code=409, detail=f"Announcement with ID '{announcement_id}' already exists")
 
-    announcement = Announcement(
-        id=data.id,
-        type=data.type,
-        created_at=datetime.now(timezone.utc),
-        active=data.active,
-        app_version=data.app_version,
-        firmware_version=data.firmware_version,
-        device_models=data.device_models,
-        expires_at=data.expires_at,
-        targeting=data.targeting,
-        display=data.display,
-        content=data.content,
-    )
+        announcement = Announcement(
+            id=announcement_id,
+            type=data.type,
+            created_at=datetime.now(timezone.utc),
+            active=data.active,
+            app_version=data.app_version,
+            firmware_version=data.firmware_version,
+            device_models=data.device_models,
+            expires_at=data.expires_at,
+            targeting=data.targeting,
+            display=data.display,
+            content=data.content,
+        )
 
-    created = create_announcement(announcement)
+        created = create_announcement(announcement)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error(f"Failed to create announcement: {sanitize(str(exc))}")
+        raise HTTPException(status_code=500, detail="Failed to create announcement")
     return created
 
 
@@ -333,36 +430,43 @@ def update_announcement_endpoint(
     Only provided fields will be updated.
     """
     _verify_admin_key(secret_key)
+    announcement_id = _require_announcement_id(announcement_id)
 
-    existing = get_announcement_by_id(announcement_id)
-    if not existing:
-        raise HTTPException(status_code=404, detail="Announcement not found")
+    try:
+        existing = get_announcement_by_id(announcement_id)
+        if not existing:
+            raise HTTPException(status_code=404, detail="Announcement not found")
 
-    # Build updates dict with only non-None values
-    updates: Dict[str, Any] = {}
-    if data.active is not None:
-        updates["active"] = data.active
-    if data.app_version is not None:
-        updates["app_version"] = data.app_version
-    if data.firmware_version is not None:
-        updates["firmware_version"] = data.firmware_version
-    if data.device_models is not None:
-        updates["device_models"] = data.device_models
-    if data.expires_at is not None:
-        updates["expires_at"] = data.expires_at
-    if data.targeting is not None:
-        updates["targeting"] = data.targeting.to_dict()
-    if data.display is not None:
-        updates["display"] = data.display.to_dict()
-    if data.content is not None:
-        updates["content"] = data.content
+        # Build updates dict with only non-None values
+        updates: Dict[str, Any] = {}
+        if data.active is not None:
+            updates["active"] = data.active
+        if data.app_version is not None:
+            updates["app_version"] = data.app_version
+        if data.firmware_version is not None:
+            updates["firmware_version"] = data.firmware_version
+        if data.device_models is not None:
+            updates["device_models"] = data.device_models
+        if data.expires_at is not None:
+            updates["expires_at"] = data.expires_at
+        if data.targeting is not None:
+            updates["targeting"] = data.targeting.to_dict()
+        if data.display is not None:
+            updates["display"] = data.display.to_dict()
+        if data.content is not None:
+            updates["content"] = data.content
 
-    if not updates:
-        raise HTTPException(status_code=400, detail="No fields to update")
+        if not updates:
+            raise HTTPException(status_code=400, detail="No fields to update")
 
-    updated = update_announcement(announcement_id, updates)
-    if updated is None:
-        raise HTTPException(status_code=404, detail="Announcement not found")
+        updated = update_announcement(announcement_id, updates)
+        if updated is None:
+            raise HTTPException(status_code=404, detail="Announcement not found")
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error(f"Failed to update announcement: {sanitize(str(exc))}")
+        raise HTTPException(status_code=500, detail="Failed to update announcement")
     return updated
 
 
@@ -380,14 +484,21 @@ def delete_announcement_endpoint(
     Set soft_delete=false to permanently remove the announcement.
     """
     _verify_admin_key(secret_key)
+    announcement_id = _require_announcement_id(announcement_id)
 
-    existing = get_announcement_by_id(announcement_id)
-    if not existing:
-        raise HTTPException(status_code=404, detail="Announcement not found")
+    try:
+        existing = get_announcement_by_id(announcement_id)
+        if not existing:
+            raise HTTPException(status_code=404, detail="Announcement not found")
 
-    if soft_delete:
-        success = deactivate_announcement(announcement_id)
-        return {"success": success, "message": "Announcement deactivated"}
-    else:
-        success = delete_announcement(announcement_id)
-        return {"success": success, "message": "Announcement permanently deleted"}
+        if soft_delete:
+            success = deactivate_announcement(announcement_id)
+            return {"success": success, "message": "Announcement deactivated"}
+        else:
+            success = delete_announcement(announcement_id)
+            return {"success": success, "message": "Announcement permanently deleted"}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error(f"Failed to delete announcement: {sanitize(str(exc))}")
+        raise HTTPException(status_code=500, detail="Failed to delete announcement")
