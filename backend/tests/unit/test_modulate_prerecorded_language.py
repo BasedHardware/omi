@@ -119,6 +119,8 @@ def test_response_without_utterances_list_raises_after_retries(http, reply, body
         {'utterances': [], 'text': 0},
         {'utterances': [], 'duration_ms': '120'},
         {'utterances': [], 'duration_ms': True},
+        {'utterances': [], 'text': 'hello'},
+        {'utterances': [], 'text': 'hello', 'duration_ms': 120},
     ],
 )
 def test_empty_utterances_without_text_or_duration_raises_after_retries(http, reply, body):

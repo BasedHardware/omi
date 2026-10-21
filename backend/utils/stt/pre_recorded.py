@@ -618,6 +618,9 @@ def modulate_prerecorded_from_bytes(
             has_duration = isinstance(duration_ms, (int, float)) and not isinstance(duration_ms, bool)
             if not (has_text or has_duration):
                 raise RuntimeError('Modulate response with empty utterances must carry text or duration_ms')
+            if has_text and result['text'].strip():
+                # Transcript text without utterances contradicts itself; never settle it as silence.
+                raise RuntimeError('Modulate response with empty utterances must not carry transcript text')
             if return_language:
                 return [], language or 'multi'
             return []
