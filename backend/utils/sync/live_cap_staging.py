@@ -24,9 +24,13 @@ from utils.observability.held_content import record_publication_retry
 from utils.other.storage import owner_storage_write_gate
 from utils.sync import cap_hold
 from utils.sync.live_cap_publication import (
+    LIVE_PUBLICATION_DEADLINE_SECONDS,
+    RECOVERY_PUBLICATION_DEADLINE_SECONDS,
     UNRECOVERED,
     Publication,
+    PublicationBudget,
     commit_publication,
+    new_publication_budget,
     publication_retry_cause,
     retry_transient_leaf,
 )
@@ -67,6 +71,7 @@ def append(uid: str, path: str, group: Publication, fragment: Publication, metad
     fields: dict[str, Any] = {}
     staged_updates: dict[str, Any] | None = None
     attempted = fragment.is_retry(uid)
+    budget = new_publication_budget(LIVE_PUBLICATION_DEADLINE_SECONDS)
 
     @firestore.transactional
     def commit(tx: Any):
@@ -78,7 +83,7 @@ def append(uid: str, path: str, group: Publication, fragment: Publication, metad
     def _apply(tx: Any):
         nonlocal fields, attempted, staged_updates
         with external_write_fence(uid, firestore_client=client, transaction=tx):
-            row = ref.get(transaction=tx).to_dict() or {}
+            row = ref.get(transaction=tx, timeout=budget.attempt_timeout(), retry=None).to_dict() or {}
             parts = row.get('stage_parts') or []
             if fragment.identity in row.get('stage_fragment_ids', []) or any(
                 part['id'] == fragment.identity for part in parts
@@ -96,6 +101,7 @@ def append(uid: str, path: str, group: Publication, fragment: Publication, metad
                 metadata,
                 immutable=True,
                 stored_size_limit=MAX_FRAGMENT_BYTES,
+                rpc_timeout=budget.attempt_timeout(),
             )
             encoded_bytes = size
             if attempted:
@@ -105,7 +111,7 @@ def append(uid: str, path: str, group: Publication, fragment: Publication, metad
                 existing = cap_hold.get_private_cloud_sync_bucket().blob(
                     fields['audio_path'], generation=int(fields['audio_generation'])
                 )
-                existing.reload(timeout=10, retry=None)
+                existing.reload(timeout=budget.attempt_timeout(), retry=None)
                 encrypted_bytes = existing.size
                 if not isinstance(encrypted_bytes, int) or not 32 < encrypted_bytes <= MAX_FRAGMENT_BYTES + 32:
                     raise ValueError('invalid stored live fragment length')
@@ -142,7 +148,7 @@ def append(uid: str, path: str, group: Publication, fragment: Publication, metad
     def _verified_staging(target: Any, payload: dict) -> dict:
         """The write already landed. A later read must not fail the live flush."""
         try:
-            stored = retry_transient_leaf(target.get).to_dict()
+            stored = retry_transient_leaf(budget, target.get).to_dict()
         except Exception as error:
             logger.warning(
                 'event=stt_cap_live_held outcome=staged_unverified exception_type=%s',
@@ -175,7 +181,7 @@ def append(uid: str, path: str, group: Publication, fragment: Publication, metad
         late row, or surface a failure if that row cannot be confirmed either.
         """
         try:
-            current = retry_transient_leaf(target.get).to_dict() or {}
+            current = retry_transient_leaf(budget, target.get).to_dict() or {}
         except Exception as error:
             logger.warning(
                 'event=stt_cap_live_held outcome=staged_unverified exception_type=%s',
@@ -191,7 +197,7 @@ def append(uid: str, path: str, group: Publication, fragment: Publication, metad
         late = cap_hold.holds(uid).document(late_hold_identity(fragment.identity))
         body = _late_staging_body(part, updates)
         try:
-            late.create(body)
+            late.create(body, timeout=budget.leaf_timeout(), retry=None)
         except AlreadyExists:
             # The id is deterministic. Return the row only when it holds this
             # fragment. Otherwise the caller must not treat the fragment as staged.
@@ -202,10 +208,10 @@ def append(uid: str, path: str, group: Publication, fragment: Publication, metad
         """Append while the group is staging. A lost precondition re-reads first."""
         for _attempt in range(_STAGING_APPEND_ATTEMPTS):
             try:
-                ref.update(merged, option=firestore.LastUpdateOption(snapshot.update_time))
+                ref.update(merged, option=firestore.LastUpdateOption(snapshot.update_time), **budget.leaf_kwargs())
             except FailedPrecondition:
                 try:
-                    snapshot = ref.get()
+                    snapshot = ref.get(**budget.leaf_kwargs())
                 except Exception as error:
                     logger.warning(
                         'event=stt_cap_live_held outcome=staged_unverified exception_type=%s',
@@ -222,7 +228,7 @@ def append(uid: str, path: str, group: Publication, fragment: Publication, metad
                 continue
             return _verified_staging(ref, merged)
         try:
-            snapshot = ref.get()
+            snapshot = ref.get(**budget.leaf_kwargs())
         except Exception as error:
             logger.warning(
                 'event=stt_cap_live_held outcome=staged_unverified exception_type=%s',
@@ -270,7 +276,7 @@ def append(uid: str, path: str, group: Publication, fragment: Publication, metad
         if part.get('id') != fragment.identity:
             return None
         with external_write_fence(uid, firestore_client=client):
-            snapshot = retry_transient_leaf(ref.get)
+            snapshot = retry_transient_leaf(budget, ref.get)
             row = snapshot.to_dict() if snapshot.exists else None
             if row and _fragment_recorded(row):
                 return row
@@ -279,7 +285,7 @@ def append(uid: str, path: str, group: Publication, fragment: Publication, metad
                 try:
                     # Deterministic id: a replay after an ambiguous create lands
                     # on AlreadyExists, which is confirmed by a read, never retried.
-                    retry_transient_leaf(ref.create, merged)
+                    retry_transient_leaf(budget, ref.create, merged)
                 except AlreadyExists:
                     current = _confirmed_fragment(ref)
                     if current is not None:
@@ -290,11 +296,11 @@ def append(uid: str, path: str, group: Publication, fragment: Publication, metad
                 return _stage_late_fragment(part, updates)
             return _append_while_staging(snapshot, merged, part, updates)
 
-    def recover(error: BaseException) -> Any:
+    def recover(error: BaseException, budget: PublicationBudget) -> Any:
         with group.lock:
             # Do not remove a fragment committed under a lost reply. Unknown
             # successful puts resolve their generation before exceptional cleanup.
-            row = retry_transient_leaf(ref.get).to_dict() or {}
+            row = retry_transient_leaf(budget, ref.get).to_dict() or {}
             if _fragment_recorded(row):
                 return row
             if is_retryable_firestore_transaction_error(error) and staged_updates is not None:
@@ -314,7 +320,7 @@ def append(uid: str, path: str, group: Publication, fragment: Publication, metad
                 record_publication_retry('source_orphaned', publication_retry_cause(error))
             return UNRECOVERED
 
-    return commit_publication(client, commit, recover=recover)
+    return commit_publication(client, commit, recover=recover, budget=budget)
 
 
 # One document per fragment. Creating it is the claim: a second seal cannot
@@ -371,7 +377,12 @@ def _counted_seconds(row: dict, parts: list[dict], claimed: list[dict]) -> float
 
 
 def _drop_unpublished_targets(
-    bucket: Any, uid: str, identity: str, part_ids: list[str], claimed_ids: list[str]
+    bucket: Any,
+    uid: str,
+    identity: str,
+    part_ids: list[str],
+    claimed_ids: list[str],
+    budget: PublicationBudget | None = None,
 ) -> None:
     """Remove composes this row published before losing fragments to another row.
 
@@ -379,24 +390,28 @@ def _drop_unpublished_targets(
     row composed names a proper superset of what it can still claim, and no
     committed manifest names it. Only this row's seal destinations are
     candidates, never a fragment source. At most 2**MAX_FRAGMENTS - 1 names.
+    Timeouts derive from the remaining budget, so a spent deadline defers this
+    garbage work to the sweep instead of stretching the flush.
     """
+    rpc_timeout = budget.attempt_timeout() if budget is not None else 10.0
     claimed = list(dict.fromkeys(claimed_ids))
     lost = [fragment_id for fragment_id in dict.fromkeys(part_ids) if fragment_id and fragment_id not in claimed]
     for size in range(1, len(lost) + 1):
         for extra in itertools.combinations(lost, size):
             target = _compose_target(bucket, uid, identity, [*claimed, *extra])
             try:
-                target.reload(timeout=10, retry=None)
+                target.reload(timeout=rpc_timeout, retry=None)
             except NotFound:
                 continue
             try:
-                target.delete(if_generation_match=target.generation, timeout=10, retry=None)
+                target.delete(if_generation_match=target.generation, timeout=rpc_timeout, retry=None)
             except (NotFound, PreconditionFailed):
                 pass
 
 
-def cleanup(uid: str, ref: Any) -> None:
-    row = ref.get(timeout=10).to_dict() or {}
+def cleanup(uid: str, ref: Any, budget: PublicationBudget | None = None) -> None:
+    rpc_timeout = budget.attempt_timeout() if budget is not None else 10.0
+    row = ref.get(timeout=rpc_timeout, retry=None).to_dict() or {}
     if not row.get('staging_cleanup') or row.get('state') in {'staging', 'sealing'}:
         return
     identity = _hold_identity(ref)
@@ -413,7 +428,7 @@ def cleanup(uid: str, ref: Any) -> None:
             continue
         if not legacy:
             try:
-                claim = _fragment_claim_ref(uid, part['id']).get(timeout=10).to_dict() or {}
+                claim = _fragment_claim_ref(uid, part['id']).get(timeout=rpc_timeout, retry=None).to_dict() or {}
             except Exception as error:
                 logger.warning(
                     'event=stt_cap_live_held outcome=cleanup_claim_unreadable exception_type=%s',
@@ -426,7 +441,9 @@ def cleanup(uid: str, ref: Any) -> None:
         if not part['audio_path'].startswith(f'chunks/{uid}/cap-held/'):
             raise ValueError('live staging cleanup owner mismatch')
         try:
-            bucket.blob(part['audio_path']).delete(if_generation_match=part['audio_generation'], timeout=10, retry=None)
+            bucket.blob(part['audio_path']).delete(
+                if_generation_match=part['audio_generation'], timeout=rpc_timeout, retry=None
+            )
         except (NotFound, PreconditionFailed):
             pass
     if unresolved:
@@ -435,7 +452,7 @@ def cleanup(uid: str, ref: Any) -> None:
     # A purged tombstone may have replaced the row while cleanup ran. Never
     # resurrect it or erase newer authority fields with a full document set.
     try:
-        ref.update({'staging_cleanup': False}, timeout=10)
+        ref.update({'staging_cleanup': False}, timeout=rpc_timeout, retry=None)
     except NotFound:
         pass
 
@@ -444,11 +461,16 @@ def seal(uid: str, identity: str, *, expired_only: bool = False) -> bool:
     client = get_firestore_client()
     ref = cap_hold.holds(uid).document(identity)
     bucket = cap_hold.get_private_cloud_sync_bucket()
+    # The redrive sweep shares this entry with the live flush but owns no
+    # socket, so its visits run on the larger recovery deadline.
+    budget = new_publication_budget(
+        RECOVERY_PUBLICATION_DEADLINE_SECONDS if expired_only else LIVE_PUBLICATION_DEADLINE_SECONDS
+    )
 
     @firestore.transactional
     def freeze(tx: Any):
         with external_write_fence(uid, firestore_client=client, transaction=tx):
-            row = ref.get(transaction=tx).to_dict() or {}
+            row = ref.get(transaction=tx, timeout=budget.attempt_timeout(), retry=None).to_dict() or {}
             if row.get('state') == 'sealing':
                 return True
             if row.get('state') != 'staging' or (expired_only and row.get('writer_until', 0) > time.time()):
@@ -457,13 +479,13 @@ def seal(uid: str, identity: str, *, expired_only: bool = False) -> bool:
             return True
 
     try:
-        if not commit_publication(client, freeze):
-            cleanup(uid, ref)
+        if not commit_publication(client, freeze, budget=budget):
+            cleanup(uid, ref, budget=budget)
             return False
     except Exception as error:
         # A staging row with parts is already in redrive custody. Raising here
         # would close the live socket with 1011 even though the audio is durable.
-        return _leave_for_redrive(error, ref)
+        return _leave_for_redrive(error, ref, budget)
 
     # Composites an earlier attempt of this row composed over fragments a later
     # attempt lost are unpublished garbage. Deleting them is up to
@@ -475,7 +497,7 @@ def seal(uid: str, identity: str, *, expired_only: bool = False) -> bool:
     def commit(tx: Any):
         nonlocal unpublished
         with external_write_fence(uid, firestore_client=client, transaction=tx):
-            row = ref.get(transaction=tx).to_dict() or {}
+            row = ref.get(transaction=tx, timeout=budget.attempt_timeout(), retry=None).to_dict() or {}
             if row.get('state') != 'sealing':
                 unpublished = None
                 return False
@@ -490,7 +512,12 @@ def seal(uid: str, identity: str, *, expired_only: bool = False) -> bool:
                 if fragment_id and fragment_id not in by_id:
                     by_id[fragment_id] = part
             holders = {
-                fragment_id: (_fragment_claim_ref(uid, fragment_id).get(transaction=tx).to_dict() or {}).get('hold_id')
+                fragment_id: (
+                    _fragment_claim_ref(uid, fragment_id)
+                    .get(transaction=tx, timeout=budget.attempt_timeout(), retry=None)
+                    .to_dict()
+                    or {}
+                ).get('hold_id')
                 for fragment_id in by_id
             }
             # Claim before compose. A fragment another row already claimed is
@@ -544,9 +571,9 @@ def seal(uid: str, identity: str, *, expired_only: bool = False) -> bool:
                 sources.append(source)
             with owner_storage_write_gate(uid, bucket):
                 try:
-                    target.compose(sources, if_generation_match=0, timeout=10, retry=None)
+                    target.compose(sources, if_generation_match=0, timeout=budget.attempt_timeout(), retry=None)
                 except PreconditionFailed:
-                    target.reload(timeout=10, retry=None)
+                    target.reload(timeout=budget.attempt_timeout(), retry=None)
             metadata = cap_hold.metadata(uid, row)
             metadata['source_frames'] = sum(part['frames'] for part in claimed)
             counted = _counted_seconds(row, parts, claimed)
@@ -588,9 +615,9 @@ def seal(uid: str, identity: str, *, expired_only: bool = False) -> bool:
     # published. Retry resolves the same immutable destination and durable row.
     # Exhausted retries leave the staging row in place for the redrive sweep.
     try:
-        result = commit_publication(client, commit)
+        result = commit_publication(client, commit, budget=budget)
     except Exception as error:
-        return _leave_for_redrive(error, ref)
+        return _leave_for_redrive(error, ref, budget)
     if unpublished is not None:
         # Post-commit cleanup, owned by the row that committed. Every candidate
         # is this hold's own compose destination — never a fragment source,
@@ -598,13 +625,13 @@ def seal(uid: str, identity: str, *, expired_only: bool = False) -> bool:
         # candidate, so a failure here can only leave garbage behind. A
         # transport fault must not close the socket over durable audio.
         try:
-            _drop_unpublished_targets(bucket, uid, identity, unpublished[0], unpublished[1])
+            _drop_unpublished_targets(bucket, uid, identity, unpublished[0], unpublished[1], budget=budget)
         except Exception as error:
             if not is_retryable_firestore_transaction_error(error):
                 raise
             logger.warning('event=stt_cap_live_held outcome=cleanup_deferred exception_type=%s', type(error).__name__)
     try:
-        cleanup(uid, ref)
+        cleanup(uid, ref, budget=budget)
     except Exception as error:
         # The staging_cleanup flag stays set, so the sweep retries this row.
         if not is_retryable_firestore_transaction_error(error):
@@ -613,12 +640,12 @@ def seal(uid: str, identity: str, *, expired_only: bool = False) -> bool:
     return result
 
 
-def _leave_for_redrive(error: BaseException, ref: Any) -> bool:
+def _leave_for_redrive(error: BaseException, ref: Any, budget: PublicationBudget) -> bool:
     """Keep the socket up only when the fragment row is already durable."""
     if not is_retryable_firestore_transaction_error(error):
         raise error
     try:
-        row = retry_transient_leaf(ref.get).to_dict() or {}
+        row = retry_transient_leaf(budget, ref.get).to_dict() or {}
     except Exception:
         raise error from None
     if row.get('state') in {'staging', 'sealing'} and row.get('stage_parts'):

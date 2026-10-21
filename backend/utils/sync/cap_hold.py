@@ -95,6 +95,7 @@ def upload_held_audio(
     *,
     immutable: bool = False,
     stored_size_limit: int | None = None,
+    rpc_timeout: float = 10.0,
 ) -> dict:
     codec = metadata.get('audio_codec')
     extension = 'opus' if codec == 'ogg_opus' else 'wav'
@@ -114,7 +115,7 @@ def upload_held_audio(
                     encrypted,
                     content_type='application/octet-stream',
                     **({'if_generation_match': 0} if immutable else {}),
-                    **({'timeout': 10, 'retry': None, 'size': encrypted_size} if codec == 'ogg_opus' else {}),
+                    **({'timeout': rpc_timeout, 'retry': None, 'size': encrypted_size} if codec == 'ogg_opus' else {}),
                 )
             except PreconditionFailed:
                 if not immutable:
@@ -122,7 +123,7 @@ def upload_held_audio(
                 # The immutable capture identity names the same plaintext;
                 # preserve the first authenticated object across upload retries.
                 if codec == 'ogg_opus':
-                    blob.reload(timeout=10, retry=None)  # Retry-only generation provenance.
+                    blob.reload(timeout=rpc_timeout, retry=None)  # Retry-only generation provenance.
                     if stored_size_limit is not None and not 32 < blob.size <= stored_size_limit + 32:
                         # An ambiguous retry accepts only this capture's own stored
                         # generation: a length outside the encoder's bound means the

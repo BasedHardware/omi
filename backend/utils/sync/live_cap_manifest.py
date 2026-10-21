@@ -11,7 +11,14 @@ from database._client import is_retryable_firestore_transaction_error, run_trans
 from database.legal_holds import external_write_fence
 from utils.observability.held_content import record_erasure
 from utils.sync import cap_hold, live_cap_codec
-from utils.sync.live_cap_publication import UNRECOVERED, Publication, commit_publication, retry_transient_leaf
+from utils.sync.live_cap_publication import (
+    LIVE_PUBLICATION_DEADLINE_SECONDS,
+    UNRECOVERED,
+    Publication,
+    commit_publication,
+    new_publication_budget,
+    retry_transient_leaf,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +33,7 @@ def _publish(uid: str, path: str, source: Publication, metadata: dict, seconds: 
     client = get_firestore_client()
     ref = cap_hold.holds(uid).document(identity)
     total = cap_hold.summary_ref(uid)
+    budget = new_publication_budget(LIVE_PUBLICATION_DEADLINE_SECONDS)
 
     @firestore.transactional
     def commit(tx: Any) -> None:
@@ -37,7 +45,7 @@ def _publish(uid: str, path: str, source: Publication, metadata: dict, seconds: 
             # A destructive writer either precedes this read (we refuse) or waits /
             # conflicts with it. Nested GCS gates reuse this exact transaction scope.
             with external_write_fence(uid, firestore_client=client, transaction=tx):
-                existing = ref.get(transaction=tx)
+                existing = ref.get(transaction=tx, timeout=budget.attempt_timeout(), retry=None)
                 prior = existing.to_dict() if existing.exists else None
                 if prior and prior.get('state') == 'purged':
                     record_erasure('post_delete_publication')
@@ -61,6 +69,7 @@ def _publish(uid: str, path: str, source: Publication, metadata: dict, seconds: 
                     metadata,
                     immutable=True,
                     stored_size_limit=live_cap_codec.MAX_OBJECT_BYTES,
+                    rpc_timeout=budget.attempt_timeout(),
                 )
                 source.fields = dict(fields)
                 body = cap_hold.hold_manifest(fields, seconds, time.time(), int(metadata['timestamp']))
@@ -85,7 +94,7 @@ def _publish(uid: str, path: str, source: Publication, metadata: dict, seconds: 
         @firestore.transactional
         def commit_recovery(tx: Any) -> bool:
             with external_write_fence(uid, firestore_client=client, transaction=tx):
-                existing = ref.get(transaction=tx)
+                existing = ref.get(transaction=tx, timeout=budget.leaf_timeout(), retry=None)
                 row = existing.to_dict() if existing.exists else None
                 if row and row.get('state') == 'purged':
                     record_erasure('post_delete_publication')
@@ -106,11 +115,13 @@ def _publish(uid: str, path: str, source: Publication, metadata: dict, seconds: 
                 return True
 
         try:
-            return bool(run_transactional(client, commit_recovery, attempts=1))
+            # One-shot by design; its reads and commit still carry the budget's
+            # confirmation slice, floored for a deadline the retries just spent.
+            return bool(run_transactional(client, commit_recovery, attempts=1, commit_timeout=budget.leaf_timeout))
         except AlreadyExists:
             return False
 
-    def recover(error: BaseException) -> Any:
+    def recover(error: BaseException, budget: Any) -> Any:
         if isinstance(error, AlreadyExists):
             # The create lost to a receipt that already exists. That receipt was
             # counted by the transaction that created it; at most its marker is
@@ -121,7 +132,7 @@ def _publish(uid: str, path: str, source: Publication, metadata: dict, seconds: 
         with source.lock:
             # A transport fault on a custody-deciding read must not turn a
             # committed receipt into a 1011; these leaves re-read idempotently.
-            snapshot = retry_transient_leaf(ref.get)
+            snapshot = retry_transient_leaf(budget, ref.get)
             row = snapshot.to_dict() if snapshot.exists else None
             if row and row.get('usage_applied'):
                 return None
@@ -144,7 +155,7 @@ def _publish(uid: str, path: str, source: Publication, metadata: dict, seconds: 
             # Exceptional path only: an upload may have succeeded before an aborted
             # commit or a deletion marker won. Never delete a committed source on a
             # lost reply, nor a replacement generation. Retain failures for retry.
-            if source.put_started and not retry_transient_leaf(ref.get).exists:
+            if source.put_started and not retry_transient_leaf(budget, ref.get).exists:
                 fields = source.fields
                 blob = cap_hold.get_private_cloud_sync_bucket().blob(
                     fields.get('audio_path') or f'chunks/{uid}/cap-held/{identity}.opus.enc'
@@ -152,13 +163,13 @@ def _publish(uid: str, path: str, source: Publication, metadata: dict, seconds: 
                 try:
                     generation = fields.get('audio_generation')
                     if not generation:
-                        retry_transient_leaf(blob.reload, timeout=10, retry=None)  # Ambiguous reply; Class B only.
+                        retry_transient_leaf(budget, blob.reload)  # Ambiguous reply; Class B only.
                         generation = blob.generation
                     if not generation:
                         raise RuntimeError('held source generation unavailable for cleanup')
-                    retry_transient_leaf(blob.delete, if_generation_match=generation)
+                    retry_transient_leaf(budget, blob.delete, if_generation_match=generation)
                 except (NotFound, PreconditionFailed):
                     pass
         return UNRECOVERED
 
-    commit_publication(client, commit, recover=recover)
+    commit_publication(client, commit, recover=recover, budget=budget)

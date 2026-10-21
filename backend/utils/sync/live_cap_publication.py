@@ -20,6 +20,74 @@ class _Unrecovered:
 
 UNRECOVERED = _Unrecovered()
 
+# The live socket stops consuming its receive queue while a publication holds
+# the sink's lock (the flush awaits the storage executor inline), and the app
+# pings every 20s and closes on a missed pong. Every part of one live
+# publication — all transaction attempts, the backoff between them, and the
+# custody-deciding leaf reads of the fallback — shares one end-to-end deadline
+# comfortably inside that heartbeat.
+LIVE_PUBLICATION_DEADLINE_SECONDS = 12.0
+# The redrive sweep shares seal() with the live path but owns no socket; its
+# deadline only bounds one sweep visit, so it stays generous.
+RECOVERY_PUBLICATION_DEADLINE_SECONDS = 60.0
+# A restart or leaf retry needs enough of the deadline left to be worth its
+# RPC budget; below this slice the fallback runs instead of another attempt.
+MIN_ATTEMPT_SECONDS = 2.0
+# The fallback's confirmation reads may outlive a spent deadline by one slice:
+# 'staged hand-off if confirmable, else 1011' needs one readable row.
+LEAF_TIMEOUT_FLOOR_SECONDS = 2.0
+# Per-RPC ceiling; individual calls shrink below it as the deadline drains.
+DEFAULT_RPC_TIMEOUT_SECONDS = 10.0
+
+
+class PublicationBudget:
+    """End-to-end wall-clock budget for one publication.
+
+    Every RPC timeout is derived from the time remaining at call time, so a
+    hung read, upload, or commit can never push the publication past its
+    deadline; restarts and leaf retries simply stop once too little is left.
+    ``clock`` is the monotonic time source (tests substitute a fake).
+    """
+
+    def __init__(self, seconds: float, clock: Callable[[], float] = time.monotonic) -> None:
+        self._expires_at = clock() + seconds
+        self._clock = clock
+
+    def remaining(self) -> float:
+        return self._expires_at - self._clock()
+
+    def expired(self) -> bool:
+        return self.remaining() <= 0
+
+    def allows_attempt(self) -> bool:
+        return self.remaining() >= MIN_ATTEMPT_SECONDS
+
+    def attempt_timeout(self, default: float = DEFAULT_RPC_TIMEOUT_SECONDS) -> float:
+        """Timeout for one RPC inside an attempt: capped by the default and by the deadline."""
+        return max(0.1, min(default, self.remaining()))
+
+    def leaf_timeout(self, default: float = DEFAULT_RPC_TIMEOUT_SECONDS) -> float:
+        """Timeout for one custody-deciding fallback read.
+
+        The confirmation slice is floored: without it, a deadline the retries
+        just spent would close the socket with 1011 even when the row that
+        confirms staging is one readable call away.
+        """
+        return min(default, max(self.remaining(), LEAF_TIMEOUT_FLOOR_SECONDS))
+
+    def leaf_kwargs(self) -> dict[str, Any]:
+        """Explicit timeout / retry for one fallback-window Firestore call."""
+        return {'timeout': self.leaf_timeout(), 'retry': None}
+
+    def clamp_sleep(self, delay: float) -> float:
+        return max(0.0, min(delay, self.remaining()))
+
+
+def new_publication_budget(seconds: float) -> PublicationBudget:
+    """Deadline constructor seam: entries build budgets through this factory."""
+    return PublicationBudget(seconds)
+
+
 # Outside ``run_transactional`` there is no restart loop, so a custody-deciding
 # recovery read or preconditioned write gets the same attempt budget here. No
 # sleep: these leaves run under a session lock the transactional path
@@ -47,24 +115,29 @@ def retry_sleep(delay: float) -> None:
     time.sleep(delay)
 
 
-def retry_transient_leaf(operation: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
+def retry_transient_leaf(budget: PublicationBudget, operation: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
     """Run one idempotent recovery leaf with a bounded transient retry.
 
     Covers the non-transactional reads and preconditioned writes that decide
     custody after ``run_transactional`` has surfaced (receipt verification,
-    staging fallback, redrive hand-off). ``AlreadyExists`` and other
-    non-transient results are never retried; a retried leaf counts
+    staging fallback, redrive hand-off). Leaf calls carry an explicit timeout
+    and ``retry=None`` derived from the budget — without them the Firestore
+    client default is a 60s timeout under a 60s retry deadline, not 10s.
+    ``AlreadyExists`` and other non-transient results are never retried, and
+    neither is anything once the deadline has drained; a retried leaf counts
     ``retried_ok`` and a spent budget counts ``exhausted`` with the failure's
     cause, so a transport fault is visible even when the transaction itself
     never restarted.
     """
+    kwargs.setdefault('timeout', budget.leaf_timeout())
+    kwargs.setdefault('retry', None)
     last_error: Exception | None = None
     for attempt in range(1, LEAF_RETRY_ATTEMPTS + 1):
         try:
             result = operation(*args, **kwargs)
         except Exception as error:
             retryable = is_retryable_firestore_transaction_error(error)
-            if attempt >= LEAF_RETRY_ATTEMPTS or not retryable:
+            if attempt >= LEAF_RETRY_ATTEMPTS or not retryable or budget.expired():
                 if retryable:
                     record_publication_retry('exhausted', publication_retry_cause(error))
                 raise
@@ -80,15 +153,19 @@ def commit_publication(
     client: Any,
     transactional_fn: Callable[..., Any],
     *,
-    recover: Callable[[BaseException], Any] | None = None,
+    budget: PublicationBudget,
+    recover: Callable[[BaseException, PublicationBudget], Any] | None = None,
 ) -> Any:
     """Run one idempotent publication transaction with bounded fresh-transaction retries.
 
     The callable must re-read before it writes. Backoff happens in
     ``run_transactional``, so the callable has to drop any session lock before
-    returning or raising. ``recover`` runs only after the error is final; return
-    ``UNRECOVERED`` to keep today's failure, or a value to treat the audio as
-    durable and let the socket stay up.
+    returning or raising. ``budget`` is the end-to-end deadline every attempt,
+    backoff sleep, and fallback leaf shares; it stops restarts early (counted
+    ``exhausted``) so the fallback still runs inside the deadline.
+    ``recover`` runs only after the error is final and receives the budget for
+    its own leaf reads; return ``UNRECOVERED`` to keep today's failure, or a
+    value to treat the audio as durable and let the socket stay up.
     """
     outcome: dict[str, str] = {}
     try:
@@ -99,13 +176,14 @@ def commit_publication(
             sleep=retry_sleep,
             random_value=random.random,
             outcome=outcome,
+            budget=budget,
         )
     except Exception as error:
         if outcome.get('status') == 'exhausted':
             record_publication_retry('exhausted', publication_retry_cause(error, outcome.get('reason')))
         if recover is None:
             raise
-        recovered = recover(error)
+        recovered = recover(error, budget)
         if recovered is UNRECOVERED:
             raise
         return recovered
