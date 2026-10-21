@@ -5,6 +5,7 @@ from pathlib import Path
 import sys
 import unittest
 from unittest.mock import patch
+from urllib.parse import parse_qs, urlsplit
 
 SCRIPTS = Path(__file__).resolve().parents[3] / "app" / "scripts"
 sys.path.insert(0, str(SCRIPTS))
@@ -14,6 +15,7 @@ import mobile_rollout_brake as brake
 class Request:
     def __init__(self, fn):
         self.fn = fn
+        self.uri = "https://androidpublisher.googleapis.com/commit?alt=json"
 
     def execute(self):
         return self.fn()
@@ -32,6 +34,9 @@ class FakePlay:
         self.pending = None
         self.mismatch = False
         self.update_mismatch = False
+        self.fraction_mismatch = False
+        self.cleanup_error = False
+        self.commit_request = None
 
     def edits(self):
         return self
@@ -46,7 +51,16 @@ class FakePlay:
     def update(self, **kw):
         self.calls.append(("update", kw))
         self.pending = copy.deepcopy(kw["body"])
-        return Request(lambda: {} if self.update_mismatch else copy.deepcopy(self.pending))
+
+        def response():
+            if self.update_mismatch:
+                return {}
+            body = copy.deepcopy(self.pending)
+            if self.fraction_mismatch:
+                body["releases"][1]["userFraction"] = 0.5
+            return body
+
+        return Request(response)
 
     def commit(self, **kw):
         self.calls.append(("commit", kw))
@@ -56,7 +70,8 @@ class FakePlay:
                 self.live = self.pending
             return {}
 
-        return Request(execute)
+        self.commit_request = Request(execute)
+        return self.commit_request
 
     def insert(self, **kw):
         self.calls.append(("insert", kw))
@@ -64,12 +79,16 @@ class FakePlay:
 
     def delete(self, **kw):
         self.calls.append(("delete", kw))
+        if self.cleanup_error:
+            raise RuntimeError("simulated cleanup failure")
         return Request(lambda: {})
 
 
 class BrakeTests(unittest.TestCase):
     def run_action(self, play, action="halt", code="1471", confirm="brake"):
-        return brake.run_brake(action, code, confirm, edit_factory=lambda: (play, "original"))
+        return brake.run_brake(
+            action, code, confirm, edit_factory=lambda: (play, "original"), quiescence_check=lambda: None
+        )
 
     def test_halt_preserves_everything_except_status_and_reads_fresh_edit(self):
         play = FakePlay()
@@ -82,6 +101,9 @@ class BrakeTests(unittest.TestCase):
         self.assertEqual(play.live, expected)
         self.assertEqual([name for name, _ in play.calls], ["get", "update", "commit", "insert", "get", "delete"])
         self.assertEqual(play.calls[-2][1]["editId"], "readback")
+        self.assertEqual(
+            parse_qs(urlsplit(play.commit_request.uri).query)["changesInReviewBehavior"], ["ERROR_IF_IN_REVIEW"]
+        )
         for _, args in play.calls:
             self.assertEqual(args["packageName"], "com.friend.ios")
             if "track" in args:
@@ -139,6 +161,61 @@ class BrakeTests(unittest.TestCase):
         with self.assertRaises(brake.BrakeError):
             self.run_action(play)
         self.assertEqual(play.calls[-1][1]["editId"], "readback")
+
+    def test_fraction_changed_by_update_response_never_commits(self):
+        play = FakePlay()
+        play.fraction_mismatch = True
+        with self.assertRaises(brake.BrakeError):
+            self.run_action(play)
+        self.assertNotIn("commit", [name for name, _ in play.calls])
+
+    def test_cleanup_failure_preserves_verified_result_and_original_error(self):
+        play = FakePlay()
+        play.cleanup_error = True
+        self.assertIn("status_after=halted", self.run_action(play))
+        with self.assertRaisesRegex(brake.BrakeError, "requires status=inProgress"):
+            self.run_action(play)
+
+    def test_country_targeted_mutation_refuses_without_stripping_fields(self):
+        play = FakePlay()
+        play.live["releases"][1]["countryTargeting"] = {"countries": ["US"]}
+        before = copy.deepcopy(play.live)
+        with self.assertRaisesRegex(brake.BrakeError, "country-targeted"):
+            self.run_action(play)
+        self.assertEqual(play.live, before)
+        self.assertEqual([name for name, _ in play.calls], ["get", "delete"])
+
+    def test_quiescence_checks_both_workflows_and_their_runs(self):
+        paths = []
+
+        def fetch(path):
+            paths.append(path)
+            return {"workflow_runs": [{"status": "completed"}]} if "/runs?" in path else {"state": "disabled_manually"}
+
+        brake.require_quiesced_writers(fetch)
+        self.assertEqual(len(paths), 4)
+        for workflow in ["mobile_rollout_watch.yml", "mobile_daily_train.yml"]:
+            self.assertIn(f"actions/workflows/{workflow}", paths)
+
+    def test_active_unknown_or_unavailable_writers_refuse(self):
+        for state in [{"state": "active"}, {}, {"state": "disabled_inactivity"}]:
+            with self.assertRaises(brake.BrakeError):
+                brake.require_quiesced_writers(lambda path: state)
+        for runs in [None, [{"status": "in_progress"}], [{"status": "queued"}], [{}]]:
+            with self.assertRaises(brake.BrakeError):
+                brake.require_quiesced_writers(
+                    lambda path: {"workflow_runs": runs} if "/runs?" in path else {"state": "disabled_manually"}
+                )
+        with self.assertRaises(brake.BrakeError):
+            brake.require_quiesced_writers(lambda path: (_ for _ in ()).throw(OSError("offline")))
+
+    def test_unquiesced_writer_never_opens_edit(self):
+        with patch.object(brake.promote, "play_edit") as factory:
+            with self.assertRaises(brake.BrakeError):
+                brake.run_brake(
+                    "halt", "1471", "brake", quiescence_check=lambda: brake.require_quiesced_writers(lambda path: {})
+                )
+            factory.assert_not_called()
 
 
 if __name__ == "__main__":
