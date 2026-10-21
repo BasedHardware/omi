@@ -15,7 +15,8 @@ users/{uid}/daily_summaries/{summary_id}
     ├── memorable_moments: List[MemorabeMoment]
     ├── stats: DayStats
     ├── tomorrow_focus: str
-    └── overall_sentiment: str
+    ├── overall_sentiment: str
+    └── notification_delivery_completed: bool (push handling acknowledged, including tokenless skip)
 
 users/{uid}/desktop_daily_usage/{date}__{client_device_id}
     ├── date/timezone/client_device_id
@@ -25,11 +26,12 @@ users/{uid}/desktop_daily_usage/{date}__{client_device_id}
 """
 
 from datetime import datetime, timezone
+from collections.abc import Mapping
 from typing import Any, Dict, List, Optional, cast
 
 from google.cloud.firestore_v1.base_query import FieldFilter
 from google.cloud import firestore
-from ._client import db
+from ._client import db, get_firestore_client
 from . import redis_db
 
 DAILY_SUMMARIES_COLLECTION = 'daily_summaries'
@@ -44,13 +46,21 @@ DESKTOP_DAILY_USAGE_COUNTER_FIELDS = (
 
 
 def upsert_desktop_daily_usage(
-    uid: str,
+    uid: object,
     date: str,
     timezone_name: str,
     client_device_id: str,
-    counters: Dict[str, int],
+    counters: Mapping[str, object],
 ) -> None:
     """Atomically merge one device's running daily counters by maximum value."""
+    # An empty uid/date/client_device_id makes a malformed doc path/id; the
+    # counters dict may legitimately omit a counter field. Reject the path
+    # inputs and read each counter with a default so neither crashes.
+    if not isinstance(uid, str) or not uid.strip():
+        raise ValueError('uid must be a non-empty string')
+    if not date or not client_device_id:
+        raise ValueError('date and client_device_id are required')
+    counters = counters or {}
     user_ref = db.collection('users').document(uid)
     usage_ref = user_ref.collection(DESKTOP_DAILY_USAGE_COLLECTION).document(f'{date}__{client_device_id}')
     transaction = db.transaction()
@@ -69,7 +79,9 @@ def upsert_desktop_daily_usage(
         for field in DESKTOP_DAILY_USAGE_COUNTER_FIELDS:
             previous = existing.get(field, 0)
             previous_value = previous if isinstance(previous, int) and not isinstance(previous, bool) else 0
-            payload[field] = max(previous_value, counters[field])
+            current = counters.get(field, 0)
+            current_value = current if isinstance(current, int) and not isinstance(current, bool) else 0
+            payload[field] = max(previous_value, current_value)
         write_transaction.set(usage_ref, payload)
 
     merge_running_totals(transaction)
@@ -207,6 +219,17 @@ def update_daily_summary(uid: str, summary_id: str, summary_data: Dict[str, Any]
     # where readers key off summary['id'].
     payload: Dict[str, Any] = {**summary_data, 'id': summary_id}
     summary_ref.set(payload)
+
+
+def mark_daily_summary_delivery_completed(uid: str, summary_id: str, *, firestore_client: Any = None) -> None:
+    """Record completed push handling independently of backfill/webhook work.
+
+    Patch only delivery metadata, preserving concurrent edits to the recap.
+    A tokenless recap also completes push handling without sending anything.
+    """
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    summary_ref = client.collection('users').document(uid).collection(DAILY_SUMMARIES_COLLECTION).document(summary_id)
+    summary_ref.update({'notification_delivery_completed': True})
 
 
 def delete_daily_summary(uid: str, summary_id: str) -> bool:

@@ -134,6 +134,7 @@ void main() {
     final provider = _providerWithPersistence(conversation, (_, __, ___) async => true);
 
     await provider.saveEditingSummarySelection(provider.getSummarySelection(), 'Edited overview');
+    await SiriIntegration.current.drainIndexForTest();
 
     expect(host.conversations['conv-1']?.summary, 'Edited overview');
   });
@@ -151,6 +152,7 @@ void main() {
     provider.setCachedConversation(conversation);
 
     expect(await provider.saveTitle('Edited title'), isTrue);
+    await SiriIntegration.current.drainIndexForTest();
     expect(host.conversations['conv-1']?.title, 'Edited title');
   });
 

@@ -1,18 +1,35 @@
 'use client';
 
-import { TranscriptSegment, Person } from '@/src/types/memory.types';
-import { avatarToneIndex, participantInitials } from '@/src/lib/shared-note.mjs';
-import { useState } from 'react';
+import { TranscriptSegment } from '@/src/types/memory.types';
+import {
+  avatarToneIndex,
+  participantInitials,
+  transcriptTimestamp,
+} from '@/src/lib/shared-note.mjs';
+import { useState, useEffect, useRef } from 'react';
 
 const PREVIEW_CHARS = 600;
 
 export default function TranscriptionSegment({
   segment,
-  people,
+  displayName,
+  sourceRequest,
 }: {
   segment: TranscriptSegment;
-  people?: Person[];
+  displayName: string;
+  sourceRequest?: { id: string; request: number } | null;
 }) {
+  const rowRef = useRef<HTMLLIElement>(null);
+  const [highlighted, setHighlighted] = useState(false);
+  useEffect(() => {
+    if (!sourceRequest) return;
+    setHighlighted(true);
+    setShowMore(true);
+    rowRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    rowRef.current?.focus({ preventScroll: true });
+    const timer = setTimeout(() => setHighlighted(false), 2500);
+    return () => clearTimeout(timer);
+  }, [sourceRequest]);
   const [showMore, setShowMore] = useState(false);
 
   const textFormatted =
@@ -21,17 +38,14 @@ export default function TranscriptionSegment({
 
   const isUser = segment.is_user;
 
-  // Get person name if available
-  const personName =
-    segment.person_id && people
-      ? people.find((p) => p.id === segment.person_id)?.name
-      : null;
-
-  const displayName = isUser ? 'Owner' : personName || `Speaker ${segment.speaker_id}`;
   const isLong = textFormatted.length > PREVIEW_CHARS;
 
   return (
-    <li className="sn-seg">
+    <li
+      ref={rowRef}
+      tabIndex={-1}
+      className={`sn-seg${highlighted ? ' sn-seg-source' : ''}`}
+    >
       <span
         className={`sn-avatar ${
           isUser ? 'sn-avatar-owner' : `sn-avatar-${avatarToneIndex(displayName)}`
@@ -41,7 +55,10 @@ export default function TranscriptionSegment({
         {participantInitials(displayName)}
       </span>
       <div style={{ minWidth: 0 }}>
-        <p className="sn-seg-name">{displayName}</p>
+        <p className="sn-seg-name">
+          {displayName}{' '}
+          <span className="sn-muted">[{transcriptTimestamp(segment.start)}]</span>
+        </p>
         <p className="sn-seg-text">
           {showMore || !isLong
             ? textFormatted

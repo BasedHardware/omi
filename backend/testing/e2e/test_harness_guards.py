@@ -38,6 +38,31 @@ def test_network_guard_blocks_external_dns_lookup():
         socket.getaddrinfo("example.com", 443)
 
 
+def test_network_guard_resolves_reserved_test_tld_hermetically():
+    """RFC 6761 reserves .test so it can never resolve on real DNS; the guard
+    answers it deterministically (no packet leaves the process) so config-time
+    validators — e.g. the developer-webhook SSRF check — stay exercisable."""
+    expected = [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("8.8.8.8", 0))]
+    assert socket.getaddrinfo("webhook.test", None) == expected
+    assert socket.getaddrinfo(b"webhook.test", None) == expected
+
+
+def test_network_guard_test_tld_answer_satisfies_public_url_validation():
+    """The synthesized .test answer must pass the webhook SSRF validator's
+    public-address class, or the route under test 400s before its logic runs."""
+    from utils.http_client import assert_public_http_url
+
+    assert assert_public_http_url("https://webhook.test/realtime") == "8.8.8.8"
+
+
+def test_network_guard_still_blocks_connect_after_test_tld_resolution():
+    """A synthesized .test resolution must not open a real-socket path: connecting
+    to the synthesized public IP still fails closed."""
+    socket.getaddrinfo("webhook.test", None)
+    with pytest.raises(AssertionError, match="blocked outbound network connection"):
+        socket.create_connection(("8.8.8.8", 443), timeout=0.1)
+
+
 def test_network_guard_blocks_external_create_connection():
     """External TCP connections should fail closed."""
     with pytest.raises(AssertionError, match="blocked outbound network connection"):

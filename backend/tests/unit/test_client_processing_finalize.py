@@ -75,6 +75,8 @@ from models.structured import Structured
 from models.transcript_segment import TranscriptSegment
 from testing.import_isolation import AutoMockModule, load_module_fresh, stub_modules
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+from tests.support.dream_firestore import DreamFirestore
+from tests.support.transcript_correction_store import install_store, target_updates, read
 from utils.conversations.transcript_hash import transcript_sha256
 import utils.managed_compute as managed_compute
 from utils.managed_compute import Decision
@@ -107,9 +109,10 @@ def _build_fakes() -> dict[str, ModuleType]:
     client_mod = ModuleType('database._client')
     client_mod.db = MagicMock(name='db')
     client_mod.get_firestore_client = lambda: client_mod.db
+    client_mod.get_data_plane_firestore_client = lambda: client_mod.db
     client_mod.document_id_from_seed = lambda seed: 'seed-id'
+    client_mod.run_transactional = MagicMock()
     add('database._client', client_mod)
-
     vector_db = add('database.vector_db', AutoMockModule('database.vector_db'))
     for attr in (
         'find_similar_memories',
@@ -181,12 +184,9 @@ def _build_fakes() -> dict[str, ModuleType]:
 
     conv_proc = ModuleType('utils.llm.conversation_processing')
     for attr in (
-        'get_transcript_structure',
         'get_app_result',
         'should_discard_conversation',
         'get_suggested_apps_for_conversation',
-        'get_reprocess_transcript_structure',
-        'extract_action_items',
         'get_conversation_notes',
         'validate_structured_source_segment_ids',
         'generate_summary_with_prompt',
@@ -309,8 +309,8 @@ def _add_conversations_fakes(fakes: dict[str, ModuleType]) -> None:
     endpoints.get_current_user_uid = _fake_get_current_user_uid
     endpoints.with_rate_limit = _fake_with_rate_limit
     endpoints.get_user = MagicMock()
+    endpoints.timeit = lambda fn: fn
     add('utils.other.endpoints', endpoints)
-
     request_validation = ModuleType('utils.request_validation')
     request_validation.NonNegativeOffset = int
     request_validation.PositiveLimit = int
@@ -434,10 +434,12 @@ def _paid_decision() -> Decision:
 
 
 def _enable_flag(monkeypatch: pytest.MonkeyPatch, pc: Any) -> None:
-    monkeypatch.setattr(pc, 'free_tier_local_processing_enabled', lambda *_: True)
+    monkeypatch.setattr(pc.funded_processing, 'enabled', lambda uid, lane=None: True)
 
 
 def _authorize(monkeypatch: pytest.MonkeyPatch, pc: Any, decision: Decision) -> None:
+    monkeypatch.setattr(pc.funded_processing, 'processing_allowed', lambda uid: decision.allowed)
+    monkeypatch.setattr(pc, 'should_defer_desktop_processing', lambda uid: not decision.allowed)
     monkeypatch.setattr(managed_compute, 'authorize_managed_compute', lambda *_args, **_kwargs: decision)
     monkeypatch.setattr(managed_compute, 'request_carries_validated_byok_key', lambda _feature: False)
 
@@ -449,24 +451,16 @@ def _spy_managed_effects(monkeypatch: pytest.MonkeyPatch, pc: Any) -> dict[str, 
         'extract_memories_inner': MagicMock(),
         'trigger_apps': MagicMock(),
         'assign_folder': MagicMock(return_value=(None, 0.0, '')),
-        'init_first_open': MagicMock(return_value=True),
-        'should_defer': MagicMock(return_value=True),
+        'should_defer': MagicMock(return_value=False),
     }
     monkeypatch.setattr(pc, '_get_structured', spies['get_structured'])
     monkeypatch.setattr(pc, 'extract_memories', spies['extract_memories'])
     monkeypatch.setattr(pc, '_extract_memories', spies['extract_memories_inner'])
     monkeypatch.setattr(pc, 'trigger_conversation_apps', spies['trigger_apps'])
     monkeypatch.setattr(pc, 'assign_conversation_to_folder', spies['assign_folder'])
-    monkeypatch.setattr(pc.conversations_db, 'initialize_first_open_work', spies['init_first_open'])
     monkeypatch.setattr(pc, 'should_defer_desktop_processing', spies['should_defer'])
     monkeypatch.setattr(pc, '_enrich_meeting_context', lambda *args, **kwargs: None)
     monkeypatch.setattr(pc, 'is_trial_paywalled', lambda *args, **kwargs: False)
-    monkeypatch.setattr(
-        pc,
-        'resolve_authorized_first_open_plan',
-        lambda **kwargs: SimpleNamespace(defer_derived_work=True),
-    )
-    monkeypatch.setattr(pc, 'record_jit_first_open', MagicMock())
     return spies
 
 
@@ -476,18 +470,20 @@ def _assert_no_managed(spies: dict[str, MagicMock]) -> None:
     spies['extract_memories_inner'].assert_not_called()
     spies['trigger_apps'].assert_not_called()
     spies['assign_folder'].assert_not_called()
-    spies['init_first_open'].assert_not_called()
 
 
 def _capture_has_projection(monkeypatch: pytest.MonkeyPatch, pc: Any) -> dict[str, Any]:
     captured: dict[str, Any] = {}
-    real = pc.resolve_free_tier_processing_plan
+    real = pc._store_budget_waiting
 
-    def wrap(**kwargs: Any):
+    def wrap(*args: Any, **kwargs: Any):
         captured.update(kwargs)
-        return real(**kwargs)
+        captured['has_projection'] = (
+            kwargs.get('client_projection') or getattr(args[1], 'client_processing', None)
+        ) is not None
+        return real(*args, **kwargs)
 
-    monkeypatch.setattr(pc, 'resolve_free_tier_processing_plan', wrap)
+    monkeypatch.setattr(pc, '_store_budget_waiting', wrap)
     return captured
 
 
@@ -632,7 +628,9 @@ def _assert_projection_on_reread(store: dict[str, Any]) -> None:
     assert reread['client_processing']['structure']['title'] == PROJECTION_TITLE
     assert store['timeline'], 'winner never wrote'
     assert store['timeline'][0] == 'admit', 'winner must stamp on the admission CAS, before coordinator persist'
-    assert 'update' not in store['timeline'], 'winner must not issue a second client_processing write'
+    assert not any(
+        'client_processing' in update for update in store['updates']
+    ), 'winner must not issue a second client_processing write'
 
 
 def _prepare_durable_finalize(monkeypatch: pytest.MonkeyPatch, conv: Any, conversation: Conversation) -> dict[str, Any]:
@@ -810,7 +808,9 @@ def test_stored_projection_alone_makes_has_projection_true(monkeypatch, stack) -
     persisted.reset_mock()
     stored = _projection(title=STORED_TITLE)
 
-    result = pc.process_conversation(_UID, 'en', _in_progress(client_processing=stored))
+    result = pc.process_conversation(
+        _UID, 'en', _in_progress(client_processing=stored).model_copy(update={'status': ConversationStatus.processing})
+    )
 
     assert captured.get('has_projection') is True
     assert result.client_processing is stored
@@ -837,7 +837,12 @@ def test_explicit_projection_beats_stored_one(monkeypatch, stack) -> None:
     stored = _projection(title=STORED_TITLE)
     explicit = _projection(title=EXPLICIT_TITLE)
 
-    result = pc.process_conversation(_UID, 'en', _in_progress(client_processing=stored), client_projection=explicit)
+    result = pc.process_conversation(
+        _UID,
+        'en',
+        _in_progress(client_processing=stored).model_copy(update={'status': ConversationStatus.processing}),
+        client_projection=explicit,
+    )
 
     assert captured.get('has_projection') is True
     assert result.client_processing is explicit
@@ -883,7 +888,9 @@ def test_durable_finalize_persists_projection_visible_as_has_projection(monkeypa
     stored = ClientProcessing.model_validate(extra['client_processing'])
     persisted = pc.lifecycle_service.persist_processed_conversation
     persisted.reset_mock()
-    result = pc.process_conversation(_UID, 'en', _in_progress(client_processing=stored))
+    result = pc.process_conversation(
+        _UID, 'en', _in_progress(client_processing=stored).model_copy(update={'status': ConversationStatus.processing})
+    )
     assert captured_plan.get('has_projection') is True
     assert result.client_processing is stored
     assert result.structured.title == _SEGMENT_TEXT
@@ -1143,10 +1150,7 @@ def _decoded_segments(payload: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def _install_text_edit_db(monkeypatch: pytest.MonkeyPatch, snapshot: dict[str, Any] | None, *, exists: bool = True):
-    ref = _TextEditRef(_TextEditSnapshot(snapshot, exists=exists))
-    monkeypatch.setattr(conversations_db, 'db', _TextEditFirestore(ref))
-    monkeypatch.setattr(conversations_db.firestore, 'transactional', lambda function: function)
-    return ref
+    return install_store(monkeypatch, _UID, _CONV_ID, snapshot if exists else None)
 
 
 def _assignable_conversation(*, with_projection: bool = True) -> Conversation:
@@ -1205,7 +1209,7 @@ def _capture_segment_write(monkeypatch: pytest.MonkeyPatch, conv: Any) -> dict[s
     return captured
 
 
-# red-proof: skip `_invalidate_client_processing` so the text write leaves client_processing attached
+# red-proof: skip `invalidate_client_processing` so the text write leaves client_processing attached
 def test_segment_text_edit_clears_projection_in_the_same_write(monkeypatch) -> None:
     snapshot = {
         'data_protection_level': 'standard',
@@ -1214,21 +1218,21 @@ def test_segment_text_edit_clears_projection_in_the_same_write(monkeypatch) -> N
         'client_processing': {'structure': {'title': PROJECTION_TITLE}},
         'structured': {'title': 'keep-title', 'overview': 'keep-overview'},
     }
-    ref = _install_text_edit_db(monkeypatch, snapshot)
+    store = _install_text_edit_db(monkeypatch, snapshot)
 
     result = conversations_db.update_conversation_segment_text(_UID, _CONV_ID, 's1', 'new text')
 
     assert result == 'ok'
-    assert len(ref.update_calls) == 1
-    payload = ref.update_calls[0]
-    assert payload['client_processing'] is conversations_db.firestore.DELETE_FIELD
-    assert payload['client_processing'] is google_firestore.DELETE_FIELD
-    assert payload['client_processing'] is not None
-    assert {segment['id']: segment['text'] for segment in _decoded_segments(payload)} == {
+    patches = target_updates(store, _UID, _CONV_ID)
+    assert len(patches) == 1
+    payload = patches[0]
+    assert 'client_processing' not in store.rows[('users', _UID, 'conversations', _CONV_ID)]
+    assert {segment['id']: segment['text'] for segment in read(store, _UID, _CONV_ID)['transcript_segments']} == {
         's1': 'new text',
         's2': 'keep',
     }
     assert 'structured' not in payload
+    assert 'transcript_segments' not in payload
 
 
 # red-proof: write structured=None alongside the clear so a no-projection doc is mutated
@@ -1239,18 +1243,21 @@ def test_segment_text_edit_without_projection_does_not_touch_other_fields(monkey
         'transcript_segments': [{'id': 's1', 'text': 'old'}],
         'structured': {'title': 'keep-title', 'overview': 'keep-overview'},
     }
-    ref = _install_text_edit_db(monkeypatch, snapshot)
+    store = _install_text_edit_db(monkeypatch, snapshot)
 
     result = conversations_db.update_conversation_segment_text(_UID, _CONV_ID, 's1', 'new text')
 
     assert result == 'ok'
-    payload = ref.update_calls[0]
-    assert payload['client_processing'] is conversations_db.firestore.DELETE_FIELD
+    payload = target_updates(store, _UID, _CONV_ID)[0]
+    assert 'client_processing' not in store.rows[('users', _UID, 'conversations', _CONV_ID)]
     assert 'structured' not in payload
-    assert {segment['id']: segment['text'] for segment in _decoded_segments(payload)} == {'s1': 'new text'}
+    assert 'transcript_segments' not in payload
+    assert {segment['id']: segment['text'] for segment in read(store, _UID, _CONV_ID)['transcript_segments']} == {
+        's1': 'new text'
+    }
 
 
-# red-proof: still call `_invalidate_client_processing` on the not-found path
+# red-proof: still call `invalidate_client_processing` on the not-found path
 def test_segment_text_edit_does_not_clear_when_mutation_does_not_write(monkeypatch) -> None:
     snapshot = {
         'data_protection_level': 'standard',
@@ -1258,15 +1265,15 @@ def test_segment_text_edit_does_not_clear_when_mutation_does_not_write(monkeypat
         'transcript_segments': [{'id': 's1', 'text': 'old'}],
         'client_processing': {'structure': {'title': PROJECTION_TITLE}},
     }
-    ref = _install_text_edit_db(monkeypatch, snapshot)
+    store = _install_text_edit_db(monkeypatch, snapshot)
 
     result = conversations_db.update_conversation_segment_text(_UID, _CONV_ID, 'missing', 'x')
 
     assert result == 'segment_not_found'
-    assert ref.update_calls == []
+    assert not store.transactions
 
 
-# red-proof: skip `_invalidate_client_processing` when the flag is set
+# red-proof: skip `invalidate_client_processing` when the flag is set
 def test_attribution_segment_write_clears_projection_in_the_same_write(monkeypatch) -> None:
     monkeypatch.setattr(conversations_db.firestore, 'transactional', lambda function: function)
     client = _SegmentWriteClient(
@@ -1971,10 +1978,7 @@ def _t1_mutation() -> dict[str, Any]:
 
 
 def _install_strict_conversation_db(monkeypatch: pytest.MonkeyPatch, snapshot: dict[str, Any]) -> StrictFirestore:
-    store = StrictFirestore({_CONV_PATH: dict(snapshot)})
-    monkeypatch.setattr(conversations_db, 'db', store)
-    monkeypatch.setattr(conversations_db.firestore, 'transactional', lambda function: function)
-    return store
+    return install_store(monkeypatch, _UID, _CONV_ID, snapshot, encode=False)
 
 
 def _row(store: StrictFirestore) -> dict[str, Any]:
@@ -2570,3 +2574,15 @@ def test_durable_winner_does_not_reread_after_outbox_commit(monkeypatch, stack) 
     assert response.conversation.client_processing.structure.title == PROJECTION_TITLE
     assert response.conversation.status == ConversationStatus.processing
     _assert_no_managed(spies)
+
+
+def test_summary_kill_switch_keeps_finalize_and_late_bind_projection_free(monkeypatch, stack):
+    _pc, conv = stack
+    monkeypatch.setenv('CLIENT_SUMMARIES_AT_CAP_ENABLED', 'false')
+    projection = _projection()
+    assert conv._accepted_client_projection(projection, [_segment()]) is None
+    bind = MagicMock(side_effect=AssertionError('kill switch accepted a new summary'))
+    monkeypatch.setattr(conv.conversations_db, 'bind_client_processing', bind)
+    existing = _in_progress()
+    assert conv._bind_late_client_projection(_UID, existing, projection) is existing
+    bind.assert_not_called()

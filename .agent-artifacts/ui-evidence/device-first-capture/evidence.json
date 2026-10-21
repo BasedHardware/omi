@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-device-first-step.png",
+      "platform": "mobile-ios",
+      "description": "Last onboarding step: device image, Connect my Omi primary, I don't have an Omi yet secondary, Skip for now tertiary",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-device-first-store.png",
+      "platform": "mobile-ios",
+      "description": "I don't have an Omi yet opens the Omi store in-app with Close",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-mobile-ios-device-first-pairing.png",
+      "platform": "mobile-ios",
+      "description": "Connect my Omi opens the pairing page",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

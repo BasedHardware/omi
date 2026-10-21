@@ -1,17 +1,6 @@
 name: Deploy Personas to Cloud Run
 
 on:
-  push:
-    branches: ["main", "development"]
-    paths:
-      - 'web/personas-open-source/**'
-      - 'config/public-build-*.json'
-      - '.github/actions/deploy-public-build/**'
-      - '.github/actions/prepare-public-build/**'
-      - '.github/actions/public-build-candidate-promotion/**'
-      - '.github/scripts/preflight_public_build_config.py'
-      - '.github/scripts/preflight_public_build_runtime.py'
-      - '.github/scripts/smoke_public_build_browser.py'
   workflow_dispatch:
     inputs:
       environment:
@@ -24,6 +13,12 @@ on:
 concurrency:
   group: deploy-cloud-run-omi-web-${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || github.ref == 'refs/heads/development' && 'development' || github.ref == 'refs/heads/main' && 'prod' || format('nondeploy-{0}', github.run_id) }}
   cancel-in-progress: false
+
+env:
+  # Abort a git HTTP transfer that stays under 1 KB/s for 60 s, so actions/checkout
+  # retries instead of hanging 7-10 min until the TCP reset (#22890).
+  GIT_HTTP_LOW_SPEED_LIMIT: "1000"
+  GIT_HTTP_LOW_SPEED_TIME: "60"
 
 jobs:
   deploy:

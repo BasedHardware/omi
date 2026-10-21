@@ -47,8 +47,10 @@ def _configure_live_wire_contract(monkeypatch: Any, pusher: ScriptedPusherPeer, 
 
     import routers.listen.runtime as listen_runtime
     import utils.pusher as pusher_client
+    import utils.stt.streaming as streaming
 
     monkeypatch.setenv('HOSTED_PARAKEET_API_URL', parakeet_api_url)
+    monkeypatch.setattr(streaming, 'stt_service_models', ('parakeet',))
     monkeypatch.setattr(listen_runtime, 'PUSHER_ENABLED', True)
     monkeypatch.setattr(pusher_client, 'PusherAPI', pusher.api_url)
 
@@ -154,6 +156,7 @@ def test_listen_pusher_wire_contract_native_happy_path_and_explicit_parakeet_rou
         assert pusher.paths[0].startswith('/v1/trigger/listen?')
         assert 'uid=123' in pusher.paths[0]
         assert 'sample_rate=8000' in pusher.paths[0]
+        assert 'audio_timeline=2' in pusher.paths[0]
         assert transcript.connection == 1
         assert transcript.payload['memory_id'] == session['conversation_id']
         assert transcript.payload['segments'][0]['id'] == 'parakeet-wire-1'

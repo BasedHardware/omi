@@ -107,7 +107,7 @@ def create_memory(
         body["category"] = category.value
     with ctx.make_client() as client:
         result = client.post("/v1/dev/user/memories", json_body=body)
-    ctx.renderer.success(f"Memory created: [bold]{result.get('id')}[/bold]")
+    ctx.renderer.success(f"Memory created: [bold]{escape(str(result.get('id')))}[/bold]")
     ctx.renderer.emit(result, title="memory")
 
 
@@ -148,7 +148,7 @@ def delete_memory(
 ) -> None:
     ctx = _ctx(typer_ctx)
     if not confirm:
-        typer.confirm(f"Delete memory {memory_id}?", abort=True)
+        typer.confirm(f"Delete memory {memory_id}?", abort=True, err=ctx.renderer.json_mode)
     with ctx.make_client() as client:
         result = client.delete(f"/v1/dev/user/memories/{path_segment(memory_id)}")
     if ctx.renderer.json_mode:

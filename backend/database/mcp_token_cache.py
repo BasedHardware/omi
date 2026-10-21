@@ -27,7 +27,7 @@ from typing import Any, Dict, List, Optional
 import database.mcp_cache_integrity as mcp_cache_integrity
 import database.redis_db as redis_db
 from config.mcp_resource_urls import mcp_resource_urls_match
-from config.mcp_scopes import MCP_FULL_ACCESS_SCOPES
+from config.mcp_scopes import MCP_SUPPORTED_SCOPES
 
 ACCESS_TOKEN_CACHE_TTL_CAP_SECONDS = 60
 LAST_USED_THROTTLE_SECONDS = 600
@@ -93,7 +93,7 @@ def _entry_is_valid(entry: object, resource: str, now: float) -> bool:
         or not entry["resource"]
         or not isinstance(scopes, list)
         or not scopes
-        or any(not isinstance(scope, str) or scope not in MCP_FULL_ACCESS_SCOPES for scope in scopes)
+        or any(not isinstance(scope, str) or scope not in MCP_SUPPORTED_SCOPES for scope in scopes)
         or not isinstance(entry.get("expires_at"), (int, float))
         or entry["expires_at"] <= now
         or not isinstance(entry.get("token_hash"), str)

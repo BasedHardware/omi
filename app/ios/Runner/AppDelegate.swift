@@ -81,6 +81,7 @@ final class QuickActionsIconPatcher: NSObject {
 
 @main
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
+  private var liveActivityManager: Any?
   private static let unusedForegroundTaskRefreshIdentifier = "com.pravera.flutter_foreground_task.refresh"
   private var methodChannel: FlutterMethodChannel?
   private var capturePolicyChannel: FlutterMethodChannel?
@@ -109,21 +110,74 @@ final class QuickActionsIconPatcher: NSObject {
   private var appleHealthChannel: FlutterMethodChannel?
   private let appleRemindersService = AppleRemindersService()
   private let appleHealthService = AppleHealthService()
+  private var deviceToolsChannel: FlutterMethodChannel?
+  private var chatVideoSampler: ChatVideoSampler?
+  private let deviceToolsService = DeviceToolsService()
   private var phoneMicController: PhoneMicController?
   private var notificationTitleOnKill: String?
   private var notificationBodyOnKill: String?
 
   var session: WCSession?
     var flutterWatchAPI: WatchRecorderFlutterAPI?
+    private var watchRecoveryFlutterAPI: BleFlutterApi?
     var rayBanMetaHostApi: RayBanMetaHostApiImpl?
-  private var audioChunks: [Int: (Data, Double)] = [:] // (audioData, sampleRate)
-  private var nextExpectedChunkIndex: Int = 0
   private var isRecordingActive: Bool = false // Track recording state to handle app restarts
+
+  private static let periodicSyncIdentifier = "com.omi.recording-sync.refresh"
+  private var periodicSyncChannel: FlutterMethodChannel?
+  private var periodicSyncReady = false
+
+  private func schedulePeriodicSync() {
+    let request = BGAppRefreshTaskRequest(identifier: Self.periodicSyncIdentifier)
+    // Earliest eligibility only. iOS decides whether and when to grant a window.
+    request.earliestBeginDate = Date(timeIntervalSinceNow: 60 * 60)
+    do {
+      try BGTaskScheduler.shared.submit(request)
+    } catch {
+      NSLog("[PeriodicSync] scheduling unavailable: %@", String(describing: error))
+    }
+  }
+
+  private func runPeriodicSync(_ task: BGTask) {
+    schedulePeriodicSync()
+    guard periodicSyncReady, let channel = periodicSyncChannel else {
+      // TODO(astra): WAL recovery is configured by the UI-isolate SyncProvider. (#5491)
+      // There is no isolated headless WAL/account bootstrap. Do not boot the
+      // ordinary app entrypoint here: it can start capture. Suspended-engine
+      // refresh is supported; a cold-process grant safely waits for foreground.
+      task.setTaskCompleted(success: false)
+      return
+    }
+    var completed = false
+    func finish(_ success: Bool) {
+      guard !completed else { return }
+      completed = true
+      task.expirationHandler = nil
+      task.setTaskCompleted(success: success)
+    }
+    task.expirationHandler = {
+      DispatchQueue.main.async {
+        guard !completed else { return }
+        channel.invokeMethod("expire", arguments: nil)
+        finish(false)
+      }
+    }
+    channel.invokeMethod("wake", arguments: nil) { result in
+      finish((result as? Bool) == true)
+    }
+  }
 
   override func application(
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
+    BGTaskScheduler.shared.register(forTaskWithIdentifier: Self.periodicSyncIdentifier, using: .main) { [weak self] task in
+      guard let self = self else {
+        task.setTaskCompleted(success: false)
+        return
+      }
+      self.runPeriodicSync(task)
+    }
     QuickActionsIconPatcher.shared.startObserving()
     SwiftFlutterForegroundTaskPlugin.setPluginRegistrantCallback { registry in
       GeneratedPluginRegistrant.register(with: registry)
@@ -145,7 +199,34 @@ final class QuickActionsIconPatcher: NSObject {
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
     let messenger = engineBridge.applicationRegistrar.messenger()
+    FlutterMethodChannel(name: "com.omi/device_health_policy", binaryMessenger: messenger).setMethodCallHandler { call, result in
+      guard call.method == "setPolicy", let args = call.arguments as? [String: Any], let epoch = args["epoch"] as? NSNumber else {
+        result(FlutterMethodNotImplemented); return
+      }
+      OmiBleManager.shared.setDeviceHealthPolicy(enabled: args["enabled"] as? Bool == true, epoch: epoch.int64Value, retire: args["retire"] as? Bool == true)
+      result(nil)
+    }
+    let syncChannel = FlutterMethodChannel(name: "com.omi/periodic_recording_sync", binaryMessenger: messenger)
+    periodicSyncChannel = syncChannel
+    syncChannel.setMethodCallHandler { [weak self] call, result in
+      guard call.method == "schedule", let self = self else {
+        result(FlutterMethodNotImplemented)
+        return
+      }
+      self.periodicSyncReady = true
+      self.schedulePeriodicSync()
+      result(nil)
+    }
     SiriBridge.shared.attach(messenger: messenger)
+    if #available(iOS 16.1, *) {
+      liveActivityManager = LiveActivityManager(messenger: messenger)
+    }
+    #if compiler(>=6.4)
+    if #available(iOS 16.0, *),
+       let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "OmiShortcutsButton") {
+      registrar.register(OmiShortcutsButtonFactory(), withId: "omi/shortcuts_button")
+    }
+    #endif
 
     ttsMp3DecoderChannel = FlutterMethodChannel(
       name: "com.omi/tts_mp3_decoder",
@@ -230,7 +311,8 @@ final class QuickActionsIconPatcher: NSObject {
           watchSession.activate()
 
             flutterWatchAPI = WatchRecorderFlutterAPI(binaryMessenger: messenger)
-            let api: WatchRecorderHostAPI = RecorderHostApiImpl(session: watchSession, flutterWatchAPI: flutterWatchAPI)
+            let api = RecorderHostApiImpl(session: watchSession, flutterWatchAPI: flutterWatchAPI)
+            api.refreshWatchAccountContext()
 
             WatchRecorderHostAPISetup.setUp(binaryMessenger: messenger, api: api)
       }
@@ -240,6 +322,7 @@ final class QuickActionsIconPatcher: NSObject {
       do {
           let messenger = messenger
           let bleFlutterApi = BleFlutterApi(binaryMessenger: messenger)
+          watchRecoveryFlutterAPI = bleFlutterApi
           OmiBleManager.shared.setFlutterApi(bleFlutterApi)
           let bleHostApi = BleHostApiImpl(bleManager: OmiBleManager.shared)
           BleHostApiSetup.setUp(binaryMessenger: messenger, api: bleHostApi)
@@ -363,11 +446,56 @@ final class QuickActionsIconPatcher: NSObject {
       self?.handleAppleHealthCall(call, result: result)
     }
 
+    // Create the on-device tool surface method channel
+    deviceToolsChannel = FlutterMethodChannel(name: "com.omi.device_tools", binaryMessenger: messenger)
+    deviceToolsChannel?.setMethodCallHandler { [weak self] (call, result) in
+      self?.deviceToolsService.handleMethodCall(call, result: result)
+    }
+
+    // Chat video attachments: sample frames + audio on device instead of uploading the clip
+    chatVideoSampler = ChatVideoSampler(messenger: messenger)
+
     // Create Speech Recognition method channel
+    _ = OnDeviceOverflowPlugin(messenger: messenger)
     let speechChannel = FlutterMethodChannel(name: "com.omi.ios/speech", binaryMessenger: messenger)
     let speechHandler = SpeechRecognitionHandler()
     speechChannel.setMethodCallHandler { (call, result) in
         speechHandler.handle(call, result: result)
+    }
+
+    // Snapshot only: no battery observer or background work. Restore monitoring
+    // so this telemetry read cannot leave UIDevice battery monitoring enabled.
+    let phoneBatteryChannel = FlutterMethodChannel(name: "com.omi/phone_battery", binaryMessenger: messenger)
+    phoneBatteryChannel.setMethodCallHandler { call, result in
+        guard call.method == "read" else {
+            result(FlutterMethodNotImplemented)
+            return
+        }
+        let device = UIDevice.current
+        let wasMonitoring = device.isBatteryMonitoringEnabled
+        device.isBatteryMonitoringEnabled = true
+        defer { device.isBatteryMonitoringEnabled = wasMonitoring }
+        let level = device.batteryLevel
+        let state = device.batteryState
+        guard level >= 0, level <= 1, state != .unknown else {
+            result(FlutterError(code: "battery_unavailable", message: "Phone battery unavailable", details: nil))
+            return
+        }
+        let thermal: String?
+        switch ProcessInfo.processInfo.thermalState {
+        case .nominal: thermal = "nominal"
+        case .fair: thermal = "fair"
+        case .serious: thermal = "serious"
+        case .critical: thermal = "critical"
+        @unknown default: thermal = nil
+        }
+        var snapshot: [String: Any] = [
+            "battery_level": Int((level * 100).rounded()),
+            "battery_charging": state == .charging || state == .full,
+            "os_battery_saver": ProcessInfo.processInfo.isLowPowerModeEnabled
+        ]
+        if let thermal { snapshot["thermal_state"] = thermal }
+        result(snapshot)
     }
 
     // TestFlight environment detection
@@ -466,7 +594,6 @@ final class QuickActionsIconPatcher: NSObject {
     } else {
       NSLog("[AppDelegate] Phone calls plugin registrar unavailable")
     }
-
   }
 
   private func endNativeSyncTransferBackgroundTask() {
@@ -624,6 +751,9 @@ final class QuickActionsIconPatcher: NSObject {
   override func applicationWillTerminate(_ application: UIApplication) {
     QuickActionsIconPatcher.shared.stopObserving()
     OmiBleManager.shared.disconnectAllPeripherals()
+    if #available(iOS 16.1, *) {
+      LiveActivityManager.endAllBeforeTermination()
+    }
 
     // If title and body are nil, then we don't need to show notification.
     guard let title = notificationTitleOnKill, let body = notificationBodyOnKill else { return }
@@ -658,53 +788,17 @@ final class QuickActionsIconPatcher: NSObject {
             return
         }
 
-        audioChunks[chunkIndex] = (audioChunk, sampleRate)
-
-        if isLast {
-            reassembleAndSendAudioData()
-        } else {
-            // Prepend 3 dummy bytes so downstream can uniformly strip headers
-            var prefixedChunk = Data([0x00, 0x00, 0x00])
-            prefixedChunk.append(audioChunk)
-            let flutterData = FlutterStandardTypedData(bytes: prefixedChunk)
-            self.flutterWatchAPI?.onAudioChunk(audioChunk: flutterData, chunkIndex: Int64(chunkIndex), isLast: isLast, sampleRate: sampleRate) { result in
-                switch result {
-                case .success:
-                    break
-                case .failure(let error):
-                    print("Audio chunk \(chunkIndex) sent to Flutter - Error: \(error.message)")
-                }
-            }
-        }
-    }
-
-    private func reassembleAndSendAudioData() {
-        // Sort chunks by index and combine them
-        let sortedChunks = audioChunks.sorted(by: { $0.key < $1.key })
-        var combinedData = Data()
-        var sampleRate: Double = 48000.0 // Default fallback
-
-        for (_, chunkTuple) in sortedChunks {
-            let (chunkData, chunkSampleRate) = chunkTuple
-            combinedData.append(chunkData)
-            sampleRate = chunkSampleRate
-        }
-
-        // Prepend 3 dummy bytes for full buffer as well
-        var prefixed = Data([0x00, 0x00, 0x00])
-        prefixed.append(combinedData)
-        let flutterData = FlutterStandardTypedData(bytes: prefixed)
-        self.flutterWatchAPI?.onAudioData(audioData: flutterData) { result in
+        // Each chunk goes straight to Flutter's capture path, the only consumer of Watch audio.
+        guard let payload = WatchAudioChunkRelay.flutterPayload(for: audioChunk) else { return }
+        let flutterData = FlutterStandardTypedData(bytes: payload)
+        self.flutterWatchAPI?.onAudioChunk(audioChunk: flutterData, chunkIndex: Int64(chunkIndex), isLast: isLast, sampleRate: sampleRate) { result in
             switch result {
             case .success:
                 break
             case .failure(let error):
-                print("Complete audio data sent to Flutter - Error: \(error.message)")
+                print("Audio chunk \(chunkIndex) sent to Flutter - Error: \(error.message)")
             }
         }
-
-        audioChunks.removeAll()
-        nextExpectedChunkIndex = 0
     }
 }
 
@@ -714,7 +808,9 @@ func registerPlugins(registry: FlutterPluginRegistry) {
 
 extension AppDelegate: WCSessionDelegate {
     
-    func session(_ session: WCSession, activationDidCompleteWith activationState: WCSessionActivationState, error: Error?) { }
+    func session(_ session: WCSession, activationDidCompleteWith activationState: WCSessionActivationState, error: Error?) {
+        if activationState == .activated { RecorderHostApiImpl(session: session).refreshWatchAccountContext() }
+    }
     
     func sessionDidBecomeInactive(_ session: WCSession) {
         print("Session Watch Become Inactive")
@@ -724,6 +820,28 @@ extension AppDelegate: WCSessionDelegate {
         print("Session Watch Deactivate")
     }
     
+    func session(_ session: WCSession, didReceive file: WCSessionFile) {
+        guard file.metadata?["method"] as? String == "watchRecordingFile",
+              let encoded = file.metadata?["recording"] as? Data,
+              let metadata = try? JSONDecoder().decode(WatchRecordingMetadata.self, from: encoded),
+              let owner = UserDefaults.standard.string(forKey: "flutter.uid"), !owner.isEmpty else { return }
+        let configuredDirectory = UserDefaults.standard.string(forKey: "flutter.batchAudioDir") ?? ""
+        let directory = configuredDirectory.isEmpty
+            ? FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].path : configuredDirectory
+        do {
+            // Must finish synchronously: WCSession removes file.fileURL on return.
+            let digest = try WatchRecordingInbox.receive(file.fileURL, metadata: metadata,
+                directory: URL(fileURLWithPath: directory, isDirectory: true), ownerUID: owner)
+            session.transferUserInfo(["method": "watchRecordingReceipt", "fileName": metadata.fileName, "digest": digest])
+            DispatchQueue.main.async {
+                self.watchRecoveryFlutterAPI?.onBatchRecordingFinalized(fileName: metadata.fileName) { _ in }
+            }
+        } catch {
+            // No receipt: the Watch retains its source and retries. Never log audio or account IDs.
+            NSLog("[WatchRecovery] File not accepted; retained on Watch")
+        }
+    }
+
     // Receive a message from watch (foreground/active)
     func session(_ session: WCSession, didReceiveMessage message: [String : Any]) {
         Task {
@@ -734,8 +852,6 @@ extension AppDelegate: WCSessionDelegate {
             switch method {
             case "startRecording":
                 self.isRecordingActive = true
-                self.audioChunks.removeAll()
-                self.nextExpectedChunkIndex = 0
                 
                 DispatchQueue.main.async {
                     self.flutterWatchAPI?.onRecordingStarted() { result in
@@ -946,6 +1062,13 @@ enum SpeechAnalyzerTranscription {
     /// Installs the model for `locale` if it is not already on the device.
     /// Concurrent callers wait on the same download.
     static func ensureModel(for locale: Locale) async throws {
+        // This app keeps one locale reservation; OS-installed assets remain OS-owned.
+        for previous in await AssetInventory.reservedLocales where previous.identifier(.bcp47) != locale.identifier(.bcp47) {
+            installTasks[previous.identifier(.bcp47)]?.cancel()
+            installTasks[previous.identifier(.bcp47)] = nil
+            _ = await AssetInventory.release(reservedLocale: previous)
+        }
+        _ = try await AssetInventory.reserve(locale: locale)
         if await isInstalled(locale) { return }
         let key = locale.identifier(.bcp47)
         let task: Task<Void, Error>
@@ -970,11 +1093,10 @@ enum SpeechAnalyzerTranscription {
 
     /// Whether transcription can run for `language`: the locale is supported
     /// and its model is installed, or finishes installing within
-    /// `installWait`. A download still running after that counts as available
-    /// too; it continues in the background and transcribe() waits for it.
-    /// Only a failed download (no network, unsupported locale) reports false.
+    /// `installWait`. A pending install continues, but reports not ready.
+    /// The caller can offer setup/retry while captured audio stays retained.
     static func isAvailable(language: String, installWait: Double = 8) async -> Bool {
-        guard let locale = await locale(for: language) else {
+        guard SpeechTranscriber.isAvailable, let locale = await locale(for: language) else {
             NSLog("[SpeechAnalyzer] no supported locale for language %@", language)
             return false
         }
@@ -982,22 +1104,21 @@ enum SpeechAnalyzerTranscription {
         return await SpeechDeadline.run(seconds: installWait, operation: {
             do {
                 try await ensureModel(for: locale)
-                return true
+                return await isInstalled(locale)
             } catch {
                 NSLog("[SpeechAnalyzer] model install failed for %@: %@", locale.identifier(.bcp47), error.localizedDescription)
                 return false
             }
         }, onTimeout: {
-            // The shared download keeps running; only this availability waiter
-            // has a deadline. A later transcription shares the same download.
-            true
+            // The shared install continues, but readiness must not claim success.
+            false
         })
     }
 
     /// Transcribes a whole audio file (the Dart side writes 16 kHz mono WAV
     /// clips) and returns the text, empty when no speech was recognized.
     static func transcribe(fileURL: URL, language: String) async throws -> String {
-        guard let locale = await locale(for: language) else {
+        guard SpeechTranscriber.isAvailable, let locale = await locale(for: language) else {
             throw TranscriptionError.unsupportedLanguage(language)
         }
         let installed: Result<Void, Error> = await SpeechDeadline.run(seconds: 20, operation: {
@@ -1048,54 +1169,76 @@ enum SpeechAnalyzerTranscription {
     }
 }
 
+private enum SpeechRecognitionFailure: Error {
+    case timedOut
+}
+
 class SpeechRecognitionHandler: NSObject {
     
     func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
-        if call.method == "transcribe" {
-            guard let args = call.arguments as? [String: Any],
-                  let path = args["filePath"] as? String else {
-                result(FlutterError(code: "INVALID_ARGS", message: "Missing arguments", details: nil))
-                return
-            }
-            
-            let language = args["language"] as? String ?? "en-US"
-            if #available(iOS 26, *) {
-                // SpeechAnalyzer needs no Dictation setting; fall back to
-                // SFSpeechRecognizer only if it cannot handle this clip.
-                Task {
-                    do {
-                        let text = try await SpeechAnalyzerTranscription.transcribe(
-                            fileURL: URL(fileURLWithPath: path), language: language)
-                        DispatchQueue.main.async { result(text) }
-                    } catch {
-                        NSLog("[SpeechAnalyzer] transcribe failed, falling back to SFSpeechRecognizer: %@", error.localizedDescription)
-                        DispatchQueue.main.async {
-                            self.transcribe(filePath: path, language: language, result: result)
-                        }
+        let args = call.arguments as? [String: Any] ?? [:]
+        let language = args["language"] as? String ?? "en-US"
+        let preferAnalyzer = args["useSpeechAnalyzer"] as? Bool != false
+        Task { @MainActor in
+            let coordinator = coordinator(language: language, path: args["filePath"] as? String)
+            switch call.method {
+            case "onDeviceAvailable", "readiness", "prepareSpeech":
+                var readiness = await coordinator.readiness(preferAnalyzer: preferAnalyzer)
+                if call.method == "prepareSpeech", readiness.status == "permission_required" {
+                    _ = await withCheckedContinuation { continuation in
+                        SFSpeechRecognizer.requestAuthorization { continuation.resume(returning: $0) }
                     }
+                    readiness = await coordinator.readiness(preferAnalyzer: preferAnalyzer)
                 }
-                return
-            }
-            transcribe(filePath: path, language: language, result: result)
-        } else if call.method == "onDeviceAvailable" {
-            let args = call.arguments as? [String: Any]
-            let language = args?["language"] as? String ?? "en-US"
-            if #available(iOS 26, *) {
-                Task {
-                    if await SpeechAnalyzerTranscription.isAvailable(language: language) {
-                        DispatchQueue.main.async { result(true) }
-                    } else {
-                        DispatchQueue.main.async {
-                            self.probeOnDeviceRecognition(language: language, result: result)
-                        }
-                    }
+                result(call.method == "onDeviceAvailable" ? readiness.ready : readiness.wire)
+            case "transcribe":
+                guard args["filePath"] is String else {
+                    result(FlutterError(code: "INVALID_ARGS", message: "Missing audio file", details: nil)); return
                 }
-                return
+                do { result(try await coordinator.transcribe(preferAnalyzer: preferAnalyzer)) }
+                catch let error as LocalSpeechUnavailable {
+                    let status = error.readiness.status
+                    result(FlutterError(code: status == "permission_required" || status == "permission_denied" ? "UNAUTHORIZED" : "UNAVAILABLE",
+                        message: "Selected local speech engine needs setup", details: error.wire))
+                } catch SpeechRecognitionFailure.timedOut {
+                    result(FlutterError(code: "RECOGNITION_TIMEOUT", message: "On-device recognition timed out", details: nil))
+                } catch {
+                    let native = error as NSError
+                    result(FlutterError(code: "RECOGNITION_ERROR", message: native.localizedDescription,
+                        details: ["nativeErrorDomain": native.domain, "nativeErrorCode": native.code]))
+                }
+            default: result(FlutterMethodNotImplemented)
             }
-            probeOnDeviceRecognition(language: language, result: result)
-        } else {
-            result(FlutterMethodNotImplemented)
         }
+    }
+
+    @MainActor
+    private func coordinator(language: String, path: String?) -> SpeechFallbackCoordinator {
+        SpeechFallbackCoordinator(analyzerReady: {
+            if #available(iOS 26, *) { return await SpeechAnalyzerTranscription.isAvailable(language: language) }
+            return false
+        }, legacyReady: {
+            let permission = SFSpeechRecognizer.authorizationStatus()
+            if permission != .authorized {
+                return LocalSpeechReadiness(engine: "sfspeech", status: permission == .notDetermined ? "permission_required" : "permission_denied")
+            }
+            let available: Bool = await withCheckedContinuation { continuation in
+                self.probeOnDeviceRecognition(language: language) { value in
+                    continuation.resume(returning: value as? Bool ?? false)
+                }
+            }
+            return LocalSpeechReadiness(engine: "sfspeech", status: available ? "ready" : "unavailable")
+        }, analyze: {
+            if #available(iOS 26, *), let path {
+                return try await SpeechAnalyzerTranscription.transcribe(fileURL: URL(fileURLWithPath: path), language: language)
+            }
+            throw LocalSpeechUnavailable(readiness: LocalSpeechReadiness(engine: "speech_analyzer", status: "unavailable"))
+        }, legacy: {
+            guard let path else { throw LocalSpeechUnavailable(readiness: LocalSpeechReadiness(engine: "sfspeech", status: "unavailable")) }
+            return try await withCheckedThrowingContinuation { continuation in
+                self.transcribe(filePath: path, language: language) { continuation.resume(with: $0) }
+            }
+        })
     }
 
     /// Resolve the app's language setting to a locale whose recognizer can run
@@ -1146,7 +1289,7 @@ class SpeechRecognitionHandler: NSObject {
             return
         }
         guard let silence = SpeechRecognitionHandler.writeSilentWav(seconds: 0.6) else {
-            result(true) // Could not build a probe clip; do not block the fallback on that.
+            result(false) // Unknown readiness is not a working recognizer.
             return
         }
 
@@ -1181,7 +1324,7 @@ class SpeechRecognitionHandler: NSObject {
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
             guard !finished else { return }
-            finish(true) // Slow but not failing; let the real request decide.
+            finish(false) // A timed-out probe cannot attest readiness.
         }
     }
 
@@ -1210,19 +1353,21 @@ class SpeechRecognitionHandler: NSObject {
         }
     }
 
-    private func transcribe(filePath: String, language: String, result: @escaping FlutterResult) {
+    private func transcribe(filePath: String, language: String, result: @escaping (Result<String, Error>) -> Void) {
         // Request authorization first
         SFSpeechRecognizer.requestAuthorization { authStatus in
             DispatchQueue.main.async {
                 if authStatus != .authorized {
-                    result(FlutterError(code: "UNAUTHORIZED", message: "Speech recognition not authorized", details: nil))
+                    result(.failure(LocalSpeechUnavailable(readiness:
+                        LocalSpeechReadiness(engine: "sfspeech", status: "permission_denied"))))
                     return
                 }
 
                 let fileUrl = URL(fileURLWithPath: filePath)
 
                 guard let recognizer = SpeechRecognitionHandler.onDeviceRecognizer(for: language) else {
-                    result(FlutterError(code: "UNAVAILABLE", message: "No on-device speech recognizer available for language \(language)", details: nil))
+                    result(.failure(LocalSpeechUnavailable(readiness:
+                        LocalSpeechReadiness(engine: "sfspeech", status: "unavailable"))))
                     return
                 }
 
@@ -1244,7 +1389,7 @@ class SpeechRecognitionHandler: NSObject {
                 var finished = false
                 var latestText = ""
                 var task: SFSpeechRecognitionTask?
-                let finish: (Any?) -> Void = { value in
+                let finish: (Result<String, Error>) -> Void = { value in
                     guard !finished else { return }
                     finished = true
                     task?.cancel()
@@ -1256,7 +1401,7 @@ class SpeechRecognitionHandler: NSObject {
                         if let recognitionResult = recognitionResult {
                             latestText = recognitionResult.bestTranscription.formattedString
                             if recognitionResult.isFinal {
-                                finish(latestText)
+                                finish(.success(latestText))
                                 return
                             }
                         }
@@ -1266,12 +1411,9 @@ class SpeechRecognitionHandler: NSObject {
                             // error is still the best answer for that clip. Only a failure that
                             // produced nothing is reported as an error.
                             if !latestText.isEmpty || (nsError.domain == "kAFAssistantErrorDomain" && nsError.code == 1110) {
-                                finish(latestText)
+                                finish(.success(latestText))
                             } else {
-                                finish(FlutterError(
-                                    code: "RECOGNITION_ERROR",
-                                    message: "\(nsError.domain) \(nsError.code): \(error.localizedDescription) (locale \(recognizer.locale.identifier))",
-                                    details: nil))
+                                finish(.failure(nsError))
                             }
                         }
                     }
@@ -1280,9 +1422,9 @@ class SpeechRecognitionHandler: NSObject {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 20) {
                     guard !finished else { return }
                     if latestText.isEmpty {
-                        finish(FlutterError(code: "RECOGNITION_TIMEOUT", message: "On-device recognition timed out", details: nil))
+                        finish(.failure(SpeechRecognitionFailure.timedOut))
                     } else {
-                        finish(latestText)
+                        finish(.success(latestText))
                     }
                 }
             }

@@ -18,7 +18,16 @@ HEAD_IDENTITY = "CHECKED_OUT_SHA=$(git rev-parse HEAD)"
 IMAGE_IDENTITY = 'IMAGE_TAG=$(git rev-parse --short=7 "$CHECKED_OUT_SHA")'
 DIAGNOSTIC = "ERROR: checked-out HEAD $CHECKED_OUT_SHA is not an ancestor of fresh origin/main"
 PERSISTED_IMAGE_IDENTITY = 'echo "IMAGE_TAG=$IMAGE_TAG" >> "$GITHUB_ENV"'
+CONTROL_CHECKOUT = (
+    "uses: actions/checkout@v7\n"
+    "        with:\n"
+    "          ref: ${{ github.workflow_sha }}\n"
+    "          path: .github/firestore-workflow\n"
+    "          persist-credentials: false"
+)
 GATEWAY_WORKFLOW = Path(".github/workflows/gcp_llm_gateway.yml")
+LISTEN_WORKFLOW = Path(".github/workflows/gcp_backend_listen_helm.yml")
+LISTEN_EXPORTER_CHECKOUT = "ref: ${{ needs.helm-upgrade.outputs.checked_out_sha }}"
 GATEWAY_RELEASE_SHA_INPUT = (
     "      release_sha:\n"
     "        description: 'Production only: exact main SHA with a successful first-attempt Release Eligibility proof'\n"
@@ -131,8 +140,12 @@ def validate(root: Path) -> list[str]:
             errors.append(f"{relative} must diagnose a rejected checked-out source identity")
         if "${GITHUB_SHA::7}" in text:
             errors.append(f"{relative} must not label built source with GITHUB_SHA")
-        if text.count("uses: actions/checkout@v7") != 1:
+        source_checkouts = text.count("uses: actions/checkout@v7") - text.count(CONTROL_CHECKOUT)
+        expected_checkouts = 2 if relative == LISTEN_WORKFLOW else 1
+        if source_checkouts != expected_checkouts:
             errors.append(f"{relative} must not check out a second source after production admission")
+        if relative == LISTEN_WORKFLOW and LISTEN_EXPORTER_CHECKOUT not in text:
+            errors.append(f"{relative} exporter job must check out the exact source admitted by helm-upgrade")
         if text.count(HEAD_IDENTITY) != 1:
             errors.append(f"{relative} must establish checked-out source identity exactly once")
         persistent_image_writes = [

@@ -585,6 +585,7 @@ def test_a_probe_dying_within_the_grace_still_rearms_through_the_seam():
         ):
             with pytest.raises(Exception, match='fallback|socket'):
                 await streaming.connect_stt_socket_with_fallback(
+                    use_config=False,
                     primary_service=STTService.modulate,
                     connect_primary=connect_and_die_within_grace,
                     connect_deepgram=AsyncMock(return_value=None),
@@ -615,12 +616,9 @@ def test_generation_guard_still_protects_in_flight_probe_bookkeeping():
     assert circuit.state == 'open', 'a stale probe must not settle a newer bench'
 
 
-def test_the_client_preflight_mirrors_the_escalated_window():
-    """``/v3/speech-profile/stt-availability`` answers through
-    ``is_stt_available`` → ``cooldown_elapsed``: mid-window it reports the
-    primary down (the client shows its upfront dialog instead of a dead
-    recorder), and the moment the (escalated) window lapses it flips true so
-    the provider stays reachable and the UI unblocks."""
+def test_the_client_preflight_delegates_admission_to_the_configured_chain():
+    """The configured chain can serve through a healthy fallback even when
+    the leading Modulate circuit is open for an escalated window."""
     now = [0.0]
     circuit = ProviderCircuitBreaker(
         failure_threshold=3,
@@ -632,9 +630,9 @@ def test_the_client_preflight_mirrors_the_escalated_window():
     with patch.object(streaming, '_modulate_circuit', circuit):
         assert streaming.is_stt_available() is True
         circuit.record_serve_failure()
-        assert streaming.is_stt_available() is False, 'mid-window the pre-flight must report the outage'
+        assert streaming.is_stt_available() is True
         now[0] = 180.0
-        assert streaming.is_stt_available() is True, 'an elapsed window must not strand the pre-flight'
+        assert streaming.is_stt_available() is True
 
 
 # ---------------------------------------------------------------------------
@@ -933,6 +931,7 @@ async def _admit_probe(circuit, *, connect_primary, grace: float = 0.02):
         patch.object(provider_resilience, 'STT_FALLBACK_LIVENESS_GRACE_SECONDS', grace),
     ):
         return await connect_stt_socket_with_fallback(
+            use_config=False,
             primary_service=STTService.modulate,
             connect_primary=connect_primary,
             connect_deepgram=AsyncMock(return_value=None),

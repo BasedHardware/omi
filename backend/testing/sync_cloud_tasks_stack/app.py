@@ -9,104 +9,71 @@ isolated Redis, Firestore, and filesystem-backed staged blobs.
 from __future__ import annotations
 
 import os
-import socket
 import time
-import uuid
 import wave
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-import google.auth
-from google.auth import credentials as google_auth_credentials
 from google.oauth2 import id_token
 from fastapi import Header, HTTPException, Request, Response
 
-from .events import write_event
-from .storage import configure_storage_dir, patch_google_storage
+# Install the no-egress guard before backend imports can instantiate a provider.
+from .isolation import LOOPBACK_HOSTS as _LOOPBACK_HOSTS, install_no_egress_guard
 
-_LOOPBACK_HOSTS = frozenset({'127.0.0.1', '::1', 'localhost', '0.0.0.0'})
-_ORIGINAL_SOCKET_CONNECT = socket.socket.connect
-_ORIGINAL_SOCKET_CONNECT_EX = socket.socket.connect_ex
-_ORIGINAL_CREATE_CONNECTION = socket.create_connection
-_ORIGINAL_GETADDRINFO = socket.getaddrinfo
+install_no_egress_guard()
+
+from .events import write_event  # noqa: E402
+from .storage import configure_storage_dir, patch_google_storage  # noqa: E402
+
+_ROLES = frozenset({'admission', 'worker', 'batch-serving'})
 
 
 def _role() -> str:
     value = os.getenv('OMI_SYNC_STACK_ROLE', '')
-    if value not in {'admission', 'worker'}:
-        raise RuntimeError('OMI_SYNC_STACK_ROLE must be admission or worker')
+    if value not in _ROLES:
+        raise RuntimeError('OMI_SYNC_STACK_ROLE must be admission, worker, or batch-serving')
     return value
 
 
 ROLE = _role()
 
 
-def _network_host(address: Any) -> str | None:
-    if isinstance(address, tuple) and address:
-        return str(address[0])
-    return None
-
-
-def _assert_loopback(address: Any) -> None:
-    host = _network_host(address)
-    if host is None or host in _LOOPBACK_HOSTS:
-        return
-    raise RuntimeError(f'Sync stack blocked outbound network connection to {host!r}')
-
-
-def _guarded_connect(sock: socket.socket, address: Any) -> Any:
-    _assert_loopback(address)
-    return _ORIGINAL_SOCKET_CONNECT(sock, address)
-
-
-def _guarded_connect_ex(sock: socket.socket, address: Any) -> int:
-    _assert_loopback(address)
-    return _ORIGINAL_SOCKET_CONNECT_EX(sock, address)
-
-
-def _guarded_create_connection(address: Any, *args: Any, **kwargs: Any) -> socket.socket:
-    _assert_loopback(address)
-    return _ORIGINAL_CREATE_CONNECTION(address, *args, **kwargs)
-
-
-def _guarded_getaddrinfo(host: Any, *args: Any, **kwargs: Any) -> Any:
-    if host is not None and str(host) not in _LOOPBACK_HOSTS:
-        raise RuntimeError(f'Sync stack blocked outbound DNS lookup for {host!r}')
-    return _ORIGINAL_GETADDRINFO(host, *args, **kwargs)
-
-
-# Install the no-egress guard before backend imports can instantiate a provider.
-socket.socket.connect = _guarded_connect
-socket.socket.connect_ex = _guarded_connect_ex
-socket.create_connection = _guarded_create_connection
-socket.getaddrinfo = _guarded_getaddrinfo
-
-
-def _anonymous_google_credentials(
-    *_args: Any, **_kwargs: Any
-) -> tuple[google_auth_credentials.AnonymousCredentials, str]:
-    project = os.getenv('GOOGLE_CLOUD_PROJECT') or os.getenv('FIREBASE_PROJECT_ID') or 'demo-omi-sync-stack'
-    return google_auth_credentials.AnonymousCredentials(), project
-
-
-# Firestore emulator traffic must never trigger ADC or metadata discovery.
-google.auth.default = _anonymous_google_credentials
-
 # ``cloud_tasks`` imports the production task helper, so load it only after
 # the no-egress guard is active.
 from .cloud_tasks import CloudTasksRecorder  # noqa: E402
+from .local_oidc import local_oidc_token  # noqa: E402
+
+
+def _local_oidc_bindings() -> set[tuple[str, str]]:
+    """(audience, identity) pairs this process's task/worker routes accept."""
+    pairs = {
+        (os.getenv('SYNC_TASKS_OIDC_AUDIENCE', ''), os.getenv('SYNC_TASKS_INVOKER_SA', '')),
+    }
+    if ROLE == 'batch-serving':
+        pairs.add(
+            (os.getenv('BATCH_PIPELINE_WORKER_AUDIENCE', ''), os.getenv('BATCH_PIPELINE_WORKER_SERVICE_ACCOUNT', ''))
+        )
+        pairs.add((os.getenv('BATCH_PIPELINE_RECOVERY_TASK_AUDIENCE', ''), os.getenv('SYNC_TASKS_INVOKER_SA', '')))
+    return {(audience, identity) for audience, identity in pairs if audience and identity}
 
 
 def _verify_local_oidc(token: str, _request: Any, *, audience: str | None = None, **_kwargs: Any) -> dict[str, Any]:
-    """Use one exact local token after the production OIDC boundary checks."""
-    expected_identity = os.getenv('SYNC_TASKS_INVOKER_SA', '')
-    expected_token = f'local-sync-oidc:{expected_identity}'
-    expected_audience = os.getenv('SYNC_TASKS_OIDC_AUDIENCE', '')
-    if not expected_identity or token != expected_token or audience != expected_audience:
-        raise ValueError('local Cloud Tasks OIDC verifier rejected the token')
-    write_event('worker', {'event': 'local_oidc_verified', 'audience': audience, 'identity_verified': True})
-    return {'email': expected_identity, 'email_verified': True}
+    """Accept one exact local token per configured audience/identity binding.
+
+    The token binds both the audience and the service-account identity, and the
+    production dependency still compares the returned identity with the route's
+    configured invoker, so a token minted for one route's audience or identity
+    is rejected by every other route.
+    """
+    for expected_audience, expected_identity in _local_oidc_bindings():
+        if audience == expected_audience and token == local_oidc_token(expected_audience, expected_identity):
+            write_event(
+                'worker' if ROLE == 'worker' else 'serving',
+                {'event': 'local_oidc_verified', 'audience': audience, 'identity_verified': True},
+            )
+            return {'email': expected_identity, 'email_verified': True}
+    raise ValueError('local Cloud Tasks OIDC verifier rejected the token')
 
 
 _storage_root = os.getenv('OMI_SYNC_STACK_STORAGE_DIR', '').strip()
@@ -116,13 +83,14 @@ configure_storage_dir(_storage_root)
 patch_google_storage()
 
 task_recorder: CloudTasksRecorder | None = None
-if ROLE == 'admission':
-    from database import conversations as conversations_db  # noqa: E402
-    from database._client import get_firestore_client  # noqa: E402
+if ROLE in {'admission', 'batch-serving'}:
     import utils.cloud_tasks as production_cloud_tasks  # noqa: E402
 
     task_recorder = CloudTasksRecorder()
     production_cloud_tasks._tasks_client = task_recorder
+if ROLE == 'admission':
+    from database import conversations as conversations_db  # noqa: E402
+    from database._client import get_firestore_client  # noqa: E402
 else:
     # ``verify_cloud_tasks_oidc`` still validates header shape, audience,
     # service-account identity, and retry count. The local seam replaces the
@@ -130,8 +98,24 @@ else:
     # validation remain a production-provider concern.
     id_token.verify_oauth2_token = _verify_local_oidc
 
+if ROLE == 'batch-serving':
+    # Replace only the paid legacy STT leaf that quarantine recovery invokes.
+    from .batch_providers import install_paid_stt_fake  # noqa: E402
+
+    install_paid_stt_fake()
+
 
 from main import app  # noqa: E402
+
+if ROLE == 'admission' and os.getenv('OMI_BATCH_STACK_POLICY_FILE'):
+    import json
+    from config.policy import BatchUnitPolicy
+    from routers import sync as _policy_sync_router
+
+    _recorded_policy = BatchUnitPolicy.from_dict(
+        json.loads(Path(os.environ['OMI_BATCH_STACK_POLICY_FILE']).read_text())
+    )
+    _policy_sync_router.resolve_batch_policy = lambda uid: _recorded_policy
 
 
 def _require_control(
@@ -148,8 +132,21 @@ def sync_stack_health() -> dict[str, str]:
     return {'status': 'ok', 'role': ROLE}
 
 
-if ROLE == 'admission':
-    assert task_recorder is not None
+if task_recorder is not None:
+    recorder = task_recorder
+
+    @app.get('/__sync-stack/tasks', include_in_schema=False)
+    def sync_stack_tasks(
+        request: Request,
+        kind: str | None = None,
+        control_token: str | None = Header(None, alias='X-Omi-Sync-Stack-Control'),
+    ) -> list[dict[str, Any]]:
+        _require_control(request, control_token)
+        # Loopback-only control data, never serialized into the evidence files.
+        return [
+            {'task_id': captured.task_id, 'kind': captured.kind, 'url': captured.url, 'body': captured.body}
+            for captured in recorder.tasks(kind)
+        ]
 
     @app.get('/__sync-stack/tasks/{task_id}', include_in_schema=False)
     def sync_stack_task(
@@ -158,11 +155,14 @@ if ROLE == 'admission':
         control_token: str | None = Header(None, alias='X-Omi-Sync-Stack-Control'),
     ) -> dict[str, Any]:
         _require_control(request, control_token)
-        captured = task_recorder.task(task_id)
+        captured = recorder.task(task_id)
         if captured is None:
             raise HTTPException(status_code=404, detail='captured task not found')
         # Loopback-only control data, never serialized into the evidence files.
         return {'task_id': captured.task_id, 'url': captured.url, 'body': captured.body}
+
+
+if ROLE == 'admission':
 
     @app.post('/__sync-stack/capture-provenance/{conversation_id}', include_in_schema=False, status_code=204)
     def sync_stack_capture_provenance(
@@ -211,7 +211,7 @@ if ROLE == 'admission':
         ).set(encoded_capture)
         return Response(status_code=204)
 
-else:
+elif ROLE == 'worker':
     from models.conversation import Conversation  # noqa: E402
     from models.conversation_enums import ConversationStatus  # noqa: E402
     from models.structured import Structured  # noqa: E402

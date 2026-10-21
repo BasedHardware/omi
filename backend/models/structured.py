@@ -3,6 +3,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import List, Literal, Optional
 
+from pydantic.json_schema import SkipJsonSchema
 from pydantic import BaseModel, Field, field_validator, model_serializer
 
 _SDK_SRC = Path(__file__).resolve().parents[2] / 'plugins' / 'omi-plugin-sdk' / 'src'
@@ -10,7 +11,17 @@ if _SDK_SRC.exists() and str(_SDK_SRC) not in sys.path:
     sys.path.insert(0, str(_SDK_SRC))
 
 try:
-    from omi_plugin_sdk.models import ActionItem, Event, Insight, MeetingType, Participant, Section, Structured
+    from omi_plugin_sdk.models import (
+        ActionItem,
+        Event,
+        Insight,
+        MeetingType,
+        NoteClaim,
+        NoteEvidenceRef,
+        Participant,
+        Section,
+        Structured,
+    )
 except ModuleNotFoundError:
     from models.conversation_enums import CategoryEnum
 
@@ -18,7 +29,7 @@ except ModuleNotFoundError:
         'interview', 'intro', 'sales', 'customer', 'one_on_one', 'team_sync', 'planning', 'demo', 'social', 'other'
     ]
 
-    _OMIT_WHEN_UNSET = ('meeting_type', 'participants', 'insights')
+    _OMIT_WHEN_UNSET = ('meeting_type', 'participants', 'insights', 'note_claims', 'title_provenance')
 
     def _drop_unset_fields(model: BaseModel, data: dict, fields: tuple) -> dict:
         for field_name in fields:
@@ -133,7 +144,28 @@ except ModuleNotFoundError:
             description='Which background source the insight draws on'
         )
 
+    class NoteEvidenceRef(BaseModel):
+        id: str
+        source_kind: str
+        time: Optional[str] = None
+        actor: Optional[str] = None
+        diarization_key: Optional[str] = None
+        source_ref: Optional[str] = None
+
+    class NoteClaim(BaseModel):
+        target: str = Field(description='JSON pointer to a visible field, e.g. /sections/0/body_markdown')
+        text: str = Field(description='Exact factual clause within that field')
+        evidence_ids: List[str] = Field(description='Smallest sufficient episode evidence IDs')
+        provenance: Literal['said', 'shown', 'written', 'inferred']
+        evidence_sources: Optional[List[NoteEvidenceRef]] = Field(
+            default=None, description='Server-authored source metadata; model may omit'
+        )
+
     class Structured(BaseModel):
+        title_provenance: SkipJsonSchema[Optional[Literal['server_minimum']]] = None
+        note_claims: Optional[List[NoteClaim]] = Field(
+            default=None, description='Episode claim provenance; absent on legacy notes'
+        )
         title: str = Field(description='A title/name for this conversation', default='')
         overview: str = Field(
             description='A brief overview of the conversation, highlighting the key details from it',
@@ -191,4 +223,14 @@ except ModuleNotFoundError:
             return result.strip()
 
 
-__all__ = ['ActionItem', 'Event', 'Insight', 'MeetingType', 'Participant', 'Section', 'Structured']
+__all__ = [
+    'ActionItem',
+    'Event',
+    'Insight',
+    'MeetingType',
+    'NoteClaim',
+    'NoteEvidenceRef',
+    'Participant',
+    'Section',
+    'Structured',
+]

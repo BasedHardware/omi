@@ -17,6 +17,12 @@ import pytest
 
 from database.document_ids import document_id_from_seed
 from utils.imports import limitless
+from utils.notification_dispatch import (
+    NotificationDispatchOutcome,
+    NotificationDispatchStatus,
+    NotificationDispatcher,
+    NotificationKind,
+)
 
 UID = "user-abc"
 FN_A = "2025-10-08_07h00m25s_Morning-standup.md"
@@ -71,7 +77,11 @@ def store(monkeypatch):
     monkeypatch.setattr(limitless.import_jobs_db, "create_import_job", MagicMock())
     monkeypatch.setattr(limitless.import_jobs_db, "update_import_job", MagicMock())
     monkeypatch.setattr(limitless.import_jobs_db, "get_import_job", MagicMock(return_value={'status': 'processing'}))
-    monkeypatch.setattr(limitless, "send_notification", MagicMock())
+    monkeypatch.setattr(
+        limitless,
+        "dispatch_notification",
+        MagicMock(return_value=NotificationDispatchOutcome(NotificationDispatchStatus.DISPATCHED)),
+    )
     return fake
 
 
@@ -149,6 +159,75 @@ def test_reimport_same_export_creates_no_duplicates(tmp_path, store):
     assert set(store.docs) == set(after_first), "re-import must not add or change document IDs"
 
 
+def test_completed_import_stays_completed_when_push_delivery_fails(tmp_path, store, monkeypatch, caplog):
+    """A transport outage must not turn a committed import into a failed job."""
+    send = MagicMock(side_effect=RuntimeError('push transport unavailable'))
+    monkeypatch.setattr(limitless, 'dispatch_notification', NotificationDispatcher(sync_delivery=send).dispatch)
+
+    _run_import(tmp_path, _zip_bytes({f"lifelogs/{FN_A}": _lifelog_md()}))
+
+    assert len(store.docs) == 1
+    updates = limitless.import_jobs_db.update_import_job.call_args_list
+    assert updates[-1].args[1]['status'] == 'completed'
+    assert send.call_count == 1
+    assert 'Limitless import notification not delivered' in caplog.text
+
+
+def test_import_notifications_keep_client_payload_and_kind(tmp_path, store):
+    _run_import(tmp_path, _zip_bytes({f"lifelogs/{FN_A}": _lifelog_md()}))
+
+    intent = limitless.dispatch_notification.call_args.args[0]
+    assert intent.kind == NotificationKind.IMPORT_JOB
+    assert intent.source == 'limitless_import'
+    assert intent.user_id == UID
+    assert intent.title == 'Limitless Import Complete! 🎉'
+    assert intent.body == 'Successfully imported 1 conversations from your Limitless data.'
+    assert intent.data == {
+        'type': 'import_complete',
+        'job_id': 'job-1',
+        'conversations_created': '1',
+        'conversations_skipped': '0',
+    }
+
+
+def test_failed_import_keeps_failure_when_push_delivery_fails(tmp_path, store, monkeypatch):
+    store.fail_ids.add(limitless.conversation_id_for_lifelog(UID, FN_A))
+    send = MagicMock(side_effect=RuntimeError('push transport unavailable'))
+    monkeypatch.setattr(limitless, 'dispatch_notification', NotificationDispatcher(sync_delivery=send).dispatch)
+
+    _run_import(tmp_path, _zip_bytes({f"lifelogs/{FN_A}": _lifelog_md()}))
+
+    updates = limitless.import_jobs_db.update_import_job.call_args_list
+    assert updates[-1].args[1]['status'] == 'failed'
+    assert send.call_count == 1
+    assert send.call_args.args[1] == 'Limitless Import Failed'
+    assert send.call_args.args[2] == (
+        f'All files failed to process. First error: Error processing lifelogs/{FN_A}: simulated firestore error'
+    )
+    assert send.call_args.args[3] == {'type': 'import_failed', 'job_id': 'job-1'}
+
+
+def test_dispatcher_exception_cannot_rewrite_completed_import(tmp_path, store, monkeypatch):
+    monkeypatch.setattr(limitless, 'dispatch_notification', MagicMock(side_effect=RuntimeError('unexpected')))
+
+    _run_import(tmp_path, _zip_bytes({f"lifelogs/{FN_A}": _lifelog_md()}))
+
+    updates = limitless.import_jobs_db.update_import_job.call_args_list
+    assert updates[-1].args[1]['status'] == 'completed'
+
+
+def test_zero_token_delivery_is_observable_without_failing_import(tmp_path, store, monkeypatch, caplog):
+    monkeypatch.setattr(
+        limitless, 'dispatch_notification', NotificationDispatcher(sync_delivery=lambda *_args: 0).dispatch
+    )
+
+    _run_import(tmp_path, _zip_bytes({f"lifelogs/{FN_A}": _lifelog_md()}))
+
+    updates = limitless.import_jobs_db.update_import_job.call_args_list
+    assert updates[-1].args[1]['status'] == 'completed'
+    assert 'delivered=0' in caplog.text
+
+
 def test_skipped_lifelog_log_does_not_include_title_slug(tmp_path, store, caplog):
     zip_data = _zip_bytes({f"lifelogs/{FN_A}": _lifelog_md()})
     _run_import(tmp_path, zip_data)
@@ -179,6 +258,39 @@ def test_distinct_lifelogs_get_distinct_ids(tmp_path, store):
     _run_import(tmp_path, zip_data)
 
     assert len(store.docs) == 2, "two different lifelogs must map to two different IDs"
+
+
+# Start of a real AppleDouble header (magic, version, "Mac OS X" filler, entry table); not UTF-8.
+APPLEDOUBLE = (
+    b"\x00\x05\x16\x07\x00\x02\x00\x00Mac OS X        \x00\x02\x00\x00\x00\x09\x00\x00\x00\x32\x00\x00\x0e\xb0"
+)
+
+
+def test_macos_archive_metadata_is_not_imported_as_lifelogs(tmp_path, store):
+    """A ZIP re-compressed in Finder carries __MACOSX/ and ._ AppleDouble entries beside the lifelogs."""
+    zip_data = _zip_bytes(
+        {
+            f"lifelogs/{FN_A}": _lifelog_md(),
+            f"lifelogs/{FN_B}": _lifelog_md("Design review."),
+            "__MACOSX/": b"",
+            "__MACOSX/lifelogs/": b"",
+            f"__MACOSX/lifelogs/._{FN_A}": APPLEDOUBLE,
+            f"__MACOSX/lifelogs/._{FN_B}": APPLEDOUBLE,
+            f"lifelogs/._{FN_A}": APPLEDOUBLE,
+        }
+    )
+
+    _run_import(tmp_path, zip_data)
+
+    assert len(store.docs) == 2
+    updates = [call.args[1] for call in limitless.import_jobs_db.update_import_job.call_args_list]
+    assert {'total_files': 2} in updates, "metadata entries must not count as lifelog files"
+    final = updates[-1]
+    assert final['status'] == 'completed'
+    assert final['error'] is None, "metadata entries must not be reported as failed files"
+    assert (final['conversations_created'], final['conversations_skipped']) == (2, 0)
+    intent = limitless.dispatch_notification.call_args.args[0]
+    assert intent.body == 'Successfully imported 2 conversations from your Limitless data.'
 
 
 def test_retitled_lifelog_is_deduped_across_imports(tmp_path, store):
@@ -318,6 +430,24 @@ def test_retry_after_partial_failure_creates_only_missing(tmp_path, store):
         limitless.conversation_id_for_lifelog(UID, FN_B),
     }
     assert store.docs[limitless.conversation_id_for_lifelog(UID, FN_B)]["transcript_segments"][0]["text"] == "ok"
+
+
+def test_macos_archive_metadata_is_not_counted_or_imported(tmp_path, store):
+    zip_data = _zip_bytes(
+        {
+            f"lifelogs/{FN_A}": _lifelog_md(),
+            f"__MACOSX/lifelogs/._{FN_A}": "\x00\x05\x16\x07not utf-8 appledouble bytes",
+            f"lifelogs/._{FN_A}": "\x00\x05\x16\x07not utf-8 appledouble bytes",
+        }
+    )
+
+    _run_import(tmp_path, zip_data)
+
+    assert len(store.docs) == 1, "only the real lifelog should be imported"
+    updates = limitless.import_jobs_db.update_import_job.call_args_list
+    total_files_updates = [u.args[1]['total_files'] for u in updates if 'total_files' in u.args[1]]
+    assert total_files_updates == [1], "macOS metadata entries must not inflate total_files"
+    assert updates[-1].args[1]['status'] == 'completed'
 
 
 def test_cancelling_an_import_stops_the_worker(store, monkeypatch, tmp_path):

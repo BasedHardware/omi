@@ -10,13 +10,134 @@ Contract fields (same mental model as desktop Swift/Rust emitters):
 from __future__ import annotations
 
 import logging
-from typing import Literal
+import math
+from dataclasses import dataclass
+from typing import Literal, TypedDict
 
 from utils.metrics import OMI_FALLBACK_TOTAL
+from utils.observability.demand_cohort import record_metric
+from utils.observability.demand_cohort import DEMAND_COHORTS, FAILURE_DETAIL, current_demand
+from utils.observability.routing_cohort import current_routing_cohort
+from utils.stt.failure_diagnostics import CONNECTION_LOSS_CAUSES
+from utils.stt.live_reason import LIVE_STT_REASONS
 
 logger = logging.getLogger(__name__)
 
 FallbackOutcome = Literal['recovered', 'degraded', 'exhausted']
+
+
+@dataclass(frozen=True)
+class ReplayLagDiagnostics:
+    """Numeric snapshot at replay-ring overflow; never contains customer content."""
+
+    capture_seconds: float
+    admitted_seconds: float
+    seconds_since_text: float
+    posts_since_anchor: int
+    empty_posts_since_anchor: int
+    post_in_flight: bool
+    empty_streak: int
+    cut_pending: bool
+    pacing_wait: bool
+    # Non-window (Soniox/Modulate) replacement legs have no POST state; they
+    # report why emitted text did not reach their VAD speech instead.
+    leg: Literal['window', 'nonwindow'] = 'window'
+    speech_unemitted_seconds: float = -1.0
+    text_segments: int = 0
+    placed_text_segments: int = 0
+    provider_output_pending: bool | None = None
+
+    def log_fields(self) -> str:
+        # Bounds apply to log values, never metric labels. -1 means no text yet.
+        def seconds(value: float) -> float:
+            return min(86400.0, max(-1.0, value)) if math.isfinite(value) else -1.0
+
+        def count(value: int) -> int:
+            return min(1000000, max(0, value))
+
+        fields = (
+            f' un_emitted_capture_seconds={seconds(self.capture_seconds):.3f}'
+            f' vad_admitted_seconds={seconds(self.admitted_seconds):.3f}'
+            f' seconds_since_text={seconds(self.seconds_since_text):.3f}'
+            f' posts_since_anchor={count(self.posts_since_anchor)}'
+            f' empty_posts_since_anchor={count(self.empty_posts_since_anchor)}'
+            f' post_in_flight={int(bool(self.post_in_flight))}'
+            f' empty_streak={count(self.empty_streak)}'
+            f' cut_pending={int(bool(self.cut_pending))}'
+            f' pacing_wait={int(bool(self.pacing_wait))}'
+        )
+        if self.leg != 'nonwindow':
+            return fields
+        pending = -1 if self.provider_output_pending is None else int(self.provider_output_pending)
+        return (
+            fields + ' leg=nonwindow'
+            f' speech_unemitted_seconds={seconds(self.speech_unemitted_seconds):.3f}'
+            f' text_segments={count(self.text_segments)}'
+            f' placed_text_segments={count(self.placed_text_segments)}'
+            f' provider_output_pending={pending}'
+        )
+
+
+@dataclass(frozen=True)
+class FirstTextDeadlineDiagnostics:
+    """Immutable numeric startup state before cancellation clears the window."""
+
+    admitted_seconds: float
+    posts: int
+    empty_posts: int
+    answered_empty_stranded_flushes: int
+    seconds_since_first_speech: float
+    episode_admitted_seconds: float
+    seconds_since_deadline_speech: float
+    answered_empty_admitted_seconds: float
+
+    def log_fields(self) -> str:
+        def seconds(value: float) -> float:
+            return min(86400.0, max(0.0, value)) if math.isfinite(value) else -1.0
+
+        def count(value: int) -> int:
+            return min(1000000, max(0, value))
+
+        return (
+            f' vad_admitted_seconds={seconds(self.admitted_seconds):.3f}'
+            f' posts={count(self.posts)}'
+            f' empty_posts={count(self.empty_posts)}'
+            f' answered_empty_stranded_flushes={count(self.answered_empty_stranded_flushes)}'
+            f' seconds_since_first_speech={seconds(self.seconds_since_first_speech):.3f}'
+            f' episode_admitted_seconds={seconds(self.episode_admitted_seconds):.3f}'
+            f' seconds_since_deadline_speech={seconds(self.seconds_since_deadline_speech):.3f}'
+            f' answered_empty_admitted_seconds={seconds(self.answered_empty_admitted_seconds):.3f}'
+        )
+
+
+class FirstTextFallbackKwargs(TypedDict, total=False):
+    first_text_diagnostics: FirstTextDeadlineDiagnostics
+
+
+def first_text_fallback_kwargs(diagnostics: FirstTextDeadlineDiagnostics | None) -> FirstTextFallbackKwargs:
+    return {} if diagnostics is None else {'first_text_diagnostics': diagnostics}
+
+
+class CapacityFallbackKwargs(TypedDict, total=False):
+    capacity_subtype: str
+    replay_diagnostics: ReplayLagDiagnostics
+
+
+class FailureFallbackKwargs(TypedDict, total=False):
+    failure_subtype: str
+
+
+def capacity_fallback_kwargs(
+    subtype: str | None, diagnostics: ReplayLagDiagnostics | None = None
+) -> CapacityFallbackKwargs:
+    """Add capacity detail only when present; other fallback calls stay unchanged."""
+    result: CapacityFallbackKwargs = {}
+    if subtype is not None:
+        result['capacity_subtype'] = subtype
+    if diagnostics is not None:
+        result['replay_diagnostics'] = diagnostics
+    return result
+
 
 FALLBACK_EVENT = 'omi_fallback_event'
 
@@ -25,15 +146,33 @@ _SAFE_LABEL_CHARS = frozenset('._:-')
 
 ALLOWED_OUTCOMES = frozenset({'recovered', 'degraded', 'exhausted'})
 
-ALLOWED_REASONS = frozenset(
+ALLOWED_REASONS = LIVE_STT_REASONS | frozenset(
     {
+        'gate_unavailable',
+        'http_error',
+        'http_429',
+        'transport_error',
+        'unavailable',
+        'unconfigured',
+        'malformed',
         'timeout',
         'provider_5xx',
         'provider_429',
         'enqueue_failed',
+        'marker_failed',
+        'enqueue_uncertain',
+        'marker_timeout',
+        'acquire_unsettled',
+        'marker_clear_failed',
+        'owner_write_failed',
+        'pre_lock_expiry',
+        'preamble_timeout',
+        'deferrals_exhausted',
         'config_incomplete',
         'circuit_open',
         'last_resort',
+        'session_excluded',
+        'recovery_budget',
         'connection_lost',
         'modulate_serve_error',
         'capability_mismatch',
@@ -45,18 +184,50 @@ ALLOWED_REASONS = frozenset(
         'byok',
         'malformed_doc',
         'capacity_full',
+        'auth_error',
+        'connection_error',
+        'first_text_deadline',
+        'empty_streak',
         'allocation_rejected',
         'private_tool_output_in_context',
         'not_authorized',
         'authorization_unavailable',
         'unmigrated_principal',
+        'document_size_limit',
+        'kept_over_80pct',
         'other',
         'none',
     }
 )
 
+# Diagnostic detail stays in the log; metric dimensions stay fixed and live
+# STT reasons share the bounded vocabulary used by cost health.
+ALLOWED_CAPACITY_SUBTYPES = frozenset({'buffer_cap', 'span_cap', 'admission', 'queue_timeout'})
+# Bounded ramp-watch reasons with their own failure-detail series.
+FAILURE_DETAIL_REASONS = frozenset({'first_text_deadline', 'capacity_full', 'replay_ring_overflow', 'gate_unavailable'})
+ALLOWED_STT_FAILURE_SUBTYPES = frozenset(
+    {
+        'initialization_failed',
+        'connection_lost',
+        'send_failed',
+        'socket_unavailable',
+        'modulate_serve_error',
+        'provider_rate_limited',
+        'soniox_idle_timeout',
+        'soniox_request_timeout',
+        'soniox_rotation',
+        'provider_5xx',
+        'capacity_full',
+        'first_text_deadline',
+        'empty_streak',
+        'soniox_invalid_hint',
+        'untyped',
+    }
+)
+
 ALLOWED_COMPONENTS = frozenset(
     {
+        'screen_task_gate',
         'sync_dispatch',
         'pusher',
         'stt_selection',
@@ -76,6 +247,7 @@ ALLOWED_COMPONENTS = frozenset(
         'firestore_read',
         'knowledge_graph',
         'agent_tools',
+        'conversation_relevance',
         'conversation_finalization',
         'conversation_notes',
         'daily_summary',
@@ -92,6 +264,12 @@ def record_fallback(
     reason: str,
     outcome: str,
     log: logging.Logger | None = None,
+    capacity_subtype: str | None = None,
+    replay_diagnostics: ReplayLagDiagnostics | None = None,
+    first_text_diagnostics: FirstTextDeadlineDiagnostics | None = None,
+    failure_subtype: str | None = None,
+    demand_cohort: str | None = None,
+    connection_cause: str | None = None,
 ) -> None:
     """Increment ``omi_fallback_total`` and emit a matching warning log.
 
@@ -115,17 +293,64 @@ def record_fallback(
     except Exception:
         pass
 
+    try:
+        demand = current_demand.get()
+        if component_label in {'stt_selection', 'stt_live_session'} and (
+            demand is not None or demand_cohort is not None
+        ):
+            if demand is not None and outcome_label == 'exhausted':
+                demand.exhausted = True
+            # An explicit cohort (the gate runs in a spawned task) beats the context var.
+            detail_cohort = (
+                demand_cohort
+                if demand_cohort in DEMAND_COHORTS
+                else (demand.cohort if demand is not None else 'ineligible')
+            )
+            record_metric(
+                FAILURE_DETAIL,
+                {
+                    'demand_cohort': detail_cohort,
+                    'reason': reason_label if reason_label in FAILURE_DETAIL_REASONS else 'other',
+                    'capacity_subtype': (
+                        (capacity_subtype if capacity_subtype in ALLOWED_CAPACITY_SUBTYPES else 'unknown')
+                        if reason_label == 'capacity_full'
+                        else 'none'
+                    ),
+                    'outcome': outcome_label,
+                },
+                1,
+            )
+    except Exception:
+        pass
+    cohort = current_routing_cohort.get()
+    if cohort is not None and component_label in {'stt_selection', 'stt_live_session'} and outcome_label == 'exhausted':
+        cohort.exhausted = True
+
     emit_log = log or logger
     try:
-        emit_log.warning(
-            '%s component=%s from=%s to=%s reason=%s outcome=%s',
-            FALLBACK_EVENT,
-            component_label,
-            from_label,
-            to_label,
-            reason_label,
-            outcome_label,
-        )
+        fields = (FALLBACK_EVENT, component_label, from_label, to_label, reason_label, outcome_label)
+        if reason_label == 'capacity_full':
+            subtype = capacity_subtype if capacity_subtype in ALLOWED_CAPACITY_SUBTYPES else 'unknown'
+            emit_log.warning('%s component=%s from=%s to=%s reason=%s outcome=%s subtype=%s', *fields, subtype)
+        elif reason_label == 'replay_ring_overflow' and replay_diagnostics is not None:
+            emit_log.warning(
+                '%s component=%s from=%s to=%s reason=%s outcome=%s%s', *fields, replay_diagnostics.log_fields()
+            )
+        elif reason_label == 'first_text_deadline' and first_text_diagnostics is not None:
+            emit_log.warning(
+                '%s component=%s from=%s to=%s reason=%s outcome=%s%s',
+                *fields,
+                first_text_diagnostics.log_fields(),
+            )
+        elif reason_label == 'other' and failure_subtype is not None:
+            subtype = failure_subtype if failure_subtype in ALLOWED_STT_FAILURE_SUBTYPES else 'unknown'
+            emit_log.warning('%s component=%s from=%s to=%s reason=%s outcome=%s subtype=%s', *fields, subtype)
+        elif reason_label == 'connection_lost' and connection_cause is not None:
+            # Log-only: the untyped connection_lost bucket gains its transport cause.
+            cause = connection_cause if connection_cause in CONNECTION_LOSS_CAUSES else 'other'
+            emit_log.warning('%s component=%s from=%s to=%s reason=%s outcome=%s cause=%s', *fields, cause)
+        else:
+            emit_log.warning('%s component=%s from=%s to=%s reason=%s outcome=%s', *fields)
     except Exception:
         pass
 
@@ -158,3 +383,59 @@ def safe_label(value: object, *, default: str = 'unknown') -> str:
         text = default
     normalized = ''.join(char if char.isalnum() or char in _SAFE_LABEL_CHARS else '_' for char in text)
     return (normalized or default)[:_LABEL_MAX_LENGTH]
+
+
+def initialize_live_stt_exhausted_children() -> None:
+    """Expose zero before the first burst so increase() can observe it."""
+    providers = ('parakeet', 'modulate', 'soniox', 'deepgram')
+    reasons = LIVE_STT_REASONS | {'auth', 'quota', 'last_resort', 'config_incomplete'}
+    for reason in sorted(reasons):
+        for provider in providers:
+            for replacement in providers:
+                OMI_FALLBACK_TOTAL.labels(
+                    component='stt_live_session',
+                    from_mode=provider,
+                    to_mode=replacement,
+                    reason=reason,
+                    outcome='exhausted',
+                )
+            OMI_FALLBACK_TOTAL.labels(
+                component='stt_live_session',
+                from_mode=provider,
+                to_mode='unavailable',
+                reason=reason,
+                outcome='exhausted',
+            )
+            OMI_FALLBACK_TOTAL.labels(
+                component='stt_selection',
+                from_mode=provider,
+                to_mode='unavailable',
+                reason=reason,
+                outcome='exhausted',
+            )
+    # Undialed selection origins report their skip (live_chain.note_skip).
+    for skip in ('session_excluded', 'recovery_budget', 'circuit_open', 'policy', 'unconfigured'):
+        for provider in providers:
+            OMI_FALLBACK_TOTAL.labels(
+                component='stt_selection',
+                from_mode=provider,
+                to_mode='unavailable',
+                reason=skip,
+                outcome='exhausted',
+            )
+
+
+def initialize_cache_write_fail_open_children() -> None:
+    """Expose zero before the first Redis cache-write fail-open so increase() can see it."""
+    for reason in ('capacity_full', 'auth_error', 'connection_error', 'timeout'):
+        OMI_FALLBACK_TOTAL.labels(
+            component='other',
+            from_mode='cache_write',
+            to_mode='skip',
+            reason=reason,
+            outcome='degraded',
+        )
+
+
+initialize_live_stt_exhausted_children()
+initialize_cache_write_fail_open_children()

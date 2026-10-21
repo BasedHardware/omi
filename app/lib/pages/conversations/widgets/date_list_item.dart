@@ -13,7 +13,7 @@ class DateListItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: EdgeInsets.fromLTRB(24, isFirst ? 0 : 20, 16, 4),
+      padding: EdgeInsets.fromLTRB(20, isFirst ? 4 : 10, 16, 0),
       child: Semantics(
         header: true,
         child: Text(

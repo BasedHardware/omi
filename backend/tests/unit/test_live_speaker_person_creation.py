@@ -45,9 +45,12 @@ class _Recorder:
         return None
 
 
-def _processor(recorder, *, owner_name=None, create_speakers=True, language=None):
+def _processor(recorder, *, owner_name=None, create_speakers=True, language=None, paid=True):
     async def resolve_owner_name():
         return owner_name
+
+    async def named_speakers_allowed():
+        return paid
 
     processor = object.__new__(transcripts.TranscriptProcessor)
     processor.suggested_segments = set()
@@ -65,6 +68,7 @@ def _processor(recorder, *, owner_name=None, create_speakers=True, language=None
             segment_assignments={},
             queue=asyncio.Queue(),
             resolve_owner_name=resolve_owner_name,
+            named_speakers_allowed=named_speakers_allowed,
         ),
         persistence=recorder,
         request=SimpleNamespace(uid='u1', create_speakers=create_speakers, speaker_auto_assign_enabled=False),
@@ -121,6 +125,30 @@ def test_copula_still_resolves_a_person_the_user_already_has():
     assert processor.host.speakers.segment_assignments == {'s1': 'person-robin'}
 
 
+def test_mixed_case_introduction_resolves_the_existing_person():
+    """People are looked up by exact name, so the detected name must keep its casing.
+
+    ``str.capitalize()`` turned "McDonald" into "Mcdonald": the lookup missed the person
+    the user already had, and the explicit introduction minted a misspelled duplicate.
+    """
+    recorder = _Recorder(existing_people={'McDonald': {'id': 'person-mcdonald', 'name': 'McDonald'}})
+    events = []
+    processor = _processor(recorder)
+    processor.host.send_event = events.append
+    _run(processor, "My name is McDonald, nice to meet you.")
+
+    assert recorder.lookups == ['McDonald']
+    assert recorder.created == []
+    assert processor.host.speakers.segment_assignments == {'s1': 'person-mcdonald'}
+    assert [event.person_name for event in events] == ['McDonald']
+
+
+def test_new_person_keeps_the_introduced_spelling():
+    recorder = _Recorder()
+    _run(_processor(recorder), "My name is DeShawn.")
+    assert [p['name'] for p in recorder.created] == ["DeShawn"]
+
+
 def test_owner_name_is_never_minted_as_a_separate_person():
     """Hearing the owner's own name produced a "David" beside "David (You)"."""
     recorder = _Recorder()
@@ -160,3 +188,15 @@ def test_owner_name_veto_uses_unicode_casefold(monkeypatch):
     _run(_processor(recorder, owner_name='Straße'), 'synthetic introduction')
     assert recorder.created == []
     assert recorder.lookups == []
+
+
+def test_free_introduction_cannot_load_or_create_named_person():
+    recorder = _Recorder()
+    events = []
+    processor = _processor(recorder, paid=False)
+    processor.host.send_event = events.append
+    _run(processor, "My name is Sam.")
+    assert recorder.created == []
+    assert recorder.lookups == []
+    # The free plan must not even receive a name suggestion for the voice.
+    assert events == []

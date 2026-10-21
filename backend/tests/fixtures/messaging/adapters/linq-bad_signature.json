@@ -1,0 +1,25 @@
+{
+  "api_version": "v3",
+  "webhook_version": "2026-02-03",
+  "event_type": "message.received",
+  "event_id": "fixture-event",
+  "created_at": "2026-10-10T02:00:00Z",
+  "data": {
+    "id": "fixture-message",
+    "chat": {
+      "id": "fixture-chat",
+      "is_group": false
+    },
+    "direction": "inbound",
+    "sender_handle": {
+      "handle": "+12025550101",
+      "is_me": false
+    },
+    "parts": [
+      {
+        "type": "text",
+        "value": "hello"
+      }
+    ]
+  }
+}

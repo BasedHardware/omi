@@ -4,7 +4,10 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:omi/pages/phone_calls/phone_calls_feature.dart';
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/env/env.dart';
 import 'package:omi/models/subscription.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/settings/settings_drawer.dart';
@@ -14,6 +17,7 @@ import 'package:omi/providers/appearance_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/ui/ui.dart';
+import 'package:omi/utils/platform/platform_manager.dart';
 
 /// The smaller Settings top level (2026-09-24): Account, Plan & Usage, Referral Program, the
 /// five settings groups, Help & About, Feedback and Developer Settings. Nothing became unreachable:
@@ -24,8 +28,25 @@ import 'package:omi/ui/ui.dart';
 /// which rows each page draws. Depth = taps from the open sheet to see the row.
 
 class _Device extends ChangeNotifier implements DeviceProvider {
+  _Device({this.connected = true, this.paired, this.persistedPairing = false});
+
+  final bool connected;
+
+  /// What the provider remembers across a drop; null means nothing remembered.
+  final BtDevice? paired;
+
+  /// The persisted pairing in SharedPreferences, present on a cold start before the provider
+  /// hydrates [paired] on the connect path.
+  final bool persistedPairing;
+
   @override
-  bool get isConnected => true;
+  bool get isConnected => connected;
+
+  @override
+  bool get hasRememberedDevice => paired?.id.isNotEmpty ?? persistedPairing;
+
+  @override
+  BtDevice? get pairedDevice => paired;
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
@@ -47,17 +68,42 @@ class _Capture extends ChangeNotifier implements CaptureProvider {
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
+class _TestEnvFields implements EnvFields {
+  @override
+  String? get posthogApiKey => null;
+  @override
+  String? get apiBaseUrl => 'http://127.0.0.1:1/';
+  @override
+  String? get intercomAppId => null;
+  @override
+  String? get intercomIOSApiKey => null;
+  @override
+  String? get intercomAndroidApiKey => null;
+  @override
+  String? get googleClientId => null;
+  @override
+  String? get googleClientSecret => null;
+  @override
+  bool? get useWebAuth => false;
+  @override
+  bool? get useAuthCustomToken => false;
+}
+
 /// The top-level rows that open a page of rows, and that page's widget key.
 const _pagesOfRows = {
   'settings_account': 'settings_page_account',
   'settings_group_device': 'settings_page_device',
   'settings_group_recording': 'settings_page_recording',
+  'settings_group_voice': 'settings_page_voice',
   'settings_group_notifications': 'settings_page_notifications',
   'settings_group_privacy': 'settings_page_privacy',
   'settings_group_help': 'settings_page_help',
 };
 
-String? _keyOf(Widget widget) => switch (widget.key) { ValueKey<String>(:final value) => value, _ => null };
+String? _keyOf(Widget widget) => switch (widget.key) {
+      ValueKey<String>(:final value) => value,
+      _ => null,
+    };
 
 List<OmiSettingsRow> _rowsOnScreen(WidgetTester tester) =>
     tester.widgetList<OmiSettingsRow>(find.byType(OmiSettingsRow)).toList();
@@ -65,8 +111,19 @@ List<OmiSettingsRow> _rowsOnScreen(WidgetTester tester) =>
 void main() {
   final en = lookupAppLocalizations(const Locale('en'));
 
+  setUpAll(() {
+    try {
+      Env.init(_TestEnvFields());
+    } catch (_) {}
+  });
+
   setUp(() async {
-    SharedPreferences.setMockInitialValues({'givenName': 'Ada', 'email': 'ada@example.com', 'uid': 'uid-1234567'});
+    SharedPreferences.setMockInitialValues({
+      'givenName': 'Ada',
+      'email': 'ada@example.com',
+      'uid': 'uid-1234567',
+      'deviceIdHash': 'test-device-hash',
+    });
     await SharedPreferencesUtil.init();
     PackageInfo.setMockInitialValues(
       appName: 'Omi',
@@ -75,16 +132,17 @@ void main() {
       buildNumber: '1',
       buildSignature: '',
     );
+    await PlatformManager.initializeServices();
   });
 
-  Future<void> pumpSheet(WidgetTester tester) async {
+  Future<void> pumpSheet(WidgetTester tester, {DeviceProvider? device}) async {
     tester.view.physicalSize = const Size(1200, 4000);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     await tester.pumpWidget(
       MultiProvider(
         providers: [
-          ChangeNotifierProvider<DeviceProvider>(create: (_) => _Device()),
+          ChangeNotifierProvider<DeviceProvider>(create: (_) => device ?? _Device()),
           ChangeNotifierProvider<UsageProvider>(create: (_) => _Usage()),
           ChangeNotifierProvider<CaptureProvider>(create: (_) => _Capture()),
           ChangeNotifierProvider<AppearanceProvider>(create: (_) => AppearanceProvider()),
@@ -100,8 +158,11 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('the sheet is Account, Plan, Referral, the groups and Feedback, in order, and every row is keyed',
-      (tester) async {
+  testWidgets(
+      'the sheet is Account, Plan, Referral, the groups, Connect an Agent, Memories, Goals and Feedback, in order, keyed',
+      (
+    tester,
+  ) async {
     await pumpSheet(tester);
     final rows = _rowsOnScreen(tester);
     expect(rows.map(_keyOf).toList(), [
@@ -110,9 +171,13 @@ void main() {
       'settings_row_referral',
       'settings_group_device',
       'settings_group_recording',
+      'settings_group_voice',
       'settings_group_notifications',
       'settings_group_integrations',
+      'settings_row_connect_agent',
       'settings_group_privacy',
+      'settings_row_memories',
+      'settings_row_goals',
       'settings_group_help',
       'settings_row_feedback', // where Intercom is supported (the host test is)
       'settings_group_developer',
@@ -125,9 +190,13 @@ void main() {
       en.referralProgram,
       en.device,
       en.recordingAndTranscription,
+      en.assistantVoiceSettingsTitle,
       en.notificationsAndDisplay,
       en.integrations,
+      en.connectAnAgent,
       en.dataAndPrivacy,
+      en.memories,
+      en.goals,
       en.helpAndAbout,
       en.feedbackBug,
       en.developerSettings,
@@ -137,8 +206,9 @@ void main() {
     expect(find.bySemanticsLabel(en.search), findsOneWidget);
   });
 
-  testWidgets('every row that was on the sheet or on Profile is still reachable at the same depth or less',
-      (tester) async {
+  testWidgets('every row that was on the sheet or on Profile is still reachable at the same depth or less', (
+    tester,
+  ) async {
     await pumpSheet(tester);
 
     // Depth 0: the sheet itself.
@@ -172,19 +242,24 @@ void main() {
       SettingsDestination.profile: 'settings_account',
       SettingsDestination.integrations: 'settings_group_integrations',
       SettingsDestination.developer: 'settings_group_developer',
+      // Connect an Agent joined the sheet (2026-10-14) so agent setup is not buried in Developer.
+      SettingsDestination.connectAgent: 'settings_row_connect_agent',
       SettingsDestination.planAndUsage: 'settings_row_planAndUsage',
       SettingsDestination.referral: 'settings_row_referral',
       SettingsDestination.feedback: 'settings_row_feedback', // where Intercom is supported (the host test is)
+      SettingsDestination.voice: 'settings_group_voice',
+      // Memories and Goals moved onto the sheet when they left the Home tabs (2026-09-29).
+      SettingsDestination.memories: 'settings_row_memories',
+      SettingsDestination.goals: 'settings_row_goals',
     };
-    const movedOffSheet = [
+    final movedOffSheet = [
       SettingsDestination.notifications,
       SettingsDestination.device, // only while connected; the stub is connected
       SettingsDestination.transcription,
       SettingsDestination.conversationDisplay,
       SettingsDestination.conversationTimeout,
       SettingsDestination.offlineSync,
-      SettingsDestination.phoneCalls,
-      SettingsDestination.homeScreen,
+      if (PhoneCallsFeature.visible) SettingsDestination.phoneCalls,
       SettingsDestination.dataPrivacy,
       SettingsDestination.exportData,
       SettingsDestination.importData,
@@ -204,7 +279,6 @@ void main() {
     const wasOnProfile = [
       SettingsDestination.language,
       SettingsDestination.customVocabulary,
-      SettingsDestination.memories,
       SettingsDestination.voiceProfile,
       SettingsDestination.people,
       SettingsDestination.deleteAccount,
@@ -219,7 +293,6 @@ void main() {
       en.email,
       en.language,
       en.customVocabulary,
-      en.memories,
       en.speechProfile,
       en.identifyingOthers,
       en.voiceResponseMode,
@@ -244,6 +317,8 @@ void main() {
       SettingsDestination.notificationsGroup,
       SettingsDestination.privacyGroup,
       SettingsDestination.helpGroup,
+      // Hidden for now (PhoneCallsFeature.visible); the destination stays wired for when it returns.
+      if (!PhoneCallsFeature.visible) SettingsDestination.phoneCalls,
     };
     expect(covered, SettingsDestination.values.toSet(), reason: 'a destination is missing from this walk');
 
@@ -254,14 +329,13 @@ void main() {
     expect(background.rowFile, 'lib/pages/settings/settings_groups.dart');
 
     // Pages hold what the brief says, in order.
-    expect(pageTitles['settings_page_account'], [
-      en.name,
-      en.email,
-      en.userId,
-      en.signOut,
-      en.deleteAccountTitle,
+    expect(pageTitles['settings_page_account'], [en.name, en.email, en.userId, en.signOut, en.deleteAccountTitle]);
+    expect(pageTitles['settings_page_device'], [
+      en.deviceSettings,
+      en.offlineSync,
+      if (PhoneCallsFeature.visible) en.phoneCalls,
+      en.permissions,
     ]);
-    expect(pageTitles['settings_page_device'], [en.deviceSettings, en.offlineSync, en.phoneCalls, en.permissions]);
     expect(pageTitles['settings_page_recording'], [
       en.transcription,
       en.language,
@@ -272,18 +346,8 @@ void main() {
       en.conversationTimeout,
       en.transcribeLaterTitle,
     ]);
-    expect(pageTitles['settings_page_notifications'], [
-      en.notifications,
-      en.homeScreen,
-      en.conversationDisplay,
-      en.appearance,
-    ]);
-    expect(pageTitles['settings_page_privacy'], [
-      en.dataProtection,
-      en.memories,
-      en.exportAllData,
-      en.importData,
-    ]);
+    expect(pageTitles['settings_page_notifications'], [en.notifications, en.conversationDisplay, en.appearance]);
+    expect(pageTitles['settings_page_privacy'], [en.dataProtection, en.exportAllData, en.importData]);
     expect(pageTitles['settings_page_help'], [en.helpCenter, en.whatsNew]);
   });
 
@@ -295,6 +359,51 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(OmiSettingsRow, en.voiceResponseMode));
     await tester.pumpAndSettle();
-    expect(find.byKey(const ValueKey('settings_page_recording')), findsOneWidget);
+    expect(find.byKey(const ValueKey('settings_page_voice')), findsOneWidget);
+  });
+
+  testWidgets('Device Settings stays reachable from the Device group after the pendant drops', (tester) async {
+    // The flagged scenario: nothing is connected, but the app remembers the pendant, so the
+    // Diagnostics row inside Device Settings must stay reachable through Settings → Device.
+    await pumpSheet(
+      tester,
+      device: _Device(
+        connected: false,
+        paired: BtDevice(id: 'pendant-1', name: 'Omi', type: DeviceType.omi, rssi: -60),
+      ),
+    );
+
+    await tester.tap(find.byKey(const ValueKey('settings_group_device')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('settings_page_device')), findsOneWidget);
+    expect(find.byKey(const ValueKey('settings_row_device')), findsOneWidget);
+    expect(find.text(en.deviceSettings), findsOneWidget);
+  });
+
+  testWidgets('with no remembered device, the Device group hides Device Settings', (tester) async {
+    await pumpSheet(tester, device: _Device(connected: false));
+
+    await tester.tap(find.byKey(const ValueKey('settings_group_device')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('settings_row_device')), findsNothing);
+  });
+
+  testWidgets('a cold start with only the persisted pairing still shows the Device Settings row', (tester) async {
+    // pairedDevice is null until the connect path hydrates it; the persisted pairing in
+    // SharedPreferences must keep the row reachable meanwhile.
+    await pumpSheet(tester, device: _Device(connected: false, persistedPairing: true));
+
+    await tester.tap(find.byKey(const ValueKey('settings_group_device')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('settings_row_device')), findsOneWidget);
+
+    // Search follows the same rule: the page is findable, its live-link rows are not.
+    await tester.tap(find.byType(OmiBackButton));
+    await tester.pumpAndSettle();
+    await tester.tap(find.bySemanticsLabel(en.search));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), en.deviceSettings);
+    await tester.pumpAndSettle();
+    expect(find.widgetWithText(OmiSettingsRow, en.deviceSettings), findsWidgets);
   });
 }

@@ -165,6 +165,7 @@ struct SettingsContentView: View {
   // ChatProvider for browser extension setup
   var chatProvider: ChatProvider? = nil
   @StateObject var viewModel = SettingsViewModel()
+  @StateObject var dataExportModel = AccountDataExportModel()
 
   // Updater view model
   @ObservedObject var updaterViewModel = UpdaterViewModel.shared
@@ -214,17 +215,13 @@ struct SettingsContentView: View {
   @State var taskAgentWorkingDirectory: String
   @State var taskExtractionInterval: Double
   @State var taskMinConfidence: Double
+  @State var goalReminderNotificationsEnabled = NotificationService.goalReminderNotificationsEnabled
   @State var taskNotificationsEnabled: Bool
   @State var taskAllowedApps: Set<String>
   @State var taskBrowserKeywords: [String]
   @State var isRescoringTasks = false
 
   // Advice Assistant states
-  @State var insightEnabled: Bool
-  @State var insightExtractionInterval: Double
-  @State var insightMinConfidence: Double
-  @State var insightNotificationsEnabled: Bool
-  @State var insightExcludedApps: Set<String>
 
   // Meeting summary share notification
   @State var meetingSummaryNotificationsEnabled: Bool
@@ -273,25 +270,49 @@ struct SettingsContentView: View {
 
   // Notification settings (from backend)
   @State var dailySummaryEnabled: Bool = true
+  /// The value the account last confirmed for `dailySummaryEnabled`, or `nil` until Settings has
+  /// read it. A failed save puts the toggle back; see `updateDailySummarySettings(enabled:)`.
+  @State var savedDailySummaryEnabled: Bool?
+  @State var dailySummaryEnabledError: String?
   @State var dailySummaryHour: Int = 22
+  @State var dailySummaryDepth: DailySummaryDepth = .brief
+  @State var savedDailySummaryDepth: DailySummaryDepth = .brief
+  @State var dailySummaryDepthSaving = false
+  @State var dailySummaryDepthRevision = 0
+  @State var dailySummaryDepthError: String?
   // UI-only date for the Summary Time stepper field; the backend stores whole hours,
   // so this glides freely while only the hour component is persisted.
   @State var dailySummaryTime: Date = SettingsControlMetrics.dailySummaryDate(
     forHour: 22, referenceDate: Date())
   @State var notificationsEnabled: Bool = NotificationService.areNotificationsEnabled()
+  /// When proactive notifications are silenced until, or `nil`. Held here rather than read
+  /// per-render so choosing a duration updates the row immediately.
+  @State var notificationsSnoozedUntil: Date? = NotificationService.currentSnoozeExpiry()
   // Start from the synchronous persisted mirror so reopening Settings never flashes
   // Balanced while the authoritative backend value is still hydrating.
   @State var notificationFrequency: Int = NotificationService.currentFrequencyLevel()
 
   // Privacy settings (from backend)
   @State var recordingPermissionEnabled: Bool = false
+  @State var savedRecordingPermissionEnabled: Bool?
+  @State var recordingPermissionError: String?
   @State var privateCloudSyncEnabled: Bool = true
+  @State var savedPrivateCloudSyncEnabled: Bool?
+  @State var privateCloudSyncError: String?
   @State var isTrackingExpanded: Bool = false
 
   // Transcription settings (from backend)
   @State var singleLanguageMode: Bool = false
+  /// The custom vocabulary the account last confirmed it holds, or `nil` until Settings has read it.
+  /// A failed save puts it back; see `TranscriptionVocabularySaver`.
+  @State var savedVocabularyList: [String]?
+  @State var vocabularySaveError: String?
   @State var newVocabularyWord: String = ""
   @State var vocabularyList: [String] = []
+  /// Whether `vocabularyList` was read from the account rather than shown from the local copy.
+  /// A save replaces the account's whole list; see `TranscriptionVocabularyWriter`.
+  @State var vocabularyLoadedFromAccount: Bool = false
+  @State var isReadingVocabulary: Bool = false
 
   // Language setting
   @State var userLanguage: String = "en"
@@ -313,6 +334,8 @@ struct SettingsContentView: View {
   @State var activeBillingWebFlow: BillingWebFlow?
   @State var pendingSubscriptionPriceId: String?
   @State var pendingCheckoutSessionId: String?
+  @State var pendingCheckoutPlanId: String = "unknown"
+  @State var pendingCheckoutInterval: String = "unknown"
 
   var isLoadingSettings: Bool {
     get { viewModel.isLoadingBackendSettings }
@@ -327,6 +350,11 @@ struct SettingsContentView: View {
   var subscriptionError: String? {
     get { viewModel.subscriptionError }
     nonmutating set { viewModel.subscriptionError = newValue }
+  }
+
+  var subscriptionConfirmation: String? {
+    get { viewModel.subscriptionConfirmation }
+    nonmutating set { viewModel.subscriptionConfirmation = newValue }
   }
 
   let cooldownOptions = [1, 2, 5, 10, 15, 30, 60]
@@ -487,7 +515,6 @@ struct SettingsContentView: View {
     case stats = "Your Stats"
     case focusAssistant = "Focus Assistant"
     case taskAssistant = "Task Assistant"
-    case insightAssistant = "Insight Assistant"
     case memoryAssistant = "Memory Assistant"
     case analysisThrottle = "Analysis Throttle"
     case goals = "Goals"
@@ -495,7 +522,7 @@ struct SettingsContentView: View {
     case troubleshooting = "Troubleshooting"
     case gmailReader = "Gmail Reader"
     case calendarSync = "Calendar Sync"
-    case developerKeys = "Developer API Keys"
+    case developerKeys = "Model Provider Keys"
 
     var icon: String {
       switch self {
@@ -504,7 +531,6 @@ struct SettingsContentView: View {
       case .stats: return "chart.bar"
       case .focusAssistant: return "eye.fill"
       case .taskAssistant: return "checklist"
-      case .insightAssistant: return ProactiveNotificationBadge.insightSystemImage
       case .memoryAssistant: return "brain.head.profile"
       case .analysisThrottle: return "clock.arrow.2.circlepath"
       case .goals: return "target"
@@ -584,13 +610,7 @@ struct SettingsContentView: View {
       initialValue: TaskAssistantSettings.shared.notificationsEnabled)
     _taskAllowedApps = State(initialValue: TaskAssistantSettings.shared.allowedApps)
     _taskBrowserKeywords = State(initialValue: TaskAssistantSettings.shared.browserKeywords)
-    _insightEnabled = State(initialValue: InsightAssistantSettings.shared.isEnabled)
-    _insightExtractionInterval = State(
-      initialValue: InsightAssistantSettings.shared.extractionInterval)
-    _insightMinConfidence = State(initialValue: InsightAssistantSettings.shared.minConfidence)
-    _insightNotificationsEnabled = State(
-      initialValue: InsightAssistantSettings.shared.notificationsEnabled)
-    _insightExcludedApps = State(initialValue: InsightAssistantSettings.shared.excludedApps)
+
     _memoryEnabled = State(initialValue: MemoryAssistantSettings.shared.isEnabled)
     _memoryExtractionInterval = State(
       initialValue: MemoryAssistantSettings.shared.extractionInterval)

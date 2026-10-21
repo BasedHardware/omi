@@ -1,6 +1,8 @@
 """Behavioral regression coverage for the extracted listen runtime."""
 
 import asyncio
+import json
+import struct
 from collections import deque
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
@@ -10,10 +12,16 @@ import pytest
 from models.transcript_segment import CombineSegmentsResult
 from routers.listen.contracts import ListenRequest
 from routers.listen.conversations import resolve_onboarding_provenance_marker
+from routers.listen.conversations import LiveConversationController
+from routers.listen import conversations as conversation_module
 from routers.listen.runtime import ListenSessionRuntime
 from routers.listen.transcripts import TranscriptProcessor
 from utils.async_tasks import WebSocketTaskSupervisor
 from utils.listen_session_bootstrap import ListenConnectBase
+from utils.listen_pusher_session import ListenPusherSession, ListenPusherSessionConfig, ListenPusherSessionDeps
+from utils.sync.live_cap_hold import LiveHeldAudio
+from utils.metrics import OMI_LISTEN_STT_UNAVAILABLE_TOTAL
+from utils.stt.live_failure import terminate_live_stt_backoff
 from utils.onboarding import ONBOARDING_QUESTIONS, OnboardingHandler
 from utils.stt.streaming import STTService
 from starlette.websockets import WebSocketState
@@ -22,6 +30,30 @@ from starlette.websockets import WebSocketState
 @pytest.fixture
 def anyio_backend():
     return 'asyncio'
+
+
+@pytest.fixture(autouse=True)
+def _policy_storage_boundary(monkeypatch):
+    # These partial runtimes exercise onboarding/selection rather than storage.
+    # Full policy startup and Redis faults have their own runtime-boundary suite.
+    from config.policy.listen import resolve_listen_policy
+
+    monkeypatch.setattr(
+        'routers.listen.runtime.initialize_session_policy',
+        AsyncMock(return_value=resolve_listen_policy('runtime-regression', flags={})),
+    )
+
+
+def _capture_product_event_inputs(monkeypatch, module):
+    events = []
+    emit_product_event = module.emit_product_event
+
+    def capture_source_event(**event):
+        events.append(event)
+        return emit_product_event(**event)
+
+    monkeypatch.setattr(module, 'emit_product_event', capture_source_event)
+    return events
 
 
 class _Persistence:
@@ -67,6 +99,78 @@ def _assert_deletion_teardown_skipped_owner_writes(runtime):
     runtime._flush_usage.assert_not_awaited()
     runtime.conversations.process_conversation.assert_not_awaited()
     runtime.parity_capture.persist.assert_not_called()
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize('cap_enforcement', [False, True])
+async def test_uncapped_desktop_close_sends_104_before_pusher_close(monkeypatch, cap_enforcement):
+    """Exercise the real teardown -> controller -> binary handoff with an empty cap sink."""
+    order = []
+    frames = []
+    conversation = {'id': 'conversation-1', 'source': 'desktop', 'transcript_segments': [{'text': 'fixture'}]}
+
+    async def persist(fn, *args, **kwargs):
+        if fn.__name__ == '_account_deletion_blocks_owner_persistence':
+            return False
+        if fn is conversation_module.conversations_db.get_conversation:
+            return conversation
+        if fn is conversation_module.lifecycle_service.request_finalization:
+            return fn(*args, **kwargs)
+        return None
+
+    request = ListenRequest(websocket=SimpleNamespace(client_state=WebSocketState.DISCONNECTED), uid='synthetic')
+    runtime = _deletion_teardown_runtime(request, persist)
+    runtime.state.close_code = 1000
+    runtime.client_kind = 'desktop_unknown_os'
+    runtime._record_session_transcript_outcome = MagicMock()
+    runtime.transcripts.flush_speaker_assignments.side_effect = lambda *_: order.append('speakers')
+    runtime.receiver.flush_multi_channel_tail.side_effect = lambda: order.append('tail')
+
+    async def send(frame):
+        frames.append(bytes(frame))
+        order.append(struct.unpack('I', frame[:4])[0])
+
+    async def close():
+        order.append('pusher_close')
+
+    session = ListenPusherSession(
+        ListenPusherSessionConfig('synthetic', 'session', 16000, False, 'en', False, 8, 8, 8, 8),
+        ListenPusherSessionDeps(
+            get_current_conversation_id=lambda: 'conversation-1',
+            is_active=lambda: runtime.state.active,
+            shutdown_event=runtime.state.shutdown_event,
+            get_byok_keys=lambda: None,
+            on_conversation_processed=lambda _: None,
+            wait_for_event=AsyncMock(return_value=True),
+        ),
+    )
+    session.pusher_ws = SimpleNamespace(send=send)
+    session.pusher_connected = True
+    runtime.request_conversation_processing = session.request_conversation_processing
+    runtime.pusher_close = close
+    runtime.conversations = LiveConversationController(runtime)
+    runtime.conversations.on_conversation_processing_started = MagicMock()
+    monkeypatch.setattr(conversation_module, 'get_byok_keys', lambda: None)
+    monkeypatch.setattr(
+        conversation_module.lifecycle_service,
+        'request_finalization',
+        lambda *args, **kwargs: {'route': 'pusher', 'job_id': 'job-1', 'dispatch_generation': 1},
+    )
+
+    async def finish_session():
+        if cap_enforcement:
+            # Enforcement can be enabled without this account ever holding audio.
+            # Its empty sink must not perform storage IO or delay finalization.
+            await LiveHeldAudio(runtime).finish_updates(None, asyncio.Event())
+        await runtime._teardown_components()
+
+    await asyncio.wait_for(finish_session(), timeout=1)
+    assert order == ['speakers', 104, 'tail', 'pusher_close']
+    assert len(frames) == 1
+    payload = json.loads(frames[0][4:])
+    assert payload['conversation_id'] == 'conversation-1'
+    assert payload['finalization_job_id'] == 'job-1'
+    assert payload['dispatch_generation'] == 1
 
 
 @pytest.mark.anyio
@@ -216,8 +320,8 @@ async def test_bootstrap_forces_single_language_before_selecting_stt_for_onboard
     )
     selected_multi_language_options = []
 
-    def select_stt(language, *, multi_lang_enabled, preferred_service=None, language_profile=None):
-        selected_multi_language_options.append((language, multi_lang_enabled, preferred_service))
+    def select_stt(language, *, multi_lang_enabled, preferred_service=None, language_profile=None, window_uid=None):
+        selected_multi_language_options.append((language, multi_lang_enabled, preferred_service, window_uid))
         return 'test-stt', 'es', 'test-model'
 
     monkeypatch.setattr(runtime_module, 'load_listen_connect_base', lambda *_args, **_kwargs: _async_result(base))
@@ -239,7 +343,7 @@ async def test_bootstrap_forces_single_language_before_selecting_stt_for_onboard
 
     assert await runtime._bootstrap() is True
     await runtime.task_supervisor.drain_all(timeout=1.0, cancel=False)
-    assert selected_multi_language_options == [('es', False, None)]
+    assert selected_multi_language_options == [('es', False, None, 'onboarding-user')]
 
 
 @pytest.mark.anyio
@@ -379,6 +483,7 @@ async def test_bootstrap_admits_speech_profile_redo_despite_completed_onboarding
     await runtime.task_supervisor.drain_all(timeout=2.0, cancel=False)
 
     assert runtime.onboarding_admitted is True
+
     assert runtime.onboarding_session_id is None
     # OnboardingHandler still mints its own internal session id when none is
     # supplied (it needs one for its own question/answer bookkeeping) — this
@@ -391,6 +496,49 @@ async def test_bootstrap_admits_speech_profile_redo_despite_completed_onboarding
     assert resolve_onboarding_provenance_marker(runtime) is None
     assert [event['type'] for event in sent_events] == ['onboarding_question']
     assert enqueued_segments and enqueued_segments[0]['speaker_id'] == OnboardingHandler.OMI_SPEAKER_ID
+
+
+@pytest.mark.anyio
+async def test_reconnect_budget_returns_terminal_backoff_before_entitlement_work(monkeypatch):
+    import routers.listen.runtime as runtime_module
+
+    websocket = SimpleNamespace(send_json=AsyncMock(), close=AsyncMock())
+    request = ListenRequest(websocket=websocket, uid='budget-user')
+    runtime = object.__new__(ListenSessionRuntime)
+    runtime.request = request
+    runtime.state = SimpleNamespace(active=True, stt_terminal_failure=False, close_code=1001)
+    monkeypatch.setattr(runtime_module.listen_reconnect_budget, 'admit', lambda *_args: (False, 17))
+    paywall = AsyncMock()
+    monkeypatch.setattr(runtime_module, 'run_blocking', paywall)
+    before = OMI_LISTEN_STT_UNAVAILABLE_TOTAL.labels(reason='reconnect_budget')._value.get()
+
+    assert not await runtime._admit()
+
+    payload = websocket.send_json.await_args.args[0]
+    assert payload['type'] == 'service_status'
+    assert payload['status'] == 'stt_failed'
+    assert payload['reason'] == 'reconnect_budget'
+    assert payload['retry_after'] == 17
+    assert websocket.close.await_args.kwargs['code'] == 1011
+    assert paywall.await_count == 0
+    assert OMI_LISTEN_STT_UNAVAILABLE_TOTAL.labels(reason='reconnect_budget')._value.get() == before + 1
+
+
+@pytest.mark.anyio
+async def test_provider_unavailable_uses_terminal_status_with_retry_hint():
+    websocket = SimpleNamespace(send_json=AsyncMock(), close=AsyncMock())
+    state = SimpleNamespace(active=True, stt_terminal_failure=False, close_code=1001)
+
+    assert await terminate_live_stt_backoff(websocket, state, reason='provider_unavailable', retry_after=45)
+
+    payload = websocket.send_json.await_args.args[0]
+    assert payload['status'] == 'stt_failed'
+    assert payload['retryable'] is True
+    assert payload['reason'] == 'provider_unavailable'
+    assert payload['retry_after'] == 45
+    assert state.active is False
+    assert state.close_code == 1011
+    assert websocket.close.await_args.kwargs['reason'] == 'transcription_service_unavailable'
 
 
 @pytest.mark.anyio
@@ -579,7 +727,7 @@ async def test_bootstrap_passes_explicit_parakeet_through_capability_aware_selec
         fair_use_dg_budget_exhausted=False,
     )
 
-    def select_stt(language, *, multi_lang_enabled, preferred_service=None, language_profile=None):
+    def select_stt(language, *, multi_lang_enabled, preferred_service=None, language_profile=None, window_uid=None):
         assert (language, multi_lang_enabled, preferred_service) == ('es', True, 'parakeet')
         return STTService.modulate, 'multi', 'velma-2'
 
@@ -599,7 +747,7 @@ async def test_bootstrap_passes_explicit_parakeet_through_capability_aware_selec
 
 
 def test_runtime_emits_speaker_suggestion_event(monkeypatch):
-    import routers.listen.runtime as runtime_module
+    import utils.live_speaker_suggestions as suggestion_module
 
     runtime = object.__new__(ListenSessionRuntime)
     runtime.request = SimpleNamespace(uid='user-1', speaker_auto_assign_enabled=True)
@@ -608,7 +756,7 @@ def test_runtime_emits_speaker_suggestion_event(monkeypatch):
     emitted_events = []
     product_events = []
     runtime.send_event = emitted_events.append
-    monkeypatch.setattr(runtime_module, 'emit_product_event', lambda **event: product_events.append(event))
+    monkeypatch.setattr(suggestion_module, 'emit_product_event', lambda **event: product_events.append(event))
 
     runtime.emit_speaker_suggestion(4, 'person-123', 'Avery', 'segment-123')
 
@@ -629,6 +777,12 @@ def test_runtime_emits_speaker_suggestion_event(monkeypatch):
             },
         }
     ]
+
+    assert 'retracted' not in emitted_events[0].to_json()
+    runtime.emit_speaker_suggestion(4, '', '', 'segment-456', retracted=True)
+    assert emitted_events[-1].to_json()['retracted'] is True
+    assert emitted_events[-1].person_id == ''
+    assert len(product_events) == 1, 'a retraction is not another proposed identity'
 
 
 class _LiveSTTAttempt:
@@ -851,7 +1005,9 @@ def _transcript_processor_for_delivery(monkeypatch, websocket):
     processor.photo_buffer = deque()
     processor.cache = SimpleNamespace(get=cache_get)
     processor.current_session_segments = {}
-    processor.speaker_id_allocator = SimpleNamespace(hydrate=lambda _segments: None, assign=lambda _segment: None)
+    processor.speaker_id_allocator = SimpleNamespace(
+        hydrate=lambda _segments: None, hydrate_receipt=MagicMock(), assign=lambda _segment: None
+    )
     processor._update_live_conversation = update
     processor._translate = no_op
     processor._speaker_detection = no_op
@@ -1076,6 +1232,7 @@ async def test_transcript_loop_still_flushes_speaker_assignments_when_the_client
 
 @pytest.mark.anyio
 async def test_transcript_loop_emits_diarization_completion_after_terminal_flush(monkeypatch):
+    import routers.listen.transcripts as transcripts_module
     from utils.product_telemetry import set_product_telemetry_client_for_tests
 
     websocket = SimpleNamespace(send_json=lambda _payload: _async_result(None))
@@ -1084,18 +1241,21 @@ async def test_transcript_loop_emits_diarization_completion_after_terminal_flush
     processor.host.recording_session_id = 'recording-1'
     telemetry = _ProductTelemetryClient()
     set_product_telemetry_client_for_tests(telemetry)
+    source_events = _capture_product_event_inputs(monkeypatch, transcripts_module)
 
     await processor.process_loop()
 
     assert flushed == ['conversation-1']
     assert telemetry.events[0]['event'] == 'Diarization Completed'
     assert telemetry.events[0]['properties']['speaker_count'] == 1
-    assert telemetry.events[0]['properties']['recording_id'] == 'recording-1'
-    assert telemetry.events[0]['properties']['conversation_id'] == 'conversation-1'
+    assert source_events[0]['properties']['recording_id'] == 'recording-1'
+    assert source_events[0]['properties']['conversation_id'] == 'conversation-1'
+    assert not {'recording_id', 'conversation_id'} & telemetry.events[0]['properties'].keys()
 
 
 @pytest.mark.anyio
 async def test_transcript_loop_attributes_diarization_completion_to_each_conversation(monkeypatch):
+    import routers.listen.transcripts as transcripts_module
     from utils.product_telemetry import set_product_telemetry_client_for_tests
 
     websocket = SimpleNamespace(send_json=lambda _payload: _async_result(None))
@@ -1103,6 +1263,7 @@ async def test_transcript_loop_attributes_diarization_completion_to_each_convers
     processor.host.recording_session_id = 'recording-1'
     telemetry = _ProductTelemetryClient()
     set_product_telemetry_client_for_tests(telemetry)
+    source_events = _capture_product_event_inputs(monkeypatch, transcripts_module)
     processor.segment_buffer[0]['speaker_id'] = 2
     waits = 0
     updates = 0
@@ -1129,11 +1290,16 @@ async def test_transcript_loop_attributes_diarization_completion_to_each_convers
 
     await processor.process_loop()
 
-    assert [event['properties']['conversation_id'] for event in telemetry.events] == [
+    assert [
+        event['properties']['conversation_id']
+        for event in source_events
+        if event.get('event') == 'Diarization Completed'
+    ] == [
         'conversation-1',
         'conversation-2',
     ]
     assert [event['properties']['speaker_count'] for event in telemetry.events] == [1, 1]
+    assert all(not {'recording_id', 'conversation_id'} & event['properties'].keys() for event in telemetry.events)
 
 
 async def _async_result(value):
@@ -1176,21 +1342,39 @@ async def test_custom_stt_flush_meters_speech_in_isolated_lane(monkeypatch):
 
     assert await runtime._flush_usage(final=False) == 0
     assert recorded == [('custom-stt-user', 4200, 'custom_stt')]
-    assert usage_calls == [('custom-stt-user', {'speech_seconds': 4})]
+    assert usage_calls == [
+        (
+            'custom-stt-user',
+            {
+                'speech_seconds': 4,
+                'usage_metadata': {'funding': 'custom', 'provider': 'unknown', 'source': 'listen'},
+            },
+        )
+    ]
 
     # No speech delta → no meter write either.
     runtime.receiver = SimpleNamespace(vad_gate=SimpleNamespace(consume_speech_ms_delta=lambda: 0))
     assert await runtime._flush_usage(final=True) == 0
     assert recorded == [('custom-stt-user', 4200, 'custom_stt')]
-    assert usage_calls == [('custom-stt-user', {'speech_seconds': 4})]
+    assert usage_calls == [
+        (
+            'custom-stt-user',
+            {
+                'speech_seconds': 4,
+                'usage_metadata': {'funding': 'custom', 'provider': 'unknown', 'source': 'listen'},
+            },
+        )
+    ]
 
 
 @pytest.mark.anyio
 async def test_flush_usage_meters_live_speech_seconds_exactly_once(monkeypatch):
-    """Live provider audio minutes come from the VAD speech delta consumed in
+    """BYOK live provider audio minutes come from the VAD speech delta consumed in
     _flush_usage: each flushed millimeter of speech reaches the counter once,
     and a zero delta (the periodic loop's next tick) emits nothing extra."""
     import routers.listen.runtime as runtime_module
+
+    monkeypatch.setattr('utils.byok.get_byok_keys', lambda: {'deepgram': 'test-key'})
 
     metered = []
     speech_recorded = []

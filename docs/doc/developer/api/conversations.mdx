@@ -29,6 +29,22 @@ description: "Create and retrieve conversations via the Developer API"
 
 ---
 
+## Saved transcripts awaiting processing
+
+When funded processing is paused at an account's allowance limit, conversation
+creation still preserves the submitted transcript or external text. An additive
+`processing_deferred: true` field identifies a saved conversation waiting for
+cloud summaries, memories, tasks, and app processing. Its completed capture status
+does not imply that those generated results exist. Reading or reopening the
+conversation preserves this waiting state.
+
+A monthly allowance reset admits new recordings while saved waiting recordings
+remain waiting. The user chooses whether to process that backlog in the app,
+after reviewing its estimated allowance use. If it cannot all fit, the newest
+recordings that fit are processed and the remainder stays waiting. An upgrade
+can start backlog processing automatically when the estimate fits the upgraded
+allowance. Transcript retrieval remains available throughout.
+
 ## Get Conversations
 
 <Card title="GET /v1/dev/user/conversations" icon="download" color="#22c55e" horizontal>
@@ -40,7 +56,8 @@ description: "Create and retrieve conversations via the Developer API"
     | Parameter | Type | Default | Description |
     |-----------|------|---------|-------------|
     | `limit` | integer | 25 | Maximum number to return |
-    | `offset` | integer | 0 | Number to skip |
+    | `offset` | integer | 0 | Number to skip. Large offsets may exhaust the read budget and return an incomplete page. |
+    | `cursor` | string | - | Opaque `X-Omi-Next-Cursor` from the previous page; use with `offset=0`, `include_transcript=false`, and no folder/starred filter. Keep date/category filters unchanged. |
     | `start_date` | datetime | - | Filter by start date (inclusive) |
     | `end_date` | datetime | - | Filter by end date (inclusive) |
     | `include_transcript` | boolean | false | Include full transcript segments |
@@ -49,6 +66,14 @@ description: "Create and retrieve conversations via the Developer API"
     | `starred` | boolean | - | Filter by starred status. `true` for starred only, `false` for non-starred only. Omit to return all. |
   </Accordion>
 </AccordionGroup>
+
+Prefer cursor pagination for exports and repeated page reads. Start with `offset=0` and follow
+`X-Omi-Next-Cursor` until `X-Omi-Has-More` is `false`. Nonzero offsets also return
+`X-Pagination-Guidance`. If `X-Omi-List-Truncated: true` is present, the page is incomplete even when it is
+empty. Start a cursor traversal from offset zero; for transcript, folder, or starred reads, narrow the date
+window. Repeating a large offset cannot advance past the same budget boundary.
+
+List results may be up to 10 seconds stale after any write. Response bodies remain arrays.
 
 <Tabs>
   <Tab title="cURL">
@@ -333,16 +358,29 @@ Memories and action items are extracted asynchronously. Use the GET endpoints to
   Create from structured transcript with speaker diarization
 </Card>
 
+When a conversation created with a stable client session ID is deleted, retries return HTTP 200
+with the same `id`, `status: "deleted"`, and `discarded: true`, without recreating or processing
+content. Clients should resolve the upload and purge its local transcript rather than retrying
+or fetching the deleted conversation. Requests without a client session ID create a fresh random
+identity and cannot be linked to an earlier deleted upload.
+
+Deletion intent is retained as content-free metadata under the account and is removed by account
+deletion. It commits before derived-data cleanup; a failed delete remains retryable while this
+intent prevents backlog recreation. No automatic tombstone expiry is currently configured.
+
 <AccordionGroup>
   <Accordion title="Request Body" icon="code" defaultOpen={true}>
     | Parameter | Type | Required | Description |
     |-----------|------|----------|-------------|
     | `transcript_segments` | array | **Yes** | List of transcript segments (1-500 segments) |
-    | `source` | string | No | Source of conversation (default: `external_integration`) |
+    | `client_session_id` | string | No | Stable upload identity (aliases: `client_conversation_id`, `session_id`, `client_id`); retries return the same conversation ID |
+    | `source` | string | No | Source of conversation (default: `phone`); segments use transcript processing for every source |
     | `started_at` | datetime | No | When conversation started (defaults to now) |
     | `finished_at` | datetime | No | When conversation finished (calculated from last segment if not provided) |
     | `language` | string | No | Language code (default: 'en') |
     | `geolocation` | object | No | Geolocation data |
+    | `folder_id` | string | No | ID of one of your folders (from `GET /v1/dev/user/folders`). The conversation is filed there and AI folder assignment is skipped; an unknown ID returns 422 |
+    | `calendar_meeting_context` | object | No | Calendar meeting this conversation belongs to: `calendar_event_id`, `title`, `start_time`, `duration_minutes` (required) and optional `participants` (`name`/`email`), `platform`, `meeting_link`, `notes`. Used as context for the summary and to identify participants |
   </Accordion>
   <Accordion title="Transcript Segment Fields" icon="list">
     | Field | Type | Required | Description |
@@ -834,12 +872,12 @@ This action is permanent. Deleted conversations and their associated photos cann
     #!/bin/bash
     API_KEY="omi_dev_your_api_key"
 
-    # Export all conversations with transcripts
-    curl -H "Authorization: Bearer $API_KEY" \
+    # Fetch only the first page, not a complete backup. Inspect the saved
+    # X-Omi-Has-More and X-Omi-List-Truncated headers before paging further.
+    curl --fail-with-body --dump-header conversations_first_page.headers -H "Authorization: Bearer $API_KEY" \
       "https://api.omi.me/v1/dev/user/conversations?limit=1000&include_transcript=true" \
-      > conversations_backup.json
-
-    echo "Exported conversations to conversations_backup.json"
+      > conversations_first_page.json &&
+      echo "Saved first page; inspect conversations_first_page.headers"
     ```
   </Tab>
   <Tab title="Python">
@@ -865,6 +903,12 @@ This action is permanent. Deleted conversations and their associated photos cann
             }
         )
 
+        response.raise_for_status()
+        if response.headers.get("X-Omi-List-Truncated", "").lower() == "true":
+            raise RuntimeError(
+                "Export incomplete; no backup saved. Use narrower date windows "
+                "for transcript/folder/starred exports."
+            )
         conversations = response.json()
         if not conversations:
             break
@@ -896,6 +940,13 @@ This action is permanent. Deleted conversations and their associated photos cann
           { headers: { Authorization: `Bearer ${API_KEY}` } }
         );
 
+        if (!response.ok) throw new Error(`Export failed: HTTP ${response.status}`);
+        if (response.headers.get('X-Omi-List-Truncated')?.toLowerCase() === 'true') {
+          throw new Error(
+            'Export incomplete; no backup saved. Use narrower date windows ' +
+            'for transcript/folder/starred exports.'
+          );
+        }
         const conversations = await response.json();
         if (conversations.length === 0) break;
 
@@ -915,3 +966,71 @@ This action is permanent. Deleted conversations and their associated photos cann
     ```
   </Tab>
 </Tabs>
+
+
+## Public shared notes for agents
+
+For a conversation the owner has already shared, the same public URL supports
+HTML, Markdown, and the public JSON payload. These representations require no
+login and use the existing share visibility rules; private or revoked shares
+return 404 for machine representations and show an unavailable page in HTML.
+
+```bash
+curl -H 'Accept: text/markdown' https://h.omi.me/conversations/CONVERSATION_ID
+curl -H 'Accept: application/json' https://h.omi.me/conversations/CONVERSATION_ID
+```
+
+The `.md` and `.json` suffixes select the same representations, independent of
+`Accept`. Default requests receive HTML. Share responses vary on `Accept` and
+advertise alternate representations in HTTP `Link` headers; the HTML page also
+contains alternate links. [Share discovery](https://h.omi.me/llms.txt) documents
+these URLs.
+
+Markdown comes from the public structured payload, including overview, sections,
+participants, action items, and transcript. The explicit allowlist exposes section
+heading, body and kind, plus action-item description, completion, `owner_name`,
+`due_at` and `context`. It excludes attendee emails, private calendar fields,
+insights, task IDs, confidence scores and section evidence IDs. Existing public
+note text is included as authored; this is not a content redaction service.
+
+Times are explicitly UTC, with ISO-8601 instants in Markdown and JSON. Transcript
+labels use elapsed offsets from the conversation start (`HH:MM:SS`). Speaker
+names use person links or an exact match to a public participant name; roster
+order cannot identify a diarized speaker. An unmatched speaker string is not a
+name: those turns use `Speaker N` when a speaker id exists, otherwise
+`Speaker unknown`. The account holder without a verified name stays `Owner`.
+Event times on the page and in Markdown use the same UTC labels. Unknown action
+owners and due times appear as Unknown. An email-shaped `owner_name` is omitted.
+
+## Pagination, search, and evidence
+
+Lists keep their JSON array shape. `limit` is clamped to **1–200**. Read
+`X-Omi-Effective-Limit` and `X-Omi-Has-More`. Offset-only modes (transcripts,
+folder or starred filters) return `X-Omi-Next-Offset` when more rows exist.
+Default lists return `X-Omi-Next-Cursor`: send it as
+`cursor` with the same filters instead of `offset`. Cursors require
+`include_transcript=false` and no `folder_id` or `starred` filter. Prefer cursors
+for a changing account. Offset sweeps are not snapshots and can overlap when new
+conversations arrive. These headers are exposed to browser clients.
+
+Date filters compare **created_at**, not recording start time. Both bounds are
+inclusive ISO 8601 instants; missing timezone offsets mean UTC. A date-only end
+on this API means midnight, whereas MCP tools include the whole UTC end day.
+For non-overlapping daily API windows use `00:00:00Z` through
+`23:59:59.999999Z`, then start the next day at `00:00:00Z`. Reversed bounds return
+400. Other unknown list query parameters are ignored and counted in `X-Omi-Ignored-Query-Params`. `query` is not a list parameter and returns 400; use the search route below.
+
+Use `GET /v1/dev/user/conversations/search?query=budget&limit=10` with
+`conversations:read`. Optional `start_date` and `end_date` use the instant rules
+above; limit is 1–100. This returns `{conversations, search_coverage, message}`,
+using the same semantic search and keyword recovery as MCP. Unindexed content
+can still match even when results are empty. If semantic retrieval finds no
+hydrated matches and keyword retrieval is unavailable, the response is 503 with
+an explanation; use a date-window list to inspect the account.
+
+List and detail responses include `transcript_included`. A false value means
+transcript text was not requested. Where transcript evidence was loaded, responses
+also expose `participants_included: true`, `participants` (stored `speaker_id`,
+`person_id`, `is_user` mappings), and unique `person_ids`. Transcript-free cards
+report `participants_included: false`; an empty mapping does not prove nobody
+participated. Names are not inferred from summary prose.

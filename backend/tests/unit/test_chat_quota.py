@@ -7,6 +7,8 @@ precede import" case: see backend/docs/test_isolation.md and
 testing/import_isolation.load_module_fresh / stub_modules.
 """
 
+from tests.unit.fixtures.cap_rollout import full_cap_dispatch_rollout  # noqa: F401
+
 import importlib
 import os
 from datetime import datetime, timezone
@@ -451,3 +453,59 @@ class TestEnforceChatQuota:
             sub_mod.enforce_chat_quota(sub_mod.RELEASE_PROBE_UID, platform="desktop")
 
         snapshot.assert_not_called()
+
+
+@pytest.mark.parametrize('plan', ['basic', 'plus', 'operator', 'architect'])
+def test_flagged_chat_admission_precedes_byok_and_old_quota(monkeypatch, plan):
+    from fastapi import HTTPException
+
+    sub_mod = _reload_subscription_module()
+    monkeypatch.setattr(sub_mod, 'is_trial_paywalled', lambda *a, **k: False)
+    snapshot = {'budget_percent': 100, 'plan_id': plan, 'reset_at': 1793491200}
+    monkeypatch.setattr(sub_mod.ladder_v1, 'budget_snapshot', lambda *a, **k: snapshot)
+    monkeypatch.setattr(sub_mod, 'get_chat_quota_snapshot', lambda *a, **k: pytest.fail('legacy quota consulted'))
+    with pytest.raises(HTTPException) as error:
+        sub_mod.enforce_chat_quota('u')
+    assert error.value.detail['chat_at_cap']['state'] == 'paused'
+
+
+@pytest.mark.parametrize('percent,allowed', [(99.99, True), (100, False)])
+def test_flagged_free_snapshot_and_admission_share_budget_not_trial(monkeypatch, percent, allowed):
+    sub_mod = _reload_subscription_module()
+    monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', 'true')
+    monkeypatch.setattr(sub_mod, 'is_trial_paywalled', lambda *a, **k: True)
+    monkeypatch.setattr(
+        sub_mod.users_db, 'get_user_valid_subscription', lambda *a, **k: _make_subscription(PlanType.basic)
+    )
+    monkeypatch.setattr(
+        sub_mod.user_usage_db,
+        'get_monthly_chat_usage',
+        lambda *a, **k: {
+            'questions': 999,
+            'cost_usd': 999,
+            'reset_at': 1793491200,
+        },
+    )
+    monkeypatch.setattr(
+        sub_mod.ladder_v1,
+        'budget_snapshot',
+        lambda *a, **k: {
+            'budget_percent': percent,
+            'plan_id': 'basic',
+            'reset_at': 1793491200,
+        },
+    )
+    snapshot = sub_mod.get_chat_quota_snapshot('u')
+    assert snapshot['allowed'] is allowed
+    assert snapshot['uses_shared_budget'] is True
+    assert ('chat_at_cap' in snapshot) is not allowed
+
+
+def test_legacy_quota_wire_omits_ladder_state():
+    from models.users import ChatUsageQuota
+
+    quota = ChatUsageQuota(plan='Free', plan_type='basic', unit='questions', used=30, limit=30)
+    payload = quota.model_dump(mode='json')
+    assert 'uses_shared_budget' not in payload
+    assert 'chat_at_cap' not in payload
+    assert ChatUsageQuota(**payload, uses_shared_budget=True).model_dump(mode='json')['uses_shared_budget'] is True

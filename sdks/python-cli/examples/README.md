@@ -42,13 +42,19 @@
   JSON export to an Excel workbook with datetime cells, duration and filters.
 * [`conversations_sqlite.md`](conversations_sqlite.md) — import conversation-list
   JSON exports into a SQLite database for SQL queries and multi-page merges.
+* [`conversations_tsv.md`](conversations_tsv.md) — convert a conversation JSON
+  export to TSV for command-line text processing (`cut`, `awk`, `grep`).
 * [`memories_markdown.md`](memories_markdown.md) — export memories, facts, and learnings to structured Markdown notes for Obsidian & Notion.
+* [`memories_pipeline.md`](memories_pipeline.md) — stream, deduplicate, and convert memories to JSONL for LLM fine-tuning or CSV for spreadsheets.
 * [`conversations_atom.md`](conversations_atom.md) — publish conversation-list
   exports as an Atom 1.0 feed for any feed reader.
 * [`action_items_sqlite.md`](action_items_sqlite.md) — convert an action-item JSON export to SQLite for structured SQL queries.
 * [`action_items_markdown.md`](action_items_markdown.md) — export action items and tasks to Obsidian/Notion Markdown checklists.
 * [`action_items_org.md`](action_items_org.md) — turn an action-item export
   into an Org-mode file with TODO/DONE headings and agenda DEADLINEs.
+* [`action_items_opml.md`](action_items_opml.md) — convert an action-item JSON export to OPML 2.0 for OmniFocus, Workflowy, and Logseq.
+* [`goals_markdown.md`](goals_markdown.md) — export goals and milestones to structured
+  Markdown checklist trees for Obsidian & Notion.
 * [`memories_markdown.pt.md`](memories_markdown.pt.md) — exportar memórias e conhecimento do Omi para Markdown (Portuguese recipe).
 * [`quickstart.th.md`](quickstart.th.md) — คู่มือเริ่มต้นใช้งาน omi-cli
   ฉบับภาษาไทย (Thai Quickstart).
@@ -75,6 +81,7 @@
 * [`quickstart.mn.md`](quickstart.mn.md) — omi-cli хурдан эхлүүлэх гарын авлага (Mongolian Quickstart).
 * [`quickstart.ca.md`](quickstart.ca.md) — guia d'inici ràpid per a omi-cli en català (Catalan Quickstart).
 * [`quickstart.ha.md`](quickstart.ha.md) — Jagorar farawa cikin sauri ta omi-cli (Hausa Quickstart).
+* [`quickstart.am.md`](quickstart.am.md) — የ omi-cli ፈጣን መጀመሪያ መመሪያ (Amharic Quickstart).
 * [`quickstart.ig.md`](quickstart.ig.md) — Ntuziaka mmalite ngwa ngwa nke omi-cli (Igbo Quickstart).
 * [`quickstart.mai.md`](quickstart.mai.md) — omi-cli त्वरित मार्गदर्शिका (Maithili Quickstart).
 * [`quickstart.as.md`](quickstart.as.md) — omi-cli ক্ষিপ্ৰ আৰম্ভণি নিৰ্দেশিকা (Assamese Quickstart).

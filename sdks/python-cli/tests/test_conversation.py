@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -121,6 +122,7 @@ def test_conversation_from_segments_rejects_invalid_unicode(config_path, respx_m
     assert "Invalid JSON" in result.stderr
     assert not respx_mock.calls
 
+
 def test_conversation_from_segments_rejects_directory(config_path, respx_mock, monkeypatch, capsys, tmp_path) -> None:
     test_dir = tmp_path / "somedir"
     test_dir.mkdir()
@@ -134,7 +136,131 @@ def test_conversation_from_segments_rejects_directory(config_path, respx_mock, m
     assert not respx_mock.calls
 
 
-def test_conversation_from_segments_rejects_unreadable_file(config_path, respx_mock, monkeypatch, capsys, tmp_path) -> None:
+def test_conversation_from_segments_missing_file_is_not_found(
+    config_path, respx_mock, monkeypatch, capsys, tmp_path
+) -> None:
+    missing = tmp_path / "missing.json"
+    monkeypatch.setattr(sys, "argv", ["omi", "--json", "conversation", "from-segments", str(missing)])
+    with pytest.raises(SystemExit) as exc:
+        main()
+    assert exc.value.code == 1
+    err = json.loads(capsys.readouterr().err)
+    assert err["error"] == f"File not found: {missing}"
+    assert not respx_mock.calls
+
+
+def test_conversation_from_segments_file_parent_is_not_a_directory(
+    config_path, respx_mock, monkeypatch, capsys, tmp_path
+) -> None:
+    """``Path.exists()`` swallows ``ENOTDIR`` and returns False, so a pre-check
+    reported ``regular_file/segments.json`` as a missing file. Opening the path
+    keeps the real ``NotADirectoryError``."""
+    blocker = tmp_path / "not_a_dir"
+    blocker.write_text("file", encoding="utf-8")
+    segments = blocker / "segments.json"
+    monkeypatch.setattr(sys, "argv", ["omi", "--json", "conversation", "from-segments", str(segments)])
+    with pytest.raises(SystemExit) as exc:
+        main()
+    assert exc.value.code == 1
+    err = json.loads(capsys.readouterr().err)
+    assert err["error"] == f"Cannot read file {segments}"
+    assert "Not a directory" in err["detail"]
+    assert "File not found" not in err["error"]
+    assert not respx_mock.calls
+
+
+def test_conversation_from_segments_windows_directory_error_is_still_a_directory(
+    config_path, respx_mock, monkeypatch, capsys, tmp_path
+) -> None:
+    """Windows opens a directory as ``PermissionError``, not ``IsADirectoryError``."""
+    test_dir = tmp_path / "somedir"
+    test_dir.mkdir()
+
+    def windows_read_bytes(self):
+        raise PermissionError(13, "Permission denied", str(self))
+
+    monkeypatch.setattr(type(test_dir), "read_bytes", windows_read_bytes)
+    monkeypatch.setattr(sys, "argv", ["omi", "--json", "conversation", "from-segments", str(test_dir)])
+    with pytest.raises(SystemExit) as exc:
+        main()
+    assert exc.value.code == 1
+    assert "Expected a file, but found a directory" in json.loads(capsys.readouterr().err)["error"]
+    assert not respx_mock.calls
+
+
+def test_conversation_from_segments_windows_file_parent_is_still_not_a_directory(
+    config_path, respx_mock, monkeypatch, capsys, tmp_path
+) -> None:
+    """Windows reports a path under a regular file as not found rather than ENOTDIR."""
+    blocker = tmp_path / "not_a_dir"
+    blocker.write_text("file", encoding="utf-8")
+    segments = blocker / "segments.json"
+
+    def windows_read_bytes(self):
+        raise FileNotFoundError(2, "The system cannot find the path specified", str(self))
+
+    monkeypatch.setattr(type(segments), "read_bytes", windows_read_bytes)
+    monkeypatch.setattr(sys, "argv", ["omi", "--json", "conversation", "from-segments", str(segments)])
+    with pytest.raises(SystemExit) as exc:
+        main()
+    assert exc.value.code == 1
+    err = json.loads(capsys.readouterr().err)
+    assert err["error"] == f"Cannot read file {segments}"
+    assert "Not a directory" in err["detail"]
+    assert not respx_mock.calls
+
+
+def test_conversation_from_segments_dotdot_past_a_file_is_still_not_found(
+    config_path, respx_mock, monkeypatch, capsys, tmp_path
+) -> None:
+    """Win32 collapses ``notes.txt\\..`` before lookup, so the file is not the blocker."""
+    (tmp_path / "notes.txt").write_text("file", encoding="utf-8")
+    segments = tmp_path / "notes.txt" / ".." / "missing.json"
+
+    def windows_read_bytes(self):
+        raise FileNotFoundError(2, "The system cannot find the file specified", str(self))
+
+    monkeypatch.setattr(type(segments), "read_bytes", windows_read_bytes)
+    monkeypatch.setattr(sys, "argv", ["omi", "--json", "conversation", "from-segments", str(segments)])
+    with pytest.raises(SystemExit) as exc:
+        main()
+    assert exc.value.code == 1
+    assert json.loads(capsys.readouterr().err)["error"] == f"File not found: {segments}"
+    assert not respx_mock.calls
+
+
+@pytest.mark.skipif(
+    os.name == "nt" or (hasattr(os, "geteuid") and os.geteuid() == 0),
+    reason="POSIX non-root directory traversal permissions only",
+)
+def test_conversation_from_segments_unsearchable_parent_is_a_read_error(
+    config_path, respx_mock, monkeypatch, capsys, tmp_path
+) -> None:
+    """A mode ``0o000`` parent makes ``Path.exists()`` raise ``PermissionError``
+    before ``read_bytes()``. That used to escape as ``unexpected error`` instead
+    of the read failure this command already reports for an unreadable file."""
+    locked = tmp_path / "locked"
+    locked.mkdir()
+    segments = locked / "segments.json"
+    segments.write_text("[]", encoding="utf-8")
+    locked.chmod(0o000)
+    try:
+        monkeypatch.setattr(sys, "argv", ["omi", "--json", "conversation", "from-segments", str(segments)])
+        with pytest.raises(SystemExit) as exc:
+            main()
+        assert exc.value.code == 1
+        err = json.loads(capsys.readouterr().err)
+        assert err["error"] == f"Cannot read file {segments}"
+        assert "Permission denied" in err["detail"]
+        assert "unexpected error" not in err["error"]
+        assert not respx_mock.calls
+    finally:
+        locked.chmod(0o700)
+
+
+def test_conversation_from_segments_rejects_unreadable_file(
+    config_path, respx_mock, monkeypatch, capsys, tmp_path
+) -> None:
     f = tmp_path / "unreadable.json"
     f.write_text("{}")
 
@@ -150,3 +276,45 @@ def test_conversation_from_segments_rejects_unreadable_file(config_path, respx_m
     err = json.loads(output.err)
     assert "Cannot read file" in err["error"]
     assert not respx_mock.calls
+
+
+@pytest.mark.parametrize("bad_text", ["", "   ", " \n \t "])
+def test_conversation_create_rejects_empty_text(authed_profile, respx_mock, cli_runner, bad_text) -> None:
+    result = cli_runner.invoke(app, ["conversation", "create", "--text", bad_text])
+    assert result.exit_code == 1
+    assert "Empty text" in result.stderr
+
+
+@pytest.mark.parametrize("bad_lang", ["", "   "])
+def test_conversation_create_rejects_empty_language(authed_profile, respx_mock, cli_runner, bad_lang) -> None:
+    result = cli_runner.invoke(app, ["conversation", "create", "--text", "hello", "--language", bad_lang])
+    assert result.exit_code == 1
+    assert "Invalid language" in result.stderr
+
+
+def test_conversation_create_escapes_markup_in_id_and_status(authed_profile, respx_mock, cli_runner) -> None:
+    respx_mock.post("/v1/dev/user/conversations").respond(
+        json={"id": "convo[bold]special[/bold]", "status": "pending[cyan]review[/cyan]", "discarded": False}
+    )
+    result = cli_runner.invoke(app, ["conversation", "create", "--text", "hello world"])
+    assert result.exit_code == 0
+    assert "convo[bold]special[/bold]" in result.stdout
+    assert "pending[cyan]review[/cyan]" in result.stdout
+
+
+def test_conversation_from_segments_escapes_markup_in_id(authed_profile, respx_mock, cli_runner, tmp_path) -> None:
+    f = tmp_path / "segments.json"
+    f.write_text(json.dumps([{"text": "hi", "start": 0.0, "end": 1.0}]))
+    respx_mock.post("/v1/dev/user/conversations/from-segments").respond(
+        json={"id": "seg[bold]special[/bold]", "status": "completed", "discarded": False}
+    )
+    result = cli_runner.invoke(app, ["conversation", "from-segments", str(f)])
+    assert result.exit_code == 0
+    assert "seg[bold]special[/bold]" in result.stdout
+
+
+@pytest.mark.parametrize("bad_title", ["", "   "])
+def test_conversation_update_rejects_empty_title(authed_profile, respx_mock, cli_runner, bad_title) -> None:
+    result = cli_runner.invoke(app, ["conversation", "update", "c1", "--title", bad_title])
+    assert result.exit_code == 1
+    assert "Invalid title" in result.stderr

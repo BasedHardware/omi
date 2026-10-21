@@ -52,7 +52,16 @@ GKE_CONFIG_MAP_KEYS_PROD_ONLY = [
 
 STT_LITERALS = {
     'STT_PRERECORDED_MODEL': 'parakeet,modulate-velma-2',
-    'STT_SERVICE_MODELS': 'modulate-velma-2,soniox,dg-nova-3,parakeet',
+    'STT_SERVICE_MODELS': 'modulate-velma-2,soniox,parakeet',
+}
+
+OVERLAY_ENV_KEYS = {
+    'OMI_SHAPED_AGENT_MODE',
+    'TRANSCRIPTION_SHADOW_ENABLED',
+    'TRANSCRIPTION_SHADOW_KILL_SWITCH',
+    'TRANSCRIPTION_SHADOW_UID_ALLOWLIST',
+    'TRANSCRIPTION_SHADOW_PERCENT',
+    'TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS',
 }
 
 
@@ -157,20 +166,70 @@ def _substitute_placeholders(obj: object, *, env: str, compute_project: str, dat
     return obj
 
 
-def _build_config_map_section(env: str) -> ConfigDict:
+def _build_config_map_section(env: str, env_config: ConfigDict) -> ConfigDict:
     keys = list(GKE_CONFIG_MAP_KEYS_BASE)
     if env == 'prod':
         keys.extend(GKE_CONFIG_MAP_KEYS_PROD_ONLY)
     entries: ConfigDict = {}
+    source_entries = env_config.get('gke', {}).get('config_map', {}).get('entries', {})
     for key in keys:
         if key in STT_LITERALS:
-            entries[key] = {'source': 'literal', 'value': STT_LITERALS[key]}
+            source_value = source_entries.get(key, {}).get('value', STT_LITERALS[key])
+            entries[key] = {'source': 'literal', 'value': source_value}
         else:
             entries[key] = {'source': 'environment'}
     return {
         'name': f'{env}-omi-backend-config',
         'entries': entries,
     }
+
+
+def _seed_recovery_defaults(shared: ConfigDict, dev: ConfigDict) -> None:
+    """Keep the safe dev values in base when prod overrides the recovery cohort."""
+    keys = ('BATCH_PIPELINE_RECOVERY_MODE', 'BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST')
+    host_configs = list(dev.get('cloud_run', {}).get('services', {}).items())
+    host_configs.append(('backend-listen', dev.get('gke', {}).get('backend-listen', {})))
+    for name, dev_host in host_configs:
+        shared_host = (
+            shared.get('cloud_run', {}).get('services', {}).get(name)
+            if name != 'backend-listen'
+            else shared.get('gke', {}).get(name)
+        )
+        if shared_host is None:
+            continue
+        for key in keys:
+            if key in dev_host.get('env', {}):
+                shared_host.setdefault('env', {})[key] = deepcopy(dev_host['env'][key])
+
+
+def _seed_stt_service_models_default(shared: ConfigDict) -> None:
+    """Keep the safe route in base while each environment overlays its canary order."""
+    listen_env = shared.get('gke', {}).get('backend-listen', {}).get('env', {})
+    if 'STT_SERVICE_MODELS' in listen_env:
+        listen_env['STT_SERVICE_MODELS'] = {
+            'value': STT_LITERALS['STT_SERVICE_MODELS'],
+            'category': 'stt_policy',
+        }
+
+
+def _remove_overlay_env_keys(shared: ConfigDict) -> None:
+    """Keep selected rollout declarations explicit in both environment overlays.
+
+    The shared extractor hoists identical declarations into base, and hoists a
+    shared subfield when only the value differs. These controls are intentionally
+    environment-scoped, so retaining their full declarations in each overlay
+    preserves the reviewed rollout boundary and keeps generated sources auditable.
+    """
+    cloud_run = shared.get('cloud_run', {}).get('services', {})
+    gke = shared.get('gke', {})
+    hosts = [*cloud_run.values(), *gke.values()]
+    for host in hosts:
+        if not isinstance(host, dict):
+            continue
+        env = host.get('env')
+        if isinstance(env, dict):
+            for key in OVERLAY_ENV_KEYS:
+                env.pop(key, None)
 
 
 def _project_fields(env: str, env_config: ConfigDict) -> ConfigDict:
@@ -197,6 +256,9 @@ def main() -> int:
     norm_dev = _normalize(dev, 'dev')
     norm_prod = _normalize(prod, 'prod')
     shared = _extract_common(norm_dev, norm_prod) or {}
+    _seed_recovery_defaults(shared, norm_dev)
+    _seed_stt_service_models_default(shared)
+    _remove_overlay_env_keys(shared)
 
     dev_substituted = _substitute_placeholders(
         shared,
@@ -215,8 +277,8 @@ def main() -> int:
     prod_overlay_body = _subtract_common(prod_substituted, _strip_legacy_project_keys(prod)) or {}
 
     # Ensure config_map sections live in overlays (env-specific names).
-    dev_overlay_body = _deep_merge(dev_overlay_body, {'gke': {'config_map': _build_config_map_section('dev')}})
-    prod_overlay_body = _deep_merge(prod_overlay_body, {'gke': {'config_map': _build_config_map_section('prod')}})
+    dev_overlay_body = _deep_merge(dev_overlay_body, {'gke': {'config_map': _build_config_map_section('dev', dev)}})
+    prod_overlay_body = _deep_merge(prod_overlay_body, {'gke': {'config_map': _build_config_map_section('prod', prod)}})
 
     base = {
         'schema_version': monolith['schema_version'],

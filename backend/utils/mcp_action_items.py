@@ -15,6 +15,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Union
 
 import database.action_items as action_items_db
+from config.action_item_reminder_triggers import action_item_write_affects_reminder
 from database.vector_db import (
     upsert_action_item_vector,
     delete_action_item_vector,
@@ -116,13 +117,13 @@ def _require_unlocked(uid: str, action_item_id: str) -> Dict[str, Any]:
 
 
 def _reload(uid: str, action_item_id: str) -> Dict[str, Any]:
-    """Re-read an item after a write and shape it for the response. Raises
+    """Re-read the canonical item after a write, before public response shaping. Raises
     ActionItemNotFound if a concurrent delete removed it between the write and
     this read, rather than dereferencing None."""
     item = action_items_db.get_action_item(uid, action_item_id)
     if not item:
         raise ActionItemNotFound("Action item not found")
-    return clean_action_item(item)
+    return item
 
 
 def _sync_reminder(uid: str, item: Dict[str, Any]) -> Dict[str, Any]:
@@ -133,6 +134,8 @@ def _sync_reminder(uid: str, item: Dict[str, Any]) -> Dict[str, Any]:
             description=item.get("description", ""),
             completed=bool(item.get("completed")),
             due_at=item.get("due_at"),
+            status=item.get("status"),
+            deleted=bool(item.get("deleted")),
         )
     except Exception:
         logger.exception("MCP action item reminder sync failed uid=%s id=%s", uid, item.get("id"))
@@ -146,7 +149,7 @@ def create_action_item(
     completed: bool = False,
 ) -> Dict[str, Any]:
     """Create a task and return its cleaned MCP shape. Content-idempotent on
-    (uid, normalized description)."""
+    (uid, normalized description) while the matching task is still open."""
     text = _normalize_description(description)
     parsed_due = parse_due_at(due_at)
     data = {
@@ -156,7 +159,9 @@ def create_action_item(
         "conversation_id": None,
     }
     key = content_idempotency_key(uid, text)
-    item_id = action_items_db.create_action_item(uid, data, idempotency_key=key)
+    # The key comes from the title, so every later task with the same title shares it.
+    # A finished task holding it is an earlier task, not a retry of this call.
+    item_id = action_items_db.create_action_item(uid, data, idempotency_key=key, reuse_finished=False)
 
     # Index for semantic search so an MCP-created task is discoverable the same
     # way app-created tasks are. Best-effort: the task already persisted, so a
@@ -169,7 +174,7 @@ def create_action_item(
     item = action_items_db.get_action_item(uid, item_id)
     if not item:
         raise ActionItemError("Failed to load the created action item")
-    if parsed_due is not None and not completed:
+    if item.get("due_at") is not None and not item.get("completed"):
         _sync_reminder(uid, item)
     return clean_action_item(item)
 
@@ -179,7 +184,7 @@ def set_completed(uid: str, action_item_id: str, completed: bool = True) -> Dict
     _require_unlocked(uid, action_item_id)
     if not action_items_db.mark_action_item_completed(uid, action_item_id, completed=completed):
         raise ActionItemNotFound("Action item not found")
-    return _sync_reminder(uid, _reload(uid, action_item_id))
+    return clean_action_item(_sync_reminder(uid, _reload(uid, action_item_id)))
 
 
 def update_action_item(
@@ -221,7 +226,11 @@ def update_action_item(
                 "MCP update_action_item: vector upsert failed uid=%s id=%s (task updated)", uid, action_item_id
             )
     item = _reload(uid, action_item_id)
-    return _sync_reminder(uid, item) if "due_at" in update_data else item
+    # The phone's scheduled reminder carries both the due time and the title, so either change
+    # re-arms it from the saved row.
+    if action_item_write_affects_reminder(update_data):
+        _sync_reminder(uid, item)
+    return clean_action_item(item)
 
 
 def delete_action_item(uid: str, action_item_id: str) -> None:

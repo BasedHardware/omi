@@ -1,0 +1,5 @@
+{
+  "changes": [
+    "Windows auto-update now ships only installers verified to start after \"Restart to update\", preventing broken updates that removed Omi without a working replacement."
+  ]
+}

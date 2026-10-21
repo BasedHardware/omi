@@ -54,6 +54,24 @@ ingress:
   tls: []
 
 env:
+  # Public client token for v2 cohort reads only; shared backend PostHog stays disabled.
+  - name: PROACTIVITY_V2_POSTHOG_TOKEN
+    value: "phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y"
+  - name: PROACTIVITY_V2_POSTHOG_HOST
+    value: "https://us.posthog.com"
+  # Share reservation state with the other development GKE services.
+  - name: REDIS_DB_HOST
+    valueFrom:
+      configMapKeyRef:
+        name: dev-omi-backend-config
+        key: REDIS_DB_HOST
+  - name: REDIS_DB_PASSWORD
+    valueFrom:
+      secretKeyRef:
+        name: dev-omi-backend-secrets
+        key: REDIS_DB_PASSWORD
+  - name: REDIS_DB_PORT
+    value: "13151"
   - name: OMI_LLM_GATEWAY_PROD
     value: "true"
   - name: OMI_LLM_GATEWAY_SERVICE_TOKEN

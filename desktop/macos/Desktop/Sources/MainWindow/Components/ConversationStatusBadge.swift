@@ -23,10 +23,10 @@ struct ConversationStatusBadge: View {
       )
     case .locked:
       Pill(
-        icon: "lock.fill",
-        text: "Locked",
+        icon: "hourglass",
+        text: "Saved and waiting",
         color: PageGlass.warning,
-        help: "This conversation is locked until your subscription is active."
+        help: "This conversation is saved. Check your plan and usage to see when processing is available."
       )
     case .failed:
       Pill(

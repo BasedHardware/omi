@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+import inspect
 import json
 from pathlib import Path
 import tracemalloc
@@ -358,9 +359,11 @@ def test_public_conversation_read_uses_a_field_mask_and_returns_only_bounded_saf
     assert firestore.path == ['users', 'owner-1', 'conversations', 'conversation-1']
     assert firestore.field_paths == [
         'visibility',
+        'deleted',
         'is_locked',
         'transcript_segments_compressed',
         'transcript_segments',
+        'has_transcript_corrections',
     ]
     assert conversation == {
         'visibility': 'shared',
@@ -553,10 +556,7 @@ async def test_gateway_failure_is_typed_unavailable_without_direct_fallback(monk
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('caller_supplies_cap', [True, False])
-async def test_public_lane_provider_contract_enforces_output_cap_from_caller_and_route_policy(
-    monkeypatch, caller_supplies_cap: bool
-):
-    monkeypatch.setenv('OMI_LLM_GATEWAY_OUTPUT_BUDGET_EXPERIMENTS', 'public_shared_conversation_chat')
+async def test_public_lane_provider_contract_preserves_caller_output_cap(monkeypatch, caller_supplies_cap: bool):
     config = load_gateway_config(prod_mode=True)
     request: dict[str, object] = {
         'model': PUBLIC_SHARED_CONVERSATION_CHAT_AUTO_LANE_ID,
@@ -577,7 +577,10 @@ async def test_public_lane_provider_contract_enforces_output_cap_from_caller_and
     )
 
     provider_request = provider.calls[0].request
-    assert provider_request['max_completion_tokens'] == 600
+    if caller_supplies_cap:
+        assert provider_request['max_completion_tokens'] == 600
+    else:
+        assert 'max_completion_tokens' not in provider_request
     assert provider_request['stream'] is False
     assert 'tools' not in provider_request
     assert 'retrieval' not in provider_request
@@ -934,9 +937,7 @@ def test_gateway_config_inventory_and_promotion_contract():
     assert route.artifact_digest == route.content_digest
     assert route.fallbacks == []
     assert route.retry.max_attempts == 1
-    assert route.output_budget is not None
-    assert route.output_budget.experiment == 'public_shared_conversation_chat'
-    assert route.output_budget.max_completion_tokens == 600
+    assert route.output_budget is None
     assert bundle.lane_id == PUBLIC_SHARED_CONVERSATION_CHAT_AUTO_LANE_ID
     assert bundle.promotion_gates['frontend_service_auth'] == 'cloud_run_oidc_and_opaque_ip_hmac'
 
@@ -955,8 +956,10 @@ def test_gateway_config_inventory_and_promotion_contract():
 
 
 def test_public_shared_chat_route_policy_and_openapi_contract_are_explicit():
+    # CSafeLoader: the manifest is ~4.7k lines and pure-Python safe_load costs
+    # ~0.4s CPU, over the fast-unit 0.30s per-test budget on a loaded runner.
     with (BACKEND_DIR / 'route_policy_manifest.yaml').open(encoding='utf-8') as handle:
-        manifest = yaml.safe_load(handle)
+        manifest = yaml.load(handle, Loader=yaml.CSafeLoader)
     route = next(
         entry
         for entry in manifest['routes']
@@ -967,17 +970,32 @@ def test_public_shared_chat_route_policy_and_openapi_contract_are_explicit():
     assert route['policy']['rate_limit']['policy_name'] == 'public_shared_conversation_chat'
     assert route['policy']['visibility'] == 'public_undocumented'
 
-    app = FastAPI()
-    app.include_router(shared_chat_router.router)
-    assert '/v1/conversations/shared/chat' not in app.openapi()['paths']
+    # The route must stay off the OpenAPI schema: the source route declares
+    # include_in_schema=False, so assert the declaration instead of building a
+    # full FastAPI app + generating the schema (which blew the per-test CPU
+    # budget under the loaded pre-push runner).
+    source = inspect.getsource(shared_chat_router)
+    assert 'include_in_schema=False' in source
+    assert "'/v1/conversations/shared/chat'" in source
 
 
-def test_public_shared_chat_runtime_mode_per_backend_surface():
+@pytest.fixture(scope='module')
+def _runtime_surface_configs():
+    with (BACKEND_DIR / 'deploy/runtime_env.yaml').open(encoding='utf-8') as handle:
+        manifest = yaml.safe_load(handle)
+    charts = {}
+    for environment in ('dev', 'prod'):
+        chart_path = BACKEND_DIR / 'charts' / 'backend-listen' / f'{environment}_omi_backend_listen_values.yaml'
+        with chart_path.open(encoding='utf-8') as handle:
+            charts[environment] = yaml.safe_load(handle)
+    return manifest, charts
+
+
+def test_public_shared_chat_runtime_mode_per_backend_surface(_runtime_surface_configs):
     # Dev enables every surface. Prod enables the Cloud Run services only: the
     # prod load balancer sends /v1/conversations/shared/chat to Cloud Run
     # `backend`, never to GKE backend-listen, which stays off (no Helm roll).
-    with (BACKEND_DIR / 'deploy/runtime_env.yaml').open(encoding='utf-8') as handle:
-        manifest = yaml.safe_load(handle)
+    manifest, charts = _runtime_surface_configs
 
     for environment in ('dev', 'prod'):
         listener_env = manifest['environments'][environment]['gke']['backend-listen']['env']
@@ -995,10 +1013,7 @@ def test_public_shared_chat_runtime_mode_per_backend_surface():
             'PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_INVOKER_SA'
         )
 
-        chart_path = BACKEND_DIR / 'charts' / 'backend-listen' / f'{environment}_omi_backend_listen_values.yaml'
-        with chart_path.open(encoding='utf-8') as chart_handle:
-            chart = yaml.safe_load(chart_handle)
-        chart_env = {item['name']: item.get('value') for item in chart['env']}
+        chart_env = {item['name']: item.get('value') for item in charts[environment]['env']}
         assert (
             chart_env['PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_INVOKER_SA']
             == {

@@ -19,11 +19,10 @@
         "platforms": [
           "linux/amd64"
         ],
-        "flags": [
-          "--memory=2Gi",
-          "--cpu=1",
-          "--timeout=3600"
-        ],
+        "flags": {
+          "development": ["--memory=2Gi", "--cpu=1", "--timeout=3600"],
+          "prod": ["--memory=2Gi", "--cpu=1", "--timeout=3600", "--no-cpu-throttling"]
+        },
         "runtime_secrets": {
           "OMI_API_SECRET_KEY": "WEB_ADMIN_OMI_API_SECRET_KEY:latest",
           "TYPESENSE_HOST": "WEB_ADMIN_TYPESENSE_HOST:latest",
@@ -46,7 +45,8 @@
           "CRON_SECRET": "WEB_ADMIN_CRON_SECRET:latest",
           "GCP_BILLING_SA_JSON": "WEB_ADMIN_GCP_BILLING_SA_JSON:latest",
           "ADMIN_ANTHROPIC_COST_API_KEY": "WEB_ADMIN_ANTHROPIC_COST_API_KEY:latest",
-          "ADMIN_OPENAI_COST_API_KEY": "WEB_ADMIN_OPENAI_COST_API_KEY:latest"
+          "ADMIN_OPENAI_COST_API_KEY": "WEB_ADMIN_OPENAI_COST_API_KEY:latest",
+      "RESEND_API_KEY": "WEB_ADMIN_RESEND_API_KEY:latest"
         },
         "remove_runtime_secrets": [
           "FIREBASE_PROJECT_ID",
@@ -259,7 +259,10 @@
           "--base-url",
           "{base_url}"
         ],
-        "marker": "app:ready"
+        "marker": "app:ready",
+        "path": "/login",
+        "timeout_seconds": 120,
+        "retry_timeout_seconds": 60
       },
       "traffic_promotion": "candidate_after_browser_acceptance"
     },

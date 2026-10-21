@@ -18,22 +18,26 @@ enum SiriIntentTelemetry {
       let action =
         name == "complete_task"
         ? "complete"
-        : name == "open"
+        : name == "open" || name == "open_chat"
           ? "open"
-          : name == "start_listening" || name == "stop_listening" ? name : "create"
+          : name == "ask_omi"
+            ? "ask"
+            : name == "start_listening" || name == "stop_listening" ? name : "create"
       throw SiriActionFailure(action: action, failure: failure)
     }
   }
 
   @MainActor
   private static func record(_ name: String, outcome: String, started: Date) {
+    var properties: [String: Any] = [
+      "platform": "macos", "outcome": outcome,
+      "latency_ms": Int(Date().timeIntervalSince(started) * 1_000),
+      "invoked_via": "unknown",
+    ]
+    if name != "ask_omi" { properties["intent"] = name }
     PostHogManager.shared.track(
-      "Siri Intent Performed",
-      properties: [
-        "intent": name, "platform": "macos", "outcome": outcome,
-        "latency_ms": Int(Date().timeIntervalSince(started) * 1_000),
-        "invoked_via": "unknown",
-      ])
+      name == "ask_omi" ? "Siri Ask Omi Performed" : "Siri Intent Performed",
+      properties: properties)
   }
 }
 
@@ -51,6 +55,144 @@ struct RememberIntent: AppIntent {
     }
     let content = SiriIntentService.normalizedMemory(saved.content)
     return .result(dialog: IntentDialog("Got it. I'll remember that \(content)."))
+  }
+}
+
+struct OpenOmiChatIntent: AppIntent {
+  static let title: LocalizedStringResource = "Open Omi chat"
+  static let description = IntentDescription("Open Omi's chat without asking a new question.")
+  static let isDiscoverable = false
+  static let openAppWhenRun = true
+  @Parameter(title: "Draft") var draft: String?
+  @Parameter(title: "Draft submission was attempted") var draftWasAttempted: Bool?
+  @Parameter(title: "Owner") var ownerID: String?
+
+  static func shouldAutoSend(draft: String?, wasAttempted: Bool?) -> Bool {
+    !SiriIntentService.normalizedQuestion(draft ?? "").isEmpty && wasAttempted != true
+  }
+
+  @MainActor
+  func perform() async throws -> some IntentResult {
+    try await SiriIntentTelemetry.perform("open_chat") {
+      guard let authorization = RuntimeOwnerIdentity.captureAuthorizationSnapshot(expectedOwnerID: ownerID)
+      else { throw SiriFailure.auth }
+      let question = SiriIntentService.normalizedQuestion(draft ?? "")
+      if question.isEmpty {
+        AppDelegate.summonWindowTarget()?.openMainAppChat()
+      } else if Self.shouldAutoSend(draft: draft, wasAttempted: draftWasAttempted) {
+        AppDelegate.summonWindowTarget()?.openMainAppChat(
+          siriQuestion: question, authorization: authorization)
+      } else {
+        AppDelegate.summonWindowTarget()?.openMainAppChat(
+          appendingDraft: question, authorization: authorization)
+      }
+    }
+    return .result()
+  }
+}
+
+/// Siri can open chat directly without a free-text slot that competes with Ask Omi.
+struct OpenOmiChatActionIntent: AppIntent {
+  static let title: LocalizedStringResource = "Open Omi chat"
+  static let description = IntentDescription("Open Omi chat to view or continue a conversation.")
+  static let openAppWhenRun = true
+
+  @MainActor
+  func perform() async throws -> some IntentResult {
+    try await OpenOmiChatIntent().perform()
+  }
+}
+
+struct AskOmiIntent: AppIntent {
+  static let title: LocalizedStringResource = "Ask Omi"
+  static let description = IntentDescription(
+    "Ask Omi a question about your conversations, memories, and tasks and get a spoken answer."
+  )
+  // Siri must authenticate before reading personal answers aloud.
+  static let authenticationPolicy: IntentAuthenticationPolicy = .requiresAuthentication
+  static let openAppWhenRun = false
+
+  static var parameterSummary: some ParameterSummary {
+    Summary("Ask Omi \(\.$question)")
+  }
+
+  @Parameter(
+    title: "Question",
+    description: "A question for Omi to answer from your conversations, memories, and tasks.",
+    requestValueDialog: "What would you like to ask Omi?"
+  )
+  var question: String
+
+  static func continuation(
+    after result: SiriAskResult, question: String, ownerID: String?
+  ) -> OpenOmiChatIntent {
+    let openChat = OpenOmiChatIntent()
+    openChat.ownerID = ownerID
+    // A draft exists only when the live provider rejected the send before it
+    // started. Pending and answered turns may already be in the chat journal.
+    if case .draft = result {
+      openChat.draft = question
+      openChat.draftWasAttempted = false
+    }
+    return openChat
+  }
+
+  /// Remember saves require local-device authentication (contracts/siri). Ask
+  /// runs under the weaker companion-device `.requiresAuthentication` policy,
+  /// so a remember phrase is redirected to the strict Remember shortcut
+  /// instead of persisting a private memory under the weaker policy. No save
+  /// is attempted here, so no success is claimed.
+  static func rememberRedirectDialog(for question: String) -> String? {
+    let lower = question.lowercased()
+    guard lower.hasPrefix("remember ") || lower.hasPrefix("to remember ") else { return nil }
+    return "To save that, say 'Remember something in Omi' instead."
+  }
+
+  @MainActor
+  func perform() async throws -> IntentResultContainer<Never, Never, Never, IntentDialog> {
+    let value = SiriIntentService.normalizedQuestion(question)
+    let ownerID = RuntimeOwnerIdentity.captureAuthorizationSnapshot()?.ownerID
+    let openChat = OpenOmiChatIntent()
+    openChat.ownerID = ownerID
+    if let redirect = Self.rememberRedirectDialog(for: value) {
+      // Record the redirect as a cancelled ask (no write, no answer), matching
+      // the iOS outcome for the same phrase.
+      _ = try? await SiriIntentTelemetry.perform("ask_omi") { throw SiriFailure.cancelled }
+      return .result(dialog: IntentDialog("\(redirect)"))
+    }
+    let result = try await SiriIntentTelemetry.perform("ask_omi") {
+      try await SiriIntentService.ask(value)
+    }
+    switch result {
+    case .draft:
+      let continuation = Self.continuation(after: result, question: value, ownerID: ownerID)
+      if #available(macOS 15.2, *) {
+        return .result(opensIntent: continuation, dialog: "Open Omi to finish your question in chat.")
+      }
+      _ = try await continuation.perform()
+      return .result(dialog: "Open Omi to finish your question in chat.")
+    case .pending:
+      let continuation = Self.continuation(after: result, question: value, ownerID: ownerID)
+      if #available(macOS 15.2, *) {
+        return .result(
+          opensIntent: continuation, dialog: "Omi couldn't finish the answer here. Open Omi chat to check it.")
+      }
+      _ = try await continuation.perform()
+      return .result(dialog: "Omi couldn't finish the answer here. Open Omi chat to check it.")
+    case .answered(let answer):
+      guard !answer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+        let continuation = Self.continuation(after: result, question: value, ownerID: ownerID)
+        if #available(macOS 15.2, *) {
+          return .result(opensIntent: continuation, dialog: "Open Omi chat to continue.")
+        }
+        _ = try await continuation.perform()
+        return .result(dialog: "Open Omi chat to continue.")
+      }
+      // The full answer is persisted to the owner's chat, so a truncated spoken
+      // answer must still say where the remainder can be read.
+      let spoken = answer.count > 450 ? String(answer.prefix(447)) + "… Open Omi chat for the rest." : answer
+      return .result(dialog: IntentDialog("\(spoken)"))
+    }
   }
 }
 
@@ -228,6 +370,24 @@ extension StopListeningIntent {
 
 struct OmiAppShortcuts: AppShortcutsProvider {
   static var appShortcuts: [AppShortcut] {
+    AppShortcut(
+      intent: AskOmiIntent(),
+      phrases: [
+        "Ask \(.applicationName)",
+        "Ask \(.applicationName) a question",
+        "Question for \(.applicationName)",
+        "\(.applicationName) question",
+        "Check \(.applicationName)",
+        "Ask a question in \(.applicationName)",
+        "Ask \(.applicationName) something",
+        "I have a question for \(.applicationName)",
+      ], shortTitle: "Ask Omi", systemImageName: "bubble.left.and.text.bubble.right")
+    AppShortcut(
+      intent: OpenOmiChatActionIntent(),
+      phrases: [
+        "Open \(.applicationName) chat",
+        "Open chat in \(.applicationName)",
+      ], shortTitle: "Open Omi chat", systemImageName: "bubble.left.and.bubble.right")
     AppShortcut(
       intent: RememberIntent(),
       phrases: [

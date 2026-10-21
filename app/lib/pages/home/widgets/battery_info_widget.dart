@@ -1,3 +1,4 @@
+import 'package:omi/pages/phone_calls/phone_calls_feature.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 
@@ -110,7 +111,7 @@ class _BatteryInfoWidgetState extends State<BatteryInfoWidget> {
                   ],
                 ],
               );
-              if (!isMemoriesPage) return batteryPill;
+              if (!isMemoriesPage || !PhoneCallsFeature.visible) return batteryPill;
               return Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -155,7 +156,12 @@ class _BatteryInfoWidgetState extends State<BatteryInfoWidget> {
                     ),
                   ),
                   const SizedBox(width: 6.0),
-                  Text(status, style: OmiType.caption.copyWith(fontSize: 12, color: OmiColors.textSecondary)),
+                  Flexible(
+                    child: Text(status,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: OmiType.caption.copyWith(fontSize: 12, color: OmiColors.textSecondary)),
+                  ),
                 ],
               );
             } else {
@@ -172,12 +178,16 @@ class _BatteryInfoWidgetState extends State<BatteryInfoWidget> {
                   }
                 },
                 children: [
-                  Image.asset(Assets.images.logoTransparent.path, width: 16, height: 16),
+                  // The asset is white; tint it so it shows on the light pill too.
+                  Image.asset(Assets.images.logoTransparent.path, width: 16, height: 16, color: OmiColors.textPrimary),
                   // Home has room for the word; the other tabs keep the logo alone (it still has a
                   // spoken label).
                   if (isMemoriesPage) ...[
                     const SizedBox(width: 6),
-                    Text(label, style: OmiType.caption.copyWith(fontSize: 12)),
+                    Flexible(
+                      child: Text(label,
+                          maxLines: 1, overflow: TextOverflow.ellipsis, style: OmiType.caption.copyWith(fontSize: 12)),
+                    ),
                   ],
                 ],
               );
@@ -256,6 +266,7 @@ class _HomeRecordButtonState extends State<HomeRecordButton> {
 
   /// Once, after the first recording stops: say that holding the button offers more ways to record.
   void _maybeShowOptionsTip(BuildContext context) {
+    if (!PhoneCallsFeature.visible) return;
     final prefs = SharedPreferencesUtil();
     if (prefs.getBool(_optionsTipKey)) return;
     prefs.saveBool(_optionsTipKey, true);
@@ -282,16 +293,20 @@ class _HomeRecordButtonState extends State<HomeRecordButton> {
     OmiHaptics.light();
     showOmiSheet<void>(
       context: context,
-      title: context.l10n.pendantIsListeningTitle,
+      title: context.read<CaptureProvider>().pendantCaptureVerified
+          ? context.l10n.pendantIsListeningTitle
+          : CaptureSources.label(context, 'omi'),
       builder: (sheetContext) => PendantListeningSheet(
         onRecordWithPhone: () {
           Navigator.pop(sheetContext);
           _startPhoneRecording(context);
         },
-        onPhoneCall: () {
-          Navigator.pop(sheetContext);
-          if (context.mounted) routeToPage(context, const PhoneCallsPage());
-        },
+        onPhoneCall: PhoneCallsFeature.visible
+            ? () {
+                Navigator.pop(sheetContext);
+                if (context.mounted) routeToPage(context, const PhoneCallsPage());
+              }
+            : null,
         onKeepPendant: () => Navigator.pop(sheetContext),
       ),
     );
@@ -359,7 +374,8 @@ class _HomeRecordButtonState extends State<HomeRecordButton> {
         // The phone recording is this button's own (live or paused); anything else is idle here.
         final isRecording = captureProvider.recordingState == RecordingState.record || captureProvider.isPhoneMicPaused;
         final isInitialising = captureProvider.recordingState == RecordingState.initialising;
-        final canShowOptions = !isRecording && !isInitialising;
+        // The options sheet only adds a phone call; with calls hidden there is nothing else to offer.
+        final canShowOptions = PhoneCallsFeature.visible && !isRecording && !isInitialising;
         final l10n = context.l10n;
         final circle = Semantics(
           button: true,
@@ -630,7 +646,9 @@ class PendantListeningSheet extends StatelessWidget {
   });
 
   final VoidCallback onRecordWithPhone;
-  final VoidCallback onPhoneCall;
+
+  /// Null hides the phone-call option.
+  final VoidCallback? onPhoneCall;
   final VoidCallback onKeepPendant;
 
   @override
@@ -650,13 +668,15 @@ class PendantListeningSheet extends StatelessWidget {
             subtitle: l10n.pendantPausesUntilYouFinish,
             onTap: onRecordWithPhone,
           ),
-          const SizedBox(height: 10),
-          _RecordOption(
-            icon: Icons.call_rounded,
-            title: l10n.phoneCall,
-            subtitle: l10n.pendantPausesDuringCall,
-            onTap: onPhoneCall,
-          ),
+          if (onPhoneCall != null) ...[
+            const SizedBox(height: 10),
+            _RecordOption(
+              icon: Icons.call_rounded,
+              title: l10n.phoneCall,
+              subtitle: l10n.pendantPausesDuringCall,
+              onTap: onPhoneCall!,
+            ),
+          ],
           const SizedBox(height: OmiSpacing.md),
           OmiButton.secondary(label: l10n.keepUsingPendant, onPressed: onKeepPendant),
         ],

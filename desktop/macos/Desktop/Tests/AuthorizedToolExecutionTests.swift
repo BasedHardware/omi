@@ -139,6 +139,27 @@ final class AuthorizedToolExecutionTests: XCTestCase {
     XCTAssertEqual(command.executor, .realtimeHub)
   }
 
+  func testWebSearchOnTypedChatUsesThePublicWebLane() throws {
+    for surface in ["floating_chat", "main_chat"] {
+      let command = try AuthorizedToolExecution.parse(
+        payload(
+          toolName: "web_search",
+          overrides: ["surfaceKind": surface]),
+        currentOwnerID: "owner-1")
+
+      XCTAssertEqual(command.canonicalToolName, "web_search")
+      XCTAssertEqual(command.surfaceKind, surface)
+      XCTAssertEqual(command.executor, .chatToolExecutor)
+    }
+
+    let voice = try AuthorizedToolExecution.parse(
+      payload(
+        toolName: "web_search",
+        overrides: ["surfaceKind": "realtime_voice"]),
+      currentOwnerID: "owner-1")
+    XCTAssertEqual(voice.executor, .realtimeHub)
+  }
+
   func testRealtimeHandlerRejectionUsesExactFailedLedgerWireTuple() throws {
     let command = try AuthorizedToolExecution.parse(
       payload(

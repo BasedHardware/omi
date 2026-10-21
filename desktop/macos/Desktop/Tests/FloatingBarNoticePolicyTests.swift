@@ -5,38 +5,27 @@ import XCTest
 
 /// The floating bar's one timing table: which notices time out, for how long, and which wait.
 final class FloatingBarNoticePolicyTests: XCTestCase {
-  func testInformationalCardWithInterjectOffUsesTheInformationalTime() {
+  func testInformationalCardUsesTheInformationalTime() {
     XCTAssertEqual(
       FloatingBarNoticePolicy.lifetime(
         title: "A title", message: "Some long message that used to be ignored at six seconds",
-        kind: .insight, isPersistent: false, interjectEnabled: false),
+        kind: .insight, isPersistent: false),
       .timed(seconds: OmiFeedbackTiming.informational))
-  }
-
-  func testInterjectOnKeepsReadingTimeDuration() {
-    // task base 6 s + 4 words at 0.25 s.
-    XCTAssertEqual(
-      FloatingBarNoticePolicy.lifetime(
-        title: "two words", message: "two more", kind: .task, isPersistent: false, interjectEnabled: true),
-      .timed(seconds: 7))
   }
 
   func testTrialCardsPersistEvenWhenTheCallerDidNotAsk() {
     XCTAssertTrue(FloatingBarNoticePolicy.persists(kind: .trial, requestedPersistent: false))
-    for interject in [false, true] {
-      XCTAssertEqual(
-        FloatingBarNoticePolicy.lifetime(
-          title: "Trial Ended", message: "Upgrade", kind: .trial, isPersistent: false,
-          interjectEnabled: interject),
-        .untilDismissed)
-    }
+    XCTAssertEqual(
+      FloatingBarNoticePolicy.lifetime(
+        title: "Trial Ended", message: "Upgrade", kind: .trial, isPersistent: false),
+      .untilDismissed)
   }
 
   func testRequestedPersistenceWinsForEveryKind() {
     for kind in ProactiveNotificationKind.allCases {
       XCTAssertEqual(
         FloatingBarNoticePolicy.lifetime(
-          title: "t", message: "m", kind: kind, isPersistent: true, interjectEnabled: false),
+          title: "t", message: "m", kind: kind, isPersistent: true),
         .untilDismissed, "\(kind)")
     }
   }
@@ -52,7 +41,7 @@ final class FloatingBarNoticePolicyTests: XCTestCase {
     let card = FloatingBarNotification(
       ownerID: "owner", title: "Trial ending tomorrow", message: "Check out plans", assistantId: "trial",
       kind: .trial)
-    XCTAssertEqual(FloatingBarNoticePolicy.lifetime(for: card, interjectEnabled: false), .untilDismissed)
+    XCTAssertEqual(FloatingBarNoticePolicy.lifetime(for: card), .untilDismissed)
   }
 
   func testConfirmationIsTheSharedConfirmationTime() {

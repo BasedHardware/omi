@@ -15,9 +15,12 @@ import 'package:omi/env/env.dart';
 import 'package:omi/env/physical_qualification.dart';
 import 'package:omi/utils/analytics/adapters/posthog_adapter.dart';
 import 'package:omi/utils/analytics/analytics_adapter.dart';
+import 'package:omi/utils/analytics/device_health_telemetry.dart';
 import 'package:omi/utils/analytics/intercom.dart';
+import 'package:omi/services/capture/empty_recording_notice.dart';
 import 'package:omi/utils/analytics/registry/events.g.dart';
 import 'package:omi/utils/analytics/registry/typed_events.dart';
+import 'package:omi/utils/auth/sign_in_failure.dart';
 import 'package:omi/utils/build_provenance.dart';
 import 'package:omi/utils/device.dart';
 import 'package:omi/utils/platform/platform_service.dart';
@@ -25,6 +28,8 @@ import 'package:omi/utils/speech_profile_enroll_events.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 import 'package:omi/utils/debugging/crashlytics_manager.dart';
+import 'package:omi/services/telemetry/client_telemetry.dart';
+import 'package:omi/services/telemetry/client_telemetry_flags.dart';
 import 'package:omi/utils/analytics/background_checkpoint_store.dart';
 
 enum ProductErrorKind { flutterFramework, uncaughtDart, startup }
@@ -37,6 +42,8 @@ class AnalyticsManager {
   static final Map<String, DateTime> _pendingTimedEvents = {};
   static const Duration _pendingTimedEventTtl = Duration(hours: 1);
   static const Duration _initTimeout = Duration(seconds: 2);
+  static const Duration _settleTimeout = Duration(seconds: 6); // reset + identify + id over the channel
+  static int _settleAttempts = 0;
   static const int _maxQueuedEvents = 200;
   static const int _flushBatchSize = 20;
   static const int _maxDeliveryAttempts = 3;
@@ -47,6 +54,17 @@ class AnalyticsManager {
   static Timer? _retryTimer;
   static int _droppedEvents = 0;
   static Map<String, Object> _globalEventProperties = {'app_platform': _mobilePlatformName};
+
+  /// Events whose PostHog rows were missing the release build (same `app_build` super-property as Device Connected).
+  static const Set<String> _captureWedgeFamilyEvents = {
+    'Capture Wedge Detected',
+    'Local WAL Stuck',
+    'Recording Start Failed',
+    'Capture Recovery Prompt Shown',
+    'Capture Recovery Actioned',
+    'Capture Recovery Resolved',
+    'Capture Ingress Health',
+  };
   static bool _analyticsReady = false;
   static bool _trackingEnabled = true;
   static int _consentRevision = 0;
@@ -63,10 +81,15 @@ class AnalyticsManager {
 
   static void Function(String? identity, bool enabled)? identityChanged;
   static int get identityEpoch => _identityEpoch;
+  static final ValueNotifier<int> _identityChanges = ValueNotifier(0);
+  static ValueListenable<int> get identityChanges => _identityChanges;
   static bool get identityKnown => _identityKnown;
   static bool get trackingEnabled => _trackingEnabled;
+  static final ValueNotifier<bool> _trackingConsent = ValueNotifier(true);
+  static ValueListenable<bool> get trackingConsent => _trackingConsent;
   static String? get currentIdentity => _boundIdentity;
   static String get appBuild => _globalEventProperties['app_build']?.toString() ?? 'unknown';
+  static bool get deviceHealthRecordingEnabled => _trackingEnabled && (!_identityKnown || _boundIdentity != null);
   static String get mobilePlatform => _mobilePlatformName;
   static Map<String, Object> get healthSnapshot => {
         'ready': _analyticsReady,
@@ -97,11 +120,20 @@ class AnalyticsManager {
   /// Fence synchronously, before any SDK identify/reset operation is scheduled.
   void bindIdentity(String? identity) {
     if (_identityKnown && _boundIdentity == identity) return;
+    final previousOwner = _identityKnown ? _boundIdentity : null;
     final hadSession = _eventContext.containsKey('app_session_id');
     _identityResetNeeded = _identityResetNeeded || !_identityKnown || _boundIdentity != null;
+    // Keep a durable epoch across relaunch of the same account (native session markers survive), retire on change.
+    final savedIdentity = _preferences.getString('device_health_identity');
+    final savedEpoch = _preferences.getInt('device_health_identity_epoch');
+    final sameOnRestart = !_identityKnown && identity != null && savedIdentity == identity && savedEpoch > 0;
+    _identityEpoch = sameOnRestart ? savedEpoch - 1 : (_identityEpoch > savedEpoch ? _identityEpoch : savedEpoch);
     _identityKnown = true;
     _identityEpoch++;
+    _settleAttempts = 0;
     _boundIdentity = identity;
+    _identityChanges.value = _identityEpoch;
+    ClientTelemetry.instance.onOwnerChanged(previous: previousOwner, next: identity);
     _droppedEvents += _queuedEvents.length;
     _queuedEvents.clear();
     _pendingTimedEvents.clear();
@@ -110,6 +142,9 @@ class AnalyticsManager {
       CrashlyticsManager.instance.setUserAttribute('app_session_id', '');
     } catch (_) {}
     _settledDistinctId = null;
+    unawaited(_preferences.saveString('device_health_identity', identity ?? ''));
+    unawaited(_preferences.saveInt('device_health_identity_epoch', _identityEpoch));
+    unawaited(DeviceHealthTelemetry.syncPolicy(enabled: _trackingEnabled && identity != null, retire: !sameOnRestart));
     _notifyIdentity(null, false);
     unawaited(_settleIdentity());
     if (hadSession && _trackingEnabled) {
@@ -135,29 +170,40 @@ class AnalyticsManager {
       if (adapter is AnalyticsIdentityAdapter) {
         distinctId = await (adapter as AnalyticsIdentityAdapter)
             .settleIdentity(_boundIdentity, reset: reset)
-            .timeout(_initTimeout);
+            .timeout(_settleTimeout);
       } else {
         if (reset) adapter.reset();
         if (_boundIdentity != null) adapter.identify(userId: _boundIdentity!);
       }
       if (epoch != _identityEpoch || !identical(adapter, _adapter) || !_trackingEnabled) return;
       _identityResetNeeded = false;
+      _settleAttempts = 0;
       _settledDistinctId = distinctId;
       _scheduleFlush();
       _notifyIdentity(distinctId, true);
     } catch (_) {
-      if (epoch == _identityEpoch) _notifyIdentity(null, false);
+      if (epoch != _identityEpoch) return;
+      _notifyIdentity(null, false);
+      // A slow or failed SDK round trip (fresh install, first sign-in) must not strand the session.
+      if (_settleAttempts < _retryDelays.length) {
+        Timer(_retryDelays[_settleAttempts++], () {
+          if (epoch == _identityEpoch && _settledDistinctId == null) unawaited(_settleIdentity());
+        });
+      }
     }
   }
 
-  void recordProductError(ProductErrorKind kind) => track('Product Error', properties: {
-        'error_kind': switch (kind) {
-          ProductErrorKind.flutterFramework => 'flutter_framework',
-          ProductErrorKind.uncaughtDart => 'uncaught_dart',
-          ProductErrorKind.startup => 'startup',
+  void recordProductError(ProductErrorKind kind) => track(
+        'Product Error',
+        properties: {
+          'error_kind': switch (kind) {
+            ProductErrorKind.flutterFramework => 'flutter_framework',
+            ProductErrorKind.uncaughtDart => 'uncaught_dart',
+            ProductErrorKind.startup => 'startup',
+          },
+          'diagnostic_source': 'crashlytics',
         },
-        'diagnostic_source': 'crashlytics',
-      });
+      );
 
   /// Periodic operational signal; does not recursively emit on queue failures.
   void recordTelemetryHealth() {
@@ -187,7 +233,10 @@ class AnalyticsManager {
     if (PhysicalQualification.enabled) return;
     _initStarted = true;
     if (_adapter == null && Env.posthogApiKey != null) {
-      _adapter = PostHogAnalyticsAdapter(apiKey: Env.posthogApiKey!);
+      _adapter = PostHogAnalyticsAdapter(
+        apiKey: Env.posthogApiKey!,
+        personPropertiesForFlags: () => {'\$email': _preferences.email},
+      );
     }
     final adapter = _adapter;
     if (adapter == null || _analyticsReady) return;
@@ -206,6 +255,8 @@ class AnalyticsManager {
         final consent = await SharedPreferences.getInstance();
         if (consentRevision == _consentRevision) {
           _trackingEnabled = consent.getBool('product_analytics_enabled') ?? _trackingEnabled;
+          _trackingConsent.value = _trackingEnabled;
+          if (!_trackingEnabled) await DeviceHealthTelemetry.syncPolicy(enabled: false, retire: true);
         }
         await PlatformService.executeIfSupportedAsync(PlatformService.isAnalyticsSupported, adapter.init);
         if (!identical(_adapter, adapter)) return;
@@ -278,6 +329,7 @@ class AnalyticsManager {
     _globalEventProperties = {'app_platform': _mobilePlatformName};
     _analyticsReady = false;
     _trackingEnabled = true;
+    _trackingConsent.value = true;
     _clientAppNamespace = 'unknown';
     _settledDistinctId = null;
     _identityEpoch++;
@@ -431,7 +483,10 @@ class AnalyticsManager {
   void optInTracking() {
     _consentRevision++;
     if (!_trackingEnabled) _identityEpoch++;
+    unawaited(_preferences.saveInt('device_health_identity_epoch', _identityEpoch));
     _trackingEnabled = true;
+    unawaited(DeviceHealthTelemetry.syncPolicy(enabled: !_identityKnown || _boundIdentity != null, retire: false));
+    _trackingConsent.value = true;
     unawaited(_persistTrackingPreference(true));
     _notifyIdentity(null, false);
     PlatformService.executeIfSupported(PlatformService.isAnalyticsSupported, () {
@@ -448,8 +503,11 @@ class AnalyticsManager {
   void optOutTracking() {
     _consentRevision++;
     _trackingEnabled = false;
+    _trackingConsent.value = false;
     unawaited(_persistTrackingPreference(false));
     _identityEpoch++;
+    unawaited(_preferences.saveInt('device_health_identity_epoch', _identityEpoch));
+    unawaited(DeviceHealthTelemetry.syncPolicy(enabled: false, retire: true));
     _queuedEvents.clear();
     _pendingTimedEvents.clear();
     _settledDistinctId = null;
@@ -498,8 +556,7 @@ class AnalyticsManager {
   }
 
   void migrateUser(String newUid) {
-    // Account transitions use the same fence; aliasing unrelated accounts is
-    // not a supported analytics migration policy.
+    // Account transitions use the same fence; aliasing unrelated accounts is not a supported policy.
     bindIdentity(newUid);
     unawaited(_clearPersonPropertyCache());
   }
@@ -508,23 +565,63 @@ class AnalyticsManager {
     _setUserPropertiesBatch({'\$name': _preferences.fullName, '\$email': _preferences.email});
   }
 
-  Future<bool> isFeatureEnabled(String key) async {
+  /// One fenced read per flag value: no adapter/identity, tracking off or an identity switch mid-read → null.
+  Future<T?> _readFlag<T>(Future<T> Function(AnalyticsFeatureFlagAdapter adapter) read,
+      {Duration timeout = _initTimeout}) async {
     final adapter = _adapter;
-    if (adapter == null || !adapter.isInitialized || !_trackingEnabled || _settledDistinctId == null) {
-      return false;
-    }
-    if (adapter is! AnalyticsFeatureFlagAdapter) return false;
+    if (adapter == null || !adapter.isInitialized || !_trackingEnabled || _settledDistinctId == null) return null;
+    if (adapter is! AnalyticsFeatureFlagAdapter) return null;
     final epoch = _identityEpoch;
     final identity = _settledDistinctId;
     try {
-      final enabled = await (adapter as AnalyticsFeatureFlagAdapter).isFeatureEnabled(key).timeout(_initTimeout);
-      if (epoch != _identityEpoch || !identical(identity, _settledDistinctId) || !_trackingEnabled) {
-        return false;
-      }
-      return enabled;
+      final value = await read(adapter as AnalyticsFeatureFlagAdapter).timeout(timeout);
+      if (epoch != _identityEpoch || !identical(identity, _settledDistinctId) || !_trackingEnabled) return null;
+      return value;
     } catch (_) {
-      return false;
+      return null;
     }
+  }
+
+  /// Off-path refresh allows the adapter's four-second request to settle.
+  Future<bool> refreshBooleanFeatureFlag(String key) async =>
+      await _readFlag((a) async {
+        await a.reloadFeatureFlags();
+        return a is AnalyticsBooleanFlagAdapter &&
+            (a as AnalyticsBooleanFlagAdapter).isBooleanFeatureEnabledCached(key);
+      }, timeout: const Duration(seconds: 6)) ??
+      false;
+
+  bool isBooleanFeatureEnabledCached(String key) {
+    final adapter = _adapter;
+    return _trackingEnabled &&
+        _settledDistinctId != null &&
+        adapter is AnalyticsBooleanFlagAdapter &&
+        (adapter as AnalyticsBooleanFlagAdapter).isBooleanFeatureEnabledCached(key);
+  }
+
+  Future<bool> isBooleanFeatureEnabled(String key) async =>
+      await _readFlag((a) => a is AnalyticsBooleanFlagAdapter
+          ? (a as AnalyticsBooleanFlagAdapter).isBooleanFeatureEnabled(key)
+          : Future.value(false)) ??
+      false;
+
+  Future<bool> isFeatureEnabled(String key) async => await _readFlag((a) => a.isFeatureEnabled(key)) ?? false;
+  Future<Object?> getFeatureFlagPayload(String key) => _readFlag<Object?>((a) => a.getFeatureFlagPayload(key));
+  Future<String?> getFeatureFlagVariant(String key) => _readFlag<String?>((a) => a.getFeatureFlagVariant(key));
+
+  /// Re-fetches flags for the settled identity (a read right after sign-in would otherwise see the anonymous id's).
+  Future<bool> reloadFeatureFlags() async => await _readFlag<bool>((a) => a.reloadFeatureFlags()) ?? false;
+  String? get settledDistinctId => _settledDistinctId; // null until an identity settles
+  final Set<String> _recordedFlagExposures = {};
+
+  /// PostHog Experiments exposure (`$feature_flag_called`), once per identity/flag/arm; also sets `$feature/<key>`.
+  bool recordFeatureFlagExposure(String key, String variant) {
+    final identity = _settledDistinctId;
+    if (identity == null || !_trackingEnabled) return false;
+    if (!_recordedFlagExposures.add('$identity:$key:$variant')) return false;
+    _adapter?.registerSuperProperties({'\$feature/$key': variant});
+    track(r'$feature_flag_called', properties: {r'$feature_flag': key, r'$feature_flag_response': variant});
+    return true;
   }
 
   void track(String eventName, {Map<String, dynamic>? properties}) =>
@@ -532,6 +629,7 @@ class AnalyticsManager {
         final adapter = _adapter;
         if (adapter == null || !_trackingEnabled) return;
         final props = <String, Object>{};
+        final ownedKeys = properties?.keys.toSet() ?? <String>{};
         if (properties != null) {
           properties.forEach((k, v) {
             final coerced = _coerceProperty(v);
@@ -543,7 +641,15 @@ class AnalyticsManager {
         if (start != null) {
           props['\$duration'] = DateTime.now().difference(start).inMilliseconds / 1000.0;
         }
-        props.addAll(_eventContext);
+        for (final entry in _eventContext.entries) {
+          if (!ownedKeys.contains(entry.key)) props.putIfAbsent(entry.key, () => entry.value);
+        }
+        // Only positive integer schema versions are valid. Invalid versions
+        // use the default delivery envelope rather than entering the wire.
+        final schemaVersion = props['schema_version'];
+        if (schemaVersion != null && (schemaVersion is! int || schemaVersion < 1)) {
+          props.remove('schema_version');
+        }
         if (eventName == 'Product Journey Outcome' || eventName == 'Product Value') {
           props['experiment_context_verified'] = true;
         }
@@ -551,6 +657,7 @@ class AnalyticsManager {
           _QueuedAnalyticsEvent(
             eventName: eventName,
             properties: props,
+            ownedKeys: ownedKeys,
             eventId: const Uuid().v4(),
             occurredAt: DateTime.now().toUtc(),
             identityEpoch: _identityEpoch,
@@ -611,7 +718,20 @@ class AnalyticsManager {
         final event = _queuedEvents.removeAt(0);
         try {
           if (!_trackingEnabled || event.identityEpoch != _identityEpoch) continue;
-          final properties = {...event.properties, ..._globalEventProperties};
+          final properties = <String, Object>{
+            for (final entry in _globalEventProperties.entries)
+              if (!event.ownedKeys.contains(entry.key)) entry.key: entry.value,
+            ...event.properties,
+          };
+          // Device lifecycle events already carry this value as `app_build`.
+          // Capture-wedge events were emitted without it, so fleet queries on
+          // `build` could not attribute a wedge to a release.
+          final build = _globalEventProperties['app_build'];
+          if (build != null &&
+              _captureWedgeFamilyEvents.contains(event.eventName) &&
+              !event.ownedKeys.contains('build')) {
+            properties.putIfAbsent('build', () => build);
+          }
           if (adapter is AnalyticsDeliveryAdapter) {
             await (adapter as AnalyticsDeliveryAdapter).deliver(
               eventName: event.eventName,
@@ -620,7 +740,7 @@ class AnalyticsManager {
                 'event_id': event.eventId,
                 r'$insert_id': event.eventId,
                 'occurred_at': event.occurredAt.toIso8601String(),
-                'schema_version': 1,
+                'schema_version': properties['schema_version'] ?? 1,
                 'client_app_namespace': _clientAppNamespace,
                 'client_app_profile': Env.profile.name,
               },
@@ -687,6 +807,76 @@ class AnalyticsManager {
   }
 
   void onboardingCompleted() => const TypedEvents().emit(const OnboardingCompleted());
+
+  void onboardingWelcomeShown() => const TypedEvents().emit(const OnboardingWelcomeShown());
+
+  void onboardingGetStartedTapped() => const TypedEvents().emit(const OnboardingGetStartedTapped());
+
+  void signInStarted(String provider) {
+    final value = signInProvider(provider);
+    if (value == null) return;
+    const TypedEvents().emit(SignInStarted(provider: value));
+  }
+
+  void signInFailed(String provider, {Object? error, bool cancelled = false}) {
+    final value = signInFailedProvider(provider);
+    if (value == null) return;
+    const TypedEvents().emit(SignInFailed(
+      provider: value,
+      errorClass: cancelled || error == null ? SignInFailedErrorClass.cancelled : classifySignInFailure(error),
+    ));
+  }
+
+  void onboardingPermissionResult({
+    required OnboardingPermissionResultPermission permission,
+    required bool granted,
+    required bool permanentlyDenied,
+    required bool servicesDisabled,
+  }) =>
+      const TypedEvents().emit(OnboardingPermissionResult(
+        permission: permission,
+        granted: granted,
+        permanentlyDenied: permanentlyDenied,
+        servicesDisabled: servicesDisabled,
+      ));
+
+  void devicePairingBlocked({
+    required DevicePairingBlockedReason reason,
+    required int androidSdk,
+    required int iosVersion,
+  }) =>
+      const TypedEvents().emit(DevicePairingBlocked(
+        reason: reason,
+        androidSdk: androidSdk < 0 ? 0 : androidSdk,
+        iosVersion: iosVersion < 0 ? 0 : iosVersion,
+      ));
+
+  void deviceScanEmpty({required int afterSeconds}) =>
+      const TypedEvents().emit(DeviceScanEmpty(afterSeconds: afterSeconds < 0 ? 0 : afterSeconds));
+
+  void deviceConnectFailed(DeviceConnectFailedErrorClass errorClass) =>
+      const TypedEvents().emit(DeviceConnectFailed(errorClass: errorClass));
+
+  void recordingProducedNoConversation({
+    required RecordingSurface source,
+    required int durationSeconds,
+    required bool transcriptObserved,
+    required EmptyRecordingReason reason,
+  }) =>
+      const TypedEvents().emit(RecordingProducedNoConversation(
+        source: switch (source) {
+          RecordingSurface.phone => RecordingProducedNoConversationSource.phone,
+          RecordingSurface.omi => RecordingProducedNoConversationSource.omi,
+          RecordingSurface.watch => RecordingProducedNoConversationSource.watch,
+        },
+        durationSeconds: durationSeconds < 0 ? 0 : durationSeconds,
+        transcriptObserved: transcriptObserved,
+        reason: switch (reason) {
+          EmptyRecordingReason.emptyDeleted => RecordingProducedNoConversationReason.emptyDeleted,
+          EmptyRecordingReason.discarded => RecordingProducedNoConversationReason.discarded,
+          EmptyRecordingReason.nullResult => RecordingProducedNoConversationReason.nullResult,
+        },
+      ));
 
   void onboardingStepCompleted(String step) => track('Onboarding Step $step Completed');
 
@@ -918,10 +1108,10 @@ class AnalyticsManager {
   void deviceConnected(BtDevice device) {
     final vendor = device.type.analyticsVendor;
     final hardwareFamily = DeviceUtils.analyticsHardwareFamily(device);
-    track('Device Connected', properties: {
-      ..._deviceConnectionEventProperties(device),
-      if (device.rssi < 0) 'rssi': device.rssi,
-    });
+    track(
+      'Device Connected',
+      properties: {..._deviceConnectionEventProperties(device), if (device.rssi < 0) 'rssi': device.rssi},
+    );
     setUserProperty('device_vendor', vendor);
     setUserProperty('hardware_family', hardwareFamily);
   }
@@ -938,9 +1128,96 @@ class AnalyticsManager {
     });
   }
 
-  void deviceDisconnected() => const TypedEvents().emit(const DeviceDisconnected());
+  /// Enriched replacement for the deprecated property-less `Device Disconnected`
+  /// emission. [reason], [reasonCode] and [appState] come from the disconnect
+  /// event native persists before notifying Dart; nulls map to `unknown`/-1.
+  void deviceDisconnected({String? reason, int? reasonCode, String? appState}) {
+    const TypedEvents().emit(
+      DeviceDisconnectedDetailed(
+        reason: disconnectReasonFromNative(reason),
+        reasonCode: reasonCode ?? -1,
+        appState: disconnectAppStateFromNative(appState),
+      ),
+    );
+  }
+
+  /// Maps native disconnect reason strings onto the closed registry enum.
+  /// `gatt_error_<code>` collapses to [DeviceDisconnectedDetailedReason.gattError];
+  /// the code itself travels in `reason_code`.
+  @visibleForTesting
+  static DeviceDisconnectedDetailedReason disconnectReasonFromNative(String? reason) {
+    switch (reason) {
+      case 'clean_disconnect':
+        return DeviceDisconnectedDetailedReason.cleanDisconnect;
+      case 'connection_timeout':
+        return DeviceDisconnectedDetailedReason.connectionTimeout;
+      case 'remote_device_terminated':
+        return DeviceDisconnectedDetailedReason.remoteDeviceTerminated;
+      case 'connection_failed_instant_passed':
+        return DeviceDisconnectedDetailedReason.connectionFailedInstantPassed;
+      case 'paired_to_another_phone':
+        return DeviceDisconnectedDetailedReason.pairedToAnotherPhone;
+      case 'link_key_mismatch':
+        return DeviceDisconnectedDetailedReason.linkKeyMismatch;
+      case 'pairing_lost':
+        return DeviceDisconnectedDetailedReason.pairingLost;
+      case 'app_closed':
+        return DeviceDisconnectedDetailedReason.appClosed;
+      case 'manual':
+        return DeviceDisconnectedDetailedReason.manual;
+      default:
+        if (reason != null && reason.startsWith('gatt_error_')) {
+          return DeviceDisconnectedDetailedReason.gattError;
+        }
+        return DeviceDisconnectedDetailedReason.unknown;
+    }
+  }
+
+  @visibleForTesting
+  static DeviceDisconnectedDetailedAppState disconnectAppStateFromNative(String? appState) {
+    switch (appState) {
+      case 'foreground':
+        return DeviceDisconnectedDetailedAppState.foreground;
+      case 'background':
+        return DeviceDisconnectedDetailedAppState.background;
+      case 'inactive':
+        return DeviceDisconnectedDetailedAppState.inactive;
+      default:
+        return DeviceDisconnectedDetailedAppState.unknown;
+    }
+  }
+
+  /// Device Diagnostics bundle accepted by the support backend. Never carries
+  /// bundle content or device identifiers — only sizes and counts.
+  void diagnosticsSent({required int bundleBytes, required int disconnectCount, required int schemaVersion}) {
+    const TypedEvents().emit(
+      DiagnosticsSent(bundleBytes: bundleBytes, disconnectCount: disconnectCount, schemaVersion: schemaVersion),
+    );
+  }
+
+  /// Device Diagnostics bundle that never reached the support backend. Bundle
+  /// metrics are 0 when the failure precedes the build; [statusCode] is the HTTP
+  /// status when the failure is the upload, else 0.
+  void diagnosticsSendFailed({
+    required DiagnosticsSendFailedFailureStage failureStage,
+    int bundleBytes = 0,
+    int disconnectCount = 0,
+    int schemaVersion = 0,
+    int statusCode = 0,
+  }) {
+    const TypedEvents().emit(
+      DiagnosticsSendFailed(
+        bundleBytes: bundleBytes,
+        disconnectCount: disconnectCount,
+        schemaVersion: schemaVersion,
+        failureStage: failureStage,
+        statusCode: statusCode,
+      ),
+    );
+  }
 
   void deviceSessionEnded({required BtDevice device, required Duration duration, String? reason, int? hciReasonCode}) {
+    if (ClientTelemetryFlags.posthogRetirementEnabled) return;
     final properties = <String, Object>{
       'duration_seconds': duration.inMilliseconds / Duration.millisecondsPerSecond,
       'reason': _knownDeviceValue(reason ?? ''),
@@ -1430,18 +1707,20 @@ class AnalyticsManager {
     required int firstAudioLatencyMs,
     required VoiceReplyPlaybackInterruptSource interruptSource,
   }) =>
-      const TypedEvents().emit(VoiceReplyPlayback(
-        outcome: outcome,
-        skipReason: skipReason,
-        mode: mode,
-        outputRoute: outputRoute,
-        chunksRequested: chunksRequested,
-        chunksPlayed: chunksPlayed,
-        chunksDropped: chunksDropped,
-        fallbackReason: fallbackReason,
-        firstAudioLatencyMs: firstAudioLatencyMs,
-        interruptSource: interruptSource,
-      ));
+      const TypedEvents().emit(
+        VoiceReplyPlayback(
+          outcome: outcome,
+          skipReason: skipReason,
+          mode: mode,
+          outputRoute: outputRoute,
+          chunksRequested: chunksRequested,
+          chunksPlayed: chunksPlayed,
+          chunksDropped: chunksDropped,
+          fallbackReason: fallbackReason,
+          firstAudioLatencyMs: firstAudioLatencyMs,
+          interruptSource: interruptSource,
+        ),
+      );
 
   // Conversation Merge Events
   void conversationMergeSelectionModeEntered() =>
@@ -1541,45 +1820,148 @@ class AnalyticsManager {
   void deletedActionItem(ServerConversation conversation) =>
       track('Deleted Action Item', properties: getConversationEventProperties(conversation));
 
-  void paywallOpened(String source) => track('Paywall Opened', properties: {'source': source});
+  /// [source] is a closed surface id (`chat_quota_exceeded`, `locked_memory`, …).
+  /// [currentPlan] is a catalog tier id. Unknown wires collapse to `unknown`.
+  void paywallOpened(String source, {String currentPlan = 'unknown'}) => const TypedEvents().emit(
+        PaywallOpened(
+          source:
+              _closedEnum(PaywallOpenedSource.values, source, PaywallOpenedSource.unknown, (value) => value.wireName),
+          currentPlan: _closedEnum(
+            PaywallOpenedCurrentPlan.values,
+            _planWire(currentPlan),
+            PaywallOpenedCurrentPlan.unknown,
+            (value) => value.wireName,
+          ),
+        ),
+      );
 
-  void upgradePlanSelected({required String plan, required String source}) =>
-      track('Upgrade Plan Selected', properties: {'plan': plan, 'source': source});
+  /// [plan] is the tier id. [billingInterval] is `month` or `year`, not the
+  /// sheet's yearly/monthly toggle. [source] is the surface that opened the sheet.
+  void upgradePlanSelected({required String plan, required String billingInterval, required String source}) =>
+      const TypedEvents().emit(
+        UpgradePlanSelected(
+          plan: _closedEnum(
+            UpgradePlanSelectedPlan.values,
+            _planWire(plan),
+            UpgradePlanSelectedPlan.unknown,
+            (value) => value.wireName,
+          ),
+          billingInterval: _closedEnum(
+            UpgradePlanSelectedBillingInterval.values,
+            _intervalWire(billingInterval),
+            UpgradePlanSelectedBillingInterval.unknown,
+            (value) => value.wireName,
+          ),
+          source: _closedEnum(
+            UpgradePlanSelectedSource.values,
+            source,
+            UpgradePlanSelectedSource.unknown,
+            (value) => value.wireName,
+          ),
+        ),
+      );
 
   void upgradeSucceeded({required String previousPlan, required String newPlan, required String billingInterval}) {
-    track(
-      'Subscription Plan Changed',
-      properties: {
-        'previous_plan': previousPlan,
-        'new_plan': newPlan,
-        'billing_interval': billingInterval,
-        'change_source': 'mobile_checkout',
-      },
+    const TypedEvents().emit(
+      SubscriptionPlanChanged(
+        previousPlan: _closedEnum(
+          SubscriptionPlanChangedPreviousPlan.values,
+          _planWire(previousPlan),
+          SubscriptionPlanChangedPreviousPlan.unknown,
+          (value) => value.wireName,
+        ),
+        newPlan: _closedEnum(
+          SubscriptionPlanChangedNewPlan.values,
+          _planWire(newPlan),
+          SubscriptionPlanChangedNewPlan.unknown,
+          (value) => value.wireName,
+        ),
+        billingInterval: _closedEnum(
+          SubscriptionPlanChangedBillingInterval.values,
+          _intervalWire(billingInterval),
+          SubscriptionPlanChangedBillingInterval.unknown,
+          (value) => value.wireName,
+        ),
+        changeSource: SubscriptionPlanChangedChangeSource.mobileCheckout,
+      ),
+    );
+    // Released `Upgrade Succeeded` cannot gain properties. Tier and interval
+    // ride the attributed event emitted in the same checkout-success call.
+    const TypedEvents().emit(
+      UpgradeSucceededAttributed(
+        plan: _closedEnum(
+          UpgradeSucceededAttributedPlan.values,
+          _planWire(newPlan),
+          UpgradeSucceededAttributedPlan.unknown,
+          (value) => value.wireName,
+        ),
+        billingInterval: _closedEnum(
+          UpgradeSucceededAttributedBillingInterval.values,
+          _intervalWire(billingInterval),
+          UpgradeSucceededAttributedBillingInterval.unknown,
+          (value) => value.wireName,
+        ),
+      ),
     );
     const TypedEvents().emit(const UpgradeSucceeded());
   }
 
   void upgradeCancelled() => const TypedEvents().emit(const UpgradeCancelled());
 
+  /// Store-update prompt (`upgrade_alert.dart`), not the subscription paywall.
   void upgradeModalDismissed() => const TypedEvents().emit(const UpgradeModalDismissed());
 
+  /// Store-update prompt (`upgrade_alert.dart`), not the subscription paywall.
   void upgradeModalClicked() => const TypedEvents().emit(const UpgradeModalClicked());
 
   void subscriptionCancelFlowStarted() => const TypedEvents().emit(const SubscriptionCancelFlowStarted());
 
-  void subscriptionCancelReasonSelected({required String reason}) =>
-      track('Subscription Cancel Reason Selected', properties: {'reason': reason});
-
-  void subscriptionCancelConfirmed({required String reason, String? details}) => track(
-        'Subscription Cancel Confirmed',
-        properties: {'reason': reason, 'has_details': details?.isNotEmpty == true},
+  void subscriptionCancelReasonSelected({required String reason}) => const TypedEvents().emit(
+        SubscriptionCancelReasonSelected(
+          reason: _closedEnum(
+            SubscriptionCancelReasonSelectedReason.values,
+            _cancelReasonWire(reason),
+            SubscriptionCancelReasonSelectedReason.unknown,
+            (value) => value.wireName,
+          ),
+        ),
       );
 
-  void subscriptionCancelKeptPlan({required int step, String? reason}) =>
-      track('Subscription Cancel Kept Plan', properties: {'step': step, 'reason': reason});
+  void subscriptionCancelConfirmed({required String reason, String? details}) => const TypedEvents().emit(
+        SubscriptionCancelConfirmed(
+          reason: _closedEnum(
+            SubscriptionCancelConfirmedReason.values,
+            _cancelReasonWire(reason),
+            SubscriptionCancelConfirmedReason.unknown,
+            (value) => value.wireName,
+          ),
+          hasDetails: details?.isNotEmpty == true,
+        ),
+      );
 
-  void subscriptionCancelAbandoned({required int step, String? reason}) =>
-      track('Subscription Cancel Abandoned', properties: {'step': step, 'reason': reason});
+  void subscriptionCancelKeptPlan({required int step, String? reason}) => const TypedEvents().emit(
+        SubscriptionCancelKeptPlan(
+          step: step,
+          reason: _closedEnum(
+            SubscriptionCancelKeptPlanReason.values,
+            _cancelReasonWire(reason),
+            SubscriptionCancelKeptPlanReason.unknown,
+            (value) => value.wireName,
+          ),
+        ),
+      );
+
+  void subscriptionCancelAbandoned({required int step, String? reason}) => const TypedEvents().emit(
+        SubscriptionCancelAbandoned(
+          step: step,
+          reason: _closedEnum(
+            SubscriptionCancelAbandonedReason.values,
+            _cancelReasonWire(reason),
+            SubscriptionCancelAbandonedReason.unknown,
+            (value) => value.wireName,
+          ),
+        ),
+      );
 
   void connectFriendClicked() => const TypedEvents().emit(const ConnectFriendClicked());
 
@@ -1918,9 +2300,7 @@ class AnalyticsManager {
     );
   }
 
-  // ============================================================================
-  // ACTION ITEMS TRACKING
-  // ============================================================================
+  // ---- ACTION ITEMS TRACKING ----
 
   void actionItemChecked({required String actionItemId, required bool completed, required DateTime timestamp}) {
     track(
@@ -1943,9 +2323,7 @@ class AnalyticsManager {
     track('Task Integration Settings Opened', properties: {'app_name': appName});
   }
 
-  // ============================================================================
-  // TRANSCRIPTION / CUSTOM STT TRACKING
-  // ============================================================================
+  // ---- TRANSCRIPTION / CUSTOM STT TRACKING ----
 
   void transcriptionSourceSelected({
     required String source, // 'omi' or 'custom'
@@ -1959,9 +2337,7 @@ class AnalyticsManager {
     track('Transcription Provider Selected', properties: {'provider': provider});
   }
 
-  // ============================================================================
-  // AUDIO PLAYBACK TRACKING
-  // ============================================================================
+  // ---- AUDIO PLAYBACK TRACKING ----
 
   void audioPlaybackFailed({required String conversationId, required String reason}) {
     track(
@@ -2094,9 +2470,7 @@ class AnalyticsManager {
     track('Apple Reminder Deleted', properties: {'action_item_id': actionItemId});
   }
 
-  // ============================================================================
-  // SETTINGS PAGE TRACKING
-  // ============================================================================
+  // ---- SETTINGS PAGE TRACKING ----
 
   void settingsPageOpened({required String pageName}) {
     track('Settings Page Opened', properties: {'page_name': pageName});
@@ -2106,9 +2480,7 @@ class AnalyticsManager {
     track('Usage Tab Changed', properties: {'tab_name': tabName});
   }
 
-  // ============================================================================
-  // APPS PAGE TRACKING
-  // ============================================================================
+  // ---- APPS PAGE TRACKING ----
 
   void appsSearched({required String searchTerm, required int resultCount}) {
     track(
@@ -2145,9 +2517,7 @@ class AnalyticsManager {
     track('Apps Category Page Opened', properties: {'category': category, 'app_count': appCount});
   }
 
-  // ============================================================================
-  // APP DETAIL PAGE TRACKING
-  // ============================================================================
+  // ---- APP DETAIL PAGE TRACKING ----
 
   void appDetailViewed({
     required String appId,
@@ -2209,9 +2579,7 @@ class AnalyticsManager {
     track('App Detail Chat Clicked', properties: {'app_id': appId, 'app_name': appName});
   }
 
-  // ============================================================================
-  // FOLDER TRACKING
-  // ============================================================================
+  // ---- FOLDER TRACKING ----
 
   void folderCreated({
     required String folderId,
@@ -2399,9 +2767,7 @@ class AnalyticsManager {
     );
   }
 
-  // ============================================================================
-  // DAILY SUMMARY / RECAP TRACKING
-  // ============================================================================
+  // ---- DAILY SUMMARY / RECAP TRACKING ----
 
   void dailySummarySettingsOpened() => const TypedEvents().emit(const DailySummarySettingsOpened());
 
@@ -2433,6 +2799,11 @@ class AnalyticsManager {
       properties: {'hour_24': hour, 'hour_12': hour12, 'period': period, 'display_time': '$hour12:00 $period'},
     );
     setUserProperty('Daily Summary Hour', hour);
+  }
+
+  /// Shape-only dimensions: no advice, source identities or arbitrary producer text.
+  void proactivityOutcome({required String action, required String channel, required String surface}) {
+    track('proactivity_v2_outcome', properties: {'action': action, 'channel': channel, 'surface': surface});
   }
 
   void dailySummaryDetailViewed({required String summaryId, required String date, String? source}) {
@@ -2493,9 +2864,7 @@ class AnalyticsManager {
     track('Daily Summary Delete Failed', properties: {'summary_id': summaryId, 'date': date, 'source': source});
   }
 
-  // ============================================================================
-  // ANNOUNCEMENT TRACKING
-  // ============================================================================
+  // ---- ANNOUNCEMENT TRACKING ----
 
   void announcementShown({required String announcementId, required String type, String? trigger, int? priority}) {
     track(
@@ -2529,9 +2898,7 @@ class AnalyticsManager {
 
   void whatsNewOpened() => const TypedEvents().emit(const WhatsNewOpened());
 
-  // ============================================================================
-  // GOALS TRACKING
-  // ============================================================================
+  // ---- GOALS TRACKING ----
 
   void goalAddButtonTapped({required String source}) {
     track('Goal Add Button Tapped', properties: {'source': source});
@@ -2593,9 +2960,7 @@ class AnalyticsManager {
 
   void dailyScoreHelpTapped() => const TypedEvents().emit(const DailyScoreHelpTapped());
 
-  // ============================================================================
-  // INTEGRATIONS PAGE TRACKING
-  // ============================================================================
+  // ---- INTEGRATIONS PAGE TRACKING ----
 
   void integrationsPageOpened() => const TypedEvents().emit(const IntegrationsPageOpened());
 
@@ -2615,19 +2980,11 @@ class AnalyticsManager {
     track('Integration Disconnected', properties: {'integration_name': integrationName});
   }
 
-  // ============================================================================
-  // PAYMENTS PAGE TRACKING
-  // ============================================================================
-
   void paymentsPageOpened() => const TypedEvents().emit(const PaymentsPageOpened());
 
   void paymentMethodSelected({required String methodName}) {
     track('Payment Method Selected', properties: {'method_name': methodName});
   }
-
-  // ============================================================================
-  // OTHER PAGES TRACKING
-  // ============================================================================
 
   void connectDevicePageOpened() => const TypedEvents().emit(const ConnectDevicePageOpened());
 
@@ -2698,11 +3055,7 @@ class AnalyticsManager {
       if (packageInfo.buildNumber.isNotEmpty) build = packageInfo.buildNumber;
       _clientAppNamespace = packageInfo.packageName;
     } catch (_) {}
-    _globalEventProperties = {
-      'app_platform': _mobilePlatformName,
-      'app_version': version,
-      'app_build': build,
-    };
+    _globalEventProperties = {'app_platform': _mobilePlatformName, 'app_version': version, 'app_build': build};
   }
 
   static Map<String, dynamic> _searchProperties({required String query, required String surface, int? resultsCount}) {
@@ -2717,6 +3070,44 @@ class AnalyticsManager {
   }
 }
 
+T _closedEnum<T>(Iterable<T> values, String? raw, T fallback, String Function(T value) wire) {
+  final normalized = raw?.trim() ?? '';
+  for (final value in values) {
+    if (wire(value) == normalized) return value;
+  }
+  return fallback;
+}
+
+String _planWire(String? raw) {
+  switch (raw?.trim()) {
+    case 'free':
+      return 'basic';
+    case 'pro':
+      return 'unknown';
+    default:
+      return raw?.trim() ?? '';
+  }
+}
+
+String _intervalWire(String? raw) {
+  switch (raw?.trim().toLowerCase()) {
+    case 'month':
+    case 'monthly':
+      return 'month';
+    case 'year':
+    case 'yearly':
+    case 'annual':
+      return 'year';
+    default:
+      return raw?.trim().toLowerCase() ?? '';
+  }
+}
+
+String _cancelReasonWire(String? raw) {
+  final trimmed = raw?.trim() ?? '';
+  return trimmed.isEmpty ? 'none' : trimmed;
+}
+
 class _QueuedAnalyticsEvent {
   const _QueuedAnalyticsEvent({
     required this.eventName,
@@ -2725,7 +3116,9 @@ class _QueuedAnalyticsEvent {
     required this.occurredAt,
     required this.identityEpoch,
     this.attempts = 0,
+    this.ownedKeys = const {},
   });
+  final Set<String> ownedKeys;
   final String eventName;
   final Map<String, Object> properties;
   final String eventId;
@@ -2735,6 +3128,7 @@ class _QueuedAnalyticsEvent {
   _QueuedAnalyticsEvent nextAttempt() => _QueuedAnalyticsEvent(
         eventName: eventName,
         properties: properties,
+        ownedKeys: ownedKeys,
         eventId: eventId,
         occurredAt: occurredAt,
         identityEpoch: identityEpoch,

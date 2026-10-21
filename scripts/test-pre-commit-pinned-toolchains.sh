@@ -49,6 +49,8 @@ cat >"$REPO/web/frontend/package-lock.json" <<LOCK
 LOCK
 printf 'const a = 0\n' >"$REPO/web/frontend/src/a.ts"
 printf 'void main() {}\n' >"$REPO/app/lib/main.dart"
+mkdir -p "$REPO/app/.dart_tool"
+printf '{"configVersion": 2, "packages": []}\n' >"$REPO/app/.dart_tool/package_config.json"
 git -C "$REPO" add -A
 git -C "$REPO" commit -qm base
 
@@ -254,6 +256,39 @@ printf 'void main() {  }\n' >"$REPO/app/lib/main.dart"
 git -C "$REPO" add app/lib/main.dart
 run_hook GIT_DIR="$REPO/.git" >/dev/null
 grep -q 'DART_FORMATTED' "$REPO/app/lib/main.dart"
+
+# --- Dart: without package_config.json the SDK ignores the package language
+# version and rewrites whole files, so the hook must refuse ---
+mv "$REPO/app/.dart_tool/package_config.json" "$TMPDIR/package_config.json"
+printf 'void main() {  }\n' >"$REPO/app/lib/main.dart"
+git -C "$REPO" add app/lib/main.dart
+expect_refusal "missing app package_config.json"
+test "$(cat "$REPO/app/lib/main.dart")" = "void main() {  }"
+mv "$TMPDIR/package_config.json" "$REPO/app/.dart_tool/package_config.json"
+
+# --- Merge commit: files staged exactly as the incoming side has them are left
+# alone (no reformat, no toolchain refusal); a resolved file is still formatted ---
+git -C "$REPO" reset -q --hard
+git -C "$REPO" checkout -q -b incoming
+printf 'void incoming() {  }\n' >"$REPO/app/lib/incoming.dart"
+printf 'void resolved() {  }\n' >"$REPO/app/lib/resolved.dart"
+printf 'const incoming = {x:1}\n' >"$REPO/web/frontend/src/incoming.ts"
+git -C "$REPO" add -A
+git -C "$REPO" commit -qm incoming
+git -C "$REPO" checkout -q -
+printf 'void branch() {}\n' >"$REPO/app/lib/branch.dart"
+git -C "$REPO" add -A
+git -C "$REPO" commit -qm branch
+git -C "$REPO" merge -q --no-commit --no-ff incoming >/dev/null 2>&1
+printf 'void resolved() {   }\n' >"$REPO/app/lib/resolved.dart"
+git -C "$REPO" add app/lib/resolved.dart
+rm -rf "$REPO/web/frontend/node_modules"
+run_hook >/dev/null
+test "$(cat "$REPO/app/lib/incoming.dart")" = "void incoming() {  }"
+test "$(cat "$REPO/web/frontend/src/incoming.ts")" = "const incoming = {x:1}"
+grep -q 'DART_FORMATTED' "$REPO/app/lib/resolved.dart"
+git -C "$REPO" merge --abort
+git -C "$REPO" branch -q -D incoming
 
 # --- Both hatches leave staged files untouched and still commit ---
 git -C "$REPO" reset -q --hard

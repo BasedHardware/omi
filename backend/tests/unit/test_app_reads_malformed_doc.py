@@ -13,6 +13,7 @@ skip a doc without the field, so such an app was never public. The helpers there
 treat a missing `private` as private: the owner (and testers) still see it, nobody else.
 """
 
+import asyncio
 from unittest.mock import MagicMock, patch
 
 import utils.apps as apps_utils
@@ -50,7 +51,7 @@ def _suggested_apps(app_docs):
     ), patch.object(
         apps_utils, 'get_is_user_paid_app', return_value=False
     ):
-        return conversations_router.get_conversation_suggested_apps('conversation-1', uid='viewer')
+        return asyncio.run(conversations_router.get_conversation_suggested_apps('conversation-1', uid='viewer'))
 
 
 def test_one_malformed_suggested_app_is_skipped_not_a_500():

@@ -1,14 +1,22 @@
 import logging
-from typing import List, Optional
+from typing import Awaitable, Callable, List, Optional
 
-from fastapi import Depends, HTTPException, Request, Security
+from fastapi import Depends, HTTPException, Request, Response, Security
 from fastapi.security import APIKeyHeader, HTTPAuthorizationCredentials, HTTPBearer
 from firebase_admin import auth
 
 import database.mcp_api_key as mcp_api_key_db
 import database.dev_api_key as dev_api_key_db
-from utils.api_key_families import DEV_FAMILY, MCP_FAMILY, wrong_key_family_detail
+from utils.api_key_families import (
+    DEV_FAMILY,
+    MCP_FAMILY,
+    wrong_key_family_detail,
+    malformed_api_key_detail,
+    unknown_api_key_detail,
+)
 from utils.executors import ExecutorSaturatedError, critical_executor, db_executor, run_blocking
+from utils.ladder_v1 import enforce_daily_cap
+from config import ladder_v1 as ladder_policy
 from utils.log_sanitizer import sanitize
 from utils.observability.api_keys import record_api_key_repairs
 from utils.memory.product_authorization import ProductAuthorizationContext
@@ -19,7 +27,6 @@ from utils.mcp_memories import (
 )
 from utils.other import endpoints as auth_endpoints
 from utils.scopes import Scopes, has_scope
-from utils.jit_qa_admission import JITQAAdmissionError, enforce_jit_qa_uid
 
 logger = logging.getLogger(__name__)
 
@@ -53,14 +60,6 @@ async def _enforce_cutover_access(uid: str, request: Request | None) -> None:
     await run_blocking(db_executor, _enforce_cutover_http_if_request, uid, request)
 
 
-def _enforce_jit_qa_http_access(uid: str) -> None:
-    """Apply the isolated QA UID fence after every verified owner lookup."""
-    try:
-        enforce_jit_qa_uid(uid)
-    except JITQAAdmissionError as error:
-        raise HTTPException(status_code=403, detail="account is not admitted to the isolated JIT QA plane") from error
-
-
 async def get_current_user_id(
     credentials: HTTPAuthorizationCredentials = Security(bearer_scheme),
     request: Request = None,  # pyright: ignore[reportArgumentType]
@@ -80,7 +79,6 @@ async def get_current_user_id(
         logger.error(f"Error verifying Firebase ID token: {e}")
         raise HTTPException(status_code=401, detail="Invalid authentication credentials")
     uid = decoded_token["uid"]
-    _enforce_jit_qa_http_access(uid)
     await _enforce_account_deletion_access(uid)
     await _enforce_cutover_access(uid, request)
     return uid
@@ -92,6 +90,7 @@ api_key_header = APIKeyHeader(name="Authorization", auto_error=False)
 async def get_uid_from_mcp_api_key(
     api_key: str = Security(api_key_header),
     request: Request = None,  # pyright: ignore[reportArgumentType]
+    response: Response = None,  # pyright: ignore[reportArgumentType]
 ) -> str:
     if not api_key or not api_key.startswith("Bearer "):
         raise HTTPException(
@@ -99,19 +98,22 @@ async def get_uid_from_mcp_api_key(
             detail="Missing or invalid Authorization header. Must be 'Bearer API_KEY'",
         )
 
-    token = api_key.replace("Bearer ", "")
+    token = api_key[7:]
     mismatch = wrong_key_family_detail(token, MCP_FAMILY)
     if mismatch:
         raise HTTPException(status_code=401, detail=mismatch)
+    malformed = malformed_api_key_detail(token, MCP_FAMILY)
+    if malformed:
+        raise HTTPException(status_code=401, detail=malformed)
     auth_result = await run_blocking(db_executor, mcp_api_key_db.get_api_key_auth_result, token)
     record_api_key_repairs(key_kind="mcp", operation="auth", repairs=auth_result.repairs, log=logger)
     user_data = auth_result.context
     if not user_data:
-        raise HTTPException(status_code=401, detail="Invalid API Key")
+        raise HTTPException(status_code=401, detail=unknown_api_key_detail(MCP_FAMILY))
     user_id = user_data["user_id"]
-    _enforce_jit_qa_http_access(user_id)
     await _enforce_account_deletion_access(user_id)
     await _enforce_cutover_access(user_id, request)
+    await _enforce_ladder_api(user_id, response)
     await _check_api_key_rate_limit_async(
         prefix="mcp",
         uid=user_id,
@@ -125,6 +127,7 @@ async def get_uid_from_mcp_api_key(
 async def get_mcp_api_key_auth(
     api_key: str = Security(api_key_header),
     request: Request = None,  # pyright: ignore[reportArgumentType]
+    response: Response = None,  # pyright: ignore[reportArgumentType]
 ) -> "ApiKeyAuth":
     """Extract uid plus persisted MCP app/key/scope context from an MCP API key.
 
@@ -138,19 +141,22 @@ async def get_mcp_api_key_auth(
             detail="Missing or invalid Authorization header. Must be 'Bearer API_KEY'",
         )
 
-    token = api_key.replace("Bearer ", "")
+    token = api_key[7:]
     mismatch = wrong_key_family_detail(token, MCP_FAMILY)
     if mismatch:
         raise HTTPException(status_code=401, detail=mismatch)
+    malformed = malformed_api_key_detail(token, MCP_FAMILY)
+    if malformed:
+        raise HTTPException(status_code=401, detail=malformed)
     auth_result = await run_blocking(db_executor, mcp_api_key_db.get_api_key_auth_result, token)
     record_api_key_repairs(key_kind="mcp", operation="auth", repairs=auth_result.repairs, log=logger)
     user_data = auth_result.context
     if not user_data:
-        raise HTTPException(status_code=401, detail="Invalid API Key")
+        raise HTTPException(status_code=401, detail=unknown_api_key_detail(MCP_FAMILY))
 
-    _enforce_jit_qa_http_access(user_data["user_id"])
     await _enforce_account_deletion_access(user_data["user_id"])
     await _enforce_cutover_access(user_data["user_id"], request)
+    await _enforce_ladder_api(user_data["user_id"], response)
 
     return ApiKeyAuth(
         uid=user_data["user_id"],
@@ -158,6 +164,31 @@ async def get_mcp_api_key_auth(
         app_id=user_data.get("app_id"),
         key_id=user_data.get("key_id"),
     )
+
+
+def require_mcp_scope(required_scope: str) -> Callable[..., Awaitable[str]]:
+    """Build a UID dependency using the hosted registry's scope requirement.
+
+    Validate the verified credential context without normalizing its scopes here.
+    Raw-key full-access normalization remains the authentication layer's policy.
+    Keep the existing aggregate MCP read budget on reads and writes; route-level
+    write budgets still compose after this dependency succeeds.
+    """
+
+    async def dependency(auth: "ApiKeyAuth" = Depends(get_mcp_api_key_auth)) -> str:
+        if not has_scope(auth.scopes, required_scope):
+            raise HTTPException(status_code=403, detail=f"Insufficient permissions. Required scope: {required_scope}")
+        await _check_api_key_rate_limit_async(
+            prefix="mcp",
+            uid=auth.uid,
+            app_id=auth.app_id,
+            key_id=auth.key_id,
+            policy_name="mcp:read",
+        )
+        return auth.uid
+
+    dependency.__name__ = f"get_uid_with_mcp_{required_scope.replace('.', '_')}"
+    return dependency
 
 
 async def get_mcp_memory_default_memory_read_context(
@@ -232,6 +263,7 @@ class ApiKeyAuth:
 async def get_api_key_auth(
     api_key: str = Security(api_key_header),
     request: Request = None,  # pyright: ignore[reportArgumentType]
+    response: Response = None,  # pyright: ignore[reportArgumentType]
 ) -> ApiKeyAuth:
     """Extract user ID and scopes from API key"""
     if not api_key or not api_key.startswith("Bearer "):
@@ -240,20 +272,23 @@ async def get_api_key_auth(
             detail="Missing or invalid Authorization header. Must be 'Bearer API_KEY'",
         )
 
-    token = api_key.replace("Bearer ", "")
+    token = api_key[7:]
     mismatch = wrong_key_family_detail(token, DEV_FAMILY)
     if mismatch:
         raise HTTPException(status_code=401, detail=mismatch)
+    malformed = malformed_api_key_detail(token, DEV_FAMILY)
+    if malformed:
+        raise HTTPException(status_code=401, detail=malformed)
     auth_result = await run_blocking(db_executor, dev_api_key_db.get_api_key_auth_result, token)
     record_api_key_repairs(key_kind="dev", operation="auth", repairs=auth_result.repairs, log=logger)
     user_data = auth_result.context
 
     if not user_data:
-        raise HTTPException(status_code=401, detail="Invalid API Key")
+        raise HTTPException(status_code=401, detail=unknown_api_key_detail(DEV_FAMILY))
 
-    _enforce_jit_qa_http_access(user_data["user_id"])
     await _enforce_account_deletion_access(user_data["user_id"])
     await _enforce_cutover_access(user_data["user_id"], request)
+    await _enforce_ladder_api(user_data["user_id"], response)
 
     return ApiKeyAuth(
         uid=user_data["user_id"],
@@ -261,12 +296,6 @@ async def get_api_key_auth(
         app_id=user_data.get("app_id"),
         key_id=user_data.get("key_id"),
     )
-
-
-async def get_uid_from_dev_api_key(api_key: str = Security(api_key_header)) -> str:
-    """Legacy function for backward compatibility. Use scope-specific dependencies instead."""
-    auth_data = await get_api_key_auth(api_key)
-    return auth_data.uid
 
 
 # Scope-specific dependencies
@@ -336,7 +365,7 @@ async def _check_api_key_rate_limit_async(
     )
 
 
-async def _check_dev_api_key_rate_limit_async(
+async def check_developer_api_key_rate_limit(
     *,
     request: Optional[Request],
     auth: ApiKeyAuth,
@@ -371,8 +400,8 @@ async def _check_conversation_read_budgets_async(
     per-route policy would hand each key a fresh bucket and raise the total number of
     conversation reads it can make -- the opposite of what these limits are for.
     """
-    await _check_dev_api_key_rate_limit_async(request=request, auth=auth, policy_name="dev:conversation_reads_total")
-    await _check_dev_api_key_rate_limit_async(request=request, auth=auth, policy_name=route_policy_name)
+    await check_developer_api_key_rate_limit(request=request, auth=auth, policy_name="dev:conversation_reads_total")
+    await check_developer_api_key_rate_limit(request=request, auth=auth, policy_name=route_policy_name)
 
 
 async def get_auth_with_conversations_read(
@@ -411,7 +440,7 @@ async def get_uid_with_conversations_read_ask(
     a leaked or overused key can't turn it into an unbounded billable endpoint.
     """
     _require_conversations_read_scope(auth)
-    await _check_dev_api_key_rate_limit_async(request=request, auth=auth, policy_name="dev:ask")
+    await check_developer_api_key_rate_limit(request=request, auth=auth, policy_name="dev:ask")
     return auth.uid
 
 
@@ -456,7 +485,7 @@ async def get_uid_with_conversations_from_segments_write(
     can never raise the aggregate conversation-write limit. Failure logging
     includes remote IP and user agent: this route is a scripted-abuse target.
     """
-    await _check_dev_api_key_rate_limit_async(
+    await check_developer_api_key_rate_limit(
         request=request,
         auth=auth,
         policy_name="dev:conversations_from_segments",
@@ -683,3 +712,17 @@ async def get_developer_memory_default_memory_batch_write_context(
         policy_name="dev:memories_batch",
     )
     return auth_context
+
+
+async def _enforce_ladder_api(uid: str, response: Response | None) -> None:
+    # MCP and developer API traffic is bounded by the daily request count and,
+    # once wired, the per-request read limit. It does not draw the monthly
+    # usage budget.
+    daily = None
+    if ladder_policy.mcp_daily_caps_enabled():
+        daily = await run_blocking(db_executor, enforce_daily_cap, uid)
+    if daily is not None and response is not None:
+        response.headers['X-Omi-Usage-State'] = daily['state']
+        response.headers['X-Omi-Usage-Reset-At'] = str(daily['reset_at'])
+        if daily['state'] == 'nudge':
+            response.headers['X-Omi-Storefront-Trigger'] = 'mcp_daily_cap'

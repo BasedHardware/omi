@@ -130,7 +130,7 @@ def create_goal(
     # No metric options given: send a qualitative goal (the API supports omitting all metric fields).
     with ctx.make_client() as client:
         result = client.post("/v1/dev/user/goals", json_body=body)
-    ctx.renderer.success(f"Goal created: [bold]{result.get('id')}[/bold]")
+    ctx.renderer.success(f"Goal created: [bold]{escape(str(result.get('id')))}[/bold]")
     ctx.renderer.emit(result)
 
 
@@ -211,7 +211,7 @@ def delete_goal(
 ) -> None:
     ctx = _ctx(typer_ctx)
     if not confirm:
-        typer.confirm(f"Delete goal {goal_id}?", abort=True)
+        typer.confirm(f"Delete goal {goal_id}?", abort=True, err=ctx.renderer.json_mode)
     with ctx.make_client() as client:
         result = client.delete(f"/v1/dev/user/goals/{path_segment(goal_id)}")
     if ctx.renderer.json_mode:

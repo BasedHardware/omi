@@ -236,7 +236,7 @@ enum SBPostOnboardingGuidance {
       return SBOrientationCue(
         id: "listening",
         symbol: "ear",
-        title: "I'm listening now, and I'll remember what matters.",
+        title: "I'm listening now. Your conversations will show up here as you have them.",
         keys: [])
     case .meetingsOnly:
       return SBOrientationCue(

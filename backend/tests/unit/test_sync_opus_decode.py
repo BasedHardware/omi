@@ -12,6 +12,9 @@ focusing on failure modes that cause WALs to become permanently stuck:
 Each scenario corresponds to a real-world sticky-pending failure mode.
 """
 
+from utils.other import owned_paths  # noqa: F401 - retain real scratch guard across legacy package stubs
+
+import enum
 import importlib.util
 import io
 import os
@@ -29,6 +32,8 @@ from fastapi import HTTPException
 # ---------------------------------------------------------------------------
 # Stubs — isolate from heavy deps before importing sync
 # ---------------------------------------------------------------------------
+# Keep the real utils.other namespace so pure transitive helpers remain importable;
+# only its heavyweight storage/endpoints leaves need stubs.
 
 _stub_modules = [
     'database._client',
@@ -48,7 +53,6 @@ _stub_modules = [
     'utils.conversations.process_conversation',
     'utils.sync.bridge',
     'utils.conversations.factory',
-    'utils.other',
     'utils.other.endpoints',
     'utils.other.storage',
     'utils.encryption',
@@ -212,8 +216,28 @@ _ensure_attrs(
 )
 _ensure_attrs('utils.subscription', ['has_transcription_credits'])
 _ensure_attrs('pydub', ['AudioSegment'])
+_ensure_attrs('models.conversation_enums', ['CategoryEnum'])
+
+
+def _ensure_real_category_enum():
+    """client_processing builds a pydantic model from this enum at import time."""
+    enums_mod = sys.modules['models.conversation_enums']
+    category = getattr(enums_mod, 'CategoryEnum', None)
+    if not (isinstance(category, type) and issubclass(category, enum.Enum)):
+
+        class CategoryEnum(str, enum.Enum):
+            other = 'other'
+
+        enums_mod.CategoryEnum = CategoryEnum
+
+
+_ensure_real_category_enum()
 if 'google.cloud.tasks_v2' not in sys.modules:
     sys.modules['google.cloud.tasks_v2'] = MagicMock()
+if 'google.cloud.firestore_v1' not in sys.modules:
+    # The lifecycle import now reaches FieldFilter at module scope; give the
+    # google.cloud MagicMock a submodule instead of a bare attribute.
+    sys.modules['google.cloud.firestore_v1'] = MagicMock()
 if not hasattr(sys.modules.setdefault('google.cloud', MagicMock()), 'tasks_v2'):
     sys.modules['google.cloud'].tasks_v2 = sys.modules['google.cloud.tasks_v2']
 sys.modules['utils.log_sanitizer'].sanitize = lambda x: x

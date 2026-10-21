@@ -140,6 +140,7 @@ for _real_import in (
 _install_module("database._client", MagicMock())
 _conversations_mod = ModuleType("database.conversations")
 _conversations_mod.get_conversation = MagicMock(return_value=None)
+_conversations_mod.decode_manual_speaker_assignments = MagicMock()
 _install_module("database.conversations", _conversations_mod)
 
 _users_mod = ModuleType("database.users")
@@ -608,6 +609,27 @@ class TestDetectSpeakerFromText:
         result = detect_speaker_from_text("I am John")
         assert result == "John"
         assert result[0].isupper()
+
+    # People are looked up by exact name, so a detected name must keep the casing it
+    # was transcribed with. str.capitalize() returned "Mcdonald" for "McDonald".
+    MIXED_CASE_CASES = [
+        (None, "My name is McDonald", "McDonald"),
+        (None, "I'm DeShawn, nice to meet you.", "DeShawn"),
+        (None, "LeBron is my name", "LeBron"),
+        (None, "I am AJ", "AJ"),
+        ("fr", "Je m'appelle MacKenzie", "MacKenzie"),
+    ]
+
+    @pytest.mark.parametrize("lang,text,expected_name", MIXED_CASE_CASES)
+    def test_mixed_case_name_keeps_its_casing(self, lang, text, expected_name):
+        detection = detect_speaker_introduction(text, language=lang)
+        assert detection is not None, f"Failed to detect name in {text!r}"
+        assert detection.name == expected_name
+        assert detect_speaker_from_text(text, language=lang) == expected_name
+
+    def test_lowercase_first_letter_is_still_capitalized(self):
+        """The Greek pattern accepts a lowercase name; only its first letter changes."""
+        assert detect_speaker_from_text("Με λένε νίκος", language="el") == "Νίκος"
 
     def test_all_languages_have_patterns(self):
         """Verify all 33 language codes have patterns defined."""

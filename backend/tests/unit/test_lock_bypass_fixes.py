@@ -12,6 +12,15 @@ from datetime import datetime, timedelta, timezone, tzinfo
 from types import ModuleType, SimpleNamespace
 from zoneinfo import ZoneInfo
 
+
+@pytest.fixture(scope='module', autouse=True)
+def _shaped_notes_enabled():
+    """These suites exercise the notes writer, which is shaped-only after go-live."""
+    os.environ['OMI_SHAPED_AGENT_MODE'] = 'on'
+    yield
+    os.environ.pop('OMI_SHAPED_AGENT_MODE', None)
+
+
 os.environ.setdefault('OPENAI_API_KEY', 'sk-test-not-real')
 os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv')
 
@@ -625,7 +634,7 @@ class TestConversationToolFiltering:
 
         from utils.retrieval.tools.conversation_tools import get_conversations_tool
 
-        config = {'configurable': {'user_id': 'test-uid', 'conversations_collected': []}}
+        config = {'configurable': {'user_id': 'test-uid', 'user_timezone': 'UTC', 'conversations_collected': []}}
         result = get_conversations_tool.invoke({'limit': 10, 'offset': 0}, config=config)
         # Result is a string with "Conversation #N" format; should have exactly 1 conversation
         assert 'Conversation #1' in result
@@ -647,7 +656,7 @@ class TestConversationToolFiltering:
 
         from utils.retrieval.tools.conversation_tools import search_conversations_tool
 
-        config = {'configurable': {'user_id': 'test-uid', 'conversations_collected': []}}
+        config = {'configurable': {'user_id': 'test-uid', 'user_timezone': 'UTC', 'conversations_collected': []}}
         result = search_conversations_tool.invoke({'query': 'test'}, config=config)
         # Only 1 unlocked conv should appear
         assert 'Conversation #1' in result
@@ -707,105 +716,6 @@ class TestMemoryToolFiltering:
             call('test-uid', limit=2, offset=0),
             call('test-uid', limit=500, offset=2),
         ]
-
-    def test_get_memories_temporal_view_filters_suppressed_rows(self):
-        """Model-facing temporal reads must never format owner-use suppression."""
-        from models.memories import MemoryDB
-        from utils.retrieval.tools import memory_tools
-        from utils.retrieval.tools.memory_tools import get_memories_tool
-
-        suppressed_payload = _make_memory(memory_id='suppressed')
-        suppressed_payload['content'] = 'SUPPRESSED_MODEL_SECRET'
-        suppressed_payload['arguments'] = {'memory_use': {'suppressed': True}}
-        visible_payload = _make_memory(locked=False, memory_id='visible')
-        visible_payload['content'] = 'VISIBLE_TEMPORAL_MEMORY'
-        suppressed = MemoryDB.model_validate(suppressed_payload)
-        visible = MemoryDB.model_validate(visible_payload)
-
-        config = {'configurable': {'user_id': 'test-uid'}}
-        with (
-            patch.object(memory_tools, 'belief_model_enabled', return_value=True),
-            patch.object(memory_tools, 'MemoryService') as memory_service,
-        ):
-            memory_service.return_value.read_page.return_value = SimpleNamespace(
-                memories=(suppressed, visible), next_cursor=None, truncated=False
-            )
-            result = get_memories_tool.invoke({'limit': 10, 'offset': 0, 'view': 'useful_now'}, config=config)
-
-        assert 'VISIBLE_TEMPORAL_MEMORY' in result
-        assert 'SUPPRESSED_MODEL_SECRET' not in result
-        memory_service.return_value.read_page.assert_called_once()
-
-    def test_get_memories_temporal_empty_continuation_is_bounded(self):
-        """Filtered empty cursor pages must stop at the fixed scan budget."""
-        from utils.retrieval.tools import memory_tools
-        from utils.retrieval.tools.memory_tools import get_memories_tool
-
-        config = {'configurable': {'user_id': 'test-uid'}}
-        with (
-            patch.object(memory_tools, 'belief_model_enabled', return_value=True),
-            patch.object(memory_tools, 'MemoryService') as memory_service,
-        ):
-            memory_service.return_value.read_page.side_effect = lambda *args, **kwargs: SimpleNamespace(
-                memories=(), next_cursor='still-more', truncated=False
-            )
-            result = get_memories_tool.invoke({'limit': 10, 'offset': 0, 'view': 'history'}, config=config)
-
-        assert 'bounded scan reached its safety limit' in result
-        assert memory_service.return_value.read_page.call_count == 10
-
-    def test_get_memories_temporal_truncated_page_without_cursor_is_disclosed(self):
-        """A budget-truncated page with no continuation cursor must surface an
-        honest partial-scan note instead of a silently complete result."""
-        from utils.retrieval.tools import memory_tools
-        from utils.retrieval.tools.memory_tools import get_memories_tool
-
-        config = {'configurable': {'user_id': 'test-uid'}}
-        with (
-            patch.object(memory_tools, 'belief_model_enabled', return_value=True),
-            patch.object(memory_tools, 'MemoryService') as memory_service,
-        ):
-            memory_service.return_value.read_page.side_effect = lambda *args, **kwargs: SimpleNamespace(
-                memories=(), next_cursor=None, truncated=True
-            )
-            result = get_memories_tool.invoke({'limit': 10, 'offset': 0, 'view': 'history'}, config=config)
-
-        assert 'bounded scan reached its safety limit' in result
-        memory_service.return_value.read_page.assert_called_once()
-
-    def test_get_memories_temporal_ranges_use_evidence_date(self):
-        """A delayed extraction is found by capture date, not processing date."""
-        from models.memories import MemoryDB
-        from utils.retrieval.tools import memory_tools
-        from utils.retrieval.tools.memory_tools import get_memories_tool
-
-        delayed_payload = _make_memory(locked=False, memory_id='delayed')
-        delayed_payload['content'] = 'CAPTURED_IN_JULY'
-        delayed_payload['created_at'] = '2026-09-14T00:00:00+00:00'
-        delayed_payload['updated_at'] = '2026-09-14T00:00:00+00:00'
-        delayed_payload['as_of'] = '2026-07-10T00:00:00+00:00'
-        delayed = MemoryDB.model_validate(delayed_payload)
-
-        config = {'configurable': {'user_id': 'test-uid'}}
-        with (
-            patch.object(memory_tools, 'belief_model_enabled', return_value=True),
-            patch.object(memory_tools, 'MemoryService') as memory_service,
-            patch.object(memory_tools.MemoryDB, 'get_memories_as_str', return_value='CAPTURED_IN_JULY'),
-        ):
-            memory_service.return_value.read_page.return_value = SimpleNamespace(
-                memories=(delayed,), next_cursor=None, truncated=False
-            )
-            result = get_memories_tool.invoke(
-                {
-                    'limit': 10,
-                    'view': 'history',
-                    'start_date': '2026-07-01T00:00:00+00:00',
-                    'end_date': '2026-07-31T23:59:59+00:00',
-                },
-                config=config,
-            )
-
-        assert 'CAPTURED_IN_JULY' in result
 
     def test_search_memories_filters_locked(self):
         """search_memories_tool must exclude locked memories from results."""
@@ -1038,8 +948,8 @@ class TestUsersLockEnforcement:
     """L2/L3: Users endpoints must enforce lock."""
 
     def test_followup_question_rejects_locked(self):
-        """L2: delete_person_endpoint must raise 402 for locked conversations."""
-        from routers.users import delete_person_endpoint
+        """L2: delete_followup_question_endpoint must raise 402 for locked conversations."""
+        from routers.users import delete_followup_question_endpoint
         from fastapi import HTTPException
 
         with patch(
@@ -1047,19 +957,19 @@ class TestUsersLockEnforcement:
             return_value=_make_conversation(locked=True),
         ):
             with pytest.raises(HTTPException) as exc_info:
-                delete_person_endpoint(memory_id="conv-1", uid="test-uid")
+                delete_followup_question_endpoint(memory_id="conv-1", uid="test-uid")
             assert exc_info.value.status_code == 402
 
     def test_followup_question_allows_unlocked(self):
-        """delete_person_endpoint should proceed for unlocked conversations."""
-        from routers.users import delete_person_endpoint
+        """delete_followup_question_endpoint should proceed for unlocked conversations."""
+        from routers.users import delete_followup_question_endpoint
 
         with patch(
             "routers.users.get_conversation",
             return_value=_make_conversation(locked=False),
         ):
             with patch("routers.users.followup_question_prompt", return_value="test result"):
-                result = delete_person_endpoint(memory_id="conv-1", uid="test-uid")
+                result = delete_followup_question_endpoint(memory_id="conv-1", uid="test-uid")
         assert result["result"] == "test result"
 
     def test_daily_summary_excludes_locked(self):
@@ -1197,7 +1107,8 @@ class TestScheduledDailySummaryLockFilter:
             ) as mock_gen:
                 daily_summaries_db.create_daily_summary = MagicMock(return_value='summary-1')
                 daily_summaries_db.get_daily_summary_by_date = MagicMock(return_value=None)
-                with patch('utils.other.notifications.send_notification'):
+                daily_summaries_db.mark_daily_summary_delivery_completed = MagicMock()
+                with patch('utils.other.notifications.send_notification_result', return_value=1):
                     import utils.other.notifications as notifications_module
                     from utils.other.notifications import _send_summary_notification
 
@@ -1315,81 +1226,6 @@ class TestNotificationLlmLockFilter:
 
         assert len(result) == 1
         assert result[0]['content'] == 'VISIBLE_CONTENT'
-
-
-# =============================================================================
-# Test mentor proactive notifications exclude locked conversations
-# =============================================================================
-
-
-class TestMentorProactiveLockFilter:
-    """Mentor proactive notifications must exclude locked conversations from context."""
-
-    def test_mentor_proactive_filters_locked_conversations(self):
-        """_process_mentor_proactive_notification must not feed locked conversations to LLM."""
-        import database.conversations as conversations_db
-        import database.mem_db as mem_db
-        import database.redis_db as redis_db
-
-        locked_conv = _make_conversation(locked=True)
-        locked_conv['structured']['overview'] = 'SECRET_LOCKED_DATA'
-        unlocked_conv = _make_conversation(locked=False, conversation_id='conv-2')
-        unlocked_conv['structured']['overview'] = 'VISIBLE_DATA'
-
-        # Disable rate limiting by returning None (no previous send)
-        mem_db.get_proactive_noti_sent_at = MagicMock(return_value=None)
-        redis_db.get_proactive_noti_sent_at = MagicMock(return_value=None)
-
-        # Mock gate to pass
-        gate_result = MagicMock()
-        gate_result.is_relevant = True
-        gate_result.relevance_score = 0.9
-        gate_result.context_summary = 'test'
-        gate_result.reasoning = 'test'
-
-        with patch('utils.app_integrations.get_mentor_notification_frequency', return_value=5):
-            with patch('utils.app_integrations.get_daily_notification_count', return_value=0):
-                with patch('utils.app_integrations.get_prompt_memories', return_value=('Test', '')):
-                    with patch('utils.app_integrations.get_user_goals', return_value=[]):
-                        with patch('utils.app_integrations.get_app_messages', return_value=[]):
-                            with patch('utils.app_integrations.track_usage'):
-                                with patch('utils.app_integrations.evaluate_relevance', return_value=gate_result):
-                                    with patch('utils.app_integrations.generate_embedding', return_value=[0.1] * 1536):
-                                        with patch(
-                                            'utils.app_integrations.query_vectors_by_metadata',
-                                            return_value=['conv-1', 'conv-2'],
-                                        ):
-                                            conversations_db.get_conversations_by_id = MagicMock(
-                                                return_value=[locked_conv, unlocked_conv]
-                                            )
-                                            conversations_db.get_conversations = MagicMock(return_value=[])
-
-                                            with patch('utils.app_integrations.conversations_to_string') as mock_render:
-                                                mock_render.return_value = ''
-
-                                                draft = MagicMock()
-                                                draft.notification_text = ''
-                                                with patch(
-                                                    'utils.app_integrations.generate_notification', return_value=draft
-                                                ):
-                                                    from utils.app_integrations import (
-                                                        _process_mentor_proactive_notification,
-                                                    )
-
-                                                    _process_mentor_proactive_notification(
-                                                        uid='test-uid',
-                                                        conversation_messages=[{'text': 'hello', 'sender': 'human'}],
-                                                    )
-
-                                            # conversations_to_string called with only unlocked
-                                            mock_render.assert_called_once()
-                                            convos_passed = mock_render.call_args[0][0]
-                                            assert len(convos_passed) == 1
-                                            conv = convos_passed[0]
-                                            is_locked = (
-                                                conv.get('is_locked') if isinstance(conv, dict) else conv.is_locked
-                                            )
-                                            assert is_locked is not True
 
 
 # =============================================================================

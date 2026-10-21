@@ -186,15 +186,28 @@ def test_existing_sync_target_preserves_explicit_identity():
 
 
 @pytest.mark.parametrize('field,value', [('source', 'desktop'), ('client_device_id', 'other'), ('is_locked', True)])
-def test_empty_explicit_target_rejects_provenance_mismatch(field, value):
+def test_empty_explicit_target_recovers_from_provenance_mismatch(monkeypatch, field, value):
+
     store = StrictFirestore()
     target = live_stub('live', 1000)
     target[field] = value
     store.rows[('users', 'u', 'conversations', 'live')] = target
-    before = deepcopy(store.rows)
-    with pytest.raises(SyncAssignmentConflict, match='provenance mismatch'):
-        intake(store, capture(0), target_id='live')
-    assert store.rows == before
+    before = deepcopy(target)
+    result, created, survivors = intake(store, capture(0), target_id='live')
+    assert created and result['id'] != 'live' and survivors
+    assert store.rows[('users', 'u', 'conversations', 'live')] == before
+
+
+def test_sync_redirect_cycle_is_bounded_as_assignment_conflict_subtype():
+    store = StrictFirestore()
+    anchor = chunk('chunk-000', 1000)
+    anchor['sync_merged_into'] = 'chunk-000'
+    store.rows[('users', 'u', 'conversations', 'chunk-000')] = anchor
+
+    with pytest.raises(SyncAssignmentConflict, match='redirect cycle') as exc_info:
+        intake(store, capture(0))
+
+    assert exc_info.value.subtype == 'redirect_cycle'
 
 
 @pytest.mark.parametrize('redirect', [False, True])

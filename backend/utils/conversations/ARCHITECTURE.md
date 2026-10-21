@@ -26,7 +26,7 @@ and background processing.
 - `processing_trigger.py` owns *why* a conversation is processed. Every caller
   of `process_conversation` (and every finalization job) names a
   `ProcessingTrigger`; its `PROCESSING_MODES` row fixes run-now, reprocess,
-  JIT first-open bypass, and relevance policy together. Callers never pass
+  first-open bypass, and relevance policy together. Callers never pass
   mode flags directly.
 - `relevance.py` owns the one keep/discard decision. Triggers assess unless
   they are themselves a user action (first open, reprocess, merge).
@@ -35,12 +35,13 @@ and background processing.
   the ambiguous middle; a calendar overlap overrides any discard. The outcome
   is stored as `relevance_decision` (server-only, outside the wire model) and
   counted in `omi_conversation_relevance_decision_total`.
-  With `CONVERSATION_RELEVANCE_JEV_ENABLED` (default off) the model tier of a
-  transcript-only conversation asks the Jev decision model instead
-  (`relevance_jev.py`, gateway lane `omi:auto:jev-decisions`) and discards only
-  when P(discard) exceeds `JEV_DISCARD_THRESHOLD`; no answer keeps
-  (`decided_by=jev`, `reason=jev_error`). Photos and wake-word invocations keep
-  `conv_discard`. The record carries the probability under `jev`.
+  Jev replaces the ambiguous `conv_discard` model tier for the stable
+  conversation-hash cohort selected by `CONVERSATION_RELEVANCE_JEV_PERCENT`.
+  An unset value defaults to 0, preserving hosts that were previously off;
+  production stays at 100 and dev stays at 0. There is no keep-all arm, UID
+  allowlist, or relevance shadow path. The value is the sole Jev relevance
+  control and its ops kill setting is 0. Restores, deterministic rules, and
+  calendar overlap retain precedence.
 - `owner_attribution.py` owns typed source-cluster evidence for memory writes.
   A passive memory may be attributed to the account owner only when the
   transcript identifies exactly one owner speaker cluster, keyed by
@@ -53,12 +54,8 @@ and background processing.
   transcripts without cluster IDs fail closed: a `TranscriptSegment` that
   only materialized `speaker_id` from the SPEAKER_00 default is not
   cluster evidence.
-  One flagged exception (`MEMORY_OWNER_JEV_FLIP_ENABLED`, default off,
-  `owner_jev.py`): a candidate capture resolved to a *third party* may be
-  re-attributed to the user when Jev's P(owner = user) is at least 0.9. It
-  never moves a candidate away from the user or out of `unknown`, and the
-  item's `promotion.source_attribution.override` records the probability and
-  the pipeline's original subject so the flip can be audited or reverted.
+  Owner attribution has no Jev override. Untrusted or missing cluster evidence
+  remains fail-closed until the source attribution is corrected.
   `transcript_for_llm.memory_transcript_from_segments` is the memory-only
   renderer: when owner evidence is untrusted it suppresses owner names and
   prefixes an explicit UNTRUSTED header. Summary and action-item rendering keep
@@ -74,6 +71,50 @@ and background processing.
   structure is a typed failure before persistence. The flagged Cloud Tasks
   worker closes that job on its first occurrence, retaining the transcript as
   a visible completed conversation; provider and parser errors still retry.
+  A clear rule-level discard is not a minimal structure: recovery records it
+  as an explicit server-recovery discard only after strict transcript decoding,
+  so contentless rows never surface. Discard persistence omits the transcript
+  fields, preserving the stored blob byte-for-byte. It rechecks protected
+  structure, user title, and the restore marker transactionally; a raced edit or
+  restore takes the same typed-minimum terminal path, retaining a visible row
+  with no new discard decision. Selfheal reports that job as dead-lettered.
+  Every terminal that moves a `processing` row into the list (dead-letter, BYOK
+  abandonment, orphan recovery) replaces an empty title with
+  `deterministic_minimum_title`; the dead-letter also marks a transient failure
+  `summary_retryable` (see `database/conversation_finalization_jobs.py`).
+- `smart_merge.py` folds a finished pendant conversation into the immediately
+  preceding one of the same device partition when Jev says it is the same
+  occasion (`CONVERSATION_SMART_MERGE_MODE=off|shadow|merge`, default `merge`; `off`
+  is the kill switch and an unrecognized value also means `off`). The
+  finalizer calls it behind the fanout claim and before any derived effect;
+  `CAPTURE_END` only. `smart_merge_policy.py` holds the pure gates and absorb
+  payloads, `smart_merge_state.py` the benchmark question and state (A is always
+  one fragment from the survivor's `smart_merge.fragments` ledger, never its
+  regenerated summary), and `database/smart_merge.py` the transactions. The
+  survivor keeps its id; the donor becomes the sync bridge's redirect tombstone
+  (`deleted`/`discarded`/`sync_merged_into`, survivor `sync_merged_from`), so
+  existing redirect readers and the deletion purge apply unchanged. The survivor
+  is reprocessed once per merge (`ProcessingTrigger.SMART_MERGE`); a retry of a
+  donor whose cleanup or refresh failed resumes it before the fanout claim, and a
+  failed refresh releases its own invocation lease. Resume first checks the job
+  epoch/generation/binding; terminal or stale deliveries do no work. Active refresh
+  leases exclude even same-job callers, and a processing receipt prevents a vector
+  retry from rerunning the completed bundle. Deferred cleanup remains retryable. An absorb
+  requires `refreshed_revision == revision`, so a refresh never persists over a
+  newer append. The absorb also advances `sync_content_revision` to fence
+  processors that read the old transcript, and refresh persistence checks the
+  current lease owner and revision. Custom-STT rows are excluded because their
+  processing budget can refuse the required refresh. Decisions are recorded as
+  server-only `smart_merge_decision` before the absorb transaction.
+  Constants and benchmark provenance live in `config/conversation_smart_merge.py`.
+  `CONVERSATION_SMART_MERGE_MODE` defaults to `merge`; `shadow` observes without
+  absorbing, and `off` is the stop lever. The wall-clock rescue is unconditional
+  after the exact legacy gate skips a pair proven to share a recording. It uses
+  the newest fragment's own server `finished_at` and the new row's `created_at`,
+  then rechecks the legacy-or-wallclock decision inside the absorb transaction.
+  Existing smart-merge logs retain `gap_path=legacy|wallclock`; the shadow-only
+  log and metric path is retired. This change admits about 800 additional
+  merges per day fleet-wide. Revert the change or set `MODE=off` to stop merges.
 - `duplicate_capture.py` owns the advisory cross-source overlap policy (#3244).
   After durable finalization, it links the shorter completed capture using
   `external_data.duplicate_capture_of` plus structured overlap evidence. The
@@ -135,3 +176,11 @@ service and developer delete endpoint. Raw DB deletion and new-target rollback d
 not orchestrate external cleanup. The shared gap
 predicate lives in `utils/conversation_continuity.py`; both paths supply speech
 silence (sync uses the default timeout; realtime can configure it per session). See `utils/sync/ARCHITECTURE.md`.
+
+EXP-004 closed under David's 2026-10-18 rulings. Owner flip and owner
+measurement were retired because label evidence did not meet the bar; attribution
+is being corrected at the source. Relevance shadows and keep-all were retired,
+and the keep-rescue path was removed. Jev relevance remains governed only by
+`CONVERSATION_RELEVANCE_JEV_PERCENT` (prod 100, dev 0, unset 0). Existing
+Firestore shadow records are left untouched and expire through their existing
+TTL. See [the closure record](../../docs/experiments/EXP-004-jev-relevance-owner-ramp.md).

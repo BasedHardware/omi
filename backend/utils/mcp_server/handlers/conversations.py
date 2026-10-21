@@ -1,7 +1,12 @@
 """Conversation tool handlers for the hosted MCP server."""
 
+import logging
+
+from utils.other.list_budget import ListReadBudget
+
 from typing import Any, Dict, List, Optional, cast
 
+from fastapi import HTTPException
 from google.api_core.exceptions import FailedPrecondition
 
 import database.conversations as conversations_db
@@ -12,7 +17,10 @@ from utils.conversations.mcp_transcript_search import (
     attach_match_snippets_to_conversations,
     resolve_mcp_conversation_search_ids,
 )
+from utils.conversations.search import keyword_search_conversation_ids, conversation_matches_date_range
+from utils.observability.fallback import record_fallback
 from utils.conversations.render import redact_conversation_for_list
+from utils.external_read_contract import utc_window
 from utils.memory.product_authorization import ProductAuthorizationContext
 from utils.mcp_data import end_of_day_utc
 from utils.mcp_memories import parse_mcp_int
@@ -41,6 +49,15 @@ from utils.mcp_server.helpers import (
 )
 from utils.mcp_server.payloads import tool_response_serialized_chars
 
+logger = logging.getLogger(__name__)
+
+
+def _utc_search_window(start_dt: Any, end_dt: Any) -> tuple:
+    try:
+        return utc_window(start_dt, end_dt)
+    except HTTPException as exc:
+        raise ToolExecutionError(str(exc.detail), code=-32602) from exc
+
 
 def conversation_cards_page_core(
     uid: str,
@@ -53,6 +70,7 @@ def conversation_cards_page_core(
     categories: Optional[List[str]] = None,
     cursor_kind: str,
     extra_field_paths: Optional[List[str]] = None,
+    budget: Optional[ListReadBudget] = None,
 ) -> tuple[List[Dict[str, Any]], Optional[str]]:
     """Shared card page for the MCP ``get_conversations`` tool and REST list.
 
@@ -61,6 +79,7 @@ def conversation_cards_page_core(
     Returns ``(card dicts, next_cursor)``; the cursor is opaque and carries
     the validated filter fingerprint.
     """
+    start_dt, end_dt = _utc_search_window(start_dt, end_dt)
     valid_categories = list(categories or [])
     filters = {
         "categories": sorted(valid_categories),
@@ -77,16 +96,26 @@ def conversation_cards_page_core(
         try:
             fetched = mcp_conversation_pages.get_mcp_conversation_cards(
                 uid,
-                limit,
+                limit + 1,
                 offset,
                 start_date=start_dt,
                 end_date=end_dt,
                 categories=valid_categories,
                 extra_field_paths=extra_field_paths,
+                **({'budget': budget} if budget is not None else {}),
             )
         except FailedPrecondition as e:
             raise_conversation_index_error(e)
-        return fetched, None
+        resume = None
+        if len(fetched) > limit and fetched[limit - 1].get("created_at") is not None:
+            last = fetched[limit - 1]
+            resume = encode_cursor(
+                kind=cursor_kind,
+                uid=uid,
+                position={"ts": serialize_timestamp(last["created_at"]), "id": last["id"]},
+                filters=filters,
+            )
+        return fetched[:limit], resume
 
     try:
         page, resume = mcp_conversation_pages.get_mcp_conversation_cards_page(
@@ -171,6 +200,9 @@ def get_conversations(
         # Include the entire end day, matching the integration-router convention.
         end_dt = end_of_day_utc(end_dt)
 
+    if start_dt is not None and end_dt is not None and start_dt > end_dt:
+        raise ToolExecutionError("start_date must be on or before end_date", code=-32602)
+
     valid_categories: List[str] = []
     for cat in categories_list:
         try:
@@ -189,7 +221,11 @@ def get_conversations(
         cursor_kind="get_conversations",
     )
 
-    result: Dict[str, Any] = {"conversations": [conversation_card(conversation) for conversation in page]}
+    result: Dict[str, Any] = {
+        "conversations": [conversation_card(conversation) for conversation in page],
+        "has_more": next_cursor is not None,
+        "effective_limit": limit,
+    }
     if next_cursor is not None:
         result["next_cursor"] = next_cursor
     return result
@@ -342,15 +378,19 @@ def search_conversations_core(
     start_dt: Optional[Any],
     end_dt: Optional[Any],
     extra_field_paths: Optional[List[str]] = None,
+    include_transcript: bool = True,
 ) -> List[Dict[str, Any]]:
     """Shared vector-search + batch-read for MCP ``search_conversations`` and REST search.
 
     Dates arrive already parsed; the caller applies its own input convention
     (date-only end-of-day for the tool, exact instants for REST).
     """
+    start_dt, end_dt = _utc_search_window(start_dt, end_dt)
     starts_at = int(start_dt.timestamp()) if start_dt is not None else None
     ends_at = int(end_dt.timestamp()) if end_dt is not None else None
 
+    # Date filters must be checked against hydrated storage as well as indexes:
+    # stale index metadata must never widen the authorized result window.
     try:
         conversation_ids = resolve_mcp_conversation_search_ids(
             uid,
@@ -359,23 +399,65 @@ def search_conversations_core(
             starts_at=starts_at,
             ends_at=ends_at,
             query_vectors=vector_db.query_vectors,
-            search_transcript_chunks=vector_db.search_transcript_chunks,
             embed_query=vector_db.embeddings.embed_query,
         )
-    except FailedPrecondition as e:
-        raise_conversation_index_error(e)
-    if not conversation_ids:
-        return []
-
-    try:
-        return conversations_db.get_mcp_conversations_by_id(
+    except FailedPrecondition as exc:
+        raise_conversation_index_error(exc)
+    except Exception:
+        logger.warning("MCP summary vector search unavailable")
+        conversation_ids = []
+    conversations = (
+        conversations_db.get_mcp_conversations_by_id(
             uid,
             conversation_ids,
-            include_transcript=True,
+            include_transcript=include_transcript,
             extra_field_paths=extra_field_paths,
         )
-    except FailedPrecondition as e:
-        raise_conversation_index_error(e)
+        if conversation_ids
+        else []
+    )
+    conversations = [
+        c
+        for c in conversations
+        if conversation_matches_date_range(
+            c, start_dt.timestamp() if start_dt else None, end_dt.timestamp() if end_dt else None
+        )
+    ]
+    if conversations:
+        return conversations[:limit]
+
+    record_fallback(component='other', from_mode='none', to_mode='none', reason='other', outcome='degraded', log=logger)
+    try:
+        keyword_ids = keyword_search_conversation_ids(
+            uid,
+            query,
+            limit=limit,
+            start_date=starts_at,
+            end_date=ends_at,
+            raise_on_error=True,
+        )
+    except Exception as exc:
+        raise ToolExecutionError(
+            "No hydrated semantic matches and keyword search is unavailable. "
+            "Use get_conversations with a date window; this does not establish that the topic is absent.",
+            code=-32009,
+            http_status=503,
+        ) from exc
+    if not keyword_ids:
+        return []
+    rows = conversations_db.get_mcp_conversations_by_id(
+        uid,
+        keyword_ids,
+        include_transcript=include_transcript,
+        extra_field_paths=extra_field_paths,
+    )
+    return [
+        c
+        for c in rows
+        if conversation_matches_date_range(
+            c, start_dt.timestamp() if start_dt else None, end_dt.timestamp() if end_dt else None
+        )
+    ][:limit]
 
 
 def search_conversations(
@@ -409,7 +491,11 @@ def search_conversations(
         end_dt=end_dt,
     )
     if not conversations:
-        return {"conversations": []}
+        return {
+            "conversations": [],
+            "search_coverage": "summary_vectors_and_keyword_recovery",
+            "message": "No indexed matches. Unindexed content may still match; browse a date window.",
+        }
 
     results: List[Dict[str, Any]] = []
     for conv in conversations:
@@ -430,4 +516,4 @@ def search_conversations(
         card["match_snippets"] = snippets
         results.append(card)
 
-    return {"conversations": results}
+    return {"conversations": results, "search_coverage": "summary_vectors_with_keyword_recovery"}

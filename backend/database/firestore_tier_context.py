@@ -14,6 +14,7 @@ from enum import Enum
 from typing import Any
 
 from config.plan_catalog import PLAN_TYPE_VALUES, WIRE_PLAN_ALIASES
+from database.firestore_read_origin import bind_read_scope, reset_read_scope
 
 TIER_VALUES = PLAN_TYPE_VALUES | frozenset(WIRE_PLAN_ALIASES) | {'unattributed', 'other'}
 _TTL_SECONDS = 60
@@ -146,6 +147,7 @@ class FirestoreTierMiddleware:
             return
         owner = _RequestOwner()
         token = _request_owner.set(owner)
+        origin_token = bind_read_scope(scope)
 
         async def send_with_lifetime(message: Any) -> None:
             # Starlette BackgroundTasks run after the final response body; they
@@ -161,3 +163,4 @@ class FirestoreTierMiddleware:
         finally:
             owner.closed = True  # Also revokes copies held by detached tasks/workers.
             _request_owner.reset(token)
+            reset_read_scope(origin_token)

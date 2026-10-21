@@ -1,4 +1,8 @@
-"""Shared explicit prompt-cache primitives for the GPT-5.6 family.
+"""Shared prompt-cache markings for agent harnesses and gateway providers.
+
+The gateway translates these same boundaries into Vertex cachedContents, with
+owner isolation and model-specific thresholds. The helpers below retain the
+OpenAI-compatible wire contract for existing callers.
 
 The provider only serves a cache READ from a prefix that ends on a message
 boundary or on an explicit ``prompt_cache_breakpoint``. A prompt whose stable
@@ -16,11 +20,40 @@ nothing, so callers preflight with :func:`has_cacheable_prefix` first.
 from __future__ import annotations
 
 import hashlib
-import os
 from collections.abc import Mapping
 from typing import Any
 
+
+def model_supports_explicit_cache(model: Any) -> bool:
+    """Check the resolved model, unwrapping bindings and dev shadow clients.
+
+    get_llm records its final BYOK-resolved model in callback metadata because
+    a gateway client's model_name is an auto-lane ID, not the provider model.
+    Unknown identities fail closed; injected clients use their concrete name.
+    """
+    from utils.llm.model_config import uses_explicit_cache_and_chat_sanitizer
+
+    seen: set[int] = set()
+    while model is not None and id(model) not in seen:
+        seen.add(id(model))
+        fields = vars(model) if hasattr(model, '__dict__') else {}
+        wrapped = fields.get('bound') or fields.get('legacy_model')
+        if wrapped is not None:
+            model = wrapped
+            continue
+        metadata = fields.get('metadata')
+        name = metadata.get('omi_resolved_model') if isinstance(metadata, Mapping) else None
+        if not isinstance(name, str):
+            name = getattr(model, 'model_name', None)
+        if not isinstance(name, str):
+            name = getattr(model, 'model', None)
+        return isinstance(name, str) and uses_explicit_cache_and_chat_sanitizer(name)
+    return False
+
+
 # Below this, the provider never serves a read, so a breakpoint is pure noise.
+
+
 EXPLICIT_CACHE_MINIMUM_TOKENS = 1024
 
 # Deliberately a character heuristic rather than a real tokenizer. This runs on
@@ -36,33 +69,16 @@ EXPLICIT_CACHE_OPTIONS = {'mode': 'explicit', 'ttl': '30m'}
 EXPLICIT_CACHE_BREAKPOINT = {'mode': 'explicit'}
 
 
-# One kill switch for every explicit-cache caller. Unset means enabled.
-GPT56_EXPLICIT_CACHE_ENABLED_ENV = 'OMI_LLM_GPT56_EXPLICIT_CACHE_ENABLED'
-
-
 def has_cacheable_prefix(content: str) -> bool:
     """Conservative preflight: is this block worth marking for a cache write?"""
     return len(content) >= EXPLICIT_CACHE_MINIMUM_CHARACTERS
-
-
-def explicit_cache_switch_enabled() -> bool:
-    """The operator kill switch shared by every explicit-cache caller.
-
-    Callers still add their own route condition (the explicit contract is
-    GPT-5.6-only); this owns just the env semantics so a rollback is one
-    variable everywhere rather than one per feature.
-    """
-    value = os.getenv(GPT56_EXPLICIT_CACHE_ENABLED_ENV)
-    if value is None:
-        return True
-    return value.strip().casefold() in {'1', 'true', 'yes', 'on'}
 
 
 def gpt56_explicit_cache_enabled() -> bool:
     """May this process put ``prompt_cache_options`` on a request at all?
 
     True when the gateway lanes (which pin the GPT-5.6 family) are the route and
-    the kill switch is not off. Whether a given prefix earns a breakpoint is a
+    the model supports it. Whether a given prefix earns a breakpoint is a
     separate, per-caller question.
 
     Sending :data:`EXPLICIT_CACHE_OPTIONS` with *no* breakpoint is not a no-op:
@@ -74,7 +90,7 @@ def gpt56_explicit_cache_enabled() -> bool:
         from utils.llm.gateway_client import should_route_features_through_gateway
     except ImportError:  # pragma: no cover - isolated suites import this module alone
         return False
-    return should_route_features_through_gateway() and explicit_cache_switch_enabled()
+    return should_route_features_through_gateway()
 
 
 def cache_write_opt_out_options() -> dict[str, str] | None:
@@ -139,14 +155,15 @@ def bind_explicit_cache(runnable: Any, *, cache_key: str | None = None) -> Any:
     return runnable.bind(**params)
 
 
-def prefix_cache_key(namespace: str, stable_text: str) -> str:
+def prefix_cache_key(namespace: str, stable_text: str, *, owner_uid: str | None = None) -> str:
     """Routing key derived from the prefix bytes themselves.
 
     Same bytes -> same key, so two callers that build an identical prefix land
     on the same cache entry, and an edit to the prefix can never route onto the
     entry its previous wording wrote. Carries no prompt content.
     """
-    return f'{namespace}-{hashlib.sha256(stable_text.encode("utf-8")).hexdigest()[:32]}'
+    identity = stable_text if owner_uid is None else f'{len(owner_uid)}:{owner_uid}{stable_text}'
+    return f'{namespace}-{hashlib.sha256(identity.encode("utf-8")).hexdigest()[:32]}'
 
 
 def content_parts_with_breakpoint(stable_text: str, volatile_text: str) -> list[dict[str, Any]]:
@@ -214,3 +231,20 @@ def marked_prefix_request(namespace: str, stable_text: str, volatile_text: str) 
         return None, None
     parts = content_parts_with_breakpoint(stable_text, volatile_text)
     return prefix_cache_key(namespace, stable_text), [{'role': 'user', 'content': parts}]
+
+
+def chat_cache_options():
+    """Chat TTL config is constrained to the gateway/provider's supported contract."""
+    import os
+
+    ttl = os.getenv('OMI_CHAT_PROMPT_CACHE_TTL', '30m')
+    if ttl != '30m':
+        import logging
+        from utils.observability.fallback import record_fallback
+
+        logging.getLogger(__name__).warning('Unsupported chat cache TTL; explicit caching disabled')
+        record_fallback(
+            component='other', from_mode='explicit_cache', to_mode='none', reason='other', outcome='degraded'
+        )
+        return None
+    return {'mode': 'explicit', 'ttl': ttl}

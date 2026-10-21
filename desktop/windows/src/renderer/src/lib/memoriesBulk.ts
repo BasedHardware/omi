@@ -1,6 +1,5 @@
 import { omiApi } from './apiClient'
 import type { Memory } from '../hooks/useMemories'
-import type { MemoryReadView } from './memoriesCache'
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
 
@@ -22,13 +21,11 @@ async function waitInterruptible(ms: number, shouldStop?: () => boolean): Promis
 export type MemoriesResponse = { data: unknown; headers?: Record<string, unknown> }
 
 export type FetchMemoriesOptions = {
-  /** Optional server-side temporal view. Omit for legacy/stable semantics. */
-  view?: MemoryReadView
   /** Route used by the explicit history reader when the caller needs ledger rows. */
   path?: '/v3/memories' | '/v3/memories/ledger-history'
 }
 
-export const MEMORY_BELIEF_ENABLED_HEADER = 'x-omi-memory-belief-enabled'
+export const MEMORY_DEVICE_SCOPE_SUPPORTED_HEADER = 'x-omi-memory-device-scope-supported'
 export const MEMORY_NEXT_CURSOR_HEADER = 'x-omi-memory-next-cursor'
 export const MEMORY_LIST_TRUNCATED_HEADER = 'x-omi-list-truncated'
 export const MEMORY_TRUNCATED_MESSAGE =
@@ -44,11 +41,9 @@ function headerValue(
   return typeof entry === 'string' && entry.trim() ? entry.trim() : undefined
 }
 
-export function beliefCapabilityFromResponse(response: MemoriesResponse): boolean | null {
-  const value = headerValue(response.headers, MEMORY_BELIEF_ENABLED_HEADER)?.toLowerCase()
-  if (value === 'true') return true
-  if (value === 'false') return false
-  return null
+export function canonicalLifecycleFromResponse(response: MemoriesResponse): boolean | null {
+  const value = headerValue(response.headers, MEMORY_DEVICE_SCOPE_SUPPORTED_HEADER)
+  return value === undefined ? null : value === 'true'
 }
 
 export function nextMemoryCursor(response: MemoriesResponse): string | undefined {
@@ -68,9 +63,8 @@ const MEMORIES_PAGE_LIMIT = 500
 const MAX_MEMORY_PAGES = 10_000
 //
 // `onResponse` fires for every raw page response so a caller (the Memories page)
-// can read capability headers off the first page — e.g.
-// X-Omi-Memory-Canonical-Lifecycle-Exposed, which gates the tier/device filters
-// — without a second request. It is the single source of truth for "fetch every
+// can read capability headers off the first page without a second request.
+// It is the single source of truth for "fetch every
 // memory": the display hook (useMemories) and the bulk export/purge paths all go
 // through it, so the pagination contract can never drift between them again.
 export async function fetchAllMemoriesPaged(
@@ -84,7 +78,6 @@ export async function fetchAllMemoriesPaged(
   let pageCount = 0
   while (pageCount < MAX_MEMORY_PAGES) {
     const params: Record<string, string | number> = { limit: MEMORIES_PAGE_LIMIT }
-    if (options.view && path === '/v3/memories') params.view = options.view
     if (cursor) params.cursor = cursor
     else params.offset = offset
     const r = await omiApi.get(path, { params })
@@ -100,9 +93,8 @@ export async function fetchAllMemoriesPaged(
         added++
       }
     }
-    // A temporal view may filter an entire physical page. The server's cursor
-    // still advances in that case, so do not stop on an empty page while a
-    // continuation cursor is present.
+    // A server-side filter may yield an empty physical page while the cursor
+    // advances, so keep following an explicit continuation cursor.
     if (nextCursor) {
       if (nextCursor === cursor) {
         // An unchanged cursor means the server cannot continue (budget spent);

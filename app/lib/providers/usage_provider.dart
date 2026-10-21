@@ -1,8 +1,13 @@
+import 'dart:async';
+
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
+import 'package:uuid/uuid.dart';
 
 import 'package:omi/backend/http/api/payment.dart';
+import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/http/api/users.dart';
+import 'package:omi/models/custom_stt_config.dart';
 import 'package:omi/models/subscription.dart';
 import 'package:omi/models/user_usage.dart';
 import 'package:omi/services/capture/transcription_allowance_cache.dart';
@@ -10,15 +15,85 @@ import 'package:omi/utils/logger.dart';
 
 typedef UsageRequest = Future<UserUsageResponse?> Function({required String period, required String? timeZone});
 
+typedef ProcessingBacklogRequest = Future<ProcessingBacklog?> Function({required String idempotencyKey});
+
 class UsageProvider with ChangeNotifier {
-  UsageProvider({Future<String?> Function()? deviceTimeZone, UsageRequest? usageRequest, DateTime Function()? now})
-      : _deviceTimeZone = deviceTimeZone ?? getUsageDeviceTimeZone,
+  UsageProvider({
+    Future<String?> Function()? deviceTimeZone,
+    UsageRequest? usageRequest,
+    Future<UserSubscriptionResponse?> Function()? subscriptionRequest,
+    ProcessingBacklogRequest? processBacklogRequest,
+    DateTime Function()? now,
+  })  : _deviceTimeZone = deviceTimeZone ?? getUsageDeviceTimeZone,
         _usageRequest = usageRequest ?? getUserUsage,
+        _subscriptionRequest = subscriptionRequest ?? getUserSubscription,
+        _processBacklogRequest = processBacklogRequest ?? processProcessingBacklog,
         _now = now ?? DateTime.now;
 
   final Future<String?> Function() _deviceTimeZone;
   final UsageRequest _usageRequest;
+  final Future<UserSubscriptionResponse?> Function() _subscriptionRequest;
   final DateTime Function() _now;
+  final ProcessingBacklogRequest _processBacklogRequest;
+  String? _backlogIdempotencyKey;
+  bool _isProcessingBacklog = false;
+  int _backlogMutationGeneration = 0;
+  Timer? _backlogRefreshTimer;
+
+  void _scheduleBacklogRefresh() {
+    _backlogRefreshTimer?.cancel();
+    _backlogRefreshTimer = null;
+    if (_subscription?.processingBacklog?.isProcessing != true) return;
+    _backlogRefreshTimer = Timer(const Duration(seconds: 15), () => unawaited(fetchSubscription()));
+  }
+
+  @override
+  void dispose() {
+    _backlogRefreshTimer?.cancel();
+    _sessionGeneration++;
+    super.dispose();
+  }
+
+  bool get isProcessingBacklog => _isProcessingBacklog;
+
+  /// A cancelled choice ends its retry identity. An in-flight request owns its
+  /// identity until it answers, even if another surface is postponed.
+  void cancelBacklogDecision() {
+    if (!_isProcessingBacklog) _backlogIdempotencyKey = null;
+  }
+
+  /// Called only after confirmation. Keep one UUID through transport errors,
+  /// lost replies and ordinary subscription refreshes, across A/B/C surfaces.
+  Future<bool> processBacklog() async {
+    if (_isProcessingBacklog || _subscription?.processingBacklog?.isWaitingChoice != true) return false;
+    final generation = _sessionGeneration;
+    final idempotencyKey = _backlogIdempotencyKey ??= const Uuid().v4();
+    _isProcessingBacklog = true;
+    _backlogMutationGeneration++;
+    notifyListeners();
+    try {
+      final snapshot = await _processBacklogRequest(idempotencyKey: idempotencyKey);
+      if (generation != _sessionGeneration || snapshot == null || _subscription == null) return false;
+      _backlogMutationGeneration++;
+      _subscription = UserSubscriptionResponse.fromJson({
+        ..._subscription!.toJson(),
+        'processing_backlog': snapshot.toJson(),
+      });
+      _backlogIdempotencyKey = null; // A validated success definitively acknowledges this action.
+      _scheduleBacklogRefresh();
+      notifyListeners();
+      return true;
+    } catch (e) {
+      Logger.debug('Failed to process backlog: $e');
+      return false;
+    } finally {
+      if (generation == _sessionGeneration) {
+        _isProcessingBacklog = false;
+        notifyListeners();
+      }
+    }
+  }
+
   String? _usageTimeZone;
   String? get usageTimeZone => _usageTimeZone;
   bool _usageTimeZoneResolved = false;
@@ -114,6 +189,7 @@ class UsageProvider with ChangeNotifier {
   bool get isOutOfCredits {
     if (_forceOutOfCredits) return true;
     if (_subscription == null) return false;
+    if (_subscription!.transcriptionAllowance?.reason == 'usage_budget_exhausted') return true;
     final plan = _subscription!.subscription.plan;
     // Plus is paid but metered, so it falls through to the usage check below.
     if (plan.hasUnlimitedTranscription) return false;
@@ -129,6 +205,12 @@ class UsageProvider with ChangeNotifier {
   void debugSetSubscription(UserSubscriptionResponse? value) {
     _subscription = value;
     TranscriptionAllowanceCache.replace(value?.transcriptionAllowance);
+    notifyListeners();
+  }
+
+  @visibleForTesting
+  void debugSetAvailablePlans(Map<String, dynamic>? value) {
+    _availablePlans = value;
     notifyListeners();
   }
 
@@ -157,6 +239,10 @@ class UsageProvider with ChangeNotifier {
   /// Wipes user-scoped state on logout so the next account doesn't inherit
   /// the previous account's subscription/usage (e.g. a stale Pro badge).
   void clearUserData() {
+    _backlogIdempotencyKey = null;
+    _backlogRefreshTimer?.cancel();
+    _backlogRefreshTimer = null;
+    _isProcessingBacklog = false;
     TranscriptionAllowanceCache.clear();
     _subscription = null;
     _todayUsage = null;
@@ -199,19 +285,21 @@ class UsageProvider with ChangeNotifier {
     if (_isSubscriptionLoading) return;
 
     final generation = _sessionGeneration;
+    final backlogGeneration = _backlogMutationGeneration;
     _isSubscriptionLoading = true;
     _error = null;
     notifyListeners();
 
     try {
-      final subscription = await getUserSubscription();
-      if (generation != _sessionGeneration) return; // Session cleared mid-flight; discard stale response.
+      final subscription = await _subscriptionRequest();
+      if (generation != _sessionGeneration || backlogGeneration != _backlogMutationGeneration) return;
       if (subscription == null) {
         _error = 'Failed to load subscription data. Please try again later.';
         return;
       }
       _subscription = subscription;
       TranscriptionAllowanceCache.replace(subscription.transcriptionAllowance);
+      await _releasePaywallOnDevicePin(subscription.subscription.plan);
       PlatformManager.instance.analytics.setSubscriptionTier(subscription.subscription.plan.name);
     } catch (e) {
       if (generation != _sessionGeneration) return;
@@ -220,10 +308,24 @@ class UsageProvider with ChangeNotifier {
     } finally {
       if (generation == _sessionGeneration) {
         _isSubscriptionLoading = false;
+        _scheduleBacklogRefresh();
         _forceOutOfCredits = false; // Reset optimistic flag
         notifyListeners();
       }
     }
+  }
+
+  /// The paywall's "switch to free" persists on-device STT with raw audio off, and a persisted
+  /// Custom STT outranks the plan. Once the user pays, release that pin so capture returns to Omi
+  /// (and audio reaches Omi again, e.g. for audio-bytes webhooks) instead of staying on-device.
+  Future<void> _releasePaywallOnDevicePin(PlanType plan) async {
+    final prefs = SharedPreferencesUtil();
+    final pinned = prefs.paywallOnDeviceSttConfigId;
+    if (!plan.isPaid || pinned.isEmpty) return;
+    if (prefs.customSttConfig.sttConfigId == pinned) {
+      await prefs.saveCustomSttConfig(CustomSttConfig.defaultConfig);
+    }
+    prefs.paywallOnDeviceSttConfigId = '';
   }
 
   /// Alias for fetchSubscription - refreshes subscription data from backend
@@ -441,7 +543,11 @@ class UsageProvider with ChangeNotifier {
     }
   }
 
-  Future<Map<String, dynamic>?> createUserCheckoutSession({required String priceId, String? promotionCode}) async {
+  Future<Map<String, dynamic>?> createUserCheckoutSession({
+    required String priceId,
+    String? promotionCode,
+    int? trialDays,
+  }) async {
     if (_isPaymentLoading) return null;
 
     _isPaymentLoading = true;
@@ -449,7 +555,8 @@ class UsageProvider with ChangeNotifier {
     notifyListeners();
 
     try {
-      final sessionData = await createCheckoutSession(priceId: priceId, promotionCode: promotionCode);
+      final sessionData =
+          await createCheckoutSession(priceId: priceId, promotionCode: promotionCode, trialDays: trialDays);
       return sessionData;
     } catch (e) {
       _error = 'Failed to create checkout session. Please try again later.';

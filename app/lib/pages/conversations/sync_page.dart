@@ -15,9 +15,10 @@ import 'package:omi/services/services.dart';
 import 'package:omi/services/wals.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/other/temp.dart';
-import 'package:omi/utils/sync/sync_card_progress_line.dart';
+import 'package:omi/utils/sync/offline_sync_amounts.dart';
 import 'package:omi/utils/sync_confirmation.dart';
 import 'widgets/sync_error_card.dart';
+import 'widgets/offline_sync_storage_sheet.dart';
 import 'local_storage_page.dart';
 import 'private_cloud_sync_page.dart';
 import 'synced_conversations_page.dart';
@@ -62,7 +63,7 @@ class WalListItem extends StatelessWidget {
     if (hasError) return (Colors.redAccent, l.failedStatus);
     switch (state) {
       case WalSyncDisplayState.synced:
-        return (Colors.grey.shade500, l.syncStatusConversationCreated);
+        return (Colors.grey.shade500, l.statusProcessed);
       case WalSyncDisplayState.uploaded:
         return (Colors.grey.shade400, l.syncStatusUploaded);
       case WalSyncDisplayState.retrying:
@@ -248,6 +249,7 @@ class SyncPage extends StatefulWidget {
 }
 
 class _SyncPageState extends State<SyncPage> {
+  final SyncRunTracker _runTracker = SyncRunTracker();
   @override
   void initState() {
     super.initState();
@@ -370,8 +372,10 @@ class _SyncPageState extends State<SyncPage> {
       context: context,
       title: context.l10n.manageStorage,
       padding: const EdgeInsets.fromLTRB(OmiSpacing.xl, OmiSpacing.xs, OmiSpacing.xl, OmiSpacing.xl),
-      builder: (sheetContext) => _ManageStorageSheet(
-        provider: provider,
+      builder: (sheetContext) => OfflineSyncStorageSheet(
+        syncedCount: provider.syncedWals.length,
+        pendingCount: provider.pendingDeletableWals.length,
+        totalCount: provider.clearableWalsCount,
         onClearSynced: () async {
           Navigator.of(sheetContext).pop();
           final confirmed = await showOmiConfirm(
@@ -475,6 +479,8 @@ class _SyncPageState extends State<SyncPage> {
     final isActive = syncProvider.isSyncing;
     final uploaded = syncProvider.uploadedWals.length;
     final readyToSync = syncProvider.missingWals.length;
+    final step = _runTracker.update(s, syncProvider.allWals);
+    String dur(int seconds) => OmiDuration.compact(seconds, l);
     final bool showSpinner = (isActive || uploaded > 0) && !syncProvider.isRateLimited;
 
     String title;
@@ -488,12 +494,12 @@ class _SyncPageState extends State<SyncPage> {
       switch (s.phase) {
         case SyncPhase.downloadingFromDevice:
           title = l.syncCardDownloadingTitle;
-          subtitle = _progressLine(s, speedStr);
+          subtitle = _progressLine(step, speedStr);
           action = statusActionPill(l.cancel, Colors.redAccent, () => _showCancelSyncDialog(context, syncProvider));
           break;
         case SyncPhase.uploadingToCloud:
           title = l.syncCardUploadingTitle;
-          subtitle = _progressLine(s, null);
+          subtitle = _progressLine(step, null);
           action = statusActionPill(l.cancel, Colors.redAccent, () => _showCancelSyncDialog(context, syncProvider));
           break;
         case SyncPhase.processingOnServer:
@@ -506,7 +512,7 @@ class _SyncPageState extends State<SyncPage> {
           break;
         case SyncPhase.idle:
           title = l.syncCardUploadingTitle;
-          subtitle = _progressLine(s, speedStr);
+          subtitle = _progressLine(step, speedStr);
           if (syncProvider.isSdCardSyncing) {
             action = statusActionPill(l.cancel, Colors.redAccent, () => _showCancelSyncDialog(context, syncProvider));
           }
@@ -516,16 +522,18 @@ class _SyncPageState extends State<SyncPage> {
       title = syncCooldownTitle(syncProvider.rateLimitReason, l);
       titleColor = Colors.orangeAccent;
     } else if (uploaded > 0) {
-      title = l.syncCardProcessing;
-      final counts = syncProvider.offlineServerProcessingCounts;
-      subtitle = SyncCardProgressLine.serverProcessingSubtitle(
-            processed: counts.processed,
-            total: counts.total,
-            counterLabel: (p, t) => l.processingProgress(p, t),
-          ) ??
-          l.syncProcessingBackgroundHint;
+      // Audio length, never server jobs: "Processing 0/5914" was one job per 75 s file.
+      final job = syncProvider.offlineServerProcessingSeconds;
+      title = job.totalSeconds > 0 ? l.syncCardTranscribingAmount(dur(job.totalSeconds)) : l.syncCardProcessing;
+      subtitle = job.tracked && job.totalSeconds > 0
+          ? l.syncCardTranscribedOf(dur(job.doneSeconds), dur(job.totalSeconds))
+          : l.syncProcessingBackgroundHint;
+    } else if (syncProvider.needsAttentionWalsCount > 0) {
+      title = l.syncCardNeedsAttention(syncProvider.needsAttentionWalsCount);
+      titleColor = Colors.orangeAccent;
     } else if (readyToSync > 0) {
-      title = l.syncCardReadyCount(readyToSync);
+      final seconds = syncProvider.missingWalsInSeconds;
+      title = seconds > 0 ? l.syncCardReadyAmount(dur(seconds)) : l.syncCardReadyCount(readyToSync);
       action = statusActionPill(l.sync, OmiColors.accent, () {
         if (context.read<ConnectivityProvider>().isConnected) {
           _handleSyncWals(context, syncProvider);
@@ -571,14 +579,18 @@ class _SyncPageState extends State<SyncPage> {
     );
   }
 
-  String? _progressLine(SyncState s, String? speedStr) {
-    return SyncCardProgressLine.subtitle(
-      phase: s.phase,
-      currentFile: s.currentFile,
-      totalFiles: s.totalFiles,
-      counterLabel: (processed, total) => context.l10n.syncCardProgressOf(processed, total),
-      speedSuffix: speedStr,
-    );
+  /// Audio moved so far in this step, plus [speedStr] while the device drains.
+  String? _progressLine(SyncStepProgress? step, String? speedStr) {
+    final l = context.l10n;
+    String dur(int seconds) => OmiDuration.compact(seconds, l);
+    String? amount;
+    if (step != null && step.totalSeconds > 0) {
+      amount = step.step == SyncStep.download
+          ? l.syncStepDownloadingAmount(dur(step.doneSeconds), dur(step.totalSeconds))
+          : l.syncStepUploadingAmount(dur(step.doneSeconds), dur(step.totalSeconds));
+    }
+    final parts = [if (amount != null) amount, if (speedStr != null) speedStr];
+    return parts.isEmpty ? null : parts.join(' \u00b7 ');
   }
 
   Widget _buildSyncErrorCard(SyncProvider syncProvider) {
@@ -632,9 +644,10 @@ class _SyncPageState extends State<SyncPage> {
   Widget _buildEmptyFilterState(BuildContext context, WalStatusFilter filter) {
     final isPending = filter == WalStatusFilter.pending;
     final isCorrupted = filter == WalStatusFilter.corrupted;
+    final needsAttention = isPending && context.read<SyncProvider>().needsAttentionWalsCount > 0;
     return OmiEmptyState(
       glyph: FaIcon(
-        isPending
+        isPending && !needsAttention
             ? FontAwesomeIcons.circleCheck
             : isCorrupted
                 ? FontAwesomeIcons.triangleExclamation
@@ -645,7 +658,7 @@ class _SyncPageState extends State<SyncPage> {
           : isCorrupted
               ? context.l10n.syncStatusFileUnavailable
               : context.l10n.noProcessedRecordings,
-      message: isPending ? context.l10n.allCaughtUp : null,
+      message: isPending && !needsAttention ? context.l10n.allCaughtUp : null,
     );
   }
 
@@ -927,154 +940,4 @@ class _PendingListItem {
         icon = null,
         color = null,
         count = null;
-}
-
-class _ManageStorageSheet extends StatelessWidget {
-  final SyncProvider provider;
-  final VoidCallback onClearSynced;
-  final VoidCallback onClearPending;
-  final VoidCallback onClearAll;
-
-  const _ManageStorageSheet({
-    required this.provider,
-    required this.onClearSynced,
-    required this.onClearPending,
-    required this.onClearAll,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final syncedCount = provider.syncedWals.length;
-    final pendingCount = provider.pendingDeletableWals.length;
-    final totalCount = provider.clearableWalsCount;
-
-    return SingleChildScrollView(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Synced row
-          _StorageRow(
-            icon: FontAwesomeIcons.circleCheck,
-            iconColor: Colors.green,
-            title: context.l10n.synced,
-            subtitle: context.l10n.safelyBackedUp,
-            count: syncedCount,
-            onClear: syncedCount > 0 ? onClearSynced : null,
-            clearLabel: context.l10n.clear,
-          ),
-          const SizedBox(height: 12),
-          // Pending row
-          _StorageRow(
-            icon: FontAwesomeIcons.clockRotateLeft,
-            iconColor: Colors.orange,
-            title: context.l10n.pending,
-            subtitle: context.l10n.notYetSynced,
-            count: pendingCount,
-            onClear: pendingCount > 0 ? onClearPending : null,
-            clearLabel: context.l10n.clear,
-            isWarning: true,
-          ),
-          if (totalCount > 0) ...[
-            const SizedBox(height: 20),
-            OmiButton.destructive(label: context.l10n.clearAll, expand: true, onPressed: onClearAll),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-class _StorageRow extends StatelessWidget {
-  final FaIconData icon;
-  final Color iconColor;
-  final String title;
-  final String subtitle;
-  final int count;
-  final VoidCallback? onClear;
-  final String clearLabel;
-  final bool isWarning;
-
-  const _StorageRow({
-    required this.icon,
-    required this.iconColor,
-    required this.title,
-    required this.subtitle,
-    required this.count,
-    required this.onClear,
-    required this.clearLabel,
-    this.isWarning = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: const Color(0xFF2A2A2E), borderRadius: BorderRadius.circular(16)),
-      child: Row(
-        children: [
-          Container(
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(
-              color: iconColor.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Center(child: FaIcon(icon, size: 16, color: iconColor)),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Text(
-                      title,
-                      style: TextStyle(color: OmiColors.textPrimary, fontSize: 15, fontWeight: FontWeight.w500),
-                    ),
-                    const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: OmiColors.textPrimary.withValues(alpha: 0.08),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Text(
-                        '$count',
-                        style: TextStyle(
-                          color: OmiColors.active == OmiPalette.light ? OmiColors.textSecondary : Colors.grey.shade400,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 3),
-                Text(subtitle, style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
-              ],
-            ),
-          ),
-          if (onClear != null)
-            GestureDetector(
-              onTap: onClear,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                decoration: BoxDecoration(
-                  color: (isWarning ? Colors.orange : Colors.red).withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(100),
-                ),
-                child: Text(
-                  clearLabel,
-                  style: TextStyle(
-                    color: isWarning ? Colors.orange.shade300 : Colors.red.shade300,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
 }

@@ -1,9 +1,11 @@
+from utils.generated_compute import require_generated_compute, generated_compute_configured
 import base64
 import logging
 import mimetypes
 import re
+import uuid
 from pathlib import Path
-from typing import Any, Dict, List, NoReturn, Optional, Tuple, Union, cast
+from typing import Any, Dict, List, NoReturn, Optional, Protocol, Sequence, Tuple, Union, cast
 
 import openai
 from openai import AsyncOpenAI
@@ -15,7 +17,8 @@ from PIL import Image, UnidentifiedImageError
 from pydantic import ValidationError
 
 import database.chat as chat_db
-from models.chat import ChatSession, FileChat, chat_file_is_document
+from models.chat import ChatFileVideo, ChatSession, FileChat, chat_file_is_document
+from utils import encryption
 from utils.executors import db_executor, run_blocking
 from utils.llm.gateway_client import (
     file_chat_auto_lane_id,
@@ -67,7 +70,7 @@ def _unsupported_chat_file_error(file_path: Union[str, Path]) -> UnsupportedChat
     return UnsupportedChatFileError(f"Unsupported attachment: {label} not supported in chat.")
 
 
-def _safe_file_chats(files_data: List[Dict[str, Any]]) -> List[FileChat]:
+def safe_file_chats(files_data: List[Dict[str, Any]]) -> List[FileChat]:
     """Build FileChat objects from raw file docs, skipping (not raising on) a malformed one.
 
     A legacy or partial file document (missing openai_file_id, mime_type, created_at, ...) must not
@@ -98,10 +101,28 @@ def _openai_file_ids(files_data: List[Dict[str, Any]]) -> List[str]:
         openai_file_id = f.get('openai_file_id')
         if isinstance(openai_file_id, str) and openai_file_id:
             ids.append(openai_file_id)
+        video = f.get('video')
+        strip_file_id = video.get('strip_file_id') if isinstance(video, dict) else None
+        if isinstance(strip_file_id, str) and strip_file_id:
+            ids.append(strip_file_id)
     return ids
 
 
 _async_openai: AsyncOpenAI | None = None
+
+
+def download_owned_chat_file(uid: str, file_id: str, *, max_bytes: int) -> bytes:
+    """Resolve and bound bytes for a file owned by the current user."""
+    rows = chat_db.get_chat_files(uid, [file_id])
+    if len(rows) != 1:
+        raise PermissionError('Owned file unavailable')
+    data = bytearray()
+    with _get_sync_openai().files.with_streaming_response.content(rows[0]['openai_file_id']) as response:
+        for chunk in response.iter_bytes():
+            data.extend(chunk)
+            if len(data) > max_bytes:
+                raise ValueError('Owned file too large')
+    return bytes(data)
 
 
 def _get_async_openai() -> AsyncOpenAI:
@@ -165,7 +186,7 @@ def _record_gateway_file_chat_fallback(outcome: str) -> None:
     )
 
 
-class _StreamingCallbackProtocol:
+class _StreamingCallbackProtocol(Protocol):
     """Structural protocol for streaming callbacks (AsyncStreamingCallback in retrieval.agentic)."""
 
     def put_data_nowait(self, text: str) -> None: ...
@@ -217,6 +238,11 @@ class File:
         # Add an underscore before any capital letter that is preceded by a lowercase or digit
         string = re.sub(r"(?<=[a-z0-9])([A-Z])", r"_\1", string)
         return string.lower()
+
+
+def _requested_file_limit(file_ids: List[str]) -> int:
+    # Keep the recent-file default, but include a complete ten-photo channel album.
+    return min(10, max(9, len(file_ids)))
 
 
 class FileChatTool:
@@ -278,11 +304,51 @@ class FileChatTool:
                     result["thumbnail_name"] = file.thumbnail_name
         return result
 
-    def process_chat_with_file(self, question: str, file_ids: List[str]) -> str:
-        """Process chat with file attachments (non-streaming, agentic tool path)."""
-        files_data = chat_db.get_chat_files_desc(self.uid, files_id=file_ids, limit=9)
-        files = _safe_file_chats(files_data)
-        return self._ask_files(question, files)
+    @staticmethod
+    def upload_video(
+        directory: Union[str, Path], file_name: str, digest: Any, transcript: str, uid: str
+    ) -> Dict[str, Any]:
+        """Store a video as its overview sheet (the chat file) plus its filmstrip.
+
+        ``digest`` is a utils.media.video_frames.VideoDigest. Returns FileChatTool.upload's
+        result with a ``video`` dict ready for FileChat(video=...).
+        """
+        # The user's name is only a display name; the file on disk has a fixed name.
+        stem = re.sub(r'[^\w .-]', '_', Path(file_name).stem).strip(' .')[:100] or 'video'
+        sheet_name = f'{stem}.jpg'
+        # Random, like the upload routes' temp names: the thumbnail's storage name derives from it.
+        sheet_path = Path(directory) / f'{uuid.uuid4().hex}.jpg'
+        sheet_path.write_bytes(digest.sheet)
+        result = FileChatTool.upload(sheet_path, file_name=sheet_name)
+        strip = digest.strip
+        try:
+            response = openai.files.create(file=('filmstrip.jpg', strip.jpeg), purpose=cast(Any, 'vision'))
+        except Exception:
+            # The overview alone still answers; a missing filmstrip only disables closer looks.
+            logger.warning('video filmstrip upload failed')
+            response = None
+        result['video'] = ChatFileVideo(
+            duration_seconds=digest.duration,
+            frame_times=list(digest.sheet_times),
+            strip_file_id=response.id if response else '',
+            strip_times=list(strip.times),
+            strip_columns=strip.columns,
+            strip_cell_width=strip.cell_width,
+            strip_cell_height=strip.cell_height,
+            transcript=encryption.encrypt(transcript, uid) if transcript else '',
+        )
+        return result
+
+    def process_chat_with_file(
+        self, question: str, file_ids: List[str], video_window: Optional[Tuple[float, float]] = None
+    ) -> str:
+        """Process chat with file attachments (non-streaming, agentic tool path).
+
+        ``video_window`` (seconds) swaps each video's overview sheet for denser frames from that span.
+        """
+        files_data = chat_db.get_chat_files_desc(self.uid, files_id=file_ids, limit=_requested_file_limit(file_ids))
+        files = safe_file_chats(files_data)
+        return self._ask_files(question, files, video_window)
 
     async def process_chat_with_file_stream(
         self,
@@ -297,9 +363,13 @@ class FileChatTool:
         assert callback is not None  # streaming path always supplies a callback
         try:
             files_data = await run_blocking(
-                db_executor, chat_db.get_chat_files_desc, self.uid, files_id=file_ids, limit=9
+                db_executor,
+                chat_db.get_chat_files_desc,
+                self.uid,
+                files_id=file_ids,
+                limit=_requested_file_limit(file_ids),
             )
-            files = _safe_file_chats(files_data)
+            files = safe_file_chats(files_data)
         except Exception:
             callback.end_nowait()
             raise
@@ -313,6 +383,8 @@ class FileChatTool:
         callback: Optional[_StreamingCallbackProtocol] = None,
     ) -> str:
         """One Chat Completions stream: images as base64 image_url, documents as file parts."""
+        if generated_compute_configured():
+            await run_blocking(db_executor, require_generated_compute, self.uid, 'file_chat_vision', allow_byok=False)
         assert callback is not None
         output_list: List[str] = []
         gateway_fallback_used = False
@@ -369,12 +441,15 @@ class FileChatTool:
             _record_gateway_file_chat_fallback('recovered')
         return ''.join(output_list)
 
-    def _ask_files(self, question: str, files: List[FileChat]) -> str:
+    def _ask_files(
+        self, question: str, files: List[FileChat], video_window: Optional[Tuple[float, float]] = None
+    ) -> str:
         """Non-streaming Chat Completions path used by search_files_tool."""
+        require_generated_compute(self.uid, 'file_chat_documents', allow_byok=False)
         gateway_fallback_used = False
         try:
             try:
-                messages = self._completion_messages_sync(question, files)
+                messages = self._completion_messages_sync(question, files, video_window)
                 gateway_enabled = _file_chat_gateway_enabled()
                 model = _completion_model(files)
                 if gateway_enabled:
@@ -426,6 +501,8 @@ class FileChatTool:
                     raw = file_content.read()
                 except (openai.NotFoundError, openai.BadRequestError) as error:
                     _reraise_provider_file_error(error)
+                if file.video:
+                    contents.append({"type": "text", "text": self._video_note(file, file.video.frame_times)})
                 b64 = base64.b64encode(raw).decode('utf-8')
                 mime = file.mime_type or 'image/png'
                 contents.append(
@@ -451,17 +528,29 @@ class FileChatTool:
                 )
         return [cast(ChatCompletionMessageParam, {"role": "user", "content": contents})]
 
-    def _completion_messages_sync(self, question: str, files: List[FileChat]) -> List[ChatCompletionMessageParam]:
+    def _completion_messages_sync(
+        self, question: str, files: List[FileChat], video_window: Optional[Tuple[float, float]] = None
+    ) -> List[ChatCompletionMessageParam]:
         contents: List[ChatCompletionContentPartParam] = [{"type": "text", "text": question}]
         for file in files:
             if file.is_image():
+                windowed = bool(file.video and video_window and file.video.strip_file_id)
                 try:
-                    file_content = openai.files.content(file.openai_file_id)
+                    source = file.video.strip_file_id if windowed and file.video else file.openai_file_id
+                    file_content = openai.files.content(source)
                     raw = file_content.read()
                 except (openai.NotFoundError, openai.BadRequestError) as error:
                     _reraise_provider_file_error(error)
-                b64 = base64.b64encode(raw).decode('utf-8')
                 mime = file.mime_type or 'image/png'
+                if file.video:
+                    times: Sequence[float] = file.video.frame_times
+                    if windowed and video_window:
+                        raw, times = self._video_window(file.video, raw, video_window)
+                        mime = 'image/jpeg'
+                    contents.append(
+                        {"type": "text", "text": self._video_note(file, times, video_window if windowed else None)}
+                    )
+                b64 = base64.b64encode(raw).decode('utf-8')
                 contents.append(
                     cast(
                         ChatCompletionContentPartParam,
@@ -484,6 +573,30 @@ class FileChatTool:
                     "files are not supported in chat."
                 )
         return [cast(ChatCompletionMessageParam, {"role": "user", "content": contents})]
+
+    def _video_note(self, file: FileChat, times: Sequence[float], window: Optional[Tuple[float, float]] = None) -> str:
+        from utils.media.video_frames import describe
+
+        assert file.video is not None
+        transcript = encryption.decrypt(file.video.transcript, self.uid) if file.video.transcript else ''
+        span = f' Frames from {window[0]:g}-{window[1]:g} s.' if window else ''
+        return f'Attachment {file.name}:{span} ' + describe(
+            file.video.duration_seconds, times, transcript, tool_hint=False
+        )
+
+    @staticmethod
+    def _video_window(video: ChatFileVideo, strip: bytes, window: Tuple[float, float]) -> Tuple[bytes, Sequence[float]]:
+        from utils.media.video_frames import window_sheet
+
+        return window_sheet(
+            strip,
+            video.strip_times,
+            video.strip_columns,
+            video.strip_cell_width,
+            video.strip_cell_height,
+            window[0],
+            window[1],
+        )
 
     def cleanup(self) -> None:
         """Cleanup chat session files on OpenAI. Thread/assistant deletes are gone with Assistants."""

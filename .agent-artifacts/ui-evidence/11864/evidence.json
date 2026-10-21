@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-desktop-macos-silence-notifications-setting.png",
+      "platform": "desktop-macos",
+      "description": "Notifications & Privacy settings with the new Silence Notifications row, shown silenced until a set time",
+      "captured_by": "human",
+      "source": "manual"
+    }
+  ]
+}

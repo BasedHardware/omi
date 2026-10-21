@@ -1,4 +1,5 @@
 import * as admin from "firebase-admin";
+import { countFirestoreReads } from "./read-counter";
 
 export type FirebaseAdminCredentialMode =
   | "service-account-key"
@@ -110,7 +111,7 @@ function ensureInitialized() {
 
 export function getDb() {
   ensureInitialized();
-  return admin.firestore();
+  return countFirestoreReads(admin.firestore());
 }
 
 export function getAdminAuth() {
@@ -123,8 +124,9 @@ export const verifyFirebaseToken = async (token: string) => {
   try {
     const decodedToken = await admin.auth().verifyIdToken(token);
     return decodedToken;
-  } catch (error) {
-    console.error("Error verifying Firebase ID token:", error);
+  } catch {
+    // SDK verification errors can embed credential input; never log them.
+    console.error("Error verifying Firebase ID token");
     return null;
   }
 };

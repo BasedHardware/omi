@@ -37,7 +37,6 @@ def progress(monkeypatch):
     goal = user.collection('goals').document('g1')
     goals.create_goal(uid, {'id': 'g1', 'title': 'Read books', 'goal_type': 'numeric', 'target_value': 20})
     wake = Mock()
-    monkeypatch.setattr(routes, '_wake_goal_change', wake)
     app = FastAPI()
     app.include_router(routes.router)
     app.dependency_overrides[routes.auth.get_current_user_uid] = lambda: uid

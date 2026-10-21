@@ -22,6 +22,7 @@ from utils.metrics import (
     OMI_LIVE_STT_TERMINAL_TOTAL,
     OMI_LIVE_STT_TERMINAL_FAILURES_TOTAL,
     OMI_LISTEN_ACCEPTED_TOTAL,
+    OMI_LISTEN_LIVE_NO_AUDIO_SESSIONS,
     OMI_LISTEN_AUDIO_OUTCOME_TOTAL,
     OMI_LISTEN_NO_AUDIO_TEARDOWN_TOTAL,
     OMI_LISTEN_REALTIME_DEMAND_SECONDS_TOTAL,
@@ -38,7 +39,9 @@ from utils.metrics import (
 from utils.env_loader import resolve_stage_from_env
 from utils.product_telemetry import emit_product_event
 from utils.stt.outcomes import TranscriptionOutcome, bounded_provider
-from utils.stt.soniox_runway import meter_audio_seconds
+from utils.observability.demand_cohort import record_metric
+from utils.observability.demand_cohort import DEMAND_COHORTS
+from utils.observability.routing_cohort import current_routing_cohort
 
 logger = logging.getLogger(__name__)
 
@@ -169,7 +172,7 @@ class LiveSTTAttempt:
         source: str | None = None,
         model: str | None = None,
         language: str | None = None,
-        emitter: Callable[..., None] = emit_product_event,
+        emitter: Callable[..., object] = emit_product_event,
         clock: Callable[[], float] = monotonic,
     ) -> None:
         self.provider = bounded_provider(provider)
@@ -185,6 +188,7 @@ class LiveSTTAttempt:
         self._clock = clock
         self._started_at = clock()
         self._finished = False
+        self._routing_cohort = current_routing_cohort.get()
         OMI_LIVE_STT_ACCEPTED_TOTAL.labels(
             provider=self.provider,
             client_platform=self.platform,
@@ -211,6 +215,8 @@ class LiveSTTAttempt:
             deployment_environment=self.deployment_environment,
             phase=phase,
         ).inc()
+        if self._routing_cohort is not None:
+            self._routing_cohort.terminal(outcome)
         properties = {
             **self._base_properties(),
             'duration_seconds': max(0.0, self._clock() - self._started_at),
@@ -296,6 +302,9 @@ def record_live_stt_pre_audio_failure(
         outcome='failure',
         phase=bounded_phase,
     ).inc()
+    cohort = current_routing_cohort.get()
+    if cohort is not None:
+        cohort.terminal('failure')
 
 
 def record_sync_intake_outcome(*, created: bool) -> None:
@@ -353,8 +362,6 @@ def record_live_stt_audio_seconds(*, provider: str | None, platform: str | None,
         client_platform=_bounded_platform(platform),
         deployment_environment=_deployment_environment(),
     ).inc(seconds)
-    if provider == 'soniox':
-        meter_audio_seconds(seconds)
 
 
 def record_live_stt_failover_accepted(*, provider: str | None, platform: str | None) -> None:
@@ -372,8 +379,37 @@ def record_live_stt_failover_accepted(*, provider: str | None, platform: str | N
     ).inc()
 
 
+class ListenNoAudioObservation:
+    """Observe first decoded audio, then raw byte-frame inactivity; control messages never reset the timer."""
+
+    def __init__(self) -> None:
+        self.started_at = monotonic()
+        self.last_audio_at: float | None = None
+        self.counted = False
+        self.closed = False
+
+    def observe(self, *, has_audio: bool, audio_received_at: float | None = None) -> None:
+        if self.closed:
+            return
+        if has_audio and audio_received_at != self.last_audio_at:
+            self.last_audio_at = audio_received_at
+            self.started_at = monotonic()
+        stalled = monotonic() - self.started_at >= 300
+        if stalled != self.counted:
+            OMI_LISTEN_LIVE_NO_AUDIO_SESSIONS.inc(1 if stalled else -1)
+            self.counted = stalled
+            if stalled:
+                logger.warning('omi_listen_capture_idle reason=no_upstream_audio threshold_seconds=300')
+
+    def close(self) -> None:
+        self.closed = True
+        if self.counted:
+            OMI_LISTEN_LIVE_NO_AUDIO_SESSIONS.dec()
+            self.counted = False
+
+
 def record_listen_session_accepted(*, source: str | None, platform: str | None, app_build: str | None = None) -> None:
-    """Count one accepted /v4/listen socket with bounded labels only.
+    """Count one /v4/listen session admitted through STT setup with bounded labels only.
 
     WebSocket accept paths omit app_build (unknown): the handshake does not
     carry a trusted version contract.
@@ -400,6 +436,7 @@ def record_listen_audio_outcome(*, source: str | None, outcome: str, platform: s
 
 def record_live_session_transcript_outcome(
     *,
+    demand_cohort: str = 'ineligible',
     outcome: LiveSessionTranscriptOutcome,
     uid: str | None = None,
     source: str | None = None,
@@ -417,7 +454,7 @@ def record_live_session_transcript_outcome(
 
     if outcome not in LIVE_SESSION_TRANSCRIPT_OUTCOMES:
         raise ValueError(f'unknown live session transcript outcome: {outcome}')
-    OMI_LIVE_SESSION_TRANSCRIPT_OUTCOME_TOTAL.labels(outcome=outcome).inc()
+    record_metric(OMI_LIVE_SESSION_TRANSCRIPT_OUTCOME_TOTAL, {'outcome': outcome, 'demand_cohort': demand_cohort}, 1)
     if outcome != 'no_transcript' or not uid:
         return
     now = _zero_transcript_clock()
@@ -465,7 +502,8 @@ def initialize_live_session_transcript_outcome_children() -> None:
 
     try:
         for outcome in sorted(LIVE_SESSION_TRANSCRIPT_OUTCOMES):
-            OMI_LIVE_SESSION_TRANSCRIPT_OUTCOME_TOTAL.labels(outcome=outcome)
+            for cohort in DEMAND_COHORTS:
+                OMI_LIVE_SESSION_TRANSCRIPT_OUTCOME_TOTAL.labels(outcome=outcome, demand_cohort=cohort)
     except Exception:
         pass
 

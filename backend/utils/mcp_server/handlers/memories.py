@@ -44,6 +44,7 @@ from utils.mcp_server.errors import (
     stable_error_code,
     tool_error_from_http,
 )
+from utils.other.list_budget import ListReadBudget
 from utils.other.endpoints import check_rate_limit_context, check_rate_limit_inline
 
 logger = logging.getLogger(__name__)
@@ -216,6 +217,7 @@ def memories_page_core(
     categories: Optional[List[str]] = None,
     max_scan: int = MCP_MEMORY_LIST_MAX_SCAN,
     cursor_kind: str,
+    budget: Optional[ListReadBudget] = None,
 ) -> Dict[str, Any]:
     """Shared validated memory page for the MCP ``get_memories`` tool and REST list.
 
@@ -225,6 +227,11 @@ def memories_page_core(
     tool uses the smaller MCP cap. Callers must authorize the read grant
     first — this function performs no product authorization.
     """
+    # The optimization targets global-sort scans. Scoring compatibility pages
+    # retain the released incremental collector and its resilience boundary;
+    # even a directly supplied budget must not force a shallow page to 5000.
+    if sort not in {'created_desc', 'updated_desc', 'manual_first'}:
+        budget = None
     valid_categories = list(categories or [])
     filters = {
         "categories": sorted(valid_categories),
@@ -259,11 +266,30 @@ def memories_page_core(
             categories=valid_categories or None,
         )
     else:
-        result = collect_filtered_memories(
-            lambda batch_offset, batch_limit: [
+        # One mixed-view read replaces growing prefix rereads when budgeted.
+        # A request budget also owns the memory resilience attempt allowance;
+        # repeatedly entering MemoryService.read would exhaust that allowance
+        # after two successful batches. Keep its retry boundary around one
+        # operation and slice the materialized window locally.
+        window = None
+        if budget is not None:
+            window = [
                 memory.model_dump(mode='json')
-                for memory in MemoryService(db_client=db).read(uid, limit=batch_limit, offset=batch_offset)
-            ],
+                for memory in MemoryService(db_client=db).read(uid, limit=max_scan, offset=0, budget=budget)
+            ]
+        result = collect_filtered_memories(
+            lambda batch_offset, batch_limit: (
+                window[batch_offset : batch_offset + batch_limit]
+                if window is not None
+                else [
+                    memory.model_dump(mode='json')
+                    for memory in MemoryService(db_client=db).read(
+                        uid,
+                        limit=batch_limit,
+                        offset=batch_offset,
+                    )
+                ]
+            ),
             limit=limit,
             offset=offset,
             reviewed=reviewed,
@@ -275,6 +301,9 @@ def memories_page_core(
             categories=valid_categories or None,
             max_scan=max_scan,
         )
+        if budget is not None and budget.truncated:
+            result['scan_truncated'] = True
+            result['has_more'] = True
         resume_uml = None
         # The bounded scan walks at most max_scan raw rows per call, so an
         # offset beyond the collected window could never be reached: emit a
@@ -300,6 +329,7 @@ def memories_page_core(
             position={"uml": resume_uml},
             filters=filters,
         )
+    result["effective_limit"] = limit
     return result
 
 
@@ -600,4 +630,13 @@ def search_memories(
             "memories.read permission, or reconnect the account."
         )
 
-    return {"memories": MemoryService(db_client=db).search_mcp(uid, query, limit=limit)}
+    return search_memories_core(uid, query, limit=limit)
+
+
+def search_memories_core(uid: str, query: str, *, limit: int) -> Dict[str, Any]:
+    """Shared authorized-by-caller search; eligibility remains in MemoryService."""
+    rows = MemoryService(db_client=db).search_mcp(uid, query, limit=limit)
+    result = {"memories": rows, "effective_limit": min(limit, 20), "search_coverage": "eligible_indexed_memories"}
+    if not rows:
+        result["message"] = "No eligible indexed matches. This does not establish absence; use the memory list."
+    return result

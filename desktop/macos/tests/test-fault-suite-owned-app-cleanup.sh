@@ -143,9 +143,18 @@ SH
   cat >"$fixture/scripts/omi-harness" <<'PY'
 #!/usr/bin/env python3
 import os
+import subprocess
 import sys
 import time
+from pathlib import Path
 mode = os.environ["OMI_TEST_FLOW_MODE"]
+# Leave the process group on purpose. Cleanup has to find this grandchild by
+# the supervisor token, not by killing the shell that launched omi-harness.
+grandchild = subprocess.Popen(
+    [sys.executable, "-c", "import time; time.sleep(120)"],
+    start_new_session=True,
+)
+Path(os.environ["OMI_TEST_GRANDCHILD_PID_FILE"]).write_text(str(grandchild.pid))
 if mode == "success":
     raise SystemExit(0)
 if mode == "failure":
@@ -167,19 +176,24 @@ set -euo pipefail
 app_path="/Applications/${OMI_APP_NAME}.app"
 executable_path="$app_path/Contents/MacOS/Omi Computer"
 bundle_id="com.omi.${OMI_APP_NAME}"
-server='import http.server,json,sys; port=int(sys.argv[1]); bundle=sys.argv[2];
+server='import http.server,json,os,sys; from pathlib import Path; port=int(sys.argv[1]); bundle=sys.argv[2];
 class H(http.server.BaseHTTPRequestHandler):
  def do_GET(self):
   body=json.dumps({"ok":True,"bundleIdentifier":bundle,"sourceIdentity":{"revision":"deadbeefdeadbeefdeadbeefdeadbeefdeadbeef","schemaVersion":1,"workingTreeState":"clean"}}).encode(); self.send_response(200); self.send_header("Content-Length",str(len(body))); self.end_headers(); self.wfile.write(body)
  def log_message(self,*args): pass
-http.server.ThreadingHTTPServer(("127.0.0.1",port),H).serve_forever()'
+httpd=http.server.ThreadingHTTPServer(("127.0.0.1",port),H)
+ready=Path(os.environ["OMI_TEST_OWNED_PID_FILE"]); temporary=ready.with_name(f"{ready.name}.tmp.{os.getpid()}")
+temporary.write_text(str(os.getpid())); temporary.replace(ready)
+httpd.serve_forever()'
 # The executable path is an explicit argv value in this portable model; on macOS
 # the real `open ... --args` process exposes it as argv[0]. Both are checked by
 # the harness alongside the unguessable token.
 python3 -c "$server" "$OMI_AUTOMATION_PORT" "$bundle_id" "$executable_path" "--omi-launch-token=${OMI_DESKTOP_LAUNCH_TOKEN}" >"$OMI_TEST_SERVER_ERROR_FILE" 2>&1 &
 owned_pid=$!
-# If another local test owns the selected port, fail before writing launch
-# ownership evidence so the caller can retry with a new port.
+# The server atomically writes its PID only after bind succeeds. Waiting for
+# that latched readiness signal avoids an unconditional 100-process sleep loop
+# delaying ownership proof even while the bridge is already serving health.
+# A collision still fails before any PID/launch ownership evidence is written.
 for _ in $(seq 1 100); do
   if [[ -s "$OMI_TEST_SERVER_ERROR_FILE" ]]; then
     wait "$owned_pid" 2>/dev/null || true
@@ -189,9 +203,14 @@ for _ in $(seq 1 100); do
     wait "$owned_pid" 2>/dev/null || true
     exit 98
   fi
+  [[ -f "${OMI_TEST_OWNED_PID_FILE:?}" ]] && break
   sleep 0.01
 done
-printf '%s\n' "$owned_pid" >"${OMI_TEST_OWNED_PID_FILE:?}"
+if [[ ! -f "${OMI_TEST_OWNED_PID_FILE:?}" ]]; then
+  kill "$owned_pid" 2>/dev/null || true
+  wait "$owned_pid" 2>/dev/null || true
+  exit 98
+fi
 # Same executable path and bundle identity, but a different capability token.
 python3 -c 'import time; time.sleep(300)' "$executable_path" "--omi-launch-token=foreign-process-token" &
 foreign_pid=$!
@@ -211,17 +230,26 @@ run_case_once() {
   local fixture="$TMP_ROOT/$mode-$attempt" bin_dir="$TMP_ROOT/$mode-$attempt-bin"
   local owned_file="$TMP_ROOT/$mode-$attempt-owned.pid"
   local foreign_file="$TMP_ROOT/$mode-$attempt-foreign.pid"
+  local grandchild_file="$TMP_ROOT/$mode-$attempt-grandchild.pid"
   local output="$TMP_ROOT/$mode-$attempt.out" error_file="$fixture/server-error"
+  local flow_deadline=""
+  if [[ "$mode" == timeout ]]; then
+    flow_deadline=2
+  fi
   local status=0 harness_pid=""
   local bundle="omi-fault-owned-cleanup-${mode}-${attempt}"
-  local token="fault-owned-cleanup-token-${mode}-${attempt}-123456"
+  # Concurrent worktrees must not reuse the same ownership capability. The
+  # fixture root is unique even when both runs exercise the same mode/attempt.
+  local token="fault-owned-cleanup-token-${mode}-${attempt}-${TMP_ROOT##*.}"
   make_fixture "$fixture" "$bin_dir" "$mode"
 
   if [[ "$mode" == term ]]; then
     PATH="$bin_dir:$PATH" OMI_FAULT_TEST_REPO_ROOT="$fixture" \
       OMI_TEST_FLOW_MODE="$mode" OMI_FAULT_RUN_TOKEN="$token" \
       OMI_TEST_OWNED_PID_FILE="$owned_file" OMI_TEST_FOREIGN_PID_FILE="$foreign_file" \
+      OMI_TEST_GRANDCHILD_PID_FILE="$grandchild_file" \
       OMI_TEST_SERVER_ERROR_FILE="$error_file" \
+      OMI_FAULT_FLOW_SHUTDOWN_DEADLINE=3 \
       bash "$fixture/scripts/desktop-core-harness.sh" --fault-suite --port "$port" >"$output" 2>&1 &
     harness_pid=$!
     wait_for_file "$owned_file" || { cat "$output" >&2; fail "TERM case never launched detached app"; }
@@ -232,6 +260,7 @@ run_case_once() {
       launch_records=("$fixture/.harness/desktop-core/"*-fault/fault-app.json)
     done
     [[ -f "${launch_records[0]}" ]] || { cat "$output" >&2; fail "TERM case never established launch ownership proof"; }
+    wait_for_file "$grandchild_file" || { cat "$output" >&2; fail "TERM case never started the fault-flow grandchild"; }
     kill -TERM "$harness_pid"
     set +e
     wait "$harness_pid"
@@ -243,7 +272,10 @@ run_case_once() {
     PATH="$bin_dir:$PATH" OMI_FAULT_TEST_REPO_ROOT="$fixture" \
       OMI_TEST_FLOW_MODE="$mode" OMI_FAULT_RUN_TOKEN="$token" \
       OMI_TEST_OWNED_PID_FILE="$owned_file" OMI_TEST_FOREIGN_PID_FILE="$foreign_file" \
+      OMI_TEST_GRANDCHILD_PID_FILE="$grandchild_file" \
       OMI_TEST_SERVER_ERROR_FILE="$error_file" \
+      OMI_FAULT_FLOW_SHUTDOWN_DEADLINE=3 \
+      OMI_FAULT_FLOW_RUN_DEADLINE="$flow_deadline" \
       bash "$fixture/scripts/desktop-core-harness.sh" --fault-suite --port "$port" >"$output" 2>&1
     status=$?
     set -e
@@ -274,6 +306,8 @@ run_case_once() {
   foreign_pid="$(cat "$foreign_file")"
   assert_dead "$owned_pid" "$mode owned detached app"
   assert_alive "$foreign_pid" "$mode foreign same-bundle app"
+  wait_for_file "$grandchild_file" || fail "$mode case did not record the fault-flow grandchild"
+  assert_dead "$(cat "$grandchild_file")" "$mode fault-flow grandchild"
   kill "$foreign_pid" 2>/dev/null || true
   printf '%s\n' "$foreign_pid" >"$TMP_ROOT/foreign-cleaned.pid"
 
@@ -320,5 +354,6 @@ run_case() {
 run_case success
 run_case failure
 run_case term
+run_case timeout
 
 echo "fault-suite owned detached-app cleanup regressions passed"

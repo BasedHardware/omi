@@ -3,9 +3,9 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('Siri index writes are awaited at every Dart call site', () {
+  test('UI call sites submit index writes without awaiting Spotlight', () {
     final calls = RegExp(
-      r'unawaited\s*\(\s*SiriIntegration\.(?:current|instance)\.(?:upsert\w*|reconcile\w*|delete\w*|refreshAuthoritative\w*|refreshOwnerWideIndex|wipe|setEnabled)',
+      r'await\s+SiriIntegration\.(?:current|instance)\.(?:upsert\w*|reconcile\w*|delete\w*|refreshAuthoritative\w*|refreshOwnerWideIndex)',
       multiLine: true,
     );
     final offenders = <String>[];
@@ -18,6 +18,6 @@ void main() {
       }
     }
     expect(offenders, isEmpty,
-        reason: 'Await native index calls so delete/undo and refresh/delete keep submission order.');
+        reason: 'UI state must use the ordered Siri queue and finish independently of Spotlight.');
   });
 }

@@ -4,7 +4,7 @@ from collections.abc import Callable, Mapping, Sequence
 from typing import TYPE_CHECKING, Any, List, Optional, Protocol, cast
 
 from langchain_core.output_parsers import PydanticOutputParser
-from pydantic import AwareDatetime, BaseModel, Field, field_validator
+from pydantic import BaseModel, Field
 
 from database.memory_non_active_routes import (
     NonActiveRoute,
@@ -22,12 +22,12 @@ from utils.llm.prompt_cache import (
     EXPLICIT_CACHE_OPTIONS,
     has_cacheable_prefix,
     prefix_cache_key,
+    model_supports_explicit_cache,
 )
 from utils.memory.rejected_memory_feedback import bound_rejected_memory_examples
-from utils.memory.belief_model import belief_model_enabled
 
 if TYPE_CHECKING:
-    from utils.llm.conversation_prompt_prefix import ConversationPromptPrefix
+    from utils.llm.conversation_prompt_context import ConversationPromptPrefix
 
 GetLlm = Callable[[str], object]
 ChatMessage = tuple[str, str]
@@ -148,30 +148,6 @@ def normalize_scoped_claim_arguments(
     return arguments
 
 
-def _belief_classification_instructions() -> str:
-    """Extra extractor fields. Omitted when the belief-model flag is off so prompts stay identical."""
-    if not belief_model_enabled():
-        return ""
-    return (
-        "Also classify each item:\n"
-        "- `subject_scope`: use only the released values primary_user, user_owned_project, "
-        "user_relationship, or third_party. This is ownership/relationship scope, not a source-quality "
-        "score. Voice, OCR, API, and device transport do not outrank one another by modality. Never "
-        "default to primary_user when the subject is unclear; assistant, media, and passive screen content "
-        "must remain unattributed or third_party.\n"
-        "- `belief_class`: identity, relationship, preference, state, plan, episodic, meta_standing "
-        "(durable instruction to Omi), or meta_residue (session leftover).\n"
-        "- `half_life_days`: omit unless wording names a shorter horizon (e.g. \"this week\" → 7). "
-        "identity, relationship, and meta_standing have no half-life.\n"
-        "- `valid_to`: ISO timestamp when the claim names an end date (\"until Friday\", \"until launch\").\n"
-        "- `arguments`: preserve explicit object/qualifier details in the existing arguments object. "
-        "When the source contains an actual decision, arguments may include `decision` with exactly one "
-        "of proposed, accepted, or resolved, and may include `rationale` only when explicitly stated. "
-        "A proposal is not acceptance. Do not infer task completion, create a task, or turn passive activity "
-        "into a standing instruction.\n\n"
-    )
-
-
 def _empty_archive_items() -> list[WorkingObservationArchiveItem]:
     return []
 
@@ -179,34 +155,6 @@ def _empty_archive_items() -> list[WorkingObservationArchiveItem]:
 class WorkingObservationBatch(BaseModel):
     items: List[WorkingObservationArchiveItem] = Field(
         default_factory=_empty_archive_items,
-        description=f"At most {MAX_WORKING_OBSERVATION_ITEMS} distinct, highest-value observations.",
-    )
-
-
-class BeliefClassifiedArchiveItem(WorkingObservationArchiveItem):
-    """Same archive item with belief fields visible in the LLM schema when the flag is on."""
-
-    subject_scope: Optional[str] = None
-    belief_class: Optional[str] = None
-    half_life_days: Optional[float] = None
-    valid_to: Optional[AwareDatetime] = None
-    # Existing proposition arguments carry object/qualifier/decision details;
-    # this does not create a new memory slot or lifecycle.
-    arguments: dict[str, Any] = Field(default_factory=dict)
-
-    @field_validator("arguments", mode="before")
-    @classmethod
-    def normalize_arguments(cls, value: Any) -> dict[str, Any]:
-        return normalize_scoped_claim_arguments(value)
-
-
-def _empty_belief_archive_items() -> list[BeliefClassifiedArchiveItem]:
-    return []
-
-
-class BeliefWorkingObservationBatch(BaseModel):
-    items: List[BeliefClassifiedArchiveItem] = Field(
-        default_factory=_empty_belief_archive_items,
         description=f"At most {MAX_WORKING_OBSERVATION_ITEMS} distinct, highest-value observations.",
     )
 
@@ -325,7 +273,6 @@ def _build_l1_messages(
         f"- An entity → e.g. \"Milo (cat)\", \"neighborhood coffee shop\"\n"
         f"- If attribution is uncertain, do not emit the item. Do not hedge inside the item text or `about` field.\n"
         f"- Use class=\"sensitive\" for credentials, health details, finances, family matters.\n\n"
-        f"{_belief_classification_instructions()}"
         f"{language_instruction + chr(10) + chr(10) if language_instruction else ''}"
         f"Return JSON:\n{format_instructions}"
     )
@@ -450,9 +397,7 @@ def extract_l1_memory_archive_items_from_text(
         return []
 
     name = user_name or "the user"
-    parser = PydanticOutputParser(
-        pydantic_object=BeliefWorkingObservationBatch if belief_model_enabled() else WorkingObservationBatch
-    )
+    parser = PydanticOutputParser(pydantic_object=WorkingObservationBatch)
     legacy_messages = _build_l1_messages(
         name,
         source_type,
@@ -462,7 +407,33 @@ def extract_l1_memory_archive_items_from_text(
         rejected_memory_examples=rejected_memory_examples,
     )
     static_system = legacy_messages[0][1]
-    cache_enabled = bool(prompt_cache_enabled and has_cacheable_prefix(static_system))
+    explicit_cache_requested = prompt_cache_enabled
+    prefix_candidate = explicit_cache_requested and has_cacheable_prefix(static_system)
+    if llm is not None:
+        model = llm
+    elif get_llm is not None:
+        try:
+            llm_factory = cast(Any, get_llm)
+            model = cast(
+                LlmInvoker,
+                llm_factory(
+                    'memory_l1',
+                    cache_key=prefix_cache_key(MEMORY_L1_CACHE_NAMESPACE, static_system) if prefix_candidate else None,
+                    prompt_cache_options=EXPLICIT_CACHE_OPTIONS if explicit_cache_requested else None,
+                ),
+            )
+        except Exception as exc:
+            logger.error("Error extracting memory L1 archive items: client_initialization_failed")
+            if strict:
+                raise WorkingObservationExtractionError("client_initialization") from exc
+            return []
+    else:
+        logger.error("Error extracting memory L1 archive items: missing_llm_client")
+        if strict:
+            raise WorkingObservationExtractionError("client_initialization") from CLIENT_IMPORT_ERROR
+        return []
+
+    cache_enabled = bool(prefix_candidate and model_supports_explicit_cache(model))
     static_system_message: dict[str, Any] = (
         {
             'role': 'system',
@@ -492,30 +463,6 @@ def extract_l1_memory_archive_items_from_text(
         ]
     else:
         messages = [static_system_message, {'role': 'user', 'content': legacy_messages[1][1]}]
-
-    if llm is not None:
-        model = llm
-    elif get_llm is not None:
-        try:
-            llm_factory = cast(Any, get_llm)
-            model = cast(
-                LlmInvoker,
-                llm_factory(
-                    'memory_l1',
-                    cache_key=prefix_cache_key(MEMORY_L1_CACHE_NAMESPACE, static_system) if cache_enabled else None,
-                    prompt_cache_options=EXPLICIT_CACHE_OPTIONS if prompt_cache_enabled else None,
-                ),
-            )
-        except Exception as exc:
-            logger.error("Error extracting memory L1 archive items: client_initialization_failed")
-            if strict:
-                raise WorkingObservationExtractionError("client_initialization") from exc
-            return []
-    else:
-        logger.error("Error extracting memory L1 archive items: missing_llm_client")
-        if strict:
-            raise WorkingObservationExtractionError("client_initialization") from CLIENT_IMPORT_ERROR
-        return []
 
     try:
         with track_usage(uid, Features.MEMORIES):

@@ -1,4 +1,7 @@
+import 'package:omi/services/on_device/on_device_transcription_controller.dart';
 import 'dart:async';
+
+import 'package:omi/backend/schema/gen/speaker_tag_prompts_wire.g.dart';
 
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/foundation.dart';
@@ -11,7 +14,9 @@ import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/structured.dart';
+import 'package:omi/services/capture/empty_recording_notice.dart';
 import 'package:omi/services/auth_service.dart';
+import 'package:omi/services/telemetry/client_telemetry.dart';
 import 'package:omi/services/siri_integration.dart';
 import 'package:omi/services/notifications/merge_notification_handler.dart';
 import 'package:omi/utils/conversations/capture_groups.dart';
@@ -74,6 +79,7 @@ class ConversationProvider extends ChangeNotifier {
 
   bool isLoadingConversations = false;
   bool showDiscardedConversations = false;
+  HomeEmptyExplanation homeEmptyExplanation = HomeEmptyExplanation.none;
   bool showShortConversations = false;
   int shortConversationThreshold = 0; // in seconds
   bool showStarredOnly = false; // filter to show only starred conversations
@@ -99,6 +105,10 @@ class ConversationProvider extends ChangeNotifier {
   static const Duration _refreshCooldown = Duration(seconds: 60); // Minimum time between refreshes
 
   List<ServerConversation> processingConversations = [];
+
+  /// Replacement processing telemetry. Production uses the process-wide client.
+  ClientTelemetry? clientTelemetry;
+  ClientTelemetry get _clientTelemetry => clientTelemetry ?? ClientTelemetry.instance;
 
   // Per-conversation websocket transition versions. Reconciliation snapshots
   // these before lifecycle probes so a completion/removal for row B cannot
@@ -266,6 +276,11 @@ class ConversationProvider extends ChangeNotifier {
   void _loadSettings() {
     final prefs = SharedPreferencesUtil();
     showDiscardedConversations = prefs.showDiscardedMemories;
+    homeEmptyExplanation = switch (prefs.homeEmptyExplanation) {
+      'tooShort' => HomeEmptyExplanation.tooShort,
+      'discardedOnly' => HomeEmptyExplanation.discardedOnly,
+      _ => HomeEmptyExplanation.none,
+    };
     showShortConversations = prefs.showShortConversations;
     shortConversationThreshold = prefs.shortConversationThreshold;
   }
@@ -284,6 +299,7 @@ class ConversationProvider extends ChangeNotifier {
     _sessionGeneration++;
     _searchRequestGeneration++;
     _conversationFetchRevision++;
+    _phoneOnlyConversations.clear();
     conversations = [];
     searchedConversations = [];
     groupedConversations = {};
@@ -315,7 +331,6 @@ class ConversationProvider extends ChangeNotifier {
     _initialFetchRetryTimer = null;
     _initialFetchRetryCount = 0;
     memoriesToDelete = {};
-    _pendingSiriDeletes.clear();
     _cancelPendingDeleteTimers();
     _refreshDebounceTimer?.cancel();
     _refreshDebounceTimer = null;
@@ -469,8 +484,11 @@ class ConversationProvider extends ChangeNotifier {
     return -1;
   }
 
-  void addProcessingConversation(ServerConversation conversation) {
+  void addProcessingConversation(ServerConversation conversation, {bool freshProcessingAttempt = false}) {
     _bumpProcessingStateRevision(conversation.id);
+    if (conversation.id != '0' && _isActiveProcessingStatus(conversation.status)) {
+      _clientTelemetry.noteProcessingVisible(conversation.id, freshAttempt: freshProcessingAttempt);
+    }
     final existingIndex = processingConversations.indexWhere((item) => item.id == conversation.id);
     if (existingIndex == -1) {
       processingConversations.add(conversation);
@@ -713,6 +731,7 @@ class ConversationProvider extends ChangeNotifier {
       pageConversationIds,
       processingRevisionsAtStart,
       processingRowsAtStart,
+      {for (final conversation in newConversations) conversation.id: conversation.status.name},
     );
     if (_conversationServerOffset == 0) {
       _conversationServerOffset = rawNewConversations.length;
@@ -842,6 +861,7 @@ class ConversationProvider extends ChangeNotifier {
       pageConversationIds,
       processingRevisionsAtStart,
       processingRowsAtStart,
+      {for (final conversation in fetchedConversations) conversation.id: conversation.status.name},
     );
     _conversationServerOffset = result.items.length;
     _conversationServerHasMore = !result.truncated && result.items.length >= _conversationPageSize;
@@ -905,8 +925,15 @@ class ConversationProvider extends ChangeNotifier {
           .toList();
     } else if (selectedFolderId == null) {
       // Only cache when viewing all folders
-      SharedPreferencesUtil().cachedConversations = conversations;
+      unawaited(SharedPreferencesUtil().cacheConversations(conversations).catchError((Object e) {
+        Logger.debug('ConversationProvider: caching conversations failed: $e');
+      }));
     }
+    conversations = conversations.map(OnDeviceTranscriptionController.instance.displayConversation).toList();
+    for (final row in _phoneOnlyConversations.values) {
+      if (!conversations.any((c) => c.id == row.id) && _matchesActiveConversationFilters(row)) conversations.add(row);
+    }
+    if (conversations.isNotEmpty) clearEmptyRecordingExplanation();
     if (searchedConversations.isEmpty) {
       searchedConversations = conversations;
     }
@@ -924,9 +951,9 @@ class ConversationProvider extends ChangeNotifier {
       final coveredAfter = _conversationServerHasMore && result.items.isNotEmpty
           ? result.items.map((row) => row.startedAt ?? row.createdAt).reduce((a, b) => a.isBefore(b) ? a : b)
           : null;
-      await SiriIntegration.current.reconcileConversations(completedById.values.toList(), coveredAfter: coveredAfter);
+      SiriIntegration.current.queueReconcileConversations(completedById.values.toList(), coveredAfter: coveredAfter);
     } else {
-      await SiriIntegration.current.upsertConversations(conversations);
+      SiriIntegration.current.queueUpsertConversations(conversations);
     }
     // Keep pagination blocked until lifecycle reconciliation and the final
     // list assignment are complete. [getMoreConversationsFromServer] uses
@@ -1269,6 +1296,7 @@ class ConversationProvider extends ChangeNotifier {
     Set<String> pageConversationIds,
     Map<String, int> processingRevisionsAtStart,
     Map<String, ServerConversation> processingRowsAtStart,
+    Map<String, String> pageStatusById,
   ) {
     final localPlaceholder = processingConversations.where((conversation) => conversation.id == '0').toList();
     final reconciled = <ServerConversation>[];
@@ -1289,6 +1317,16 @@ class ConversationProvider extends ChangeNotifier {
       final current = result.item;
       if (current != null && _isActiveProcessingStatus(current.status) && _matchesActiveConversationFilters(current)) {
         reconciled.add(current);
+        continue;
+      }
+      if (processingIdsAtStart.contains(existing.id)) {
+        final pageStatus = pageStatusById[existing.id];
+        _clientTelemetry.noteProcessingRowLeft(
+          id: existing.id,
+          lifecycleOk: true,
+          lifecycleStatus: current?.status.name,
+          pageStatus: pageStatus,
+        );
       }
     }
 
@@ -1397,9 +1435,9 @@ class ConversationProvider extends ChangeNotifier {
           ? newConversations.map((row) => row.startedAt ?? row.createdAt).reduce((a, b) => a.isBefore(b) ? a : b)
           : null;
       final serverRows = conversations.where((row) => _conversationServerLoadedIds.contains(row.id)).toList();
-      await SiriIntegration.current.reconcileConversations(serverRows, coveredAfter: coveredAfter);
+      SiriIntegration.current.queueReconcileConversations(serverRows, coveredAfter: coveredAfter);
     } else {
-      await SiriIntegration.current.upsertConversations(newConversations);
+      SiriIntegration.current.queueUpsertConversations(newConversations);
     }
     setLoadingConversations(false);
     notifyListeners();
@@ -1408,19 +1446,80 @@ class ConversationProvider extends ChangeNotifier {
 
   Future<void> addConversation(ServerConversation conversation) async {
     conversations.insert(0, conversation);
-    await SiriIntegration.current.upsertConversations([conversation]);
+    SiriIntegration.current.queueUpsertConversations([conversation]);
     _groupConversationsByDateWithoutNotify();
 
     notifyListeners();
   }
 
+  /// Apply only the server-returned segment IDs; repeated speaker numbers carry no authority.
+  void applySpeakerPromptIdentities(GeneratedSpeakerTagPromptAnswerResponse result) {
+    final identities = {
+      for (final identity in result.segmentIdentities ?? <GeneratedSpeakerTagPromptSegmentIdentity>[])
+        identity.id: identity
+    };
+    final rows = [...conversations, ...searchedConversations, ...groupedConversations.values.expand((group) => group)];
+    for (final row in rows) {
+      if (row.id != result.conversationId) continue;
+      for (final segment in row.transcriptSegments) {
+        final identity = identities[segment.id];
+        if (identity == null) continue;
+        segment.isUser = identity.isUser;
+        segment.personId = identity.personId;
+        segment.speakerLabelSource = 'manual';
+      }
+    }
+    notifyListeners();
+  }
+
+  void showEmptyRecordingExplanation() {
+    if (conversations.any((conversation) => !conversation.discarded)) return;
+    _setHomeEmptyExplanation(HomeEmptyExplanation.tooShort);
+  }
+
+  /// Sets the discarded-only empty state whenever that is still true.
+  /// [DiscardedOnlyClaim.alreadyShown] still lets the caller emit once per capture.
+  DiscardedOnlyClaim claimDiscardedOnlyExplanation() {
+    if (showDiscardedConversations) return DiscardedOnlyClaim.notDiscardedOnly;
+    if (!onlyDiscardedConversations(conversations.map((conversation) => conversation.discarded))) {
+      return DiscardedOnlyClaim.notDiscardedOnly;
+    }
+    _setHomeEmptyExplanation(HomeEmptyExplanation.discardedOnly);
+    if (SharedPreferencesUtil().discardedOnlyExplained) return DiscardedOnlyClaim.alreadyShown;
+    SharedPreferencesUtil().discardedOnlyExplained = true;
+    return DiscardedOnlyClaim.shown;
+  }
+
+  void clearEmptyRecordingExplanation() {
+    if (homeEmptyExplanation == HomeEmptyExplanation.none) return;
+    homeEmptyExplanation = HomeEmptyExplanation.none;
+    SharedPreferencesUtil().homeEmptyExplanation = '';
+    notifyListeners();
+  }
+
+  void _setHomeEmptyExplanation(HomeEmptyExplanation next) {
+    final stored = switch (next) {
+      HomeEmptyExplanation.tooShort => 'tooShort',
+      HomeEmptyExplanation.discardedOnly => 'discardedOnly',
+      HomeEmptyExplanation.none => '',
+    };
+    final changed = homeEmptyExplanation != next;
+    homeEmptyExplanation = next;
+    SharedPreferencesUtil().homeEmptyExplanation = stored;
+    if (changed) notifyListeners();
+  }
+
+  final _phoneOnlyConversations = <String, ServerConversation>{};
   void upsertConversation(ServerConversation conversation) {
+    conversation = OnDeviceTranscriptionController.instance.displayConversation(conversation);
+    if (conversation.id.startsWith('ondevice-')) _phoneOnlyConversations[conversation.id] = conversation;
     int idx = conversations.indexWhere((m) => m.id == conversation.id);
     if (idx < 0) {
       addConversation(conversation);
     } else {
       updateConversation(conversation, idx);
     }
+    if (!conversation.discarded) clearEmptyRecordingExplanation();
   }
 
   void updateConversationInSortedList(ServerConversation conversation) {
@@ -1528,14 +1627,11 @@ class ConversationProvider extends ChangeNotifier {
   /// request so a concurrent refresh cannot reinsert them.
   Map<String, ServerConversation> memoriesToDelete = {};
   final Map<String, Timer> _pendingDeleteTimers = {};
-  final Map<String, Future<void>> _pendingSiriDeletes = {};
 
   Future<void> _restoreSiriAfterOptimisticDelete(ServerConversation conversation) async {
     final generation = _sessionGeneration;
-    final pendingDelete = _pendingSiriDeletes.remove(conversation.id);
-    if (pendingDelete != null) await pendingDelete;
     if (generation == _sessionGeneration) {
-      await SiriIntegration.current.upsertConversations([conversation]);
+      SiriIntegration.current.queueUpsertConversations([conversation], restoreDeleted: true);
     }
   }
 
@@ -1553,8 +1649,7 @@ class ConversationProvider extends ChangeNotifier {
   /// [undoDeletedConversation] restores it first. The one delete path for list, bulk and detail.
   Future<void> deleteConversationLocally(ServerConversation conversation, [DateTime? date]) async {
     memoriesToDelete[conversation.id] = conversation;
-    final indexDelete = SiriIntegration.current.delete('conversation', conversation.id);
-    _pendingSiriDeletes[conversation.id] = indexDelete;
+    SiriIntegration.current.queueDelete('conversation', conversation.id);
     _pendingDeleteTimers.remove(conversation.id)?.cancel();
     _pendingDeleteTimers[conversation.id] = Timer(pendingDeleteWindow, () => commitPendingDelete(conversation.id));
     conversations.removeWhere((element) => element.id == conversation.id);
@@ -1563,7 +1658,6 @@ class ConversationProvider extends ChangeNotifier {
     }
     groupedConversations.removeWhere((_, group) => group.isEmpty);
     notifyListeners();
-    await indexDelete;
   }
 
   /// Whether [conversationId] was deleted in the UI and can still be restored.
@@ -1586,8 +1680,10 @@ class ConversationProvider extends ChangeNotifier {
     _pendingDeleteTimers.remove(conversationId)?.cancel();
     final generation = _sessionGeneration;
     final wasLoadedFromServer = _conversationServerLoadedIds.contains(conversationId);
-    final deleteFuture =
-        conversationDeleteFetcherOverride?.call(conversationId) ?? deleteConversationServer(conversationId);
+    final deleteFuture = conversationId.startsWith('ondevice-')
+        ? (OnDeviceTranscriptionController.instance.deleteLocalConversation?.call(conversationId) ??
+            Future.value(false))
+        : conversationDeleteFetcherOverride?.call(conversationId) ?? deleteConversationServer(conversationId);
     unawaited(
       deleteFuture.then(
         (succeeded) async {
@@ -1611,26 +1707,26 @@ class ConversationProvider extends ChangeNotifier {
           // Keep the tombstone in place until the request settles so a concurrent
           // refresh cannot reinsert the server row before DELETE completes.
           if (succeeded) {
+            _phoneOnlyConversations.remove(conversationId);
             conversations.removeWhere((conversation) => conversation.id == conversationId);
             searchedConversations.removeWhere((conversation) => conversation.id == conversationId);
             for (final group in groupedConversations.values) {
               group.removeWhere((conversation) => conversation.id == conversationId);
             }
             groupedConversations.removeWhere((_, group) => group.isEmpty);
-            _pendingSiriDeletes.remove(conversationId);
           } else {
             final deleted = memoriesToDelete[conversationId];
-            if (deleted != null) await _restoreSiriAfterOptimisticDelete(deleted);
+            if (deleted != null) await _restoreDeletedConversation(deleted);
           }
           _clearDeleteTombstone(conversationId);
           notifyListeners();
         },
         onError: (Object _, StackTrace __) async {
-          // Match the prior behavior on a failed request: release the local
-          // tombstone, but do not rebase the server cursor.
+          // Same as a refused DELETE: the conversation still exists, so put its
+          // row back, but do not rebase the server cursor.
           if (generation != _sessionGeneration) return;
           final deleted = memoriesToDelete[conversationId];
-          if (deleted != null) await _restoreSiriAfterOptimisticDelete(deleted);
+          if (deleted != null) await _restoreDeletedConversation(deleted);
           _clearDeleteTombstone(conversationId);
           notifyListeners();
         },
@@ -1640,11 +1736,9 @@ class ConversationProvider extends ChangeNotifier {
 
   void _clearDeleteTombstone(String conversationId) => memoriesToDelete.remove(conversationId);
 
-  /// Restores a conversation whose delete is still pending. Does nothing once the DELETE was sent.
-  Future<void> undoDeletedConversation(ServerConversation conversation) async {
-    final timer = _pendingDeleteTimers.remove(conversation.id);
-    if (timer == null) return;
-    timer.cancel();
+  /// Puts a row hidden by [deleteConversationLocally] back in the list and in Siri: on Undo, and when
+  /// the server refuses or fails the DELETE, since the conversation then still exists.
+  Future<void> _restoreDeletedConversation(ServerConversation conversation) async {
     memoriesToDelete.remove(conversation.id);
     if (!conversations.any((e) => e.id == conversation.id)) {
       conversations.add(conversation);
@@ -1652,6 +1746,14 @@ class ConversationProvider extends ChangeNotifier {
     }
     groupConversationsByDate();
     await _restoreSiriAfterOptimisticDelete(conversation);
+  }
+
+  /// Restores a conversation whose delete is still pending. Does nothing once the DELETE was sent.
+  Future<void> undoDeletedConversation(ServerConversation conversation) async {
+    final timer = _pendingDeleteTimers.remove(conversation.id);
+    if (timer == null) return;
+    timer.cancel();
+    await _restoreDeletedConversation(conversation);
   }
 
   @override
@@ -2012,31 +2114,26 @@ class ConversationProvider extends ChangeNotifier {
     PlatformManager.instance.analytics.conversationMergeCompleted(mergedConversationId, removedConversationIds);
 
     // Remove deleted conversations from local state
-    final pendingIndexDeletes = <Future<void>>[];
     for (final id in removedConversationIds) {
       conversations.removeWhere((c) => c.id == id);
-      pendingIndexDeletes.add(SiriIntegration.current.delete('conversation', id));
+      SiriIntegration.current.queueDelete('conversation', id);
     }
 
     // Fetch updated merged conversation
     ServerConversation? mergedConvo;
-    try {
-      mergedConvo = (await _conversationLifecycleFetcher(mergedConversationId)).item;
-      if (generation != _sessionGeneration) return;
-      if (mergedConvo != null) {
-        final idx = conversations.indexWhere((c) => c.id == mergedConversationId);
-        if (idx != -1) {
-          conversations[idx] = mergedConvo;
-        } else {
-          conversations.insert(0, mergedConvo);
-        }
-        conversations.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    mergedConvo = (await _conversationLifecycleFetcher(mergedConversationId)).item;
+    if (generation != _sessionGeneration) return;
+    if (mergedConvo != null) {
+      final idx = conversations.indexWhere((c) => c.id == mergedConversationId);
+      if (idx != -1) {
+        conversations[idx] = mergedConvo;
+      } else {
+        conversations.insert(0, mergedConvo);
       }
-      _groupConversationsByDateWithoutNotify();
-      notifyListeners();
-    } finally {
-      await Future.wait(pendingIndexDeletes);
+      conversations.sort((a, b) => b.createdAt.compareTo(a.createdAt));
     }
-    if (mergedConvo != null) await SiriIntegration.current.upsertConversations([mergedConvo]);
+    _groupConversationsByDateWithoutNotify();
+    notifyListeners();
+    if (mergedConvo != null) SiriIntegration.current.queueUpsertConversations([mergedConvo]);
   }
 }

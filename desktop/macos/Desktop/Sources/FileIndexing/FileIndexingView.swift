@@ -78,7 +78,7 @@ struct FileIndexingView: View {
           .foregroundColor(Ink.secondary)
           .multilineTextAlignment(.center)
       } else {
-        Text("All data is secure and belongs to you. Open-source verified.")
+        Text("Your files are read on this Mac and aren't uploaded. Omi is open source.")
           .scaledFont(size: OmiType.body)
           .foregroundColor(Ink.secondary)
           .multilineTextAlignment(.center)
@@ -193,7 +193,7 @@ struct FileIndexingView: View {
           Image(systemName: "brain")
             .scaledFont(size: OmiType.hero)
             .foregroundColor(Ink.hairline)
-          Text("Your knowledge graph will grow as Omi learns more about you")
+          Text("More connections appear as Omi learns about you")
             .scaledFont(size: OmiType.body)
             .foregroundColor(Ink.secondary)
             .multilineTextAlignment(.center)

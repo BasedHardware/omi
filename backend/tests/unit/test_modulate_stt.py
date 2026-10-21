@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from utils.stt.send_queue import AudioSendQueue
 from utils.stt.streaming import (
     STTService,
     SafeModulateSocket,
@@ -15,6 +16,11 @@ from utils.stt.streaming import (
     sort_segments_by_start,
     sort_transcript_segments_in_place,
 )
+
+
+@pytest.fixture(autouse=True)
+def _stt_failover_recovery_on(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv('STT_FAILOVER_RECOVERY_ENABLED', 'true')
 
 
 def _exercise_abrupt_modulate_close():
@@ -34,7 +40,7 @@ def _exercise_abrupt_modulate_close():
     loop = asyncio.new_event_loop()
 
     async def run():
-        class ObservedSendQueue(asyncio.Queue[bytes]):
+        class ObservedSendQueue(AudioSendQueue[bytes]):
             def __init__(self):
                 super().__init__(maxsize=2000)
                 self.get_count = 0
@@ -327,6 +333,19 @@ class TestUtteranceHandling(unittest.TestCase):
 
         return self.loop.run_until_complete(create())
 
+    def test_pending_provider_output_tracks_partials_until_a_text_final(self):
+        sock = self._make_socket()
+        self.assertFalse(sock.has_pending_provider_output())
+        sock._handle_partial_utterance({'text': 'hel', 'start_ms': 100})
+        self.assertTrue(sock.has_pending_provider_output())
+        # An empty final leaves the partial buffered for drain: still owed.
+        sock._handle_utterance({'text': '', 'start_ms': 100, 'duration_ms': 300})
+        self.assertTrue(sock.has_pending_provider_output())
+        sock._handle_partial_utterance({'text': 'hello', 'start_ms': 900})
+        sock._handle_utterance({'text': 'hello', 'start_ms': 900, 'duration_ms': 400})
+        self.assertFalse(sock.has_pending_provider_output())
+        self.assertEqual([seg['text'] for seg in self.segments], ['hello'])
+
     def test_utterance_parsing(self):
         sock = self._make_socket()
         msg = {'type': 'utterance', 'text': 'hello world', 'start_ms': 1000, 'duration_ms': 500, 'speaker': 1}
@@ -550,6 +569,7 @@ class TestRecvLoop(unittest.TestCase):
         self.assertEqual(self.segments, [])
         self.assertTrue(sock.is_connection_dead)
         self.assertIn('closed cleanly', sock.death_reason)
+        self.assertEqual(sock.connection_cause, 'clean_eof')
 
     def test_error_message_marks_dead(self):
         msg = json.dumps({'type': 'error', 'error': 'rate limit'})
@@ -1476,7 +1496,7 @@ class TestPrerecordedProviderFactory(unittest.TestCase):
         self.assertEqual(provider._normalize_lang('pt-BR'), 'pt')
         self.assertEqual(provider._normalize_lang('en_US'), 'en')
         self.assertEqual(provider._normalize_lang('zh-CN'), 'zh')
-        self.assertEqual(provider._normalize_lang(None), 'en')
+        self.assertEqual(provider._normalize_lang(None), 'multi')
 
 
 if __name__ == '__main__':

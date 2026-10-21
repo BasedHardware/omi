@@ -9,6 +9,10 @@ import {
   meetingTypeLabel,
   previewBullets,
 } from '@/src/lib/shared-note.mjs';
+import {
+  noteTranscriptIDs,
+  presentableNoteStructured,
+} from '@omi/note-shared/note-sources.mjs';
 
 const WIDTH = 1200;
 const HEIGHT = 630;
@@ -16,6 +20,7 @@ const HEIGHT = 630;
 interface SharedNote {
   started_at?: string;
   finished_at?: string;
+  transcript_segments?: { id?: string | null }[];
   structured?: {
     title?: string;
     overview?: string;
@@ -29,7 +34,7 @@ async function fetchSharedNote(id: string): Promise<SharedNote | null> {
   try {
     const response = await fetch(
       sharedApiUrl(envConfig.API_URL, 'v1', 'conversations', id, 'shared'),
-      { next: { revalidate: 300 }, signal: AbortSignal.timeout(5000) },
+      { cache: 'no-store', signal: AbortSignal.timeout(5000) },
     );
     if (!response.ok) return null;
     return (await response.json()) as SharedNote;
@@ -71,8 +76,13 @@ export async function GET(request: Request, props: { params: Promise<{ id: strin
   );
   const note = await fetchSharedNote(id);
 
-  const title = note ? note.structured?.title || DEFAULT_TITLE_MEMORY : 'Notes from Omi';
-  const points = note ? previewBullets(note.structured) : [];
+  // The preview image reads the same repaired text the page shows, not raw citation debris.
+  const structured = presentableNoteStructured(
+    note?.structured,
+    noteTranscriptIDs(note?.transcript_segments),
+  );
+  const title = note ? structured?.title || DEFAULT_TITLE_MEMORY : 'Notes from Omi';
+  const points = note ? previewBullets(structured) : [];
   const minutes = note ? durationMinutes(note.started_at, note.finished_at) : null;
   const kind = meetingTypeLabel(note?.structured?.meeting_type) || 'Conversation notes';
   const meta = [kind, minutes && minutes > 0 ? formatDuration(minutes) : '']
@@ -172,10 +182,8 @@ export async function GET(request: Request, props: { params: Promise<{ id: strin
       height: HEIGHT,
       fonts: fonts.length ? fonts : undefined,
       headers: {
-        // A note can be made private later; don't let caches keep it for a year.
-        'Cache-Control': note
-          ? 'public, max-age=3600, s-maxage=3600'
-          : 'public, max-age=300, s-maxage=300',
+        // Revoking a share must not leave the title or note bullets in a cache.
+        'Cache-Control': 'private, no-store',
       },
     },
   );

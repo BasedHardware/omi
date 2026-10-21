@@ -92,11 +92,12 @@ void main() {
     provider.deleteConversationLocally(a);
     await Future<void>.delayed(Duration.zero);
     await provider.undoDeletedConversation(a);
+    await SiriIntegration.current.drainIndexForTest();
 
     expect(host.restored.map((row) => row.id), ['a']);
   });
 
-  test('undo completion waits for a pending native delete of the same id', () async {
+  test('undo completes while native delete is pending, then reindexes in order', () async {
     final host = _SiriUndoHost()..deleteGate = Completer<void>();
     SiriIntegration.testInstance = SiriIntegration.forTest(host, 'owner-a');
     addTearDown(() => SiriIntegration.testInstance = null);
@@ -106,11 +107,12 @@ void main() {
     var restored = false;
     final undo = provider.undoDeletedConversation(a).then((_) => restored = true);
     await Future<void>.delayed(Duration.zero);
-    expect(restored, isFalse);
+    expect(restored, isTrue);
     expect(host.restored, isEmpty);
     host.deleteGate!.complete();
     await deletion;
     await undo;
+    await SiriIntegration.current.drainIndexForTest();
     expect(restored, isTrue);
     expect(host.restored.map((row) => row.id), ['a']);
   });
@@ -132,10 +134,46 @@ void main() {
       provider.commitPendingDelete('a');
       await Future<void>.delayed(Duration.zero);
       await Future<void>.delayed(Duration.zero);
+      await SiriIntegration.current.drainIndexForTest();
 
       expect(host.restored.map((row) => row.id), ['a']);
     });
+
+    test('a $failure server delete puts the row back in the list', () async {
+      final a = _conversation('a');
+      final provider = makeProvider([a, _conversation('b')]);
+      provider.conversationDeleteFetcherOverride = (_) async {
+        if (failure == 'throws') throw StateError('offline');
+        return false;
+      };
+
+      provider.deleteConversationLocally(a);
+      provider.commitPendingDelete('a');
+      await Future<void>.delayed(Duration.zero);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(provider.conversations.map((c) => c.id), unorderedEquals(['a', 'b']));
+      expect(provider.displayedConversations.map((c) => c.id), unorderedEquals(['a', 'b']));
+      expect(provider.memoriesToDelete, isEmpty);
+    });
   }
+
+  test('a failed server delete puts the row back in active search results', () async {
+    final a = _conversation('a');
+    final provider = makeProvider([]);
+    provider.conversationDeleteFetcherOverride = (_) async => false;
+    provider.previousQuery = 'title';
+    provider.searchedConversations = [a, _conversation('b')];
+    provider.groupSearchConvosByDate();
+
+    provider.deleteConversationLocally(a);
+    expect(provider.displayedConversations.map((c) => c.id), ['b']);
+    provider.commitPendingDelete('a');
+    await Future<void>.delayed(Duration.zero);
+    await Future<void>.delayed(Duration.zero);
+
+    expect(provider.displayedConversations.map((c) => c.id), unorderedEquals(['a', 'b']));
+  });
 
   test('a failed server delete waits for the optimistic native delete before restoring', () async {
     final host = _SiriUndoHost()..deleteGate = Completer<void>();
@@ -149,8 +187,7 @@ void main() {
     await Future<void>.delayed(Duration.zero);
     expect(host.restored, isEmpty);
     host.deleteGate!.complete();
-    await Future<void>.delayed(Duration.zero);
-    await Future<void>.delayed(Duration.zero);
+    await SiriIntegration.current.drainIndexForTest();
     expect(host.restored.map((row) => row.id), ['a']);
   });
 

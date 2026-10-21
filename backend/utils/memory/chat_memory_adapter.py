@@ -9,7 +9,6 @@ from datetime import datetime
 from typing import Any, Callable, Optional
 
 from models.product_memory import MemoryAccessPolicy, MemoryConsumer
-from utils.memory.belief_model import belief_model_enabled, normalize_temporal_read_view
 from utils.memory.default_read_rollout import (
     MemoryReadDecision,
     read_default_read_rollout,
@@ -39,9 +38,9 @@ CHAT_MEMORY_POLICY_MARKER = 'policy=default_memory archive_default_visible=False
 
 
 def _chat_read_view(view: str) -> str:
-    """Validate the bounded chat selector and keep flag-off reads released."""
-    requested = normalize_temporal_read_view(view)
-    return requested if belief_model_enabled() else 'released'
+    """Preserve released chat memory semantics for every caller."""
+    del view
+    return 'released'
 
 
 def search_memory_default_chat_memories_text(
@@ -296,8 +295,6 @@ def _chat_memory_time_suffix(
     view: str = 'released',
 ) -> str:
     stamp = None
-    if belief_model_enabled():
-        stamp = parse_optional_default_read_datetime(item.get('as_of'))
     if stamp is None:
         for key in date_keys:
             stamp = parse_optional_default_read_datetime(item.get(key))
@@ -308,15 +305,7 @@ def _chat_memory_time_suffix(
     if extra:
         parts.append(extra)
     parts.append(f"tier: {item.get('tier')}")
-    if belief_model_enabled():
-        band = item.get('currency_band')
-        if band:
-            parts.append(f"band: {band}")
-        parts.append(f"as_of: {date_str}")
-        if view == 'history':
-            parts.append('historical: true')
-    else:
-        parts.append(f"date: {date_str}")
+    parts.append(f"date: {date_str}")
     return ", ".join(parts)
 
 

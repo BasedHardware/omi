@@ -39,6 +39,7 @@ struct QueryShellHome: View {
   @ObservedObject var appProvider: AppProvider
   @ObservedObject var chatProvider: ChatProvider
   @ObservedObject var memoriesViewModel: MemoriesViewModel
+  @ObservedObject private var usageLimiter = FloatingBarUsageLimiter.shared
   @ObservedObject private var tasksStore = TasksStore.shared
   var taskChatCoordinator: TaskChatCoordinator? = nil
   /// Typed navigation and the interactable content-block controls. Every Chat
@@ -150,7 +151,9 @@ struct QueryShellHome: View {
                 // measurement would push the composer down by its own height.
                 VStack(spacing: OmiSpacing.sm) {
                   ChatQuotaBannerView.Slot()
-                  composerBar(draft: draft)
+                  if !PlanStorefrontGate.contextualEnabled || usageLimiter.serverQuota?.chatAtCap?.active != true {
+                    composerBar(draft: draft)
+                  }
                 }
                 .onGeometryChange(for: CGFloat.self) {
                   $0.size.height
@@ -567,6 +570,19 @@ struct QueryShellHome: View {
   }
 
   private func takePendingDraftIfAny() {
+    if let request = MainChatNavigationRequestStore.shared.consumeAutoSendRequest() {
+      searchText = HomeBridgeIntent.openChat.searchTextAfter(searchText)
+      Task { @MainActor in
+        guard RuntimeOwnerIdentity.isAuthorizationCurrent(request.authorization) else { return }
+        let answer = await chatProvider.sendMessage(request.question)
+        guard RuntimeOwnerIdentity.isAuthorizationCurrent(request.authorization) else { return }
+        if answer == nil && chatProvider.draftText.isEmpty {
+          chatProvider.draftText = request.question
+          claimCaret()
+        }
+      }
+      return
+    }
     guard let draft = MainChatNavigationRequestStore.shared.consumeDraft(existingDraft: chatProvider.draftText) else {
       return
     }

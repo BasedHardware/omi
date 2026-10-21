@@ -159,6 +159,7 @@ def _stub_external_deletion_boundaries(monkeypatch) -> None:
 
     monkeypatch.setattr(account_deletion.auth, "delete_account", lambda _uid: None)
     monkeypatch.setattr(account_deletion.users_db, "get_user_subscription", lambda _uid: None)
+    monkeypatch.setattr(account_deletion.stripe_utils, "find_billable_app_subscription_ids", lambda _uid: [])
     monkeypatch.setattr(account_deletion, "delete_user_caller_ids", lambda _uid: None)
     monkeypatch.setattr(account_deletion, "delete_agent_vm_for_account", lambda _uid: None)
     monkeypatch.setattr(account_deletion, "delete_account_credentials", lambda _uid: None)
