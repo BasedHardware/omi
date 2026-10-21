@@ -3079,7 +3079,7 @@ environments:
             BATCH_PIPELINE_LIVE_ADMISSION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED: {value: 'false', category: rollout}
-            BATCH_PIPELINE_SPEECH_EMPTY_MULTILINGUAL_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_SPEECH_EMPTY_MULTILINGUAL_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_RECOVERY_ALL_ADMITTED: {value: 'false', category: rollout}
             BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED: {value: 'true', category: rollout}
@@ -3446,7 +3446,7 @@ environments:
             BATCH_PIPELINE_LIVE_ADMISSION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED: {value: 'false', category: rollout}
-            BATCH_PIPELINE_SPEECH_EMPTY_MULTILINGUAL_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_SPEECH_EMPTY_MULTILINGUAL_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_RECOVERY_ALL_ADMITTED: {value: 'false', category: rollout}
             BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED: {value: 'true', category: rollout}
@@ -3457,7 +3457,7 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
-            SUMMARY_DEBT_REPAIR_ENABLED: {value: 'true', category: rollout}
+            SUMMARY_DEBT_REPAIR_ENABLED: {value: 'false', category: rollout}
             CAPTURE_SHARED_SPEECH_MODE: {value: 'off', category: rollout}
             CAPTURE_SHARED_SPEECH_PERCENT: {value: '0', category: rollout}
             HOSTED_DIARIZATION_API_URL:
@@ -3797,7 +3797,7 @@ environments:
             BATCH_PIPELINE_LIVE_ADMISSION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED: {value: 'false', category: rollout}
-            BATCH_PIPELINE_SPEECH_EMPTY_MULTILINGUAL_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_SPEECH_EMPTY_MULTILINGUAL_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_RECOVERY_ALL_ADMITTED: {value: 'false', category: rollout}
             BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED: {value: 'true', category: rollout}
@@ -4094,7 +4094,7 @@ environments:
             BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_SPEECH_EMPTY_MULTILINGUAL_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED: {value: 'true', category: rollout}
-            BATCH_PIPELINE_RECOVERY_ALL_ADMITTED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_RECOVERY_ALL_ADMITTED: {value: 'true', category: rollout}
             BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_PROJECTION_TIMING_ENABLED: {value: 'true', category: rollout}
