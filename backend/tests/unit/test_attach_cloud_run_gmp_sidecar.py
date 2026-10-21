@@ -1406,6 +1406,12 @@ def test_sync_scrape_retains_exporter_and_direct_sentinel_consumers():
         'omi_firestore_billed_reads_by_origin_total',
         'omi_firestore_caller_label_overflow_total',
         'omi_fsr_leader_lease_total',
+        # Held-audio recovery gates: narrowing state, cohort resolution and pacing decisions.
+        'omi_stt_cap_recovery_cohort_narrowed',
+        'omi_stt_cap_cohort_source',
+        'omi_stt_cap_cohort_percent',
+        'omi_held_recovery_pacing_intents_total',
+        'omi_held_recovery_pacing_audio_seconds_total',
     ):
         assert kept(name), name
     for component in ('sync', 'summary_delivery', 'storage'):

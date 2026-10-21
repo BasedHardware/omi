@@ -81,3 +81,33 @@ python3 .github/scripts/check_mobile_ui_isolate.py --graph
   enabled. Turn it on, reproduce the lag, and read which route and background activity coincided.
 - **A device trace** is the ground truth: `flutter run --profile` on a phone, then DevTools'
   Performance view during a sync or a long recording.
+
+## Sync ring and Device page regression (October 21, 2026)
+
+`OmiActivityRing` used a `RotationTransition` without a repaint boundary. In a
+60-frame window the real Home battery header had 60 rotation-widget builds and
+60 surrounding display-list repaints while syncing (both zero while idle).
+It did not rebuild Home's page root or notify a provider at frame rate. The arc
+now listens to its controller directly in a `CustomPainter` inside its own
+`RepaintBoundary`; its static glyph and the header stay out of those repaints.
+The controller stops when inactive, under Reduce Motion, or outside `TickerMode`.
+
+Separately, Device settings listened to all Capture, Sync, Conversation and
+Episode notifications at the page root. Metric samples and progress updates
+rebuilt every section and recalculated the WAL totals and today's conversation
+durations. Capture metrics sample every five seconds; episodes poll and tick
+every 30 seconds. Neither is a frame-rate timer. Device settings now selects
+its visible capture state and sync badge, with separate subscriptions for stats,
+Right now and the diagnostic rates. Ten irrelevant Capture/Sync notification
+pairs per simulated second used to cause ten whole-page builds, both idle and
+syncing; now they cause zero. Visible pause and sync-amount updates remain tested.
+
+Reproduce the counters with `flutter test test/perf/sync_indicator_isolation_test.dart`
+from `app/`. For the same workload with an explicit live frame policy, run
+`flutter test --no-pub -d flutter-tester integration_test/perf/sync_indicator_perf.dart`.
+It pumps 60 frames at 16,667 microseconds each, after warmup, and logs rebuilds,
+surrounding paints and host UI pipeline p50/p95. The page input stress rate is
+10 notification pairs per second, not a claim about the production notification
+rate. Optional `SYNC_INDICATOR_EVIDENCE_DIR` writes synthetic screenshots.
+These host timings do not measure phone latency or GPU raster; use rebuild and
+paint counts as the portable regression signal and a phone profile for device jank.
