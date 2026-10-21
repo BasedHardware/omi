@@ -14412,4 +14412,105 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get activityAttentionLinkStalledSubtitle => 'O Omi continua gravando';
+
+  @override
+  String get episodeNow => 'Agora';
+
+  @override
+  String episodeLiveFor(String duration) {
+    return 'Ao vivo · $duration';
+  }
+
+  @override
+  String episodeMomentsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count momentos',
+      one: '1 momento',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get episodeMoments => 'Momentos';
+
+  @override
+  String get episodeSoFar => 'Até agora';
+
+  @override
+  String get episodeUpdatedJustNow => 'Atualizado agora · notas completas no final';
+
+  @override
+  String episodeUpdatedMinutesAgo(int minutes) {
+    return 'Atualizado há $minutes min · notas completas no final';
+  }
+
+  @override
+  String get episodeNotesSoon => 'As notas aparecem após os primeiros minutos de conversa.';
+
+  @override
+  String get episodeOpenAll => 'Abrir Tudo';
+
+  @override
+  String get episodeWrapUpNow => 'Concluir Agora';
+
+  @override
+  String get episodeWrapsUpHint => 'O Omi conclui isto quando você passa para outra coisa';
+
+  @override
+  String episodeTaskCaptured(String text) {
+    return 'Tarefa detectada: $text';
+  }
+
+  @override
+  String episodeReminderCaptured(String text) {
+    return 'Lembrete detectado: $text';
+  }
+
+  @override
+  String episodeTaskSaved(String text) {
+    return 'Tarefa salva: $text';
+  }
+
+  @override
+  String episodeAddingFromOmi(String duration) {
+    return 'adicionando $duration do seu Omi';
+  }
+
+  @override
+  String get episodeListeningNow => 'Ouvindo agora';
+
+  @override
+  String get deviceHeardToday => 'Ouvido hoje';
+
+  @override
+  String get deviceToSync => 'para sincronizar';
+
+  @override
+  String get deviceRightNow => 'Agora mesmo';
+
+  @override
+  String deviceLiveEpisode(String duration) {
+    return 'Episódio ao vivo · $duration';
+  }
+
+  @override
+  String get deviceCatchingUp => 'Atualizando';
+
+  @override
+  String deviceCatchingUpProgress(int done, int total) {
+    return '$done de $total min';
+  }
+
+  @override
+  String get deviceRecently => 'Recentemente';
+
+  @override
+  String deviceDisconnectedFor(String duration) {
+    return 'Desconectado por $duration';
+  }
+
+  @override
+  String get deviceControls => 'Controles';
 }

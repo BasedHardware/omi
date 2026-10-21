@@ -25484,6 +25484,156 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Still recording on your Omi'**
   String get activityAttentionLinkStalledSubtitle;
+
+  /// Marks the moment of a live episode that is happening now, and starts a live row subtitle (Now · 24m).
+  ///
+  /// In en, this message translates to:
+  /// **'Now'**
+  String get episodeNow;
+
+  /// Meta line of a live episode: it is live, and for how long so far (a compact duration such as 24m).
+  ///
+  /// In en, this message translates to:
+  /// **'Live · {duration}'**
+  String episodeLiveFor(String duration);
+
+  /// How many moments (stretches of speech) an episode has.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 moment} other{{count} moments}}'**
+  String episodeMomentsCount(int count);
+
+  /// Section title listing the moments (stretches of speech) of an episode.
+  ///
+  /// In en, this message translates to:
+  /// **'Moments'**
+  String get episodeMoments;
+
+  /// Title of the running notes card on a live episode.
+  ///
+  /// In en, this message translates to:
+  /// **'So far'**
+  String get episodeSoFar;
+
+  /// Under the running notes of a live episode: the notes were just updated; complete notes come when it ends.
+  ///
+  /// In en, this message translates to:
+  /// **'Updated just now · full notes when it wraps up'**
+  String get episodeUpdatedJustNow;
+
+  /// Under the running notes of a live episode: how many minutes ago they were updated; complete notes come when it ends.
+  ///
+  /// In en, this message translates to:
+  /// **'Updated {minutes} min ago · full notes when it wraps up'**
+  String episodeUpdatedMinutesAgo(int minutes);
+
+  /// Shown in the running notes card before the first notes exist.
+  ///
+  /// In en, this message translates to:
+  /// **'Running notes appear after the first few minutes of talk.'**
+  String get episodeNotesSoon;
+
+  /// Opens the full live transcript from its preview on a live episode.
+  ///
+  /// In en, this message translates to:
+  /// **'Open All'**
+  String get episodeOpenAll;
+
+  /// Button that ends a live episode now and makes its full notes.
+  ///
+  /// In en, this message translates to:
+  /// **'Wrap Up Now'**
+  String get episodeWrapUpNow;
+
+  /// Above the Wrap Up Now button: the episode also ends by itself when the user moves on.
+  ///
+  /// In en, this message translates to:
+  /// **'Omi wraps this up when you move on'**
+  String get episodeWrapsUpHint;
+
+  /// Inline in a live transcript: Omi heard a possible task. It is not in Tasks yet; Undo removes it.
+  ///
+  /// In en, this message translates to:
+  /// **'Task captured: {text}'**
+  String episodeTaskCaptured(String text);
+
+  /// Inline in a live transcript: Omi heard a possible reminder. It is not saved yet; Undo removes it.
+  ///
+  /// In en, this message translates to:
+  /// **'Reminder captured: {text}'**
+  String episodeReminderCaptured(String text);
+
+  /// Inline in a live transcript: a task Omi heard is now saved in Tasks.
+  ///
+  /// In en, this message translates to:
+  /// **'Task saved: {text}'**
+  String episodeTaskSaved(String text);
+
+  /// Subtitle of a conversation row that offline sync is still filling in: how much audio from the Omi device is being added.
+  ///
+  /// In en, this message translates to:
+  /// **'adding {duration} from your Omi'**
+  String episodeAddingFromOmi(String duration);
+
+  /// Title of a live episode before Omi has named its topic.
+  ///
+  /// In en, this message translates to:
+  /// **'Listening now'**
+  String get episodeListeningNow;
+
+  /// Device page stat: how much speech the Omi heard today.
+  ///
+  /// In en, this message translates to:
+  /// **'Heard today'**
+  String get deviceHeardToday;
+
+  /// Device page stat caption: the audio on the device still has to sync to the phone.
+  ///
+  /// In en, this message translates to:
+  /// **'to sync'**
+  String get deviceToSync;
+
+  /// Device page section: what the Omi is doing right now.
+  ///
+  /// In en, this message translates to:
+  /// **'Right now'**
+  String get deviceRightNow;
+
+  /// Device page: the live episode row subtitle, with how long it has run (a compact duration such as 24m).
+  ///
+  /// In en, this message translates to:
+  /// **'Live episode · {duration}'**
+  String deviceLiveEpisode(String duration);
+
+  /// Device page: audio saved on the Omi while the phone was away is being synced.
+  ///
+  /// In en, this message translates to:
+  /// **'Catching up'**
+  String get deviceCatchingUp;
+
+  /// Device page: how many minutes of the device backlog are synced, out of the total.
+  ///
+  /// In en, this message translates to:
+  /// **'{done} of {total} min'**
+  String deviceCatchingUpProgress(int done, int total);
+
+  /// Device page section: recent connection events.
+  ///
+  /// In en, this message translates to:
+  /// **'Recently'**
+  String get deviceRecently;
+
+  /// Device page event: the Omi was disconnected for this long (a compact duration such as 10m).
+  ///
+  /// In en, this message translates to:
+  /// **'Disconnected for {duration}'**
+  String deviceDisconnectedFor(String duration);
+
+  /// Device page section: controls such as pausing recording.
+  ///
+  /// In en, this message translates to:
+  /// **'Controls'**
+  String get deviceControls;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

@@ -16,8 +16,16 @@ import 'package:omi/pages/home/omiglass_ota_update.dart';
 import 'package:omi/pages/onboarding/interactive_device_onboarding/interactive_device_onboarding_wrapper.dart';
 import 'package:omi/pages/settings/device/device_control_sheets.dart';
 import 'package:omi/pages/settings/device/device_info_groups.dart';
+import 'package:omi/pages/settings/device/device_live_sections.dart';
+import 'package:omi/pages/episodes/episode_presentation.dart';
+import 'package:omi/pages/episodes/live_episode_page.dart';
+import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/providers/episode_provider.dart';
+import 'package:omi/utils/sync/offline_sync_amounts.dart';
 import 'package:omi/pages/settings/device/device_page_header.dart';
 import 'package:omi/pages/settings/device_diagnostics.dart';
+import 'package:omi/pages/settings/transcription_settings_page.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
@@ -514,6 +522,13 @@ class _DeviceSettingsState extends State<DeviceSettings> {
           showChevron: true,
           onTap: () => _openOfflineSync(provider),
         ),
+        // Language is chosen in one place; the device page links to it.
+        OmiSettingsRow(
+          key: const Key('device_transcription_language'),
+          leading: const FaIcon(FontAwesomeIcons.language),
+          title: l10n.transcriptionLanguage,
+          onTap: () => routeToPage(context, const TranscriptionSettingsPage()),
+        ),
         // Omi devices only: opt out of syncing offline recordings automatically on connect.
         if (paired?.type == DeviceType.omi)
           OmiSettingsRow.toggle(
@@ -575,6 +590,12 @@ class _DeviceSettingsState extends State<DeviceSettings> {
     final paired = provider.pairedDevice;
     final connected = provider.connectedDevice;
     const gap = SizedBox(height: OmiSpacing.xxl);
+    final sync = _maybeProvider<SyncProvider>(context);
+    final amounts = sync == null ? null : SyncPipelineAmounts.of(sync.allWals);
+    final deviceSource = capture?.liveCaptureSource;
+    final deviceStreaming = capture != null && deviceSource != null && deviceSource != 'phone';
+    final devicePaused = capture?.isPaused ?? false;
+    final rightNow = _rightNow(context, capture, sync, amounts, deviceStreaming: deviceStreaming);
 
     return Scaffold(
       backgroundColor: OmiColors.surface0,
@@ -582,10 +603,26 @@ class _DeviceSettingsState extends State<DeviceSettings> {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.xs, OmiSpacing.md, 48),
         children: [
-          DevicePageHeader(pairedDevice: paired, connectedDevice: connected),
+          DevicePageHeader(
+            pairedDevice: paired,
+            connectedDevice: connected,
+            listening: connected != null && deviceStreaming && !devicePaused,
+            paused: connected != null && deviceStreaming && devicePaused,
+          ),
           const SizedBox(height: OmiSpacing.xl),
-          if (connected != null && provider.batteryLevel > 0) ...[
-            DeviceBatteryGroup(batteryLevel: provider.batteryLevel, isCharging: provider.isCharging),
+          if (connected != null) ...[
+            DeviceStatsRow(
+              batteryLevel: provider.batteryLevel,
+              isCharging: provider.isCharging,
+              heardTodaySeconds: _heardTodaySeconds(context),
+              onDeviceSeconds: amounts?.onDeviceSeconds ?? 0,
+            ),
+            gap,
+          ],
+          if (rightNow.hasContent) ...[rightNow, gap],
+          DeviceRecentlyGroup(load: provider.disconnectHistory),
+          if (deviceStreaming && EpisodePresentation.canPause(capture)) ...[
+            DeviceControlsGroup(paused: devicePaused, onToggle: () => _togglePause(capture)),
             gap,
           ],
           if (provider.isConnected)
@@ -609,6 +646,55 @@ class _DeviceSettingsState extends State<DeviceSettings> {
         ],
       ),
     );
+  }
+}
+
+extension _DeviceLiveSections on _DeviceSettingsState {
+  /// Speech heard today, by the conversation list's own length rule.
+  int _heardTodaySeconds(BuildContext context) {
+    final conversations = _maybeProvider<ConversationProvider>(context);
+    if (conversations == null) return 0;
+    final today = DateUtils.dateOnly(DateTime.now());
+    return (conversations.groupedConversations[today] ?? const <ServerConversation>[])
+        .where((c) => !c.discarded)
+        .fold<int>(0, (sum, c) => sum + c.getDurationInSeconds());
+  }
+
+  DeviceRightNowGroup _rightNow(
+    BuildContext context,
+    CaptureProvider? capture,
+    SyncProvider? sync,
+    SyncPipelineAmounts? amounts, {
+    required bool deviceStreaming,
+  }) {
+    final episodes = _maybeProvider<EpisodeProvider>(context);
+    final live = episodes != null && episodes.enabled && deviceStreaming ? episodes.live : null;
+    final l10n = context.l10n;
+    final waiting = amounts == null ? 0 : amounts.onDeviceSeconds + amounts.onPhoneSeconds + amounts.processingSeconds;
+    final moved = amounts == null ? 0 : amounts.onPhoneSeconds + amounts.processingSeconds;
+    return DeviceRightNowGroup(
+      liveTitle: live == null ? null : (live.title.isEmpty ? l10n.episodeListeningNow : live.title),
+      liveLength: live == null || capture == null
+          ? null
+          : EpisodePresentation.runningLength(EpisodePresentation.elapsed(live, capture, episodes!.now()), l10n),
+      onOpenLive: capture == null
+          ? null
+          : () => routeToPage(context, LiveEpisodePage(topConversationId: capture.topConversationId)),
+      catchingUp: (sync?.isSyncing ?? false) && waiting > 0 ? (doneSeconds: moved, totalSeconds: waiting) : null,
+    );
+  }
+
+  Future<void> _togglePause(CaptureProvider capture) async {
+    try {
+      OmiHaptics.medium();
+      if (capture.isPaused) {
+        await capture.resumeCapture();
+      } else {
+        await capture.pauseCapture();
+      }
+    } catch (_) {
+      if (mounted) OmiFeedback.error(context, context.l10n.somethingWentWrong);
+    }
   }
 }
 
