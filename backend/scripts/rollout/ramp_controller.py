@@ -110,6 +110,11 @@ COHORT_FAIL_TOKENS = frozenset(
         'first_summary_completion_outlier',
         'first_summary_deadline',  # testing/pipeline_sim/scorer.py, the in-repo fleet_gate stand-in
         'http_5xx_regression',
+        # P26 language-route verdicts (workspace fleet_gate 3172987): cohort audio routed to Parakeet in an
+        # unknown/unsupported language, and completed units with no route evidence. Deliberate fail-closed
+        # verdicts like recovery_spend_unknown, not gate read errors, so they roll back rather than hold.
+        'unsafe_parakeet_language_route',
+        'language_route_unknown',
         'parity_fail',
     }
 )
