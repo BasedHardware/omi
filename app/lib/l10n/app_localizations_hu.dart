@@ -14442,4 +14442,105 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get activityAttentionLinkStalledSubtitle => 'Az Omi tovább rögzít';
+
+  @override
+  String get episodeNow => 'Most';
+
+  @override
+  String episodeLiveFor(String duration) {
+    return 'Élő · $duration';
+  }
+
+  @override
+  String episodeMomentsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count pillanat',
+      one: '1 pillanat',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get episodeMoments => 'Pillanatok';
+
+  @override
+  String get episodeSoFar => 'Eddig';
+
+  @override
+  String get episodeUpdatedJustNow => 'Épp most frissült · teljes jegyzet a végén';
+
+  @override
+  String episodeUpdatedMinutesAgo(int minutes) {
+    return '$minutes perce frissült · teljes jegyzet a végén';
+  }
+
+  @override
+  String get episodeNotesSoon => 'A jegyzetek a beszélgetés első perceit követően jelennek meg.';
+
+  @override
+  String get episodeOpenAll => 'Összes megnyitása';
+
+  @override
+  String get episodeWrapUpNow => 'Lezárás most';
+
+  @override
+  String get episodeWrapsUpHint => 'Az Omi lezárja, amikor továbblépsz';
+
+  @override
+  String episodeTaskCaptured(String text) {
+    return 'Feladat észlelve: $text';
+  }
+
+  @override
+  String episodeReminderCaptured(String text) {
+    return 'Emlékeztető észlelve: $text';
+  }
+
+  @override
+  String episodeTaskSaved(String text) {
+    return 'Feladat mentve: $text';
+  }
+
+  @override
+  String episodeAddingFromOmi(String duration) {
+    return '$duration hozzáadása az Omiról';
+  }
+
+  @override
+  String get episodeListeningNow => 'Most figyel';
+
+  @override
+  String get deviceHeardToday => 'Ma hallott';
+
+  @override
+  String get deviceToSync => 'szinkronizálandó';
+
+  @override
+  String get deviceRightNow => 'Most';
+
+  @override
+  String deviceLiveEpisode(String duration) {
+    return 'Élő epizód · $duration';
+  }
+
+  @override
+  String get deviceCatchingUp => 'Felzárkózás';
+
+  @override
+  String deviceCatchingUpProgress(int done, int total) {
+    return '$done/$total perc';
+  }
+
+  @override
+  String get deviceRecently => 'Nemrég';
+
+  @override
+  String deviceDisconnectedFor(String duration) {
+    return '$duration szétkapcsolva';
+  }
+
+  @override
+  String get deviceControls => 'Vezérlők';
 }

@@ -15,7 +15,7 @@ import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/conversations/widgets/live_capture_card.dart';
 import 'package:omi/pages/conversations/widgets/processing_capture.dart';
-import 'package:omi/pages/conversation_capturing/page.dart';
+import 'package:omi/pages/episodes/live_episode_page.dart';
 import 'package:omi/pages/home/widgets/battery_info_widget.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/services/sockets/local_stt_failure.dart';
@@ -612,7 +612,7 @@ void main() {
       await tester.pump();
       expect(capture.phoneStarts, 1);
       expect(find.text(en.somethingWentWrong), findsOneWidget);
-      expect(find.byType(ConversationCapturingPage), findsNothing);
+      expect(find.byType(LiveEpisodePage), findsNothing);
     });
 
     testWidgets('a start that resolves without phone ownership navigates nowhere', (tester) async {
@@ -621,7 +621,7 @@ void main() {
       await tester.tap(find.bySemanticsLabel(en.startRecording));
       await tester.pump();
       expect(capture.phoneStarts, 1);
-      expect(find.byType(ConversationCapturingPage), findsNothing);
+      expect(find.byType(LiveEpisodePage), findsNothing);
       expect(find.text(en.somethingWentWrong), findsNothing, reason: 'a refusal is not an error toast');
     });
 

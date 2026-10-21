@@ -14498,4 +14498,105 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get activityAttentionLinkStalledSubtitle => 'Patuloy na nagre-record ang Omi';
+
+  @override
+  String get episodeNow => 'Ngayon';
+
+  @override
+  String episodeLiveFor(String duration) {
+    return 'Live · $duration';
+  }
+
+  @override
+  String episodeMomentsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count sandali',
+      one: '1 sandali',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get episodeMoments => 'Mga Sandali';
+
+  @override
+  String get episodeSoFar => 'Sa ngayon';
+
+  @override
+  String get episodeUpdatedJustNow => 'Na-update ngayon lang · buong tala kapag natapos';
+
+  @override
+  String episodeUpdatedMinutesAgo(int minutes) {
+    return 'Na-update $minutes min ang nakalipas · buong tala kapag natapos';
+  }
+
+  @override
+  String get episodeNotesSoon => 'Lalabas ang mga tala pagkatapos ng unang ilang minuto ng usapan.';
+
+  @override
+  String get episodeOpenAll => 'Buksan Lahat';
+
+  @override
+  String get episodeWrapUpNow => 'Tapusin Ngayon';
+
+  @override
+  String get episodeWrapsUpHint => 'Tatapusin ito ng Omi kapag lumipat ka na';
+
+  @override
+  String episodeTaskCaptured(String text) {
+    return 'Nakuhang gawain: $text';
+  }
+
+  @override
+  String episodeReminderCaptured(String text) {
+    return 'Nakuhang paalala: $text';
+  }
+
+  @override
+  String episodeTaskSaved(String text) {
+    return 'Na-save ang gawain: $text';
+  }
+
+  @override
+  String episodeAddingFromOmi(String duration) {
+    return 'nagdadagdag ng $duration mula sa iyong Omi';
+  }
+
+  @override
+  String get episodeListeningNow => 'Nakikinig ngayon';
+
+  @override
+  String get deviceHeardToday => 'Narinig ngayon';
+
+  @override
+  String get deviceToSync => 'i-sync pa';
+
+  @override
+  String get deviceRightNow => 'Sa ngayon';
+
+  @override
+  String deviceLiveEpisode(String duration) {
+    return 'Live na episode · $duration';
+  }
+
+  @override
+  String get deviceCatchingUp => 'Humahabol';
+
+  @override
+  String deviceCatchingUpProgress(int done, int total) {
+    return '$done sa $total min';
+  }
+
+  @override
+  String get deviceRecently => 'Kamakailan';
+
+  @override
+  String deviceDisconnectedFor(String duration) {
+    return 'Nadiskonekta nang $duration';
+  }
+
+  @override
+  String get deviceControls => 'Mga Kontrol';
 }

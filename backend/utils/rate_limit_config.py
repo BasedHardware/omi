@@ -105,6 +105,8 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     # the worst case below the :create ceiling while allowing real exploration.
     "conversations:reprocess": (10, 3600),
     "conversations:merge": (5, 3600),
+    # Episodes: "Wrap up now" and Undo on a captured item; no model call.
+    "episodes:write": (60, 3600),
     # From-segments: on-device-STT upload path (segments already transcribed, so
     # cheaper than :create — no Deepgram, just LLM structuring). Used per finished
     # conversation by Parakeet/local-STT users, so a bit more headroom than :create.

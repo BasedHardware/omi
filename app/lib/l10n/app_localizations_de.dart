@@ -14492,4 +14492,105 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get activityAttentionLinkStalledSubtitle => 'Omi nimmt weiter auf';
+
+  @override
+  String get episodeNow => 'Jetzt';
+
+  @override
+  String episodeLiveFor(String duration) {
+    return 'Live · $duration';
+  }
+
+  @override
+  String episodeMomentsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count Momente',
+      one: '1 Moment',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get episodeMoments => 'Momente';
+
+  @override
+  String get episodeSoFar => 'Bisher';
+
+  @override
+  String get episodeUpdatedJustNow => 'Gerade aktualisiert · vollständige Notizen zum Schluss';
+
+  @override
+  String episodeUpdatedMinutesAgo(int minutes) {
+    return 'Vor $minutes Min. aktualisiert · vollständige Notizen zum Schluss';
+  }
+
+  @override
+  String get episodeNotesSoon => 'Notizen erscheinen nach den ersten Gesprächsminuten.';
+
+  @override
+  String get episodeOpenAll => 'Alles öffnen';
+
+  @override
+  String get episodeWrapUpNow => 'Jetzt abschließen';
+
+  @override
+  String get episodeWrapsUpHint => 'Omi schließt das ab, sobald du weitermachst';
+
+  @override
+  String episodeTaskCaptured(String text) {
+    return 'Aufgabe erkannt: $text';
+  }
+
+  @override
+  String episodeReminderCaptured(String text) {
+    return 'Erinnerung erkannt: $text';
+  }
+
+  @override
+  String episodeTaskSaved(String text) {
+    return 'Aufgabe gespeichert: $text';
+  }
+
+  @override
+  String episodeAddingFromOmi(String duration) {
+    return '$duration von deinem Omi werden ergänzt';
+  }
+
+  @override
+  String get episodeListeningNow => 'Hört gerade zu';
+
+  @override
+  String get deviceHeardToday => 'Heute gehört';
+
+  @override
+  String get deviceToSync => 'zum Synchronisieren';
+
+  @override
+  String get deviceRightNow => 'Gerade jetzt';
+
+  @override
+  String deviceLiveEpisode(String duration) {
+    return 'Live-Episode · $duration';
+  }
+
+  @override
+  String get deviceCatchingUp => 'Holt auf';
+
+  @override
+  String deviceCatchingUpProgress(int done, int total) {
+    return '$done von $total Min.';
+  }
+
+  @override
+  String get deviceRecently => 'Kürzlich';
+
+  @override
+  String deviceDisconnectedFor(String duration) {
+    return '$duration getrennt';
+  }
+
+  @override
+  String get deviceControls => 'Steuerung';
 }
