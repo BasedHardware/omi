@@ -790,6 +790,15 @@ class HistoricalMemoryRecord:
     hydrated: bool = True
 
 
+def _historical_conversation_sources(record: HistoricalMemoryRecord) -> Iterator[str]:
+    """Every conversation id the retraction match below can match for this row."""
+    if isinstance(record.memory.conversation_id, str):
+        yield record.memory.conversation_id
+    for evidence in record.memory.evidence:
+        if evidence.source_type == "conversation" and isinstance(evidence.source_id, str):
+            yield evidence.source_id
+
+
 class HistoricalMemoryAdapter:
     """Bounded, protected, read-only reader for historical memory documents.
 
@@ -4465,15 +4474,7 @@ class MemoryService:
         # target instead of deleting both source and target memories.
         if on_authoritative_commit is not None:
             on_authoritative_commit()
-        historical_ids = [
-            record.memory.id
-            for record in self.history.all_live(uid)
-            if record.memory.conversation_id == conversation_id
-            or any(
-                evidence.source_type == "conversation" and evidence.source_id == conversation_id
-                for evidence in record.memory.evidence
-            )
-        ]
+        historical_ids = self._historical_conversation_memory_ids(uid, conversation_id)
         retracted_ids = list(dict.fromkeys(list(result.get("retracted_memory_ids") or []) if result else []))
         all_ids = list(dict.fromkeys(retracted_ids + historical_ids))
         if coalesce:
@@ -4538,6 +4539,51 @@ class MemoryService:
                     detail="Conversation memory replacement receipt cleanup unavailable",
                 ) from exc
         return result
+
+    def _historical_conversation_memory_ids(self, uid: str, conversation_id: str) -> List[str]:
+        """Live historical rows that name ``conversation_id``.
+
+        The full legacy scan costs every row twice. A current source index that
+        lacks the id proves no row names it, so a fresh donor skips the scan;
+        a scan with the index enabled rebuilds it for the next retraction.
+        """
+        kwargs = {"firestore_client": self.db_client} if self.db_client is not None else {}
+        observed: Optional[memories_db.HistoricalSourceIndexSnapshot] = None
+        outcome = "scanned_disabled"
+        if memories_db.historical_source_index_enabled():
+            try:
+                observed = memories_db.read_historical_source_index(uid, **kwargs)
+            except Exception:
+                logger.warning("historical source index read failed uid=%s", uid, exc_info=True)
+                outcome = "scanned_read_failed"
+        if observed is not None and observed.excludes(conversation_id):
+            memories_db.HISTORICAL_SOURCE_INDEX_EVENTS.labels(event="retraction_scan", outcome="skipped").inc()
+            logger.info("event=memory_retraction_historical_scan outcome=skipped uid=%s", uid)
+            return []
+        if observed is None:
+            records = self.history.all_live(uid)
+        else:
+            outcome = "scanned_match" if observed.keys is not None else "scanned_unindexed"
+            # The stored index must describe rows read after ``observed``.
+            with memories_db.historical_scan_memo_suspended():
+                records = self.history.all_live(uid)
+            memories_db.store_historical_source_index(
+                uid,
+                observed,
+                (source_id for record in records for source_id in _historical_conversation_sources(record)),
+                **kwargs,
+            )
+        memories_db.HISTORICAL_SOURCE_INDEX_EVENTS.labels(event="retraction_scan", outcome=outcome).inc()
+        logger.info("event=memory_retraction_historical_scan outcome=%s uid=%s rows=%d", outcome, uid, len(records))
+        return [
+            record.memory.id
+            for record in records
+            if record.memory.conversation_id == conversation_id
+            or any(
+                evidence.source_type == "conversation" and evidence.source_id == conversation_id
+                for evidence in record.memory.evidence
+            )
+        ]
 
     def replace_conversation_memories(
         self,

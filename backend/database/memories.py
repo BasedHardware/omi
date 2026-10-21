@@ -10,14 +10,27 @@ from contextvars import ContextVar
 from datetime import datetime, timezone
 from functools import wraps
 from threading import RLock
-from typing import Any, Callable, Dict, Iterator, List, Optional, TypedDict, cast
+from typing import Any, Callable, Dict, Iterable, Iterator, List, Optional, TypedDict, cast
 from database.dream_dirty import after_write
+from prometheus_client import Counter
 
 try:
     from google.api_core.exceptions import NotFound as FirestoreNotFound  # type: ignore[reportAssignmentType]  # fallback class below rebinds the name in stub-less test envs
 except Exception:  # pragma: no cover - lightweight tests may stub only google.cloud
 
     class FirestoreNotFound(Exception):
+        pass
+
+
+try:
+    from google.api_core.exceptions import AlreadyExists as FirestoreAlreadyExists  # type: ignore[reportAssignmentType]
+    from google.api_core.exceptions import FailedPrecondition as FirestoreFailedPrecondition  # type: ignore[reportAssignmentType]
+except Exception:  # pragma: no cover - lightweight tests may stub only google.cloud
+
+    class FirestoreAlreadyExists(Exception):
+        pass
+
+    class FirestoreFailedPrecondition(Exception):
         pass
 
 
@@ -148,6 +161,19 @@ def historical_scan_memo_scope(uid: str) -> Iterator[None]:
                 previous.clear()
 
 
+@contextmanager
+def historical_scan_memo_suspended() -> Iterator[None]:
+    """Read fresh pages: a scan that builds the source index must postdate its epoch read.
+
+    Reads only. A write inside this block would not fence the outer memo.
+    """
+    token = _historical_scan_memo.set(None)
+    try:
+        yield
+    finally:
+        _historical_scan_memo.reset(token)
+
+
 def _active_historical_scan_memo(uid: str) -> Optional[_HistoricalScanMemo]:
     memo = _historical_scan_memo.get()
     if memo is None or memo.closed or memo.uid != uid:
@@ -159,7 +185,28 @@ def _active_historical_scan_memo(uid: str) -> Optional[_HistoricalScanMemo]:
 
 
 def _historical_scan_write(function: Callable[..., Any]) -> Callable[..., Any]:
-    """Fence the complete synchronous write, including transaction callbacks/retries."""
+    """Fence the complete synchronous write, including transaction callbacks/retries.
+
+    Also invalidates the owner's historical source index around the write. Use
+    ``_historical_scan_write_without_new_sources`` only for a write that can
+    never add a conversation reference or make a hidden row live again.
+    """
+    memo_fenced = _historical_scan_write_without_new_sources(function)
+
+    @wraps(function)
+    def wrapped(uid: str, *args: Any, **kwargs: Any) -> Any:
+        with _historical_source_index_fence(uid, kwargs.get('firestore_client')):
+            return memo_fenced(uid, *args, **kwargs)
+
+    return wrapped
+
+
+def _historical_scan_write_without_new_sources(function: Callable[..., Any]) -> Callable[..., Any]:
+    """Memo fence only: deletes, tombstones, unlocks and re-encryption.
+
+    These shrink (or keep) the set of conversation ids live historical rows
+    name, so a stored source index stays a valid superset across them.
+    """
 
     @wraps(function)
     def wrapped(uid: str, *args: Any, **kwargs: Any) -> Any:
@@ -178,11 +225,13 @@ def _historical_scan_transaction_write(function: Callable[..., Any]) -> Callable
 
     @wraps(function)
     def wrapped(transaction: Any, uid: str, *args: Any, **kwargs: Any) -> Any:
-        memo = _historical_scan_memo.get()
-        if memo is None or memo.closed or memo.uid != uid:
-            return function(transaction, uid, *args, **kwargs)
-        with _historical_scan_mutation(memo):
-            return function(transaction, uid, *args, **kwargs)
+        client = kwargs.get('firestore_client') or getattr(transaction, '_client', None)
+        with _historical_source_index_fence(uid, client):
+            memo = _historical_scan_memo.get()
+            if memo is None or memo.closed or memo.uid != uid:
+                return function(transaction, uid, *args, **kwargs)
+            with _historical_scan_mutation(memo):
+                return function(transaction, uid, *args, **kwargs)
 
     return wrapped
 
@@ -200,6 +249,135 @@ def _historical_scan_mutation(memo: _HistoricalScanMemo) -> Iterator[None]:
             memo.writers -= 1
 
 
+# One content-free document per owner holds short hashes of every conversation
+# id that a live historical row references (``conversation_id`` or a
+# conversation evidence ``source_id``). Conversation retraction checks it and
+# skips the full dual-keyset scan of ``users/{uid}/memories`` when the donor is
+# absent. Writers bump ``epoch`` before and after every write that could add a
+# reference; an index is trusted only when ``indexed_epoch == epoch``, and is
+# stored only under a last-update-time precondition from before its scan.
+# ``MEMORY_HISTORICAL_SOURCE_INDEX=off`` is the kill switch for readers and
+# builders; writers always bump so re-enabling never trusts a stale index.
+HISTORICAL_SOURCE_INDEX_ENV = 'MEMORY_HISTORICAL_SOURCE_INDEX'
+HISTORICAL_SOURCE_INDEX_DOC = 'historical_source_index'
+_HISTORICAL_SOURCE_INDEX_MAX_KEYS = 40_000
+_HISTORICAL_SOURCE_INDEX_OFF_VALUES = frozenset({'off', 'false', '0', 'no', 'disabled'})
+
+HISTORICAL_SOURCE_INDEX_EVENTS = Counter(
+    'omi_memory_historical_source_index_events_total',
+    'Historical source index: retraction scans skipped or run, index builds, and writer bumps',
+    ['event', 'outcome'],
+)
+
+
+def historical_source_index_enabled() -> bool:
+    raw = os.environ.get(HISTORICAL_SOURCE_INDEX_ENV, '').strip().lower()
+    return raw not in _HISTORICAL_SOURCE_INDEX_OFF_VALUES
+
+
+def historical_source_key(conversation_id: str) -> str:
+    return hashlib.sha256(conversation_id.encode()).hexdigest()[:16]
+
+
+def _historical_source_index_ref(database: Any, uid: str) -> Any:
+    return (
+        database.collection(users_collection)
+        .document(uid)
+        .collection('memory_state')
+        .document(HISTORICAL_SOURCE_INDEX_DOC)
+    )
+
+
+def _bump_historical_source_index(uid: str, firestore_client: Any) -> None:
+    ref = _historical_source_index_ref(_get_db(firestore_client), uid)
+    ref.set({'epoch': firestore.Increment(1)}, merge=True)
+
+
+@contextmanager
+def _historical_source_index_fence(uid: str, firestore_client: Any) -> Iterator[None]:
+    # Before: a failed bump aborts the write, so no row can outlive a trusted
+    # index that misses it. After: invalidates an index built mid-write.
+    try:
+        _bump_historical_source_index(uid, firestore_client)
+    except Exception:
+        HISTORICAL_SOURCE_INDEX_EVENTS.labels(event='bump', outcome='failed').inc()
+        raise
+    try:
+        yield
+    finally:
+        try:
+            _bump_historical_source_index(uid, firestore_client)
+        except Exception:
+            # Only an index stored during this very write can be stale now.
+            HISTORICAL_SOURCE_INDEX_EVENTS.labels(event='bump', outcome='after_failed').inc()
+            logger.exception('historical source index post-write bump failed uid=%s', uid)
+
+
+class HistoricalSourceIndexSnapshot:
+    """One read of the index document, kept as the precondition for a rebuild."""
+
+    def __init__(self, *, exists: bool, update_time: Any, epoch: Any, keys: Optional[frozenset[str]]) -> None:
+        self.exists = exists
+        self.update_time = update_time
+        self.epoch = epoch
+        self.keys = keys
+
+    def excludes(self, conversation_id: str) -> bool:
+        """True only when a current index proves no live historical row names the id."""
+        return self.keys is not None and historical_source_key(conversation_id) not in self.keys
+
+
+def read_historical_source_index(uid: str, *, firestore_client: Any = None) -> HistoricalSourceIndexSnapshot:
+    snapshot = _historical_source_index_ref(_get_db(firestore_client), uid).get()
+    if not getattr(snapshot, 'exists', False):
+        return HistoricalSourceIndexSnapshot(exists=False, update_time=None, epoch=0, keys=None)
+    data = _typed_doc(snapshot)
+    epoch = data.get('epoch', 0)
+    keys: Optional[frozenset[str]] = None
+    encoded = data.get('keys')
+    if isinstance(encoded, str) and data.get('indexed_epoch') == epoch:
+        keys = frozenset(key for key in encoded.split(',') if key)
+    return HistoricalSourceIndexSnapshot(exists=True, update_time=snapshot.update_time, epoch=epoch, keys=keys)
+
+
+def store_historical_source_index(
+    uid: str,
+    observed: HistoricalSourceIndexSnapshot,
+    conversation_ids: Iterable[str],
+    *,
+    firestore_client: Any = None,
+) -> str:
+    """Store the index for a scan that began after ``observed`` was read.
+
+    Returns a bounded outcome. Any writer bump since ``observed`` fails the
+    precondition, so the index never claims a scan that missed a later write.
+    """
+    keys = sorted({historical_source_key(cid) for cid in conversation_ids})
+    if len(keys) > _HISTORICAL_SOURCE_INDEX_MAX_KEYS:
+        outcome = 'too_large'
+    else:
+        database = _get_db(firestore_client)
+        ref = _historical_source_index_ref(database, uid)
+        payload = {'keys': ','.join(keys), 'key_count': len(keys), 'built_at': datetime.now(timezone.utc)}
+        try:
+            if observed.exists:
+                # A bump since ``observed`` moves update_time and fails this.
+                ref.update(
+                    {**payload, 'indexed_epoch': observed.epoch},
+                    option=database.write_option(last_update_time=observed.update_time),
+                )
+            else:
+                ref.create({**payload, 'epoch': 0, 'indexed_epoch': 0})
+            outcome = 'stored'
+        except (FirestoreAlreadyExists, FirestoreFailedPrecondition):
+            outcome = 'raced'
+        except Exception:
+            logger.exception('historical source index store failed uid=%s', uid)
+            outcome = 'failed'
+    HISTORICAL_SOURCE_INDEX_EVENTS.labels(event='build', outcome=outcome).inc()
+    return outcome
+
+
 def _account_write_gated(function: Callable[..., Any]) -> Callable[..., Any]:
     @wraps(function)
     def wrapped(uid: str, *args: Any, **kwargs: Any) -> Any:
@@ -213,11 +391,12 @@ def _destination_account_write_gated(function: Callable[..., Any]) -> Callable[.
     @wraps(function)
     def wrapped(prev_uid: str, new_uid: str, *args: Any, **kwargs: Any) -> Any:
         with external_write_fence(new_uid, firestore_client=kwargs.get("firestore_client")):
-            memo = _historical_scan_memo.get()
-            if memo is None or memo.closed or memo.uid != new_uid:
-                return function(prev_uid, new_uid, *args, **kwargs)
-            with _historical_scan_mutation(memo):
-                return function(prev_uid, new_uid, *args, **kwargs)
+            with _historical_source_index_fence(new_uid, kwargs.get("firestore_client")):
+                memo = _historical_scan_memo.get()
+                if memo is None or memo.closed or memo.uid != new_uid:
+                    return function(prev_uid, new_uid, *args, **kwargs)
+                with _historical_scan_mutation(memo):
+                    return function(prev_uid, new_uid, *args, **kwargs)
 
     return wrapped
 
@@ -288,7 +467,7 @@ def _get_db(firestore_client: Any = None) -> Any:
     return firestore_client if firestore_client is not None else get_firestore_client()
 
 
-@_historical_scan_write
+@_historical_scan_write_without_new_sources  # only caller sets kg_extracted, never a source
 def _update_memory_if_exists(
     uid: str,
     memory_id: str,
@@ -1152,7 +1331,7 @@ def _merge_evidence(  # type: ignore[reportUnusedFunction]  # reserved: thin ali
     return merge_evidence_sets(existing, incoming)
 
 
-@_historical_scan_write
+@_historical_scan_write_without_new_sources
 def delete_memories(uid: str, *, firestore_client: Any = None) -> None:
     database = _get_db(firestore_client)
     user_ref = database.collection(users_collection).document(uid)
@@ -1444,7 +1623,7 @@ def projection_update_for_refine(
     return update_payload
 
 
-@_historical_scan_write
+@_historical_scan_write_without_new_sources
 def invalidate_memory(
     uid: str,
     memory_id: str,
@@ -1499,7 +1678,7 @@ def invalidate_memory(
     )
 
 
-@_historical_scan_write
+@_historical_scan_write_without_new_sources
 def delete_memory(uid: str, memory_id: str, *, firestore_client: Any = None) -> None:
     database = _get_db(firestore_client)
     user_ref = database.collection(users_collection).document(uid)
@@ -1508,7 +1687,7 @@ def delete_memory(uid: str, memory_id: str, *, firestore_client: Any = None) -> 
     memory_ref.delete()
 
 
-@_historical_scan_write
+@_historical_scan_write_without_new_sources
 def delete_memories_batch(uid: str, memory_ids: List[str], *, firestore_client: Any = None) -> None:
     """Delete multiple memories in a single batched Firestore write.
 
@@ -1534,7 +1713,7 @@ def delete_memories_batch(uid: str, memory_ids: List[str], *, firestore_client: 
         batch.commit()
 
 
-@_historical_scan_write
+@_historical_scan_write_without_new_sources
 def delete_all_memories(uid: str, *, firestore_client: Any = None) -> None:
     database = _get_db(firestore_client)
     user_ref = database.collection(users_collection).document(uid)
@@ -1555,7 +1734,7 @@ def delete_all_memories(uid: str, *, firestore_client: Any = None) -> None:
         batch.commit()
 
 
-@_historical_scan_write
+@_historical_scan_write_without_new_sources
 def ripple_source_deletion(uid: str, source_id: str, *, firestore_client: Any = None) -> Dict[str, Any]:
     database = _get_db(firestore_client)
     user_ref = database.collection(users_collection).document(uid)
@@ -1755,7 +1934,7 @@ class MemoryUnlockCount(int):
 
 
 @_account_write_gated
-@_historical_scan_write
+@_historical_scan_write_without_new_sources
 def unlock_all_memories(uid: str, *, firestore_client: Any = None, limit: Optional[int] = None) -> int:
     """
     Unlock both released legacy rows and canonical product-memory rows.
@@ -1818,7 +1997,7 @@ def get_memories_to_migrate(uid: str, target_level: str, *, firestore_client: An
 
 
 @_account_write_gated
-@_historical_scan_write
+@_historical_scan_write_without_new_sources
 def migrate_memories_level_batch(
     uid: str, memory_ids: List[str], target_level: str, *, firestore_client: Any = None
 ) -> None:

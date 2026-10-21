@@ -124,7 +124,13 @@ def db(monkeypatch):
     monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{"historical_scan_memo":100}')
     monkeypatch.delenv('FIRESTORE_HISTORICAL_SCAN_MEMO_MAX_ENTRIES', raising=False)
     monkeypatch.delenv('FIRESTORE_HISTORICAL_SCAN_MEMO_MAX_BYTES', raising=False)
-    return _Db()
+    database = _Db()
+    # Source-index epoch bumps are their own document; record them apart from row writes.
+    database.index_bumps = []
+    monkeypatch.setattr(
+        memories, '_bump_historical_source_index', lambda uid, _client: database.index_bumps.append(uid)
+    )
+    return database
 
 
 def _scan(db, uid=UID, **kwargs):
@@ -288,6 +294,9 @@ def test_memory_mutation_fences_before_write_and_rereads_after_commit(db, operat
         assert _scan(db) == next_page
     assert len(db.queries) == 3
     assert len(db.writes) == 1
+    # Visibility and review can make a row live, so they invalidate the source
+    # index before and after the write; kg flags and deletes cannot add a source.
+    assert db.index_bumps == ([UID, UID] if operation in {'visibility', 'review'} else [])
 
 
 def test_fence_survives_lever_toggle_off_then_on(db, monkeypatch):
