@@ -32,10 +32,23 @@ CAPTURE_AUDIO = Counter(
     'Decoded listen capture seconds before VAD or replay',
     ['demand_cohort'],
 )
+# Why a session was ineligible: the first failing admission condition, in the
+# order capture_demand_admission checks them. ~300/10m ineligible sessions were
+# the only cohort hitting chain_exhausted (2026-10-21, lead ruling f12e4a) and
+# the cohort alone could not say which exclusion they share. 'none' for the
+# eligible cohorts.
+INELIGIBLE_REASONS = (
+    'recovery_off',
+    'unmanaged_chain',  # byok, multichannel or custom STT
+    'onboarding',
+    'phone_call',
+    'language_unqualified',
+    'no_profile',
+)
 EXHAUSTED_SESSIONS = Counter(
     'omi_listen_demand_exhausted_sessions_total',
     'Completed backend-STT sessions with or without an exhausted selection/recovery hop',
-    ['demand_cohort', 'outcome'],
+    ['demand_cohort', 'outcome', 'ineligible_reason'],
 )
 FAILURE_DETAIL = Counter(
     'omi_listen_demand_failure_detail_total',
@@ -143,7 +156,8 @@ try:
                         demand_cohort=_cohort, reason=_reason, capacity_subtype=_subtype, outcome=_outcome
                     )
         for _outcome in ('yes', 'no'):
-            EXHAUSTED_SESSIONS.labels(demand_cohort=_cohort, outcome=_outcome)
+            for _reason in INELIGIBLE_REASONS if _cohort == 'ineligible' else ('none',):
+                EXHAUSTED_SESSIONS.labels(demand_cohort=_cohort, outcome=_outcome, ineligible_reason=_reason)
         for _trigger in ('first_output', 'visible_return'):
             OUTPUT_LATENCY.labels(demand_cohort=_cohort, trigger=_trigger)
             for _outcome in ('started', 'delivered', 'no_output'):
@@ -153,10 +167,15 @@ except Exception:
 
 
 class DemandTelemetry:
-    def __init__(self, cohort: str):
+    def __init__(self, cohort: str, ineligible_reason: str | None = None):
         if cohort not in DEMAND_COHORTS:
             raise ValueError('invalid demand cohort')
         self.cohort = cohort
+        # Bounded: a reason only exists for the ineligible cohort, and only from
+        # the closed set; anything else reads 'none'.
+        self.ineligible_reason = (
+            ineligible_reason if cohort == 'ineligible' and ineligible_reason in INELIGIBLE_REASONS else 'none'
+        )
         self.batch_cohort = 'ineligible'
         self.exhausted = False
         self.finished = False
@@ -221,7 +240,13 @@ class DemandTelemetry:
                 self.output_event('visible_return', 'no_output')
                 self.visible_at = None
             record_metric(
-                EXHAUSTED_SESSIONS, {'demand_cohort': self.cohort, 'outcome': 'yes' if self.exhausted else 'no'}, 1
+                EXHAUSTED_SESSIONS,
+                {
+                    'demand_cohort': self.cohort,
+                    'outcome': 'yes' if self.exhausted else 'no',
+                    'ineligible_reason': self.ineligible_reason,
+                },
+                1,
             )
 
 
@@ -306,9 +331,9 @@ def create_wire_meter(provider: str, sample_rate: int, channels: int = 1):
         return None
 
 
-def attach_demand_telemetry(host, cohort: str):
+def attach_demand_telemetry(host, cohort: str, ineligible_reason: str | None = None):
     try:
-        telemetry = DemandTelemetry(cohort)
+        telemetry = DemandTelemetry(cohort, ineligible_reason)
         host.demand_telemetry = telemetry
         current_demand.set(telemetry)
         return telemetry
