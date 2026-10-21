@@ -390,7 +390,12 @@ piece as `transcribed` with no content, zero seconds and no usage charge
 (`settled_empty`), whether the same pass observes the checkpoint or a later pass
 resumes a `dispatched` receipt that carries it. It is never re-dispatched. A hold
 whose pieces all settle empty finalizes, settles its content ledger and purges
-like any fully successful recovery. If a call may have happened but no completion
+like any fully successful recovery. Only a validated success-shaped reply earns
+that checkpoint: the prerecorded adapters raise on a 2xx body that is not the
+provider's success shape (Parakeet without both `text` and `segments`, Modulate
+without an `utterances` list), so a JSON error envelope or partial payload is a
+provider failure with no completion checkpoint, and the dispatch stays ambiguous.
+If a call may have happened but no completion
 checkpoint exists, the piece waits 30 minutes. Then:
 
 1. A proof written in the **same transaction as conversation ingestion** identifies

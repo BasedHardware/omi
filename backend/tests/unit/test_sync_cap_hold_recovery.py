@@ -8,7 +8,10 @@ from tests.unit.fixtures.cap_rollout import full_cap_dispatch_rollout  # noqa: F
 
 import pytest
 
+from utils.stt import pre_recorded
+from utils.stt.outcomes import TranscriptionOutcome, failure_from_exception
 from utils.sync import cap_hold_recovery as recovery
+from utils.sync import cap_recovery_provider
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 
 
@@ -462,6 +465,119 @@ async def test_dispatched_receipt_without_completion_checkpoint_still_reconciles
     failed = state.row['piece_receipts']['p.wav']
     assert failed['state'] == 'failed_reconciliation' and failed['attempt'] == 2
     assert state.row['failed_reconciliation'] and state.row['retain_audio']
+    recovery.record_usage.assert_not_called()
+    assert [item.args[0] for item in recovery.record_reconciliation.call_args_list] == ['redispatched', 'failed']
+
+
+@pytest.mark.parametrize(
+    'provider,body',
+    [
+        ('parakeet', {'text': ''}),  # segments missing: previously parsed as no speech
+        ('parakeet', {'segments': []}),  # text missing: previously parsed as no speech
+        ('parakeet', {'detail': 'Model loading, try again shortly'}),
+        ('modulate', {'error': 'quota exceeded'}),  # utterances missing: previously parsed as no speech
+        ('modulate', {'utterances': None}),
+    ],
+)
+async def test_malformed_provider_body_leaves_no_empty_checkpoint_and_stays_reconcilable(
+    state, monkeypatch, provider, body
+):
+    """A 2xx body that is not the provider's success shape is an error, not a verdict.
+
+    The adapter raises, so cap_recovery_provider.transcribe never writes the
+    provider_empty completion checkpoint, _settled_empty stays false, and the
+    piece reconciles exactly like a lost reply instead of settling and purging.
+    """
+    key = ('users', 'synthetic', 'stt_cap_holds', 'hold')
+    summary = ('users', 'synthetic', 'stt_cap_hold_summary', 'current')
+    client = StrictFirestore(
+        {
+            key: {
+                'state': 'held',
+                'lease_until': 10_000_000,
+                'lease_token': 'owner-token',
+                'seconds': 0.16,
+                'piece_plan': {'p.wav': {'audio_path': 'retained-piece', 'seconds': 0.112}},
+            },
+            summary: {'version': 2, 'seconds': 20.112, 'count': 2},
+        }
+    )
+    ref = client.document('/'.join(key))
+    clock = [100.0]
+    monkeypatch.setattr(recovery.time, 'time', lambda: clock[0])
+    monkeypatch.setattr(recovery.cap_hold, 'get_firestore_client', lambda: client)
+    monkeypatch.setattr(recovery.cap_hold, 'external_write_fence', lambda _: nullcontext())
+    monkeypatch.setattr(recovery.cap_hold, 'checkpoint', state.checkpoint)
+    monkeypatch.setattr(recovery.sync_cap_recovery, 'get_firestore_client', lambda: client)
+    monkeypatch.setattr(recovery.sync_cap_recovery, 'external_write_fence', lambda uid, **_: nullcontext())
+    monkeypatch.setattr(recovery, 'record_reconciliation', Mock())
+    state.snapshot.reference = ref
+
+    # The real adapter behind a 2xx reply whose body is not the success shape.
+    monkeypatch.setenv('MODULATE_API_KEY', 'synthetic')
+    monkeypatch.setenv('HOSTED_PARAKEET_API_URL', 'http://127.0.0.1:1')
+    reply = Mock()
+    reply.status_code = 200
+    reply.raise_for_status = Mock()
+    reply.json.return_value = body
+    http = Mock()
+    http.__enter__ = Mock(return_value=http)
+    http.__exit__ = Mock(return_value=False)
+    http.post.return_value = reply
+    monkeypatch.setattr(pre_recorded.httpx, 'Client', Mock(return_value=http))
+    adapter = (
+        pre_recorded.modulate_prerecorded_from_bytes
+        if provider == 'modulate'
+        else pre_recorded.parakeet_prerecorded_from_bytes
+    )
+    failures = []
+
+    def malformed_reply(path, uid, response, lock, errors, *args, **kwargs):
+        # process_segment's provider_call phase: the fenced dispatch starts, the
+        # adapter raises on the body, and the handler records a failure.
+        kwargs['deferred_outcome']['provider_called'] = True
+        try:
+            cap_recovery_provider.transcribe(
+                uid, kwargs['cap_recovery_checkpoint'], adapter, b'pcm', diarize=False, return_language=True
+            )
+        except RuntimeError as error:
+            failure = failure_from_exception(error, provider=provider)
+            failures.append(failure)
+            errors.append(failure.error_code)
+            return False
+        raise AssertionError('a malformed body must not come back as words')
+
+    recovery.process_segment.side_effect = malformed_reply
+    assert not await recovery._recover_row('synthetic', state.snapshot, ref.get().to_dict())
+    assert http.post.call_count == 1  # Held dispatch: no nested paid retry on the bad body.
+    assert failures[0].outcome == TranscriptionOutcome.UPSTREAM_ERROR and failures[0].retryable
+    row = client.rows[key]
+    receipt = row['piece_receipts']['p.wav']
+    assert receipt['state'] == 'dispatched' and receipt['attempt'] == 1
+    assert 'provider_started_at' in receipt
+    assert 'provider_empty' not in receipt and 'provider_completed_at' not in receipt
+    assert 'provider_result' not in receipt
+    assert not row.get('processed_paths') and not row.get('finalized_paths') and not row.get('finalized')
+    assert client.rows[summary] == {'version': 2, 'seconds': pytest.approx(20.112), 'count': 2}
+    recovery.record_usage.assert_not_called()
+    recovery.finalize_recovered_sync_segment.assert_not_called()
+    recovery.record_reconciliation.assert_not_called()
+
+    # Then the ordinary lost-reply path: cooldown, no ingest proof, one
+    # re-dispatch (same bad body), then failed_reconciliation with audio retained.
+    clock[0] = 1901.0
+    assert not await recovery._recover_row('synthetic', state.snapshot, ref.get().to_dict())
+    assert http.post.call_count == 2
+    redispatched = client.rows[key]['piece_receipts']['p.wav']
+    assert redispatched['state'] == 'dispatched' and redispatched['attempt'] == 2
+    assert 'provider_empty' not in redispatched and 'provider_completed_at' not in redispatched
+    clock[0] = 3702.0
+    assert await recovery._recover_row('synthetic', state.snapshot, ref.get().to_dict())
+    assert http.post.call_count == 2
+    row = client.rows[key]
+    failed = row['piece_receipts']['p.wav']
+    assert failed['state'] == 'failed_reconciliation' and failed['attempt'] == 2
+    assert row['failed_reconciliation'] and row['retain_audio']
     recovery.record_usage.assert_not_called()
     assert [item.args[0] for item in recovery.record_reconciliation.call_args_list] == ['redispatched', 'failed']
 

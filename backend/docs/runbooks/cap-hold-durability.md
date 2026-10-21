@@ -143,6 +143,10 @@ usage key. An empty response is checkpointed as `provider_empty` with
 fenced checkpoint proves the vendor finished, recovery settles the piece as a
 transcribed, no-content receipt (`settled_empty`) with no usage and no second
 dispatch, on the same pass or when a later pass resumes the `dispatched` receipt.
+The checkpoint is written only for a reply the adapter validated as the
+provider's success shape with zero words; a 2xx body that is missing or mistypes
+those fields raises inside the adapter, so no completion checkpoint exists and
+the dispatch takes the ambiguous path below rather than settling and purging.
 
 Caching measures the **whole proposed Firestore document** using the installed
 SDK encoded-map Value envelope, including existing encrypted results, plan and

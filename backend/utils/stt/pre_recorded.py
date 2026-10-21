@@ -599,7 +599,15 @@ def modulate_prerecorded_from_bytes(
         response.raise_for_status()
         result = response.json()
 
-        utterances = result.get('utterances', [])
+        # Velma's batch success shape is an utterances list, empty for silence
+        # ({"utterances": []}). A 2xx body without that list (a JSON error envelope,
+        # a null, a bare string) is not a no-speech verdict. Raise so callers keep
+        # the audio as retry material and held-piece recovery never checkpoints the
+        # reply as a completed empty result. See #23081.
+        if not isinstance(result, dict) or not isinstance(result.get('utterances'), list):
+            raise RuntimeError('Modulate response must carry an utterances list')
+
+        utterances = result['utterances']
         if not utterances:
             if return_language:
                 return [], language or 'multi'
@@ -876,17 +884,24 @@ def parakeet_prerecorded_from_bytes(
         payload: Any = response.json()
 
         # A Parakeet result always carries both keys, even for silence ({"text": "",
-        # "segments": []}). A 200 body with neither key is a degraded or foreign
-        # responder (misrouted ILB, proxy error shell), not a no-speech verdict. Raise
-        # so the sync job stays truthful and clients keep the audio as retry material
-        # instead of marking the WAL synced and discarding it. See #9586.
-        if not isinstance(payload, dict) or ('segments' not in payload and 'text' not in payload):
-            raise RuntimeError('Parakeet response contained neither segments nor text')
+        # "segments": []}). A 200 body missing either key, or carrying them with the
+        # wrong type, is a degraded or foreign responder (misrouted ILB, proxy error
+        # shell, partial envelope), not a no-speech verdict. Raise so the sync job
+        # stays truthful, clients keep the audio as retry material instead of
+        # marking the WAL synced and discarding it, and held-piece recovery never
+        # checkpoints the reply as a completed empty result. See #9586, #23081.
+        if not isinstance(payload, dict) or 'segments' not in payload or 'text' not in payload:
+            raise RuntimeError('Parakeet response must carry both segments and text')
 
         result: Dict[str, Any] = cast(Dict[str, Any], payload)
-        raw_segments = result.get('segments', [])
-        segments: List[Dict[str, Any]] = list(raw_segments) if isinstance(raw_segments, list) else []  # type: ignore[reportUnknownArgumentType]  # untyped external JSON
-        full_text = (result.get('text') or '').strip()
+        raw_segments = result['segments']
+        if not isinstance(raw_segments, list):
+            raise RuntimeError('Parakeet response segments must be a list')
+        raw_text = result['text']
+        if raw_text is not None and not isinstance(raw_text, str):
+            raise RuntimeError('Parakeet response text must be a string')
+        segments: List[Dict[str, Any]] = list(raw_segments)  # type: ignore[reportUnknownArgumentType]  # untyped external JSON
+        full_text = (raw_text or '').strip()
 
         if not segments and not full_text:
             if return_language:
