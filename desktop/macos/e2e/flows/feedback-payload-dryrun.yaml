@@ -37,5 +37,5 @@ steps:
     name: No real feedback submission was logged
     log.expect:
       absent:
-        - "User report recorded locally"
+        - "User report saved locally"
         - "DesktopAutomationBridge: failed"

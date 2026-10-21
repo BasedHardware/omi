@@ -61,6 +61,7 @@ struct FeedbackView: View {
   @State private var isSubmitting: Bool = false
   @State private var showSuccess: Bool = false
   @State private var savedReportPath: String?
+  @State private var savedReportIncludesDiagnostics = false
 
   init(userEmail: String?, onDismiss: @escaping () -> Void) {
     self.userEmail = userEmail
@@ -85,7 +86,9 @@ struct FeedbackView: View {
 
           if let savedReportPath {
             Text(
-              "Nothing was sent over the network. The report (your note plus redacted diagnostics) is saved at:\n\(savedReportPath)"
+              savedReportIncludesDiagnostics
+                ? "Nothing was sent over the network. The report (your note plus redacted diagnostics) is saved at:\n\(savedReportPath)"
+                : "Nothing was sent over the network. Your note was saved at:\n\(savedReportPath)\n\nRedacted diagnostics could not be generated — use \"Save Diagnostics…\" to capture them."
             )
             .inkStyle(.prose, color: Ink.secondary)
             .textSelection(.enabled)
@@ -161,17 +164,26 @@ struct FeedbackView: View {
     .inkGlassPanel(cornerRadius: 0, shadow: nil)
   }
 
+  /// A persisted report plus whether the redacted diagnostics bundle made it
+  /// into the file. `diagnosticsIncluded == false` is a partial success the
+  /// confirmation sheet must disclose, never paper over.
+  struct PersistedReport: Equatable {
+    let url: URL
+    let diagnosticsIncluded: Bool
+  }
+
   /// Write the report (note + redacted diagnostics bundle) under
   /// `Application Support/<bundle>/Feedback Reports/` so the user keeps a
   /// durable, shareable copy on their own machine. Best-effort: returns nil
-  /// when the write fails.
+  /// when the write fails, and flags a note-only file when the diagnostics
+  /// bundle could not be generated or read.
   @discardableResult
   private static func persistLocalReport(
     title: String,
     note: String,
     name: String,
     email: String
-  ) -> URL? {
+  ) -> PersistedReport? {
     let fileManager = FileManager.default
     let applicationSupport =
       fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
@@ -195,6 +207,7 @@ struct FeedbackView: View {
       if !name.isEmpty { text += "name: \(name)\n" }
       if !email.isEmpty { text += "email: \(email)\n" }
       text += "\n\(note)\n"
+      var diagnosticsIncluded = false
       if let diagnosticsURL = DesktopDiagnosticsManager.shared.writeIncidentDiagnosticsAttachment(
         area: "other",
         failureClass: "user_report",
@@ -207,10 +220,15 @@ struct FeedbackView: View {
           text += "\n--- redacted diagnostics (desktop_diagnostics.json) ---\n"
           text += diagnosticsText
           text += "\n"
+          diagnosticsIncluded = true
+        } else {
+          logError("Feedback report: diagnostics bundle was unreadable; saving note-only")
         }
+      } else {
+        logError("Feedback report: diagnostics bundle could not be generated; saving note-only")
       }
       try text.data(using: .utf8)?.write(to: target, options: .atomic)
-      return target
+      return PersistedReport(url: target, diagnosticsIncluded: diagnosticsIncluded)
     } catch {
       logError("Failed to persist local feedback report", error: error)
       return nil
@@ -235,14 +253,17 @@ struct FeedbackView: View {
       name: name,
       email: email)
     if let savedReportURL {
-      log("User report saved locally: \(savedReportURL.path)")
+      log(
+        "User report saved locally: \(savedReportURL.url.path) diagnostics=\(savedReportURL.diagnosticsIncluded)"
+      )
     } else {
       logError("User report could not be saved locally")
     }
 
     // Show success
     OmiMotion.withGated {
-      savedReportPath = savedReportURL?.path
+      savedReportPath = savedReportURL?.url.path
+      savedReportIncludesDiagnostics = savedReportURL?.diagnosticsIncluded ?? false
       showSuccess = true
       isSubmitting = false
     }
