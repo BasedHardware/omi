@@ -19,7 +19,7 @@ from utils.observability.demand_cohort import record_metric
 from utils.observability.demand_cohort import DEMAND_COHORTS, FAILURE_DETAIL, current_demand
 from utils.observability.routing_cohort import current_routing_cohort
 from utils.stt.failure_diagnostics import CONNECTION_LOSS_CAUSES
-from utils.stt.live_reason import LIVE_STT_REASONS
+from utils.stt.live_reason import LIVE_STT_FAILURE_REASONS, LIVE_STT_REASONS
 
 logger = logging.getLogger(__name__)
 
@@ -386,9 +386,22 @@ def safe_label(value: object, *, default: str = 'unknown') -> str:
 
 
 def initialize_live_stt_exhausted_children() -> None:
-    """Expose zero before the first burst so increase() can observe it."""
+    """Expose zero before the first burst so increase() can observe it.
+
+    The full provider x replacement x reason matrix is deliberate: increase()
+    cannot observe a one-off burst on a lazily created counter (its first sample
+    already holds the burst, and the flat tail reads as zero), and the
+    retired-provider and capacity_full-by-to_mode alerts select across the whole
+    from x to x reason product over 6h windows. Each series costs one entry per
+    listen/pusher/gateway pod and per Cloud Run instance, so shrink this only by
+    shrinking the reason vocabulary itself, never by dropping combinations.
+
+    'text' and 'no_text' are transcript-outcome tokens, never fallback reasons,
+    so they stay out of the baseline (they were silently adding 2 x 24 series
+    per emitter).
+    """
     providers = ('parakeet', 'modulate', 'soniox', 'deepgram')
-    reasons = LIVE_STT_REASONS | {'auth', 'quota', 'last_resort', 'config_incomplete'}
+    reasons = LIVE_STT_FAILURE_REASONS | {'auth', 'quota', 'last_resort', 'config_incomplete'}
     for reason in sorted(reasons):
         for provider in providers:
             for replacement in providers:
