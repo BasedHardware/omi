@@ -84,6 +84,8 @@ def _log_pass_failure(exc, *, stage):
 
 
 MINUTE_HEADROOM_RETRIES = 3
+CAPACITY_CALL_RETRIES = 5
+CAPACITY_RETRY_HEADROOM_SECONDS = 20
 PROVIDER_STOP_CODES = frozenset({'dream_gateway_rejected', 'dream_gateway_failure'})
 # A billed but unusable model reply late in a pass; staged work is still verified.
 MODEL_OUTPUT_STOP_CODES = frozenset({'dream_response_truncated', 'dream_invalid_tool_calls'})
@@ -260,6 +262,26 @@ async def run_session(
     budget_notice_sent = False
 
     async def invoke(lane, mount, messages):
+        for attempt in range(CAPACITY_CALL_RETRIES + 1):
+            try:
+                return await invoke_once(lane, mount, messages)
+            except dream_harness_transport.CapacityWait as exc:
+                if not exc.retryable or attempt == CAPACITY_CALL_RETRIES:
+                    raise
+                await active()
+                mode, allowlisted = admission_for(uid)
+                if not await dream_capacity.wait_for_capacity(
+                    deadline,
+                    CAPACITY_RETRY_HEADROOM_SECONDS,
+                    mode=mode,
+                    owner_allowlisted=allowlisted,
+                ):
+                    raise
+                logger.info('Dream capacity retry lane=%s attempt=%d', lane, attempt + 1)
+                # invoke_once rechecks the kill switch/lease and reserves this attempt.
+                # The shaped loop retains history, tool results and staged proposals.
+
+    async def invoke_once(lane, mount, messages):
         nonlocal budget_notice_sent, stage
         await active()
         stage = 'request_sizing'
@@ -844,7 +866,7 @@ async def drain(*, limit=5000):
                         results.append(report)
                         if report['status'] != 'waiting':
                             break
-                        await asyncio.sleep(60)
+                        await asyncio.sleep(dream_capacity.COOLDOWN_SECONDS)
 
             async with asyncio.TaskGroup() as group:
                 for _ in range(concurrency()):

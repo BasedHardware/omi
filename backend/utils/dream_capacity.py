@@ -4,6 +4,7 @@ import asyncio
 import json
 import logging
 import os
+import random
 import time
 from dataclasses import dataclass, field
 from functools import lru_cache
@@ -18,7 +19,7 @@ from llm_gateway.gateway.dream_lanes import DREAM_MODEL
 from utils.observability.fallback import record_fallback
 
 SLOT_SECONDS = 240
-COOLDOWN_SECONDS = 120
+COOLDOWN_SECONDS = RESERVATIONS[DREAM_MODEL].saturation_seconds
 RELEASE = "if redis.call('get',KEYS[1]) == ARGV[1] then return redis.call('del',KEYS[1]) else return 0 end"
 logger = logging.getLogger(__name__)
 
@@ -144,7 +145,7 @@ async def available_model(*, mode='reserved', owner_allowlisted=False):
 
 async def mark_saturated(model):
     if model in RESERVATIONS:
-        _local().cooldowns[model] = time.monotonic() + COOLDOWN_SECONDS
+        _local().cooldowns[model] = time.monotonic() + RESERVATIONS[model].saturation_seconds
         try:
             await reservation_state.record(model, 'dedicated', 429, None)
         except Exception:
@@ -159,15 +160,19 @@ async def mark_saturated(model):
 
 
 async def wait_for_capacity(deadline, required_seconds, *, clock=None, mode='reserved', owner_allowlisted=False):
-    """One cooldown, then recheck shared/local saturation; never outlive the pass."""
+    """Recheck with capped exponential jitter, keeping the caller's session and deadline."""
     clock = asyncio.get_running_loop().time if clock is None else clock
-    if deadline - clock() < COOLDOWN_SECONDS + required_seconds:
-        return False
-    await asyncio.sleep(COOLDOWN_SECONDS)
-    return (
-        deadline - clock() >= required_seconds
-        and await available_model(mode=mode, owner_allowlisted=owner_allowlisted) is not None
-    )
+    for attempt in range(6):
+        ceiling = min(30, COOLDOWN_SECONDS * 2**attempt)
+        pause = random.uniform(ceiling / 2, ceiling)
+        if deadline - clock() < pause + required_seconds:
+            return False
+        await asyncio.sleep(pause)
+        if deadline - clock() < required_seconds:
+            return False
+        if await available_model(mode=mode, owner_allowlisted=owner_allowlisted) is not None:
+            return True
+    return False
 
 
 def _release_local(token):

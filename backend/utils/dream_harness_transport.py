@@ -24,7 +24,9 @@ from utils.llm.shaped_agent import Turn, validate_output
 
 
 class CapacityWait(RuntimeError):
-    pass
+    def __init__(self, message='dream_capacity_wait', *, retryable=False):
+        super().__init__(message)
+        self.retryable = retryable
 
 
 class PreTokenFailure(RuntimeError):
@@ -134,6 +136,12 @@ def _apply_cost(turn, micro, status):
     turn.cost_status = status
 
 
+def _zero_turn():
+    turn = Turn(price_weighted_tokens=0)
+    _apply_cost(turn, 0, 'priced')
+    return turn
+
+
 def _price_aggregate(turn, aggregate, ceiling):
     attempts = aggregate.get('attempt_usage') if isinstance(aggregate, dict) else None
     if isinstance(attempts, list) and attempts:
@@ -236,7 +244,10 @@ async def model_turn(
     mode, allowlisted = admission_for(uid)
     model = await dream_capacity.available_model(mode=mode, owner_allowlisted=allowlisted)
     if model is None:
-        raise CapacityWait('dream_capacity_wait')
+        # No dispatch: release the caller's minute hold before it pauses/re-reserves.
+        if on_usage is not None:
+            await on_usage(_zero_turn())
+        raise CapacityWait('dream_capacity_wait', retryable=True)
     headers = llm_gateway_headers(feature='dream_agent')
     headers['X-Omi-User-Uid'] = uid
     request: dict[str, Any] = {
@@ -278,14 +289,19 @@ async def model_turn(
         aggregate = error_body.get('dream_usage')
         if isinstance(aggregate, dict):
             paid, unknown = turn_from_usage(aggregate, ceiling)
+            if usage_sink is not None:
+                usage_sink['usage_unknown'] = unknown > 0
             if on_usage is not None:
                 await on_usage(paid)
             known_zero = unknown == 0 and paid.accounted_tokens in (None, 0) and paid.tokens == 0
+        if known_zero and not isinstance(aggregate, dict) and on_usage is not None:
+            await on_usage(_zero_turn())
         if known_zero and usage_sink is not None:
             usage_sink['usage_unknown'] = False
         if response.status_code == 429 or failure in {'reserved_capacity_unavailable', 'provider_429_omi_paid'}:
             await dream_capacity.mark_saturated(model)
-            raise CapacityWait('dream_capacity_wait')
+            # Any billed/unknown aggregate was charged above before re-reserving a retry.
+            raise CapacityWait('dream_capacity_wait', retryable=True)
         if known_zero:
             raise PreTokenFailure('dream_gateway_rejected')
         raise RuntimeError('dream_gateway_failure')
