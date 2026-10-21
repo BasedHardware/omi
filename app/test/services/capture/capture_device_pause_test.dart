@@ -52,6 +52,10 @@ void main() {
   }
 
   test('batch-mode pause freezes the card timer and resume does not count the paused time', () async {
+    // The setUp world owns process-global state (SharedPreferences backing
+    // store, path_provider handler, WAL handles). Dispose it before booting a
+    // second world, or the harness retargets the first one onto the new state.
+    await world.dispose();
     final timerDirectory = await Directory.systemTemp.createTemp('capture_timer_');
     final timerWorld = await CaptureReplayWorld.boot(
       tempDir: timerDirectory,
