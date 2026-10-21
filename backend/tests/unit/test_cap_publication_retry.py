@@ -12,7 +12,14 @@ from threading import RLock
 from types import SimpleNamespace
 
 import pytest
-from google.api_core.exceptions import Aborted, AlreadyExists, DeadlineExceeded, InvalidArgument, ServiceUnavailable
+from google.api_core.exceptions import (
+    Aborted,
+    AlreadyExists,
+    DeadlineExceeded,
+    InvalidArgument,
+    ResourceExhausted,
+    ServiceUnavailable,
+)
 from google.cloud.firestore_v1.transforms import Increment
 
 from database._client import (
@@ -36,6 +43,8 @@ def _counter(outcome: str) -> float:
 def test_failure_reason_classifies_commit_deadline_and_unavailable():
     assert firestore_failure_reason(DeadlineExceeded('deadline')) == 'deadline_exceeded'
     assert firestore_failure_reason(ServiceUnavailable('unavailable')) == 'unavailable'
+    assert firestore_failure_reason(ResourceExhausted('429 Quota exceeded.')) == 'resource_exhausted'
+    assert is_retryable_firestore_transaction_error(ResourceExhausted('429 Quota exceeded.'))
     assert is_retryable_firestore_transaction_error(InvalidArgument(EXPIRED))
     assert is_retryable_firestore_transaction_error(Aborted('Too much contention on these documents.'))
     assert is_retryable_firestore_transaction_error(DeadlineExceeded('deadline'))
@@ -46,6 +55,19 @@ def test_failure_reason_classifies_commit_deadline_and_unavailable():
     assert not is_retryable_firestore_transaction_error(
         InvalidArgument('the document exceeds the maximum allowed size')
     )
+
+
+def test_default_run_transactional_does_not_retry_resource_exhausted():
+    calls = []
+
+    def operation(_tx):
+        calls.append(1)
+        raise ResourceExhausted('429 Quota exceeded.')
+
+    client = SimpleNamespace(transaction=lambda: object())
+    with pytest.raises(ResourceExhausted):
+        run_transactional(client, operation, sleep=lambda _delay: (_ for _ in ()).throw(AssertionError('slept')))
+    assert calls == [1]
 
 
 def test_default_run_transactional_does_not_retry_contention_or_sleep():
@@ -121,6 +143,8 @@ class _Transaction:
             raise DeadlineExceeded('deadline exceeded before the commit reply')
         if action == 'permanent':
             raise InvalidArgument('some other 400')
+        if action == 'throttle':
+            raise ResourceExhausted('429 Quota exceeded.')
         self._apply()
 
     def _apply(self) -> None:
@@ -398,6 +422,77 @@ def test_exhausted_retries_keep_the_fragment_staged_for_redrive(delays, store, t
     assert store.docs['summary']['seconds'] == 1
     assert store.docs[group.identity]['state'] == 'held'
     assert store.increments.count(('summary', 'count', 1.0)) == 1
+
+
+def test_resource_exhausted_retries_once_and_publishes_one_fragment(delays, store, tmp_path):
+    slept, locks = delays
+    path = tmp_path / 'fragment.opus'
+    path.write_bytes(b'opus')
+    group = Publication(UID)
+    _track(group, locks)
+    store.actions = ['throttle', 'ok']
+    fragment = Publication(UID)
+    before_ok = _counter('retried_ok')
+    row = live_cap_staging.append(
+        UID,
+        str(path),
+        group,
+        fragment,
+        {'timestamp': 1_700_000_000, 'sample_rate': 16000, 'source_frames': 16000, 'audio_codec': 'ogg_opus'},
+        1.0,
+    )
+    assert len(store.transactions) == 2
+    assert store.transactions[0] is not store.transactions[1]
+    assert store.applied == 1
+    assert [part['id'] for part in row['stage_parts']] == [fragment.identity]
+    assert _counter('retried_ok') == before_ok + 1
+    assert len(slept) == 1 and sum(slept) < 5
+    assert store.deletes == []
+
+
+def test_resource_exhausted_past_the_budget_stays_staged_for_one_redrive(delays, store, tmp_path, monkeypatch):
+    path = tmp_path / 'fragment.opus'
+    path.write_bytes(b'opus')
+    before_exhausted = _counter('exhausted')
+    before_ok = _counter('retried_ok')
+    group, fragment, row = _append(store, str(path), actions=['throttle', 'throttle', 'throttle'])
+    assert _counter('exhausted') == before_exhausted + 1
+    assert _counter('retried_ok') == before_ok
+    assert len(delays[0]) == 2 and sum(delays[0]) < 5
+    assert row['state'] == 'staging'
+    assert [part['id'] for part in row['stage_parts']] == [fragment.identity]
+    assert store.applied == 0
+    assert store.deletes == []
+    assert 'summary' not in store.docs
+    store.docs[group.identity]['writer_until'] = 0
+    store.actions = []
+    snap = SimpleNamespace(
+        id=group.identity,
+        reference=SimpleNamespace(path=f'users/{UID}/stt_cap_holds/{group.identity}'),
+    )
+    monkeypatch.setattr(cap_hold_redrive, 'enabled', lambda: True)
+    monkeypatch.setattr(cap_hold_redrive, 'execution_admission_configured', lambda: False)
+    monkeypatch.setattr(
+        cap_hold_redrive.store,
+        'fleet_snapshot',
+        lambda firestore_client=None: {
+            'pending_count': 1,
+            'pending_seconds': 1.0,
+            'oldest_listed_at': 1_700_000_000,
+            'undated_pending': 0,
+            'backlog_items': 0,
+        },
+    )
+    monkeypatch.setattr(
+        cap_hold_redrive.store,
+        'discover',
+        lambda kind: [snap] if kind == 'staging' else [],
+    )
+    assert __import__('asyncio').run(cap_hold_redrive.sweep())['sealed'] == 1
+    assert store.docs['summary']['count'] == 1
+    assert store.docs['summary']['seconds'] == 1
+    assert store.increments.count(('summary', 'count', 1.0)) == 1
+    assert store.increments.count(('summary', 'seconds', 1.0)) == 1
 
 
 def test_non_retryable_invalid_argument_is_not_retried(delays, store, tmp_path):

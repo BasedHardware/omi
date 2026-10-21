@@ -6,7 +6,7 @@ from threading import Lock
 from typing import Any, Callable
 
 import os
-from google.api_core.exceptions import Aborted, DeadlineExceeded, InvalidArgument, ServiceUnavailable
+from google.api_core.exceptions import Aborted, DeadlineExceeded, InvalidArgument, ResourceExhausted, ServiceUnavailable
 from google.cloud import firestore
 
 from database.document_ids import document_id_from_seed
@@ -358,8 +358,9 @@ def firestore_failure_reason(error: BaseException) -> str:
     Firestore error text names the rejected document by path, which carries the
     uid, so callers log this token (and ``firestore_document_kind``) instead.
     ``document_size_limit`` is permanent; ``expired_transaction``,
-    ``contention``, ``deadline_exceeded``, and ``unavailable`` are transient
-    and succeed on a later attempt.
+    ``contention``, ``deadline_exceeded``, ``unavailable``, and
+    ``resource_exhausted`` are transient and succeed on a later attempt.
+    ``resource_exhausted`` is retried only by the ``transient=True`` path.
     """
     if is_document_size_limit_error(error):
         return 'document_size_limit'
@@ -373,10 +374,16 @@ def firestore_failure_reason(error: BaseException) -> str:
         return 'deadline_exceeded'
     if isinstance(error, ServiceUnavailable):
         return 'unavailable'
+    if isinstance(error, ResourceExhausted):
+        return 'resource_exhausted'
     return 'other'
 
 
-_RETRYABLE_FIRESTORE_REASONS = frozenset({'expired_transaction', 'contention', 'deadline_exceeded', 'unavailable'})
+# Used only by the transient publication opt-in. The default transactional path
+# still retries an expired id alone and does not consult this set.
+_RETRYABLE_FIRESTORE_REASONS = frozenset(
+    {'expired_transaction', 'contention', 'deadline_exceeded', 'unavailable', 'resource_exhausted'}
+)
 
 
 def is_retryable_firestore_transaction_error(error: BaseException) -> bool:
@@ -384,9 +391,11 @@ def is_retryable_firestore_transaction_error(error: BaseException) -> bool:
 
     Composes ``firestore_failure_reason`` and ``is_permanent_firestore_write_rejection``.
     Expired transaction ids, contention (including the SDK's exhausted-commit
-    wrapper), ``DeadlineExceeded``, and ``ServiceUnavailable`` are retryable.
-    Any other ``InvalidArgument`` is not. The cause chain is walked because the
-    SDK wraps a spent ``Aborted`` retry in ``ValueError``.
+    wrapper), ``DeadlineExceeded``, ``ServiceUnavailable``, and
+    ``ResourceExhausted`` are retryable. Any other ``InvalidArgument`` is not.
+    The cause chain is walked because the SDK wraps a spent ``Aborted`` retry
+    in ``ValueError``. Callers that do not pass ``transient=True`` do not use
+    this predicate.
     """
     if is_permanent_firestore_write_rejection(error):
         return False
@@ -470,12 +479,13 @@ def run_transactional(
     expiry still replaces it with a new transaction under the existing attempt limit.
 
     ``transient=True`` is the idempotent-caller opt-in. It also restarts on contention,
-    ``DeadlineExceeded``, and ``ServiceUnavailable``, with equal-jitter backoff between
-    fresh transactions. A deadline at commit can be ambiguous, so the callable must
-    re-read and refuse a second increment. Backoff runs in this helper, after the
-    callable has returned, so a lock held only inside the callable is not held during
-    the sleep. The default path still retries only an expired transaction id and does
-    not sleep. ``outcome`` receives ``retried_ok`` or ``exhausted`` when set.
+    ``DeadlineExceeded``, ``ServiceUnavailable``, and ``ResourceExhausted``, with
+    equal-jitter backoff between fresh transactions. A deadline or a throttle at
+    commit can be ambiguous, so the callable must re-read and refuse a second
+    increment. Backoff runs in this helper, after the callable has returned, so a
+    lock held only inside the callable is not held during the sleep. The default
+    path still retries only an expired transaction id and does not sleep.
+    ``outcome`` receives ``retried_ok`` or ``exhausted`` when set.
     """
     predicate = is_retryable_firestore_transaction_error if transient else is_expired_transaction_error
     caught: tuple[type[BaseException], ...] | type[Exception] = Exception if transient else (InvalidArgument, Aborted)
