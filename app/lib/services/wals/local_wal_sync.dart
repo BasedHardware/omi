@@ -609,7 +609,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   }
 
   @override
-  Future onAudioCodecChanged(BleAudioCodec codec) async {
+  Future onAudioCodecChanged(BleAudioCodec codec, {({String id, String model})? deviceInfo}) async {
     final generation = _sessionGeneration;
     await _enqueueBuffer(() async {
       if (!_isCurrent(generation)) return;
@@ -621,6 +621,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
       _frames = [];
       _pendingPhoneOnly = false;
       _frameSynced = [];
+      if (deviceInfo != null) setDeviceInfo(deviceInfo.id, deviceInfo.model);
       _framesPerSecond = codec.getFramesPerSecond();
       _codec = codec;
       _sourceClockEpoch++;

@@ -2376,7 +2376,7 @@ class CaptureController extends ChangeNotifier
         _capture.stagedReadModel.callActive) {
       return;
     }
-    await _wal.getSyncs().phone.onAudioCodecChanged(codec);
+    await _wal.getSyncs().phone.onAudioCodecChanged(codec, deviceInfo: (id: deviceId, model: device.modelNumber));
     await _saveNativeBleStreamConfig(device, codec);
     if (_deviceIdentityStale(deviceRevision) || !_capture.stagedReadModel.pendantOwns) return;
     await _setIngressAuthorized(!_preferences.capturePolicy.muted);
@@ -2880,8 +2880,10 @@ class CaptureController extends ChangeNotifier
 
     _activeSource = PhoneMicSource();
     _phoneMicWalActive = true;
-    await _wal.getSyncs().phone.onAudioCodecChanged(BleAudioCodec.pcm16);
-    _wal.getSyncs().phone.setDeviceInfo('phone-mic', 'Phone Microphone');
+    await _wal.getSyncs().phone.onAudioCodecChanged(
+      BleAudioCodec.pcm16,
+      deviceInfo: (id: 'phone-mic', model: 'Phone Microphone'),
+    );
     setIsWalSupported(true);
 
     try {

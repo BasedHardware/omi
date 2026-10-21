@@ -96,8 +96,9 @@ abstract class LocalWalSync implements IWalSync {
   /// Matches frames by sync key (source-agnostic).
   void markFrameSynced(FrameSyncKey key);
 
-  /// Notify WAL that the audio codec has changed (resets frame state).
-  Future onAudioCodecChanged(BleAudioCodec codec);
+  /// Seal the old source before switching codec and optional device metadata.
+  /// Ingress arriving during the flush belongs to this new source.
+  Future onAudioCodecChanged(BleAudioCodec codec, {({String id, String model})? deviceInfo});
 
   /// Set device metadata for WAL file naming.
   void setDeviceInfo(String? deviceId, String? deviceModel);
