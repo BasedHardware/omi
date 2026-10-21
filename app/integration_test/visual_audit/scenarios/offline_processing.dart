@@ -287,9 +287,10 @@ final offlineProcessingScenarios = <AuditScenario>[
             _wal(_at(0, 11, 0), 110, WalStatus.miss, storage: WalStorage.sdcard),
           ]));
       expect(find.text('Catching up'), findsOneWidget);
-      expect(find.text('0 of 180 min'), findsOneWidget);
+      expect(find.byKey(const Key('device_catching_up_status')), findsOneWidget);
+      expect(find.byType(LinearProgressIndicator), findsNothing);
       expect(find.byKey(const Key('device_catching_up_span')), findsOneWidget);
-      await a.shot('Large backlog lives on Device with progress and its audio span');
+      await a.shot('Large backlog lives on Device with its status and audio span');
     },
   ),
   for (final multiple in [false, true])

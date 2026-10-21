@@ -18,7 +18,7 @@
     {
       "file": "003-mobile-android-device-large-backlog.png",
       "platform": "mobile-android",
-      "description": "Device: large waiting backlog, transfer progress, audio span and On the Way.",
+      "description": "Device: large waiting backlog, audio span and On the Way. Captured before the progress bar was removed (lead ruling d02cce); the bar and 'X of Y min' line no longer render.",
       "captured_by": "agent",
       "source": "visual-audit"
     },

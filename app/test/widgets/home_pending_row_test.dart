@@ -276,15 +276,6 @@ void main() {
       expect(find.text('All recordings are synced'), findsOneWidget);
     });
 
-    testWidgets('a synced first chunk does not hide the longer device source', (tester) async {
-      final chunk = _wal('twin', 1, WalStatus.synced);
-      final source = _wal('twin', 4, WalStatus.miss)..storage = WalStorage.sdcard;
-      await _pumpPage(tester, _FakeSync(wals: [chunk, source]));
-
-      expect(find.text('On your device'), findsOneWidget);
-      expect(find.text('All recordings are synced'), findsNothing);
-    });
-
     testWidgets('counts fragments of one recording as one row', (tester) async {
       final a = Wal(
         timerStart: 1000,

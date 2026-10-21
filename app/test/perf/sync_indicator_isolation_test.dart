@@ -15,6 +15,7 @@ import 'package:omi/models/sync_state.dart';
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/schema/pending_work.dart';
 import 'package:omi/services/pending_work/pending_work_store.dart';
+import 'package:omi/services/wals/sync_rate_limiter.dart' show RateLimitReason;
 import 'package:omi/pages/home/widgets/battery_info_widget.dart';
 import 'package:omi/pages/settings/device_settings.dart';
 import 'package:omi/pages/settings/device/device_live_sections.dart';
@@ -96,6 +97,11 @@ class _Sync extends ChangeNotifier implements SyncProvider {
   final wals = <Wal>[];
   @override
   int get missingWalsInSeconds => 0;
+  // The device card's status line reads the rate-limit state; this fake is never limited.
+  @override
+  bool get isRateLimited => false;
+  @override
+  RateLimitReason? get rateLimitReason => null;
   void tick() => notifyListeners();
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
@@ -320,8 +326,7 @@ void main() {
     sync.tick();
     await tester.pump();
     expect(find.byKey(const Key('device_right_now_catching_up')), findsOneWidget);
-    expect(tester.widget<DeviceRightNowGroup>(find.byType(DeviceRightNowGroup)).catchingUp?.progress,
-        (doneSeconds: 0, totalSeconds: 600));
+    expect(tester.widget<DeviceRightNowGroup>(find.byType(DeviceRightNowGroup)).catchingUp?.status, isNotEmpty);
     expect(tester.widget<DeviceStatsRow>(find.byType(DeviceStatsRow)).onDeviceSeconds, 600);
     sync.active = false;
     sync.tick();

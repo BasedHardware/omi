@@ -10,6 +10,7 @@ import 'package:omi/pages/conversations/sync_cooldown_copy.dart';
 import 'package:omi/pages/conversations/sync_page.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
+import 'package:omi/services/wals/sync_rate_limiter.dart' show RateLimitReason;
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -43,59 +44,25 @@ abstract final class SyncPendingWork {
   static bool shouldShow(SyncProvider p) => hasServerJobs(p) || p.allWals.any(isPendingWal);
 
   /// Ids of device recordings whose phone copy already moved on: lagging
-  /// bookkeeping, not audio still on the device. A phone copy stands for its
-  /// source only once its pieces cover the whole recording — whether they are
-  /// still transcribing (`uploaded`) or already done (`synced`) — because a
-  /// first chunk of a longer file leaves real audio on the device that On the
-  /// Way and the device card must still show. Chunks after the first carry a
-  /// later start and so a different id, which is why coverage follows the
-  /// source's recording span, not just the id.
-  static Set<String> hiddenDeviceTwinIds(List<Wal> wals) {
-    final candidates = <Wal>[];
-    var minStart = -1, maxEnd = 0;
-    for (final w in wals) {
-      if (w.status != WalStatus.miss || !walIsOnDevice(w)) continue;
-      candidates.add(w);
-      final end = w.timerStart + (w.seconds > 0 ? w.seconds : 0);
-      if (minStart < 0 || w.timerStart < minStart) minStart = w.timerStart;
-      if (end > maxEnd) maxEnd = end;
-    }
-    if (candidates.isEmpty) return const {};
-    final coveredSeconds = <String, int>{};
-    for (final w in wals) {
-      if (walIsOnDevice(w)) continue;
-      if (w.status != WalStatus.uploaded && w.status != WalStatus.synced) continue;
-      // Old synced history predates any current backlog; one window check keeps
-      // this pass linear for large inventories.
-      if (w.timerStart < minStart || w.timerStart > maxEnd) continue;
-      final seconds = w.seconds > 0 ? w.seconds : 0;
-      final drainPiece = w.originalStorage != null && w.originalStorage != WalStorage.disk;
-      for (final src in candidates) {
-        if (src.device != w.device) continue;
-        if (w.id != src.id && !drainPiece) continue;
-        final end = src.timerStart + (src.seconds > 0 ? src.seconds : 0);
-        if (w.timerStart >= src.timerStart && w.timerStart <= end) {
-          coveredSeconds[src.id] = (coveredSeconds[src.id] ?? 0) + seconds;
-        }
-      }
-    }
-    if (coveredSeconds.isEmpty) return const {};
-    final hidden = <String>{};
-    for (final src in candidates) {
-      final seconds = src.seconds > 0 ? src.seconds : 0;
-      if ((coveredSeconds[src.id] ?? 0) >= seconds) hidden.add(src.id);
-    }
-    return hidden;
-  }
+  /// bookkeeping, not audio still on the device.
+  static Set<String> hiddenDeviceTwinIds(List<Wal> wals) => wals
+      .where((w) => !walIsOnDevice(w) && (w.status == WalStatus.uploaded || w.status == WalStatus.synced))
+      .map((w) => w.id)
+      .toSet();
 
   /// Recordings uploaded and being transcribed on the server.
   static List<Wal> uploaded(SyncProvider p) =>
       p.displaySortedWals.where((w) => w.status == WalStatus.uploaded).toList(growable: false);
 
   /// Recordings still on the device or the phone, waiting for or in a sync.
-  static List<Wal> syncing(SyncProvider p) {
-    final hidden = hiddenDeviceTwinIds(p.allWals);
-    final pending = p.displaySortedWals.where((w) => isPendingWal(w) && !hidden.contains(w.id)).toList(growable: false);
+  static List<Wal> syncing(SyncProvider p) => syncingOf(p.displaySortedWals);
+
+  /// The rows [syncing] lists, from any ordering of the inventory: the device
+  /// card reads the unsorted index and must show exactly what On the Way shows.
+  static List<Wal> syncingOf(List<Wal> wals) {
+    final hidden = hiddenDeviceTwinIds(wals);
+    final pending =
+        wals.where((w) => isPendingWal(w) && !(walIsOnDevice(w) && hidden.contains(w.id))).toList(growable: false);
     final sources = pending.where(walIsOnDevice).toList(growable: false);
     if (sources.isEmpty) return pending;
     // A device drain copies a recording to the phone piece by piece and keeps the source until the
@@ -104,21 +71,15 @@ abstract final class SyncPendingWork {
     return pending.where((w) => !_isPieceOfSource(w, sources)).toList(growable: false);
   }
 
-  /// The visible device source a phone piece was copied from, if any: the
-  /// piece's original storage is on-device and its start falls inside the
-  /// source's recording span. Shared by On the Way's row list and the device
-  /// card so both fold pieces into their source the same way.
-  static Wal? sourceOfPiece(Wal w, Iterable<Wal> sources) {
-    if (walIsOnDevice(w) || w.originalStorage == null || w.originalStorage == WalStorage.disk) return null;
+  static bool _isPieceOfSource(Wal w, List<Wal> sources) {
+    if (walIsOnDevice(w) || w.originalStorage == null || w.originalStorage == WalStorage.disk) return false;
     for (final src in sources) {
       if (src.device != w.device) continue;
       final end = src.timerStart + (src.seconds > 0 ? src.seconds : 0);
-      if (w.timerStart >= src.timerStart && w.timerStart <= end) return src;
+      if (w.timerStart >= src.timerStart && w.timerStart <= end) return true;
     }
-    return null;
+    return false;
   }
-
-  static bool _isPieceOfSource(Wal w, List<Wal> sources) => sourceOfPiece(w, sources) != null;
 
   static bool needsAttention(WalSyncDisplayState s) =>
       s == WalSyncDisplayState.failed ||
@@ -162,13 +123,28 @@ abstract final class SyncPendingWork {
   }
 
   /// Where the pending work is right now, in one short line.
-  static String stageLabel(SyncProvider p, AppLocalizations l) {
-    final s = p.syncState;
+  static String stageLabel(SyncProvider p, AppLocalizations l) => stageLabelFor(
+        p.syncState,
+        l,
+        rateLimited: p.isRateLimited,
+        rateLimitReason: p.isRateLimited ? p.rateLimitReason : null,
+        serverJobs: hasServerJobs(p),
+      );
+
+  /// [stageLabel] from its inputs, for a caller that already holds a memoized
+  /// inventory snapshot and must not rescan the WAL list on every notify.
+  static String stageLabelFor(
+    SyncState s,
+    AppLocalizations l, {
+    required bool rateLimited,
+    required RateLimitReason? rateLimitReason,
+    required bool serverJobs,
+  }) {
     final active = s.isSyncing && !s.isFetchingConversations;
     // Device downloads run through an upload cooldown (pulling audio uses no upload quota), so a
     // download in progress is reported as itself, not as the cooldown.
     if (active && s.phase == SyncPhase.downloadingFromDevice) return l.syncCardDownloadingTitle;
-    if (p.isRateLimited) return syncCooldownTitle(p.rateLimitReason, l);
+    if (rateLimited) return syncCooldownTitle(rateLimitReason, l);
     if (active) {
       switch (s.phase) {
         case SyncPhase.downloadingFromDevice:
@@ -182,7 +158,7 @@ abstract final class SyncPendingWork {
           break;
       }
     }
-    if (hasServerJobs(p)) return l.transcribing;
+    if (serverJobs) return l.transcribing;
     return l.syncStatusWaiting;
   }
 }

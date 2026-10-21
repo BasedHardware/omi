@@ -138,10 +138,12 @@ void main() {
     return store;
   }
 
-  testWidgets('large idle backlog has progress, audio span and reachable On the Way', (tester) async {
+  testWidgets('large idle backlog shows its status, audio span and reachable On the Way, with no bar', (tester) async {
     await pump(tester, _Sync(wals: [_wal()]));
     expect(find.text('Catching up'), findsOneWidget);
-    expect(find.text('0 of 180 min'), findsOneWidget);
+    expect(find.text('Waiting to sync'), findsOneWidget);
+    expect(find.textContaining(' of '), findsNothing);
+    expect(find.byType(LinearProgressIndicator), findsNothing);
     expect(find.byKey(const Key('device_catching_up_span')), findsOneWidget);
     expect(tester.widget<Text>(find.byKey(const Key('device_catching_up_span'))).data, contains('11'));
     expect(find.byKey(const Key('device_catching_up_targets')), findsNothing);
@@ -177,7 +179,7 @@ void main() {
       await tester.pump();
       expect(find.text('Catching up'), findsOneWidget);
       expect(find.text('Processing'), findsOneWidget);
-      expect(tester.widget<LinearProgressIndicator>(find.byType(LinearProgressIndicator)).value, isNull);
+      expect(find.byType(LinearProgressIndicator), findsNothing);
       expect(find.byKey(const Key('device_catching_up_span')), findsOneWidget);
       if (ids.isNotEmpty) expect(find.text('2 conversations · Conversation a · Conversation b'), findsOneWidget);
       await tester.tap(find.byKey(const Key('device_catching_up_on_the_way')));
@@ -217,59 +219,13 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('a synced first chunk keeps the card on its longer device source', (tester) async {
-    final chunk = _wal(minutes: 1, status: WalStatus.synced)..storage = WalStorage.disk;
-    final source = _wal(minutes: 4);
-    await pump(tester, _Sync(wals: [chunk, source]));
-    expect(find.text('Catching up'), findsOneWidget);
-    expect(find.text('0 of 4 min'), findsOneWidget);
-    await tester.tap(find.byKey(const Key('device_catching_up_on_the_way')));
-    await tester.pumpAndSettle();
-    expect(find.text('All recordings are synced'), findsNothing);
-    await tester.pumpWidget(const SizedBox.shrink());
-  });
-
-  testWidgets('an uploaded first chunk keeps its longer device source measurable', (tester) async {
-    final chunk = _wal(minutes: 1, status: WalStatus.uploaded)
-      ..storage = WalStorage.disk
-      ..originalStorage = WalStorage.sdcard;
-    final source = _wal(minutes: 180);
-    await pump(tester, _Sync(wals: [chunk, source]));
-    expect(find.text('Catching up'), findsOneWidget);
-    expect(find.text('1 of 180 min'), findsOneWidget);
-    expect(find.text('Processing'), findsNothing);
-    await tester.pumpWidget(const SizedBox.shrink());
-  });
-
-  testWidgets('copied pieces move progress without inflating the source total', (tester) async {
-    final piece = _wal(minutes: 15)
-      ..storage = WalStorage.disk
-      ..originalStorage = WalStorage.sdcard;
-    final source = _wal(minutes: 20);
-    await pump(tester, _Sync(wals: [piece, source]));
-    expect(find.text('Catching up'), findsOneWidget);
-    expect(find.text('15 of 20 min'), findsOneWidget);
-    await tester.pumpWidget(const SizedBox.shrink());
-  });
-
-  testWidgets('phone-only waiting audio is measured from zero, not as moved', (tester) async {
+  testWidgets('phone-only waiting audio shows the waiting status, with no bar', (tester) async {
     final phone = _wal(minutes: 180)..storage = WalStorage.disk;
     await pump(tester, _Sync(wals: [phone]));
     expect(find.text('Catching up'), findsOneWidget);
-    expect(find.text('0 of 180 min'), findsOneWidget);
+    expect(find.text('Waiting to sync'), findsOneWidget);
     expect(find.text('Processing'), findsNothing);
-    expect(tester.widget<LinearProgressIndicator>(find.byType(LinearProgressIndicator)).value, 0.0);
-    await tester.pumpWidget(const SizedBox.shrink());
-  });
-
-  testWidgets('a synced drain chunk keeps its progress instead of rewinding', (tester) async {
-    final chunk = _wal(minutes: 15, status: WalStatus.synced)
-      ..storage = WalStorage.disk
-      ..originalStorage = WalStorage.sdcard;
-    final source = _wal(minutes: 20);
-    await pump(tester, _Sync(wals: [chunk, source]));
-    expect(find.text('Catching up'), findsOneWidget);
-    expect(find.text('15 of 20 min'), findsOneWidget);
+    expect(find.byType(LinearProgressIndicator), findsNothing);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
@@ -287,14 +243,18 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('retry-exhausted audio does not count toward the progress total', (tester) async {
+  testWidgets('retry-exhausted audio never holds the card on its own', (tester) async {
     final failed = _wal(minutes: 180)
       ..retryCount = 99
       ..timerStart += 60;
     final waiting = _wal(minutes: 1);
-    await pump(tester, _Sync(wals: [failed, waiting]));
+    final sync = _Sync(wals: [failed, waiting]);
+    await pump(tester, sync);
     expect(find.text('Catching up'), findsOneWidget);
-    expect(find.text('0 of 1 min'), findsOneWidget);
+    expect(find.text('Waiting to sync'), findsOneWidget);
+    sync.update([failed]);
+    await tester.pump();
+    expect(find.text('Catching up'), findsNothing);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
@@ -310,7 +270,7 @@ void main() {
                   child: SingleChildScrollView(
                       child: DeviceCatchingUpCard(
                     summary: const DeviceCatchUpSummary(
-                        progress: (doneSeconds: 240, totalSeconds: 10800),
+                        status: 'Waiting to sync',
                         targetIds: {'a', 'b'},
                         targetTitles: ['A very long conversation title', 'Another conversation']),
                     onOpen: () {},

@@ -12,10 +12,8 @@ import 'package:omi/utils/sync/offline_sync_amounts.dart';
 /// outside capture/episode listeners, so streaming metrics never rescan recording history.
 typedef DeviceCatchUpLocal = ({
   int onDeviceSeconds,
-  int onPhoneSeconds,
-  int totalSeconds,
-  int movedSeconds,
   bool hasPending,
+  bool hasUploaded,
   DateTime? start,
   DateTime? end,
   String targetIds,
@@ -27,71 +25,29 @@ DeviceCatchUpLocal deviceCatchUpLocal(List<Wal> wals) {
   // rescanning recording history on the UI isolate.
   final memo = _catchUpMemo[wals];
   if (memo != null && memo.$1 == wals.length) return memo.$2;
-  final hidden = SyncPendingWork.hiddenDeviceTwinIds(wals);
-  // The same rows On the Way lists: terminal recordings belong to the bell, and
-  // a hidden twin is bookkeeping lag, not audio waiting anywhere. A drain's
-  // copied pieces fold into their source exactly as On the Way groups them, so
-  // they never count twice: the source stands for the whole recording, and each
-  // piece counts once as audio that already left the device.
-  final sources = wals
-      .where((w) => walIsOnDevice(w) && SyncPendingWork.isPendingWal(w) && !hidden.contains(w.id))
-      .toList(growable: false);
-  final copiedBySource = <String, int>{};
+  // Exactly the rows On the Way lists, so the card can never open an empty page:
+  // terminal recordings belong to the bell, a lagging device twin is hidden, and
+  // a drain's copied pieces fold into their source.
+  final uploaded = wals.where((w) => w.status == WalStatus.uploaded).toList(growable: false);
+  final rows = [...uploaded, ...SyncPendingWork.syncingOf(wals)];
+  var onDeviceSeconds = 0;
   DateTime? start, end;
   final ids = <String>{};
-  var onDeviceSeconds = 0, onPhoneSeconds = 0, phoneRecordedSeconds = 0, processingSeconds = 0;
-  var hasPending = false;
-  for (final w in wals) {
-    final uploadedRow = w.status == WalStatus.uploaded;
-    final pendingRow = !uploadedRow && SyncPendingWork.isPendingWal(w) && !hidden.contains(w.id);
-    final syncedRow = w.status == WalStatus.synced;
-    if (!uploadedRow && !pendingRow && !syncedRow) continue;
-    final seconds = w.seconds > 0 ? w.seconds : 0;
-    // A synced piece of a still-visible source is moved audio inside the
-    // source's total; a synced recording that is nobody's piece is done and
-    // listed nowhere.
-    final source = !walIsOnDevice(w) ? SyncPendingWork.sourceOfPiece(w, sources) : null;
-    if (syncedRow && source == null) continue;
-    hasPending = true;
+  for (final w in rows) {
     if (w.conversationId case final id? when id.isNotEmpty) ids.add(id);
-    if (source != null) {
-      // A piece of a visible source: moved audio inside the source's own total.
-      copiedBySource[source.id] = (copiedBySource[source.id] ?? 0) + seconds;
-      continue;
-    }
-    if (w.timerStart > 0 && seconds > 0) {
-      final from = DateTime.fromMillisecondsSinceEpoch(w.timerStart * 1000);
-      final to = from.add(Duration(seconds: seconds));
-      if (start == null || from.isBefore(start)) start = from;
-      if (end == null || to.isAfter(end)) end = to;
-    }
-    if (uploadedRow) {
-      processingSeconds += seconds;
-    } else if (walIsOnDevice(w)) {
-      onDeviceSeconds += seconds;
-    } else if (w.originalStorage != null && w.originalStorage != WalStorage.disk) {
-      onPhoneSeconds += seconds;
-    } else {
-      phoneRecordedSeconds += seconds;
-    }
-  }
-  // Never claim more moved audio than the source recording holds.
-  var copiedSeconds = 0;
-  for (final source in sources) {
-    final copied = copiedBySource[source.id] ?? 0;
-    if (copied <= 0) continue;
-    final length = source.seconds > 0 ? source.seconds : 0;
-    copiedSeconds += length == 0 || copied < length ? copied : length;
+    if (w.seconds <= 0) continue;
+    if (walIsOnDevice(w)) onDeviceSeconds += w.seconds;
+    if (w.timerStart <= 0) continue;
+    final from = DateTime.fromMillisecondsSinceEpoch(w.timerStart * 1000);
+    final to = from.add(Duration(seconds: w.seconds));
+    if (start == null || from.isBefore(start)) start = from;
+    if (end == null || to.isAfter(end)) end = to;
   }
   final targets = ids.toList()..sort();
   final result = (
     onDeviceSeconds: onDeviceSeconds,
-    onPhoneSeconds: onPhoneSeconds + phoneRecordedSeconds,
-    totalSeconds: onDeviceSeconds + onPhoneSeconds + phoneRecordedSeconds + processingSeconds,
-    // Only audio that left device storage moves the bar: pieces copied or
-    // uploaded from a device. Phone-recorded audio is waiting, not moved.
-    movedSeconds: onPhoneSeconds + processingSeconds + copiedSeconds,
-    hasPending: hasPending,
+    hasPending: rows.isNotEmpty,
+    hasUploaded: uploaded.isNotEmpty,
     start: start,
     end: end,
     targetIds: targets.join('\n'),
@@ -103,10 +59,12 @@ DeviceCatchUpLocal deviceCatchUpLocal(List<Wal> wals) {
 final Expando<(int, DeviceCatchUpLocal)> _catchUpMemo = Expando('deviceCatchUpLocal');
 
 /// Local transfers and server work share a card, even after upload or before targets are known.
-/// Server totals can overlap local WALs, so they are never added to the local transfer denominator.
+/// Progress is deliberately indeterminate: a device drain's pieces, virtual source timestamps and
+/// shrinking on-device lengths make inventory arithmetic unreliable, so the card shows where the
+/// work is, not how far along it is.
 class DeviceCatchUpSummary {
   const DeviceCatchUpSummary({
-    this.progress,
+    required this.status,
     this.start,
     this.end,
     this.targetIds = const {},
@@ -116,6 +74,7 @@ class DeviceCatchUpSummary {
   static DeviceCatchUpSummary? from({
     required DeviceCatchUpLocal local,
     required bool serverProcessing,
+    required String status,
     required List<PendingWorkItem> pending,
     required List<ServerConversation> conversations,
     required List<ServerConversation> processing,
@@ -146,12 +105,7 @@ class DeviceCatchUpSummary {
       if (title.isNotEmpty) titles.add(title);
     }
     return DeviceCatchUpSummary(
-      // Transfer completion does not mean transcription is done, and server-only
-      // work has no measured local total: both stay indeterminate. Any forward-
-      // moving local audio — on the device or already on the phone — is measured.
-      progress: local.hasPending && local.onDeviceSeconds + local.onPhoneSeconds > 0 && local.totalSeconds > 0
-          ? (doneSeconds: local.movedSeconds, totalSeconds: local.totalSeconds)
-          : null,
+      status: status,
       start: start,
       end: end,
       targetIds: ids,
@@ -159,7 +113,8 @@ class DeviceCatchUpSummary {
     );
   }
 
-  final ({int doneSeconds, int totalSeconds})? progress;
+  /// Where the work is right now, in On the Way's words.
+  final String status;
   final DateTime? start;
   final DateTime? end;
   final Set<String> targetIds;
@@ -175,7 +130,6 @@ class DeviceCatchingUpCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    final progress = summary.progress;
     final dates = OmiDateFormat.of(context);
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: OmiSpacing.sm),
@@ -185,23 +139,9 @@ class DeviceCatchingUpCard extends StatelessWidget {
           Text(l10n.deviceCatchingUp, style: OmiType.callout),
           const SizedBox(height: OmiSpacing.xxs),
           Text(
-            progress == null
-                ? l10n.processing
-                : l10n.deviceCatchingUpProgress(
-                    (progress.doneSeconds / 60).floor(), (progress.totalSeconds / 60).ceil()),
+            summary.status,
+            key: const Key('device_catching_up_status'),
             style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
-          ),
-          const SizedBox(height: OmiSpacing.xs),
-          ClipRRect(
-            borderRadius: OmiRadius.pillAll,
-            child: LinearProgressIndicator(
-              value: progress == null || progress.totalSeconds <= 0
-                  ? null
-                  : (progress.doneSeconds / progress.totalSeconds).clamp(0.0, 1.0),
-              minHeight: 6,
-              backgroundColor: OmiColors.surface2,
-              color: OmiColors.accent,
-            ),
           ),
           if (summary.start != null && summary.end != null) ...[
             const SizedBox(height: OmiSpacing.xs),

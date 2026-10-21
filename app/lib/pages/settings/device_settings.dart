@@ -14,6 +14,7 @@ import 'package:omi/pages/conversations/on_the_way_page.dart';
 import 'package:omi/pages/settings/device/device_catching_up_card.dart';
 import 'package:omi/services/pending_work/pending_work_store.dart';
 import 'package:omi/pages/conversations/sync_page.dart';
+import 'package:omi/pages/conversations/sync_pending_work.dart';
 import 'package:omi/pages/home/firmware_update.dart';
 import 'package:omi/pages/home/omiglass_ota_update.dart';
 import 'package:omi/pages/onboarding/interactive_device_onboarding/interactive_device_onboarding_wrapper.dart';
@@ -670,10 +671,22 @@ extension _DeviceLiveSections on _DeviceSettingsState {
       // Capture/episode updates subscribe below this builder and never rescan it;
       // deviceCatchUpLocal memoizes on the WAL list identity, so a progress-only
       // notify reuses the last snapshot instead of rescanning, and the server
-      // flag selects on its own.
+      // flag and status line select on their own.
+      final l10n = context.l10n;
       final local =
           context.select<SyncProvider?, DeviceCatchUpLocal>((s) => deviceCatchUpLocal(s?.allWals ?? const []));
       final serverProcessing = context.select<SyncProvider?, bool>((s) => s?.syncState.isProcessing ?? false);
+      // The status line reads sync state only; whether server jobs exist comes
+      // from the memoized snapshot, so a progress tick never rescans the inventory.
+      final syncStatus = context.select<SyncProvider?, String>((s) => s == null
+          ? ''
+          : SyncPendingWork.stageLabelFor(
+              s.syncState,
+              l10n,
+              rateLimited: s.isRateLimited,
+              rateLimitReason: s.isRateLimited ? s.rateLimitReason : null,
+              serverJobs: local.hasUploaded || s.syncState.isProcessing,
+            ));
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -690,7 +703,8 @@ extension _DeviceLiveSections on _DeviceSettingsState {
           ListenableBuilder(
             listenable: _pendingWork,
             builder: (context, _) {
-              final rightNow = _rightNow(context, local: local, serverProcessing: serverProcessing);
+              final rightNow =
+                  _rightNow(context, local: local, serverProcessing: serverProcessing, syncStatus: syncStatus);
               return rightNow.hasContent ? Column(children: [rightNow, gap]) : const SizedBox.shrink();
             },
           ),
@@ -710,7 +724,7 @@ extension _DeviceLiveSections on _DeviceSettingsState {
   }
 
   DeviceRightNowGroup _rightNow(BuildContext context,
-      {required DeviceCatchUpLocal local, required bool serverProcessing}) {
+      {required DeviceCatchUpLocal local, required bool serverProcessing, required String syncStatus}) {
     final conversations = context.watch<ConversationProvider?>();
     final capture = context.read<CaptureProvider?>();
     // Only the visible source and running length depend on capture, not its
@@ -733,6 +747,9 @@ extension _DeviceLiveSections on _DeviceSettingsState {
       catchingUp: DeviceCatchUpSummary.from(
         local: local,
         serverProcessing: serverProcessing,
+        // Local or phone-run work reads On the Way's own stage; server work the
+        // phone did not start has no local stage to report.
+        status: local.hasPending || serverProcessing ? syncStatus : l10n.processing,
         pending: _pendingWork.pending,
         conversations: conversations?.conversations ?? const [],
         processing: conversations?.processingConversations ?? const [],
