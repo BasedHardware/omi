@@ -1038,7 +1038,7 @@ def test_flatten_cleanup_copies_donor_and_ancestor_audio_once(world, monkeypatch
         def blob(self, name):
             return _Blob(name)
 
-        def copy_blob(self, source_blob, bucket, new_path):
+        def copy_blob(self, source_blob, bucket, new_path, **preconditions):
             copied_paths.append(new_path)
             blobs[new_path] = True
 

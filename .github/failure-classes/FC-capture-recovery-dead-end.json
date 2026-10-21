@@ -10,9 +10,10 @@
   ],
   "evidence_prs": [],
   "scope_hints": [
-    "app/lib/pages/conversations/widgets/capture_recovery_banner.dart",
+    "app/lib/pages/conversation_capturing/capture_recovery_status.dart",
     "app/lib/pages/conversations/capture_state_labels.dart",
-    "app/lib/pages/conversation_capturing/"
+    "app/lib/pages/conversation_capturing/",
+    "app/lib/pages/episodes/"
   ],
   "status": "open"
 }

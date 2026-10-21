@@ -2070,7 +2070,7 @@ def _apply_late_from_segments_context(
     stored_calendar_context = None
     if calendar_context is not None and 'calendar_meeting_context' not in external_data:
         # Dotted path, so a concurrent writer's other external_data keys survive.
-        stored_calendar_context = calendar_context.model_dump(mode='json')
+        stored_calendar_context = calendar_context.to_storage_dict()
         updates['external_data.calendar_meeting_context'] = stored_calendar_context
 
     if not updates or not conversations_db.update_conversation(uid, conversation_id, updates):

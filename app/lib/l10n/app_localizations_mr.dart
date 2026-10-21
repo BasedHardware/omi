@@ -14395,4 +14395,105 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get activityAttentionLinkStalledSubtitle => 'Omi वर रेकॉर्डिंग सुरू आहे';
+
+  @override
+  String get episodeNow => 'आता';
+
+  @override
+  String episodeLiveFor(String duration) {
+    return 'थेट · $duration';
+  }
+
+  @override
+  String episodeMomentsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count क्षण',
+      one: '1 क्षण',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get episodeMoments => 'क्षण';
+
+  @override
+  String get episodeSoFar => 'आतापर्यंत';
+
+  @override
+  String get episodeUpdatedJustNow => 'आत्ताच अपडेट केले · शेवटी पूर्ण नोट्स';
+
+  @override
+  String episodeUpdatedMinutesAgo(int minutes) {
+    return '$minutes मिनिटांपूर्वी अपडेट · शेवटी पूर्ण नोट्स';
+  }
+
+  @override
+  String get episodeNotesSoon => 'बोलण्याच्या पहिल्या काही मिनिटांनंतर नोट्स दिसतील.';
+
+  @override
+  String get episodeOpenAll => 'सर्व उघडा';
+
+  @override
+  String get episodeWrapUpNow => 'आता पूर्ण करा';
+
+  @override
+  String get episodeWrapsUpHint => 'तुम्ही पुढे गेल्यावर Omi हे पूर्ण करते';
+
+  @override
+  String episodeTaskCaptured(String text) {
+    return 'कार्य नोंदवले: $text';
+  }
+
+  @override
+  String episodeReminderCaptured(String text) {
+    return 'स्मरणपत्र नोंदवले: $text';
+  }
+
+  @override
+  String episodeTaskSaved(String text) {
+    return 'कार्य जतन केले: $text';
+  }
+
+  @override
+  String episodeAddingFromOmi(String duration) {
+    return 'तुमच्या Omi मधून $duration जोडत आहे';
+  }
+
+  @override
+  String get episodeListeningNow => 'आता ऐकत आहे';
+
+  @override
+  String get deviceHeardToday => 'आज ऐकले';
+
+  @override
+  String get deviceToSync => 'सिंक बाकी';
+
+  @override
+  String get deviceRightNow => 'सध्या';
+
+  @override
+  String deviceLiveEpisode(String duration) {
+    return 'थेट भाग · $duration';
+  }
+
+  @override
+  String get deviceCatchingUp => 'मागे राहिलेले आणत आहे';
+
+  @override
+  String deviceCatchingUpProgress(int done, int total) {
+    return '$done/$total मिनिटे';
+  }
+
+  @override
+  String get deviceRecently => 'अलीकडे';
+
+  @override
+  String deviceDisconnectedFor(String duration) {
+    return '$duration डिस्कनेक्ट';
+  }
+
+  @override
+  String get deviceControls => 'नियंत्रणे';
 }

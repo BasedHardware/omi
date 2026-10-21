@@ -1,8 +1,10 @@
 """Deterministic checks and repairs for a ``submit_notes`` payload. Pure: no I/O.
 
-A first submission that breaks a format rule is returned to the model once with
-the exact problems; a later one is repaired here instead, so a format slip never
-costs the owner their notes.
+Each problem carries its failure class (``format`` or ``content``; the agent adds
+``evidence``). The harness :class:`~utils.llm.shaped_agent.SendBackBudget` returns a
+submission once per class; after that it is repaired here instead, so a format slip
+never costs the owner their notes. Near-miss keys (``body`` for ``body_markdown``) are
+normalized by the harness from the schema's declared aliases before these checks run.
 """
 
 from __future__ import annotations
@@ -12,6 +14,7 @@ from dataclasses import dataclass, field
 from typing import Any, Iterable, Mapping, Sequence
 
 from utils.llm.notes_agent_prompt import length_ceiling, length_floor
+from utils.llm.shaped_agent import Problem
 
 # Words that make a heading a task list rather than discussion.
 _ACTION_HEADING = re.compile(
@@ -28,37 +31,25 @@ LENGTH_TOLERANCE = 1.25
 DUPLICATE_TASK_OVERLAP = 0.8
 
 
+FORMAT = 'format'
+CONTENT = 'content'
+
+
 @dataclass
 class NotesCheck:
-    problems: list[str] = field(default_factory=list)
+    findings: list[Problem] = field(default_factory=list)
     repairs: list[str] = field(default_factory=list)
 
     @property
+    def problems(self) -> list[str]:
+        return [finding.message for finding in self.findings]
+
+    @property
     def ok(self) -> bool:
-        return not self.problems
+        return not self.findings
 
-
-_BODY_ALIASES = ('body', 'content', 'markdown', 'bullets', 'text')
-
-
-def normalize_submission(submission: Mapping[str, Any]) -> dict[str, Any]:
-    """Accept a section body under a near-miss key, so a key slip costs no turn and no section."""
-    normalized = dict(submission)
-    sections = []
-    for section in submission.get('sections') or []:
-        if not isinstance(section, Mapping):
-            continue
-        section = dict(section)
-        if not isinstance(section.get('body_markdown'), str):
-            alias = next((section[key] for key in _BODY_ALIASES if isinstance(section.get(key), (str, list))), None)
-            if isinstance(alias, list):
-                alias = '\n'.join(f'- {item}' for item in alias if isinstance(item, str))
-            if isinstance(alias, str):
-                section['body_markdown'] = alias
-        sections.append(section)
-    if 'sections' in submission:
-        normalized['sections'] = sections
-    return normalized
+    def add(self, kind: str, message: str) -> None:
+        self.findings.append(Problem(kind, message))
 
 
 def body_words(sections: Iterable[Mapping[str, Any]]) -> int:
@@ -105,36 +96,37 @@ def check_notes(submission: Mapping[str, Any], *, transcript_words: int) -> Note
     check = NotesCheck()
     sections = [section for section in submission.get('sections') or [] if isinstance(section, Mapping)]
     if not sections:
-        check.problems.append('No sections: write the notes as sections with bullet-list bodies.')
+        check.add(FORMAT, 'No sections: write the notes as sections with bullet-list bodies.')
         return check
     action_sections = [str(s.get('heading')) for s in sections if is_action_heading(str(s.get('heading') or ''))]
     if action_sections:
-        check.problems.append(
+        check.add(
+            FORMAT,
             'Remove the section(s) ' + ', '.join(repr(name) for name in action_sections) + '; commitments belong '
-            'only in action_items.'
+            'only in action_items.',
         )
     prose = [str(s.get('heading')) for s in sections if not _TOP_BULLET.search(str(s.get('body_markdown') or ''))]
     if prose:
-        check.problems.append(
-            'Write these section bodies as "- " bullet lists, not prose: ' + ', '.join(map(repr, prose)) + '.'
+        check.add(
+            FORMAT, 'Write these section bodies as "- " bullet lists, not prose: ' + ', '.join(map(repr, prose)) + '.'
         )
     if transcript_words >= NESTING_MIN_WORDS and not any(
         nested_bullet_count(str(s.get('body_markdown') or '')) for s in sections
     ):
-        check.problems.append(
-            'Nest the details: put supporting details under their point as indented "  - " sub-bullets.'
-        )
+        check.add(FORMAT, 'Nest the details: put supporting details under their point as indented "  - " sub-bullets.')
     ceiling = length_ceiling(transcript_words)
     words = body_words(sections)
     if words > ceiling * LENGTH_TOLERANCE:
-        check.problems.append(
-            f'The section bodies have {words} words; the ceiling is {ceiling}. Cut minor details and repetition.'
+        check.add(
+            CONTENT,
+            f'The section bodies have {words} words; the ceiling is {ceiling}. Cut minor details and repetition.',
         )
     floor = length_floor(transcript_words)
     if words < floor:
-        check.problems.append(
+        check.add(
+            CONTENT,
             f'The section bodies have {words} words; this meeting needs at least {floor}. Cover every substantive '
-            'thread with its points and details.'
+            'thread with its points and details.',
         )
     return check
 

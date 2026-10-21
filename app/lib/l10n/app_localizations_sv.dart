@@ -14392,4 +14392,105 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get activityAttentionLinkStalledSubtitle => 'Omi spelar fortfarande in';
+
+  @override
+  String get episodeNow => 'Nu';
+
+  @override
+  String episodeLiveFor(String duration) {
+    return 'Live · $duration';
+  }
+
+  @override
+  String episodeMomentsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ögonblick',
+      one: '1 ögonblick',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get episodeMoments => 'Ögonblick';
+
+  @override
+  String get episodeSoFar => 'Hittills';
+
+  @override
+  String get episodeUpdatedJustNow => 'Uppdaterad nyss · fullständiga anteckningar när det är klart';
+
+  @override
+  String episodeUpdatedMinutesAgo(int minutes) {
+    return 'Uppdaterad för $minutes min sedan · fullständiga anteckningar när det är klart';
+  }
+
+  @override
+  String get episodeNotesSoon => 'Anteckningarna visas efter de första minuterna av samtalet.';
+
+  @override
+  String get episodeOpenAll => 'Öppna alla';
+
+  @override
+  String get episodeWrapUpNow => 'Avsluta nu';
+
+  @override
+  String get episodeWrapsUpHint => 'Omi avslutar det här när du går vidare';
+
+  @override
+  String episodeTaskCaptured(String text) {
+    return 'Uppgift uppfångad: $text';
+  }
+
+  @override
+  String episodeReminderCaptured(String text) {
+    return 'Påminnelse uppfångad: $text';
+  }
+
+  @override
+  String episodeTaskSaved(String text) {
+    return 'Uppgift sparad: $text';
+  }
+
+  @override
+  String episodeAddingFromOmi(String duration) {
+    return 'lägger till $duration från din Omi';
+  }
+
+  @override
+  String get episodeListeningNow => 'Lyssnar nu';
+
+  @override
+  String get deviceHeardToday => 'Hört i dag';
+
+  @override
+  String get deviceToSync => 'att synka';
+
+  @override
+  String get deviceRightNow => 'Just nu';
+
+  @override
+  String deviceLiveEpisode(String duration) {
+    return 'Liveavsnitt · $duration';
+  }
+
+  @override
+  String get deviceCatchingUp => 'Kommer ikapp';
+
+  @override
+  String deviceCatchingUpProgress(int done, int total) {
+    return '$done av $total min';
+  }
+
+  @override
+  String get deviceRecently => 'Nyligen';
+
+  @override
+  String deviceDisconnectedFor(String duration) {
+    return 'Frånkopplad i $duration';
+  }
+
+  @override
+  String get deviceControls => 'Kontroller';
 }

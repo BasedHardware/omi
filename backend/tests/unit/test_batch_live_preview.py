@@ -82,9 +82,12 @@ def test_all_three_cohorts_share_batch_bucket_and_summary_survives_admission_rol
         assert summary_guarantee.enabled(owner) == expected
         results.append(expected)
     assert 20 < sum(results) < 80
+    # The kill switch is all-or-nothing and the summary guarantee is independent of it, so a
+    # 100-owner prefix proves both. The full 1000-owner sweep above keeps the bucket bound
+    # statistically meaningful; each policy resolution copies the whole process environment.
     monkeypatch.setenv('BATCH_PIPELINE_ENABLED', 'false')
-    assert not any(batch_pipeline.enabled_for(f'synthetic-{i}') for i in range(1000))
-    assert [summary_guarantee.enabled(f'synthetic-{i}') for i in range(1000)] == results
+    assert not any(batch_pipeline.enabled_for(f'synthetic-{i}') for i in range(100))
+    assert [summary_guarantee.enabled(f'synthetic-{i}') for i in range(100)] == results[:100]
 
 
 def test_summary_kill_allowlist_legacy_global_and_invalid(monkeypatch):

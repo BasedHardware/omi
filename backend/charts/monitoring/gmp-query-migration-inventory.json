@@ -15,6 +15,32 @@
       "scope": "normalized-omi-consumer-source-review"
     },
     {
+      "expression": "sum by (namespace, outcome) (increase(omi_sync_transcription_job_total{job=\"cloud-run-application-metrics\",namespace=~\"backend-sync|backend-sync-backfill|backend-integration\",outcome!=\"success\",outcome!=\"expected_silence\"}[60m]))",
+      "file": "alerts/backend-sync.json",
+      "issues": [],
+      "metrics": [
+        "omi_sync_transcription_job_total"
+      ],
+      "owner_title": "Sync jobs - a failure reason is running above 3x its 7-day rate",
+      "owner_uid": "omi-sync-failure-reason-step",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "explicit-bridge"
+    },
+    {
+      "expression": "(sum by (namespace, outcome) (increase(omi_sync_transcription_job_total{job=\"cloud-run-application-metrics\",namespace=~\"backend-sync|backend-sync-backfill|backend-integration\",outcome!=\"success\",outcome!=\"expected_silence\"}[60m])) / on (namespace) group_left () sum by (namespace) (increase(omi_sync_transcription_job_total{job=\"cloud-run-application-metrics\",namespace=~\"backend-sync|backend-sync-backfill|backend-integration\"}[60m]))) / clamp_min((sum by (namespace, outcome) (increase(omi_sync_transcription_job_total{job=\"cloud-run-application-metrics\",namespace=~\"backend-sync|backend-sync-backfill|backend-integration\",outcome!=\"success\",outcome!=\"expected_silence\"}[7d] offset 60m)) / on (namespace) group_left () sum by (namespace) (increase(omi_sync_transcription_job_total{job=\"cloud-run-application-metrics\",namespace=~\"backend-sync|backend-sync-backfill|backend-integration\"}[7d] offset 60m))) or ((sum by (namespace, outcome) (increase(omi_sync_transcription_job_total{job=\"cloud-run-application-metrics\",namespace=~\"backend-sync|backend-sync-backfill|backend-integration\",outcome!=\"success\",outcome!=\"expected_silence\"}[60m])) / on (namespace) group_left () sum by (namespace) (increase(omi_sync_transcription_job_total{job=\"cloud-run-application-metrics\",namespace=~\"backend-sync|backend-sync-backfill|backend-integration\"}[60m]))) * 0), 0.0001)",
+      "file": "alerts/backend-sync.json",
+      "issues": [],
+      "metrics": [
+        "omi_sync_transcription_job_total"
+      ],
+      "owner_title": "Sync jobs - a failure reason is running above 3x its 7-day rate",
+      "owner_uid": "omi-sync-failure-reason-step",
+      "panel": null,
+      "pointer": "/data/1/model/expr",
+      "scope": "explicit-bridge"
+    },
+    {
       "expression": "count({job=\"cloud-run-application-metrics\", __name__=~\"stackdriver_.*_omi_.*\"}) or vector(0)",
       "file": "alerts/cloud-run-ingestion.json",
       "issues": [
@@ -3010,8 +3036,8 @@
     }
   ],
   "counts": {
-    "explicit_bridge": 21,
-    "query_consumers": 197
+    "explicit_bridge": 23,
+    "query_consumers": 199
   },
   "schema_version": 1,
   "source": "repository, not live Grafana export"

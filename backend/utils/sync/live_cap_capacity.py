@@ -5,7 +5,7 @@ from typing import Any
 from uuid import uuid4
 
 from google.cloud import firestore
-from database._client import get_data_plane_firestore_client as get_firestore_client
+from database._client import get_data_plane_firestore_client as get_firestore_client, run_transactional
 from database.legal_holds import external_write_fence
 from utils.sync.live_cap_codec import MAX_OBJECT_BYTES
 
@@ -54,7 +54,10 @@ def acquire(uid: str, month: str, identity: str | None = None) -> Capacity:
         tx.set(quota, {'bytes': size, 'chunks': groups}, merge=True)
         tx.create(lease, {'groups': BLOCK_GROUPS, 'bytes': BLOCK_BYTES, 'closed': False})
 
-    commit(client.transaction())
+    # Idempotent on the reservation id: a deadline after commit sees the lease and
+    # does not add the block twice. Backoff stays off the event loop; acquire
+    # runs on the database executor and holds no session lock.
+    run_transactional(client, commit, transient=True)
     return Capacity(uid, month, identity)
 
 
@@ -83,4 +86,4 @@ def release(capacity: Capacity) -> None:
         tx.update(quota, {'bytes': max(0, row['bytes'] - refund_bytes), 'chunks': max(0, row['chunks'] - unused)})
         tx.update(lease, {'closed': True, 'groups': capacity.used})
 
-    commit(client.transaction())
+    run_transactional(client, commit, transient=True)

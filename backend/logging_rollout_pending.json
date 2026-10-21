@@ -19,15 +19,6 @@
     "basicConfig": 1,
     "missing_setup": 1
   },
-  "backend/llm_gateway/main.py::docker:backend/Dockerfile:llm_gateway.main": {
-    "missing_setup": 1
-  },
-  "backend/llm_gateway/main.py::helm:backend/charts/llm-gateway/templates/deployment.yaml:0:backend:llm_gateway.main": {
-    "missing_setup": 1
-  },
-  "backend/main.py::docker:backend/Dockerfile:main": {
-    "missing_setup": 1
-  },
   "backend/modal/day3_reengagement_email_job.py::docker:backend/modal/Dockerfile.day3_reengagement_email_job:day3_reengagement_email_job": {
     "basicConfig": 1,
     "missing_setup": 1
@@ -77,15 +68,8 @@
   "backend/parakeet/main.py::docker:backend/parakeet/Dockerfile:main": {
     "missing_setup": 1
   },
-  "backend/pusher/main.py::docker:backend/pusher/Dockerfile:pusher.main": {
-    "missing_setup": 1
-  },
   "backend/scripts/finops/cloudrun_entry.py::docker:backend/modal/Dockerfile.finops_unit_cost_job:/app/monorepo/backend/scripts/finops/cloudrun_entry.py": {
     "print": 1,
-    "missing_setup": 1
-  },
-  "backend/utils/messaging/maintenance.py::helm:backend/charts/messaging-maintenance/templates/cronjob.yaml:0:backend:utils.messaging.maintenance": {
-    "basicConfig": 1,
     "missing_setup": 1
   }
 }
