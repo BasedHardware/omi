@@ -23,8 +23,7 @@ class PhoneSpy {
   final dynamic real;
   Completer<void>? finalizeGate;
   final published = <Geolocation?>[];
-  Future<void> onAudioCodecChanged(BleAudioCodec codec, {({String id, String model})? deviceInfo}) async =>
-      await real.onAudioCodecChanged(codec, deviceInfo: deviceInfo);
+  Future<void> onAudioCodecChanged(BleAudioCodec codec) async => await real.onAudioCodecChanged(codec);
   void setDeviceInfo(String? id, String? name) => real.setDeviceInfo(id, name);
   void setSessionGeolocation(Geolocation? value) {
     published.add(value);

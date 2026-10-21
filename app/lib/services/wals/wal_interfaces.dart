@@ -97,7 +97,8 @@ abstract class LocalWalSync implements IWalSync {
   void markFrameSynced(FrameSyncKey key);
 
   /// Seal the old source before switching codec and optional device metadata.
-  /// Ingress arriving during the flush belongs to this new source.
+  /// Supply deviceInfo when ingress can continue during the flush, so those
+  /// arrivals belong to the new source before asynchronous I/O yields.
   Future onAudioCodecChanged(BleAudioCodec codec, {({String id, String model})? deviceInfo});
 
   /// Set device metadata for WAL file naming.

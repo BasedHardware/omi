@@ -2880,10 +2880,8 @@ class CaptureController extends ChangeNotifier
 
     _activeSource = PhoneMicSource();
     _phoneMicWalActive = true;
-    await _wal.getSyncs().phone.onAudioCodecChanged(
-      BleAudioCodec.pcm16,
-      deviceInfo: (id: 'phone-mic', model: 'Phone Microphone'),
-    );
+    await _wal.getSyncs().phone.onAudioCodecChanged(BleAudioCodec.pcm16);
+    _wal.getSyncs().phone.setDeviceInfo('phone-mic', 'Phone Microphone');
     setIsWalSupported(true);
 
     try {
