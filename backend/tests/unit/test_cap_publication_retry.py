@@ -2,6 +2,9 @@
 
 An expired transaction id wrote nothing. Contention, a commit deadline, and
 unavailable are the same class when the body re-reads before it increments.
+Transport timeouts and dropped connections — a GCS upload or a Firestore read
+whose reply never arrived — restart the same way, because the body replays its
+generation preconditions instead of duplicating the write.
 """
 
 from __future__ import annotations
@@ -9,10 +12,14 @@ from __future__ import annotations
 import asyncio
 import copy
 from contextlib import nullcontext
+from tempfile import TemporaryDirectory
 from threading import Barrier, Lock, RLock, Thread
 from types import SimpleNamespace
+from unittest.mock import Mock
 
 import pytest
+import requests.exceptions
+import urllib3.exceptions
 from google.api_core.exceptions import (
     Aborted,
     AlreadyExists,
@@ -22,8 +29,10 @@ from google.api_core.exceptions import (
     NotFound,
     PreconditionFailed,
     ResourceExhausted,
+    RetryError,
     ServiceUnavailable,
 )
+from google.auth.exceptions import TransportError as AuthTransportError
 from google.cloud.firestore_v1 import ReadAfterWriteError
 from google.cloud.firestore_v1.transforms import Increment
 
@@ -46,7 +55,14 @@ FRAGMENT_PAYLOAD = b'fragment-bytes' * 4
 
 
 def _counter(outcome: str) -> float:
-    return held_metrics.PUBLICATION_RETRY.labels(outcome=outcome)._value.get()
+    return sum(
+        held_metrics.PUBLICATION_RETRY.labels(outcome=outcome, cause=cause)._value.get()
+        for cause in held_metrics.PUBLICATION_RETRY_CAUSES
+    )
+
+
+def _cause_counter(outcome: str, cause: str) -> float:
+    return held_metrics.PUBLICATION_RETRY.labels(outcome=outcome, cause=cause)._value.get()
 
 
 def test_failure_reason_classifies_commit_deadline_and_unavailable():
@@ -64,6 +80,62 @@ def test_failure_reason_classifies_commit_deadline_and_unavailable():
     assert not is_retryable_firestore_transaction_error(
         InvalidArgument('the document exceeds the maximum allowed size')
     )
+
+
+@pytest.mark.parametrize(
+    'error, reason',
+    [
+        (requests.exceptions.ReadTimeout('read timed out'), 'transport_timeout'),
+        (requests.exceptions.ConnectTimeout('connect timed out'), 'transport_timeout'),
+        (RetryError('retry deadline exceeded', cause=DeadlineExceeded('d')), 'transport_timeout'),
+        (requests.exceptions.ConnectionError('connection aborted'), 'transport_connection'),
+        (requests.exceptions.ChunkedEncodingError('truncated body'), 'transport_connection'),
+        (urllib3.exceptions.ProtocolError('connection reset'), 'transport_connection'),
+        (ConnectionResetError('peer reset'), 'transport_connection'),
+        (AuthTransportError('token endpoint unreachable'), 'transport_connection'),
+    ],
+)
+def test_transport_faults_are_retryable_by_the_transient_path(error, reason):
+    assert firestore_failure_reason(error) == reason
+    assert is_retryable_firestore_transaction_error(error)
+
+
+def test_non_transport_timeouts_and_plain_errors_stay_non_retryable():
+    # asyncio.TimeoutError is an alias of TimeoutError on 3.11: a caller
+    # signal, not an IO fault, so it must not restart a publication.
+    assert firestore_failure_reason(TimeoutError('caller deadline')) == 'other'
+    assert not is_retryable_firestore_transaction_error(TimeoutError('caller deadline'))
+    assert not is_retryable_firestore_transaction_error(RuntimeError('stored held source length mismatch'))
+    assert not is_retryable_firestore_transaction_error(AlreadyExists('exists'))
+
+
+def test_default_run_transactional_does_not_retry_transport_faults():
+    calls = []
+
+    def operation(_tx):
+        calls.append(1)
+        raise requests.exceptions.ReadTimeout('read timed out')
+
+    client = SimpleNamespace(transaction=lambda: object())
+    with pytest.raises(requests.exceptions.ReadTimeout):
+        run_transactional(client, operation, sleep=lambda _delay: (_ for _ in ()).throw(AssertionError('slept')))
+    assert calls == [1]
+
+
+def test_transient_run_transactional_records_the_transport_reason():
+    seen = []
+    outcome: dict[str, str] = {}
+
+    def operation(tx):
+        seen.append(tx)
+        if len(seen) == 1:
+            raise requests.exceptions.ReadTimeout('read timed out')
+        return 'ok'
+
+    client = SimpleNamespace(transaction=lambda: object())
+    assert run_transactional(client, operation, transient=True, sleep=lambda _d: None, outcome=outcome) == 'ok'
+    assert len(seen) == 2 and seen[0] is not seen[1]
+    assert outcome == {'status': 'retried_ok', 'reason': 'transport_timeout'}
 
 
 def test_default_run_transactional_does_not_retry_resource_exhausted():
@@ -161,6 +233,11 @@ class _Transaction:
         if action == 'deadline':
             self._apply()
             raise DeadlineExceeded('deadline exceeded before the commit reply')
+        if action == 'read_timeout':
+            # The commit reply never arrived; nothing was applied on the server.
+            raise requests.exceptions.ReadTimeout('commit reply timed out')
+        if action == 'retry_error':
+            raise RetryError('retry deadline exceeded', cause=DeadlineExceeded('deadline'))
         if action == 'permanent':
             raise InvalidArgument('some other 400')
         if action == 'throttle':
@@ -191,6 +268,8 @@ class _Doc:
         # body must finish its reads first.
         if transaction is not None and transaction.ops:
             raise ReadAfterWriteError('Attempted read after write in a transaction.')
+        if transaction is None and self.client.plain_read_errors:
+            raise self.client.plain_read_errors.pop(0)
         if self.key in self.client.fail_get_keys:
             self.client.fail_get_keys.discard(self.key)
             raise ResourceExhausted('429 Quota exceeded.')
@@ -262,6 +341,7 @@ class _Client:
     def __init__(self, actions: list[str] | None = None, read_errors: list | None = None):
         self.actions = list(actions or [])
         self.read_errors = list(read_errors or [])
+        self.plain_read_errors: list[BaseException] = []
         self.docs: dict[str, dict] = {}
         self.versions: dict[str, int] = {}
         self.transactions: list[_Transaction] = []
@@ -440,7 +520,7 @@ def store(monkeypatch):
     def summary(_uid):
         return _Doc(client, 'summary')
 
-    def upload(_uid, _path, identity, metadata, immutable=False):
+    def upload(_uid, _path, identity, metadata, immutable=False, **_kwargs):
         audio_path = f'chunks/{UID}/cap-held/{identity}.opus.enc'
         bucket.put(audio_path, FRAGMENT_PAYLOAD, generation=1)
         return {
@@ -849,6 +929,7 @@ def test_read_after_a_staged_write_does_not_fail_the_socket(delays, store, tmp_p
     path = tmp_path / 'fragment.opus'
     path.write_bytes(b'opus')
     before = _counter('staged_unverified')
+    before_ok = _cause_counter('retried_ok', 'throttle')
     store.fail_get_after_plain_write = True
     state = SimpleNamespace(close_code=None)
     try:
@@ -861,7 +942,11 @@ def test_read_after_a_staged_write_does_not_fail_the_socket(delays, store, tmp_p
     assert [part['id'] for part in row['stage_parts']] == [fragment.identity]
     assert store.docs[group.identity]['state'] == 'staging'
     assert store.verification_raised is True
-    assert _counter('staged_unverified') == before + 1
+    # The throttled verification read is a transient recovery leaf: the bounded
+    # retry re-reads and confirms the stored row instead of reporting it
+    # unverified, so the socket stays up with a verified staging row.
+    assert _counter('staged_unverified') == before
+    assert _cause_counter('retried_ok', 'throttle') == before_ok + 1
     assert 'summary' not in store.docs
     store.docs[group.identity]['writer_until'] = 0
     store.actions = []
@@ -988,9 +1073,13 @@ def test_lost_create_race_without_the_fragment_opens_a_late_row(delays, store, t
     store.conflict_row = _empty_staging_row()
     store.actions = ['throttle', 'throttle', 'throttle']
     before = _counter('staged_unverified')
+    before_ok = _cause_counter('retried_ok', 'throttle')
     row = live_cap_staging.append(UID, str(path), group, fragment, _METADATA, 1.0)
     late = late_hold_identity(fragment.identity)
-    assert _counter('staged_unverified') == before + 1
+    # The throttled confirm read is a transient recovery leaf: the retry re-reads,
+    # finds the row does not hold the fragment, and opens the late row.
+    assert _counter('staged_unverified') == before
+    assert _cause_counter('retried_ok', 'throttle') == before_ok + 1
     assert [part['id'] for part in store.docs[group.identity]['stage_parts']] == []
     assert [part['id'] for part in store.docs[late]['stage_parts']] == [fragment.identity]
     assert [part['id'] for part in row['stage_parts']] == [fragment.identity]
@@ -1124,15 +1213,23 @@ def test_create_race_with_the_fragment_and_a_failed_read_counts_once(delays, sto
     }
     store.actions = ['throttle', 'throttle', 'throttle']
     before = _counter('staged_unverified')
+    before_ok = _cause_counter('retried_ok', 'throttle')
     live_cap_staging.append(UID, str(path), group, fragment, _METADATA, 1.0)
     late = late_hold_identity(fragment.identity)
-    assert _counter('staged_unverified') == before + 1
-    assert late in store.docs
+    # The throttled confirm read is retried as a transient recovery leaf and
+    # confirms the conflicting row already holds this fragment, so the late
+    # row is never needed.
+    assert _counter('staged_unverified') == before
+    assert _cause_counter('retried_ok', 'throttle') == before_ok + 1
+    assert late not in store.docs
     assert [part['id'] for part in store.docs[group.identity]['stage_parts']] == [fragment.identity]
-    assert [part['id'] for part in store.docs[late]['stage_parts']] == [fragment.identity]
     assert live_cap_staging.seal(UID, group.identity) is True
-    assert live_cap_staging.seal(UID, late) is True
-    _assert_one_claim(store, fragment.identity, group.identity, late)
+    assert store.docs[group.identity]['state'] == 'held'
+    assert store.docs['summary']['count'] == 1
+    assert store.increments.count(('summary', 'count', 1.0)) == 1
+    claim = f'users/{UID}/stt_cap_fragment_claims/{fragment.identity}'
+    assert store.docs[claim] == {'hold_id': group.identity, 'fragment_id': fragment.identity}
+    assert source in store.deletes
 
 
 def test_unconfirmed_late_create_keeps_the_source_and_fails(delays, store, tmp_path):
@@ -1292,6 +1389,319 @@ def test_permanent_commit_failure_after_upload_counts_the_orphaned_source(delays
     assert store.bucket.blob(source).download_as_bytes() == FRAGMENT_PAYLOAD
     assert group.identity not in store.docs
     assert late_hold_identity(fragment.identity) not in store.docs
+
+
+def test_read_timeout_on_upload_retries_and_publishes(delays, store, tmp_path, monkeypatch):
+    """A GCS upload timeout restarts the publication instead of closing the socket."""
+    path = tmp_path / 'minute.opus'
+    path.write_bytes(b'opus')
+    source = Publication(UID)
+    _track(source, delays[1])
+    original = cap_hold.upload_held_audio
+    attempts = []
+
+    def upload(uid, path_, identity, metadata, **kwargs):
+        attempts.append(identity)
+        if len(attempts) == 1:
+            raise requests.exceptions.ReadTimeout('GCS upload reply timed out')
+        return original(uid, path_, identity, metadata, **kwargs)
+
+    monkeypatch.setattr(cap_hold, 'upload_held_audio', upload)
+    before_ok = _counter('retried_ok')
+    before_timeout = _cause_counter('retried_ok', 'timeout')
+    live_cap_manifest.publish(UID, str(path), source, _METADATA, 60)
+    assert attempts and attempts[0] == attempts[-1] == source.identity  # One identity across restarts.
+    assert len(store.transactions) == 2
+    assert store.docs[source.identity]['state'] == 'held'
+    assert store.docs['summary']['seconds'] == 60
+    assert store.increments.count(('summary', 'seconds', 60.0)) == 1
+    assert _counter('retried_ok') == before_ok + 1
+    assert _cause_counter('retried_ok', 'timeout') == before_timeout + 1
+    assert len(delays[0]) == 1 and sum(delays[0]) < 5
+    assert store.deletes == []
+
+
+def test_persistent_upload_read_timeouts_exhaust_and_fail_closed(delays, store, tmp_path, monkeypatch):
+    """A bounded budget, then today's failure: the socket closes with 1011, counted."""
+    path = tmp_path / 'minute.opus'
+    path.write_bytes(b'opus')
+    source = Publication(UID)
+    _track(source, delays[1])
+    attempts = []
+
+    def upload(*args, **kwargs):
+        attempts.append(1)
+        raise requests.exceptions.ReadTimeout('GCS upload reply timed out')
+
+    monkeypatch.setattr(cap_hold, 'upload_held_audio', upload)
+    before_exhausted = _counter('exhausted')
+    before_timeout = _cause_counter('exhausted', 'timeout')
+    before_ok = _counter('retried_ok')
+    state = SimpleNamespace(close_code=None)
+    try:
+        live_cap_manifest.publish(UID, str(path), source, _METADATA, 60)
+    except Exception as error:
+        mark_listen_internal_error(state)
+        assert isinstance(error, requests.exceptions.ReadTimeout)
+    assert state.close_code == 1011
+    assert len(attempts) == 3  # One original attempt plus two bounded restarts.
+    # Three publication transactions, then the one-shot recovery read transaction.
+    assert len(store.transactions) == 4
+    assert _counter('exhausted') == before_exhausted + 1
+    assert _cause_counter('exhausted', 'timeout') == before_timeout + 1
+    assert _counter('retried_ok') == before_ok
+    assert len(delays[0]) == 2 and sum(delays[0]) < 5
+    assert store.deletes == []  # Never delete an object whose state is unknown.
+    assert source.identity not in store.docs
+
+
+def test_persistent_commit_transport_timeouts_stage_the_fragment(delays, store, tmp_path, monkeypatch):
+    """Commit replies that never arrive exhaust the budget, then the staging fallback keeps the socket up."""
+    path = tmp_path / 'fragment.opus'
+    path.write_bytes(b'opus')
+    group = Publication(UID)
+    fragment = Publication(UID)
+    store.actions = ['read_timeout', 'read_timeout', 'read_timeout']
+    before_exhausted = _counter('exhausted')
+    before_timeout = _cause_counter('exhausted', 'timeout')
+    before_ok = _counter('retried_ok')
+    row = live_cap_staging.append(UID, str(path), group, fragment, _METADATA, 1.0)
+    assert row['state'] == 'staging'
+    assert [part['id'] for part in row['stage_parts']] == [fragment.identity]
+    assert store.applied == 0  # No transactional commit ever landed.
+    assert store.deletes == []
+    assert _counter('exhausted') == before_exhausted + 1
+    assert _cause_counter('exhausted', 'timeout') == before_timeout + 1
+    assert _counter('retried_ok') == before_ok
+    store.docs[group.identity]['writer_until'] = 0
+    store.actions = []
+    _enable_redrive(monkeypatch, [_hold_snap(group.identity)])
+    assert __import__('asyncio').run(cap_hold_redrive.sweep())['sealed'] == 1
+    assert store.docs['summary']['count'] == 1
+    assert store.increments.count(('summary', 'count', 1.0)) == 1
+
+
+def test_ambiguous_upload_then_timeout_reuses_the_stored_generation(delays, store, tmp_path, monkeypatch):
+    """An upload that landed before a lost commit reply is not written twice."""
+    path = tmp_path / 'minute.opus'
+    path.write_bytes(b'opus')
+    source = Publication(UID)
+    _track(source, delays[1])
+    store.actions = ['read_timeout']  # The upload lands; the commit reply is lost.
+    payloads: list[bytes] = []
+    precondition_hits: list[str] = []
+
+    def upload(uid, _path, identity, metadata, **kwargs):
+        audio_path = f'chunks/{UID}/cap-held/{identity}.opus.enc'
+        stored = store.bucket.objects.get(audio_path)
+        if kwargs.get('immutable') and stored is not None and stored.alive:
+            # The real client refuses the second write with if_generation_match=0
+            # and resolves the stored generation by reloading.
+            precondition_hits.append(audio_path)
+            return {
+                'audio_path': audio_path,
+                'audio_generation': stored.generation,
+                'audio_codec': 'ogg_opus',
+                'sample_rate': metadata['sample_rate'],
+                'source_frames': metadata['source_frames'],
+                'metadata': 'encrypted',
+            }
+        payloads.append(f'attempt-{len(payloads) + 1}'.encode())
+        store.bucket.put(audio_path, payloads[-1], generation=3)
+        return {
+            'audio_path': audio_path,
+            'audio_generation': 3,
+            'audio_codec': 'ogg_opus',
+            'sample_rate': metadata['sample_rate'],
+            'source_frames': metadata['source_frames'],
+            'metadata': 'encrypted',
+        }
+
+    monkeypatch.setattr(cap_hold, 'upload_held_audio', upload)
+    before_ok = _counter('retried_ok')
+    before_timeout = _cause_counter('retried_ok', 'timeout')
+    live_cap_manifest.publish(UID, str(path), source, _METADATA, 60)
+    audio_path = f'chunks/{UID}/cap-held/{source.identity}.opus.enc'
+    assert len(payloads) == 1 and payloads[0] == b'attempt-1'  # Only the first attempt wrote.
+    assert precondition_hits == [audio_path]  # The retry collided with the precondition.
+    assert store.bucket.objects[audio_path].payload == b'attempt-1'
+    assert store.docs[source.identity]['audio_generation'] == 3
+    assert store.docs[source.identity]['state'] == 'held'
+    assert store.increments.count(('summary', 'count', 1.0)) == 1
+    assert _counter('retried_ok') == before_ok + 1
+    assert _cause_counter('retried_ok', 'timeout') == before_timeout + 1
+
+
+@pytest.mark.parametrize('action', ['read_timeout', 'retry_error'])
+def test_firestore_commit_transport_fault_retries_and_publishes(delays, store, tmp_path, action):
+    """A transport timeout or retry-deadline at commit restarts the transaction once."""
+    path = tmp_path / 'minute.opus'
+    path.write_bytes(b'opus')
+    source = Publication(UID)
+    _track(source, delays[1])
+    store.actions = [action]
+    before_ok = _counter('retried_ok')
+    before_timeout = _cause_counter('retried_ok', 'timeout')
+    live_cap_manifest.publish(UID, str(path), source, _METADATA, 60)
+    assert len(store.transactions) == 2
+    assert store.docs[source.identity]['state'] == 'held'
+    assert store.increments.count(('summary', 'count', 1.0)) == 1
+    assert _counter('retried_ok') == before_ok + 1
+    assert _cause_counter('retried_ok', 'timeout') == before_timeout + 1
+    assert len(delays[0]) == 1 and sum(delays[0]) < 5
+
+
+def test_firestore_transport_timeout_on_a_transactional_read_retries(delays, store, tmp_path):
+    """A read whose reply never arrived restarts on a fresh transaction, counted once."""
+    path = tmp_path / 'fragment.opus'
+    path.write_bytes(b'opus')
+    before_ok = _counter('retried_ok')
+    before_timeout = _cause_counter('retried_ok', 'timeout')
+    group, fragment, row = _append(
+        store,
+        str(path),
+        read_errors=[requests.exceptions.ReadTimeout('BatchGetDocuments timed out')],
+    )
+    assert len(store.transactions) == 2
+    assert store.transactions[0]._id != store.transactions[1]._id
+    assert row['state'] == 'staging'
+    assert [part['id'] for part in row['stage_parts']] == [fragment.identity]
+    assert _counter('retried_ok') == before_ok + 1
+    assert _cause_counter('retried_ok', 'timeout') == before_timeout + 1
+    assert len(delays[0]) == 1 and sum(delays[0]) < 5
+
+
+def test_recovery_read_connection_fault_is_retried_without_sleeping(delays, store, tmp_path):
+    """A custody-deciding recovery read retries an immediate connection fault under its lock."""
+    path = tmp_path / 'minute.opus'
+    path.write_bytes(b'opus')
+    source = Publication(UID)
+    _track(source, delays[1])
+    store.actions = ['expire', 'expire', 'expire']
+    store.plain_read_errors = [requests.exceptions.ConnectionError('read dropped')]
+    before_connection = _cause_counter('retried_ok', 'connection')
+    live_cap_manifest.publish(UID, str(path), source, _METADATA, 60)
+    assert store.docs[source.identity]['state'] == 'held'  # Recovery committed the receipt.
+    assert store.increments.count(('summary', 'count', 1.0)) == 1
+    assert _cause_counter('retried_ok', 'connection') == before_connection + 1
+    assert len(delays[0]) == 2  # Only the transactional backoff slept.
+
+
+def test_transport_fault_in_post_commit_cleanup_keeps_the_seal(store, monkeypatch):
+    """Garbage cleanup after a committed seal must not close the socket on a timeout."""
+    group = Publication(UID).identity
+    fragment_id = Publication(UID).identity
+    _plant_fragment_row(store, group, fragment_id)
+
+    def failing_cleanup(_uid, _ref):
+        raise requests.exceptions.ReadTimeout('claim read timed out')
+
+    monkeypatch.setattr(live_cap_staging, 'cleanup', failing_cleanup)
+    assert live_cap_staging.seal(UID, group) is True
+    assert store.docs[group]['state'] == 'held'
+    assert store.docs['summary']['count'] == 1
+
+
+def test_permanent_error_in_post_commit_cleanup_still_raises(store, monkeypatch):
+    group = Publication(UID).identity
+    fragment_id = Publication(UID).identity
+    _plant_fragment_row(store, group, fragment_id)
+    monkeypatch.setattr(live_cap_staging, 'cleanup', Mock(side_effect=ValueError('boom')))
+    with pytest.raises(ValueError):
+        live_cap_staging.seal(UID, group)
+    assert store.docs[group]['state'] == 'held'
+
+
+class _StrictBucket:
+    """The storage client's 412-then-reload semantics for an immutable destination."""
+
+    def __init__(self, stored_size: int):
+        self.objects: dict[str, SimpleNamespace] = {}
+        self.stored_size = stored_size
+
+    def blob(self, name: str) -> SimpleNamespace:
+        bucket = self
+
+        class _Blob:
+            def __init__(self):
+                self.name = name
+                self.generation = None
+                self.size = 0
+                self.chunk_size = None
+
+            def upload_from_file(
+                self, _fileobj, content_type=None, if_generation_match=None, timeout=None, retry=None, size=None
+            ):
+                stored = bucket.objects.get(name)
+                if if_generation_match == 0 and stored is not None:
+                    raise PreconditionFailed('generation')
+                bucket.objects[name] = SimpleNamespace(generation=5, size=bucket.stored_size, payload=b'stored')
+                self.generation, self.size = 5, bucket.stored_size
+
+            def reload(self, timeout=None, retry=None):
+                stored = bucket.objects[name]
+                self.generation, self.size = stored.generation, stored.size
+
+        return _Blob()
+
+
+def _install_strict_bucket(monkeypatch, tmp_path, stored_size: int) -> _StrictBucket:
+    bucket = _StrictBucket(stored_size)
+    monkeypatch.setattr(cap_hold, 'get_private_cloud_sync_bucket', lambda: bucket)
+    monkeypatch.setattr(cap_hold, 'external_write_fence', lambda *args, **kwargs: nullcontext())
+    monkeypatch.setattr(cap_hold, 'owner_storage_write_gate', lambda *args, **kwargs: nullcontext())
+    monkeypatch.setattr(cap_hold, 'recovery_directory', lambda uid: TemporaryDirectory(prefix='cap-', dir=tmp_path))
+    return bucket
+
+
+_AMBIGUOUS_IDENTITY = 'identity-1'
+_AMBIGUOUS_PATH = f'chunks/{UID}/cap-held/{_AMBIGUOUS_IDENTITY}.opus.enc'
+
+
+def _seed_ambiguous_object(bucket: _StrictBucket) -> None:
+    """An earlier attempt's upload already landed at the immutable destination."""
+    bucket.objects[_AMBIGUOUS_PATH] = SimpleNamespace(generation=5, size=bucket.stored_size, payload=b'stored')
+
+
+def test_upload_held_audio_accepts_a_plausible_stored_object_after_412(monkeypatch, tmp_path):
+    bucket = _install_strict_bucket(monkeypatch, tmp_path, stored_size=116)
+    _seed_ambiguous_object(bucket)
+    path = tmp_path / 'capture.opus'
+    path.write_bytes(b'x' * 100)
+    fields = cap_hold.upload_held_audio(
+        UID, str(path), _AMBIGUOUS_IDENTITY, _METADATA, immutable=True, stored_size_limit=128 * 1024
+    )
+    assert fields['audio_generation'] == 5
+
+
+def test_upload_held_audio_refuses_a_foreign_length_after_412(monkeypatch, tmp_path):
+    bucket = _install_strict_bucket(monkeypatch, tmp_path, stored_size=200_000)
+    _seed_ambiguous_object(bucket)
+    path = tmp_path / 'capture.opus'
+    path.write_bytes(b'x' * 100)
+    with pytest.raises(RuntimeError, match='stored held source length mismatch'):
+        cap_hold.upload_held_audio(
+            UID, str(path), _AMBIGUOUS_IDENTITY, _METADATA, immutable=True, stored_size_limit=128 * 1024
+        )
+
+
+def test_upload_held_audio_without_a_bound_keeps_recovery_piece_uploads(monkeypatch, tmp_path):
+    bucket = _install_strict_bucket(monkeypatch, tmp_path, stored_size=200_000)
+    _seed_ambiguous_object(bucket)
+    path = tmp_path / 'capture.opus'
+    path.write_bytes(b'x' * 100)
+    fields = cap_hold.upload_held_audio(UID, str(path), _AMBIGUOUS_IDENTITY, _METADATA, immutable=True)
+    assert fields['audio_generation'] == 5
+
+
+def test_publication_retry_labels_are_a_closed_set():
+    assert held_metrics.PUBLICATION_RETRY_CAUSES == ('throttle', 'timeout', 'connection', 'other')
+    before = _counter('retried_ok')
+    held_metrics.record_publication_retry('retried_ok', 'connection')
+    held_metrics.record_publication_retry('retried_ok', 'bogus')  # Unknown causes are dropped.
+    held_metrics.record_publication_retry('bogus', 'timeout')  # Unknown outcomes are dropped.
+    held_metrics.record_publication_retry('exhausted')  # The default cause is 'other'.
+    assert _counter('retried_ok') == before + 1
 
 
 async def test_receive_data_close_code_follows_staging(delays, store, tmp_path):
