@@ -19,7 +19,17 @@ What is compared
     key the serving ReplicaSet sets through an explicit ``env`` entry shadows
     ``envFrom`` and is always compared, proven or not. envFrom references are
     compared per serving target (never as a union across a mixed rollout), and
-    a reference identity carries its prefix and optionality.
+    a reference identity carries its prefix and optionality. When several
+    expected sources export the same key, the value comparison honors K8s
+    last-source-wins: a key whose effective source is a reference the
+    repository cannot enumerate (external ConfigMap) is not compared against
+    the repository ConfigMap's manifest digest.
+  * Explicit ``valueFrom.configMapKeyRef`` bindings compare by reference
+    identity (ConfigMap name, key, optionality) in addition to name. The
+    immutable pod spec proves the binding, so a rollout that rebinds a key to
+    a different ConfigMap or key is drift; only when the binding matches does
+    the key stay value-unproven on a live read (the ConfigMap data the
+    container resolved at start cannot be re-read; K8s requires a pod restart).
 
 Each serving target's application-container env is compared with the
 expected env (``runtime_env.yaml`` / rendered deploy state for Cloud Run,
@@ -73,9 +83,12 @@ _NOT_FOUND_SENTINEL = object()
 # must not be published. ``_KEY`` (not just ``API_KEY``) covers credential-like
 # bindings declared as secrets in the manifest (ADMIN_KEY, FAL_KEY), and the
 # explicit ``OAUTH`` alternative covers credential-bearing blobs such as
-# MCP_OAUTH_CLIENTS_JSON that no ``_KEY`` suffix would catch.
+# MCP_OAUTH_CLIENTS_JSON that no ``_KEY`` suffix would catch. ``SALT`` covers
+# salt-named credentials declared as secrets in the manifest
+# (DREAM_AGENT_FEEDBACK_SALT): a binding accidentally deployed as a literal
+# would otherwise publish a digest candidate salts can be tested against.
 _SENSITIVE_KEY_RE = re.compile(
-    r'(UID|ALLOWLIST|SECRET|TOKEN|PASSWORD|CREDENTIAL|API_KEY|PRIVATE|OAUTH|_KEY)', re.IGNORECASE
+    r'(UID|ALLOWLIST|SECRET|TOKEN|PASSWORD|CREDENTIAL|API_KEY|PRIVATE|OAUTH|_KEY|SALT)', re.IGNORECASE
 )
 
 # Keys intentionally set outside backend/deploy/runtime_env.yaml (for example,
@@ -176,6 +189,12 @@ class ServingTarget:
     # shadow ``envFrom`` (K8s precedence) and the serving spec is immutable, so
     # their values stay knowable even when live ConfigMap data is unproven.
     explicit_keys: frozenset[str] = frozenset()
+    # ``key -> configMapKeyRef identity hash`` for this target's explicit
+    # ``valueFrom.configMapKeyRef`` bindings (live reads only; ``{}`` when the
+    # binding identities are not tracked). The immutable pod spec proves the
+    # reference, so a binding whose identity hash differs from the expected one
+    # is drift even though the resolved ConfigMap value is unknowable.
+    explicit_keyref_hashes: Mapping[str, str] = field(default_factory=dict)
     # envFrom ConfigMap references (identity includes prefix and optionality)
     # declared by this target's spec. Compared per target, never unioned: in a
     # mixed rollout the ReplicaSets that serve side by side may disagree.
@@ -369,25 +388,23 @@ def _envfrom_source_descriptors(container: Mapping[str, Any] | None) -> tuple[tu
     return tuple(descriptors)
 
 
-def _explicit_configmap_backed_keys(entries: object) -> frozenset[str]:
-    """Explicit ``env`` entry names whose value comes from ``configMapKeyRef``.
+def _explicit_configmap_keyref_hashes(entries: object) -> dict[str, str]:
+    """``name -> configMapKeyRef identity hash`` for one container's env list.
 
-    Such an entry's effective value was resolved from the ConfigMap when the
-    container started; the reference identity in the immutable pod spec proves
-    only the binding, never the data. On a live read these keys cannot be
-    value-compared (an updated ConfigMap without a rollout leaves running pods
-    stale while every reference hash still matches).
+    The identity hash covers the ConfigMap name, key and optionality (see
+    ``env_entry_hash``); it is provable from the immutable pod spec even when
+    the resolved ConfigMap data is not.
     """
     if not isinstance(entries, list):
-        return frozenset()
-    names: set[str] = set()
+        return {}
+    hashes: dict[str, str] = {}
     for entry in entries:
         if not (isinstance(entry, dict) and isinstance(entry.get('name'), str) and entry['name']):
             continue
         value_from = entry.get('valueFrom')
         if isinstance(value_from, Mapping) and isinstance(value_from.get('configMapKeyRef'), Mapping):
-            names.add(entry['name'])
-    return frozenset(names)
+            hashes[entry['name']] = env_entry_hash(entry)
+    return hashes
 
 
 def _envfrom_ref_identity(name: str, prefix: str, optional: bool) -> str:
@@ -631,14 +648,23 @@ def _load_values(path: Path) -> dict[str, Any]:
     return loaded
 
 
-def expected_gke_env_from_values(workload: str, *, env: str, root: Path = ROOT) -> ExpectedEnv | None:
-    """Expected env from the chart values ``env`` list; None when the chart builds env in its template."""
+def expected_gke_env_from_values(
+    workload: str, *, env: str, root: Path = ROOT
+) -> tuple[ExpectedEnv | None, dict[str, str]]:
+    """Expected env from the chart values ``env`` list; None when the chart builds env in its template.
+
+    Returns ``(expected, keyref_hashes)`` where ``keyref_hashes`` maps each key
+    the chart binds through ``valueFrom.configMapKeyRef`` to its binding
+    identity hash (post template-rewrite), so the comparison can prove binding
+    drift even though the resolved ConfigMap data is unknowable.
+    """
     spec = GKE_WORKLOADS[workload]
     values = _load_values(root / spec.values_file.format(env=env))
     entries = values.get('env')
     if not isinstance(entries, list):
-        return None
+        return None, {}
     expected: ExpectedEnv = {}
+    keyref_hashes: dict[str, str] = {}
     runtime_config_map = values.get('runtimeConfigMapName')
     for raw in entries:
         if not isinstance(raw, dict) or not isinstance(raw.get('name'), str):
@@ -651,8 +677,10 @@ def expected_gke_env_from_values(workload: str, *, env: str, root: Path = ROOT) 
         value_from = entry.get('valueFrom')
         if isinstance(value_from, dict) and isinstance(value_from.get('configMapKeyRef'), dict) and runtime_config_map:
             entry['valueFrom'] = {'configMapKeyRef': {**value_from['configMapKeyRef'], 'name': runtime_config_map}}
+        if isinstance(entry.get('valueFrom'), dict) and isinstance(entry['valueFrom'].get('configMapKeyRef'), dict):
+            keyref_hashes[name] = env_entry_hash(entry)
         expected[name] = env_entry_hash(entry)
-    return expected
+    return expected, keyref_hashes
 
 
 def _redact_helm_override_values(text: str, helm_args: Sequence[str]) -> str:
@@ -686,7 +714,7 @@ def expected_gke_env_from_helm(
     root: Path = ROOT,
     runner: Callable[..., Any] = subprocess.run,
     helm_args: Sequence[str] = (),
-) -> tuple[ExpectedEnv, tuple[str, ...]]:
+) -> tuple[ExpectedEnv, tuple[str, ...], dict[str, str]]:
     """Expected env and envFrom ConfigMap refs from ``helm template`` of the chart
     with its prod/dev values (exact chart semantics).
 
@@ -695,6 +723,11 @@ def expected_gke_env_from_helm(
     fragments from ``listen_helm_env_overrides.py``'s argv file). Without
     them, a legitimately overridden rollout compares against chart defaults
     and shows false value drift.
+
+    Returns ``(expected, envfrom_refs, keyref_hashes)``; ``keyref_hashes`` maps
+    each key the rendered chart binds through ``valueFrom.configMapKeyRef`` to
+    its binding identity hash, so the comparison can prove binding drift even
+    though the resolved ConfigMap data is unknowable on a live read.
     """
     spec = GKE_WORKLOADS[workload]
     deployment = spec.deployment.format(env=env)
@@ -736,6 +769,7 @@ def expected_gke_env_from_helm(
             return (
                 expected_env_map,
                 tuple(identity for identity, _s, _n, _p, _o in _envfrom_source_descriptors(container)),
+                _explicit_configmap_keyref_hashes(container.get('env', [])),
             )
     raise ValueError(f'helm template rendered no Deployment {deployment!r}')
 
@@ -1030,10 +1064,16 @@ def read_gke_workload(
         # reference, not the data the container resolved at start (K8s needs a
         # pod restart to pick up ConfigMap changes), so those keys stay
         # value-unproven. An offline snapshot is the captured truth and proves
-        # them.
-        explicit_unproven = (
-            _explicit_configmap_backed_keys(env_list) if offline_gke is None and kube_context else frozenset()
-        )
+        # them. The binding identities are kept per key so the comparison can
+        # still flag a rollout that rebound a key to a different ConfigMap or
+        # key — the immutable pod spec proves the reference even when the
+        # resolved data is unknowable.
+        if offline_gke is None and kube_context:
+            keyref_hashes = _explicit_configmap_keyref_hashes(env_list)
+            explicit_unproven = frozenset(keyref_hashes)
+        else:
+            keyref_hashes = {}
+            explicit_unproven = frozenset()
         # envFrom references are tracked per ReplicaSet (they are part of its
         # immutable spec) so the comparison can catch two serving ReplicaSets
         # that disagree, instead of only their union. Secret sources join as
@@ -1080,6 +1120,7 @@ def read_gke_workload(
                     unproven_envfrom_keys=frozenset(target_unproven_keys - explicit_keys),
                     envfrom_key_contributions=tuple(target_contributions),
                     explicit_unproven_keys=explicit_unproven,
+                    explicit_keyref_hashes=keyref_hashes,
                 ),
                 env_map,
             )
@@ -1106,6 +1147,7 @@ def compare_service(
     expected_envfrom_unresolved: tuple[str, ...] = (),
     expected_envfrom_keys: frozenset[str] = frozenset(),
     expected_envfrom_keys_by_ref: Mapping[str, frozenset[str]] | None = None,
+    expected_keyref_hashes: Mapping[str, str] | None = None,
 ) -> ServiceEnvDrift:
     expected_env: ExpectedEnv = expected or {}
     declared = frozenset(expected_env)
@@ -1136,6 +1178,12 @@ def compare_service(
         # container start (K8s never refreshes envFrom); comparisons on those keys
         # would be assertions, so they are skipped and the workload reports INVENTORY.
         envfrom_unproven = tuple(sorted(set(live.envfrom_unproven) - set(live.envfrom_unresolved) - mismatched))
+    # Expected references whose keys the repository cannot enumerate (external
+    # ConfigMaps), excluding any whose identity already drifted: their
+    # contributed keys degrade to INVENTORY instead of asserting a value.
+    expected_unresolved_refs: set[str] = (
+        set(expected_envfrom_unresolved) - set(envfrom_mismatched) if expected is not None else set()
+    )
     live_only: set[str] = set()
     missing: set[str] = set()
     mismatches: list[ValueMismatch] = []
@@ -1154,6 +1202,10 @@ def compare_service(
         # current ConfigMap data may have gained (or lost) keys after these pods
         # started, so their presence proves nothing about the running workload.
         target_excused = set(target.unproven_envfrom_keys)
+        # Keys contributed by an expected reference the repository cannot
+        # enumerate, on a target that holds that same reference (offline
+        # snapshots where the fixture resolves the external ConfigMap's data).
+        unresolved_contributions: set[str] = set()
         if expected is not None:
             # Keys contributed by an expected reference the repository cannot
             # enumerate (external ConfigMap) are also excused on targets that
@@ -1161,10 +1213,10 @@ def compare_service(
             # bulk-load is exactly what the chart declared. Reporting those
             # keys as unallowlisted live-only drift would fail --strict for a
             # correct rollout; they surface as INVENTORY instead.
-            expected_unresolved_refs = set(expected_envfrom_unresolved) - set(envfrom_mismatched)
-            target_excused |= {
+            unresolved_contributions = {
                 key for ref, keys in target.envfrom_key_contributions if ref in expected_unresolved_refs for key in keys
             }
+            target_excused |= unresolved_contributions
         live_only |= (set(env_map) - declared) - target_excused if expected is not None else set(env_map) - declared
         if expected is None:
             continue
@@ -1196,13 +1248,54 @@ def compare_service(
         # Key presence is still checked even when the expected value is unknown
         # (deploy-time binding): a None hash skips only the value comparison,
         # never the key.
+        # The same precedence holds for unresolved external sources: when the
+        # repository cannot enumerate an expected reference's keys but the
+        # snapshot resolved its data, the effective value of a duplicated key
+        # follows K8s last-source-wins, not the repository ConfigMap's manifest
+        # entry — comparing it against the repo digest would report false
+        # drift for a correct rollout. Only keys whose effective value the
+        # repository does prove (an explicit env entry shadows the unresolved
+        # source, or a later contributing source on this target overrides it)
+        # are value-compared. Excluded keys need no separate INVENTORY
+        # attribution: the unresolved reference itself already reports the
+        # workload as INVENTORY (envfrom_unresolved).
+        value_excluded: set[str] = set()
+        if unresolved_contributions:
+            # Per-target later-source-wins resolution: a key's effective source
+            # is the last envFrom source that contributed it in spec order.
+            effective_source: dict[str, str] = {}
+            for ref, keys in target.envfrom_key_contributions:
+                for key in keys:
+                    effective_source[key] = ref
+            for key in unresolved_contributions & declared:
+                if key in target.explicit_keys:
+                    continue  # explicit env entry shadows envFrom; compared above
+                if effective_source.get(key) in expected_unresolved_refs:
+                    value_excluded.add(key)
         explicit_unproven |= target.explicit_unproven_keys - target.unproven_envfrom_keys
-        for key in sorted((declared & set(env_map)) - target.unproven_envfrom_keys - target.explicit_unproven_keys):
+        for key in sorted(
+            (declared & set(env_map)) - target.unproven_envfrom_keys - target.explicit_unproven_keys - value_excluded
+        ):
             want = expected_env[key]
             if want is not None and env_map[key] != want:
                 mismatches.append(
                     ValueMismatch(key=key, expected_hash=want, live_hash=env_map[key], target=target.name)
                 )
+        # A configMapKeyRef binding is provable from the immutable pod spec
+        # even when the resolved ConfigMap data is not: compare the reference
+        # identity hashes before degrading a key to INVENTORY. A rollout that
+        # rebound a key to a different ConfigMap or key is drift; only a
+        # matching binding stays value-unproven (the live ConfigMap data still
+        # cannot prove what the running pods resolved at start).
+        if expected_keyref_hashes:
+            for key, expected_identity in expected_keyref_hashes.items():
+                live_identity = target.explicit_keyref_hashes.get(key)
+                if live_identity is not None and live_identity != expected_identity:
+                    mismatches.append(
+                        ValueMismatch(
+                            key=key, expected_hash=expected_identity, live_hash=live_identity, target=target.name
+                        )
+                    )
     template_matches: bool | None = None
     if live.template_env is not None and live.source == 'serving':
         template_fp = env_fingerprint(live.template_env)
@@ -1361,16 +1454,30 @@ def inspect_gke_drift(
         expected_unresolved: tuple[str, ...] = ()
         expected_envfrom_keys: frozenset[str] = frozenset()
         expected_envfrom_keys_by_ref: dict[str, frozenset[str]] = {}
+        expected_keyref_hashes: dict[str, str] = {}
         try:
+            # Values mode cannot honor override tokens: it reads the chart
+            # values file directly, so every --gke-helm-arg /
+            # --gke-helm-arg-file token (exact deployed values or --set-string
+            # inputs) would be silently ignored and the comparison would run
+            # against repository defaults, reporting false drift for a
+            # legitimately overridden rollout. Reject the incompatible
+            # invocation as an operational error instead (per workload, so
+            # token-free workloads in the same run still report).
+            if render != 'helm' and workload_helm_args:
+                raise ValueError(
+                    f'--gke-render {render!r} ignores --gke-helm-arg override tokens for {workload!r}; '
+                    'use --gke-render helm so the expected state is rendered from the exact deployed inputs'
+                )
             if expected_overrides is not None and workload in expected_overrides:
                 expected = dict(expected_overrides[workload])
                 expected_refs = expected_gke_envfrom_refs(workload, env=env, root=root)
             elif render == 'helm':
-                expected, expected_refs = expected_gke_env_from_helm(
+                expected, expected_refs, expected_keyref_hashes = expected_gke_env_from_helm(
                     workload, env=env, root=root, runner=runner, helm_args=workload_helm_args
                 )
             else:
-                expected = expected_gke_env_from_values(workload, env=env, root=root)
+                expected, expected_keyref_hashes = expected_gke_env_from_values(workload, env=env, root=root)
                 expected_refs = expected_gke_envfrom_refs(workload, env=env, root=root)
             if expected is not None:
                 merged_keys: set[str] = set()
@@ -1410,6 +1517,7 @@ def inspect_gke_drift(
                     expected_envfrom_unresolved=expected_unresolved,
                     expected_envfrom_keys=expected_envfrom_keys,
                     expected_envfrom_keys_by_ref=expected_envfrom_keys_by_ref,
+                    expected_keyref_hashes=expected_keyref_hashes,
                 )
             )
         except Exception as exc:

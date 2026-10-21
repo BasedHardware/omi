@@ -1632,7 +1632,7 @@ def test_gke_helm_render_uses_chart_and_values(checker) -> None:
         calls.append(argv)
         return subprocess.CompletedProcess(argv, 0, stdout=rendered, stderr='')
 
-    expected, refs = checker.expected_gke_env_from_helm('pusher', env='prod', runner=runner)
+    expected, refs, _keyrefs = checker.expected_gke_env_from_helm('pusher', env='prod', runner=runner)
     assert expected == {'A': checker.value_hash('value', 'x')}
     assert refs == ('prod-omi-backend-config',)
     assert calls[0][:3] == ['helm', 'template', 'prod-omi-pusher']
@@ -2438,3 +2438,298 @@ def test_gke_envfrom_secret_refs_join_identity_comparison(checker) -> None:
     assert reordered.error is None, reordered.error
     assert reordered.envfrom_mismatched_refs != ()
     assert reordered.template_matches_serving is False
+
+
+def test_gke_live_explicit_keyref_binding_drift_is_provable(checker, monkeypatch) -> None:
+    # Thread: when a live ReplicaSet binds an explicit key to a *different*
+    # ConfigMap name or key than the chart declares, the key used to fall into
+    # explicit_unproven and the comparison degraded to INVENTORY with
+    # --strict exit 0 — the immutable pod spec proves the binding identity, so
+    # a rebind is drift. Only a *matching* binding stays value-unproven.
+    deployment = 'prod-omi-pusher'
+    cm_name = 'prod-omi-backend-config'
+    chart_binding = {'configMapKeyRef': {'name': cm_name, 'key': 'REDIS_DB_HOST'}}
+    serving_env = [
+        {'name': 'X', 'value': 'x'},
+        {
+            'name': 'REDIS_DB_HOST',
+            'valueFrom': {'configMapKeyRef': {'name': 'attacker-other-config', 'key': 'REDIS_DB_HOST'}},
+        },
+    ]
+    envfrom = [{'configMapRef': {'name': cm_name}}]
+
+    def runner(argv, **_kwargs):
+        if 'replicasets' in argv:
+            return subprocess.CompletedProcess(
+                argv,
+                0,
+                stdout=json.dumps(
+                    {'items': [_replicaset(f'{deployment}-a', deployment, 2, serving_env, 'pusher', envfrom=envfrom)]}
+                ),
+                stderr='',
+            )
+        if 'configmap' in argv:
+            return subprocess.CompletedProcess(
+                argv, 0, stdout=json.dumps({'data': {'REDIS_DB_HOST': 'irrelevant-live-data'}}), stderr=''
+            )
+        return subprocess.CompletedProcess(
+            argv,
+            0,
+            stdout=json.dumps(
+                {
+                    'spec': {
+                        'template': {
+                            'spec': {'containers': [{'name': 'pusher', 'env': serving_env, 'envFrom': envfrom}]}
+                        }
+                    }
+                }
+            ),
+            stderr='',
+        )
+
+    workload_values = {
+        'env': [{'name': 'X', 'value': 'x'}, {'name': 'REDIS_DB_HOST', 'valueFrom': chart_binding}],
+        'runtimeConfigMapName': cm_name,
+    }
+    monkeypatch.setattr(checker, '_load_values', lambda _path: workload_values)
+    monkeypatch.setattr(
+        checker,
+        'manifest_config_map',
+        lambda _env, _manifest_path=None: (cm_name, {'REDIS_DB_HOST': {'source': 'literal', 'value': 'repo'}}),
+    )
+
+    (result,) = checker.inspect_gke_drift(env='prod', workloads=('pusher',), kube_context='gke_ctx', runner=runner)
+    assert result.error is None, result.error
+    # The binding mismatch is proven from the immutable pod spec and reported
+    # as a value mismatch on the identity hashes (not the unknowable data).
+    (mismatch,) = result.value_mismatches
+    assert mismatch.key == 'REDIS_DB_HOST'
+    assert mismatch.expected_hash == checker.env_entry_hash({'name': 'REDIS_DB_HOST', 'valueFrom': chart_binding})
+    assert mismatch.live_hash == checker.env_entry_hash(serving_env[1])
+    assert result.status == 'DRIFT'
+    assert checker.exit_code((result,), strict=True) == 1
+
+
+def test_gke_matching_explicit_keyref_binding_stays_inventory(checker, monkeypatch) -> None:
+    # Companion to the rebind test: when the live binding *matches* the chart
+    # exactly, the key still cannot be value-compared on a live read (the
+    # container resolved the ConfigMap data at start), so the workload reports
+    # INVENTORY with --strict exit 0 — the binding comparison must not fire.
+    deployment = 'prod-omi-pusher'
+    cm_name = 'prod-omi-backend-config'
+    binding = {'configMapKeyRef': {'name': cm_name, 'key': 'REDIS_DB_HOST'}}
+    serving_env = [{'name': 'X', 'value': 'x'}, {'name': 'REDIS_DB_HOST', 'valueFrom': binding}]
+    envfrom = [{'configMapRef': {'name': cm_name}}]
+
+    def runner(argv, **_kwargs):
+        if 'replicasets' in argv:
+            return subprocess.CompletedProcess(
+                argv,
+                0,
+                stdout=json.dumps(
+                    {'items': [_replicaset(f'{deployment}-a', deployment, 2, serving_env, 'pusher', envfrom=envfrom)]}
+                ),
+                stderr='',
+            )
+        if 'configmap' in argv:
+            return subprocess.CompletedProcess(
+                argv, 0, stdout=json.dumps({'data': {'REDIS_DB_HOST': 'someone-updated-the-configmap'}}), stderr=''
+            )
+        return subprocess.CompletedProcess(
+            argv,
+            0,
+            stdout=json.dumps(
+                {
+                    'spec': {
+                        'template': {
+                            'spec': {'containers': [{'name': 'pusher', 'env': serving_env, 'envFrom': envfrom}]}
+                        }
+                    }
+                }
+            ),
+            stderr='',
+        )
+
+    workload_values = {
+        'env': serving_env,
+        'runtimeConfigMapName': cm_name,
+    }
+    monkeypatch.setattr(checker, '_load_values', lambda _path: workload_values)
+    monkeypatch.setattr(
+        checker,
+        'manifest_config_map',
+        lambda _env, _manifest_path=None: (cm_name, {'REDIS_DB_HOST': {'source': 'literal', 'value': 'repo'}}),
+    )
+
+    (result,) = checker.inspect_gke_drift(env='prod', workloads=('pusher',), kube_context='gke_ctx', runner=runner)
+    assert result.error is None, result.error
+    assert result.value_mismatches == ()
+    assert result.explicit_unproven_keys == ('REDIS_DB_HOST',)
+    assert result.status == 'INVENTORY'
+    assert not result.has_drift
+    assert checker.exit_code((result,), strict=True) == 0
+
+
+def test_gke_snapshot_unresolved_external_source_shadowing_key_excluded(checker) -> None:
+    # Thread: in an offline snapshot where expected sources [A, B] match the
+    # ReplicaSet, A is the repository ConfigMap, external B is last, and both
+    # export X, Kubernetes resolves X from B (last source wins). The checker
+    # must not compare that value against A's manifest digest and report false
+    # drift/strict exit 1 — X degrades with the unresolved reference instead.
+    cm_name, cm_data = _prod_configmap_fixture(checker)
+    shadowed = next(k for k, v in cm_data.items() if v)
+    cm_b = 'fixture-external-config'
+    deployment = 'prod-omi-pusher'
+    serving_env = [{'name': 'X', 'value': 'x'}]
+    envfrom = [{'configMapRef': {'name': cm_name}}, {'configMapRef': {'name': cm_b}}]
+    rendered = yaml.safe_dump_all(
+        [
+            {
+                'kind': 'Deployment',
+                'metadata': {'name': deployment},
+                'spec': {
+                    'template': {'spec': {'containers': [{'name': 'pusher', 'env': serving_env, 'envFrom': envfrom}]}}
+                },
+            }
+        ]
+    )
+
+    def runner(argv, **_kwargs):
+        return subprocess.CompletedProcess(argv, 0, stdout=rendered, stderr='')
+
+    gke_state = {
+        # B exports the same key A declares, with a different value: K8s
+        # last-source-wins resolves the pod's X from B.
+        'configmaps': {cm_name: {'data': cm_data}, cm_b: {'data': {shadowed: 'external-value'}}},
+        'pusher': {
+            'deployment': {
+                'spec': {
+                    'template': {'spec': {'containers': [{'name': 'pusher', 'env': serving_env, 'envFrom': envfrom}]}}
+                }
+            },
+            'replicasets': [_replicaset(f'{deployment}-a', deployment, 2, serving_env, 'pusher', envfrom=envfrom)],
+        },
+    }
+    (result,) = checker.inspect_gke_drift(
+        env='prod', workloads=('pusher',), render='helm', gke_state=gke_state, runner=runner
+    )
+    assert result.error is None, result.error
+    # No value mismatch may be reported for the shadowed key: its effective
+    # source is the external ConfigMap the repository cannot enumerate.
+    assert [m.key for m in result.value_mismatches if m.key == shadowed] == []
+    assert result.envfrom_unresolved == (cm_b,)
+    assert result.status == 'INVENTORY'
+    assert not result.has_drift
+    assert checker.exit_code((result,), strict=True) == 0
+
+
+def test_gke_snapshot_explicit_entry_overrides_unresolved_source_still_compared(checker) -> None:
+    # Companion: an explicit env entry for the same key shadows envFrom, so
+    # even when an unresolved external source exports the key, the explicit
+    # value is what the container runs and must stay value-compared.
+    cm_name, cm_data = _prod_configmap_fixture(checker)
+    shadowed = next(k for k, v in cm_data.items() if v)
+    cm_b = 'fixture-external-config'
+    deployment = 'prod-omi-pusher'
+    serving_env = [{'name': shadowed, 'value': 'explicit-live-value'}]
+    template_env = [{'name': shadowed, 'value': 'chart-declared-value'}]
+    envfrom = [{'configMapRef': {'name': cm_name}}, {'configMapRef': {'name': cm_b}}]
+    rendered = yaml.safe_dump_all(
+        [
+            {
+                'kind': 'Deployment',
+                'metadata': {'name': deployment},
+                'spec': {
+                    'template': {'spec': {'containers': [{'name': 'pusher', 'env': template_env, 'envFrom': envfrom}]}}
+                },
+            }
+        ]
+    )
+
+    def runner(argv, **_kwargs):
+        return subprocess.CompletedProcess(argv, 0, stdout=rendered, stderr='')
+
+    gke_state = {
+        'configmaps': {cm_name: {'data': cm_data}, cm_b: {'data': {shadowed: 'external-value'}}},
+        'pusher': {
+            'deployment': {
+                'spec': {
+                    'template': {'spec': {'containers': [{'name': 'pusher', 'env': template_env, 'envFrom': envfrom}]}}
+                }
+            },
+            'replicasets': [_replicaset(f'{deployment}-a', deployment, 2, serving_env, 'pusher', envfrom=envfrom)],
+        },
+    }
+    (result,) = checker.inspect_gke_drift(
+        env='prod', workloads=('pusher',), render='helm', gke_state=gke_state, runner=runner
+    )
+    assert result.error is None, result.error
+    # The explicit entry is the effective value and drifts from the manifest
+    # digest: real drift, not excused by the unresolved sibling source.
+    assert [m.key for m in result.value_mismatches] == [shadowed]
+    assert result.has_drift
+    assert checker.exit_code((result,), strict=True) == 1
+
+
+def test_sensitive_key_detection_covers_salt_named_credentials(checker) -> None:
+    # Thread: DREAM_AGENT_FEEDBACK_SALT is declared as a secret in the
+    # production manifest, but the sensitive-name regex did not match SALT; if
+    # that binding were accidentally deployed as a literal, mismatch output
+    # and the display fingerprint would publish its deterministic digest,
+    # letting candidate salts be tested offline. Salt-named credentials
+    # redact like every other credential.
+    assert checker.display_hash('DREAM_AGENT_FEEDBACK_SALT', 'abcdef123456') == 'redacted'
+    assert checker.display_hash('PW_SALT', 'abcdef123456') == 'redacted'
+    # Salting-adjacent words with no credential meaning stay publishable.
+    assert checker.display_hash('BCRYPT_HASH_ROUNDS', 'abcdef123456') != 'redacted'
+
+
+def test_values_render_rejects_override_tokens_as_operational_error(checker, tmp_path: Path) -> None:
+    # Thread: --gke-render values (chosen explicitly, or by auto falling back
+    # when helm is absent) reads the chart values file directly and cannot
+    # honor --gke-helm-arg / --gke-helm-arg-file override tokens. Silently
+    # ignoring them compares a legitimately overridden rollout against
+    # repository defaults and reports false drift with --strict exit 1. The
+    # incompatible invocation is rejected as an operational error (exit 2)
+    # instead, per workload, so token-free workloads still report.
+    state = {
+        'pusher': {
+            'deployment': {},
+            'replicasets': [
+                _replicaset('prod-omi-pusher-a', 'prod-omi-pusher', 2, [{'name': 'X', 'value': 'x'}], 'pusher')
+            ],
+        },
+    }
+    state_file = tmp_path / 'gke.json'
+    state_file.write_text(json.dumps(state), encoding='utf-8')
+    rc = checker.main(
+        [
+            '--no-cloud-run',
+            '--gke-workload',
+            'pusher',
+            '--gke-render',
+            'values',
+            '--gke-helm-arg=--set-string',
+            '--gke-helm-arg=env[0].value=deployed-secret',
+            '--gke-helm-arg-workload',
+            'pusher',
+            '--gke-state',
+            str(state_file),
+            '--strict',
+        ],
+    )
+    assert rc == 2  # operational error, not false drift
+    # Sanity: the same invocation without override tokens still reports.
+    rc = checker.main(
+        [
+            '--no-cloud-run',
+            '--gke-workload',
+            'pusher',
+            '--gke-render',
+            'values',
+            '--gke-state',
+            str(state_file),
+            '--strict',
+        ],
+    )
+    assert rc in (0, 1)
