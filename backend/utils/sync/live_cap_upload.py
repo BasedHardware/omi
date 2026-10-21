@@ -4,10 +4,7 @@ import asyncio
 from concurrent.futures import Future
 from typing import Callable
 
-import requests.exceptions
-import urllib3.exceptions
-from google.api_core.exceptions import RetryError
-from google.auth.exceptions import TransportError
+from config.storage_transport import UploadWaitTimeout, transport_cause
 
 from utils.executors import storage_executor, submit_with_context
 from utils.observability.held_content import record_publication_retry
@@ -16,41 +13,6 @@ from utils.sync.live_cap_publication import Publication
 UPLOAD_ATTEMPT_SECONDS = 4.0
 UPLOAD_SOCKET_SECONDS = 1.5
 UPLOAD_ATTEMPTS = 2
-
-
-def transport_cause(error: BaseException | None) -> str | None:
-    """Unwrap transport faults only; API/throttle/Firestore faults do not opt in."""
-    if error is None:
-        return None
-    pending = [error]
-    seen = set()
-    while pending:
-        current = pending.pop()
-        if id(current) in seen:
-            continue
-        seen.add(id(current))
-        if isinstance(
-            current,
-            (requests.exceptions.Timeout, urllib3.exceptions.ReadTimeoutError, urllib3.exceptions.ConnectTimeoutError),
-        ) and not isinstance(current, urllib3.exceptions.NewConnectionError):
-            return 'timeout'
-        if isinstance(
-            current,
-            (
-                requests.exceptions.ConnectionError,
-                requests.exceptions.ChunkedEncodingError,
-                urllib3.exceptions.ProtocolError,
-                urllib3.exceptions.NewConnectionError,
-            ),
-        ):
-            return 'connection'
-        if isinstance(current.__cause__, BaseException):
-            pending.append(current.__cause__)
-        if isinstance(current, (RetryError, TransportError, urllib3.exceptions.MaxRetryError)):
-            for inner in (getattr(current, 'cause', None), getattr(current, 'reason', None), *current.args):
-                if isinstance(inner, BaseException):
-                    pending.append(inner)
-    return None
 
 
 async def prepare(source: Publication, upload: Callable[[], dict]) -> None:
@@ -77,7 +39,7 @@ async def prepare(source: Publication, upload: Callable[[], dict]) -> None:
     if last_error is not None and transport_cause(last_error) is None:
         raise last_error
     if len(source.upload_attempts) == UPLOAD_ATTEMPTS:
-        raise last_error or requests.exceptions.ReadTimeout('immutable live upload outcome unknown')
+        raise last_error or UploadWaitTimeout('immutable live upload outcome unknown')
     while len(source.upload_attempts) < UPLOAD_ATTEMPTS:
         source.put_started = True
         future: Future[dict] = submit_with_context(storage_executor, upload)
@@ -85,11 +47,13 @@ async def prepare(source: Publication, upload: Callable[[], dict]) -> None:
         deadline = asyncio.timeout(UPLOAD_ATTEMPT_SECONDS)
         try:
             async with deadline:
-                fields = await asyncio.shield(asyncio.wrap_future(future))
+                await asyncio.shield(asyncio.wrap_future(future))
+                # The wrapper owns the wait; the retained future owns the result.
+                fields = future.result()
         except asyncio.TimeoutError:
             if not deadline.expired():
                 raise  # An operation's bare TimeoutError is not a transport retry.
-            last_error = requests.exceptions.ReadTimeout('immutable live upload wait deadline')
+            last_error = UploadWaitTimeout('immutable live upload wait deadline')
         except Exception as error:
             last_error = error
         else:
@@ -101,4 +65,4 @@ async def prepare(source: Publication, upload: Callable[[], dict]) -> None:
         if cause is None:
             raise last_error
     record_publication_retry('exhausted', transport_cause(last_error) or 'timeout')
-    raise last_error or requests.exceptions.ReadTimeout('immutable live upload outcome unknown')
+    raise last_error or UploadWaitTimeout('immutable live upload outcome unknown')
