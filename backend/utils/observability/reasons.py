@@ -168,6 +168,9 @@ class LiveSttReason(StrEnum):
     SONIOX_NO_AUDIO_TEARDOWN = 'soniox_no_audio_teardown'
     SONIOX_ROTATION = 'soniox_rotation'
     CAPACITY_FULL = 'capacity_full'
+    SEND_QUEUE_FULL = 'send_queue_full'
+    REPLAY_SEND_STALLED = 'replay_send_stalled'
+    DELIVERY_EXPIRED = 'delivery_expired'
     # The session's capture replay ring outgrew its horizon before the leg emitted;
     # session-local, never provider capacity or failure.
     REPLAY_RING_OVERFLOW = 'replay_ring_overflow'

@@ -843,14 +843,15 @@ class LiveLegSocket(STTSocket):
         circuit = target_circuit(target)
         if reason in ACCOUNT_REJECTION_REASONS:
             circuit.record_account_failure(
-                float(listen_value('account_circuit_cooldown_seconds', 'STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS', '1800'))
+                float(listen_value('account_circuit_cooldown_seconds', 'STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS', '1800')),
+                error_class=reason,
             )
             health.quarantine_target(target.id, circuit.account_cooldown_seconds_remaining)
             health.quarantine(self.service.value, 'account', circuit.account_cooldown_seconds_remaining)
         elif getattr(self.raw, 'idle_reopen_failed', False) is True:
             circuit.record_failure()
         else:
-            circuit.record_serve_failure()
+            circuit.record_serve_failure(error_class=reason)
             health.quarantine(
                 self.service.value, 'selection', circuit.serve_error_bench_seconds, endpoint=self.routing_endpoint
             )

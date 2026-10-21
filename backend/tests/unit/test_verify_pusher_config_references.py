@@ -228,7 +228,7 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
         "OMI_SHAPED_AGENT_MODE": "on",
         "CAPTURE_GROUP_CONTAINMENT_MODE": "shadow",
         "CLIENT_SUMMARIES_AT_CAP_ENABLED": "true",
-        "FIRESTORE_READ_LEVERS": '{"action_items_page":100,"backfill_task_reads":0,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":0,"ledger_purge_coalesce":0,"people_scan_dedupe":0,"queue_age_sample_budget":0,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":25,"subscription_cache":100,"usage_month_cache":0}',
+        "FIRESTORE_READ_LEVERS": '{"action_items_page":100,"backfill_task_reads":0,"candidates_page":100,"canonical_statuses_dedupe":5,"deletion_marker_cache":100,"historical_scan_memo":0,"ledger_purge_coalesce":0,"mcp_conversation_cards_cache":5,"memory_list_index_window":5,"people_scan_dedupe":0,"queue_age_sample_budget":0,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":25,"subscription_cache":100,"usage_month_cache":0}',
         "FSR_QUEUE_AGE_PUBLISHER": "0",
         "FSR_QUEUE_AGE_LEASE_SECONDS": "120",
         "FSR_LEADER_LEASE_TTL_SECONDS": "0",

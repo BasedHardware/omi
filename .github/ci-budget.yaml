@@ -3603,13 +3603,28 @@
     "desktop-checks.yml": {
       "name": "Desktop Checks",
       "owner": "CI maintainers",
-      "rationale": "Initial workflow inventory P18 adds one daily reusable nightly call; PR triggers and test commands stay unchanged.",
+      "rationale": "Initial workflow inventory P18 adds one daily reusable nightly call; PR triggers and test commands stay unchanged. 2026-10-21 runner economy narrows the push trigger to the detect-changes agent-runtime superset; main pushes outside desktop paths skip the workflow, PR forecast unchanged.",
       "triggers": {
         "pull_request": {
           "branches": "main"
         },
         "push": {
-          "branches": "main"
+          "branches": "main",
+          "paths": [
+            "desktop/macos/agent/**",
+            "desktop/macos/pi-mono-extension/**",
+            "desktop/macos/run.sh",
+            "desktop/macos/scripts/audit-desktop-bundle-deps.sh",
+            "desktop/macos/scripts/prepare-agent-runtime.sh",
+            "desktop/macos/scripts/prepare-desktop-bundle-native-deps.sh",
+            "desktop/macos/scripts/test-tool-surfaces.sh",
+            "desktop/macos/scripts/agent-logic-harness.sh",
+            "codemagic.yaml",
+            "scripts/pre-push",
+            "scripts/pre_push_ci_prediction.py",
+            ".github/actions/detect-changes/**",
+            ".github/workflows/desktop-checks.yml"
+          ]
         },
         "workflow_call": {
           "inputs": {
@@ -6018,13 +6033,23 @@
     "web-checks.yml": {
       "name": "Web Checks",
       "owner": "CI maintainers",
-      "rationale": "Initial workflow inventory P18 adds one daily reusable nightly call; PR triggers and test commands stay unchanged.",
+      "rationale": "Initial workflow inventory P18 adds one daily reusable nightly call; PR triggers and test commands stay unchanged. 2026-10-21 runner economy narrows the push trigger to the detect-changes web superset; main pushes outside web paths skip the workflow, PR forecast unchanged.",
       "triggers": {
         "pull_request": {
           "branches": "main"
         },
         "push": {
-          "branches": "main"
+          "branches": "main",
+          "paths": [
+            "web/frontend/**",
+            "web/app/**",
+            "web/admin/**",
+            "web/personas-open-source/**",
+            "web/packages/note-shared/**",
+            "firestore.indexes.json",
+            ".github/actions/detect-changes/**",
+            ".github/workflows/web-checks.yml"
+          ]
         },
         "workflow_call": {
           "inputs": {

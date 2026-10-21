@@ -1153,6 +1153,13 @@ class CreateConversationRequest(BaseModel):
     language: Optional[str] = Field(default='en', description="Language code (ISO 639-1, e.g., 'en', 'es', 'fr')")
     geolocation: Optional[GeolocationInput] = Field(default=None, description="Geolocation where conversation occurred")
 
+    @field_validator('started_at', 'finished_at')
+    @classmethod
+    def read_naive_timestamp_as_utc(cls, value: Optional[datetime]) -> Optional[datetime]:
+        # Naive next to aware made the handler's finished_at < started_at comparison a TypeError (500).
+        # Two naive values were always accepted here, so read them as UTC instead of the from-segments 422.
+        return value.replace(tzinfo=timezone.utc) if value is not None and value.tzinfo is None else value
+
 
 class ConversationResponse(BaseModel):
     model_config = ConfigDict(title='ConversationCreateResponse')

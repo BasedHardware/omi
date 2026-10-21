@@ -119,7 +119,7 @@ class _LiveTranscriptViewState extends State<LiveTranscriptView> {
                         )
                       : getTranscriptWidget(
                           false,
-                          provider.segments,
+                          List<TranscriptSegment>.of(provider.segments),
                           provider.photos,
                           deviceProvider.connectedDevice,
                           bottomMargin: 0,
@@ -147,7 +147,10 @@ class _LiveTranscriptViewState extends State<LiveTranscriptView> {
     String? conversationId,
   ) {
     final photos = List<ConversationPhoto>.from(provider.photos)..sort((a, b) => a.createdAt.compareTo(b.createdAt));
-    final segments = provider.segments;
+    // A lazy row can be requested after a server deletion mutates the capture
+    // list, while its old delegate still has the previous itemCount. Keep one
+    // membership snapshot for that delegate, its names and decorations.
+    final segments = List<TranscriptSegment>.of(provider.segments);
     final people = context.watch<PeopleProvider?>()?.people ?? SharedPreferencesUtil().cachedPeople;
     final names = SpeakerNames.forSegments(segments, people: people, l10n: context.l10n);
     final decorations = LiveTranscriptDecorations.of(widget.episode, conversationId, segments);

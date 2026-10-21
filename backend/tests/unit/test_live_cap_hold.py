@@ -53,9 +53,7 @@ def persistence(monkeypatch, tmp_path):
     monkeypatch.setattr(
         live.live_cap_manifest,
         'publish',
-        lambda uid, path, source, meta, duration, **kwargs: cap_hold.upload_held_audio(
-            uid, path, source.identity, meta, immutable=True
-        ),
+        lambda uid, path, source, meta, duration, **kwargs: None,
     )
     monkeypatch.setattr(cap_hold, 'release', Mock())
     monkeypatch.setattr(cap_hold, 'holds', lambda uid: SimpleNamespace(document=lambda identity: identity))
@@ -119,7 +117,7 @@ async def test_failed_persistence_does_not_increment_receipt_or_discard_pcm(host
     hold = live.LiveHeldAudio(host)
     hold.append(b'\0' * 32000, 16000, 10, 'a')
     save = Mock(side_effect=RuntimeError('synthetic upload fault'))
-    monkeypatch.setattr(cap_hold, 'upload_held_audio', save)
+    monkeypatch.setattr(live.live_cap_manifest, 'publish', save)
     with pytest.raises(RuntimeError):
         await hold.flush(force=True)
     assert hold.seconds == 0 and len(hold.pending) == 1

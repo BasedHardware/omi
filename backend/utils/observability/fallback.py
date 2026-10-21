@@ -152,8 +152,20 @@ ALLOWED_REASONS = reason_values(FallbackReason)
 # Diagnostic detail stays in the log; metric dimensions stay fixed and live
 # STT reasons share the bounded vocabulary used by cost health.
 ALLOWED_CAPACITY_SUBTYPES = frozenset({'buffer_cap', 'span_cap', 'admission', 'queue_timeout'})
-# Bounded ramp-watch reasons with their own failure-detail series.
-FAILURE_DETAIL_REASONS = frozenset({'first_text_deadline', 'capacity_full', 'replay_ring_overflow', 'gate_unavailable'})
+# Bounded ramp-watch reasons with their own failure-detail series. The local
+# delivery deaths (send_queue_full / replay_send_stalled / delivery_expired)
+# carry their own series instead of hiding inside capacity_full.
+FAILURE_DETAIL_REASONS = frozenset(
+    {
+        'first_text_deadline',
+        'capacity_full',
+        'replay_ring_overflow',
+        'gate_unavailable',
+        'send_queue_full',
+        'replay_send_stalled',
+        'delivery_expired',
+    }
+)
 ALLOWED_STT_FAILURE_SUBTYPES = frozenset(
     {
         'initialization_failed',

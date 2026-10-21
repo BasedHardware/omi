@@ -96,6 +96,9 @@ class AppContext:
 
     def make_client(self) -> OmiClient:
         profile = self.get_profile()
+        # --api-base, $OMI_API_BASE and configs saved before `config set` checked URLs reach here
+        # unchecked; httpx would report a bad one as a network failure (or "outcome unknown").
+        profile.api_base = config_cmd.validated_url("api_base", profile.api_base)
         # Apply the per-command key only to cloud API requests. Saved-profile
         # management uses its own credentials.
         env_key = os.environ.get(cfg.ENV_API_KEY)

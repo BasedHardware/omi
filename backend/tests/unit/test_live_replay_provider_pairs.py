@@ -112,7 +112,7 @@ async def test_old_unyielding_replay_overflows_both_real_provider_queues(kind):
                 break
             accepted += 1
         assert accepted == 2000
-        assert raw.is_connection_dead and raw.typed_death_reason == 'capacity_full'
+        assert raw.is_connection_dead and raw.typed_death_reason == 'send_queue_full'
     finally:
         await stop([raw])
 
@@ -327,7 +327,7 @@ async def test_managed_soniox_internal_finish_still_fails_over(monkeypatch):
         while not soniox.raw._send_queue.full():
             soniox.raw._send_queue.put_nowait(b'\x01\x00')
         assert not soniox.send(b'\x01\x00' * 480)
-        assert soniox.normalized_death_reason == 'capacity_full'
+        assert soniox.normalized_death_reason == 'send_queue_full'
         assert soniox.raw._finishing
         assert not socket_is_finishing(soniox)
         assert await actual._failover_stt_socket()
@@ -403,7 +403,7 @@ async def test_stalled_replay_queue_rejects_with_bounded_capacity_cause(monkeypa
     raw.send(b'\x01\x00')
     try:
         assert not await raw.wait_send_capacity()
-        assert raw.is_connection_dead and raw.typed_death_reason == 'capacity_full'
+        assert raw.is_connection_dead and raw.typed_death_reason == 'replay_send_stalled'
     finally:
         await stop([raw])
 
@@ -422,14 +422,14 @@ async def test_stalled_default_queue_replay_never_hides_behind_2000_slots(monkey
         rejected = await replay_chunks(raw, ring.snapshot(), source=ring, provider='parakeet', soniox=None)
         assert rejected is not None
         assert raw._send_queue.maxsize == 2000 and raw._send_queue.high_water == 2
-        assert raw.typed_death_reason == 'capacity_full'
+        assert raw.typed_death_reason == 'replay_send_stalled'
     finally:
         await stop([raw])
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('successor', ['soniox', 'modulate-velma-2'])
-async def test_adopted_tail_capacity_full_is_censored_not_provider_death(monkeypatch, successor):
+async def test_adopted_tail_bound_is_censored_not_provider_death(monkeypatch, successor):
     actual, _, raws, legs, observations = await setup_receiver(monkeypatch, ['parakeet-window', successor])
     actual.stt_socket.raw.fail('first_text_deadline')
     try:
@@ -438,19 +438,21 @@ async def test_adopted_tail_capacity_full_is_censored_not_provider_death(monkeyp
         assert isinstance(tail, ReplayTailSocket)
         assert not tail.connection.is_connection_dead
         assert not tail.send(b'\x01\x00' * (27 * 16000), 135 * 16000)
-        assert tail.typed_death_reason == 'capacity_full'
+        # The tail's own live-residence bound filled: a local queue, never
+        # destination capacity (which stays capacity_full).
+        assert tail.typed_death_reason == 'send_queue_full'
         assert not raws[-1].is_connection_dead
-        assert live_stt_terminal_reason(tail, 'send_failed') == 'capacity_full'
+        assert live_stt_terminal_reason(tail, 'send_failed') == 'send_queue_full'
         hop = PendingLiveFailover.from_socket(tail, actual.host.stt_service.value, 'unavailable')
-        assert hop.reason == 'capacity_full'
+        assert hop.reason == 'send_queue_full'
         before = fallback_count()
         hop.note_failure(None)
         hop.note_failure(None)
         assert legs[-1].leg_outcome.settled
         assert fallback_count() - before == 1
-        assert provider_observation('failover', 'capacity_full') is None
+        assert provider_observation('failover', 'send_queue_full') is None
         recorded = [entry for entry in observations if entry[0] == legs[-1].routing_target]
-        assert recorded and recorded[-1][5] == 'capacity_full'
+        assert recorded and recorded[-1][5] == 'send_queue_full'
         assert recorded[-1][5] != 'connection_lost'
     finally:
         await actual._drain_stt_sockets()

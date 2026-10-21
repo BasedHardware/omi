@@ -1283,12 +1283,14 @@ async def test_queued_live_frame_never_writes_past_capture_age_deadline(monkeypa
         await until(lambda: raw._send_queue.inflight == 1)
         asyncio.create_task(virtual_clock.sleep(1.0))
         await asyncio.sleep(0.7)
-        assert raw.typed_death_reason == 'capacity_full'
+        # The frame's absolute capture-age delivery deadline passed mid-write:
+        # a local delivery bound (delivery_expired), never destination capacity.
+        assert raw.typed_death_reason == 'delivery_expired'
         assert transport.pcm == b''
         assert all(stamp <= 28.0 for stamp in transport.sent_at)
         assert raw.is_connection_dead
-        assert live_stt_terminal_reason(raw, 'send_failed') == 'capacity_full'
-        assert provider_observation('failover', 'capacity_full') is None
+        assert live_stt_terminal_reason(raw, 'send_failed') == 'delivery_expired'
+        assert provider_observation('failover', 'delivery_expired') is None
     finally:
         transport.gate.set()
         await abort_replay_socket(delivery)

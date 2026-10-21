@@ -1274,11 +1274,27 @@
     },
     {
       "path": "utils/stt/provider_resilience.py",
+      "function": "ProviderCircuitBreaker._note_trip",
+      "label": "provider",
+      "shape": "attribute",
+      "count": 1,
+      "why": "main #23074 breaker trip causes (M3 final main merge); provider label from the breaker config, owner lane 14"
+    },
+    {
+      "path": "utils/stt/provider_resilience.py",
       "function": "ProviderCircuitBreaker._publish_state",
       "label": "provider",
       "shape": "attribute",
       "count": 2,
       "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/stt/provider_resilience.py",
+      "function": "initialize_stt_circuit_trip_children",
+      "label": "provider",
+      "shape": "name",
+      "count": 1,
+      "why": "main #23074 breaker trip causes (M3 final main merge); provider label from the breaker config, owner lane 14"
     },
     {
       "path": "utils/stt/provider_stream_end.py",

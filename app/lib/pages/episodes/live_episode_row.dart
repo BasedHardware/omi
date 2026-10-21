@@ -1,11 +1,10 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';
 
 import 'package:omi/pages/conversations/capture_state_labels.dart';
 import 'package:omi/pages/episodes/episode_presentation.dart';
+import 'package:omi/pages/episodes/live_episode_clock.dart';
 import 'package:omi/pages/episodes/live_episode_page.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/episode_provider.dart';
@@ -26,35 +25,37 @@ class LiveEpisodeRow extends StatefulWidget {
 
 class _LiveEpisodeRowState extends State<LiveEpisodeRow> {
   EpisodeProvider? _episodes;
-  Timer? _tick;
 
   @override
   void initState() {
     super.initState();
     _episodes = context.read<EpisodeProvider?>();
     _episodes?.watch();
-    _tick = Timer.periodic(const Duration(seconds: 30), (_) {
-      if (mounted) setState(() {});
-    });
   }
 
   @override
   void dispose() {
-    _tick?.cancel();
     _episodes?.unwatch();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final l10n = context.l10n;
     final episodes = context.watch<EpisodeProvider>();
     final capture = context.watch<CaptureProvider>();
+    return LiveEpisodeClock(
+      clock: episodes.now,
+      builder: (context, now) => _row(context, episodes, capture, now),
+    );
+  }
+
+  Widget _row(BuildContext context, EpisodeProvider episodes, CaptureProvider capture, DateTime now) {
+    final l10n = context.l10n;
     final episode = episodes.live;
     final state = EpisodePresentation.displayState(capture);
     final listening = EpisodePresentation.isListening(state);
     final elapsed = EpisodePresentation.runningLength(
-      EpisodePresentation.elapsed(episode, capture, episodes.now()),
+      EpisodePresentation.elapsed(episode, capture, now),
       l10n,
     );
     final title = (episode?.title ?? '').trim().isEmpty ? l10n.episodeListeningNow : episode!.title;

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 import 'package:omi/gen/pigeon_communicator.g.dart';
+import 'package:omi/pages/settings/device/device_catching_up_card.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
@@ -103,14 +104,15 @@ class DeviceRightNowGroup extends StatelessWidget {
     this.liveLength,
     this.onOpenLive,
     this.catchingUp,
+    this.onOpenCatchingUp,
   });
 
   final String? liveTitle;
   final String? liveLength;
   final VoidCallback? onOpenLive;
 
-  /// Minutes moved off the device so far, out of everything waiting to sync.
-  final ({int doneSeconds, int totalSeconds})? catchingUp;
+  final DeviceCatchUpSummary? catchingUp;
+  final VoidCallback? onOpenCatchingUp;
 
   bool get hasContent => liveTitle != null || catchingUp != null;
 
@@ -130,36 +132,10 @@ class DeviceRightNowGroup extends StatelessWidget {
             onTap: onOpenLive,
           ),
         if (catchingUp != null)
-          Padding(
+          DeviceCatchingUpCard(
             key: const Key('device_right_now_catching_up'),
-            padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: OmiSpacing.sm),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(
-                  children: [
-                    Expanded(child: Text(l10n.deviceCatchingUp, style: OmiType.callout)),
-                    Text(
-                      l10n.deviceCatchingUpProgress(
-                        (catchingUp.doneSeconds / 60).floor(),
-                        (catchingUp.totalSeconds / 60).ceil(),
-                      ),
-                      style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: OmiSpacing.xs),
-                ClipRRect(
-                  borderRadius: OmiRadius.pillAll,
-                  child: LinearProgressIndicator(
-                    value: catchingUp.totalSeconds <= 0 ? 0 : catchingUp.doneSeconds / catchingUp.totalSeconds,
-                    minHeight: 6,
-                    backgroundColor: OmiColors.surface2,
-                    color: OmiColors.accent,
-                  ),
-                ),
-              ],
-            ),
+            summary: catchingUp,
+            onOpen: onOpenCatchingUp,
           ),
       ],
     );
