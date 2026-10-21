@@ -108,7 +108,10 @@ def _reserve_batch_live_capture(uid: str, conversation_data: dict[str, Any]) -> 
     if conversation_data.get('record_lane_owner'):
         return
     policy = resolve_batch_policy(uid)
-    if record_capture_eligible(uid, conversation_data) and ramp_admission_policy(uid, policy).live_record_enabled:
+    if (
+        record_capture_eligible(uid, conversation_data, policy=policy)
+        and ramp_admission_policy(uid, policy).live_record_enabled
+    ):
         conversation_data['record_lane_owner'] = 'batch_live_v1'
 
 
