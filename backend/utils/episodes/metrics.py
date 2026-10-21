@@ -10,6 +10,8 @@
 - client gating: moments skipped because no capable client was seen
   (``omi_episode_moments_skipped_no_client_total``), and live conversations by
   whether the user's client was seen (``omi_episode_live_sessions_total``)
+- episodes API calls by client channel and admission outcome
+  (``omi_episode_client_requests_total``)
 """
 
 from __future__ import annotations
@@ -99,6 +101,14 @@ EPISODE_LIVE_SESSIONS_TOTAL = _reuse_or_create(
     'Admitted live conversations at their first ended moment, by whether a capable client was seen (true|false).',
     ['client_seen'],
 )
+CLIENT_CHANNELS = frozenset({'beta', 'store', 'unknown'})
+CLIENT_REQUEST_OUTCOMES = frozenset({'admitted', 'channel_closed', 'not_admitted'})
+EPISODE_CLIENT_REQUESTS_TOTAL = _reuse_or_create(
+    Counter,
+    'omi_episode_client_requests_total',
+    'Episodes API calls by X-Omi-App-Channel (beta|store|unknown) and outcome (admitted|channel_closed|not_admitted).',
+    ['channel', 'outcome'],
+)
 
 
 def _label(value: str, allowed: frozenset[str]) -> str:
@@ -168,5 +178,15 @@ def record_moment_skipped_no_client(trigger: str) -> None:
 def record_live_session(client_seen: bool) -> None:
     try:
         EPISODE_LIVE_SESSIONS_TOTAL.labels(client_seen='true' if client_seen else 'false').inc()
+    except Exception:
+        pass
+
+
+def record_client_request(channel: str, outcome: str) -> None:
+    try:
+        EPISODE_CLIENT_REQUESTS_TOTAL.labels(
+            channel=channel if channel in CLIENT_CHANNELS else 'unknown',
+            outcome=_label(outcome, CLIENT_REQUEST_OUTCOMES),
+        ).inc()
     except Exception:
         pass

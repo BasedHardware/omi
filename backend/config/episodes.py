@@ -25,6 +25,15 @@ builds, the desktop app and web never call that API, so their users cost
 nothing. The API itself stays available to every admitted uid, since it is what
 sets the marker. The allowlist bypasses the percentage, not the marker.
 
+``EPISODES_CLIENT_CHANNELS`` (default ``beta``) is the client cohort. The app
+sends ``X-Omi-App-Channel: beta|store`` on every request (TestFlight and
+non-production build profiles are ``beta``; anything else, including an
+unknown install, is ``store``). An episodes API call from a channel outside the
+list answers ``enabled: false`` and leaves no marker, so that client keeps
+today's UI and its user costs nothing. A missing or unrecognised channel (old
+builds, desktop, web) is never admitted. Expanding to store users is the config
+flip ``beta,store``.
+
 Pure module: stdlib only, flags read at the call boundary, never at import.
 """
 
@@ -37,6 +46,10 @@ from config.jev_decisions import percentage, uid_bucket
 EPISODES_ENABLED_ENV = 'EPISODES_ENABLED'
 EPISODES_PERCENT_ENV = 'EPISODES_PERCENT'
 EPISODES_UID_ALLOWLIST_ENV = 'EPISODES_UID_ALLOWLIST'
+EPISODES_CLIENT_CHANNELS_ENV = 'EPISODES_CLIENT_CHANNELS'
+APP_CHANNEL_HEADER = 'X-Omi-App-Channel'
+APP_CHANNELS = frozenset({'beta', 'store'})
+_DEFAULT_CLIENT_CHANNELS = frozenset({'beta'})
 _COHORT_SALT = 'episodes-v1'
 _ON = frozenset({'true', 'on', '1', 'yes'})
 
@@ -58,6 +71,26 @@ def episodes_enabled_for(uid: str) -> bool:
     if uid in allowlist:
         return True
     return uid_bucket(uid, _COHORT_SALT) < percentage(EPISODES_PERCENT_ENV, default=100.0)
+
+
+def app_channel(raw: str | None) -> str:
+    """The request's ``X-Omi-App-Channel`` as a bounded label: ``beta``, ``store`` or ``unknown``."""
+    value = (raw or '').strip().lower()
+    return value if value in APP_CHANNELS else 'unknown'
+
+
+def episodes_client_channels() -> frozenset[str]:
+    """Admitted client channels. Unset or blank is ``beta``; unrecognised entries are ignored."""
+    raw = os.getenv(EPISODES_CLIENT_CHANNELS_ENV, '')
+    if not raw.strip():
+        return _DEFAULT_CLIENT_CHANNELS
+    return frozenset(item.strip().lower() for item in raw.split(',')) & APP_CHANNELS
+
+
+def client_channel_admitted(raw: str | None) -> bool:
+    """A missing or unknown channel is never admitted."""
+    channel = app_channel(raw)
+    return channel != 'unknown' and channel in episodes_client_channels()
 
 
 # --------------------------------------------------------------------------- client capability

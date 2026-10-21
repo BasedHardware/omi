@@ -69,6 +69,7 @@ def _admitted_by_default(monkeypatch):
     monkeypatch.delenv(config.EPISODES_ENABLED_ENV, raising=False)
     monkeypatch.delenv(config.EPISODES_PERCENT_ENV, raising=False)
     monkeypatch.delenv(config.EPISODES_UID_ALLOWLIST_ENV, raising=False)
+    monkeypatch.delenv(config.EPISODES_CLIENT_CHANNELS_ENV, raising=False)
 
 
 def _sample(name, **labels):
@@ -112,7 +113,7 @@ def http(monkeypatch):
             app.dependency_overrides[dependency.call] = lambda: 'uid-1'
     monkeypatch.setattr(router_module.service, 'live_episode', lambda uid: None)
     monkeypatch.setattr(router_module.service, 'episode_for_conversation', lambda uid, cid: None)
-    return TestClient(app)
+    return TestClient(app, headers={'X-Omi-App-Channel': 'beta'})
 
 
 def test_an_api_call_sets_the_marker_once_and_polling_does_not_rewrite_it(fake_redis, http):
@@ -157,6 +158,52 @@ def test_an_unadmitted_caller_leaves_no_marker(fake_redis, http, monkeypatch):
     monkeypatch.setenv(config.EPISODES_ENABLED_ENV, 'off')
     assert http.get('/v1/episodes/live').json() == {'enabled': False, 'episode': None}
     assert fake_redis.sets == []
+
+
+# --------------------------------------------------------------------------- the client channel is the cohort
+
+
+@pytest.mark.parametrize(
+    'headers', [{'X-Omi-App-Channel': 'store'}, {'X-Omi-App-Channel': 'nightly'}, {'X-Omi-App-Channel': ''}, None]
+)
+def test_store_missing_or_unknown_channels_see_no_episodes_and_leave_no_marker(fake_redis, http, monkeypatch, headers):
+    monkeypatch.setattr(router_module.service, 'live_episode', lambda uid: pytest.fail('must not read'))
+    request = {'headers': headers} if headers is not None else {}
+    if headers is None:
+        http.headers.pop('X-Omi-App-Channel', None)
+    assert http.get('/v1/episodes/live', **request).json() == {'enabled': False, 'episode': None}
+    assert http.get('/v1/episodes/by-conversation/c1', **request).json() == {'enabled': False, 'episode': None}
+    assert http.post('/v1/episodes/e1/wrap-up', json={}, **request).status_code == 404
+    assert fake_redis.sets == []
+    assert client_gate.client_seen('uid-1') is False
+
+
+def test_beta_channel_is_admitted_by_default_and_store_by_config(fake_redis, http, monkeypatch):
+    beta = _sample('omi_episode_client_requests_total', channel='beta', outcome='admitted')
+    store_closed = _sample('omi_episode_client_requests_total', channel='store', outcome='channel_closed')
+    assert http.get('/v1/episodes/live', headers={'X-Omi-App-Channel': 'BETA'}).json()['enabled'] is True
+    assert http.get('/v1/episodes/live', headers={'X-Omi-App-Channel': 'store'}).json()['enabled'] is False
+    assert _sample('omi_episode_client_requests_total', channel='beta', outcome='admitted') == beta + 1
+    assert _sample('omi_episode_client_requests_total', channel='store', outcome='channel_closed') == store_closed + 1
+    monkeypatch.setenv(config.EPISODES_CLIENT_CHANNELS_ENV, 'beta,store')
+    assert http.get('/v1/episodes/live', headers={'X-Omi-App-Channel': 'store'}).json()['enabled'] is True
+
+
+def test_channel_config_parsing(monkeypatch):
+    monkeypatch.delenv(config.EPISODES_CLIENT_CHANNELS_ENV, raising=False)
+    assert config.episodes_client_channels() == {'beta'}
+    monkeypatch.setenv(config.EPISODES_CLIENT_CHANNELS_ENV, '  ')
+    assert config.episodes_client_channels() == {'beta'}
+    monkeypatch.setenv(config.EPISODES_CLIENT_CHANNELS_ENV, ' Beta , STORE, unknown ')
+    assert config.episodes_client_channels() == {'beta', 'store'}
+    monkeypatch.setenv(config.EPISODES_CLIENT_CHANNELS_ENV, 'nonsense')
+    assert config.episodes_client_channels() == frozenset()
+    assert config.client_channel_admitted('beta') is False
+    monkeypatch.setenv(config.EPISODES_CLIENT_CHANNELS_ENV, 'beta')
+    assert config.client_channel_admitted(None) is False
+    assert config.client_channel_admitted('unknown') is False
+    assert config.app_channel(' Store ') == 'store'
+    assert config.app_channel('x' * 500) == 'unknown'
 
 
 # --------------------------------------------------------------------------- listen spends only with a marker

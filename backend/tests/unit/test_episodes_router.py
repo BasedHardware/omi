@@ -43,7 +43,8 @@ def client(monkeypatch):
     for route in app.routes:
         for dependency in getattr(getattr(route, 'dependant', None), 'dependencies', []):
             app.dependency_overrides[dependency.call] = lambda: 'uid-1'
-    return app, TestClient(app)
+    # A TestFlight build (beta channel); test_episodes_client_gate covers the channel gate.
+    return app, TestClient(app, headers={'X-Omi-App-Channel': 'beta'})
 
 
 def test_live_reports_capability_and_projects_the_wire_shape(client, monkeypatch):
