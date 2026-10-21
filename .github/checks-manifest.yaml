@@ -165,6 +165,11 @@ checks:
     triggers: ["plugins/omi-semantic-scholar-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#13925: null or non-dict data/papers payloads, mixed-type year/citationCount sort keys, null authors, and unnormalized DOI/arXiv identifiers must produce clean chat-tool responses, not TypeErrors or 500s"
+  - id: semantic-scholar-error-handling-tests
+    command: ["python3", "plugins/omi-semantic-scholar-app/test_error_handling.py"]
+    triggers: ["plugins/omi-semantic-scholar-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "Transport failures and unexpected internal exceptions must never be interpolated into chat tool error responses; only fixed code-controlled messages (and HTTP status mappings) may reach the chat model"
   - id: arxiv-app-tests
     command: ["python3", "plugins/omi-arxiv-app/test_main.py"]
     triggers: ["plugins/omi-arxiv-app/**", ".github/checks-manifest.yaml"]
