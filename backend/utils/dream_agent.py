@@ -745,6 +745,10 @@ async def run_pass(
             await dream_capacity.release(slot)
 
 
+RESERVED_RECHECKS = 4
+RESERVED_RECHECK_SECONDS = 30
+
+
 async def drain(*, limit=5000):
     if not enabled() or limit <= 0:
         return []
@@ -752,6 +756,14 @@ async def drain(*, limit=5000):
     try:
         async with asyncio.timeout(DRAIN_TIMEOUT_SECONDS):
             reserved_open = await dream_capacity.available_model(mode='reserved') is not None
+            if not reserved_open and not on_demand_enabled():
+                # The first check can only start the probe that refreshes stale evidence; recheck
+                # before giving up the hourly sweep.
+                for _ in range(RESERVED_RECHECKS):
+                    await asyncio.sleep(RESERVED_RECHECK_SECONDS)
+                    if await dream_capacity.available_model(mode='reserved') is not None:
+                        reserved_open = True
+                        break
             if not reserved_open and not on_demand_enabled():
                 report = {'status': 'waiting', 'reason': 'reserved_capacity'}
                 record_pass(report)

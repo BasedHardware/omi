@@ -162,14 +162,32 @@ async def test_gateway_capacity_errors_cool_the_selected_model_only(monkeypatch,
 
 def test_no_model_sweep_is_visible_without_owner_admission(monkeypatch, caplog):
     monkeypatch.setenv('DREAM_AGENT_ENABLED', 'true')
-    monkeypatch.setattr(dream_capacity, 'available_model', AsyncMock(return_value=None))
+    monkeypatch.delenv('DREAM_ON_DEMAND_ENABLED', raising=False)
+    monkeypatch.setattr(dream_agent, 'RESERVED_RECHECK_SECONDS', 0)
+    available = AsyncMock(return_value=None)
+    monkeypatch.setattr(dream_capacity, 'available_model', available)
     monkeypatch.setattr(dream_agent.dream_scheduler, 'candidates', lambda **k: pytest.fail('owner page read'))
     metric = PASSES.labels('waiting', 'none')._value
     before = metric.get()
     with caplog.at_level('INFO', logger='utils.dream_metrics'):
         assert asyncio.run(dream_agent.drain()) == [{'status': 'waiting', 'reason': 'reserved_capacity'}]
+    assert available.await_count == 1 + dream_agent.RESERVED_RECHECKS
     assert metric.get() == before + 1
     assert 'Dream status=waiting' in caplog.text
+
+
+def test_sweep_rechecks_after_stale_evidence_before_giving_up(monkeypatch):
+    # The first admission check launches the probe; fresh evidence opens the sweep on a recheck.
+    monkeypatch.setenv('DREAM_AGENT_ENABLED', 'true')
+    monkeypatch.delenv('DREAM_ON_DEMAND_ENABLED', raising=False)
+    monkeypatch.setattr(dream_agent, 'RESERVED_RECHECK_SECONDS', 0)
+    available = AsyncMock(side_effect=[None, None, NEW])
+    monkeypatch.setattr(dream_capacity, 'available_model', available)
+    pages = []
+    monkeypatch.setattr(dream_agent.dream_scheduler, 'candidates', lambda **k: pages.append(k) or [])
+    assert asyncio.run(dream_agent.drain()) == []
+    assert available.await_count == 3
+    assert len(pages) == 1
 
 
 def test_no_model_stops_before_gateway_access(monkeypatch):
