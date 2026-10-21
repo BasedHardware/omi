@@ -37,6 +37,12 @@ on:
 
 # B5: every prod deploy writer shares one prod-train lock. Break-glass falls back to
 # this workflow's own target lock so an urgent ops fix never waits behind a train.
+env:
+  # Abort a git HTTP transfer that stays under 1 KB/s for 60 s, so actions/checkout
+  # retries instead of hanging 7-10 min until the TCP reset (#22890; main sync 15).
+  GIT_HTTP_LOW_SPEED_LIMIT: "1000"
+  GIT_HTTP_LOW_SPEED_TIME: "60"
+
 concurrency:
   group: ${{ github.event.inputs.environment == 'prod' && github.event.inputs.break_glass_lock != 'true' && 'prod-train' || format('config-train-{0}', github.event.inputs.environment) }}
   cancel-in-progress: false
