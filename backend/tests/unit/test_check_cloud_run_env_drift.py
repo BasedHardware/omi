@@ -2079,14 +2079,18 @@ def test_gke_live_explicit_configmap_keyref_values_stay_unproven(checker) -> Non
             stderr='',
         )
 
-    # The expected value deliberately differs from anything the reference could
-    # resolve today; the old code subtracted every explicit key from the
-    # unproven set and asserted this hash, reporting DRIFT/OK from data it
-    # cannot know.
+    # The expected side mirrors the binding identity the deploy rendered: the
+    # immutable spec proves the reference, so identities are compared. The old
+    # code subtracted every explicit key from the unproven set and asserted a
+    # literal hash against it, reporting DRIFT/OK from data it cannot know; the
+    # resolved data itself (the ConfigMap was edited after pod start, without a
+    # rollout) still cannot be value-compared, so a matching binding stays
+    # INVENTORY. A literal-vs-keyref source swap is provable drift and covered
+    # by test_gke_live_keyref_swap_of_expected_literal_is_provable.
     overrides = {
         'pusher': {
             'X': checker.value_hash('value', 'x'),
-            'REDIS_DB_HOST': checker.value_hash('value', 'db.internal.example'),
+            'REDIS_DB_HOST': checker.env_entry_hash(serving_env[1]),
         }
     }
     (result,) = checker.inspect_gke_drift(
@@ -2567,6 +2571,135 @@ def test_gke_matching_explicit_keyref_binding_stays_inventory(checker, monkeypat
     assert result.explicit_unproven_keys == ('REDIS_DB_HOST',)
     assert result.status == 'INVENTORY'
     assert not result.has_drift
+    assert checker.exit_code((result,), strict=True) == 0
+
+
+def test_gke_live_keyref_swap_of_expected_literal_is_provable(checker, monkeypatch) -> None:
+    # Thread (Codex P2, r4341399125): when the chart renders a key as a literal
+    # but the serving ReplicaSet binds it through configMapKeyRef, the key was
+    # subtracted from value comparison (explicit_unproven) while
+    # expected_keyref_hashes — which only holds *expected* keyref keys — could
+    # not flag it either, so the source change vanished into INVENTORY with a
+    # --strict exit 0. The immutable pod spec proves the live binding and the
+    # repository proves the literal, so the swap is drift and must exit 1.
+    deployment = 'prod-omi-pusher'
+    cm_name = 'prod-omi-backend-config'
+    serving_env = [
+        {'name': 'X', 'value': 'x'},
+        {'name': 'REDIS_DB_HOST', 'valueFrom': {'configMapKeyRef': {'name': cm_name, 'key': 'REDIS_DB_HOST'}}},
+    ]
+    envfrom = [{'configMapRef': {'name': cm_name}}]
+
+    def runner(argv, **_kwargs):
+        if 'replicasets' in argv:
+            return subprocess.CompletedProcess(
+                argv,
+                0,
+                stdout=json.dumps(
+                    {'items': [_replicaset(f'{deployment}-a', deployment, 2, serving_env, 'pusher', envfrom=envfrom)]}
+                ),
+                stderr='',
+            )
+        if 'configmap' in argv:
+            return subprocess.CompletedProcess(
+                argv, 0, stdout=json.dumps({'data': {'REDIS_DB_HOST': 'same-value-as-the-literal'}}), stderr=''
+            )
+        return subprocess.CompletedProcess(
+            argv,
+            0,
+            stdout=json.dumps(
+                {
+                    'spec': {
+                        'template': {
+                            'spec': {'containers': [{'name': 'pusher', 'env': serving_env, 'envFrom': envfrom}]}
+                        }
+                    }
+                }
+            ),
+            stderr='',
+        )
+
+    # The chart declares the key as a literal; the ConfigMap data matching the
+    # literal is irrelevant — the spec shape itself is the proven divergence.
+    workload_values = {
+        'env': [{'name': 'X', 'value': 'x'}, {'name': 'REDIS_DB_HOST', 'value': 'redis.internal:6379'}],
+        'runtimeConfigMapName': cm_name,
+    }
+    monkeypatch.setattr(checker, '_load_values', lambda _path: workload_values)
+    monkeypatch.setattr(
+        checker,
+        'manifest_config_map',
+        lambda _env, _manifest_path=None: (cm_name, {'REDIS_DB_HOST': {'source': 'literal', 'value': 'repo'}}),
+    )
+
+    (result,) = checker.inspect_gke_drift(env='prod', workloads=('pusher',), kube_context='gke_ctx', runner=runner)
+    assert result.error is None, result.error
+    (mismatch,) = result.value_mismatches
+    assert mismatch.key == 'REDIS_DB_HOST'
+    assert mismatch.expected_hash == checker.env_entry_hash({'name': 'REDIS_DB_HOST', 'value': 'redis.internal:6379'})
+    assert mismatch.live_hash == checker.env_entry_hash(serving_env[1])
+    assert result.status == 'DRIFT'
+    assert checker.exit_code((result,), strict=True) == 1
+
+
+def test_gke_live_keyref_swap_of_envfrom_only_key_stays_inventory(checker, monkeypatch) -> None:
+    # Companion: when the repository cannot prove the expected value (an
+    # envFrom-only key whose manifest entry is environment-sourced, hash None),
+    # a live explicit keyref binding for that key stays INVENTORY — the swap
+    # check must not manufacture false drift from an unknowable expectation.
+    deployment = 'prod-omi-pusher'
+    cm_name = 'prod-omi-backend-config'
+    serving_env = [
+        {'name': 'X', 'value': 'x'},
+        {'name': 'REDIS_DB_HOST', 'valueFrom': {'configMapKeyRef': {'name': cm_name, 'key': 'REDIS_DB_HOST'}}},
+    ]
+    envfrom = [{'configMapRef': {'name': cm_name}}]
+
+    def runner(argv, **_kwargs):
+        if 'replicasets' in argv:
+            return subprocess.CompletedProcess(
+                argv,
+                0,
+                stdout=json.dumps(
+                    {'items': [_replicaset(f'{deployment}-a', deployment, 2, serving_env, 'pusher', envfrom=envfrom)]}
+                ),
+                stderr='',
+            )
+        if 'configmap' in argv:
+            return subprocess.CompletedProcess(
+                argv, 0, stdout=json.dumps({'data': {'REDIS_DB_HOST': 'someone-updated-the-configmap'}}), stderr=''
+            )
+        return subprocess.CompletedProcess(
+            argv,
+            0,
+            stdout=json.dumps(
+                {
+                    'spec': {
+                        'template': {
+                            'spec': {'containers': [{'name': 'pusher', 'env': serving_env, 'envFrom': envfrom}]}
+                        }
+                    }
+                }
+            ),
+            stderr='',
+        )
+
+    workload_values = {'env': [{'name': 'X', 'value': 'x'}], 'runtimeConfigMapName': cm_name}
+    monkeypatch.setattr(checker, '_load_values', lambda _path: workload_values)
+    monkeypatch.setattr(
+        checker,
+        'manifest_config_map',
+        lambda _env, _manifest_path=None: (
+            cm_name,
+            {'REDIS_DB_HOST': {'source': 'env_var', 'env_var': 'REDIS_DB_HOST_FOR_TEST'}},
+        ),
+    )
+
+    (result,) = checker.inspect_gke_drift(env='prod', workloads=('pusher',), kube_context='gke_ctx', runner=runner)
+    assert result.error is None, result.error
+    assert result.value_mismatches == ()
+    assert result.explicit_unproven_keys == ('REDIS_DB_HOST',)
+    assert result.status == 'INVENTORY'
     assert checker.exit_code((result,), strict=True) == 0
 
 

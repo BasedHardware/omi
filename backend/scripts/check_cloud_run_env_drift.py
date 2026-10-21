@@ -1296,6 +1296,28 @@ def compare_service(
                             key=key, expected_hash=expected_identity, live_hash=live_identity, target=target.name
                         )
                     )
+        # The reverse direction is provable too: a key the chart renders as a
+        # literal (or any non-keyref source) that serving binds through
+        # configMapKeyRef. The subtraction above already removed it from value
+        # comparison (explicit_unproven), and expected_keyref_hashes cannot
+        # contain it (the expected source is not a keyref), so without this
+        # check the source change would vanish into INVENTORY with a strict
+        # exit 0. The immutable pod spec proves the live binding and the
+        # repository proves the expected source, so compare them directly.
+        # Their hashes live in disjoint domains (``value:`` vs ``configmap:``),
+        # so a source change always shows as a mismatch; an expected source the
+        # repository cannot prove (None hash, deploy-time binding) still skips
+        # the comparison — name-only, no false drift.
+        for key, live_identity in target.explicit_keyref_hashes.items():
+            if key in (expected_keyref_hashes or {}):
+                continue  # expected keyref: handled by the identity check above
+            want = expected_env.get(key)
+            if want is None:
+                continue
+            if live_identity != want:
+                mismatches.append(
+                    ValueMismatch(key=key, expected_hash=want, live_hash=live_identity, target=target.name)
+                )
     template_matches: bool | None = None
     if live.template_env is not None and live.source == 'serving':
         template_fp = env_fingerprint(live.template_env)
