@@ -685,7 +685,10 @@ Live episodes (`utils/episodes/live.py`, kill switch `EPISODES_ENABLED`) see the
 same realtime batches after the paywall check and before mentor admission. They
 buffer final segments per user in process and, when a moment ends (a pause of
 45 seconds, 600 words, or a move to another conversation), schedule one tracked
-background update. That update makes one gpt-5-nano call over the compact episode
+background update. The update first requires the client-capability marker
+(`episodes:client_seen:{uid}`, left by the user's app calling `/v1/episodes` from a channel in `EPISODES_CLIENT_CHANNELS`;
+`utils/episodes/client_gate.py`): without it the moment is dropped and counted,
+so users on clients that cannot show episodes cost nothing. It then makes one gpt-5-nano call over the compact episode
 state plus only that moment's text. It never blocks the fan-out, writes no
 conversation, task or memory, and is restarted from durable state by finalization
 (`finalize_persisted_conversation` calls `utils/episodes/service.on_conversation_finalized`

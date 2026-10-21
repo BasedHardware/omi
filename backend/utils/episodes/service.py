@@ -31,7 +31,7 @@ from database import action_items as action_items_db
 from database import episodes as episodes_db
 from database import notifications as notification_db
 from database import users as users_db
-from utils.episodes import incremental, metrics, policy
+from utils.episodes import client_gate, incremental, metrics, policy
 from utils.episodes.moment import MomentInput
 from utils.episodes.state import apply_update, clean_text, provisional_items, render_state
 
@@ -389,6 +389,10 @@ def on_conversation_finalized(
     if not episodes_enabled_for(uid) or trigger not in RECONCILE_TRIGGERS:
         return 'skipped'
     try:
+        if not client_gate.client_seen(uid):
+            # No app of this user can show episodes: no tail update, no reconciliation reads.
+            metrics.record_moment_skipped_no_client('finalize')
+            return 'skipped_no_client'
         return _on_finalized(uid, conversation_id, row, absorbed_from, c)
     except Exception as error:
         logger.warning('event=episode_finalize outcome=error exception_type=%s', type(error).__name__)
@@ -635,7 +639,7 @@ def to_wire(episode: Optional[Mapping[str, Any]]) -> Optional[dict[str, Any]]:
 def mentor_episode_state(uid: str) -> Optional[str]:
     """The compact live state for the mentor lane, or None. Never raises."""
     try:
-        if not episodes_enabled_for(uid):
+        if not client_gate.episode_work_enabled(uid):
             return None
         episode = live_episode(uid)
         return render_state(episode) if episode else None

@@ -13,6 +13,10 @@ A moment shorter than ``MOMENT_MIN_WORDS``, or one inside
 of costing a call. The buffer is in-process and bounded (TTL plus a size cap):
 losing it on a restart loses nothing durable, because finalization applies
 every segment the live stream did not (``service.on_conversation_finalized``).
+
+Only users whose app can show episodes cost anything: an ended moment first
+checks the client-capability marker (``client_gate.client_seen``, one Redis read
+on ``db_executor``) and is dropped, counted, when no capable client was seen.
 """
 
 from __future__ import annotations
@@ -31,6 +35,7 @@ from config.episodes import (
     MOMENT_PAUSE_SECONDS,
     episodes_enabled_for,
 )
+from utils.episodes import client_gate, metrics
 from utils.episodes.moment import MomentInput
 from utils import executors
 
@@ -127,6 +132,47 @@ class MomentTracker:
 tracker = MomentTracker()
 
 
+class _SessionCounter:
+    """Counts each admitted live conversation once, at its first ended moment, by client capability."""
+
+    def __init__(self, cap: int = MAX_BUFFERS) -> None:
+        self._last: dict[str, str] = {}
+        self._cap = cap
+        self._lock = threading.Lock()
+
+    def first_moment(self, uid: str, conversation_id: str) -> bool:
+        with self._lock:
+            if self._last.get(uid) == conversation_id:
+                return False
+            self._last.pop(uid, None)
+            self._last[uid] = conversation_id
+            while len(self._last) > self._cap:
+                del self._last[next(iter(self._last))]
+            return True
+
+    def clear(self) -> None:
+        with self._lock:
+            self._last.clear()
+
+
+sessions = _SessionCounter()
+
+
+async def _moment_if_client_seen(uid: str, moment: MomentInput) -> str:
+    """One ended moment: spend only when the user's app can show episodes."""
+    seen = await executors.run_blocking(executors.db_executor, client_gate.client_seen, uid)
+    if sessions.first_moment(uid, moment.conversation_id):
+        metrics.record_live_session(seen)
+    if not seen:
+        metrics.record_moment_skipped_no_client(moment.trigger)
+        return 'skipped_no_client'
+    # Deferred: this module sits on the realtime fan-out's import path (app_integrations), and the
+    # orchestration pulls in the model client stack only once a moment actually ends.
+    from utils.episodes.service import record_moment
+
+    return await executors.run_blocking(executors.postprocess_executor, record_moment, uid, moment)
+
+
 async def on_realtime_segments(
     uid: str, segments: Sequence[Mapping[str, Any]], conversation_id: Optional[str], source: Optional[str] = None
 ) -> None:
@@ -137,14 +183,7 @@ async def on_realtime_segments(
         moments = tracker.observe(uid, segments, conversation_id, source)
         if not moments:
             return
-        # Deferred: this module sits on the realtime fan-out's import path (app_integrations), and the
-        # orchestration pulls in the model client stack only once a moment actually ends.
-        from utils.episodes.service import record_moment
-
         for moment in moments:
-            executors.start_background_task(
-                executors.run_blocking(executors.postprocess_executor, record_moment, uid, moment),
-                name='episode_moment',
-            )
+            executors.start_background_task(_moment_if_client_seen(uid, moment), name='episode_moment')
     except Exception as error:
         logger.warning('event=episode_live outcome=error exception_type=%s', type(error).__name__)
