@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -68,3 +69,105 @@ def test_the_assignment_hook_never_raises():
     projector._mirror_assignment(SimpleNamespace())  # swallowed and logged
     projector.store = SimpleNamespace()  # a store without the hook (fakes, older seams)
     projector._mirror_assignment(SimpleNamespace())
+
+
+def test_persist_empty_mirrors_after_its_own_commit():
+    """Silence, no_recoverable_speech, superseded and empty-word parts commit through persist_empty."""
+    from database.batch_pipeline_projection_session import ProjectionSession
+
+    order = []
+    session = object.__new__(ProjectionSession)
+    session.policy = None
+    session.store = SimpleNamespace(
+        run=lambda commit, policy=None: order.append('commit') or 'receipt',
+        mirror_assignment=lambda s: order.append(('mirror', s)),
+    )
+    assert session.persist_empty() == 'receipt'
+    assert order == ['commit', ('mirror', session)]
+
+
+# -- other writers of mirrored tables outside Store.run ---------------------------------------------
+
+
+class Snap:
+    def __init__(self, doc, ident='x'):
+        self._doc, self.id, self.exists = doc, ident, doc is not None
+        self.reference = SimpleNamespace(update=Mock(), delete=Mock())
+
+    def to_dict(self):
+        return self._doc
+
+
+class Ref:
+    def __init__(self, doc):
+        self.doc = doc
+
+    def get(self, transaction=None):
+        return Snap(self.doc)
+
+
+class Client:
+    def __init__(self, docs):
+        self.docs = docs  # {(collection, key): doc}
+
+    def collection(self, name):
+        return SimpleNamespace(document=lambda key: Ref(self.docs.get((name, key))))
+
+    def transaction(self):
+        return SimpleNamespace(update=Mock())
+
+
+@pytest.fixture
+def plain_transactions(monkeypatch):
+    from google.cloud import firestore
+
+    monkeypatch.setattr(firestore, 'transactional', lambda fn: fn)
+
+
+def test_a_fenced_revocation_refreshes_the_job(monkeypatch, plain_transactions):
+    from database import batch_pipeline_recovery as recovery
+    from database.batch_pipeline_privacy import BatchPrivacyBlocked
+
+    calls = []
+    monkeypatch.setattr(recovery, 'mirror_refresh', lambda ns, keys: calls.append((ns, keys)))
+    monkeypatch.setattr(recovery, 'assert_batch_write_allowed', Mock(side_effect=BatchPrivacyBlocked('fenced')))
+    client = Client({('batch_pipeline_dev_jobs', 'j'): {'state': 'leased', 'owner_id': 'u'}})
+    assert recovery.quarantine_fenced(client, 'batch_pipeline_dev', 'j', 1.0) is True
+    assert calls == [('batch_pipeline_dev', [('jobs', 'j')])]
+    calls.clear()
+    monkeypatch.setattr(recovery, 'assert_batch_write_allowed', Mock(return_value=1))  # not fenced: no write
+    assert recovery.quarantine_fenced(client, 'batch_pipeline_dev', 'j', 1.0) is False
+    assert calls == []
+
+
+def test_completion_retention_refreshes_every_row_it_stamps(monkeypatch, plain_transactions):
+    from utils.batch_pipeline import retention
+
+    calls = []
+    monkeypatch.setattr(retention, 'mirror_refresh', lambda ns, keys: calls.append((ns, keys)))
+    owner = retention.privacy_owner_key('u')
+    client = Client(
+        {
+            ('batch_pipeline_dev_jobs', 's'): {'owner_id': 'u', 'projection_binding': {'job_id': 'i'}},
+            ('batch_pipeline_dev_results', 's'): {'owner_key': owner, 'projection_state': 'completed'},
+            ('batch_pipeline_dev_intakes', 'i'): {'n': 1},
+        }
+    )
+    monkeypatch.setattr(retention.queries, 'segment_artifacts', lambda *a: [Snap({'kind': 'result'}, 'a1')])
+    store = SimpleNamespace(client=client, namespace='batch_pipeline_dev')
+    assert retention.expire_completed_segment(store, 'u', 's', 1.0) is True
+    assert calls == [('batch_pipeline_dev', [('jobs', 's'), ('results', 's'), ('intakes', 'i'), ('artifacts', 'a1')])]
+
+
+def test_artifact_cleanup_refreshes_what_it_touched(monkeypatch):
+    from utils.batch_pipeline import retention
+
+    calls = []
+    monkeypatch.setattr(retention, 'mirror_refresh', lambda ns, keys: calls.append((ns, keys)))
+    artifacts = [Snap({'owner_id': 'u', 'uri': 'gs://b/1'}, 'a1'), Snap({'owner_id': 'u', 'uri': 'gs://b/2'}, 'a2')]
+    artifacts[1]._doc['erasure_requested'] = True
+    monkeypatch.setattr(retention.queries, 'due_artifacts', lambda *a: artifacts)
+    store = SimpleNamespace(client=None, namespace='batch_pipeline_dev')
+    now = datetime(2026, 10, 21, tzinfo=timezone.utc)
+    assert retention.cleanup_completed_artifacts(store, now, delete_uri=lambda *a: None) == 2
+    assert calls == [('batch_pipeline_dev', [('artifacts', 'a1'), ('artifacts', 'a2')])]

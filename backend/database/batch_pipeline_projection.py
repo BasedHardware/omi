@@ -5,6 +5,7 @@ separate from the Redis client projection, and can repair a lost Redis reply.
 """
 
 from datetime import datetime, timedelta, timezone
+import logging
 import re
 from typing import Any
 
@@ -29,6 +30,8 @@ from database.batch_pipeline_projection_protocol import (
     normalized_binding,
 )
 from database.batch_pipeline_projection_session import ProjectionSession as ProjectionSession
+
+logger = logging.getLogger(__name__)
 
 _USAGE_PERIOD = re.compile(r'(\d{4})-(\d{2})')
 
@@ -71,8 +74,11 @@ class ProjectionStore:
     def mirror_assignment(self, session: Any) -> None:
         """After an assignment transaction (``assign_sync_conversation``): re-copy the binding's rows, the
         owner's watermark and the erased predecessors whose ``expires_at`` it stamped. Never raises."""
-        erased = [('results', reference.id) for reference in getattr(session, 'erased_predecessors', ())]
-        self._mirror(session.binding, erased)
+        try:
+            erased = [('results', reference.id) for reference in getattr(session, 'erased_predecessors', ())]
+            self._mirror(session.binding, erased)
+        except Exception:
+            logger.warning('event=jobstore_shadow op=refresh outcome=hook_error site=projection_assignment')
 
     def read(self, segment_id: str) -> tuple[dict[str, Any], dict[str, Any], ProjectionBinding]:
         # This snapshot is a fetch hint only. Every mutation rereads it atomically.

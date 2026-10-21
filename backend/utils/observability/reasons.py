@@ -126,7 +126,6 @@ class ShadowParityOutcome(StrEnum):
     TIMEOUT = 'timeout'
     DROPPED = 'dropped'
     SKIPPED = 'skipped'
-    SUPERSEDED = 'superseded'
 
 
 class ProviderSttReason(StrEnum):
