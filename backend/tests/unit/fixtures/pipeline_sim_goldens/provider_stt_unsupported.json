@@ -25,6 +25,7 @@
     "result": {
      "outcome": "success"
     },
+    "shadow": false,
     "state": "committed",
     "stt_route": {
      "language": "sw",
@@ -97,6 +98,7 @@
     "result": {
      "outcome": "success"
     },
+    "shadow": false,
     "state": "committed",
     "stt_route": {
      "language": "sw",
@@ -169,6 +171,7 @@
     "result": {
      "outcome": "success"
     },
+    "shadow": false,
     "state": "committed",
     "stt_route": {
      "language": "sw",
@@ -241,6 +244,7 @@
     "result": {
      "outcome": "success"
     },
+    "shadow": false,
     "state": "committed",
     "stt_route": {
      "language": "sw",
@@ -313,6 +317,7 @@
     "result": {
      "outcome": "success"
     },
+    "shadow": false,
     "state": "committed",
     "stt_route": {
      "language": "sw",
@@ -385,6 +390,7 @@
     "result": {
      "outcome": "success"
     },
+    "shadow": false,
     "state": "committed",
     "stt_route": {
      "language": "sw",
@@ -457,6 +463,7 @@
     "result": {
      "outcome": "success"
     },
+    "shadow": false,
     "state": "committed",
     "stt_route": {
      "language": "sw",
