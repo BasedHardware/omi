@@ -10,7 +10,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from google.api_core.exceptions import AlreadyExists, NotFound, PreconditionFailed
+from google.api_core.exceptions import AlreadyExists, FailedPrecondition, NotFound, PreconditionFailed
 from google.cloud import firestore
 from database._client import (
     get_data_plane_firestore_client as get_firestore_client,
@@ -18,6 +18,7 @@ from database._client import (
 )
 from database.legal_holds import external_write_fence
 from utils.encryption import encrypt
+from utils.observability.held_content import record_publication_retry
 from utils.other.storage import owner_storage_write_gate
 from utils.sync import cap_hold
 from utils.sync.live_cap_publication import UNRECOVERED, Publication, commit_publication
@@ -110,13 +111,67 @@ def append(uid: str, path: str, group: Publication, fragment: Publication, metad
             part['id'] == fragment.identity for part in row.get('stage_parts') or []
         )
 
+    def _verified_staging(target: Any, payload: dict) -> dict:
+        """The write already landed. A later read must not fail the live flush."""
+        try:
+            stored = target.get().to_dict()
+        except Exception as error:
+            logger.warning(
+                'event=stt_cap_live_held outcome=staged_unverified exception_type=%s',
+                type(error).__name__,
+            )
+            record_publication_retry('staged_unverified')
+            return payload
+        return stored or payload
+
+    def _late_staging_body(part: dict, updates: dict) -> dict:
+        # writer_until is already expired so the redrive seals this row on its
+        # own. It must not be appended onto a group the sealer has moved on.
+        return {
+            'state': 'staging',
+            'stage_parts': [part],
+            'writer_until': 0,
+            'seconds': seconds,
+            'metadata': updates.get('metadata'),
+            'sample_rate': updates.get('sample_rate'),
+            'started_at': updates.get('started_at'),
+            'created_at': time.time(),
+            'listed_at': updates.get('listed_at', updates.get('started_at')),
+            'live_custody_version': 4,
+        }
+
+    def _stage_late_fragment(part: dict, updates: dict) -> dict | None:
+        late = cap_hold.holds(uid).document(fragment.identity)
+        body = _late_staging_body(part, updates)
+        try:
+            late.create(body)
+        except AlreadyExists:
+            current = late.get().to_dict() or {}
+            return current if _fragment_recorded(current) else None
+        return _verified_staging(late, body)
+
+    def _merged_staging(updates: dict, row: dict | None, part: dict) -> dict:
+        merged = dict(updates)
+        prior_parts = (row or {}).get('stage_parts') or []
+        already = any(item.get('id') == part.get('id') for item in prior_parts)
+        merged['stage_parts'] = prior_parts if already else [*prior_parts, part]
+        base = float((row or {}).get('seconds') or 0)
+        merged['seconds'] = base if already else base + seconds
+        if row:
+            merged['created_at'] = row.get('created_at', merged['created_at'])
+            merged['started_at'] = row.get('started_at', merged['started_at'])
+            merged['listed_at'] = row.get('listed_at', merged['listed_at'])
+        return merged
+
     def _stage_for_redrive(updates: dict) -> dict | None:
         """Persist an uploaded fragment when every transaction id was retired.
 
         A plain create is not the steady path. It runs only after the bounded
-        transactional budget, under the same non-transactional deletion fence,
-        and only while the row is still absent or staging. The redrive seals
-        that row once the writer lease expires. Returning the row keeps the
+        transactional budget, under the same non-transactional deletion fence.
+        Appending to a staging row uses the row's update_time as a precondition
+        so a cross-process sealer cannot be reset to staging. If that row is
+        already sealing or the precondition loses, the fragment becomes its own
+        staging row and the redrive seals it once. Returning the row keeps the
         socket up: the bytes are durable, so this is not a 1011.
         """
         part = updates['stage_parts'][-1]
@@ -127,24 +182,23 @@ def append(uid: str, path: str, group: Publication, fragment: Publication, metad
             row = snapshot.to_dict() if snapshot.exists else None
             if row and _fragment_recorded(row):
                 return row
-            if row and row.get('state') != 'staging':
-                return None
-            merged = dict(updates)
-            prior_parts = (row or {}).get('stage_parts') or []
-            merged['stage_parts'] = [*prior_parts, part]
-            merged['seconds'] = float((row or {}).get('seconds') or 0) + seconds
-            if row:
-                merged['created_at'] = row.get('created_at', merged['created_at'])
-                merged['started_at'] = row.get('started_at', merged['started_at'])
-                merged['listed_at'] = row.get('listed_at', merged['listed_at'])
-                ref.set(merged)
-            else:
+            merged = _merged_staging(updates, row, part)
+            if not row:
                 try:
                     ref.create(merged)
                 except AlreadyExists:
                     current = ref.get().to_dict() or {}
-                    return current if _fragment_recorded(current) else None
-            return ref.get().to_dict()
+                    if _fragment_recorded(current):
+                        return current
+                    return _stage_late_fragment(part, updates)
+                return _verified_staging(ref, merged)
+            if row.get('state') != 'staging':
+                return _stage_late_fragment(part, updates)
+            try:
+                ref.update(merged, option=firestore.LastUpdateOption(snapshot.update_time))
+            except FailedPrecondition:
+                return _stage_late_fragment(part, updates)
+            return _verified_staging(ref, merged)
 
     def recover(error: BaseException) -> Any:
         with group.lock:

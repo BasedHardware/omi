@@ -21,7 +21,7 @@ CAPTURE_KINDS = ('lost', 'byte_mismatch', 'frame_mismatch', 'ack_without_authori
 CHOICE_OUTCOMES = ('ok', 'stale_period_409', 'no_capability', 'intent_only')
 RECOVERY_RESULTS = ('attempt', 'completed')
 ERASURE_OUTCOMES = ('failure', 'post_delete_publication')
-PUBLICATION_RETRY_OUTCOMES = ('retried_ok', 'exhausted')
+PUBLICATION_RETRY_OUTCOMES = ('retried_ok', 'exhausted', 'staged_unverified')
 CHOICE_METHODS = ('get', 'put')
 
 CAPTURE = Counter(
@@ -77,7 +77,8 @@ ERASURE = Counter('omi_held_content_erasure', 'Held erasure failures and post-de
 PUBLICATION_RETRY = Counter(
     'omi_held_content_publication_retry',
     'Live cap publication attempts that retried a transient Firestore transaction. '
-    'retried_ok committed on a later fresh transaction; exhausted spent the bounded budget. '
+    'retried_ok committed on a later fresh transaction; exhausted spent the bounded budget; '
+    'staged_unverified means the staging write landed and a later read failed. '
     'Labels are a closed set and never identify a person',
     ['outcome'],
 )

@@ -7,6 +7,7 @@ unavailable are the same class when the body re-reads before it increments.
 from __future__ import annotations
 
 import copy
+import inspect
 from contextlib import nullcontext
 from threading import RLock
 from types import SimpleNamespace
@@ -16,6 +17,7 @@ from google.api_core.exceptions import (
     Aborted,
     AlreadyExists,
     DeadlineExceeded,
+    FailedPrecondition,
     InvalidArgument,
     ResourceExhausted,
     ServiceUnavailable,
@@ -28,6 +30,8 @@ from database._client import (
     run_transactional,
 )
 from database.firestore_transaction_retry import FirestoreContentionExhausted
+import routers.listen.receiver as receiver_module
+from routers.listen.receiver import mark_listen_internal_error
 from utils.observability import held_content as held_metrics
 from utils.sync import cap_hold, cap_hold_redrive, live_cap_manifest, live_cap_staging
 from utils.sync.live_cap_publication import Publication
@@ -99,9 +103,10 @@ def test_transient_run_transactional_uses_a_fresh_transaction(error):
 
 
 class _Snap:
-    def __init__(self, data):
+    def __init__(self, data, update_time):
         self._data = data
         self.exists = data is not None
+        self.update_time = update_time
 
     def to_dict(self):
         return None if self._data is None else copy.deepcopy(self._data)
@@ -164,16 +169,31 @@ class _Doc:
     def get(self, transaction=None, timeout=None):
         if self.client.read_errors:
             raise self.client.read_errors.pop(0)
-        return _Snap(self.client.docs.get(self.key))
+        if self.client.fail_get_after_plain_write and self.client.plain_writes and not self.client.verification_raised:
+            self.client.verification_raised = True
+            raise ResourceExhausted('429 Quota exceeded.')
+        data = self.client.docs.get(self.key)
+        return _Snap(data, self.client.versions.get(self.key, 0))
 
     def set(self, payload, merge: bool = False, timeout=None) -> None:
-        self.client.write(self.key, copy.deepcopy(payload), merge=merge, create=False)
+        self.client.write(self.key, copy.deepcopy(payload), merge=merge, create=False, plain=True)
 
     def create(self, payload) -> None:
-        self.client.write(self.key, copy.deepcopy(payload), merge=False, create=True)
+        self.client.write(self.key, copy.deepcopy(payload), merge=False, create=True, plain=True)
 
-    def update(self, payload, timeout=None) -> None:
-        self.client.write(self.key, copy.deepcopy(payload), merge=True, create=False)
+    def update(self, payload, option=None, timeout=None) -> None:
+        self.client.last_update_option = option
+        if self.client.seal_during_update == self.key:
+            row = self.client.docs[self.key]
+            row['state'] = 'sealing'
+            self.client.versions[self.key] = self.client.versions.get(self.key, 0) + 1
+            self.client.seal_during_update = None
+            raise FailedPrecondition('stored version changed before the fallback write')
+        expected = getattr(option, '_last_update_time', None) if option is not None else None
+        current = self.client.versions.get(self.key, 0)
+        if expected is not None and expected != current:
+            raise FailedPrecondition('precondition failed')
+        self.client.write(self.key, copy.deepcopy(payload), merge=True, create=False, plain=True)
 
 
 class _Client:
@@ -181,17 +201,23 @@ class _Client:
         self.actions = list(actions or [])
         self.read_errors = list(read_errors or [])
         self.docs: dict[str, dict] = {}
+        self.versions: dict[str, int] = {}
         self.transactions: list[_Transaction] = []
         self.applied = 0
         self.increments: list[tuple[str, str, float]] = []
         self.deletes: list[str] = []
+        self.plain_writes = 0
+        self.fail_get_after_plain_write = False
+        self.verification_raised = False
+        self.seal_during_update: str | None = None
+        self.last_update_option = None
 
     def transaction(self) -> _Transaction:
         txn = _Transaction(self)
         self.transactions.append(txn)
         return txn
 
-    def write(self, key: str, payload: dict, *, merge: bool, create: bool) -> None:
+    def write(self, key: str, payload: dict, *, merge: bool, create: bool, plain: bool = False) -> None:
         if create and key in self.docs:
             raise AlreadyExists('exists')
         current = dict(self.docs.get(key) or {})
@@ -203,6 +229,9 @@ class _Client:
             else:
                 applied[field] = value
         self.docs[key] = {**current, **applied} if merge else applied
+        self.versions[key] = self.versions.get(key, 0) + 1
+        if plain:
+            self.plain_writes += 1
 
 
 class _Blob:
@@ -543,11 +572,12 @@ def test_manifest_exhaustion_publishes_one_receipt_without_raising(delays, store
         {'timestamp': 1_700_000_000, 'sample_rate': 16000, 'source_frames': 16000},
         60,
     )
-    assert store.applied == 0
+    assert store.applied == 1  # The retired attempts wrote nothing; recovery committed once.
     assert store.deletes == []
     assert store.docs[source.identity]['state'] == 'held'
     assert store.docs['summary']['seconds'] == 60
     assert store.docs['summary']['count'] == 1
+    assert store.docs[source.identity]['usage_applied'] is True
     assert store.increments.count(('summary', 'count', 1.0)) == 1
     assert _counter('exhausted') == before + 1
 
@@ -566,3 +596,160 @@ def test_seal_exhaustion_keeps_parts_until_a_later_seal(delays, store, tmp_path)
     assert live_cap_staging.seal(UID, group.identity, expired_only=True) is True
     assert store.docs['summary']['count'] == 1
     assert store.increments.count(('summary', 'count', 1.0)) == 1
+
+
+def _enable_redrive(monkeypatch, snaps: list) -> None:
+    monkeypatch.setattr(cap_hold_redrive, 'enabled', lambda: True)
+    monkeypatch.setattr(cap_hold_redrive, 'execution_admission_configured', lambda: False)
+    monkeypatch.setattr(
+        cap_hold_redrive.store,
+        'fleet_snapshot',
+        lambda firestore_client=None: {
+            'pending_count': 1,
+            'pending_seconds': 1.0,
+            'oldest_listed_at': 1_700_000_000,
+            'undated_pending': 0,
+            'backlog_items': 0,
+        },
+    )
+    monkeypatch.setattr(cap_hold_redrive.store, 'discover', lambda kind: snaps if kind == 'staging' else [])
+
+
+def _hold_snap(identity: str):
+    return SimpleNamespace(
+        id=identity,
+        reference=SimpleNamespace(path=f'users/{UID}/stt_cap_holds/{identity}'),
+    )
+
+
+_METADATA = {
+    'timestamp': 1_700_000_000,
+    'sample_rate': 16000,
+    'source_frames': 16000,
+    'audio_codec': 'ogg_opus',
+}
+
+
+def test_fallback_does_not_clobber_a_row_the_sealer_moved(delays, store, tmp_path, monkeypatch):
+    path = tmp_path / 'fragment.opus'
+    path.write_bytes(b'opus')
+    group = Publication(UID)
+    fragment = Publication(UID)
+    earlier = {
+        'id': 'earlier',
+        'audio_path': f'chunks/{UID}/cap-held/earlier.opus.enc',
+        'audio_generation': 1,
+        'bytes': 4,
+        'frames': 1,
+    }
+    store.docs[group.identity] = {
+        'state': 'staging',
+        'stage_parts': [earlier],
+        'seconds': 1.0,
+        'writer_until': 10**12,
+        'metadata': 'encrypted',
+        'sample_rate': 16000,
+        'started_at': 1_700_000_000,
+        'created_at': 1.0,
+        'listed_at': 1_700_000_000,
+        'live_custody_version': 4,
+    }
+    store.versions[group.identity] = 1
+    store.seal_during_update = group.identity
+    store.actions = ['throttle', 'throttle', 'throttle']
+    row = live_cap_staging.append(UID, str(path), group, fragment, _METADATA, 1.0)
+    assert store.last_update_option._last_update_time == 1
+    assert store.docs[group.identity]['state'] == 'sealing'
+    assert [part['id'] for part in store.docs[group.identity]['stage_parts']] == ['earlier']
+    assert row['state'] == 'staging'
+    assert [part['id'] for part in row['stage_parts']] == [fragment.identity]
+    assert store.docs[fragment.identity]['writer_until'] == 0
+    assert 'summary' not in store.docs
+    store.actions = []
+    _enable_redrive(monkeypatch, [_hold_snap(fragment.identity)])
+    assert __import__('asyncio').run(cap_hold_redrive.sweep())['sealed'] == 1
+    assert store.docs[fragment.identity]['state'] == 'held'
+    assert store.docs[group.identity]['state'] == 'sealing'
+    assert [part['id'] for part in store.docs[group.identity]['stage_parts']] == ['earlier']
+    assert store.docs['summary']['count'] == 1
+    assert store.docs['summary']['seconds'] == 1
+    assert store.increments.count(('summary', 'count', 1.0)) == 1
+    assert store.increments.count(('summary', 'seconds', 1.0)) == 1
+    assert __import__('asyncio').run(cap_hold_redrive.sweep())['sealed'] == 0
+    assert store.increments.count(('summary', 'count', 1.0)) == 1
+    assert store.increments.count(('summary', 'seconds', 1.0)) == 1
+
+
+def test_recovery_counts_usage_once_when_create_landed_without_the_increment(delays, store, tmp_path):
+    source = Publication(UID)
+    _track(source, delays[1])
+    path = tmp_path / 'minute.opus'
+    path.write_bytes(b'opus')
+    # The create committed and the summary increment never did. The receipt has
+    # no usage marker, which is what a later recovery used to treat as done.
+    store.docs[source.identity] = {'state': 'held', 'seconds': 60, 'live_custody_version': 4}
+    store.actions = ['expire', 'expire', 'expire']
+    live_cap_manifest.publish(UID, str(path), source, _METADATA, 60)
+    assert store.docs[source.identity]['usage_applied'] is True
+    assert store.docs[source.identity]['state'] == 'held'
+    assert store.docs['summary']['count'] == 1
+    assert store.docs['summary']['seconds'] == 60
+    assert store.increments.count(('summary', 'count', 1.0)) == 1
+    assert store.increments.count(('summary', 'seconds', 60.0)) == 1
+    store.actions = ['expire', 'expire', 'expire']
+    live_cap_manifest.publish(UID, str(path), source, _METADATA, 60)
+    assert store.increments.count(('summary', 'count', 1.0)) == 1
+    assert store.increments.count(('summary', 'seconds', 60.0)) == 1
+    assert store.docs['summary']['count'] == 1
+    assert store.docs['summary']['seconds'] == 60
+
+
+def test_read_after_a_staged_write_does_not_fail_the_socket(delays, store, tmp_path, monkeypatch):
+    path = tmp_path / 'fragment.opus'
+    path.write_bytes(b'opus')
+    before = _counter('staged_unverified')
+    store.fail_get_after_plain_write = True
+    state = SimpleNamespace(close_code=None)
+    try:
+        group, fragment, row = _append(store, str(path), actions=['throttle', 'throttle', 'throttle'])
+    except Exception:
+        mark_listen_internal_error(state)
+        raise
+    assert state.close_code != 1011
+    assert row['state'] == 'staging'
+    assert [part['id'] for part in row['stage_parts']] == [fragment.identity]
+    assert store.docs[group.identity]['state'] == 'staging'
+    assert store.verification_raised is True
+    assert _counter('staged_unverified') == before + 1
+    assert 'summary' not in store.docs
+    store.docs[group.identity]['writer_until'] = 0
+    store.actions = []
+    _enable_redrive(monkeypatch, [_hold_snap(group.identity)])
+    assert __import__('asyncio').run(cap_hold_redrive.sweep())['sealed'] == 1
+    assert store.docs['summary']['count'] == 1
+    assert store.docs['summary']['seconds'] == 1
+    assert store.increments.count(('summary', 'count', 1.0)) == 1
+    assert store.increments.count(('summary', 'seconds', 1.0)) == 1
+
+
+def test_listen_close_code_stays_open_when_staged_and_closes_when_the_write_fails(delays, store, tmp_path):
+    receive = inspect.getsource(receiver_module.ListenReceiver.receive_data)
+    assert receive.count('mark_listen_internal_error') == 2
+    assert 'close_code = 1011' not in receive
+    path = tmp_path / 'fragment.opus'
+    path.write_bytes(b'opus')
+    staged = SimpleNamespace(close_code=None)
+    try:
+        _group, _fragment, row = _append(store, str(path), actions=['throttle', 'throttle', 'throttle'])
+    except Exception:
+        mark_listen_internal_error(staged)
+    assert row['state'] == 'staging'
+    assert staged.close_code != 1011
+    failed = SimpleNamespace(close_code=None)
+    with pytest.raises(InvalidArgument, match='some other 400'):
+        try:
+            _append(store, str(path), read_errors=[InvalidArgument('some other 400')])
+        except InvalidArgument:
+            mark_listen_internal_error(failed)
+            raise
+    assert failed.close_code == 1011
