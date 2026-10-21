@@ -539,19 +539,21 @@ def test_gate_unavailable_escalates_every_third_consecutive_tick():
 
 
 def test_leaving_on_requires_every_draining_precondition():
-    assert {'cap_hold_ladder_debit', 'minimal_redrive_finished'} <= set(rc.DRAINING_PRECONDITIONS)
+    gates = {'cap_hold_ladder_debit', 'minimal_redrive_finished', 'provider_stt_live', 'legacy_final_pass_rehomed'}
+    assert gates <= set(rc.DRAINING_PRECONDITIONS)
     parse = ramp_set.build_parser().parse_args
     on = {'percents': {'batch-pipeline': 100.0}, 'locked_by': None, 'legacy_sync': 'on'}
     refused = ramp_set.plan_change(parse(['--env', 'prod', '--legacy-sync', 'draining']), on)
-    assert refused == 'draining_precondition_unmet:cap_hold_ladder_debit,minimal_redrive_finished'
+    assert refused == 'draining_precondition_unmet:' + ','.join(sorted(rc.DRAINING_PRECONDITIONS))
     partial = parse(['--env', 'prod', '--legacy-sync', 'draining', '--precondition-met', 'cap_hold_ladder_debit'])
-    assert ramp_set.plan_change(partial, on) == 'draining_precondition_unmet:minimal_redrive_finished'
+    rest = sorted(set(rc.DRAINING_PRECONDITIONS) - {'cap_hold_ladder_debit'})
+    assert ramp_set.plan_change(partial, on) == 'draining_precondition_unmet:' + ','.join(rest)
     assert ramp_set.plan_change(parse(['--env', 'prod', '--legacy-sync', 'dark']), None).startswith(
         'draining_precondition'
     )
     ok = parse(
         ['--env', 'prod', '--legacy-sync', 'draining']
-        + [arg for pid in ('cap_hold_ladder_debit', 'minimal_redrive_finished') for arg in ('--precondition-met', pid)]
+        + [arg for pid in sorted(rc.DRAINING_PRECONDITIONS) for arg in ('--precondition-met', pid)]
     )
     assert ramp_set.plan_change(ok, on)[0] == {'legacy_sync': 'draining'}
     # Returning to on, and draining -> dark, are never gated (rollback and progression after the gate passed).

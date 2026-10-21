@@ -201,16 +201,28 @@ def test_consumer_retries_a_processing_dependency_failure_and_keeps_the_wake(row
     assert rows[0][KEY]['lease_until'] == 0 and rows[0][KEY]['task_token'] == token
 
 
+def _provider_sweep(monkeypatch, sweep):
+    """Stub the C8 provider-STT outbox that maintain() also sweeps (M3 review); never touches Firestore."""
+    import database.outbox as outbox_module
+    from types import SimpleNamespace
+
+    monkeypatch.setattr(outbox_module, 'outbox_for', lambda kind: SimpleNamespace(sweep=sweep))
+
+
 def test_maintenance_sweeps_the_outbox_and_admits_summary_debt(rows, monkeypatch):
     from services import summary_debt_repair
     from database.outbox import SweepCounts
 
     monkeypatch.setattr(ENRICHMENT_OUTBOX, 'sweep', lambda *, now, limit=100: SweepCounts(2, 0, 1, 0))
+    _provider_sweep(monkeypatch, lambda *, now, limit=100: SweepCounts(4, 1, 2, 1))
     monkeypatch.setattr(summary_debt_repair, 'tick', lambda *, now: {'scanned': 5, 'admitted': 3, 'errors': 0})
     assert route.maintain(1000.0) == {
         'rewoken': 2,
         'discarded': 1,
         'sweep_errors': 0,
+        'provider_stt_rewoken': 4,
+        'provider_stt_discarded': 2,
+        'provider_stt_sweep_errors': 1,
         'summary_debt_scanned': 5,
         'summary_debt_admitted': 3,
         'summary_debt_errors': 0,
@@ -222,7 +234,21 @@ def test_maintenance_counts_a_summary_debt_failure_without_5xx(rows, client, mon
     from database.outbox import SweepCounts
 
     monkeypatch.setattr(ENRICHMENT_OUTBOX, 'sweep', lambda *, now, limit=100: SweepCounts(0, 0, 0, 0))
+    _provider_sweep(monkeypatch, lambda *, now, limit=100: SweepCounts(0, 0, 0, 0))
     monkeypatch.setattr(summary_debt_repair, 'tick', Mock(side_effect=RuntimeError('synthetic')))
     response = client.post('/v2/enrichment/sweep')
     assert response.status_code == 200
     assert response.json()['counts']['summary_debt_errors'] == 1
+
+
+def test_maintenance_isolates_a_provider_stt_sweep_failure(rows, monkeypatch):
+    """A provider-STT sweep error is counted and never blocks the enrichment half or summary debt."""
+    from services import summary_debt_repair
+    from database.outbox import SweepCounts
+
+    monkeypatch.setattr(ENRICHMENT_OUTBOX, 'sweep', lambda *, now, limit=100: SweepCounts(1, 0, 0, 0))
+    _provider_sweep(monkeypatch, Mock(side_effect=RuntimeError('synthetic')))
+    monkeypatch.setattr(summary_debt_repair, 'tick', lambda *, now: {'scanned': 1, 'admitted': 1, 'errors': 0})
+    counts = route.maintain(1000.0)
+    assert counts['rewoken'] == 1 and counts['provider_stt_sweep_errors'] == 1
+    assert counts['summary_debt_admitted'] == 1
