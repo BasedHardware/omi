@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/message.dart';
+import 'package:omi/models/plan_storefront.dart';
 import 'package:omi/providers/message_provider.dart';
 
 void main() {
@@ -60,6 +61,43 @@ void main() {
     final reply = provider.messages.last;
     expect(provider.isReplyFailed(reply), isTrue);
     expect(reply.text, isEmpty);
+  });
+
+  test('Try Again while chat is paused keeps the failed reply and releases the composer', () async {
+    final sent = <String>[];
+    var fail = true;
+    final provider = MessageProvider()
+      ..replyStreamOverride = (text, {appId, filesId, context, chatSessionId}) async* {
+        sent.add(text);
+        if (fail) throw Exception('socket closed');
+        yield ServerMessageChunk('reply-1', 'All good.', MessageChunkType.data);
+      };
+    provider.addMessageLocally('hello');
+    await provider.sendMessageStreamToServer('hello');
+    final failed = provider.messages.last;
+
+    // The budget check pauses chat while the failed reply is still on screen.
+    final resetAt = DateTime.now().add(const Duration(hours: 1)).millisecondsSinceEpoch ~/ 1000;
+    provider
+        .applyChatAtCap(ChatAtCap(title: 'Paused', body: 'Budget used', resetLine: 'Resets soon', resetAt: resetAt));
+    // The chat page locks the composer before it calls retry.
+    provider.setSendingMessage(true);
+    await provider.retryFailedReply(failed);
+
+    expect(sent, ['hello'], reason: 'nothing is sent while chat is paused');
+    expect(provider.messages.last, same(failed), reason: 'the failed reply stays instead of vanishing');
+    expect(provider.isReplyFailed(failed), isTrue);
+    expect(provider.canRetryReply(failed), isTrue);
+    expect(provider.sendingMessage, isFalse, reason: 'the composer is usable again once the pause ends');
+
+    provider.applyChatAtCap(null);
+    fail = false;
+    provider.setSendingMessage(true);
+    await provider.retryFailedReply(failed);
+
+    expect(sent, ['hello', 'hello']);
+    expect(provider.messages.last.text, 'All good.');
+    expect(provider.sendingMessage, isFalse);
   });
 
   test('retry is a no-op for a reply that did not fail', () async {
