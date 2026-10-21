@@ -75,7 +75,7 @@ The close reasons are `user`, `gap`, `idle`, `hard_cap`, `source_change`,
 
 `config/episodes.py`:
 - `EPISODES_ENABLED` defaults on and is the kill switch.
-- `EPISODES_PERCENT` (`EPISODES_PERCENT_DEFAULT`, 100) and `EPISODES_UID_ALLOWLIST`
+- `EPISODES_PERCENT` (default 100) and `EPISODES_UID_ALLOWLIST`
   select the admitted cohort. The allowlist bypasses the percentage.
 
 Off makes `/v1/episodes/*` report `enabled: false`. Apps keep today's

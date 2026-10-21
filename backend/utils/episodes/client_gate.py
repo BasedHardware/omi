@@ -20,7 +20,7 @@ import time
 from typing import Optional
 
 from config.episodes import CLIENT_SEEN_REFRESH_SECONDS, CLIENT_SEEN_TTL_SECONDS, episodes_enabled_for
-from database import redis_db
+from database import episodes_client_seen as marker_db
 
 _MEMO_MAX = 50_000
 _memo: dict[str, float] = {}
@@ -56,10 +56,10 @@ def note_client_seen(uid: str, *, now: Optional[float] = None) -> bool:
     wall = time.time() if now is None else now
     if not _claim(uid, wall):
         return False
-    remaining = redis_db.get_episodes_client_seen_ttl(uid)
+    remaining = marker_db.get_client_seen_ttl(uid)
     if remaining is not None and remaining > CLIENT_SEEN_TTL_SECONDS - CLIENT_SEEN_REFRESH_SECONDS:
         return False
-    if redis_db.set_episodes_client_seen(uid, CLIENT_SEEN_TTL_SECONDS):
+    if marker_db.set_client_seen(uid, CLIENT_SEEN_TTL_SECONDS):
         return True
     # The write did not land: let the next call retry instead of waiting out the memo.
     _release(uid)
@@ -68,7 +68,7 @@ def note_client_seen(uid: str, *, now: Optional[float] = None) -> bool:
 
 def client_seen(uid: str) -> bool:
     """True when ``uid``'s app called the episodes API within the marker TTL. Blocking (Redis)."""
-    return bool(uid) and redis_db.has_episodes_client_seen(uid)
+    return bool(uid) and marker_db.has_client_seen(uid)
 
 
 def episode_work_enabled(uid: str) -> bool:

@@ -48,7 +48,6 @@ def test_unset_percent_admits_everyone_by_default(monkeypatch):
     monkeypatch.delenv(config.EPISODES_ENABLED_ENV, raising=False)
     monkeypatch.delenv(config.EPISODES_PERCENT_ENV, raising=False)
     monkeypatch.delenv(config.EPISODES_UID_ALLOWLIST_ENV, raising=False)
-    assert config.EPISODES_PERCENT_DEFAULT == 100.0
     assert all(config.episodes_enabled_for(f'user-{i}') for i in range(2000))
 
 

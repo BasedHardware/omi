@@ -11,7 +11,7 @@ rather than silently keeping it running. Off makes the episodes API report
 ``enabled: false``: released and current apps then show today's
 per-conversation UI, and no episode state is read, written or computed.
 
-``EPISODES_PERCENT`` (default ``EPISODES_PERCENT_DEFAULT``, 100) and
+``EPISODES_PERCENT`` (default 100) and
 ``EPISODES_UID_ALLOWLIST`` select the admitted cohort: a stable salted uid
 bucket below the percentage, or a listed uid, is admitted. Invalid percentages
 admit nobody beyond the allowlist.
@@ -40,9 +40,6 @@ EPISODES_UID_ALLOWLIST_ENV = 'EPISODES_UID_ALLOWLIST'
 _COHORT_SALT = 'episodes-v1'
 _ON = frozenset({'true', 'on', '1', 'yes'})
 
-# The admitted share when EPISODES_PERCENT is unset. Read by the rollout train check.
-EPISODES_PERCENT_DEFAULT = 100.0
-
 
 def episodes_enabled() -> bool:
     """Unset or blank is on; only an explicit on-value keeps it on, anything else is off."""
@@ -60,7 +57,7 @@ def episodes_enabled_for(uid: str) -> bool:
     allowlist = {item.strip() for item in os.getenv(EPISODES_UID_ALLOWLIST_ENV, '').split(',') if item.strip()}
     if uid in allowlist:
         return True
-    return uid_bucket(uid, _COHORT_SALT) < percentage(EPISODES_PERCENT_ENV, default=EPISODES_PERCENT_DEFAULT)
+    return uid_bucket(uid, _COHORT_SALT) < percentage(EPISODES_PERCENT_ENV, default=100.0)
 
 
 # --------------------------------------------------------------------------- client capability
