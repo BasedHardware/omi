@@ -223,6 +223,8 @@ class BrakeTests(unittest.TestCase):
         result = self.stage(play)
         self.assertTrue(result.startswith("BRAKE_RESULT action=stage versionCode=1477 status_before=absent"))
         self.assertIn("userFraction=0.01 supersedes=1471 superseded_status=halted superseded_userFraction=0.1", result)
+        self.assertIn("en_us_before='- Faster sync.\\n- Longer battery.\\n'", result)
+        self.assertIn(f"en_us_after='- Faster sync.\\n- Longer battery.\\n{FIX}'", result)
         self.assertEqual(play.live["releases"][0], completed)
         staged = play.live["releases"][1]
         self.assertEqual(staged["versionCodes"], ["1477"])
@@ -296,10 +298,8 @@ class BrakeTests(unittest.TestCase):
 
     def test_stage_keeps_semicolon_joined_android_notes_shape(self):
         play = self.halted_play()
-        first = "a" * 320
-        last = "b" * 150
-        play.live["releases"][1]["releaseNotes"] = [{"language": "en-US", "text": f"{first}; {last}"}]
-        brake.run_brake(
+        play.live["releases"][1]["releaseNotes"] = [{"language": "en-US", "text": "Faster sync; Longer battery"}]
+        result = brake.run_brake(
             "stage",
             "1477",
             "brake",
@@ -311,8 +311,51 @@ class BrakeTests(unittest.TestCase):
         )
         self.assertEqual(
             play.live["releases"][1]["releaseNotes"],
-            [{"language": "en-US", "text": f"{first}; Fixes audio loss when your Omi reconnects"}],
+            [{"language": "en-US", "text": "Faster sync; Longer battery; Fixes audio loss when your Omi reconnects"}],
         )
+        self.assertIn("en_us_before='Faster sync; Longer battery'", result)
+        self.assertIn("en_us_after='Faster sync; Longer battery; Fixes audio loss when your Omi reconnects'", result)
+
+    def test_stage_semicolon_replace_last_requires_opt_in_and_logs_before_after(self):
+        play = self.halted_play()
+        first = "a" * 320
+        last = "entry with internal; clause " + "b" * 120
+        original_text = f"{first}; {last}"
+        play.live["releases"][1]["releaseNotes"] = [{"language": "en-US", "text": original_text}]
+        with self.assertRaisesRegex(brake.BrakeError, "BRAKE_REPLACE_LAST=true"):
+            brake.run_brake(
+                "stage",
+                "1477",
+                "brake",
+                user_fraction="0.01",
+                supersedes="1471",
+                notes_line="Fixes audio loss when your Omi reconnects",
+                edit_factory=lambda: (play, "original"),
+                quiescence_check=lambda: None,
+            )
+        self.assertNotIn("update", [name for name, _ in play.calls])
+        play = self.halted_play()
+        first = "a" * 320
+        last = "b" * 150
+        play.live["releases"][1]["releaseNotes"] = [{"language": "en-US", "text": f"{first}; {last}"}]
+        result = brake.run_brake(
+            "stage",
+            "1477",
+            "brake",
+            user_fraction="0.01",
+            supersedes="1471",
+            notes_line="Fixes audio loss when your Omi reconnects",
+            replace_last="true",
+            edit_factory=lambda: (play, "original"),
+            quiescence_check=lambda: None,
+        )
+        expected_after = f"{first}; Fixes audio loss when your Omi reconnects"
+        self.assertEqual(
+            play.live["releases"][1]["releaseNotes"],
+            [{"language": "en-US", "text": expected_after}],
+        )
+        self.assertIn(f"en_us_before={f'{first}; {last}'!r}", result)
+        self.assertIn(f"en_us_after={expected_after!r}", result)
 
     def test_stage_fraction_above_halted_fraction_refuses(self):
         play = self.halted_play()
@@ -330,6 +373,8 @@ class BrakeTests(unittest.TestCase):
             ("0.01", "1477", "brake", FIX),
             ("0.01", "1471", "", FIX),
             ("0.01", "1471", "brake", " "),
+            ("0.01", "1471", "brake", "unset"),
+            ("0.01", "1471", "brake", " unset "),
             ("0.01", "1471", "brake", "two\nlines"),
         ]:
             with self.subTest(fraction=fraction, supersedes=supersedes, confirm=confirm, line=line):
@@ -339,6 +384,18 @@ class BrakeTests(unittest.TestCase):
                             "stage", "1477", confirm, user_fraction=fraction, supersedes=supersedes, notes_line=line
                         )
                     factory.assert_not_called()
+        with patch.object(brake.promote, "play_edit") as factory:
+            with self.assertRaisesRegex(brake.BrakeError, "BRAKE_REPLACE_LAST"):
+                brake.run_brake(
+                    "stage",
+                    "1477",
+                    "brake",
+                    user_fraction="0.01",
+                    supersedes="1471",
+                    notes_line=FIX,
+                    replace_last="invalid",
+                )
+            factory.assert_not_called()
 
     def test_stage_update_or_readback_mismatch_fails_closed(self):
         play = self.halted_play()

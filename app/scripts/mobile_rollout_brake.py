@@ -24,6 +24,7 @@ class BrakeError(ValueError):
 
 # Play's per-language What's New limit.
 PLAY_NOTES_LIMIT = 500
+UNSET_NOTES_LINE = "unset"
 
 
 def github_json(path: str) -> object:
@@ -95,12 +96,14 @@ def staged_source_version(sources: dict[str, object], version_code: str) -> str:
     return versions.pop()
 
 
-def stage_notes(halted: dict, fix_line: str) -> list[dict]:
+def stage_notes(halted: dict, fix_line: str, *, allow_replace_last: bool = False) -> list[dict]:
     """The halted release's What's New, with the English fix line added.
 
     The line is appended, or replaces the last line when appending would pass
-    Play's limit. It goes on en-US and on every locale carrying the identical
-    English text (the train copies it to each locale); real translations stay as-is.
+    Play's limit (requiring explicit opt-in on '; '-joined notes so an entry
+    containing '; ' cannot be silently truncated). It goes on en-US and on
+    every locale carrying the identical English text (the train copies it to
+    each locale); real translations stay as-is.
     """
     notes = copy.deepcopy(halted.get("releaseNotes"))
     if not isinstance(notes, list) or any(not isinstance(entry, dict) for entry in notes):
@@ -115,6 +118,12 @@ def stage_notes(halted: dict, fix_line: str) -> list[dict]:
     lines = source.strip().split(separator)
     updated = separator.join([*lines, fix_line])
     if len(updated) > PLAY_NOTES_LIMIT and len(lines) > 1:
+        if separator == "; " and not allow_replace_last:
+            raise BrakeError(
+                f"en-US '; '-joined release notes would exceed Play's {PLAY_NOTES_LIMIT} characters "
+                f"(current={len(source.rstrip())} line={len(fix_line)}); "
+                "set BRAKE_REPLACE_LAST=true to allow replacing the last '; '-delimited segment"
+            )
         updated = separator.join([*lines[:-1], fix_line])
     if len(updated) > PLAY_NOTES_LIMIT:
         raise BrakeError(
@@ -128,7 +137,14 @@ def stage_notes(halted: dict, fix_line: str) -> list[dict]:
 
 
 def stage_track(
-    production: object, sources: dict[str, object], version_code: str, supersedes: str, fraction: float, fix_line: str
+    production: object,
+    sources: dict[str, object],
+    version_code: str,
+    supersedes: str,
+    fraction: float,
+    fix_line: str,
+    *,
+    allow_replace_last: bool = False,
 ):
     """Expected production track: the halted release replaced by a new staged one.
 
@@ -157,7 +173,7 @@ def stage_track(
         "versionCodes": [version_code],
         "status": "inProgress",
         "userFraction": fraction,
-        "releaseNotes": stage_notes(halted, fix_line),
+        "releaseNotes": stage_notes(halted, fix_line, allow_replace_last=allow_replace_last),
     }
     expected = copy.deepcopy(production)
     expected["releases"] = [release if old is halted else copy.deepcopy(old) for old in releases]
@@ -193,6 +209,7 @@ def run_brake(
     user_fraction: str = "",
     supersedes: str = "",
     notes_line: str = "",
+    replace_last: str = "",
     edit_factory=None,
     quiescence_check=None,
 ) -> str:
@@ -203,12 +220,18 @@ def run_brake(
         raise BrakeError("BRAKE_VERSION_CODE must be a positive integer")
     if action != "status" and confirm != "brake":
         raise BrakeError("mutation requires CONFIRM=brake")
+    allow_replace_last = False
     if action == "stage":
         fraction_target = parse_stage_fraction(user_fraction)
         if not promote.BUILD_RE.fullmatch(supersedes) or supersedes == version_code:
             raise BrakeError("stage requires BRAKE_SUPERSEDES_VERSION_CODE naming the halted release")
-        if not notes_line.strip() or "\n" in notes_line:
+        cleaned_notes_line = notes_line.strip()
+        if not cleaned_notes_line or cleaned_notes_line == UNSET_NOTES_LINE or "\n" in notes_line:
             raise BrakeError("stage requires a one-line BRAKE_NOTES_LINE for the en-US What's New")
+        replace_last_flag = replace_last.strip()
+        if replace_last_flag not in ("", "unset", "false", "true"):
+            raise BrakeError("BRAKE_REPLACE_LAST must be true or false")
+        allow_replace_last = replace_last_flag == "true"
     (quiescence_check or require_quiesced_writers)()
     edit_factory = edit_factory or promote.play_edit
     client, edit_id = edit_factory()
@@ -218,14 +241,24 @@ def run_brake(
         if action == "stage":
             sources = {name: promote.play_track(client, edit_id, name) for name in ("internal", "alpha")}
             expected, halted_fraction = stage_track(
-                production, sources, version_code, supersedes, fraction_target, notes_line.strip()
+                production,
+                sources,
+                version_code,
+                supersedes,
+                fraction_target,
+                notes_line.strip(),
+                allow_replace_last=allow_replace_last,
             )
             commit_expected(client, edit_id, expected, open_edits)
+            halted = selected_release(production, supersedes)
             staged = selected_release(expected, version_code)
+            en_us_before = next(e["text"] for e in halted["releaseNotes"] if e.get("language") == "en-US")
+            en_us_after = next(e["text"] for e in staged["releaseNotes"] if e.get("language") == "en-US")
             return (
                 f"BRAKE_RESULT action=stage versionCode={version_code} status_before=absent "
                 f"status_after=inProgress userFraction={fraction_target} supersedes={supersedes} "
-                f"superseded_status=halted superseded_userFraction={halted_fraction} name={staged['name']!r}"
+                f"superseded_status=halted superseded_userFraction={halted_fraction} name={staged['name']!r} "
+                f"en_us_before={en_us_before!r} en_us_after={en_us_after!r}"
             )
         selected = selected_release(production, version_code)
         before = selected["status"]
@@ -268,6 +301,7 @@ def main() -> int:
             user_fraction=os.environ.get("BRAKE_USER_FRACTION", ""),
             supersedes=os.environ.get("BRAKE_SUPERSEDES_VERSION_CODE", ""),
             notes_line=os.environ.get("BRAKE_NOTES_LINE", ""),
+            replace_last=os.environ.get("BRAKE_REPLACE_LAST", ""),
         )
     except (BrakeError, promote.PromotionError, train.TrainError) as exc:
         print(f"BRAKE_ERROR {exc}", file=sys.stderr)
