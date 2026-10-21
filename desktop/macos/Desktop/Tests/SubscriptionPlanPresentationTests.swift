@@ -53,7 +53,8 @@ final class SubscriptionPlanPresentationTests: XCTestCase {
   }
 
   func testCheckoutConflictIsAnExistingSubscriptionNotAPendingCancellation() {
-    let existing = "You already have a subscription. Manage your existing subscription instead of starting a new checkout."
+    let existing =
+      "You already have a subscription. Manage your existing subscription instead of starting a new checkout."
     XCTAssertEqual(
       SubscriptionPlanPresentation.checkoutErrorMessage(.httpError(statusCode: 409, detail: existing)), existing)
     XCTAssertEqual(
