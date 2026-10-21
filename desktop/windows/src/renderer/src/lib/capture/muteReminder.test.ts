@@ -31,6 +31,35 @@ describe('muteReminder (#20215)', () => {
     expect(normalizeMuteReminderIntervalMinutes(15)).toBe(15)
   })
 
+  it('never reminds users who start or restore auth with recording disabled', () => {
+    const onRemind = vi.fn()
+    const controller = createMuteReminderController({ onRemind })
+    const state = { signedIn: true, onboarded: true, continuousRecording: false }
+    controller.update(state)
+    vi.advanceTimersByTime(120 * 60_000)
+    expect(controller.isArmed()).toBe(false)
+    controller.update({ ...state, signedIn: false })
+    controller.update({ ...state, urgency: 'high', intervalMinutes: 15 })
+    vi.advanceTimersByTime(120 * 60_000)
+    expect(onRemind).not.toHaveBeenCalled()
+    controller.dispose()
+  })
+
+  it('does not carry active recording history across sign-out or onboarding', () => {
+    const onRemind = vi.fn()
+    const controller = createMuteReminderController({ onRemind })
+    const state = { signedIn: true, onboarded: true, continuousRecording: true }
+    for (const boundary of [{ signedIn: false }, { onboarded: false }]) {
+      controller.update(state)
+      controller.update({ ...state, ...boundary })
+      controller.update({ ...state, continuousRecording: false })
+      expect(controller.isArmed()).toBe(false)
+      vi.advanceTimersByTime(60 * 60_000)
+    }
+    expect(onRemind).not.toHaveBeenCalled()
+    controller.dispose()
+  })
+
   it('formats elapsed muted duration labels clearly', () => {
     expect(formatMutedDurationLabel(15)).toBe('15 min')
     expect(formatMutedDurationLabel(60)).toBe('1 hour')
@@ -38,11 +67,13 @@ describe('muteReminder (#20215)', () => {
     expect(formatMutedDurationLabel(120)).toBe('2 hours')
   })
 
-  it('arms when signed in, onboarded, and recording is muted, firing periodic reminders until unmuted', () => {
+  it('arms only after active recording is paused, firing periodic reminders until unmuted', () => {
     const reminders: MuteReminderNotificationPayload[] = []
     const controller = createMuteReminderController({
       onRemind: (payload) => reminders.push(payload)
     })
+
+    controller.update({ signedIn: true, onboarded: true, continuousRecording: true })
 
     controller.update({
       signedIn: true,
@@ -136,6 +167,8 @@ describe('muteReminder (#20215)', () => {
       onRemind: (payload) => reminders.push(payload)
     })
 
+    controller.update({ signedIn: true, onboarded: true, continuousRecording: true })
+
     controller.update({
       signedIn: true,
       onboarded: true,
@@ -177,6 +210,8 @@ describe('muteReminder (#20215)', () => {
       intervalMinutes: 30
     }
 
+    controller.update({ signedIn: true, onboarded: true, continuousRecording: true })
+
     controller.update(state)
     vi.advanceTimersByTime(20 * 60_000)
     controller.update({ ...state, intervalMinutes: 15 })
@@ -205,6 +240,8 @@ describe('muteReminder (#20215)', () => {
     const controller = createMuteReminderController({
       onRemind: (payload) => reminders.push(payload)
     })
+
+    controller.update({ signedIn: true, onboarded: true, continuousRecording: true })
 
     controller.update({
       signedIn: true,

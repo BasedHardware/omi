@@ -81,7 +81,7 @@ export function buildMuteReminderPayload(
   const body =
     urgency === 'subtle'
       ? `Audio recording has been paused for ${durationLabel}. Turn Microphone back on when you are ready to capture.`
-      : `Audio recording has been paused for ${durationLabel}. Click to open Omi and resume recording so you don't miss your next conversation.`
+      : `Audio recording has been paused for ${durationLabel}. Click to open Omi. You can resume recording there when you are ready.`
 
   return {
     title,
@@ -110,7 +110,7 @@ export interface MuteReminderController {
 
 /**
  * Pure timer controller that arms a repeating reminder while the user is signed in,
- * onboarded, and has `continuousRecording` paused/muted (`false`). Disarms
+ * onboarded, and has paused recording after an observed active session. Disarms
  * immediately when recording resumes, when the user signs out, or when urgency is 'off'.
  */
 export function createMuteReminderController(
@@ -126,6 +126,8 @@ export function createMuteReminderController(
   let currentUrgency: MuteReminderUrgency = MUTE_REMINDER_URGENCY_DEFAULT
   let currentIntervalMs = MUTE_REMINDER_INTERVAL_MINUTES_DEFAULT * 60_000
   let armed = false
+  let wasRecording = false
+  let pausedActiveSession = false
 
   function cancelTimer(): void {
     if (timerHandle !== null) {
@@ -164,10 +166,21 @@ export function createMuteReminderController(
     const urgency = normalizeMuteReminderUrgency(input.urgency)
     const intervalMinutes = normalizeMuteReminderIntervalMinutes(input.intervalMinutes)
     const nextIntervalMs = intervalMinutes * 60_000
+    if (!input.signedIn || !input.onboarded) {
+      wasRecording = false
+      pausedActiveSession = false
+    } else if (input.continuousRecording) {
+      wasRecording = true
+      pausedActiveSession = false
+    } else if (wasRecording) {
+      wasRecording = false
+      pausedActiveSession = true
+    }
     const shouldMonitorMuted =
       input.signedIn === true &&
       input.onboarded === true &&
       input.continuousRecording === false &&
+      pausedActiveSession &&
       urgency !== 'off'
 
     if (!shouldMonitorMuted) {
@@ -197,7 +210,11 @@ export function createMuteReminderController(
 
   return {
     update,
-    dispose: disarmAndReset,
+    dispose: () => {
+      disarmAndReset()
+      wasRecording = false
+      pausedActiveSession = false
+    },
     isArmed: () => armed,
     getReminderCount: () => reminderCount
   }
