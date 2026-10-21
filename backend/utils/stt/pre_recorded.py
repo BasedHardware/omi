@@ -599,16 +599,25 @@ def modulate_prerecorded_from_bytes(
         response.raise_for_status()
         result = response.json()
 
-        # Velma's batch success shape is an utterances list, empty for silence
-        # ({"utterances": []}). A 2xx body without that list (a JSON error envelope,
-        # a null, a bare string) is not a no-speech verdict. Raise so callers keep
-        # the audio as retry material and held-piece recovery never checkpoints the
-        # reply as a completed empty result. See #23081.
+        # Velma's batch success shape carries utterances (a list, empty for silence)
+        # beside text ("" for silence) and duration_ms. A 2xx body without the list
+        # (a JSON error envelope, a null, a bare string) is not a no-speech verdict,
+        # and neither is {"utterances": []} alone, which any unrelated 2xx envelope
+        # could carry. Silence therefore also needs text as a str or duration_ms as a
+        # number — one of them, not both, so the older host this client targets is
+        # held to no more than the docs promise. A non-empty list is parsed as
+        # before. Raise so callers keep the audio as retry material and held-piece
+        # recovery never checkpoints the reply as a completed empty result. See #23081.
         if not isinstance(result, dict) or not isinstance(result.get('utterances'), list):
             raise RuntimeError('Modulate response must carry an utterances list')
 
         utterances = result['utterances']
         if not utterances:
+            has_text = isinstance(result.get('text'), str)
+            duration_ms = result.get('duration_ms')
+            has_duration = isinstance(duration_ms, (int, float)) and not isinstance(duration_ms, bool)
+            if not (has_text or has_duration):
+                raise RuntimeError('Modulate response with empty utterances must carry text or duration_ms')
             if return_language:
                 return [], language or 'multi'
             return []

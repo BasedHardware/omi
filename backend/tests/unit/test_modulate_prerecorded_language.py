@@ -11,6 +11,11 @@ def utterance(text, language, duration=1000):
     return {'text': text, 'language': language, 'duration_ms': duration, 'start_ms': 0, 'speaker': 1}
 
 
+def silence():
+    """Velma's documented no-speech reply: every required field present, text and utterances empty."""
+    return {'text': '', 'duration_ms': 120, 'utterances': []}
+
+
 @pytest.fixture
 def http(monkeypatch):
     monkeypatch.setenv('MODULATE_API_KEY', 'synthetic-test-key')
@@ -57,14 +62,14 @@ def test_word_majority_duration_ties_and_short_noise(reply, utterances, expected
 @pytest.mark.parametrize('utterances', [[], [utterance('  ', 'en')], [utterance('words without detection', None)]])
 @pytest.mark.parametrize('requested,expected', [(None, 'multi'), ('multi', 'multi'), ('vi', 'vi')])
 def test_no_detection_never_fabricates_english(reply, utterances, requested, expected):
-    reply.json.return_value = {'utterances': utterances}
+    reply.json.return_value = {**silence(), 'utterances': utterances}
     _, language = stt.modulate_prerecorded_from_bytes(b'wave', return_language=True, language=requested)
     assert language == expected
 
 
 @pytest.mark.parametrize('use_url', [True, False])
 def test_provider_forwards_requested_language_on_url_and_bytes_paths(reply, use_url):
-    reply.json.return_value = {'utterances': []}
+    reply.json.return_value = silence()
     provider = stt.ModulatePrerecordedProvider()
     transcribe = provider.transcribe_url if use_url else provider.transcribe_bytes
     assert transcribe(
@@ -74,7 +79,7 @@ def test_provider_forwards_requested_language_on_url_and_bytes_paths(reply, use_
 
 
 def test_retry_preserves_requested_language(reply):
-    reply.json.side_effect = [ValueError('synthetic malformed reply'), {'utterances': []}]
+    reply.json.side_effect = [ValueError('synthetic malformed reply'), silence()]
     assert stt.modulate_prerecorded_from_bytes(b'wave', return_language=True, language='vi') == ([], 'vi')
 
 
@@ -103,7 +108,27 @@ def test_response_without_utterances_list_raises_after_retries(http, reply, body
     assert http.post.call_count == 3
 
 
-@pytest.mark.parametrize('body', [{'error': 'quota exceeded'}, {'utterances': None}])
+# {"utterances": []} on its own is not the documented silence reply, which also
+# carries text ("" for no speech) and duration_ms; with neither sibling present the
+# body could be any unrelated 2xx envelope. See #23081.
+@pytest.mark.parametrize(
+    'body',
+    [
+        {'utterances': []},
+        {'utterances': [], 'text': None, 'duration_ms': None},
+        {'utterances': [], 'text': 0},
+        {'utterances': [], 'duration_ms': '120'},
+        {'utterances': [], 'duration_ms': True},
+    ],
+)
+def test_empty_utterances_without_text_or_duration_raises_after_retries(http, reply, body):
+    reply.json.return_value = body
+    with pytest.raises(RuntimeError, match='Modulate transcription failed after 3 attempts'):
+        stt.modulate_prerecorded_from_bytes(b'wave', return_language=True)
+    assert http.post.call_count == 3
+
+
+@pytest.mark.parametrize('body', [{'error': 'quota exceeded'}, {'utterances': None}, {'utterances': []}])
 def test_held_dispatch_raises_on_malformed_body_after_one_call(http, reply, body):
     reply.json.return_value = body
     with stt.held_single_attempt(), pytest.raises(RuntimeError, match='failed after 1 attempts'):
@@ -120,8 +145,23 @@ def test_malformed_body_raises_through_the_provider_on_url_and_bytes_paths(http,
         transcribe('https://synthetic.invalid/wave' if use_url else b'wave', return_language=True)
 
 
-def test_well_formed_silence_is_still_no_speech(http, reply):
-    reply.json.return_value = {'utterances': []}
+@pytest.mark.parametrize(
+    'body',
+    [
+        silence(),
+        {'utterances': [], 'text': ''},
+        {'utterances': [], 'duration_ms': 120},
+        {'utterances': [], 'duration_ms': 0},
+        {'utterances': [], 'duration_ms': 120.0},
+    ],
+)
+def test_well_formed_silence_is_still_no_speech(http, reply, body):
+    reply.json.return_value = body
     assert stt.modulate_prerecorded_from_bytes(b'wave') == []
     assert stt.modulate_prerecorded_from_bytes(b'wave', return_language=True, language='vi') == ([], 'vi')
     assert http.post.call_count == 2
+
+
+def test_non_empty_utterances_need_no_sibling_field(reply):
+    reply.json.return_value = {'utterances': [utterance('one two three', 'en')]}
+    assert [word['text'] for word in stt.modulate_prerecorded_from_bytes(b'wave')] == ['one two three']
