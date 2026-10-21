@@ -2151,6 +2151,12 @@ FIELD_INDEX_REQUIREMENTS: tuple[FieldIndexRequirement, ...] = MESSAGING_FIELD_RE
     FieldIndexRequirement(
         'sync_content_ledger_created_at_group_ascending', 'sync_content_ledger', 'created_at', ('ASCENDING',)
     ),
+    # Legacy dark final-pass re-home sweep (scripts/legacy_dark/final_pass_rehome.py,
+    # the legacy_final_pass_rehomed draining precondition): every conversation still
+    # routed to legacy_final_pass_v1, across users.
+    FieldIndexRequirement(
+        'conversations_record_lane_owner_group_ascending', 'conversations', 'record_lane_owner', ('ASCENDING',)
+    ),
     FieldIndexRequirement(
         'task_recurrence_inbox_status_group_ascending', 'task_recurrence_inbox', 'status', ('ASCENDING',)
     ),

@@ -89,6 +89,29 @@ def _covered(paths, jobs, artifacts):
     return True
 
 
+async def _legacy_final_pass_route(uid, conversation_id, store, legacy_mode) -> RecordUploadRoute:
+    """``legacy_final_pass_v1`` keeps today's route in ``on``; after that, re-home or hold.
+
+    In ``draining``/``dark`` legacy can no longer serve this conversation, so a
+    successful re-home routes the upload to batch intake. A held re-home (a live
+    legacy job for the uid, a lost CAS) keeps the LEGACY route: the router's fence
+    answers the shipped in-progress ACK and the client retries.
+    """
+    # Imported per call: router harnesses stub ``utils`` wholesale, and ``on``
+    # must keep today's route without touching the re-home module.
+    from utils.sync import final_pass_rehome, legacy_dark
+
+    if not conversation_id:
+        return RecordUploadRoute.LEGACY
+    mode = legacy_mode if legacy_mode is not None else await run_blocking(db_executor, legacy_dark.current_mode)
+    if mode is legacy_dark.LegacySyncMode.ON:
+        return RecordUploadRoute.LEGACY
+    outcome = await run_blocking(
+        db_executor, final_pass_rehome.rehome_final_pass_owner, uid, conversation_id, firestore_client=store.client
+    )
+    return RecordUploadRoute.BATCH if final_pass_rehome.rehomes_to_batch(outcome) else RecordUploadRoute.LEGACY
+
+
 async def registered_record_response(
     *,
     uid,
@@ -101,6 +124,7 @@ async def registered_record_response(
     recording_session_id=None,
     loaded_conversation=None,
     policy=None,
+    legacy_mode=None,
 ) -> JSONResponse | RecordUploadRoute | None:
     policy = policy or resolve_batch_policy(uid)
     if not conversation_id and not recording_session_id:
@@ -131,7 +155,7 @@ async def registered_record_response(
         row = snapshot.to_dict() or {}
     if row.get('record_lane_owner') != OWNER:
         if row.get('record_lane_owner') == 'legacy_final_pass_v1':
-            return RecordUploadRoute.LEGACY
+            return await _legacy_final_pass_route(uid, conversation_id, store, legacy_mode)
         if row.get('record_lane_owner') == 'batch_sync_v1':
             return RecordUploadRoute.BATCH
         # A pre-enable capture can exist without an owner until its finalizer

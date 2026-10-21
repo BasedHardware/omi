@@ -134,7 +134,8 @@ DRAINING_PRECONDITIONS = {
     ),
     'legacy_final_pass_rehomed': (
         'conversations still owned by legacy_final_pass_v1 with no live legacy job are re-homed to batch, so '
-        'later uploads are not held on device after dark (M3 Luna review, lead ruling b209a5)'
+        'later uploads are not held on device after dark (M3 Luna review, lead ruling b209a5); evidence: '
+        'scripts.legacy_dark.final_pass_rehome --apply reads CLEAR'
     ),
 }
 

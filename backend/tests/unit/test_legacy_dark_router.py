@@ -81,8 +81,9 @@ async def test_router_acknowledges_completed_legacy_content_in_dark(monkeypatch)
 @pytest.mark.asyncio
 @pytest.mark.parametrize('mode', [DRAINING, DARK])
 async def test_router_acknowledges_a_legacy_final_pass_owner_without_a_ledger_row(monkeypatch, mode):
-    """M3 review: a conversation owned by legacy_final_pass_v1 gets batch intake's ACK (the shipped
-    in-progress 409 that follows the owner), not the admission-refused backstop, and no legacy job."""
+    """M3 review: a conversation owned by legacy_final_pass_v1 whose re-home is held (the route
+    stays LEGACY) gets batch intake's ACK (the shipped in-progress 409 that follows the owner),
+    not the admission-refused backstop, and no legacy job."""
     from unittest.mock import AsyncMock, MagicMock
 
     from utils.batch_pipeline.live_upload import RecordUploadRoute
@@ -96,6 +97,35 @@ async def test_router_acknowledges_a_legacy_final_pass_owner_without_a_ledger_ro
         response = await _upload(module, BytesIO)
         assert response.status_code == 409
         assert json.loads(response.body)['code'] == 'sync_content_in_progress'
+        module.create_sync_job.assert_not_called()
+    finally:
+        _restore(saved)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('mode', [DRAINING, DARK])
+async def test_router_admits_a_rehomed_final_pass_owner_to_batch(monkeypatch, mode):
+    """Lead ruling b209a5: the route re-homes a legacy_final_pass_v1 owner to batch outside ``on``
+    (it receives the mode the router read); the upload then goes to batch intake with batch
+    enabled, past any owner-load narrowing, and never to the fence or a legacy job."""
+    from unittest.mock import AsyncMock, MagicMock
+
+    from utils.batch_pipeline.live_upload import RecordUploadRoute
+
+    module, saved, jobs, BytesIO = _router()
+    try:
+        monkeypatch.setattr(legacy_dark, 'current_mode', lambda: mode)
+        monkeypatch.setattr(legacy_dark, 'read_ledger_row', MagicMock(side_effect=AssertionError('fence ran')))
+        module.registered_record_response = AsyncMock(return_value=RecordUploadRoute.BATCH)
+        module.accept_batch_upload = AsyncMock(
+            return_value=module.JSONResponse(status_code=202, content={'job_id': 'bp_1', 'status': 'queued'})
+        )
+        module.create_sync_job = MagicMock()
+        response = await _upload(module, BytesIO)
+        assert response.status_code == 202
+        assert module.registered_record_response.await_args.kwargs['legacy_mode'] is mode
+        module.accept_batch_upload.assert_awaited_once()
+        assert module.accept_batch_upload.await_args.kwargs['policy'].batch_enabled is True
         module.create_sync_job.assert_not_called()
     finally:
         _restore(saved)

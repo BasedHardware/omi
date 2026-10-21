@@ -15,6 +15,17 @@ Any failure to read the mode serves `on`. During the soak the legacy image, queu
 ## Preconditions
 
 - **`on` → `draining`:** batch percent 100 at a clean fleet gate, C8 `provider_stt` live, cap-hold rehome live (or S12: cap enforcement held at its current cohort), parity gate PASS, the enrichment queue switch (C3) complete, **and the ladder v1 usage budget is debited for batch-admitted cap-hold units** (Subscription session ruling 10-19; lane 6 owns it)., **and onthway's operator minimal-mode redrives (#22503) are finished or moved to the batch redrive path** (lead ruling 10-20 05:17Z: `draining` stops new sequencer registration, which minimal redrive needs, and C11 deletes it). **C8 provider-STT is live in prod** (`provider_stt_live`: the provider-stt queue, `PROVIDER_STT_TASKS_*` env and the enrichment maintenance job, which also sweeps the provider-stt outbox; M3 review), **and conversations still owned by `legacy_final_pass_v1` with no live legacy job are re-homed to batch** (`legacy_final_pass_rehomed`; lead ruling 10-21 b209a5). `ramp_set.py` refuses to leave `on` until each id in `DRAINING_PRECONDITIONS` (`scripts/rollout/ramp_controller.py`) is confirmed with `--precondition-met <id>`.
+
+  The re-home sweep is the evidence for `legacy_final_pass_rehomed`. It needs the `conversations.record_lane_owner` collection-group field index (`scripts/reconcile_firestore_indexes.py --provision-missing`, as the M2 staging cycle did for the ledger index), runs after the other preconditions, and is repeated until `CLEAR`:
+
+  ```bash
+  source ~/.local/bin/gcp-agent-env.sh ro-prod        # dry run: counts only
+  cd backend && .venv/bin/python -m scripts.legacy_dark.final_pass_rehome --env prod
+  source ~/.local/bin/gcp-agent-env.sh prod-operator  # apply, keep the receipt in the run dir
+  .venv/bin/python -m scripts.legacy_dark.final_pass_rehome --env prod --apply --output <run-dir>/final-pass-rehome.json
+  ```
+
+  A conversation the sweep holds (an active legacy ledger claim or a retryable legacy row for its uid) is re-homed later by its next upload in `draining`/`dark`, from the exact Redis pending index (`utils/sync/final_pass_rehome.py`).
 - **`draining` → `dark`:** the drain census reads zero twice, at least 10 minutes apart:
 
   ```bash
@@ -56,6 +67,8 @@ Content already claimed in `sync_content_ledger` by legacy is never re-admitted 
 | processing, fresh, Redis owner job present (or unknown) | 409 `sync_content_in_progress` with the legacy job id (the shipped "follow the owner" response, lead ruling 10-19); the running legacy task finishes it | `legacy_active` (`legacy_active_in_dark` pages in `dark`) |
 | retryable, stale or untimestamped claim, Redis owner job gone (the `claim_sync_content` check), invalid completion | batch adopts it when the intake supports the ledger takeover; otherwise 409 retry-later, client keeps the audio | `legacy_stranded_adopted` / `legacy_stranded` |
 | repeat-failure pause active | 409 with `Retry-After` = the pause remaining, never adopted | `legacy_capped` |
+
+A conversation whose `record_lane_owner` is `legacy_final_pass_v1` (a durable route owner, not a ledger row) is re-homed in `draining`/`dark` by its next upload, in both the router route and batch intake: with no live legacy job for the uid (the Redis pending index) its owner moves to `batch_sync_v1` by the same revision-fenced CAS every owner transition uses, and the upload is admitted to batch intake, which keeps its privacy, binding and predecessor fences (`legacy_final_pass_rehomed`). While a legacy job is live for the uid, or the CAS is lost to a concurrent claim, the upload gets the in-progress 409 (`legacy_active`) and the client retries; `promote_final_pass_if_current` refuses a batch-owned conversation, so a final pass still running cannot promote over batch's work. The pre-flip stock is cleared by the sweep above.
 
 An epoch-less backfill task in `draining`/`dark` never runs beside a live sequencer owner for the same uid: if the sequencer already holds the job and its sweep still dispatches (`draining`) the task is acked (`sequencer_owns_job`); while another job is the uid's active owner it answers 409 so the queue retries (`sequencer_owner_active`).
 

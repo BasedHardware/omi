@@ -1242,6 +1242,9 @@ async def sync_local_files_v2(
             recording_session_id=recording_session_id,
             policy=batch_policy,
             loaded_conversation=record_snapshot if record_snapshot.get('record_lane_owner') else None,
+            # A legacy_final_pass_v1 owner is re-homed to batch once legacy is
+            # draining/dark (final_pass_rehome); the route answers BATCH then.
+            legacy_mode=legacy_mode,
         )
         if isinstance(record_response, JSONResponse):
             return record_response

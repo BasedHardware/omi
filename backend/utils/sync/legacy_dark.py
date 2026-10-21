@@ -75,6 +75,7 @@ class LegacyDarkReason(StrEnum):
     LEGACY_ACTIVE_IN_DARK = 'legacy_active_in_dark'
     LEGACY_STRANDED = 'legacy_stranded'
     LEGACY_STRANDED_ADOPTED = 'legacy_stranded_adopted'
+    LEGACY_FINAL_PASS_REHOMED = 'legacy_final_pass_rehomed'
     LEGACY_CAPPED = 'legacy_capped'
     ADMISSION_REFUSED = 'admission_refused'
     SEQUENCER_DARK = 'sequencer_dark'

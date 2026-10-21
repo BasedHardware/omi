@@ -407,19 +407,26 @@ async def accept_upload(
                 loaded_conversation=target,
                 policy=policy,
             )
-        if target.get('record_lane_owner') == 'legacy_final_pass_v1':
+        if isinstance(conversation_id, str) and target.get('record_lane_owner') == 'legacy_final_pass_v1':
             if mode is LegacySyncMode.ON:
                 return None
-            # The in-flight legacy final pass owns this recording (h, invariant 4).
-            return legacy_dark.fence_response(
-                legacy_dark.FenceDecision(
-                    legacy_dark.FenceAction.ACK,
-                    legacy_dark.LegacyDarkReason.LEGACY_ACTIVE,
-                    legacy_dark.LegacyOwnership.ACTIVE,
-                ),
-                total_files=len(paths),
-                lane=lane,
-            )
+            # Legacy can no longer serve this conversation: move its route to batch
+            # (the same revision-fenced CAS as every owner transition) and admit
+            # below. A held re-home (a live legacy job for the uid, a lost CAS)
+            # keeps the in-flight owner's ACK (h, invariant 4); the client retries.
+            from utils.sync import final_pass_rehome
+
+            rehome = await run_blocking(db_executor, final_pass_rehome.rehome_final_pass_owner, uid, conversation_id)
+            if not final_pass_rehome.rehomes_to_batch(rehome):
+                return legacy_dark.fence_response(
+                    legacy_dark.FenceDecision(
+                        legacy_dark.FenceAction.ACK,
+                        legacy_dark.LegacyDarkReason.LEGACY_ACTIVE,
+                        legacy_dark.LegacyOwnership.ACTIVE,
+                    ),
+                    total_files=len(paths),
+                    lane=lane,
+                )
         language = normalized_stt_language(target.get('language') or user.get('language'))
         # Match legacy sync's effective input: a primary app language is not a
         # promise that the audio is monolingual. Do this only before new custody;
