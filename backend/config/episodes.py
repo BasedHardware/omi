@@ -11,9 +11,28 @@ rather than silently keeping it running. Off makes the episodes API report
 ``enabled: false``: released and current apps then show today's
 per-conversation UI, and no episode state is read, written or computed.
 
-``EPISODES_PERCENT`` (default 100) and ``EPISODES_UID_ALLOWLIST`` exist only
-for the ramp: a stable salted uid bucket below the percentage, or a listed
-uid, is admitted. Invalid percentages admit nobody beyond the allowlist.
+``EPISODES_PERCENT`` (default 100) and
+``EPISODES_UID_ALLOWLIST`` select the admitted cohort: a stable salted uid
+bucket below the percentage, or a listed uid, is admitted. Invalid percentages
+admit nobody beyond the allowlist.
+
+Admission alone never spends money. Episode work (the per-moment listen update
+and the finalizer's tail and reconciliation) also requires an inferred client
+capability: the user's app called a ``/v1/episodes`` route within
+``CLIENT_SEEN_TTL_SECONDS``, recorded as the Redis marker
+``episodes:client_seen:{uid}`` (``utils/episodes/client_gate.py``). Old mobile
+builds, the desktop app and web never call that API, so their users cost
+nothing. The API itself stays available to every admitted uid, since it is what
+sets the marker. The allowlist bypasses the percentage, not the marker.
+
+``EPISODES_CLIENT_CHANNELS`` (default ``beta``) is the client cohort. The app
+sends ``X-Omi-App-Channel: beta|store`` on every request (TestFlight and
+non-production build profiles are ``beta``; anything else, including an
+unknown install, is ``store``). An episodes API call from a channel outside the
+list answers ``enabled: false`` and leaves no marker, so that client keeps
+today's UI and its user costs nothing. A missing or unrecognised channel (old
+builds, desktop, web) is never admitted. Expanding to store users is the config
+flip ``beta,store``.
 
 Pure module: stdlib only, flags read at the call boundary, never at import.
 """
@@ -27,6 +46,10 @@ from config.jev_decisions import percentage, uid_bucket
 EPISODES_ENABLED_ENV = 'EPISODES_ENABLED'
 EPISODES_PERCENT_ENV = 'EPISODES_PERCENT'
 EPISODES_UID_ALLOWLIST_ENV = 'EPISODES_UID_ALLOWLIST'
+EPISODES_CLIENT_CHANNELS_ENV = 'EPISODES_CLIENT_CHANNELS'
+APP_CHANNEL_HEADER = 'X-Omi-App-Channel'
+APP_CHANNELS = frozenset({'beta', 'store'})
+_DEFAULT_CLIENT_CHANNELS = frozenset({'beta'})
 _COHORT_SALT = 'episodes-v1'
 _ON = frozenset({'true', 'on', '1', 'yes'})
 
@@ -38,7 +61,10 @@ def episodes_enabled() -> bool:
 
 
 def episodes_enabled_for(uid: str) -> bool:
-    """The kill switch first, then the ramp cohort (allowlist or stable uid bucket)."""
+    """The kill switch first, then the cohort (allowlist or stable uid bucket).
+
+    Admission only: callers that spend money also need ``client_gate.client_seen``.
+    """
     if not uid or not episodes_enabled():
         return False
     allowlist = {item.strip() for item in os.getenv(EPISODES_UID_ALLOWLIST_ENV, '').split(',') if item.strip()}
@@ -46,6 +72,34 @@ def episodes_enabled_for(uid: str) -> bool:
         return True
     return uid_bucket(uid, _COHORT_SALT) < percentage(EPISODES_PERCENT_ENV, default=100.0)
 
+
+def app_channel(raw: str | None) -> str:
+    """The request's ``X-Omi-App-Channel`` as a bounded label: ``beta``, ``store`` or ``unknown``."""
+    value = (raw or '').strip().lower()
+    return value if value in APP_CHANNELS else 'unknown'
+
+
+def episodes_client_channels() -> frozenset[str]:
+    """Admitted client channels. Unset or blank is ``beta``; unrecognised entries are ignored."""
+    raw = os.getenv(EPISODES_CLIENT_CHANNELS_ENV, '')
+    if not raw.strip():
+        return _DEFAULT_CLIENT_CHANNELS
+    return frozenset(item.strip().lower() for item in raw.split(',')) & APP_CHANNELS
+
+
+def client_channel_admitted(raw: str | None) -> bool:
+    """A missing or unknown channel is never admitted."""
+    channel = app_channel(raw)
+    return channel != 'unknown' and channel in episodes_client_channels()
+
+
+# --------------------------------------------------------------------------- client capability
+
+# A capable app calls /v1/episodes at startup and every 30 s while a live surface
+# is on screen; the marker it leaves lives this long without another call.
+CLIENT_SEEN_TTL_SECONDS = 14 * 24 * 60 * 60
+# The marker is rewritten at most this often per uid, so polling is not a write.
+CLIENT_SEEN_REFRESH_SECONDS = 60 * 60
 
 # --------------------------------------------------------------------------- moments
 

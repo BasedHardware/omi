@@ -9,6 +9,7 @@ from typing import Any, Callable
 COLLECTION = 'rollout_cohorts'
 # Literal env reads keep the migration fallbacks visible to the flag registry.
 COHORT_ENVS = {
+    'batch-pipeline-shadow': lambda: '',
     # The composition root injects scoped policy env readers with the runtime.
     'batch-pipeline': lambda: '',
     'batch-pipeline-recovery': lambda: '',

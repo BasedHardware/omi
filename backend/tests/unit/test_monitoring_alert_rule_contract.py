@@ -1904,7 +1904,18 @@ def test_sync_failure_reason_and_firestore_commit_exhaustion_alerts():
         sync = {node["refId"]: node["model"] for node in rules["omi-sync-failure-reason-step"]["data"]}
         assert "sum by (namespace, outcome)" in sync["A"]["expr"], export_name
         assert "[7d] offset 60m" in sync["B"]["expr"], export_name
-        assert sync["C"]["expression"] == "$A >= 50 && $B > 3", export_name
+        # 2026-10-21: #22977 split internal failures out of upstream_error; a relabel
+        # must not page, so a reason also needs the service's total failure share up.
+        assert sync["C"]["expression"] == "$A >= 50 && $B > 3 && $G > 1.5", export_name
+        assert "sum by (namespace) (" in sync["G"]["expr"], export_name
+        assert "[7d] offset 60m" in sync["G"]["expr"], export_name
+        assert "backend-integration" not in sync["A"]["expr"], export_name
+        ceiling = rules["omi-sync-total-failure-share-ceiling"]
+        ceiling_nodes = {node["refId"]: node["model"] for node in ceiling["data"]}
+        assert ceiling_nodes["C"]["expression"] == "$A > 0.08 && $B >= 200", export_name
+        assert "sum by (namespace)" in ceiling_nodes["A"]["expr"], export_name
+        assert ceiling["labels"]["severity"] == "warning", export_name
+        assert ceiling["for"] == "30m", export_name
         assert rules["omi-sync-failure-reason-step"]["labels"]["severity"] == "critical", export_name
         fs = rules["omi-firestore-commit-resource-exhausted"]
         filters = fs["data"][0]["model"]["timeSeriesList"]["filters"]

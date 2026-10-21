@@ -43,6 +43,14 @@ def test_ramp_cohort_admits_allowlist_and_bucket(monkeypatch):
     assert config.episodes_enabled_for('') is False
 
 
+def test_unset_percent_admits_everyone_by_default(monkeypatch):
+    # Client gating (utils/episodes/client_gate.py) makes admission free, so the code default is 100.
+    monkeypatch.delenv(config.EPISODES_ENABLED_ENV, raising=False)
+    monkeypatch.delenv(config.EPISODES_PERCENT_ENV, raising=False)
+    monkeypatch.delenv(config.EPISODES_UID_ALLOWLIST_ENV, raising=False)
+    assert all(config.episodes_enabled_for(f'user-{i}') for i in range(2000))
+
+
 def test_five_percent_cohort_is_stable_and_near_five_percent(monkeypatch):
     monkeypatch.delenv(config.EPISODES_ENABLED_ENV, raising=False)
     monkeypatch.delenv(config.EPISODES_UID_ALLOWLIST_ENV, raising=False)

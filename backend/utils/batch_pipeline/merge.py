@@ -203,6 +203,8 @@ class OrderedMerge:
             # Terminal quarantine atomically removes merge_pending; it never
             # enters this success log or the projection predecessor chain.
             candidate = tx.first_pending(key)
+            if candidate and candidate.get('shadow'):
+                return None
             over_cap = bool(depth and candidate and _awaiting_projection(tx, owner) >= depth)
             if candidate:
                 head['catch_up'] = _catch_up(candidate)
@@ -211,6 +213,8 @@ class OrderedMerge:
                 # pending, ready row. It appends at the tail like any commit;
                 # anything it passes appends later, as late_capture if behind.
                 current = tx.get('jobs', exact)
+                if current.get('shadow'):
+                    return None
                 if not (
                     current.get('owner_key') == key
                     and current.get('merge_pending')

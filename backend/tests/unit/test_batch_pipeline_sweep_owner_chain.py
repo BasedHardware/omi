@@ -91,6 +91,95 @@ class Recording:
 # --- owner chain inside the sweep ------------------------------------------------
 
 
+def test_blocked_successor_rebuilds_missing_predecessor_in_same_pass():
+    log = ResultLog()
+    ids = chain(log, BURST, 'a', 5)
+    projector = projector_for(log)
+    # The cursor already paged past the head. Only a successor is discovered.
+    projector.assignment_discovery.after = (log.results[ids[2]]['committed_at'], ids[2])
+    counts = projector.sweep(limit=1)
+    assert counts['blocked'] == 1
+    assert log.persist_order == ids
+    assert set(projector.chain_followups) == set(ids)
+    assert projector.has_async_followups
+
+
+def test_blocked_successor_requests_owner_drain(monkeypatch):
+    monkeypatch.setenv('BATCH_PIPELINE_OWNER_DRAIN_ENABLED', 'true')
+    log = ResultLog()
+    ids = chain(log, BURST, 'a', 5)
+    projector = projector_for(log)
+    projector.assignment_discovery.after = (log.results[ids[2]]['committed_at'], ids[2])
+    projector.sweep(limit=1)
+    assert projector.owes_drains
+    assert log.persist_order == []
+    walk = projector.drain_step(BURST, budget_seconds=30)
+    assert walk.advanced == ids
+
+
+def test_predecessor_error_before_binding_read_never_reuses_previous_owner(monkeypatch):
+    from database.batch_pipeline_projection_protocol import ProjectionPredecessorPending
+
+    monkeypatch.setenv('BATCH_PIPELINE_OWNER_DRAIN_ENABLED', 'true')
+    log = ResultLog()
+    log.commit('done-owner', 'done', 'done', ['done'], state='ready')
+    log.commit(BURST, 'a', 'head', ['head'])
+    real = log.read
+
+    def read(sid):
+        if sid == 'head':
+            raise ProjectionPredecessorPending('synthetic read failure')
+        return real(sid)
+
+    log.read = read
+    projector = projector_for(log)
+    counts = projector.sweep()
+    assert counts['blocked'] == 1
+    assert not projector.owes_drains
+
+
+def test_blocked_successor_replay_kill_switch_restores_previous_behavior(monkeypatch):
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_PREDECESSOR_REPLAY_ENABLED', 'off')
+    log = ResultLog()
+    ids = chain(log, BURST, 'a', 5)
+    projector = projector_for(log)
+    projector.assignment_discovery.after = (log.results[ids[2]]['committed_at'], ids[2])
+    assert projector.sweep(limit=1)['blocked'] == 1
+    assert log.persist_order == []
+    assert not projector.owes_drains
+
+
+def test_missing_predecessor_replay_does_not_bypass_head_binding_fence():
+    from database.batch_pipeline_projection import ProjectionBlocked
+
+    log = ResultLog()
+    ids = chain(log, BURST, 'a', 5)
+    real = log.session
+
+    def fenced(sid, *args, **kwargs):
+        if sid == ids[0]:
+            raise ProjectionBlocked('immutable result binding mismatch')
+        return real(sid, *args, **kwargs)
+
+    log.session = fenced
+    projector = projector_for(log)
+    projector.assignment_discovery.after = (log.results[ids[2]]['committed_at'], ids[2])
+    projector.sweep(limit=1)
+    assert log.persist_order == []
+    assert not projector.chain_followups
+
+
+def test_missing_predecessor_replay_respects_row_budget(monkeypatch):
+    monkeypatch.setattr(projection, 'OWNER_CHAIN_LIMIT', 2)
+    log = ResultLog()
+    ids = chain(log, BURST, 'a', 5)
+    projector = projector_for(log)
+    projector.assignment_discovery.after = (log.results[ids[2]]['committed_at'], ids[2])
+    projector.sweep(limit=1)
+    assert log.persist_order == ids[:2]
+    assert set(projector.chain_followups) == set(ids[:2])
+
+
 def test_owner_backlog_drains_in_one_sweep_pass_up_to_the_chain_limit(monkeypatch, claims):
     log = ResultLog()
     ids = chain(log, BURST, 'a', 100)

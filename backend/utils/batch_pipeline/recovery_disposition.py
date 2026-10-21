@@ -105,7 +105,8 @@ def result_outcome(payload):
         if (
             payload.get('words') != []
             or payload.get('words_provider') != 'exhausted_recognizers'
-            or payload.get('recognition_evidence') not in (EMPTY_EVIDENCE, TWO_PROVIDER_EMPTY_EVIDENCE)
+            or payload.get('recognition_evidence')
+            not in (EMPTY_EVIDENCE, TWO_PROVIDER_EMPTY_EVIDENCE, LANGUAGE_GUARD_EMPTY_EVIDENCE)
         ):
             raise RecoveryFailure('payload_validation', 'invalid_payload')
         at_stage(
@@ -121,6 +122,11 @@ EMPTY_EVIDENCE = {'gpu_padded_retry': 'empty', 'multilingual_recovery': 'empty'}
 # independent multilingual recognizers stand in for it.
 TWO_PROVIDER_EMPTY_EVIDENCE = {
     'gpu_padded_retry': 'skipped_long_speech',
+    'multilingual_recovery': 'empty',
+    'second_multilingual_recovery': 'empty',
+}
+LANGUAGE_GUARD_EMPTY_EVIDENCE = {
+    'gpu_language_guard': 'unsupported_language',
     'multilingual_recovery': 'empty',
     'second_multilingual_recovery': 'empty',
 }

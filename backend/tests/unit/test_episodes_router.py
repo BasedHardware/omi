@@ -34,6 +34,8 @@ EPISODE = {
 def client(monkeypatch):
     monkeypatch.delenv(config.EPISODES_ENABLED_ENV, raising=False)
     monkeypatch.delenv(config.EPISODES_PERCENT_ENV, raising=False)
+    # The capability marker is Redis; test_episodes_client_gate covers it.
+    monkeypatch.setattr(router_module.client_gate, 'note_client_seen', lambda uid: False)
     app = FastAPI()
     app.include_router(router_module.router)
     app.dependency_overrides[auth.get_current_user_uid] = lambda: 'uid-1'
@@ -41,7 +43,8 @@ def client(monkeypatch):
     for route in app.routes:
         for dependency in getattr(getattr(route, 'dependant', None), 'dependencies', []):
             app.dependency_overrides[dependency.call] = lambda: 'uid-1'
-    return app, TestClient(app)
+    # A TestFlight build (beta channel); test_episodes_client_gate covers the channel gate.
+    return app, TestClient(app, headers={'X-Omi-App-Channel': 'beta'})
 
 
 def test_live_reports_capability_and_projects_the_wire_shape(client, monkeypatch):

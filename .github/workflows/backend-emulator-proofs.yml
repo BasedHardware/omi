@@ -15,6 +15,14 @@ name: Backend Emulator Proofs
 # it to a required check once it has a stable green history.
 
 on:
+  # Nightly calls run these same jobs against one immutable main snapshot.
+  workflow_call:
+    inputs:
+      nightly_main_sha:
+        description: Main SHA pinned by the unfiltered nightly caller
+        type: string
+        required: false
+        default: ''
   push:
     branches:
       - main
@@ -51,7 +59,7 @@ on:
       - '.github/workflows/backend-emulator-proofs.yml'
 
 concurrency:
-  group: backend-emulator-proofs-${{ github.ref }}
+  group: backend-emulator-proofs-${{ github.ref }}-${{ inputs.nightly_main_sha != '' && format('nightly-{0}', github.run_id) || 'normal' }}
   cancel-in-progress: true
 
 env:
@@ -69,6 +77,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.nightly_main_sha || github.sha }}
 
       - name: Set up Python
         uses: actions/setup-python@v6

@@ -83,6 +83,35 @@ async def test_backend_discovery_publishes_shared_evidence_without_gateway(monke
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize('override', [{OLD: 'inactive'}, {OLD: 'inactive', NEW: 'inactive'}])
+async def test_dream_admission_uses_raw_evidence_despite_desktop_override(monkeypatch, override):
+    monkeypatch.setenv('OMI_VERTEX_RESERVATION_STATES', json.dumps(override))
+    monkeypatch.delenv('OMI_VERTEX_PT_MODEL', raising=False)
+    redis = fakeredis.aioredis.FakeRedis(decode_responses=True)
+    state = ReservationState(redis)
+    monkeypatch.setattr(dream_capacity, 'reservation_state', state)
+    seconds, micros = await redis.time()
+    now = seconds + micros / 1_000_000
+    await redis.set(
+        state.key(),
+        json.dumps(
+            {
+                'evidence': {NEW: {'success_at': now - 1}},
+                'leases': {OLD: now + 600, NEW: now + 600},
+            }
+        ),
+    )
+    try:
+        # available_model passes apply_overrides=False, including when an
+        # operator explicitly overrides the target as well as retired 2.5.
+        assert await dream_capacity.available_model() == NEW
+        assert not state._probe_tasks
+    finally:
+        await state.aclose()
+        await redis.aclose()
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     'status,failure,lane,cools',
     [
@@ -133,14 +162,32 @@ async def test_gateway_capacity_errors_cool_the_selected_model_only(monkeypatch,
 
 def test_no_model_sweep_is_visible_without_owner_admission(monkeypatch, caplog):
     monkeypatch.setenv('DREAM_AGENT_ENABLED', 'true')
-    monkeypatch.setattr(dream_capacity, 'available_model', AsyncMock(return_value=None))
+    monkeypatch.delenv('DREAM_ON_DEMAND_ENABLED', raising=False)
+    monkeypatch.setattr(dream_agent, 'RESERVED_RECHECK_SECONDS', 0)
+    available = AsyncMock(return_value=None)
+    monkeypatch.setattr(dream_capacity, 'available_model', available)
     monkeypatch.setattr(dream_agent.dream_scheduler, 'candidates', lambda **k: pytest.fail('owner page read'))
     metric = PASSES.labels('waiting', 'none')._value
     before = metric.get()
     with caplog.at_level('INFO', logger='utils.dream_metrics'):
         assert asyncio.run(dream_agent.drain()) == [{'status': 'waiting', 'reason': 'reserved_capacity'}]
+    assert available.await_count == 1 + dream_agent.RESERVED_RECHECKS
     assert metric.get() == before + 1
     assert 'Dream status=waiting' in caplog.text
+
+
+def test_sweep_rechecks_after_stale_evidence_before_giving_up(monkeypatch):
+    # The first admission check launches the probe; fresh evidence opens the sweep on a recheck.
+    monkeypatch.setenv('DREAM_AGENT_ENABLED', 'true')
+    monkeypatch.delenv('DREAM_ON_DEMAND_ENABLED', raising=False)
+    monkeypatch.setattr(dream_agent, 'RESERVED_RECHECK_SECONDS', 0)
+    available = AsyncMock(side_effect=[None, None, NEW])
+    monkeypatch.setattr(dream_capacity, 'available_model', available)
+    pages = []
+    monkeypatch.setattr(dream_agent.dream_scheduler, 'candidates', lambda **k: pages.append(k) or [])
+    assert asyncio.run(dream_agent.drain()) == []
+    assert available.await_count == 3
+    assert len(pages) == 1
 
 
 def test_no_model_stops_before_gateway_access(monkeypatch):

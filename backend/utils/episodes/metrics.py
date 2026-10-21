@@ -7,6 +7,11 @@
 - wrap-up latency: end of the closing conversation's speech to its finished
   notes (``omi_episode_wrapup_latency_seconds``)
 - boundary decisions, including Jev answers (``omi_episode_boundary_total``)
+- client gating: moments skipped because no capable client was seen
+  (``omi_episode_moments_skipped_no_client_total``), and live conversations by
+  whether the user's client was seen (``omi_episode_live_sessions_total``)
+- episodes API calls by client channel and admission outcome
+  (``omi_episode_client_requests_total``)
 """
 
 from __future__ import annotations
@@ -84,6 +89,26 @@ EPISODE_BOUNDARY_TOTAL = _reuse_or_create(
     'Moment boundary decisions against the open episode.',
     ['outcome'],
 )
+EPISODE_MOMENTS_SKIPPED_NO_CLIENT_TOTAL = _reuse_or_create(
+    Counter,
+    'omi_episode_moments_skipped_no_client_total',
+    'Admitted moments (and finalization tails) skipped because the user has no client that called /v1/episodes.',
+    ['trigger'],
+)
+EPISODE_LIVE_SESSIONS_TOTAL = _reuse_or_create(
+    Counter,
+    'omi_episode_live_sessions_total',
+    'Admitted live conversations at their first ended moment, by whether a capable client was seen (true|false).',
+    ['client_seen'],
+)
+CLIENT_CHANNELS = frozenset({'beta', 'store', 'unknown'})
+CLIENT_REQUEST_OUTCOMES = frozenset({'admitted', 'channel_closed', 'not_admitted'})
+EPISODE_CLIENT_REQUESTS_TOTAL = _reuse_or_create(
+    Counter,
+    'omi_episode_client_requests_total',
+    'Episodes API calls by X-Omi-App-Channel (beta|store|unknown) and outcome (admitted|channel_closed|not_admitted).',
+    ['channel', 'outcome'],
+)
 
 
 def _label(value: str, allowed: frozenset[str]) -> str:
@@ -139,5 +164,29 @@ def record_wrapup_latency(reason: str, seconds: float) -> None:
 def record_boundary(outcome: str) -> None:
     try:
         EPISODE_BOUNDARY_TOTAL.labels(outcome=_label(outcome, BOUNDARY_OUTCOMES)).inc()
+    except Exception:
+        pass
+
+
+def record_moment_skipped_no_client(trigger: str) -> None:
+    try:
+        EPISODE_MOMENTS_SKIPPED_NO_CLIENT_TOTAL.labels(trigger=_label(trigger, MOMENT_TRIGGERS)).inc()
+    except Exception:
+        pass
+
+
+def record_live_session(client_seen: bool) -> None:
+    try:
+        EPISODE_LIVE_SESSIONS_TOTAL.labels(client_seen='true' if client_seen else 'false').inc()
+    except Exception:
+        pass
+
+
+def record_client_request(channel: str, outcome: str) -> None:
+    try:
+        EPISODE_CLIENT_REQUESTS_TOTAL.labels(
+            channel=channel if channel in CLIENT_CHANNELS else 'unknown',
+            outcome=_label(outcome, CLIENT_REQUEST_OUTCOMES),
+        ).inc()
     except Exception:
         pass

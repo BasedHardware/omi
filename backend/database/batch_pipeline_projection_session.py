@@ -8,7 +8,12 @@ from typing import TYPE_CHECKING, Any
 from google.cloud import firestore
 
 from database.batch_pipeline_privacy import assert_batch_write_allowed
-from database.batch_pipeline_projection_protocol import ProjectionBlocked, ProjectionReplay, normalized_binding
+from database.batch_pipeline_projection_protocol import (
+    ProjectionBlocked,
+    ProjectionPredecessorPending,
+    ProjectionReplay,
+    normalized_binding,
+)
 from database.sync_ledger import sync_content_ledger_ref, batch_projection_ledger_owner_matches, LEDGER_RETENTION_DAYS
 from utils.batch_pipeline.contracts import ProjectionBinding
 from utils.batch_pipeline.scheduler import owner_key
@@ -151,7 +156,7 @@ class ProjectionSession:
             owner.get('projection_watermark'),
         )
         if erased is None:
-            raise ProjectionBlocked('earlier committed projection must persist first')
+            raise ProjectionPredecessorPending('earlier committed projection must persist first')
         self.erased_predecessors = erased
 
     def validate_plan(self, transaction, planned):

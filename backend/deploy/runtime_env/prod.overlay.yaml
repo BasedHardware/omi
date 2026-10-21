@@ -5,6 +5,10 @@ data_plane_project: based-hardware
 overlay:
   llm_gateway:
     env:
+      # Retirement is an operator decision; expiring evidence can revive old ACTIVE state.
+      OMI_VERTEX_RESERVATION_STATES:
+        value: '{"gemini-2.5-flash":"inactive"}'
+        category: ops_kill
       PROACTIVITY_REDIS_HOST:
         config_map:
           name: prod-omi-backend-config
@@ -89,6 +93,9 @@ overlay:
           value: https://omi.me
         DREAM_AGENT_ENABLED:
           value: 'true'
+          category: rollout
+        DREAM_ON_DEMAND_ENABLED:
+          value: 'false'
           category: rollout
         DREAM_AGENT_UID_ALLOWLIST:
           value: vi7SA9ckQCe4ccobWNxlbdcNdC23
@@ -275,6 +282,9 @@ overlay:
           category: rollout
         DREAM_AGENT_ENABLED:
           value: 'true'
+          category: rollout
+        DREAM_ON_DEMAND_ENABLED:
+          value: 'false'
           category: rollout
         DREAM_AGENT_UID_ALLOWLIST:
           value: vi7SA9ckQCe4ccobWNxlbdcNdC23
@@ -525,8 +535,17 @@ overlay:
           DREAM_AGENT_ENABLED:
             value: 'true'
             category: rollout
+          DREAM_AGENT_ELIGIBILITY:
+            value: paid
+            category: rollout
+          DREAM_AGENT_PAID_PERCENT:
+            value: '0'
+            category: rollout
+          DREAM_ON_DEMAND_ENABLED:
+            value: 'false'
+            category: rollout
           DREAM_AGENT_PASSES_PER_DAY:
-            value: '6'
+            value: '48'
             category: rollout
           DREAM_AGENT_HUNT_INTERVAL_HOURS:
             value: '2'
@@ -675,7 +694,7 @@ overlay:
             value: 'false'
             category: rollout
           BATCH_PIPELINE_SPEECH_EMPTY_MULTILINGUAL_ENABLED:
-            value: 'false'
+            value: 'true'
             category: rollout
           BATCH_PIPELINE_UNIT_SECONDS:
             value: '3600'
@@ -729,7 +748,7 @@ overlay:
             version: latest
         env:
           FIRST_SUMMARY_DEADLINE_PERCENT: {value: '100', category: rollout}
-          SUMMARY_DEBT_REPAIR_ENABLED: {value: 'true', category: rollout}
+          SUMMARY_DEBT_REPAIR_ENABLED: {value: 'false', category: rollout}
           # Explicit shared-speech rollback; GKE hosts remain off.
           CAPTURE_SHARED_SPEECH_MODE:
             value: 'off'
@@ -824,11 +843,20 @@ overlay:
           DREAM_AGENT_ENABLED:
             value: 'true'
             category: rollout
+          DREAM_AGENT_ELIGIBILITY:
+            value: paid
+            category: rollout
+          DREAM_AGENT_PAID_PERCENT:
+            value: '0'
+            category: rollout
+          DREAM_ON_DEMAND_ENABLED:
+            value: 'false'
+            category: rollout
           REVIEW_SURFACE_MODE:
             value: 'on'
             category: rollout
           DREAM_AGENT_PASSES_PER_DAY:
-            value: '6'
+            value: '48'
             category: rollout
           DREAM_AGENT_HUNT_INTERVAL_HOURS:
             value: '2'
@@ -958,7 +986,7 @@ overlay:
             value: 'false'
             category: rollout
           BATCH_PIPELINE_SPEECH_EMPTY_MULTILINGUAL_ENABLED:
-            value: 'false'
+            value: 'true'
             category: rollout
           BATCH_PIPELINE_UNIT_SECONDS:
             value: '3600'
@@ -1158,6 +1186,18 @@ overlay:
           DREAM_AGENT_ENABLED:
             value: 'true'
             category: rollout
+          DREAM_AGENT_ELIGIBILITY:
+            value: paid
+            category: rollout
+          DREAM_AGENT_PAID_PERCENT:
+            value: '0'
+            category: rollout
+          DREAM_ON_DEMAND_ENABLED:
+            value: 'false'
+            category: rollout
+          DREAM_AGENT_PASSES_PER_DAY:
+            value: '48'
+            category: rollout
           MENTOR_PIPELINE:
             value: cohort
             category: rollout
@@ -1264,7 +1304,7 @@ overlay:
             value: 'false'
             category: rollout
           BATCH_PIPELINE_SPEECH_EMPTY_MULTILINGUAL_ENABLED:
-            value: 'false'
+            value: 'true'
             category: rollout
           BATCH_PIPELINE_UNIT_SECONDS:
             value: '3600'
@@ -1426,6 +1466,15 @@ overlay:
           DREAM_AGENT_ENABLED:
             value: 'true'
             category: rollout
+          DREAM_AGENT_ELIGIBILITY:
+            value: paid
+            category: rollout
+          DREAM_AGENT_PAID_PERCENT:
+            value: '0'
+            category: rollout
+          DREAM_ON_DEMAND_ENABLED:
+            value: 'false'
+            category: rollout
           MENTOR_PIPELINE:
             value: cohort
             category: rollout
@@ -1503,7 +1552,7 @@ overlay:
             value: 'true'
             category: rollout
           BATCH_PIPELINE_RECOVERY_ALL_ADMITTED:
-            value: 'false'
+            value: 'true'
             category: rollout
           BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED:
             value: 'true'

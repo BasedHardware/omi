@@ -84,7 +84,15 @@ def register_batch_artifact(
 
     @firestore.transactional
     def register(transaction):
-        job = client.collection(f'{namespace}_jobs').document(segment_id).get(transaction=transaction).to_dict() or {}
+        table = 'shadow_jobs' if getattr(item, 'shadow', False) else 'jobs'
+        job = (
+            client.collection(f'{namespace}_{table}').document(segment_id).get(transaction=transaction).to_dict() or {}
+        )
+        shadow = getattr(item, 'shadow', False)
+        if shadow and (kind != 'audio' or job.get('shadow') is not True or job.get('state') != 'staging'):
+            raise BatchPrivacyBlocked('shadow_artifact_state')
+        if shadow and job.get('owner_key') != privacy_owner_key(uid):
+            raise BatchPrivacyBlocked('shadow_artifact_owner')
         binding = job.get('projection_binding') or {}
         conversation_ids = [
             value
@@ -159,7 +167,7 @@ def register_batch_artifact(
             and not terminal_write
         ):
             raise BatchPrivacyBlocked('result_lease_lost')
-        if job and job.get('owner_id') != uid:
+        if job and not shadow and job.get('owner_id') != uid:
             raise ValueError('artifact owner mismatch')
         if not job and (item is None or item.owner_id != uid or kind != 'audio'):
             raise ValueError('result requires an existing owner job')
@@ -176,6 +184,11 @@ def register_batch_artifact(
                     'kind': kind,
                     'privacy_generation': expected_generation,
                     'write_pending_until': datetime.now(timezone.utc) + timedelta(seconds=UPLOAD_PENDING_SECONDS),
+                    **(
+                        {'shadow': True, 'cleanup_after': datetime.now(timezone.utc) + timedelta(hours=1)}
+                        if shadow
+                        else {}
+                    ),
                 },
             )
 
@@ -196,6 +209,8 @@ def expire_completed_segment(store: Any, uid: str, segment_id: str, now: float) 
         job_ref = client.collection(f'{namespace}_jobs').document(segment_id)
         result_ref = client.collection(f'{namespace}_results').document(segment_id)
         job = job_ref.get(transaction=transaction).to_dict() or {}
+        if job.get('shadow'):
+            return False
         result = result_ref.get(transaction=transaction).to_dict() or {}
         artifacts = queries.segment_artifacts(client, namespace, segment_id, transaction)
         intake_id = (job.get('projection_binding') or {}).get('job_id')
@@ -274,7 +289,7 @@ def cleanup_completed_artifacts(
             touched.append(('artifacts', artifact.id))
             # Deletion races must never recreate a purged metadata document.
             try:
-                if data.get('erasure_requested'):
+                if data.get('erasure_requested') or data.get('shadow'):
                     artifact.reference.delete()
                     cleaned += 1
                     continue

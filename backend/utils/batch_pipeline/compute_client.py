@@ -22,6 +22,7 @@ class ComputeClient:
         if not audience or stage not in {'prod', 'dev'}:
             raise ValueError('explicit worker audience and runtime stage required')
         self.url = base_url.rstrip('/') + '/v2/batch-pipeline/authorize-compute'
+        self.base_url = base_url.rstrip('/')
         self.audience, self.stage = audience, stage
         self._token_source = token or (lambda: fetch_id_token(GoogleRequest(), audience))
         self._send = send or urlopen
@@ -72,6 +73,25 @@ class ComputeClient:
             self._refresh_at = 0.0
             raise
 
+    def shadow_recover(self, segment_id: str) -> dict:
+        with self._lock:
+            if time.monotonic() >= self._refresh_at:
+                self._token = self._token_source()
+                self._refresh_at = time.monotonic() + 300
+            token = self._token
+        request = Request(
+            self.base_url + '/v2/batch-pipeline/shadow-recover',
+            data=json.dumps({'stage': self.stage, 'segment_id': segment_id}).encode(),
+            method='POST',
+            headers={'Content-Type': 'application/json', 'Authorization': f'Bearer {token}'},
+        )
+        # No application retry: the backend durably starts the intent once.
+        with self._send(request, timeout=600) as response:
+            raw = response.read(4097)
+        if len(raw) > 4096:
+            raise ValueError('oversized shadow recovery response')
+        return json.loads(raw)
+
 
 def from_env() -> ComputeClient:
     return ComputeClient(
@@ -79,3 +99,8 @@ def from_env() -> ComputeClient:
         os.getenv('BATCH_PIPELINE_WORKER_AUDIENCE', '').strip(),
         os.getenv('OMI_ENV_STAGE', '').strip().lower(),
     )
+
+
+def shadow_from_env() -> ComputeClient:
+    base = os.getenv('BATCH_PIPELINE_SHADOW_RECOVERY_API_URL', '').strip()
+    return ComputeClient(base, base, os.getenv('OMI_ENV_STAGE', '').strip().lower())

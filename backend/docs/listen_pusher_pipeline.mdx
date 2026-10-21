@@ -6,6 +6,15 @@ description: "Sequence diagrams and finalization policy for the /v4/listen WebSo
 
 # Listen + Pusher Pipeline — Sequence Diagrams
 
+At a new recording reservation during a partial batch ramp, the owner-load
+predicate in `config/policy/ramp.py` keeps heavy owners on the legacy route.
+`BATCH_PIPELINE_RAMP_EXCLUDE_HEAVY_OWNERS=off` disables this admission narrowing.
+The check runs at the existing database write boundary, never on audio frames
+or pusher flushes. An existing `batch_live_v1` owner keeps draining through
+finalization and WAL retries even if its current load is heavy. Thresholds,
+telemetry and the separate heavy-owner qualification gate are documented in
+`batch-pipeline-serving.md`.
+
 Soniox transport exceptions log once at the first socket death, with bounded
 `operation`, `exception_class`, `received_close_code`, `sent_close_code`,
 `close_cause`, and `session_age_bucket` fields. `-1` means no close frame was
@@ -676,7 +685,10 @@ Live episodes (`utils/episodes/live.py`, kill switch `EPISODES_ENABLED`) see the
 same realtime batches after the paywall check and before mentor admission. They
 buffer final segments per user in process and, when a moment ends (a pause of
 45 seconds, 600 words, or a move to another conversation), schedule one tracked
-background update. That update makes one gpt-5-nano call over the compact episode
+background update. The update first requires the client-capability marker
+(`episodes:client_seen:{uid}`, left by the user's app calling `/v1/episodes` from a channel in `EPISODES_CLIENT_CHANNELS`;
+`utils/episodes/client_gate.py`): without it the moment is dropped and counted,
+so users on clients that cannot show episodes cost nothing. It then makes one gpt-5-nano call over the compact episode
 state plus only that moment's text. It never blocks the fan-out, writes no
 conversation, task or memory, and is restarted from durable state by finalization
 (`finalize_persisted_conversation` calls `utils/episodes/service.on_conversation_finalized`
@@ -5781,8 +5793,8 @@ effects-only obligations retain their existing coalescing policy. The global
 enabled flag is the kill switch; setting the percentage to zero restores the
 explicit allowlist cohort.
 
-The scheduled backend-sync sweep has `SUMMARY_DEBT_REPAIR_ENABLED=true`.
-It admits at most ten eligible completed server-minimum rows per two-minute
+The scheduled backend-sync sweep is held off in production
+(`SUMMARY_DEBT_REPAIR_ENABLED=false`, deferred 2026-10-20). When enabled, it admits at most ten eligible completed server-minimum rows per two-minute
 tick, rotating a page of at most 100 rows behind a global lease. It respects
 manual edits, deletion, privacy, BYOK, active owners and transcript revisions;
 it neither infers historical title provenance nor overrides finalization jobs.

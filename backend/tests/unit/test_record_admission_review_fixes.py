@@ -271,7 +271,7 @@ async def test_desktop_record_origin_uses_the_escape_language(
         client_device_id='mac-1',
         client_platform='macos',
         policy=BatchUnitPolicy(
-            live_record_enabled=live_record
+            batch_enabled=True, live_record_enabled=live_record
         ),  # integration intake uses dataclasses.replace (contract (c))
     )
     if expected is None:

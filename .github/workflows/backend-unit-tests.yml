@@ -1,6 +1,14 @@
 name: Backend Unit Tests
 
 on:
+  # Nightly calls run these same jobs against one immutable main snapshot.
+  workflow_call:
+    inputs:
+      nightly_main_sha:
+        description: Main SHA pinned by the unfiltered nightly caller
+        type: string
+        required: false
+        default: ''
   push:
     branches:
       - main
@@ -112,7 +120,7 @@ permissions:
 concurrency:
   # PR updates supersede earlier test runs; main and manual runs retain an
   # independent result for every dispatch.
-  group: backend-unit-tests-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || format('run-{0}', github.run_id) }}
+  group: backend-unit-tests-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || format('run-{0}', github.run_id) }}-${{ inputs.nightly_main_sha != '' && format('nightly-{0}', github.run_id) || 'normal' }}
   cancel-in-progress: true
 
 env:
@@ -126,9 +134,11 @@ jobs:
     name: Resolve CI Tier
     runs-on: ubuntu-latest
     outputs:
-      full_ci: ${{ steps.resolve.outputs.full_ci }}
+      full_ci: ${{ inputs.nightly_main_sha != '' && 'true' || (steps.resolve.outputs.full_ci) }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.nightly_main_sha || github.sha }}
       - id: resolve
         uses: ./.github/actions/ci-tier
 
@@ -157,6 +167,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v7
         with:
+          ref: ${{ inputs.nightly_main_sha || github.sha }}
           # Full history is required: the pull_request path resolves the merge base
           # live via scripts/changed-files. blob:none keeps the history without
           # downloading every historical file blob.
@@ -234,6 +245,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.nightly_main_sha || github.sha }}
 
       - name: Set up Python
         uses: actions/setup-python@v6

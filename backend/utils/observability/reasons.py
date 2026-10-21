@@ -211,6 +211,7 @@ class WorkerValidationReason(StrEnum):
     VAD_BOUNDS = 'vad_bounds'
     EMPTY_ASR = 'empty_asr'
     NO_OWNED_WORDS = 'no_owned_words'
+    UNSUPPORTED_LANGUAGE = 'unsupported_language'
 
 
 class RecoveryFailureStage(StrEnum):

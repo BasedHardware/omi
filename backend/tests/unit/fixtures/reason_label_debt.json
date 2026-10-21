@@ -370,6 +370,14 @@
     },
     {
       "path": "utils/episodes/metrics.py",
+      "function": "record_client_request",
+      "label": "outcome",
+      "shape": "call:_label",
+      "count": 1,
+      "why": "main episodes client gate (M3 final main merge); label normalized by _label, owner lane 14 to enum"
+    },
+    {
+      "path": "utils/episodes/metrics.py",
       "function": "record_episode_closed",
       "label": "reason",
       "shape": "call:_label",

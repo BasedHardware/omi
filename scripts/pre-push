@@ -46,6 +46,26 @@ while read -r local_ref local_oid remote_ref remote_oid; do
   PUSH_UPDATES+=("$local_oid:$remote_oid:$remote_ref")
 done
 
+# Fast-forwarding a branch to a SHA that GitHub CI already certified re-ran the
+# whole local suite against an unchanged tree (~55 min per rollout sync). Skip
+# only that duplicate: pre_push_ci_verified.py asks GitHub about every pushed
+# SHA and fails closed. It reads no environment, so it is not a skip hatch.
+if [ "${#PUSH_UPDATES[@]}" -gt 0 ]; then
+  declare -a PUSH_OIDS=()
+  for update in "${PUSH_UPDATES[@]}"; do
+    PUSH_OIDS+=("${update%%:*}")
+  done
+  PUSH_REMOTE_URL="${2:-$(git remote get-url "$PUSH_REMOTE" 2>/dev/null || true)}"
+  if "$PYTHON_BIN" scripts/pre_push_ci_verified.py \
+    --remote-url "$PUSH_REMOTE_URL" \
+    --log-file "$(git rev-parse --git-common-dir)/omi-pre-push-ci-verified.log" \
+    "${PUSH_OIDS[@]}"
+  then
+    echo "Every pushed SHA already passed terminal-green CI on GitHub; the local pre-push suite would only repeat it."
+    exit 0
+  fi
+fi
+
 if [ "${#PUSH_UPDATES[@]}" -gt 0 ]; then
   echo "Running bounded pre-push checks for ${#PUSH_UPDATES[@]} pushed ref(s) against ${BASE_REMOTE_REF#refs/remotes/}."
 else

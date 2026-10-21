@@ -47,34 +47,6 @@
     {
       "path": "backend/utils/conversations/episode_evidence.py",
       "reason": "Production capture and claim validation were removed with the legacy writer. backend/testing/episode_notes/prompts.py still imports EvidenceItem and render_episode_evidence for synthetic evaluation; runner.py imports restore_episode_claim_ids. Retain these evaluation adapters without restoring production capture."
-    },
-    {
-      "path": "backend/utils/rollout/runtime_percent.py",
-      "reason": "Legacy-sync retirement swarm contract stub (lane 1, contracts.md in omi-knowledge-base projects/backend-target-architecture): importers land on integration/legacy-retire as lanes merge. EXPIRES at the M3 merge (target 2026-10-21): delete this entry then; the M3 PR must not carry it."
-    },
-    {
-      "path": "backend/utils/workers/consumer.py",
-      "reason": "Legacy-sync retirement swarm contract stub (lane 1, contracts.md in omi-knowledge-base projects/backend-target-architecture): importers land on integration/legacy-retire as lanes merge. EXPIRES at the M3 merge (target 2026-10-21): delete this entry then; the M3 PR must not carry it."
-    },
-    {
-      "path": "backend/utils/workers/retry.py",
-      "reason": "Legacy-sync retirement swarm contract stub (lane 1, contracts.md in omi-knowledge-base projects/backend-target-architecture): importers land on integration/legacy-retire as lanes merge. EXPIRES at the M3 merge (target 2026-10-21): delete this entry then; the M3 PR must not carry it."
-    },
-    {
-      "path": "backend/database/outbox.py",
-      "reason": "Legacy-sync retirement swarm contract stub (lane 1, contracts.md in omi-knowledge-base projects/backend-target-architecture): importers land on integration/legacy-retire as lanes merge. EXPIRES at the M3 merge (target 2026-10-21): delete this entry then; the M3 PR must not carry it."
-    },
-    {
-      "path": "backend/utils/observability/reasons.py",
-      "reason": "Legacy-sync retirement swarm contract stub (lane 1, contracts.md in omi-knowledge-base projects/backend-target-architecture): importers land on integration/legacy-retire as lanes merge. EXPIRES at the M3 merge (target 2026-10-21): delete this entry then; the M3 PR must not carry it."
-    },
-    {
-      "path": "backend/routers/enrichment.py",
-      "reason": "Legacy-sync retirement swarm contract stub (lane 1, contracts.md in omi-knowledge-base projects/backend-target-architecture): importers land on integration/legacy-retire as lanes merge. EXPIRES at the M3 merge (target 2026-10-21): delete this entry then; the M3 PR must not carry it."
-    },
-    {
-      "path": "backend/routers/batch_provider_stt.py",
-      "reason": "Legacy-sync retirement swarm contract stub (lane 1, contracts.md in omi-knowledge-base projects/backend-target-architecture): importers land on integration/legacy-retire as lanes merge. EXPIRES at the M3 merge (target 2026-10-21): delete this entry then; the M3 PR must not carry it."
     }
   ]
 }
