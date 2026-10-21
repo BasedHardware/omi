@@ -23,6 +23,7 @@ from utils.stt.connect_metrics import ERROR_CLASS_CAPABILITY, connect_error_clas
 from utils.stt.live_failure import PendingLiveFailover
 from utils.stt.live_reason import (
     LIVE_STT_FAILURE_REASONS,
+    LOCAL_DELIVERY_DEATH_REASONS,
     LOCAL_DELIVERY_EXPIRED,
     LOCAL_DELIVERY_REPLAY_SEND_STALLED,
     LOCAL_DELIVERY_SEND_QUEUE_FULL,
@@ -251,6 +252,34 @@ def test_queue_age_is_the_oldest_still_queued_packet_not_the_session():
     assert 0.0 <= age < 0.05
     assert later > 9.9
     assert AudioSendQueue(maxsize=1).oldest_queued_age(time.monotonic()) == -1.0
+
+
+def test_exhausted_tail_terminate_forwards_only_local_tokens_never_a_circuit_vote():
+    """The owner's exhausted-recovery terminate reported a fixed local token
+    before the split and never benched the provider. A tail that died without
+    latching a local cause (a residence-deadline write stall with the vendor
+    socket open) resolves to connection_lost through the generic funnel; this
+    site must not forward that into a serve-failure circuit vote."""
+    from utils.stt import live_failure
+
+    # What a ReplayTailSocket exposes after a residence-deadline stall: no local
+    # reason latched, so its normalized_death_reason falls to the default.
+    stalled = SimpleNamespace(
+        typed_death_reason=None, death_reason=None, normalized_death_reason='connection_lost', is_connection_dead=True
+    )
+    assert live_failure.live_stt_terminal_reason(stalled, 'send_failed') == 'connection_lost'  # the generic funnel
+    assert live_failure.local_tail_terminal_reason(stalled) == 'send_queue_full'
+    assert live_failure.local_tail_terminal_reason(None) == 'send_queue_full'
+    for token in LOCAL_DELIVERY_DEATH_REASONS:
+        assert live_failure.local_tail_terminal_reason(SimpleNamespace(typed_death_reason=token)) == token
+    # A provider token on the tail keeps its attribution through the death
+    # monitor; this site reports the local bound it observed, as before.
+    assert (
+        live_failure.local_tail_terminal_reason(SimpleNamespace(typed_death_reason='provider_5xx')) == 'send_queue_full'
+    )
+    for token in LOCAL_DELIVERY_DEATH_REASONS:
+        assert token not in live_failure._SERVE_FAILURE_REASONS
+        assert token not in live_failure._CIRCUIT_OPENING_REASONS
 
 
 def test_window_successor_replay_wall_expiry_is_replay_send_stalled():
