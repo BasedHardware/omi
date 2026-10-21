@@ -29,6 +29,19 @@ FRAGMENT_SECONDS = 15
 MAX_FRAGMENTS = 4
 MAX_FRAGMENT_BYTES = 32 * 1024
 WRITER_SECONDS = 120
+# A lost precondition is retried against a fresh read. The separate row is
+# only for a group that has already left staging.
+_STAGING_APPEND_ATTEMPTS = 3
+
+
+def late_hold_identity(fragment_identity: str) -> str:
+    """Seal a late fragment to its own object.
+
+    The fragment blob is ``chunks/{uid}/cap-held/{fragment}.opus.enc``. Using
+    that same id as the hold id makes seal compose onto the fragment and then
+    delete it as a part.
+    """
+    return f'late:{fragment_identity}'
 
 
 class SourceSealed(RuntimeError):
@@ -140,15 +153,75 @@ def append(uid: str, path: str, group: Publication, fragment: Publication, metad
             'live_custody_version': 4,
         }
 
+    def _row_after_create_race(target: Any, staged: dict) -> dict | None:
+        """Read the row that won the create.
+
+        None means that row does not hold this fragment. A failed read still
+        returns the staged payload: the competing row may already hold it, and
+        the failure must not close the socket.
+        """
+        try:
+            current = target.get().to_dict() or {}
+        except Exception as error:
+            logger.warning(
+                'event=stt_cap_live_held outcome=staged_unverified exception_type=%s',
+                type(error).__name__,
+            )
+            record_publication_retry('staged_unverified')
+            return staged
+        if _fragment_recorded(current):
+            return current
+        return None
+
     def _stage_late_fragment(part: dict, updates: dict) -> dict | None:
-        late = cap_hold.holds(uid).document(fragment.identity)
+        late = cap_hold.holds(uid).document(late_hold_identity(fragment.identity))
         body = _late_staging_body(part, updates)
         try:
             late.create(body)
         except AlreadyExists:
-            current = late.get().to_dict() or {}
-            return current if _fragment_recorded(current) else None
+            return _row_after_create_race(late, body)
         return _verified_staging(late, body)
+
+    def _append_while_staging(snapshot: Any, merged: dict, part: dict, updates: dict) -> dict | None:
+        """Append while the group is staging. A lost precondition re-reads first."""
+        for _attempt in range(_STAGING_APPEND_ATTEMPTS):
+            try:
+                ref.update(merged, option=firestore.LastUpdateOption(snapshot.update_time))
+            except FailedPrecondition:
+                try:
+                    snapshot = ref.get()
+                except Exception as error:
+                    logger.warning(
+                        'event=stt_cap_live_held outcome=staged_unverified exception_type=%s',
+                        type(error).__name__,
+                    )
+                    record_publication_retry('staged_unverified')
+                    continue
+                row = snapshot.to_dict() if snapshot.exists else None
+                if row and _fragment_recorded(row):
+                    return row
+                if not row or row.get('state') != 'staging':
+                    return _stage_late_fragment(part, updates)
+                merged = _merged_staging(updates, row, part)
+                continue
+            return _verified_staging(ref, merged)
+        try:
+            snapshot = ref.get()
+        except Exception as error:
+            logger.warning(
+                'event=stt_cap_live_held outcome=staged_unverified exception_type=%s',
+                type(error).__name__,
+            )
+            record_publication_retry('staged_unverified')
+            return merged
+        row = snapshot.to_dict() if snapshot.exists else None
+        if row and _fragment_recorded(row):
+            return row
+        if not row or row.get('state') != 'staging':
+            return _stage_late_fragment(part, updates)
+        # Still staging, and this fragment is not in it. A second row here
+        # would seal the same audio twice if the lost update had committed.
+        return merged
 
     def _merged_staging(updates: dict, row: dict | None, part: dict) -> dict:
         merged = dict(updates)
@@ -169,10 +242,13 @@ def append(uid: str, path: str, group: Publication, fragment: Publication, metad
         A plain create is not the steady path. It runs only after the bounded
         transactional budget, under the same non-transactional deletion fence.
         Appending to a staging row uses the row's update_time as a precondition
-        so a cross-process sealer cannot be reset to staging. If that row is
-        already sealing or the precondition loses, the fragment becomes its own
-        staging row and the redrive seals it once. Returning the row keeps the
-        socket up: the bytes are durable, so this is not a 1011.
+        so a cross-process sealer cannot be reset to staging. A lost
+        precondition re-reads the group: a fragment already recorded there is
+        returned, a group that is still staging is retried, and a separate row
+        is created only after the group has left staging. That row's id is not
+        the fragment id, so seal writes a different object from the part.
+        Returning the row keeps the socket up: the bytes are durable, so this
+        is not a 1011.
         """
         part = updates['stage_parts'][-1]
         if part.get('id') != fragment.identity:
@@ -187,18 +263,14 @@ def append(uid: str, path: str, group: Publication, fragment: Publication, metad
                 try:
                     ref.create(merged)
                 except AlreadyExists:
-                    current = ref.get().to_dict() or {}
-                    if _fragment_recorded(current):
+                    current = _row_after_create_race(ref, merged)
+                    if current is not None:
                         return current
                     return _stage_late_fragment(part, updates)
                 return _verified_staging(ref, merged)
             if row.get('state') != 'staging':
                 return _stage_late_fragment(part, updates)
-            try:
-                ref.update(merged, option=firestore.LastUpdateOption(snapshot.update_time))
-            except FailedPrecondition:
-                return _stage_late_fragment(part, updates)
-            return _verified_staging(ref, merged)
+            return _append_while_staging(snapshot, merged, part, updates)
 
     def recover(error: BaseException) -> Any:
         with group.lock:

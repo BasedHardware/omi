@@ -6,8 +6,8 @@ unavailable are the same class when the body re-reads before it increments.
 
 from __future__ import annotations
 
+import asyncio
 import copy
-import inspect
 from contextlib import nullcontext
 from threading import RLock
 from types import SimpleNamespace
@@ -19,6 +19,8 @@ from google.api_core.exceptions import (
     DeadlineExceeded,
     FailedPrecondition,
     InvalidArgument,
+    NotFound,
+    PreconditionFailed,
     ResourceExhausted,
     ServiceUnavailable,
 )
@@ -30,14 +32,16 @@ from database._client import (
     run_transactional,
 )
 from database.firestore_transaction_retry import FirestoreContentionExhausted
-import routers.listen.receiver as receiver_module
-from routers.listen.receiver import mark_listen_internal_error
+from routers.listen.contracts import ListenSessionState
+from routers.listen.receiver import ListenReceiver, mark_listen_internal_error
 from utils.observability import held_content as held_metrics
 from utils.sync import cap_hold, cap_hold_redrive, live_cap_manifest, live_cap_staging
 from utils.sync.live_cap_publication import Publication
+from utils.sync.live_cap_staging import late_hold_identity
 
 EXPIRED = '400 The referenced transaction has expired or is no longer valid.'
 UID = 'synthetic'
+FRAGMENT_PAYLOAD = b'fragment-bytes' * 4
 
 
 def _counter(outcome: str) -> float:
@@ -169,6 +173,9 @@ class _Doc:
     def get(self, transaction=None, timeout=None):
         if self.client.read_errors:
             raise self.client.read_errors.pop(0)
+        if self.client.fail_next_get:
+            self.client.fail_next_get = False
+            raise ResourceExhausted('429 Quota exceeded.')
         if self.client.fail_get_after_plain_write and self.client.plain_writes and not self.client.verification_raised:
             self.client.verification_raised = True
             raise ResourceExhausted('429 Quota exceeded.')
@@ -179,10 +186,22 @@ class _Doc:
         self.client.write(self.key, copy.deepcopy(payload), merge=merge, create=False, plain=True)
 
     def create(self, payload) -> None:
+        if self.client.conflict_create == self.key:
+            self.client.conflict_create = None
+            if self.client.conflict_row is not None:
+                self.client.docs[self.key] = copy.deepcopy(self.client.conflict_row)
+                self.client.versions[self.key] = self.client.versions.get(self.key, 0) + 1
+            self.client.fail_next_get = True
+            raise AlreadyExists('exists')
         self.client.write(self.key, copy.deepcopy(payload), merge=False, create=True, plain=True)
 
     def update(self, payload, option=None, timeout=None) -> None:
         self.client.last_update_option = option
+        if self.client.land_fragment_on_update == self.key:
+            # The attempt that already committed this fragment wins the version.
+            self.client.land_fragment_on_update = None
+            self.client.write(self.key, copy.deepcopy(payload), merge=False, create=False, plain=True)
+            raise FailedPrecondition('ambiguous commit won the precondition')
         if self.client.seal_during_update == self.key:
             row = self.client.docs[self.key]
             row['state'] = 'sealing'
@@ -210,6 +229,10 @@ class _Client:
         self.fail_get_after_plain_write = False
         self.verification_raised = False
         self.seal_during_update: str | None = None
+        self.land_fragment_on_update: str | None = None
+        self.conflict_create: str | None = None
+        self.conflict_row: dict | None = None
+        self.fail_next_get = False
         self.last_update_option = None
 
     def transaction(self) -> _Transaction:
@@ -234,40 +257,76 @@ class _Client:
             self.plain_writes += 1
 
 
-class _Blob:
-    def __init__(self, name: str, generation: int | None = None):
+class _Stored:
+    def __init__(self, name: str, generation: int, payload: bytes):
         self.name = name
-        self.generation = generation or 1
+        self.generation = generation
+        self.payload = payload
+        self.alive = True
+
+
+class _Blob:
+    def __init__(self, bucket: '_Bucket', name: str, generation: int | None = None):
+        self.bucket = bucket
+        self.name = name
+        self.generation = generation
         self.size = 64
 
     def reload(self, timeout=10, retry=None) -> None:
-        self.generation = self.generation or 1
+        stored = self.bucket.objects.get(self.name)
+        if stored is None or not stored.alive:
+            raise NotFound(self.name)
+        self.generation = stored.generation
+        self.size = len(stored.payload)
 
     def delete(self, if_generation_match=None, timeout=10, retry=None) -> None:
-        return None
+        stored = self.bucket.objects.get(self.name)
+        if stored is None or not stored.alive:
+            raise NotFound(self.name)
+        if if_generation_match is not None and int(if_generation_match) != stored.generation:
+            raise PreconditionFailed('generation')
+        stored.alive = False
 
     def compose(self, sources, if_generation_match=0, timeout=10, retry=None) -> None:
+        stored = self.bucket.objects.get(self.name)
+        if if_generation_match == 0 and stored is not None and stored.alive:
+            raise PreconditionFailed('destination exists')
+        payload = b''
+        for source in sources:
+            src = self.bucket.objects.get(source.name)
+            if src is None or not src.alive:
+                raise NotFound(source.name)
+            payload += src.payload
+        created = _Stored(self.name, 7, payload)
+        self.bucket.objects[self.name] = created
         self.generation = 7
+        self.size = len(payload)
+
+    def download_as_bytes(self):
+        stored = self.bucket.objects.get(self.name)
+        if stored is None or not stored.alive:
+            raise NotFound(self.name)
+        return stored.payload
 
 
 class _Bucket:
     def __init__(self, deletes: list[str]):
         self.deletes = deletes
-        self.blobs: dict[str, _Blob] = {}
+        self.objects: dict[str, _Stored] = {}
+
+    def put(self, name: str, payload: bytes, generation: int = 1) -> None:
+        self.objects[name] = _Stored(name, generation, payload)
 
     def blob(self, name, generation=None):
-        blob = self.blobs.setdefault(name, _Blob(name, generation))
-        if generation:
-            blob.generation = int(generation)
-        blob.delete = self._delete(name, blob.delete)
-        return blob
+        blob = _Blob(self, name, generation)
+        original = blob.delete
 
-    def _delete(self, name, original):
         def delete(*args, **kwargs):
             self.deletes.append(name)
             return original(*args, **kwargs)
 
-        return delete
+        blob.delete = delete
+        return blob
 
 
 class _TrackingLock:
@@ -317,8 +376,10 @@ def store(monkeypatch):
         return _Doc(client, 'summary')
 
     def upload(_uid, _path, identity, metadata, immutable=False):
+        audio_path = f'chunks/{UID}/cap-held/{identity}.opus.enc'
+        bucket.put(audio_path, FRAGMENT_PAYLOAD, generation=1)
         return {
-            'audio_path': f'chunks/{UID}/cap-held/{identity}.opus.enc',
+            'audio_path': audio_path,
             'audio_generation': 1,
             'audio_codec': 'ogg_opus',
             'sample_rate': metadata['sample_rate'],
@@ -333,6 +394,7 @@ def store(monkeypatch):
     monkeypatch.setattr(cap_hold, 'summary_ref', summary)
     monkeypatch.setattr(cap_hold, 'upload_held_audio', upload)
     monkeypatch.setattr(cap_hold, 'get_private_cloud_sync_bucket', lambda: bucket)
+    client.bucket = bucket
     monkeypatch.setattr(cap_hold, 'metadata', lambda _uid, _row: {'sample_rate': 16000})
     monkeypatch.setattr(live_cap_staging, 'encrypt', lambda payload, _uid: payload)
     monkeypatch.setattr(live_cap_staging, 'owner_storage_write_gate', lambda *args, **kwargs: nullcontext())
@@ -661,14 +723,23 @@ def test_fallback_does_not_clobber_a_row_the_sealer_moved(delays, store, tmp_pat
     assert store.last_update_option._last_update_time == 1
     assert store.docs[group.identity]['state'] == 'sealing'
     assert [part['id'] for part in store.docs[group.identity]['stage_parts']] == ['earlier']
+    late = late_hold_identity(fragment.identity)
+    part_path = f'chunks/{UID}/cap-held/{fragment.identity}.opus.enc'
     assert row['state'] == 'staging'
     assert [part['id'] for part in row['stage_parts']] == [fragment.identity]
-    assert store.docs[fragment.identity]['writer_until'] == 0
+    assert store.docs[late]['writer_until'] == 0
+    assert fragment.identity not in store.docs
     assert 'summary' not in store.docs
     store.actions = []
-    _enable_redrive(monkeypatch, [_hold_snap(fragment.identity)])
+    _enable_redrive(monkeypatch, [_hold_snap(late)])
     assert __import__('asyncio').run(cap_hold_redrive.sweep())['sealed'] == 1
-    assert store.docs[fragment.identity]['state'] == 'held'
+    sealed = store.docs[late]
+    assert sealed['state'] == 'held'
+    assert sealed['audio_path'] != part_path
+    assert store.bucket.blob(sealed['audio_path']).download_as_bytes() == FRAGMENT_PAYLOAD
+    assert part_path in store.deletes
+    with pytest.raises(NotFound):
+        store.bucket.blob(part_path).download_as_bytes()
     assert store.docs[group.identity]['state'] == 'sealing'
     assert [part['id'] for part in store.docs[group.identity]['stage_parts']] == ['earlier']
     assert store.docs['summary']['count'] == 1
@@ -678,6 +749,7 @@ def test_fallback_does_not_clobber_a_row_the_sealer_moved(delays, store, tmp_pat
     assert __import__('asyncio').run(cap_hold_redrive.sweep())['sealed'] == 0
     assert store.increments.count(('summary', 'count', 1.0)) == 1
     assert store.increments.count(('summary', 'seconds', 1.0)) == 1
+    assert store.bucket.blob(sealed['audio_path']).download_as_bytes() == FRAGMENT_PAYLOAD
 
 
 def test_recovery_counts_usage_once_when_create_landed_without_the_increment(delays, store, tmp_path):
@@ -732,24 +804,133 @@ def test_read_after_a_staged_write_does_not_fail_the_socket(delays, store, tmp_p
     assert store.increments.count(('summary', 'seconds', 1.0)) == 1
 
 
-def test_listen_close_code_stays_open_when_staged_and_closes_when_the_write_fails(delays, store, tmp_path):
-    receive = inspect.getsource(receiver_module.ListenReceiver.receive_data)
-    assert receive.count('mark_listen_internal_error') == 2
-    assert 'close_code = 1011' not in receive
+def test_precondition_loss_after_the_fragment_landed_seals_once(delays, store, tmp_path, monkeypatch):
     path = tmp_path / 'fragment.opus'
     path.write_bytes(b'opus')
-    staged = SimpleNamespace(close_code=None)
-    try:
-        _group, _fragment, row = _append(store, str(path), actions=['throttle', 'throttle', 'throttle'])
-    except Exception:
-        mark_listen_internal_error(staged)
+    group = Publication(UID)
+    fragment = Publication(UID)
+    store.docs[group.identity] = {
+        'state': 'staging',
+        'stage_parts': [],
+        'seconds': 0,
+        'writer_until': 10**12,
+        'metadata': 'encrypted',
+        'sample_rate': 16000,
+        'started_at': 1_700_000_000,
+        'created_at': 1.0,
+        'listed_at': 1_700_000_000,
+        'live_custody_version': 4,
+    }
+    store.versions[group.identity] = 1
+    store.land_fragment_on_update = group.identity
+    store.actions = ['throttle', 'throttle', 'throttle']
+    row = live_cap_staging.append(UID, str(path), group, fragment, _METADATA, 1.0)
+    assert late_hold_identity(fragment.identity) not in store.docs
+    assert [part['id'] for part in row['stage_parts']] == [fragment.identity]
+    assert [part['id'] for part in store.docs[group.identity]['stage_parts']] == [fragment.identity]
+    store.docs[group.identity]['writer_until'] = 0
+    store.actions = []
+    _enable_redrive(monkeypatch, [_hold_snap(group.identity)])
+    assert __import__('asyncio').run(cap_hold_redrive.sweep())['sealed'] == 1
+    assert store.docs['summary']['count'] == 1
+    assert store.docs['summary']['seconds'] == 1
+    assert store.increments.count(('summary', 'count', 1.0)) == 1
+    assert store.increments.count(('summary', 'seconds', 1.0)) == 1
+    assert __import__('asyncio').run(cap_hold_redrive.sweep())['sealed'] == 0
+    assert store.increments.count(('summary', 'count', 1.0)) == 1
+
+
+def test_create_race_read_failure_stays_staged_and_seals_once(delays, store, tmp_path, monkeypatch):
+    path = tmp_path / 'fragment.opus'
+    path.write_bytes(b'opus')
+    group = Publication(UID)
+    fragment = Publication(UID)
+    part_path = f'chunks/{UID}/cap-held/{fragment.identity}.opus.enc'
+    store.conflict_create = group.identity
+    store.conflict_row = {
+        'state': 'staging',
+        'stage_parts': [
+            {
+                'id': fragment.identity,
+                'audio_path': part_path,
+                'audio_generation': 1,
+                'bytes': 4,
+                'frames': 16000,
+            }
+        ],
+        'seconds': 1.0,
+        'writer_until': 0,
+        'metadata': 'encrypted',
+        'sample_rate': 16000,
+        'started_at': 1_700_000_000,
+        'created_at': 1.0,
+        'listed_at': 1_700_000_000,
+        'live_custody_version': 4,
+    }
+    store.actions = ['throttle', 'throttle', 'throttle']
+    before = _counter('staged_unverified')
+    row = live_cap_staging.append(UID, str(path), group, fragment, _METADATA, 1.0)
+    assert row is not None
+    assert _counter('staged_unverified') == before + 1
+    assert late_hold_identity(fragment.identity) not in store.docs
+    assert [part['id'] for part in store.docs[group.identity]['stage_parts']] == [fragment.identity]
+    store.actions = []
+    _enable_redrive(monkeypatch, [_hold_snap(group.identity)])
+    assert __import__('asyncio').run(cap_hold_redrive.sweep())['sealed'] == 1
+    assert store.docs['summary']['count'] == 1
+    assert store.docs['summary']['seconds'] == 1
+    assert store.increments.count(('summary', 'count', 1.0)) == 1
+    assert store.increments.count(('summary', 'seconds', 1.0)) == 1
+
+
+async def test_receive_data_close_code_follows_staging(delays, store, tmp_path):
+    path = tmp_path / 'fragment.opus'
+    path.write_bytes(b'opus')
+
+    class _Socket:
+        async def receive(self):
+            raise asyncio.TimeoutError
+
+    class _Hold:
+        def __init__(self, actions, read_errors):
+            self.actions = actions
+            self.read_errors = read_errors
+            self.row = None
+
+        async def run_updates(self, receiver):
+            await receiver._cap_hold_stop.wait()
+
+        async def finish_updates(self, updates, stop):
+            stop.set()
+            if updates is not None:
+                await updates
+            _group, _fragment, self.row = _append(store, str(path), actions=self.actions, read_errors=self.read_errors)
+
+    def spawn(coro, name=None):
+        return asyncio.create_task(coro)
+
+    async def turn(actions, read_errors):
+        state = ListenSessionState()
+        state.close_code = 1000
+        hold = _Hold(actions, read_errors)
+        host = SimpleNamespace(
+            request=SimpleNamespace(websocket=_Socket(), uid=UID, codec='pcm16', sample_rate=16000),
+            state=state,
+            limits=SimpleNamespace(ws_receive_timeout=1.0),
+            is_multi_channel=False,
+            use_custom_stt=True,
+            audio_bytes_send=None,
+            transcripts=SimpleNamespace(enqueue=lambda segments: None),
+            start_live_transcription=lambda: None,
+            spawn=spawn,
+        )
+        receiver = ListenReceiver(host, [], {})
+        receiver.live_hold = hold
+        await receiver.receive_data()
+        return state, hold.row
+
+    staged, row = await turn(['throttle', 'throttle', 'throttle'], [])
+    assert staged.close_code == 1000
     assert row['state'] == 'staging'
-    assert staged.close_code != 1011
-    failed = SimpleNamespace(close_code=None)
-    with pytest.raises(InvalidArgument, match='some other 400'):
-        try:
-            _append(store, str(path), read_errors=[InvalidArgument('some other 400')])
-        except InvalidArgument:
-            mark_listen_internal_error(failed)
-            raise
+    failed, _row = await turn([], [InvalidArgument('some other 400')])
     assert failed.close_code == 1011
