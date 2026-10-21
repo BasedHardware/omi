@@ -155,6 +155,9 @@ def off(monkeypatch, request):
         monkeypatch.setenv(flag, request.param)
 
     monkeypatch.setenv('SYNC_LINEAGE_RESOLVE_ENABLED', 'true')
+    # The fresh conversation turn is a throughput guard outside lineage parity; this
+    # hermetic run has no Redis, so leaving it on would add its 'unavailable' log line.
+    monkeypatch.setenv('SYNC_FRESH_CONVERSATION_TURN', 'off')
     monkeypatch.setenv('SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST', '')  # Explicit legacy global policy.
 
 

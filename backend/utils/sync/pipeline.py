@@ -367,7 +367,7 @@ def _record_sync_segment_outcome(
     reason = _sync_failure_reason(None if outcome in _NON_ERROR_SEGMENT_OUTCOMES else phase, exception)
     log(
         'event=sync_transcription_segment outcome=%s provider=%s model=%s lane=%s retryable=%s '
-        'phase=%s exception_type=%s job_ref=%s attempt_ref=%s failure_reason=%s',
+        'phase=%s exception_type=%s job_ref=%s attempt_ref=%s%s',
         outcome_label(outcome.value, reason),
         bounded_provider(provider),
         _bounded_sync_model(model),
@@ -377,7 +377,7 @@ def _record_sync_segment_outcome(
         bounded_exception_class(exception),
         _bounded_correlation_ref(job_id),
         _bounded_correlation_ref(attempt_ref),
-        reason.value,
+        '' if reason is SyncFailureReason.NONE else f' failure_reason={reason.value}',
     )
     try:
         record_sync_transcription_outcome(
