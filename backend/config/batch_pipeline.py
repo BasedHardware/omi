@@ -215,6 +215,15 @@ def long_speech_handoff_enabled() -> bool:
     return os.getenv('BATCH_PIPELINE_LONG_SPEECH_HANDOFF_ENABLED', 'true').strip().lower() != 'false'
 
 
+def second_multilingual_enabled() -> bool:
+    """Kill switch (unset is on; only ``false`` disables it).
+
+    A long-speech handoff unit whose Modulate recovery came back valid-empty gets
+    one Deepgram multilingual call inside the same paid recovery intent.
+    """
+    return os.getenv('BATCH_PIPELINE_SECOND_MULTILINGUAL_ENABLED', 'true').strip().lower() != 'false'
+
+
 def worker_validation_disposition_enabled() -> bool:
     """Ship-on deterministic validation handoff; false restores bounded GPU retries."""
     return os.getenv('BATCH_PIPELINE_WORKER_VALIDATION_DISPOSITION_ENABLED', 'true').strip().lower() == 'true'
