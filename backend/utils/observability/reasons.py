@@ -128,6 +128,16 @@ class ShadowParityOutcome(StrEnum):
     SKIPPED = 'skipped'
 
 
+class ShadowConvergenceOutcome(StrEnum):
+    """`omi_jobstore_shadow_convergence_total{outcome}` (lane 12, A2 gate: mirror lag vs divergence)."""
+
+    UNKNOWN = 'unknown'
+    CONVERGED = 'converged'
+    DIVERGED = 'diverged'
+    DROPPED = 'dropped'
+    ERROR = 'error'
+
+
 class ProviderSttReason(StrEnum):
     """Lane 8 owns the member list; the base set is the pre-recorded provider-STT stage vocabulary."""
 

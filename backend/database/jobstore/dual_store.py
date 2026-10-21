@@ -35,6 +35,7 @@ except in staging on the staging Firestore database, which keeps that worker nam
 from __future__ import annotations
 
 import contextvars
+import heapq
 import hashlib
 import importlib.util
 import logging
@@ -47,7 +48,7 @@ from copy import deepcopy
 from enum import StrEnum
 from typing import Any, Callable, TypeVar
 
-from prometheus_client import Counter
+from prometheus_client import Counter, Histogram
 
 import database.jobstore.codec as codec
 from utils.observability.reasons import ReasonFamily, reason_label
@@ -83,6 +84,44 @@ SHADOW_PARITY_TOTAL = Counter(
     'A2 job-store shadow: Postgres mirror writes and read-parity comparisons against Firestore.',
     ['table', 'op', 'outcome'],
 )
+
+
+class ShadowConvergenceOutcome(StrEnum):
+    """``omi_jobstore_shadow_convergence_total{outcome}``: what became of a non-matching read (lead ruling a2d720)."""
+
+    UNKNOWN = 'unknown'
+    CONVERGED = 'converged'  # Postgres equalled Firestore's current state within the window: mirror lag
+    DIVERGED = 'diverged'  # still different after the window: a real divergence
+    DROPPED = 'dropped'  # tracker queue full: unknown, gated as diverged (fail closed)
+    ERROR = 'error'  # a check failed: unknown, gated as diverged (fail closed)
+
+
+# Non-matching reads are re-checked (Postgres copy vs the primary's current state, lock-free) at these offsets
+# from the comparison; the first match records its lag. No match by the last offset is a divergence.
+CONVERGENCE_DELAYS_S = (0.0, 0.5, 1.0, 2.0, 5.0, 10.0)
+CONVERGENCE_QUEUE_LIMIT = 1000
+
+SHADOW_CONVERGENCE_TOTAL = Counter(
+    'omi_jobstore_shadow_convergence_total',
+    'A2 job-store shadow: non-matching reads re-checked until Postgres equals the primary (lag) or the window ends.',
+    ['table', 'outcome'],
+)
+SHADOW_CONVERGENCE_SECONDS = Histogram(
+    'omi_jobstore_shadow_convergence_seconds',
+    'A2 job-store shadow: seconds from a non-matching read comparison until Postgres equalled the primary.',
+    ['table'],
+    buckets=(0.05, 0.25, 0.5, 1.0, 2.0, 5.0, 10.0, 10.5),  # the last legal observation ends <= 10 s + budget_s
+)
+
+
+def _table_label(table: str) -> str:
+    return table if table in MIRRORED_TABLES else 'other'
+
+
+def _converge_count(table: str, outcome: ShadowConvergenceOutcome) -> None:
+    SHADOW_CONVERGENCE_TOTAL.labels(
+        table=_table_label(table), outcome=reason_label(ReasonFamily.PARITY, outcome, ShadowConvergenceOutcome)
+    ).inc()
 
 
 def _count(table: str, op: str, outcome: ShadowParityOutcome, n: int = 1) -> None:
@@ -224,6 +263,13 @@ class DualStore:
         self._queue: queue.Queue = queue.Queue(maxsize=queue_limit)
         self._worker: threading.Thread | None = None
         self._lock = threading.Lock()
+        # Convergence tracker (lead ruling a2d720): its own thread and heap, so re-checks never delay the mirror.
+        self.convergence_delays: tuple[float, ...] = CONVERGENCE_DELAYS_S
+        self._pending: list[tuple[float, int, str, str, float, int]] = []
+        self._pending_cv = threading.Condition()
+        self._pending_seq = 0
+        self._in_flight = 0
+        self._tracker: threading.Thread | None = None
 
     def __getattr__(self, name: str) -> Any:
         # due / oldest / oldest_retry / control_candidate / quarantine_fenced / projection_* / client / namespace
@@ -382,9 +428,125 @@ class DualStore:
             self._log_failure('write', outcome, exc, phase[0], writes)
             return
         finally:
+            self._track_convergence(differing)
             self._log_differing(differing)
         for table, _ in writes:
             _count(table, 'write', ShadowParityOutcome.MIRRORED)
+
+    # -- convergence (lead ruling a2d720) ----------------------------------------------------------
+    def _track_convergence(self, differing: list[tuple[str, str, ShadowParityOutcome, dict, dict]]) -> None:
+        """Re-check every mismatch / missing / extra read until Postgres equals the primary or the window ends.
+
+        A read that converges is mirror lag (``converged``, with its lag in seconds); one that does not is a
+        divergence. The parity counter itself is unchanged: this is a second, separately gated signal.
+        Never raises.
+        """
+        tracked = {ShadowParityOutcome.MISMATCH, ShadowParityOutcome.MISSING, ShadowParityOutcome.EXTRA}
+        try:
+            entries = [(table, key) for table, key, outcome, *_ in differing if outcome in tracked]
+            if not entries:
+                return
+            if self.inline:  # deterministic harnesses: one check, no waiting
+                for table, key in entries:
+                    self._check_convergence((0.0, 0, table, key, time.monotonic(), len(self.convergence_delays)))
+                return
+            with self._pending_cv:
+                for table, key in entries:
+                    if len(self._pending) >= CONVERGENCE_QUEUE_LIMIT:
+                        _converge_count(table, ShadowConvergenceOutcome.DROPPED)
+                        continue
+                    started = time.monotonic()
+                    self._pending_seq += 1
+                    heapq.heappush(self._pending, (started, self._pending_seq, table, key, started, 0))
+                self._pending_cv.notify()
+                if self._tracker is None or not self._tracker.is_alive():
+                    self._tracker = threading.Thread(
+                        target=contextvars.Context().run,
+                        args=(self._converge_forever,),
+                        name='jobstore-shadow-converge',
+                        daemon=True,
+                    )
+                    self._tracker.start()
+        except Exception:
+            logger.warning('event=jobstore_shadow op=converge outcome=track_error', exc_info=True)
+
+    def _converge_forever(self) -> None:
+        while True:
+            with self._pending_cv:
+                while not self._pending or self._pending[0][0] > time.monotonic():
+                    wait = (self._pending[0][0] - time.monotonic()) if self._pending else None
+                    self._pending_cv.wait(wait)
+                item = heapq.heappop(self._pending)
+                self._in_flight += 1
+            try:
+                self._check_convergence(item)
+            finally:
+                with self._pending_cv:
+                    self._in_flight -= 1
+                    self._pending_cv.notify_all()
+
+    def _read_shadow(self, table: str, key: str) -> dict:
+        with self.shadow.pool.connection(timeout=self.budget_s) as conn:
+            with conn.transaction():
+                conn.execute(f'SET LOCAL statement_timeout = {int(self.budget_s * 1000)}')
+                return self.shadow.read_doc(conn, table, key)
+
+    def _check_convergence(self, item: tuple[float, int, str, str, float, int]) -> None:
+        """One observation. ``converged`` needs a STABLE pair inside the window (Grok #22965 B1).
+
+        Postgres is read, then the primary (lock-free), then Postgres again: a mirror committing between the
+        reads (a torn pair) cannot count. And the observation must finish within the last re-check offset
+        plus one ``budget_s`` of slop, so a late check after a backlog cannot turn a stuck row into lag.
+        Anything else re-schedules, and the last step counts ``diverged``. Never raises; any failure counts
+        ``error`` (fail closed).
+        """
+        _, seq, table, key, started, step = item
+        try:
+            shadow_before = self._read_shadow(table, key)
+            primary_doc = read_current(self.primary, [(table, key)]).get((table, key), {})
+            shadow_after = self._read_shadow(table, key)
+            elapsed = time.monotonic() - started
+            in_window = elapsed <= self.convergence_delays[-1] + self.budget_s
+            stable = compare(shadow_before, shadow_after) is ShadowParityOutcome.MATCH
+            if in_window and stable and compare(primary_doc, shadow_after) is ShadowParityOutcome.MATCH:
+                _converge_count(table, ShadowConvergenceOutcome.CONVERGED)
+                SHADOW_CONVERGENCE_SECONDS.labels(table=_table_label(table)).observe(elapsed)
+                return
+            step += 1
+            if step >= len(self.convergence_delays) or not in_window:
+                _converge_count(table, ShadowConvergenceOutcome.DIVERGED)
+                namespace = getattr(self.shadow, 'namespace', '?')
+                logger.warning(
+                    'event=jobstore_shadow op=converge outcome=diverged namespace=%s table=%s key=%s fields=%s late=%s',
+                    namespace,
+                    table,
+                    key_hash(namespace, table, key),
+                    differing_fields(primary_doc, shadow_after),
+                    not in_window,
+                )
+                return
+            with self._pending_cv:
+                heapq.heappush(self._pending, (started + self.convergence_delays[step], seq, table, key, started, step))
+                self._pending_cv.notify()
+        except Exception as exc:
+            _converge_count(table, ShadowConvergenceOutcome.ERROR)
+            logger.warning(
+                'event=jobstore_shadow op=converge outcome=error error=%s error_class=%s table=%s',
+                type(exc).__name__,
+                _error_class(exc),
+                table,
+            )
+
+    def drain_convergence(self, timeout: float = 15.0) -> bool:
+        """Wait until every tracked read has converged or diverged (tests). True when drained."""
+        deadline = time.monotonic() + timeout
+        with self._pending_cv:
+            while self._pending or self._in_flight:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    return False
+                self._pending_cv.wait(remaining)
+        return True
 
     def _log_failure(
         self, op: str, outcome: ShadowParityOutcome, exc: BaseException, phase: str, keys: list[tuple[str, str]]
