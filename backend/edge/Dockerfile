@@ -13,10 +13,12 @@
 FROM rust:1.99.1-slim-bookworm AS builder
 
 # libopus through pkg-config (the opus crate's preferred path; cmake covers its
-# bundled fallback); ort downloads its prebuilt static ONNX Runtime at build time.
+# bundled fallback); ort downloads its prebuilt static ONNX Runtime at build time
+# through ureq/native-tls, so the builder needs libssl-dev (not the runtime).
 RUN apt-get update && apt-get install -y --no-install-recommends \
     pkg-config \
     libopus-dev \
+    libssl-dev \
     cmake \
     g++ \
     ca-certificates \
