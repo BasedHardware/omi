@@ -178,7 +178,7 @@ def save_user_preference_tool(
     slot: str = "",
     replace_memory_id: Optional[str] = "",
     user_stated: bool = False,
-    config: RunnableConfig = None,
+    config: Optional[RunnableConfig] = None,
 ) -> str:  # type: ignore[reportAssignmentType]  # langchain injects at runtime; None default for direct calls
     """Save a learned user preference or personal detail for future conversations.
 
@@ -205,7 +205,7 @@ def save_user_preference_tool(
         replace_memory_id: Existing memory ID to correct instead of appending.
         user_stated: Whether the user directly asserted this preference.
     """
-    uid = _get_uid(config)
+    uid = str(_get_uid(config) or '').strip()
     if not uid:
         return "Error: Could not determine user ID"
 
@@ -214,6 +214,10 @@ def save_user_preference_tool(
     # meaningless memory item.
     if not preference or not isinstance(preference, str) or not preference.strip():
         return "Error: Preference content cannot be empty"
+
+    # Persist the normalized form so surrounding whitespace can never become
+    # part of the stored memory content or of the retry-stable provenance id.
+    preference = preference.strip()
 
     try:
         firestore_client = get_data_plane_firestore_client()
