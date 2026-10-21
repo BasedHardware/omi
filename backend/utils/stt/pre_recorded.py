@@ -651,6 +651,11 @@ def modulate_prerecorded_from_bytes(
                 lang = lang.split('-')[0].split('_')[0].lower()
                 language_votes.append((lang, len(text.split()), max(0, duration_ms)))
 
+        top_text = result.get('text')
+        if not words and isinstance(top_text, str) and top_text.strip():
+            # Transcript text with only blank utterances is contradictory; never return it as silence.
+            raise RuntimeError('Modulate response with blank utterances must not carry transcript text')
+
         if return_language:
             # Tiny acknowledgments are noisy detection evidence. Only use them
             # when the provider supplied no longer transcribed utterance.
