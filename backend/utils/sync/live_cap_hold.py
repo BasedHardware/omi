@@ -73,7 +73,16 @@ def _upload_audio(
         )
 
 
-async def _publish_audio(uid, data, rate, start, group, source, metadata, duration) -> None:
+async def _publish_audio(
+    uid: str,
+    data: bytes,
+    rate: int,
+    start: float,
+    group: Publication | None,
+    source: Publication,
+    metadata: dict,
+    duration: float,
+) -> None:
     await live_cap_upload.prepare(
         source, lambda: _upload_audio(uid, data, rate, start, group, source, metadata, duration)
     )

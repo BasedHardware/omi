@@ -110,6 +110,7 @@ def upload_held_audio(
                     encrypted.write(encrypt_audio_chunk(chunk, uid))
             encrypted_size = encrypted.tell()
             encrypted.seek(0)
+            capture = ''
             if live_size_limit is not None:
                 if not immutable or codec != 'ogg_opus' or not 32 < encrypted_size <= live_size_limit + 32:
                     raise ValueError('invalid immutable live source')
@@ -145,7 +146,7 @@ def upload_held_audio(
                             raise ValueError('stored live source provenance mismatch')
                         encrypted_size = blob.size
         encoded_metadata = encrypt(json.dumps(metadata), uid)
-        fields = {'audio_path': blob_path, 'metadata': encoded_metadata}
+        fields: dict[str, Any] = {'audio_path': blob_path, 'metadata': encoded_metadata}
         if codec == 'ogg_opus':
             fields.update(
                 audio_codec=codec,

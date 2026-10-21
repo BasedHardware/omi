@@ -18,8 +18,10 @@ UPLOAD_SOCKET_SECONDS = 1.5
 UPLOAD_ATTEMPTS = 2
 
 
-def transport_cause(error: BaseException) -> str | None:
+def transport_cause(error: BaseException | None) -> str | None:
     """Unwrap transport faults only; API/throttle/Firestore faults do not opt in."""
+    if error is None:
+        return None
     pending = [error]
     seen = set()
     while pending:
@@ -64,10 +66,10 @@ async def prepare(source: Publication, upload: Callable[[], dict]) -> None:
         return
     last_error: BaseException | None = None
     # A later flush can adopt a completed late upload without starting a third.
-    for future in source.upload_attempts:
-        if future.done():
+    for previous in source.upload_attempts:
+        if previous.done():
             try:
-                source.fields = future.result()
+                source.fields = previous.result()
             except Exception as error:
                 last_error = error
             else:
@@ -78,7 +80,7 @@ async def prepare(source: Publication, upload: Callable[[], dict]) -> None:
         raise last_error or requests.exceptions.ReadTimeout('immutable live upload outcome unknown')
     while len(source.upload_attempts) < UPLOAD_ATTEMPTS:
         source.put_started = True
-        future: Future = submit_with_context(storage_executor, upload)
+        future: Future[dict] = submit_with_context(storage_executor, upload)
         source.upload_attempts.append(future)
         deadline = asyncio.timeout(UPLOAD_ATTEMPT_SECONDS)
         try:
