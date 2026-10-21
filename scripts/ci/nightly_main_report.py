@@ -60,20 +60,27 @@ def failing_tests(log):
     return sorted(found)
 
 
-def last_green(repo, run_id):
+def last_green(repo, run_id, main_sha):
     runs = api_pages(
-        f"repos/{repo}/actions/workflows/{WORKFLOW}/runs?branch=main&status=success&per_page=100", "workflow_runs"
+        f"repos/{repo}/actions/workflows/{WORKFLOW}/runs?status=success&per_page=100", "workflow_runs"
     )
     previous = [r for r in runs if r["id"] < run_id and r["event"] in ("schedule", "workflow_dispatch")]
-    if not previous:
-        return None
-    run = max(previous, key=lambda r: r["id"])
-    with tempfile.TemporaryDirectory() as directory:
-        gh("run", "download", str(run["id"]), "--repo", repo, "--name", "nightly-main-report", "--dir", directory)
-        receipt = json.loads((Path(directory) / "report.json").read_text())
-    if receipt["run_id"] != run["id"] or receipt["failures"] or not re.fullmatch(r"[0-9a-f]{40}", receipt["main_sha"]):
-        raise ValueError("Invalid last-green nightly receipt")
-    return receipt["main_sha"]
+    for run in sorted(previous, key=lambda r: r["id"], reverse=True):
+        with tempfile.TemporaryDirectory() as directory:
+            gh("run", "download", str(run["id"]), "--repo", repo, "--name", "nightly-main-report", "--dir", directory)
+            receipt = json.loads((Path(directory) / "report.json").read_text())
+        if receipt["run_id"] != run["id"] or receipt["failures"] or not re.fullmatch(r"[0-9a-f]{40}", receipt["main_sha"]):
+            raise ValueError("Invalid last-green nightly receipt")
+        # Lead ruling 9cb025: workflow branch is not the tested source. A
+        # successful branch dispatch is a baseline only on the tested main
+        # lineage. An older run may have been rerun against newer main code;
+        # that newer SHA cannot be the lower bound of this run's bisect range.
+        status = gh("api", f"repos/{repo}/compare/{receipt['main_sha']}...{main_sha}", "--jq", ".status").strip()
+        if status in ("ahead", "identical"):
+            return receipt["main_sha"]
+        if status not in ("behind", "diverged"):
+            raise ValueError("Cannot verify last-green source ancestry")
+    return None
 
 
 def collect(repo, run_id, main_sha, jobs):
@@ -93,7 +100,7 @@ def collect(repo, run_id, main_sha, jobs):
             )]
         failures.extend({"job": job["name"], "test": name} for name in names)
     return {"schema_version": 1, "run_id": run_id, "main_sha": main_sha,
-            "last_green_sha": last_green(repo, run_id), "failures": failures}
+            "last_green_sha": last_green(repo, run_id, main_sha), "failures": failures}
 
 
 def summary(report):

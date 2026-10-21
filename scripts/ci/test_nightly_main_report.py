@@ -50,19 +50,53 @@ class ReportTests(unittest.TestCase):
 
     def test_first_run_records_none_without_guessing_head_sha(self):
         with patch.object(REPORT, "api_pages", return_value=[]):
-            self.assertIsNone(REPORT.last_green("BasedHardware/omi", 123))
+            self.assertIsNone(REPORT.last_green("BasedHardware/omi", 123, "a" * 40))
 
-    def test_previous_green_uses_artifact_main_sha_and_excludes_branch_dispatch(self):
+    def test_previous_green_uses_artifact_main_sha_and_verifies_ancestry(self):
         runs = [dict(id=120, event="schedule"), dict(id=123, event="schedule"), dict(id=119, event="push")]
 
         def gh(*args, **kwargs):
+            if args[0] == "api":
+                self.assertIn("b" * 40 + "..." + "a" * 40, args[1])
+                return "ahead\n"
             self.assertEqual(args[2], "120")
             out = Path(args[args.index("--dir") + 1])
             (out / "report.json").write_text(json.dumps(dict(run_id=120, failures=[], main_sha="b" * 40)))
 
         with patch.object(REPORT, "api_pages", return_value=runs) as api, patch.object(REPORT, "gh", side_effect=gh):
-            self.assertEqual(REPORT.last_green("BasedHardware/omi", 123), "b" * 40)
-        self.assertIn("branch=main&status=success", api.call_args.args[0])
+            self.assertEqual(REPORT.last_green("BasedHardware/omi", 123, "a" * 40), "b" * 40)
+        self.assertIn("status=success", api.call_args.args[0])
+        self.assertNotIn("branch=", api.call_args.args[0])
+
+    def test_non_main_green_candidate_cannot_replace_the_verified_baseline(self):
+        runs = [dict(id=120, event="workflow_dispatch"), dict(id=119, event="schedule")]
+        downloads = []
+
+        def gh(*args, **kwargs):
+            if args[0] == "api":
+                return "diverged" if "c" * 40 in args[1] else "identical"
+            run_id = int(args[2])
+            downloads.append(run_id)
+            out = Path(args[args.index("--dir") + 1])
+            (out / "report.json").write_text(json.dumps(dict(run_id=run_id, failures=[],
+                                                           main_sha=("c" if run_id == 120 else "b") * 40)))
+
+        with patch.object(REPORT, "api_pages", return_value=runs), patch.object(REPORT, "gh", side_effect=gh):
+            self.assertEqual(REPORT.last_green("BasedHardware/omi", 123, "a" * 40), "b" * 40)
+        self.assertEqual(downloads, [120, 119])
+
+    def test_older_run_rerun_on_newer_main_cannot_reverse_the_bisect_range(self):
+        runs = [dict(id=120, event="workflow_dispatch")]
+
+        def gh(*args, **kwargs):
+            if args[0] == "api":
+                self.assertTrue(args[1].endswith("c" * 40 + "..." + "a" * 40))
+                return "behind"
+            out = Path(args[args.index("--dir") + 1])
+            (out / "report.json").write_text(json.dumps(dict(run_id=120, failures=[], main_sha="c" * 40)))
+
+        with patch.object(REPORT, "api_pages", return_value=runs), patch.object(REPORT, "gh", side_effect=gh):
+            self.assertIsNone(REPORT.last_green("BasedHardware/omi", 123, "a" * 40))
 
     def test_summary_escapes_test_markdown_and_names_main_and_green(self):
         rendered = REPORT.summary(dict(main_sha="a" * 40, last_green_sha="b" * 40,

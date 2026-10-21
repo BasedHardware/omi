@@ -20,14 +20,18 @@ mutation runs in the nightly. Artifacts and the normal dependency caches stay
 under GitHub Actions.
 
 `nightly_main_report.py` reads completed job logs and writes `report.json`, a
-job summary and `last-green-sha.txt`. The prior successful **main-branch** nightly
-receipt owns the green SHA; the workflow run's head SHA can name a different
+job summary and `last-green-sha.txt`. The prior successful nightly receipt owns
+the green SHA, including branch dispatches whose tested SHA is verified as an
+ancestor of the tested main SHA (lead ruling 9cb025). This also excludes older
+runs rerun on code newer than this run's pinned source, keeping the bisect range
+ordered. The workflow run's head SHA can name a different
 commit from the tested source. Before the first green nightly, the artifact
 contains `none`. Missing previous receipts fail visibly rather than inventing
 a bisect range. Setup failures without test records name the failed step.
 
-The workspace lead reads the latest main run through
-`infra/rollout/bin/nightly_main_read.sh`. It pins the run ID before downloading
-the receipt, appends known-red rows, and posts one debt message per run attempt.
-It performs no writes for pending, green or cancelled runs. A failed bus post
+The workspace lead reads the latest workflow run, including branch dispatch,
+through `infra/rollout/bin/nightly_main_read.sh`. It pins the run ID, validates
+the receipt and tested SHA against freshly fetched `origin/main`, appends
+known-red rows, and posts one debt message per run attempt. Pending, green and
+cancelled runs do not write known-red or bus. A failed bus post
 can be retried without duplicating rows.
