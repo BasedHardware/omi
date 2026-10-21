@@ -2,6 +2,7 @@
 
 import asyncio
 from copy import deepcopy
+from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -14,6 +15,21 @@ from tests.unit.test_dream_cleanup_edits import UID, store  # noqa: F401
 from tests.unit.test_dream_harness_runtime import runtime, _plan, _verdict  # noqa: F401
 from tests.unit.test_dream_session import call, turn
 from utils import dream_agent, dream_capacity, dream_cost, dream_harness_transport as transport
+
+FROZEN_NOW = datetime(2026, 10, 21, 12, 0, 30, tzinfo=timezone.utc)
+
+
+class _FrozenDatetime(datetime):
+    @classmethod
+    def now(cls, tz=None):
+        return FROZEN_NOW if tz is not None else FROZEN_NOW.replace(tzinfo=None)
+
+
+@pytest.fixture(autouse=True)
+def frozen_minute(monkeypatch):
+    # Minute-headroom shards reset when the wall-clock minute rolls over, so a
+    # loaded runner crossing a minute boundary would split the asserted totals.
+    monkeypatch.setattr(dream_turns, 'datetime', _FrozenDatetime)
 
 
 def gateway(monkeypatch, respond):
