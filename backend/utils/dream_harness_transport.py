@@ -20,7 +20,7 @@ from utils.dream_cost import (
 from utils.executors import db_executor, run_blocking
 from utils.http_client import get_llm_gateway_client, get_llm_gateway_semaphore
 from utils.llm.gateway_client import get_llm_gateway_base_url, llm_gateway_headers
-from utils.llm.shaped_agent import Turn
+from utils.llm.shaped_agent import Turn, validate_output
 
 
 class CapacityWait(RuntimeError):
@@ -310,7 +310,8 @@ async def model_turn(
         raise ValueError('dream_response_truncated')
     message = choice['message']
     if mount.schema is not None:
-        turn.value = mount.schema.model_validate_json(message.get('content') or '', strict=True)
+        # Declared near-miss keys are normalized before strict validation (harness tool rule 3).
+        turn.value = validate_output(mount.schema, message.get('content') or '', strict=True)
     else:
         calls = message.get('tool_calls') or []
         if not isinstance(calls, list) or len(calls) > 64 or any(not isinstance(call, dict) for call in calls):

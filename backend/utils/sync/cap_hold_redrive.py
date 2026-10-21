@@ -9,7 +9,7 @@ from typing import Any
 from database import cap_hold_redrive as store
 from utils.executors import db_executor, storage_executor, run_blocking
 from utils import funded_processing, processing_backlog_worker
-from config.stt_cap_dispatch import execution_admission_configured
+from config.stt_cap_dispatch import execution_admission_configured, recovery_cohort_admits
 from utils.observability.held_content import publish_fleet
 from utils.sync import live_cap_staging
 
@@ -67,7 +67,7 @@ async def sweep() -> dict:
 
     async def visit(snap: Any, turn: int):
         uid = owner(snap, 'processing_backlog')
-        if uid is None or not funded_processing.enabled(uid):
+        if uid is None or not recovery_cohort_admits(uid) or not funded_processing.enabled(uid):
             return None
         try:
             # One newest-first candidate per owner per round. A fast owner

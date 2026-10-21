@@ -202,9 +202,19 @@ def test_every_scoped_production_gate_supplies_its_subject(path):
     for node in ast.walk(tree):
         if isinstance(node, ast.ImportFrom) and node.module == 'config.stt_cap_dispatch':
             for name in node.names:
-                if name.name in {'execution_admission_enabled', 'enabled_for', 'selected'}:
+                if name.name in {
+                    'execution_admission_enabled',
+                    'recovery_admission_enabled',
+                    'enabled_for',
+                    'selected',
+                }:
                     scoped[name.asname or name.name] = 2
-                elif name.name in {'any_execution_admission_enabled', 'any_legacy_admission_enabled'}:
+                elif name.name in {
+                    'any_execution_admission_enabled',
+                    'any_legacy_admission_enabled',
+                    'any_recovery_admission_enabled',
+                    'recovery_cohort_admits',
+                }:
                     scoped[name.asname or name.name] = 1
     for node in ast.walk(tree):
         if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id in scoped:

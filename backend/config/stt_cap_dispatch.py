@@ -5,7 +5,7 @@ import os
 from threading import Lock
 from typing import Callable
 
-from config.rollout_cohorts import cohort_admits
+from config.rollout_cohorts import cohort_admits, parse_cohort
 
 LANES = frozenset({'live', 'sync', 'batch'})
 # Lane8 must write provider_reason=byok into binding.policy at batch admission
@@ -14,6 +14,8 @@ _BATCH_LANE_READY = False
 _logger = logging.getLogger(__name__)
 _batch_warning_lock = Lock()
 _batch_warning_emitted = False
+_recovery_warning_lock = Lock()
+_recovery_warning_emitted = False
 _cohort_resolver: Callable[[], str] | None = None
 
 
@@ -83,6 +85,41 @@ def execution_admission_enabled(uid: str, lane: str) -> bool:
 def any_execution_admission_enabled(uid: str) -> bool:
     """Owner-facing backlog/consent surfaces; each dispatch still names its lane."""
     return any(execution_admission_enabled(uid, lane) for lane in LANES)
+
+
+def _recovery_cohort_state(raw: str | None) -> str:
+    global _recovery_warning_emitted
+    if raw is None:
+        return 'unset'
+    if parse_cohort(raw) is not None:
+        return 'set'
+    with _recovery_warning_lock:
+        if not _recovery_warning_emitted:
+            _recovery_warning_emitted = True
+            _logger.warning('Malformed STT cap recovery cohort; denying all recovery')
+    return 'malformed'
+
+
+def recovery_cohort_state() -> str:
+    """Low-cardinality effective env state; never expose the private tokens."""
+    return _recovery_cohort_state(os.getenv('STT_CAP_RECOVERY_COHORT'))
+
+
+def recovery_cohort_admits(uid: str) -> bool:
+    """Additional filter only; callers must also require dispatch admission."""
+    raw = os.getenv('STT_CAP_RECOVERY_COHORT')
+    state = _recovery_cohort_state(raw)
+    return state == 'unset' or state == 'set' and cohort_admits(uid, raw)
+
+
+def recovery_admission_enabled(uid: str, lane: str) -> bool:
+    """Additional intersection only: listen/capture admission stays unchanged."""
+    return recovery_cohort_admits(uid) and execution_admission_enabled(uid, lane)
+
+
+def any_recovery_admission_enabled(uid: str) -> bool:
+    """Gate owner visits, consent and wakes before acquiring recovery work."""
+    return recovery_cohort_admits(uid) and any_execution_admission_enabled(uid)
 
 
 def hold_lane(metadata: object) -> str | None:

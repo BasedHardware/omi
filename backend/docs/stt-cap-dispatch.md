@@ -594,3 +594,48 @@ Local migration verification (loopback Firestore only):
 firebase emulators:exec --only firestore --project demo-held-audio \
   'backend/.venv/bin/python backend/scripts/held_audio_summary_emulator_test.py'
 ```
+
+
+## Recovery-only probe narrowing
+
+`STT_CAP_RECOVERY_COHORT` optionally intersects **effective** dispatch membership
+(including the runtime `rollout_cohorts/stt-cap-dispatch` resolver), enforcement
+and original execution lane. It uses the same `uid:`, `pct:N`, and sole `all`
+token grammar. It cannot admit an owner outside dispatch scope. **Absent** means
+no extra restriction; empty, whitespace or malformed values deny all recovery,
+with one process-local warning that contains neither tokens nor owner identity.
+Listen-side hold admission and backlog display stay unchanged.
+
+The intersection gates manual/upgrade consent creation, the backlog process API,
+redrive owner visits, worker entry, direct recovery wakes, selected manifests and
+each new provider dispatch (including sync pipeline retries). Excluded owners'
+persisted consent and holds are preserved. Staging seal/cleanup and fleet metrics
+continue independently of recovery membership. The one-hot gauge
+`omi_stt_cap_recovery_cohort_narrowed{state="unset|set|malformed"}` reports only
+configuration state; it does not prove which private owner is configured.
+
+For qualification, the deploy lead sets `uid:<test>` through the **private-values
+path**, never a committed manifest, on every API/sync recovery executor. Verify
+all serving revisions and scheduler targets carry the restriction **before**
+activating recovery. Staging is data-isolated (`FIRESTORE_DATABASE_ID=staging`
+in `based-hardware-dev`, in-cluster Redis, and the data-plane fence in
+`database/_client.py`), so on staging the restriction is defence in depth; in
+prod it is the guard that keeps other consented owners asleep. Keep the
+shared dispatch document and listen configuration unchanged, and verify the
+test account is already in the effective dispatch cohort. First qualify staging
+(`backend-staging`, `backend-sync-staging`), then one separately authorized prod
+receipt. Record running release SHA, fresh `state="set"` metric, held-to-published
+receipt, exactly-once usage/replay, source cleanup and normal-load error/backlog
+metrics. Use only the agent-owned test account; no other owners' data reads or
+consent changes. A stale qualification driver that insists the shared dispatch
+cohort itself is probe-only must be updated to attest this intersection before
+execution; do not alter the shared document to satisfy it.
+
+Owner: dazheng / subscription rollout lead. Ramp: staging probe, single prod
+receipt, then **remove the variable** to reach the full existing dispatch cohort
+by **2026-10-23**, after clean capture-integrity/reconciliation, no backlog stalls
+or sync 5xx regression, and reviewed receipts. Emptying it is a fail-closed stop,
+not widening. A missed deadline is a blocker; no automatic expansion. Widening
+can resume other owners' already-consented holds. To stop new recovery, set the narrowing to `pct:0` on every API/sync executor
+while keeping custody redrive on and listen admission unchanged; accepted provider
+calls can still finish.

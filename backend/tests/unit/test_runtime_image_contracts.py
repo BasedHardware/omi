@@ -103,6 +103,18 @@ def test_registered_runtime_image_workflows_smoke_their_declared_dockerfile(cont
     assert contracts_module.workflow_contract_errors(contracts_module.load_contracts()) == []
 
 
+def test_a_commented_smoke_marker_does_not_satisfy_the_workflow_contract(contracts_module, monkeypatch):
+    contract = next(c for c in contracts_module.load_contracts() if c.name == 'backend-api')
+    commented = 'steps:\n  # runtime_image_contracts.py smoke\n  - name: build backend/Dockerfile.roles\n'
+    monkeypatch.setattr(contracts_module, '_workflow_contract_text', lambda _: commented)
+    assert contracts_module.workflow_contract_errors([contract]) == [
+        'backend-api: .github/workflows/gcp_backend.yml does not smoke its registered runtime image'
+    ]
+    real = commented + '    run: python3 backend/scripts/role_images.py verify --manifest m\n'
+    monkeypatch.setattr(contracts_module, '_workflow_contract_text', lambda _: real)
+    assert contracts_module.workflow_contract_errors([contract]) == []
+
+
 def test_memory_maintenance_import_smoke_supplies_its_required_nonproduction_config(contracts_module):
     memory_maintenance_job = _contract(contracts_module, 'memory-maintenance-job')
 
@@ -573,8 +585,9 @@ def test_cpu_role_images_build_from_one_dockerfile_and_share_layers(contracts_mo
     dockerfile = BACKEND_DIR.parent / ROLE_DOCKERFILE
     for name, target in CPU_ROLE_TARGETS.items():
         contract = contracts[name]
-        assert (contract.dockerfile, contract.target, contract.build_only) == (dockerfile, target, True)
-        assert contract.deployment_workflows == ()
+        # B2: the gcp_backend.yml build-only train publishes every role image (not deployed until opt-in).
+        assert (contract.dockerfile, contract.target, contract.build_only) == (dockerfile, target, False)
+        assert contract.deployment_workflows == (BACKEND_DIR.parent / '.github/workflows/gcp_backend.yml',)
         assert contract.dependency_probe_smoke and contract.pull_request_smoke
 
     # api/workers/realtime/gateway differ from `app` only in metadata (ENV/CMD/ARG/LABEL),
@@ -865,7 +878,7 @@ def test_smoke_of_a_multi_target_dockerfile_requires_its_target(contracts_module
 def test_build_only_entries_are_validated(contracts_module, tmp_path, override, expected):
     def mutate(payload):
         entry = next(image for image in payload['images'] if image['name'] == 'backend-api')
-        entry.update(override)
+        entry.update({'build_only': True, 'deployment_workflows': [], **override})
 
     with pytest.raises(contracts_module.ContractError, match=re.escape(expected)):
         contracts_module.load_contracts(_registry_variant(tmp_path, mutate))
