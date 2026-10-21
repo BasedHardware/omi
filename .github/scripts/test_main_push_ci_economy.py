@@ -15,12 +15,20 @@ Two workflows keep deliberate exceptions and are asserted as such:
   release planning (``plan-desktop-release.py``) requires this workflow's
   checks on the exact source SHA, so collapsing intermediate main SHAs would
   make them permanently unreleasable. It also must not gain push ``paths``.
-* ``mobile-app-checks.yml`` must not gain push ``paths`` either: mobile
-  release admission (``verify_mobile_release_admission.py``) consumes a
-  push-event "Mobile App Checks" run on the exact release SHA.
+* ``mobile-app-checks.yml`` keys push runs per SHA for the same reason:
+  mobile release admission (``verify_mobile_release_admission.py``) consumes
+  a first-attempt push-event "Mobile App Checks" run on the exact release
+  SHA, and a pending push run replaced by a newer event leaves a cancelled
+  check no rerun can re-mint. It must not gain push ``paths`` either.
+
+Workflows that also trigger on schedule, manual dispatch, or the merge queue
+(backend-hermetic-e2e, backend-unit-tests) guard the ref collapse with
+``github.event_name == 'push'`` so those events keep per-run groups: sharing
+the push group would let a cron or dispatch evict the newest pending push
+run, and a cancelled push check fails ``scripts/pre_push_ci_verified.py``.
 
 Every workflow in COLLAPSE_WORKFLOW_GROUPS also isolates its nightly
-``workflow_call`` runs (unique ``nightly-{run_id}`) from the push group.
+``workflow_call`` runs (unique ``nightly-{run_id}``) from the push group.
 """
 
 from pathlib import Path
@@ -39,13 +47,26 @@ NIGHTLY_SUFFIX = "${{ inputs.nightly_main_sha != '' && format('nightly-{0}', git
 # collapse to one running + one newest-pending run.
 COLLAPSE_WORKFLOW_GROUPS = {
     "backend-checks.yml": "backend-checks-${{ github.event.pull_request.number || github.ref }}-" + NIGHTLY_SUFFIX,
-    "backend-hermetic-e2e.yml": "backend-hermetic-e2e-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.ref }}-" + NIGHTLY_SUFFIX,
-    "backend-unit-tests.yml": "backend-unit-tests-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.ref }}-" + NIGHTLY_SUFFIX,
     "desktop-checks.yml": "desktop-checks-${{ github.event.pull_request.number || github.ref }}-" + NIGHTLY_SUFFIX,
-    "mobile-app-checks.yml": "mobile-app-checks-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.ref }}-" + NIGHTLY_SUFFIX,
     "python-cli-ci.yml": "python-cli-ci-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.ref }}-" + NIGHTLY_SUFFIX,
     "repo-checks.yml": "repo-checks-${{ github.event.pull_request.number || github.ref }}-${{ github.event_name == 'pull_request' && contains(fromJSON('[\"edited\", \"labeled\", \"unlabeled\"]'), github.event.action) && 'metadata' || 'code' }}-" + NIGHTLY_SUFFIX,
     "web-checks.yml": "web-checks-${{ github.event.pull_request.number || github.ref }}-" + NIGHTLY_SUFFIX,
+}
+
+# Same ref collapse, but these workflows also trigger on schedule, dispatch or
+# merge_group; the push key must be guarded so only push events share the
+# ref group and the other events keep per-run groups.
+COLLAPSE_PUSH_GUARDED_WORKFLOW_GROUPS = {
+    "backend-hermetic-e2e.yml": "backend-hermetic-e2e-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || (github.event_name == 'push' && github.ref) || format('run-{0}', github.run_id) }}-" + NIGHTLY_SUFFIX,
+    "backend-unit-tests.yml": "backend-unit-tests-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || (github.event_name == 'push' && github.ref) || format('run-{0}', github.run_id) }}-" + NIGHTLY_SUFFIX,
+}
+
+# Workflows whose push-event runs are consumed as per-SHA release evidence;
+# a pending push run replaced by a newer event leaves a cancelled check that
+# release admission treats as absent (skipped and absent never qualify).
+PER_SHA_PUSH_EVIDENCE_GROUPS = {
+    "desktop-swift-ci.yml": "desktop-swift-${{ github.event.pull_request.number || github.sha }}-" + NIGHTLY_SUFFIX,
+    "mobile-app-checks.yml": "mobile-app-checks-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || (github.event_name == 'push' && github.sha) || format('run-{0}', github.run_id) }}-" + NIGHTLY_SUFFIX,
 }
 
 # workflow file -> push paths minimum set. These mirror the detect-changes /
@@ -119,7 +140,8 @@ def push_paths(doc: dict):
 
 class MainPushCICollapseContractTests(unittest.TestCase):
     def test_heavy_workflows_collapse_superseded_main_pushes(self):
-        for name, expected_group in COLLAPSE_WORKFLOW_GROUPS.items():
+        expected = {**COLLAPSE_WORKFLOW_GROUPS, **COLLAPSE_PUSH_GUARDED_WORKFLOW_GROUPS}
+        for name, expected_group in expected.items():
             with self.subTest(workflow=name):
                 doc = load_workflow(name)
                 concurrency = doc.get("concurrency")
@@ -130,15 +152,33 @@ class MainPushCICollapseContractTests(unittest.TestCase):
                     "'true' lets a newer main merge cancel the running run"
                 ))
 
-    def test_heavy_workflow_groups_do_not_key_main_runs_on_run_id(self):
+    def test_push_only_workflows_never_key_main_runs_on_run_id(self):
         for name in COLLAPSE_WORKFLOW_GROUPS:
             with self.subTest(workflow=name):
-                group = load_workflow(name)["concurrency"]["group"]
-                self.assertNotIn("format('run-{0}', github.run_id)", group, (
+                doc = load_workflow(name)
+                on = doc.get("on") or {}
+                self.assertFalse({"schedule", "workflow_dispatch", "merge_group"} & set(on), (
+                    f"{name}: gained a non-push trigger; move it to COLLAPSE_PUSH_GUARDED_WORKFLOW_GROUPS "
+                    "so that event keeps a per-run group"
+                ))
+                group = doc["concurrency"]["group"]
+                self.assertNotIn("github.run_id)", group.split(NIGHTLY_SUFFIX)[0], (
                     f"{name}: a per-run-id fallback gives every main push its own group, so "
                     "superseded suites all run; the non-PR fallback must be github.ref"
                 ))
-                self.assertIn("github.ref", group, f"{name}: non-PR fallback must key on github.ref")
+
+    def test_scheduled_or_dispatched_workflows_guard_the_push_collapse(self):
+        for name in COLLAPSE_PUSH_GUARDED_WORKFLOW_GROUPS:
+            with self.subTest(workflow=name):
+                doc = load_workflow(name)
+                on = doc.get("on") or {}
+                self.assertTrue({"schedule", "workflow_dispatch", "merge_group"} & set(on), f"{name}: no longer needs the push guard")
+                group = doc["concurrency"]["group"]
+                self.assertIn("(github.event_name == 'push' && github.ref)", group, (
+                    f"{name}: only push events may share the ref group; a cron or dispatch in the "
+                    "same group evicts the newest pending push run and leaves a cancelled push check"
+                ))
+                self.assertIn("|| format('run-{0}', github.run_id)", group, f"{name}: non-push events must keep per-run groups")
 
     def test_path_filtered_workflows_mirror_their_internal_filters(self):
         for name, minimum in PUSH_PATH_MIRRORS.items():
@@ -155,13 +195,15 @@ class MainPushCICollapseContractTests(unittest.TestCase):
                     "per-SHA release evidence consumers require"
                 ))
 
-    def test_desktop_swift_ci_keeps_per_sha_main_evidence(self):
-        concurrency = load_workflow("desktop-swift-ci.yml")["concurrency"]
-        self.assertEqual(
-            "desktop-swift-${{ github.event.pull_request.number || github.sha }}-" + NIGHTLY_SUFFIX,
-            concurrency["group"],
-        )
-        self.assertEqual(PR_CANCEL, concurrency["cancel-in-progress"])
+    def test_release_evidence_workflows_keep_per_sha_push_runs(self):
+        for name, expected_group in PER_SHA_PUSH_EVIDENCE_GROUPS.items():
+            with self.subTest(workflow=name):
+                concurrency = load_workflow(name)["concurrency"]
+                self.assertEqual(expected_group, concurrency["group"], (
+                    f"{name}: push runs must key on github.sha; a ref-keyed group replaces a pending "
+                    "push run with a newer one and release admission cannot re-mint that evidence"
+                ))
+                self.assertEqual(PR_CANCEL, concurrency["cancel-in-progress"])
 
     def test_load_bearing_workflows_keep_their_concurrency(self):
         for name, (group, cancel) in UNTOUCHED_CONCURRENCY.items():

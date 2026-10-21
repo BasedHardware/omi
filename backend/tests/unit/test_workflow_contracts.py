@@ -335,12 +335,15 @@ def test_expensive_pr_contracts_cancel_only_superseded_pull_request_runs():
     # still cancel that PR's older run, but main pushes share one ref-keyed
     # group with cancel-in-progress false — the running suite finishes and
     # only the newest pending main SHA runs next, so a merge burst no longer
-    # queues a full superseded suite per intermediate SHA.
+    # queues a full superseded suite per intermediate SHA. Manual dispatches
+    # keep per-run groups so they can never evict a pending push run.
     backend_unit_tests = (repo / ".github/workflows/backend-unit-tests.yml").read_text(encoding="utf-8")
     assert "concurrency:" in backend_unit_tests
     assert "group: backend-unit-tests-${{ github.event_name == 'pull_request'" in backend_unit_tests
     assert "format('pr-{0}', github.event.pull_request.number)" in backend_unit_tests
-    assert "|| github.ref }}-" in backend_unit_tests
+    assert (
+        "|| (github.event_name == 'push' && github.ref) || format('run-{0}', github.run_id) }}-" in backend_unit_tests
+    )
     assert "cancel-in-progress: ${{ github.event_name == 'pull_request' }}" in backend_unit_tests
     # openapi-contract keeps per-run main isolation: its runs are cheap and
     # path-filtered, and its pending-run accounting is not release evidence.
