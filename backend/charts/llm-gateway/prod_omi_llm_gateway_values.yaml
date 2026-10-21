@@ -96,6 +96,9 @@ env:
         key: REDIS_DB_PASSWORD
   - name: REDIS_DB_PORT
     value: "13151"
+  # Retired order: skip desktop 2.5 inference/probes; 3.8 discovery stays automatic for Dream.
+  - name: OMI_VERTEX_RESERVATION_STATES
+    value: '{"gemini-2.5-flash":"inactive"}'
   - name: OMI_LLM_GATEWAY_PROD
     value: "true"
   - name: OMI_LLM_GATEWAY_SERVICE_TOKEN
