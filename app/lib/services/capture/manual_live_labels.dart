@@ -11,13 +11,16 @@ void retainManualLiveLabels(
       if (line.speakerLabelSource == 'manual') line.id: line
   };
   for (final line in incoming) {
+    // A new acknowledged manual edit is authoritative, including one made on
+    // another client. Only stale automatic/unlabeled projections need repair.
+    if (line.speakerLabelSource == 'manual') continue;
     final previous = manualById[line.id];
     final assigned = speakerDefaults[line.speakerId];
     if (previous != null) {
       line.isUser = previous.isUser;
       line.personId = previous.personId;
       line.speakerLabelSource = 'manual';
-    } else if (assigned != null && line.speakerLabelSource != 'manual') {
+    } else if (assigned != null) {
       line.isUser = assigned == 'user';
       line.personId = line.isUser ? null : assigned;
       line.speakerLabelSource = 'manual';

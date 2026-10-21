@@ -494,6 +494,14 @@ void main() {
       'transcript_segments': [_segment('c', 'server refresh').toJson()],
     }));
     expect(provider.segments.single.isUser, isTrue);
+    provider.onSegmentReceived([
+      _segment('c', 'another acknowledged manual edit')
+        ..personId = 'another-person'
+        ..speakerLabelSource = 'manual'
+    ]);
+    await Future<void>.delayed(Duration.zero);
+    expect(provider.segments.single.isUser, isFalse);
+    expect(provider.segments.single.personId, 'another-person');
     provider.applyInProgressConversation(ServerConversation.fromJson({
       'id': 'next-conversation',
       'created_at': '2026-09-21T00:00:00Z',
