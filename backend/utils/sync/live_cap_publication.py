@@ -6,7 +6,11 @@ from threading import RLock
 from typing import Any, Callable
 from uuid import uuid4
 
-from database._client import run_transactional
+from database._client import (
+    firestore_failure_reason,
+    is_retryable_firestore_transaction_error,
+    run_transactional,
+)
 from utils.observability.held_content import record_publication_retry
 
 
@@ -16,10 +20,60 @@ class _Unrecovered:
 
 UNRECOVERED = _Unrecovered()
 
+# Outside ``run_transactional`` there is no restart loop, so a custody-deciding
+# recovery read or preconditioned write gets the same attempt budget here. No
+# sleep: these leaves run under a session lock the transactional path
+# deliberately releases before backoff, and each leaf's own RPC timeout has
+# already spent the fault window by the time it raises.
+LEAF_RETRY_ATTEMPTS = 3
+
+_PUBLICATION_CAUSE_BY_REASON = {
+    'transport_timeout': 'timeout',
+    'deadline_exceeded': 'timeout',
+    'transport_connection': 'connection',
+    'unavailable': 'connection',
+    'resource_exhausted': 'throttle',
+}
+
+
+def publication_retry_cause(error: BaseException | None = None, reason: str | None = None) -> str:
+    """Closed-set cause label for a publication retry, from a reason token or the error."""
+    token = reason or (firestore_failure_reason(error) if error is not None else None)
+    return _PUBLICATION_CAUSE_BY_REASON.get(token or '', 'other')
+
 
 def retry_sleep(delay: float) -> None:
     """Backoff hook. Publication callers sleep only after releasing their lock."""
     time.sleep(delay)
+
+
+def retry_transient_leaf(operation: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
+    """Run one idempotent recovery leaf with a bounded transient retry.
+
+    Covers the non-transactional reads and preconditioned writes that decide
+    custody after ``run_transactional`` has surfaced (receipt verification,
+    staging fallback, redrive hand-off). ``AlreadyExists`` and other
+    non-transient results are never retried; a retried leaf counts
+    ``retried_ok`` and a spent budget counts ``exhausted`` with the failure's
+    cause, so a transport fault is visible even when the transaction itself
+    never restarted.
+    """
+    last_error: Exception | None = None
+    for attempt in range(1, LEAF_RETRY_ATTEMPTS + 1):
+        try:
+            result = operation(*args, **kwargs)
+        except Exception as error:
+            retryable = is_retryable_firestore_transaction_error(error)
+            if attempt >= LEAF_RETRY_ATTEMPTS or not retryable:
+                if retryable:
+                    record_publication_retry('exhausted', publication_retry_cause(error))
+                raise
+            last_error = error
+            continue
+        if attempt > 1:
+            record_publication_retry('retried_ok', publication_retry_cause(last_error))
+        return result
+    raise AssertionError('unreachable')
 
 
 def commit_publication(
@@ -48,7 +102,7 @@ def commit_publication(
         )
     except Exception as error:
         if outcome.get('status') == 'exhausted':
-            record_publication_retry('exhausted')
+            record_publication_retry('exhausted', publication_retry_cause(error, outcome.get('reason')))
         if recover is None:
             raise
         recovered = recover(error)
@@ -56,7 +110,7 @@ def commit_publication(
             raise
         return recovered
     if outcome.get('status') == 'retried_ok':
-        record_publication_retry('retried_ok')
+        record_publication_retry('retried_ok', publication_retry_cause(reason=outcome.get('reason')))
     return result
 
 

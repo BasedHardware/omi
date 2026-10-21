@@ -87,7 +87,15 @@ def _exists(uid: str, identity: str) -> bool:
         return bool(holds(uid).document(identity).get().exists)
 
 
-def upload_held_audio(uid: str, path: str, identity: str, metadata: dict, *, immutable: bool = False) -> dict:
+def upload_held_audio(
+    uid: str,
+    path: str,
+    identity: str,
+    metadata: dict,
+    *,
+    immutable: bool = False,
+    stored_size_limit: int | None = None,
+) -> dict:
     codec = metadata.get('audio_codec')
     extension = 'opus' if codec == 'ogg_opus' else 'wav'
     blob_path = f'chunks/{uid}/cap-held/{identity}.{extension}.enc'
@@ -115,6 +123,11 @@ def upload_held_audio(uid: str, path: str, identity: str, metadata: dict, *, imm
                 # preserve the first authenticated object across upload retries.
                 if codec == 'ogg_opus':
                     blob.reload(timeout=10, retry=None)  # Retry-only generation provenance.
+                    if stored_size_limit is not None and not 32 < blob.size <= stored_size_limit + 32:
+                        # An ambiguous retry accepts only this capture's own stored
+                        # generation: a length outside the encoder's bound means the
+                        # object at this identity is not the upload being retried.
+                        raise RuntimeError('stored held source length mismatch')
         encoded_metadata = encrypt(json.dumps(metadata), uid)
         fields = {'audio_path': blob_path, 'metadata': encoded_metadata}
         if codec == 'ogg_opus':

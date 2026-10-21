@@ -6,7 +6,18 @@ from threading import Lock
 from typing import Any, Callable
 
 import os
-from google.api_core.exceptions import Aborted, DeadlineExceeded, InvalidArgument, ResourceExhausted, ServiceUnavailable
+import requests.exceptions
+import urllib3.exceptions
+from google.api_core.exceptions import (
+    Aborted,
+    DeadlineExceeded,
+    GatewayTimeout,
+    InvalidArgument,
+    ResourceExhausted,
+    RetryError,
+    ServiceUnavailable,
+)
+from google.auth import exceptions as google_auth_exceptions
 from google.cloud import firestore
 
 from database.document_ids import document_id_from_seed
@@ -352,6 +363,38 @@ def is_permanent_firestore_write_rejection(error: BaseException) -> bool:
 _SDK_COMMIT_EXHAUSTED_PREFIX = "failed to commit transaction"
 
 
+def _transport_failure_reason(error: BaseException) -> str | None:
+    """Reason token for a transport-level timeout or connection fault, else ``None``.
+
+    The Google Cloud storage client rides on ``requests`` (including its
+    ``google.auth`` token transport), and callers that disable its built-in
+    retry (``retry=None``) see these exceptions raw. The set mirrors
+    ``google.cloud.storage.retry._RETRYABLE_TYPES`` for the transport classes:
+    read/connect timeouts, dropped or truncated connections, and api_core's
+    exhausted retry deadline. Deliberately excluded: bare ``TimeoutError``
+    (an ``asyncio.TimeoutError`` alias in worker-adjacent code is a caller
+    signal, not an IO fault) and every non-transient API response.
+    ``DeadlineExceeded`` subclasses ``GatewayTimeout`` in api_core, so the 504
+    match has to keep the Firestore deadline token intact.
+    """
+    if isinstance(error, (requests.exceptions.Timeout, RetryError)) or (
+        isinstance(error, GatewayTimeout) and not isinstance(error, DeadlineExceeded)
+    ):
+        return 'transport_timeout'
+    if isinstance(
+        error,
+        (
+            ConnectionError,
+            requests.exceptions.ConnectionError,
+            requests.exceptions.ChunkedEncodingError,
+            urllib3.exceptions.ProtocolError,
+            google_auth_exceptions.TransportError,
+        ),
+    ):
+        return 'transport_connection'
+    return None
+
+
 def firestore_failure_reason(error: BaseException) -> str:
     """Bounded, loggable token for why a Firestore call failed; never the message itself.
 
@@ -360,8 +403,14 @@ def firestore_failure_reason(error: BaseException) -> str:
     ``document_size_limit`` is permanent; ``expired_transaction``,
     ``contention``, ``deadline_exceeded``, ``unavailable``, and
     ``resource_exhausted`` are transient and succeed on a later attempt.
-    ``resource_exhausted`` is retried only by the ``transient=True`` path.
+    ``resource_exhausted`` is retried only by the ``transient=True`` path, as
+    are the ``transport_timeout`` / ``transport_connection`` tokens for
+    timeout and connection faults raised by a storage or auth HTTP transport
+    under a callable that re-reads before it writes.
     """
+    transport = _transport_failure_reason(error)
+    if transport is not None:
+        return transport
     if is_document_size_limit_error(error):
         return 'document_size_limit'
     if is_expired_transaction_error(error):
@@ -380,9 +429,21 @@ def firestore_failure_reason(error: BaseException) -> str:
 
 
 # Used only by the transient publication opt-in. The default transactional path
-# still retries an expired id alone and does not consult this set.
+# still retries an expired id alone and does not consult this set. The two
+# transport tokens cover GCS / google.auth HTTP faults raised inside a
+# transient callable (the storage client's retry is disabled there), and an
+# api_core retry deadline; both are safe to replay only because every
+# transient caller re-reads and refuses a second increment.
 _RETRYABLE_FIRESTORE_REASONS = frozenset(
-    {'expired_transaction', 'contention', 'deadline_exceeded', 'unavailable', 'resource_exhausted'}
+    {
+        'expired_transaction',
+        'contention',
+        'deadline_exceeded',
+        'unavailable',
+        'resource_exhausted',
+        'transport_timeout',
+        'transport_connection',
+    }
 )
 
 
@@ -392,7 +453,10 @@ def is_retryable_firestore_transaction_error(error: BaseException) -> bool:
     Composes ``firestore_failure_reason`` and ``is_permanent_firestore_write_rejection``.
     Expired transaction ids, contention (including the SDK's exhausted-commit
     wrapper), ``DeadlineExceeded``, ``ServiceUnavailable``, and
-    ``ResourceExhausted`` are retryable. Any other ``InvalidArgument`` is not.
+    ``ResourceExhausted`` are retryable, and so are transport-level timeouts
+    and connection faults (``requests`` timeouts, dropped connections, and
+    api_core's ``RetryError``) raised by a storage or auth transport that a
+    transient callable talks to. Any other ``InvalidArgument`` is not.
     The cause chain is walked because the SDK wraps a spent ``Aborted`` retry
     in ``ValueError``. Callers that do not pass ``transient=True`` do not use
     this predicate.
@@ -480,12 +544,17 @@ def run_transactional(
 
     ``transient=True`` is the idempotent-caller opt-in. It also restarts on contention,
     ``DeadlineExceeded``, ``ServiceUnavailable``, and ``ResourceExhausted``, with
-    equal-jitter backoff between fresh transactions. A deadline or a throttle at
-    commit can be ambiguous, so the callable must re-read and refuse a second
-    increment. Backoff runs in this helper, after the callable has returned, so a
+    equal-jitter backoff between fresh transactions. It restarts the same way on a
+    transport-level timeout or connection fault (``requests`` timeouts and dropped
+    connections from a storage or auth HTTP transport inside the callable, and
+    api_core's ``RetryError``): an upload or compose that died ambiguously is replayed
+    against its generation preconditions by the re-reading callable. A deadline or a
+    throttle at commit can be ambiguous, so the callable must re-read and refuse a
+    second increment. Backoff runs in this helper, after the callable has returned, so a
     lock held only inside the callable is not held during the sleep. The default
     path still retries only an expired transaction id and does not sleep.
-    ``outcome`` receives ``retried_ok`` or ``exhausted`` when set.
+    ``outcome`` receives ``retried_ok`` or ``exhausted`` when set, and ``reason``
+    carries the last retryable failure's reason token.
     """
     predicate = is_retryable_firestore_transaction_error if transient else is_expired_transaction_error
     caught: tuple[type[BaseException], ...] | type[Exception] = Exception if transient else (InvalidArgument, Aborted)
@@ -500,6 +569,8 @@ def run_transactional(
             return result
         except caught as error:
             retryable = predicate(error)
+            if outcome is not None and retryable:
+                outcome['reason'] = firestore_failure_reason(error)
             if attempt >= attempts or not retryable:
                 if outcome is not None and retryable and attempt >= attempts:
                     outcome['status'] = 'exhausted'

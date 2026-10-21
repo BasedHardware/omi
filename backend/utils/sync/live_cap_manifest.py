@@ -10,8 +10,8 @@ from database._client import get_data_plane_firestore_client as get_firestore_cl
 from database._client import is_retryable_firestore_transaction_error, run_transactional
 from database.legal_holds import external_write_fence
 from utils.observability.held_content import record_erasure
-from utils.sync import cap_hold
-from utils.sync.live_cap_publication import UNRECOVERED, Publication, commit_publication
+from utils.sync import cap_hold, live_cap_codec
+from utils.sync.live_cap_publication import UNRECOVERED, Publication, commit_publication, retry_transient_leaf
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +54,14 @@ def _publish(uid: str, path: str, source: Publication, metadata: dict, seconds: 
                 attempted = True
                 source.put_started = True
                 source.fields = {}  # A later failed put must not inherit a deleted generation.
-                fields = cap_hold.upload_held_audio(uid, path, identity, metadata, immutable=True)
+                fields = cap_hold.upload_held_audio(
+                    uid,
+                    path,
+                    identity,
+                    metadata,
+                    immutable=True,
+                    stored_size_limit=live_cap_codec.MAX_OBJECT_BYTES,
+                )
                 source.fields = dict(fields)
                 body = cap_hold.hold_manifest(fields, seconds, time.time(), int(metadata['timestamp']))
                 tx.create(ref, {**body, 'live_custody_version': 4, 'usage_applied': True})
@@ -112,7 +119,9 @@ def _publish(uid: str, path: str, source: Publication, metadata: dict, seconds: 
                 return None
             return UNRECOVERED
         with source.lock:
-            snapshot = ref.get()
+            # A transport fault on a custody-deciding read must not turn a
+            # committed receipt into a 1011; these leaves re-read idempotently.
+            snapshot = retry_transient_leaf(ref.get)
             row = snapshot.to_dict() if snapshot.exists else None
             if row and row.get('usage_applied'):
                 return None
@@ -135,7 +144,7 @@ def _publish(uid: str, path: str, source: Publication, metadata: dict, seconds: 
             # Exceptional path only: an upload may have succeeded before an aborted
             # commit or a deletion marker won. Never delete a committed source on a
             # lost reply, nor a replacement generation. Retain failures for retry.
-            if source.put_started and not ref.get().exists:
+            if source.put_started and not retry_transient_leaf(ref.get).exists:
                 fields = source.fields
                 blob = cap_hold.get_private_cloud_sync_bucket().blob(
                     fields.get('audio_path') or f'chunks/{uid}/cap-held/{identity}.opus.enc'
@@ -143,11 +152,11 @@ def _publish(uid: str, path: str, source: Publication, metadata: dict, seconds: 
                 try:
                     generation = fields.get('audio_generation')
                     if not generation:
-                        blob.reload(timeout=10, retry=None)  # Ambiguous reply; exceptional Class B only.
+                        retry_transient_leaf(blob.reload, timeout=10, retry=None)  # Ambiguous reply; Class B only.
                         generation = blob.generation
                     if not generation:
                         raise RuntimeError('held source generation unavailable for cleanup')
-                    blob.delete(if_generation_match=generation)
+                    retry_transient_leaf(blob.delete, if_generation_match=generation)
                 except (NotFound, PreconditionFailed):
                     pass
         return UNRECOVERED

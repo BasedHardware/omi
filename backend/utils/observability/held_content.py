@@ -22,6 +22,7 @@ CHOICE_OUTCOMES = ('ok', 'stale_period_409', 'no_capability', 'intent_only')
 RECOVERY_RESULTS = ('attempt', 'completed')
 ERASURE_OUTCOMES = ('failure', 'post_delete_publication')
 PUBLICATION_RETRY_OUTCOMES = ('retried_ok', 'exhausted', 'staged_unverified', 'source_orphaned')
+PUBLICATION_RETRY_CAUSES = ('throttle', 'timeout', 'connection', 'other')
 CHOICE_METHODS = ('get', 'put')
 
 CAPTURE = Counter(
@@ -84,12 +85,15 @@ FLEET_SNAPSHOT_TIMESTAMP = Gauge(
 ERASURE = Counter('omi_held_content_erasure', 'Held erasure failures and post-delete publication', ['outcome'])
 PUBLICATION_RETRY = Counter(
     'omi_held_content_publication_retry',
-    'Live cap publication attempts that retried a transient Firestore transaction. '
-    'retried_ok committed on a later fresh transaction; exhausted spent the bounded budget; '
+    'Live cap publication attempts that retried a transient failure, as a Firestore '
+    'transaction restart or a bounded recovery-leaf retry. '
+    'retried_ok committed on a later fresh transaction; '
+    'exhausted spent the bounded budget; '
     'staged_unverified means the staging write landed and a later read failed; '
     'source_orphaned means the flush failed closed after uploading a fragment no row names. '
-    'Labels are a closed set and never identify a person',
-    ['outcome'],
+    'cause separates Firestore throttling (throttle) from transport timeouts (timeout) '
+    'and dropped connections (connection). Labels are a closed set and never identify a person',
+    ['outcome', 'cause'],
 )
 COHORT_SOURCE = Gauge('omi_held_content_cohort_source', 'Active held-content cohort source', ['source'])
 COHORT_PERCENT = Gauge('omi_held_content_cohort_percent', 'Active held-content cohort percent; 0 denies by percent')
@@ -113,7 +117,8 @@ for _outcome in PACING_OUTCOMES:
 for _outcome in ERASURE_OUTCOMES:
     ERASURE.labels(outcome=_outcome)
 for _outcome in PUBLICATION_RETRY_OUTCOMES:
-    PUBLICATION_RETRY.labels(outcome=_outcome)
+    for _cause in PUBLICATION_RETRY_CAUSES:
+        PUBLICATION_RETRY.labels(outcome=_outcome, cause=_cause)
 for _source in ('doc', 'env', 'none'):
     COHORT_SOURCE.labels(source=_source)
 for _reason in ('read', 'schedule'):
@@ -173,9 +178,9 @@ def record_erasure(outcome: str) -> None:
         _inc(ERASURE, outcome=outcome)
 
 
-def record_publication_retry(outcome: str) -> None:
-    if outcome in PUBLICATION_RETRY_OUTCOMES:
-        _inc(PUBLICATION_RETRY, outcome=outcome)
+def record_publication_retry(outcome: str, cause: str = 'other') -> None:
+    if outcome in PUBLICATION_RETRY_OUTCOMES and cause in PUBLICATION_RETRY_CAUSES:
+        _inc(PUBLICATION_RETRY, outcome=outcome, cause=cause)
 
 
 def _gauge_number(value, *, whole: bool) -> float:
