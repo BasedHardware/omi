@@ -79,7 +79,10 @@ def test_cohort_registry_and_live_switch_contract():
             continue
         assert salt not in seen, f'{cohort} must have its own salt'
         seen[salt] = cohort
-    rows = yaml.safe_load((ROOT / 'config/feature-flags.yaml').read_text())['flags']
+    # The 240 KB registry takes ~0.7s to parse with the pure-Python loader; the C loader
+    # yields the identical structure and keeps this call-phase cost well under the guard.
+    loader = getattr(yaml, 'CSafeLoader', yaml.SafeLoader)
+    rows = yaml.load((ROOT / 'config/feature-flags.yaml').read_text(), Loader=loader)['flags']
     by_key = {row['key']: row for row in rows}
     for key in KILL_SWITCHES:
         assert by_key[key]['lifecycle'] == 'ops_kill'
