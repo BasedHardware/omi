@@ -118,10 +118,13 @@ permissions:
   issues: read
 
 concurrency:
-  # PR updates supersede earlier test runs; main and manual runs retain an
-  # independent result for every dispatch.
-  group: backend-unit-tests-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || format('run-{0}', github.run_id) }}-${{ inputs.nightly_main_sha != '' && format('nightly-{0}', github.run_id) || 'normal' }}
-  cancel-in-progress: true
+  # PR updates supersede earlier test runs. Main pushes share one ref-keyed
+  # group with cancel-in-progress false: the running suite finishes and only
+  # the newest pending main SHA runs next, so a burst of merges no longer
+  # queues a full superseded suite for every intermediate SHA. Manual
+  # dispatches join the same group and serialize behind it.
+  group: backend-unit-tests-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.ref }}-${{ inputs.nightly_main_sha != '' && format('nightly-{0}', github.run_id) || 'normal' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   # Abort a git HTTP transfer that stays under 1 KB/s for 60 s, so actions/checkout

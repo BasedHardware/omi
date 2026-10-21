@@ -24,7 +24,12 @@ permissions:
   issues: read
 
 concurrency:
-  group: backend-hermetic-e2e-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || format('run-{0}', github.run_id) }}-${{ inputs.nightly_main_sha != '' && format('nightly-{0}', github.run_id) || 'normal' }}
+  # PRs cancel their own older runs. Main pushes share one ref-keyed group
+  # with cancel-in-progress false: the running gauntlet finishes and only the
+  # newest pending main SHA runs next, so a burst of merges no longer queues
+  # a full superseded suite for every intermediate SHA. Merge-queue attempts
+  # key on their unique gh-readonly-queue refs and stay independent.
+  group: backend-hermetic-e2e-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.ref }}-${{ inputs.nightly_main_sha != '' && format('nightly-{0}', github.run_id) || 'normal' }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:

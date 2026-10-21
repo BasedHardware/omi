@@ -24,6 +24,14 @@ on:
       - '.github/workflows/python-cli-ci.yml'
       - '.github/workflows/publish_omi_cli.yml'
 
+concurrency:
+  # PRs cancel their own older runs. Main pushes share one ref-keyed group
+  # with cancel-in-progress false: the running tests finish and only the
+  # newest pending main SHA runs next — a burst of CLI merges no longer
+  # queues a superseded suite for every intermediate SHA.
+  group: python-cli-ci-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.ref }}-${{ inputs.nightly_main_sha != '' && format('nightly-{0}', github.run_id) || 'normal' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 permissions:
   contents: read
   issues: read

@@ -24,7 +24,12 @@ permissions:
   issues: read
 
 concurrency:
-  group: mobile-app-checks-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || format('run-{0}', github.run_id) }}-${{ inputs.nightly_main_sha != '' && format('nightly-{0}', github.run_id) || 'normal' }}
+  # PRs cancel their own older runs. Main pushes share one ref-keyed group
+  # with cancel-in-progress false: the running checks finish and only the
+  # newest pending main SHA runs next. The newest main SHA therefore always
+  # carries a complete push-event run, which mobile release admission
+  # (verify_mobile_release_admission.py) requires as its per-SHA proof.
+  group: mobile-app-checks-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.ref }}-${{ inputs.nightly_main_sha != '' && format('nightly-{0}', github.run_id) || 'normal' }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
