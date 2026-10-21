@@ -2053,6 +2053,26 @@ so the burst surfaced as `Listen pending finalization failed
 stage=lifecycle_rollover` (×135/30m in the same 2026-10-14 window) instead
 of a replay on a fresh transaction.
 
+Since 2026-10-21 the session's shadow fail-open arms learned the last
+transient shape: the retired-id commit itself. ``run_transactional`` restarts
+an expired transaction on a fresh id, and the shared budget replays
+contention, but a burst that outlives both still surfaces one bare
+``InvalidArgument 400 The referenced transaction has expired or is no longer
+valid`` at the boundary — the SDK raises it from ``_commit`` and never
+retries it. The renewal classified that 400 as a real write failure:
+prod backend-listen 2026-10-21 logged
+`recording session lease renewal failed` with its
+`renew_live_recording_session_lease` traceback ×70/30m (the top signature of
+the window) plus the `open_recording_session` sibling ×33/30m, across every
+listen pod. All three boundaries (`renew_live_recording_session_lease`,
+`open_recording_session`, `record_recording_session_event`) now classify the
+retirement through the same expiry test the restart budget uses, so a drained
+burst keeps the log-only transient arm — WARNING, no stack trace, no
+`omi_fallback_total` degradation event — and the next renewal, open (every
+reconnect) or lifecycle event re-attempts the durable write. Enforce mode
+still raises, and a random `InvalidArgument` without the retirement marker is
+still a real failed write.
+
 Eligible meeting receipts also carry the stable Chat intent ID and, after the
 desktop kernel acknowledges its journal write, the materialization time. The
 durable receipt projection remains on the finalization write path. The disabled

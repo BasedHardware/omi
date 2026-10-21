@@ -94,6 +94,9 @@ def _build_fakes() -> dict[str, ModuleType]:
     client_mod.run_transactional = MagicMock(name='run_transactional')
     client_mod.get_customer_firestore_client = lambda: client_mod.db
     client_mod.data_plane_db = MagicMock(name='data_plane_db')
+    # lifecycle (via process_conversation) classifies the retired-transaction
+    # 400 through this seam at import time.
+    client_mod.is_expired_transaction_error = lambda error: False
     add('database._client', client_mod)
 
     for name in (

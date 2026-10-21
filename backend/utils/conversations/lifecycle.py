@@ -26,6 +26,7 @@ from database.firestore_transaction_retry import (
     FirestoreContentionExhausted,
     is_transaction_contention,
 )
+from database._client import is_expired_transaction_error
 from models.conversation_enums import ConversationStatus
 from utils.cloud_tasks import (
     enqueue_listen_finalization_job,
@@ -83,6 +84,37 @@ def recording_session_mode() -> str:
     """Return the bounded recording-session rollout mode, defaulting to dual write."""
     configured = os.getenv('RECORDING_SESSION_MODE', 'dual_write').strip().lower()
     return configured if configured in RECORDING_SESSION_MODES else 'dual_write'
+
+
+def _is_recording_session_transient(error: BaseException) -> bool:
+    """Classify the bounded transients the session's fail-open branch absorbs.
+
+    Two shapes reach the lifecycle owner after the write layer's bounded
+    budgets drain, and both leave Firestore with nothing written:
+
+    - contention exhaustion: every attempt of the shared budget hit atomic
+      contention (or the SDK's same-id replay of it);
+    - transaction-id retirement: the commit of an already-retired transaction
+      id returns ``InvalidArgument 400 The referenced transaction has expired
+      or is no longer valid`` — the same-id replay's terminal form, which the
+      SDK classifies as a permanent 400 and never retries (prod backend-listen
+      2026-10-21: the renewal boundary logged this exact terminal exception
+      ×70/30m as ``recording session lease renewal failed`` tracebacks, and
+      its ``open_recording_session`` sibling added ×33 more).
+
+    A retirement that survives the restart budget is the same bounded
+    transient by construction: a fresh transaction was already minted for
+    every replay, so a drain means the burst outlived the budget, not that a
+    write was refused. Classifying it here — instead of letting it fall to the
+    failed-write arm — keeps the next renewal/open/event (one minute, one
+    reconnect, one lifecycle callback away) as the recovery path, without a
+    traceback or a ``omi_fallback_total`` degradation event.
+    """
+    return (
+        isinstance(error, FirestoreContentionExhausted)
+        or is_transaction_contention(error)
+        or is_expired_transaction_error(error)
+    )
 
 
 def _status_value(status: ConversationStatus | str | None) -> str:
@@ -502,7 +534,7 @@ def open_recording_session(
     except Exception as error:
         if recording_session_mode() == 'enforce':
             raise
-        if isinstance(error, FirestoreContentionExhausted) or is_transaction_contention(error):
+        if _is_recording_session_transient(error):
             # Firestore replayed the open at both transaction boundaries and
             # every attempt hit atomic contention or an expired id; nothing was
             # written. This open proceeds on the shadow legacy route exactly as
@@ -598,7 +630,7 @@ def record_recording_session_event(
     except Exception as error:
         if recording_session_mode() == 'enforce':
             raise
-        if isinstance(error, FirestoreContentionExhausted) or is_transaction_contention(error):
+        if _is_recording_session_transient(error):
             # Same transient arm as the session open: the write layer's budget
             # already replayed the burst on fresh transactions, so exhaustion
             # here is bounded contention — this event is dropped with the
@@ -688,12 +720,13 @@ def renew_live_recording_session_lease(
     except Exception as error:
         if recording_session_mode() == 'enforce':
             raise
-        if isinstance(error, FirestoreContentionExhausted) or is_transaction_contention(error):
+        if _is_recording_session_transient(error):
             # Firestore retried the renewal at both transaction boundaries and
-            # every attempt hit atomic contention; nothing was written. The
-            # next minute's audio activity re-arms the renewal, so this is the
-            # bounded transient — not the failed write the fail-open branch
-            # exists for. Log-only; no omi_fallback_total degradation event.
+            # every attempt hit atomic contention or a retired transaction id;
+            # nothing was written. The next minute's audio activity re-arms the
+            # renewal, so this is the bounded transient — not the failed write
+            # the fail-open branch exists for. Log-only; no
+            # omi_fallback_total degradation event.
             logger.warning(
                 'recording session lease renewal contended uid=%s session=%s conversation=%s',
                 uid,
