@@ -4,13 +4,15 @@ No transcript bodies are copied into scheduler metadata. Durable completion is
 separate from the Redis client projection, and can repair a lost Redis reply.
 """
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import logging
+import re
 from typing import Any
 
 from google.cloud import firestore
 
 from database.batch_pipeline_policy import load_stage_policy
+from database.batch_pipeline_shadow_hook import mirror_refresh
 from config.policy import ProjectionPolicy
 from database.fsr_read_cache import writing
 from database.batch_pipeline_store import FirestoreStore
@@ -34,6 +36,24 @@ from database.batch_pipeline_projection_session import ProjectionSession as Proj
 
 logger = logging.getLogger(__name__)
 
+_USAGE_PERIOD = re.compile(r'(\d{4})-(\d{2})')
+
+
+def usage_stamp(now: datetime, usage_period: Any) -> datetime:
+    """Hour stamp for projection usage: ``now``, backdated into ``usage_period`` only across a rollover.
+
+    A cap-hold unit admitted under the owner's funded choice in month M is billed to M even when
+    projection completes in M+1 (lane 6, Subscription ruling B(a)). The stamp moves only backwards, to
+    the period's last second, and the hourly doc id/year/month/day/hour all derive from it, so the
+    month query reads it as M (transcription has no day rollup). Missing or malformed periods keep now.
+    """
+    match = _USAGE_PERIOD.fullmatch(usage_period) if isinstance(usage_period, str) else None
+    if match is None or not 1 <= int(match.group(2)) <= 12:
+        return now
+    start = datetime(int(match.group(1)), int(match.group(2)), 1, tzinfo=timezone.utc)
+    end = (start + timedelta(days=32)).replace(day=1)
+    return end - timedelta(seconds=1) if now >= end else now
+
 
 class ProjectionStore:
     def __init__(self, store: FirestoreStore):
@@ -45,6 +65,23 @@ class ProjectionStore:
 
     def ref(self, table: str, key: str):
         return self.client.collection(f'{self.store.namespace}_{table}').document(key)
+
+    def _mirror(self, binding: ProjectionBinding, extra: list[tuple[str, str]] | tuple = ()) -> None:
+        # A2 shadow: these transactions write batch docs outside Store.run; no-op unless shadow mode.
+        # The owner row too: assignment advances its projection_watermark (staging 10-20: 59 owners rows
+        # diverged at rest because no refresh named them).
+        namespace = getattr(self.store, 'namespace', '')
+        keys = [(t, s) for s in binding.segment_ids for t in ('jobs', 'results')]
+        mirror_refresh(namespace, [*keys, ('owners', owner_key(binding.owner_id)), *extra])
+
+    def mirror_assignment(self, session: Any) -> None:
+        """After an assignment transaction (``assign_sync_conversation``): re-copy the binding's rows, the
+        owner's watermark and the erased predecessors whose ``expires_at`` it stamped. Never raises."""
+        try:
+            erased = [('results', reference.id) for reference in getattr(session, 'erased_predecessors', ())]
+            self._mirror(session.binding, erased)
+        except Exception:
+            logger.warning('event=jobstore_shadow op=refresh outcome=hook_error site=projection_assignment')
 
     def read(self, segment_id: str) -> tuple[dict[str, Any], dict[str, Any], ProjectionBinding]:
         # This snapshot is a fetch hint only. Every mutation rereads it atomically.
@@ -85,7 +122,9 @@ class ProjectionStore:
             session.write_receipt(transaction, receipt)
             return receipt
 
-        return self.run(commit, policy=policy)
+        receipt = self.run(commit, policy=policy)
+        self._mirror(binding)
+        return receipt
 
     def check(self, session):
         @firestore.transactional
@@ -107,6 +146,7 @@ class ProjectionStore:
             transaction.update(session.result_ref, {'projection_state': 'completed'})
 
         self.run(commit, policy=policy)
+        self._mirror(binding)
 
     def status(self, uid: str, content_id: str) -> dict | None:
         @firestore.transactional
@@ -136,53 +176,68 @@ class ProjectionStore:
         part_index=None,
         policy=None,
     ):
-        from utils.sync import reprocess
+        from config.sync_reprocess import settle_seconds
+        from database.outbox_firestore import FirestoreEnrichmentOutbox
+        from utils.enrichment import outbox as reprocess
 
+        if not reprocess.owns_runtime():
+            raise RuntimeError('sync reprocess projection requires production or a Firestore emulator')
         policy = policy or self.policy(segment_id)
+        document_id = reprocess.key(binding.owner_id, canonical)
+        outbox = FirestoreEnrichmentOutbox(self.client)
 
-        def mutate(document_id, operation):
-            @firestore.transactional
-            def commit(transaction):
-                session = self.session(segment_id, binding, now, part_index=part_index, policy=policy)
-                session.prepare(transaction, replay=False)
-                session.guard(transaction, [canonical])
-                receipt = dict(session.receipt())
-                ref = self.client.collection(reprocess.COLLECTION).document(document_id)
-                snapshot = ref.get(transaction=transaction)
-                old = snapshot.to_dict() if snapshot.exists else None
-                if receipt.get('state') == 'ready':
-                    return {**(old or {}), '_wake': False}, True
-                row, result = operation(old)
-                if old is None and session.job.get('priority') != 0:
-                    from utils.cloud_tasks import is_sync_backfill_routing_enabled
+        def commit(transaction):
+            session = self.session(segment_id, binding, now, part_index=part_index, policy=policy)
+            session.prepare(transaction, replay=False)
+            session.guard(transaction, [canonical])
+            receipt = dict(session.receipt())
+            if receipt.get('state') == 'ready':
+                return None
+            backfill = session.job.get('priority') != 0
+            # The enrichment obligation and its exactly-once projection
+            # receipt commit together, fenced against account deletion.
+            result = outbox.enqueue(
+                document_id,
+                binding.owner_id,
+                {'conversation_id': canonical, 'language': language},
+                now + settle_seconds(),
+                tx=_ClientTransaction(self.client, transaction),
+                now=now,
+                new_dispatch=self._backfill_dispatch if backfill else None,
+                snapshot_summary=True,  # E1: the first-summary policy is snapshotted on the obligation
+            )
+            receipt.update(state='ready', conversation_id=canonical)
+            session.write_receipt(transaction, receipt)
+            return result
 
-                    if is_sync_backfill_routing_enabled():
-                        import os
+        result = self.run(firestore.transactional(commit), policy=policy)
+        if result is not None and result.wake_token:
+            outbox.wake(result.row_id, result.wake_token)  # Durable before wake; the sweep repairs a miss.
+        self._mirror(binding)  # after the wake: the first-summary dispatch path never waits on the shadow
 
-                        queue = os.getenv('SYNC_BACKFILL_TASKS_QUEUE', '').strip()
-                        handler = os.getenv('SYNC_BACKFILL_TASKS_HANDLER_URL', '').strip()
-                        if not queue or not handler:
-                            raise ProjectionBlocked('backfill enrichment dispatch binding required')
-                        dispatch = {
-                            'queue': queue,
-                            'handler': handler,
-                            'audience': os.getenv('SYNC_BACKFILL_TASKS_OIDC_AUDIENCE') or handler,
-                            'invoker_sa': os.getenv('SYNC_TASKS_INVOKER_SA', ''),
-                        }
-                        if not reprocess.valid_dispatch_binding(dispatch):
-                            raise ProjectionBlocked('complete backfill enrichment dispatch binding required')
-                        row['dispatch'] = dispatch
-                        result = (row, result[1])
-                # The enrichment obligation and its exactly-once projection
-                # receipt commit together, fenced against account deletion.
-                transaction.set(ref, row)
-                receipt.update(state='ready', conversation_id=canonical)
-                session.write_receipt(transaction, receipt)
-                return result
+    @staticmethod
+    def _backfill_dispatch() -> dict[str, str] | None:
+        """A backfill unit keeps the backfill queue binding on a new obligation (None: host binding)."""
+        from utils.cloud_tasks import is_sync_backfill_routing_enabled
+        from utils.enrichment import outbox as reprocess
 
-            return self.run(commit, policy=policy)
+        if not is_sync_backfill_routing_enabled():
+            return None
+        import os
 
-        reprocess.mark(binding.owner_id, canonical, language, now=now, mutate=mutate, snapshot_summary=True)
+        queue = os.getenv('SYNC_BACKFILL_TASKS_QUEUE', '').strip()
+        handler = os.getenv('SYNC_BACKFILL_TASKS_HANDLER_URL', '').strip()
+        if not queue or not handler:
+            raise ProjectionBlocked('backfill enrichment dispatch binding required')
+        dispatch = {
+            'queue': queue,
+            'handler': handler,
+            'audience': os.getenv('SYNC_BACKFILL_TASKS_OIDC_AUDIENCE') or handler,
+            'invoker_sa': os.getenv('SYNC_TASKS_INVOKER_SA', ''),
+        }
+        if not reprocess.valid_dispatch_binding(dispatch):
+            raise ProjectionBlocked('complete backfill enrichment dispatch binding required')
+        return dispatch
 
     def run(self, operation, *, policy=None):
         # Same bounded opt-in read-contention retry as legacy sync (#21680).
@@ -227,7 +282,9 @@ class ProjectionStore:
                 transaction.update(session.result_ref, {'projection_state': 'quarantine_held'})
             return held
 
-        return self.run(commit, policy=policy)
+        held = self.run(commit, policy=policy)
+        self._mirror(binding)
+        return held
 
     def prepare_accounting(self, binding: ProjectionBinding, now: float, *, held: bool = False) -> dict | None:
         """Resolve usage attribution outside the retryable completion transaction.
@@ -281,6 +338,9 @@ class ProjectionStore:
         stamp = datetime.fromtimestamp(now, timezone.utc)
         updates = {}
         if int(seconds) - int(charged) > 0 and ledger.get('status') != 'completed':
+            # Lane 6 ruling B(a): bill a cap-hold unit to its funded month across a rollover.
+            intake = self.ref('intakes', binding.job_id).get().to_dict() or {}
+            stamp = usage_stamp(stamp, intake.get('usage_period'))
             from database.llm_usage import resolve_usage_plan_id
             from database.hourly_usage_updates import prepare_hourly_usage_updates
 
@@ -395,6 +455,7 @@ class ProjectionStore:
 
         with writing('usage_month_cache', binding.owner_id):
             result, changed, seconds = self.run(commit, policy=policy)
+        self._mirror(binding)
         if changed:
             record_correctness('projection_completed', seconds=seconds)
         return result
@@ -619,3 +680,11 @@ def held_without_recovery(job: dict) -> bool:
         and isinstance(raw, dict)
         and not RecoveryPolicy.from_dict(raw).recovery_enabled
     )
+
+
+class _ClientTransaction:
+    """A raw Firestore transaction with the client that owns it, for ``Outbox.enqueue(tx=...)``."""
+
+    def __init__(self, client, transaction):
+        self.client = client
+        self.transaction = transaction

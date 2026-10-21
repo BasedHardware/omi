@@ -4100,7 +4100,8 @@ async def test_legacy_fresh_refusal_preserves_backfill_pause_instead_of_429(monk
 
 
 @pytest.mark.asyncio
-async def test_dark_unowned_allowlisted_byok_upload_keeps_batch_intake_hold(monkeypatch):
+async def test_byok_upload_enters_batch_admission_like_any_upload(monkeypatch):
+    """David 10-19: no special BYOK path; the request keys are never needed by the batch stages."""
     monkeypatch.setenv('BATCH_PIPELINE_LIVE_ADMISSION_ENABLED', 'false')
     monkeypatch.setenv('BATCH_PIPELINE_ENABLED', 'true')
     monkeypatch.setenv('BATCH_PIPELINE_PERCENT', '0')
@@ -4111,6 +4112,8 @@ async def test_dark_unowned_allowlisted_byok_upload_keeps_batch_intake_hold(monk
     store.run.side_effect = lambda body: body(transaction)
     monkeypatch.setattr(_batch_intake, 'FirestoreStore', lambda *_: store)
     module.has_byok_keys = MagicMock(return_value=True)
+    authorize = MagicMock(side_effect=RuntimeError('synthetic staging stop'))
+    monkeypatch.setattr(_batch_intake, 'batch_artifact_authorize', authorize)
     accepted = AsyncMock(wraps=_batch_intake.accept_upload)
     module.accept_batch_upload = accepted
     try:
@@ -4119,12 +4122,12 @@ async def test_dark_unowned_allowlisted_byok_upload_keeps_batch_intake_hold(monk
             uid='test-uid',
             conversation_id='unowned-record',
         )
+        # The synthetic stop inside batch admission answers the ordinary batch retry, not a BYOK hold.
         assert response.status_code == 503
-        assert json.loads(response.body)['code'] == 'sync_batch_byok_unavailable'
-        assert response.headers['Retry-After'] == '30'
+        assert json.loads(response.body)['code'] == 'sync_batch_unavailable'
         accepted.assert_awaited_once()
         assert accepted.call_args.kwargs['byok_enabled'] is True
-        assert transaction.get.call_count == 1  # Existing content-ledger read only.
+        authorize.assert_called_once()
         transaction.put.assert_not_called()
         module.create_sync_job.assert_not_called()
         module.claim_sync_content.assert_not_called()

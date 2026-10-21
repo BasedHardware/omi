@@ -645,18 +645,31 @@ class Projector:
             '_batch_require_live_target': True,
             '_batch_replace_live': {'start': item.capture_at, 'end': item.capture_at + item.duration_seconds},
         }
-        conversations_db.assign_sync_conversation(
-            binding.owner_id,
-            incoming,
-            target_id=binding.target_conversation_id,
-            firestore_client=self.store.client,
-            before_assign=session.prepare,
-            validate_plan=session.validate_plan,
-            after_assign=lambda transaction, planned: session.persist(transaction, planned),
-            retry_contention=session.policy.projection_contention,
-            timing=session.policy.projection_timing,
-            **self._index_options(hint),
-        )
+        try:
+            conversations_db.assign_sync_conversation(
+                binding.owner_id,
+                incoming,
+                target_id=binding.target_conversation_id,
+                firestore_client=self.store.client,
+                before_assign=session.prepare,
+                validate_plan=session.validate_plan,
+                after_assign=lambda transaction, planned: session.persist(transaction, planned),
+                retry_contention=session.policy.projection_contention,
+                timing=session.policy.projection_timing,
+                **self._index_options(hint),
+            )
+        finally:
+            self._mirror_assignment(session)
+
+    def _mirror_assignment(self, session) -> None:
+        # A2 shadow: the assignment transaction writes the owner watermark and predecessor results outside
+        # Store.run. A strict no-op unless shadow mode; idempotent (re-copies current state); never raises.
+        try:
+            mirror = getattr(self.store, 'mirror_assignment', None)
+            if mirror is not None:
+                mirror(session)
+        except Exception:
+            logger.warning('event=jobstore_shadow op=refresh outcome=hook_error site=projection_assignment')
 
     def assign_parts(self, item, entry, binding, *, finish=True, policy=None, hint=None):
         policy = policy or self.store.policy(item.segment_id)
@@ -759,19 +772,22 @@ class Projector:
                             found, candidate = self._parallel_candidate(pending_candidate, span, deadline)
                             if not found:
                                 candidate = get_closest_conversation_to_timestamps(binding.owner_id, *span)
-                    assigned = conversations_db.assign_sync_conversation(
-                        binding.owner_id,
-                        incoming,
-                        target_id=context.target_id,
-                        candidate_id=candidate['id'] if candidate else None,
-                        firestore_client=self.store.client,
-                        before_assign=session.prepare,
-                        validate_plan=session.validate_plan,
-                        after_assign=persisted,
-                        retry_contention=policy.projection_contention,
-                        timing=policy.projection_timing,
-                        **self._index_options(hint),
-                    )
+                    try:
+                        assigned = conversations_db.assign_sync_conversation(
+                            binding.owner_id,
+                            incoming,
+                            target_id=context.target_id,
+                            candidate_id=candidate['id'] if candidate else None,
+                            firestore_client=self.store.client,
+                            before_assign=session.prepare,
+                            validate_plan=session.validate_plan,
+                            after_assign=persisted,
+                            retry_contention=policy.projection_contention,
+                            timing=policy.projection_timing,
+                            **self._index_options(hint),
+                        )
+                    finally:
+                        self._mirror_assignment(session)
                     receipt = receipt_box[0]
                     record_labels(assigned[2])
                     if assigned[0].pop('_sync_lineage_stamp_gap_refused', False):

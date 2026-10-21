@@ -15,7 +15,7 @@ _MUTATE = reprocess._mutate
 
 @pytest.fixture
 def state(monkeypatch):
-    from utils.sync import enrichment_scan
+    from utils.enrichment import scan as enrichment_scan
 
     rows, tasks = {}, []
 

@@ -8,6 +8,36 @@ from google.cloud import firestore
 from database.batch_pipeline_privacy import BatchPrivacyBlocked, BatchPrivacyReason, assert_batch_write_allowed
 
 
+def discard_blocked(document_id: str) -> bool:
+    """A deletion/protection fence retires derived work without recreating it."""
+    from utils.enrichment import outbox
+
+    client = outbox.get_firestore_client()
+    ref = client.collection(outbox.COLLECTION).document(document_id)
+
+    @firestore.transactional
+    def discard(transaction):
+        row = ref.get(transaction=transaction).to_dict() or {}
+        if not row or row.get('dormant'):
+            return False
+        try:
+            assert_batch_write_allowed(client, transaction, row['uid'], conversation_ids=[row['conversation_id']])
+        except BatchPrivacyBlocked as error:
+            if error.reason in {
+                BatchPrivacyReason.CONVERSATION_REDIRECT_CYCLE,
+                BatchPrivacyReason.CONVERSATION_REDIRECT_MISSING,
+                BatchPrivacyReason.CONVERSATION_FENCE_BUDGET,
+            }:
+                # Invalid topology is not evidence of user deletion. The real
+                # callback defers unresolved redirects without forgetting debt.
+                return False
+            transaction.delete(ref)
+            return True
+        return False
+
+    return discard(client.transaction())
+
+
 def transfer_redirect(document_id: str, token: str, owner: str, canonical: str, *, now: float) -> dict | None:
     """Coalesce into one canonical outbox before retiring the donor.
 
@@ -15,7 +45,7 @@ def transfer_redirect(document_id: str, token: str, owner: str, canonical: str, 
     canonical callback still takes its normal snapshot and publication fences;
     transferring metadata is never a summary/provider completion receipt.
     """
-    from utils.sync import reprocess
+    from utils.enrichment import outbox as reprocess
 
     client = reprocess.get_firestore_client()
     source = client.collection(reprocess.COLLECTION).document(document_id)

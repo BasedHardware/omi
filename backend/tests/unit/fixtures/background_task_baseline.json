@@ -288,7 +288,7 @@
       "why": "reviewed safe: best-effort playback cache warming"
     },
     {
-      "path": "utils/sync/reprocess.py",
+      "path": "utils/enrichment/outbox.py",
       "function": "_heartbeat",
       "kind": "threading.Thread",
       "count": 1,

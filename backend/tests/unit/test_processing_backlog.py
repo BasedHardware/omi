@@ -19,6 +19,12 @@ from utils.conversations import process_conversation as pipeline
 from routers import users as route
 
 
+@pytest.fixture(autouse=True)
+def no_cap_hold_reservations(monkeypatch):
+    # Cap-hold batch reservations (lane 6) are covered by test_cap_hold_batch_debit.py; here none are open.
+    monkeypatch.setattr(worker.cap_hold_reservations, 'open_units', lambda *args, **kwargs: 0.0)
+
+
 def allowance(remaining=130, managed=True):
     return SimpleNamespace(managed=managed, remaining_units=remaining, budget_units=1300)
 

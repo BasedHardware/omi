@@ -4,6 +4,7 @@ The async coordinator borrows leaf workers. Audio stays held until transcription
 content persistence and idempotent usage settlement succeed, including silence.
 """
 
+from functools import partial
 import logging
 import threading
 import time
@@ -11,6 +12,7 @@ import time
 from typing import Any, Awaitable, Callable
 from google.api_core.exceptions import NotFound
 
+from config.rate_card import recording_units_per_hour
 from config.stt_cap_dispatch import recovery_admission_enabled as enabled, any_recovery_admission_enabled, hold_lane
 from database import users as users_db
 from database import sync_cap_holds, sync_cap_recovery, cap_recovery_pacing
@@ -19,7 +21,8 @@ from utils.executors import run_blocking, db_executor, sync_executor, storage_ex
 from utils.stt_cap_dispatch import sync_allowed
 from utils.fair_use import get_hard_restriction_status, is_daily_audio_ceiling_exceeded
 from utils.stt.pre_recorded import get_prerecorded_service
-from utils.sync import cap_hold, cap_recovery_plan, cap_work_budget
+from utils import funded_processing
+from utils.sync import cap_hold, cap_hold_reservations, cap_recovery_plan, cap_work_budget
 from utils.observability.held_content import record_erasure, record_recovery, record_pacing
 from utils.observability.stt_cap_dispatch import record_reconciliation
 from utils.sync.cap_recovery_audio import prepare as prepare_audio
@@ -457,26 +460,70 @@ def _settle_and_erase(uid: str, snapshot: Any, row: dict) -> None:
         _erase(uid, snapshot, row)
 
 
-async def selected_for_recovery(uid: str, row: dict) -> bool:
+async def _selected_lane(uid: str, row: dict) -> str | None:
+    """The hold's original dispatch lane when this owner and lane are in recovery scope, else None.
+
+    Recovery scope = execution admission plus main's optional recovery cohort (#22991)."""
     if not any_recovery_admission_enabled(uid):
-        return False
+        return None
     meta = await run_blocking(storage_executor, cap_hold.metadata, uid, row)
     lane = hold_lane(meta)
-    return lane is not None and enabled(uid, lane)
+    return lane if lane is not None and enabled(uid, lane) else None
+
+
+async def selected_for_recovery(uid: str, row: dict) -> bool:
+    return await _selected_lane(uid, row) is not None
 
 
 async def recover_selected(uid: str, snapshot: Any) -> bool:
     """One explicitly selected manifest, retaining existing claim/receipt fences."""
     row = snapshot.to_dict() or {}
-    if not await selected_for_recovery(uid, row):
+    lane = await _selected_lane(uid, row)
+    if lane is None:
         return False
     if row.get('state') == 'completed':
         await run_blocking(storage_executor, _settle_and_erase, uid, snapshot, row)
+        return True
+    if row.get('state') == 'batch_admitted':
+        # Terminal hand-off (lane 8): batch owns this audio. Only finish an interrupted erase; never
+        # claim, re-admit, or settle it (settlement would bill the batch-processed audio twice).
+        await run_blocking(storage_executor, _erase, uid, snapshot, row)
         return True
     row = await run_blocking(db_executor, cap_hold.claim, uid, snapshot.reference, time.time())
     if row is None:
         return False
     try:
+        from utils.batch_pipeline import cap_hold_admission
+
+        if await run_blocking(db_executor, cap_hold_admission.enabled_for, row):
+            # Legacy draining/dark: re-enter through batch admission (lane 8). Batch owns the
+            # conversation and usage; the hold is handed off and erased, never settled as legacy.
+            # The same new-dispatch gate as legacy recovery (funded allowance, hard restriction,
+            # daily ceiling) on the hold's original lane: a gated owner's audio stays held.
+            if not await run_blocking(db_executor, _new_dispatch_allowed, uid, lane):
+                return False
+            # checkpoint() decrements the held-audio summary in this same transaction (held -> batch_admitted).
+            admitted = await cap_hold_admission.admit_held(uid, snapshot, row)
+            if admitted.outcome not in ('admitted', 'already_admitted'):
+                return False
+            # Batch debits at projection, not here. Reserve the hold's units (the backlog worker's own
+            # candidate units) before the hand-off is durable, so the next candidate sees this spend
+            # (lane 6, Subscription ruling 10-19). Idempotent per hold; settled by the batch outcome.
+            await run_blocking(
+                db_executor,
+                partial(
+                    cap_hold_reservations.reserve,
+                    uid,
+                    snapshot.id,
+                    units=cap_hold.remaining_seconds(row) * float(recording_units_per_hour('batch')) / 3600,
+                    period=funded_processing.period_id(),
+                    batch_job_id=admitted.batch_job_id or '',
+                ),
+            )
+            if not await _save(uid, snapshot, row, {'state': 'batch_admitted', 'batch_job_id': admitted.batch_job_id}):
+                return False
+            await run_blocking(storage_executor, _erase, uid, snapshot, row)
+            return True
         if not await _recover_row(uid, snapshot, row):
             return False
         if not await _save(uid, snapshot, row, {'state': 'completed'}):

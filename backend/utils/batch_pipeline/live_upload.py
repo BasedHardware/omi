@@ -146,8 +146,9 @@ async def registered_record_response(
         if awaiting_reservation or (snapshot is not None and not snapshot.exists and policy.live_record_enabled):
             return _pending()
         if snapshot is not None and snapshot.exists and not row.get('record_lane_owner'):
-            # Only enabled admission may establish a new dispatcher.
-            owner = 'batch_sync_v1' if policy.batch_enabled and not byok_enabled else 'legacy_final_pass_v1'
+            # Only enabled admission may establish a new dispatcher. BYOK takes the
+            # batch owner like any upload (David, 10-19): no request-scoped keys needed.
+            owner = 'batch_sync_v1' if policy.batch_enabled else 'legacy_final_pass_v1'
             revision = await run_blocking(
                 db_executor,
                 claim_record_lane_owner,

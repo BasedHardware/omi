@@ -87,17 +87,45 @@ outputs:
 runs:
   using: composite
   steps:
+    - name: Resolve ops-owned backfill queues
+      if: ${{ inputs.mode == 'worker' }}
+      id: ops-queues
+      shell: bash
+      env:
+        BACKFILL_ENV: ${{ inputs.backfill_env_vars }}
+      run: |
+        set -euo pipefail
+        # B4: the live backfill queue is an ops value (backend/deploy/ops/prod.yaml), read from the
+        # reviewed deploy-control source, so a train never re-points backfill at a queue an operator
+        # retired (10-19 04:52Z sync-backfill stall). Prod fails closed if the ops file has no value.
+        # Non-prod: the manifest's values win (main #22460), sync-backfill only when it declares none.
+        backfill_queue="$(sed -n 's/^SYNC_BACKFILL_TASKS_QUEUE=//p' <<<"${BACKFILL_ENV:-}" | tail -n 1)"
+        worker_queue="$(sed -n 's/^SYNC_TASKS_QUEUE=//p' <<<"${BACKFILL_ENV:-}" | tail -n 1)"
+        backfill_queue="${backfill_queue:-sync-backfill}"
+        worker_queue="${worker_queue:-sync-backfill}"
+        if [[ '${{ inputs.project_id }}' == 'based-hardware' ]]; then
+          python3 -m pip install -q PyYAML==6.0.1
+          DEPLOY_CONTROL_SCRIPT_DIR="${DEPLOY_CONTROL_SCRIPTS:-backend/scripts}"
+          ops_env="$(python3 "$DEPLOY_CONTROL_SCRIPT_DIR/ops_train.py" render-env --env prod \
+            --service '${{ inputs.service }}-sync-backfill')"
+          backfill_queue="$(sed -n 's/^SYNC_BACKFILL_TASKS_QUEUE=//p' <<<"$ops_env")"
+          worker_queue="$(sed -n 's/^SYNC_TASKS_QUEUE=//p' <<<"$ops_env")"
+          if [[ -z "$backfill_queue" || -z "$worker_queue" ]]; then
+            echo "ops file declares no backfill queues for ${{ inputs.service }}-sync-backfill" >&2
+            exit 1
+          fi
+        fi
+        echo "Backfill queues: SYNC_BACKFILL_TASKS_QUEUE=$backfill_queue SYNC_TASKS_QUEUE=$worker_queue"
+        echo "backfill_queue=$backfill_queue" >> "$GITHUB_OUTPUT"
+        echo "worker_queue=$worker_queue" >> "$GITHUB_OUTPUT"
+
     - name: Resolve backfill service URL
       if: ${{ inputs.mode == 'worker' }}
       id: backfill-service
       shell: bash
       env:
-        BACKFILL_ENV: ${{ inputs.backfill_env_vars }}
+        BACKFILL_QUEUE: ${{ steps.ops-queues.outputs.backfill_queue }}
       run: |
-        # The manifest owns the live backfill queue (prod: sync-backfill-fresh since the 10-19
-        # 04:52Z stall); sync-backfill is only the default when the manifest declares none.
-        BACKFILL_QUEUE="$(sed -n 's/^SYNC_BACKFILL_TASKS_QUEUE=//p' <<<"${BACKFILL_ENV:-}" | tail -n 1)"
-        BACKFILL_QUEUE="${BACKFILL_QUEUE:-sync-backfill}"
         PROJECT_NUMBER="$(gcloud projects describe "${{ inputs.project_id }}" --format='value(projectNumber)')"
         URL="https://${{ inputs.service }}-sync-backfill-${PROJECT_NUMBER}.${{ inputs.region }}.run.app"
         echo "url=${URL}" >> "$GITHUB_OUTPUT"
@@ -115,8 +143,8 @@ runs:
       shell: bash
       env:
         ENV_OVERLAY: |-
-          SYNC_TASKS_QUEUE=sync-backfill
           ${{ inputs.backfill_env_vars }}
+          SYNC_TASKS_QUEUE=${{ steps.ops-queues.outputs.worker_queue }}
           SYNC_TASKS_HANDLER_URL=${{ steps.backfill-service.outputs.url }}/v2/sync-jobs/run
           SYNC_TASKS_OIDC_AUDIENCE=${{ steps.backfill-service.outputs.url }}/v2/sync-jobs/run
         SECRET_OVERLAY: ${{ inputs.backfill_secrets }}
@@ -252,8 +280,14 @@ runs:
         BACKFILL_ENV: ${{ inputs.backfill_env_vars }}
       run: |
         set -euo pipefail
-        # Reconcile the queue the manifest routes backfill to (prod: sync-backfill-fresh); the
-        # retired sync-backfill queue is left as it is.
+        # B4: in prod the live backfill queue's name and rates are ops values
+        # (backend/deploy/ops/prod.yaml cloud_tasks), applied and verified only by the
+        # config-train, so a train never rewrites them (one source, not train + ops file).
+        if [[ '${{ inputs.project_id }}' == 'based-hardware' ]]; then
+          echo "prod backfill queue is owned by the ops file and config-train; train does not reconcile it"
+          exit 0
+        fi
+        # Elsewhere reconcile the queue the manifest routes backfill to, defaulting to sync-backfill.
         BACKFILL_QUEUE="$(sed -n 's/^SYNC_BACKFILL_TASKS_QUEUE=//p' <<<"${BACKFILL_ENV:-}" | tail -n 1)"
         BACKFILL_QUEUE="${BACKFILL_QUEUE:-sync-backfill}"
         # Keep the train ceiling of 90, bounded by the live worker cap x concurrency 6.

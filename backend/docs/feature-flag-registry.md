@@ -1,4 +1,4 @@
-<!-- feature-flag-registry as-of: 2026-10-22 -->
+<!-- feature-flag-registry as-of: 2026-10-21 -->
 
 # Feature-flag authority registry
 
@@ -109,7 +109,7 @@ entries are exempt: they are queued for removal, not running.
 
 ## Overdue for a decision
 
-None as of 2026-10-22.
+None as of 2026-10-21.
 
 ## Flags
 
@@ -149,6 +149,7 @@ and an explicit empty literal renders as `''`.
 | `AUDIO_ARCHIVE_UID_ALLOWLIST` | Default-off as-captured audio rollout setting AUDIO_ARCHIVE_UID_ALLOWLIST; David then <=5 percent for >=12h | backend | env | closed | declared | vi7SA9ckQCe4ccobWNxlbdcNdC23 (backend-listen (chart), gke/backend-listen, gke/pusher, pusher (chart)) | '' (backend-listen (chart), gke/backend-listen, gke/pusher, pusher (chart)) | — | pending | undecided | 2026-11-14 | dazheng |
 | `AUDIO_CANONICAL_PACKING_ENABLED` | Default off; new release-scoped canonical capture intake and owner-only verified tar packing; requires new regional bucket | backend | env | closed | — | — | — | — | pending | undecided | 2026-11-14 | dazheng |
 | `AUDIO_MERGE_WORKER_URL` | Default-off as-captured audio rollout setting AUDIO_MERGE_WORKER_URL; David then <=5 percent for >=12h | backend | env | closed | '' | '' (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher, pusher (chart)) | '' (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher, pusher (chart)) | — | pending | undecided | 2026-11-14 | dazheng |
+| `BATCH_JOBSTORE_MODE` | Default firestore; shadow mirrors committed batch job-store writes to the staging Postgres and counts read parity (Firestore stays the only authority) | backend | env | closed | — | — | — | — | pending | undecided | 2026-11-02 | dazheng |
 | `BATCH_LIVE_STT_RETIRE_PERCENT` | Default-zero batch hash cohort preferring configured resident TDT window preview for durable batch-owned captures with supported language profiles and ordinary vendor failover | backend | env | closed | {value: '0', category: rollout} | 0 (backend-listen (chart), pusher (chart)); {value: '0', category: rollout} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher) | 0 (backend-listen (chart), pusher (chart)); {value: '0', category: rollout} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher) | — | pending | undecided | 2026-11-16 | dazheng |
 | `BATCH_PIPELINE_ASR_LEFT_CONTEXT_SECONDS` | Default 0 (off); seconds of the same capture stream's contiguous predecessor speech run prefixed to a unit whose speech starts at sample 0, so Parakeet TDT does not start mid-utterance | backend | env | closed | — | — | — | — | keep | keep | 2026-10-26 | dazheng |
 | `BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED` | Default off; ordered assignment releases its owner claim before bounded asynchronous durable projection follow-ups | backend | env | closed | false | false (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen) | true (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen) | — | graduate | on | 2026-11-04 | dazheng |
@@ -193,6 +194,7 @@ and an explicit empty literal renders as `''`.
 | `DEMAND_PROCESSING_UID_ALLOWLIST` | Default-off demand processing control: uid allowlist | backend | env | closed | {value: '', category: rollout} | '' (backend-listen (chart), pusher (chart)); {value: '', category: rollout} (gke/backend-listen, gke/pusher) | '' (backend-listen (chart), pusher (chart)); {value: '', category: rollout} (gke/backend-listen, gke/pusher) | — | kill | off | 2026-11-15 | dazheng |
 | `DREAM_AGENT_PAID_PERCENT` | Stable per-owner percent of paid owners eligible under ELIGIBILITY=paid; unset admits all paid owners, malformed admits none; listed owners always stay in | backend | env | closed | — | — | 5 | — | kill | off | 2026-11-04 | dazheng |
 | `EDGE_SHADOW_PERCENT` | Plan D D2: static uid-hash cohort whose raw listen frames and VAD window decisions are mirrored fire-and-forget to listen-edge /v1/shadow; default 0 (kill switch) | backend | env | closed | — | — | 0 (backend-listen (chart)) | — | pending | undecided | 2026-11-20 | dazheng |
+| `ENRICHMENT_ROUTE` | Default sync_handler; enrichment_queue binds new sr- enrichment obligations to /v2/enrichment/run on the enrichment queue (plan C3) | backend | env | closed | — | — | — | — | pending | undecided | 2026-11-02 | dazheng |
 | `EPISODES_CLIENT_CHANNELS` | Default beta; comma-separated X-Omi-App-Channel values (beta, store) whose episodes API calls are admitted and set the client-seen marker. A missing or unknown channel is never admitted | backend | env | closed | — | — | — | — | pending | on | 2026-11-03 | dazheng |
 | `EPISODES_PERCENT` | Default 100; stable salted uid bucket admitted to episodes when EPISODES_ENABLED is on. Admission alone spends nothing: listen and the finalizer also need a client that called /v1/episodes within 14 days (Redis episodes:client_seen:{uid}). Invalid values admit only the allowlist | backend | env | closed | — | — | — | — | pending | on | 2026-11-03 | dazheng |
 | `FIRST_SUMMARY_DEADLINE_ENABLED` | Code default false; production on across all summary hosts; durable first-summary deadline and terminal receipt contract | backend | env | closed | — | — | true (backend-listen (chart), cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, pusher (chart)); {value: 'true', category: rollout} (cloud_run/backend, gke/backend-listen, gke/pusher) | — | pending | undecided | 2026-11-04 | dazheng |
@@ -361,6 +363,7 @@ and an explicit empty literal renders as `''`.
 | `FAIR_USE_ENABLED` | Enforce fair-use metering; set false to stop enforcement | backend | env | closed | — | true (backend-listen (chart)) | true (backend-listen (chart)) | — | keep | keep | — | unowned |
 | `FAIR_USE_KILL_SWITCH` | Emergency stop for fair-use enforcement | backend | env | inverted | — | false (backend-listen (chart)) | false (backend-listen (chart)) | — | keep | keep | — | unowned |
 | `FRAME_REQUEST_RETENTION_INDEPENDENT_HEALTHY` | Skip shared retention when independent job is healthy | backend | env | closed | false | false | false | — | keep | keep | — | unowned |
+| `JOBSTORE_SHADOW_WRITES` | Default on unless 0/false/off/no; off stops the A2 Postgres shadow mirror (and its parity reads) while BATCH_JOBSTORE_MODE=shadow | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `LISTEN_FINALIZATION_BYOK_ABANDONMENT_ENABLED` | Abandon finalization after BYOK failure | backend | env | open | true | true (backend-listen (chart), gke/backend-listen) | true (backend-listen (chart), gke/backend-listen) | — | keep | keep | — | unowned |
 | `LISTEN_FINALIZATION_DURABLE_ATTEMPT_CAP_ENABLED` | Cap durable listen worker attempts while retaining transcript-only conversations | backend | env | open | — | — | true | — | keep | keep | — | dazheng |
 | `LISTEN_FINALIZATION_RECOVERY_MINIMUM_TERMINAL_ENABLED` | End self-heal jobs after a minimal structure and skip obvious trivial content before paid notes | backend | env | open | — | — | true | — | keep | keep | — | dazheng |
@@ -573,6 +576,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `ADMIN_KEY_AUTH_ENABLED` — Allow administrator-key authentication (fail: open)
 - `AUDIO_CANONICAL_PACKING_ENABLED` — Default off; new release-scoped canonical capture intake and owner-only verified tar packing; requires new regional bucket (fail: closed)
 - `AUDIO_MERGE_DISPATCH_MODE` — Select audio-merge dispatch lane (fail: closed)
+- `BATCH_JOBSTORE_MODE` — Default firestore; shadow mirrors committed batch job-store writes to the staging Postgres and counts read parity (Firestore stays the only authority) (fail: closed)
 - `BATCH_PIPELINE_ASR_LEFT_CONTEXT_SECONDS` — Default 0 (off); seconds of the same capture stream's contiguous predecessor speech run prefixed to a unit whose speech starts at sample 0, so Parakeet TDT does not start mid-utterance (fail: closed)
 - `BATCH_PIPELINE_ASR_LEFT_CONTEXT_UNITS` — Process-local predecessor tails kept for ASR left context (default 64, range [0, 1024]; each <=8 s int16, 10 min TTL, keyed by owner, privacy generation and capture stream: source, device and lock from the staged intake context, or the record conversation) (fail: closed)
 - `BATCH_PIPELINE_CONTEXT_SECONDS` — GPU chain internal ASR boundary context seconds; default 2; requires AMI qualification (fail: closed)
@@ -635,6 +639,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `DIARIZATION_V2_ENABLED` — Enable the separate batch-only diarizer app; default false; startup loads models before readiness (fail: closed)
 - `DREAM_AGENT_EXPECTED_TOKENS` — Expected session tokens for initial spend holds and derived concurrency; default 12000; actual turn reservations enforce ceilings (fail: closed)
 - `EDGE_SHADOW_TOKEN` — Optional shared token listen sends to listen-edge /v1/shadow (x-edge-shadow-token); must match the edge's EDGE_SHADOW_TOKEN (fail: closed)
+- `ENRICHMENT_ROUTE` — Default sync_handler; enrichment_queue binds new sr- enrichment obligations to /v2/enrichment/run on the enrichment queue (plan C3) (fail: closed)
 - `EPISODES_CLIENT_CHANNELS` — Default beta; comma-separated X-Omi-App-Channel values (beta, store) whose episodes API calls are admitted and set the client-seen marker. A missing or unknown channel is never admitted (fail: closed)
 - `EPISODES_ENABLED` — Default on unless set to a non-on value; live episodes overlay (per-moment gpt-5-nano update, provisional items, /v1/episodes capability). Off reports enabled=false and apps keep today's per-conversation UI (fail: closed)
 - `EPISODES_PERCENT` — Default 100; stable salted uid bucket admitted to episodes when EPISODES_ENABLED is on. Admission alone spends nothing: listen and the finalizer also need a client that called /v1/episodes within 14 days (Redis episodes:client_seen:{uid}). Invalid values admit only the allowlist (fail: closed)
@@ -644,6 +649,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `FIRST_SUMMARY_UID_ALLOWLIST` — Optional summary canary owner allowlist; empty admits only the positive percentage cohort when global gate is on (fail: closed)
 - `HELD_CONTENT_COHORT` — Fallback tokens uid:<uid>,pct:<0-100> or explicit all, used only after rollout_cohorts/held-content is confirmed absent; empty, unset, or malformed admits nobody (fail: closed)
 - `HELD_CONTENT_ENABLED` — Default-off at-cap choice API; additionally requires X-Omi-Held-Content: 1. Capture custody and recovery must ship before enablement. (fail: closed)
+- `JOBSTORE_SHADOW_WRITES` — Default on unless 0/false/off/no; off stops the A2 Postgres shadow mirror (and its parity reads) while BATCH_JOBSTORE_MODE=shadow (fail: open)
 - `LADDER_V1_BUDGET_ENFORCEMENT_ENABLED` — Default-off shared monthly budget admission for Free and ladder prices; hold on device at cap; legacy bypass (fail: closed)
 - `LADDER_V1_LANE_METERING_ENABLED` — Default-off live/batch/on-device shadow attribution; no new budget or charge (fail: closed)
 - `LADDER_V1_MCP_DAILY_CAPS_ENABLED` — Default-off shared per-UID daily MCP/developer API reservations; legacy bypass (fail: closed)

@@ -1,6 +1,7 @@
 """Bounded, fenced explicit-choice worker; reuses the held-audio receipt machinery."""
 
 import asyncio
+from functools import partial
 from datetime import datetime, timezone
 from enum import Enum
 import logging
@@ -15,7 +16,7 @@ from utils.processing_backlog import choose, is_active
 from utils.conversations.process_conversation import process_conversation
 from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.executors import db_executor, postprocess_executor, storage_executor, run_blocking
-from utils.sync import cap_hold, cap_hold_recovery, cap_work_budget
+from utils.sync import cap_hold, cap_hold_recovery, cap_hold_reservations, cap_work_budget
 from config.rate_card import recording_units_per_hour
 from config.stt_cap_dispatch import hold_lane, recovery_cohort_admits
 
@@ -254,6 +255,27 @@ async def run(
             if item.get('state') in {'staging', 'sealing'}:
                 return False
             actual_remaining, _ = funded_processing.capacity(current)
+            if actual_remaining is not None:
+                # Cap-hold units handed to batch are debited only at projection; their open
+                # reservations stand in for that spend until the batch outcome is known.
+                reserved_units = await run_blocking(
+                    db_executor,
+                    partial(
+                        cap_hold_reservations.open_units,
+                        uid,
+                        job['period'],
+                        status_reader=cap_hold_reservations.batch_status,
+                    ),
+                )
+                # Re-read after settling: a projection that commits between the first allowance read
+                # and open_units drops its reservation, so only a later read sees its usage. A commit
+                # after open_units is counted twice, which under-admits (safe).
+                current = await run_blocking(db_executor, funded_processing.allowance, uid)
+                if not current.managed:
+                    return await finish()
+                actual_remaining, _ = funded_processing.capacity(current)
+                if actual_remaining is not None:
+                    actual_remaining = max(0.0, actual_remaining - reserved_units)
             if actual_remaining is not None and item['units'] > actual_remaining:
                 if not await save(updates):
                     return False

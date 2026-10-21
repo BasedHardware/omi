@@ -1,0 +1,18 @@
+# Committed staging batch-worker env (contract (i)), applied by worker_post_render.py on every
+# deploy.sh --with-worker. Plain values, or {secretKeyRef: {name, key}} for a k8s Secret in
+# namespace staging. Never an inline secret.
+
+# A2 Postgres job-store shadow (lead ruling 2026-10-19; lane 12). IAM DB auth: the store mints a
+# sqlservice.login token from the pod's Workload Identity (GSA staging-worker) per connection, so
+# there is no password. Instance staging-jobs (private IP on omi-dev-vpc-1). Kill without
+# redeploying semantics: JOBSTORE_SHADOW_WRITES=off.
+# NOT LIVE YET (M1 review L02-2): staging runs OMI_ENV_STAGE=prod, so the worker (chart value
+# namespace) and the API (batch_pipeline_{stage}) both use namespace batch_pipeline_prod inside
+# database `staging`, and dual_store.shadow_from_env refuses that namespace. Until its guard admits
+# staging (lane 12's file), this env is inert: the store stays Firestore-only and logs
+# event=jobstore_shadow outcome=refused reason=prod_namespace.
+BATCH_JOBSTORE_MODE: shadow
+JOBSTORE_SHADOW_WRITES: 'on'
+JOBSTORE_PG_HOST: 172.20.207.3
+JOBSTORE_PG_DATABASE: jobstore_staging
+JOBSTORE_PG_USER: staging-worker@based-hardware-dev.iam

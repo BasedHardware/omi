@@ -136,12 +136,24 @@ _customer_firestore_client = None
 _customer_firestore_client_lock = Lock()
 
 
-def _firestore_database_id() -> str | None:
-    """Reject named database overrides outside the local emulator branch."""
+def _firestore_database_id(project: str | None = None) -> str | None:
+    """Reject named database overrides outside the emulator, except staging's own DB.
+
+    The staging deployment (contract (i)) reads and writes the named database
+    ``staging`` in ``based-hardware-dev``. That is allowed only when
+    ``OMI_DEPLOYMENT=staging`` and the client's project is ``based-hardware-dev``;
+    the staging isolation fence runs first, so a staging process pointed at prod
+    never gets this far.
+    """
+    from utils.staging_fence import STAGING_DATABASE, STAGING_PROJECT, assert_staging_isolation, is_staging
+
+    assert_staging_isolation()
     database = (os.getenv("FIRESTORE_DATABASE_ID") or "").strip()
     if not database or database == "(default)":
         return None
-    raise RuntimeError("FIRESTORE_DATABASE_ID is restricted to local Firestore emulators")
+    if database == STAGING_DATABASE and is_staging() and project == STAGING_PROJECT:
+        return database
+    raise RuntimeError("FIRESTORE_DATABASE_ID is restricted to local Firestore emulators and staging")
 
 
 def _client_kwargs(credentials: Any, project: str) -> dict[str, Any]:
@@ -171,14 +183,14 @@ def _build_firestore_client() -> Any:
     customer_data = customer_data_service_account()
     if customer_data is not None:
         credentials, project_id = customer_data
-        database = _firestore_database_id()
+        database = _firestore_database_id(project_id)
         customer_kwargs: dict[str, Any] = _client_kwargs(credentials, project_id)
         if database:
             customer_kwargs["database"] = database
         return firestore.Client(**customer_kwargs)
 
     prepare_google_credentials()
-    database = _firestore_database_id()
+    database = _firestore_database_id("based-hardware-dev")
     if database:
         return firestore.Client(project="based-hardware-dev", database=database)
     return firestore.Client()
@@ -206,7 +218,7 @@ def _build_customer_firestore_client() -> Any:
     entitlements = customer_entitlement_service_account()
     if entitlements is not None:
         credentials, project_id = entitlements
-        database = _firestore_database_id()
+        database = _firestore_database_id(project_id)
         kwargs: dict[str, Any] = _client_kwargs(credentials, project_id)
         if database:
             kwargs["database"] = database
@@ -247,12 +259,14 @@ def _build_data_plane_firestore_client() -> Any:
         return get_firestore_client()
 
     data_plane_project = os.environ.get("OMI_FIRESTORE_DATA_PLANE_PROJECT", "").strip()
-    database = _firestore_database_id()
     if not data_plane_project:
         service = (os.getenv("K_SERVICE") or os.getenv("APP_NAME") or "").strip().casefold()
         if "desktop-backend" in service:
             raise RuntimeError("OMI_FIRESTORE_DATA_PLANE_PROJECT is required on desktop-backend")
         return get_firestore_client()
+    # Resolved only once a data-plane project is pinned: without one this seam is the default client,
+    # which applies its own (project-aware) named-DB check.
+    database = _firestore_database_id(data_plane_project)
 
     # Bare ADC pinned to another project is not enough: the dev compute
     # service account has no data-plane Firestore IAM (writes came back 403
