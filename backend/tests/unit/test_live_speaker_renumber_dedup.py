@@ -144,4 +144,3 @@ async def test_production_callback_deduplication_against_last_end(monkeypatch):
     assert emitted[1]["start"] == 296.50
     assert emitted[1]["end"] == 300.00
     assert session.last_end == 300.00
-
