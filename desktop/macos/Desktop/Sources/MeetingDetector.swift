@@ -16,9 +16,9 @@ private final class WeakMeetingDetector: @unchecked Sendable {
 /// conversations at call boundaries while Always mode keeps the microphone live. It exists only
 /// while microphone transcription is active, so there is zero overhead otherwise.
 ///
-/// Transitions **on** as soon as a call is detected, but transitions **off** only after a grace
-/// period of sustained "no meeting" (hysteresis) to avoid flapping when a call window briefly
-/// disappears (focus changes, screen-share popups, etc.).
+/// Capture opens provisionally on first evidence; conversation boundaries wait for sustained
+/// confirmation. Both levels close after sustained "no meeting" (off hysteresis). The notice
+/// additionally waits out short meetings and a successful conversation rotation.
 ///
 /// Polls every 1s while a native call app or browser holds the microphone, and every 4s
 /// otherwise. The off grace stays a fixed 8s, so the faster poll does not shorten it.
@@ -27,6 +27,17 @@ final class MeetingDetector {
 
   /// Current meeting state. Updated on the main actor by `applyDetected(_:)`.
   private(set) var isMeetingActive: Bool = false
+  /// Confirmed level for conversation boundaries, independent of provisional capture gating.
+  private(set) var isMeetingConfirmed = false
+  private var pendingOnSince: Date?
+  private var confirmedSince: Date?
+  private var noticeRequested = false
+  private let confirmationPeriod: TimeInterval
+  private let noticeDelay: TimeInterval
+  private let onConfirmedChange: (Bool) -> Void
+  private let onNoteTakingNoticeReady: () -> Void
+  private let onConfirmedEvidence: (MeetingDetectionEvidence) -> Void
+  private var latestEvidence: MeetingDetectionEvidence?
   /// True after at least one async probe has reported. Until then, `isMeetingActive == false`
   /// means "unknown", not "no meeting".
   private(set) var hasObservedState: Bool = false
@@ -82,12 +93,26 @@ final class MeetingDetector {
     processInputAPIAvailable: Bool? = nil,
     snapshot: (@Sendable () -> CallAudioSnapshot)? = nil,
     callConfirmationPeriod: TimeInterval = 8.0,
+    confirmationPeriod: TimeInterval = MeetingDetectionTiming.confirmationPeriod,
+    noticeDelay: TimeInterval = MeetingDetectionTiming.noticeDelay,
     now: @escaping () -> Date = { Date() },
     audioLedgerDefaults: UserDefaults = .standard,
     calendar: Calendar = .current,
     onInitialStateObserved: @escaping () -> Void = {},
     onCallChanged: @escaping () -> Void = {},
     onChange: @escaping (Bool) -> Void,
+    onConfirmedChange: @escaping (Bool) -> Void = { _ in },
+    onNoteTakingNoticeReady: @escaping () -> Void = {},
+    onConfirmedEvidence: @escaping (MeetingDetectionEvidence) -> Void = {
+      PostHogManager.shared.track(MeetingDetectionEvidence.eventName, properties: $0.properties)
+      if !$0.titlesReadable, $0.processInputAPIAvailable,
+        $0.bundleIDs.contains(where: { MeetingCallObservation.browserFamily($0) != nil })
+      {
+        DesktopDiagnosticsManager.shared.recordFallback(
+          area: "screen_capture", from: "browser_title_corroboration", to: "browser_microphone",
+          reason: "capability_mismatch", outcome: .recovered)
+      }
+    },
     onAudioSummaries: @escaping ([CallAppAudioSummary]) -> Void = { summaries in
       for summary in summaries {
         PostHogManager.shared.callAppAudioSummary(summary)
@@ -116,11 +141,16 @@ final class MeetingDetector {
     self.onInitialStateObserved = onInitialStateObserved
     self.onCallChanged = onCallChanged
     self.onChange = onChange
+    self.confirmationPeriod = confirmationPeriod
+    self.noticeDelay = noticeDelay
+    self.onConfirmedChange = onConfirmedChange
+    self.onNoteTakingNoticeReady = onNoteTakingNoticeReady
+    self.onConfirmedEvidence = onConfirmedEvidence
     self.onAudioSummaries = onAudioSummaries
   }
 
-  /// Begin observing app launch/terminate/activation and polling. Emits the initial state
-  /// synchronously so callers can read `isMeetingActive` immediately after `start()`.
+  /// Begin observing app changes and polling. The first off-main probe asynchronously
+  /// establishes readiness and provisional capture state.
   func start() {
     guard !started else { return }
     started = true
@@ -165,6 +195,8 @@ final class MeetingDetector {
     }
     workspaceObservers.removeAll()
     pendingOffDeadline = nil
+    pendingOnSince = nil
+    noticeRequested = false
     log("MeetingDetector: stopped")
   }
 
@@ -220,6 +252,8 @@ final class MeetingDetector {
         processInputAPIAvailable: processInputAPIAvailable,
         nativeIdentity: { self.audioLedger.nativeCallIdentity(bundleID: $0) })
       : []
+    latestEvidence = MeetingDetectionEvidence(
+      snapshot: snapshot, mode: mode, processInputAPIAvailable: processInputAPIAvailable)
     applyDetected(detected, callIDs: callIDs)
   }
 
@@ -233,14 +267,28 @@ final class MeetingDetector {
       // Meeting present: cancel any pending-off and ensure we're active.
       pendingOffDeadline = nil
       setActive(true)
-      if callTracker.observe(callIDs, at: now()) {
+      if !isMeetingConfirmed {
+        if pendingOnSince == nil { pendingOnSince = now() }
+        if let since = pendingOnSince, now().timeIntervalSince(since) >= confirmationPeriod {
+          isMeetingConfirmed = true
+          confirmedSince = now()
+          pendingOnSince = nil
+          if let latestEvidence { onConfirmedEvidence(latestEvidence) }
+          onConfirmedChange(true)
+        }
+      }
+      if isMeetingConfirmed, callTracker.observe(callIDs, at: now()) {
         log("MeetingDetector: call CHANGED (now \(callIDs.sorted().joined(separator: ",")))")
         hasPendingCallChange = true
+        confirmedSince = now()
+        noticeRequested = false
         onCallChanged()
       }
+      deliverNoteTakingNoticeIfReady()
     } else if isMeetingActive {
+      pendingOnSince = nil
       // Meeting undetected while active: arm or honor the off grace period.
-      callTracker.noteMicrophoneGap(at: now())
+      if isMeetingConfirmed { callTracker.noteMicrophoneGap(at: now()) }
       if let deadline = pendingOffDeadline {
         if now() >= deadline {
           pendingOffDeadline = nil
@@ -252,6 +300,7 @@ final class MeetingDetector {
     } else {
       // Already inactive and still no meeting.
       pendingOffDeadline = nil
+      pendingOnSince = nil
     }
 
     if !hadObservedState {
@@ -263,11 +312,34 @@ final class MeetingDetector {
     guard active != isMeetingActive else { return }
     isMeetingActive = active
     if !active {
+      pendingOnSince = nil
+      confirmedSince = nil
+      noticeRequested = false
+      if isMeetingConfirmed {
+        isMeetingConfirmed = false
+        onConfirmedChange(false)
+      }
       callTracker.reset()
       hasPendingCallChange = false
     }
     log("MeetingDetector: meeting \(active ? "STARTED" : "ENDED")")
     onChange(active)
+  }
+
+  /// Called only after a successful rotation into the meeting role. A slow rotation
+  /// may finish after the meeting ended, so never arm a card for an inactive call.
+  func requestNoteTakingNotice() {
+    guard isMeetingConfirmed else { return }
+    noticeRequested = true
+    deliverNoteTakingNoticeIfReady()
+  }
+
+  private func deliverNoteTakingNoticeIfReady() {
+    guard noticeRequested, isMeetingConfirmed, pendingOffDeadline == nil,
+      let since = confirmedSince, now().timeIntervalSince(since) >= noticeDelay
+    else { return }
+    noticeRequested = false
+    onNoteTakingNoticeReady()
   }
 
   func clearPendingCallChange() { hasPendingCallChange = false }

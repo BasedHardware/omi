@@ -13,13 +13,14 @@ from google.api_core.exceptions import NotFound
 
 from config.stt_cap_dispatch import execution_admission_enabled as enabled, any_execution_admission_enabled, hold_lane
 from database import users as users_db
-from database import sync_cap_holds, sync_cap_recovery
+from database import sync_cap_holds, sync_cap_recovery, cap_recovery_pacing
 from utils.analytics import record_usage
 from utils.executors import run_blocking, db_executor, sync_executor, storage_executor
 from utils.stt_cap_dispatch import sync_allowed
 from utils.fair_use import get_hard_restriction_status, is_daily_audio_ceiling_exceeded
 from utils.stt.pre_recorded import get_prerecorded_service
 from utils.sync import cap_hold, cap_recovery_plan, cap_work_budget
+from utils.observability.held_content import record_erasure, record_recovery, record_pacing
 from utils.observability.stt_cap_dispatch import record_reconciliation
 from utils.sync.cap_recovery_audio import prepare as prepare_audio
 from models.geolocation import Geolocation
@@ -32,15 +33,23 @@ from models.conversation import ConversationSource
 
 logger = logging.getLogger(__name__)
 RECONCILIATION_COOLDOWN_SECONDS = 1800
-_backlog_runner: Callable[[str], Awaitable[None]] | None = None
+_backlog_runner: Callable[[str], Awaitable[bool | None]] | None = None
 
 
-def register_backlog_runner(runner: Callable[[str], Awaitable[None]]) -> None:
+def register_backlog_runner(runner: Callable[[str], Awaitable[bool | None]]) -> None:
     global _backlog_runner
     _backlog_runner = runner
 
 
 def _erase(uid: str, snapshot: Any, row: dict[str, Any]) -> None:
+    try:
+        _erase_objects(uid, snapshot, row)
+    except Exception:
+        record_erasure('failure')
+        raise
+
+
+def _erase_objects(uid: str, snapshot: Any, row: dict[str, Any]) -> None:
     # Account deletion already purges this existing owner-scoped chunk prefix.
     objects = [
         row,
@@ -150,6 +159,7 @@ async def _recover_row(uid: str, snapshot: Any, row: dict[str, Any]) -> bool:
         receipts.update(updated)
         return True
 
+    record_recovery('attempt')
     try:
         try:
             plan, local_paths, contexts = await cap_recovery_plan.ensure_plan(
@@ -227,6 +237,34 @@ async def _recover_row(uid: str, snapshot: Any, row: dict[str, Any]) -> bool:
                     )
                     pending = True
                     continue
+                if not cached_result:
+                    # Consume once per new intent, including ambiguous-call
+                    # retries. Never create a provider-attempt receipt on denial.
+                    pacing = await run_blocking(db_executor, cap_recovery_pacing.reserve, plan[name]['seconds'])
+                    now = time.time()
+                    if pacing.outcome != 'granted':
+                        since = row.get('pacing_deferred_since') or now
+                        if not await _save(
+                            uid,
+                            snapshot,
+                            row,
+                            {
+                                'next_attempt_at': now + pacing.retry_after,
+                                'pacing_deferred_since': since,
+                                'pacing_reason': pacing.reason,
+                            },
+                        ):
+                            return False
+                        record_pacing(pacing.outcome, plan[name]['seconds'], now - since)
+                        pending = True
+                        # Finish/settle completed siblings below; no more new
+                        # intents from this hold while its retry time is future.
+                        break
+                    record_pacing('granted', plan[name]['seconds'])
+                    if row.get('pacing_deferred_since') and not await _save(
+                        uid, snapshot, row, {'pacing_deferred_since': 0, 'pacing_reason': '', 'next_attempt_at': 0}
+                    ):
+                        return False
                 intent: dict[str, Any] = {
                     **({'provider_result': cached_result} if cached_result else {}),
                     'state': 'dispatched',
@@ -342,7 +380,7 @@ async def _recover_row(uid: str, snapshot: Any, row: dict[str, Any]) -> bool:
             return False
         failed = any(r.get('state') == 'failed_reconciliation' for r in receipts.values())
         retained = failed or any(r.get('reconciled_ingested') for r in receipts.values())
-        return await _save(
+        saved = await _save(
             uid,
             snapshot,
             row,
@@ -353,6 +391,9 @@ async def _recover_row(uid: str, snapshot: Any, row: dict[str, Any]) -> bool:
                 'retain_audio': retained,
             },
         )
+        if saved:
+            record_recovery('completed')
+        return saved
     finally:
         await run_blocking(storage_executor, directory.cleanup)
 

@@ -312,6 +312,15 @@ def main() -> None:
         sys.exit(exc.exit_code)
     except typer.Exit as exc:
         sys.exit(exc.exit_code)
+    except cfg.ConfigWriteRefused as exc:
+        # A deliberate refusal to clobber a config that would not parse. It
+        # reaches here from every write path (`config set`, `config profile
+        # use/delete`, `local configure`, and the auth store), so catching it
+        # once here beats eight call-site handlers that can drift apart.
+        renderer = _LAST_RENDERER or Renderer(
+            json_mode="--json" in sys.argv,
+        )
+        sys.exit(_exit_with_cli_error(CliError(message=str(exc)), renderer))
     except click.Abort:
         # Ctrl-C during an interactive prompt (Click raises click.Abort, which
         # subclasses RuntimeError — not KeyboardInterrupt — so it must be caught

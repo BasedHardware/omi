@@ -97,6 +97,15 @@ class RegistryFixture(unittest.TestCase):
     def errors(self) -> list[str]:
         return check(self.root, check_render=False)[0]
 
+    def test_kill_after_readout_is_a_reviewed_nonterminal_experiment(self) -> None:
+        self.write("backend/docs/experiment.md", "Pre-registered readout")
+        row = flag(lifecycle="experiment", decision="kill_after_readout", terminal="undecided",
+                   review_by="2026-10-30", prereg="backend/docs/experiment.md")
+        self.assertEqual(validate_registry({"flags": [row], "ignore": [], "retired": []}, root=self.root), [])
+        for changes in ({"terminal": "off"}, {"lifecycle": "rollout"}):
+            errors = validate_registry({"flags": [{**row, **changes}], "ignore": [], "retired": []}, root=self.root)
+            self.assertTrue(any("kill_after_readout requires" in error for error in errors))
+
     def test_finds_literal_and_module_constant_env_reads_with_locations(self) -> None:
         self.write(
             "backend/service.py",
@@ -223,6 +232,17 @@ class RegistryFixture(unittest.TestCase):
         registry = load_registry(self.root / "config/feature-flags.yaml")
         output = render(self.root, registry, date(2026, 10, 8))
         self.assertTrue(any("ship" in line for line in output.splitlines() if line.startswith("| `EXAMPLE_ENABLED` |")))
+
+    def test_with_legacy_keeps_a_dated_rollout_until_deletion(self) -> None:
+        entry = flag(decision="with_legacy", terminal="off", review_by="2026-12-15")
+        self.assertEqual(validate_registry({"flags": [entry], "ignore": [], "retired": []}, root=self.root), [])
+        entry["terminal"] = "on"
+        errors = "\n".join(validate_registry({"flags": [entry], "ignore": [], "retired": []}, root=self.root))
+        self.assertIn("decision with_legacy requires terminal off", errors)
+        entry["terminal"] = "off"
+        del entry["review_by"]
+        errors = "\n".join(validate_registry({"flags": [entry], "ignore": [], "retired": []}, root=self.root))
+        self.assertIn("review_by", errors)
 
     def test_unknown_decision_is_rejected(self) -> None:
         self.write("config/feature-flags.yaml", self.yaml([flag(decision="unknown")]))

@@ -15,7 +15,6 @@ import logging
 import threading
 from typing import Callable, Optional
 
-from config.capture_evidence import capture_evidence_dark_write_enabled
 from utils.capture_evidence import (
     bounded_envelope,
     merge_track_receipts,
@@ -65,8 +64,6 @@ def apply_capture_evidence_dark_write(
     incoming: dict, source_position_map: Optional[tuple[dict, int]], transcript_segments: list
 ) -> None:
     """Populate ``incoming['capture_evidence']`` from the pre-ingest receipts."""
-    if not capture_evidence_dark_write_enabled():
-        return
     receipt = unknown_envelope('missing_source_position', origin='sync_vad')
     if source_position_map is not None:
         frame_map, derivative_start = source_position_map
@@ -90,11 +87,10 @@ def apply_capture_evidence_dark_write(
 
 def record_capture_evidence_metric(incoming: dict) -> None:
     """Emit the post-ingest envelope metric for a dark-written capture receipt."""
-    if capture_evidence_dark_write_enabled():
-        OMI_CAPTURE_EVIDENCE_ENVELOPES_TOTAL.labels(
-            path='sync',
-            status='mapped' if incoming['capture_evidence']['capability'] == 'source_position' else 'unknown',
-        ).inc()
+    OMI_CAPTURE_EVIDENCE_ENVELOPES_TOTAL.labels(
+        path='sync',
+        status='mapped' if incoming['capture_evidence']['capability'] == 'source_position' else 'unknown',
+    ).inc()
 
 
 def log_sync_lineage_append(stats: dict, existing_completion: bool = False) -> None:

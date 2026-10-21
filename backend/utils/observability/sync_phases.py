@@ -333,6 +333,12 @@ def sync_phase_timer(phase: str) -> Iterator[None]:
             attempt.record(phase, time.monotonic() - started)
 
 
+def current_sync_lane() -> str | None:
+    """The lane of the sync attempt in this context, or None outside one."""
+    attempt = _attempt.get()
+    return None if attempt is None else attempt.lane
+
+
 def set_sync_metrics_lane(lane: str) -> None:
     attempt = _attempt.get()
     if attempt is not None:

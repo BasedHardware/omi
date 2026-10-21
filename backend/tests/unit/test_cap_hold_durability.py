@@ -8,9 +8,24 @@ import wave
 
 import pytest
 
+from utils.observability import held_content as held_metrics
 from utils.sync import cap_hold, cap_hold_lifecycle, cap_hold_redrive, live_cap_hold as live, live_cap_staging
+from utils.sync.live_cap_publication import Publication
 from utils.sync import live_cap_codec
 from utils.stt import pre_recorded
+
+_EMPTY_FLEET = {
+    'pending_count': 0,
+    'pending_seconds': 0.0,
+    'oldest_listed_at': None,
+    'undated_pending': 0,
+    'backlog_items': 0,
+}
+
+
+@pytest.fixture(autouse=True)
+def _fleet_snapshot_stays_local(monkeypatch):
+    monkeypatch.setattr(cap_hold_redrive.store, 'fleet_snapshot', lambda firestore_client=None: dict(_EMPTY_FLEET))
 
 
 @pytest.fixture
@@ -116,7 +131,8 @@ async def test_sweep_awaits_worker_and_does_not_create_consent(monkeypatch):
     entered, release = asyncio.Event(), asyncio.Event()
 
     async def run(uid, **kwargs):
-        assert uid == 'owner' and kwargs == {'max_items': 100, 'time_budget': 900}
+        assert uid == 'owner' and kwargs['max_items'] == 1 and not kwargs['continuation']
+        assert 0 < kwargs['time_budget'] <= 900
         entered.set()
         await release.wait()
 
@@ -134,8 +150,64 @@ async def test_sweep_awaits_worker_and_does_not_create_consent(monkeypatch):
 async def test_sweep_kill_switch_does_not_read_or_dispatch(monkeypatch):
     monkeypatch.setenv('CAP_HOLD_DURABLE_REDRIVE_ENABLED', 'false')
     discover = Mock(side_effect=AssertionError('disabled sweep queried'))
+    snapshot = Mock(side_effect=AssertionError('disabled sweep aggregated'))
     monkeypatch.setattr(cap_hold_redrive.store, 'discover', discover)
+    monkeypatch.setattr(cap_hold_redrive.store, 'fleet_snapshot', snapshot)
     assert await cap_hold_redrive.sweep() == {'disabled': True}
+    snapshot.assert_not_called()
+
+
+def test_retry_observing_purged_receipt_counts_post_delete_publication(monkeypatch):
+    manifest = live.live_cap_manifest
+
+    class Tx:
+        def create(self, *args, **kwargs):
+            raise AssertionError('tombstone published a manifest')
+
+        def set(self, *args, **kwargs):
+            raise AssertionError('tombstone updated the summary')
+
+    receipt = {'state': 'purged'}
+    ref = SimpleNamespace(get=lambda transaction=None: SimpleNamespace(exists=True, to_dict=lambda: dict(receipt)))
+    monkeypatch.setattr(manifest.firestore, 'transactional', lambda fn: fn)
+    monkeypatch.setattr(manifest, 'get_firestore_client', lambda: SimpleNamespace(transaction=Tx))
+    monkeypatch.setattr(manifest, 'external_write_fence', lambda *args, **kwargs: nullcontext())
+    monkeypatch.setattr(manifest.cap_hold, 'holds', lambda uid: SimpleNamespace(document=lambda identity: ref))
+    monkeypatch.setattr(manifest.cap_hold, 'summary_ref', lambda uid: SimpleNamespace())
+    upload = Mock(side_effect=AssertionError('tombstone uploaded audio'))
+    monkeypatch.setattr(manifest.cap_hold, 'upload_held_audio', upload)
+
+    source = Publication('synthetic')
+    assert source.is_retry('synthetic') is False
+    before = held_metrics.ERASURE.labels(outcome='post_delete_publication')._value.get()
+    manifest.publish('synthetic', 'unused', source, {'timestamp': 1000}, 60)
+    assert held_metrics.ERASURE.labels(outcome='post_delete_publication')._value.get() == before + 1
+    upload.assert_not_called()
+
+    receipt['state'] = 'held'
+    manifest.publish('synthetic', 'unused', source, {'timestamp': 1000}, 60)
+    assert held_metrics.ERASURE.labels(outcome='post_delete_publication')._value.get() == before + 1
+    upload.assert_not_called()
+
+
+async def test_sweep_publishes_one_fleet_snapshot_and_clears_an_empty_backlog(monkeypatch):
+    monkeypatch.setattr(cap_hold_redrive.store, 'discover', lambda kind: [])
+    calls = []
+
+    def snapshot(firestore_client=None):
+        calls.append(firestore_client)
+        return dict(_EMPTY_FLEET)
+
+    monkeypatch.setattr(cap_hold_redrive.store, 'fleet_snapshot', snapshot)
+    held_metrics.OLDEST_AGE.set(9)
+    held_metrics.UNDATED_PENDING.set(9)
+    held_metrics.BACKLOG.set(9)
+    await cap_hold_redrive.sweep()
+    assert calls == [None]
+    assert held_metrics.OLDEST_AGE._value.get() == 0
+    assert held_metrics.PENDING_COUNT._value.get() == 0
+    assert held_metrics.UNDATED_PENDING._value.get() == 0
+    assert held_metrics.BACKLOG._value.get() == 0
 
 
 @pytest.mark.parametrize('provider', ['modulate', 'parakeet'])
@@ -410,8 +482,8 @@ async def test_sweep_progresses_five_owners_concurrently(monkeypatch):
     all_entered = asyncio.Event()
     completed = []
 
-    async def run(uid, *, max_items, time_budget):
-        assert (max_items, time_budget) == (100, 900)
+    async def run(uid, *, continuation, max_items, time_budget):
+        assert max_items == 1 and not continuation and 0 < time_budget <= 900
         entered.add(uid)
         if len(entered) == 5:
             all_entered.set()
@@ -421,6 +493,54 @@ async def test_sweep_progresses_five_owners_concurrently(monkeypatch):
     monkeypatch.setattr(cap_hold_redrive.processing_backlog_worker, 'run', run)
     assert (await cap_hold_redrive.sweep())['visited'] == 5
     assert len(completed) == 5
+
+
+async def test_sweep_rotates_owners_before_fast_owner_gets_another_turn(monkeypatch):
+    snaps = [SimpleNamespace(reference=SimpleNamespace(path=f'users/{i}/processing_backlog/current')) for i in range(5)]
+    monkeypatch.setattr(cap_hold_redrive.store, 'discover', lambda kind: snaps if kind == 'choices' else [])
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'true')
+    monkeypatch.setenv('STT_CAP_DISPATCH_COHORT', 'all')
+    turns, seen = [], {str(i): 0 for i in range(5)}
+
+    async def run(uid, *, continuation, max_items, time_budget):
+        assert max_items == 1
+        assert continuation == (seen[uid] > 0)
+        assert max(seen.values()) - min(seen.values()) <= 1
+        turns.append(uid)
+        seen[uid] += 1
+        await asyncio.sleep(0)
+        return seen[uid] < 3
+
+    monkeypatch.setattr(cap_hold_redrive.processing_backlog_worker, 'run', run)
+    assert (await cap_hold_redrive.sweep())['visited'] == 5
+    assert len(turns) == 15
+    assert all(set(turns[offset : offset + 5]) == set(seen) for offset in range(0, 15, 5))
+
+
+async def test_paced_owner_does_not_stop_other_owners_or_custody_maintenance(monkeypatch):
+    snaps = [
+        SimpleNamespace(id=str(i), reference=SimpleNamespace(path=f'users/{i}/processing_backlog/current'))
+        for i in range(2)
+    ]
+    staging = SimpleNamespace(id='source', reference=SimpleNamespace(path='users/0/stt_cap_holds/source'))
+    monkeypatch.setattr(cap_hold_redrive.store, 'discover', lambda kind: snaps if kind == 'choices' else [staging])
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'true')
+    monkeypatch.setenv('STT_CAP_DISPATCH_COHORT', 'all')
+    calls = []
+
+    async def run(uid, **kwargs):
+        calls.append(uid)
+        return uid == '1' and calls.count(uid) < 3
+
+    seal = Mock(return_value=True)
+    cleanup = Mock()
+    monkeypatch.setattr(cap_hold_redrive.live_cap_staging, 'seal', seal)
+    monkeypatch.setattr(cap_hold_redrive.live_cap_staging, 'cleanup', cleanup)
+    monkeypatch.setattr(cap_hold_redrive.processing_backlog_worker, 'run', run)
+    assert await cap_hold_redrive.sweep() == {'sealed': 1, 'visited': 2}
+    assert calls.count('0') == 1 and calls.count('1') == 3
+    seal.assert_called_once()
+    cleanup.assert_called_once()
 
 
 @pytest.mark.parametrize('size', [900 * 1024, 100 * 1024])

@@ -341,12 +341,16 @@ def _exchange_firebase_token_for_dev_key(api_base: str, id_token: str) -> str:
         try:
             listing = client.get(f"{base}{_DEV_KEYS_PATH}", headers=headers)
             if listing.status_code == 200:
+                # A 200 does not guarantee a JSON list: a proxy or a degraded
+                # gateway can answer with HTML or a scalar. Parsing and shape
+                # failures belong with the transport failures below, or this
+                # block stops being best-effort and fails the whole login.
                 existing_keys = listing.json()
                 if isinstance(existing_keys, list):
                     for key in existing_keys:
                         if isinstance(key, dict) and key.get("name") == key_name and key.get("id"):
                             client.delete(f"{base}{_DEV_KEYS_PATH}/{key['id']}", headers=headers)
-        except (httpx.HTTPError, ValueError):
+        except (httpx.HTTPError, ValueError, TypeError):
             pass
 
         try:
@@ -367,6 +371,10 @@ def _exchange_firebase_token_for_dev_key(api_base: str, id_token: str) -> str:
             ),
         )
 
+    # The mint response is only useful if it is a JSON object carrying `key`.
+    # A 2xx that is not JSON, or is JSON of another shape, is the same failure
+    # to the caller as a missing field, so report it the same way instead of
+    # raising ValueError/AttributeError past this function's error contract.
     data = _parse_json_object(resp, "Developer key creation")
     raw_key = data.get("key")
     if not isinstance(raw_key, str) or not raw_key.strip():

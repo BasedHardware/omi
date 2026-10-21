@@ -305,9 +305,9 @@ def test_reconcile_drains_then_walks_owner_before_generic_sweep(monkeypatch):
     projector.project_owner.side_effect = lambda owner, recovered: calls.append(('chain', owner, recovered)) or ['seg']
     projector.sweep.side_effect = lambda: calls.append(('sweep',))
     service = Serving(MemoryStore(), projector=projector)
-    monkeypatch.setattr(service, 'drain_owner', lambda owner: calls.append(('drain', owner)))
+    monkeypatch.setattr(service, 'drain_owner', lambda owner, recovered=None: calls.append(('drain', owner, recovered)))
     assert service.reconcile(owner_id=BURST, recovered='r') == ['seg']
-    assert calls == [('drain', BURST), ('chain', BURST, 'r'), ('sweep',)]
+    assert calls == [('drain', BURST, 'r'), ('chain', BURST, 'r'), ('sweep',)]
     calls.clear()
     assert service.reconcile() == []
     assert calls == [('sweep',)]
@@ -504,6 +504,8 @@ def test_sweep_chain_persists_backlog_in_the_pass_that_reaches_its_head(monkeypa
     """
     monkeypatch.setenv('BATCH_PIPELINE_SWEEP_OWNER_CHAIN_ENABLED', str(sweep_chain).lower())
     monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_PENDING_PAGE_ENABLED', str(sweep_chain).lower())
+    # The sweep's own walk; test_batch_pipeline_owner_drain.py covers the drain.
+    monkeypatch.setenv('BATCH_PIPELINE_OWNER_DRAIN_ENABLED', 'false')
     log, burst = backlog_log()
     projector = projector_for(log)
     cursor = (log.results['x-0']['committed_at'], 'x-0')

@@ -12,6 +12,7 @@
     "conversation_id": "conv-1",
     "duration_seconds": 552.98,
     "failure": "worker_failed",
+    "fresh_capture": true,
     "late_capture": false,
     "merge_pending": false,
     "owner_id": "owner-1",
@@ -68,7 +69,7 @@
      }
     },
     "policy_source": "admission",
-    "priority": 0,
+    "priority": 1,
     "privacy_generation": 0,
     "protocol_version": 1,
     "quarantine_reason": "worker_failed",
@@ -91,10 +92,10 @@
    },
    "final_result": {
     "conversation_id": "conv-1",
-    "late_capture": false,
-    "log_sequence": 1,
+    "late_capture": true,
+    "log_sequence": 3,
     "owner_id": "owner-1",
-    "previous_segment_id": null,
+    "previous_segment_id": "seg-2",
     "privacy_generation": 0,
     "projection": {
      "speech_seconds": 552.98,
@@ -156,6 +157,7 @@
     "conversation_id": "conv-2",
     "duration_seconds": 447.66,
     "failure": "worker_failed",
+    "fresh_capture": true,
     "late_capture": false,
     "merge_pending": false,
     "owner_id": "owner-1",
@@ -202,7 +204,7 @@
      }
     },
     "policy_source": "admission",
-    "priority": 0,
+    "priority": 1,
     "privacy_generation": 0,
     "protocol_version": 1,
     "quarantine_reason": "worker_failed",
@@ -226,7 +228,7 @@
    "final_result": {
     "conversation_id": "conv-2",
     "late_capture": true,
-    "log_sequence": 3,
+    "log_sequence": 2,
     "owner_id": "owner-1",
     "previous_segment_id": "seg-3",
     "privacy_generation": 0,
@@ -290,6 +292,7 @@
     "conversation_id": "conv-3",
     "duration_seconds": 525.29,
     "failure": "worker_failed",
+    "fresh_capture": true,
     "late_capture": false,
     "merge_pending": false,
     "owner_id": "owner-1",
@@ -336,7 +339,7 @@
      }
     },
     "policy_source": "admission",
-    "priority": 0,
+    "priority": 1,
     "privacy_generation": 0,
     "protocol_version": 1,
     "quarantine_reason": "worker_failed",
@@ -360,9 +363,9 @@
    "final_result": {
     "conversation_id": "conv-3",
     "late_capture": false,
-    "log_sequence": 2,
+    "log_sequence": 1,
     "owner_id": "owner-1",
-    "previous_segment_id": "seg-1",
+    "previous_segment_id": null,
     "privacy_generation": 0,
     "projection": {
      "speech_seconds": 525.29,
@@ -424,6 +427,7 @@
     "conversation_id": "conv-4",
     "duration_seconds": 176.93,
     "failure": "worker_failed",
+    "fresh_capture": true,
     "late_capture": true,
     "merge_pending": false,
     "owner_id": "owner-1",
@@ -480,7 +484,7 @@
      }
     },
     "policy_source": "admission",
-    "priority": 0,
+    "priority": 1,
     "privacy_generation": 0,
     "protocol_version": 1,
     "quarantine_reason": "worker_failed",
@@ -506,7 +510,7 @@
     "late_capture": true,
     "log_sequence": 4,
     "owner_id": "owner-1",
-    "previous_segment_id": "seg-2",
+    "previous_segment_id": "seg-1",
     "privacy_generation": 0,
     "projection": {
      "speech_seconds": 176.93,

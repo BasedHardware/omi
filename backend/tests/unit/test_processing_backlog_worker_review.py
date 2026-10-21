@@ -303,6 +303,18 @@ async def test_flags_off_worker_does_not_read_or_schedule(monkeypatch):
     blocked.assert_not_called()
 
 
+async def test_resumed_reservation_consumes_single_candidate_rotation_turn(monkeypatch, job_harness):
+    reserved = {'kind': 'audio', 'id': 'reserved', 'units': 1, 'at': 100}
+    job_harness.job['reserved'] = reserved
+    page = Mock(side_effect=AssertionError('owner took a second candidate in one turn'))
+    monkeypatch.setattr(worker, '_page', page)
+    assert await worker.run('synthetic', max_items=1)
+    assert job_harness.processed == [reserved]
+    assert job_harness.job['reserved'] == {}
+    assert job_harness.job['state'] == 'processing'
+    page.assert_not_called()
+
+
 @pytest.mark.parametrize('naive', [False, True])
 async def test_mixed_datetime_numeric_queues_sort_and_compare_without_changing_cursor_types(
     monkeypatch, job_harness, naive

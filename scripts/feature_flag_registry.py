@@ -18,7 +18,7 @@ KINDS = {"env", "posthog", "bundle", "server_capability", "build_define", "fires
 LIFECYCLES = {"experiment", "rollout", "ops_kill", "config_switch"}
 SURFACES = {"backend", "macos", "windows", "web-app", "web-admin", "web-frontend", "mobile", "llm-gateway"}
 FAILS = {"open", "closed", "inverted"}
-DECISIONS = {"pending", "graduate", "ship", "kill", "keep"}
+DECISIONS = {"pending", "graduate", "ship", "kill", "kill_after_readout", "keep", "with_legacy"}
 TERMINALS = {"on", "off", "keep", "undecided"}
 REVIEW_GRACE_DAYS = 7
 RAMP_REQUIRED_FROM = date(2026, 10, 21)
@@ -150,9 +150,17 @@ def validate_registry(registry: dict[str, list[dict[str, Any]]], *, root: Path =
                     errors.append(f"{label}: {lifecycle} terminal must be keep")
                 if lifecycle in {"rollout", "experiment"} and entry.get("owner") == "unowned":
                     errors.append(f"{label}: {lifecycle} owner must not be unowned")
-                terminal_for_decision = {"graduate": "on", "ship": "on", "kill": "off", "keep": "keep"}
+                terminal_for_decision = {
+                    "graduate": "on",
+                    "ship": "on",
+                    "kill": "off",
+                    "keep": "keep",
+                    "with_legacy": "off",
+                }
                 if decision in terminal_for_decision and terminal != terminal_for_decision[decision]:
                     errors.append(f"{label}: decision {decision} requires terminal {terminal_for_decision[decision]}")
+                if decision == "kill_after_readout" and (lifecycle != "experiment" or terminal != "undecided"):
+                    errors.append(f"{label}: kill_after_readout requires experiment lifecycle and undecided terminal")
                 surfaces = entry.get("surfaces")
                 if not isinstance(surfaces, list) or not surfaces or any(s not in SURFACES for s in surfaces):
                     errors.append(f"{label}: invalid surfaces")

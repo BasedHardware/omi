@@ -361,6 +361,23 @@ def chat_file_is_document(name: str, mime_type: Optional[str]) -> bool:
     return bool(mime) and mime in CHAT_FILE_DOCUMENT_MIME_TYPES
 
 
+class ChatFileVideo(BaseModel):
+    """A video attachment stored as stills (utils.media.video_frames); the clip itself is not kept.
+
+    The FileChat's own file is the overview contact sheet. The filmstrip holds every sampled
+    frame for closer looks at a time window. ``transcript`` is encrypted at rest like chat text.
+    """
+
+    duration_seconds: float
+    frame_times: List[float] = Field(default_factory=list)
+    strip_file_id: str = ''
+    strip_times: List[float] = Field(default_factory=list)
+    strip_columns: int = 0
+    strip_cell_width: int = 0
+    strip_cell_height: int = 0
+    transcript: str = ''
+
+
 class FileChat(BaseModel):
     id: str
     name: str
@@ -369,6 +386,7 @@ class FileChat(BaseModel):
     openai_file_id: str
     created_at: datetime
     thumb_name: Optional[str] = ""
+    video: Optional[ChatFileVideo] = None
 
     def is_image(self):
         return self.mime_type.startswith("image")
@@ -379,6 +397,13 @@ class FileChat(BaseModel):
     def model_dump(self, **kwargs):
         exclude_fields = {'thumb_name'}
         return super().model_dump(exclude=exclude_fields, **kwargs)
+
+    def client_dump(self) -> Dict[str, Any]:
+        """Upload response: clients get the video length, never the transcript or filmstrip ids."""
+        row = self.model_dump()
+        if self.video:
+            row['video'] = {'duration_seconds': self.video.duration_seconds}
+        return row
 
 
 class ChartDataPoint(BaseModel):

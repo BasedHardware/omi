@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-task-suggestions.png",
+      "platform": "mobile-ios",
+      "description": "Tasks exposes a desktop suggestion before approval.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-saved-task.png",
+      "platform": "mobile-ios",
+      "description": "The acknowledged task appears once in the real Tasks list.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-mobile-ios-task-integrations-menu.png",
+      "platform": "mobile-ios",
+      "description": "The real Tasks overflow has a named Task Integrations entry.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "004-mobile-ios-task-integrations.png",
+      "platform": "mobile-ios",
+      "description": "That entry opens the existing native Task Integrations page.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "005-mobile-ios-summary-task-recovery.png",
+      "platform": "mobile-ios",
+      "description": "A cached desktop summary skips invalid leading rows, then recovers stored row 3; the synthetic server rejects any other prepare/accept coordinate.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

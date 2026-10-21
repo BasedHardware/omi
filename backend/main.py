@@ -45,6 +45,7 @@ from routers import (
     review,
     proactivity,
     chat,
+    chat_video,
     firmware,
     static_map,
     transcribe,
@@ -156,6 +157,7 @@ from utils.executors import start_background_task
 from utils.batch_pipeline.serving import start_serving_from_env, stop_serving
 from utils.cloud_tasks import validate_account_deletion_dispatch_configuration
 from utils.stt.streaming import validate_streaming_stt_env
+from utils.stt.soniox_usage import start_if_configured as start_soniox_usage_if_configured
 from utils.stt.live_health import health as live_stt_health
 from utils.stt.parakeet_window import batch_pressure
 from utils.llm.managed_spend_ledger import shutdown_managed_spend_ledger
@@ -263,6 +265,7 @@ app.include_router(x_connector.router)
 app.include_router(memories.router)
 app.include_router(chat.router)
 app.include_router(chat_receipts.router)
+app.include_router(chat_video.router)
 app.include_router(speech_profile.router)
 app.include_router(speaker_tag_prompts.router)
 app.include_router(speaker_labels.router)
@@ -406,6 +409,11 @@ from utils.other.fsr_leader_lease import install_loop_lease_sigterm_handler
 
 install_loop_lease_sigterm_handler()
 
+# Live STT: deaths after SIGTERM are our rolling restart, not provider evidence.
+from utils.stt.pod_drain import install_drain_signal_marker
+
+install_drain_signal_marker()
+
 
 @app.on_event("startup")  # type: ignore[reportDeprecated]  # FastAPI on_event still functional; lifespan migration would change app wiring
 async def startup_event():
@@ -415,8 +423,12 @@ async def startup_event():
     start_metrics_sidecar_server()
     start_background_task(refresh_stt_cap_cohort_forever(), name='stt_cap_cohort_refresh')
     start_background_task(live_stt_health.refresh_forever(), name='live_stt_fleet_health')
+    from utils.held_content_cohort import refresh_held_content_cohort_forever
+
+    start_background_task(refresh_held_content_cohort_forever(), name='held_content_cohort_refresh')
     batch_pressure.start_from_env()
     app.state.batch_pipeline_serving = start_serving_from_env()
+    start_soniox_usage_if_configured(start_background_task)
     validate_account_deletion_dispatch_configuration()
     validate_streaming_stt_env()
     start_background_task(log_executor_health(), name='executor_health')
@@ -661,6 +673,7 @@ async def _periodic_durable_queue_age_publish(interval_seconds: int | None = Non
 async def shutdown_event():
     # Keep the shutdown cleanup self-contained for isolated lifecycle callers.
     import logging
+
     from utils.executors import db_executor, run_blocking
 
     runtime = getattr(app.state, 'messaging_runtime', None)

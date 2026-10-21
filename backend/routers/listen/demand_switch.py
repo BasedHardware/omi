@@ -15,6 +15,7 @@ from utils.stt.recovery_state import LiveRecoveryController, RecoveryState, curr
 from utils.stt.replay_delivery import abort_replay_socket, socket_replay_limits
 from utils.stt import replay_delivery
 from utils.stt.resilient_stream import trim_window_replay_to_anchor
+from utils.stt.provider_stream_end import US_FAILOVER, note_stream_close_intent
 from utils.stt.socket import release_live_stt_socket
 
 
@@ -144,6 +145,7 @@ async def switch_live_demand(receiver, lane: str) -> bool:
         if ring is not None:
             receiver._window_replay_cutoff_sample = ring.finalized_sample
         hop = PendingLiveFailover(from_mode=old_selection[0].value, to_mode=selected[0].value, reason='normal_close')
+        note_stream_close_intent(previous, US_FAILOVER)
         try:
             await abort_replay_socket(previous)
             release_live_stt_socket(previous)

@@ -23,6 +23,14 @@ from utils.log_sanitizer import sanitize_provider_error
 from utils.observability.fallback import record_fallback
 from utils.stt.committed_words import remember_provider_word
 from utils.stt.failure_diagnostics import connection_loss_cause, transport_failure_fields
+from utils.stt.provider_stream_end import (
+    US_TIMEOUT,
+    VENDOR,
+    DETACHED_STREAM_END,
+    ProviderStreamEnd,
+    log_connect_rejection,
+    observe_connect_seconds,
+)
 from config.live_stt_replay import ReplayLimits
 from config.live_stt_recovery import recovery_enabled
 from utils.stt.socket import STTSocket
@@ -186,6 +194,7 @@ class SafeSonioxSocket(STTSocket):
     """
 
     max_replay_rate = 1.0  # Real-time ceiling; see replay_delivery and the replay runbook.
+    stream_end: ProviderStreamEnd = DETACHED_STREAM_END  # Replaced in __init__.
     replay_limits = ReplayLimits()
 
     def __init__(
@@ -223,6 +232,7 @@ class SafeSonioxSocket(STTSocket):
         except Exception:
             self.disable_capture_axis_diagnostics()
         self._ws: Any = ws
+        self.stream_end = ProviderStreamEnd(SONIOX_SERVICE_NAME, ws)
         self._opened_at = time.monotonic()
         self._stream_transcript = stream_transcript
         self._loop = loop
@@ -299,6 +309,7 @@ class SafeSonioxSocket(STTSocket):
             else:
                 return
         if transport_error is not None:
+            self.stream_end.record(self._ws, error=transport_error)
             fields = transport_failure_fields(transport_error, time.monotonic() - self._opened_at)
             logger.warning(
                 'STT provider transport failure provider=soniox operation=%s exception_class=%s '
@@ -385,6 +396,7 @@ class SafeSonioxSocket(STTSocket):
             if self._closed or self._finishing:
                 return
             self._finishing = True
+        self.stream_end.record(unless_closing=True)  # Only when no owner will close this transport.
 
         def finish_on_loop() -> None:
             try:
@@ -408,6 +420,18 @@ class SafeSonioxSocket(STTSocket):
                 self._mark_dead('finish called after provider event loop closed', typed_reason='normal_close')
 
     async def drain_and_close(self) -> None:
+        self.stream_end.begin_close()
+        self._done_timed_out = False
+        cancelled = False
+        try:
+            await self._drain_and_close()
+        except asyncio.CancelledError:
+            cancelled = True  # The abort that follows closes the transport and records first.
+            raise
+        finally:
+            self.stream_end.record_after_drain(cancelled=cancelled, closer=US_TIMEOUT if self._done_timed_out else None)
+
+    async def _drain_and_close(self) -> None:
         try:
             self.finish()
             await asyncio.gather(self._send_task, return_exceptions=True)
@@ -416,6 +440,7 @@ class SafeSonioxSocket(STTSocket):
                     await asyncio.wait_for(self._done_event.wait(), timeout=60)
                 except (asyncio.TimeoutError, asyncio.CancelledError):
                     logger.warning('Soniox drain timed out waiting for finished message')
+                    self._done_timed_out = True
         except Exception:
             pass
         self._closed = True
@@ -510,6 +535,8 @@ class SafeSonioxSocket(STTSocket):
             await self._ws.send(data)
             written = True
             telemetry_call(self, '_demand_wire', 'written', data)
+            if isinstance(data, bytes):
+                self.stream_end.note_audio_sent()
             if provider_clock is not None and finalize:
                 provider_clock.finalize_written()
             if provider_clock is not None and isinstance(data, bytes):
@@ -626,6 +653,8 @@ class SafeSonioxSocket(STTSocket):
                         self._done_event.set()
                         break
                     record_stt_stream_close(provider=SONIOX_SERVICE_NAME, reason=typed)
+                    self.stream_end.note_frame(msg)
+                    self.stream_end.note_vendor_error(typed)
                     if typed in (PROVIDER_BUDGET_EXHAUSTED, PROVIDER_AUTH_REJECTED, SONIOX_DEATH_INVALID_HINT):
                         # The provider evaluated the account (402 / monthly budget)
                         # or the session config (400 invalid language hint) and
@@ -635,9 +664,10 @@ class SafeSonioxSocket(STTSocket):
                         # signature. Monthly budget used to miss the typed set
                         # and log at WARNING for 27.5h.
                         logger.error(
-                            'Soniox streaming error: reason=%s %s',
+                            'Soniox streaming error: reason=%s %s request_id=%s',
                             typed,
                             sanitize_provider_error(err, code=msg.get('error_code')),
+                            self.stream_end.request_id or 'none',
                         )
                     else:
                         # Idle-timeout and documented rotation are the
@@ -645,9 +675,10 @@ class SafeSonioxSocket(STTSocket):
                         # provider fault; failing to discriminate kept this the
                         # top backend-listen error signature with no signal.
                         logger.warning(
-                            'Soniox stream closed: reason=%s %s',
+                            'Soniox stream closed: reason=%s %s request_id=%s',
                             typed,
                             sanitize_provider_error(err, code=msg.get('error_code')),
+                            self.stream_end.request_id or 'none',
                         )
                         if typed == PROVIDER_RATE_LIMITED:
                             _rate_limit_persistent_error(err)
@@ -666,12 +697,16 @@ class SafeSonioxSocket(STTSocket):
                     isinstance(token, dict) and not token.get('is_final') and str(token.get('text') or '').strip()
                     for token in tokens
                 )
+                if self._nonfinal_pending:
+                    self.stream_end.note_text()
                 if tokens:
                     self._handle_tokens(tokens)
 
                 if msg.get('finished'):
                     self._done_event.set()
                     break
+            if not (self._closed or self._finishing or self._done_event.is_set()):
+                self.stream_end.record(self._ws, closer=VENDOR, reason='clean_eof')
         except websockets.exceptions.ConnectionClosed as e:
             self._mark_dead(
                 f'ws recv closed: {e}',
@@ -727,6 +762,7 @@ class SafeSonioxSocket(STTSocket):
                 continue
             if token.get('start_ms') is None or token.get('end_ms') is None:
                 continue
+            self.stream_end.note_text()
             start_ms = int(token['start_ms'])
             start = start_ms / 1000.0
             if self._preseconds and start < self._preseconds:
@@ -846,7 +882,8 @@ async def process_audio_soniox(
 async def _open_soniox(config: Dict[str, Any], url: str, stream_transcript: Any, preseconds: int) -> SafeSonioxSocket:
     sample_rate = config['sample_rate']
     logger.info('Connecting to Soniox streaming sample_rate=%s', sample_rate)
-    deadline = time.monotonic() + SONIOX_CONNECT_RETRY_DEADLINE_SECONDS
+    started = time.monotonic()
+    deadline = started + SONIOX_CONNECT_RETRY_DEADLINE_SECONDS
     ws = None
     last_rate_limit: BaseException | None = None
     for attempt in range(len(SONIOX_CONNECT_RETRY_DELAYS) + 1):
@@ -861,6 +898,7 @@ async def _open_soniox(config: Dict[str, Any], url: str, stream_transcript: Any,
             break
         except Exception as error:
             if _websocket_status(error) != 429:
+                log_connect_rejection(SONIOX_SERVICE_NAME, error)
                 raise
             last_rate_limit = error
             record_stt_stream_close(provider=SONIOX_SERVICE_NAME, reason=PROVIDER_RATE_LIMITED)
@@ -886,5 +924,6 @@ async def _open_soniox(config: Dict[str, Any], url: str, stream_transcript: Any,
         raise
     loop = asyncio.get_running_loop()
     sock = SafeSonioxSocket(ws, stream_transcript, loop, preseconds=preseconds, sample_rate=sample_rate)
+    observe_connect_seconds(SONIOX_SERVICE_NAME, time.monotonic() - started)
     logger.info('Soniox streaming connection established')
     return sock

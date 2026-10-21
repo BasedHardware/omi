@@ -75,6 +75,44 @@ def test_conflicting_retry_cannot_overwrite_first_choice():
     assert budget_choice.get_choice('test-user', '2026-10', firestore_client=db)['choice'] == 'on_device'
 
 
+def test_newer_stored_period_rejects_when_request_month_equals_clock():
+    db = StrictFirestore()
+    path = ('users', 'test-user', 'budget_choice', 'current')
+    stored = {'period': '2026-11', 'choice': 'upgrade', 'dont_ask_again': False}
+    db.rows[path] = dict(stored)
+    with pytest.raises(budget_choice.BudgetChoiceConflict, match='budget_period_changed'):
+        budget_choice.set_choice('test-user', '2026-10', 'on_device', True, firestore_client=db)
+    assert db.rows[path] == stored
+    assert all(not tx.sets for tx in db.transactions)
+
+
+def test_two_transaction_attempts_cross_the_month_change(monkeypatch):
+    from google.api_core.exceptions import Aborted
+
+    db = StrictFirestore()
+    ref = db.collection('users').document('test-user').collection('budget_choice').document('current')
+    tx = db.transaction()
+    tx._max_attempts = 2
+    staged = []
+
+    def commit():
+        if not staged:
+            staged.append([path for path, _payload in tx.sets])
+            for path, _payload in list(tx.sets):
+                db.rows.pop(path, None)
+            tx.sets.clear()
+            tx.has_written = False
+            monkeypatch.setattr(budget_choice, 'budget_period', lambda: '2026-11')
+            raise Aborted('synthetic contention')
+
+    monkeypatch.setattr(tx, '_commit', commit)
+    with pytest.raises(budget_choice.BudgetChoiceConflict, match='budget_period_changed'):
+        budget_choice._store(tx, ref, '2026-10', 'on_device', False)
+    assert staged == [[ref.path]]
+    assert not db.rows
+    assert not tx.sets
+
+
 def test_delayed_previous_period_cannot_overwrite_reset_choice(monkeypatch):
     monkeypatch.setattr(budget_choice, 'budget_period', lambda: '2026-11')
     db = StrictFirestore()

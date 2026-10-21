@@ -48,13 +48,10 @@ def coordinator():
 def env(monkeypatch):
     monkeypatch.delenv('SYNC_LINEAGE_RESOLVE_ENABLED', raising=False)
     monkeypatch.setenv('SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST', '')  # Explicit legacy global policy.
-    monkeypatch.setenv('SYNC_LINEAGE_S1_REQUIRED', 'true')
-    monkeypatch.setenv('CAPTURE_EVIDENCE_V1_DARK_WRITE', 'true')
 
 
 def _request(monkeypatch, caplog, claims, filenames, *, s1_env='true', dark='true', metric_broken=False):
-    monkeypatch.setenv('SYNC_LINEAGE_S1_REQUIRED', s1_env)
-    monkeypatch.setenv('CAPTURE_EVIDENCE_V1_DARK_WRITE', dark)
+
     metrics = MagicMock()
     if metric_broken:
         metrics.labels.side_effect = RuntimeError('metric backend down')
@@ -126,13 +123,6 @@ def test_refusal_reasons_emit_once_and_stay_bounded(monkeypatch, caplog, claims,
     assert 'job_ref=none' in lines[0]
 
 
-def test_dark_write_disabled_classifies_not_admitted(monkeypatch, caplog):
-    requested, outcomes, lines = _request(monkeypatch, caplog, VALID, [BIN_NAME], dark='false')
-    assert requested is False
-    assert outcomes == ['s1_refused']
-    assert 'reason=not_admitted' in lines[0]
-
-
 def test_oversize_serialized_claim_set_is_parse_failed(monkeypatch, caplog):
     names = [f"{'a' * 240}{i:03d}.bin" for i in range(20)]
     claims = {name: _claim() for name in names}
@@ -143,12 +133,6 @@ def test_oversize_serialized_claim_set_is_parse_failed(monkeypatch, caplog):
 
 def test_valid_claims_pass_silently(monkeypatch, caplog):
     requested, outcomes, lines = _request(monkeypatch, caplog, VALID, [BIN_NAME])
-    assert requested is True
-    assert outcomes == [] and lines == []
-
-
-def test_s1_gate_off_bypasses_silently(monkeypatch, caplog):
-    requested, outcomes, lines = _request(monkeypatch, caplog, None, [], s1_env='off')
     assert requested is True
     assert outcomes == [] and lines == []
 
@@ -188,7 +172,7 @@ async def test_observed_map_count_mismatch_emits_one_s1_refusal(coordinator, mon
     module, stubs = coordinator
     pipeline = stubs['pipeline']
     _coverage_env(monkeypatch)
-    monkeypatch.delenv('SYNC_LINEAGE_S1_REQUIRED', raising=False)
+
     state = _wire(pipeline, monkeypatch, tmp_path, lineage_rows=[generation(1)])
     refusals = []
     lineage_module = getattr(pipeline, 'sync_recording_lineage', recording_lineage)

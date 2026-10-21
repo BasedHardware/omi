@@ -266,3 +266,54 @@ def test_new_binding_cannot_inherit_pending_source_exception(tmp_path, monkeypat
     assert len(actual) == len(pending) + 1
     assert guard.check_pending(actual, pending, pending)
     assert guard.check_pending(actual, actual, pending)
+
+
+def _multi_target_service(tmp_path, monkeypatch, *, build_only):
+    from types import SimpleNamespace
+
+    source = tmp_path / 'backend/service'
+    source.mkdir(parents=True)
+    (source / 'main.py').write_text('')
+    (source / 'worker.py').write_text('')
+    docker = source / 'Dockerfile.roles'
+    docker.write_text(
+        'FROM python AS app\nWORKDIR /app\nCOPY backend/service/ .\n'
+        'FROM app AS api\nCMD ["uvicorn", "main:app"]\n'
+        'FROM app AS worker\nCMD ["python", "-m", "worker"]\n'
+    )
+    (tmp_path / 'backend/charts').mkdir()
+    (tmp_path / 'backend/runtime_images.json').write_text(json.dumps({'logging_chart_images': {}}))
+    contracts = [
+        SimpleNamespace(
+            name=f'service-{stage}',
+            source_root=source,
+            dockerfile=docker,
+            build_context=tmp_path,
+            entrypoints=(module,),
+            target=stage,
+            build_only=build_only,
+        )
+        for stage, module in (('api', 'main'), ('worker', 'worker'))
+    ]
+    monkeypatch.setattr(guard, 'load_contracts', lambda: contracts)
+    monkeypatch.setattr(guard, 'ROOT', tmp_path)
+    return guard.inventory(tmp_path)
+
+
+def test_each_registered_build_target_is_its_own_launch_surface(tmp_path, monkeypatch):
+    actual = _multi_target_service(tmp_path, monkeypatch, build_only=False)
+    assert set(actual) == {
+        'backend/service/main.py::docker:backend/service/Dockerfile.roles@api:main',
+        'backend/service/worker.py::docker:backend/service/Dockerfile.roles@worker:worker',
+    }
+    assert guard.check_pending(actual, {}, {})
+
+
+def test_build_only_targets_have_no_launch_surface_until_deployed(tmp_path, monkeypatch):
+    monkeypatch.setattr(guard, 'dockerfile_shipped_by_github', lambda _: [])
+    assert _multi_target_service(tmp_path, monkeypatch, build_only=True) == {}
+
+
+def test_build_only_flag_cannot_hide_a_dockerfile_a_workflow_ships(tmp_path, monkeypatch):
+    monkeypatch.setattr(guard, 'dockerfile_shipped_by_github', lambda _: ['.github/workflows/ships.yml'])
+    assert len(_multi_target_service(tmp_path, monkeypatch, build_only=True)) == 2
