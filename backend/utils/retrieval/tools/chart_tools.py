@@ -21,6 +21,43 @@ def _agent_config() -> Optional[Dict[str, Any]]:
         return None
 
 
+def _coerce_value(value: Any) -> float:
+    """Coerce an LLM-supplied value into a finite float.
+
+    LLM tool calls frequently emit ``None``, string-encoded numbers (``"7.2"``) or
+    unparseable text. Anything that cannot be represented as a finite float becomes
+    ``0.0`` so the chart wire schema stays valid JSON instead of leaking ``None``.
+    """
+    try:
+        coerced = float(value)
+    except (TypeError, ValueError):
+        return 0.0
+    if coerced != coerced or coerced in (float('inf'), float('-inf')):
+        return 0.0
+    return coerced
+
+
+def _coerce_label(label: Any) -> str:
+    """Coerce an LLM-supplied label into a string (``None`` becomes an empty label)."""
+    if label is None:
+        return ""
+    return str(label)
+
+
+def _bind_configurable(config: Dict[str, Any]) -> Dict[str, Any]:
+    """Return a mutable ``config['configurable']`` dict, creating it when missing or None.
+
+    ``config.get('configurable', {})`` silently detaches from ``config`` when the key is
+    absent, and returns ``None`` when LangChain leaves ``configurable`` uninitialized.
+    Both cases are repaired here so ``chart_data`` actually reaches downstream readers.
+    """
+    configurable = config.get('configurable')
+    if not isinstance(configurable, dict):
+        configurable = {}
+        config['configurable'] = configurable
+    return configurable
+
+
 @tool
 def create_chart_tool(
     chart_type: str,
@@ -73,15 +110,16 @@ def create_chart_tool(
         "datasets": [
             {
                 "label": dataset_label,
-                "data_points": [{"label": l, "value": v} for l, v in zip(labels, values)],
+                "data_points": [
+                    {"label": _coerce_label(l), "value": _coerce_value(v)} for l, v in zip(labels, values)
+                ],
                 "color": color,
             }
         ],
     }
 
     config = _agent_config()
-    if config:
-        configurable = config.get('configurable', {})
-        configurable['chart_data'] = chart_data
+    if config is not None:
+        _bind_configurable(config)['chart_data'] = chart_data
 
     return f"Chart created: {title} ({chart_type} chart with {len(labels)} data points). The chart will be displayed inline in the chat."
