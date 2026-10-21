@@ -59,6 +59,7 @@ if [ "${#PUSH_UPDATES[@]}" -gt 0 ]; then
   if "$PYTHON_BIN" scripts/pre_push_ci_verified.py \
     --remote-url "$PUSH_REMOTE_URL" \
     --log-file "$(git rev-parse --git-common-dir)/omi-pre-push-ci-verified.log" \
+    --registry-ref "$BASE_REMOTE_REF" \
     "${PUSH_OIDS[@]}"
   then
     echo "Every pushed SHA already passed terminal-green CI on GitHub; the local pre-push suite would only repeat it."

@@ -10,13 +10,14 @@ only that duplicated local suite when, for every pushed SHA:
 - at least one CI workflow run (push / pull_request / merge_group) on that SHA
   concluded success, and every CI workflow run on it is terminal and green
   (success, skipped or neutral);
-- no legacy commit status on it is failure or error.
+- if it carries any legacy commit statuses, their combined state is success.
 
 Deployment writers (the LOCK_CONTRACTS registry in
-.github/scripts/check-deployment-concurrency.py) are not CI and neither certify
-nor block: on main they sit parked behind their concurrency lock or are
-cancelled by a newer push, which says nothing about the commit. If the registry
-cannot be read, deploys are judged like CI, which only fails closed.
+.github/scripts/check-deployment-concurrency.py, read at the base ref the hook
+passes, never from the working tree) are not CI and neither certify nor block:
+on main they sit parked behind their concurrency lock or are cancelled by a
+newer push, which says nothing about the commit. If the registry cannot be
+read, deploys are judged like CI, which only fails closed.
 
 This is not a skip hatch. Nothing here reads the environment; the only way to
 skip is for GitHub to report green CI on the exact SHA. Every error, timeout,
@@ -42,7 +43,6 @@ from typing import Any, Callable
 
 CI_EVENTS = frozenset({"push", "pull_request", "pull_request_target", "merge_group"})
 GREEN_CONCLUSIONS = frozenset({"success", "skipped", "neutral"})
-RED_STATUS_STATES = frozenset({"failure", "error"})
 GH_TIMEOUT_SECONDS = 30
 DEPLOY_REGISTRY = Path(".github/scripts/check-deployment-concurrency.py")
 
@@ -115,9 +115,12 @@ def verify_commit(
     if not green:
         raise NotVerified(f"{sha[:12]}: no successful CI workflow run on this exact SHA")
 
+    # GitHub reports "pending" for a commit with no statuses at all; only that case is neutral.
     combined = gh_api(f"repos/{repo}/commits/{sha}/status")
-    state = combined.get("state") if isinstance(combined, dict) else None
-    if state in RED_STATUS_STATES:
+    if not isinstance(combined, dict):
+        raise NotVerified(f"{sha[:12]}: combined commit status is unreadable")
+    state = combined.get("state")
+    if combined.get("total_count", 0) and state != "success":
         raise NotVerified(f"{sha[:12]}: combined commit status is {state}")
 
     return f"{sha[:12]}: {len(green)} successful CI run(s), tree {local_tree[:12]} matches"
@@ -182,6 +185,22 @@ def decide(
     return True, proofs
 
 
+def _deploy_files_at(ref: str) -> frozenset[str]:
+    """The registry as the base branch has it, so a local edit cannot widen what is ignored."""
+    result = subprocess.run(
+        ["git", "show", f"{ref}:{DEPLOY_REGISTRY.as_posix()}"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        return frozenset()
+    try:
+        return deploy_workflow_files(result.stdout)
+    except (SyntaxError, ValueError):
+        return frozenset()
+
+
 def _append_log(log_file: Path, record: dict[str, Any]) -> None:
     try:
         with log_file.open("a", encoding="utf-8") as handle:
@@ -194,13 +213,11 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--remote-url", required=True)
     parser.add_argument("--log-file", type=Path, required=True)
+    parser.add_argument("--registry-ref", required=True, help="trusted ref to read the deploy-writer registry from")
     parser.add_argument("shas", nargs="*")
     args = parser.parse_args(argv)
 
-    try:
-        deploy_files = deploy_workflow_files(DEPLOY_REGISTRY.read_text(encoding="utf-8"))
-    except (OSError, SyntaxError, ValueError):
-        deploy_files = frozenset()
+    deploy_files = _deploy_files_at(args.registry_ref)
 
     verified, lines = decide(args.remote_url, args.shas, gh_api_subprocess, _local_tree, deploy_files)
     verdict = "ci-green: skipping the duplicated local suite" if verified else "not CI-verified: running the local suite"

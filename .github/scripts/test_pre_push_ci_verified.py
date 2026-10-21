@@ -46,10 +46,10 @@ def run(name: str, conclusion: str | None, *, status: str = "completed", event: 
     }
 
 
-def fake_github(runs: list[dict], *, tree: str = TREE, state: str = "success"):
+def fake_github(runs: list[dict], *, tree: str = TREE, state: str = "success", statuses: int = 1):
     def gh_api(endpoint: str):
         if endpoint.endswith("/status"):
-            return {"state": state}
+            return {"state": state, "total_count": statuses}
         if "actions/runs" in endpoint:
             return [{"workflow_runs": runs}]
         return {"commit": {"tree": {"sha": tree}}}
@@ -107,8 +107,14 @@ class VerdictTests(unittest.TestCase):
         self.assertFalse(ok)
         self.assertIn("differs from local tree", lines[-1])
 
-    def test_red_commit_status_is_not_verified(self):
-        self.assertFalse(verdict(fake_github([run("Backend Checks", "success")], state="failure"))[0])
+    def test_commit_status_must_be_success_when_any_exist(self):
+        green = [run("Backend Checks", "success")]
+        for state in ("failure", "error", "pending"):
+            with self.subTest(state=state):
+                self.assertFalse(verdict(fake_github(green, state=state))[0])
+        # GitHub's answer for a commit with no statuses at all.
+        self.assertTrue(verdict(fake_github(green, state="pending", statuses=0))[0])
+        self.assertFalse(verdict(lambda e: [] if e.endswith("/status") else fake_github(green)(e))[0])
 
     def test_every_pushed_sha_must_be_green(self):
         other = "d" * 40
