@@ -68,6 +68,8 @@ class Publication:
         self.lock = RLock()
         self.fields: dict = {}
         self.put_started = False
+        # Upload-only futures retain ambiguous results; they never own a commit.
+        self.upload_attempts: list[Any] = []
 
     @property
     def uid(self) -> str:

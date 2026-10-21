@@ -9,10 +9,17 @@ from __future__ import annotations
 import asyncio
 import copy
 from contextlib import nullcontext
-from threading import Barrier, Lock, RLock, Thread
+from concurrent.futures import Future
+from pathlib import Path
+from unittest.mock import Mock
+from threading import Barrier, Event, Lock, RLock, Thread
 from types import SimpleNamespace
 
 import pytest
+import requests.exceptions
+import urllib3.exceptions
+from google.auth.exceptions import TransportError
+from google.api_core.exceptions import RetryError
 from google.api_core.exceptions import (
     Aborted,
     AlreadyExists,
@@ -36,17 +43,21 @@ from database.firestore_transaction_retry import FirestoreContentionExhausted
 from routers.listen.contracts import ListenSessionState
 from routers.listen.receiver import ListenReceiver, mark_listen_internal_error
 from utils.observability import held_content as held_metrics
-from utils.sync import cap_hold, cap_hold_redrive, live_cap_manifest, live_cap_staging
+from utils.sync import cap_hold, cap_hold_redrive, live_cap_manifest, live_cap_staging, live_cap_upload, live_cap_hold
 from utils.sync.live_cap_publication import Publication
 from utils.sync.live_cap_staging import late_hold_identity
 
 EXPIRED = '400 The referenced transaction has expired or is no longer valid.'
+REAL_UPLOAD = cap_hold.upload_held_audio
 UID = 'synthetic'
 FRAGMENT_PAYLOAD = b'fragment-bytes' * 4
 
 
 def _counter(outcome: str) -> float:
-    return held_metrics.PUBLICATION_RETRY.labels(outcome=outcome)._value.get()
+    return sum(
+        held_metrics.PUBLICATION_RETRY.labels(outcome=outcome, cause=cause)._value.get()
+        for cause in held_metrics.PUBLICATION_RETRY_CAUSES
+    )
 
 
 def test_failure_reason_classifies_commit_deadline_and_unavailable():
@@ -1345,3 +1356,243 @@ async def test_receive_data_close_code_follows_staging(delays, store, tmp_path):
     assert row['state'] == 'staging'
     failed, _row = await turn([], [InvalidArgument('some other 400')])
     assert failed.close_code == 1011
+
+
+@pytest.mark.parametrize(
+    'error',
+    [
+        requests.exceptions.ReadTimeout('read'),
+        requests.exceptions.ConnectTimeout('connect'),
+        requests.exceptions.ConnectionError('connection'),
+        urllib3.exceptions.ProtocolError('protocol'),
+        urllib3.exceptions.ReadTimeoutError(None, '/', 'read'),
+        urllib3.exceptions.MaxRetryError(None, '/', requests.exceptions.ReadTimeout('wrapped')),
+        TransportError('auth', requests.exceptions.ReadTimeout('wrapped')),
+        RetryError('wrapped', requests.exceptions.ConnectionError('connection')),
+    ],
+)
+async def test_only_upload_gets_one_transport_retry(error):
+    source = Publication(UID)
+    upload = Mock(side_effect=[error, {'audio_generation': 7, 'audio_size': 36}])
+    cause = live_cap_upload.transport_cause(error)
+    assert cause in ('timeout', 'connection')
+    before = held_metrics.PUBLICATION_RETRY.labels(outcome='retried_ok', cause=cause)._value.get()
+    await live_cap_upload.prepare(source, upload)
+    assert upload.call_count == 2 and source.fields['audio_generation'] == 7
+    assert held_metrics.PUBLICATION_RETRY.labels(outcome='retried_ok', cause=cause)._value.get() == before + 1
+    await live_cap_upload.prepare(source, upload)
+    assert upload.call_count == 2
+
+
+async def test_second_upload_timeout_fails_without_a_third_attempt():
+    source = Publication(UID)
+    upload = Mock(side_effect=requests.exceptions.ReadTimeout('read'))
+    before = held_metrics.PUBLICATION_RETRY.labels(outcome='exhausted', cause='timeout')._value.get()
+    for _ in range(2):  # close/flush cannot reset the budget or the identity
+        with pytest.raises(requests.exceptions.ReadTimeout):
+            await live_cap_upload.prepare(source, upload)
+    assert upload.call_count == 2 and len(source.upload_attempts) == 2
+    assert source.put_started and not source.fields
+    assert held_metrics.PUBLICATION_RETRY.labels(outcome='exhausted', cause='timeout')._value.get() == before + 1
+
+
+@pytest.mark.parametrize(
+    'error',
+    [
+        ValueError('permanent'),
+        TimeoutError('caller signal'),
+        ResourceExhausted('throttle'),
+        DeadlineExceeded('Firestore'),
+        RetryError('permanent', InvalidArgument('bad')),
+        TransportError('no inner fault'),
+    ],
+)
+async def test_upload_does_not_retry_api_or_permanent_errors(error):
+    source = Publication(UID)
+    upload = Mock(side_effect=error)
+    with pytest.raises(type(error)):
+        await live_cap_upload.prepare(source, upload)
+    assert upload.call_count == 1
+
+
+async def test_wall_deadline_retains_late_upload_and_never_commits(monkeypatch):
+    entered, release = Event(), Event()
+    source = Publication(UID)
+    calls = []
+
+    def stalled():
+        calls.append(source.identity)
+        entered.set()
+        assert release.wait(2)
+        return {'audio_generation': 7, 'audio_size': 36}
+
+    monkeypatch.setattr(live_cap_upload, 'UPLOAD_ATTEMPT_SECONDS', 0.02)
+    try:
+        with pytest.raises(requests.exceptions.ReadTimeout):
+            await live_cap_upload.prepare(source, stalled)
+        assert entered.is_set() and calls == [source.identity, source.identity]
+        assert not source.fields and len(source.upload_attempts) == 2
+    finally:
+        release.set()
+        await asyncio.gather(*(asyncio.wrap_future(f) for f in source.upload_attempts))
+    await live_cap_upload.prepare(source, stalled)
+    assert source.fields['audio_generation'] == 7 and len(calls) == 2
+
+
+async def test_live_upload_timeout_then_success_commits_once(delays, store, monkeypatch):
+
+    monkeypatch.setattr(
+        live_cap_hold.live_cap_codec, 'encode', lambda path, *args, **kw: Path(path).write_bytes(b'opus')
+    )
+    upload = Mock(
+        side_effect=[
+            requests.exceptions.ReadTimeout('read'),
+            {
+                'audio_path': 'chunks/synthetic/cap-held/source.opus.enc',
+                'metadata': 'encrypted',
+                'audio_generation': 1,
+                'audio_size': 36,
+            },
+        ]
+    )
+    monkeypatch.setattr(cap_hold, 'upload_held_audio', upload)
+    group, source = Publication(UID), Publication(UID)
+    await live_cap_hold._publish_audio(UID, b'pcm', 16000, 100, group, source, _METADATA, 1)
+    assert upload.call_count == 2 and len(store.transactions) == 1
+    assert store.docs[group.identity]['stage_parts'][0]['id'] == source.identity
+    assert upload.call_args.kwargs['rpc_timeout'] == 1.5
+
+
+async def test_live_second_upload_timeout_never_enters_commit(store, monkeypatch):
+
+    monkeypatch.setattr(
+        live_cap_hold.live_cap_codec, 'encode', lambda path, *args, **kw: Path(path).write_bytes(b'opus')
+    )
+    upload = Mock(side_effect=requests.exceptions.ReadTimeout('read'))
+    monkeypatch.setattr(cap_hold, 'upload_held_audio', upload)
+    group, source = Publication(UID), Publication(UID)
+    with pytest.raises(requests.exceptions.ReadTimeout):
+        await live_cap_hold._publish_audio(UID, b'pcm', 16000, 100, group, source, _METADATA, 1)
+    assert upload.call_count == 2 and not store.transactions and not store.deletes
+
+
+@pytest.mark.parametrize('mismatch', [None, 'capture', 'size', 'missing_metadata', 'generation'])
+@pytest.mark.parametrize('failure', ['upload', 'reload'])
+def test_ambiguous_upload_412_verifies_size_metadata_and_generation(tmp_path, monkeypatch, mismatch, failure):
+    path = tmp_path / 'source.opus'
+    path.write_bytes(b'opus')
+
+    class Blob:
+        generation = None
+        stored = None
+        reloads = 0
+
+        def upload_from_file(self, stream, **kwargs):
+            assert kwargs['if_generation_match'] == 0 and kwargs['retry'] is None
+            assert kwargs['timeout'] == 1.5
+            if self.stored is None:
+                self.stored = (stream.read(), dict(self.metadata))
+                if failure == 'upload':
+                    raise requests.exceptions.ReadTimeout('upload landed, reply lost')
+            raise PreconditionFailed('already landed')
+
+        def reload(self, **kwargs):
+            assert kwargs == {'timeout': 1.5, 'retry': None}
+            self.reloads += 1
+            if failure == 'reload' and self.reloads == 1:
+                raise requests.exceptions.ReadTimeout('reload reply lost')
+            payload, metadata = self.stored
+            self.metadata = dict(metadata)
+            self.size, self.generation = len(payload), 7
+            if mismatch == 'capture':
+                self.metadata['omi_live_capture'] = 'foreign'
+            if mismatch == 'size':
+                self.size += 1
+            if mismatch == 'missing_metadata':
+                self.metadata = {}
+            if mismatch == 'generation':
+                self.generation = None
+
+    blob = Blob()
+    monkeypatch.setattr(cap_hold, 'external_write_fence', lambda *a, **kw: nullcontext())
+    monkeypatch.setattr(cap_hold, 'owner_storage_write_gate', lambda *a, **kw: nullcontext())
+    monkeypatch.setattr(cap_hold, 'get_private_cloud_sync_bucket', lambda: SimpleNamespace(blob=lambda name: blob))
+    args = (UID, str(path), 'stable-identity', _METADATA)
+    kwargs = {'immutable': True, 'live_size_limit': 32768, 'rpc_timeout': 1.5}
+    with pytest.raises(requests.exceptions.ReadTimeout):
+        REAL_UPLOAD(*args, **kwargs)
+    if mismatch:
+        with pytest.raises(ValueError, match='provenance mismatch'):
+            REAL_UPLOAD(*args, **kwargs)
+    else:
+        fields = REAL_UPLOAD(*args, **kwargs)
+        assert fields['audio_generation'] == 7 and fields['audio_size'] == 36
+
+
+def test_manifest_unknown_commit_preserves_source_generation(delays, store, tmp_path, monkeypatch):
+    path = tmp_path / 'source.opus'
+    path.write_bytes(b'opus')
+    source = Publication(UID)
+    store.actions = ['permanent']
+    with pytest.raises(InvalidArgument):
+        live_cap_manifest.publish(UID, str(path), source, _METADATA, 1)
+    original = dict(source.fields)
+    assert original['audio_generation'] == 1 and not store.deletes
+    # Later upload/reload fails while the earlier commit's outcome is unresolved.
+    # A known generation is reused; a failed put cannot erase it.
+    monkeypatch.setattr(cap_hold, 'upload_held_audio', Mock(side_effect=requests.exceptions.ReadTimeout('late')))
+    store.actions = ['permanent']
+    with pytest.raises(InvalidArgument):
+        live_cap_manifest.publish(UID, str(path), source, _METADATA, 1)
+    assert source.fields == original and not store.deletes
+    assert store.bucket.blob(original['audio_path']).download_as_bytes() == FRAGMENT_PAYLOAD
+
+
+def test_requests_timeout_does_not_change_firestore_retry_semantics():
+    client = Mock()
+    call = Mock(side_effect=requests.exceptions.ReadTimeout('not a Firestore retry'))
+    with pytest.raises(requests.exceptions.ReadTimeout):
+        run_transactional(client, call, transient=True)
+    assert call.call_count == 1
+
+
+def test_late_manifest_commit_still_names_retained_audio(delays, store, tmp_path, monkeypatch):
+    path = tmp_path / 'source.opus'
+    path.write_bytes(b'opus')
+    source = Publication(UID)
+    pending = []
+
+    def ambiguous(tx):
+        pending.extend(copy.deepcopy(tx.ops))
+        raise requests.exceptions.ReadTimeout('commit reply unknown')
+
+    monkeypatch.setattr(_Transaction, '_commit', ambiguous)
+    with pytest.raises(requests.exceptions.ReadTimeout):
+        live_cap_manifest.publish(UID, str(path), source, _METADATA, 1)
+    assert source.identity not in store.docs and source.fields['audio_generation'] == 1
+    assert not store.deletes
+    late = _Transaction(store)
+    late.ops = pending
+    late._apply()  # The server's old commit lands after recovery's absence read.
+    assert store.docs[source.identity]['audio_path'] == source.fields['audio_path']
+    assert store.bucket.blob(source.fields['audio_path']).download_as_bytes() == FRAGMENT_PAYLOAD
+
+
+def test_retry_causes_are_a_closed_metric_set():
+    before = _counter('retried_ok')
+    held_metrics.record_publication_retry('retried_ok', 'unbounded-error-message')
+    assert _counter('retried_ok') == before
+    assert set(held_metrics.PUBLICATION_RETRY_CAUSES) == {'throttle', 'timeout', 'connection', 'other'}
+
+
+async def test_cancelled_waiter_does_not_retry_an_upload_with_unknown_outcome():
+    source = Publication(UID)
+    previous = Future()
+    source.upload_attempts.append(previous)
+    upload = Mock()
+    with pytest.raises(requests.exceptions.ReadTimeout, match='outcome unknown'):
+        await live_cap_upload.prepare(source, upload)
+    upload.assert_not_called()
+    previous.set_result({'audio_generation': 7, 'audio_size': 36})
+    await live_cap_upload.prepare(source, upload)
+    assert source.fields['audio_generation'] == 7 and len(source.upload_attempts) == 1
