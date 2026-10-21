@@ -1,6 +1,7 @@
 """Historical source index: retraction skips the legacy scan only when no live row can name the donor."""
 
 from types import SimpleNamespace
+from unittest.mock import MagicMock
 
 import pytest
 from google.api_core.exceptions import AlreadyExists, FailedPrecondition
@@ -43,6 +44,9 @@ class _Ref:
         self.db.update_times[self.path] = self.db.clock
 
     def set(self, data, merge=False):
+        writers = data.get('writers')
+        if self.db.fail_release and isinstance(writers, Increment) and writers.value < 0:
+            raise RuntimeError('release lost')
         current = dict(self.db.docs.get(self.path) or {}) if merge else {}
         for key, value in data.items():
             current[key] = current.get(key, 0) + value.value if isinstance(value, Increment) else value
@@ -81,6 +85,7 @@ class _Db:
         self.reads = []
         self.clock = 0
         self.fail_writes_to = None
+        self.fail_release = False
 
     def collection(self, name):
         return _Collection(self, (name,))
@@ -227,9 +232,9 @@ def test_failed_pre_write_bump_aborts_the_write(world):
 
 def test_write_during_the_scan_prevents_storing_a_stale_index(world):
     _ids(world, 'donor-1')
-    memories._bump_historical_source_index(UID, world.db)  # stale existing index
+    memories._bump_historical_source_index(UID, world.db, 0)  # stale existing index
     raced = _events('build', 'raced')
-    world.history.during_scan = lambda: memories._bump_historical_source_index(UID, world.db)
+    world.history.during_scan = lambda: memories._bump_historical_source_index(UID, world.db, 0)
 
     assert _ids(world, 'donor-2') == []
     assert _events('build', 'raced') - raced == 1
@@ -240,7 +245,7 @@ def test_write_during_the_scan_prevents_storing_a_stale_index(world):
 
 def test_first_build_loses_to_a_writer_that_created_the_document(world):
     raced = _events('build', 'raced')
-    world.history.during_scan = lambda: memories._bump_historical_source_index(UID, world.db)
+    world.history.during_scan = lambda: memories._bump_historical_source_index(UID, world.db, 0)
 
     assert _ids(world, 'donor-1') == []
     assert _events('build', 'raced') - raced == 1
@@ -271,6 +276,67 @@ def test_oversized_index_is_not_stored(world, monkeypatch):
     assert INDEX_PATH not in world.db.docs
     _ids(world, 'donor-2')
     assert world.history.scans == 2
+
+
+def test_scan_during_an_in_flight_writer_is_never_stored(world):
+    writer_active = _events('build', 'writer_active')
+    memories._bump_historical_source_index(UID, world.db, 1)  # a writer claimed and is mid-write
+
+    assert _ids(world, 'donor-1') == []
+    assert _events('build', 'writer_active') - writer_active == 1
+    assert 'keys' not in world.db.docs[INDEX_PATH]
+
+
+def test_lost_writer_release_keeps_the_index_untrusted_until_the_write_is_stale(world, monkeypatch):
+    _ids(world, 'donor-1')
+    world.db.fail_release = True
+    memories.change_memory_visibility(UID, 'legacy-1', 'private', firestore_client=world.db)
+    world.db.fail_release = False
+    assert world.db.docs[INDEX_PATH]['writers'] == 1
+
+    # A build cannot claim the post-write state while the release is missing.
+    _ids(world, 'donor-2')
+    _ids(world, 'donor-3')
+    assert world.history.scans == 3
+    assert 'writers' in world.db.docs[INDEX_PATH] and world.db.docs[INDEX_PATH]['writers'] == 1
+
+    # Once that write is an hour old, the next scan provably saw its rows.
+    stamp = world.db.docs[INDEX_PATH]['bumped_at']
+    world.db.docs[INDEX_PATH]['bumped_at'] = stamp - memories._HISTORICAL_SOURCE_INDEX_STALE_WRITER
+    _ids(world, 'donor-4')
+    assert world.db.docs[INDEX_PATH]['writers'] == 0
+    assert _ids(world, 'donor-5') == []
+    assert world.history.scans == 4
+
+
+def test_subject_reassignment_holds_the_fence(monkeypatch):
+    from database import entities
+
+    bumps = []
+    monkeypatch.setattr(entities.kg_db, 'db', MagicMock())
+    monkeypatch.setattr(memories, '_bump_historical_source_index', lambda uid, _client, writers: bumps.append(writers))
+    monkeypatch.setattr(entities.memory_ledger, 'append_commit', lambda *a, **k: bumps.append('commit') or 'ok')
+
+    assert entities.reassign_fact_subject(UID, 'fact-1', None, 'person:p1') == 'ok'
+    assert bumps == [1, 'commit', -1]
+
+
+def test_account_wipe_drops_a_late_index_document(monkeypatch):
+    from database import batch_pipeline_purge, user_data_deletion
+
+    monkeypatch.setattr(batch_pipeline_purge, 'purge_batch_owner', lambda uid: None)
+    monkeypatch.setattr(user_data_deletion, 'get_data_plane_firestore_client', lambda: MagicMock())
+    deleted = []
+    user_ref = SimpleNamespace(
+        get=lambda: SimpleNamespace(exists=False),
+        collections=lambda: [],
+        collection=lambda name: SimpleNamespace(
+            document=lambda doc: SimpleNamespace(delete=lambda: deleted.append((name, doc)))
+        ),
+    )
+    client = SimpleNamespace(collection=lambda name: SimpleNamespace(document=lambda uid: user_ref))
+    user_data_deletion.purge_user_subtree(UID, client, lambda *a, **k: None)
+    assert ('memory_state', memories.HISTORICAL_SOURCE_INDEX_DOC) in deleted
 
 
 def test_scan_inside_a_memo_scope_reads_fresh_pages(world, monkeypatch):

@@ -7,7 +7,7 @@ import sys
 from collections import OrderedDict
 from contextlib import contextmanager
 from contextvars import ContextVar
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from functools import wraps
 from threading import RLock
 from typing import Any, Callable, Dict, Iterable, Iterator, List, Optional, TypedDict, cast
@@ -189,7 +189,8 @@ def _historical_scan_write(function: Callable[..., Any]) -> Callable[..., Any]:
 
     Also invalidates the owner's historical source index around the write. Use
     ``_historical_scan_write_without_new_sources`` only for a write that can
-    never add a conversation reference or make a hidden row live again.
+    never add a conversation reference, make a hidden row live again, or move
+    a row that stays live in the scan's ``updated_at``/``created_at`` order.
     """
     memo_fenced = _historical_scan_write_without_new_sources(function)
 
@@ -202,10 +203,11 @@ def _historical_scan_write(function: Callable[..., Any]) -> Callable[..., Any]:
 
 
 def _historical_scan_write_without_new_sources(function: Callable[..., Any]) -> Callable[..., Any]:
-    """Memo fence only: deletes, tombstones, unlocks and re-encryption.
+    """Memo fence only: deletes, invalidation, unlocks, re-encryption and flags.
 
     These shrink (or keep) the set of conversation ids live historical rows
-    name, so a stored source index stays a valid superset across them.
+    name and leave every still-live row's timestamps alone, so a concurrent
+    scan cannot miss a row and a stored index stays a valid superset.
     """
 
     @wraps(function)
@@ -253,14 +255,19 @@ def _historical_scan_mutation(memo: _HistoricalScanMemo) -> Iterator[None]:
 # id that a live historical row references (``conversation_id`` or a
 # conversation evidence ``source_id``). Conversation retraction checks it and
 # skips the full dual-keyset scan of ``users/{uid}/memories`` when the donor is
-# absent. Writers bump ``epoch`` before and after every write that could add a
-# reference; an index is trusted only when ``indexed_epoch == epoch``, and is
-# stored only under a last-update-time precondition from before its scan.
+# absent. Every write that could add a reference, or move a live row in the
+# scan's keyset order, bumps ``epoch`` and holds ``writers`` above zero for its
+# duration. An index is trusted only when ``indexed_epoch == epoch`` and no
+# writer is in flight, and is stored only under a last-update-time
+# precondition from before its scan. A writer that dies or fails to release
+# leaves ``writers`` raised, so the index stays untrusted until a build after
+# ``_HISTORICAL_SOURCE_INDEX_STALE_WRITER`` proves that write long finished.
 # ``MEMORY_HISTORICAL_SOURCE_INDEX=off`` is the kill switch for readers and
 # builders; writers always bump so re-enabling never trusts a stale index.
 HISTORICAL_SOURCE_INDEX_ENV = 'MEMORY_HISTORICAL_SOURCE_INDEX'
 HISTORICAL_SOURCE_INDEX_DOC = 'historical_source_index'
 _HISTORICAL_SOURCE_INDEX_MAX_KEYS = 40_000
+_HISTORICAL_SOURCE_INDEX_STALE_WRITER = timedelta(hours=1)
 _HISTORICAL_SOURCE_INDEX_OFF_VALUES = frozenset({'off', 'false', '0', 'no', 'disabled'})
 
 HISTORICAL_SOURCE_INDEX_EVENTS = Counter(
@@ -288,39 +295,75 @@ def _historical_source_index_ref(database: Any, uid: str) -> Any:
     )
 
 
-def _bump_historical_source_index(uid: str, firestore_client: Any) -> None:
+def _bump_historical_source_index(uid: str, firestore_client: Any, writers: int) -> None:
     ref = _historical_source_index_ref(_get_db(firestore_client), uid)
-    ref.set({'epoch': firestore.Increment(1)}, merge=True)
+    ref.set(
+        {
+            'epoch': firestore.Increment(1),
+            'writers': firestore.Increment(writers),
+            'bumped_at': datetime.now(timezone.utc),
+        },
+        merge=True,
+    )
 
 
 @contextmanager
 def _historical_source_index_fence(uid: str, firestore_client: Any) -> Iterator[None]:
-    # Before: a failed bump aborts the write, so no row can outlive a trusted
-    # index that misses it. After: invalidates an index built mid-write.
+    # A failed claim aborts the write, so no row can outlive a trusted index
+    # that misses it. The release is retried; a lost release fails safe.
     try:
-        _bump_historical_source_index(uid, firestore_client)
+        _bump_historical_source_index(uid, firestore_client, 1)
     except Exception:
         HISTORICAL_SOURCE_INDEX_EVENTS.labels(event='bump', outcome='failed').inc()
         raise
     try:
         yield
     finally:
-        try:
-            _bump_historical_source_index(uid, firestore_client)
-        except Exception:
-            # Only an index stored during this very write can be stale now.
-            HISTORICAL_SOURCE_INDEX_EVENTS.labels(event='bump', outcome='after_failed').inc()
-            logger.exception('historical source index post-write bump failed uid=%s', uid)
+        for attempt in range(2):
+            try:
+                _bump_historical_source_index(uid, firestore_client, -1)
+                break
+            except Exception:
+                if attempt:
+                    # ``writers`` stays raised: retraction scans until the
+                    # stale-writer window lets a build reset it.
+                    HISTORICAL_SOURCE_INDEX_EVENTS.labels(event='bump', outcome='release_failed').inc()
+                    logger.exception('historical source index writer release failed uid=%s', uid)
+
+
+def historical_source_index_fence(uid: str, firestore_client: Any = None) -> Any:
+    """For a legacy-row writer outside this module (none may bypass the fence)."""
+    return _historical_source_index_fence(uid, firestore_client)
 
 
 class HistoricalSourceIndexSnapshot:
     """One read of the index document, kept as the precondition for a rebuild."""
 
-    def __init__(self, *, exists: bool, update_time: Any, epoch: Any, keys: Optional[frozenset[str]]) -> None:
+    def __init__(
+        self,
+        *,
+        exists: bool,
+        update_time: Any,
+        epoch: Any,
+        keys: Optional[frozenset[str]],
+        writers: int = 0,
+        bumped_at: Any = None,
+    ) -> None:
         self.exists = exists
         self.update_time = update_time
         self.epoch = epoch
         self.keys = keys
+        self.writers = writers
+        self.bumped_at = bumped_at
+
+    def writer_in_flight(self, now: datetime) -> bool:
+        if self.writers <= 0:
+            return False
+        # A missing or non-datetime stamp is never treated as stale.
+        if not isinstance(self.bumped_at, datetime):
+            return True
+        bumped_at = self.bumped_at if self.bumped_at.tzinfo else self.bumped_at.replace(tzinfo=timezone.utc)
+        return now - bumped_at < _HISTORICAL_SOURCE_INDEX_STALE_WRITER
 
     def excludes(self, conversation_id: str) -> bool:
         """True only when a current index proves no live historical row names the id."""
@@ -333,11 +376,21 @@ def read_historical_source_index(uid: str, *, firestore_client: Any = None) -> H
         return HistoricalSourceIndexSnapshot(exists=False, update_time=None, epoch=0, keys=None)
     data = _typed_doc(snapshot)
     epoch = data.get('epoch', 0)
+    raw_writers = data.get('writers', 0)
+    # An unreadable counter counts as a writer in flight.
+    writers = raw_writers if isinstance(raw_writers, int) and not isinstance(raw_writers, bool) else 1
     keys: Optional[frozenset[str]] = None
     encoded = data.get('keys')
-    if isinstance(encoded, str) and data.get('indexed_epoch') == epoch:
+    if isinstance(encoded, str) and data.get('indexed_epoch') == epoch and writers <= 0:
         keys = frozenset(key for key in encoded.split(',') if key)
-    return HistoricalSourceIndexSnapshot(exists=True, update_time=snapshot.update_time, epoch=epoch, keys=keys)
+    return HistoricalSourceIndexSnapshot(
+        exists=True,
+        update_time=snapshot.update_time,
+        epoch=epoch,
+        keys=keys,
+        writers=writers,
+        bumped_at=data.get('bumped_at'),
+    )
 
 
 def store_historical_source_index(
@@ -353,21 +406,27 @@ def store_historical_source_index(
     precondition, so the index never claims a scan that missed a later write.
     """
     keys = sorted({historical_source_key(cid) for cid in conversation_ids})
-    if len(keys) > _HISTORICAL_SOURCE_INDEX_MAX_KEYS:
+    now = datetime.now(timezone.utc)
+    if observed.writer_in_flight(now):
+        # The scan may have run while that write was moving rows.
+        outcome = 'writer_active'
+    elif len(keys) > _HISTORICAL_SOURCE_INDEX_MAX_KEYS:
         outcome = 'too_large'
     else:
         database = _get_db(firestore_client)
         ref = _historical_source_index_ref(database, uid)
-        payload = {'keys': ','.join(keys), 'key_count': len(keys), 'built_at': datetime.now(timezone.utc)}
+        payload = {'keys': ','.join(keys), 'key_count': len(keys), 'built_at': now}
         try:
             if observed.exists:
                 # A bump since ``observed`` moves update_time and fails this.
+                # A stale raised counter is reset: its write finished before
+                # ``observed`` was read, so this scan saw its rows.
                 ref.update(
-                    {**payload, 'indexed_epoch': observed.epoch},
+                    {**payload, 'indexed_epoch': observed.epoch, 'writers': 0},
                     option=database.write_option(last_update_time=observed.update_time),
                 )
             else:
-                ref.create({**payload, 'epoch': 0, 'indexed_epoch': 0})
+                ref.create({**payload, 'epoch': 0, 'indexed_epoch': 0, 'writers': 0})
             outcome = 'stored'
         except (FirestoreAlreadyExists, FirestoreFailedPrecondition):
             outcome = 'raced'
@@ -1734,7 +1793,7 @@ def delete_all_memories(uid: str, *, firestore_client: Any = None) -> None:
         batch.commit()
 
 
-@_historical_scan_write_without_new_sources
+@_historical_scan_write
 def ripple_source_deletion(uid: str, source_id: str, *, firestore_client: Any = None) -> Dict[str, Any]:
     database = _get_db(firestore_client)
     user_ref = database.collection(users_collection).document(uid)

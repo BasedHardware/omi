@@ -128,7 +128,7 @@ def db(monkeypatch):
     # Source-index epoch bumps are their own document; record them apart from row writes.
     database.index_bumps = []
     monkeypatch.setattr(
-        memories, '_bump_historical_source_index', lambda uid, _client: database.index_bumps.append(uid)
+        memories, '_bump_historical_source_index', lambda uid, _client, _writers: database.index_bumps.append(uid)
     )
     return database
 
