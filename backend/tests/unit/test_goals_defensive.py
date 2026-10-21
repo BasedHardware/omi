@@ -9,6 +9,9 @@ from contextlib import nullcontext
 from types import SimpleNamespace
 from unittest.mock import patch
 
+import pytest
+from fastapi import HTTPException
+
 os.environ.setdefault("ENCRYPTION_SECRET", "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv")
 os.environ.setdefault("OPENAI_API_KEY", "sk-test-not-real")
 
@@ -16,7 +19,7 @@ import database.goals as goals_db
 import utils.llm.goals as llm_goals
 from utils.llm.goals import safe_float, safe_optional_float
 from models.goal import GoalSuggestionResponse
-from routers import goals as goals_router
+import routers.goals as goals_router
 
 
 class _StubDoc:
@@ -165,11 +168,34 @@ class TestGoalAdviceNullSafety:
         assert "PROGRESS: Qualitative goal (no numeric metric set)" in prompts[0]
 
     def test_get_goal_advice_missing_or_inactive_goal(self, monkeypatch):
-        """Non-existent or inactive goal falls back to canned advice."""
+        """Missing or inactive goal raises ValueError so the router can return HTTP 404."""
         _setup_stub_goals(monkeypatch, {"inactive": {"is_active": False, "title": "Done"}})
 
-        assert llm_goals.get_goal_advice("u1", "missing_id") == "Focus on the next small step toward your goal."
-        assert llm_goals.get_goal_advice("u1", "inactive") == "Focus on the next small step toward your goal."
+        with pytest.raises(ValueError, match="Goal not found"):
+            llm_goals.get_goal_advice("u1", "missing_id")
+
+        with pytest.raises(ValueError, match="Goal not found"):
+            llm_goals.get_goal_advice("u1", "inactive")
+
+    def test_get_goal_advice_llm_failure_returns_fallback_advice(self, monkeypatch):
+        """Active goal where LLM invocation fails gracefully falls back to canned advice."""
+        goal_data = {
+            "id": "goal_err",
+            "title": "Active Goal",
+            "is_active": True,
+            "current_value": 5.0,
+            "target_value": 10.0,
+        }
+        _setup_stub_goals(monkeypatch, {"goal_err": goal_data})
+
+        class FailingLLM:
+            def invoke(self, *args, **kwargs):
+                raise RuntimeError("LLM service unavailable")
+
+        monkeypatch.setattr(llm_goals, "get_llm", lambda _name: FailingLLM())
+
+        advice = llm_goals.get_goal_advice("u1", "goal_err")
+        assert advice == "Focus on the next small step toward your goal."
 
 
 class TestGoalSuggestionNullSafety:
@@ -286,9 +312,30 @@ class TestGoalSuggestionNullSafety:
         validated = GoalSuggestionResponse(**res)
         assert validated.suggested_target == 10.0
 
+    def test_sanitize_suggestion_delegation_consistency(self):
+        """Verify sanitize_goal_suggestion delegates to models.goal.sanitize_suggestion_dict with identical defaults."""
+        from models.goal import sanitize_suggestion_dict
+
+        raw = {"suggested_title": "  Test Goal  ", "suggested_type": "UNKNOWN", "suggested_target": "25.5"}
+        res_models = sanitize_suggestion_dict(raw)
+        res_llm = llm_goals.sanitize_goal_suggestion(raw)
+        assert res_models == res_llm
+        assert res_models["reasoning"] == "Start tracking your daily progress!"
+        assert res_llm["suggested_type"] == "scale"
+        assert res_llm["suggested_target"] == 25.5
+
 
 class TestGoalRouterEndpointDefensive:
     """Verifies router-level defensive behaviors for advice and suggestions."""
+
+    def test_get_goal_advice_router_raises_404_for_missing_goal(self):
+        """GET /v1/goals/{goal_id}/advice raises HTTPException(404) when goal does not exist."""
+        with patch.object(goals_router, "get_goal_advice_llm", side_effect=ValueError("Goal not found")):
+            with patch.object(goals_router, "require_generated_compute"):
+                with pytest.raises(HTTPException) as exc_info:
+                    goals_router.get_goal_advice(goal_id="nonexistent", uid="u1")
+                assert exc_info.value.status_code == 404
+                assert exc_info.value.detail == "Goal not found"
 
     def test_get_current_goal_advice_with_missing_id_in_dict(self):
         """If user goal dict exists but lacks 'id', return setup message rather than raising KeyError."""

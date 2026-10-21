@@ -17,6 +17,7 @@ import database.conversations as conversations_db
 import database.chat as chat_db
 from database._client import db as firestore_db
 from database.vector_db import query_vectors as vector_search
+from models.goal import sanitize_suggestion_dict
 from utils.llm.clients import get_llm
 from utils.llm.usage_tracker import track_usage, Features
 from utils.memory.memory_service import MemoryService
@@ -133,42 +134,8 @@ def _safe_optional_float(val: Any) -> Optional[float]:
 safe_float = _safe_float
 safe_optional_float = _safe_optional_float
 
-
-def _sanitize_goal_suggestion(suggestion: Any) -> Dict[str, Any]:
-    if not isinstance(suggestion, dict):
-        return {
-            'suggested_title': 'Make progress every day',
-            'suggested_type': 'scale',
-            'suggested_target': 10.0,
-            'suggested_min': 0.0,
-            'suggested_max': 10.0,
-            'reasoning': 'Start with a simple daily progress goal!',
-        }
-
-    title = str(suggestion.get('suggested_title') or '').strip() or 'Make progress every day'
-
-    raw_type = str(suggestion.get('suggested_type') or 'scale').lower().strip()
-    goal_type = raw_type if raw_type in {'scale', 'numeric', 'boolean'} else 'scale'
-
-    target = _safe_float(suggestion.get('suggested_target'), 10.0)
-    min_val = _safe_float(suggestion.get('suggested_min'), 0.0)
-    max_val = _safe_float(suggestion.get('suggested_max'), max(target, 10.0))
-
-    if min_val > max_val:
-        min_val, max_val = max_val, min_val
-    elif min_val == max_val:
-        max_val = min_val + 10.0
-
-    reasoning = str(suggestion.get('reasoning') or '').strip() or 'Start with a simple daily progress goal!'
-
-    return {
-        'suggested_title': title,
-        'suggested_type': goal_type,
-        'suggested_target': target,
-        'suggested_min': min_val,
-        'suggested_max': max_val,
-        'reasoning': reasoning,
-    }
+_sanitize_goal_suggestion = sanitize_suggestion_dict
+sanitize_goal_suggestion = sanitize_suggestion_dict
 
 
 def suggest_goal(uid: str) -> Dict[str, Any]:
@@ -246,7 +213,7 @@ Make the goal specific, measurable, and relevant to their interests."""
             'suggested_target': 10.0,
             'suggested_min': 0.0,
             'suggested_max': 10.0,
-            'reasoning': 'Start with a simple daily progress goal!',
+            'reasoning': 'Start tracking your daily progress!',
         })
 
 
@@ -255,12 +222,12 @@ def get_goal_advice(uid: str, goal_id: str) -> str:
     Get AI-generated actionable advice for achieving a goal.
     Uses hybrid retrieval: vector search + recent context + chat history.
     """
-    try:
-        # Get the goal
-        goal = goals_db.get_goal_by_id(uid, goal_id)
-        if not goal or not goal.get('is_active'):
-            raise ValueError("Goal not found")
+    # Get the goal - raise ValueError for missing/inactive goals to let the router return 404
+    goal = goals_db.get_goal_by_id(uid, goal_id)
+    if not goal or not goal.get('is_active'):
+        raise ValueError("Goal not found")
 
+    try:
         goal_title = str(goal.get('title') or 'Unknown')
 
         # Safely parse numeric current and target values if present
@@ -313,8 +280,6 @@ Give ONE specific action in 1-2 sentences. Be concise but complete. No generic a
 
         return advice
 
-    except ValueError:
-        return 'Focus on the next small step toward your goal.'
     except Exception as e:
         logger.error(f"[GOAL-ADVICE] Error: {e}")
         traceback.print_exc()

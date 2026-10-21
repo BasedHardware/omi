@@ -250,6 +250,47 @@ class GoalDeleteResponse(BaseModel):
     deleted_id: str
 
 
+def sanitize_suggestion_dict(data: Any) -> dict[str, Any]:
+    """Sanitize and clamp a goal suggestion dictionary, ensuring numeric targets and bounds are finite floats."""
+    if not isinstance(data, dict):
+        return {
+            'suggested_title': 'Make progress every day',
+            'suggested_type': 'scale',
+            'suggested_target': 10.0,
+            'suggested_min': 0.0,
+            'suggested_max': 10.0,
+            'reasoning': 'Start tracking your daily progress!',
+        }
+    d = dict(data)
+
+    def _safe(val: Any, default: float) -> float:
+        if val is None or isinstance(val, bool) or val == '':
+            return default
+        try:
+            f = float(val)
+            return f if math.isfinite(f) else default
+        except (TypeError, ValueError):
+            return default
+
+    d['suggested_title'] = str(d.get('suggested_title') or '').strip() or 'Make progress every day'
+    raw_type = str(d.get('suggested_type') or 'scale').lower().strip()
+    d['suggested_type'] = raw_type if raw_type in {'scale', 'numeric', 'boolean'} else 'scale'
+
+    target = _safe(d.get('suggested_target'), 10.0)
+    min_v = _safe(d.get('suggested_min'), 0.0)
+    max_v = _safe(d.get('suggested_max'), max(target, 10.0))
+    if min_v > max_v:
+        min_v, max_v = max_v, min_v
+    elif min_v == max_v:
+        max_v = min_v + 10.0
+
+    d['suggested_target'] = target
+    d['suggested_min'] = min_v
+    d['suggested_max'] = max_v
+    d['reasoning'] = str(d.get('reasoning') or '').strip() or 'Start tracking your daily progress!'
+    return d
+
+
 class GoalSuggestionResponse(BaseModel):
     suggested_title: str
     suggested_type: str
@@ -261,36 +302,7 @@ class GoalSuggestionResponse(BaseModel):
     @model_validator(mode='before')
     @classmethod
     def sanitize_suggestion(cls, data: Any) -> Any:
-        if not isinstance(data, dict):
-            return data
-        d = dict(data)
-
-        def _safe(val: Any, default: float) -> float:
-            if val is None or isinstance(val, bool) or val == '':
-                return default
-            try:
-                f = float(val)
-                return f if math.isfinite(f) else default
-            except (TypeError, ValueError):
-                return default
-
-        d['suggested_title'] = str(d.get('suggested_title') or '').strip() or 'Make progress every day'
-        raw_type = str(d.get('suggested_type') or 'scale').lower().strip()
-        d['suggested_type'] = raw_type if raw_type in {'scale', 'numeric', 'boolean'} else 'scale'
-
-        target = _safe(d.get('suggested_target'), 10.0)
-        min_v = _safe(d.get('suggested_min'), 0.0)
-        max_v = _safe(d.get('suggested_max'), max(target, 10.0))
-        if min_v > max_v:
-            min_v, max_v = max_v, min_v
-        elif min_v == max_v:
-            max_v = min_v + 10.0
-
-        d['suggested_target'] = target
-        d['suggested_min'] = min_v
-        d['suggested_max'] = max_v
-        d['reasoning'] = str(d.get('reasoning') or '').strip() or 'Start tracking your daily progress!'
-        return d
+        return sanitize_suggestion_dict(data)
 
 
 class AdviceResponse(BaseModel):
@@ -315,4 +327,5 @@ __all__ = [
     'GoalSuggestionResponse',
     'GoalType',
     'GoalUpdate',
+    'sanitize_suggestion_dict',
 ]
