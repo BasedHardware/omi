@@ -287,6 +287,34 @@ def _local_started_at_iso(started_at: datetime, tz: Optional[str]) -> str:
 # Notes must use the foreground structure budget, not the gateway's background
 # first-byte deadline. The owning feature route declares it in model_config.
 CONVERSATION_STRUCTURE_TIMEOUT_SECONDS = FOREGROUND_REQUEST_TIMEOUT_SECONDS
+# The notes run_loop deadline is the transport's whole recovery budget, not one
+# attempt. The conv_structure model client already enforces the per-attempt
+# deadline above — the seam this class's earlier fixes designated — and the
+# direct lane retries once, so a loop deadline equal to a single attempt fired
+# while that attempt or its retry was still in flight and ended whole-transcript
+# structuring as a bare TimeoutError (2026-10-18 prod: asyncio/timeouts.py:115
+# surfacing at _get_structured's llm_input_dedupe.notes call).
+#
+# The route, not this loop, owns the client-visible cut on synchronous
+# create/reprocess: 2x60s of transport recovery plus the auth/db preamble does
+# not fit the middleware's 120s default, and EPISODE_DEADLINES.md keeps sync at
+# one 60s attempt with extended recovery owned by the durable finalizer's 1500s
+# lease — the lane where this whole budget actually fits. Never shrink this
+# deadline to "reserve headroom" under the route budget: that would preempt the
+# retry again on that lease and resurrect this error group there. A sync request
+# that outruns the middleware gets a 504 on the response only — the handler runs
+# on a threadpool thread and the notes loop on its own asyncio.run loop, so the
+# recovery finishes after the 504 — with the processing_admission_guard orphan
+# sweep as the crash floor. messaging.summarize sizes its mount by the same
+# per-attempt multiplier method, at 2x its lane's per-attempt deadline.
+#
+# The recovery budget is strictly more than two attempts: the SDK sleeps before
+# its retry — 0.5s doubling backoff after a timed-out attempt (8s cap), or a
+# server Retry-After of up to 60s after a retried status response — and the
+# per-attempt deadline buys each HTTP attempt afresh. An exactly-2x loop
+# deadline cancelled the viable retry in its final stretch, so the mount sizes
+# at two attempts plus one inter-attempt delay bound (3x).
+NOTES_LOOP_DEADLINE_SECONDS = 3 * CONVERSATION_STRUCTURE_TIMEOUT_SECONDS
 # Screen-OCR rows already parsed from the context are a follow-up; this gate counts frames only.
 _NOTES_TIER_MIN_WORDS = 1500
 _NOTES_TIER_MIN_SCREEN_FRAMES = 5
@@ -397,7 +425,7 @@ person. Attribute speech only from the original speaker map or direct evidence.
 Do not infer attendance, absence, or a no-show from either listing.
 """ + '\n\n' + ACTION_ITEM_EXTRACTION_RULES,
         schema=StructuredExtraction,
-        budget=Budget(turns=1, tool_calls=0, deadline_seconds=CONVERSATION_STRUCTURE_TIMEOUT_SECONDS),
+        budget=Budget(turns=1, tool_calls=0, deadline_seconds=NOTES_LOOP_DEADLINE_SECONDS),
     )
 
 

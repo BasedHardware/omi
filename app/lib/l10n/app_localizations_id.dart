@@ -14398,4 +14398,105 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get activityAttentionLinkStalledSubtitle => 'Omi masih merekam';
+
+  @override
+  String get episodeNow => 'Sekarang';
+
+  @override
+  String episodeLiveFor(String duration) {
+    return 'Langsung · $duration';
+  }
+
+  @override
+  String episodeMomentsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count momen',
+      one: '1 momen',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get episodeMoments => 'Momen';
+
+  @override
+  String get episodeSoFar => 'Sejauh ini';
+
+  @override
+  String get episodeUpdatedJustNow => 'Baru diperbarui · catatan lengkap saat selesai';
+
+  @override
+  String episodeUpdatedMinutesAgo(int minutes) {
+    return 'Diperbarui $minutes mnt lalu · catatan lengkap saat selesai';
+  }
+
+  @override
+  String get episodeNotesSoon => 'Catatan muncul setelah beberapa menit pertama percakapan.';
+
+  @override
+  String get episodeOpenAll => 'Buka Semua';
+
+  @override
+  String get episodeWrapUpNow => 'Selesaikan Sekarang';
+
+  @override
+  String get episodeWrapsUpHint => 'Omi menyelesaikannya saat Anda beralih';
+
+  @override
+  String episodeTaskCaptured(String text) {
+    return 'Tugas tertangkap: $text';
+  }
+
+  @override
+  String episodeReminderCaptured(String text) {
+    return 'Pengingat tertangkap: $text';
+  }
+
+  @override
+  String episodeTaskSaved(String text) {
+    return 'Tugas disimpan: $text';
+  }
+
+  @override
+  String episodeAddingFromOmi(String duration) {
+    return 'menambahkan $duration dari Omi Anda';
+  }
+
+  @override
+  String get episodeListeningNow => 'Sedang mendengarkan';
+
+  @override
+  String get deviceHeardToday => 'Didengar hari ini';
+
+  @override
+  String get deviceToSync => 'belum disinkronkan';
+
+  @override
+  String get deviceRightNow => 'Saat ini';
+
+  @override
+  String deviceLiveEpisode(String duration) {
+    return 'Episode langsung · $duration';
+  }
+
+  @override
+  String get deviceCatchingUp => 'Mengejar ketinggalan';
+
+  @override
+  String deviceCatchingUpProgress(int done, int total) {
+    return '$done dari $total mnt';
+  }
+
+  @override
+  String get deviceRecently => 'Baru-baru ini';
+
+  @override
+  String deviceDisconnectedFor(String duration) {
+    return 'Terputus selama $duration';
+  }
+
+  @override
+  String get deviceControls => 'Kontrol';
 }

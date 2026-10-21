@@ -14478,4 +14478,105 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get activityAttentionLinkStalledSubtitle => 'Το Omi συνεχίζει την εγγραφή';
+
+  @override
+  String get episodeNow => 'Τώρα';
+
+  @override
+  String episodeLiveFor(String duration) {
+    return 'Ζωντανά · $duration';
+  }
+
+  @override
+  String episodeMomentsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count στιγμές',
+      one: '1 στιγμή',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get episodeMoments => 'Στιγμές';
+
+  @override
+  String get episodeSoFar => 'Μέχρι τώρα';
+
+  @override
+  String get episodeUpdatedJustNow => 'Ενημερώθηκε μόλις τώρα · πλήρεις σημειώσεις στο τέλος';
+
+  @override
+  String episodeUpdatedMinutesAgo(int minutes) {
+    return 'Ενημερώθηκε πριν από $minutes λεπ. · πλήρεις σημειώσεις στο τέλος';
+  }
+
+  @override
+  String get episodeNotesSoon => 'Οι σημειώσεις εμφανίζονται μετά τα πρώτα λεπτά συζήτησης.';
+
+  @override
+  String get episodeOpenAll => 'Άνοιγμα όλων';
+
+  @override
+  String get episodeWrapUpNow => 'Ολοκλήρωση τώρα';
+
+  @override
+  String get episodeWrapsUpHint => 'Το Omi το ολοκληρώνει όταν προχωρήσεις';
+
+  @override
+  String episodeTaskCaptured(String text) {
+    return 'Εντοπίστηκε εργασία: $text';
+  }
+
+  @override
+  String episodeReminderCaptured(String text) {
+    return 'Εντοπίστηκε υπενθύμιση: $text';
+  }
+
+  @override
+  String episodeTaskSaved(String text) {
+    return 'Η εργασία αποθηκεύτηκε: $text';
+  }
+
+  @override
+  String episodeAddingFromOmi(String duration) {
+    return 'προστίθενται $duration από το Omi σου';
+  }
+
+  @override
+  String get episodeListeningNow => 'Ακούει τώρα';
+
+  @override
+  String get deviceHeardToday => 'Ακούστηκαν σήμερα';
+
+  @override
+  String get deviceToSync => 'για συγχρονισμό';
+
+  @override
+  String get deviceRightNow => 'Αυτή τη στιγμή';
+
+  @override
+  String deviceLiveEpisode(String duration) {
+    return 'Ζωντανό επεισόδιο · $duration';
+  }
+
+  @override
+  String get deviceCatchingUp => 'Συγχρονισμός εκκρεμοτήτων';
+
+  @override
+  String deviceCatchingUpProgress(int done, int total) {
+    return '$done από $total λεπ.';
+  }
+
+  @override
+  String get deviceRecently => 'Πρόσφατα';
+
+  @override
+  String deviceDisconnectedFor(String duration) {
+    return 'Αποσυνδεδεμένο για $duration';
+  }
+
+  @override
+  String get deviceControls => 'Χειριστήρια';
 }
