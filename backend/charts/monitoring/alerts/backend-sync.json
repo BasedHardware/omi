@@ -1102,6 +1102,7 @@
     "for": "15m",
     "keep_firing_for": "0s",
     "annotations": {
+      "evidence": "omi-workspace:data/run-2026-10-13-two-lane-nemotron/sync-upstream-error-2026-10-21.md",
       "dashboard_url": "https://monitor.omi.me/d/6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
       "summary": "A sync job failure reason (outcome) on one sync service is more than 3x its 7-day share of jobs, with at least 50 such jobs in the last 60m",
       "threshold": "per (service, outcome != success|expected_silence): 60m share of jobs > 3x the 7-day share (the 7 days before the window), with >= 50 jobs of that outcome in 60m, for 15m. A reason with no baseline counts as new (baseline floor 0.01%).",

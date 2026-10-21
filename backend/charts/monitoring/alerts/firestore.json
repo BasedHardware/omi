@@ -742,6 +742,7 @@
     "for": "5m",
     "keep_firing_for": "0s",
     "annotations": {
+      "evidence": "omi-knowledge-base:projects/two-lane-transcription/evidence/2026-10-21-firestore-hotspots-key-visualizer.md",
       "dashboard_url": "https://monitor.omi.me/d/3e7c5f57-a1be-4175-81e6-1f0c7c28b9dd",
       "summary": "Firestore Commit calls are returning RESOURCE_EXHAUSTED at more than 10 per minute for 5 consecutive minutes",
       "threshold": "firestore.googleapis.com/api/request_count{api_method=Commit,response_code=RESOURCE_EXHAUSTED}, 60s ALIGN_DELTA summed, last point > 10, for 5m",
