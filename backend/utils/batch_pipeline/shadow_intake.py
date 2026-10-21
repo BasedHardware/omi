@@ -8,7 +8,7 @@ import os
 import shutil
 import tempfile
 
-from config.batch_pipeline import priority_for
+from config.batch_pipeline import Priority, priority_for
 from config.batch_pipeline_shadow import selected, shadow_percent
 from config.batch_pipeline_providers import provider_config
 from database.batch_pipeline_store import FirestoreStore
@@ -16,13 +16,18 @@ from database.batch_pipeline_shadow import ShadowStore
 from utils.batch_pipeline.audio import with_context
 from utils.batch_pipeline.capture_decode import decode_units
 from utils.batch_pipeline.contracts import WorkItem
-from utils.batch_pipeline.intake import artifacts_for, _next_unit
+from utils.batch_pipeline.intake import artifacts_for
 from utils.batch_pipeline.retention import batch_artifact_authorize
 from utils.executors import db_executor, storage_executor, sync_executor, run_blocking, start_background_task
 from utils.sync.stage import current_stage
 from utils.sync.content_id import compute_sync_content_id
 
 logger = logging.getLogger(__name__)
+
+
+def _next_unit(iterator):
+    # StopIteration cannot cross asyncio Future boundaries.
+    return next(iterator, None)
 
 
 def copy_paths(paths):
@@ -130,7 +135,9 @@ async def stage_upload(
     iterator, reservation = None, first
     try:
         store = repository.store
-        seed = WorkItem(first[0], uid, 0, 'intake:shadow', 1, 2, shadow=True, conversation_id=conversation_id)
+        seed = WorkItem(
+            first[0], uid, 0, 'intake:shadow', 1, Priority.DEEP, shadow=True, conversation_id=conversation_id
+        )
         snapshots = {}
         context = await run_blocking(db_executor, batch_artifact_authorize, store, seed, snapshots=snapshots)
         user = snapshots['user']

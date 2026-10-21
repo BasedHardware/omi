@@ -4,6 +4,7 @@ import asyncio
 import hashlib
 import os
 import time
+from typing import Callable
 
 from config.batch_pipeline_shadow import shadow_percent
 from utils.batch_pipeline.contracts import WorkResult, HeldWork, RecoveryWork, ValidationFailureWork
@@ -12,7 +13,7 @@ from utils.executors import db_executor, sync_executor, run_blocking, start_back
 
 
 class ShadowRunner:
-    def __init__(self, repository, recovery):
+    def __init__(self, repository, recovery: Callable[[str], object]):
         self.repository, self.recovery = repository, recovery
         self.worker_id = hashlib.sha256(os.getenv('POD_NAME', os.getenv('HOSTNAME', '')).encode()).hexdigest()
         self._reap_at = 0.0
