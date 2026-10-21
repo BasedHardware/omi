@@ -34,13 +34,17 @@ def _resolve_uid(config: RunnableConfig | None) -> Optional[str]:
     cfg: Optional[Dict[str, Any]] = cast(Optional[Dict[str, Any]], config)
     if cfg is None:
         cfg = _agent_config()
-    if not cfg:
+    if not cfg or not isinstance(cfg, dict):
         return None
     try:
         raw_configurable = cfg.get('configurable')
         if isinstance(raw_configurable, dict):
-            configurable: Dict[str, Any] = cast(Dict[str, Any], raw_configurable)
-            return configurable.get('user_id')
+            uid = raw_configurable.get('user_id')
+            if uid:
+                return str(uid)
+        uid = cfg.get('user_id')
+        if uid:
+            return str(uid)
         return None
     except (KeyError, TypeError):
         return None
@@ -68,6 +72,19 @@ def traverse_knowledge_graph_tool(
         Connected subgraph of relationships with cited long-term memory atoms.
     """
     logger.info("traverse_knowledge_graph_tool entity=%s hops=%s", entity, hops)
+
+    if entity is None or not isinstance(entity, str) or not entity.strip():
+        return "Error: Entity name must not be empty"
+    entity = entity.strip()
+
+    try:
+        hops = int(hops)
+    except (ValueError, TypeError):
+        hops = 1
+    if hops < 1:
+        hops = 1
+    elif hops > 2:
+        hops = 2
 
     uid = _resolve_uid(config)
     if not uid:
