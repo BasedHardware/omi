@@ -8,10 +8,12 @@ from unittest.mock import AsyncMock
 import httpx
 import pytest
 
+from config.dream_session import SessionLimits
+from database import dream_turns
 from tests.unit.test_dream_cleanup_edits import UID, store  # noqa: F401
 from tests.unit.test_dream_harness_runtime import runtime, _plan, _verdict  # noqa: F401
 from tests.unit.test_dream_session import call, turn
-from utils import dream_agent, dream_capacity, dream_harness_transport as transport
+from utils import dream_agent, dream_capacity, dream_cost, dream_harness_transport as transport
 
 
 def gateway(monkeypatch, respond):
@@ -71,6 +73,8 @@ def test_real_429_retries_same_history_and_keeps_staged_work_and_budget(runtime,
     assert report['status'] == 'complete', report
     assert report['outcomes'][0]['status'] == 'applied'
     assert report['tool_counts']['propose_edit'] == 1
+    assert report['turns'] == 2
+    assert report['model_lanes'].count(transport.VERIFY_LANE) == 2
     assert requests[failures[0]] == requests[failures[0] + 1]
     assert report['tokens'] == 48 and report['usage_unknown'] is False
     assert runtime.rows[('dream_users', UID)]['passes'] == 1
@@ -92,7 +96,69 @@ def test_persistent_429_is_bounded_and_refunds_known_zero_attempts(runtime, monk
     assert report['status'] == 'waiting', report
     assert post.await_count == 6 and wait.await_count == 5
     assert report['tokens'] == 0 and report['usage_unknown'] is False
+    assert report['turns'] == 0 and report['model_lanes'] == []
     assert sum(v.get('tokens', 0) for k, v in runtime.rows.items() if str(k[1]).startswith('headroom-')) == 0
+
+
+@pytest.mark.parametrize('rejection', ['bare_429', 'no_dispatch'])
+@pytest.mark.parametrize('exhausted', [False, True])
+def test_heavy_pass_zero_cost_retries_do_not_fill_receipt_cap(runtime, monkeypatch, rejection, exhausted):
+    load = dream_agent.dream_seed.load
+
+    def heavy_seed(uid, caps):
+        seed, records, consumed, _limits = load(uid, caps)
+        return seed, records, consumed, SessionLimits.for_size(80)
+
+    monkeypatch.setattr(dream_agent.dream_seed, 'load', heavy_seed)
+    # Freeze the real rate-card fixture rather than parse the same YAML for
+    # every attempt. Keep request sizing and all usage calculations real.
+    rate_card = dream_cost._load_yaml()
+    monkeypatch.setattr(dream_cost, '_load_yaml', lambda: rate_card)
+    completed = attempts = 0
+    receipt_counts = []
+    settle = dream_turns.settle
+
+    def record_settlement(*args, **kwargs):
+        settle(*args, **kwargs)
+        lease = runtime.rows[('dream_users', UID)]['lease']
+        receipt_counts.append(len(lease['turn_receipts']))
+        assert lease['minute_hold'] is None
+        # Only successful calls burn minute tokens: each reports 10 input + 2 output.
+        minute = sum(v.get('tokens', 0) for k, v in runtime.rows.items() if k[0] == 'dream_scheduler')
+        assert minute == completed * 20
+
+    def rejects():
+        return attempts % 4 != 0 or (exhausted and completed == 63)
+
+    async def available(**kwargs):
+        nonlocal attempts
+        attempts += 1
+        return None if rejection == 'no_dispatch' and rejects() else transport.DREAM_MODEL
+
+    async def post(*args, **kwargs):
+        nonlocal completed
+        if rejects():
+            return httpx.Response(429, json={'error': {}})
+        completed += 1
+        tool = (
+            call('finish', {'summary': 'Synthetic heavy pass complete'})
+            if completed == 64
+            else call('read', {'refs': ['people/junk']})
+        )
+        return reply(turn([tool]))
+
+    gateway(monkeypatch, post)
+    monkeypatch.setattr(dream_capacity, 'available_model', available)
+    monkeypatch.setattr(dream_capacity, 'wait_for_capacity', AsyncMock(return_value=True))
+    monkeypatch.setattr(dream_capacity, 'mark_saturated', AsyncMock())
+    monkeypatch.setattr(dream_turns, 'settle', record_settlement)
+    report = asyncio.run(dream_agent.run_pass(UID))
+    assert report['status'] == ('waiting' if exhausted else 'complete'), report
+    assert completed == (63 if exhausted else 64)
+    assert report['turns'] == completed
+    assert attempts > 128 and max(receipt_counts) == completed
+    assert report['tokens'] == completed * 12 and report['usage_unknown'] is False
+    assert runtime.rows[('dream_users', UID)]['passes'] == 1
 
 
 def test_capacity_retry_rechecks_kill_switch_before_dispatch(runtime, monkeypatch):
@@ -156,6 +222,7 @@ def test_retry_retains_paid_and_unknown_error_usage(runtime, monkeypatch, unknow
     report = asyncio.run(dream_agent.run_pass(UID))
     assert report['status'] == 'complete', report
     assert len(calls) == 2 and report['tokens'] == 122
+    assert report['turns'] == 1
     assert report['accounted_tokens'] > 122 if unknown_attempts else report['accounted_tokens'] == 122
     assert report['usage_unknown'] is bool(unknown_attempts)
     minute = sum(v.get('tokens', 0) for k, v in runtime.rows.items() if str(k[1]).startswith('headroom-'))

@@ -369,12 +369,12 @@ async def run_session(
                         raise
                     await asyncio.sleep(pause)
                     await active()
-        report['model_lanes'].append(lane)
         stage = 'model_turn'
         sink = {}
         try:
             if turn is not None:
                 result = await turn(uid, lane, mount, messages)
+                report['model_lanes'].append(lane)
                 await usage(result)
                 if lane == dream_harness_transport.MAIN_LANE and result.prompt_tokens:
                     main_history['prompt_tokens'] = result.prompt_tokens
@@ -402,6 +402,7 @@ async def run_session(
                 prior_message_count=prior_count,
                 cached_tokens_estimate=cached_estimate,
             )
+            report['model_lanes'].append(lane)
             if lane == dream_harness_transport.MAIN_LANE and result.prompt_tokens:
                 main_history['prompt_tokens'] = result.prompt_tokens
                 main_history['messages'] = len(messages)
