@@ -1,4 +1,4 @@
-"""The three A2 shadow seams (lead ruling 2026-10-19 14:41Z) stay plain Firestore unless staging opts in.
+"""The four A2 shadow seams (lead ruling 2026-10-19 14:41Z) stay plain Firestore unless staging opts in.
 
 Each seam builds its store as ``shadow_from_env(FirestoreStore(...))``. The AST test pins that shape at the
 exact call sites; the behaviour tests run each module's own bound names: with the mode unset, and with the
@@ -14,6 +14,7 @@ import sys
 import pytest
 
 import diarizer.batch_pipeline_runtime  # noqa: F401  (imported at collection: the timing budget is per test)
+import utils.batch_pipeline.intake  # noqa: F401
 import utils.batch_pipeline.live  # noqa: F401
 import utils.batch_pipeline.serving  # noqa: F401
 from database import batch_pipeline_shadow_hook as hook
@@ -25,6 +26,7 @@ SEAMS = [
     ('diarizer.batch_pipeline_runtime', 'main'),
     ('utils.batch_pipeline.serving', 'serving_for_stage'),
     ('utils.batch_pipeline.live', 'register_recording'),
+    ('utils.batch_pipeline.intake', 'accept_upload'),
 ]
 
 

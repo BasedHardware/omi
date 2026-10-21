@@ -16,6 +16,7 @@ from config.stt_provider_policy import normalized_stt_language, PARAKEET_SUPPORT
 from database.batch_pipeline_intake import admit, cache_completed
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from database.batch_pipeline_store import FirestoreStore
+from database.batch_pipeline_shadow_hook import shadow_from_env
 from database.sync_ledger import is_valid_completed_sync_content_result
 from utils.batch_pipeline.artifacts import ArtifactStore
 from utils.batch_pipeline.artifact_policy import create_artifact_store
@@ -279,7 +280,10 @@ async def accept_upload(
     public_job_id = JOB_PREFIX + job_id
     iterator = None
     try:
-        store = await run_blocking(db_executor, FirestoreStore, f'batch_pipeline_{current_stage()}')
+        # A2 seam: the sync upload admission (intakes, jobs, owners, queues, control) is mirrored in shadow mode.
+        store = await run_blocking(
+            db_executor, lambda: shadow_from_env(FirestoreStore(f'batch_pipeline_{current_stage()}'))
+        )
         previous = await run_blocking(db_executor, store.run, lambda tx: tx.get('content', f'{uid}/{content_id}'))
         if previous.get('dispatch_protocol') == 'batch_v1':
             status = await run_blocking(db_executor, durable_status, store, uid, previous['job_id'])
