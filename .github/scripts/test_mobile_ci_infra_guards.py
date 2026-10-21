@@ -127,22 +127,21 @@ class MobileCIInfraGuardTests(unittest.TestCase):
                     "elsewhere keeps post-job saves off the compile-smoke wall); a second "
                     "writer also races the shared key",
                 )
-        writer_events = set(
-            re.findall(r"github\.event_name == '([a-z_]+)'", str(self.jobs[NDK_CACHE_WRITER].get("if", "")))
-        )
+        writer_condition = str(self.jobs[NDK_CACHE_WRITER].get("if", ""))
         for job_id in NDK_JOBS:
             if job_id == NDK_CACHE_WRITER:
                 continue
             with self.subTest(reader=job_id):
-                reader_events = set(
-                    re.findall(r"github\.event_name == '([a-z_]+)'", str(self.jobs[job_id].get("if", "")))
-                )
-                self.assertLessEqual(
-                    reader_events,
-                    writer_events,
-                    f"{job_id}: triggers on events {sorted(reader_events - writer_events)} where the "
-                    f"cache writer {NDK_CACHE_WRITER} does not run; its first run per ref would "
-                    "download unretried unless it becomes a writer",
+                reader_condition = str(self.jobs[job_id].get("if", ""))
+                # The reader's whole condition must appear as a disjunct of the
+                # writer's, so any event or path filter that runs a reader also
+                # runs the writer; otherwise a reader's first run per ref would
+                # download unretried while the cache stays unseeded.
+                self.assertIn(
+                    reader_condition,
+                    writer_condition,
+                    f"{job_id}: its `if` is no longer contained in {NDK_CACHE_WRITER}'s `if`; "
+                    "either widen the writer's condition or make this job a writer too",
                 )
 
     def test_ios_compile_timeout_covers_the_measured_cold_path(self) -> None:

@@ -17,11 +17,16 @@ from __future__ import annotations
 import argparse
 import os
 import shutil
+import signal
 import subprocess
 import sys
 from pathlib import Path
 
-DEFAULT_ATTEMPT_TIMEOUT_SECONDS = 600
+# A healthy download + extract takes ~22 s. Two full attempts must still fit
+# inside the 25-minute Android Compile Smoke and JVM ceilings next to their
+# ~13 / ~9 minute p50 bodies, so the cap is minutes, not the job budget:
+# 2 x 240 s = 8 min worst case, which also leaves ~3 MB/s for a slow CDN day.
+DEFAULT_ATTEMPT_TIMEOUT_SECONDS = 240
 
 
 def ndk_is_installed(ndk_dir: Path, version: str) -> bool:
@@ -32,20 +37,31 @@ def ndk_is_installed(ndk_dir: Path, version: str) -> bool:
     return f"Pkg.Revision = {version}" in properties
 
 
-def run_sdkmanager(sdkmanager: Path, version: str, timeout: float) -> bool:
-    command = [str(sdkmanager), f"ndk;{version}"]
+def run_sdkmanager(sdkmanager: Path, android_home: Path, version: str, timeout: float) -> bool:
+    # --sdk_root keeps sdkmanager writing under the same root this script
+    # verifies and purges, whatever ANDROID_HOME the wrapper would derive.
+    command = [str(sdkmanager), f"--sdk_root={android_home}", f"ndk;{version}"]
     print(f"+ {' '.join(command)}", flush=True)
+    # The cmdline-tools sdkmanager is a shell wrapper around a Java child it
+    # does not exec. A timeout must kill the whole process group, or the
+    # extractor keeps writing into the tree the retry is about to purge.
+    process = subprocess.Popen(command, start_new_session=True)
     try:
-        completed = subprocess.run(command, check=False, timeout=timeout)
+        process.wait(timeout=timeout)
     except subprocess.TimeoutExpired:
-        print(f"sdkmanager attempt exceeded {timeout:.0f}s", file=sys.stderr)
+        print(f"sdkmanager attempt exceeded {timeout:.0f}s; killing its process group", file=sys.stderr)
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        process.wait()
         return False
-    return completed.returncode == 0
+    return process.returncode == 0
 
 
-def install(sdkmanager: Path, ndk_dir: Path, version: str, timeout: float) -> bool:
+def install(sdkmanager: Path, android_home: Path, ndk_dir: Path, version: str, timeout: float) -> bool:
     """Install `ndk;<version>` once; a zero exit alone is not success."""
-    if not run_sdkmanager(sdkmanager, version, timeout):
+    if not run_sdkmanager(sdkmanager, android_home, version, timeout):
         return False
     return ndk_is_installed(ndk_dir, version)
 
@@ -56,7 +72,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--android-home",
         default=os.environ.get("ANDROID_HOME"),
-        help="Android SDK root (default: $ANDROID_HOME)",
+        help="Android SDK root (default: $ANDROID_HOME); passed to sdkmanager as --sdk_root",
     )
     parser.add_argument(
         "--sdkmanager",
@@ -86,7 +102,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Android NDK {args.ndk_version} already present at {ndk_dir}; skipping install")
         return 0
 
-    if install(sdkmanager, ndk_dir, args.ndk_version, args.attempt_timeout):
+    if install(sdkmanager, android_home, ndk_dir, args.ndk_version, args.attempt_timeout):
         print(f"Android NDK {args.ndk_version} installed on first attempt")
         return 0
 
@@ -96,7 +112,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     shutil.rmtree(ndk_dir, ignore_errors=True)
     shutil.rmtree(android_home / ".temp", ignore_errors=True)
-    if install(sdkmanager, ndk_dir, args.ndk_version, args.attempt_timeout):
+    if install(sdkmanager, android_home, ndk_dir, args.ndk_version, args.attempt_timeout):
         print(f"Android NDK {args.ndk_version} installed on retry")
         return 0
 
