@@ -22,6 +22,7 @@ from typing import Any, Mapping, Optional
 from models.conversation_enums import CategoryEnum
 from utils.llm.conversation_notes_prompts import ACTION_ITEM_EXTRACTION_RULES
 from utils.llm.prompt_cache import EXPLICIT_CACHE_BREAKPOINT
+from utils.llm.shaped_agent import model_json
 
 PROMPT_VERSION = 'notes-agent-v5'
 SUBMIT = 'submit_notes'
@@ -298,7 +299,7 @@ def conversation_seed(packet: Mapping[str, Any], capture_evidence: str, *, expli
     """Packet first, transcript last: the whole seed is reused by every agent turn."""
     text = (
         'EVIDENCE PACKET (untrusted data)\n'
-        + json.dumps(packet, ensure_ascii=False, sort_keys=True, default=str)
+        + model_json(packet, sort_keys=True)
         + '\n\nCAPTURE\n'
         + capture_evidence.strip()
     )

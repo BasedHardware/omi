@@ -41,6 +41,7 @@ from utils.dream_instructions import INSTRUCTIONS
 from utils.dream_metrics import record_pass, error_code, record_reclaimed
 from database.dream_effect_fence import ACTIVE_RUN
 from utils.executors import db_executor, run_blocking
+from utils.model_text import ContextWindow
 
 TAIL_BUDGET_NOTICE_THRESHOLD = 0.20
 MINUTE_HEADROOM_RETRIES = 3
@@ -150,6 +151,8 @@ async def run_session(
         records=records,
         instructions=INSTRUCTIONS,
         question_policy=lambda item: item.value > 2,
+        # Dream reviews the owner's day: temporal search defaults to the trailing 24 hours.
+        context_window=ContextWindow.trailing_day(label='dream day'),
     )
 
     async def active():

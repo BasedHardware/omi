@@ -1,6 +1,6 @@
 import logging
 from datetime import datetime
-from typing import Any, Dict, List, Literal, Optional, Tuple, Type
+from typing import Any, ClassVar, Dict, List, Literal, Optional, Tuple, Type
 
 from pydantic import BaseModel, Field, ValidationError, field_validator, model_validator
 
@@ -221,6 +221,12 @@ class ExtractedEvent(BaseModel):
 
 
 class ExtractedSection(BaseModel):
+    # Near-miss keys a model writes for the body; the agent harness normalizes them before
+    # validation (utils.llm.shaped_agent.normalize_output). Not part of the JSON schema.
+    output_aliases: ClassVar[dict[str, tuple[str, ...]]] = {
+        'body_markdown': ('body', 'content', 'markdown', 'bullets', 'text'),
+    }
+
     heading: str = Field(description='A descriptive heading chosen for this conversation')
     body_markdown: str = Field(description='Free-form markdown containing the section details')
     source_segment_ids: List[str] = Field(
