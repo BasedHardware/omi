@@ -287,26 +287,25 @@ def test_scan_during_an_in_flight_writer_is_never_stored(world):
     assert 'keys' not in world.db.docs[INDEX_PATH]
 
 
-def test_lost_writer_release_keeps_the_index_untrusted_until_the_write_is_stale(world, monkeypatch):
+def test_lost_writer_release_keeps_the_owner_on_the_full_scan(world):
     _ids(world, 'donor-1')
     world.db.fail_release = True
     memories.change_memory_visibility(UID, 'legacy-1', 'private', firestore_client=world.db)
     world.db.fail_release = False
     assert world.db.docs[INDEX_PATH]['writers'] == 1
 
-    # A build cannot claim the post-write state while the release is missing.
-    _ids(world, 'donor-2')
-    _ids(world, 'donor-3')
-    assert world.history.scans == 3
-    assert 'writers' in world.db.docs[INDEX_PATH] and world.db.docs[INDEX_PATH]['writers'] == 1
-
-    # Once that write is an hour old, the next scan provably saw its rows.
-    stamp = world.db.docs[INDEX_PATH]['bumped_at']
-    world.db.docs[INDEX_PATH]['bumped_at'] = stamp - memories._HISTORICAL_SOURCE_INDEX_STALE_WRITER
-    _ids(world, 'donor-4')
-    assert world.db.docs[INDEX_PATH]['writers'] == 0
-    assert _ids(world, 'donor-5') == []
+    # No build may claim the post-write state: a lost release and a write still
+    # in flight look the same, so the counter is never reset by a reader.
+    for donor in ('donor-2', 'donor-3', 'donor-4'):
+        assert _ids(world, donor) == []
     assert world.history.scans == 4
+    assert world.db.docs[INDEX_PATH]['writers'] == 1
+
+    # Deleting the document is the operator recovery; the next scan rebuilds.
+    del world.db.docs[INDEX_PATH]
+    _ids(world, 'donor-5')
+    assert _ids(world, 'donor-6') == []
+    assert world.history.scans == 5
 
 
 def test_subject_reassignment_holds_the_fence(monkeypatch):
