@@ -612,8 +612,8 @@ class _DeviceSettingsState extends State<DeviceSettings> {
           const SizedBox(height: OmiSpacing.xl),
           _liveSections(
             connected: connected != null,
-            batteryLevel: provider.batteryLevel,
-            isCharging: provider.isCharging,
+            batteryLevel: connected == null ? 0 : provider.batteryLevel,
+            isCharging: connected != null && provider.isCharging,
           ),
           DeviceRecentlyGroup(load: provider.disconnectHistory),
           if (deviceStreaming && canPause) ...[
