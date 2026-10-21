@@ -11,8 +11,9 @@ from typing import Any, Callable, Protocol, TypeVar
 
 from google.cloud import firestore
 
+from config.firestore_read_levers import lever_enabled
 from database._client import get_data_plane_firestore_client
-from database.batch_pipeline_privacy import assert_batch_write_allowed
+from database.batch_pipeline_privacy import assert_batch_write_allowed, BatchPrivacyMemo
 from database.batch_pipeline_recovery import quarantine_fenced
 from utils.sync.stage import collection_name
 
@@ -103,12 +104,19 @@ class FirestoreTransaction:
         return service_frontier(self.client, self.namespace, priority, transaction=self.transaction)
 
     def check_privacy(self, uid: str, conversation_ids=(), expected_generation: int | None = None) -> int:
+        options = {}
+        if lever_enabled('batch_privacy_memoize', uid):
+            # FirestoreStore.run creates this view anew on every callback retry.
+            if not hasattr(self, '_privacy_memo'):
+                self._privacy_memo = BatchPrivacyMemo(self.client, self.transaction)
+            options['memo'] = self._privacy_memo
         return assert_batch_write_allowed(
             self.client,
             self.transaction,
             uid,
             conversation_ids=conversation_ids,
             expected_generation=expected_generation,
+            **options,
         )
 
     def flush(self):
@@ -123,9 +131,7 @@ class FirestoreTransaction:
             if identity in guarded:
                 continue
             guarded.add(identity)
-            generation = assert_batch_write_allowed(
-                self.client,
-                self.transaction,
+            generation = self.check_privacy(
                 job['owner_id'],
                 conversation_ids=(job['conversation_id'],) if job.get('conversation_id') else (),
                 expected_generation=job.get('privacy_generation'),

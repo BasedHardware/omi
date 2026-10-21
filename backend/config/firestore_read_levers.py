@@ -41,6 +41,7 @@ KNOWN_LEVERS = frozenset(
         'memory_list_index_window',
         'mcp_conversation_cards_cache',
         'canonical_statuses_dedupe',
+        'batch_privacy_memoize',
     }
 )
 
