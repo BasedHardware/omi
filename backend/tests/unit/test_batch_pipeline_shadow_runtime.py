@@ -4,10 +4,11 @@ import asyncio
 import threading
 import io
 import json
+import time
 from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import Mock, AsyncMock
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -17,7 +18,7 @@ from diarizer import batch_pipeline
 from tests.unit.test_batch_pipeline_worker import setup_worker, item
 from tests.unit.test_batch_pipeline_shadow import repository, running, row  # noqa: F401
 from utils.batch_pipeline.artifacts import ArtifactStore
-from utils.batch_pipeline.contracts import RecoveryWork, WorkResult
+from utils.batch_pipeline.contracts import RecoveryWork, WorkResult, PoolCapacity, WorkItem
 from utils.batch_pipeline.shadow_worker import ShadowRunner
 from routers import batch_pipeline as router
 from utils.batch_pipeline import intake, shadow_recovery
@@ -27,6 +28,37 @@ from utils import cloud_tasks
 from utils.batch_pipeline.artifact_policy import create_artifact_store
 from tests.unit.test_batch_pipeline_artifacts import ObjectClient
 from tests.unit.test_batch_pipeline_audio import pcm
+from tests.unit.test_batch_pipeline_scheduler import MemoryStore
+from utils.batch_pipeline.scheduler import Scheduler
+from utils.batch_pipeline.pump import Pump
+
+
+async def run_shadow(runner, pump):
+    return await runner.run_once(pump, capacity=PoolCapacity(time.time(), available_slots=1))
+
+
+@pytest.mark.parametrize('restriction', ['zero_slots', 'fresh_reserved', 'stale', 'shared_live', 'oversized'])
+async def test_shadow_obeys_the_same_capacity_snapshot_as_normal_pull(repository, restriction):
+    runner = ShadowRunner(repository, Mock())
+    runner.worker_id = 'worker-capacity'
+    repository.offer(runner.worker_id)
+    reservation = repository.reserve('synthetic-owner', 'capacity-unit', 'deep')
+    work = WorkItem(reservation[0], 'synthetic-owner', 1, 'synthetic:audio', 300, 2, shadow=True, privacy_generation=0)
+    assert repository.ready(reservation, work, '')
+    fields = {'observed_at': time.time(), 'available_slots': 1}
+    fields.update(
+        {
+            'zero_slots': {'available_slots': 0},
+            'fresh_reserved': {'reserved_fresh_slots': 1},
+            'stale': {'observed_at': time.time() - 30},
+            'shared_live': {'shared_with_live': True, 'gpu_id': 'synthetic-gpu', 'memory_headroom_bytes': 8 * 1024**3},
+            'oversized': {'max_item_seconds': 120},
+        }[restriction]
+    )
+    pump = SimpleNamespace(_gpu=asyncio.Lock(), _normal_flights=0, worker=Mock())
+    assert await runner.run_once(pump, capacity=PoolCapacity(**fields)) == 0
+    pump.worker.process_batch.assert_not_called()
+    assert row(repository, work.segment_id)['outcome'] == 'dropped'
 
 
 async def test_runner_uses_full_worker_but_never_normal_publication(repository, monkeypatch):
@@ -53,12 +85,18 @@ async def test_runner_uses_full_worker_but_never_normal_publication(repository, 
     worker, words, _, decoded, diarized, failures = setup_worker(persist=artifacts.persist_result)
     monkeypatch.setattr(batch_pipeline, 'cap_dispatch_enabled', Mock(side_effect=AssertionError('no user quota')))
     monkeypatch.setattr(batch_pipeline, 'record_audio', Mock(side_effect=AssertionError('no user usage')))
-    pump = SimpleNamespace(_gpu=asyncio.Lock(), _normal_flights=0, worker=worker)
-    assert await runner.run_once(pump) == 1
+    normal_store = MemoryStore()
+    pump = Pump(
+        Scheduler(normal_store), worker, shadow=runner, capacity=lambda: PoolCapacity(time.time(), available_slots=1)
+    )
+    pump._publish_flight = AsyncMock(side_effect=AssertionError('shadow cannot enter normal publication'))
+    assert await pump.run_once(maintain=False) == 1
     assert words.calls and decoded and diarized and not failures
     assert row(repository, work.segment_id)['outcome'] == 'recovered'
     assert all(path[0].startswith('batch_pipeline_dev_shadow_') for path in repository.store.client.rows)
     artifacts.register_artifact.assert_not_called()
+    pump._publish_flight.assert_not_awaited()
+    assert not any(table == 'jobs' for table, _ in normal_store.rows)
 
 
 async def test_runner_does_not_wait_behind_live_gpu_or_claimed_flight(repository):
@@ -67,10 +105,10 @@ async def test_runner_does_not_wait_behind_live_gpu_or_claimed_flight(repository
     await lock.acquire()
     pump = SimpleNamespace(_gpu=lock, _normal_flights=0, worker=Mock())
     repository.take = Mock(side_effect=AssertionError('must not take behind live GPU'))
-    assert await runner.run_once(pump) == 0
+    assert await run_shadow(runner, pump) == 0
     lock.release()
     pump._normal_flights = 1
-    assert await runner.run_once(pump) == 0
+    assert await run_shadow(runner, pump) == 0
     repository.take.assert_not_called()
 
 
@@ -84,7 +122,7 @@ async def test_live_claim_during_take_drops_before_gpu_dispatch(repository):
         return work
 
     repository.take = take
-    assert await runner.run_once(pump) == 0
+    assert await run_shadow(runner, pump) == 0
     pump.worker.process_batch.assert_not_called()
     assert row(repository, work.segment_id)['outcome'] == 'dropped'
 
@@ -95,7 +133,7 @@ async def test_missing_gpu_result_never_starts_paid_recovery(repository):
     recovery = Mock()
     runner = ShadowRunner(repository, recovery)
     pump = SimpleNamespace(_gpu=asyncio.Lock(), _normal_flights=0, worker=Mock(process_batch=Mock(return_value=[])))
-    assert await runner.run_once(pump) == 1
+    assert await run_shadow(runner, pump) == 1
     recovery.assert_not_called()
     assert row(repository, work.segment_id)['outcome'] == 'error'
 
@@ -106,7 +144,7 @@ async def test_busy_probe_failure_settles_taken_work_immediately(repository):
     repository.busy = Mock(side_effect=TimeoutError('synthetic probe timeout'))
     runner = ShadowRunner(repository, Mock())
     pump = SimpleNamespace(_gpu=asyncio.Lock(), _normal_flights=0, worker=Mock())
-    assert await runner.run_once(pump) == 0
+    assert await run_shadow(runner, pump) == 0
     pump.worker.process_batch.assert_not_called()
     assert row(repository, work.segment_id)['outcome'] == 'dropped'
 
@@ -129,7 +167,7 @@ async def test_late_take_reply_is_dropped_without_leaving_raw_owner(repository):
     repository.take = delayed
     pump = SimpleNamespace(_gpu=asyncio.Lock(), _normal_flights=0, worker=Mock())
     try:
-        assert await runner.run_once(pump) == 0
+        assert await run_shadow(runner, pump) == 0
         assert row(repository, work.segment_id)['state'] == 'running'
     finally:
         release.set()

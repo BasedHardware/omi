@@ -30,16 +30,20 @@ class ShadowRunner:
                 run_blocking(db_executor, self.repository.offer, self.worker_id, close=True), timeout=0.25
             )
 
-    async def run_once(self, pump):
+    async def run_once(self, pump, *, capacity):
         if not shadow_percent() or pump._gpu.locked() or pump._normal_flights or self._recovering or self._taking:
+            return 0
+        slots, spare, _ = capacity.limits(time.time(), shared_live_enabled=False)
+        if capacity.shared_with_live or not slots or not spare:
+            await self.close()
             return 0
         self._taking = True
         try:
-            return await self._run_idle(pump)
+            return await self._run_idle(pump, capacity)
         finally:
             self._taking = False
 
-    async def _run_idle(self, pump):
+    async def _run_idle(self, pump, capacity):
         # Admission IO must not hold the ordinary GPU lock.
         taking = start_background_task(
             run_blocking(db_executor, self.repository.take, self.worker_id), name='batch_shadow_take'
@@ -57,7 +61,17 @@ class ShadowRunner:
         except Exception:
             await run_blocking(db_executor, self.repository.finish, item.segment_id, 'dropped')
             return 0
-        if pump._gpu.locked() or pump._normal_flights or not shadow_percent() or busy:
+        slots, spare, max_seconds = capacity.limits(time.time(), shared_live_enabled=False)
+        if (
+            pump._gpu.locked()
+            or pump._normal_flights
+            or not shadow_percent()
+            or busy
+            or capacity.shared_with_live
+            or not slots
+            or not spare
+            or item.duration_seconds > max_seconds
+        ):
             await run_blocking(db_executor, self.repository.finish, item.segment_id, 'dropped')
             return 0
         # No await between this final idle check and acquiring an unlocked lock.

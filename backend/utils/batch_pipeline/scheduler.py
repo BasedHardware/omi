@@ -160,7 +160,10 @@ class Scheduler:
             raise ValueError('pending recording owner cannot change')
         if previous and previous.get('state') != 'record_pending':
             if any(
-                previous.get(key, {'unit_kind': 'conversation', 'requires_compute_admission': False}.get(key)) != value
+                previous.get(
+                    key, {'unit_kind': 'conversation', 'requires_compute_admission': False, 'shadow': False}.get(key)
+                )
+                != value
                 for key, value in immutable.items()
                 if not (key == 'privacy_generation' and value is None)
             ):

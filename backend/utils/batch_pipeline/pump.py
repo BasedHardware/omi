@@ -261,7 +261,7 @@ class Pump:
         if not leases:
             if self.shadow is not None:
                 try:
-                    return await self.shadow.run_once(self)
+                    return await self.shadow.run_once(self, capacity=snapshot)
                 except FatalGpuError:
                     raise
                 except Exception as error:

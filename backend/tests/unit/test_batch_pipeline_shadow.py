@@ -340,3 +340,17 @@ def test_projection_and_normal_scheduler_refuse_shadow_before_any_side_effect():
     item = WorkItem('segment', 'synthetic', 1, 'encrypted:shadow', 30, 2, shadow=True)
     with pytest.raises(ValueError, match='shadow'):
         Scheduler.enqueue_in_transaction(Mock(), item, 0)
+
+
+def test_pre_shadow_normal_job_duplicates_keep_their_immutable_identity():
+    from tests.unit.test_batch_pipeline_scheduler import MemoryStore
+    from copy import deepcopy
+
+    store = MemoryStore()
+    queue = Scheduler(store)
+    work = WorkItem('normal-segment', 'synthetic', 1, 'encrypted:normal', 30, 2)
+    assert queue.enqueue(work, 1)
+    store.rows['jobs', work.segment_id].pop('shadow')  # Persisted before this rollout.
+    before = deepcopy(store.rows)
+    assert queue.enqueue(work, 2) is False
+    assert store.rows == before

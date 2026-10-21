@@ -28,9 +28,11 @@ An idle GPU worker offers one rendezvous for six seconds. At most four offers
 exist, within the existing fleet's <=4-node operator limit. Upload staging has
 120 seconds to fill an offer; ready work has six seconds to start. No offer or
 ordinary ready/leased/retry work means `dropped`, with no queue or later retry.
-The worker checks ordinary flights and pool admission again under the existing
-exclusive GPU lock. Shadow never waits behind ordinary compute. A live arrival
-after CUDA starts waits for that one non-preemptible unit, as with any batch
+The worker rechecks ordinary flights and pool admission immediately before
+acquiring the existing exclusive GPU lock. Shadow never waits behind ordinary compute.
+The exact normal-pull capacity snapshot also gates shadow: no shared-live pool,
+stale sample, exhausted slot budget, reserved fresh capacity or oversized unit
+can start a shadow chain. A live arrival after CUDA starts waits for that one non-preemptible unit, as with any batch
 flight; shadow never starts a second unit ahead of waiting ordinary work.
 
 The upload owns a temporary copy of the raw files. It uses canonical record-lane
