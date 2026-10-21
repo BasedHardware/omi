@@ -107,11 +107,20 @@ def test_seam_failure_keeps_the_plain_primary(monkeypatch):
     assert hook.shadow_from_env(primary) is primary
 
 
-def test_provider_stt_stage_store_is_the_shadow_seam(monkeypatch):
-    """The provider-STT consumer writes jobs/owners through ``store.run``; its store is the deferred seam."""
-    import utils.batch_pipeline.provider_stt as provider_stt
+@pytest.mark.parametrize(
+    'module_name, function',
+    [
+        ('utils.batch_pipeline.provider_stt', '_service_stage'),
+        ('utils.batch_pipeline.intake', 'get_durable_job_status'),
+    ],
+)
+def test_secondary_writer_stores_are_the_shadow_seam(module_name, function):
+    """Provider-STT start/settle and the durable-status redrive write batch rows through ``store.run``."""
+    import importlib
 
-    tree = ast.parse(inspect.getsource(provider_stt._service_stage))
+    module = importlib.import_module(module_name)
+
+    tree = ast.parse(inspect.getsource(getattr(module, function)))
     calls = [
         node
         for node in ast.walk(tree)

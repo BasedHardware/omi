@@ -584,7 +584,8 @@ def get_durable_job_status(job_id: str, uid: str) -> dict | None:
         return None
     if len(job_id) > 128 or '/' in job_id:
         raise HTTPException(status_code=404, detail='Sync job not found')
-    status = durable_status(FirestoreStore(f'batch_pipeline_{current_stage()}'), uid, job_id)
+    # A2 seam: durable_status may redrive a dead job (writes jobs/queues/control).
+    status = durable_status(shadow_from_env(FirestoreStore(f'batch_pipeline_{current_stage()}')), uid, job_id)
     if status is None:
         raise HTTPException(status_code=404, detail='Sync job not found')
     return status
