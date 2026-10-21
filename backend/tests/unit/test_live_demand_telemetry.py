@@ -142,7 +142,9 @@ def test_exhausted_sessions_carry_the_ineligible_reason_and_zero_children_exist(
                 )
                 is not None
             ), (reason, outcome)
-    for cohort in ('admitted', 'eligible_control'):
+    # 'none' exists for every cohort: the eligible ones always, and ineligible
+    # for a session a batch preview moved there after admission.
+    for cohort in ('admitted', 'eligible_control', 'ineligible'):
         assert (
             REGISTRY.get_sample_value(
                 'omi_listen_demand_exhausted_sessions_total',

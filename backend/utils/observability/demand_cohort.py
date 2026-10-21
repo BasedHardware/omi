@@ -156,7 +156,10 @@ try:
                         demand_cohort=_cohort, reason=_reason, capacity_subtype=_subtype, outcome=_outcome
                     )
         for _outcome in ('yes', 'no'):
-            for _reason in INELIGIBLE_REASONS if _cohort == 'ineligible' else ('none',):
+            # A batch preview can move an admitted session into the ineligible
+            # cohort after admission, with no exclusion reason: that series
+            # reads 'none' too, so it needs its zero child.
+            for _reason in (*INELIGIBLE_REASONS, 'none') if _cohort == 'ineligible' else ('none',):
                 EXHAUSTED_SESSIONS.labels(demand_cohort=_cohort, outcome=_outcome, ineligible_reason=_reason)
         for _trigger in ('first_output', 'visible_return'):
             OUTPUT_LATENCY.labels(demand_cohort=_cohort, trigger=_trigger)
