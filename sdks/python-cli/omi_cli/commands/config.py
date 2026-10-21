@@ -65,6 +65,37 @@ def path(typer_ctx: typer.Context) -> None:
 _SETTABLE_KEYS = {"api_base", "local_api_url", "local_token"}
 
 
+def _normalize_key(key: str) -> str:
+    """Canonicalize a config key: case-insensitive, kebab-case accepted for snake_case keys."""
+    cleaned = key.strip().lower().replace("-", "_")
+    if cleaned not in _SETTABLE_KEYS:
+        raise UsageError(
+            message=f"Unknown config key '{key}'",
+            detail=f"Known keys: {sorted(_SETTABLE_KEYS)}",
+        )
+    return cleaned
+
+
+@app.command("get", help="Print a single per-profile config value. Keys: api_base, local_api_url, local_token.")
+def get_value(
+    typer_ctx: typer.Context,
+    key: str = typer.Argument(..., help=f"Config key to read. One of: {sorted(_SETTABLE_KEYS)}"),
+    unmasked: bool = typer.Option(False, "--unmasked", help="Show the raw local_token instead of a masked value."),
+) -> None:
+    ctx = _ctx(typer_ctx)
+    key = _normalize_key(key)
+    config = ctx.load_config()
+    profile = config.get_profile(ctx.profile_name)
+    if key == "local_token" and not unmasked:
+        value: object = profile.masked_local_token()
+    else:
+        value = getattr(profile, key)
+    if ctx.renderer.json_mode:
+        ctx.renderer.emit({"key": key, "value": value})
+    else:
+        typer.echo(value if value is not None else "(none)")
+
+
 @app.command("set", help="Set a per-profile config value. Keys: api_base, local_api_url, local_token.")
 def set_value(
     typer_ctx: typer.Context,
@@ -72,11 +103,7 @@ def set_value(
     value: str = typer.Argument(..., help="New value."),
 ) -> None:
     ctx = _ctx(typer_ctx)
-    if key not in _SETTABLE_KEYS:
-        raise UsageError(
-            message=f"Unknown config key '{key}'",
-            detail=f"Settable keys: {sorted(_SETTABLE_KEYS)}",
-        )
+    key = _normalize_key(key)
     config = ctx.load_config()
     profile = config.get_profile(ctx.profile_name)
     if key in {"api_base", "local_api_url"}:
