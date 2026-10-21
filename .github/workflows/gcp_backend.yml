@@ -633,9 +633,9 @@ jobs:
       - name: Login to GCR
         run: gcloud auth configure-docker
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
-
+      # No setup-buildx-action here: the runner's default docker builder loads each
+      # image into the local store for the docker run probes, and pushes plain
+      # single-platform manifests whose config `imagetools inspect` reads at deploy.
       - name: Build role images from backend/Dockerfile.roles and backend/edge/Dockerfile
         env:
           PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}

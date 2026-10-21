@@ -12,11 +12,13 @@
 
 FROM rust:1.99.1-slim-bookworm AS builder
 
-# libopus through pkg-config (the opus crate's preferred path); ort downloads its
-# prebuilt static ONNX Runtime at build time.
+# libopus through pkg-config (the opus crate's preferred path; cmake covers its
+# bundled fallback); ort downloads its prebuilt static ONNX Runtime at build time.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     pkg-config \
     libopus-dev \
+    cmake \
+    g++ \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
