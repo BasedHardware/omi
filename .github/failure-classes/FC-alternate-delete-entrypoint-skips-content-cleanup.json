@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "FC-alternate-delete-entrypoint-skips-content-cleanup",
+  "violated_contract": "Every entrypoint that deletes a user's conversation must remove the same stored content as the app's DELETE /v1/conversations/{id}. The Developer API delete only removed the Firestore document, so the conversation's photo and screen-frame images stayed in GCS (with no path left to find them, because their ids lived under the deleted document) and its conversation and transcript-chunk vectors stayed searchable.",
+  "canonical_prevention": "A second delete entrypoint runs the app route's cleanup sequence, in its order (screen frames and frame evidence before the parent document, vectors after), and a test executes the entrypoint with recording collaborators and asserts that sequence, so a cleanup step added to one route and not the other fails the suite.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_conversation_tombstones.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/routers/developer.py",
+    "backend/routers/conversations.py"
+  ],
+  "status": "open"
+}

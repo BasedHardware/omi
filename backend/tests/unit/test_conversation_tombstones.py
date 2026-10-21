@@ -237,27 +237,54 @@ def test_live_client_chosen_deleted_id_is_closed_before_bootstrap_and_registrati
     assert calls == [tombstones.is_deleted]
 
 
-def test_developer_delete_commits_tombstone_before_cleanup_failure(store, monkeypatch):
-    helper = AutoMockModule('utils.conversations.merge_conversations')
+def developer_delete(hard_delete, calls):
+    def record(name):
+        return lambda uid, cid: calls.append((name, tombstones.is_deleted(uid, cid)))
 
-    def fail(*args):
-        assert tombstones.is_deleted('u', 'c')
-        raise RuntimeError('cleanup failed')
-
-    helper.delete_conversation_with_sync_sources = fail
-    delete = function(
+    return function(
         'routers/developer.py',
         'delete_conversation_endpoint',
         {
             'conversation_tombstones': tombstones,
             'HTTPException': HTTPException,
             'conversations_db': SimpleNamespace(get_conversation=lambda *a: {'id': 'c'}),
+            'delete_owner_prompt_embedding_cache': record('prompt'),
+            'delete_conversation_screen_frames': record('screen-frames'),
+            'delete_conversation_and_frame_evidence': hard_delete,
+            'vector_db': SimpleNamespace(
+                delete_vector=record('vector'), delete_transcript_chunk_vectors=record('chunk-vectors')
+            ),
         },
     )
-    with stub_modules({'utils.conversations.merge_conversations': helper}):
-        with pytest.raises(RuntimeError, match='cleanup failed'):
-            delete('c', 'u')
+
+
+def test_developer_delete_commits_tombstone_before_cleanup_failure(store):
+    def fail(*args):
+        assert tombstones.is_deleted('u', 'c')
+        raise RuntimeError('cleanup failed')
+
+    with pytest.raises(RuntimeError, match='cleanup failed'):
+        developer_delete(fail, [])('c', 'u')
     assert tombstones.is_deleted('u', 'c')
+
+
+def test_developer_delete_runs_the_app_delete_cleanup(store):
+    calls = []
+
+    def hard_delete(uid, cid):
+        calls.append(('parent', tombstones.is_deleted(uid, cid)))
+        store.rows.pop(f'users/{uid}/conversations/{cid}')
+
+    assert developer_delete(hard_delete, calls)('c', 'u') == {'success': True}
+    # Screen frames before the parent doc: their GCS objects are keyed under it.
+    assert calls == [
+        ('prompt', True),
+        ('screen-frames', True),
+        ('parent', True),
+        ('vector', True),
+        ('chunk-vectors', True),
+    ]
+    assert 'users/u/conversations/c' not in store.rows
 
 
 def test_repeated_delete_after_hard_cleanup_preserves_original_metadata(store):

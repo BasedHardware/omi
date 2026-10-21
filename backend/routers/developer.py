@@ -70,6 +70,9 @@ from dependencies import (
 from utils.apps import update_personas_async
 from utils.log_sanitizer import sanitize
 from utils.other.endpoints import with_rate_limit, get_current_user_uid
+from utils.other.storage import delete_owner_prompt_embedding_cache
+from utils.screen_frames.store import delete_conversation_screen_frames
+from services.conversation_frame_evidence import delete_conversation_and_frame_evidence
 from utils.other.list_budget import finish_list_budget, list_read_budget_for_request
 from utils.observability.external_lists import (
     observe_action_items_page,
@@ -2548,12 +2551,13 @@ def delete_conversation_endpoint(
     if conversation.get('is_locked', False):
         raise HTTPException(status_code=402, detail="A paid plan is required to access this conversation.")
 
-    # Lazy: keep developer routes off the merge/memory import graph so stubbed
-    # ``utils.memory.*`` tests can load this module without a complete retraction_scope.
-    from utils.conversations.merge_conversations import delete_conversation_with_sync_sources
-
+    # Same cleanup as the app's DELETE /v1/conversations/{id}; the parent doc alone strands images and vectors.
     conversation_tombstones.record_deletion(uid, conversation_id)
-    delete_conversation_with_sync_sources(uid, conversation_id)
+    delete_owner_prompt_embedding_cache(uid, conversation_id)
+    delete_conversation_screen_frames(uid, conversation_id)
+    delete_conversation_and_frame_evidence(uid, conversation_id)
+    vector_db.delete_vector(uid, conversation_id)
+    vector_db.delete_transcript_chunk_vectors(uid, conversation_id)
     return {"success": True}
 
 
