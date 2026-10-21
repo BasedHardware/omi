@@ -135,7 +135,10 @@ async def _process(uid, item) -> AttemptOutcome:
     return AttemptOutcome.COMPLETE if recovered else AttemptOutcome.RETRY
 
 
-async def run(uid: str, *, continuation: bool = False, max_items: int = PAGE, time_budget: float | None = None):
+async def run(
+    uid: str, *, continuation: bool = False, max_items: int = PAGE, time_budget: float | None = None
+) -> bool | None:
+    """True permits another round; false/None parks a blocked or inactive owner."""
     if not funded_processing.enabled(uid):
         return
     max_items = max(1, min(max_items, 100))
@@ -211,6 +214,8 @@ async def run(uid: str, *, continuation: bool = False, max_items: int = PAGE, ti
                 job.update(released)
             elif not await attempt(reserved):
                 return False
+            elif limit == 1:
+                return True  # Resuming a reservation consumes this owner's turn.
         pages = await run_blocking(db_executor, _page, uid, 'audio', job.get('cursor_audio'))
         pages += await run_blocking(db_executor, _page, uid, 'text', job.get('cursor_text'))
         candidates = sorted(
@@ -282,6 +287,7 @@ async def run(uid: str, *, continuation: bool = False, max_items: int = PAGE, ti
             logger.warning('event=processing_backlog outcome=release_deferred exception_type=%s', type(exc).__name__)
     # A productive page remains state=processing. The periodic durable sweep
     # owns continuation, including an authorized pending upgrade consumed above.
+    return continuation
 
 
 def upgrade(uid: str, request_key: str, *, intent_at):
