@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:omi/utils/audio/background_location_cadence.dart';
 import 'package:omi/utils/audio/foreground.dart';
 
 void main() {
@@ -34,6 +35,8 @@ void main() {
     final repeat = source.substring(source.indexOf('void onRepeatEvent'), source.indexOf('Future<void> onDestroy'));
     expect(repeat, contains('_locationCadence.onRepeat'));
     expect(repeat, isNot(contains('lastAttempt:')));
+    expect(repeat, isNot(contains('attemptAt')));
+    expect(repeat, isNot(contains('recordStart')));
     expect(repeat, isNot(contains('runBackgroundRepeat')));
     expect(repeat, isNot(contains('_locationInBackground(')));
     expect(repeat, contains("sendDataToMain({'recordingSyncWake': true})"));

@@ -1,66 +1,11 @@
 import 'dart:io';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:geolocator/geolocator.dart';
 
+import 'package:omi/utils/audio/background_location_cadence.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/notification_channel_strings.dart';
-
-/// The service repeats every 5 minutes for the WAL sync wake. Location only
-/// keeps the backend's 30-minute geolocation cache warm (a fallback for
-/// conversations without their own snapshot), so a fix and its upload run at
-/// most this often instead of on every repeat.
-const Duration backgroundLocationRefreshInterval = Duration(minutes: 15);
-
-@visibleForTesting
-bool backgroundLocationRefreshDue(DateTime? lastAttempt, DateTime now) =>
-    lastAttempt == null ||
-    now.isBefore(lastAttempt) ||
-    !now.isBefore(lastAttempt.add(backgroundLocationRefreshInterval));
-
-/// The repeat handler's control flow. The sync wake always runs. Location
-/// runs only when [backgroundLocationRefreshDue] is true, and the attempt
-/// stamp is recorded before the refresh so a failed fix is not retried on
-/// the next 5-minute repeat.
-@visibleForTesting
-Future<void> runBackgroundRepeat({
-  required DateTime? lastAttempt,
-  required DateTime now,
-  required void Function() sendSyncWake,
-  required void Function(DateTime attemptAt) recordAttempt,
-  required Future<void> Function() refreshLocation,
-}) async {
-  sendSyncWake();
-  if (!backgroundLocationRefreshDue(lastAttempt, now)) return;
-  recordAttempt(now);
-  await refreshLocation();
-}
-
-/// Owns the attempt stamp the production repeat handler passes in.
-/// A caller that passes null instead of [attemptAt] refreshes every repeat.
-@visibleForTesting
-class BackgroundLocationCadence {
-  DateTime? attemptAt;
-
-  void recordStart(DateTime now) {
-    attemptAt = now;
-  }
-
-  Future<void> onRepeat({
-    required DateTime now,
-    required void Function() sendSyncWake,
-    required Future<void> Function() refreshLocation,
-  }) {
-    return runBackgroundRepeat(
-      lastAttempt: attemptAt,
-      now: now,
-      sendSyncWake: sendSyncWake,
-      recordAttempt: (stamp) => attemptAt = stamp,
-      refreshLocation: refreshLocation,
-    );
-  }
-}
 
 @pragma('vm:entry-point')
 void _startForegroundCallback() {
