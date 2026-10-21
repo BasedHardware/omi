@@ -198,9 +198,9 @@ class BrakeTests(unittest.TestCase):
     def halted_play(self):
         play = FakePlay("halted")
         play.live["releases"][1]["releaseNotes"] = [
-            {"language": "en-US", "text": "Faster sync.\n"},
+            {"language": "en-US", "text": "- Faster sync.\n- Longer battery.\n"},
             {"language": "de-DE", "text": "Schneller."},
-            {"language": "fr-FR", "text": "Faster sync.\n"},
+            {"language": "fr-FR", "text": "- Faster sync.\n- Longer battery.\n"},
         ]
         return play
 
@@ -232,9 +232,9 @@ class BrakeTests(unittest.TestCase):
         self.assertEqual(
             staged["releaseNotes"],
             [
-                {"language": "en-US", "text": f"Faster sync.\n{FIX}"},
+                {"language": "en-US", "text": f"- Faster sync.\n- Longer battery.\n{FIX}"},
                 {"language": "de-DE", "text": "Schneller."},
-                {"language": "fr-FR", "text": f"Faster sync.\n{FIX}"},
+                {"language": "fr-FR", "text": f"- Faster sync.\n- Longer battery.\n{FIX}"},
             ],
         )
         self.assertEqual(len(play.live["releases"]), 2)
@@ -292,6 +292,26 @@ class BrakeTests(unittest.TestCase):
         self.assertEqual(notes["en-US"], f"{head}\n{FIX}")
         self.assertEqual(notes["fr-FR"], f"{head}\n{FIX}")
         self.assertEqual(notes["de-DE"], "Schneller.")
+
+    def test_stage_keeps_semicolon_joined_android_notes_shape(self):
+        play = self.halted_play()
+        first = "a" * 320
+        last = "b" * 150
+        play.live["releases"][1]["releaseNotes"] = [{"language": "en-US", "text": f"{first}; {last}"}]
+        brake.run_brake(
+            "stage",
+            "1477",
+            "brake",
+            user_fraction="0.01",
+            supersedes="1471",
+            notes_line="Fixes audio loss when your Omi reconnects",
+            edit_factory=lambda: (play, "original"),
+            quiescence_check=lambda: None,
+        )
+        self.assertEqual(
+            play.live["releases"][1]["releaseNotes"],
+            [{"language": "en-US", "text": f"{first}; Fixes audio loss when your Omi reconnects"}],
+        )
 
     def test_stage_fraction_above_halted_fraction_refuses(self):
         play = self.halted_play()

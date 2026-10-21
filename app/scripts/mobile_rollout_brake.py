@@ -106,10 +106,13 @@ def stage_notes(halted: dict, fix_line: str) -> list[dict]:
     if len(english) != 1 or not isinstance(english[0].get("text"), str) or not english[0]["text"].strip():
         raise BrakeError("halted release must carry exactly one non-empty en-US note")
     source = english[0]["text"]
-    lines = source.rstrip().split("\n")
-    updated = "\n".join([*lines, fix_line])
+    # Android store notes are one "; "-joined line (mobile-changelog android_notes);
+    # hand-written ones may be newline bullets. Keep whichever shape Play holds.
+    separator = "\n" if "\n" in source.strip() else "; "
+    lines = source.strip().split(separator)
+    updated = separator.join([*lines, fix_line])
     if len(updated) > PLAY_NOTES_LIMIT and len(lines) > 1:
-        updated = "\n".join([*lines[:-1], fix_line])
+        updated = separator.join([*lines[:-1], fix_line])
     if len(updated) > PLAY_NOTES_LIMIT:
         raise BrakeError(
             f"en-US release notes would exceed Play's {PLAY_NOTES_LIMIT} characters "
