@@ -85,7 +85,7 @@ on:
       # build-role-images); copy its digest from that run's "Role images" summary.
       # See backend/docs/runbooks/edge-shadow-rollout.md.
       listen_edge_image_digest:
-        description: 'Plan D D2: listen-edge image to roll, gcr.io/<project>/listen-edge@sha256:<digest> from the build-only train summary; must be labelled with the checked-out SHA (blank leaves the listen-edge release untouched)'
+        description: 'Plan D D2: listen-edge image to roll, gcr.io/<project>/listen-edge@sha256:<digest> from a build-only train summary; it must have been built from a commit the checked-out source contains (blank leaves the listen-edge release untouched)'
         required: false
         default: ''
         type: string
@@ -245,9 +245,12 @@ jobs:
       # Plan D D2: the listen-edge image is admitted by digest before anything is
       # applied. The admission reads only the image config (the same imagetools
       # inspect deploy-backend-stack uses for service_images): this project's
-      # registry, the listen-edge image, revision label and OMI_RELEASE_SHA both
-      # equal to the checked-out SHA admitted above. Blank input skips every
-      # listen-edge step; nothing else in this workflow changes.
+      # registry, the listen-edge image, a revision label equal to its
+      # OMI_RELEASE_SHA stamp, and that revision an ancestor of the checked-out
+      # source admitted above — the image_tag rule applied to a digest, so a
+      # digest from an earlier train (or the previous one, for rollback) stays
+      # deployable after main moves on. Blank input skips every listen-edge
+      # step; nothing else in this workflow changes.
       - name: Login to GCR for the listen-edge image read
         if: ${{ (github.event.inputs.mode || 'deploy') == 'deploy' && github.event.inputs.listen_edge_image_digest != '' }}
         run: gcloud auth configure-docker --quiet
@@ -583,10 +586,10 @@ jobs:
       # Plan D D2: roll the listen-edge chart after listen is verified, so the
       # sensitive listen rollout keeps its own step sequence independent of the
       # edge. Runs only when a digest was admitted above. Blank input never
-      # creates or touches the release: chart-only changes re-pass the same
-      # digest explicitly (digests are immutable). mode=rollback touches the
-      # listen release only; rolling listen-edge back is by digest or
-      # `helm rollback` per the runbook.
+      # creates or touches the release: chart-only changes and rollbacks re-pass
+      # a digest explicitly (digests are immutable; any digest built from a
+      # commit main contains is admissible). mode=rollback touches the listen
+      # release only.
       - name: Upgrade listen-edge Helm chart
         if: ${{ (github.event.inputs.mode || 'deploy') == 'deploy' && env.LISTEN_EDGE_IMAGE_DIGEST != '' }}
         run: |

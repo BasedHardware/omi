@@ -4385,7 +4385,7 @@
             },
             "listen_edge_image_digest": {
               "default": "",
-              "description": "Plan D D2: listen-edge image to roll, gcr.io/<project>/listen-edge@sha256:<digest> from the build-only train summary; must be labelled with the checked-out SHA (blank leaves the listen-edge release untouched)",
+              "description": "Plan D D2: listen-edge image to roll, gcr.io/<project>/listen-edge@sha256:<digest> from a build-only train summary; it must have been built from a commit the checked-out source contains (blank leaves the listen-edge release untouched)",
               "required": "false",
               "type": "string"
             },
