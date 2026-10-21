@@ -19584,5 +19584,327 @@
       "repeat_interval": "24h"
     },
     "record": null
+  },
+  {
+    "uid": "omi-sync-failure-reason-step",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Backend-sync",
+    "title": "Sync jobs - a failure reason is running above 3x its 7-day rate",
+    "condition": "D",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 3600,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (namespace, outcome) (increase(omi_sync_transcription_job_total{job=\"cloud-run-application-metrics\",namespace=~\"backend-sync|backend-sync-backfill|backend-integration\",outcome!=\"success\",outcome!=\"expected_silence\"}[60m]))",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 3600,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "(sum by (namespace, outcome) (increase(omi_sync_transcription_job_total{job=\"cloud-run-application-metrics\",namespace=~\"backend-sync|backend-sync-backfill|backend-integration\",outcome!=\"success\",outcome!=\"expected_silence\"}[60m])) / on (namespace) group_left () sum by (namespace) (increase(omi_sync_transcription_job_total{job=\"cloud-run-application-metrics\",namespace=~\"backend-sync|backend-sync-backfill|backend-integration\"}[60m]))) / clamp_min((sum by (namespace, outcome) (increase(omi_sync_transcription_job_total{job=\"cloud-run-application-metrics\",namespace=~\"backend-sync|backend-sync-backfill|backend-integration\",outcome!=\"success\",outcome!=\"expected_silence\"}[7d] offset 60m)) / on (namespace) group_left () sum by (namespace) (increase(omi_sync_transcription_job_total{job=\"cloud-run-application-metrics\",namespace=~\"backend-sync|backend-sync-backfill|backend-integration\"}[7d] offset 60m))) or ((sum by (namespace, outcome) (increase(omi_sync_transcription_job_total{job=\"cloud-run-application-metrics\",namespace=~\"backend-sync|backend-sync-backfill|backend-integration\",outcome!=\"success\",outcome!=\"expected_silence\"}[60m])) / on (namespace) group_left () sum by (namespace) (increase(omi_sync_transcription_job_total{job=\"cloud-run-application-metrics\",namespace=~\"backend-sync|backend-sync-backfill|backend-integration\"}[60m]))) * 0), 0.0001)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A >= 50 && $B > 3",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "D"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "C",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "D",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-10-19T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "15m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "evidence": "omi-workspace:data/run-2026-10-13-two-lane-nemotron/sync-upstream-error-2026-10-21.md",
+      "dashboard_url": "https://monitor.omi.me/d/6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
+      "summary": "A sync job failure reason (outcome) on one sync service is more than 3x its 7-day share of jobs, with at least 50 such jobs in the last 60m",
+      "threshold": "per (service, outcome != success|expected_silence): 60m share of jobs > 3x the 7-day share (the 7 days before the window), with >= 50 jobs of that outcome in 60m, for 15m. A reason with no baseline counts as new (baseline floor 0.01%).",
+      "user_impact": "Uploaded recordings on that service are failing to finalize at a new, higher rate; users see missing or late conversations from offline sync.",
+      "scope": "omi_sync_transcription_job_total via the cloud-run-application-metrics bridge, namespaces backend-sync, backend-sync-backfill and backend-integration, keyed by the outcome label so new reasons (the sync-fresh-fix split of upstream_error) are covered automatically. The counter records terminal attempt outcomes, not finalized jobs, so it is compared only with its own baseline; the finalized-job count is event=sync_transcription_job_finalized in Cloud Logging.",
+      "verification": "Backtest 2026-10-14..10-21 (15m steps, prod Prometheus via the Grafana proxy): 23 sustained episodes in 7d, concentrated in the 10-16..10-18 onset of the fresh-lane switch (backend-sync upstream_error 10-16 14:38Z, 10-17 07:08Z, 10-21 03:38Z; backfill upstream_error 11x, backfill invalid_input 8x, backend-sync invalid_input 1x). On 2026-10-21 ~05Z backend-sync upstream_error was 620 jobs/60m at 2.4x baseline (below threshold now that the 7-day baseline includes the regression), backfill 1.17x. Instant evaluation ~5.6s.",
+      "evaluated_bad": "backend-sync upstream_error onset 2026-10-16 (episodes from 14:38Z)",
+      "evaluated_good": "backend-sync upstream_error 2.44x (2026-10-21 05Z)",
+      "safe_next_action": "Run the two-lane sentinel scripts/sync_failure_reasons.sh for the failure_phase / failure_class split of finalized jobs, then check the sync_finalize_exception and sync_persistence_exception site fields before changing lanes or flags.",
+      "runbook": "backend/docs/runbooks/real-traffic-journeys.md"
+    },
+    "labels": {
+      "component": "sync",
+      "impact": "user-experience",
+      "severity": "critical",
+      "instatus_component": "api",
+      "alert_identity": "omi-sync-failure-reason-step"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h"
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-firestore-commit-resource-exhausted",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Firestore Cost",
+    "title": "Firestore - Commit RESOURCE_EXHAUSTED sustained",
+    "condition": "D",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "timeSeriesList",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "beuxmaq8oxhq8e",
+        "model": {
+          "datasource": {
+            "type": "stackdriver",
+            "uid": "beuxmaq8oxhq8e"
+          },
+          "instant": false,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "queryType": "timeSeriesList",
+          "range": true,
+          "refId": "A",
+          "timeSeriesList": {
+            "alignmentPeriod": "60s",
+            "crossSeriesReducer": "REDUCE_SUM",
+            "filters": [
+              "metric.type",
+              "=",
+              "firestore.googleapis.com/api/request_count",
+              "AND",
+              "metric.label.api_method",
+              "=",
+              "Commit",
+              "AND",
+              "metric.label.response_code",
+              "=",
+              "RESOURCE_EXHAUSTED"
+            ],
+            "groupBys": [],
+            "perSeriesAligner": "ALIGN_DELTA",
+            "projectName": "based-hardware",
+            "view": "FULL"
+          }
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "B",
+          "type": "reduce",
+          "settings": {
+            "mode": "dropNN"
+          }
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$B > 10",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "D"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "C",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "D",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-10-19T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "5m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "evidence": "omi-knowledge-base:projects/two-lane-transcription/evidence/2026-10-21-firestore-hotspots-key-visualizer.md",
+      "dashboard_url": "https://monitor.omi.me/d/3e7c5f57-a1be-4175-81e6-1f0c7c28b9dd",
+      "summary": "Firestore Commit calls are returning RESOURCE_EXHAUSTED at more than 10 per minute for 5 consecutive minutes",
+      "threshold": "firestore.googleapis.com/api/request_count{api_method=Commit,response_code=RESOURCE_EXHAUSTED}, 60s ALIGN_DELTA summed, last point > 10, for 5m",
+      "user_impact": "Contended or throttled commits expire in-flight transactions (batch retention, cap persist); work retries or is lost until the hotspot clears.",
+      "scope": "Cloud Monitoring firestore.googleapis.com/api/request_count for the based-hardware default database, Commit only. Hotspot evidence: KB projects/two-lane-transcription/evidence/2026-10-21-firestore-hotspots-key-visualizer.md.",
+      "verification": "Backtest 2026-10-14..10-21 (Cloud Monitoring, 60s ALIGN_DELTA): RESOURCE_EXHAUSTED on Commit was nonzero in 958 minutes (60.7k total; nonzero-minute p50 9, p90 147, max 2,351). Sustained episodes: > 0 for 2m = 217 in 7d (too noisy to page on); > 10/min for 5m = 18 (latest 10-20 16:16Z, 18:02Z, 18:32Z); > 50/min for 5m = 8; > 10/min for 10m = 5.",
+      "evaluated_bad": "> 100/min for 5m on 2026-10-20 16:18Z",
+      "evaluated_good": "0/min (most minutes; 958 of ~10,080 minutes were nonzero)",
+      "safe_next_action": "Open the Firestore Key Visualizer for the hot key range and match it to the batch retention / cap-persist writers before changing write rates.",
+      "runbook": "backend/docs/runbooks/resilience-dashboards.md"
+    },
+    "labels": {
+      "component": "firestore",
+      "impact": "infrastructure",
+      "severity": "warning",
+      "instatus_component": "observability",
+      "alert_identity": "omi-firestore-commit-resource-exhausted"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h"
+    },
+    "record": null
   }
 ]

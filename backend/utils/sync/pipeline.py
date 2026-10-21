@@ -2593,7 +2593,7 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                 raise
             if use_lineage:
                 if len(source_frame_maps) != len(wav_paths):
-                    sync_recording_lineage.emit_s1_refusal('count_mismatch')
+                    sync_recording_lineage.emit_s1_mapping_refusal(len(source_frame_maps), len(wav_paths))
                     use_lineage = False
                     target_conversation_id = await _resolve_safety_wal_target(
                         uid,
