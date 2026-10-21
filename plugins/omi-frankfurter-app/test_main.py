@@ -339,7 +339,9 @@ class FrankfurterToolTests(unittest.IsolatedAsyncioTestCase):
             mock_req.side_effect = main.httpx.HTTPError("Network down")
             req = main.ConvertCurrencyRequest(amount=50, from_currency="USD", to_currencies=["EUR"])
             resp = await main.convert_currency(req)
-            self.assertIn("currency conversion failed: Network down", resp.error)
+            # transport exception text must never reach the chat tool response
+            self.assertNotIn("Network down", resp.error)
+            self.assertIn("Currency conversion failed: the Frankfurter API could not be reached. Please try again later.", resp.error)
 
     async def test_get_latest_rates_success(self):
         mock_data = {
