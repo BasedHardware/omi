@@ -266,6 +266,7 @@ class SimWorker:
             config=self.config,
             recover_words=self.planned.recover_words,
             gpu_lock=contextlib.nullcontext(),
+            language_of=lambda item: 'en',  # This virtual corpus is declared English.
         )
         self.index = index
 

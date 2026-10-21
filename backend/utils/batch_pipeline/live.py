@@ -291,6 +291,11 @@ async def admit_recording(store, pending, *, now=None):
             'client_device_id': binding.client_device_id,
             'client_platform': binding.client_platform,
             'conversation_id': conversation_id,
+            # Native record admission already requires a fully supported
+            # declared language profile. Preserve that proof in its manifest.
+            'stt_language': binding.language or '',
+            'stt_language_evidence': 'declared',
+            'stt_language_confidence': 1.0,
         }
         manifest = {
             'owner_id': uid,

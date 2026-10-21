@@ -412,6 +412,9 @@ def _upload(
 ) -> Upload:
     uid = uid or stack.scenario_uid(scenario)
     stack.seed_user(uid)
+    # The corpus is synthetic English. Qualify that declaration through the
+    # real intake/worker metadata path without a vendor language probe.
+    stack.firestore.collection('users').document(uid).update({'transcription_preferences.single_language_mode': True})
     stack.set_words(uid, words, latency_ms)
     stack.owner_variants += 1
     pcm = _speech_pcm(stack.owner_variants)

@@ -11,6 +11,7 @@ WORKER_VALIDATION_REASONS = frozenset(
         'vad_bounds',
         'empty_asr',
         'no_owned_words',
+        'unsupported_language',
     }
 )
 

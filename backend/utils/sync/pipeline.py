@@ -1495,9 +1495,28 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
             provider, _, model = cap_recovery_service
             recovery_dispatch['selected_service'] = cap_recovery_service
         else:
+            from utils.stt.batch_language import resolve_file
+            from config.prerecorded_language import language_class, language_guard_enabled
+
             provider, _, model = minimal_redrive.select_service(
-                redrive_mode, req_language, recovery_dispatch, get_prerecorded_service
+                redrive_mode,
+                req_language,
+                recovery_dispatch,
+                lambda language: resolve_file(
+                    language,
+                    path,
+                    selector=get_prerecorded_service,
+                    before_probe=lambda: not cap_enforced() or sync_allowed(uid, lane=cap_dispatch_lane),
+                ),
             )
+            if (
+                redrive_mode != minimal_redrive.MINIMAL
+                and language_guard_enabled()
+                and language_class(req_language) == 'unknown'
+            ):
+                # Pin this segment's detected selection into the call as well as
+                # its spend/outcome accounting; the URL client must not probe twice.
+                recovery_dispatch['selected_service'] = (provider, req_language, model)
 
         # When single-language mode is active, trust the user's language choice
         # rather than Deepgram's detection (avoids overriding explicit selection).
@@ -2962,6 +2981,7 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
             # job records no usage though it is not a failure.
             content_segment_count = [0]
             segment_lock = threading.Lock()
+            provider_selections = set()
             first_segment_failure: list = []
             persistence_failure_fingerprints: list[str] = []
             provider_invalid_failures = [0]
@@ -3054,6 +3074,11 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                     **({'cap_content_id': content_id} if cap_enabled(uid, 'sync') else {}),
                     **({'redrive_mode': redrive_mode} if redrive_mode else {}),
                 )
+                if deferred_outcome.get('provider'):
+                    with segment_lock:
+                        provider_selections.add(
+                            (deferred_outcome['provider'], deferred_outcome.get('model', 'unknown'))
+                        )
                 if deferred_outcome.get('cap_held'):
                     return  # Durable policy hold, not success/silence/provider failure.
                 if ok:
@@ -3216,6 +3241,13 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                 except Exception:
                     pass
 
+            if provider_selections:
+                # Audio LID can choose different providers for sibling segments.
+                # Attribute uniform jobs to their actual provider; mixed jobs
+                # stay unknown rather than falsely billing the provisional one.
+                sync_provider, sync_model = (
+                    next(iter(provider_selections)) if len(provider_selections) == 1 else ('unknown', 'unknown')
+                )
             coordinator_loop = asyncio.get_running_loop()
             job_phase = 'postprocess'
 

@@ -42,6 +42,7 @@ from utils.batch_pipeline.recovery_disposition import (
     padded_long_speech,
     terminal_empty_payload,
     TWO_PROVIDER_EMPTY_EVIDENCE,
+    LANGUAGE_GUARD_EMPTY_EVIDENCE,
 )
 
 from utils.cloud_tasks import enqueue_named_task, named_task_exists
@@ -198,7 +199,10 @@ def record_accepted(owner_id, provider, seconds):
 
 def second_provider_eligible(job, empty):
     speech = sum(span['end'] - span['start'] for span in empty.spans)
-    return second_multilingual_enabled() and padded_long_speech(job) and speech >= LONG_SPEECH_HANDOFF_SECONDS
+    guarded = (job.get('worker_failure') or {}).get('reason') == 'unsupported_language'
+    return second_multilingual_enabled() and (
+        guarded and speech > 0 or padded_long_speech(job) and speech >= LONG_SPEECH_HANDOFF_SECONDS
+    )
 
 
 class QuarantineRecovery:
@@ -220,7 +224,7 @@ class QuarantineRecovery:
     def _second_eligible(self, job, empty):
         return second_provider_eligible(job, empty)
 
-    def _second_multilingual(self, item, owner_id, audio, empty, policy):
+    def _second_multilingual(self, item, owner_id, audio, empty, policy, *, guarded=False):
         """At most one Deepgram call inside the running intent; None leaves the unit held."""
         payload, outcome = None, 'refused'
         try:
@@ -245,7 +249,8 @@ class QuarantineRecovery:
             metered(record_accepted, owner_id, SECOND_PROVIDER, item.duration_seconds)
         if outcome == 'empty' and policy.terminal_empty_disposition:
             # Two independent multilingual recognizers found no words.
-            return terminal_empty_payload(empty.duration, empty.spans, TWO_PROVIDER_EMPTY_EVIDENCE)
+            evidence = LANGUAGE_GUARD_EMPTY_EVIDENCE if guarded else TWO_PROVIDER_EMPTY_EVIDENCE
+            return terminal_empty_payload(empty.duration, empty.spans, evidence)
         return payload
 
     def recover(self, segment_id, owner_id):
@@ -299,7 +304,11 @@ class QuarantineRecovery:
                 and not sync_allowed(owner_id, item.duration_seconds, lane='batch')
             ):
                 return 'held'
-            multilingual = policy.speech_empty_multilingual
+            # Existing guard-owned custody must drain safely even after the
+            # new-admission guard is rolled back.
+            multilingual = policy.speech_empty_multilingual or (
+                (job.get('worker_failure') or {}).get('reason') == 'unsupported_language'
+            )
             if not self.protocol.start(
                 segment_id, token, self.clock(), provider='modulate' if multilingual else 'legacy_sync'
             ):
@@ -350,7 +359,14 @@ class QuarantineRecovery:
                 # A valid empty answer is still accepted, billed audio.
                 metered(record_accepted, owner_id, 'modulate', item.duration_seconds)
                 if failure and self._second_eligible(job, empty):
-                    payload = self._second_multilingual(item, owner_id, audio, empty, policy)
+                    payload = self._second_multilingual(
+                        item,
+                        owner_id,
+                        audio,
+                        empty,
+                        policy,
+                        guarded=(job.get('worker_failure') or {}).get('reason') == 'unsupported_language',
+                    )
                     if payload is not None:
                         failure = None
             # Log outside the exception handler: logger failures must not chain a private exception.
