@@ -89,6 +89,14 @@ def _covered(paths, jobs, artifacts):
     return True
 
 
+async def _legacy_mode(legacy_mode):
+    """The caller's mode, else one off-loop read (a cold process gets its bounded first wait)."""
+    # Imported per call: router harnesses stub ``utils`` wholesale.
+    from utils.sync import legacy_dark
+
+    return legacy_mode if legacy_mode is not None else await run_blocking(db_executor, legacy_dark.current_mode)
+
+
 async def _legacy_final_pass_route(uid, conversation_id, store, legacy_mode) -> RecordUploadRoute:
     """``legacy_final_pass_v1`` keeps today's route in ``on``; after that, re-home or hold.
 
@@ -97,19 +105,30 @@ async def _legacy_final_pass_route(uid, conversation_id, store, legacy_mode) -> 
     legacy job for the uid, a lost CAS) keeps the LEGACY route: the router's fence
     answers the shipped in-progress ACK and the client retries.
     """
-    # Imported per call: router harnesses stub ``utils`` wholesale, and ``on``
-    # must keep today's route without touching the re-home module.
     from utils.sync import final_pass_rehome, legacy_dark
 
     if not conversation_id:
         return RecordUploadRoute.LEGACY
-    mode = legacy_mode if legacy_mode is not None else await run_blocking(db_executor, legacy_dark.current_mode)
-    if mode is legacy_dark.LegacySyncMode.ON:
+    if await _legacy_mode(legacy_mode) is legacy_dark.LegacySyncMode.ON:
         return RecordUploadRoute.LEGACY
     outcome = await run_blocking(
         db_executor, final_pass_rehome.rehome_final_pass_owner, uid, conversation_id, firestore_client=store.client
     )
     return RecordUploadRoute.BATCH if final_pass_rehome.rehomes_to_batch(outcome) else RecordUploadRoute.LEGACY
+
+
+async def _legacy_takes_new_owner(policy, legacy_mode) -> bool:
+    """An ownerless conversation goes to legacy only for a narrowed uid at ``on``.
+
+    Outside ``on`` legacy may take no new owner (M3 re-review): batch owns it even
+    for a narrowed uid, as intake widens such an upload anyway. The mode is read
+    only when the policy would otherwise pick legacy.
+    """
+    from utils.sync import legacy_dark
+
+    if policy.batch_enabled:
+        return False
+    return await _legacy_mode(legacy_mode) is legacy_dark.LegacySyncMode.ON
 
 
 async def registered_record_response(
@@ -172,7 +191,8 @@ async def registered_record_response(
         if snapshot is not None and snapshot.exists and not row.get('record_lane_owner'):
             # Only enabled admission may establish a new dispatcher. BYOK takes the
             # batch owner like any upload (David, 10-19): no request-scoped keys needed.
-            owner = 'batch_sync_v1' if policy.batch_enabled else 'legacy_final_pass_v1'
+            legacy_owner = await _legacy_takes_new_owner(policy, legacy_mode)
+            owner = 'legacy_final_pass_v1' if legacy_owner else 'batch_sync_v1'
             revision = await run_blocking(
                 db_executor,
                 claim_record_lane_owner,

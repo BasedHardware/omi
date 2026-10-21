@@ -18,6 +18,7 @@ from database import conversations as conversations_db
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore, StrictFirestoreSnapshot
 from utils.batch_pipeline import live_upload
 from utils.batch_pipeline.live_upload import RecordUploadRoute
+from utils.conversations import transcription_shadow as shadow
 from utils.sync import final_pass_rehome, legacy_dark
 from utils.sync.final_pass_rehome import RehomeOutcome, rehome_final_pass_owner, upload_rehome
 from utils.sync.legacy_dark import LegacySyncMode
@@ -224,6 +225,70 @@ async def test_the_route_reads_the_mode_off_the_loop_when_the_caller_has_none(mo
     monkeypatch.setattr(final_pass_rehome, 'rehome_final_pass_owner', lambda *a, **k: RehomeOutcome.REHOMED)
     loaded = {'record_lane_owner': 'legacy_final_pass_v1'}
     assert await _route(loaded) is RecordUploadRoute.BATCH
+
+
+# --- no new legacy final-pass owner outside on (M3 re-review scope add) ----------------------------
+
+
+def _narrowed_policy():
+    from dataclasses import replace
+
+    from config.policy import resolve_batch_policy
+
+    return replace(resolve_batch_policy(UID), batch_enabled=False, live_admission_enabled=True)
+
+
+@pytest.mark.parametrize('mode', [LegacySyncMode.DRAINING, LegacySyncMode.DARK])
+async def test_an_ownerless_upload_for_a_narrowed_uid_takes_batch_outside_on(monkeypatch, mode):
+    """The ownerless-upload claim picked legacy_final_pass_v1 whenever the uid's batch policy
+    was off (owner-load narrowing), minting new stranded owners after the gate. Outside ``on``
+    it claims batch_sync_v1: intake widens a narrowed upload onto batch anyway."""
+    client = _client(None, status='completed')
+    claimed = []
+    monkeypatch.setattr(
+        live_upload, 'claim_record_lane_owner', lambda uid, cid, owner, expected, **kw: claimed.append(owner) or R2
+    )
+    monkeypatch.setattr(live_upload, 'FirestoreStore', lambda *_: SimpleNamespace(client=client))
+    monkeypatch.setattr(live_upload, 'record_capture_eligible', lambda *a, **k: False)
+    assert await _route(None, legacy_mode=mode, policy=_narrowed_policy()) is RecordUploadRoute.BATCH
+    assert claimed == ['batch_sync_v1']
+
+
+async def test_an_ownerless_upload_for_a_narrowed_uid_still_takes_legacy_at_on(monkeypatch):
+    client = _client(None, status='completed')
+    claimed = []
+    monkeypatch.setattr(
+        live_upload, 'claim_record_lane_owner', lambda uid, cid, owner, expected, **kw: claimed.append(owner) or R2
+    )
+    monkeypatch.setattr(live_upload, 'FirestoreStore', lambda *_: SimpleNamespace(client=client))
+    monkeypatch.setattr(live_upload, 'record_capture_eligible', lambda *a, **k: False)
+    monkeypatch.setattr(legacy_dark, 'current_mode', forbidden)  # the caller's mode is used, never a read
+    assert await _route(None, legacy_mode=LegacySyncMode.ON, policy=_narrowed_policy()) is RecordUploadRoute.LEGACY
+    assert claimed == ['legacy_final_pass_v1']
+
+
+@pytest.mark.parametrize('mode', [LegacySyncMode.DRAINING, LegacySyncMode.DARK])
+@pytest.mark.parametrize('live_admission', ['true', 'false'])
+def test_the_shadow_final_pass_takes_no_new_owner_outside_on(monkeypatch, mode, live_admission):
+    """transcription_shadow._claim_shadow_owner claimed legacy_final_pass_v1 without reading the
+    mode. Outside ``on`` an unowned conversation gets no claim and no pass (it stays unowned for
+    batch admission); an owner that already exists keeps its pass until the next upload re-homes it."""
+    monkeypatch.setenv('BATCH_PIPELINE_LIVE_ADMISSION_ENABLED', live_admission)
+    monkeypatch.setattr(legacy_dark, 'current_mode', lambda: mode)
+    monkeypatch.setattr(shadow.conversations_db, 'claim_record_lane_owner', forbidden)
+    monkeypatch.setattr(shadow.conversations_db, 'get_conversation', forbidden)
+    assert shadow._claim_shadow_owner(UID, CID, {'id': CID, 'updated_at': 1}) is None
+    owned = {'id': CID, 'record_lane_owner': 'legacy_final_pass_v1', 'updated_at': 1}
+    assert shadow._claim_shadow_owner(UID, CID, owned) is owned
+
+
+def test_the_shadow_final_pass_claims_as_before_at_on(monkeypatch):
+    monkeypatch.setenv('BATCH_PIPELINE_LIVE_ADMISSION_ENABLED', 'true')
+    monkeypatch.setattr(legacy_dark, 'current_mode', lambda: LegacySyncMode.ON)
+    claim = Mock(return_value=2)
+    monkeypatch.setattr(shadow.conversations_db, 'claim_record_lane_owner', claim)
+    result = shadow._claim_shadow_owner(UID, CID, {'id': CID, 'updated_at': 1})
+    assert result['record_lane_owner'] == 'legacy_final_pass_v1' and claim.call_count == 1
 
 
 # --- the operator sweep --------------------------------------------------------------------------
