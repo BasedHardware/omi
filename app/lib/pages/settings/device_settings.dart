@@ -467,7 +467,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
     final paired = provider.pairedDevice;
     final connected = provider.connectedDevice;
     final isRayBan = paired?.type == DeviceType.raybanMeta;
-    final pendingSeconds = _maybeProvider<SyncProvider>(context)?.missingWalsInSeconds ?? 0;
+    final pendingSeconds = context.select<SyncProvider?, int>((s) => s?.missingWalsInSeconds ?? 0);
     // getDeviceInfo() leaves pairedDevice as BtDevice.empty() (id '') when nothing is remembered;
     // native diagnostics are keyed by device id, so an empty id has no history to send.
     final diagnosticsId = (paired?.id.isNotEmpty ?? false) ? paired!.id : connected?.id;
@@ -586,16 +586,16 @@ class _DeviceSettingsState extends State<DeviceSettings> {
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<DeviceProvider>();
-    final capture = _maybeProvider<CaptureProvider>(context);
+    final capture = context.read<CaptureProvider?>();
+    // Audio metrics/transcript notifications must not rebuild the settings page.
+    final (deviceSource, devicePaused, canPause) = context.select<CaptureProvider?, (String?, bool, bool)>(
+      (c) => (c?.liveCaptureSource, c?.isPaused ?? false, c != null && EpisodePresentation.canPause(c)),
+    );
     final paired = provider.pairedDevice;
     final connected = provider.connectedDevice;
     const gap = SizedBox(height: OmiSpacing.xxl);
-    final sync = _maybeProvider<SyncProvider>(context);
-    final amounts = sync == null ? null : SyncPipelineAmounts.of(sync.allWals);
-    final deviceSource = capture?.liveCaptureSource;
+
     final deviceStreaming = capture != null && deviceSource != null && deviceSource != 'phone';
-    final devicePaused = capture?.isPaused ?? false;
-    final rightNow = _rightNow(context, capture, sync, amounts, deviceStreaming: deviceStreaming);
 
     return Scaffold(
       backgroundColor: OmiColors.surface0,
@@ -611,17 +611,25 @@ class _DeviceSettingsState extends State<DeviceSettings> {
           ),
           const SizedBox(height: OmiSpacing.xl),
           if (connected != null) ...[
-            DeviceStatsRow(
-              batteryLevel: provider.batteryLevel,
-              isCharging: provider.isCharging,
-              heardTodaySeconds: _heardTodaySeconds(context),
-              onDeviceSeconds: amounts?.onDeviceSeconds ?? 0,
-            ),
+            Builder(builder: (context) {
+              final onDeviceSeconds = context.select<SyncProvider?, int>(
+                (s) => s == null ? 0 : SyncPipelineAmounts.of(s.allWals).onDeviceSeconds,
+              );
+              return DeviceStatsRow(
+                batteryLevel: provider.batteryLevel,
+                isCharging: provider.isCharging,
+                heardTodaySeconds: _heardTodaySeconds(context),
+                onDeviceSeconds: onDeviceSeconds,
+              );
+            }),
             gap,
           ],
-          if (rightNow.hasContent) ...[rightNow, gap],
+          Builder(builder: (context) {
+            final rightNow = _rightNow(context);
+            return rightNow.hasContent ? Column(children: [rightNow, gap]) : const SizedBox.shrink();
+          }),
           DeviceRecentlyGroup(load: provider.disconnectHistory),
-          if (deviceStreaming && EpisodePresentation.canPause(capture)) ...[
+          if (deviceStreaming && canPause) ...[
             DeviceControlsGroup(paused: devicePaused, onToggle: () => _togglePause(capture)),
             gap,
           ],
@@ -639,10 +647,20 @@ class _DeviceSettingsState extends State<DeviceSettings> {
           ),
           gap,
           _forgetGroup(provider),
-          if (connected != null && capture != null && capture.havingRecordingDevice) ...[
-            gap,
-            DeviceStreamingMetrics(bleReceiveKbps: capture.bleReceiveRateKbps, wsSendKbps: capture.wsSendRateKbps),
-          ],
+          if (connected != null)
+            Builder(builder: (context) {
+              final metrics = context.select<CaptureProvider?, (bool, double, double)>(
+                (c) => c == null || !c.havingRecordingDevice
+                    ? (false, 0, 0)
+                    : (true, c.bleReceiveRateKbps, c.wsSendRateKbps),
+              );
+              return metrics.$1
+                  ? Column(children: [
+                      gap,
+                      DeviceStreamingMetrics(bleReceiveKbps: metrics.$2, wsSendKbps: metrics.$3),
+                    ])
+                  : const SizedBox.shrink();
+            }),
         ],
       ),
     );
@@ -652,26 +670,33 @@ class _DeviceSettingsState extends State<DeviceSettings> {
 extension _DeviceLiveSections on _DeviceSettingsState {
   /// Speech heard today, by the conversation list's own length rule.
   int _heardTodaySeconds(BuildContext context) {
-    final conversations = _maybeProvider<ConversationProvider>(context);
-    if (conversations == null) return 0;
     final today = DateUtils.dateOnly(DateTime.now());
-    return (conversations.groupedConversations[today] ?? const <ServerConversation>[])
-        .where((c) => !c.discarded)
-        .fold<int>(0, (sum, c) => sum + c.getDurationInSeconds());
+    return context.select<ConversationProvider?, int>((conversations) =>
+        (conversations?.groupedConversations[today] ?? const <ServerConversation>[])
+            .where((c) => !c.discarded)
+            .fold<int>(0, (sum, c) => sum + c.getDurationInSeconds()));
   }
 
-  DeviceRightNowGroup _rightNow(
-    BuildContext context,
-    CaptureProvider? capture,
-    SyncProvider? sync,
-    SyncPipelineAmounts? amounts, {
-    required bool deviceStreaming,
-  }) {
+  DeviceRightNowGroup _rightNow(BuildContext context) {
+    final capture = context.read<CaptureProvider?>();
+    // Only the visible source and running length depend on capture, not its
+    // transcript text, socket state, or BLE/network rate samples.
+    final (source, _) = context.select<CaptureProvider?, (String?, double)>(
+      (c) => (c?.liveCaptureSource, c?.segments.lastOrNull?.end ?? 0),
+    );
+    final deviceStreaming = source != null && source != 'phone';
     final episodes = _maybeProvider<EpisodeProvider>(context);
     final live = episodes != null && episodes.enabled && deviceStreaming ? episodes.live : null;
+    final (syncing, waiting, moved) = context.select<SyncProvider?, (bool, int, int)>((sync) {
+      if (sync == null) return (false, 0, 0);
+      final amounts = SyncPipelineAmounts.of(sync.allWals);
+      return (
+        sync.isSyncing,
+        amounts.onDeviceSeconds + amounts.onPhoneSeconds + amounts.processingSeconds,
+        amounts.onPhoneSeconds + amounts.processingSeconds,
+      );
+    });
     final l10n = context.l10n;
-    final waiting = amounts == null ? 0 : amounts.onDeviceSeconds + amounts.onPhoneSeconds + amounts.processingSeconds;
-    final moved = amounts == null ? 0 : amounts.onPhoneSeconds + amounts.processingSeconds;
     return DeviceRightNowGroup(
       liveTitle: live == null ? null : (live.title.isEmpty ? l10n.episodeListeningNow : live.title),
       liveLength: live == null || capture == null
@@ -680,7 +705,7 @@ extension _DeviceLiveSections on _DeviceSettingsState {
       onOpenLive: capture == null
           ? null
           : () => routeToPage(context, LiveEpisodePage(topConversationId: capture.topConversationId)),
-      catchingUp: (sync?.isSyncing ?? false) && waiting > 0 ? (doneSeconds: moved, totalSeconds: waiting) : null,
+      catchingUp: syncing && waiting > 0 ? (doneSeconds: moved, totalSeconds: waiting) : null,
     );
   }
 
