@@ -34,22 +34,26 @@ def mirror_refresh(namespace: str, keys: Iterable[tuple[str, str]]) -> None:
         logger.warning('event=jobstore_shadow op=refresh outcome=hook_error', exc_info=True)
 
 
-def shadow_parity_collector():
-    """The A2 parity counter for a process-private metrics registry, or ``None`` outside shadow mode.
+def shadow_parity_collectors() -> tuple:
+    """The A2 parity and convergence metrics for a process-private registry; empty outside shadow mode.
 
-    ``omi_jobstore_shadow_parity_total`` lives in the default registry; a process that serves its own
-    ``CollectorRegistry`` (the batch worker) must register it there or the series is never exported.
+    ``omi_jobstore_shadow_{parity,convergence}_*`` live in the default registry; a process that serves its own
+    ``CollectorRegistry`` (the batch worker) must register them there or the series are never exported.
     Never raises: a failed import keeps the worker serving its other metrics.
     """
     if not _shadow_mode():
-        return None
+        return ()
     try:
         import database.jobstore.dual_store as dual_store
 
-        return dual_store.SHADOW_PARITY_TOTAL
+        return (
+            dual_store.SHADOW_PARITY_TOTAL,
+            dual_store.SHADOW_CONVERGENCE_TOTAL,
+            dual_store.SHADOW_CONVERGENCE_SECONDS,
+        )
     except Exception:
         logger.warning('event=jobstore_shadow outcome=metrics_unavailable', exc_info=True)
-        return None
+        return ()
 
 
 def shadow_from_env(primary):
