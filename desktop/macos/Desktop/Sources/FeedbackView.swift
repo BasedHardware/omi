@@ -87,8 +87,8 @@ struct FeedbackView: View {
           if let savedReportPath {
             Text(
               savedReportIncludesDiagnostics
-                ? "Nothing was sent over the network. The report (your note plus redacted diagnostics) is saved at:\n\(savedReportPath)"
-                : "Nothing was sent over the network. Your note was saved at:\n\(savedReportPath)\n\nRedacted diagnostics could not be generated — use \"Save Diagnostics…\" to capture them."
+                ? "Your report was not uploaded. A copy (your note plus redacted diagnostics) is saved on this Mac at:\n\(savedReportPath)"
+                : "Your report was not uploaded. Your note was saved on this Mac at:\n\(savedReportPath)\n\nRedacted diagnostics could not be generated — use \"Save Diagnostics…\" to capture them."
             )
             .inkStyle(.prose, color: Ink.secondary)
             .textSelection(.enabled)
