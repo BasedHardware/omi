@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-"""Re-home conversations stranded on ``legacy_final_pass_v1`` before legacy sync leaves ``on``.
+"""Re-home conversations stranded on ``legacy_final_pass_v1`` once legacy sync is draining.
 
-The ``legacy_final_pass_rehomed`` draining precondition (lead ruling b209a5,
+The ``legacy_final_pass_rehomed`` gate (lead ruling b209a5,
 ``scripts/rollout/ramp_controller.py``): a conversation whose
 ``record_lane_owner`` is still ``legacy_final_pass_v1`` with no live legacy job
 is moved to ``batch_sync_v1`` through ``utils.sync.final_pass_rehome``, the
-same revision-fenced CAS the upload path uses in ``draining``/``dark``. Run it
-after the other draining preconditions are met (batch at 100, C8 provider-STT
-live), repeat until the verdict is CLEAR, then confirm the precondition.
+same revision-fenced CAS the upload path uses in ``draining``/``dark``. Dry-run
+it at ``on`` to size the stock, apply it in ``draining`` after the flip grace,
+and repeat until the verdict is CLEAR before ``dark``.
 
 Dry run by default: counts only, never a uid or conversation id.
 
@@ -18,11 +18,14 @@ Dry run by default: counts only, never a uid or conversation id.
     .venv/bin/python -m scripts.legacy_dark.final_pass_rehome --env prod --apply --output <receipt.json>
 
 The live-job lease has no Redis from an operator shell, so it is read from the
-uid's ``sync_content_ledger`` fresh for every conversation (the sweep runs at
-``on`` beside live legacy admission): an ACTIVE legacy processing claim, a
-retryable legacy row, or any ledger row created in the last QUIET_SECONDS
-holds the uid (conservative; the upload path re-homes the held ones later,
-from the exact Redis pending index). Needs the
+uid's ``sync_content_ledger`` fresh for every conversation: an ACTIVE legacy
+processing claim, a retryable legacy row, or any legacy ledger row created in
+the last QUIET_SECONDS holds the uid (conservative). ``--apply`` runs only when
+the ramp serves ``draining``/``dark`` and is at least FLIP_GRACE_SECONDS past
+its last write: legacy admission is quiesced there (the router re-validates its
+mode read before creating a legacy job), so nothing can start a legacy job
+beside the sweep, and the upload path re-homes anything held later, from the
+exact Redis pending index. A dry run at ``on`` only sizes the stock. Needs the
 ``conversations.record_lane_owner`` collection-group field index
 (``scripts/reconcile_firestore_indexes.py``).
 
@@ -42,14 +45,21 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Optional
 
 from utils.sync import legacy_dark
-from utils.sync.final_pass_rehome import LEGACY_FINAL_PASS_OWNER, RehomeOutcome, rehome_final_pass_owner
+from utils.sync.final_pass_rehome import (
+    FLIP_GRACE_SECONDS,
+    LEGACY_FINAL_PASS_OWNER,
+    RehomeOutcome,
+    rehome_final_pass_owner,
+)
 
 LEDGER_COLLECTION = 'sync_content_ledger'
 LEDGER_LIVE_STATUSES = ('processing', 'retryable')
 BATCH_PROTOCOLS = ('batch_v1', 'stt_cap_hold_v1')
 CONVERSATION_PATH_DEPTH = 4  # users/{uid}/conversations/{id}
-# A uid with any ledger row this recent may have a legacy job starting right now.
+# A uid with any legacy ledger row this recent may have a legacy job starting right now.
 QUIET_SECONDS = 600
+RECENT_ROW_PAGE = 200  # more legacy rows than this in the quiet window is not a uid to re-home anyway
+APPLY_MODES = ('draining', 'dark')
 
 
 def ledger_live_jobs(
@@ -77,8 +87,11 @@ def ledger_live_jobs(
                     if status == 'retryable' or ownership is legacy_dark.LegacyOwnership.ACTIVE:
                         live += 1
             since = moment - timedelta(seconds=quiet_seconds)
-            recent = ledger.where(filter=FieldFilter('created_at', '>=', since)).limit(1)
-            live += sum(1 for _ in recent.stream())
+            # Only legacy rows hold: batch and cap-hold rows cannot carry a legacy job.
+            recent = ledger.where(filter=FieldFilter('created_at', '>=', since)).limit(RECENT_ROW_PAGE)
+            live += sum(
+                1 for s in recent.stream() if (s.to_dict() or {}).get('dispatch_protocol') not in BATCH_PROTOCOLS
+            )
             return live
         except Exception:
             return None
@@ -135,6 +148,34 @@ def sweep(
     }
 
 
+def served_ramp(client: Any, env: str, *, now: Optional[datetime] = None) -> tuple[Optional[str], Optional[float]]:
+    """(legacy_sync mode, seconds since the env entry was written) from the ramp document; (None, None) when absent."""
+    from database import rollout_cohorts as store
+
+    document = store.read_ramp(firestore_client=client, timeout=store.OPERATOR_READ_TIMEOUT_SECONDS)
+    entry = (document or {}).get('envs', {}).get(env) if document else None
+    if not entry:
+        return None, None
+    written = entry.get('updated_at')
+    if not isinstance(written, str) or not written:
+        return entry.get('legacy_sync'), None
+    parsed = datetime.fromisoformat(written.replace('Z', '+00:00'))
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return entry.get('legacy_sync'), ((now or datetime.now(timezone.utc)) - parsed).total_seconds()
+
+
+def apply_refusal(mode: Optional[str], age: Optional[float]) -> Optional[str]:
+    """Why ``--apply`` must not run now: legacy admission is quiesced only in draining/dark past the grace."""
+    if mode not in APPLY_MODES:
+        return f'legacy_sync is {mode or "unknown"}: --apply runs in draining or dark (dry run sizes the stock at on)'
+    if age is None or age < FLIP_GRACE_SECONDS:
+        return (
+            f'ramp written {"unknown" if age is None else int(age)}s ago: wait for the {FLIP_GRACE_SECONDS}s flip grace'
+        )
+    return None
+
+
 def main(argv: Optional[list[str]] = None) -> int:
     from scripts.legacy_dark.drain_census import ENVIRONMENTS
 
@@ -155,11 +196,17 @@ def main(argv: Optional[list[str]] = None) -> int:
         project, database, _location = ENVIRONMENTS[args.env]
         client = firestore.Client(project=project, database=database)
         now = datetime.now(timezone.utc)
+        mode, age = served_ramp(client, args.env, now=now)
+        if args.apply:
+            refusal = apply_refusal(mode, age)
+            if refusal:
+                print(f'--apply refused: {refusal}', file=sys.stderr)
+                return 2
         result = sweep(client, apply=args.apply, limit=args.limit)
     except Exception as error:
         print(f'sweep failed: {type(error).__name__}', file=sys.stderr)
         return 2
-    receipt = {'env': args.env, 'tier': tier, 'observed_at': now.isoformat(), **result}
+    receipt = {'env': args.env, 'tier': tier, 'observed_at': now.isoformat(), 'legacy_sync': mode, **result}
     text = json.dumps(receipt, sort_keys=True)
     if args.output:
         with open(args.output, 'w') as handle:

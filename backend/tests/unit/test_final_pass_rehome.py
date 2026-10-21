@@ -173,6 +173,15 @@ def test_upload_rehome_holds_inside_the_flip_grace_without_any_read(monkeypatch,
     assert upload_rehome(LegacySyncMode.DARK, UID, CID, firestore_client=forbidden, mode_age=age) is RehomeOutcome.HELD
 
 
+def test_the_flip_grace_bounds_the_stale_admission_window():
+    """The router re-reads a mode older than ADMISSION_REVALIDATE_SECONDS before a legacy job and the
+    ramp cache refreshes within TTL_SECONDS, so no stale 'on' creates a legacy job later than their
+    sum after a flip; the grace that holds re-homes must exceed it."""
+    from utils.rollout.runtime_percent import TTL_SECONDS
+
+    assert final_pass_rehome.FLIP_GRACE_SECONDS > legacy_dark.ADMISSION_REVALIDATE_SECONDS + TTL_SECONDS
+
+
 def test_mode_age_reads_the_ramp_write_time_and_fails_closed(monkeypatch):
     from utils.rollout import runtime_percent
 
@@ -461,14 +470,66 @@ def test_ledger_probe_counts_active_retryable_and_recent_legacy_rows_fresh_each_
     held = {'status': 'held', 'job_id': 'hold', 'dispatch_protocol': 'stt_cap_hold_v1'}
     retryable = {'status': 'retryable', 'job_id': 'legacy-3', 'created_at': old}
     just_admitted = {'status': 'completed', 'job_id': 'legacy-4', 'created_at': now - timedelta(seconds=30)}
-    ledgers = {'u1': [fresh, stale, batch, held, retryable], 'u2': [stale, batch], 'u3': [just_admitted]}
+    recent_batch = {'status': 'completed', 'dispatch_protocol': 'batch_v1', 'created_at': now - timedelta(seconds=30)}
+    recent_hold = {'status': 'held', 'dispatch_protocol': 'stt_cap_hold_v1', 'created_at': now - timedelta(seconds=5)}
+    ledgers = {
+        'u1': [fresh, stale, batch, held, retryable],
+        'u2': [stale, batch],
+        'u3': [just_admitted],
+        'u4': [recent_batch, recent_hold],  # review P2: batch traffic alone never holds a uid
+    }
     client = _SweepClient([], ledgers)
     probe = sweep_module.ledger_live_jobs(client, now=now)
     assert probe('u1') == 2
     assert probe('u2') == 0
     assert probe('u3') == 1
+    assert probe('u4') == 0
     ledgers['u2'].append(dict(fresh))  # a job started while the sweep was running
     assert probe('u2') == 1
+
+
+@pytest.mark.parametrize(
+    'mode,age,refused',
+    [
+        ('on', 10_000, True),
+        (None, None, True),
+        ('draining', None, True),
+        ('draining', 299, True),
+        ('draining', 300, False),
+        ('dark', 86_400, False),
+    ],
+)
+def test_apply_runs_only_in_draining_or_dark_past_the_flip_grace(mode, age, refused):
+    """Review P1: at ``on`` the sweep cannot serialize with live legacy admission; applied only
+    once admission is quiesced (the router re-validates its mode read before any legacy job)."""
+    from scripts.legacy_dark import final_pass_rehome as sweep_module
+
+    assert (sweep_module.apply_refusal(mode, age) is not None) is refused
+
+
+def test_served_ramp_reads_the_env_entry_and_its_age(monkeypatch):
+    from database import rollout_cohorts as store
+    from scripts.legacy_dark import final_pass_rehome as sweep_module
+
+    now = datetime(2026, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+    document = {'envs': {'prod': {'legacy_sync': 'draining', 'updated_at': '2026-01-01T11:55:00Z'}}}
+    monkeypatch.setattr(store, 'read_ramp', lambda **kwargs: document)
+    assert sweep_module.served_ramp(object(), 'prod', now=now) == ('draining', 300.0)
+    assert sweep_module.served_ramp(object(), 'staging', now=now) == (None, None)
+    monkeypatch.setattr(store, 'read_ramp', lambda **kwargs: None)
+    assert sweep_module.served_ramp(object(), 'prod', now=now) == (None, None)
+
+
+def test_main_refuses_apply_at_on_before_touching_a_conversation(monkeypatch, capsys):
+    from google.cloud import firestore
+    from scripts.legacy_dark import final_pass_rehome as sweep_module
+
+    monkeypatch.setenv('GCP_AGENT_TIER', 'prod-operator')
+    monkeypatch.setattr(firestore, 'Client', lambda **kwargs: object())
+    monkeypatch.setattr(sweep_module, 'served_ramp', lambda client, env, now=None: ('on', 10_000.0))
+    monkeypatch.setattr(sweep_module, 'sweep', forbidden)
+    assert sweep_module.main(['--env', 'prod', '--apply']) == 2
+    assert 'runs in draining or dark' in capsys.readouterr().err
 
 
 def test_ledger_probe_fails_closed_on_a_read_error():

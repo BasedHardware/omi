@@ -43,6 +43,11 @@ LEGACY_TRANSCRIPTION_QUEUES = ('sync-jobs', 'sync-backfill', 'sync-backfill-fres
 # this module stays importable without a Firestore client.
 CLAIM_STALE_SECONDS = 2 * 24 * 60 * 60
 DARK_RETRY_AFTER_SECONDS = 60
+# A legacy job is created only on a mode read at most this old; an older read is
+# taken again first. With the 30s ramp cache that bounds how long after a flip a
+# stale 'on' can still create a legacy job, which is what final_pass_rehome's
+# flip grace relies on (it must exceed this plus the cache TTL).
+ADMISSION_REVALIDATE_SECONDS = 60
 
 
 class LegacySyncMode(StrEnum):

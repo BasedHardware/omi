@@ -134,8 +134,9 @@ DRAINING_PRECONDITIONS = {
     ),
     'legacy_final_pass_rehomed': (
         'conversations still owned by legacy_final_pass_v1 with no live legacy job are re-homed to batch, so '
-        'later uploads are not held on device after dark (M3 Luna review, lead ruling b209a5); evidence: '
-        'scripts.legacy_dark.final_pass_rehome --apply reads CLEAR'
+        'later uploads are not held on device after dark (M3 Luna review, lead ruling b209a5): the re-home '
+        '(#23129) serves on every revision and scripts.legacy_dark.final_pass_rehome has sized the stock; its '
+        '--apply runs in draining past the flip grace and must read CLEAR before dark'
     ),
 }
 
