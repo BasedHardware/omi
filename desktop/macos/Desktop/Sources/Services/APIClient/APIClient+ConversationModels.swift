@@ -232,6 +232,7 @@ struct ServerConversation: Codable, Identifiable, Equatable {
       && lhs.captureGroup == rhs.captureGroup
       && lhs.audioTimelineVersion == rhs.audioTimelineVersion
       && lhs.createdFromSegments == rhs.createdFromSegments
+      && lhs.meetingIdentity == rhs.meetingIdentity
   }
 
   let id: String
@@ -262,6 +263,8 @@ struct ServerConversation: Codable, Identifiable, Equatable {
   let audioTimelineVersion: Int?
   /// Desktop `/from-segments` conversations anchor offsets to the client session start.
   let createdFromSegments: Bool
+  /// Only explicit calendar identity can qualify a conversation as prior-meeting evidence.
+  let meetingIdentity: ConversationMeetingIdentity?
 
   let status: ConversationStatus
   let discarded: Bool
@@ -341,6 +344,9 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     audioTimelineVersion = wire.audioTimeline?.version
     createdFromSegments =
       (wire.externalData?["from_segments_client_session_id"]?.value as? String)?.isEmpty == false
+    meetingIdentity =
+      ConversationMeetingIdentity(calendarContext: wire.externalData?["calendar_meeting_context"]?.value)
+      ?? wire.calendarEvent.map(ConversationMeetingIdentity.init)
     status = wire.status.map { ConversationStatus(rawValue: $0.rawValue) ?? .completed } ?? .completed
     discarded = wire.discarded ?? false
     deleted = false  // backend REST Conversation schema does not expose deleted
@@ -408,6 +414,7 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     conversationAudio: CaptureConversationAudio? = nil,
     audioTimelineVersion: Int? = nil,
     createdFromSegments: Bool = false,
+    meetingIdentity: ConversationMeetingIdentity? = nil,
     status: ConversationStatus,
     discarded: Bool,
     deleted: Bool,
@@ -438,6 +445,7 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     self.conversationAudio = conversationAudio
     self.audioTimelineVersion = audioTimelineVersion
     self.createdFromSegments = createdFromSegments
+    self.meetingIdentity = meetingIdentity
     self.status = status
     self.discarded = discarded
     self.deleted = deleted

@@ -163,6 +163,36 @@ final class SystemCalendarMeetingContextServiceTests: XCTestCase {
     XCTAssertEqual(counts.reads, 2)
   }
 
+  func testMeetingBriefReadNeverPromptsOrUploads() async {
+    let event = snapshot(
+      id: "upcoming", title: "Design sync",
+      start: referenceDate.addingTimeInterval(900), end: referenceDate.addingTimeInterval(1800))
+    let provider = SystemCalendarProviderStub(state: .allowed, snapshots: [event])
+    let uploader = SystemCalendarUploaderStub()
+    let service = SystemCalendarMeetingContextService(provider: provider, uploader: uploader)
+
+    let events = await service.upcomingAuthorizedEvents(now: referenceDate, horizon: 3600)
+
+    XCTAssertEqual(events.map(\.calendarEventID), ["upcoming"])
+    let counts = await provider.counts()
+    XCTAssertEqual(counts.requests, 0)
+    XCTAssertEqual(counts.reads, 1)
+    let uploaded = await uploader.uploadedPayloads()
+    XCTAssertTrue(uploaded.isEmpty)
+  }
+
+  func testMeetingBriefReadWithoutGrantIsSilent() async {
+    let provider = SystemCalendarProviderStub(state: .notDetermined)
+    let service = SystemCalendarMeetingContextService(provider: provider, uploader: SystemCalendarUploaderStub())
+
+    let events = await service.upcomingAuthorizedEvents(now: referenceDate, horizon: 3600)
+
+    XCTAssertTrue(events.isEmpty)
+    let counts = await provider.counts()
+    XCTAssertEqual(counts.requests, 0)
+    XCTAssertEqual(counts.reads, 0)
+  }
+
   private func snapshot(
     id: String,
     title: String,
