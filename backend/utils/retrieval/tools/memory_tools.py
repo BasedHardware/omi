@@ -47,6 +47,8 @@ def _memory_truncation_suffix(shown: int) -> str:
 
 
 def _publish_memory_refs(configurable, memories):
+    if not isinstance(configurable, dict):
+        return
     channel_items = configurable.get('channel_items')
     for memory in memories:
         memory_id = getattr(memory, 'id', None)
@@ -81,6 +83,14 @@ def _agent_config() -> Optional[Dict[str, Any]]:
         return agent_config_context.get()
     except LookupError:
         return None
+
+
+def _extract_user_context(cfg: Optional[Dict[str, Any]]) -> tuple[Optional[str], Any]:
+    if not cfg:
+        return None, {}
+    configurable = cfg.get('configurable') or {}
+    user_id = configurable.get('user_id') or cfg.get('user_id')
+    return user_id, configurable
 
 
 def _memory_tools_blocked_by_chat_scope(configurable: Any) -> Optional[str]:
@@ -187,17 +197,17 @@ def get_memories_tool(
         logger.info(f"❌ get_memories_tool - config is None")
         return "Error: Configuration not available"
 
-    memories: List[MemoryDB] = []
-    try:
-        configurable: Any = cfg.get('configurable')
-        uid = configurable.get('user_id')
-    except (KeyError, TypeError, AttributeError) as e:
-        logger.error(f"❌ get_memories_tool - error accessing config: {e}")
-        return "Error: Configuration not available"
-
+    uid, configurable = _extract_user_context(cfg)
     if not uid:
         logger.info(f"❌ get_memories_tool - no user_id in config")
         return "Error: User ID not found in configuration"
+    
+    try:
+        limit = max(1, min(int(limit), 5000))
+        offset = max(0, int(offset))
+    except (ValueError, TypeError):
+        return "Error: Invalid limit or offset"
+
     clock = clock_for_config(config or _agent_config(), uid)
     logger.info(f"✅ get_memories_tool - uid: {uid}, limit: {limit}")
 
@@ -209,10 +219,7 @@ def get_memories_tool(
     if scope_err:
         return f"Error: {scope_err}"
 
-    # Cap at 5000 per call to prevent overloading context
-    if limit > 5000:
-        logger.info(f"⚠️ get_memories_tool - limit capped from {limit} to 5000")
-        limit = 5000
+    # Clamping already handled during parameter normalization
 
     # Parse dates if provided (must be ISO format with timezone)
     start_dt = None
@@ -375,16 +382,19 @@ def search_memories_tool(
         logger.info(f"❌ search_memories_tool - config is None")
         return "Error: Configuration not available"
 
-    try:
-        configurable: Any = cfg.get('configurable')
-        uid = configurable.get('user_id')
-    except (KeyError, TypeError, AttributeError) as e:
-        logger.error(f"❌ search_memories_tool - error accessing config: {e}")
-        return "Error: Configuration not available"
-
+    uid, configurable = _extract_user_context(cfg)
     if not uid:
         logger.info(f"❌ search_memories_tool - no user_id in config")
         return "Error: User ID not found in configuration"
+
+    if not query or not isinstance(query, str) or not query.strip():
+        return "Error: Query must be a non-empty string"
+
+    try:
+        limit = max(1, min(int(limit), 20))
+    except (ValueError, TypeError):
+        limit = 5
+
     clock = clock_for_config(config or _agent_config(), uid)
     logger.info('search_memories_tool uid=%s limit=%s', uid, limit)
 
@@ -399,8 +409,7 @@ def search_memories_tool(
     scope_start_dt = _parse_date_from_chat_scope(scope.get("start_date"))
     scope_end_dt = _parse_date_from_chat_scope(scope.get("end_date"))
 
-    # Cap limit at 20
-    limit = min(limit, 20)
+    # Limit clamped during normalization
 
     try:
         if not (scope_start_dt or scope_end_dt):
