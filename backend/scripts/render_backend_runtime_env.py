@@ -109,6 +109,13 @@ def _remove_env_extra(service: str, service_config: ConfigDict) -> str:
     return ''.join(f',{name}' for name in sorted(set(service_config.get('forbidden_env', [])) - listed))
 
 
+def _job_removed_env_names(job_config: ConfigDict) -> set[str]:
+    """Names a job deploy removes: its forbidden_env plus its own rendered --remove-env-vars flag."""
+    flags = _render_flag_values(_as_config_dict(job_config.get('flags')) or {})
+    listed = {name for name in flags.get('--remove-env-vars', '').split(',') if name}
+    return listed | set(job_config.get('forbidden_env', []))
+
+
 def _parse_deploy_cloud_run_env_vars(rendered: str) -> list[tuple[str, str]]:
     """Invert _render_env_vars: split deploy-cloudrun's escaped grammar back into pairs."""
     entries: list[str] = []
@@ -317,7 +324,7 @@ def main() -> int:
             raise ValueError(f'Cloud Run job {job} must be a mapping')
         output_prefix = _output_prefix(job)
         job_env_vars = _render_env_vars(job_config.get('env', {}))
-        assert_manifest_env_renders(f'job {job}', job_config, job_env_vars, set(job_config.get('forbidden_env', [])))
+        assert_manifest_env_renders(f'job {job}', job_config, job_env_vars, _job_removed_env_names(job_config))
         rendered_outputs.extend(
             (
                 (f'{output_prefix}_flags', _render_flags(_as_config_dict(job_config.get('flags')) or {})),

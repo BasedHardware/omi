@@ -9,6 +9,7 @@ before check selection; unknown, red and unreachable all reach the full suite.
 
 from __future__ import annotations
 
+import base64
 import os
 import shutil
 import stat
@@ -32,7 +33,7 @@ from pre_push_ci_verified import (  # noqa: E402
 SHA = "a" * 40
 TREE = "b" * 40
 REMOTE = "https://github.com/BasedHardware/omi.git"
-DEPLOYS = frozenset({"gcp_app.yml"})
+REGISTRY_SOURCE = 'LOCK_CONTRACTS = {"gcp_app.yml": LockContract("deploy-app")}\n'
 
 
 def run(name: str, conclusion: str | None, *, status: str = "completed", event: str = "push", path: str = "") -> dict:
@@ -46,19 +47,33 @@ def run(name: str, conclusion: str | None, *, status: str = "completed", event: 
     }
 
 
-def fake_github(runs: list[dict], *, tree: str = TREE, state: str = "success", statuses: int = 1):
+def fake_github(
+    runs: list[dict],
+    *,
+    tree: str = TREE,
+    state: str = "success",
+    statuses: int = 1,
+    registry: str | None = REGISTRY_SOURCE,
+    commit_sha: str | None = None,
+):
     def gh_api(endpoint: str):
         if endpoint.endswith("/status"):
             return {"state": state, "total_count": statuses}
         if "actions/runs" in endpoint:
             return [{"workflow_runs": runs}]
-        return {"commit": {"tree": {"sha": tree}}}
+        if "/contents/" in endpoint:
+            if registry is None:
+                raise NotVerified("GitHub unreachable: contents read failed")
+            assert endpoint.endswith("?ref=main"), endpoint
+            return {"encoding": "base64", "content": base64.b64encode(registry.encode()).decode()}
+        sha = endpoint.rsplit("/", 1)[-1]
+        return {"sha": commit_sha or sha, "commit": {"tree": {"sha": tree}}}
 
     return gh_api
 
 
 def verdict(gh_api, shas=(SHA,), remote=REMOTE):
-    return decide(remote, list(shas), gh_api, lambda _sha: TREE, DEPLOYS)
+    return decide(remote, list(shas), gh_api, lambda _sha: TREE)
 
 
 class VerdictTests(unittest.TestCase):
@@ -70,13 +85,41 @@ class VerdictTests(unittest.TestCase):
     def test_unknown_sha_without_runs_is_not_verified(self):
         ok, lines = verdict(fake_github([]))
         self.assertFalse(ok)
-        self.assertIn("no successful CI workflow run", lines[-1])
+        self.assertIn("no successful push or merge-queue CI run", lines[-1])
 
     def test_red_run_is_not_verified(self):
-        for conclusion in ("failure", "cancelled", "timed_out", "action_required", "startup_failure", None):
+        for conclusion in ("failure", "cancelled", "timed_out", "action_required", "startup_failure", "neutral", None):
             with self.subTest(conclusion=conclusion):
                 ok, _ = verdict(fake_github([run("Backend Checks", "success"), run("Repo Checks", conclusion)]))
                 self.assertFalse(ok)
+
+    def test_pull_request_runs_block_but_never_certify(self):
+        # A pull_request run tests the PR merge ref, not this commit's tree.
+        self.assertFalse(verdict(fake_github([run("Backend Checks", "success", event="pull_request")]))[0])
+        red_pr = run("Repo Checks", "failure", event="pull_request")
+        self.assertFalse(verdict(fake_github([run("Backend Checks", "success"), red_pr]))[0])
+        green_pr = run("Repo Checks", "success", event="pull_request")
+        self.assertTrue(verdict(fake_github([run("Backend Checks", "success"), green_pr]))[0])
+
+    def test_merge_group_success_certifies(self):
+        self.assertTrue(verdict(fake_github([run("Backend Checks", "success", event="merge_group")]))[0])
+
+    def test_codeql_dynamic_runs_block_but_never_certify(self):
+        codeql = ".github/workflows/dynamic/github-code-scanning/codeql"
+        self.assertFalse(verdict(fake_github([run("Push on main", "success", event="dynamic", path=codeql)]))[0])
+        for status, conclusion in (("completed", "failure"), ("queued", None)):
+            with self.subTest(status=status):
+                red = run("Push on main", conclusion, status=status, event="dynamic", path=codeql)
+                self.assertFalse(verdict(fake_github([run("Backend Checks", "success"), red]))[0])
+
+    def test_pull_request_target_is_ignored(self):
+        base_checkout = run("PR Declined Comment", "success", event="pull_request_target")
+        self.assertFalse(verdict(fake_github([base_checkout]))[0])
+
+    def test_commit_payload_must_be_the_requested_sha(self):
+        ok, lines = verdict(fake_github([run("Backend Checks", "success")], commit_sha="e" * 40))
+        self.assertFalse(ok)
+        self.assertIn("did not return this exact commit", lines[-1])
 
     def test_in_progress_ci_is_not_verified(self):
         ok, lines = verdict(fake_github([run("Backend Checks", "success"), run("Repo Checks", None, status="in_progress")]))
@@ -93,8 +136,15 @@ class VerdictTests(unittest.TestCase):
 
     def test_unreadable_deploy_registry_judges_deploys_as_ci(self):
         parked = run("Deploy App", None, status="pending", path=".github/workflows/gcp_app.yml")
-        gh_api = fake_github([run("Backend Checks", "success"), parked])
-        self.assertFalse(decide(REMOTE, [SHA], gh_api, lambda _sha: TREE, frozenset())[0])
+        for registry in (None, "LOCK_CONTRACTS = (", "OTHER = {}\n"):
+            with self.subTest(registry=registry):
+                gh_api = fake_github([run("Backend Checks", "success"), parked], registry=registry)
+                self.assertFalse(verdict(gh_api)[0])
+
+    def test_deploy_registry_comes_only_from_github_main(self):
+        source = (REPO_ROOT / "scripts/pre_push_ci_verified.py").read_text()
+        self.assertNotIn("git show", source)
+        self.assertNotIn("--registry-ref", (REPO_ROOT / "scripts/pre-push").read_text())
 
     def test_non_ci_events_neither_certify_nor_block(self):
         scheduled = run("Nightly", "success", event="schedule")
@@ -185,7 +235,7 @@ elif "actions/runs" in endpoint:
     }}[mode]
     print(json.dumps([{{"workflow_runs": runs}}]))
 else:
-    print(json.dumps({{"commit": {{"tree": {{"sha": os.environ["FAKE_GH_TREE"]}}}}}}))
+    print(json.dumps({{"sha": sha, "commit": {{"tree": {{"sha": os.environ["FAKE_GH_TREE"]}}}}}}))
 """
 
 # The suite's first step after CI verification is check selection; the stub

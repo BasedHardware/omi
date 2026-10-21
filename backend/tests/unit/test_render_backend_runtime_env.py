@@ -1300,9 +1300,10 @@ def test_every_manifest_env_key_renders_for_every_cloud_run_workload(env, monkey
     for kind in ('services', 'jobs'):
         for name, config in (env_config['cloud_run'].get(kind) or {}).items():
             rendered = _MODULE['_render_env_vars'](config.get('env', {}))
-            removed = set(config.get('forbidden_env', []))
             if kind == 'services':
-                removed |= _MODULE['_action_removed_env_names'](name)
+                removed = _MODULE['_action_removed_env_names'](name) | set(config.get('forbidden_env', []))
+            else:
+                removed = _MODULE['_job_removed_env_names'](config)
             _MODULE['assert_manifest_env_renders'](f'{kind} {name}', config, rendered, removed)
             assert len(_MODULE['_parse_deploy_cloud_run_env_vars'](rendered)) == len(config.get('env', {}))
 
@@ -1359,6 +1360,19 @@ def test_render_assertion_fails_when_the_deploy_also_removes_a_manifest_key():
     with pytest.raises(ValueError, match=f'also removed by the deploy: {retired}'):
         _MODULE['assert_manifest_env_renders'](
             'service backend', config, rendered, _MODULE['_action_removed_env_names']('backend')
+        )
+
+
+def test_job_removal_set_includes_its_rendered_remove_env_vars_flag():
+    job = {
+        'flags': {'--remove-env-vars': 'HOSTED_PUSHER_API_URL,MEMORY_MODE', '--task-timeout': '900s'},
+        'forbidden_env': ['OLD_KEY'],
+        'env': {'MEMORY_MODE': {'value': 'off'}},
+    }
+    assert _MODULE['_job_removed_env_names'](job) == {'HOSTED_PUSHER_API_URL', 'MEMORY_MODE', 'OLD_KEY'}
+    with pytest.raises(ValueError, match='also removed by the deploy: MEMORY_MODE'):
+        _MODULE['assert_manifest_env_renders'](
+            'job fixture', job, _MODULE['_render_env_vars'](job['env']), _MODULE['_job_removed_env_names'](job)
         )
 
 

@@ -7,14 +7,16 @@ per rollout sync. scripts/pre-push calls this before selecting checks and skips
 only that duplicated local suite when, for every pushed SHA:
 
 - GitHub knows the exact commit and its tree equals the local tree;
-- at least one CI workflow run (push / pull_request / merge_group) on that SHA
-  concluded success, and every CI workflow run on it is terminal and green
-  (success, skipped or neutral);
+- at least one push or merge-queue run on that SHA concluded success. Those are
+  the only runs that check out the commit itself: a pull_request run tests the
+  PR merge ref, whose tree differs whenever the branch is behind its base;
+- every push, merge-queue, pull_request and CodeQL (event "dynamic") run on it
+  is terminal and concluded success or skipped;
 - if it carries any legacy commit statuses, their combined state is success.
 
 Deployment writers (the LOCK_CONTRACTS registry in
-.github/scripts/check-deployment-concurrency.py, read at the base ref the hook
-passes, never from the working tree) are not CI and neither certify nor block:
+.github/scripts/check-deployment-concurrency.py, fetched from the push remote's
+main on GitHub, never from a local file or ref) are not CI and neither certify nor block:
 on main they sit parked behind their concurrency lock or are cancelled by a
 newer push, which says nothing about the commit. If the registry cannot be
 read, deploys are judged like CI, which only fails closed.
@@ -32,6 +34,8 @@ from __future__ import annotations
 
 import argparse
 import ast
+import base64
+import binascii
 import datetime as dt
 import json
 import os
@@ -41,8 +45,13 @@ import sys
 from pathlib import Path
 from typing import Any, Callable
 
-CI_EVENTS = frozenset({"push", "pull_request", "pull_request_target", "merge_group"})
-GREEN_CONCLUSIONS = frozenset({"success", "skipped", "neutral"})
+# Only these runs check out the commit itself; a pull_request run tests the PR merge ref,
+# whose tree differs from the head whenever the branch is behind its base.
+CERTIFYING_EVENTS = frozenset({"push", "merge_group"})
+# These must also be terminal and green when present. "dynamic" is default CodeQL setup.
+BLOCKING_EVENTS = CERTIFYING_EVENTS | {"pull_request", "dynamic"}
+GREEN_CONCLUSIONS = frozenset({"success", "skipped"})
+REGISTRY_BRANCH = "main"
 GH_TIMEOUT_SECONDS = 30
 DEPLOY_REGISTRY = Path(".github/scripts/check-deployment-concurrency.py")
 
@@ -89,7 +98,9 @@ def verify_commit(
 ) -> str:
     """Return a one-line proof for a CI-green SHA, or raise NotVerified."""
     commit = gh_api(f"repos/{repo}/commits/{sha}")
-    remote_tree = (commit.get("commit") or {}).get("tree", {}).get("sha") if isinstance(commit, dict) else None
+    if not isinstance(commit, dict) or commit.get("sha") != sha:
+        raise NotVerified(f"{sha[:12]}: GitHub did not return this exact commit")
+    remote_tree = (commit.get("commit") or {}).get("tree", {}).get("sha")
     if remote_tree != local_tree:
         raise NotVerified(f"{sha[:12]}: GitHub tree {remote_tree!s:.12} differs from local tree {local_tree:.12}")
 
@@ -99,7 +110,8 @@ def verify_commit(
     runs = [run for page in pages for run in (page or {}).get("workflow_runs", [])]
     green: list[str] = []
     for run in runs:
-        if run.get("head_sha") != sha or run.get("event") not in CI_EVENTS:
+        event = run.get("event")
+        if run.get("head_sha") != sha or event not in BLOCKING_EVENTS:
             continue
         if Path(run.get("path") or "").name in deploy_files:
             continue
@@ -107,13 +119,13 @@ def verify_commit(
         status = run.get("status")
         conclusion = run.get("conclusion")
         if status != "completed":
-            raise NotVerified(f"{sha[:12]}: CI run {name!r} is {status}, not terminal")
+            raise NotVerified(f"{sha[:12]}: {event} run {name!r} is {status}, not terminal")
         if conclusion not in GREEN_CONCLUSIONS:
-            raise NotVerified(f"{sha[:12]}: CI run {name!r} concluded {conclusion}")
-        if conclusion == "success":
+            raise NotVerified(f"{sha[:12]}: {event} run {name!r} concluded {conclusion}")
+        if conclusion == "success" and event in CERTIFYING_EVENTS:
             green.append(name)
     if not green:
-        raise NotVerified(f"{sha[:12]}: no successful CI workflow run on this exact SHA")
+        raise NotVerified(f"{sha[:12]}: no successful push or merge-queue CI run on this exact SHA")
 
     # GitHub reports "pending" for a commit with no statuses at all; only that case is neutral.
     combined = gh_api(f"repos/{repo}/commits/{sha}/status")
@@ -165,7 +177,6 @@ def decide(
     shas: list[str],
     gh_api: GhApi,
     local_tree: Callable[[str], str],
-    deploy_files: frozenset[str],
 ) -> tuple[bool, list[str]]:
     repo = github_repo(remote_url)
     if repo is None:
@@ -174,6 +185,7 @@ def decide(
         return False, ["no pushed commits to verify"]
     proofs: list[str] = []
     try:
+        deploy_files = remote_deploy_files(repo, gh_api)
         for sha in shas:
             if not _SHA.match(sha):
                 raise NotVerified(f"{sha!r} is not a full commit SHA")
@@ -185,19 +197,17 @@ def decide(
     return True, proofs
 
 
-def _deploy_files_at(ref: str) -> frozenset[str]:
-    """The registry as the base branch has it, so a local edit cannot widen what is ignored."""
-    result = subprocess.run(
-        ["git", "show", f"{ref}:{DEPLOY_REGISTRY.as_posix()}"],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if result.returncode != 0:
-        return frozenset()
+def remote_deploy_files(repo: str, gh_api: GhApi) -> frozenset[str]:
+    """The registry as GitHub's main has it: no local file, ref or env var can widen what is ignored.
+
+    Any failure returns the empty set, so deploy runs are judged like CI (fail closed).
+    """
     try:
-        return deploy_workflow_files(result.stdout)
-    except (SyntaxError, ValueError):
+        answer = gh_api(f"repos/{repo}/contents/{DEPLOY_REGISTRY.as_posix()}?ref={REGISTRY_BRANCH}")
+        if not isinstance(answer, dict) or answer.get("encoding") != "base64":
+            return frozenset()
+        return deploy_workflow_files(base64.b64decode(answer.get("content", "")).decode("utf-8"))
+    except (NotVerified, SyntaxError, ValueError, binascii.Error, UnicodeDecodeError):
         return frozenset()
 
 
@@ -213,13 +223,10 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--remote-url", required=True)
     parser.add_argument("--log-file", type=Path, required=True)
-    parser.add_argument("--registry-ref", required=True, help="trusted ref to read the deploy-writer registry from")
     parser.add_argument("shas", nargs="*")
     args = parser.parse_args(argv)
 
-    deploy_files = _deploy_files_at(args.registry_ref)
-
-    verified, lines = decide(args.remote_url, args.shas, gh_api_subprocess, _local_tree, deploy_files)
+    verified, lines = decide(args.remote_url, args.shas, gh_api_subprocess, _local_tree)
     verdict = "ci-green: skipping the duplicated local suite" if verified else "not CI-verified: running the local suite"
     print(f"CI-verified push check: {verdict}")
     for line in lines:
