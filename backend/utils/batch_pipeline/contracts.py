@@ -60,6 +60,7 @@ class WorkItem:
     conversation_id: str | None = None
     privacy_generation: int | None = None
     requires_compute_admission: bool = False
+    shadow: bool = False
 
     def __post_init__(self):
         if not self.segment_id or len(self.segment_id) > 128 or '/' in self.segment_id:
@@ -82,6 +83,8 @@ class WorkItem:
             raise ValueError('privacy_generation must be a nonnegative integer')
         if type(self.requires_compute_admission) is not bool:
             raise ValueError('requires_compute_admission must be boolean')
+        if type(self.shadow) is not bool:
+            raise ValueError('shadow must be boolean')
         Priority(self.priority)
         if self.unit_kind not in {'conversation', 'capture_span'}:
             raise ValueError('unit_kind must be conversation or capture_span')

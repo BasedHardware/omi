@@ -19,7 +19,7 @@ T0 = datetime(2026, 10, 20, 10, 0, tzinfo=timezone.utc)
     [(None, True), ('', True), ('true', True), ('on', True), ('off', False), ('of', False), ('false', False)],
 )
 def test_kill_switch_defaults_on_and_a_typo_turns_it_off(monkeypatch, raw, expected):
-    monkeypatch.delenv(config.EPISODES_PERCENT_ENV, raising=False)
+    monkeypatch.setenv(config.EPISODES_PERCENT_ENV, '100')
     if raw is None:
         monkeypatch.delenv(config.EPISODES_ENABLED_ENV, raising=False)
     else:
@@ -41,6 +41,15 @@ def test_ramp_cohort_admits_allowlist_and_bucket(monkeypatch):
     monkeypatch.setenv(config.EPISODES_ENABLED_ENV, 'off')
     assert config.episodes_enabled_for('david') is False
     assert config.episodes_enabled_for('') is False
+
+
+def test_unset_percent_admits_only_the_allowlist(monkeypatch):
+    # A deploy that sets nothing must not admit everyone: the ramp starts at the allowlist.
+    monkeypatch.delenv(config.EPISODES_ENABLED_ENV, raising=False)
+    monkeypatch.delenv(config.EPISODES_PERCENT_ENV, raising=False)
+    monkeypatch.setenv(config.EPISODES_UID_ALLOWLIST_ENV, 'david')
+    assert config.episodes_enabled_for('david') is True
+    assert not any(config.episodes_enabled_for(f'user-{i}') for i in range(2000))
 
 
 def test_five_percent_cohort_is_stable_and_near_five_percent(monkeypatch):

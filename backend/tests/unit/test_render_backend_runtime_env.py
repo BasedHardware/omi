@@ -1272,3 +1272,125 @@ def test_cli_emits_only_resource_metadata_never_runtime_credential_value(
     assert 'screen_vector_stripe_secret' not in output
     assert fixture_credential not in output + state_path.read_text()
     assert capsys.readouterr() == ('', '')
+
+
+# Ops keys the lead re-set by hand after every Cloud Run train until the prod overlay carried them.
+_TRAIN_DRIFT_KEYS = {
+    'backend': ('BATCH_PIPELINE_SPEECH_EMPTY_MULTILINGUAL_ENABLED',),
+    'backend-sync': ('BATCH_PIPELINE_SPEECH_EMPTY_MULTILINGUAL_ENABLED', 'SUMMARY_DEBT_REPAIR_ENABLED'),
+    'backend-sync-backfill': ('BATCH_PIPELINE_SPEECH_EMPTY_MULTILINGUAL_ENABLED',),
+    'backend-integration': ('BATCH_PIPELINE_RECOVERY_ALL_ADMITTED', 'BATCH_PIPELINE_SPEECH_EMPTY_MULTILINGUAL_ENABLED'),
+}
+
+
+def _set_workflow_bound_env(monkeypatch, env_config):
+    for workload in (
+        *(env_config['cloud_run'].get('services') or {}).values(),
+        *(env_config['cloud_run'].get('jobs') or {}).values(),
+    ):
+        for raw_entry in (workload.get('env') or {}).values():
+            if isinstance(raw_entry, dict) and isinstance(raw_entry.get('env_var'), str):
+                monkeypatch.setenv(raw_entry['env_var'], str(raw_entry.get('default') or 'rendered-value'))
+
+
+@pytest.mark.parametrize('env', ['dev', 'prod'])
+def test_every_manifest_env_key_renders_for_every_cloud_run_workload(env, monkeypatch):
+    env_config = _MANIFEST['environments'][env]
+    _set_workflow_bound_env(monkeypatch, env_config)
+    for kind in ('services', 'jobs'):
+        for name, config in (env_config['cloud_run'].get(kind) or {}).items():
+            rendered = _MODULE['_render_env_vars'](config.get('env', {}))
+            if kind == 'services':
+                removed = _MODULE['_action_removed_env_names'](name) | set(config.get('forbidden_env', []))
+            else:
+                removed = _MODULE['_job_removed_env_names'](config)
+            _MODULE['assert_manifest_env_renders'](f'{kind} {name}', config, rendered, removed)
+            assert len(_MODULE['_parse_deploy_cloud_run_env_vars'](rendered)) == len(config.get('env', {}))
+
+
+def test_train_drift_keys_render_on_their_prod_services(monkeypatch):
+    env_config = _MANIFEST['environments']['prod']
+    _set_workflow_bound_env(monkeypatch, env_config)
+    for service, keys in _TRAIN_DRIFT_KEYS.items():
+        services = env_config['cloud_run']['services']
+        names = {
+            name
+            for name, _ in _MODULE['_parse_deploy_cloud_run_env_vars'](
+                _MODULE['_render_env_vars'](services[service]['env'])
+            )
+        }
+        assert set(keys) <= names, service
+
+
+def test_render_assertion_round_trips_deploy_cloudrun_escapes():
+    config = {
+        'env': {
+            'LIST': {'value': 'modulate-velma-2,parakeet'},
+            'PATH_LIKE': {'value': r'C:\models'},
+            'MULTILINE': {'value': 'first\nsecond'},
+            'EMPTY': {'value': ''},
+        }
+    }
+    rendered = _MODULE['_render_env_vars'](config['env'])
+    assert _MODULE['_parse_deploy_cloud_run_env_vars'](rendered) == [
+        ('LIST', 'modulate-velma-2,parakeet'),
+        ('PATH_LIKE', r'C:\models'),
+        ('MULTILINE', 'first\nsecond'),
+        ('EMPTY', ''),
+    ]
+    _MODULE['assert_manifest_env_renders']('service fixture', config, rendered, set())
+
+
+def test_render_assertion_fails_when_a_manifest_key_does_not_land():
+    config = {'env': {'KEEP': {'value': 'true'}, 'OPS_KEY': {'value': 'true'}}}
+    with pytest.raises(ValueError, match='missing from the rendered env: OPS_KEY'):
+        _MODULE['assert_manifest_env_renders']('service fixture', config, 'KEEP=true', set())
+    with pytest.raises(ValueError, match='rendered value differs from the manifest: OPS_KEY'):
+        _MODULE['assert_manifest_env_renders']('service fixture', config, 'KEEP=true\nOPS_KEY=false', set())
+    with pytest.raises(ValueError, match='rendered more than once: KEEP'):
+        _MODULE['assert_manifest_env_renders']('service fixture', config, 'KEEP=true\nOPS_KEY=true\nKEEP=true', set())
+    with pytest.raises(ValueError, match='not in the manifest: STRAY'):
+        _MODULE['assert_manifest_env_renders']('service fixture', config, 'KEEP=true\nOPS_KEY=true\nSTRAY=1', set())
+
+
+def test_render_assertion_fails_when_the_deploy_also_removes_a_manifest_key():
+    retired = _MODULE['RETIRED_ENV_NAMES'][0]
+    config = {'env': {retired: {'value': 'true'}}}
+    rendered = _MODULE['_render_env_vars'](config['env'])
+    with pytest.raises(ValueError, match=f'also removed by the deploy: {retired}'):
+        _MODULE['assert_manifest_env_renders'](
+            'service backend', config, rendered, _MODULE['_action_removed_env_names']('backend')
+        )
+
+
+def test_job_removal_set_includes_its_rendered_remove_env_vars_flag():
+    job = {
+        'flags': {'--remove-env-vars': 'HOSTED_PUSHER_API_URL,MEMORY_MODE', '--task-timeout': '900s'},
+        'forbidden_env': ['OLD_KEY'],
+        'env': {'MEMORY_MODE': {'value': 'off'}},
+    }
+    assert _MODULE['_job_removed_env_names'](job) == {'HOSTED_PUSHER_API_URL', 'MEMORY_MODE', 'OLD_KEY'}
+    with pytest.raises(ValueError, match='also removed by the deploy: MEMORY_MODE'):
+        _MODULE['assert_manifest_env_renders'](
+            'job fixture', job, _MODULE['_render_env_vars'](job['env']), _MODULE['_job_removed_env_names'](job)
+        )
+
+
+def test_render_assertion_allows_the_documented_provisional_omission(monkeypatch):
+    monkeypatch.delenv('OMI_LLM_GATEWAY_URL', raising=False)
+    config = {'env': {'OMI_LLM_GATEWAY_URL': {'env_var': 'OMI_LLM_GATEWAY_URL', 'provisional': True}}}
+    _MODULE['assert_manifest_env_renders']('service fixture', config, _MODULE['_render_env_vars'](config['env']), set())
+
+
+def test_full_render_refuses_to_emit_when_a_service_key_would_be_removed(monkeypatch):
+    manifest = deepcopy(_MANIFEST)
+    backend = manifest['environments']['prod']['cloud_run']['services']['backend']
+    backend['env'][_MODULE['RETIRED_ENV_NAMES'][0]] = {'value': 'true'}
+    monkeypatch.setitem(_MODULE['main'].__globals__, '_load_yaml', lambda _path: manifest)
+    monkeypatch.setenv('CLOUD_RUN_VPC_NETWORK', 'omi-prod-vpc')
+    monkeypatch.setenv('CLOUD_RUN_VPC_SUBNET', 'omi-prod-subnet')
+    _set_workflow_bound_env(monkeypatch, manifest['environments']['prod'])
+    monkeypatch.setattr('sys.argv', ['render_backend_runtime_env.py', '--env', 'prod'])
+    with pytest.raises(ValueError, match='Cloud Run service backend env does not render every manifest key'):
+        _MODULE['main']()
+    assert _read_workflow_outputs() == ''

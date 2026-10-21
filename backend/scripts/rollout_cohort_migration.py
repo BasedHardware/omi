@@ -106,6 +106,9 @@ def read_live(environment, kube_context, *, command=_json_command):
 
 def cohort_sources(sources, name):
     """Inspect declared bindings, never combine divergent host lists into a wider cohort."""
+    if name == 'batch-pipeline-shadow':
+        # No env allowlist ever existed: legacy membership is everyone, narrowed only by stored denials.
+        return [Membership(all_users=True)]
     rows = []
     for host, env in sources.items():
         if name.startswith('messaging-'):

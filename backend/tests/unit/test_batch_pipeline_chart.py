@@ -49,6 +49,24 @@ def enabled_arguments():
     ]
 
 
+@pytest.mark.parametrize('percent,cap', [(0, 200), (10, 17)])
+def test_shadow_settings_render_for_the_leads_activation(percent, cap):
+    result = render(
+        *enabled_arguments(),
+        '--set',
+        f'worker.shadowPercent={percent}',
+        '--set',
+        f'worker.shadowPaidRecoveryPerHour={cap}',
+    )
+    assert result.returncode == 0, result.stderr
+    deployment = next(doc for doc in yaml.safe_load_all(result.stdout) if doc and doc.get('kind') == 'Deployment')
+    env = {
+        entry['name']: entry.get('value') for entry in deployment['spec']['template']['spec']['containers'][0]['env']
+    }
+    assert env['BATCH_PIPELINE_SHADOW_PERCENT'] == str(percent)
+    assert env['BATCH_PIPELINE_SHADOW_PAID_RECOVERY_PER_HOUR'] == str(cap)
+
+
 def test_default_chart_has_no_resources_or_admission():
     values = yaml.safe_load((CHART / 'values.yaml').read_text())
     assert values['enabled'] is False and values['autoscaling']['minReplicas'] == 1

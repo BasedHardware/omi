@@ -41,8 +41,21 @@ class OmiActivityRing extends StatefulWidget {
 class _OmiActivityRingState extends State<OmiActivityRing> with SingleTickerProviderStateMixin {
   late final AnimationController _spin = AnimationController(vsync: this, duration: const Duration(milliseconds: 1400));
 
-  void _sync(bool reduceMotion) {
-    if (widget.active && !reduceMotion) {
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _sync();
+  }
+
+  @override
+  void didUpdateWidget(OmiActivityRing oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _sync();
+  }
+
+  void _sync() {
+    final reduceMotion = OmiMotion.of(context).standard == Duration.zero;
+    if (widget.active && !reduceMotion && TickerMode.valuesOf(context).enabled) {
       if (!_spin.isAnimating) _spin.repeat();
     } else if (_spin.isAnimating) {
       _spin.stop();
@@ -57,8 +70,6 @@ class _OmiActivityRingState extends State<OmiActivityRing> with SingleTickerProv
 
   @override
   Widget build(BuildContext context) {
-    final reduceMotion = OmiMotion.of(context).standard == Duration.zero;
-    _sync(reduceMotion);
     return SizedBox.square(
       dimension: widget.diameter,
       child: Stack(
@@ -68,10 +79,11 @@ class _OmiActivityRingState extends State<OmiActivityRing> with SingleTickerProv
           if (widget.active)
             Positioned.fill(
               child: ExcludeSemantics(
-                child: RotationTransition(
-                  turns: _spin,
+                // Only the arc repaints. A transform without a boundary dirties the
+                // surrounding header's display list on every animation frame.
+                child: RepaintBoundary(
                   child: CustomPaint(
-                    painter: _ArcPainter(widget.color ?? OmiColors.textSecondary, widget.strokeWidth),
+                    painter: _ArcPainter(_spin, widget.color ?? OmiColors.textSecondary, widget.strokeWidth),
                   ),
                 ),
               ),
@@ -83,7 +95,9 @@ class _OmiActivityRingState extends State<OmiActivityRing> with SingleTickerProv
 }
 
 class _ArcPainter extends CustomPainter {
-  _ArcPainter(this.color, this.strokeWidth);
+  _ArcPainter(this.turns, this.color, this.strokeWidth) : super(repaint: turns);
+
+  final Animation<double> turns;
 
   final Color color;
   final double strokeWidth;
@@ -101,11 +115,12 @@ class _ArcPainter extends CustomPainter {
       ..strokeWidth = strokeWidth
       ..strokeCap = StrokeCap.round;
     canvas.drawArc(rect, 0, math.pi * 2, false, track);
-    canvas.drawArc(rect, -math.pi / 2, math.pi * 0.6, false, arc);
+    canvas.drawArc(rect, -math.pi / 2 + turns.value * math.pi * 2, math.pi * 0.6, false, arc);
   }
 
   @override
-  bool shouldRepaint(_ArcPainter oldDelegate) => oldDelegate.color != color || oldDelegate.strokeWidth != strokeWidth;
+  bool shouldRepaint(_ArcPainter oldDelegate) =>
+      oldDelegate.turns != turns || oldDelegate.color != color || oldDelegate.strokeWidth != strokeWidth;
 }
 
 /// The live dot: green, gently pulsing while [live]; grey and still otherwise (paused, waiting).

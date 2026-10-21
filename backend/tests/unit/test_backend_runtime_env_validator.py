@@ -544,6 +544,20 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
         count=1,
         flags=re.DOTALL,
     )
+    payload = re.sub(
+        r'("backend(?:-sync|-sync-backfill|-integration)?":\s*\{.*?"env":\s*\[)',
+        r'\1\n        {"name": "BATCH_PIPELINE_SHADOW_PERCENT", "value": "0"},'
+        r'\n        {"name": "BATCH_PIPELINE_SHADOW_PAID_RECOVERY_PER_HOUR", "value": "200"},',
+        payload,
+        flags=re.DOTALL,
+    )
+    payload = re.sub(
+        r'("backend-integration":\s*\{.*?"name": "BATCH_PIPELINE_WORKER_SERVICE_ACCOUNT", "value": )""',
+        r'\1"batch-pipeline-worker@based-hardware-dev.iam.gserviceaccount.com"',
+        payload,
+        count=1,
+        flags=re.DOTALL,
+    )
     return with_firestore_read_runtime_env(payload)
 
 

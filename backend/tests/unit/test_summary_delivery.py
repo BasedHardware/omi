@@ -1,5 +1,6 @@
 """Summary success is a fenced durable outcome, never upload/model success."""
 
+import importlib
 from copy import deepcopy
 from datetime import datetime, timezone
 from types import SimpleNamespace
@@ -8,6 +9,14 @@ import pytest
 from config import summary_guarantee as flags
 from utils.conversations import summary_delivery as delivery
 from utils.conversations.deterministic_minimum import build_deterministic_minimum_structured
+
+
+@pytest.fixture(scope='module', autouse=True)
+def summary_database_dependency():
+    # The banked-summary branch lazily imports effective_user_title. Load the
+    # real dependency in setup so the call CPU guard measures merge logic,
+    # while import failures still fail this suite and all assertions stay real.
+    importlib.import_module('database.conversations')
 
 
 @pytest.fixture
