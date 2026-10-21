@@ -105,11 +105,19 @@ def bounded_transcript_segments(
                 text = text[:remaining_chars]
             truncated = True
         item = {key: segment.get(key) for key in allowed_keys if key in segment}
-        if item.get('original_text') is not None:
-            item['original_text'] = str(item['original_text'])[:remaining_chars]
         item["text"] = text
+        used_segment_chars = len(text)
+        if item.get("original_text") is not None:
+            orig_str = str(item["original_text"])
+            remaining_orig = max(0, max_chars - (used_chars + used_segment_chars))
+            if len(orig_str) > remaining_orig:
+                item["original_text"] = orig_str[:remaining_orig]
+                truncated = True
+            else:
+                item["original_text"] = orig_str
+            used_segment_chars += len(item["original_text"])
         bounded.append(item)
-        used_chars += len(text)
+        used_chars += used_segment_chars
         if truncated:
             break
 
