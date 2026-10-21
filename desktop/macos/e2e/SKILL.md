@@ -260,7 +260,7 @@ have requeried without the drag guard. Non-production bundles only.
 diagnostics bundle locally, so the dry-run below is how a harness verifies the payload
 is token-free without touching the user's machine state. `dump_feedback_payload_dryrun` (non-prod only) assembles the
 **same** payload — the report title (`feedbackReportTitle`) and the diagnostics JSON
-(`writeDiagnosticsAttachment`, the exact builder the real submit uses) — and returns it
+(`writeIncidentDiagnosticsAttachment`, the same builder the real submit embeds) — and returns it
 **without** submitting anywhere, so the diagnostics JSON can be secret-scanned.
 
 ```bash

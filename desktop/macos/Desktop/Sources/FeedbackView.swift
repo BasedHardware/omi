@@ -60,6 +60,7 @@ struct FeedbackView: View {
   @State private var email: String = ""
   @State private var isSubmitting: Bool = false
   @State private var showSuccess: Bool = false
+  @State private var savedReportPath: String?
 
   init(userEmail: String?, onDismiss: @escaping () -> Void) {
     self.userEmail = userEmail
@@ -79,11 +80,19 @@ struct FeedbackView: View {
             .scaledFont(size: 48)
             .foregroundColor(Ink.listeningGreen)
 
-          Text("Report sent")
+          Text(savedReportPath == nil ? "Report not saved" : "Report saved on this Mac")
             .inkStyle(.firstTitle, color: Ink.primary)
 
-          Text("We'll look into this issue.")
+          if let savedReportPath {
+            Text(
+              "Nothing was sent over the network. The report (your note plus redacted diagnostics) is saved at:\n\(savedReportPath)"
+            )
             .inkStyle(.prose, color: Ink.secondary)
+            .textSelection(.enabled)
+          } else {
+            Text("The report could not be written to disk. Try \"Save Diagnostics…\" instead.")
+              .inkStyle(.prose, color: Ink.secondary)
+          }
 
           Button("Close") {
             onDismiss()
@@ -152,6 +161,60 @@ struct FeedbackView: View {
     .inkGlassPanel(cornerRadius: 0, shadow: nil)
   }
 
+  /// Write the report (note + redacted diagnostics bundle) under
+  /// `Application Support/<bundle>/Feedback Reports/` so the user keeps a
+  /// durable, shareable copy on their own machine. Best-effort: returns nil
+  /// when the write fails.
+  @discardableResult
+  private static func persistLocalReport(
+    title: String,
+    note: String,
+    name: String,
+    email: String
+  ) -> URL? {
+    let fileManager = FileManager.default
+    let applicationSupport =
+      fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+      ?? fileManager.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support")
+    let bundleID = Bundle.main.bundleIdentifier ?? "com.omi.desktop"
+    let reportsDir =
+      applicationSupport
+      .appendingPathComponent(bundleID, isDirectory: true)
+      .appendingPathComponent("Feedback Reports", isDirectory: true)
+    let formatter = DateFormatter()
+    formatter.dateFormat = "yyyyMMdd-HHmmss"
+    let stamp = formatter.string(from: Date())
+    let target = reportsDir.appendingPathComponent("report-\(stamp).txt")
+
+    do {
+      try fileManager.createDirectory(at: reportsDir, withIntermediateDirectories: true)
+      var text = "title: \(title)\n"
+      text += "created_at: \(ISO8601DateFormatter().string(from: Date()))\n"
+      if !name.isEmpty { text += "name: \(name)\n" }
+      if !email.isEmpty { text += "email: \(email)\n" }
+      text += "\n\(note)\n"
+      if let diagnosticsURL = DesktopDiagnosticsManager.shared.writeIncidentDiagnosticsAttachment(
+        area: "other",
+        failureClass: "user_report",
+        phase: "other")
+      {
+        defer { try? fileManager.removeItem(at: diagnosticsURL) }
+        if let diagnosticsData = try? Data(contentsOf: diagnosticsURL),
+          let diagnosticsText = String(data: diagnosticsData, encoding: .utf8)
+        {
+          text += "\n--- redacted diagnostics (desktop_diagnostics.json) ---\n"
+          text += diagnosticsText
+          text += "\n"
+        }
+      }
+      try text.data(using: .utf8)?.write(to: target, options: .atomic)
+      return target
+    } catch {
+      logError("Failed to persist local feedback report", error: error)
+      return nil
+    }
+  }
+
   private func submitFeedback() {
     isSubmitting = true
 
@@ -160,21 +223,24 @@ struct FeedbackView: View {
     // Track feedback submitted
     AnalyticsManager.shared.feedbackSubmitted(feedbackLength: message.count)
 
-    // Write the bounded, redacted diagnostics bundle locally. The user-entered
-    // text, name, and email are intentionally not transmitted anywhere; the
-    // user can share the bundle manually via "Save Diagnostics…".
+    // With crash reporting removed, a report is retained locally on this
+    // machine only: the note plus the bounded, redacted diagnostics bundle.
+    // Nothing is transmitted anywhere; support shares the file manually.
     let reportTitle = feedbackReportTitle(for: message)
-    let diagnosticsURL = DesktopDiagnosticsManager.shared.writeIncidentDiagnosticsAttachment(
-      area: "other",
-      failureClass: "user_report",
-      phase: "other")
-    if let diagnosticsURL {
-      try? FileManager.default.removeItem(at: diagnosticsURL)
+    let savedReportURL = Self.persistLocalReport(
+      title: reportTitle,
+      note: message,
+      name: name,
+      email: email)
+    if let savedReportURL {
+      log("User report saved locally: \(savedReportURL.path)")
+    } else {
+      logError("User report could not be saved locally")
     }
-    log("User report recorded locally: \(reportTitle)")
 
     // Show success
     OmiMotion.withGated {
+      savedReportPath = savedReportURL?.path
       showSuccess = true
       isSubmitting = false
     }

@@ -31,6 +31,7 @@ steps:
     expect:
       result.detail.report_title: "User Report"
       result.detail.cloud_submission_invoked: "false"
+      result.detail.would_submit_to_cloud: "false"
 
   - id: S3
     name: No real feedback submission was logged
