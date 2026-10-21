@@ -33,9 +33,9 @@ const secondsPerFlashPage = 1.4;
 ///                  The same bytes produce the same verdict every time, so like
 ///                  [outsideRecoveryWindow] this is terminal rather than pending.
 ///                  The local file is kept; only deletion is offered.
-/// - [uploadRejected] — the upload endpoint definitively refused these bytes
-///                  (HTTP 400/403/413). Connectivity restoration cannot change
-///                  that response, so automatic drains must stop.
+/// - [uploadRejected] — an upload request was refused (HTTP 400/413, or a
+///                  historical 403). Automatic drains stop; an explicit retry
+///                  can re-submit the intact file without rewriting its time.
 enum WalStatus {
   inProgress,
   miss,
@@ -102,7 +102,8 @@ WalSyncDisplayState? worstSessionSyncState(Iterable<Wal> wals) {
 /// retry can still help (the sync pages' "Failed — tap Retry" case, which
 /// resets the auto-retry budget). Corrupted and out-of-window recordings
 /// cannot be retried into success.
-bool isRetryableSyncState(WalSyncDisplayState state) => state == WalSyncDisplayState.failed;
+bool isRetryableSyncState(WalSyncDisplayState state) =>
+    state == WalSyncDisplayState.failed || state == WalSyncDisplayState.uploadRejected;
 
 int _syncOutcomeRank(WalSyncDisplayState state) => switch (state) {
       WalSyncDisplayState.failed => 4,
@@ -353,6 +354,14 @@ class Wal {
     syncStartedAt = null;
     syncEtaSeconds = null;
     syncSpeedKBps = null;
+  }
+
+  /// Explicit user action only. Old request refusals carry no per-file proof
+  /// of invalid audio; keep automatic wakes stopped until this gesture.
+  void prepareManualRetry() {
+    if (status == WalStatus.uploadRejected) status = WalStatus.miss;
+    retryCount = 0;
+    lastRetryAt = 0;
   }
 
   Wal({
