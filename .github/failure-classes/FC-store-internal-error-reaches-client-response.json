@@ -1,0 +1,16 @@
+{
+    "schema_version": 1,
+    "id": "FC-store-internal-error-reaches-client-response",
+    "violated_contract": "A client-facing error response must never carry data-layer internals, and a failed mutation must never be reported as success. When a focus-session caller supplied a blank, traversal-shaped, reserved or oversized document id, or the store raised, the router either surfaced raw store exception text to the chat tool response or answered a missing delete with a fake ok - leaking storage internals and masking failure as success.",
+    "canonical_prevention": "Validate document ids at the router boundary before they reach the data layer (blank, dot segments, embedded slashes, reserved double-underscore ids, byte-size caps), re-raise HTTPException ahead of the generic except boundary, log through the sanitizer, and return fixed, static 500 messages so raw store internals cannot reach clients and missing targets surface as real 404s.",
+    "canonical_prevention_artifact": [
+          "backend/routers/focus_sessions.py",
+          "backend/tests/unit/test_focus_sessions_router_resilience.py"
+    ],
+    "evidence_prs": [22975],
+    "scope_hints": [
+          "backend/routers/**",
+          "backend/tests/unit/**"
+    ],
+    "status": "open"
+}
