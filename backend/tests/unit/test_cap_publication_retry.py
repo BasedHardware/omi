@@ -176,6 +176,14 @@ class _Doc:
         if self.client.fail_next_get:
             self.client.fail_next_get = False
             raise ResourceExhausted('429 Quota exceeded.')
+        if (
+            self.client.fail_read_after_rejections
+            and self.client.reject_precondition == self.key
+            and self.client.precondition_rejections >= 3
+        ):
+            if self.client.saw_reread_at_budget:
+                raise ResourceExhausted('429 Quota exceeded.')
+            self.client.saw_reread_at_budget = True
         if self.client.fail_get_after_plain_write and self.client.plain_writes and not self.client.verification_raised:
             self.client.verification_raised = True
             raise ResourceExhausted('429 Quota exceeded.')
@@ -197,6 +205,9 @@ class _Doc:
 
     def update(self, payload, option=None, timeout=None) -> None:
         self.client.last_update_option = option
+        if self.client.reject_precondition == self.key:
+            self.client.precondition_rejections += 1
+            raise FailedPrecondition('conditional append rejected')
         if self.client.land_fragment_on_update == self.key:
             # The attempt that already committed this fragment wins the version.
             self.client.land_fragment_on_update = None
@@ -230,6 +241,10 @@ class _Client:
         self.verification_raised = False
         self.seal_during_update: str | None = None
         self.land_fragment_on_update: str | None = None
+        self.reject_precondition: str | None = None
+        self.precondition_rejections = 0
+        self.fail_read_after_rejections = False
+        self.saw_reread_at_budget = False
         self.conflict_create: str | None = None
         self.conflict_row: dict | None = None
         self.fail_next_get = False
@@ -840,26 +855,12 @@ def test_precondition_loss_after_the_fragment_landed_seals_once(delays, store, t
     assert store.increments.count(('summary', 'count', 1.0)) == 1
 
 
-def test_create_race_read_failure_stays_staged_and_seals_once(delays, store, tmp_path, monkeypatch):
-    path = tmp_path / 'fragment.opus'
-    path.write_bytes(b'opus')
-    group = Publication(UID)
-    fragment = Publication(UID)
-    part_path = f'chunks/{UID}/cap-held/{fragment.identity}.opus.enc'
-    store.conflict_create = group.identity
-    store.conflict_row = {
+def _empty_staging_row() -> dict:
+    return {
         'state': 'staging',
-        'stage_parts': [
-            {
-                'id': fragment.identity,
-                'audio_path': part_path,
-                'audio_generation': 1,
-                'bytes': 4,
-                'frames': 16000,
-            }
-        ],
-        'seconds': 1.0,
-        'writer_until': 0,
+        'stage_parts': [],
+        'seconds': 0,
+        'writer_until': 10**12,
         'metadata': 'encrypted',
         'sample_rate': 16000,
         'started_at': 1_700_000_000,
@@ -867,20 +868,80 @@ def test_create_race_read_failure_stays_staged_and_seals_once(delays, store, tmp
         'listed_at': 1_700_000_000,
         'live_custody_version': 4,
     }
-    store.actions = ['throttle', 'throttle', 'throttle']
-    before = _counter('staged_unverified')
-    row = live_cap_staging.append(UID, str(path), group, fragment, _METADATA, 1.0)
-    assert row is not None
-    assert _counter('staged_unverified') == before + 1
-    assert late_hold_identity(fragment.identity) not in store.docs
-    assert [part['id'] for part in store.docs[group.identity]['stage_parts']] == [fragment.identity]
+
+
+def _seal_late(monkeypatch, store, fragment) -> None:
+    late = late_hold_identity(fragment.identity)
     store.actions = []
-    _enable_redrive(monkeypatch, [_hold_snap(group.identity)])
+    _enable_redrive(monkeypatch, [_hold_snap(late)])
     assert __import__('asyncio').run(cap_hold_redrive.sweep())['sealed'] == 1
+    assert store.docs[late]['state'] == 'held'
     assert store.docs['summary']['count'] == 1
     assert store.docs['summary']['seconds'] == 1
     assert store.increments.count(('summary', 'count', 1.0)) == 1
     assert store.increments.count(('summary', 'seconds', 1.0)) == 1
+    assert __import__('asyncio').run(cap_hold_redrive.sweep())['sealed'] == 0
+    assert store.increments.count(('summary', 'count', 1.0)) == 1
+
+
+def test_exhausted_appends_open_a_late_row_when_the_group_omits_the_fragment(delays, store, tmp_path, monkeypatch):
+    path = tmp_path / 'fragment.opus'
+    path.write_bytes(b'opus')
+    group = Publication(UID)
+    fragment = Publication(UID)
+    store.docs[group.identity] = _empty_staging_row()
+    store.versions[group.identity] = 1
+    store.reject_precondition = group.identity
+    store.actions = ['throttle', 'throttle', 'throttle']
+    row = live_cap_staging.append(UID, str(path), group, fragment, _METADATA, 1.0)
+    late = late_hold_identity(fragment.identity)
+    assert store.precondition_rejections == 3
+    assert [part['id'] for part in store.docs[group.identity]['stage_parts']] == []
+    assert store.docs[group.identity]['state'] == 'staging'
+    assert [part['id'] for part in store.docs[late]['stage_parts']] == [fragment.identity]
+    assert row['writer_until'] == 0
+    assert [part['id'] for part in row['stage_parts']] == [fragment.identity]
+    _seal_late(monkeypatch, store, fragment)
+
+
+def test_final_read_failure_does_not_report_an_uncommitted_merge(delays, store, tmp_path, monkeypatch):
+    path = tmp_path / 'fragment.opus'
+    path.write_bytes(b'opus')
+    group = Publication(UID)
+    fragment = Publication(UID)
+    store.docs[group.identity] = _empty_staging_row()
+    store.versions[group.identity] = 1
+    store.reject_precondition = group.identity
+    store.fail_read_after_rejections = True
+    store.actions = ['throttle', 'throttle', 'throttle']
+    before = _counter('staged_unverified')
+    row = live_cap_staging.append(UID, str(path), group, fragment, _METADATA, 1.0)
+    late = late_hold_identity(fragment.identity)
+    assert _counter('staged_unverified') == before + 1
+    assert [part['id'] for part in store.docs[group.identity]['stage_parts']] == []
+    assert [part['id'] for part in row['stage_parts']] == [fragment.identity]
+    assert row['writer_until'] == 0
+    assert late in store.docs
+    _seal_late(monkeypatch, store, fragment)
+
+
+def test_lost_create_race_without_the_fragment_opens_a_late_row(delays, store, tmp_path, monkeypatch):
+    path = tmp_path / 'fragment.opus'
+    path.write_bytes(b'opus')
+    group = Publication(UID)
+    fragment = Publication(UID)
+    store.conflict_create = group.identity
+    store.conflict_row = _empty_staging_row()
+    store.actions = ['throttle', 'throttle', 'throttle']
+    before = _counter('staged_unverified')
+    row = live_cap_staging.append(UID, str(path), group, fragment, _METADATA, 1.0)
+    late = late_hold_identity(fragment.identity)
+    assert _counter('staged_unverified') == before + 1
+    assert [part['id'] for part in store.docs[group.identity]['stage_parts']] == []
+    assert [part['id'] for part in store.docs[late]['stage_parts']] == [fragment.identity]
+    assert [part['id'] for part in row['stage_parts']] == [fragment.identity]
+    assert row['writer_until'] == 0
+    _seal_late(monkeypatch, store, fragment)
 
 
 async def test_receive_data_close_code_follows_staging(delays, store, tmp_path):

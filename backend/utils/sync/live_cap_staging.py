@@ -153,12 +153,11 @@ def append(uid: str, path: str, group: Publication, fragment: Publication, metad
             'live_custody_version': 4,
         }
 
-    def _row_after_create_race(target: Any, staged: dict) -> dict | None:
-        """Read the row that won the create.
+    def _confirmed_fragment(target: Any) -> dict | None:
+        """Return the row only when a read shows it holds this fragment.
 
-        None means that row does not hold this fragment. A failed read still
-        returns the staged payload: the competing row may already hold it, and
-        the failure must not close the socket.
+        A failed read confirms nothing. Callers then open the deterministic
+        late row, or surface a failure if that row cannot be confirmed either.
         """
         try:
             current = target.get().to_dict() or {}
@@ -168,7 +167,7 @@ def append(uid: str, path: str, group: Publication, fragment: Publication, metad
                 type(error).__name__,
             )
             record_publication_retry('staged_unverified')
-            return staged
+            return None
         if _fragment_recorded(current):
             return current
         return None
@@ -179,7 +178,9 @@ def append(uid: str, path: str, group: Publication, fragment: Publication, metad
         try:
             late.create(body)
         except AlreadyExists:
-            return _row_after_create_race(late, body)
+            # The id is deterministic. Return the row only when it holds this
+            # fragment. Otherwise the caller must not treat the fragment as staged.
+            return _confirmed_fragment(late)
         return _verified_staging(late, body)
 
     def _append_while_staging(snapshot: Any, merged: dict, part: dict, updates: dict) -> dict | None:
@@ -213,15 +214,13 @@ def append(uid: str, path: str, group: Publication, fragment: Publication, metad
                 type(error).__name__,
             )
             record_publication_retry('staged_unverified')
-            return merged
+            return _stage_late_fragment(part, updates)
         row = snapshot.to_dict() if snapshot.exists else None
         if row and _fragment_recorded(row):
             return row
-        if not row or row.get('state') != 'staging':
-            return _stage_late_fragment(part, updates)
-        # Still staging, and this fragment is not in it. A second row here
-        # would seal the same audio twice if the lost update had committed.
-        return merged
+        # Still missing, or the group has left staging. The late id is
+        # deterministic, so a second recovery creates this row once.
+        return _stage_late_fragment(part, updates)
 
     def _merged_staging(updates: dict, row: dict | None, part: dict) -> dict:
         merged = dict(updates)
@@ -243,12 +242,12 @@ def append(uid: str, path: str, group: Publication, fragment: Publication, metad
         transactional budget, under the same non-transactional deletion fence.
         Appending to a staging row uses the row's update_time as a precondition
         so a cross-process sealer cannot be reset to staging. A lost
-        precondition re-reads the group: a fragment already recorded there is
-        returned, a group that is still staging is retried, and a separate row
-        is created only after the group has left staging. That row's id is not
-        the fragment id, so seal writes a different object from the part.
-        Returning the row keeps the socket up: the bytes are durable, so this
-        is not a 1011.
+        precondition re-reads the group. A fragment is returned only when a
+        read shows some row holds it. Retries that never record it, and a
+        re-read that fails, open the deterministic late row instead of
+        reporting the uncommitted merge. That row's id is not the fragment
+        id, so seal writes a different object from the part. Returning the
+        confirmed row keeps the socket up. An unconfirmed fragment still fails.
         """
         part = updates['stage_parts'][-1]
         if part.get('id') != fragment.identity:
@@ -263,7 +262,7 @@ def append(uid: str, path: str, group: Publication, fragment: Publication, metad
                 try:
                     ref.create(merged)
                 except AlreadyExists:
-                    current = _row_after_create_race(ref, merged)
+                    current = _confirmed_fragment(ref)
                     if current is not None:
                         return current
                     return _stage_late_fragment(part, updates)
