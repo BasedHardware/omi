@@ -1243,7 +1243,12 @@ def retrieve_metadata_fields_from_transcript(
     '''.replace('    ', '')
     try:
         with track_usage(uid, Features.CONVERSATION_PROCESSING):
-            structured = get_llm('chat_extraction').with_structured_output(ExtractedInformation)
+            # chat_metadata_extraction, not chat_extraction: this call reads the
+            # WHOLE conversation content in one structured request and needs the
+            # foreground deadline (see model_config._FOREGROUND_TIMEOUT_FEATURES).
+            # The shared chat_extraction feature stays on the background deadline
+            # for its short interactive-chat prompts.
+            structured = get_llm('chat_metadata_extraction').with_structured_output(ExtractedInformation)
             result = cast(ExtractedInformation, with_cache_write_opt_out(structured).invoke(prompt))
     except Exception as e:
         logger.error(f'e {e}')
@@ -1359,7 +1364,9 @@ def _process_extracted_metadata(uid: str, prompt: str, reference_date: str) -> d
     """Process the extracted metadata from any source"""
     try:
         with track_usage(uid, Features.CONVERSATION_PROCESSING):
-            structured = get_llm('chat_extraction').with_structured_output(ExtractedInformation)
+            # Whole message/document body in one structured call — same
+            # foreground-deadline feature as the transcript path above.
+            structured = get_llm('chat_metadata_extraction').with_structured_output(ExtractedInformation)
             result = cast(ExtractedInformation, with_cache_write_opt_out(structured).invoke(prompt))
     except Exception as e:
         logger.error(f'Error extracting metadata: {e}')

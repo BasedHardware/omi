@@ -151,7 +151,7 @@ def test_foreground_deadline_exceeds_what_the_provider_needs():
 def test_the_foreground_family_stays_closed_over_its_members():
     """The class guard: every whole-transcript lane that runs while a user waits."""
     assert model_config._FOREGROUND_TIMEOUT_FEATURES == frozenset(
-        {"conv_structure", "conv_app_result", "daily_summary", "memory_l1"}
+        {"conv_structure", "conv_app_result", "daily_summary", "memory_l1", "chat_metadata_extraction"}
     )
 
 

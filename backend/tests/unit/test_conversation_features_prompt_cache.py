@@ -255,7 +255,10 @@ def _run_metadata_extraction(monkeypatch, *, gateway=True, byok=False):
 
 def test_metadata_extraction_sends_explicit_mode_with_no_breakpoint(monkeypatch):
     captured = _run_metadata_extraction(monkeypatch)
-    assert captured['feature'] == 'chat_extraction'
+    # The metadata extractor runs on its own foreground-deadline feature since
+    # 2026-10-20 (see model_config._FOREGROUND_TIMEOUT_FEATURES); the cache
+    # contract below is unchanged.
+    assert captured['feature'] == 'chat_metadata_extraction'
     # Asserted on what the INVOKED runnable carried, not on what get_llm was handed:
     # binding before with_structured_output would drop it and this is the only
     # assertion that notices.

@@ -53,6 +53,7 @@ model_config_features:
     - app_integration
     structured_output:
     - chat_extraction
+    - chat_metadata_extraction
     - conv_app_select
     - external_structure
     - proactive_notification
@@ -123,6 +124,7 @@ surfaces:
   call_sites:
   - utils/llm/chat.py::feature:chat_responses
   - utils/llm/chat.py::feature:chat_extraction
+  - utils/llm/chat.py::feature:chat_metadata_extraction
   - utils/llm/conversation_folder.py::feature:conv_folder
   - utils/llm/conversation_processing.py::feature:conv_discard
   - utils/llm/conversation_processing.py::feature:conv_structure

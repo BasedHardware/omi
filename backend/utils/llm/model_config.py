@@ -85,6 +85,10 @@ _TWO_TIER_MODEL_PROFILE: Dict[str, Tuple[str, str]] = {
     'file_chat_documents': (LUNA_MODEL, 'openai'),
     'chat_agent': (LUNA_MODEL, 'openai'),
     'chat_extraction': (LUNA_MODEL, 'openai'),
+    # Conversation metadata extraction (people/topics/entities/dates search
+    # filters) shares chat_extraction's Luna route but owns its own deadline —
+    # see _FOREGROUND_TIMEOUT_FEATURES — so it is a distinct feature key.
+    'chat_metadata_extraction': (LUNA_MODEL, 'openai'),
     'chat_graph': (LUNA_MODEL, 'openai'),
     'goals': (LUNA_MODEL, 'openai'),
     'goals_advice': (LUNA_MODEL, 'openai'),
@@ -141,6 +145,7 @@ _BYOK_OPENAI_ROUTES: Dict[str, Tuple[str, str]] = {
     'chat_agent': (BYOK_OPENAI_MODEL, 'openai'),
     'chat_responses': (BYOK_OPENAI_MODEL, 'openai'),
     'chat_extraction': (BYOK_OPENAI_MODEL, 'openai'),
+    'chat_metadata_extraction': (BYOK_OPENAI_MODEL, 'openai'),
     'chat_graph': (BYOK_OPENAI_MODEL, 'openai'),
     'file_chat_vision': (BYOK_OPENAI_MODEL, 'openai'),
     'file_chat_documents': (BYOK_OPENAI_MODEL, 'openai'),
@@ -237,6 +242,7 @@ _CACHE_RETENTION_MODEL_PREFIXES = ('gpt-5', 'o1', 'o3', 'o4')
 # Features that call .with_structured_output().
 _STRUCTURED_OUTPUT_FEATURES = {
     'chat_extraction',
+    'chat_metadata_extraction',
     'proactive_notification',
     'conv_app_select',
     'external_structure',
@@ -274,6 +280,20 @@ _FOREGROUND_TIMEOUT_FEATURES = frozenset(
         # invoke_failed:APITimeoutError" 9-21×/day, no retry. The extractor reads
         # the whole transcript in one structured call, like its siblings above.
         'memory_l1',
+        # Sixth instance of the class, 2026-10-20: the conversation metadata
+        # extractor (`get_llm('chat_metadata_extraction')` behind
+        # retrieve_metadata_fields_from_transcript / _process_extracted_metadata)
+        # feeds the WHOLE conversation content — transcript or external message
+        # body — into one structured call from conversation finalization's
+        # summary-vector step. On the shared background deadline it timed out and
+        # the except arm returned empty metadata, silently erasing every
+        # conversation's people/topics/entities/dates search filters:
+        # prod pusher 2026-10-20/21 "ERROR:utils.llm.chat:e Request timed out."
+        # x42-52/30m, the #2 live signature. It shares chat_extraction's route
+        # today only because it predates the deadline map; the interactive-chat
+        # prompts on that lane stay on the background deadline — hence a
+        # dedicated feature, not an entry for the shared one.
+        'chat_metadata_extraction',
     }
 )
 

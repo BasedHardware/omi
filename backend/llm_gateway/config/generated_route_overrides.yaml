@@ -15,6 +15,14 @@ generated_route_overrides:
   - feature: chat_extraction
     primary: {provider: openai, model: gpt-6-luna}
     provider_options: {reasoning_effort: low}
+  # Conversation metadata extraction: same Luna route, own foreground deadline
+  # (see model_config._FOREGROUND_TIMEOUT_FEATURES). The 30s generated-lane
+  # request budget is raised to cover the 60s client deadline so the lane never
+  # aborts a request its caller is still willing to wait for.
+  - feature: chat_metadata_extraction
+    primary: {provider: openai, model: gpt-6-luna}
+    provider_options: {reasoning_effort: low}
+    request_timeout_ms: 90000
   - feature: chat_graph
     primary: {provider: openai, model: gpt-6-luna}
     provider_options: {reasoning_effort: low}

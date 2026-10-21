@@ -349,6 +349,7 @@ class TestModelQosProfiles:
             'memory_l2_flex',
             'chat_responses',
             'chat_extraction',
+            'chat_metadata_extraction',
             'chat_graph',
             'goals',
             'goals_advice',
@@ -1234,6 +1235,7 @@ class TestBYOKProfile:
             'chat_agent',
             'chat_responses',
             'chat_extraction',
+            'chat_metadata_extraction',
             'chat_graph',
             'file_chat_vision',
             'file_chat_documents',
@@ -1307,6 +1309,7 @@ class TestStructuredOutputFeatureTracking:
     def test_expected_features_tracked(self):
         expected = {
             'chat_extraction',
+            'chat_metadata_extraction',
             'proactive_notification',
             'translation',
             'conv_app_select',
