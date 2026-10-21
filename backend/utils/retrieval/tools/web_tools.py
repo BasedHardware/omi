@@ -3,6 +3,7 @@ Tools for fetching content from specific URLs.
 """
 
 import asyncio
+import html as html_lib
 import ipaddress
 import json
 import re
@@ -19,7 +20,9 @@ from utils.model_text import UNTRUSTED_LEGEND, truncation_note, untrusted_block
 
 logger = logging.getLogger(__name__)
 
-_SKIP_TAGS = {'script', 'style', 'noscript', 'head', 'meta', 'link', 'svg', 'iframe', 'nav', 'footer'}
+# Only non-void container tags should track skip depth. Void tags like <meta> and <link>
+# do not have closing tags in HTML5 and must not increment skip depth.
+_SKIP_TAGS = {'script', 'style', 'noscript', 'head', 'svg', 'iframe', 'nav', 'footer'}
 _BLOCK_TAGS = {'p', 'div', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'li', 'br', 'tr', 'blockquote', 'section', 'article'}
 _MAX_CONTENT_CHARS = 8000
 _MAX_BODY_BYTES = 512 * 1024  # cap before HTML parsing
@@ -73,18 +76,21 @@ def _extract_meta_tags(html: str) -> str:
     These are set even on fully JS-rendered pages (needed for SEO/social sharing)
     and live inside <head>, which the HTML stripper skips entirely.
     """
+    if not html:
+        return ''
     lines: List[str] = []
     seen: Set[str] = set()
 
     def add(label: str, value: str) -> None:
-        value = value.strip()
+        value = html_lib.unescape(value).strip()
         if value and label not in seen:
             seen.add(label)
             lines.append(f'{label}: {value}')
 
     title_m = re.search(r'<title[^>]*>(.*?)</title>', html, re.DOTALL | re.IGNORECASE)
     if title_m:
-        add('Title', re.sub(r'<[^>]+>', '', title_m.group(1)))
+        raw_title = re.sub(r'<[^>]+>', '', title_m.group(1))
+        add('Title', raw_title)
 
     for m in re.finditer(r'<meta\s+([^>]+?)/?>', html, re.IGNORECASE):
         attrs = m.group(1)
@@ -117,6 +123,8 @@ def _extract_json_ld(html: str) -> str:
     here even when the visible DOM is empty without JS execution.
     Returns a formatted multi-line string, or '' if nothing useful is found.
     """
+    if not html:
+        return ''
     pattern = re.compile(
         r'<script[^>]+type=["\']application/ld\+json["\'][^>]*>(.*?)</script>', re.DOTALL | re.IGNORECASE
     )
@@ -128,7 +136,9 @@ def _extract_json_ld(html: str) -> str:
             continue
 
         items: List[Any]
-        if isinstance(loaded, list):
+        if isinstance(loaded, dict) and isinstance(loaded.get('@graph'), list):
+            items = cast(List[Any], loaded['@graph'])
+        elif isinstance(loaded, list):
             items = cast(List[Any], loaded)
         else:
             items = [loaded]
@@ -154,7 +164,9 @@ def _extract_json_ld(html: str) -> str:
                         else:
                             parts.append(str(v))
                     val = ', '.join(parts)
-                lines.append(f'{label}: {val}')
+                val_str = html_lib.unescape(str(val)).strip()
+                if val_str:
+                    lines.append(f'{label}: {val_str}')
 
     return '\n'.join(lines)
 
@@ -186,7 +198,10 @@ class _TextExtractor(HTMLParser):
         self.chunks: List[str] = []
 
     def handle_starttag(self, tag: str, attrs: Any) -> None:
-        if tag in _SKIP_TAGS:
+        if tag == 'body':
+            # Entering <body> resets skip depth even if <head> lacked an explicit </head>
+            self._skip_depth = 0
+        elif tag in _SKIP_TAGS:
             self._skip_depth += 1
         elif tag in _BLOCK_TAGS and self._skip_depth == 0 and self.chunks:
             self.chunks.append('\n')
@@ -203,6 +218,8 @@ class _TextExtractor(HTMLParser):
 
 
 def _html_to_text(html: str) -> str:
+    if not html:
+        return ''
     meta = _extract_meta_tags(html)
     structured = _extract_json_ld(html)
 
@@ -294,9 +311,13 @@ async def fetch_url_tool(url: str) -> str:
     Returns:
         The readable text content of the page (up to 8000 characters)
     """
-    logger.info(f"fetch_url_tool called - url: {sanitize(url)}")
+    clean_url = str(url or '').strip()
+    if not clean_url:
+        return 'Error: URL cannot be empty.'
 
-    if not url.startswith(('http://', 'https://')):
+    logger.info(f"fetch_url_tool called - url: {sanitize(clean_url)}")
+
+    if not clean_url.startswith(('http://', 'https://')):
         return 'Error: URL must start with http:// or https://'
 
     headers: Dict[str, str] = {
@@ -306,16 +327,16 @@ async def fetch_url_tool(url: str) -> str:
     }
 
     try:
-        status, content_type, body = await _fetch_page(url, headers)
+        status, content_type, body = await _fetch_page(clean_url, headers)
     except ValueError as e:
         logger.warning(f"fetch_url_tool blocked - {sanitize(str(e))}")
         return f'Error: {sanitize(str(e))}'
     except Exception as e:
-        logger.error(f"fetch_url_tool - error fetching {sanitize(url)}: {sanitize(str(e))}", exc_info=True)
+        logger.error(f"fetch_url_tool - error fetching {sanitize(clean_url)}: {sanitize(str(e))}", exc_info=True)
         return 'Error: Failed to fetch the URL. Please verify the URL or try again later.'
 
     if status != 200:
-        logger.warning(f"fetch_url_tool - HTTP {status} for {sanitize(url)}")
+        logger.warning(f"fetch_url_tool - HTTP {status} for {sanitize(clean_url)}")
         return f'Error: Could not fetch page (HTTP {status})'
 
     if not any(t in content_type for t in _PARSEABLE_TYPES) and content_type:
@@ -328,5 +349,5 @@ async def fetch_url_tool(url: str) -> str:
     if not text:
         return 'Error: Page has no readable text content.'
 
-    logger.info(f"fetch_url_tool - fetched {min(len(text), _MAX_CONTENT_CHARS)} chars from {sanitize(url)}")
-    return _format_web_page_content(url, text)
+    logger.info(f"fetch_url_tool - fetched {min(len(text), _MAX_CONTENT_CHARS)} chars from {sanitize(clean_url)}")
+    return _format_web_page_content(clean_url, text)
