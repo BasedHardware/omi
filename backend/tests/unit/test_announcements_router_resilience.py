@@ -155,8 +155,11 @@ def test_admin_key_comparison_is_constant_time(announcements_router):
 def test_admin_key_comparison_survives_non_ascii_keys(announcements_router):
     """compare_digest refuses non ASCII strings, the guard must not 500."""
     with mock.patch.dict(os.environ, {"ADMIN_KEY": "ké"}):
+        # the exact key is still accepted, the comparison must not raise
+        announcements_router._verify_admin_key("ké")
+    with mock.patch.dict(os.environ, {"ADMIN_KEY": "ké"}):
         with pytest.raises(_HTTPException) as exc:
-            announcements_router._verify_admin_key("ké")
+            announcements_router._verify_admin_key("ki")
     assert exc.value.status_code == 403
 
 
