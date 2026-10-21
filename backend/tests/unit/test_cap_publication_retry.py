@@ -9,7 +9,6 @@ from __future__ import annotations
 import asyncio
 import copy
 from contextlib import nullcontext
-from datetime import datetime, timedelta, timezone
 from threading import Barrier, Lock, RLock, Thread
 from types import SimpleNamespace
 
@@ -823,28 +822,27 @@ def test_fallback_does_not_clobber_a_row_the_sealer_moved(delays, store, tmp_pat
     assert store.bucket.blob(sealed['audio_path']).download_as_bytes() == FRAGMENT_PAYLOAD
 
 
-def test_recovery_counts_usage_once_when_create_landed_without_the_increment(delays, store, tmp_path):
+def test_markerless_receipt_is_counted_exactly_once_on_both_paths(delays, store, tmp_path):
     source = Publication(UID)
     _track(source, delays[1])
     path = tmp_path / 'minute.opus'
     path.write_bytes(b'opus')
-    # The create committed and the summary increment never did. The receipt has
-    # no usage marker, which is what a later recovery used to treat as done.
+    # The writer deployed in production created the receipt and incremented the
+    # summary in one transaction. Only the usage marker postdates that receipt.
     store.docs[source.identity] = {'state': 'held', 'seconds': 60, 'live_custody_version': 4}
+    store.docs['summary'] = {'count': 1, 'seconds': 60}
+    live_cap_manifest.publish(UID, str(path), source, _METADATA, 60)
+    assert store.docs[source.identity]['usage_applied'] is True
+    assert store.docs['summary'] == {'count': 1, 'seconds': 60}
+    assert store.increments == []
+    # Recovery: every publication attempt retires its transaction id, so the
+    # receipt is reached through _publish_for_recovery instead of the commit.
+    store.docs[source.identity].pop('usage_applied')
     store.actions = ['expire', 'expire', 'expire']
     live_cap_manifest.publish(UID, str(path), source, _METADATA, 60)
     assert store.docs[source.identity]['usage_applied'] is True
-    assert store.docs[source.identity]['state'] == 'held'
-    assert store.docs['summary']['count'] == 1
-    assert store.docs['summary']['seconds'] == 60
-    assert store.increments.count(('summary', 'count', 1.0)) == 1
-    assert store.increments.count(('summary', 'seconds', 60.0)) == 1
-    store.actions = ['expire', 'expire', 'expire']
-    live_cap_manifest.publish(UID, str(path), source, _METADATA, 60)
-    assert store.increments.count(('summary', 'count', 1.0)) == 1
-    assert store.increments.count(('summary', 'seconds', 60.0)) == 1
-    assert store.docs['summary']['count'] == 1
-    assert store.docs['summary']['seconds'] == 60
+    assert store.docs['summary'] == {'count': 1, 'seconds': 60}
+    assert store.increments == []
 
 
 def test_read_after_a_staged_write_does_not_fail_the_socket(delays, store, tmp_path, monkeypatch):
@@ -1064,16 +1062,10 @@ def _live_destinations(store, identity: str) -> list[str]:
     return sorted(name for name, stored in store.bucket.objects.items() if name.startswith(prefix) and stored.alive)
 
 
-def _assert_claim_expiry(claim: dict) -> None:
-    remaining = claim['expire_at'] - datetime.now(timezone.utc)
-    assert timedelta(days=89) < remaining < timedelta(days=91)
-
-
 def _assert_one_claim(store, fragment_id: str, winner: str, loser: str) -> None:
     claim = f'users/{UID}/stt_cap_fragment_claims/{fragment_id}'
     assert [key for key in store.docs if 'stt_cap_fragment_claims' in key] == [claim]
-    assert store.docs[claim]['hold_id'] == winner
-    _assert_claim_expiry(store.docs[claim])
+    assert store.docs[claim] == {'hold_id': winner, 'fragment_id': fragment_id}
     assert store.docs[winner]['state'] == 'held'
     assert store.docs[loser]['state'] == 'superseded'
     assert store.docs[loser]['seconds'] == 0
@@ -1220,17 +1212,26 @@ def test_multi_fragment_group_reads_every_claim_before_the_first_write(store):
     assert store.increments.count(('summary', 'count', 1.0)) == 1
     for fragment_id in fragments:
         claim = store.docs[f'users/{UID}/stt_cap_fragment_claims/{fragment_id}']
-        assert claim == {'hold_id': group, 'fragment_id': fragment_id, 'expire_at': claim['expire_at']}
-        _assert_claim_expiry(claim)
+        assert claim == {'hold_id': group, 'fragment_id': fragment_id}
         assert f'chunks/{UID}/cap-held/{fragment_id}.opus.enc' in store.deletes
     assert _live_destinations(store, group) == [row['audio_path']]
 
 
-def test_retry_that_lost_a_fragment_composes_only_its_claimed_set(store):
+def test_retry_that_lost_a_fragment_composes_only_its_claimed_set(store, monkeypatch):
     group = Publication(UID).identity
     x, y = Publication(UID).identity, Publication(UID).identity
     payloads = _plant_group_row(store, group, [x, y])
     wide = live_cap_staging._compose_target(store.bucket, UID, group, [x, y]).name
+    drops: list[tuple[str, int]] = []
+    original_drop = live_cap_staging._drop_unpublished_targets
+
+    def tracked_drop(bucket, uid, identity, part_ids, claimed_ids):
+        # The stale-wider-composite deletion runs outside the seal transaction;
+        # by the time it starts, this row's own commit is already applied.
+        drops.append((store.docs[identity]['state'], store.applied))
+        return original_drop(bucket, uid, identity, part_ids, claimed_ids)
+
+    monkeypatch.setattr(live_cap_staging, '_drop_unpublished_targets', tracked_drop)
     # Freeze commits; every seal commit then retires its transaction id after
     # the X+Y composite is already in the bucket.
     store.actions = ['ok', 'expire', 'expire', 'expire']
@@ -1261,6 +1262,7 @@ def test_retry_that_lost_a_fragment_composes_only_its_claimed_set(store):
     assert sum(fragment['bytes'] for fragment in row['opus_fragments']) == len(composed)
     stale = store.bucket.objects.get(wide)
     assert stale is None or not stale.alive
+    assert drops == [('held', store.applied)]
     assert _live_destinations(store, group) == [row['audio_path']]
     assert store.docs[f'users/{UID}/stt_cap_fragment_claims/{x}']['hold_id'] == group
     assert store.docs[f'users/{UID}/stt_cap_fragment_claims/{y}']['hold_id'] == late

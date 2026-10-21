@@ -42,18 +42,14 @@ def _publish(uid: str, path: str, source: Publication, metadata: dict, seconds: 
                 if prior and prior.get('state') == 'purged':
                     record_erasure('post_delete_publication')
                     return  # Tombstone wins. A commit over it is post_delete_publication.
-                if prior and prior.get('usage_applied'):
-                    return  # Receipt and its summary increment already committed together.
                 if existing.exists:
-                    # The receipt landed and the increment did not. The flag and
-                    # the summary move in this same transaction, so a retry that
-                    # sees the flag cannot count the audio twice.
-                    tx.update(ref, {'usage_applied': True})
-                    tx.set(
-                        total,
-                        {'seconds': firestore.Increment(seconds), 'count': firestore.Increment(1)},
-                        merge=True,
-                    )
+                    # Every writer that can leave this receipt — the one deployed
+                    # today and this path — commits the receipt and its summary
+                    # increment in one transaction. A receipt without the marker
+                    # predates the marker; the audio is already counted. Stamp the
+                    # marker for the readers and never increment again.
+                    if not (prior or {}).get('usage_applied'):
+                        tx.update(ref, {'usage_applied': True})
                     return
                 attempted = True
                 source.put_started = True
@@ -71,9 +67,11 @@ def _publish(uid: str, path: str, source: Publication, metadata: dict, seconds: 
     def _publish_for_recovery() -> bool:
         """Write the held receipt outside the retired transaction id.
 
-        The receipt and the summary increment commit in one transaction, and
-        ``usage_applied`` is set in that same transaction. A receipt left behind
-        by a create that never reached its increment is repaired here, once.
+        The receipt and its summary increment commit in one transaction, and
+        every writer that can leave a receipt did so — including the writer
+        deployed before ``usage_applied`` existed. A receipt that already
+        exists, with or without the marker, is already counted: only the
+        marker is stamped here, and the summary moves only with a create.
         """
         fields = source.fields
 
@@ -85,15 +83,14 @@ def _publish(uid: str, path: str, source: Publication, metadata: dict, seconds: 
                 if row and row.get('state') == 'purged':
                     record_erasure('post_delete_publication')
                     return True
-                if row and row.get('usage_applied'):
-                    return True
                 if existing.exists:
-                    tx.update(ref, {'usage_applied': True})
-                else:
-                    if not fields:
-                        return False
-                    body = cap_hold.hold_manifest(fields, seconds, time.time(), int(metadata['timestamp']))
-                    tx.create(ref, {**body, 'live_custody_version': 4, 'usage_applied': True})
+                    if not (row or {}).get('usage_applied'):
+                        tx.update(ref, {'usage_applied': True})
+                    return True
+                if not fields:
+                    return False
+                body = cap_hold.hold_manifest(fields, seconds, time.time(), int(metadata['timestamp']))
+                tx.create(ref, {**body, 'live_custody_version': 4, 'usage_applied': True})
                 tx.set(
                     total,
                     {'seconds': firestore.Increment(seconds), 'count': firestore.Increment(1)},
@@ -108,8 +105,9 @@ def _publish(uid: str, path: str, source: Publication, metadata: dict, seconds: 
 
     def recover(error: BaseException) -> Any:
         if isinstance(error, AlreadyExists):
-            # The create lost to a receipt that already exists. Repair usage
-            # only when that receipt never recorded the increment.
+            # The create lost to a receipt that already exists. That receipt was
+            # counted by the transaction that created it; at most its marker is
+            # missing, and stamping it never moves the summary.
             if _publish_for_recovery():
                 return None
             return UNRECOVERED
@@ -121,12 +119,12 @@ def _publish(uid: str, path: str, source: Publication, metadata: dict, seconds: 
             if row and row.get('state') == 'purged':
                 record_erasure('post_delete_publication')
                 return None
-            needs_usage = bool(row) and not row.get('usage_applied')
+            needs_marker = bool(row) and not row.get('usage_applied')
             # The audio is durable and the held receipt is what recovery reads.
             # Returning keeps the socket up instead of closing it with 1011.
             if (
                 is_retryable_firestore_transaction_error(error)
-                and (source.put_started or needs_usage)
+                and (source.put_started or needs_marker)
                 and _publish_for_recovery()
             ):
                 logger.warning(

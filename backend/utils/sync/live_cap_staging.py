@@ -9,7 +9,6 @@ import itertools
 import json
 import logging
 import time
-from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -305,15 +304,11 @@ def append(uid: str, path: str, group: Publication, fragment: Publication, metad
 
 # One document per fragment. Creating it is the claim: a second seal cannot
 # create the same id, so it cannot compose or count that fragment again.
+# Claims are permanent. An expiry could let a duplicate row re-claim a
+# fragment later and count it twice, so a cleanup may relax this only once it
+# can prove every row referencing the fragment is terminal and the source is
+# gone. The ledger is tiny, and account erasure deletes it with the user.
 _FRAGMENT_CLAIMS = 'stt_cap_fragment_claims'
-# A claim must outlive every window in which a second row could still seal the
-# same fragment. A row leaves staging WRITER_SECONDS after its last append, and
-# the redrive sweep retries a staging or sealing row on every rotation, so the
-# duplicate-row window is minutes to hours, not months. Ninety days covers a
-# redrive outage plus manual repair by orders of magnitude. The field is a
-# timestamp so a Firestore TTL policy on it (enabled separately) can bound the
-# ledger; TTL ignores numeric epochs.
-CLAIM_LEDGER_SECONDS = 90 * 24 * 60 * 60
 
 
 def _fragment_claim_ref(uid: str, fragment_id: str) -> Any:
@@ -321,11 +316,7 @@ def _fragment_claim_ref(uid: str, fragment_id: str) -> Any:
 
 
 def _fragment_claim(identity: str, fragment_id: str) -> dict:
-    return {
-        'hold_id': identity,
-        'fragment_id': fragment_id,
-        'expire_at': datetime.now(timezone.utc) + timedelta(seconds=CLAIM_LEDGER_SECONDS),
-    }
+    return {'hold_id': identity, 'fragment_id': fragment_id}
 
 
 def _claim_set_digest(fragment_ids: list[str]) -> str:
@@ -459,11 +450,19 @@ def seal(uid: str, identity: str, *, expired_only: bool = False) -> bool:
         # would close the live socket with 1011 even though the audio is durable.
         return _leave_for_redrive(error, ref)
 
+    # Composites an earlier attempt of this row composed over fragments a later
+    # attempt lost are unpublished garbage. Deleting them is up to
+    # 2**MAX_FRAGMENTS - 1 sequential GCS calls with 10s timeouts, so they run
+    # after the commit, never inside the transaction callback.
+    unpublished: tuple[list[str], list[str]] | None = None
+
     @firestore.transactional
     def commit(tx: Any):
+        nonlocal unpublished
         with external_write_fence(uid, firestore_client=client, transaction=tx):
             row = ref.get(transaction=tx).to_dict() or {}
             if row.get('state') != 'sealing':
+                unpublished = None
                 return False
             parts = row['stage_parts']
             if not 0 < len(parts) <= MAX_FRAGMENTS:
@@ -494,9 +493,10 @@ def seal(uid: str, identity: str, *, expired_only: bool = False) -> bool:
             claimed_ids = [part['id'] for part in claimed]
             if not claimed:
                 # This attempt may already have composed, then lost the claim
-                # commit and retried. Drop those unpublished destinations. The
-                # fragment sources belong to the rows that won the claims.
-                _drop_unpublished_targets(bucket, uid, identity, part_ids, [])
+                # commit and retried. Those destinations are dropped after the
+                # superseded row commits. The fragment sources belong to the
+                # rows that won the claims.
+                unpublished = (part_ids, [])
                 tx.set(
                     ref,
                     {
@@ -515,7 +515,9 @@ def seal(uid: str, identity: str, *, expired_only: bool = False) -> bool:
             if len(claimed) < len(by_id):
                 # An earlier attempt may have composed the wider set this row
                 # could still claim then. That object is unpublished garbage.
-                _drop_unpublished_targets(bucket, uid, identity, part_ids, claimed_ids)
+                unpublished = (part_ids, claimed_ids)
+            else:
+                unpublished = None
             # Composition copies authenticated encryption frames verbatim. The
             # reader decodes each independent Opus clock before joining PCM.
             target = _compose_target(bucket, uid, identity, claimed_ids)
@@ -574,6 +576,12 @@ def seal(uid: str, identity: str, *, expired_only: bool = False) -> bool:
         result = commit_publication(client, commit)
     except Exception as error:
         return _leave_for_redrive(error, ref)
+    if unpublished is not None:
+        # Post-commit cleanup, owned by the row that committed. Every candidate
+        # is this hold's own compose destination — never a fragment source,
+        # never another hold's object — and the committed set itself is never a
+        # candidate, so a failure here can only leave garbage behind.
+        _drop_unpublished_targets(bucket, uid, identity, unpublished[0], unpublished[1])
     cleanup(uid, ref)
     return result
 

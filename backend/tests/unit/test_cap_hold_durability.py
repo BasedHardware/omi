@@ -188,17 +188,18 @@ def test_retry_observing_purged_receipt_counts_post_delete_publication(monkeypat
     assert writes == []  # The tombstone wins: no manifest and no summary movement.
     upload.assert_not_called()
 
-    # A held receipt that never recorded its increment is repaired once, with
-    # the marker and the summary in the same transaction and no new upload.
+    # A held receipt without the marker was already counted by the writer that
+    # created it: receipt and summary increment commit in one transaction, so
+    # only the marker is stamped and the summary never moves again.
     receipt['state'] = 'held'
     manifest.publish('synthetic', 'unused', source, {'timestamp': 1000}, 60)
     assert held_metrics.ERASURE.labels(outcome='post_delete_publication')._value.get() == before + 1
-    assert writes == [('update', {'usage_applied': True}), ('set', ['count', 'seconds'])]
+    assert writes == [('update', {'usage_applied': True})]
     upload.assert_not_called()
 
     receipt['usage_applied'] = True
     manifest.publish('synthetic', 'unused', source, {'timestamp': 1000}, 60)
-    assert writes == [('update', {'usage_applied': True}), ('set', ['count', 'seconds'])]
+    assert writes == [('update', {'usage_applied': True})]
     upload.assert_not_called()
 
 
