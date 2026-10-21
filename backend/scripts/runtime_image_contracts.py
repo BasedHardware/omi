@@ -587,11 +587,19 @@ def workflow_contract_errors(contracts: Iterable[ImageContract]) -> list[str]:
     for contract in contracts:
         dockerfile = _repository_relative(contract.dockerfile)
         for workflow in contract.deployment_workflows:
-            workflow_text = _workflow_contract_text(workflow)
+            # Comments do not run: a marker left above a deleted step must not pass.
+            workflow_text = "\n".join(
+                line for line in _workflow_contract_text(workflow).splitlines() if not line.lstrip().startswith("#")
+            )
             workflow_name = _repository_relative(workflow)
             if not any(
                 marker in workflow_text
-                for marker in ("runtime_image_contracts.py smoke", 'runtime_image_contracts.py" smoke')
+                # role_images.py verify runs this smoke per role target (backend/scripts/role_images.py).
+                for marker in (
+                    "runtime_image_contracts.py smoke",
+                    'runtime_image_contracts.py" smoke',
+                    "role_images.py verify",
+                )
             ):
                 errors.append(f"{contract.name}: {workflow_name} does not smoke its registered runtime image")
             if dockerfile not in workflow_text:

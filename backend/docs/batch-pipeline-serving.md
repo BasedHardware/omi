@@ -492,10 +492,44 @@ pins/persists its provider before dispatch. With the flag on, positive strict
 local VAD, affirmative GPU padded-empty evidence, and a validated empty
 **multilingual** response produce `no_recoverable_speech`. Oversized and long-speech units that
 skipped the GPU padded retry still run strict VAD and multilingual recovery, but
-an empty multilingual response stays `failed_held` rather than terminal-empty.
-Timeouts, malformed responses, uncertain calls, missing evidence, and provider
-failures stay held. There are no additional calls after exhaustion and no
-paid-intent resets.
+an empty multilingual response from Modulate alone stays `failed_held` rather
+than terminal-empty. Timeouts, malformed responses, uncertain calls, missing
+evidence, and provider failures stay held. There are no paid-intent resets.
+
+**Second multilingual provider (long-speech units).** A unit with
+`padded_retry=skipped_long_speech` evidence, at least 5 s of strict-VAD speech
+and a validated empty Modulate response gets exactly one more call, to cloud
+Deepgram nova-3 with language detection (`second_transcribe`), inside the same
+`running` intent. Deepgram is the only other provider with a batch client
+(Soniox is streaming-only), and `config/stt_provider_policy.py` names it
+`HELD_RECOVERY_SECOND_PROVIDER` without admitting it to the general
+pre-recorded route. The batch allowance and consent are rechecked first; the
+client's own retry is disabled. Outcomes:
+
+- Deepgram returns words: the unit recovers with those words (ordinary
+  `success` result).
+- Deepgram also returns valid-empty: with the terminal-empty flag on, the unit
+  settles `no_recoverable_speech` with `recognition_evidence`
+  `{gpu_padded_retry: skipped_long_speech, multilingual_recovery: empty,
+  second_multilingual_recovery: empty}`. This is the honest outcome. No one may
+  listen to the audio, so the pipeline has to settle it on evidence: VAD saw
+  speech-like energy, and two independent multilingual ASR systems, with
+  different models and language coverage, both found no words in it. It is the
+  same quality of evidence as GPU padded-empty plus Modulate-empty. Another
+  `failed_held` would only say "unknown", and nothing would ever retry it.
+- Deepgram errors, times out, returns a malformed answer, or the allowance
+  refuses: the unit stays `failed_held` with Modulate's
+  `response_validation/empty_asr` failure, as before.
+
+A crash between the two calls leaves the intent `running`. The 900 s abandonment
+rule then settles it `failed_held` without another call. Each long-speech empty
+costs at most one extra Deepgram call of the unit's duration. Metering:
+`omi_batch_recovery_second_provider_total{provider=deepgram,outcome=words|empty|error|refused}`,
+the log `event=batch_recovery_second_provider provider=deepgram outcome=...`,
+and `omi_stt_cap_provider_audio_seconds{path=sync,outcome=accepted}` for both
+paid answers (`provider=modulate`, now also for valid-empty answers, and
+`provider=deepgram`). `BATCH_PIPELINE_SECOND_MULTILINGUAL_ENABLED=false` (kill
+switch, unset is on) restores Modulate-only recovery.
 
 This is an empty-words **terminal degradation**, distinct from silence. The
 encrypted result retains validated positive VAD and closed recognition evidence.

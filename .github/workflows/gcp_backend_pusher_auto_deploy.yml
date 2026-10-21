@@ -15,6 +15,7 @@ on:
       - 'backend/testing/parity_pack_v0/**'
       - 'backend/utils/**'
       - 'backend/pusher/**'
+      - 'backend/omi_logging.py'
       - 'backend/charts/pusher/**'
       - '.dockerignore'
       - 'backend/scripts/verify_pusher_source_closure.py'

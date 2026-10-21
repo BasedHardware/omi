@@ -97,6 +97,7 @@ struct ConversationDetailView: View {
   // ("impossible to assign speakers" reports).
   private var people: [Person] { AppState.current?.people ?? [] }
   @ObservedObject private var automation = ConversationDetailAutomationState.shared
+  @AppStorage(DefaultsKey.meetingMemoryBriefsEnabled.rawValue) private var meetingMemoryBriefsEnabled = false
 
   @StateObject private var appProvider = AppProvider()
   @StateObject private var summaryAppPicker = ConversationSummaryAppPicker()
@@ -151,6 +152,8 @@ struct ConversationDetailView: View {
   // Action states
   @State private var showDeleteConfirmation = false
   @State private var showEditDialog = false
+  @State private var showFollowUpDraft = false
+  @State private var followUpDraftText = ""
   @State private var editedTitle = ""
   @State private var isUpdatingTitle = false
   @State private var isDeleting = false
@@ -286,6 +289,19 @@ struct ConversationDetailView: View {
         },
         onCancel: { showEditDialog = false }
       )
+    }
+    .dismissableSheet(isPresented: $showFollowUpDraft) {
+      MeetingFollowUpDraftSheet(
+        text: $followUpDraftText,
+        onReviewTranscript: {
+          showFollowUpDraft = false
+          showTranscriptDrawer = true
+        },
+        onCopy: {
+          OmiToastCenter.shared.copy(followUpDraftText, confirming: "Draft copied")
+          showFollowUpDraft = false
+        },
+        onClose: { showFollowUpDraft = false })
     }
     .onAppear {
       showTranscriptDrawer = ConversationDetailAutomationState.shared.syncPresentedDetail(
@@ -513,6 +529,15 @@ struct ConversationDetailView: View {
       },
       onMoveToFolder: onMoveToFolder.map { move in { folderId in moveToFolder(folderId, using: move) } },
       onCopyTranscript: copyTranscript,
+      // Compose once per render: the same draft decides the menu item and fills the sheet.
+      onDraftFollowUp: (meetingMemoryBriefsEnabled
+        ? MeetingFollowUpDraftComposer.compose(from: displayConversation) : nil)
+        .map { text in
+          {
+            followUpDraftText = text
+            showFollowUpDraft = true
+          }
+        },
       onDiscussInChat: onDiscussInChat,
       onDelete: { showDeleteConfirmation = true },
       bannerInset: { headerBannerInset },

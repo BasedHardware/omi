@@ -108,7 +108,7 @@ def result_outcome(payload):
         if (
             payload.get('words') != []
             or payload.get('words_provider') != 'exhausted_recognizers'
-            or payload.get('recognition_evidence') != EMPTY_EVIDENCE
+            or payload.get('recognition_evidence') not in (EMPTY_EVIDENCE, TWO_PROVIDER_EMPTY_EVIDENCE)
         ):
             raise RecoveryFailure('payload_validation', 'invalid_payload')
         at_stage(
@@ -120,6 +120,13 @@ def result_outcome(payload):
 
 
 EMPTY_EVIDENCE = {'gpu_padded_retry': 'empty', 'multilingual_recovery': 'empty'}
+# The worker skipped the padded retry for long unknown-language speech, so two
+# independent multilingual recognizers stand in for it.
+TWO_PROVIDER_EMPTY_EVIDENCE = {
+    'gpu_padded_retry': 'skipped_long_speech',
+    'multilingual_recovery': 'empty',
+    'second_multilingual_recovery': 'empty',
+}
 
 
 class MultilingualEmpty(RecoveryFailure):
@@ -141,7 +148,11 @@ def padded_skipped(job):
     )
 
 
-def terminal_empty_payload(duration, spans):
+def padded_long_speech(job):
+    return job.get('worker_empty_evidence') == {'padded_retry': 'skipped_long_speech', 'version': 1}
+
+
+def terminal_empty_payload(duration, spans, evidence=EMPTY_EVIDENCE):
     payload = {
         'audio_seconds': duration,
         'speech_seconds': sum(s['end'] - s['start'] for s in spans),
@@ -151,7 +162,7 @@ def terminal_empty_payload(duration, spans):
         'words_provider': 'exhausted_recognizers',
         'recovery_version': 1,
         'outcome': 'no_recoverable_speech',
-        'recognition_evidence': dict(EMPTY_EVIDENCE),
+        'recognition_evidence': dict(evidence),
     }
     result_outcome(payload)
     return payload

@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import os
+import time
 from typing import Any
 
 from database import cap_hold_redrive as store
@@ -61,19 +62,31 @@ async def sweep() -> dict:
     if not execution_admission_configured():
         return counts
 
-    async def visit(snap: Any):
+    started = time.monotonic()
+    visited = set()
+
+    async def visit(snap: Any, turn: int):
         uid = owner(snap, 'processing_backlog')
         if uid is None or not funded_processing.enabled(uid):
-            return
+            return None
         try:
-            # Five concurrent owners share existing executors. Stop before the
-            # next item/piece after 900s; in-flight IO keeps adapter timeouts.
-            await processing_backlog_worker.run(uid, max_items=100, time_budget=900)
-            counts['visited'] += 1
+            # One newest-first candidate per owner per round. A fast owner
+            # cannot drain its 100 candidates before its peers get a turn.
+            more = await processing_backlog_worker.run(
+                uid, continuation=turn > 0, max_items=1, time_budget=max(0, 900 - (time.monotonic() - started))
+            )
+            visited.add(uid)
+            return snap if more else None
         except Exception as error:
             logger.warning('event=cap_hold_redrive outcome=worker_deferred exception_type=%s', type(error).__name__)
+            return None
 
     choices = await run_blocking(db_executor, store.discover, 'choices')
-    await asyncio.gather(*(visit(snap) for snap in choices))
+    for turn in range(100):
+        if not choices or time.monotonic() - started >= 900:
+            break
+        results = await asyncio.gather(*(visit(snap, turn) for snap in choices))
+        choices = [snap for snap in results if snap is not None]
+    counts['visited'] = len(visited)
     logger.info('event=cap_hold_redrive outcome=complete visited=%s sealed=%s', counts['visited'], counts['sealed'])
     return counts

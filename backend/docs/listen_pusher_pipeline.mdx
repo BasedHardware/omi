@@ -25,6 +25,15 @@ The [dispatch contract](stt-cap-dispatch.md) also documents sync holds, recovery
 BYOK funding, additive metrics and the per-client activation decision.
 Sync recovery fences a provider-bound `dispatched` receipt before paid STT or
 ingestion, and atomically checkpoints ingest proof alongside the conversation.
+Before every new recovery provider intent (including retries), an always-on,
+shared Redis Lua token bucket admits both audio seconds and one intent. Defaults
+are 60 audio-hours/hour and 12k intents/hour with at most one minute of burst
+credit. Pacing denial or Redis failure checkpoints `next_attempt_at` on the hold
+without creating an attempt or metered charge; release preserves that deadline.
+The durable sweep rotates owners in one-candidate rounds, newest-first inside
+each user's consent/cutoff. Sealing, cleanup and cached-result settlement remain
+independent. See [recovery pacing](stt-cap-dispatch.md#shared-recovery-pacing)
+for settings, telemetry and operational limits.
 Known non-calls clear the intent. After 30 minutes, ambiguous work reconciles
 from that proof or gets one second dispatch; a second ambiguity retains the audio
 as failed reconciliation. Successful siblings finalize independently. Flagged

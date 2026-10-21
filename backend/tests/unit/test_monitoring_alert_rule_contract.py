@@ -1898,3 +1898,20 @@ def test_live_stt_session_exhaustion_and_availability_escape_alerts():
         assert escape["data"][1]["model"]["expression"] == "$A == 0", export_name
         assert escape["for"] == "10m", export_name
         assert escape["noDataState"] == "OK", export_name
+
+
+def test_sync_failure_reason_and_firestore_commit_exhaustion_alerts():
+    # 2026-10-16: the fresh-lane switch raised sync upstream_error ~8x and went
+    # unnoticed for 5 days; Firestore Commit RESOURCE_EXHAUSTED windows expire
+    # in-flight transactions. Both must key on their real labels.
+    for export_name, rules in _all_rule_exports().items():
+        sync = {node["refId"]: node["model"] for node in rules["omi-sync-failure-reason-step"]["data"]}
+        assert "sum by (namespace, outcome)" in sync["A"]["expr"], export_name
+        assert "[7d] offset 60m" in sync["B"]["expr"], export_name
+        assert sync["C"]["expression"] == "$A >= 50 && $B > 3", export_name
+        assert rules["omi-sync-failure-reason-step"]["labels"]["severity"] == "critical", export_name
+        fs = rules["omi-firestore-commit-resource-exhausted"]
+        filters = fs["data"][0]["model"]["timeSeriesList"]["filters"]
+        assert "Commit" in filters and "RESOURCE_EXHAUSTED" in filters, export_name
+        assert fs["data"][2]["model"]["expression"] == "$B > 10", export_name
+        assert fs["for"] == "5m", export_name

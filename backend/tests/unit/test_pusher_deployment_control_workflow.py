@@ -448,7 +448,9 @@ def test_dev_auto_qualification_covers_every_pusher_dockerfile_source_input() ->
     source_paths = closure["final_stage_copy_sources"](ROOT / "backend/pusher/Dockerfile")
 
     for source_path in source_paths:
-        assert f"'{source_path}**'" in AUTO, f"development qualification does not trigger for {source_path}"
+        # Directory sources need a recursive glob; a single copied file (omi_logging.py) its exact path.
+        pattern = f"'{source_path}**'" if source_path.endswith("/") else f"'{source_path}'"
+        assert pattern in AUTO, f"development qualification does not trigger for {source_path}"
     assert "'backend/charts/pusher/**'" in AUTO
     assert "'.github/workflows/gcp_backend_pusher.yml'" in AUTO
 
