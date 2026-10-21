@@ -84,6 +84,42 @@ class Walk(NamedTuple):
     more: bool = False
 
 
+def error_type(error: BaseException) -> str:
+    """Bounded exception class token for an error log line.
+
+    google-cloud-firestore's ``@transactional`` retries a commit ``Aborted``
+    a fixed number of times, then raises ``ValueError('Failed to commit
+    transaction in N attempts')`` from the last ``Aborted``. That is commit
+    contention, the class the bounded outer retry names
+    ``FirestoreContentionExhausted``, so it is logged under that name. Any
+    other ``ValueError`` keeps its own name.
+    """
+    from database.firestore_transaction_retry import FirestoreAborted
+
+    if (
+        type(error) is ValueError
+        and isinstance(error.__cause__, FirestoreAborted)
+        and str(error).startswith('Failed to commit transaction')
+    ):
+        return 'FirestoreContentionExhausted'
+    return type(error).__name__
+
+
+def error_site_field(error: BaseException) -> str:
+    """` site=<file>:<line>` of the innermost backend frame; static code location only."""
+    import os
+    import traceback
+
+    try:
+        frames = traceback.extract_tb(error.__traceback__)
+    except Exception:
+        return ''
+    for frame in reversed(frames):
+        if 'site-packages' not in frame.filename and 'dist-packages' not in frame.filename:
+            return f' site={os.path.basename(frame.filename)}:{frame.lineno}'
+    return ''
+
+
 def fence_reason_field(error: BaseException) -> str:
     """Bounded privacy-fence reason for an error log line; never IDs or text."""
     from database.batch_pipeline_privacy import BatchPrivacyBlocked
@@ -105,11 +141,12 @@ def projection_phase(phase: str, policy: ProjectionPolicy | None = None) -> Iter
         yield
     except Exception as error:
         logger.info(
-            'event=batch_projection_phase phase=%s outcome=error elapsed_ms=%d exception_type=%s%s',
+            'event=batch_projection_phase phase=%s outcome=error elapsed_ms=%d exception_type=%s%s%s',
             phase,
             int((time.monotonic() - started) * 1000),
-            type(error).__name__,
+            error_type(error),
             fence_reason_field(error),
+            error_site_field(error),
         )
         raise
     else:
@@ -584,7 +621,7 @@ class Projector:
                 counts['partial' if self.complete_held(binding) is not None else 'waiting'] += 1
             except Exception as error:
                 counts['error'] += 1
-                logger.warning('event=batch_held_partial outcome=retry exception_type=%s', type(error).__name__)
+                logger.warning('event=batch_held_partial outcome=retry exception_type=%s', error_type(error))
         return counts
 
     def assign_record_silence(self, item, binding, session, *, hint=None):
@@ -734,7 +771,7 @@ class Projector:
                 if policy.projection_contention:
                     logger.error(
                         'event=batch_projection action=assignment outcome=error exception_type=%s%s',
-                        type(error).__name__,
+                        error_type(error),
                         fence_reason_field(error),
                     )
                 raise
@@ -979,7 +1016,9 @@ class Projector:
         def failed(error: BaseException) -> None:
             # Keep what this walk already persisted; the sweep resumes later.
             logger.error(
-                'event=batch_projection action=owner_chain outcome=error exception_type=%s', type(error).__name__
+                'event=batch_projection action=owner_chain outcome=error exception_type=%s%s',
+                error_type(error),
+                error_site_field(error),
             )
 
         def owe(segment_id: str, binding: ProjectionBinding) -> bool:
@@ -1150,7 +1189,9 @@ class Projector:
             except Exception as error:
                 counts['error'] += 1
                 logger.error(
-                    'event=batch_projection action=sweep outcome=error exception_type=%s', type(error).__name__
+                    'event=batch_projection action=sweep outcome=error exception_type=%s%s',
+                    error_type(error),
+                    error_site_field(error),
                 )
                 continue
             if chain and entry.get('projection_state') == 'pending':
@@ -1190,7 +1231,7 @@ class Projector:
                     except Exception as error:
                         logger.error(
                             'event=batch_projection action=sweep_chain outcome=error exception_type=%s',
-                            type(error).__name__,
+                            error_type(error),
                         )
         if pending_page:
             contention = self._sweep_finish(size, counts, touched | chained) or contention
@@ -1237,6 +1278,8 @@ class Projector:
             except Exception as error:
                 counts['error'] += 1
                 logger.error(
-                    'event=batch_projection action=sweep outcome=error exception_type=%s', type(error).__name__
+                    'event=batch_projection action=sweep outcome=error exception_type=%s%s',
+                    error_type(error),
+                    error_site_field(error),
                 )
         return contention

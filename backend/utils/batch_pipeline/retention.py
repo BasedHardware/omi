@@ -212,7 +212,29 @@ def expire_completed_segment(store: Any, uid: str, segment_id: str, now: float) 
             transaction.update(artifact.reference, {'cleanup_after': completed_at + retention})
         return True
 
-    return expire(client.transaction())
+    return run_retention_transaction(client, expire)
+
+
+def run_retention_transaction(client: Any, operation: Callable[[Any], Any]) -> Any:
+    """Run a retention transaction with the projection path's bounded retries.
+
+    A bare ``operation(client.transaction())`` is retried by the SDK only for a
+    commit ``Aborted``, reusing one transaction id: a read-time ``Aborted``, an
+    expired transaction (``InvalidArgument`` on commit) and the SDK's
+    exhausted-commit ``ValueError`` all escaped and failed the completion's
+    retention phase. Aborted and expired transactions write nothing, and the
+    body rereads every document, so a fresh transaction replays it safely.
+    """
+    from database._client import run_transactional
+    from database.firestore_transaction_retry import run_with_transaction_contention_retry
+
+    return run_with_transaction_contention_retry(
+        # One SDK commit attempt per transaction: the outer helper is the only
+        # commit-contention budget (5 bodies, not 5 x 5).
+        lambda: client.transaction(max_attempts=1),
+        lambda transaction: run_transactional(client, operation, initial_transaction=transaction),
+        operation_name='batch_retention',
+    )
 
 
 def cleanup_completed_artifacts(
