@@ -15,6 +15,20 @@ def jobs(text):
     return dict(zip(chunks[1::2], chunks[2::2]))
 
 
+# Deliberate, reviewed budget changes to nightly-reusable jobs. The default
+# contract is that a PR never changes a reusable job's runner or timeout, so
+# the nightly graph's cost stays what CI budgets. Record the new value here
+# with the PR that changed it; the assertion below then pins the exact value,
+# so any later drift still fails until this dict is edited in review.
+INTENTIONAL_BUDGET_CHANGES = {
+    # iOS Compile Check: the 40-min ceiling sat below the measured cold path
+    # (39:25 real steps + ~1 min post-job Post Setup Flutter cache save, run
+    # 39634604539 attempt 1), cancelling a healthy cold job after every real
+    # step passed. 50 restores wedge headroom; budget_p50 stays 19.
+    ("mobile-app-checks.yml", "ios-compile-check", "timeout-minutes"): "50",
+}
+
+
 class WorkflowTests(unittest.TestCase):
     def setUp(self):
         self.nightly = (WORKFLOWS / "main_nightly_full.yml").read_text()
@@ -66,7 +80,12 @@ class WorkflowTests(unittest.TestCase):
             for name in before:
                 for field in ("runs-on", "timeout-minutes"):
                     pattern = rf"(?m)^    {field}:.*$"
-                    self.assertEqual(re.findall(pattern, before[name]), re.findall(pattern, after[name]), (filename, name, field))
+                    after_values = re.findall(pattern, after[name])
+                    pinned = INTENTIONAL_BUDGET_CHANGES.get((filename, name, field))
+                    if pinned is not None:
+                        self.assertEqual([f"    {field}: {pinned}"], after_values, (filename, name, field))
+                        continue
+                    self.assertEqual(re.findall(pattern, before[name]), after_values, (filename, name, field))
 
 
 if __name__ == "__main__":
