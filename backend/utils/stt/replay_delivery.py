@@ -10,8 +10,13 @@ from collections import deque
 from dataclasses import dataclass
 from typing import Any, Awaitable, Callable, Iterator, cast
 
-from config.live_stt_replay import ReplayLimits, DEFAULT_REPLAY_LIMITS, replay_prefix_margin_seconds
-from utils.stt.live_metrics import REPLAY_SKIPPED
+from config.live_stt_replay import (
+    ReplayLimits,
+    DEFAULT_REPLAY_LIMITS,
+    live_tail_catchup_rate,
+    replay_prefix_margin_seconds,
+)
+from utils.stt.live_metrics import REPLAY_SKIPPED, TAIL_CATCHUP
 from utils.stt.live_reason import (
     LOCAL_DELIVERY_EXPIRED,
     LOCAL_DELIVERY_SEND_QUEUE_FULL,
@@ -28,6 +33,15 @@ LIVE_TAIL_SECONDS = REPLAY_WALL_BUDGET + 1.0
 TAIL_RESIDENCE_SECONDS = 28.0
 SHUTDOWN_CLEANUP_SECONDS = 2.0
 REPLAY_RATES = {'soniox': 1.0, 'modulate': 1.0, 'deepgram': 1.0, 'parakeet': 1.0}
+# Ceiling on the live-tail catch-up multiple per successor family. Soniox asks
+# for "real-time or near real-time" input and warns that prolonged bursts may
+# disconnect; Modulate and Deepgram document no ingest ceiling; the window leg
+# has no wire and a 60 s PCM cushion sized for a catch-up burst.
+TAIL_CATCHUP_CEILINGS = {'soniox': 2.0, 'modulate': 2.0, 'deepgram': 2.0, 'parakeet': 4.0}
+# The tail drains at the catch-up rate only while it holds more audio than
+# this; below it the pump returns to the sustained rate, so the residual lag
+# after a drain is at most this plus one packet.
+TAIL_CATCHUP_FLOOR_SECONDS = 1.0
 clock = time.monotonic
 sleep = asyncio.sleep
 logger = logging.getLogger(__name__)
@@ -78,6 +92,15 @@ def socket_replay_limits(socket: Any, family_name: str = 'unknown') -> ReplayLim
     return ReplayLimits(rate=rate, max_frame_bytes=REPLAY_PACKET_BYTES)
 
 
+def tail_catchup_rate(limits: ReplayLimits, family_name: str) -> float:
+    """Audio-time multiple the live tail may drain a held backlog at: the
+    endpoint's sustained rate times the configured catch-up multiple, capped by
+    the family ceiling. Equal to the sustained rate when the switch is off or
+    the family is unknown, so an unidentified endpoint never runs ahead."""
+    ceiling = TAIL_CATCHUP_CEILINGS.get(family_name, 1.0)
+    return limits.rate * max(1.0, min(live_tail_catchup_rate(), ceiling))
+
+
 REPLAY_PACKET_BYTES = 16 * 1024
 
 WRITER_SLOT_SECONDS = 2.0
@@ -98,11 +121,14 @@ class AudioDeliveryExpired(TimeoutError):
 class RecoveryWriterPace:
     """Opt-in per-recovery-leg wire cadence shared with the typed limits.
 
-    Sustained writes stay at <=1x audio time plus the bounded jitter allowance
-    of queued-plus-in-flight bytes. There is no catch-up credit: slots advance
-    from the previously armed slot (sub-frame timer oversleep is absorbed, not
-    accumulated), and a stall of one frame or longer rebases on the clock, so
-    a blocked write never earns debt that a resumed transport could burst with.
+    Sustained writes stay at or below ``rate`` audio time plus the bounded
+    jitter allowance of queued-plus-in-flight bytes. The rate is the leg's
+    catch-up ceiling, not its sustained pace: admission (``ReplayPacer``) sets
+    the sustained wire rate and only raises it while the live tail holds a
+    backlog. There is no catch-up credit: slots advance from the previously
+    armed slot (sub-frame timer oversleep is absorbed, not accumulated), and a
+    stall of one frame or longer rebases on the clock, so a blocked write never
+    earns debt that a resumed transport could burst with.
     """
 
     def __init__(self, sample_rate: int, rate: float, budget: Callable[[], float | None] = lambda: None) -> None:
@@ -160,8 +186,10 @@ class RecoveryWriterPace:
 def enable_recovery_writer_pace(
     socket: Any, sample_rate: int, limits: ReplayLimits, budget: Callable[[], float | None]
 ) -> None:
-    """Opt a recovery leg's real transport into writer cadence. Managed
-    wrappers and initial ordinary/PTT legs never see this call."""
+    """Opt a recovery leg's real transport into writer cadence at the tail's
+    catch-up ceiling, so the transport can carry a backlog drain the admission
+    pacer allows. Managed wrappers and initial ordinary/PTT legs never see
+    this call."""
     if getattr(socket, 'recovery_enabled', None) is False:
         return
     current = socket
@@ -172,7 +200,7 @@ def enable_recovery_writer_pace(
         seen.add(id(current))
         enable = getattr(current, 'enable_writer_pacing', None)
         if callable(enable):
-            enable(sample_rate, limits.rate, budget)
+            enable(sample_rate, tail_catchup_rate(limits, family(socket)), budget)
             return
         current = getattr(current, 'raw', None) or getattr(current, '_conn', None)
 
@@ -232,6 +260,7 @@ class ReplayPacer:
             limits = socket_replay_limits(socket, successor)
         self.limits = limits
         self.rate = limits.rate
+        self.catchup_rate = tail_catchup_rate(limits, family(socket, successor))
         self.max_frame_bytes = limits.max_frame_bytes
         self.next_send = clock()
         self.deadline: float | None = None
@@ -246,11 +275,14 @@ class ReplayPacer:
         replay: bool,
         admitted: bool = False,
         deadline: float | None = None,
+        catchup: bool = False,
     ) -> bool:
         # Owner departure and death are checked at each bounded packet interval;
         # missed slots never earn burst credit. Cancellation interrupts sleep.
         # ``deadline`` is the packet's absolute live-capture bound; the prefix
-        # wall in self.deadline still applies to replay sends.
+        # wall in self.deadline still applies to replay sends. ``catchup`` arms
+        # the next slot at the catch-up rate: only the live tail asks for it,
+        # and only while it holds a backlog, so the prefix never runs ahead.
         packet_deadline = deadline
         if replay and self.deadline is not None:
             packet_deadline = self.deadline if packet_deadline is None else min(packet_deadline, self.deadline)
@@ -308,7 +340,8 @@ class ReplayPacer:
                     accepted = await cast(Callable[[], Awaitable[bool]], complete)()
             else:
                 accepted = await cast(Callable[[], Awaitable[bool]], complete)()
-        self.next_send = _next_audio_slot(self.next_send, len(data) / (2 * self.sample_rate * self.rate), clock())
+        rate = self.catchup_rate if catchup else self.rate
+        self.next_send = _next_audio_slot(self.next_send, len(data) / (2 * self.sample_rate * rate), clock())
         await sleep(0)
         succeeded = accepted is True and not socket.is_connection_dead
         if succeeded and getattr(socket, 'idle_close_enabled', False) is True:
@@ -559,7 +592,11 @@ class ReplayTailSocket:
 
     The receiver's supervisor owns the tail task. At real-time input, <=26s
     PCM is retained here; overload rejects the leg instead of dropping audio,
-    and no accepted packet may wait past the hard residence bound.
+    and no accepted packet may wait past the hard residence bound. While the
+    tail holds more than TAIL_CATCHUP_FLOOR_SECONDS of audio the pump drains
+    it at the pacer's catch-up rate, so audio held through a dial, a prefix,
+    a client burst or a missed slot is recovered instead of carried as a
+    permanent lag until the bound is hit.
     """
 
     def __init__(
@@ -617,6 +654,9 @@ class ReplayTailSocket:
 
     def _tail_bound_bytes(self) -> float:
         return LIVE_TAIL_SECONDS * self.pacer.sample_rate * 2
+
+    def _catchup_floor_bytes(self) -> float:
+        return TAIL_CATCHUP_FLOOR_SECONDS * self.pacer.sample_rate * 2
 
     def _retire_expired(self) -> None:
         """Retire live intervals past the residence bound through the same
@@ -719,6 +759,7 @@ class ReplayTailSocket:
                         queue,
                         enqueued + 1 if isinstance(enqueued, int) else None,
                     )
+                    catchup = self._tail_bytes > self._catchup_floor_bytes()
                     if not await self.pacer.send(
                         self.connection,
                         packet,
@@ -727,6 +768,7 @@ class ReplayTailSocket:
                         replay=False,
                         admitted=entry.admitted,
                         deadline=packet_deadline,
+                        catchup=catchup,
                     ):
                         self._pending_write = None
                         if clock() >= packet_deadline and not self.connection.is_connection_dead:
@@ -763,6 +805,10 @@ class ReplayTailSocket:
                     entry.start = position + len(packet) // 2
                     entry.data = entry.data[len(packet) :]
                     self._tail_bytes -= len(packet)
+                    if catchup and self.pacer.catchup_rate > self.pacer.rate:
+                        TAIL_CATCHUP.labels(successor=family(self.connection)).inc(
+                            len(packet) / (2 * self.pacer.sample_rate)
+                        )
                 if expired_mid:
                     end = entry.start + len(entry.data) // 2
                     if self.tail and self.tail[0] is entry:
