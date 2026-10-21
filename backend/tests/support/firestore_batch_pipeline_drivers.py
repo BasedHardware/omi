@@ -19,14 +19,14 @@ def entries():
             covered_by=('database.batch_pipeline_shadow.pool_busy',),
             reason='thin adapter forwards the owning client and stage-qualified namespace unchanged',
             expect_observed=False,
-            body_digest='e99b9715c5f7ecba1df66a5a117248961e5eabcd4a0607b042a15b602f5e4e2c',
+            body_digest='3be03e458c8e65c535fed1475cbfae9c97421970c89dc751e2f4eaa4a46a4467',
         ),
         CoveredByEntry(
             'database.batch_pipeline_shadow.ShadowStore.reap',
             covered_by=('database.batch_pipeline_shadow.stale_jobs',),
             reason='bounded orchestration delegates its only query to stale_jobs; finish uses document transactions',
             expect_observed=False,
-            body_digest='02f361085857c5f60d91ab037ae614cee9cbf067d75a182bc7acf44367558ed1',
+            body_digest='e5ea33125389c09c8ad556fab4a6319142f223e4dfa655095dcd89c64e976a8d',
         ),
         CoveredByEntry(
             'database.batch_pipeline_store.FirestoreTransaction.ready_predecessor',

@@ -107,6 +107,14 @@ first hour. No additional nodes are requested; shadow uses existing provisioned
 GPU slack. Watch GPU busy minutes (`increase(omi_batch_shadow_gpu_seconds_total[1h])/60`)
 and normal latency, and keep the fleet within the operator's <=4-node ceiling.
 
+Before production activation, the lead/lane 1 train must qualify the shadow on
+isolated staging with staging-soak's synthetic corpus: prove no user-visible
+writes, the combined paid cap and dropping under load. Production 10% follows
+that staging pass (lead ruling 2026-10-21, bus `dbc28b`). Outcome counters have no
+environment or percentage labels; bind reads to external deployment/config
+identity. They alone cannot prove the gate's p95, debt, reads or a continuous
+same-percentage clean window, and `empty` is not an expected-silence guarantee.
+
 For an illustrative 100 eligible audio hours, uniform owners and no drops give
 10 shadow hours. If 5% need Modulate and 1% of all shadow duration also needs
 Deepgram, recovery is about $0.0462, excluding storage/CPU: `0.5 * $0.03 +
