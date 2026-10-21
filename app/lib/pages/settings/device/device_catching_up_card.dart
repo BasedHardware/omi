@@ -12,6 +12,7 @@ import 'package:omi/utils/sync/offline_sync_amounts.dart';
 /// outside capture/episode listeners, so streaming metrics never rescan recording history.
 typedef DeviceCatchUpLocal = ({
   int onDeviceSeconds,
+  int onPhoneSeconds,
   int totalSeconds,
   int movedSeconds,
   bool hasPending,
@@ -21,13 +22,21 @@ typedef DeviceCatchUpLocal = ({
 });
 
 DeviceCatchUpLocal deviceCatchUpLocal(List<Wal> wals) {
-  final amounts = SyncPipelineAmounts.of(wals);
+  // Sync progress notifies with the same list instance (the provider swaps it on
+  // status changes), so an identity+length memo keeps a per-chunk tick from
+  // rescanning recording history on the UI isolate.
+  final memo = _catchUpMemo[wals];
+  if (memo != null && memo.$1 == wals.length) return memo.$2;
+  final hidden = SyncPendingWork.hiddenDeviceTwinIds(wals);
+  // The same rows On the Way lists: terminal recordings belong to the bell, and
+  // a hidden twin is bookkeeping lag, not audio waiting anywhere.
+  final listed = wals
+      .where((w) => w.status == WalStatus.uploaded || (SyncPendingWork.isPendingWal(w) && !hidden.contains(w.id)))
+      .toList(growable: false);
+  final amounts = SyncPipelineAmounts.of(listed);
   DateTime? start, end;
-  var hasPending = false;
   final ids = <String>{};
-  for (final w in wals) {
-    if (!SyncPendingWork.isPendingWal(w) && w.status != WalStatus.uploaded) continue;
-    hasPending = true;
+  for (final w in listed) {
     if (w.conversationId case final id? when id.isNotEmpty) ids.add(id);
     if (w.timerStart <= 0 || w.seconds <= 0) continue;
     final from = DateTime.fromMillisecondsSinceEpoch(w.timerStart * 1000);
@@ -36,16 +45,21 @@ DeviceCatchUpLocal deviceCatchUpLocal(List<Wal> wals) {
     if (end == null || to.isAfter(end)) end = to;
   }
   final targets = ids.toList()..sort();
-  return (
+  final result = (
     onDeviceSeconds: amounts.onDeviceSeconds,
+    onPhoneSeconds: amounts.onPhoneSeconds,
     totalSeconds: amounts.onDeviceSeconds + amounts.onPhoneSeconds + amounts.processingSeconds,
     movedSeconds: amounts.onPhoneSeconds + amounts.processingSeconds,
-    hasPending: hasPending,
+    hasPending: listed.isNotEmpty,
     start: start,
     end: end,
     targetIds: targets.join('\n'),
   );
+  _catchUpMemo[wals] = (wals.length, result);
+  return result;
 }
+
+final Expando<(int, DeviceCatchUpLocal)> _catchUpMemo = Expando('deviceCatchUpLocal');
 
 /// Local transfers and server work share a card, even after upload or before targets are known.
 /// Server totals can overlap local WALs, so they are never added to the local transfer denominator.
@@ -91,9 +105,10 @@ class DeviceCatchUpSummary {
       if (title.isNotEmpty) titles.add(title);
     }
     return DeviceCatchUpSummary(
-      // Transfer completion does not mean transcription is done. With only server work, show
-      // indeterminate progress instead of a misleading full bar.
-      progress: local.hasPending && local.onDeviceSeconds > 0 && local.totalSeconds > 0
+      // Transfer completion does not mean transcription is done, and server-only
+      // work has no measured local total: both stay indeterminate. Any forward-
+      // moving local audio — on the device or already on the phone — is measured.
+      progress: local.hasPending && local.onDeviceSeconds + local.onPhoneSeconds > 0 && local.totalSeconds > 0
           ? (doneSeconds: local.movedSeconds, totalSeconds: local.totalSeconds)
           : null,
       start: start,

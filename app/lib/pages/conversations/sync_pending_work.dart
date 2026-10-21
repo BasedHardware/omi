@@ -43,11 +43,30 @@ abstract final class SyncPendingWork {
   static bool shouldShow(SyncProvider p) => hasServerJobs(p) || p.allWals.any(isPendingWal);
 
   /// Ids of device recordings whose phone copy already moved on: lagging
-  /// bookkeeping, not audio still on the device.
-  static Set<String> movedIds(SyncProvider p) => p.allWals
-      .where((w) => !walIsOnDevice(w) && (w.status == WalStatus.uploaded || w.status == WalStatus.synced))
-      .map((w) => w.id)
-      .toSet();
+  /// bookkeeping, not audio still on the device. An uploaded copy stands for its
+  /// source while it is transcribed; a synced copy only once its pieces cover
+  /// the whole recording, because a first chunk of a longer file leaves real
+  /// audio on the device that On the Way and the device card must still show.
+  static Set<String> hiddenDeviceTwinIds(List<Wal> wals) {
+    final uploadedIds = <String>{};
+    final syncedSeconds = <String, int>{};
+    for (final w in wals) {
+      if (walIsOnDevice(w)) continue;
+      if (w.status == WalStatus.uploaded) {
+        uploadedIds.add(w.id);
+      } else if (w.status == WalStatus.synced) {
+        syncedSeconds[w.id] = (syncedSeconds[w.id] ?? 0) + (w.seconds > 0 ? w.seconds : 0);
+      }
+    }
+    if (uploadedIds.isEmpty && syncedSeconds.isEmpty) return const {};
+    final hidden = <String>{};
+    for (final w in wals) {
+      if (w.status != WalStatus.miss || !walIsOnDevice(w)) continue;
+      final seconds = w.seconds > 0 ? w.seconds : 0;
+      if (uploadedIds.contains(w.id) || (syncedSeconds[w.id] ?? 0) >= seconds) hidden.add(w.id);
+    }
+    return hidden;
+  }
 
   /// Recordings uploaded and being transcribed on the server.
   static List<Wal> uploaded(SyncProvider p) =>
@@ -55,10 +74,8 @@ abstract final class SyncPendingWork {
 
   /// Recordings still on the device or the phone, waiting for or in a sync.
   static List<Wal> syncing(SyncProvider p) {
-    final moved = movedIds(p);
-    final pending = p.displaySortedWals
-        .where((w) => isPendingWal(w) && !(walIsOnDevice(w) && moved.contains(w.id)))
-        .toList(growable: false);
+    final hidden = hiddenDeviceTwinIds(p.allWals);
+    final pending = p.displaySortedWals.where((w) => isPendingWal(w) && !hidden.contains(w.id)).toList(growable: false);
     final sources = pending.where(walIsOnDevice).toList(growable: false);
     if (sources.isEmpty) return pending;
     // A device drain copies a recording to the phone piece by piece and keeps the source until the
@@ -153,8 +170,8 @@ abstract final class SyncPendingWork {
 /// The page still renders device rows read-only without the wearable, which is
 /// exactly what a phone problem needs.
 void openOfflineSyncDetails(BuildContext context, SyncProvider p, {bool? multiFileSync, bool phoneLocal = false}) {
-  final moved = SyncPendingWork.movedIds(p);
-  final hasDeviceWork = p.allWals.any((w) => w.status == WalStatus.miss && walIsOnDevice(w) && !moved.contains(w.id));
+  final hidden = SyncPendingWork.hiddenDeviceTwinIds(p.allWals);
+  final hasDeviceWork = p.allWals.any((w) => w.status == WalStatus.miss && walIsOnDevice(w) && !hidden.contains(w.id));
   if (!phoneLocal && hasDeviceWork && !context.read<DeviceProvider>().isDeviceStorageSupport) {
     showOmiAlert(context, title: context.l10n.v2Undetected, message: context.l10n.v2UndetectedMessage);
     return;

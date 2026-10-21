@@ -667,11 +667,13 @@ extension _DeviceLiveSections on _DeviceSettingsState {
     const gap = SizedBox(height: OmiSpacing.xxl);
     return Builder(builder: (context) {
       // One WAL pass per sync notification, shared by Stats and Right now.
-      // Capture/episode updates subscribe below this builder and never rescan it.
-      final sync = context.select<SyncProvider?, (DeviceCatchUpLocal, bool)>((s) => (
-            deviceCatchUpLocal(s?.allWals ?? const []),
-            s?.syncState.isProcessing ?? false,
-          ));
+      // Capture/episode updates subscribe below this builder and never rescan it;
+      // deviceCatchUpLocal memoizes on the WAL list identity, so a progress-only
+      // notify reuses the last snapshot instead of rescanning, and the server
+      // flag selects on its own.
+      final local =
+          context.select<SyncProvider?, DeviceCatchUpLocal>((s) => deviceCatchUpLocal(s?.allWals ?? const []));
+      final serverProcessing = context.select<SyncProvider?, bool>((s) => s?.syncState.isProcessing ?? false);
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -681,14 +683,14 @@ extension _DeviceLiveSections on _DeviceSettingsState {
                       batteryLevel: batteryLevel,
                       isCharging: isCharging,
                       heardTodaySeconds: _heardTodaySeconds(context),
-                      onDeviceSeconds: sync.$1.onDeviceSeconds,
+                      onDeviceSeconds: local.onDeviceSeconds,
                     )),
             gap,
           ],
           ListenableBuilder(
             listenable: _pendingWork,
             builder: (context, _) {
-              final rightNow = _rightNow(context, local: sync.$1, serverProcessing: sync.$2);
+              final rightNow = _rightNow(context, local: local, serverProcessing: serverProcessing);
               return rightNow.hasContent ? Column(children: [rightNow, gap]) : const SizedBox.shrink();
             },
           ),

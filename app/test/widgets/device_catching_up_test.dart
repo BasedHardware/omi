@@ -209,6 +209,46 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
+  testWidgets('a synced phone twin hides the card instead of opening an empty page', (tester) async {
+    final phone = _wal(minutes: 4, status: WalStatus.synced)..storage = WalStorage.disk;
+    final deviceTwin = _wal(minutes: 4);
+    await pump(tester, _Sync(wals: [phone, deviceTwin]));
+    expect(find.text('Catching up'), findsNothing);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('a synced first chunk keeps the card on its longer device source', (tester) async {
+    final chunk = _wal(minutes: 1, status: WalStatus.synced)..storage = WalStorage.disk;
+    final source = _wal(minutes: 4);
+    await pump(tester, _Sync(wals: [chunk, source]));
+    expect(find.text('Catching up'), findsOneWidget);
+    expect(find.text('0 of 4 min'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('device_catching_up_on_the_way')));
+    await tester.pumpAndSettle();
+    expect(find.text('All recordings are synced'), findsNothing);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('phone-only waiting audio is measured instead of Processing', (tester) async {
+    final phone = _wal(minutes: 180)..storage = WalStorage.disk;
+    await pump(tester, _Sync(wals: [phone]));
+    expect(find.text('Catching up'), findsOneWidget);
+    expect(find.text('180 of 180 min'), findsOneWidget);
+    expect(tester.widget<LinearProgressIndicator>(find.byType(LinearProgressIndicator)).value, 1.0);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('retry-exhausted audio does not count toward the progress total', (tester) async {
+    final failed = _wal(minutes: 180)
+      ..retryCount = 99
+      ..timerStart += 60;
+    final waiting = _wal(minutes: 1);
+    await pump(tester, _Sync(wals: [failed, waiting]));
+    expect(find.text('Catching up'), findsOneWidget);
+    expect(find.text('0 of 1 min'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('card wraps at 200 percent text scale', (tester) async {
     await tester.pumpWidget(MaterialApp(
         localizationsDelegates: AppLocalizations.localizationsDelegates,
