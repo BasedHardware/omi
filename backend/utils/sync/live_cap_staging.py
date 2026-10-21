@@ -4,19 +4,25 @@ Only staging rows may grow. A transaction serializes append, writer expiry and
 seal under both privacy authorities. Published held sources never change.
 """
 
+import json
+import logging
 import time
 from pathlib import Path
 from typing import Any
 
-from google.api_core.exceptions import NotFound, PreconditionFailed
+from google.api_core.exceptions import AlreadyExists, NotFound, PreconditionFailed
 from google.cloud import firestore
-from database._client import get_data_plane_firestore_client as get_firestore_client
+from database._client import (
+    get_data_plane_firestore_client as get_firestore_client,
+    is_retryable_firestore_transaction_error,
+)
 from database.legal_holds import external_write_fence
 from utils.encryption import encrypt
 from utils.other.storage import owner_storage_write_gate
 from utils.sync import cap_hold
-from utils.sync.live_cap_publication import Publication
-import json
+from utils.sync.live_cap_publication import UNRECOVERED, Publication, commit_publication
+
+logger = logging.getLogger(__name__)
 
 FRAGMENT_SECONDS = 15
 MAX_FRAGMENTS = 4
@@ -37,11 +43,18 @@ def append(uid: str, path: str, group: Publication, fragment: Publication, metad
     client = get_firestore_client()
     ref = cap_hold.holds(uid).document(group.identity)
     fields: dict[str, Any] = {}
+    staged_updates: dict[str, Any] | None = None
     attempted = fragment.is_retry(uid)
 
     @firestore.transactional
     def commit(tx: Any):
-        nonlocal fields, attempted
+        nonlocal fields, attempted, staged_updates
+        # Lock one attempt only. The retry helper sleeps after this returns.
+        with group.lock:
+            return _apply(tx)
+
+    def _apply(tx: Any):
+        nonlocal fields, attempted, staged_updates
         with external_write_fence(uid, firestore_client=client, transaction=tx):
             row = ref.get(transaction=tx).to_dict() or {}
             parts = row.get('stage_parts') or []
@@ -88,21 +101,66 @@ def append(uid: str, path: str, group: Publication, fragment: Publication, metad
                 'listed_at': row.get('listed_at', metadata['timestamp']),
                 'live_custody_version': 4,
             }
+            staged_updates = updates
             tx.set(ref, updates)
             return updates
 
-    # Serialize retry attempts using the same process-owned publication token.
-    with group.lock:
-        try:
-            return commit(client.transaction())
-        except Exception:
+    def _fragment_recorded(row: dict) -> bool:
+        return fragment.identity in row.get('stage_fragment_ids', []) or any(
+            part['id'] == fragment.identity for part in row.get('stage_parts') or []
+        )
+
+    def _stage_for_redrive(updates: dict) -> dict | None:
+        """Persist an uploaded fragment when every transaction id was retired.
+
+        A plain create is not the steady path. It runs only after the bounded
+        transactional budget, under the same non-transactional deletion fence,
+        and only while the row is still absent or staging. The redrive seals
+        that row once the writer lease expires. Returning the row keeps the
+        socket up: the bytes are durable, so this is not a 1011.
+        """
+        part = updates['stage_parts'][-1]
+        if part.get('id') != fragment.identity:
+            return None
+        with external_write_fence(uid, firestore_client=client):
+            snapshot = ref.get()
+            row = snapshot.to_dict() if snapshot.exists else None
+            if row and _fragment_recorded(row):
+                return row
+            if row and row.get('state') != 'staging':
+                return None
+            merged = dict(updates)
+            prior_parts = (row or {}).get('stage_parts') or []
+            merged['stage_parts'] = [*prior_parts, part]
+            merged['seconds'] = float((row or {}).get('seconds') or 0) + seconds
+            if row:
+                merged['created_at'] = row.get('created_at', merged['created_at'])
+                merged['started_at'] = row.get('started_at', merged['started_at'])
+                merged['listed_at'] = row.get('listed_at', merged['listed_at'])
+                ref.set(merged)
+            else:
+                try:
+                    ref.create(merged)
+                except AlreadyExists:
+                    current = ref.get().to_dict() or {}
+                    return current if _fragment_recorded(current) else None
+            return ref.get().to_dict()
+
+    def recover(error: BaseException) -> Any:
+        with group.lock:
             # Do not remove a fragment committed under a lost reply. Unknown
             # successful puts resolve their generation before exceptional cleanup.
             row = ref.get().to_dict() or {}
-            if fragment.identity in row.get('stage_fragment_ids', []) or any(
-                part['id'] == fragment.identity for part in row.get('stage_parts') or []
-            ):
+            if _fragment_recorded(row):
                 return row
+            if is_retryable_firestore_transaction_error(error) and staged_updates is not None:
+                staged = _stage_for_redrive(staged_updates)
+                if staged is not None:
+                    logger.warning(
+                        'event=stt_cap_live_held outcome=staged_for_redrive exception_type=%s',
+                        type(error).__name__,
+                    )
+                    return staged
             blob = cap_hold.get_private_cloud_sync_bucket().blob(
                 fields.get('audio_path') or f'chunks/{uid}/cap-held/{fragment.identity}.opus.enc'
             )
@@ -114,7 +172,9 @@ def append(uid: str, path: str, group: Publication, fragment: Publication, metad
                 blob.delete(if_generation_match=generation, timeout=10, retry=None)
             except (NotFound, PreconditionFailed):
                 pass
-            raise
+            return UNRECOVERED
+
+    return commit_publication(client, commit, recover=recover)
 
 
 def cleanup(uid: str, ref: Any) -> None:
@@ -153,9 +213,14 @@ def seal(uid: str, identity: str, *, expired_only: bool = False) -> bool:
             tx.update(ref, {'state': 'sealing'})
             return True
 
-    if not freeze(client.transaction()):
-        cleanup(uid, ref)
-        return False
+    try:
+        if not commit_publication(client, freeze):
+            cleanup(uid, ref)
+            return False
+    except Exception as error:
+        # A staging row with parts is already in redrive custody. Raising here
+        # would close the live socket with 1011 even though the audio is durable.
+        return _leave_for_redrive(error, ref)
 
     @firestore.transactional
     def commit(tx: Any):
@@ -209,6 +274,27 @@ def seal(uid: str, identity: str, *, expired_only: bool = False) -> bool:
 
     # No source cleanup on an uncertain compose/commit reply: it may already be
     # published. Retry resolves the same immutable destination and durable row.
-    result = commit(client.transaction())
+    # Exhausted retries leave the staging row in place for the redrive sweep.
+    try:
+        result = commit_publication(client, commit)
+    except Exception as error:
+        return _leave_for_redrive(error, ref)
     cleanup(uid, ref)
     return result
+
+
+def _leave_for_redrive(error: BaseException, ref: Any) -> bool:
+    """Keep the socket up only when the fragment row is already durable."""
+    if not is_retryable_firestore_transaction_error(error):
+        raise error
+    try:
+        row = ref.get().to_dict() or {}
+    except Exception:
+        raise error from None
+    if row.get('state') in {'staging', 'sealing'} and row.get('stage_parts'):
+        logger.warning(
+            'event=stt_cap_live_held outcome=staged_for_redrive exception_type=%s',
+            type(error).__name__,
+        )
+        return False
+    raise error

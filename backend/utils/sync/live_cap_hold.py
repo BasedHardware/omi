@@ -19,7 +19,7 @@ from utils.sync.cap_hold_lifecycle import ACTIVE as _ACTIVE, observe_publication
 
 from google.cloud import firestore
 
-from database._client import get_firestore_client
+from database._client import get_firestore_client, run_transactional
 from database.legal_holds import external_write_fence
 from utils.executors import db_executor, storage_executor, run_blocking
 from utils.observability.held_content import record_capture
@@ -96,7 +96,7 @@ def reserve(
             tx.create(receipt, {'bytes': size})
 
     with external_write_fence(uid):
-        commit(client.transaction())
+        run_transactional(client, commit, transient=True)
 
 
 class LiveHeldAudio:

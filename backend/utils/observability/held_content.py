@@ -21,6 +21,7 @@ CAPTURE_KINDS = ('lost', 'byte_mismatch', 'frame_mismatch', 'ack_without_authori
 CHOICE_OUTCOMES = ('ok', 'stale_period_409', 'no_capability', 'intent_only')
 RECOVERY_RESULTS = ('attempt', 'completed')
 ERASURE_OUTCOMES = ('failure', 'post_delete_publication')
+PUBLICATION_RETRY_OUTCOMES = ('retried_ok', 'exhausted')
 CHOICE_METHODS = ('get', 'put')
 
 CAPTURE = Counter(
@@ -73,6 +74,13 @@ FLEET_SNAPSHOT_TIMESTAMP = Gauge(
     'Select sibling gauges from the replica where this equals the max',
 )
 ERASURE = Counter('omi_held_content_erasure', 'Held erasure failures and post-delete publication', ['outcome'])
+PUBLICATION_RETRY = Counter(
+    'omi_held_content_publication_retry',
+    'Live cap publication attempts that retried a transient Firestore transaction. '
+    'retried_ok committed on a later fresh transaction; exhausted spent the bounded budget. '
+    'Labels are a closed set and never identify a person',
+    ['outcome'],
+)
 COHORT_SOURCE = Gauge('omi_held_content_cohort_source', 'Active held-content cohort source', ['source'])
 COHORT_PERCENT = Gauge('omi_held_content_cohort_percent', 'Active held-content cohort percent; 0 denies by percent')
 COHORT_REFRESH_FAILURES = Counter(
@@ -91,6 +99,8 @@ for _result in RECOVERY_RESULTS:
     RECOVERY.labels(result=_result)
 for _outcome in ERASURE_OUTCOMES:
     ERASURE.labels(outcome=_outcome)
+for _outcome in PUBLICATION_RETRY_OUTCOMES:
+    PUBLICATION_RETRY.labels(outcome=_outcome)
 for _source in ('doc', 'env', 'none'):
     COHORT_SOURCE.labels(source=_source)
 for _reason in ('read', 'schedule'):
@@ -136,6 +146,11 @@ def record_recovery(result: str) -> None:
 def record_erasure(outcome: str) -> None:
     if outcome in ERASURE_OUTCOMES:
         _inc(ERASURE, outcome=outcome)
+
+
+def record_publication_retry(outcome: str) -> None:
+    if outcome in PUBLICATION_RETRY_OUTCOMES:
+        _inc(PUBLICATION_RETRY, outcome=outcome)
 
 
 def _gauge_number(value, *, whole: bool) -> float:
