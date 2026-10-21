@@ -296,6 +296,11 @@ checks:
     triggers: ["scripts/pre-push", "scripts/pre_push_ci_prediction.py", ".github/scripts/test_pre_push_ci_prediction.py", "desktop/macos/scripts/desktop-flow-lint.py", "desktop/macos/scripts/desktop_flow_contract.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#9440: local CI prediction must select only bounded Flutter generator, desktop-flow, and Windows KG-worker checks for the final PR diff"
+  - id: pre-push-ci-verified-tests
+    command: ["python3", ".github/scripts/test_pre_push_ci_verified.py"]
+    triggers: ["scripts/pre-push", "scripts/pre_push_ci_verified.py", ".github/scripts/test_pre_push_ci_verified.py", ".github/scripts/check-deployment-concurrency.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "Fast-forwarding a branch to a SHA with terminal-green GitHub CI re-ran the full local pre-push suite (~55 min per rollout sync); the skip must hold only for green exact SHAs and fail closed on unknown, red or unreachable GitHub"
   - id: worktree-env-doctor-tests
     command: ["python3", ".github/scripts/test_worktree_env_doctor.py"]
     triggers: ["scripts/worktree_env_doctor.py", ".github/scripts/test_worktree_env_doctor.py", "scripts/pre-push", "backend/scripts/needs-typecheck.sh", ".gitignore", ".github/checks-manifest.yaml"]
