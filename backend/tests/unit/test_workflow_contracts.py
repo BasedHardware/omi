@@ -690,7 +690,7 @@ def test_mobile_ios_compile_check_is_path_gated_simulator_unsigned_and_secret_fr
     assert "has_app_ios_compile" in ios
     assert "has_app_ios_compile" in changes
     assert "has_app_ios_compile:" in detect_changes
-    assert "timeout-minutes: 40" in ios
+    assert "timeout-minutes: 50" in ios
     assert "fetch-depth: 0" in ios
     assert "run-swift-ci.sh --select-toolchain" in ios
     assert "Prove stable iOS compiler emits no Siri metadata" in ios
