@@ -1,5 +1,6 @@
 """Live global kill switch, eligibility and hard all-user Dream ceilings."""
 
+import hashlib
 import math
 import os
 
@@ -48,6 +49,25 @@ def allowlist_uids():
     return list(rollout_cohort_members('dream-agent'))
 
 
+def paid_percent():
+    """Share of paid owners in the Dream ramp; unset admits every paid owner, malformed admits none."""
+    raw = os.getenv('DREAM_AGENT_PAID_PERCENT', '100').strip()
+    if not raw.isascii() or not raw.isdigit() or int(raw) > 100:
+        return 0
+    return int(raw)
+
+
+def in_paid_ramp(uid):
+    """Stable per-owner bucket, so widening the percent only ever adds owners."""
+    bucket = int(hashlib.sha256(('dream-agent-paid:' + uid).encode()).hexdigest()[:8], 16) % 100
+    return bucket < paid_percent()
+
+
+def _paid_cohort(uid):
+    # Listed owners stay in at any percent; the member list is cached, not read per owner.
+    return in_paid_ramp(uid) or uid in allowlist_uids()
+
+
 def hunt_interval(size_bucket):
     """Idle time before a pass with no dirty work hunts again; 24h (6h heavy) unless overridden."""
     default = 6.0 if size_bucket == 'heavy' else 24.0
@@ -88,6 +108,7 @@ def may_be_eligible(uid):
         and not uid.startswith('dream-canary-')
         and eligibility() != 'invalid'
         and (eligibility() != 'allowlist' or _allowlisted(uid))
+        and (eligibility() != 'paid' or _paid_cohort(uid))
     )
 
 
@@ -98,7 +119,16 @@ def eligible(uid, user):
     return (
         policy == 'all'
         or (policy == 'allowlist' and _allowlisted(uid))
-        or (policy == 'paid' and (user.get('subscription') or {}).get('plan', user.get('plan', '')) in PAID_PLAN_IDS)
+        or (
+            policy == 'paid'
+            and (
+                uid in allowlist_uids()
+                or (
+                    in_paid_ramp(uid)
+                    and (user.get('subscription') or {}).get('plan', user.get('plan', '')) in PAID_PLAN_IDS
+                )
+            )
+        )
     )
 
 

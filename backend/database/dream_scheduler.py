@@ -82,7 +82,7 @@ def discover(database, now, *, pages=20):
                 if eligible(row.id, row.to_dict() or {}):
                     if row.id not in queued:
                         tx.set(target, {'due_at': due_time(states.get(row.id, {}), now)})
-                else:
+                elif row.id in queued:
                     tx.delete(target)
             if listed is None:
                 tx.set(cursor, {'after': rows[-1].id})
