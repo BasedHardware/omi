@@ -12,7 +12,11 @@ from typing import Any, Awaitable, Callable, Iterator, cast
 
 from config.live_stt_replay import ReplayLimits, DEFAULT_REPLAY_LIMITS
 from utils.stt.live_metrics import REPLAY_SKIPPED
-from utils.stt.live_reason import normalize_live_stt_reason
+from utils.stt.live_reason import (
+    LOCAL_DELIVERY_EXPIRED,
+    LOCAL_DELIVERY_SEND_QUEUE_FULL,
+    normalize_live_stt_reason,
+)
 from utils.stt.send_queue import audio_send_deadline
 from utils.stt.provider_stream_end import begin_stream_close, record_stream_end
 from utils.stt.socket import release_live_stt_socket
@@ -601,9 +605,11 @@ class ReplayTailSocket:
             getattr(self.connection, 'death_reason', None),
         )
 
-    def mark_capacity_full(self) -> None:
+    def mark_tail_full(self) -> None:
+        # The local tail buffer (not the provider) hit its live-residence
+        # bound; a local queue, never destination capacity.
         self._dead = True
-        self._local_reason = 'capacity_full'
+        self._local_reason = LOCAL_DELIVERY_SEND_QUEUE_FULL
 
     def _tail_bound_bytes(self) -> float:
         return LIVE_TAIL_SECONDS * self.pacer.sample_rate * 2
@@ -635,7 +641,7 @@ class ReplayTailSocket:
             start_sample = 0
         self._retire_expired()
         if self._tail_bytes + len(data) > self._tail_bound_bytes():
-            self.mark_capacity_full()
+            self.mark_tail_full()
             return False
         assert start_sample is not None
         received = self._birth.note(start_sample, start_sample + len(data) // 2) if self._birth is not None else clock()
@@ -653,7 +659,7 @@ class ReplayTailSocket:
         if self._closing or self.is_connection_dead:
             return False
         if self._tail_bytes + len(data) > self._tail_bound_bytes():
-            self.mark_capacity_full()
+            self.mark_tail_full()
             return False
         offset = 0
         for start, length in spans:
@@ -739,7 +745,10 @@ class ReplayTailSocket:
                             entry.start = position
                         self._dead = True
                         if clock() < packet_deadline and not self.connection.is_connection_dead:
-                            self._local_reason = 'capacity_full'
+                            # The write was still inside its deadline when it
+                            # failed to confirm: the tail's bound, not the
+                            # destination's capacity.
+                            self._local_reason = LOCAL_DELIVERY_EXPIRED
                         return
                     self._pending_write = None
                     entry.start = position + len(packet) // 2

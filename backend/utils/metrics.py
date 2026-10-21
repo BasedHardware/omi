@@ -1063,6 +1063,20 @@ OMI_STT_PROVIDER_CIRCUIT_OPEN = Gauge(
     ['provider', 'kind'],
 )
 
+# Trips of the same breaker (closed/half-open -> open), counted once per
+# transition by the bounded cause that opened it: the serve-death reason
+# (connection_lost, send_failed, ...) or the connect-failure reason that
+# reached the threshold. error_class uses the shared live-reason vocabulary;
+# 'untyped' covers trips whose caller could not name a cause. Re-arming an
+# already-open breaker does not count. The gauge above shows state; this
+# counter answers WHY it tripped (P34 2026-10-21: Parakeet selection breakers
+# tripped on 2-10 of 40 listen pods per 10m with the cause unlogged).
+OMI_STT_PROVIDER_CIRCUIT_TRIP_TOTAL = Counter(
+    'omi_stt_provider_circuit_trip_total',
+    'STT provider breaker transitions into open by bounded cause (serve-death or connect-failure reason)',
+    ['provider', 'kind', 'error_class'],
+)
+
 # Per-provider live-STT connection attempts on every connect path (legacy order
 # and configured chain), with a bounded error class for the failure tail.
 OMI_STT_PROVIDER_CONNECT_TOTAL = Counter(

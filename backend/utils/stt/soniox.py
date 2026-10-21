@@ -43,6 +43,12 @@ from utils.stt.soniox_capture_axis import (
     enabled as capture_axis_diagnostics_enabled,
 )
 from utils.stt.soniox_idle import IdleSonioxSocket, SonioxIdleBudget
+from utils.stt.live_reason import (
+    LOCAL_DELIVERY_DEATH_REASONS,
+    LOCAL_DELIVERY_EXPIRED,
+    LOCAL_DELIVERY_REPLAY_SEND_STALLED,
+    LOCAL_DELIVERY_SEND_QUEUE_FULL,
+)
 from utils.stt.replay_delivery import AudioDeliveryExpired, RecoveryWriterPace, clock
 from utils.stt.send_queue import AudioSendQueue
 from utils.observability.demand_cohort import create_connected_meter, create_wire_meter, telemetry_call
@@ -253,6 +259,10 @@ class SafeSonioxSocket(STTSocket):
         else:
             self._send_queue = asyncio.Queue(maxsize=2000)
         self._writer_pace: RecoveryWriterPace | None = None
+        # Death diagnostics only (local delivery deaths): when the oldest packet
+        # still queued was enqueued, and when the last wire write completed.
+        self._queued_at: float | None = None
+        self._last_write_at: float | None = None
         # A response can end in the middle of a word. Downstream joins distinct
         # segments with spaces, so retain the last word until its boundary is known.
         self._pending_segment: Optional[Dict[str, Any]] = None
@@ -317,6 +327,36 @@ class SafeSonioxSocket(STTSocket):
                 operation if operation in {'send', 'recv'} else 'unknown',
                 *fields,
             )
+        if typed_reason in LOCAL_DELIVERY_DEATH_REASONS:
+            self._log_local_delivery_death(typed_reason)
+
+    def _log_local_delivery_death(self, subtype: str) -> None:
+        """One bounded WARNING per local delivery death: the subtype and numbers only.
+
+        These deaths carry no transport error, so until now they never logged
+        and the three local causes were indistinguishable in prod (P32).
+        """
+        now = time.monotonic()
+        queue = self._send_queue
+        try:
+            queue_packets = queue.qsize() + getattr(queue, 'inflight', 0)
+        except Exception:
+            queue_packets = -1
+        queued_at = self._queued_at
+        last_write_at = self._last_write_at
+        logger.warning(
+            'Soniox local delivery death subtype=%s queue_packets=%d queue_age_seconds=%.3f '
+            'since_last_send_seconds=%.3f session_age_seconds=%.3f',
+            subtype,
+            queue_packets,
+            now - queued_at if queued_at is not None else -1.0,
+            now - last_write_at if last_write_at is not None else -1.0,
+            now - self._opened_at,
+        )
+
+    def _note_enqueued(self) -> None:
+        if self._queued_at is None:
+            self._queued_at = time.monotonic()
 
     def send(self, data: bytes) -> bool:
         with self._lock:
@@ -346,9 +386,10 @@ class SafeSonioxSocket(STTSocket):
                 spans = () if had_odd_byte or len(data) % 2 else capture_spans.get()
                 aligned = observed_audio(aligned, self._wire_epoch, spans)
             self._send_queue.put_nowait(aligned)
+            self._note_enqueued()
             self._diagnostic(lambda diagnostic: setattr(diagnostic, 'queued', diagnostic.queued + len(aligned) // 2))
         except asyncio.QueueFull:
-            self._mark_dead('send queue full', typed_reason='capacity_full')
+            self._mark_dead('send queue full', typed_reason=LOCAL_DELIVERY_SEND_QUEUE_FULL)
             return False
         return True
 
@@ -367,7 +408,7 @@ class SafeSonioxSocket(STTSocket):
                 timeout=timeout if timeout is not None else self.replay_limits.queue_wait_seconds,
             )
         except TimeoutError:
-            self._mark_dead('replay send queue stalled', typed_reason='capacity_full')
+            self._mark_dead('replay send queue stalled', typed_reason=LOCAL_DELIVERY_REPLAY_SEND_STALLED)
         return not (self._dead or self._closed or self._finishing)
 
     def finalize(self) -> None:
@@ -376,8 +417,9 @@ class SafeSonioxSocket(STTSocket):
                 return
             try:
                 self._send_queue.put_nowait(json.dumps({'type': 'finalize'}))
+                self._note_enqueued()
             except asyncio.QueueFull:
-                self._mark_dead('send queue full', typed_reason='capacity_full')
+                self._mark_dead('send queue full', typed_reason=LOCAL_DELIVERY_SEND_QUEUE_FULL)
 
         try:
             current_loop = asyncio.get_running_loop()
@@ -404,8 +446,9 @@ class SafeSonioxSocket(STTSocket):
             finally:
                 try:
                     self._send_queue.put_nowait(b'')
+                    self._note_enqueued()
                 except asyncio.QueueFull:
-                    self._mark_dead('send queue full', typed_reason='capacity_full')
+                    self._mark_dead('send queue full', typed_reason=LOCAL_DELIVERY_SEND_QUEUE_FULL)
 
         try:
             current_loop = asyncio.get_running_loop()
@@ -534,6 +577,7 @@ class SafeSonioxSocket(STTSocket):
         try:
             await self._ws.send(data)
             written = True
+            self._last_write_at = time.monotonic()
             telemetry_call(self, '_demand_wire', 'written', data)
             if isinstance(data, bytes):
                 self.stream_end.note_audio_sent()
@@ -562,6 +606,8 @@ class SafeSonioxSocket(STTSocket):
         try:
             while not self._closed and not self._dead:
                 telemetry_call(self, '_connected_meter', 'flush')
+                if self._send_queue.qsize() == 0 and getattr(self._send_queue, 'inflight', 0) == 0:
+                    self._queued_at = None
                 try:
                     data = await asyncio.wait_for(self._send_queue.get(), timeout=SONIOX_KEEPALIVE_SECONDS)
                 except asyncio.TimeoutError:
@@ -615,7 +661,7 @@ class SafeSonioxSocket(STTSocket):
                 if isinstance(data, bytes):
                     self._audio_sent = True
         except AudioDeliveryExpired:
-            self._mark_dead('live audio delivery expired', typed_reason='capacity_full')
+            self._mark_dead('live audio delivery expired', typed_reason=LOCAL_DELIVERY_EXPIRED)
         except websockets.exceptions.ConnectionClosed as e:
             self._mark_dead(
                 f'ws send closed: {e}',

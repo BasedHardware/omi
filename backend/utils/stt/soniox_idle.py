@@ -24,6 +24,7 @@ from utils.async_tasks import create_named_task
 from utils.stt.socket import STTSocket
 from utils.stt.soniox_capture_axis import disable_socket_diagnostics
 from utils.stt.replay_delivery import abort_replay_socket
+from utils.stt.live_reason import LOCAL_DELIVERY_SEND_QUEUE_FULL
 from utils.stt.live_metrics import soniox_idle_metrics
 from utils.observability.routing_cohort import current_routing_cohort
 from utils.stt.connect_metrics import CONNECT_FAILURE, CONNECT_SUCCESS, record_stt_provider_connect
@@ -254,7 +255,9 @@ class IdleSonioxSocket(STTSocket):
             # The serving send boundary awaits complete_send before accepting
             # this frame. Retain at most ten seconds, including VAD pre-roll.
             if len(self._pending) + len(data) > self._rate * 2 * 10:
-                self._dead, self._reason = True, 'capacity_full'
+                # The idle wrapper's own pending buffer filled: a local bound,
+                # never vendor capacity.
+                self._dead, self._reason = True, LOCAL_DELIVERY_SEND_QUEUE_FULL
                 return False
             self._pending.extend(data)
             if self._wire_epoch is not None:

@@ -697,7 +697,9 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
         self.finish()
 
     def _shed_capacity(self) -> None:
-        st._parakeet_circuit.record_serve_failure()  # type: ignore[reportPrivateUsage]  # shared circuit owner
+        st._parakeet_circuit.record_serve_failure(  # type: ignore[reportPrivateUsage]  # shared circuit owner
+            error_class='capacity_full'
+        )
         self.fail('capacity_full', capacity_subtype='buffer_cap')
 
     def finish(self) -> None:
@@ -1232,7 +1234,9 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
                 self.fail('capacity_full', capacity_subtype='queue_timeout')
                 response.raise_for_status()
             if response.status_code >= 500:
-                st._parakeet_circuit.record_serve_failure()  # type: ignore[reportPrivateUsage]  # shared circuit owner
+                st._parakeet_circuit.record_serve_failure(  # type: ignore[reportPrivateUsage]  # shared circuit owner
+                    error_class='provider_5xx'
+                )
                 self.fail('provider_5xx')
                 response.raise_for_status()
             if response.status_code == 413:
@@ -1257,7 +1261,9 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
             self.fail('timeout')
             raise
         except (TimeoutError, httpx.TimeoutException):
-            st._parakeet_circuit.record_serve_failure()  # type: ignore[reportPrivateUsage]  # shared circuit owner
+            st._parakeet_circuit.record_serve_failure(  # type: ignore[reportPrivateUsage]  # shared circuit owner
+                error_class='timeout'
+            )
             self.fail('timeout')
             raise
         except Exception:
