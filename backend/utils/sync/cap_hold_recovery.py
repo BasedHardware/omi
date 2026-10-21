@@ -102,6 +102,30 @@ def _response(receipts: dict) -> dict:
     return response
 
 
+def _settled_empty(receipt: dict[str, Any] | None) -> dict[str, Any] | None:
+    """A dispatch whose provider reply completed with no words is terminal.
+
+    The fenced result checkpoint proves the call finished, so there is nothing
+    to reconcile and nothing to charge; only a dispatch with no completion
+    checkpoint stays ambiguous.
+    """
+    if (
+        not receipt
+        or receipt.get('state') != 'dispatched'
+        or receipt.get('provider_result')
+        or not receipt.get('provider_empty')
+        or not receipt.get('provider_completed_at')
+    ):
+        return None
+    return {
+        **receipt,
+        'state': 'transcribed',
+        'has_content': False,
+        'seconds': 0,
+        'response': {'new_memories': [], 'updated_memories': []},
+    }
+
+
 async def _save(uid: str, snapshot: Any, row: dict, updates: dict) -> bool:
     saved = await run_blocking(db_executor, cap_hold.checkpoint, uid, snapshot.reference, row['lease_token'], updates)
     if saved:
@@ -183,7 +207,14 @@ async def _recover_row(uid: str, snapshot: Any, row: dict[str, Any]) -> bool:
             if receipt and receipt.get('state') == 'failed_reconciliation':
                 continue
             attempt = (receipt or {}).get('attempt', 1) if (receipt or {}).get('provider_result') else 1
-            if receipt and receipt.get('state') == 'dispatched' and not receipt.get('provider_result'):
+            settled = _settled_empty(receipt)
+            if settled is not None:
+                # Crash between the result checkpoint and the receipt save.
+                if not await save_receipt(name, settled):
+                    return False
+                record_reconciliation('settled_empty', snapshot.id, name)
+                receipt = settled
+            elif receipt and receipt.get('state') == 'dispatched' and not receipt.get('provider_result'):
                 if 'dispatched_at' not in receipt:
                     receipt = {
                         **receipt,
@@ -341,17 +372,23 @@ async def _recover_row(uid: str, snapshot: Any, row: dict[str, Any]) -> bool:
                     persisted = (refreshed.to_dict() or {}).get('piece_receipts') or {}
                     receipts.update(persisted)
                     row['piece_receipts'] = dict(receipts)
-                    pending = True
-                    continue
-                receipt = {
-                    **{k: v for k, v in intent.items() if k != 'provider_result'},
-                    'state': 'transcribed',
-                    'response': _stored(response),
-                    'seconds': intent['seconds'] if ok else 0,
-                    'has_content': bool(ok),
-                }
-                if not await save_receipt(name, receipt):
-                    return False
+                    receipt = _settled_empty(receipts.get(name))
+                    if receipt is None:
+                        pending = True
+                        continue
+                    if not await save_receipt(name, receipt):
+                        return False
+                    record_reconciliation('settled_empty', snapshot.id, name)
+                else:
+                    receipt = {
+                        **{k: v for k, v in intent.items() if k != 'provider_result'},
+                        'state': 'transcribed',
+                        'response': _stored(response),
+                        'seconds': intent['seconds'] if ok else 0,
+                        'has_content': bool(ok),
+                    }
+                    if not await save_receipt(name, receipt):
+                        return False
             if receipt['has_content']:
                 seconds = int(receipt['seconds'])
                 await run_blocking(

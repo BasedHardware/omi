@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 def record_reconciliation(outcome: str, hold_id: str, piece: str) -> None:
     if not enabled():
         return
-    if outcome not in {'cleared_noncall', 'reconciled_ingested', 'redispatched', 'failed'}:
+    if outcome not in {'cleared_noncall', 'reconciled_ingested', 'redispatched', 'failed', 'settled_empty'}:
         raise ValueError('unknown reconciliation outcome')
     RECONCILIATION.labels(outcome=outcome).inc()
     logger.info('event=stt_cap_recovery_reconciliation outcome=%s hold_id=%s piece=%r', outcome, hold_id, piece)
