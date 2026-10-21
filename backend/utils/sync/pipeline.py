@@ -170,6 +170,7 @@ from utils.stt.speaker_match import mean_embedding, select_speaker_match
 from utils.stt.sync_speaker_evidence import collect_speaker_audio
 from utils.observability.speaker_identification import SYNC_SPEAKER_DECISIONS
 from utils.stt.vad import vad_is_empty
+from utils.sync.clock_run import SYNC_CLOCK_RUN_FIELD, clock_run_from_path, segment_name_prefix
 from utils.sync.files import decode_files_to_wav, get_timestamp_from_path, get_wav_duration
 from utils.sync.recording_intent import user_selected_recording
 from utils.sync.input_limits import (
@@ -972,6 +973,8 @@ def retrieve_vad_segments(
 
     aseg = AudioSegment.from_wav(path)
     path_dir = '/'.join(path.split('/')[:-1])
+    # An estimated-clock run follows the audio into every derived segment.
+    clock_prefix = segment_name_prefix(path)
 
     try:
         for i, segment in enumerate(segments):
@@ -986,11 +989,11 @@ def retrieve_vad_segments(
             # timestamp (capture_start + vad_offset). Reserve the path under the lock
             # before export so a concurrent worker never silently overwrites it.
             with segment_source_lock or contextlib.nullcontext():
-                segment_path = f'{path_dir}/{segment_timestamp}.wav'
+                segment_path = f'{path_dir}/{clock_prefix}{segment_timestamp}.wav'
                 dup = 0
                 while segment_path in segmented_paths:
                     dup += 1
-                    segment_path = f'{path_dir}/dup{dup}_{segment_timestamp}.wav'
+                    segment_path = f'{path_dir}/dup{dup}_{clock_prefix}{segment_timestamp}.wav'
                 segmented_paths.add(segment_path)
             segment_aseg = aseg[segment['start'] * 1000 : segment['end'] * 1000]
             try:
@@ -1624,6 +1627,7 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
             logger.warning(f'sync: ordered assignment wait timed out for {path}, proceeding out of order')
 
         timestamp = get_timestamp_from_path(path)
+        clock_run = clock_run_from_path(path)
         # The content identity survives job-directory changes and retry. Direct
         # legacy callers retain a capture-time scope, never one shared by all WALs.
         for segment in transcript_segments:
@@ -1643,6 +1647,7 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
             source,
             client_device_id,
             is_locked,
+            clock_run,
         )
         closest_memory = (
             None
@@ -1711,12 +1716,15 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
                     if cap_recovery_checkpoint and cap_recovery_checkpoint.get('capture_partition')
                     else {}
                 ),
+                **({'clock_run': clock_run} if clock_run else {}),
             ),
             created_at=started_at,
             structured=build_deterministic_minimum_structured(create_memory, uid=uid),
             **create_memory.model_dump(),
         ).model_dump()
         incoming['data_protection_level'] = data_protection_level
+        if clock_run:
+            incoming[SYNC_CLOCK_RUN_FIELD] = clock_run
         apply_capture_evidence_dark_write(incoming, source_position_map, transcript_segments)
         if lineage_binding is not None and target_conversation_id:
             incoming['_sync_lineage_binding'] = lineage_binding
