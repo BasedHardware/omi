@@ -2808,17 +2808,20 @@ def set_conversation_as_discarded(uid: str, conversation_id: str):
     _sync_conversation_search_index(uid, conversation_id)
 
 
-def discard_by_relevance(
+def rule_discard_outcome(
     uid: str,
     conversation_id: str,
     relevance_decision: dict,
     *,
     expected_sync_content_revision: Optional[int] = None,
-) -> bool:
+) -> str:
     """Hide a row the relevance rules settled after the fact (backfill).
 
     Transactional so it never overrides what happened since the scan: a
-    deleted, already hidden, or user-restored row is left alone.
+    deleted, user-restored or revised row is ``refused``. A row that is already
+    stored hidden is ``already_discarded``: that state is what the caller wanted,
+    but nothing changed, so no cache or index side effect runs. Only a write
+    returns ``discarded``.
     """
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
@@ -2827,24 +2830,47 @@ def discard_by_relevance(
     def _discard(transaction):
         snapshot = conversation_ref.get(transaction=transaction)
         if not getattr(snapshot, 'exists', False):
-            return False
+            return 'refused'
         current = snapshot.to_dict() or {}
+        if is_soft_deleted(current):
+            return 'refused'
+        if current.get('discarded'):
+            return 'already_discarded'
         status = getattr(current.get('status'), 'value', current.get('status'))
-        if is_soft_deleted(current) or current.get('discarded') or status != 'completed' or is_user_curated(current):
-            return False
+        if status != 'completed' or is_user_curated(current):
+            return 'refused'
         if (
             expected_sync_content_revision is not None
             and current.get('sync_content_revision') != expected_sync_content_revision
         ):
-            return False
+            return 'refused'
         transaction.update(conversation_ref, {'discarded': True, 'relevance_decision': relevance_decision})
-        return True
+        return 'discarded'
 
-    discarded = run_transactional(db, _discard)
-    if discarded:
+    outcome = run_transactional(db, _discard)
+    if outcome == 'discarded':
         invalidate_people_stats_cache(uid)
         _sync_conversation_search_index(uid, conversation_id)
-    return discarded
+    return outcome
+
+
+def discard_by_relevance(
+    uid: str,
+    conversation_id: str,
+    relevance_decision: dict,
+    *,
+    expected_sync_content_revision: Optional[int] = None,
+) -> bool:
+    """True only when this call hid the row; see ``rule_discard_outcome``."""
+    return (
+        rule_discard_outcome(
+            uid,
+            conversation_id,
+            relevance_decision,
+            expected_sync_content_revision=expected_sync_content_revision,
+        )
+        == 'discarded'
+    )
 
 
 def restore_conversation_from_discarded(uid: str, conversation_id: str):

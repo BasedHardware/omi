@@ -43,6 +43,28 @@ def operate(database, operation):
         dream_turns.settle(OWNER, 'synthetic-run', turn, firestore_client=database)
 
 
+@pytest.mark.parametrize('kind', ['known_zero', 'unknown_usage', 'billed_tokens', 'billed_cost', 'unpriced'])
+def test_only_known_zero_settlement_bypasses_full_receipt_cap(database, kind):
+    lease = database.rows[STATE]['lease']
+    lease['turn_receipts'] = [
+        {'tokens': 1, 'accounted_tokens': 1, 'cached_tokens': 0, 'cost_status': 'priced', 'cost_micro_usd': 1}
+        for _ in range(128)
+    ]
+    operate(database, 'reserve')
+    turn = Turn(tokens=int(kind == 'billed_tokens'), accounted_tokens=int(kind in {'unknown_usage', 'billed_tokens'}))
+    turn.cost_status = 'unpriced' if kind == 'unpriced' else 'priced'
+    turn.cost_micro_usd = int(kind == 'billed_cost')
+    if kind != 'known_zero':
+        with pytest.raises(ValueError, match='dream_turn_cap'):
+            dream_turns.settle(OWNER, 'synthetic-run', turn, firestore_client=database)
+        return
+    dream_turns.settle(OWNER, 'synthetic-run', turn, firestore_client=database)
+    lease = database.rows[STATE]['lease']
+    assert len(lease['turn_receipts']) == 128 and lease['minute_hold'] is None
+    assert lease['budget_charge_usd'] == pytest.approx(0.000128)
+    assert sum(row.get('tokens', 0) for key, row in database.rows.items() if key[0] == 'dream_scheduler') == 0
+
+
 def commit_exhausted():
     """Produce the SDK's real ValueError-from-Aborted, without any fake writes."""
 

@@ -84,6 +84,8 @@ def _log_pass_failure(exc, *, stage):
 
 
 MINUTE_HEADROOM_RETRIES = 3
+CAPACITY_CALL_RETRIES = 5
+CAPACITY_RETRY_HEADROOM_SECONDS = 20
 PROVIDER_STOP_CODES = frozenset({'dream_gateway_rejected', 'dream_gateway_failure'})
 # A billed but unusable model reply late in a pass; staged work is still verified.
 MODEL_OUTPUT_STOP_CODES = frozenset({'dream_response_truncated', 'dream_invalid_tool_calls'})
@@ -260,6 +262,26 @@ async def run_session(
     budget_notice_sent = False
 
     async def invoke(lane, mount, messages):
+        for attempt in range(CAPACITY_CALL_RETRIES + 1):
+            try:
+                return await invoke_once(lane, mount, messages)
+            except dream_harness_transport.CapacityWait as exc:
+                if not exc.retryable or attempt == CAPACITY_CALL_RETRIES:
+                    raise
+                await active()
+                mode, allowlisted = admission_for(uid)
+                if not await dream_capacity.wait_for_capacity(
+                    deadline,
+                    CAPACITY_RETRY_HEADROOM_SECONDS,
+                    mode=mode,
+                    owner_allowlisted=allowlisted,
+                ):
+                    raise
+                logger.info('Dream capacity retry lane=%s attempt=%d', lane, attempt + 1)
+                # invoke_once rechecks the kill switch/lease and reserves this attempt.
+                # The shaped loop retains history, tool results and staged proposals.
+
+    async def invoke_once(lane, mount, messages):
         nonlocal budget_notice_sent, stage
         await active()
         stage = 'request_sizing'
@@ -347,12 +369,13 @@ async def run_session(
                         raise
                     await asyncio.sleep(pause)
                     await active()
-        report['model_lanes'].append(lane)
         stage = 'model_turn'
         sink = {}
+        counted = False
         try:
             if turn is not None:
                 result = await turn(uid, lane, mount, messages)
+                report['model_lanes'].append(lane)
                 await usage(result)
                 if lane == dream_harness_transport.MAIN_LANE and result.prompt_tokens:
                     main_history['prompt_tokens'] = result.prompt_tokens
@@ -380,6 +403,8 @@ async def run_session(
                 prior_message_count=prior_count,
                 cached_tokens_estimate=cached_estimate,
             )
+            report['model_lanes'].append(lane)
+            counted = True
             if lane == dream_harness_transport.MAIN_LANE and result.prompt_tokens:
                 main_history['prompt_tokens'] = result.prompt_tokens
                 main_history['messages'] = len(messages)
@@ -391,6 +416,10 @@ async def run_session(
             stage = 'tools' if lane == dream_harness_transport.MAIN_LANE else 'verify'
             return result
         finally:
+            # A call counts as a model turn once its transport completed, even if the
+            # payload then fails to parse; zero-cost capacity retries never complete.
+            if not counted and turn is None and sink.get('transport_complete'):
+                report['model_lanes'].append(lane)
             if lane == dream_harness_transport.VERIFY_LANE and sink.get('transport_complete'):
                 report['verifier_transport_responses'] = report.get('verifier_transport_responses', 0) + 1
             report['usage_unknown'] |= sink.get('usage_unknown', False)
@@ -844,7 +873,7 @@ async def drain(*, limit=5000):
                         results.append(report)
                         if report['status'] != 'waiting':
                             break
-                        await asyncio.sleep(60)
+                        await asyncio.sleep(dream_capacity.COOLDOWN_SECONDS)
 
             async with asyncio.TaskGroup() as group:
                 for _ in range(concurrency()):

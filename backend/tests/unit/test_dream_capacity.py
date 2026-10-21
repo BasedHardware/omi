@@ -238,3 +238,60 @@ async def test_keyless_probe_denial_is_advisory_without_a_provider_fallback(monk
     assert len(requests) == (0 if credential_failure else 1)
     assert dream_capacity._local().probe_failed_until > 0
     saturated.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_38_saturation_cooldown_is_short_in_both_local_and_shared_state(monkeypatch):
+    redis = fakeredis.aioredis.FakeRedis(decode_responses=True)
+    state = ReservationState(redis)
+    monkeypatch.setattr(dream_capacity, 'reservation_state', state)
+    try:
+        await dream_capacity.mark_saturated(NEW)
+        assert 0 < dream_capacity._local().cooldowns[NEW] - dream_capacity.time.monotonic() <= 10
+        assert 0 < await redis.ttl(state.key() + ':saturated:' + NEW) <= 10
+        # Gateway observations use the same short TTL, including another process's 429.
+        await state.record(NEW, 'dedicated', 429, None)
+        assert 0 < await redis.ttl(state.key() + ':saturated:' + NEW) <= 10
+    finally:
+        await redis.aclose()
+
+
+@pytest.mark.asyncio
+async def test_capacity_wait_uses_bounded_jitter_and_rechecks_shared_evidence(monkeypatch):
+    now, pauses = [0], []
+    available = AsyncMock(side_effect=[None, None, NEW])
+    monkeypatch.setattr(dream_capacity, 'available_model', available)
+
+    async def sleep(seconds):
+        pauses.append(seconds)
+        now[0] += seconds
+
+    monkeypatch.setattr(dream_capacity.asyncio, 'sleep', sleep)
+    assert await dream_capacity.wait_for_capacity(200, 20, clock=lambda: now[0])
+    assert len(pauses) == 3
+    assert all(lo <= pause <= hi for pause, lo, hi in zip(pauses, [5, 10, 15], [10, 20, 30]))
+    assert available.await_count == 3
+    pauses.clear()
+    available.reset_mock()
+    assert not await dream_capacity.wait_for_capacity(now[0] + 21, 20, clock=lambda: now[0])
+    assert not pauses and available.await_count == 0
+
+
+@pytest.mark.asyncio
+async def test_capacity_wait_stays_fail_closed_and_is_cancellable(monkeypatch):
+    pauses = []
+    monkeypatch.setattr(dream_capacity, 'available_model', AsyncMock(return_value=None))
+
+    async def sleep(seconds):
+        pauses.append(seconds)
+
+    monkeypatch.setattr(dream_capacity.asyncio, 'sleep', sleep)
+    assert not await dream_capacity.wait_for_capacity(1000, 20, clock=lambda: 0)
+    assert len(pauses) == 6 and all(5 <= pause <= 30 for pause in pauses)
+
+    async def cancelled(seconds):
+        raise asyncio.CancelledError
+
+    monkeypatch.setattr(dream_capacity.asyncio, 'sleep', cancelled)
+    with pytest.raises(asyncio.CancelledError):
+        await dream_capacity.wait_for_capacity(1000, 20, clock=lambda: 0)

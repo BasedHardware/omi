@@ -35,7 +35,12 @@ from utils.stt import live_session, streaming as st
 from utils.stt.resilient_stream import ResilientAudio
 import json
 
-from config.live_stt_replay import ReplayLimits, parse_replay_limits
+from config.live_stt_replay import (
+    DEFAULT_REPLAY_PREFIX_MARGIN_SECONDS,
+    REPLAY_PREFIX_MARGIN_ENV,
+    ReplayLimits,
+    parse_replay_limits,
+)
 from routers.listen.runtime import ListenSessionRuntime
 from tests.unit.test_live_cost_router import MemoryRedis
 from tests.unit.test_live_replay_provider_pairs import Transport
@@ -79,7 +84,10 @@ def _stt_failover_recovery_on(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 BYTES_PER_SECOND = 16000 * 2
-PREFIX_SECONDS = 20
+PREFIX_WALL_SECONDS = 20
+# Audio retained for the prefix under shipped defaults: the wall less the
+# margin held back so 1x delivery lands inside it.
+PREFIX_SECONDS = PREFIX_WALL_SECONDS - int(DEFAULT_REPLAY_PREFIX_MARGIN_SECONDS)
 SAMPLE_RATE = 16000
 
 
@@ -88,7 +96,9 @@ def shipped_defaults(monkeypatch):
     """Ordinary qualification always runs the shipped 20s/60s/28s budgets;
     full-span stress opts in explicitly inside the test that needs it."""
 
-    monkeypatch.setattr(replay_delivery, 'REPLAY_PREFIX_SECONDS', 20.0)
+    assert DEFAULT_REPLAY_PREFIX_MARGIN_SECONDS == int(DEFAULT_REPLAY_PREFIX_MARGIN_SECONDS)
+    monkeypatch.delenv(REPLAY_PREFIX_MARGIN_ENV, raising=False)
+    monkeypatch.setattr(replay_delivery, 'REPLAY_PREFIX_SECONDS', float(PREFIX_WALL_SECONDS))
     monkeypatch.setattr(replay_delivery, 'TAIL_RESIDENCE_SECONDS', 28.0)
     monkeypatch.setattr(recovery_state, 'RECOVERY_EPISODE_SECONDS', 60.0)
 
@@ -787,7 +797,7 @@ async def test_directed_recovery_under_burst_closing_transport(monkeypatch, virt
         raw = raws[-1]
         await until(lambda: raw._ws.byte_count == len(kept) + len(tail))
         assert raw._ws.pcm == kept + tail
-        assert REPLAY_SKIPPED.labels(**labels)._value.get() - skipped_before == pytest.approx(115.0)
+        assert REPLAY_SKIPPED.labels(**labels)._value.get() - skipped_before == pytest.approx(135.0 - PREFIX_SECONDS)
         assert not raw.is_connection_dead
         actual.host.request.websocket.close.assert_not_awaited()
         await actual._drain_stt_sockets()
@@ -1160,10 +1170,13 @@ async def test_selected_target_declared_limits_shape_prefix(monkeypatch, virtual
     try:
         assert await actual._failover_stt_socket()
         raw = dialed[-1]
-        expected = captured[-10 * BYTES_PER_SECOND :]
+        # (wall - margin) wall seconds at the declared 0.5x rate.
+        expected = captured[-int(PREFIX_SECONDS * 0.5 * BYTES_PER_SECOND) :]
         await until(lambda: raw._ws.byte_count == len(expected))
         assert raw._ws.pcm == expected
-        assert REPLAY_SKIPPED.labels(**labels)._value.get() - skipped_before == pytest.approx(125.0)
+        assert REPLAY_SKIPPED.labels(**labels)._value.get() - skipped_before == pytest.approx(
+            135.0 - PREFIX_SECONDS * 0.5
+        )
         assert all(len(frame) <= 8192 for frame in raw._ws.sent if isinstance(frame, bytes))
         assert raw._send_queue.high_water <= 1
         assert raw._ws.sent_at[1] - raw._ws.sent_at[0] >= 0.5
@@ -1296,6 +1309,53 @@ async def test_queued_live_frame_never_writes_past_capture_age_deadline(monkeypa
         await abort_replay_socket(delivery)
         assert transport.closed
         assert raw._send_task.done() and raw._recv_task.done()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('kind', [SafeSonioxSocket, SafeModulateSocket])
+async def test_unpaced_tail_write_blocked_through_residence_deadline_is_local_not_provider_death(
+    monkeypatch, virtual_clock, kind
+):
+    """An initial paid leg has no writer pace, so a blocked ``ws.send`` never
+    raises AudioDeliveryExpired. When the frame is inside the last 2s of its 28s
+    residence, the tail's write bound IS the residence deadline; the stall
+    surfaces through ``await_frozen_writes`` with the vendor socket open. That
+    is the tail's own bound (delivery_expired): it must never read as the
+    default connection_lost, which votes on the provider circuit and counts as
+    provider failure (review of #23074; lead ruling 603b95)."""
+
+    monkeypatch.setattr(st, 'clock', lambda: virtual_clock.now)
+    monkeypatch.setattr(soniox_module, 'clock', lambda: virtual_clock.now)
+    transport = Transport()
+    transport.timer = virtual_clock
+    raw = kind(transport, lambda _: None, asyncio.get_running_loop())
+    live_send_compat(raw)
+    birth = BirthLedger()
+    delivery = ReplayTailSocket(
+        raw,
+        ReplayPacer(SAMPLE_RATE, 'soniox' if kind is SafeSonioxSocket else 'modulate', raw),
+        deque(),
+        tail_host(),
+        birth=birth,
+    )
+    try:
+        assert birth.note(0, 1600) == 0.0
+        virtual_clock.now = 27.5
+        transport.gate.clear()
+        assert delivery.send(b'\x01\x00' * 1600, 0)
+        delivery.start_tail()
+        await until(lambda: raw._send_queue.inflight == 1)
+        asyncio.create_task(virtual_clock.sleep(1.0))
+        await until(lambda: delivery.is_connection_dead)
+        assert not raw.is_connection_dead  # the vendor socket never closed
+        assert delivery.typed_death_reason == 'delivery_expired'
+        assert delivery.normalized_death_reason == 'delivery_expired'
+        assert live_stt_terminal_reason(delivery, 'send_failed') == 'delivery_expired'
+        assert provider_observation('failover', 'delivery_expired') is None
+    finally:
+        transport.gate.set()
+        await abort_replay_socket(delivery)
+        assert transport.closed
 
 
 @pytest.mark.asyncio
