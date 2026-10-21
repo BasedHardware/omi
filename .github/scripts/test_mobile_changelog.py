@@ -485,6 +485,8 @@ class GateFixtureTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             repo = Path(tmp)
             git(repo, "init", "-q")
+            # Force rename detection so the fixture fails without --no-renames on any host config.
+            git(repo, "config", "diff.renames", "true")
             base = commit_all(
                 repo,
                 {
@@ -511,6 +513,7 @@ class GateFixtureTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             repo = Path(tmp)
             git(repo, "init", "-q")
+            git(repo, "config", "diff.renames", "true")
             base = commit_all(repo, {"app/lib/old_name.dart": "void main() {}\n"})
             git(repo, "mv", "app/lib/old_name.dart", "app/lib/new_name.dart")
             head = commit_all(repo, {})

@@ -253,6 +253,8 @@ class RenamePairingTests(unittest.TestCase):
         os.chdir(self.repo)
         self.addCleanup(os.chdir, previous_cwd)
         self.git("init", "-q")
+        # Force rename detection so these fixtures fail without --no-renames on any host config.
+        self.git("config", "diff.renames", "true")
 
     def git(self, *args: str) -> str:
         return subprocess.check_output(
