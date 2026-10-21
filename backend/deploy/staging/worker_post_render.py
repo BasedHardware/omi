@@ -12,6 +12,10 @@ Env sources, in order (a later source may not redefine an earlier name):
    entries, or ``NAME: {secretKeyRef: {name, key}}`` for a k8s Secret (never inline secrets).
 3. ``--set NAME=VALUE``: a deploy-time rehearsal override (deploy.sh --worker-set), not committed.
 
+``--replicas N`` (deploy.sh --worker-replicas, default 0) sets the Deployment's replica count. The
+shared chart refuses replicaCount < 1 because prod's queue sampling runs in workers; staging has no
+HPA and its GPUs are on demand (2026-10-20), so the worker idles at 0 and is scaled up for replays.
+
 ``--probe-configmap NAME`` (deploy.sh --worker-probe) runs the worker through a staging-only
 measurement wrapper mounted from that ConfigMap; the worker module and its arguments are
 otherwise unchanged.
@@ -58,11 +62,18 @@ def _env_entries(env_file: Path | None, overrides: list[str]) -> list[dict]:
     return entries
 
 
-def patch(docs: list, env_entries: list[dict], probe_configmap: str | None = None) -> list:
+def patch(docs: list, env_entries: list[dict], probe_configmap: str | None = None, replicas: int | None = None) -> list:
     patched = 0
+    if replicas is not None:
+        if replicas < 0:
+            raise SystemExit('--replicas must be >= 0')
+        if any(isinstance(doc, dict) and doc.get('kind') == 'HorizontalPodAutoscaler' for doc in docs):
+            raise SystemExit('--replicas with an HPA rendered; refusing (staging runs autoscaling.enabled false)')
     for doc in docs:
         if not isinstance(doc, dict) or doc.get('kind') != 'Deployment':
             continue
+        if replicas is not None:
+            doc['spec']['replicas'] = replicas
         pod = doc['spec']['template']['spec']
         for container in pod['containers']:
             if container.get('name') != 'worker':
@@ -95,10 +106,11 @@ def main() -> int:
     parser.add_argument('--env-file', type=Path)
     parser.add_argument('--set', action='append', default=[], dest='overrides')
     parser.add_argument('--probe-configmap')
+    parser.add_argument('--replicas', type=int)
     args = parser.parse_args()
     docs = [doc for doc in yaml.safe_load_all(sys.stdin) if doc is not None]
     entries = _env_entries(args.env_file, args.overrides)
-    yaml.safe_dump_all(patch(docs, entries, args.probe_configmap), sys.stdout, sort_keys=False)
+    yaml.safe_dump_all(patch(docs, entries, args.probe_configmap, args.replicas), sys.stdout, sort_keys=False)
     return 0
 
 
