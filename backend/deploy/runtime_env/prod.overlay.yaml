@@ -539,8 +539,11 @@ overlay:
             value: paid
             category: rollout
           DREAM_AGENT_PAID_PERCENT:
-            value: '0'
+            value: '5'
             category: rollout
+          DREAM_AGENT_CONCURRENCY:
+            value: '8'
+            category: reliability
           DREAM_ON_DEMAND_ENABLED:
             value: 'false'
             category: rollout
@@ -847,8 +850,11 @@ overlay:
             value: paid
             category: rollout
           DREAM_AGENT_PAID_PERCENT:
-            value: '0'
+            value: '5'
             category: rollout
+          DREAM_AGENT_CONCURRENCY:
+            value: '8'
+            category: reliability
           DREAM_ON_DEMAND_ENABLED:
             value: 'false'
             category: rollout
@@ -1190,8 +1196,11 @@ overlay:
             value: paid
             category: rollout
           DREAM_AGENT_PAID_PERCENT:
-            value: '0'
+            value: '5'
             category: rollout
+          DREAM_AGENT_CONCURRENCY:
+            value: '8'
+            category: reliability
           DREAM_ON_DEMAND_ENABLED:
             value: 'false'
             category: rollout
@@ -1470,8 +1479,11 @@ overlay:
             value: paid
             category: rollout
           DREAM_AGENT_PAID_PERCENT:
-            value: '0'
+            value: '5'
             category: rollout
+          DREAM_AGENT_CONCURRENCY:
+            value: '8'
+            category: reliability
           DREAM_ON_DEMAND_ENABLED:
             value: 'false'
             category: rollout
