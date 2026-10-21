@@ -117,6 +117,27 @@ def test_blocked_successor_requests_owner_drain(monkeypatch):
     assert walk.advanced == ids
 
 
+def test_predecessor_error_before_binding_read_never_reuses_previous_owner(monkeypatch):
+    from database.batch_pipeline_projection_protocol import ProjectionPredecessorPending
+
+    monkeypatch.setenv('BATCH_PIPELINE_OWNER_DRAIN_ENABLED', 'true')
+    log = ResultLog()
+    log.commit('done-owner', 'done', 'done', ['done'], state='ready')
+    log.commit(BURST, 'a', 'head', ['head'])
+    real = log.read
+
+    def read(sid):
+        if sid == 'head':
+            raise ProjectionPredecessorPending('synthetic read failure')
+        return real(sid)
+
+    log.read = read
+    projector = projector_for(log)
+    counts = projector.sweep()
+    assert counts['blocked'] == 1
+    assert not projector.owes_drains
+
+
 def test_blocked_successor_replay_kill_switch_restores_previous_behavior(monkeypatch):
     monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_PREDECESSOR_REPLAY_ENABLED', 'off')
     log = ResultLog()

@@ -1179,6 +1179,7 @@ class Projector:
         for segment_id in discovery.next(limit=size):
             if segment_id in chained:
                 continue
+            binding = None
             try:
                 job, entry, binding = self.store.read(segment_id)
                 if drain and (binding.owner_id in self.draining or binding.owner_id in handed):
@@ -1201,7 +1202,12 @@ class Projector:
                 # Discovery may have paged past the unprojected head. Rebuild it
                 # from the watermark rather than waiting for the cursor to wrap.
                 # The walk still runs every transactional assignment fence.
-                if chain and projection_predecessor_replay_enabled() and binding.owner_id not in walked:
+                if (
+                    binding is not None
+                    and chain
+                    and projection_predecessor_replay_enabled()
+                    and binding.owner_id not in walked
+                ):
                     walked.add(binding.owner_id)
                     if drain:
                         handed.add(binding.owner_id)
