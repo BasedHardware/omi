@@ -8,7 +8,7 @@ import pytest
 
 from tests.unit.test_parakeet_window_live import runtime, receiver, Client  # noqa: F401
 from tests.unit.test_live_cost_router import controls  # noqa: F401
-from config.live_stt_replay import DEFAULT_REPLAY_PREFIX_MARGIN_SECONDS, ReplayLimits
+from config.live_stt_replay import DEFAULT_LIVE_TAIL_CATCHUP_RATE, DEFAULT_REPLAY_PREFIX_MARGIN_SECONDS, ReplayLimits
 from routers.listen.receiver import ListenReceiver
 from utils.stt import (
     parakeet_window as window,
@@ -607,15 +607,26 @@ async def test_slow_consumer_full_ring_paced_budget_and_realtime_live_order(monk
         assert REPLAY_SKIPPED.labels(**labels)._value.get() - skipped_before == pytest.approx(135 - PREFIX_SECONDS)
         assert REPLAY_AUDIO.labels(**labels)._value.get() - audio_before == pytest.approx(PREFIX_SECONDS)
         assert REPLAY_CLOSED.labels(**labels)._value.get() == closed_before
-        # For every replay admission interval: <=1x audio plus one bounded packet.
+        # Replay admissions stay at <=1x audio plus one bounded packet. Once
+        # the live tail is behind, the pump drains it at the catch-up rate, so
+        # cumulative delivery may run ahead of 1x but never past the
+        # successor's catch-up ceiling plus one packet.
         packets = [(data, at) for data, at in zip(transport.sent, transport.sent_at) if isinstance(data, bytes)]
+        catchup_rate = actual.stt_socket.pacer.catchup_rate
+        assert catchup_rate == DEFAULT_LIVE_TAIL_CATCHUP_RATE
         delivered = 0.0
-        for data, at in packets:
+        for n, (data, at) in enumerate(packets):
             delivered += len(data) / 32000
-            assert delivered <= at + 0.512 + 0.001
+            if n < PREFIX_PACKETS:
+                assert delivered <= at + 0.512 + 0.001
+            assert delivered <= at * catchup_rate + 0.512 + 0.001
         live_times = [at for _, at in packets[PREFIX_PACKETS:]]
         assert len(live_times) == len(captured)
         assert max(at - born for at, born in zip(live_times, captured)) <= 20.532 + 3 * 0.512
+        # The capture held through the 19 s prefix is drained at 1.5x rather
+        # than carried for the rest of the leg: the last live packet lands
+        # well inside the ~19 s lag the exact-rate tail used to keep.
+        assert live_times[-1] - captured[-1] <= 21.0 / catchup_rate + 1.0
         assert sum(len(packet.data) for packet in actual.stt_socket.tail) <= 21 * 32000
     finally:
         task.cancel()

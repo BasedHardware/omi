@@ -36,7 +36,9 @@ from utils.stt.resilient_stream import ResilientAudio
 import json
 
 from config.live_stt_replay import (
+    DEFAULT_LIVE_TAIL_CATCHUP_RATE,
     DEFAULT_REPLAY_PREFIX_MARGIN_SECONDS,
+    LIVE_TAIL_CATCHUP_RATE_ENV,
     REPLAY_PREFIX_MARGIN_ENV,
     ReplayLimits,
     parse_replay_limits,
@@ -297,16 +299,28 @@ async def test_directed_recovery_matrix(monkeypatch, source, successor, duration
 @pytest.mark.asyncio
 @pytest.mark.parametrize('kind', [SafeSonioxSocket, SafeModulateSocket])
 @pytest.mark.parametrize('frame_bytes', [960, 16 * 1024])
-async def test_writer_pause_resume_paces_real_wire_timestamps(virtual_clock, kind, frame_bytes):
+@pytest.mark.parametrize('catchup_env', [None, '1'])
+async def test_writer_pause_resume_paces_real_wire_timestamps(
+    monkeypatch, virtual_clock, kind, frame_bytes, catchup_env
+):
     """A genuinely stalled transport cannot burst on resume: writes restart at
     previous_start + audio_duration on the wire clock, the declared
-    queue+in-flight bound is never exceeded, and the leg stays alive."""
+    queue+in-flight bound is never exceeded, and the leg stays alive. The
+    writer runs at the leg's tail catch-up ceiling, so only the packets the
+    queue already held may close up at that rate; with the switch off the
+    cadence is exactly 1x."""
 
+    if catchup_env is None:
+        monkeypatch.delenv(LIVE_TAIL_CATCHUP_RATE_ENV, raising=False)
+    else:
+        monkeypatch.setenv(LIVE_TAIL_CATCHUP_RATE_ENV, catchup_env)
     transport = Transport()
     transport.timer = virtual_clock
     raw = kind(transport, lambda _: None, asyncio.get_running_loop())
     limits = ReplayLimits()
     enable_recovery_writer_pace(raw, SAMPLE_RATE, limits, lambda: None)
+    writer_rate = raw._writer_pace.rate
+    assert writer_rate == (1.0 if catchup_env == '1' else DEFAULT_LIVE_TAIL_CATCHUP_RATE)
     raw.replay_send = lambda data, start: raw.send(data)
     pacer = ReplayPacer(SAMPLE_RATE, 'soniox', raw, limits=limits)
     frame = b'\x01\x00' * (frame_bytes // 2)
@@ -328,7 +342,8 @@ async def test_writer_pause_resume_paces_real_wire_timestamps(virtual_clock, kin
         await until(lambda: producer.done() and len(transport.sent_at) >= total)
         starts = transport.sent_at
         assert starts[0] >= 0.6
-        assert starts[-1] - starts[0] >= (total - limits.queue_packets) * frame_seconds - 1e-9
+        queued_credit = limits.queue_packets * frame_seconds * (1 - 1 / writer_rate)
+        assert starts[-1] - starts[0] >= (total - limits.queue_packets) * frame_seconds - queued_credit - 1e-9
         assert raw._send_queue.high_water <= limits.queue_packets
         assert not raw.is_connection_dead
         await abort_replay_socket(raw)
