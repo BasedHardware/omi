@@ -854,7 +854,7 @@ def finalize_sync_job_failure_now(
     reaper. A run-token owner fences the Redis terminal transition first; only
     that winning owner may release the durable retry claim afterward.
     """
-    if failure_reason is not SyncFailureReason.NONE and error_code == 'stt_upstream_error':
+    if failure_reason is not SyncFailureReason.NONE and error_code in {'stt_upstream_error', 'stt_timeout'}:
         # A task-mode failure reaches here through sync_failure_from_exception; keep its
         # internal cause instead of publishing a vendor error code.
         error_code = sync_failure_error_code(failure_reason, failure_phase or 'finalize')

@@ -38,7 +38,8 @@ class _Bucket:
             SimpleNamespace(name=name, **vars(obj)) for name, obj in self.objects.items() if name.startswith(prefix)
         ]
 
-    def get_blob(self, name):
+    def get_blob(self, name, retry='default'):
+        assert retry is None
         obj = self.objects.get(name)
         return None if obj is None else SimpleNamespace(name=name, **vars(obj))
 

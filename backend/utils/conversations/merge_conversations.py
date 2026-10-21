@@ -738,7 +738,7 @@ def _copied_source_identity(bucket: Any, chunk: Dict) -> Dict:
     """
     if not chunk.get('bucket'):
         return {'crc32c': chunk.get('crc32c'), 'size': chunk.get('size')}
-    source = bucket.get_blob(chunk['path'])
+    source = bucket.get_blob(chunk['path'], retry=None)  # a 429 must not wait out the library's 120 s retry
     return {} if source is None else {'crc32c': source.crc32c, 'size': source.size}
 
 
@@ -761,7 +761,7 @@ def _copy_bridge_chunk(uid: str, bucket: Any, source_blob: Any, new_path: str, i
         generation = getattr(current, 'generation', None) if current is not None else 0
         _copy_chunk_with_backoff(uid, bucket, source_blob, new_path, if_generation_match=generation, bridge=True)
     except google_exceptions.PreconditionFailed:
-        winner = bucket.get_blob(new_path)
+        winner = bucket.get_blob(new_path, retry=None)
         # Archive packs list no checksum; their capture-named object of the same size
         # is the same pack another bridge copied a moment ago.
         unverifiable = not identity.get('crc32c') and getattr(winner, 'size', None) == identity.get('size')
