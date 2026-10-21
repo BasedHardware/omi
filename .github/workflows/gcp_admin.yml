@@ -27,6 +27,12 @@ concurrency:
   group: deploy-cloud-run-omi-admin-dashboard-${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || github.ref == 'refs/heads/development' && 'development' || github.ref == 'refs/heads/main' && 'prod' || format('nondeploy-{0}', github.run_id) }}
   cancel-in-progress: false
 
+env:
+  # Abort a git HTTP transfer that stays under 1 KB/s for 60 s, so actions/checkout
+  # retries instead of hanging 7-10 min until the TCP reset (#22890).
+  GIT_HTTP_LOW_SPEED_LIMIT: "1000"
+  GIT_HTTP_LOW_SPEED_TIME: "60"
+
 jobs:
   scope:
     name: Decide admin deployment scope
@@ -94,33 +100,7 @@ jobs:
             OMI_LLM_GATEWAY_URL=${{ vars.OMI_LLM_GATEWAY_URL }}
             ADMIN_STATS_READER_SAS=${{ vars.ADMIN_STATS_READER_SAS }}
             ADMIN_STATS_READER_AUDIENCE=${{ vars.ADMIN_STATS_READER_AUDIENCE }}
+            GRAFANA_EMBED_ENABLED=${{ vars.GRAFANA_EMBED_ENABLED }}
+            GRAFANA_EMBED_SIGNING_SECRET=${{ vars.GRAFANA_EMBED_SIGNING_SECRET }}
+            GRAFANA_BUSINESS_TOKEN_SECRET=${{ vars.GRAFANA_BUSINESS_TOKEN_SECRET }}
           require_gateway_url: true
-
-      # The live boards are edited in the Grafana UI (drag/resize persists in
-      # its DB). Only overwrite them when this push actually changes the
-      # checked-in dashboard JSONs — an unconditional apply stomps UI edits on
-      # every unrelated admin deploy.
-      - name: Detect dashboard JSON changes
-        id: dashboards_diff
-        run: |
-          # The deploy job checks out at depth 1, so the push's `before` commit
-          # must be fetched or the diff fails — and a failed diff must NOT
-          # count as "changed" (an unconditional apply stomps UI-edited board
-          # layouts). Round-7 regression: silent grep-on-error skipped a real
-          # dashboard apply.
-          BEFORE="${{ github.event.before || 'HEAD~1' }}"
-          git fetch --no-tags --depth=1 origin "$BEFORE" 2>/dev/null || true
-          if ! git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
-            echo "::warning::cannot resolve $BEFORE; dashboards not auto-applied — run workflow_dispatch if boards changed"
-            echo "changed=false" >> "$GITHUB_OUTPUT"
-          elif git diff --name-only "$BEFORE" "${{ github.sha }}" -- 'web/admin/grafana/dashboards/*.json' | grep -q .; then
-            echo "changed=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "changed=false" >> "$GITHUB_OUTPUT"
-          fi
-      - name: Apply checked-in omi-tv dashboard
-        if: github.event_name == 'workflow_dispatch' || steps.dashboards_diff.outputs.changed == 'true'
-        env:
-          GRAFANA_URL: ${{ vars.GRAFANA_URL }}
-          GRAFANA_TOKEN: ${{ secrets.GRAFANA_TOKEN }}
-        run: python3 web/admin/grafana/apply_omi_tv_dashboard.py

@@ -380,6 +380,7 @@ def _processor(monkeypatch, store, *, current: Optional[str], photos_sink=None):
         onboarding_handler=None,
         transcript_send=None,
         pusher_enabled=True,
+        is_multi_channel=False,
         user_has_credits=True,
         client_kind='test',
         language='en',

@@ -1,4 +1,5 @@
 from __future__ import annotations
+from utils.generated_compute import require_generated_compute, generated_compute_configured
 
 from datetime import datetime, timezone
 from html import escape
@@ -223,6 +224,15 @@ async def tts_synthesize(request: TtsSynthesizeRequest, uid: str = Depends(get_c
         byok_exempt=legacy_openai,
     ):
         raise HTTPException(status_code=403, detail="A paid subscription is required")
+    if generated_compute_configured():
+        await run_blocking(
+            db_executor,
+            require_generated_compute,
+            uid,
+            'desktop_tts',
+            allow_byok=legacy_openai,
+            provider='openai',
+        )
     openai_byok_key = get_byok_key("openai") if legacy_openai else None
     if not (legacy_openai and openai_byok_key):
         status, _ = await run_blocking(

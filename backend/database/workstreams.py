@@ -9,8 +9,10 @@ from google.cloud import firestore
 
 from google.cloud.firestore_v1 import FieldFilter
 import database.goals as goals_db
+from database.action_items_cache import bump_action_items_list_version
 from database.candidates import candidate_has_lapsed
 from database._client import get_firestore_client
+from database.staged_promote_cache import invalidate_around_write
 from database.read_boundary import parse_snapshot_or_none, parse_snapshot_strict, parse_snapshots
 from models.action_item import ActionItemResponse, TaskOwner, TaskPriority, TaskStatus
 from models.candidate import CandidateRecord, CandidateResolutionReceipt, CandidateStatus, CandidateSubjectKind
@@ -840,6 +842,7 @@ def list_continuation_checkpoints(
     return parse_snapshots(ContinuationCheckpoint, snapshots)
 
 
+@invalidate_around_write
 def resolve_workstream_candidate(
     uid: str,
     candidate: CandidateRecord,
@@ -969,7 +972,12 @@ def resolve_workstream_candidate(
             resolved_at=now,
         )
 
-    return apply(transaction)
+    receipt = apply(transaction)
+    if receipt.newly_resolved:
+        # The anchor task is created here, not through database.action_items, so
+        # invalidate the cached GET /v1/action-items pages here too.
+        bump_action_items_list_version(uid)
+    return receipt
 
 
 def resolve_work_intent(
@@ -1003,9 +1011,10 @@ def resolve_work_intent(
             if stored.get('request_hash') != request_hash:
                 raise WorkstreamConflictError('idempotency key was reused with another intent')
             stored.pop('request_hash', None)
-            return WorkIntentReceipt.model_validate(stored)
+            return WorkIntentReceipt.model_validate(stored), False
 
         newly_created = False
+        task_written = False
         if isinstance(request, TaskOriginWorkIntent):
             task_ref = _task_ref(uid, request.task_id, firestore_client=client)
             task_snapshot = task_ref.get(transaction=write_transaction)
@@ -1056,6 +1065,7 @@ def resolve_work_intent(
                         task_ref,
                         {'account_generation': account_generation, 'updated_at': now},
                     )
+                    task_written = True
                 if workstream_generation == 0:
                     write_transaction.update(
                         _workstream_ref(uid, workstream_id, firestore_client=client),
@@ -1107,6 +1117,7 @@ def resolve_work_intent(
                         'updated_at': now,
                     },
                 )
+                task_written = True
         else:
             goal_id = request.goal_id
             _assert_goal_exists(
@@ -1158,6 +1169,7 @@ def resolve_work_intent(
                 ),
             )
             newly_created = True
+            task_written = True
 
         receipt = WorkIntentReceipt(
             receipt_id=receipt_id,
@@ -1168,9 +1180,14 @@ def resolve_work_intent(
             created_at=now,
         )
         write_transaction.create(receipt_ref, {**receipt.model_dump(mode='python'), 'request_hash': request_hash})
-        return receipt
+        return receipt, task_written
 
-    return apply(transaction)
+    receipt, task_written = apply(transaction)
+    if task_written:
+        # The task is created or linked here, not through database.action_items, so
+        # invalidate the cached GET /v1/action-items pages here too.
+        bump_action_items_list_version(uid)
+    return receipt
 
 
 def import_task_goal_links(
@@ -1221,6 +1238,7 @@ def import_task_goal_links(
     stored_result = reserve(reservation_transaction)
     if stored_result is not None:
         return TaskGoalLinkImportReport.model_validate(stored_result)
+    tasks_written = False
     for index, link in enumerate(request.links):
         task_ref = _task_ref(uid, link.task_id, firestore_client=client)
         goal_ref = goals_db.goal_document_ref(uid, link.goal_id, firestore_client=client)
@@ -1228,6 +1246,7 @@ def import_task_goal_links(
 
         @firestore.transactional
         def apply(write_transaction):
+            nonlocal tasks_written
             control_snapshot = _control_ref(uid, firestore_client=client).get(transaction=write_transaction)
             _validate_control(control_snapshot, uid=uid, account_generation=account_generation)
             receipt_snapshot = receipt_ref.get(transaction=write_transaction)
@@ -1281,6 +1300,7 @@ def import_task_goal_links(
                                 'updated_at': datetime.now(timezone.utc),
                             },
                         )
+                        tasks_written = True
                 else:
                     outcome = 'imported'
                     write_transaction.update(
@@ -1291,11 +1311,16 @@ def import_task_goal_links(
                             'updated_at': datetime.now(timezone.utc),
                         },
                     )
+                    tasks_written = True
             outcomes[outcome_key] = outcome
             write_transaction.update(receipt_ref, {'outcomes': outcomes, 'updated_at': datetime.now(timezone.utc)})
             return outcome
 
         apply(transaction)
+    if tasks_written:
+        # The tasks are updated here, not through database.action_items, so
+        # invalidate the cached GET /v1/action-items pages here too.
+        bump_action_items_list_version(uid)
     completion_transaction = client.transaction()
     now = datetime.now(timezone.utc)
 

@@ -2,6 +2,8 @@
 
 import hashlib
 import os
+
+from config.rollout_cohorts import in_rollout_cohort
 import logging
 
 logger = logging.getLogger(__name__)
@@ -28,7 +30,6 @@ def _phase_enabled(phase: str) -> bool:
 def admitted(uid: str, phase: str) -> bool:
     if not _phase_enabled(phase) or not uid:
         return False
-    allowlist = {item.strip() for item in os.getenv('AUDIO_ARCHIVE_UID_ALLOWLIST', '').split(',') if item.strip()}
     try:
         percent = float(os.getenv('AUDIO_ARCHIVE_PERCENT', '0'))
     except ValueError:
@@ -36,7 +37,7 @@ def admitted(uid: str, phase: str) -> bool:
     if not 0 <= percent <= 100:
         return False
     bucket = int.from_bytes(hashlib.sha256(('audio-archive:' + uid).encode()).digest()[:8], 'big') / 2**64
-    return uid in allowlist or bucket * 100 < percent
+    return in_rollout_cohort(uid, 'audio-archive') or bucket * 100 < percent
 
 
 def regional_bucket(uid: str, legacy: str | None) -> str | None:

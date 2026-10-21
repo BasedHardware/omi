@@ -22,6 +22,8 @@ from typing import Any, Callable
 from starlette.websockets import WebSocketState
 
 from utils.stt.live_metrics import RECOVERY_ATTEMPTS, provider_family
+from utils.observability.demand_cohort import record_metric
+from utils.observability.demand_cohort import demand_cohort
 from config.live_stt_registry import MAX_REGISTRY_TARGETS
 
 # One recovery episode per provider death.
@@ -73,6 +75,9 @@ class LiveRecoveryController:
         self._reentry_used: set[str] = set()
         self._cheap_reentry_granted = False
         self._cheap_reentry_used = False
+        self._retry_jitter: dict[str, float] = {}
+        self._retry_grants: set[str] = set()
+        self._retry_used: set[str] = set()
         # The dial that killed the leg, normalized for bounded metric labels.
         self.source_family: str | None = None
         # Proof binding: text and adoption count only for the current
@@ -212,6 +217,7 @@ class LiveRecoveryController:
             return
         keep = {serving}
         keep.update(self._reentry_grants)
+        keep.update(self._retry_grants - self._retry_used)
         if self._cheap_reentry_granted:
             keep.add('parakeet-window')
         self.attempted_targets = {identity for identity in self.attempted_targets if identity in keep}
@@ -289,6 +295,35 @@ class LiveRecoveryController:
         self._reentry_grants.add(identity)
         return True
 
+    def grant_transient_retry(self, identity: str) -> bool:
+        """One same-target redial per identity per session, separate from the
+        Soniox rescue re-entry so a retry cannot consume that slot."""
+        if identity in self._retry_grants:
+            return identity not in self._retry_used
+        if len(self._retry_grants) >= MAX_RECOVERY_TARGETS:
+            return False
+        self._retry_grants.add(identity)
+        return True
+
+    def _retry_available(self, identity: str) -> bool:
+        return identity in self._retry_grants and identity not in self._retry_used
+
+    def is_retry_dial(self, identity: str) -> bool:
+        """Whether the next reservation of ``identity`` spends its retry slot."""
+        return (
+            identity in self.attempted_targets
+            and not self._cheap_reentry_available(identity)
+            and self._retry_available(identity)
+        )
+
+    def note_retry_jitter(self, identity: str, seconds: float) -> None:
+        """Delay the next dial of a same-target retry (one pending per identity)."""
+        if len(self._retry_jitter) < MAX_RECOVERY_TARGETS:
+            self._retry_jitter[identity] = max(0.0, float(seconds))
+
+    def take_retry_jitter(self, identity: str) -> float:
+        return self._retry_jitter.pop(identity, 0.0)
+
     def grant_cheap_reentry(self, identity: str) -> bool:
         """One lease-expiry failback, independent of transient Soniox rescue."""
         if self._cheap_reentry_granted or identity != 'parakeet-window':
@@ -316,15 +351,21 @@ class LiveRecoveryController:
             return False
         if len(self.attempted_targets) < MAX_RECOVERY_TARGETS:
             return True
-        return bool(self._reentry_grants - self._reentry_used) or self._cheap_reentry_available('parakeet-window')
+        return (
+            bool(self._reentry_grants - self._reentry_used)
+            or bool(self._retry_grants - self._retry_used)
+            or self._cheap_reentry_available('parakeet-window')
+        )
 
     def can_attempt(self, identity: str) -> bool:
         if self._blocked():
             return False
         if identity in self.attempted_targets:
             return (
-                identity in self._reentry_grants and identity not in self._reentry_used
-            ) or self._cheap_reentry_available(identity)
+                (identity in self._reentry_grants and identity not in self._reentry_used)
+                or self._cheap_reentry_available(identity)
+                or self._retry_available(identity)
+            )
         return len(self.attempted_targets) < MAX_RECOVERY_TARGETS
 
     def reserve(self, identity: str, successor: str | None = None) -> bool:
@@ -336,6 +377,8 @@ class LiveRecoveryController:
         if identity in self.attempted_targets:
             if self._cheap_reentry_available(identity):
                 self._cheap_reentry_used = True
+            elif self._retry_available(identity):
+                self._retry_used.add(identity)
             elif identity in self._reentry_grants and identity not in self._reentry_used:
                 self._reentry_used.add(identity)
             else:
@@ -356,7 +399,13 @@ class LiveRecoveryController:
         # before any episode exists; selector probes/capacity skips never
         # reach this seam.
         if self._deadline is not None:
-            RECOVERY_ATTEMPTS.labels(
-                source=provider_family(self.source_family), successor=provider_family(successor or identity)
-            ).inc()
+            record_metric(
+                RECOVERY_ATTEMPTS,
+                {
+                    'source': provider_family(self.source_family),
+                    'successor': provider_family(successor or identity),
+                    'demand_cohort': demand_cohort(),
+                },
+                1,
+            )
         return True

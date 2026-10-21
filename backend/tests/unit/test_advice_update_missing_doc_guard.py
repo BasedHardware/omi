@@ -70,6 +70,8 @@ class _NotFound(Exception):
 # would poison sibling modules that import the same names.
 for _p in ["google", "google.cloud", "google.api_core", "database", "models"]:
     _pkg(_p)
+
+
 def _missing(name):
     try:
         return importlib.util.find_spec(name) is None
@@ -80,8 +82,7 @@ def _missing(name):
 if _missing("google.api_core.exceptions"):
     _mod("google.api_core.exceptions", NotFound=_NotFound)
 if _missing("google.cloud.firestore"):
-    _mod("google.cloud.firestore",
-         SERVER_TIMESTAMP=MagicMock(), Query=MagicMock())
+    _mod("google.cloud.firestore", SERVER_TIMESTAMP=MagicMock(), Query=MagicMock())
     _mod("google.cloud.firestore_v1.base_query", FieldFilter=MagicMock())
 # The shared client stub (full seam surface, not a bare MagicMock) — other
 # modules import document_id_from_seed/get_firestore_client/etc from
@@ -149,8 +150,7 @@ def test_deleted_before_update_returns_none():
     # must become a None return (404), not a propagated 500. Raised via an
     # instance of the class advice.py itself bound — real or stub depending
     # on the env.
-    col, ref = _wire([_snap(True)],
-                     update_exc=advice.NotFound("deleted mid-update"))
+    col, ref = _wire([_snap(True)], update_exc=advice.NotFound("deleted mid-update"))
     with patch.object(advice, "_user_col", return_value=col):
         assert advice.update_advice("u", "adv1", is_read=True) is None
 

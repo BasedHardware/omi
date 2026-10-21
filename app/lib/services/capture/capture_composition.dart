@@ -18,6 +18,9 @@ import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/phone_call_provider.dart';
 import 'package:omi/services/capture/capture_seams.dart';
 import 'package:omi/services/capture/capture_wedge_monitor.dart';
+import 'package:omi/services/capture/capture_continuity_monitor.dart';
+import 'package:omi/env/env.dart';
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:omi/services/capture/capture_system_surface.dart';
 import 'package:omi/services/bridges/live_activity_bridge.dart';
 import 'package:omi/services/capture/capture_external_actions.dart';
@@ -186,16 +189,28 @@ CaptureWedgeMonitor composeCaptureWedgeMonitor() {
     },
     bleRetry: (deviceId) async {
       final deviceService = ServiceManager.instance().device;
-      await deviceService.disconnectDevice(deviceId);
-      if (!monitor.hasActiveEpisode(deviceId)) return;
-      if (SharedPreferencesUtil().btDevice.id != deviceId) return;
-      await deviceService.ensureConnection(deviceId, force: true);
+      await deviceService.recoverConnection(deviceId, shouldRetry: () => monitor.hasActiveEpisode(deviceId));
     },
     transferRetry: () => RecordingTransferCoordinator.instance.wake(WakeTrigger.dataStalled),
     appBuild: () => AnalyticsManager.appBuild,
     platform: () => AnalyticsManager.mobilePlatform,
   );
   return monitor;
+}
+
+/// Wires [CaptureContinuityMonitor] to the same analytics sink as the wedge
+/// monitor. Its banner shows only in debug and TestFlight builds.
+CaptureContinuityMonitor composeCaptureContinuityMonitor() {
+  return CaptureContinuityMonitor(
+    now: DateTime.now,
+    track: (event, properties) {
+      if (ClientTelemetryFlags.posthogRetirementEnabled) return;
+      PlatformManager.instance.analytics.track(event, properties: properties);
+    },
+    dogfood: () => kDebugMode || Env.isTestFlight,
+    appBuild: () => AnalyticsManager.appBuild,
+    platform: () => AnalyticsManager.mobilePlatform,
+  );
 }
 
 Future<void> _installMobileStandardBatch(CaptureProvider provider) async {

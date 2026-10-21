@@ -508,7 +508,7 @@ class TestRosterPromptPrefix:
         # the transcript, byte-for-byte. The one-name guard still binds.
         assert prefix.context == (
             'CONVERSATION METADATA\n'
-            '- Captured at: 2026-08-18T14:00:00 (UTC)\n'
+            '- Captured at: Tue 18 Aug 2026, 14:00 UTC\n'
             '- Meeting title: Scaling Forever sync\n'
             '- Participants: David, Ash Kalb <ash@fulcra.com>\n'
             '- Platform: Zoom\n'

@@ -346,8 +346,21 @@ impl RingRecordReassembler {
     }
 }
 
+/// Bit 31 of a ring-record timestamp. Custody firmware sets it when the RTC is
+/// unset: the low 31 bits are then seconds since boot, not epoch UTC.
+pub const RECORD_TIMESTAMP_UPTIME_FLAG: u32 = 0x8000_0000;
+
+/// Read the 4-byte big-endian timestamp prefix of a ring record as epoch seconds.
+///
+/// A timestamp with [`RECORD_TIMESTAMP_UPTIME_FLAG`] set has no usable clock.
+/// This returns 0 for that case, matching `RingProtocol.readRecordTimestamp`.
 pub fn record_timestamp(record: &[u8; RING_RECORD_SIZE]) -> u32 {
-    big_u32(&record[..4])
+    let raw = big_u32(&record[..4]);
+    if raw & RECORD_TIMESTAMP_UPTIME_FLAG != 0 {
+        0
+    } else {
+        raw
+    }
 }
 
 pub fn audio_frames(payload: &[u8]) -> Vec<&[u8]> {
@@ -572,6 +585,31 @@ mod tests {
         assert!(reassembler.push(&[1; 400]).is_empty());
         assert_eq!(reassembler.push(&[2; 44]).len(), 1);
         assert_eq!(reassembler.pending_len(), 0);
+    }
+
+    fn record_with_timestamp(timestamp: [u8; 4]) -> [u8; RING_RECORD_SIZE] {
+        let mut record = [0; RING_RECORD_SIZE];
+        record[..4].copy_from_slice(&timestamp);
+        record
+    }
+
+    #[test]
+    fn epoch_ring_timestamp_keeps_its_seconds() {
+        let record = record_with_timestamp([0x00, 0x00, 0x04, 0xD2]);
+        assert_eq!(record_timestamp(&record), 1234);
+        // The highest word that is still an epoch: bit 31 is the uptime flag.
+        let below_flag = record_with_timestamp([0x7F, 0xFF, 0xFF, 0xFF]);
+        assert_eq!(record_timestamp(&below_flag), 0x7FFF_FFFF);
+    }
+
+    #[test]
+    fn uptime_flagged_ring_timestamp_is_not_epoch_time() {
+        // Custody firmware: 0x80000000 | 1234 s since boot while the RTC is unset.
+        // The raw word is 2_147_484_882, which is a date in 2038, not "no clock".
+        let record = record_with_timestamp([0x80, 0x00, 0x04, 0xD2]);
+        assert_eq!(record_timestamp(&record), 0);
+        let flag_only = record_with_timestamp([0x80, 0x00, 0x00, 0x00]);
+        assert_eq!(record_timestamp(&flag_only), 0);
     }
 
     #[test]

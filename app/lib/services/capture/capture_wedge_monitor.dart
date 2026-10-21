@@ -26,6 +26,46 @@ class CaptureWedgeEpisode {
   bool promptVisible = false;
   bool promptShownEmitted = false;
   String? telemetryOperationId;
+  DateTime? ingressRecoveryStartedAt;
+  DateTime? lastRecoveryByteAt;
+}
+
+/// Phone-disk admission failures engaged: new recordings cannot be written until
+/// space frees or retention changes. A slow-burn problem, so it lives in
+/// Activity's Needs attention section, never in a banner.
+class CaptureStorageAtRisk {
+  const CaptureStorageAtRisk({
+    required this.engagedAt,
+    required this.blockedCount,
+    required this.retainedCount,
+    required this.reason,
+  });
+
+  final DateTime engagedAt;
+
+  /// Recordings the disk could not admit.
+  final int blockedCount;
+
+  /// Recordings kept under the admission count cap.
+  final int retainedCount;
+
+  final String reason;
+}
+
+/// A WAL backlog with no upload progress for
+/// [CaptureWedgeMonitor.uploadSilenceThreshold]: the recordings wait on the
+/// phone, safe but not moving. Listed in Activity's Needs attention section.
+class CaptureUploadStall {
+  const CaptureUploadStall({required this.since, required this.pendingCount, required this.pendingSeconds});
+
+  /// When the stall was first declared; counts refresh while it persists.
+  final DateTime since;
+
+  /// Recordings waiting to upload.
+  final int pendingCount;
+
+  /// Kept-audio length across the pending recordings, 0 when unknown.
+  final int pendingSeconds;
 }
 
 typedef CaptureWedgeTrack = void Function(String event, Map<String, Object> properties);
@@ -68,6 +108,8 @@ class CaptureWedgeMonitor extends ChangeNotifier {
   /// audio packets, so only a multi-minute gap with no BLE notifications is a
   /// stalled link.
   static const Duration connectedNoBytesWindow = Duration(minutes: 5);
+  static const Duration ingressRecoveryWindow = Duration(seconds: 5);
+  static const Duration ingressRecoveryMaxGap = Duration(seconds: 2);
 
   static const String triggerZeroByteStreak = 'zero_byte_streak';
   static const String triggerRapidReconnects = 'rapid_reconnects';
@@ -92,6 +134,131 @@ class CaptureWedgeMonitor extends ChangeNotifier {
   final Set<String> _nativeIngressDevices = {};
   final Set<String> _cccdRecoveryDevices = {};
 
+  CaptureStorageAtRisk? _storageAtRisk;
+  CaptureUploadStall? _uploadStall;
+  DateTime? _captureAttentionSeenAt;
+
+  /// The latest slow-burn local capture state, for Activity's Needs attention rows.
+  CaptureStorageAtRisk? get storageAtRisk => _storageAtRisk;
+
+  CaptureUploadStall? get uploadStall => _uploadStall;
+
+  /// The acute link episode the reader is being asked about (a stalled or
+  /// silent pendant link, or an exhausted ingress recovery), if any. The
+  /// storage episode shares the prompt slot but is slow-burn: it has its own
+  /// [storageAtRisk] row, so it is not acute.
+  CaptureWedgeEpisode? get acuteEpisode {
+    // Every device, not just [visiblePrompt]'s first hit: an open storage episode on the local
+    // WAL must not hide a pendant stall behind it.
+    for (final state in _devices.values) {
+      final episode = state.episode;
+      if (episode != null && episode.promptVisible && episode.trigger != triggerStorageAtRisk) return episode;
+    }
+    return null;
+  }
+
+  /// Whether an acute link episode is open at all, prompt shown or not: it also holds while the
+  /// reader's retry is in flight (the prompt steps aside until that retry settles), so the live
+  /// header keeps saying "Reconnecting" instead of falling back to a live label while no audio
+  /// reaches the app.
+  bool get linkStalled {
+    for (final state in _devices.values) {
+      final episode = state.episode;
+      if (episode != null && episode.trigger != triggerStorageAtRisk) return true;
+    }
+    return false;
+  }
+
+  bool get hasCaptureAttention => _storageAtRisk != null || _uploadStall != null || acuteEpisode != null;
+
+  /// True while a capture attention row is newer than the last Activity visit:
+  /// lights the bell's warning dot. A new episode re-lights it. Acute link
+  /// episodes count too: Home has no banner, so the dot is how a stall reaches
+  /// a reader who is not on the live page.
+  final ValueNotifier<bool> hasUnseenCaptureAttention = ValueNotifier(false);
+
+  /// Records that Activity rendered its capture rows. With [through], marks
+  /// seen only the episodes a build actually included: the timestamp of the
+  /// newest row on screen at build time. An incident declared after that build
+  /// stays unseen — the bell keeps warning — until a frame shows its row. The
+  /// seen timestamp never rewinds.
+  void markCaptureAttentionSeen({DateTime? through}) {
+    final at = through ?? _now();
+    final seen = _captureAttentionSeenAt;
+    _captureAttentionSeenAt = seen == null || seen.isBefore(at) ? at : seen;
+    _updateUnseenCaptureAttention();
+  }
+
+  /// Activity showed its capture attention rows: the bell goes dark until a new
+  /// episode arrives. In memory only — after a restart the live observations
+  /// re-declare any condition that still holds.
+  void _updateUnseenCaptureAttention() {
+    final seen = _captureAttentionSeenAt;
+    final storage = _storageAtRisk;
+    final upload = _uploadStall;
+    final acute = acuteEpisode;
+    hasUnseenCaptureAttention.value = (storage != null && (seen == null || storage.engagedAt.isAfter(seen))) ||
+        (upload != null && (seen == null || upload.since.isAfter(seen))) ||
+        (acute != null && (seen == null || acute.declaredAt.isAfter(seen)));
+  }
+
+  /// Every episode change (declared, retried, resolved, dismissed) passes through
+  /// here, so the bell's acute half stays in step without each path recomputing it.
+  @override
+  void notifyListeners() {
+    _updateUnseenCaptureAttention();
+    super.notifyListeners();
+  }
+
+  /// Ends the slow-burn rows the way their episodes end: resolved, dismissed, or reset.
+  void _clearCaptureAttention() {
+    if (_storageAtRisk == null && _uploadStall == null) return;
+    _storageAtRisk = null;
+    _uploadStall = null;
+    _updateUnseenCaptureAttention();
+    notifyListeners();
+  }
+
+  /// Ends the storage row the way its own condition ends: the disk admitted a
+  /// write again (or the retention diagnostic stopped reporting a risk). Upload
+  /// progress must not clear it — a full disk keeps refusing recordings while
+  /// an unrelated backlog drains. The retention fingerprint resets so a risk
+  /// that re-reports after a clear re-engages the row instead of being ignored.
+  void clearStorageAtRisk() {
+    if (_storageAtRisk == null) return;
+    _storageAtRisk = null;
+    _lastRetentionRiskFingerprint = null;
+    _resolveStorageEpisodeIfAny();
+    _updateUnseenCaptureAttention();
+    notifyListeners();
+  }
+
+  /// Ends a storage row engaged by disk-admission failure without touching the
+  /// retention fingerprint: the caller has a fresher observation whose telemetry
+  /// dedupe must hold, and whose reason differs, so a returning disk failure
+  /// re-engages the row on its own fingerprint.
+  void _endStorageAtRiskRow() {
+    if (_storageAtRisk == null) return;
+    _storageAtRisk = null;
+    _resolveStorageEpisodeIfAny();
+    _updateUnseenCaptureAttention();
+    notifyListeners();
+  }
+
+  /// A storage row ending with its own condition also ends the local-WAL
+  /// episode that declared it: the capturing page's banner must stop reporting
+  /// a recovered storage problem, and `_canDeclare` must let a later disk
+  /// incident start a fresh recovery. The upload-silence telemetry episode is
+  /// independent and stays for `onUploadCompleted` to later resolve on its own
+  /// terms.
+  void _resolveStorageEpisodeIfAny() {
+    final state = _devices[localWalDeviceId];
+    if (state?.episode?.trigger == triggerStorageAtRisk) {
+      _safeTrack('Capture Recovery Resolved', {'source': state!.episode!.source, 'trigger': triggerStorageAtRisk});
+      state.episode = null;
+    }
+  }
+
   void setNativeIngressOwner(String deviceId, bool active) {
     if (active) {
       _nativeIngressDevices.add(deviceId);
@@ -106,6 +273,8 @@ class CaptureWedgeMonitor extends ChangeNotifier {
   /// projection, or let a transcript resolve an ingress failure.
   void observeIngressHealth(String deviceId, CaptureIngressHealth? health) {
     final state = _stateFor(deviceId);
+    final previousHealth = state.lastIngressHealth;
+    state.lastIngressHealth = health;
     if (health?.reason == CaptureIngressHealth.cccdRecoveryReason) {
       _cccdRecoveryDevices.add(deviceId);
       _nativeIngressDevices.add(deviceId);
@@ -145,7 +314,9 @@ class CaptureWedgeMonitor extends ChangeNotifier {
       }
     }
     if (health?.actionable == true) {
-      if (state.episode?.trigger != triggerIngressRecoveryFailed) {
+      final dismissedGeneration = state.dismissedIngressGeneration;
+      final sameIncident = dismissedGeneration != null && health!.generation == dismissedGeneration;
+      if (!sameIncident && state.episode?.trigger != triggerIngressRecoveryFailed) {
         state.episode = CaptureWedgeEpisode(
           deviceId: deviceId,
           source: 'omi',
@@ -153,9 +324,20 @@ class CaptureWedgeMonitor extends ChangeNotifier {
           declaredAt: _now(),
         )..retryAttempted = true;
       }
-      state.episode!.promptVisible = true;
-    } else if (state.episode?.trigger == triggerIngressRecoveryFailed) {
-      state.episode = null;
+      if (!sameIncident) state.episode?.promptVisible = true;
+    } else {
+      if (state.episode?.trigger == triggerIngressRecoveryFailed) state.episode = null;
+      // Health left actionRequired (or the owner went away): the incident is
+      // over, so a later actionable snapshot of a *new* incident may alert.
+      state.dismissedIngressGeneration = null;
+    }
+    // A new, valid native ingress lease proves recovery independently of STT.
+    // Replaying the same cached lease must not resolve a later BLE episode.
+    if (health != null &&
+        health.verifiedAt(_now()) &&
+        (previousHealth?.generation != health.generation ||
+            health.validUntilMs > (previousHealth?.validUntilMs ?? 0))) {
+      _resolveIfActive(deviceId, state, bleIngressOnly: true);
     }
     notifyListeners();
   }
@@ -200,6 +382,17 @@ class CaptureWedgeMonitor extends ChangeNotifier {
       session.ingressBytes += byteCount;
       session.lastIngressByteAt = now;
       session.lastBleIngressAt = now;
+    }
+    final state = _devices[deviceId];
+    final episode = state?.episode;
+    if (state == null || episode == null || !_isBleIngressTrigger(episode.trigger)) return;
+    final lastByte = episode.lastRecoveryByteAt;
+    if (lastByte == null || now.difference(lastByte) > ingressRecoveryMaxGap) {
+      episode.ingressRecoveryStartedAt = now;
+    }
+    episode.lastRecoveryByteAt = now;
+    if (now.difference(episode.ingressRecoveryStartedAt!) >= ingressRecoveryWindow) {
+      _resolveIfActive(deviceId, state, bleIngressOnly: true);
     }
   }
 
@@ -288,17 +481,23 @@ class CaptureWedgeMonitor extends ChangeNotifier {
 
   /// Surfaces durable recordings that have made no upload progress for long
   /// enough to require user attention. Callers pass the oldest retryable local
-  /// WAL timestamp after every inventory refresh.
-  void observeWalBacklog({required int pendingCount, required DateTime? oldestPendingAt}) {
+  /// WAL timestamp after every inventory refresh; [pendingSeconds] is the
+  /// kept-audio length across the backlog, when the caller knows it.
+  void observeWalBacklog({required int pendingCount, required DateTime? oldestPendingAt, int pendingSeconds = 0}) {
     final state = _stateFor(localWalDeviceId);
     if (pendingCount <= 0 || oldestPendingAt == null) {
       _resolveIfActive(localWalDeviceId, state);
       return;
     }
     final now = _now();
-    if (now.difference(oldestPendingAt) < uploadSilenceThreshold) return;
+    if (now.difference(oldestPendingAt) < uploadSilenceThreshold) {
+      // The stalled recordings left the backlog (deleted, or out of retries) and what waits now is young.
+      _endUploadStall();
+      return;
+    }
     final lastUploadAt = _lastUploadAt;
     if (lastUploadAt != null && now.difference(lastUploadAt) < uploadSilenceThreshold) return;
+    _updateUploadStall(since: _uploadStall?.since ?? now, pendingCount: pendingCount, pendingSeconds: pendingSeconds);
     unawaited(
       _maybeDeclare(
         state,
@@ -312,6 +511,25 @@ class CaptureWedgeMonitor extends ChangeNotifier {
         },
       ),
     );
+  }
+
+  void _endUploadStall() {
+    if (_uploadStall == null) return;
+    _uploadStall = null;
+    _updateUnseenCaptureAttention();
+    notifyListeners();
+  }
+
+  /// Refreshes the upload-stall row's counts without re-declaring the episode:
+  /// the telemetry slot may already be held by this very stall.
+  void _updateUploadStall({required DateTime since, required int pendingCount, required int pendingSeconds}) {
+    final previous = _uploadStall;
+    if (previous != null && previous.pendingCount == pendingCount && previous.pendingSeconds == pendingSeconds) {
+      return;
+    }
+    _uploadStall = CaptureUploadStall(since: since, pendingCount: pendingCount, pendingSeconds: pendingSeconds);
+    _updateUnseenCaptureAttention();
+    notifyListeners();
   }
 
   void observeStorageAtRisk({
@@ -332,6 +550,13 @@ class CaptureWedgeMonitor extends ChangeNotifier {
     };
     // Count-cap pressure is diagnostic only; storage prompts are reserved for disk admission failures.
     if (reason == 'count_cap') {
+      // A count-cap reading proves the disk admitted a write again, so any storage
+      // row a disk failure engaged has ended the way its own condition ends — the
+      // risk now reported is count pressure, which never owns the row. The
+      // fingerprint stays so this diagnostic observation keeps its telemetry
+      // dedupe; a disk failure that returns re-engages the row on its own
+      // (different reason, different fingerprint).
+      _endStorageAtRiskRow();
       final depth = _silenceAge(localWalDeviceId);
       _safeTrack('Capture Wedge Detected', {
         'source': localWalSource,
@@ -355,6 +580,16 @@ class CaptureWedgeMonitor extends ChangeNotifier {
         extraProperties: properties,
       ),
     );
+    // The row follows the observation, not the episode: counts refresh even
+    // while the episode slot is held and no new alert is declared.
+    _storageAtRisk = CaptureStorageAtRisk(
+      engagedAt: engagedAt,
+      blockedCount: blockedCount,
+      retainedCount: retainedCount,
+      reason: reason,
+    );
+    _updateUnseenCaptureAttention();
+    notifyListeners();
   }
 
   @visibleForTesting
@@ -440,7 +675,12 @@ class CaptureWedgeMonitor extends ChangeNotifier {
     }
   }
 
+  /// The episode the reader is asked about. An acute link episode outranks a storage episode:
+  /// it is the one the live page's header and Reconnect speak for, and its retry must not land
+  /// on the storage transfer instead. Map order alone would pick whichever device came first.
   CaptureWedgeEpisode? get visiblePrompt {
+    final acute = acuteEpisode;
+    if (acute != null) return acute;
     for (final state in _devices.values) {
       final episode = state.episode;
       if (episode != null && episode.promptVisible) return episode;
@@ -477,9 +717,33 @@ class CaptureWedgeMonitor extends ChangeNotifier {
     final state = _devices[deviceId];
     if (state == null) return;
     state.rapidDropEnds.clear();
+    if (deviceId == localWalDeviceId) _clearCaptureAttention();
     if (state.episode == null && state.telemetryEpisode == null) return;
     state.episode = null;
     state.telemetryEpisode = null;
+    notifyListeners();
+  }
+
+  /// Dismisses only the episode the reader dismissed — the visible prompt. A
+  /// telemetry-only episode for the same device (an upload-silence observation,
+  /// say) is a separate recovery operation: erasing it would silently cancel
+  /// its eventual resolved event and let later observations redeclare it as a
+  /// new incident. [dismissDeviceEpisode] remains the full reset for an
+  /// intentional disconnect.
+  void dismissVisibleEpisode(String deviceId) {
+    final state = _devices[deviceId];
+    if (state == null || state.episode == null) return;
+    state.rapidDropEnds.clear();
+    final episode = state.episode!;
+    if (episode.trigger == triggerIngressRecoveryFailed) {
+      // The native side republishes the same actionable snapshot every few
+      // seconds, and observeIngressHealth would recreate a nulled episode on
+      // the next tick — resurrecting a dismissed banner. Remember the
+      // dismissed incident (its connection generation) until health actually
+      // changes; a new generation or a healthy/quiet snapshot re-allows it.
+      state.dismissedIngressGeneration = state.lastIngressHealth?.generation;
+    }
+    state.episode = null;
     notifyListeners();
   }
 
@@ -491,6 +755,10 @@ class CaptureWedgeMonitor extends ChangeNotifier {
     _retryInFlightDevices.clear();
     _lastUploadAt = null;
     _lastRetentionRiskFingerprint = null;
+    _storageAtRisk = null;
+    _uploadStall = null;
+    _captureAttentionSeenAt = null;
+    hasUnseenCaptureAttention.value = false;
     _connectedWatchdog?.cancel();
     _connectedWatchdog = null;
     notifyListeners();
@@ -504,6 +772,7 @@ class CaptureWedgeMonitor extends ChangeNotifier {
     _openSessions.clear();
     _retryInFlightDevices.clear();
     _connectedWatchdog?.cancel();
+    hasUnseenCaptureAttention.dispose();
     super.dispose();
   }
 
@@ -576,6 +845,9 @@ class CaptureWedgeMonitor extends ChangeNotifier {
   bool _isTelemetryOnlyTrigger(String trigger) =>
       trigger == triggerBytesSentNoTranscript || trigger == triggerUploadSilence;
 
+  bool _isBleIngressTrigger(String trigger) =>
+      trigger == triggerConnectedNoBytes || trigger == triggerZeroByteStreak || trigger == triggerRapidReconnects;
+
   bool _canDeclare(_DeviceWedgeState state, String trigger) {
     return _isTelemetryOnlyTrigger(trigger) ? state.telemetryEpisode == null : state.episode == null;
   }
@@ -631,7 +903,13 @@ class CaptureWedgeMonitor extends ChangeNotifier {
     return telemetryOnly ? state?.telemetryEpisode : state?.episode;
   }
 
-  void _resolveIfActive(String deviceId, _DeviceWedgeState state) {
+  void _resolveIfActive(String deviceId, _DeviceWedgeState state, {bool bleIngressOnly = false}) {
+    if (bleIngressOnly && !_isBleIngressTrigger(state.episode?.trigger ?? '')) return;
+    if (deviceId == localWalDeviceId) {
+      // A resolving local-WAL observation proves upload progress, not recovered
+      // disk: the storage row ends only with its own retention observation.
+      _endUploadStall();
+    }
     if (state.episode?.trigger == triggerIngressRecoveryFailed) {
       // The ingress failure stays (native owns it), but a transcript during
       // the alert must still release the telemetry slot: native-owned devices
@@ -642,7 +920,7 @@ class CaptureWedgeMonitor extends ChangeNotifier {
       return;
     }
     if (state.episode == null && state.telemetryEpisode == null) return;
-    for (final episode in [state.episode, state.telemetryEpisode]) {
+    for (final episode in [state.episode, if (!bleIngressOnly) state.telemetryEpisode]) {
       if (episode != null && _now().difference(episode.declaredAt) <= resolveWindow) {
         _safeTrack('Capture Recovery Resolved', {'source': episode.source, 'trigger': episode.trigger});
         final operationId = episode.telemetryOperationId;
@@ -660,7 +938,15 @@ class CaptureWedgeMonitor extends ChangeNotifier {
       }
     }
     state.episode = null;
-    state.telemetryEpisode = null;
+    if (bleIngressOnly) {
+      state.zeroByteSessionEnds.clear();
+      state.rapidDropEnds.clear();
+      for (final session in _openSessions.values) {
+        if (session.deviceId == deviceId && session.bytesSinceTranscript == 0) session.watchdogDeclared = false;
+      }
+    } else {
+      state.telemetryEpisode = null;
+    }
     notifyListeners();
   }
 
@@ -707,6 +993,8 @@ class CaptureWedgeMonitor extends ChangeNotifier {
 }
 
 class _DeviceWedgeState {
+  CaptureIngressHealth? lastIngressHealth;
+  String? dismissedIngressGeneration;
   final List<DateTime> zeroByteSessionEnds = [];
   final List<DateTime> noTranscriptSessionEnds = [];
   final List<DateTime> rapidDropEnds = [];

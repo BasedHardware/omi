@@ -17,18 +17,28 @@ on:
     branches: [main]
     paths:
       - 'desktop/windows/**'
+      - 'web/packages/note-shared/**'
+      - 'contracts/note_citation_contract.json'
       - '.github/workflows/desktop-windows-ci.yml'
       - '.github/workflows/desktop_windows_release.yml'
   pull_request:
     branches: [main]
     paths:
       - 'desktop/windows/**'
+      - 'web/packages/note-shared/**'
+      - 'contracts/note_citation_contract.json'
       - '.github/workflows/desktop-windows-ci.yml'
       - '.github/workflows/desktop_windows_release.yml'
 
 defaults:
   run:
     working-directory: desktop/windows
+
+env:
+  # Abort a git HTTP transfer that stays under 1 KB/s for 60 s, so actions/checkout
+  # retries instead of hanging 7-10 min until the TCP reset (#22890).
+  GIT_HTTP_LOW_SPEED_LIMIT: "1000"
+  GIT_HTTP_LOW_SPEED_TIME: "60"
 
 jobs:
   checks:

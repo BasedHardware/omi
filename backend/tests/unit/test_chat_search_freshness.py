@@ -1,4 +1,4 @@
-"""Execute chat search through hybrid success, failure, empty and JIT result paths."""
+"""Execute chat search through hybrid success, failure, and empty result paths."""
 
 import contextvars
 from datetime import datetime, timezone
@@ -25,7 +25,6 @@ def tools():
             'database.vector_db',
             'utils.conversations.factory',
             'utils.conversations.render',
-            'utils.retrieval.tools.conversation_jit',
         )
     }
     agentic = ModuleType('utils.retrieval.agentic')
@@ -39,7 +38,6 @@ def tools():
             'utils.retrieval.tools.conversation_tools',
             Path(__file__).resolve().parents[2] / 'utils/retrieval/tools/conversation_tools.py',
         )
-        module.is_jit_conversation_retrieval_enabled = MagicMock(return_value=False)
         module.keyword_search_conversation_ids = MagicMock(return_value=['keyword'])
         module.vector_db.index = object()
         module.vector_db.embeddings.embed_query.return_value = [0.1]
@@ -52,13 +50,14 @@ def tools():
         module.conversations_db.get_conversations_by_id.return_value = rows
         module.deserialize_conversation = lambda data: SimpleNamespace(id=data['id'], transcript_segments=[])
         module.conversations_to_string.return_value = 'conversation results'
-        module.notification_db.get_user_time_zone.return_value = 'UTC'
         yield module
 
 
 def invoke(tools):
     return tools.search_conversations_tool(
-        'topic', include_transcript=False, config={'configurable': {'user_id': 'uid', 'conversations_collected': []}}
+        'topic',
+        include_transcript=False,
+        config={'configurable': {'user_id': 'uid', 'user_timezone': 'UTC', 'conversations_collected': []}},
     )
 
 
@@ -69,29 +68,29 @@ def value(path, outcome):
 def test_happy_path_unchanged_and_keyword_semantic_both_used(tools):
     before = value('keyword', 'ok')
     result = invoke(tools)
-    assert result.startswith("Found 2 conversations semantically matching 'topic':\n\nconversation results")
+    assert result.startswith(
+        "2 nearest conversations for 'topic' "
+        "(semantic search returns the closest matches even when none is relevant; check before citing)\n\n"
+        "conversation results"
+    )
     assert 'Keyword index temporarily unavailable' not in result
-    tools.conversations_db.get_conversations_by_id.assert_called_once_with('uid', ['keyword', 'semantic'])
+    tools.conversations_db.get_conversations_by_id.assert_called_once_with(
+        'uid', ['keyword', 'semantic'], include_discarded=True
+    )
     assert value('keyword', 'ok') == before + 1
 
 
 @pytest.mark.parametrize('error_type', [ConversationSearchUnavailableError, RuntimeError])
-@pytest.mark.parametrize('empty,jit', [(False, False), (True, False), (False, True)])
-def test_keyword_failure_is_visible_in_all_result_modes(tools, empty, jit, error_type):
+@pytest.mark.parametrize('empty', [False, True])
+def test_keyword_failure_is_visible_in_all_result_modes(tools, empty, error_type):
     tools.keyword_search_conversation_ids.side_effect = error_type('offline')
-    tools.is_jit_conversation_retrieval_enabled.return_value = jit
-    tools.format_active_jit_conversations.return_value = 'jit results'
-    if jit:
-        tools._consume_jit_summary_search_budget = lambda config: None
     if empty:
         tools.vector_db.query_vectors.return_value = []
     before = value('keyword', 'degraded')
     result = invoke(tools)
     assert result.endswith('[Keyword index temporarily unavailable; results are semantic-only]')
     assert value('keyword', 'degraded') == before + 1
-    if jit:
-        assert result.startswith('jit results')
-    elif empty:
+    if empty:
         assert result.startswith('No conversations found')
 
 
@@ -105,7 +104,9 @@ def test_successful_empty_keyword_is_not_degraded(tools):
 def test_exact_lookup_skips_keyword_and_records_firestore(tools):
     before = value('firestore', 'ok')
     tools.search_conversations_tool(
-        'e8c05000-52f0-4a95-951c-ccd715523429', include_transcript=False, config={'configurable': {'user_id': 'uid'}}
+        'e8c05000-52f0-4a95-951c-ccd715523429',
+        include_transcript=False,
+        config={'configurable': {'user_id': 'uid', 'user_timezone': 'UTC'}},
     )
     tools.keyword_search_conversation_ids.assert_not_called()
     assert value('firestore', 'ok') == before + 1

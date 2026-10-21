@@ -1,3 +1,4 @@
+import { DESKTOP_HEALTH_EVENT_WEIGHT_SQL } from "./desktop-health-sampling";
 import type { TelemetryAggregateRow } from "@/lib/telemetry/aggregates";
 
 /**
@@ -34,7 +35,7 @@ SELECT
   toString(toDate(timestamp)) AS day,
   coalesce(nullIf(toString(properties.area), ''), 'other') AS area,
   coalesce(nullIf(toString(properties.reason), ''), 'unknown') AS reason,
-  count() AS event_count
+  sum(${DESKTOP_HEALTH_EVENT_WEIGHT_SQL}) AS event_count
 FROM events
 WHERE event = 'desktop_health_event'
   AND toString(properties.health_event) = 'fallback_triggered'
@@ -52,7 +53,7 @@ SELECT
   coalesce(nullIf(toString(properties.area), ''), 'other') AS area,
   coalesce(nullIf(toString(properties.reason), ''), 'unknown') AS reason,
   coalesce(nullIf(toString(properties.outcome), ''), 'unknown') AS outcome,
-  count() AS event_count
+  sum(${DESKTOP_HEALTH_EVENT_WEIGHT_SQL}) AS event_count
 FROM events
 WHERE event = 'desktop_health_event'
   AND toString(properties.health_event) = 'fallback_triggered'
@@ -118,6 +119,7 @@ export function tallyFallbackObservations(
   return counts;
 }
 
+/** Input counts already weighted by the legacy SQL; never multiply again. */
 export function fallbackObservationsFromLegacy(
   rows: FallbackObservation[]
 ): FallbackTriageCounts {

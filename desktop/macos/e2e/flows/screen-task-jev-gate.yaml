@@ -1,7 +1,7 @@
 version: 2
 name: screen-task-jev-gate
 tier: manual
-description: Synthetic screen fixtures verify default-off extraction, OCR admission, canonical suggestions and owner-bound dispatch.
+description: Synthetic screen fixtures verify default-on Jev admission, canonical suggestions and owner-bound dispatch.
 app: non-prod
 covers:
   - desktop/macos/Desktop/Sources/PostHogManager.swift
@@ -30,12 +30,12 @@ preconditions:
 
 steps:
   - id: S1
-    name: Default-off preserves the existing extractor
-    do: "Use an isolated named bundle and synthetic local backend fixtures only. With screen_task_jev_gate absent or false, analyze a synthetic request screenshot and verify the existing 2.5 Flash tool loop runs without a screen-task gate request. Do not enable the flag on real screen data before privacy approval."
+    name: Default-on flag read admits the Jev gate
+    do: "Use an isolated named bundle and synthetic local backend fixtures only. With screen_task_jev_gate absent, unknown, quota-limited or returning an error, analyze a synthetic request screenshot and verify the screen-task gate runs. Set the flag explicitly false and verify the existing 2.5 Flash tool loop runs without a screen-task gate request."
 
   - id: S2
     name: Content admission avoids duplicate requests and rejected pixel uploads
-    do: "Enable the flag only in the synthetic fixture profile. Replay a Telegram request frame, then the same main-pane text with changed unread count and OCR punctuation. Verify only the first sends gate/extractor traffic. Scroll, reorder main-pane lines, replace an earlier ok with a new ok at the bottom, add a novel request or change a deadline and verify another gate request; only an identical ordered normalized list skips. Stub rejection and verify no image upload; stub audited rejection and verify one image call with bounded audit metadata. Its real extracted task must stage and sync, with the true staged count, audit_sample=true and gate_outcome=rejected, without a duplicate ordinary extraction event."
+    do: "Leave the flag absent or set it true in the synthetic fixture profile. Replay a Telegram request frame, then the same main-pane text with changed unread count and OCR punctuation. Verify only the first sends gate/extractor traffic. Scroll, reorder main-pane lines, replace an earlier ok with a new ok at the bottom, add a novel request or change a deadline and verify another gate request; only an identical ordered normalized list skips. Stub rejection and verify no image upload; stub audited rejection and verify one image call with bounded audit metadata. Its real extracted task must stage and sync, with the true staged count, audit_sample=true and gate_outcome=rejected, without a duplicate ordinary extraction event."
 
   - id: S3
     name: Structured results remain pending suggestions
@@ -43,7 +43,7 @@ steps:
 
   - id: S4
     name: Fail-open and account revocation preserve authority
-    do: "Stub gate timeout and verify one screenshot extraction with fail_open telemetry. Stub genuine extraction timeout/5xx and verify provider_outage with no legacy request, observation, staging or content dedupe; retry the next trigger; stub 401/402/429 or an explicitly non-retryable refusal and verify no recovery. Cap typed gate-budget Retry-After at 60 seconds with gate_budget_cooldown telemetry; retain screenshot quota Retry-After for that owner/session. Revoke that owner before gate completion and during legacy inference and embedding auth acquisition; verify no subsequent request with another account's token and no late suggestion/event. Confirm flag-on local logs, including the normal result handler, ordinary legacy and inherited observation tasks, contain only capped counts/outcomes and no context, task/window titles, queries or free-form errors. Repeat through TaskTestRunnerWindow and verify its legacy extractor obeys the flag-on privacy scope. Disable the flag and verify the existing log lines are retained. Confirm fallback telemetry contains bounded fields and no screen text."
+    do: "Stub gate timeout and verify one screenshot extraction with fail_open telemetry. Stub genuine extraction timeout/5xx and verify provider_outage with no legacy request, observation, staging or content dedupe; retry the next trigger; stub 401/402/429 or an explicitly non-retryable refusal and verify no recovery. Cap typed gate-budget Retry-After at 60 seconds with gate_budget_cooldown telemetry; retain screenshot quota Retry-After for that owner/session. Revoke that owner before gate completion and during legacy inference and embedding auth acquisition; verify no subsequent request with another account's token and no late suggestion/event. Confirm default-on local logs, including the normal result handler, ordinary legacy and inherited observation tasks, contain only capped counts/outcomes and no context, task/window titles, queries or free-form errors. Repeat through TaskTestRunnerWindow and verify its legacy extractor obeys the default-on privacy scope. Set the flag explicitly false and verify the existing legacy log lines are retained. Confirm fallback telemetry contains bounded fields and no screen text."
 
   - id: S5
     name: Focused behavioral evidence

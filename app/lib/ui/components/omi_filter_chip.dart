@@ -7,8 +7,9 @@ import 'package:omi/ui/omi_tokens.dart';
 /// [OmiColors.chipSurface].
 ///
 /// [count], when given, is drawn after the label; [semanticsLabel] must then say what it counts
-/// ("Needs Voice, 3 people"). [icon], when given, leads the label (the "+" of "Add Person"). The
-/// visual chip is 32pt; the touch target is 44pt.
+/// ("Needs Voice, 3 people"). [icon], when given, leads the label (the "+" of "Add Person"); with
+/// an empty label the chip is that icon alone, named by [semanticsLabel]. The visual chip is 32pt;
+/// the touch target is 44pt.
 class OmiFilterChip extends StatelessWidget {
   const OmiFilterChip({
     super.key,
@@ -81,6 +82,8 @@ class OmiFilterChip extends StatelessWidget {
   Widget _withIcon(Widget text, Color foreground) {
     final glyph = icon;
     if (glyph == null) return text;
+    // An icon-only chip ("+") names itself through [semanticsLabel].
+    if (label.isEmpty && count == null) return Icon(glyph, size: 16, color: foreground);
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [

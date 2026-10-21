@@ -13,7 +13,6 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple, cast
 
 from fastapi.websockets import WebSocketDisconnect
 
-from config.capture_evidence import capture_evidence_dark_write_enabled, listen_committed_capture_coverage_enabled
 from config.translation import resolve_ondemand_config
 from routers.listen.capture_merges import snapshot_proofs, acknowledge_proofs
 from models.capture_window_proof import CaptureWindowProof
@@ -349,7 +348,7 @@ class TranscriptProcessor:
                 context = coordinator.result_context(segment_id, conversation_id) if coordinator else None
                 if context is not None and context[1] == 'viewed_v1' and not config.gate_enabled:
                     return False
-                if config.gate_enabled and config.admits(self.host.request.uid):
+                if config.gate_enabled:
                     if context is None:
                         current = await self.cache.get(conversation_id, force_refresh=True)
                         source = next(
@@ -466,25 +465,17 @@ class TranscriptProcessor:
             self._apply_speaker_identity_statuses(targets)
             fresh = [segment.model_dump() for segment in segments]
             self._capture_merge_tails = getattr(self, "_capture_merge_tails", {})
-            source_map = self.host.state.source_position_map if capture_evidence_dark_write_enabled() else None
+            source_map = self.host.state.source_position_map
             capture_evidence = None
-            if capture_evidence_dark_write_enabled():
-                if source_map is not None:
-                    if listen_committed_capture_coverage_enabled():
-                        capture_evidence = source_map.committed_snapshot(conversation.id, segments) or unknown_envelope(
-                            'missing_source_position', origin='live'
-                        )
-                    else:
-                        capture_evidence = source_map.snapshot(
-                            (start, end)
-                            for start, end, owner in (self.host.state.conversation_sample_ranges or ())
-                            if owner == conversation.id
-                        )
-                else:
-                    capture_evidence = unknown_envelope(
-                        'multichannel_mix' if self.host.is_multi_channel else 'missing_source_position',
-                        origin='live',
-                    )
+            if source_map is not None:
+                capture_evidence = source_map.committed_snapshot(conversation.id, segments) or unknown_envelope(
+                    'missing_source_position', origin='live'
+                )
+            else:
+                capture_evidence = unknown_envelope(
+                    'multichannel_mix' if self.host.is_multi_channel else 'missing_source_position',
+                    origin='live',
+                )
             written = await self.host.persistence.call(
                 conversations_db.update_conversation_segments,
                 self.host.request.uid,
@@ -495,19 +486,18 @@ class TranscriptProcessor:
                 **snapshot_proofs(self._capture_merge_tails, conversation.id, segments),
                 started_at=started_at,
                 audio_timeline=audio_timeline,
-                **({'capture_evidence': capture_evidence} if capture_evidence_dark_write_enabled() else {}),
+                capture_evidence=capture_evidence,
                 data_protection_level=self.cache.protection_level,
                 invalidate_client_processing=False,
             )
-            if capture_evidence_dark_write_enabled():
-                OMI_CAPTURE_EVIDENCE_ENVELOPES_TOTAL.labels(
-                    path='live',
-                    status=(
-                        'mapped'
-                        if self.host.state.source_position_map and self.host.state.source_position_map.runs
-                        else 'unknown'
-                    ),
-                ).inc()
+            OMI_CAPTURE_EVIDENCE_ENVELOPES_TOTAL.labels(
+                path='live',
+                status=(
+                    'mapped'
+                    if self.host.state.source_position_map and self.host.state.source_position_map.runs
+                    else 'unknown'
+                ),
+            ).inc()
             if not isinstance(written, LiveTranscriptMerge):
                 return None
             if getattr(self.host.state, 'capture_timeline_v2', False):
@@ -720,12 +710,12 @@ class TranscriptProcessor:
             return
         coordinator.demand_changed()
         config = resolve_ondemand_config()
-        if not config.gate_enabled or not config.admits(self.host.request.uid) or coordinator.realtime_interpreter:
+        if not config.gate_enabled or coordinator.realtime_interpreter:
             return
         demand = coordinator.demand
         if demand is None:
             return
-        snapshot = demand.snapshot(lease_v1_enabled=config.lease_v1_enabled)
+        snapshot = demand.snapshot()
         if snapshot.policy != DemandPolicy.viewed:
             return
         conversation_id = self.host.state.current_conversation_id
@@ -753,15 +743,15 @@ class TranscriptProcessor:
             current = resolve_ondemand_config()
             if (
                 not current.gate_enabled
-                or demand.snapshot(lease_v1_enabled=current.lease_v1_enabled).policy != DemandPolicy.viewed
-                or demand.snapshot(lease_v1_enabled=current.lease_v1_enabled).generation != snapshot.generation
+                or demand.snapshot().policy != DemandPolicy.viewed
+                or demand.snapshot().generation != snapshot.generation
                 or self.host.state.current_conversation_id != conversation_id
             ):
                 return
             page = raw_segments[max(0, end - config.max_segments) : end]
             end -= config.max_segments
             pages_done += 1
-            policy = 'viewed_v1' if current.gemini_enabled else 'legacy'
+            policy = 'viewed_v1'
             segments = [
                 TranscriptSegment(**raw)
                 for raw in page

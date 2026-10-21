@@ -24,6 +24,18 @@ class _Sync extends ChangeNotifier implements SyncProvider {
 
   final List<Wal> wals;
   final deleted = <Wal>[];
+  final shared = <List<Wal>>[];
+  int retried = 0;
+
+  @override
+  bool canPlayOrShareWal(Wal wal) => wal.filePath != null;
+  @override
+  Future<void> shareRecordingAsWav(List<Wal> wals) async => shared.add(wals);
+
+  @override
+  List<Wal> get retryableAttentionWals => wals.where((w) => w.syncDisplayState == WalSyncDisplayState.failed).toList();
+  @override
+  Future<void> retryNeedsAttentionWals() async => retried++;
 
   @override
   SyncState get syncState => const SyncState();
@@ -150,5 +162,69 @@ void main() {
     await tester.pump(const Duration(milliseconds: 500));
 
     expect(find.textContaining('3m'), findsNWidgets(10));
+  });
+
+  testWidgets("a recording's files share as one recording", (tester) async {
+    // A recording can be hundreds of 10 s files; sharing each one from its own page took a user hours.
+    final synced = [
+      for (final w in _tooOldAfternoon())
+        w
+          ..status = WalStatus.synced
+          ..filePath = 'audio_${w.timerStart}.bin',
+    ];
+    final sync = await _pump(tester, synced);
+
+    await tester.tap(find.text('Synced'));
+    await tester.pump();
+    await tester.tap(find.textContaining('30m'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Share Recording'));
+    await tester.pump();
+
+    expect(sync.shared, hasLength(1));
+    expect(sync.shared.single, unorderedEquals(synced));
+  });
+
+  testWidgets('a recording with no audio on the phone offers no share', (tester) async {
+    final synced = [for (final w in _tooOldAfternoon()) w..status = WalStatus.synced];
+    await _pump(tester, synced);
+
+    await tester.tap(find.text('Synced'));
+    await tester.pump();
+    await tester.tap(find.textContaining('30m'));
+    await tester.pump(const Duration(milliseconds: 500));
+
+    expect(find.text('Share Recording'), findsNothing);
+  });
+
+  testWidgets('recordings that can never upload need attention without a dead Sync button', (tester) async {
+    // #21177 follow-up: the card offered Sync for these, and Sync skipped them.
+    await _pump(tester, _tooOldAfternoon());
+
+    expect(find.textContaining('need attention'), findsWidgets);
+    expect(find.text('Sync'), findsNothing);
+    expect(find.byKey(const Key('offline_sync_card_retry_attention')), findsNothing);
+  });
+
+  testWidgets('a recording whose retry budget is spent offers Try Again, which retries it', (tester) async {
+    final start = DateTime.now().subtract(const Duration(hours: 2)).millisecondsSinceEpoch ~/ 1000;
+    final spent = Wal(
+      timerStart: start,
+      codec: BleAudioCodec.opus,
+      seconds: 60,
+      status: WalStatus.miss,
+      storage: WalStorage.disk,
+      device: 'pendant',
+    )..retryCount = walMaxAutoRetries;
+    final sync = await _pump(tester, [spent]);
+
+    final cardRetry = find.byKey(const Key('offline_sync_card_retry_attention'));
+    expect(find.text('Sync'), findsNothing);
+    expect(cardRetry, findsOneWidget);
+
+    await tester.tap(cardRetry);
+    await tester.pump();
+
+    expect(sync.retried, 1);
   });
 }

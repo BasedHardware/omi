@@ -24,12 +24,17 @@ from config.plan_catalog import get_plan_allocation, plan_uses_overage
 from database import user_usage as user_usage_db
 from models.users import PlanType
 from utils.subscription import get_plan_limits
+from config.ladder_v1 import budget_enforcement_enabled
+from utils.ladder_v1 import account
 
 # Markup applied to raw provider cost before charging the user.
 # 1.15 = 15 % on top of true cost (covers variance + infra).
 OVERAGE_MARKUP_MULTIPLIER = float(os.getenv('OVERAGE_MARKUP_MULTIPLIER', '1.15'))
 
-# Per-1M-token reference rates shown in the explainer UI. These are NOT used
+# Per-1M-token reference rates shown in the explainer UI. Gemini Flash prices
+# are the Vertex AI Gemini 2.5 Standard tab rates verified 2026-10-18 at
+# https://cloud.google.com/vertex-ai/generative-ai/pricing (the earlier values
+# were the Priority tier). These are not used
 # for live computation — live cost is taken from the already-tracked
 # `desktop_chat.cost_usd` which the LLM clients compute per-call from
 # actual provider token counts. Rates here are purely informational.
@@ -104,7 +109,8 @@ def get_user_overage(uid: str, plan: PlanType) -> Dict[str, Any]:
 
     overage_usd = 0.0
     excess_q = 0
-    if not plan_uses_overage(plan):
+    ladder = account(uid) if budget_enforcement_enabled() else None
+    if ladder is not None or not plan_uses_overage(plan):
         return {
             'included_questions': included_q,
             'included_cost_usd': included_cost,

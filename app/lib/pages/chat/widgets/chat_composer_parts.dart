@@ -216,7 +216,14 @@ class ChatSelectedFilesStrip extends StatelessWidget {
                 ),
                 child: Stack(
                   children: [
-                    if (!isImage) Center(child: Icon(Icons.insert_drive_file, color: OmiColors.textPrimary, size: 24)),
+                    if (!isImage)
+                      Center(
+                        child: Icon(
+                          provider.selectedFileTypes[index] == 'video' ? Icons.videocam : Icons.insert_drive_file,
+                          color: OmiColors.textPrimary,
+                          size: 24,
+                        ),
+                      ),
                     if (provider.isFileUploading(file.path))
                       Container(
                         decoration: BoxDecoration(

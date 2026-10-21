@@ -28,19 +28,6 @@ enum OmiLogPathResolver {
 private let logBundleIdentifier = Bundle.main.bundleIdentifier ?? "unknown"
 private let logProcessID = getpid()
 
-/// EXP-002: launch-scoped experiment context appended to every structured
-/// desktop log line once the arm resolves, so logs are sliceable by arm
-/// alongside PostHog events and Sentry tags. Written once per launch on the
-/// main actor before the main shell paints.
-private nonisolated(unsafe) var logExperimentContext: (experimentId: String, variant: String)?
-private let logExperimentContextLock = NSLock()
-
-func setLogExperimentContext(experimentId: String, variant: String) {
-  logExperimentContextLock.withLock {
-    logExperimentContext = (experimentId, variant)
-  }
-}
-
 private let logFile: String = OmiLogPathResolver.logPath(
   isNonProduction: AppBuild.isNonProduction,
   bundleIdentifier: logBundleIdentifier,
@@ -208,11 +195,8 @@ private func ensureLogParentDirectories() -> Bool {
 }
 
 private func logLine(timestamp: String, category: String, message: String) -> String {
-  let experiment = logExperimentContextLock.withLock { logExperimentContext }
-  let experimentFields =
-    experiment.map { " [experiment_id=\($0.experimentId) variant=\($0.variant)]" } ?? ""
   return
-    "[\(timestamp)] [\(category)] [bundle_id=\(logBundleIdentifier) pid=\(logProcessID)]\(experimentFields) \(message)"
+    "[\(timestamp)] [\(category)] [bundle_id=\(logBundleIdentifier) pid=\(logProcessID)] \(message)"
 }
 
 func writeToLogFile(

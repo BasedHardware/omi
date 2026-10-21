@@ -10,7 +10,7 @@ import re
 import uuid
 import traceback
 from datetime import datetime, timezone
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any, Dict, List, Tuple, Optional
 from zipfile import ZipFile
 
@@ -284,6 +284,11 @@ def find_legacy_limitless_conversation_id(uid: str, started_at: datetime) -> Opt
     return None
 
 
+def _is_macos_archive_metadata(name: str) -> bool:
+    """Finder's ``__MACOSX/`` tree and ``._<name>`` AppleDouble entries: resource forks, not export files."""
+    return any(part == '__MACOSX' or part.startswith('._') for part in PurePosixPath(name).parts)
+
+
 def _job_cancelled(job_id: str) -> bool:
     current = import_jobs_db.get_import_job(job_id)
     return bool(current and current.get('status') == ImportJobStatus.cancelled.value)
@@ -319,16 +324,21 @@ def process_limitless_import(job_id: str, uid: str, zip_path: str, language_code
 
         # Open and scan the ZIP file
         with ZipFile(zip_path, 'r') as zf:
-            all_files = zf.namelist()
+            all_files = [name for name in zf.namelist() if not _is_macos_archive_metadata(name)]
             logger.info(f"[Limitless Import] ZIP contains {len(all_files)} entries")
             logger.info(f"[Limitless Import] First 20 entries: {all_files[:20]}")
 
             # Find all lifelog markdown files
-            # Handle both "lifelogs/..." and "something/lifelogs/..." structures
+            # Handle both "lifelogs/..." and "something/lifelogs/..." structures.
+            # Skip macOS archive metadata (__MACOSX/ tree and AppleDouble "._name" files)
+            # that Finder's "Compress" adds alongside every real entry.
             lifelog_files = [
                 name
                 for name in all_files
-                if ('lifelogs/' in name or name.startswith('lifelogs')) and name.endswith('.md')
+                if ('lifelogs/' in name or name.startswith('lifelogs'))
+                and name.endswith('.md')
+                and '__MACOSX' not in name
+                and not Path(name).name.startswith('.')
             ]
 
             logger.info(f"[Limitless Import] Found {len(lifelog_files)} lifelog files")

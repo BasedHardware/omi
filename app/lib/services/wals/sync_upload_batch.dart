@@ -35,12 +35,11 @@ List<Wal> _takeWithinBudget(Iterable<Wal> wals) {
   return batch;
 }
 
-const _captureEvidenceV1DarkWrite = bool.fromEnvironment('CAPTURE_EVIDENCE_V1_DARK_WRITE');
-
 const _captureEvidenceHeaderMaxBytes = 4096;
 
-final _captureClaimRootPattern =
-    RegExp(r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$');
+final _captureClaimRootPattern = RegExp(
+  r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$',
+);
 final _captureClaimNamePattern = RegExp(r'^[A-Za-z0-9_.\-]{1,255}$');
 
 String _walUploadFileName(Wal wal) =>
@@ -75,8 +74,7 @@ Map<String, dynamic>? _captureEvidenceClaim(Wal wal, String name) {
   };
 }
 
-bool captureEvidenceWalClaimable(Wal wal) =>
-    _captureEvidenceV1DarkWrite && _captureEvidenceClaim(wal, _walUploadFileName(wal)) != null;
+bool captureEvidenceWalClaimable(Wal wal) => _captureEvidenceClaim(wal, _walUploadFileName(wal)) != null;
 
 final _syncTimestampTokenPattern = RegExp(r'_([0-9]+(?:\.[0-9]+)?)\.bin$');
 
@@ -115,7 +113,7 @@ String? _encodeCaptureEvidenceClaims(List<Map<String, dynamic>> claims) {
 /// mixed batch cannot make a single bounded claim; the server then records
 /// unknown coverage instead of inventing positions from timestamps.
 String? captureEvidenceUploadHeader(List<Wal> wals, List<File> files) {
-  if (!_captureEvidenceV1DarkWrite || wals.length != files.length || wals.isEmpty) {
+  if (wals.length != files.length || wals.isEmpty) {
     return null;
   }
   final claims = <Map<String, dynamic>>[];
@@ -134,22 +132,6 @@ String? _walLocationBatchKey(Wal wal) {
 }
 
 List<Wal> nextSyncUploadBatch(List<Wal> pending, int nowSeconds) {
-  if (!_captureEvidenceV1DarkWrite) {
-    final ordered = List<Wal>.from(pending)..sort((a, b) => b.timerStart.compareTo(a.timerStart));
-    if (ordered.isEmpty) return const [];
-    final conversationId = ordered.first.conversationId;
-    final recordingSessionId = ordered.first.recordingSessionId;
-    final locationKey = _walLocationBatchKey(ordered.first);
-    return _takeWithinBudget(
-      ordered.where(
-        (wal) =>
-            wal.conversationId == conversationId &&
-            wal.recordingSessionId == recordingSessionId &&
-            isMobileStandardBatchWal(wal) == isMobileStandardBatchWal(ordered.first) &&
-            _walLocationBatchKey(wal) == locationKey,
-      ),
-    );
-  }
   final indexed = [for (var i = 0; i < pending.length; i++) (pending[i], i)]..sort((a, b) {
       final byStart = b.$1.timerStart.compareTo(a.$1.timerStart);
       return byStart != 0 ? byStart : a.$2.compareTo(b.$2);

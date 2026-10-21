@@ -9,6 +9,10 @@ on:
       - '.github/workflows/gcp_memory_maintenance_job_auto_dev.yml'
 
 env:
+  # Abort a git HTTP transfer that stays under 1 KB/s for 60 s, so actions/checkout
+  # retries instead of hanging 7-10 min until the TCP reset (#22890).
+  GIT_HTTP_LOW_SPEED_LIMIT: "1000"
+  GIT_HTTP_LOW_SPEED_TIME: "60"
   SERVICE: memory-maintenance-job
   SCHEDULER_JOB: memory-maintenance-hourly
   # The account this workflow's hourly trigger invokes as. Not otherwise stated

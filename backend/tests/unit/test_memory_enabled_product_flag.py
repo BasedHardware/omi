@@ -39,7 +39,7 @@ def test_retired_aliases_do_not_enable_memory():
 def test_dev_and_prod_overlays_pin_memory_enabled_on():
     import yaml
 
-    composed = yaml.safe_load((BACKEND / "deploy/runtime_env.yaml").read_text(encoding="utf-8"))
+    composed = yaml.load((BACKEND / "deploy/runtime_env.yaml").read_text(encoding="utf-8"), Loader=yaml.CSafeLoader)
     dev = composed["environments"]["dev"]
     prod = composed["environments"]["prod"]
 

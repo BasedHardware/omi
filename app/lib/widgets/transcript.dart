@@ -1026,7 +1026,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
               child: Column(
                 crossAxisAlignment: isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
                 children: [
-                  if (!isUser) ...[
+                  if (!isUser && data.sttProvider?.startsWith('on_device:') != true) ...[
                     Padding(
                       padding: const EdgeInsets.only(left: 4, bottom: 2),
                       child: Row(

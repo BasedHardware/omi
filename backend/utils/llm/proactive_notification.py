@@ -1,3 +1,4 @@
+from utils.generated_compute import current_generated_compute_allowed
 import hashlib
 import os
 import re
@@ -609,6 +610,8 @@ def evaluate_proactive_notification(
     current_date: Optional[str] = None,
 ) -> ProactiveNotificationResult:
     """Legacy single-call evaluation. Kept for eval tests."""
+    if not current_generated_compute_allowed('proactive_notification'):
+        return ProactiveNotificationResult(has_advice=False, context_summary='')
     goals_text = format_goals(goals)
     current_conversation = format_current_conversation(current_messages, user_name)
     notifications_text = format_recent_notifications(recent_notifications)

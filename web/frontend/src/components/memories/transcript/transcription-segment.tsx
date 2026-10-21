@@ -6,17 +6,30 @@ import {
   participantInitials,
   transcriptTimestamp,
 } from '@/src/lib/shared-note.mjs';
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
 const PREVIEW_CHARS = 600;
 
 export default function TranscriptionSegment({
   segment,
   displayName,
+  sourceRequest,
 }: {
   segment: TranscriptSegment;
   displayName: string;
+  sourceRequest?: { id: string; request: number } | null;
 }) {
+  const rowRef = useRef<HTMLLIElement>(null);
+  const [highlighted, setHighlighted] = useState(false);
+  useEffect(() => {
+    if (!sourceRequest) return;
+    setHighlighted(true);
+    setShowMore(true);
+    rowRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    rowRef.current?.focus({ preventScroll: true });
+    const timer = setTimeout(() => setHighlighted(false), 2500);
+    return () => clearTimeout(timer);
+  }, [sourceRequest]);
   const [showMore, setShowMore] = useState(false);
 
   const textFormatted =
@@ -28,7 +41,11 @@ export default function TranscriptionSegment({
   const isLong = textFormatted.length > PREVIEW_CHARS;
 
   return (
-    <li className="sn-seg">
+    <li
+      ref={rowRef}
+      tabIndex={-1}
+      className={`sn-seg${highlighted ? ' sn-seg-source' : ''}`}
+    >
       <span
         className={`sn-avatar ${
           isUser ? 'sn-avatar-owner' : `sn-avatar-${avatarToneIndex(displayName)}`

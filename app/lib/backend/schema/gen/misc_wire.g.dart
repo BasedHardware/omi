@@ -86,6 +86,42 @@ class GeneratedKnowledgeGraphResponse {
   }
 }
 
+class GeneratedCanonicalKnowledgeGraphResponse {
+  final List<Map<String, dynamic>> catalogNodes;
+  final List<Map<String, dynamic>> edges;
+  final bool hasMore;
+  final String? nextCursor;
+  final List<Map<String, dynamic>> nodes;
+
+  const GeneratedCanonicalKnowledgeGraphResponse({
+    this.catalogNodes = const [],
+    required this.edges,
+    required this.hasMore,
+    this.nextCursor,
+    required this.nodes,
+  });
+
+  factory GeneratedCanonicalKnowledgeGraphResponse.fromJson(Map<String, dynamic> json) {
+    return GeneratedCanonicalKnowledgeGraphResponse(
+      catalogNodes: _required(_readFieldValue<List<Map<String, dynamic>>>(_readField(json, const ["catalog_nodes"]), "catalog_nodes", _readMapList, requiredField: false, nullable: false, defaultValue: const []), "catalog_nodes"),
+      edges: _required(_readFieldValue<List<Map<String, dynamic>>>(_readField(json, const ["edges"]), "edges", _readMapList, requiredField: true, nullable: false), "edges"),
+      hasMore: _required(_readFieldValue<bool>(_readField(json, const ["has_more"]), "has_more", _readBool, requiredField: true, nullable: false), "has_more"),
+      nextCursor: _readFieldValue<String>(_readField(json, const ["next_cursor"]), "next_cursor", _readString, requiredField: false, nullable: true),
+      nodes: _required(_readFieldValue<List<Map<String, dynamic>>>(_readField(json, const ["nodes"]), "nodes", _readMapList, requiredField: true, nullable: false), "nodes"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'catalog_nodes': catalogNodes,
+      'edges': edges,
+      'has_more': hasMore,
+      'next_cursor': nextCursor,
+      'nodes': nodes,
+    };
+  }
+}
+
 class GeneratedRebuildResponse {
   final int edgesCount;
   final int nodesCount;

@@ -12,6 +12,8 @@ focusing on failure modes that cause WALs to become permanently stuck:
 Each scenario corresponds to a real-world sticky-pending failure mode.
 """
 
+from utils.other import owned_paths  # noqa: F401 - retain real scratch guard across legacy package stubs
+
 import enum
 import importlib.util
 import io
@@ -30,6 +32,8 @@ from fastapi import HTTPException
 # ---------------------------------------------------------------------------
 # Stubs — isolate from heavy deps before importing sync
 # ---------------------------------------------------------------------------
+# Keep the real utils.other namespace so pure transitive helpers remain importable;
+# only its heavyweight storage/endpoints leaves need stubs.
 
 _stub_modules = [
     'database._client',
@@ -49,7 +53,6 @@ _stub_modules = [
     'utils.conversations.process_conversation',
     'utils.sync.bridge',
     'utils.conversations.factory',
-    'utils.other',
     'utils.other.endpoints',
     'utils.other.storage',
     'utils.encryption',

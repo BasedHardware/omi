@@ -79,7 +79,6 @@ def _tombstone(world, cid, *, merged_into, revision=3, **extra):
 @pytest.fixture
 def world(monkeypatch):
     monkeypatch.setenv(config.SMART_MERGE_MODE_ENV, 'off')
-    monkeypatch.delenv(config.SMART_MERGE_UID_ALLOWLIST_ENV, raising=False)
     monkeypatch.delenv(config.SMART_MERGE_AUDIT_ENV, raising=False)
     monkeypatch.delenv(config.SMART_MERGE_FLATTEN_ENV, raising=False)
     return World(monkeypatch)
@@ -781,7 +780,8 @@ def test_sync_absorb_then_smart_merge_flattens_one_hop(world):
     assert len(ids) == len(expected)
 
 
-def test_smart_merge_then_sync_absorb_flattens_new_donor_ancestry(world):
+def test_smart_merge_then_sync_absorb_flattens_new_donor_ancestry(world, monkeypatch):
+    monkeypatch.setenv('SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST', UID)
     _flattened_world(world)
     world.add('d', 20, 8, sync_content_revision=1)
     world.add('g3', 19, 2)
@@ -1073,7 +1073,7 @@ def test_flatten_cleanup_copies_donor_and_ancestor_audio_once(world, monkeypatch
     monkeypatch.setattr(
         merge_conversations,
         'list_audio_chunks',
-        lambda uid, cid: [
+        lambda uid, cid, **kwargs: [
             {'path': path % uid, 'timestamp': float(path.rsplit('/', 1)[-1].removesuffix('.bin'))}
             for path in chunk_map.get(cid, ())
         ],

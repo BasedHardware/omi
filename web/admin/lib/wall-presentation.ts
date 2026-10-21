@@ -1,21 +1,22 @@
+import { MCP_MARKER_MISSING } from "./wall-mcp";
 import { freshness } from "./qualified-activity";
 import type { Metric, WallPayload } from "./wall-metrics";
 import { formatWallValue, shortDate, wallCardSvg } from "./wall-card-svg";
 
 export const WALL_LABELS: Partial<Record<Metric["id"], string>> = {
-  "growth.wau": "Weekly active people",
-  "growth.true_new_7d": "New people · interim",
+  "growth.wau": "Weekly active users",
+  "growth.true_new_7d": "New users",
   "activation.rate": "Week-one activation",
   "retention.if_activated": "Retained if activated",
-  "engagement.dau": "Daily active people",
-  "engagement.mau": "Monthly active people",
+  "engagement.dau": "Daily active users",
+  "engagement.mau": "Monthly active users",
   "engagement.assistant_success": "Answered questions",
   "revenue.arpmau": "ARPMAU",
   "revenue.mrr": "Monthly recurring revenue",
   "revenue.hardware_usd_week": "Hardware sales",
   "revenue.plan_prepay_usd_week": "Plan prepay · Shopify",
-  "cost.net_day": "Daily net cost",
-  "cost.per_mau_month": "Monthly cost / MAU",
+  "cost.net_day": "All-in cost / day",
+  "cost.per_mau_month": "All-in cost / MAU · 30d",
   "cost.gross_margin_pct": "Gross margin · goal 60%",
   "health.crash_free": "Crash-free",
   "health.thumbs_positive": "Positive answers",
@@ -42,7 +43,10 @@ export function wallPresentation(payload: WallPayload, now = new Date()) {
         ].includes(m.id)
       ? "daily"
       : "hourly";
-    m.stale = freshness(m.sourceRefreshedAt, m.dataThrough, cadence, now).stale;
+    m.stale =
+      Boolean(m.retainedSince) ||
+      Boolean(payload.cacheStale) ||
+      freshness(m.sourceRefreshedAt, m.dataThrough, cadence, now).stale;
     presented.push(m);
     const key = m.id.replaceAll(".", "_"),
       fixture = Boolean(m.fixture || m.reason?.includes("FIXTURE"));
@@ -106,23 +110,24 @@ export function wallPresentation(payload: WallPayload, now = new Date()) {
       : signal < 0
       ? "#fb923c"
       : "#92a3ba";
-    const splitValues = (["macos", "mobile", "other"] as const).map((p) =>
+    const mcpActivity = [
+      "growth.wau",
+      "engagement.dau",
+      "engagement.mau",
+    ].includes(m.id);
+    const splitKeys: (keyof Metric["split"])[] = mcpActivity
+      ? ["macos", "mobile", "other", "mcp"]
+      : ["macos", "mobile", "other"];
+    const splitValues = splitKeys.map((p) =>
       m.split[p] == null
         ? "—"
         : m.unit === "percent"
         ? `${m.split[p]!.toFixed(1)}%`
         : m.split[p]!.toLocaleString("en-US", { maximumFractionDigits: 0 })
     );
-    const missingReasons: Partial<Record<Metric["id"], string>> = {
-      "health.crash_free": "Crash coverage not verified",
-      "health.thumbs_positive": "Answer ratings source needed",
-      "revenue.payer_churn": "Payer history needed",
-      "revenue.activated_paid_30d": "Paid-account linkage needed",
-      "revenue.arpmau": "Same-date revenue source needed",
-      "revenue.mrr": "Plan revenue source needed",
-      "cost.gross_margin_pct": "Revenue and cost coverage needed",
-    };
-    const missingReason = missingReasons[m.id] || "Source data not available";
+    // The route's classified cause, rather than an ID-based generic substitute.
+    const missingReason =
+      m.reason?.split(";")[0] || "Source refresh receipt missing";
     let footnote = through ? `as of ${through}` : "Refresh time unavailable";
     if (cohortDate)
       footnote += ` · cohort ${cohortDate}${
@@ -140,6 +145,13 @@ export function wallPresentation(payload: WallPayload, now = new Date()) {
       footnote = `Coverage incomplete · ${
         through ? `as of ${through}` : "refresh pending"
       }`;
+    if (
+      m.id === "revenue.arpmau" &&
+      m.value != null &&
+      m.materialGap &&
+      !fixture
+    )
+      footnote = `Live MRR / MAU through ${through || "unknown"}`;
     if (m.id === "growth.true_new_7d" && !m.stale && m.value != null)
       footnote = `180-day lookback · ${
         through ? `as of ${through}` : "refresh pending"
@@ -154,6 +166,10 @@ export function wallPresentation(payload: WallPayload, now = new Date()) {
     )
       footnote = `Shopify cash · ${
         through ? `as of ${through}` : "refresh pending"
+      }`;
+    if (mcpActivity && m.value != null && m.split.mcp == null)
+      footnote = `${m.mcpReason || MCP_MARKER_MISSING}${
+        m.stale ? " · stale" : through ? ` · ${through}` : ""
       }`;
     const hardwareUnits =
       m.id === "revenue.hardware_usd_week"
@@ -193,6 +209,9 @@ export function wallPresentation(payload: WallPayload, now = new Date()) {
       macos: splitValues[0],
       mobile: splitValues[1],
       other: splitValues[2],
+      ...(mcpActivity
+        ? { mcp: splitValues[3], mcpReason: m.mcpReason || MCP_MARKER_MISSING }
+        : {}),
       state:
         m.status === "null"
           ? "UNAVAILABLE"
@@ -203,7 +222,9 @@ export function wallPresentation(payload: WallPayload, now = new Date()) {
           : m.partial
           ? "PARTIAL"
           : m.status.toUpperCase(),
-      splitRow: `macOS ${splitValues[0]} · Mobile ${splitValues[1]} · Other ${splitValues[2]}`,
+      splitRow: `macOS ${splitValues[0]} · Mobile ${splitValues[1]} · Other ${
+        splitValues[2]
+      }${mcpActivity ? ` · MCP-only ${splitValues[3]}` : ""}`,
       footnote,
       reason: m.reason || "—",
       scope,

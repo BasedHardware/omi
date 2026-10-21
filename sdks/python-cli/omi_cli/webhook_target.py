@@ -35,11 +35,30 @@ class TargetReport:
 
 
 def is_public_address(ip: IPAddress) -> bool:
+    # ``::ffff:100.64.0.1`` and ``100.64.0.1`` name one destination, and
+    # getaddrinfo returns either form depending on the host's resolver. Python's
+    # own categories read through to the embedded address, but CGNAT is not one
+    # of them, so classify the mapped address rather than the form it arrived in
+    # — otherwise the rule below only sees half the addresses it is written for.
+    mapped = getattr(ip, "ipv4_mapped", None)
+    if mapped is not None:
+        ip = mapped
     if isinstance(ip, ipaddress.IPv4Address) and ip in CGNAT_NETWORK:
         return False
     return not (
         ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_multicast or ip.is_reserved or ip.is_unspecified
     )
+
+
+def _format_address(ip: IPAddress) -> str:
+    # str() of an IPv4-mapped address depends on the Python release: newer ones
+    # print ::ffff:100.64.0.1, older ones (3.12.10, the newest 3.12 with Windows
+    # installers, is one) print ::ffff:6440:1. Spell the mapped form out so the
+    # report names the address the same way on every Python.
+    if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped is not None:
+        text = f"::ffff:{ip.ipv4_mapped}"
+        return f"{text}%{ip.scope_id}" if ip.scope_id else text
+    return str(ip)
 
 
 def resolve_addresses(host: str) -> list[str]:
@@ -78,7 +97,7 @@ def inspect_target(url: str, resolver: Optional[Resolver] = None) -> TargetRepor
     if not addresses:
         return TargetReport(False, f"Omi cannot resolve {host}", "No addresses returned.")
 
-    private = [str(ip) for ip in addresses if not is_public_address(ip)]
+    private = [_format_address(ip) for ip in addresses if not is_public_address(ip)]
     if private:
         return TargetReport(
             False,
@@ -88,4 +107,4 @@ def inspect_target(url: str, resolver: Optional[Resolver] = None) -> TargetRepor
         )
 
     detail = None if parts.scheme == "https" else "Omi delivers over http too, but the payload is unencrypted."
-    return TargetReport(True, f"{host} resolves to {', '.join(str(ip) for ip in addresses)}", detail)
+    return TargetReport(True, f"{host} resolves to {', '.join(_format_address(ip) for ip in addresses)}", detail)

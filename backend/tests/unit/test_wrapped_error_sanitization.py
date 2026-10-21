@@ -18,6 +18,8 @@ from types import ModuleType
 import unittest
 from unittest.mock import MagicMock, patch
 
+from google.api_core import retry as api_retry
+
 WRAPPED_ROUTER_FILE = Path(__file__).resolve().parents[2] / "routers" / "wrapped.py"
 WRAPPED_GEN_FILE = Path(__file__).resolve().parents[2] / "utils" / "wrapped" / "generate_2025.py"
 
@@ -61,6 +63,7 @@ class WrappedErrorSanitizationTests(unittest.TestCase):
         )
         google_api_core_exceptions.__getattr__ = lambda name: type(name, (Exception,), {})
         google_api_core.exceptions = google_api_core_exceptions
+        google_api_core.retry = api_retry
 
         google_auth = sys.modules.get("google.auth") or ModuleType("google.auth")
         google_auth_transport = sys.modules.get("google.auth.transport") or ModuleType("google.auth.transport")

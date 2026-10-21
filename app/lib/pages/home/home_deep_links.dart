@@ -333,8 +333,6 @@ Future<Map<String, Memory>> resolveIndexedMemoriesByIds(
           limit: limit,
           offset: cursor == null ? offset : 0,
           cursor: cursor,
-          view: memories_api.MemoryReadView.all,
-          forceView: true,
         ));
     if (!ownerIsCurrent()) return const {};
     if (!result.ok || result.truncated) return found;

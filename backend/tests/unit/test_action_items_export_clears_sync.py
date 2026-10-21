@@ -27,9 +27,15 @@ def _install_fake_db(monkeypatch):
     """Capture the update payload the single-item route writes."""
     writes = []
 
+    stored_row = {'sync_requested': True}
     doc_ref = MagicMock()
-    doc_ref.get.return_value = SimpleNamespace(exists=True)
-    doc_ref.update.side_effect = lambda data: writes.append(data)
+    doc_ref.get.return_value = SimpleNamespace(exists=True, to_dict=lambda: dict(stored_row))
+
+    def update(data):
+        writes.append(dict(data))
+        stored_row.update(data)
+
+    doc_ref.update.side_effect = update
 
     items_collection = MagicMock()
     items_collection.document.return_value = doc_ref
@@ -44,11 +50,11 @@ def _install_fake_db(monkeypatch):
 
     monkeypatch.setattr(action_items_db, "db", fake_db)
     monkeypatch.setattr(action_items_db, "bump_action_items_list_version", lambda uid: None)
-    return writes
+    return writes, stored_row
 
 
 def test_export_clears_sync_requested(monkeypatch):
-    writes = _install_fake_db(monkeypatch)
+    writes, _stored_row = _install_fake_db(monkeypatch)
 
     action_items_db.update_action_item(
         UID,
@@ -62,8 +68,26 @@ def test_export_clears_sync_requested(monkeypatch):
 
 
 def test_non_export_update_leaves_sync_requested_alone(monkeypatch):
-    writes = _install_fake_db(monkeypatch)
+    writes, _stored_row = _install_fake_db(monkeypatch)
 
     action_items_db.update_action_item(UID, ITEM_ID, {"description": "x"})
 
     assert "sync_requested" not in writes[-1]
+
+
+def test_cloud_export_clears_stored_pending_sync_requested(monkeypatch):
+    writes, stored_row = _install_fake_db(monkeypatch)
+
+    action_items_db.update_action_item(
+        UID,
+        ITEM_ID,
+        {"exported": True, "export_platform": "asana"},
+    )
+
+    assert writes[-1]["exported"] is True
+    assert writes[-1]["export_platform"] == "asana"
+    assert writes[-1]["sync_requested"] is False
+    assert stored_row['sync_requested'] is False
+    # The pending read filters on sync_requested == True before it applies
+    # exported != True in Python, so this settled row no longer consumes a
+    # slot in that limit-50 result.

@@ -3,6 +3,65 @@ require 'open3'
 require 'tmpdir'
 
 class SpeechFallbackCoordinatorTest < Minitest::Test
+  def test_runtime_failure_rechecks_readiness_and_preserves_the_native_cause
+    Dir.mktmpdir('speech-runtime-recovery') do |dir|
+      source = File.expand_path('../Runner/SpeechDeadline.swift', __dir__)
+      harness = File.join(dir, 'Harness.swift')
+      File.write(harness, <<~SWIFT)
+        import Foundation
+        @main struct Harness {
+          @MainActor static func main() async throws {
+            for preferAnalyzer in [false, true] {
+              for failedStatus in ["unavailable", "permission_denied"] {
+                var probes = 0
+                var calls = 0
+                let native = NSError(domain: "kLSRErrorDomain", code: 102,
+                  userInfo: [NSLocalizedDescriptionKey: "Localized asset error"])
+                let coordinator = SpeechFallbackCoordinator(analyzerReady: { true },
+                  legacyReady: {
+                    probes += 1
+                    return LocalSpeechReadiness(engine: "sfspeech", status: probes == 1 ? "ready" : failedStatus)
+                  }, analyze: { throw native }, legacy: { calls += 1; throw native })
+                do { _ = try await coordinator.transcribe(preferAnalyzer: preferAnalyzer); preconditionFailure() }
+                catch let error as LocalSpeechUnavailable {
+                  precondition(error.readiness.status == failedStatus)
+                  precondition(error.cause === native)
+                  precondition(error.wire["nativeErrorDomain"] as? String == native.domain)
+                  precondition(error.wire["nativeErrorCode"] as? Int == 102)
+                }
+                precondition(probes == 2 && calls == 1)
+              }
+            }
+            // A clip/timeout/asset error with a healthy follow-up probe stays
+            // an error, unchanged. Do not parse messages or report empty success.
+            for domain in ["clip.io", "kLSRErrorDomain"] {
+              let native = NSError(domain: domain, code: 102,
+                userInfo: [NSLocalizedDescriptionKey: "Failed to access assets"])
+              let coordinator = SpeechFallbackCoordinator(analyzerReady: { false },
+                legacyReady: { LocalSpeechReadiness(engine: "sfspeech", status: "ready") },
+                analyze: { preconditionFailure() }, legacy: { throw native })
+              do { _ = try await coordinator.transcribe(preferAnalyzer: false); preconditionFailure() }
+              catch { precondition((error as NSError) === native) }
+            }
+            // Healthy silence remains a successful empty result, without a
+            // second readiness probe or a new recovery failure.
+            var probes = 0
+            let silence = SpeechFallbackCoordinator(analyzerReady: { false },
+              legacyReady: { probes += 1; return LocalSpeechReadiness(engine: "sfspeech", status: "ready") },
+              analyze: { preconditionFailure() }, legacy: { "" })
+            let text = try await silence.transcribe(preferAnalyzer: false)
+            precondition(text.isEmpty && probes == 1)
+            print("runtime readiness, native diagnostics and silence paths passed")
+          }
+        }
+      SWIFT
+      output, status = Open3.capture2e('swiftc', '-parse-as-library', source, harness, '-o', File.join(dir, 'test'))
+      assert status.success?, output
+      output, status = Open3.capture2e(File.join(dir, 'test'))
+      assert status.success?, output
+    end
+  end
+
   def test_actual_coordinator_install_recognition_permission_and_rollback_paths
     Dir.mktmpdir('speech-coordinator') do |dir|
       source = File.expand_path('../Runner/SpeechDeadline.swift', __dir__)

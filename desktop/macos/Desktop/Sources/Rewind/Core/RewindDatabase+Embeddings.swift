@@ -37,10 +37,26 @@ extension RewindDatabase {
     }
   }
 
+  /// Final bounded admission check while the caller holds its per-row reservation.
+  func screenshotIDsMissingEmbeddings(_ ids: Set<Int64>) throws -> Set<Int64> {
+    guard !ids.isEmpty else { return [] }
+    guard let dbQueue = getDatabaseQueue() else { throw RewindError.databaseNotInitialized }
+    return try dbQueue.read { db in
+      Set(
+        try Int64.fetchAll(
+          db,
+          sql:
+            "SELECT id FROM screenshots WHERE embedding IS NULL AND id IN (\(ids.map(String.init).joined(separator: ",")))"
+        ))
+    }
+  }
+
   /// Get screenshots missing embeddings (for backfill)
-  func getScreenshotsMissingEmbeddings(limit: Int = 100) throws -> [(
-    id: Int64, ocrText: String, appName: String, windowTitle: String?
-  )] {
+  func getScreenshotsMissingEmbeddings(limit: Int = 100, olderThan cutoff: Date? = nil, excludingIDs: Set<Int64> = [])
+    throws -> [(
+      id: Int64, ocrText: String, appName: String, windowTitle: String?
+    )]
+  {
     guard let dbQueue = getDatabaseQueue() else {
       throw RewindError.databaseNotInitialized
     }
@@ -51,8 +67,14 @@ extension RewindDatabase {
         sql: """
               SELECT id, ocrText, appName, windowTitle FROM screenshots
               WHERE embedding IS NULL AND ocrText IS NOT NULL AND LENGTH(ocrText) >= 20
+              AND (? IS NULL OR (CAST(strftime('%s', timestamp) AS INTEGER) / 300 + 1) * 300 <= ?)
+                AND id NOT IN (\(excludingIDs.map(String.init).joined(separator: ",")))
               ORDER BY id LIMIT ?
-          """, arguments: [limit]
+          """,
+        arguments: [
+          cutoff.map { Int64($0.timeIntervalSince1970.rounded(.down)) },
+          cutoff.map { Int64($0.timeIntervalSince1970.rounded(.down)) }, limit,
+        ]
       ).compactMap { row in
         guard let id: Int64 = row["id"],
           let ocrText: String = row["ocrText"],
@@ -79,9 +101,11 @@ extension RewindDatabase {
   /// intervening green `main` runs had skipped the suite rather than passed it.
   /// Ranking still happens before the filter, which is what keeps the query idempotent:
   /// a bucket's winner is chosen among all its rows and drops out once it has an embedding.
-  func getCompactedScreenshotsMissingEmbeddings(limit: Int = 100, olderThan cutoff: Date) throws -> [(
-    id: Int64, ocrText: String, appName: String, windowTitle: String?
-  )] {
+  func getCompactedScreenshotsMissingEmbeddings(limit: Int = 100, olderThan cutoff: Date, excludingIDs: Set<Int64> = [])
+    throws -> [(
+      id: Int64, ocrText: String, appName: String, windowTitle: String?
+    )]
+  {
     guard let dbQueue = getDatabaseQueue() else {
       throw RewindError.databaseNotInitialized
     }
@@ -96,6 +120,7 @@ extension RewindDatabase {
           SELECT id, ocrText, appName, windowTitle
           FROM ranked
           WHERE bucketRank = 1 AND embedding IS NULL
+            AND id NOT IN (\(excludingIDs.map(String.init).joined(separator: ",")))
           ORDER BY id
           LIMIT ?
           """,
@@ -192,33 +217,47 @@ extension RewindDatabase {
   /// Re-open a previously completed backfill when compacted, OCR-bearing rows still lack vectors.
   /// This repairs the historical completed=1/processedCount=0 state without scanning or enqueueing
   /// more than one bounded launch will consume.
-  func rearmScreenshotEmbeddingBackfillIfNeeded(olderThan cutoff: Date) throws -> Bool {
+  func rearmScreenshotEmbeddingBackfillIfNeeded(olderThan cutoff: Date, compacted: Bool = true) throws -> Bool {
     guard let dbQueue = getDatabaseQueue() else {
       throw RewindError.databaseNotInitialized
     }
 
     return try dbQueue.write { db in
-      let missingWinner =
-        try Bool.fetchOne(
-          db,
-          sql: """
-            WITH ranked AS (
-              SELECT embedding,
-                     ROW_NUMBER() OVER (
-                       PARTITION BY appName, COALESCE(windowTitle, ''),
-                                    CAST(strftime('%s', timestamp) AS INTEGER) / 300
-                       ORDER BY LENGTH(ocrText) DESC, id DESC
-                     ) AS bucketRank
-              FROM screenshots
-              WHERE ocrText IS NOT NULL
-                AND LENGTH(ocrText) >= 20
-                AND (CAST(strftime('%s', timestamp) AS INTEGER) / 300 + 1) * 300 <= ?
-            )
-            SELECT EXISTS(
-              SELECT 1 FROM ranked WHERE bucketRank = 1 AND embedding IS NULL
-            )
-            """,
-          arguments: [Int64(cutoff.timeIntervalSince1970.rounded(.down))]) ?? false
+      let missingWinner: Bool
+      if compacted {
+        missingWinner =
+          try Bool.fetchOne(
+            db,
+            sql: """
+              WITH ranked AS (
+                SELECT embedding,
+                       ROW_NUMBER() OVER (
+                         PARTITION BY appName, COALESCE(windowTitle, ''),
+                                      CAST(strftime('%s', timestamp) AS INTEGER) / 300
+                         ORDER BY LENGTH(ocrText) DESC, id DESC
+                       ) AS bucketRank
+                FROM screenshots
+                WHERE ocrText IS NOT NULL
+                  AND LENGTH(ocrText) >= 20
+                  AND (CAST(strftime('%s', timestamp) AS INTEGER) / 300 + 1) * 300 <= ?
+              )
+              SELECT EXISTS(
+                SELECT 1 FROM ranked WHERE bucketRank = 1 AND embedding IS NULL
+              )
+              """,
+            arguments: [Int64(cutoff.timeIntervalSince1970.rounded(.down))]) ?? false
+      } else {
+        // Uses idx_screenshots_missing_embedding; do not rank/scan the whole history
+        // to reopen the Stable legacy path after a brief unknown grant.
+        missingWinner =
+          try Bool.fetchOne(
+            db,
+            sql: """
+              SELECT EXISTS(SELECT 1 FROM screenshots
+                WHERE embedding IS NULL AND ocrText IS NOT NULL AND LENGTH(ocrText) >= 20
+                  AND (CAST(strftime('%s', timestamp) AS INTEGER) / 300 + 1) * 300 <= ? LIMIT 1)
+              """, arguments: [Int64(cutoff.timeIntervalSince1970.rounded(.down))]) ?? false
+      }
       guard missingWinner else { return false }
 
       try db.execute(

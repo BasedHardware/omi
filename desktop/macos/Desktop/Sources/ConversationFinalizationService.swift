@@ -219,13 +219,6 @@ actor ConversationFinalizationService {
       await meetingContextSyncForTesting(Self.captureInterval(of: session))
       return
     }
-    let enabled = await MainActor.run {
-      (
-        systemCalendar: SystemCalendarMeetingContextFeature.isEnabled,
-        onDeviceIdentity: OnDeviceMeetingIdentityFeature.isEnabled
-      )
-    }
-    guard enabled.systemCalendar || enabled.onDeviceIdentity else { return }
     let end = max(session.finishedAt ?? Date(), session.startedAt.addingTimeInterval(1))
     let interval = DateInterval(start: session.startedAt, end: end)
 
@@ -235,15 +228,11 @@ actor ConversationFinalizationService {
     await withTaskGroup(of: Void.self) { group in
       group.addTask {
         await withTaskGroup(of: Void.self) { syncGroup in
-          if enabled.systemCalendar {
-            syncGroup.addTask {
-              await SystemCalendarMeetingContextService.shared.syncAuthorizedEvents(overlapping: interval)
-            }
+          syncGroup.addTask {
+            await SystemCalendarMeetingContextService.shared.syncAuthorizedEvents(overlapping: interval)
           }
-          if enabled.onDeviceIdentity {
-            syncGroup.addTask {
-              await OnDeviceMeetingIdentityService.shared.syncIdentity(overlapping: interval)
-            }
+          syncGroup.addTask {
+            await OnDeviceMeetingIdentityService.shared.syncIdentity(overlapping: interval)
           }
           await syncGroup.waitForAll()
         }
@@ -324,26 +313,6 @@ actor ConversationFinalizationService {
       uploadSegments: uploadSegments,
       startedAt: bundle.session.startedAt
     )
-    let captureEvidence: APIClient.CaptureEvidenceLineage?
-    if ProcessInfo.processInfo.environment["CAPTURE_EVIDENCE_V1_DARK_WRITE"] == "1" {
-      let units = bundle.segments.compactMap { segment -> APIClient.CaptureEvidenceLineage.Unit? in
-        guard let id = segment.id, segment.startTime.isFinite, segment.endTime.isFinite,
-          segment.startTime >= 0, segment.endTime > segment.startTime
-        else { return nil }
-        return .init(
-          id: String(id),
-          startMs: Int64((segment.startTime * 1000).rounded()),
-          endMs: Int64((segment.endTime * 1000).rounded()))
-      }
-      let root = Self.localClientConversationId(session: bundle.session, sessionId: sessionId)
-      let complete = units.count == bundle.segments.count && units.count <= 64
-      captureEvidence = .init(
-        version: 1, capability: "stable_artifact", captureRoot: root,
-        clockDomain: "desktop_session_ms", lineage: complete ? "complete" : "incomplete",
-        units: complete ? units : [])
-    } else {
-      captureEvidence = nil
-    }
     let request = APIClient.CreateConversationFromSegmentsRequest(
       transcript_segments: uploadSegments,
       source: bundle.session.source,
@@ -354,7 +323,7 @@ actor ConversationFinalizationService {
       conversation_role: bundle.session.conversationRole.rawValue,
       conversation_finalization_reason: bundle.session.finalizationReason?.rawValue,
       client_processing: clientProcessing,
-      captureEvidence: captureEvidence
+      captureEvidence: nil
     )
     let response = try await apiClient.createConversationFromSegments(request)
     if response.status == "deleted" {
@@ -401,7 +370,11 @@ actor ConversationFinalizationService {
     if let pinned = localProjectionHooks?.entitlement {
       entitlement = pinned
     } else {
-      entitlement = await SubscriptionEntitlementService.shared.decisionForManagedProactivity()
+      let subscription = await SubscriptionEntitlementService.shared.snapshot()
+      entitlement =
+        LocalProjectionFinalization.fundingUnavailable(
+          subscription: subscription, isByokActive: APIKeyService.isByokActive
+        ) ? .planGated : .allowManagedProactivity
     }
     let thermalState = localProjectionHooks?.thermalState ?? ProcessInfo.processInfo.thermalState
     let decision = LocalProjectionFinalization.decision(

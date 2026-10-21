@@ -184,7 +184,7 @@
             "type": "__expr__",
             "uid": "__expr__"
           },
-          "expression": "$A >= 20 && $B > 0.10",
+          "expression": "$A >= 20 && $B > 0.10 && $E >= 5",
           "intervalMs": 1000,
           "maxDataPoints": 43200,
           "refId": "C",
@@ -232,6 +232,26 @@
           "refId": "D",
           "type": "reduce"
         }
+      },
+      {
+        "refId": "E",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 1800,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(omi_journey_terminal_total{journey=\"chat_response\",outcome=\"failure\"}[30m]))",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "E"
+        }
       }
     ],
     "updated": "2026-07-15T00:00:00Z",
@@ -242,11 +262,11 @@
     "annotations": {
       "__dashboardUid__": "omi-resilience-fallbacks",
       "__panelId__": "7",
-      "summary": "Chat terminal failures exceed 10% with at least 20 terminal real requests in 30m",
-      "threshold": "failure share > 0.10; terminal outcomes >= 20",
+      "summary": "Chat terminal failures exceed 10% with at least 20 terminal real requests and at least 5 failures in 30m",
+      "threshold": "failure share > 0.10; terminal outcomes >= 20; failures >= 5",
       "user_impact": "Users may be unable to complete this Omi interaction or may experience degraded results.",
       "scope": "The Omi AI chat production service path.",
-      "verification": "Verify the condition in the linked Grafana panel and correlate it with production traffic before intervention.",
+      "verification": "2026-10-19: a quiet half hour (~22 terminals) with 4 provider_request_rejected 400s on omi:auto:chat-agent drove the 30m success share to 0.81 and set both chat rules pending. The failure floor ($E >= 5) keeps 3-4 rejects in low traffic from paging. Backtest over the full retained history (2026-10-09..10-19, 10m and 5m steps): the old and new conditions both have zero sustained firings; the worst windows are 10-15 16:43Z (success 0.74, 5.1 failures, 20 accepted: still satisfies the new condition) and 10-19 18:13Z (0.81, 4.3 failures: now suppressed). Accepted per 30m is p50 21 / p90 40, so a full outage (~20+ failures per 30m) clears the floor at once.",
       "safe_next_action": "Inspect the linked dashboard and the affected user path; mitigate through the documented service runbook only after verification."
     },
     "labels": {
@@ -1266,7 +1286,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (lane_id) (increase(llm_gateway_requests_total{outcome!=\"success\"}[1h])) / clamp_min(sum by (lane_id) (increase(llm_gateway_requests_total[1h])), 1)",
+          "expr": "(sum by (lane_id) (increase(llm_gateway_requests_total{outcome!=\"success\"}[1h])) - (sum by (lane_id) (increase(llm_gateway_requests_total{outcome!=\"success\",lane_id=\"omi:auto:proactive-notification\",error_class=\"invalid_request\",provider=\"none\"}[1h])) or sum by (lane_id) (increase(llm_gateway_requests_total{outcome!=\"success\"}[1h])) * 0)) / clamp_min(sum by (lane_id) (increase(llm_gateway_requests_total[1h])), 1)",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -1345,7 +1365,7 @@
       "__dashboardUid__": "omi-resilience-fallbacks",
       "__panelId__": "13",
       "summary": "One gateway lane is failing more than a quarter of its real requests over an hour",
-      "threshold": "failure share > 0.25 with >= 20 real requests in 1h, per lane",
+      "threshold": "failure share > 0.25 with >= 20 real requests in 1h, per lane. Excludes omi:auto:proactive-notification pre-provider invalid_request refusals (error_class=invalid_request, provider=none: proactivity_admission.call_limit per-user/per-item caps, no provider call, no cost; ~47/h on 2026-10-19).",
       "user_impact": "The Omi capability served by this lane may be unavailable or degraded for the users who reach it.",
       "scope": "A single production LLM gateway lane; other lanes are evaluated independently.",
       "verification": "Confirm the failing lane and its provider rejection class in the linked panel before intervention.",
@@ -2097,7 +2117,7 @@
             "type": "__expr__",
             "uid": "__expr__"
           },
-          "expression": "$A >= 20 && $B < 0.90",
+          "expression": "$A >= 20 && $B < 0.90 && $E >= 5",
           "intervalMs": 1000,
           "maxDataPoints": 43200,
           "refId": "C",
@@ -2145,6 +2165,26 @@
           "refId": "D",
           "type": "reduce"
         }
+      },
+      {
+        "refId": "E",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 1800,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(omi_journey_terminal_total{journey=\"chat_response\",outcome=\"failure\"}[30m]))",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "E"
+        }
       }
     ],
     "updated": "2026-08-30T00:00:00Z",
@@ -2155,11 +2195,11 @@
     "annotations": {
       "__dashboardUid__": "omi-core-features",
       "__panelId__": "4",
-      "summary": "Chat response success share below the 90% paging floor while at least 20 journeys were accepted in 30m",
-      "threshold": "accepted >= 20 per 30m and success / (success + failure) < 0.90",
+      "summary": "Chat response success share below the 90% paging floor with at least 20 journeys accepted and at least 5 failures in 30m",
+      "threshold": "accepted >= 20 per 30m and success / (success + failure) < 0.90 and failures >= 5 per 30m",
       "user_impact": "Chat requests are terminalizing as failures; users cannot get AI chat responses.",
       "scope": "The chat-response journey outcome on the Cloud Run backend, ingested via the cloud-run-application-metrics bridge.",
-      "verification": "Confirm the success tile and the accepted-vs-settled panel on the linked Core Features dashboard before intervention.",
+      "verification": "2026-10-19: a quiet half hour (~22 terminals) with 4 provider_request_rejected 400s on omi:auto:chat-agent drove the 30m success share to 0.81 and set both chat rules pending. The failure floor ($E >= 5) keeps 3-4 rejects in low traffic from paging. Backtest over the full retained history (2026-10-09..10-19, 10m and 5m steps): the old and new conditions both have zero sustained firings; the worst windows are 10-15 16:43Z (success 0.74, 5.1 failures, 20 accepted: still satisfies the new condition) and 10-19 18:13Z (0.81, 4.3 failures: now suppressed). Accepted per 30m is p50 21 / p90 40, so a full outage (~20+ failures per 30m) clears the floor at once.",
       "safe_next_action": "Follow the real-traffic journeys runbook; treat a low success share with real accepted traffic as a user-facing outage, not a capacity signal.",
       "runbook": "backend/docs/runbooks/real-traffic-journeys.md"
     },
@@ -2459,6 +2499,304 @@
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
       "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-capture-summary-never-published",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Resilience",
+    "title": "Capture finalization - summary has never published",
+    "condition": "C",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 1800,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "absent_over_time(listen_finalization_summary_last_success_timestamp_seconds[30m])",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "B"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "B",
+          "type": "reduce"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  0
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "C"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "threshold"
+        }
+      }
+    ],
+    "updated": "2026-10-18T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "30m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "__dashboardUid__": "omi-core-features",
+      "__panelId__": "30",
+      "summary": "Capture finalization - summary has not published",
+      "threshold": "Warning when no successful summary timestamp has been scraped for 30m and that absence persists for another 30m. This is not a page.",
+      "user_impact": "Summary freshness has not yet been established; this can be expected before the backend-listen image ships or during prolonged restarts and lease handoffs.",
+      "scope": "No backend-listen pod has published the summary timestamp within the last 30m.",
+      "verification": "Check backend-listen rollout and lease state first, then inspect Firestore summary query logs and the metric scrape.",
+      "safe_next_action": "Confirm the backend-listen image is deployed; if it is, investigate why the Firestore summary has not published.",
+      "runbook": "backend/docs/runbooks/real-traffic-journeys.md"
+    },
+    "labels": {
+      "severity": "warning",
+      "instatus_component": "speech-processing",
+      "alert_identity": "omi-capture-summary-never-published",
+      "component": "speech-processing",
+      "impact": "user-experience"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h"
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-capture-summary-stale",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Resilience",
+    "title": "Capture finalization - Firestore summary stale",
+    "condition": "C",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 1800,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "time() - max(max_over_time(listen_finalization_summary_last_success_timestamp_seconds[30m])) > 900",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "B"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "B",
+          "type": "reduce"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  0
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "C"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "threshold"
+        }
+      }
+    ],
+    "updated": "2026-10-18T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "5m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "__dashboardUid__": "omi-core-features",
+      "__panelId__": "30",
+      "summary": "Capture finalization - Firestore summary stale",
+      "threshold": "Critical only after a previously published Firestore summary timestamp is older than 900s for 5m; the 30m query window must still contain a sample.",
+      "user_impact": "The oldest unfinished capture age may be stale because no listen pod has completed a Firestore summary recently.",
+      "scope": "Maximum last-success timestamp across backend-listen pods; missing series is OK for this critical rule until a summary has been published.",
+      "verification": "Check the summary freshness metric and backend-listen Firestore query logs; a missing series is handled by the separate warning.",
+      "safe_next_action": "Restore summary reads and verify a successful Firestore summary republishes the age and status gauges.",
+      "runbook": "backend/docs/runbooks/real-traffic-journeys.md"
+    },
+    "labels": {
+      "severity": "critical",
+      "instatus_component": "speech-processing",
+      "alert_identity": "omi-capture-summary-stale",
+      "component": "speech-processing",
+      "impact": "user-experience"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h"
     },
     "record": null
   },
@@ -3217,6 +3555,150 @@
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
       "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-reason-unknown-ratio",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Resilience",
+    "title": "Reason enums - unknown reason ratio elevated",
+    "condition": "C",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 1800,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "(sum by (family) (rate(omi_reason_unknown_total[30m])) / clamp_min(sum by (family) (rate(omi_reason_total[30m])), 1e-9)) and on (family) (sum by (family) (increase(omi_reason_total[30m])) > 50)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B",
+          "type": "reduce",
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "B"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "reducer": "last"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "threshold",
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  0.02
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "C"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ]
+        }
+      }
+    ],
+    "updated": "2026-10-19T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "30m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "summary": "A reason family has an unknown share above 2% with enough events to evaluate.",
+      "user_impact": "A known reason mapped to unknown can misroute retries or provider fallback. The Parakeet cancelled-to-connection_lost mislabel caused about $75/day of false Soniox routing for five days.",
+      "scope": "Evaluated per family: unknown reason rate divided by total reason rate over 30m, with a same-window total-volume guard.",
+      "verification": "Inspect the family and emitting site; compare unknown and total reason rates with the reason mapping and route outcomes.",
+      "safe_next_action": "Find the emitting site that maps a known reason to unknown; verify its enum mapping before changing provider routing.",
+      "threshold": "Unknown share >2% and more than 50 total reason events in the rolling 30m window; the condition must persist for 30m.",
+      "incident": "Parakeet cancelled-to-connection_lost mislabel: about $75/day of false Soniox routing for five days. See backend/docs/runbooks/live-stt-routing.md for the reason contract.",
+      "dashboard_url": "https://monitor.omi.me/d/omi-resilience-fallbacks",
+      "runbook": "backend/docs/runbooks/live-stt-routing.md"
+    },
+    "labels": {
+      "alert_identity": "omi-reason-unknown-ratio",
+      "component": "backend",
+      "impact": "product",
+      "instatus_component": "api",
+      "severity": "warning"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null
   }

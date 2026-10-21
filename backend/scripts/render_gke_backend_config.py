@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import sys
 from pathlib import Path
@@ -15,7 +16,7 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT / 'backend') not in sys.path:
     sys.path.insert(0, str(ROOT / 'backend'))
 
-from config.free_tier_rollout import validate_free_tier_deploy_value  # noqa: E402
+from config.plan_catalog_generated import LADDER_V1_PRICE_BINDINGS  # noqa: E402
 from scripts.render_backend_runtime_env import require_sync_lineage_rollout  # noqa: E402
 
 DEFAULT_MANIFEST = ROOT / 'backend/deploy/runtime_env.yaml'
@@ -133,7 +134,7 @@ def config_map_entries(env: str, manifest_path: Path = DEFAULT_MANIFEST) -> tupl
             value = entry.get('value')
             if not isinstance(value, str):
                 raise ValueError(f'config_map entry {key} with source=literal requires string value')
-            validate_free_tier_deploy_value(key, value)
+
             resolved[key] = value
             continue
         if source == 'environment':
@@ -143,7 +144,7 @@ def config_map_entries(env: str, manifest_path: Path = DEFAULT_MANIFEST) -> tupl
             if value is None:
                 missing.append(key)
                 continue
-            validate_free_tier_deploy_value(key, value)
+
             resolved[key] = value
             continue
         raise ValueError(f'config_map entry {key} has unsupported source {source!r}')
@@ -159,6 +160,9 @@ def main() -> int:
     parser.add_argument('--env', choices=('dev', 'prod'), required=True)
     parser.add_argument('--manifest', type=Path, default=DEFAULT_MANIFEST)
     parser.add_argument(
+        '--existing-config-map', type=Path, help='Retain bound ladder references when omitted by a caller.'
+    )
+    parser.add_argument(
         '--format',
         choices=('env', 'keys', 'name'),
         default='env',
@@ -171,6 +175,13 @@ def main() -> int:
 
     try:
         name, entries = config_map_entries(args.env, args.manifest)
+        if args.existing_config_map:
+            text = args.existing_config_map.read_text(encoding='utf-8')
+            existing = json.loads(text).get('data', {}) if text.strip() else {}
+            for binding in LADDER_V1_PRICE_BINDINGS.values():
+                key = binding['env_var']
+                if key in entries and not entries[key] and existing.get(key):
+                    entries[key] = existing[key]
     except ValueError as exc:
         print(str(exc), file=sys.stderr)
         return 1

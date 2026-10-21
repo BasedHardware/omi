@@ -71,6 +71,11 @@ from utils.stt.send_queue import AudioSendQueue, audio_send_deadline
 @pytest.fixture(autouse=True)
 def _stt_failover_recovery_on(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv('STT_FAILOVER_RECOVERY_ENABLED', 'true')
+    # The matrix pins source->successor replay across providers. A serving
+    # source that dies before text would first get its one same-target
+    # retry; that policy has its own tests (test_live_stt_restart_burst_sim,
+    # test_live_replay_provider_pairs::test_serving_soniox_pre_text_*).
+    monkeypatch.setenv('LISTEN_STT_SAME_TARGET_RETRY_ENABLED', 'false')
 
 
 BYTES_PER_SECOND = 16000 * 2
@@ -433,7 +438,7 @@ async def test_four_distinct_modulate_targets_reach_healthy_fourth(monkeypatch, 
 
     monkeypatch.setattr(live_router, '_target_circuits', {})
     pod = live_health.FleetHealth(redis_client=MemoryRedis())
-    monkeypatch.setattr(pod, 'schedule', lambda coro: coro.close())
+    monkeypatch.setattr(pod, 'schedule', lambda coro, **_labels: coro.close())
     monkeypatch.setattr(live_chain, 'health', pod)
     monkeypatch.setattr(live_session, 'health', pod)
     for family in ('parakeet', 'modulate', 'soniox', 'deepgram'):
@@ -509,7 +514,7 @@ async def test_episode_deadline_clamps_dials_then_exhausts(monkeypatch, virtual_
 
     monkeypatch.setattr(live_router, '_target_circuits', {})
     pod = live_health.FleetHealth(redis_client=MemoryRedis())
-    monkeypatch.setattr(pod, 'schedule', lambda coro: coro.close())
+    monkeypatch.setattr(pod, 'schedule', lambda coro, **_labels: coro.close())
     monkeypatch.setattr(live_chain, 'health', pod)
     monkeypatch.setattr(live_session, 'health', pod)
     for family in ('parakeet', 'modulate', 'soniox', 'deepgram'):
@@ -581,7 +586,7 @@ async def test_ptt_and_initial_legs_never_get_recovery_pacing():
 
 def test_terminal_after_text_counter_only_when_delivered_then_failed():
 
-    soniox_counter = LIVE_SESSION_TERMINAL_AFTER_TEXT.labels(provider='soniox')
+    soniox_counter = LIVE_SESSION_TERMINAL_AFTER_TEXT.labels(provider='soniox', demand_cohort='ineligible')
     before = soniox_counter._value.get()
     runtime = _runtime(delivered=True, terminal=True)
     runtime.stt_service = st.STTService.soniox
@@ -903,7 +908,7 @@ async def test_real_dials_each_get_the_full_per_dial_budget(monkeypatch, virtual
 
     monkeypatch.setattr(live_router, '_target_circuits', {})
     pod = live_health.FleetHealth(redis_client=MemoryRedis())
-    monkeypatch.setattr(pod, 'schedule', lambda coro: coro.close())
+    monkeypatch.setattr(pod, 'schedule', lambda coro, **_labels: coro.close())
     monkeypatch.setattr(live_chain, 'health', pod)
     monkeypatch.setattr(live_session, 'health', pod)
     for family in ('parakeet', 'modulate', 'soniox', 'deepgram'):
@@ -961,7 +966,7 @@ async def test_wall_dial_cap_cancels_hung_connect_and_walks(monkeypatch, virtual
 
     monkeypatch.setattr(live_router, '_target_circuits', {})
     pod = live_health.FleetHealth(redis_client=MemoryRedis())
-    monkeypatch.setattr(pod, 'schedule', lambda coro: coro.close())
+    monkeypatch.setattr(pod, 'schedule', lambda coro, **_labels: coro.close())
     monkeypatch.setattr(live_chain, 'health', pod)
     monkeypatch.setattr(live_session, 'health', pod)
     for family in ('parakeet', 'modulate', 'soniox', 'deepgram'):
@@ -1026,7 +1031,7 @@ async def test_connect_reject_settles_every_constructed_leg_once(monkeypatch, vi
 
     monkeypatch.setattr(live_router, '_target_circuits', {})
     pod = live_health.FleetHealth(redis_client=MemoryRedis())
-    monkeypatch.setattr(pod, 'schedule', lambda coro: coro.close())
+    monkeypatch.setattr(pod, 'schedule', lambda coro, **_labels: coro.close())
     monkeypatch.setattr(live_chain, 'health', pod)
     monkeypatch.setattr(live_session, 'health', pod)
     for family in ('parakeet', 'modulate', 'soniox', 'deepgram'):
@@ -1106,7 +1111,7 @@ async def test_selected_target_declared_limits_shape_prefix(monkeypatch, virtual
 
     monkeypatch.setattr(live_router, '_target_circuits', {})
     pod = live_health.FleetHealth(redis_client=MemoryRedis())
-    monkeypatch.setattr(pod, 'schedule', lambda coro: coro.close())
+    monkeypatch.setattr(pod, 'schedule', lambda coro, **_labels: coro.close())
     monkeypatch.setattr(live_chain, 'health', pod)
     monkeypatch.setattr(live_session, 'health', pod)
     for family in ('parakeet', 'modulate', 'soniox', 'deepgram'):

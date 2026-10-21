@@ -132,8 +132,6 @@ class L1MemoryArchiveItem(BaseModel):
     # "Dr. Patel". Empty/unknown should be treated as uncertain, not as a named user.
     about: str = ""
     subject_scope: SkipJsonSchema[Optional[str]] = None
-    belief_class: SkipJsonSchema[Optional[str]] = None
-    half_life_days: SkipJsonSchema[Optional[float]] = None
     valid_to: SkipJsonSchema[Optional[AwareDatetime]] = None
     confidence: str = "medium"
     risk_flags: List[str] = Field(default_factory=list)
@@ -514,8 +512,6 @@ class DurableMemoryPatch(BaseModel):
     ledger_schema_version: Optional[str] = None
     kind: MemoryKind = MemoryKind.fact
     subject_scope: MemorySubjectScope = MemorySubjectScope.primary_user
-    half_life_days: Optional[float] = None
-    belief_class: Optional[str] = None
     slot: Optional[str] = None
     body: Optional[str] = None
     valid_from: Optional[AwareDatetime] = None

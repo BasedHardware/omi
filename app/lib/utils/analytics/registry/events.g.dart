@@ -6,6 +6,47 @@ sealed class RegisteredEvent {
   Map<String, Object> get properties;
 }
 
+enum SavedPendantReconnectObservedTrigger {
+  launch("launch"),
+  resume("resume"),
+  adapterOn("adapter_on"),
+  backoff("backoff"),
+  nativeRetry("native_retry");
+  const SavedPendantReconnectObservedTrigger(this.wireName);
+  final String wireName;
+}
+
+enum SavedPendantReconnectObservedResult {
+  attempted("attempted"),
+  connected("connected"),
+  failedNotReady("failed_not_ready"),
+  failedTimeout("failed_timeout"),
+  failedAdapterNotReady("failed_adapter_not_ready"),
+  failedNativeConnect("failed_native_connect"),
+  failedConnection("failed_connection"),
+  failedConnect("failed_connect"),
+  failedDisconnected("failed_disconnected"),
+  failedPairingLost("failed_pairing_lost"),
+  failedNoGatt("failed_no_gatt"),
+  failedGatt("failed_gatt"),
+  skippedUserOrPairingBlock("skipped_user_or_pairing_block"),
+  skippedKillSwitch("skipped_kill_switch");
+  const SavedPendantReconnectObservedResult(this.wireName);
+  final String wireName;
+}
+
+final class SavedPendantReconnectObserved extends RegisteredEvent {
+  const SavedPendantReconnectObserved({required this.trigger, required this.attempt, required this.result, required this.disconnectedMs});
+  final SavedPendantReconnectObservedTrigger trigger;
+  final int attempt;
+  final SavedPendantReconnectObservedResult result;
+  final int disconnectedMs;
+  @override
+  String get wireName => "Saved Pendant Reconnect";
+  @override
+  Map<String, Object> get properties => {"trigger": trigger.wireName, "attempt": attempt, "result": result.wireName, "disconnected_ms": disconnectedMs};
+}
+
 final class OnboardingCompleted extends RegisteredEvent {
   const OnboardingCompleted();
   @override
@@ -2796,7 +2837,8 @@ final class OnboardingStepCompleted extends RegisteredEvent {
 enum PaywallVariantShownVariant {
   control("control"),
   outline("outline"),
-  web("web");
+  web("web"),
+  trial("trial");
   const PaywallVariantShownVariant(this.wireName);
   final String wireName;
 }
@@ -2896,4 +2938,34 @@ final class OnboardingWebviewFallback extends RegisteredEvent {
   String get wireName => "Onboarding Webview Fallback";
   @override
   Map<String, Object> get properties => {"reason": reason.wireName};
+}
+
+enum CaptureRecoveryObservedKind {
+  captureStartSkipped("capture_start_skipped"),
+  captureStartRedriven("capture_start_redriven"),
+  pendantAudioOrphaned("pendant_audio_orphaned"),
+  transferPassTimedOut("transfer_pass_timed_out");
+  const CaptureRecoveryObservedKind(this.wireName);
+  final String wireName;
+}
+
+enum CaptureRecoveryObservedTrigger {
+  syncPass("sync_pass"),
+  passEnded("pass_ended"),
+  appResumed("app_resumed"),
+  orphanAudio("orphan_audio"),
+  periodic("periodic"),
+  other("other");
+  const CaptureRecoveryObservedTrigger(this.wireName);
+  final String wireName;
+}
+
+final class CaptureRecoveryObserved extends RegisteredEvent {
+  const CaptureRecoveryObserved({required this.kind, required this.trigger});
+  final CaptureRecoveryObservedKind kind;
+  final CaptureRecoveryObservedTrigger trigger;
+  @override
+  String get wireName => "Capture Recovery Observed";
+  @override
+  Map<String, Object> get properties => {"kind": kind.wireName, "trigger": trigger.wireName};
 }

@@ -18,6 +18,7 @@ import 'package:omi/providers/user_provider.dart';
 import 'package:omi/services/wals.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/sync/offline_sync_amounts.dart';
 import 'package:omi/utils/sync_confirmation.dart';
@@ -220,7 +221,17 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
     } else if (attentionWals.isNotEmpty) {
       title = l.syncCardNeedsAttention(groupRecordingBlocks(attentionWals).length);
       titleColor = Colors.orangeAccent;
-      action = statusActionPill(l.sync, OmiColors.accent, startSync);
+      // Only a recording whose retry budget is spent can still upload; the
+      // others are terminal, and a plain Sync skipped both kinds. Offer the
+      // button only when it can do something.
+      if (p.retryableAttentionWals.isNotEmpty) {
+        action = KeyedSubtree(
+          key: const Key('offline_sync_card_retry_attention'),
+          child: statusActionPill(l.retry, OmiColors.accent, () async {
+            if (await confirmSyncForCustomStt(context) && context.mounted) p.retryNeedsAttentionWals();
+          }),
+        );
+      }
     } else if (readyWals.isNotEmpty) {
       final seconds = walSeconds(readyWals);
       title = seconds > 0
@@ -387,7 +398,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
         OmiSettingsRow.toggle(
           leading: const Icon(Icons.auto_delete),
           title: context.l10n.autoRemoveSyncedCopiesTitle,
-          subtitle: context.l10n.autoRemoveSyncedCopiesDescription(autoRemoveDays),
+          subtitle: context.l10n.autoRemoveSyncedCopiesDays(autoRemoveDays),
           value: autoRemoveOn,
           onChanged: (value) async {
             SharedPreferencesUtil().autoRemoveSyncedCopies = value;
@@ -680,18 +691,44 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
         builder: (_, __) {
           final wals = sync.displaySortedWals.where((w) => ids.contains('${w.id}#${w.storage.name}')).toList();
           if (wals.isEmpty) return const SizedBox.shrink();
+          // Audio still on the device has nothing on the phone to share yet.
+          final onPhone = wals.where((w) => w.storage != WalStorage.sdcard && sync.canPlayOrShareWal(w)).toList();
           return ConstrainedBox(
             constraints: BoxConstraints(maxHeight: MediaQuery.of(sheetContext).size.height * 0.7),
-            child: ListView.separated(
-              shrinkWrap: true,
-              itemCount: wals.length,
-              separatorBuilder: (_, __) => _rowDivider,
-              itemBuilder: (_, i) => _walRow(wals[i]),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (onPhone.isNotEmpty)
+                  OmiSettingsRow(
+                    leading: const Icon(Icons.ios_share_rounded),
+                    title: context.l10n.shareRecording,
+                    showChevron: false,
+                    onTap: () => _shareRecording(sync, onPhone),
+                  ),
+                Flexible(
+                  child: ListView.separated(
+                    shrinkWrap: true,
+                    itemCount: wals.length,
+                    separatorBuilder: (_, __) => _rowDivider,
+                    itemBuilder: (_, i) => _walRow(wals[i]),
+                  ),
+                ),
+              ],
             ),
           );
         },
       ),
     );
+  }
+
+  /// The whole recording as one audio file, instead of one share per short file.
+  Future<void> _shareRecording(SyncProvider sync, List<Wal> wals) async {
+    try {
+      await sync.shareRecordingAsWav(wals);
+    } catch (e) {
+      Logger.error('Offline Sync: failed to share recording audio: $e');
+      if (mounted) OmiFeedback.error(context, context.l10n.audioPlaybackFailed);
+    }
   }
 
   /// Bar fraction for the recording that is actually leaving the device.
@@ -851,7 +888,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
   (Color, FaIconData, String) _rowVisual(WalSyncDisplayState state) {
     switch (state) {
       case WalSyncDisplayState.synced:
-        return (Colors.grey.shade500, FontAwesomeIcons.cloudArrowUp, context.l10n.syncStatusConversationCreated);
+        return (Colors.grey.shade500, FontAwesomeIcons.cloudArrowUp, context.l10n.statusProcessed);
       case WalSyncDisplayState.syncing:
         return (Colors.grey.shade300, FontAwesomeIcons.arrowsRotate, context.l10n.syncStatusBackingUp);
       case WalSyncDisplayState.uploaded:

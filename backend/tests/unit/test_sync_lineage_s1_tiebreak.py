@@ -42,7 +42,7 @@ OFFSETS = [i * SPF for i in range(11)]
 @pytest.fixture(autouse=True)
 def default_flag(monkeypatch):
     monkeypatch.delenv(sync_lineage.SYNC_LINEAGE_RESOLVE_ENV, raising=False)
-    monkeypatch.delenv(sync_lineage.SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST_ENV, raising=False)
+    monkeypatch.setenv(sync_lineage.SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST_ENV, '')
 
 
 def committed_env(first, last, *, wall_first, spf=SPF, root=ROOT, epoch=EPOCH, rate=RATE):
@@ -561,7 +561,7 @@ def test_helper_rejects_every_nondeciding_shape():
 
 
 def test_plan_rechecks_forward_the_source_maps(monkeypatch):
-    monkeypatch.setenv('CAPTURE_EVIDENCE_V1_DARK_WRITE', 'true')
+
     monkeypatch.setenv('SYNC_LINEAGE_LIVE_DEDUPE_ENABLED', 'true')
     seen_maps = []
     original = recording_lineage.resolve_segment_targets
@@ -596,7 +596,7 @@ def test_resolver_requests_evidence_only_when_admitted(monkeypatch):
     """Projection is requested exactly when the evidence can decide, and the
     stored envelopes reach the selector only through that admitted read: the
     same rows still bind, stay pending or miss plain together with the flag."""
-    monkeypatch.setenv('CAPTURE_EVIDENCE_V1_DARK_WRITE', 'true')
+
     monkeypatch.setenv('SYNC_LINEAGE_LIVE_DEDUPE_ENABLED', 'true')
     env = committed_env(95, 115, wall_first=T - 2.5)
     rows = overlapping(back_evidence=env)
@@ -629,62 +629,21 @@ def test_resolver_requests_evidence_only_when_admitted(monkeypatch):
     assert projections == [True, False, False]
     assert targets == {'seg.wav': None}
     assert reasons == {'seg.wav': 'ambiguous_pending'}
-    monkeypatch.setenv('CAPTURE_EVIDENCE_V1_DARK_WRITE', 'false')
+
+    monkeypatch.setenv('SYNC_LINEAGE_LIVE_DEDUPE_ENABLED', 'off')
     reasons.clear()
     targets = recording_lineage.resolve_segment_targets(
         'u', ORIGIN, spans_map, segment_source_maps={'seg.wav': source_map()}, binding_reasons=reasons, **kwargs
     )
     assert projections == [True, False, False, False]
     assert targets == {'seg.wav': None}
-    assert reasons == {'seg.wav': 'ambiguous_pending'}
-    monkeypatch.setenv('CAPTURE_EVIDENCE_V1_DARK_WRITE', 'true')
-    monkeypatch.setenv('SYNC_LINEAGE_LIVE_DEDUPE_ENABLED', 'off')
-    reasons.clear()
-    targets = recording_lineage.resolve_segment_targets(
-        'u', ORIGIN, spans_map, segment_source_maps={'seg.wav': source_map()}, binding_reasons=reasons, **kwargs
-    )
-    assert projections == [True, False, False, False, False]
-    assert targets == {'seg.wav': None}
     assert reasons == {'seg.wav': 'unbound'}
-
-
-def test_resolver_stub_rows_carrying_evidence_still_need_the_gate(monkeypatch):
-    """A resolver-side stub that returns fully evidenced rows despite
-    ``include_capture_evidence=False`` proves the gate is explicit: with dark
-    write off the maps never reach the selector and two visible rows stay
-    pending — the evidence cannot decide through the projection alone."""
-    monkeypatch.delenv('CAPTURE_EVIDENCE_V1_DARK_WRITE', raising=False)
-    monkeypatch.setenv('SYNC_LINEAGE_LIVE_DEDUPE_ENABLED', 'true')
-    env = committed_env(95, 115, wall_first=T - 2.5)
-    rows = overlapping(back_evidence=env)
-    projections = []
-    monkeypatch.setattr(
-        recording_lineage,
-        '_load_lineage',
-        lambda *args, **kwargs: projections.append(kwargs.get('include_capture_evidence')) or (list(rows), None, False),
-    )
-    reasons = {}
-    targets = recording_lineage.resolve_segment_targets(
-        'u',
-        ORIGIN,
-        {'seg.wav': (T, T + 5.0)},
-        stamped_target=None,
-        source='omi',
-        client_device_id='pendant',
-        is_locked=False,
-        firestore_client=None,
-        binding_reasons=reasons,
-        segment_source_maps={'seg.wav': source_map()},
-    )
-    assert projections == [False]
-    assert targets == {'seg.wav': None}
-    assert reasons == {'seg.wav': 'ambiguous_pending'}
 
 
 def test_resolver_outside_uid_cohort_neither_projects_nor_uses_evidence(monkeypatch):
     """Outside the dedupe allowlist the resolver keeps the pre-gate path: no
     evidence projection and no map input even when every row is evidenced."""
-    monkeypatch.setenv('CAPTURE_EVIDENCE_V1_DARK_WRITE', 'true')
+
     monkeypatch.setenv('SYNC_LINEAGE_LIVE_DEDUPE_ENABLED', 'true')
     monkeypatch.setenv(sync_lineage.SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST_ENV, 'other-uid')
     env = committed_env(95, 115, wall_first=T - 2.5)

@@ -160,7 +160,8 @@ def test_seventy_minutes_of_identical_narration_is_one_recording():
     assert rows[0]['discarded'] is False
 
 
-def test_reverse_order_retry_and_deleted_target():
+def test_reverse_order_retry_and_deleted_target(monkeypatch):
+    monkeypatch.setenv('SYNC_BACKFILL_ORDER', 'newest')
     store = StrictFirestore()
     later, _, _ = intake(store, chunk('later', 1060))
     earlier, _, _ = intake(store, chunk('earlier', 1000))
@@ -501,7 +502,8 @@ def _smart_merge_pair(store):
     store.rows[('users', 'u', 'conversations', 'n')] = donor
 
 
-def test_late_repair_audio_for_a_smart_merge_donor_lands_in_the_survivor():
+def test_late_repair_audio_for_a_smart_merge_donor_lands_in_the_survivor(monkeypatch):
+    monkeypatch.setenv('SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST', '')
     store = StrictFirestore()
     _smart_merge_pair(store)
     from tests.unit.test_sync_lineage_dedupe_replay import prove
@@ -517,7 +519,8 @@ def test_late_repair_audio_for_a_smart_merge_donor_lands_in_the_survivor():
     assert ('users', 'u', 'conversations', 'wal-new') not in store.rows
 
 
-def test_repeated_late_repair_to_revisioned_smart_survivor_appends():
+def test_repeated_late_repair_to_revisioned_smart_survivor_appends(monkeypatch):
+    monkeypatch.setenv('SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST', '')
     store = StrictFirestore()
     _smart_merge_pair(store)
     store.rows[('users', 'u', 'conversations', 'p')]['sync_content_revision'] = 1
@@ -549,3 +552,32 @@ def test_sync_bridge_donor_targets_still_fall_back_to_temporal_assignment():
     store.rows[('users', 'u', 'conversations', 'p')].pop('smart_merge')
     result, created, _ = intake(store, chunk('wal-other', 1620), target_id='n')
     assert created and result['id'] == 'wal-other'
+
+
+def _tombstone(store, conversation_id):
+    store.rows[('users', 'u', 'deleted_conversations', conversation_id)] = {'conversation_id': conversation_id}
+
+
+def test_reupload_never_recreates_a_hard_deleted_conversation_id():
+    store = StrictFirestore()
+    _tombstone(store, 'deleted')
+    with pytest.raises(SyncAssignmentSuperseded):
+        intake(store, chunk('deleted', 1000))
+    assert conversations(store) == []
+
+
+def test_hard_deleted_explicit_target_is_not_replaced_temporally():
+    store = StrictFirestore()
+    _tombstone(store, 'deleted-target')
+    with pytest.raises(SyncAssignmentSuperseded):
+        intake(store, chunk('wal', 1000), target_id='deleted-target')
+    assert conversations(store) == []
+
+
+def test_tombstone_of_another_id_still_creates_and_appends():
+    store = StrictFirestore()
+    _tombstone(store, 'unrelated')
+    first, created, _ = intake(store, chunk('first', 1000))
+    assert created and first['id'] == 'first'
+    second, created, _ = intake(store, chunk('second', 1012))
+    assert not created and second['id'] == 'first'

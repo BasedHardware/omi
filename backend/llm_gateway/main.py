@@ -8,6 +8,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from starlette.responses import Response
 
+from database.firestore_tier_context import FirestoreTierMiddleware
 from llm_gateway.gateway.request_context import REQUEST_ID_HEADER, request_id_for, resolve_request_id
 from llm_gateway.gateway.vertex_diagnostics import request_id_context
 from llm_gateway.gateway.metrics import observe_gateway_config_identity
@@ -43,6 +44,7 @@ async def _run_shutdown_cleanup(name: str, cleanup: Callable[[], Awaitable[None]
 
 
 app = FastAPI(title='Omi LLM Gateway', lifespan=lifespan)
+app.add_middleware(FirestoreTierMiddleware)
 
 
 @app.exception_handler(Exception)

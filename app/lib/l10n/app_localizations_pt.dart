@@ -1972,12 +1972,6 @@ class AppLocalizationsPt extends AppLocalizations {
   String get memoryHistory => 'Histórico';
 
   @override
-  String get memoryAllowUse => 'Permitir uso';
-
-  @override
-  String get memoryDontUse => 'Não usar';
-
-  @override
   String get undo => 'Desfazer';
 
   @override
@@ -4363,6 +4357,16 @@ class AppLocalizationsPt extends AppLocalizations {
   }
 
   @override
+  String yourPlanEndsOn(String plan, String date) {
+    return 'Seu plano $plan termina em $date.';
+  }
+
+  @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return 'Assine novamente agora para manter seus benefícios - sem cobrança até $date.';
+  }
+
+  @override
   String planSetToCancelOn(String date) {
     return 'Seu plano está configurado para cancelar em $date.\nAssine novamente agora para manter seus benefícios - sem cobrança até $date.';
   }
@@ -4370,6 +4374,11 @@ class AppLocalizationsPt extends AppLocalizations {
   @override
   String get annualPlanStartsAutomatically =>
       'Seu plano anual começará automaticamente quando seu plano mensal terminar.';
+
+  @override
+  String yourPlanWillRenewOn(String plan, String date) {
+    return 'Seu plano $plan será renovado em $date.';
+  }
 
   @override
   String planRenewsOn(String date) {
@@ -4402,6 +4411,9 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get continueText => 'Continuar';
+
+  @override
+  String get resubscribeFirstToChangePlans => 'Assine novamente antes de mudar de plano.';
 
   @override
   String get resubscribe => 'Assinar novamente';
@@ -5020,9 +5032,6 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get content => 'Conteúdo';
-
-  @override
-  String get noContentToDisplay => 'Nenhum conteúdo para exibir';
 
   @override
   String get noSummary => 'Sem resumo';
@@ -9317,6 +9326,14 @@ class AppLocalizationsPt extends AppLocalizations {
   String get deviceOnboardingIntroDuration => 'Cerca de 1 minuto';
 
   @override
+  String quoteJumpToTime(String duration) {
+    return 'Ir para $duration';
+  }
+
+  @override
+  String get quoteShowSources => 'Mostrar fontes';
+
+  @override
   String get jumpToLatestMessage => 'Ir para a mensagem mais recente';
 
   @override
@@ -9820,9 +9837,6 @@ class AppLocalizationsPt extends AppLocalizations {
   @override
   String get speechToTextUnavailableDesc =>
       'A transcrição de voz não está disponível no momento. Verifique sua conexão com a internet e as configurações de reconhecimento de voz do dispositivo e tente novamente.';
-
-  @override
-  String get processingTakingLonger => 'Ainda a trabalhar — isto está a demorar mais do que o habitual.';
 
   @override
   String get speechProfileEnrollmentPrompt =>
@@ -11065,7 +11079,7 @@ class AppLocalizationsPt extends AppLocalizations {
   String get openCall => 'Abrir chamada';
 
   @override
-  String get captureRecoveryBanner => 'Omi não está enviando áudio — toque para reconectar';
+  String get captureRecoveryBannerTitle => 'Omi não está enviando áudio';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11076,6 +11090,23 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get captureAudioSavedTranscribesLater => 'Áudio salvo, transcrição depois';
+
+  @override
+  String get captureBannerTryReconnect => 'Tentar reconectar';
+
+  @override
+  String get captureBannerRetrySync => 'Repetir sincronização';
+
+  @override
+  String get captureWedgeBleExplanation =>
+      'O link Bluetooth com o seu Omi parou, então o áudio não está chegando ao aplicativo. O Omi continua gravando no dispositivo e sincronizará assim que o link se recuperar. Tentar novamente reconecta o link; se continuar falhando, verifique seu dispositivo em Ajustes > Dispositivo.';
+
+  @override
+  String get captureIngressNeedsReconnect => 'O áudio não está chegando ao aplicativo — reconecte seu Omi';
+
+  @override
+  String get captureIngressNeedsReconnectExplanation =>
+      'O aplicativo não consegue mais receber áudio do dispositivo Omi e não conseguiu restaurar a conexão automaticamente. Desconecte e reconecte o dispositivo — nas configurações do dispositivo ou desligando-o e ligando-o. O áudio salvo no dispositivo será sincronizado depois.';
 
   @override
   String get captureStillRecording => 'Ainda gravando';
@@ -12450,6 +12481,59 @@ class AppLocalizationsPt extends AppLocalizations {
   String get reviewNoChangesBody => 'Quando o Omi organizar suas notas, as alterações aparecerão aqui.';
 
   @override
+  String get reviewChangesSectionTerms => 'Nomes e termos';
+
+  @override
+  String get reviewChangesSectionTitles => 'Títulos e resumos';
+
+  @override
+  String get reviewChangesSectionOther => 'Outras alterações';
+
+  @override
+  String reviewChangeConversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count conversas',
+      one: '1 conversa',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangePlaceCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count lugares',
+      one: '1 lugar',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangeShowAll(int count) {
+    return 'Mostrar todos ($count)';
+  }
+
+  @override
+  String get reviewChangeUndoAll => 'Desfazer tudo';
+
+  @override
+  String get reviewChangeSeeEvidence => 'Ver evidências';
+
+  @override
+  String get reviewChangeViewConversation => 'Ver conversa';
+
+  @override
+  String get reviewChangeViewTask => 'Ver tarefa';
+
+  @override
+  String reviewChangesUndoPartial(int failed, int total) {
+    return 'Não foi possível desfazer $failed de $total. Tente novamente.';
+  }
+
+  @override
   String get reviewShowMore => 'Mostrar mais';
 
   @override
@@ -13057,6 +13141,9 @@ class AppLocalizationsPt extends AppLocalizations {
   String get reviewProposalSuggested => 'Sugerido';
 
   @override
+  String get reviewQuestionOutOfDate => 'Esta pergunta está desatualizada, por isso nada mudou.';
+
+  @override
   String get reviewProposalConflict => 'Isto mudou desde que o Dream sugeriu, então nada foi aplicado.';
 
   @override
@@ -13072,22 +13159,22 @@ class AppLocalizationsPt extends AppLocalizations {
   }
 
   @override
-  String get paywallRecommended => 'Recommended';
+  String get paywallRecommended => 'Recomendado';
 
   @override
   String get paywallNoPlans => 'Plans aren\'t available right now. Try again in a minute.';
 
   @override
-  String get paywallOtherPlans => 'See all plans';
+  String get paywallOtherPlans => 'Ver todos os planos';
 
   @override
-  String get paywallComparePlans => 'See plans';
+  String get paywallComparePlans => 'Ver planos';
 
   @override
-  String get paywallYourPlan => 'Your plan';
+  String get paywallYourPlan => 'Seu plano';
 
   @override
-  String get paywallNotNow => 'Not now';
+  String get paywallNotNow => 'Agora não';
 
   @override
   String get paywallTryAgain => 'Try again';
@@ -13115,6 +13202,19 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get firstCaptureWatch => 'Apple Watch';
+
+  @override
+  String get firstCaptureConnectTitle => 'Conecte seu Omi';
+
+  @override
+  String get firstCaptureConnectDescription =>
+      'Emparelhe seu Omi e ele capturará suas conversas, sem usar as mãos, o dia todo.';
+
+  @override
+  String get firstCaptureConnect => 'Conectar meu Omi';
+
+  @override
+  String get firstCaptureNoDevice => 'Ainda não tenho um Omi';
 
   @override
   String get firstCaptureSkip => 'Skip for Now';
@@ -13223,6 +13323,112 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get paywallOutlineHeadline => 'Nunca mais perca uma palavra.';
+
+  @override
+  String get paywallTrialBrand => 'Omi Pro';
+
+  @override
+  String get paywallTrialHeadline => 'Veja como funciona seu teste gratuito.';
+
+  @override
+  String get paywallTrialSlideSummariesTitle => 'Resumos Unlimited, guardados para sempre';
+
+  @override
+  String get paywallTrialSlideSummariesBody =>
+      'Cada conversa vira um resumo claro com os próximos passos, para que nada escape.';
+
+  @override
+  String get paywallTrialSlideTranscriptionTitle => 'Transcrições de alta qualidade';
+
+  @override
+  String get paywallTrialChipDetails => 'Captura mais detalhes';
+
+  @override
+  String get paywallTrialChipSpeakers => 'Distingue os oradores';
+
+  @override
+  String get paywallTrialChipNoise => 'Funciona em ambientes barulhentos';
+
+  @override
+  String get paywallTrialChipAccents => 'Lida com sotaques';
+
+  @override
+  String get paywallTrialChipJargon => 'Conhece seu jargão e nomes';
+
+  @override
+  String get paywallTrialSlideSpeakersTitle => 'Nomes dos oradores, detectados automaticamente';
+
+  @override
+  String get paywallTrialSlideAskTitle => 'Perguntas Unlimited, em todas as conversas';
+
+  @override
+  String get paywallTrialBubbleFollowUp => 'Rascunhe um e-mail de acompanhamento desta reunião.';
+
+  @override
+  String get paywallTrialBubbleConflicts => 'Algum conflito com o que John disse na terça-feira?';
+
+  @override
+  String get paywallTrialBubbleBlockers => 'Encontre qualquer coisa que possa nos atrasar.';
+
+  @override
+  String get paywallTrialSlideAppsTitle => 'Funciona com seus aplicativos favoritos';
+
+  @override
+  String get paywallTrialTodayTitle => 'Hoje';
+
+  @override
+  String get paywallTrialTodayBody => 'Tudo no Pro está desbloqueado.';
+
+  @override
+  String paywallTrialFreeDaysTitle(int days) {
+    return '+ $days dias grátis';
+  }
+
+  @override
+  String paywallTrialFreeDaysBody(int days) {
+    return '$days dias de Omi Pro, por nossa conta.';
+  }
+
+  @override
+  String paywallTrialInDaysTitle(int days) {
+    return 'Em $days dias';
+  }
+
+  @override
+  String get paywallTrialEndsBody => 'O teste termina. Você será cobrado, a menos que cancele.';
+
+  @override
+  String get paywallTrialFeatureModels => 'Os modelos de IA mais recentes';
+
+  @override
+  String get paywallTrialFeatureAsk => 'Unlimited Ask Omi';
+
+  @override
+  String get paywallTrialBilledMonthly => 'Cobrado mensalmente';
+
+  @override
+  String get paywallTrialBilledYearly => 'Cobrado anualmente';
+
+  @override
+  String paywallTrialSaveAmount(String amount) {
+    return 'Economize $amount';
+  }
+
+  @override
+  String paywallTrialCta(String price) {
+    return 'Começar por $price';
+  }
+
+  @override
+  String get paywallTrialSecondary => 'Continuar com o plano gratuito';
+
+  @override
+  String get paywallTrialCancelNote => 'Cancele a qualquer momento. Sem taxas, sem multas.';
+
+  @override
+  String paywallTrialStarted(int days) {
+    return 'Seu teste gratuito de $days dias do Omi Pro começou.';
+  }
 
   @override
   String get paywallCancelAnytime => 'Cancele quando quiser.';
@@ -13425,4 +13631,785 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => 'Toque para corrigir';
+
+  @override
+  String get homePendingTitle => 'Conversas a caminho';
+
+  @override
+  String get homePendingCatchingUp => 'Processando áudio anterior';
+
+  @override
+  String get onTheWayTitle => 'A caminho';
+
+  @override
+  String get onTheWayAlmostReady => 'Quase pronto';
+
+  @override
+  String onTheWayRecordingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count gravações',
+      one: '1 gravação',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String onTheWaySummary(String totals) {
+    return '$totals a caminho';
+  }
+
+  @override
+  String onTheWayUploadingCount(int count) {
+    return 'Enviando: $count';
+  }
+
+  @override
+  String onTheWayAlmostReadyCount(int count) {
+    return 'Quase prontas: $count';
+  }
+
+  @override
+  String onTheWayNeedsAttentionCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count precisam de atenção',
+      one: '1 precisa de atenção',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get activityEmpty => 'Nenhuma atividade ainda';
+
+  @override
+  String get activityNewSemantics => 'Atividade, novos itens';
+
+  @override
+  String get activityLoadFailed => 'Não foi possível carregar toda a sua atividade';
+
+  @override
+  String get activityNewItem => 'Novo';
+
+  @override
+  String get activityNeedsAttention => 'Precisa de atenção';
+
+  @override
+  String get activityRetryAll => 'Tentar tudo novamente';
+
+  @override
+  String get activityAttentionStorageUnknownTitle => 'Não é possível verificar o armazenamento';
+
+  @override
+  String get activityAttentionStorageSubtitle => 'Gravações pausadas';
+
+  @override
+  String get activityAttentionUploadStalledTitle => 'Envio parado';
+
+  @override
+  String activityAttentionUploadRecordings(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count gravações aguardando',
+      one: '1 gravação aguardando',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get attentionSummaryFailed => 'Não foi possível resumir esta conversa';
+
+  @override
+  String get activityAttentionSemantics => 'Atividade, requer atenção';
+
+  @override
+  String get connectAgentHeadline => 'Use sua memória do Omi no ChatGPT e nos seus agentes de IA';
+
+  @override
+  String get connectAgentIntro => 'Conecte uma vez. Depois, pergunte a eles sobre suas conversas, memórias e tarefas.';
+
+  @override
+  String get connectAgentOneTap => 'Com um toque';
+
+  @override
+  String get connectAgentComputerAgents => 'Agentes com computador próprio';
+
+  @override
+  String get connectAgentComputerAgentsSubtitle =>
+      'Copie um único prompt. O Omi cria uma chave só para esse agente e a envia com segurança.';
+
+  @override
+  String get connectAgentOtherAgent => 'Outro agente';
+
+  @override
+  String get connectAgentKeyActive => 'Chave ativa';
+
+  @override
+  String connectAgentLastUsed(String time) {
+    return 'Último uso: $time';
+  }
+
+  @override
+  String get connectAgentDevelopers => 'Chaves MCP e API para desenvolvedores';
+
+  @override
+  String get connectAgentLoadFailed => 'Não foi possível carregar suas conexões.';
+
+  @override
+  String get connectAgentActionFailed => 'Algo deu errado. Tente novamente.';
+
+  @override
+  String get connectChatGptTitle => 'Conectar ChatGPT';
+
+  @override
+  String get connectChatGptSubtitle =>
+      'Leva cerca de 30 segundos. Você aprova dentro do ChatGPT e funciona no seu celular e no computador.';
+
+  @override
+  String get connectChatGptStepOpen => 'Abrimos o Omi no ChatGPT';
+
+  @override
+  String get connectChatGptStepOpenBody => 'O ChatGPT abre direto na página do app Omi.';
+
+  @override
+  String get connectChatGptStepApprove => 'Toque em \"Conectar\" e entre no Omi';
+
+  @override
+  String get connectChatGptStepApproveBody => 'Use a mesma conta que você usa aqui.';
+
+  @override
+  String get connectChatGptStepReturn => 'Volte para o Omi';
+
+  @override
+  String get connectChatGptStepReturnBody => 'Verificamos a conexão automaticamente.';
+
+  @override
+  String get openChatGpt => 'Abrir ChatGPT';
+
+  @override
+  String get chatGptConnectedEverywhere => 'Conectado no celular e no computador';
+
+  @override
+  String get tryAskingChatGpt => 'Experimente perguntar ao ChatGPT';
+
+  @override
+  String get tryAskingChatGptFooter => 'Toque em uma para abrir o ChatGPT com ela já preenchida.';
+
+  @override
+  String get chatGptExampleMeetings => 'Com o que eu concordei nas reuniões de ontem?';
+
+  @override
+  String get chatGptExampleTasks => 'Transforme minhas tarefas abertas do Omi em um plano para esta semana.';
+
+  @override
+  String get chatGptExampleGoals => 'O que o Omi sabe sobre os meus objetivos?';
+
+  @override
+  String get disconnectChatGpt => 'Desconectar ChatGPT';
+
+  @override
+  String get disconnectChatGptQuestion => 'Desconectar ChatGPT?';
+
+  @override
+  String get disconnectChatGptMessage => 'O ChatGPT não poderá mais ler suas memórias, conversas ou tarefas do Omi.';
+
+  @override
+  String connectAgentNamed(String name) {
+    return 'Conectar $name';
+  }
+
+  @override
+  String connectAgentPromptSubtitle(String name) {
+    return 'Cole um único prompt. $name configura o Omi no próprio computador.';
+  }
+
+  @override
+  String get connectAgentGenericPromptSubtitle =>
+      'Cole um único prompt. Seu agente configura o Omi no próprio computador.';
+
+  @override
+  String connectAgentKeyCreated(String name) {
+    return 'Chave “$name” criada';
+  }
+
+  @override
+  String get connectAgentKeyCreatedBody =>
+      'O prompt contém um link de uso único, não a chave em si. Ele abre uma vez e expira em 1 hora. Revogue a chave aqui quando quiser.';
+
+  @override
+  String get connectAgentPreparing => 'Criando uma chave e um link seguro…';
+
+  @override
+  String get connectAgentPrepareFailed => 'Não foi possível criar a chave. Verifique sua conexão e tente novamente.';
+
+  @override
+  String get copyPrompt => 'Copiar prompt';
+
+  @override
+  String get connectAgentNewLink => 'Link expirou? Crie um novo';
+
+  @override
+  String connectAgentActiveTitle(String name) {
+    return '$name está conectado';
+  }
+
+  @override
+  String connectAgentActiveBody(String name) {
+    return '$name tem uma chave do Omi. Revogue-a para cortar o acesso. Você pode conectar de novo quando quiser.';
+  }
+
+  @override
+  String revokeAgentKeyQuestion(String name) {
+    return 'Revogar a chave de $name?';
+  }
+
+  @override
+  String revokeAgentKeyMessage(String name) {
+    return '$name perde o acesso à sua memória do Omi na hora.';
+  }
+
+  @override
+  String get askAboutConversation => 'Perguntar sobre esta conversa';
+
+  @override
+  String get askAboutConversationSubtitle =>
+      'Abre o ChatGPT com sua pergunta pronta. Ele busca a conversa pelo Omi, então você não precisa colar a transcrição.';
+
+  @override
+  String get askYourQuestion => 'Sua pergunta';
+
+  @override
+  String get askSuggestFollowUp => 'Escreva um rascunho de e-mail de acompanhamento a partir desta conversa.';
+
+  @override
+  String get askSuggestCommitments => 'Com o que eu me comprometi nesta conversa?';
+
+  @override
+  String get askSuggestDoc => 'Transforme esta conversa em um documento curto.';
+
+  @override
+  String get askInChatGpt => 'Perguntar ao ChatGPT';
+
+  @override
+  String get copyForAnyApp => 'Copiar para qualquer app';
+
+  @override
+  String get askConnectChatGptFirst => 'Conecte o ChatGPT uma vez para perguntar sobre suas conversas.';
+
+  @override
+  String get reconnect => 'Reconectar';
+
+  @override
+  String get chatGptNeedsReconnect => 'Precisa de mais acesso. Reconecte para corrigir.';
+
+  @override
+  String get connectAgentWaiting => 'Aguardando o agente usar a sua chave';
+
+  @override
+  String connectAgentWaitingTitle(String name) {
+    return '$name ainda não está conectado';
+  }
+
+  @override
+  String get summaryNotSummarizedYet => 'Ainda não resumida';
+
+  @override
+  String get summaryEmptyStateBody =>
+      'O Omi pode transformar esta conversa em uma visão geral, pontos principais e tarefas.';
+
+  @override
+  String get summaryWithOmi => 'Resumir com Omi';
+
+  @override
+  String summaryWithTemplate(String name) {
+    return 'Resumir com $name';
+  }
+
+  @override
+  String get summaryUseDifferentTemplate => 'Usar outro modelo';
+
+  @override
+  String get summaryFromTheTranscript => 'Da transcrição';
+
+  @override
+  String get summaryReadFullTranscript => 'Ler transcrição completa';
+
+  @override
+  String get summarySheetTitle => 'Resumir com';
+
+  @override
+  String get summaryOmiTemplateSubtitle => 'Visão geral, pontos principais e tarefas';
+
+  @override
+  String get summaryYourTemplates => 'Seus modelos';
+
+  @override
+  String get summarySuggestedTemplates => 'Sugeridos para esta conversa';
+
+  @override
+  String get summaryBrowseTemplates => 'Explorar modelos';
+
+  @override
+  String get summaryCreateYourOwn => 'Criar o seu';
+
+  @override
+  String get summaryUseForNewConversations => 'Definir como meu padrão';
+
+  @override
+  String get summaryTemplatesLoadFailed => 'Não foi possível carregar seus modelos. O Omi continua funcionando.';
+
+  @override
+  String get summaryNoTemplatesYet => 'Você ainda não adicionou nenhum modelo. Explore alguns ou crie o seu.';
+
+  @override
+  String summarySummarizingWith(String name) {
+    return 'Resumindo com $name…';
+  }
+
+  @override
+  String summaryTemplateFailedTitle(String name) {
+    return '$name não conseguiu concluir';
+  }
+
+  @override
+  String get summaryTemplateFailedBody => 'O modelo não retornou um resumo para esta conversa.';
+
+  @override
+  String get summaryWithOmiInstead => 'Resumir com Omi em vez disso';
+
+  @override
+  String get summaryBusyTitle => 'Ainda processando';
+
+  @override
+  String get summaryBusyBody => 'O Omi já está trabalhando nesta conversa. O resumo aparecerá aqui quando terminar.';
+
+  @override
+  String get summaryCheckAgain => 'Verificar novamente';
+
+  @override
+  String get summaryLimitTitle => 'Limite de resumos atingido';
+
+  @override
+  String get summaryLimitBody => 'Você gerou novamente vários resumos na última hora. Tente novamente mais tarde.';
+
+  @override
+  String get summaryFailedTitle => 'Não foi possível resumir';
+
+  @override
+  String get summaryFailedBody => 'Algo deu errado ao resumir esta conversa.';
+
+  @override
+  String get noContentToDisplay => 'Nenhum conteúdo para exibir';
+
+  @override
+  String get processingTakingLonger => 'Ainda a trabalhar — isto está a demorar mais do que o habitual.';
+
+  @override
+  String get onDeviceAtCapTitle => 'Você atingiu o limite deste mês';
+
+  @override
+  String get onDeviceAtCapBody => 'O Omi continua gravando. Escolha como o resto do mês será transcrito.';
+
+  @override
+  String onDeviceLiveHoursReturn(String date) {
+    return 'Seu uso é redefinido em $date.';
+  }
+
+  @override
+  String get onDeviceTranscribeOnPhone => 'Transcrever neste telefone';
+
+  @override
+  String get onDeviceIncluded => 'Incluído';
+
+  @override
+  String get onDeviceOptionChargingBody => 'Funciona enquanto o telefone carrega.';
+
+  @override
+  String get onDeviceUpgradeBody => 'Faça upgrade para Pro para separar os falantes e obter maior precisão';
+
+  @override
+  String get onDeviceAtCapFooter =>
+      'Nada se perde, em nenhum caso. Você pode mudar isso em Configurações › Transcrição.';
+
+  @override
+  String onDeviceStepOf(int step, int total) {
+    return 'Etapa $step de $total';
+  }
+
+  @override
+  String get onDeviceSetupBody =>
+      'O Omi baixa um modelo de fala uma única vez. Depois disso, suas gravações viram texto aqui mesmo, sem contar no seu uso.';
+
+  @override
+  String get onDeviceSpeechModel => 'Modelo de fala';
+
+  @override
+  String onDeviceMegabytes(String size) {
+    return '$size MB';
+  }
+
+  @override
+  String onDeviceDownloadingWifi(int percent) {
+    return 'Baixando via Wi-Fi · $percent%';
+  }
+
+  @override
+  String onDeviceDownloadingPercent(int percent) {
+    return 'Baixando · $percent%';
+  }
+
+  @override
+  String onDeviceTimeLeft(String time) {
+    return 'Cerca de $time restantes';
+  }
+
+  @override
+  String get onDeviceWaitingForWifi => 'Aguardando Wi-Fi';
+
+  @override
+  String get onDeviceDownloadFailed => 'O download não terminou';
+
+  @override
+  String get onDeviceModelNotDownloaded => 'Não baixado';
+
+  @override
+  String onDeviceModelInstalled(String size) {
+    return 'Instalado · $size';
+  }
+
+  @override
+  String get onDeviceModelUnsupported => 'Ainda não disponível neste telefone';
+
+  @override
+  String get onDeviceSetupKeepRecording => 'Continue gravando enquanto baixa. Nada depende disso.';
+
+  @override
+  String get onDeviceSetupAudioStays => 'O áudio fica no seu telefone até ser transcrito.';
+
+  @override
+  String get onDeviceWifiOnly => 'Baixar só via Wi-Fi';
+
+  @override
+  String get onDeviceDownloadModel => 'Baixar modelo de fala';
+
+  @override
+  String get onDeviceScheduleTitle => 'Quando transcrever';
+
+  @override
+  String get onDeviceScheduleHeadline => 'Quando o Omi deve transcrever?';
+
+  @override
+  String get onDeviceScheduleBody => 'Você pode mudar isso a qualquer momento.';
+
+  @override
+  String get onDeviceScheduleCharging => 'Durante o carregamento';
+
+  @override
+  String get onDeviceScheduleChargingBody =>
+      'As transcrições aparecem depois que você conecta o carregador, geralmente durante a noite.';
+
+  @override
+  String get onDeviceBatteryAlmostNone => 'Bateria: quase nada';
+
+  @override
+  String get onDeviceScheduleHours => 'A cada poucas horas';
+
+  @override
+  String get onDeviceScheduleHoursBody =>
+      'Coloca tudo em dia em rodadas curtas usando a bateria, então as transcrições raramente atrasam mais que algumas horas.';
+
+  @override
+  String onDeviceBatteryPerDay(int percent) {
+    return 'Bateria: cerca de $percent% por dia';
+  }
+
+  @override
+  String get onDeviceScheduleLive => 'Enquanto você fala';
+
+  @override
+  String get onDeviceScheduleLiveBody => 'Transcreve regularmente enquanto o Omi está aberto.';
+
+  @override
+  String onDeviceBatteryPerHour(int percent) {
+    return 'Bateria: cerca de $percent% por hora de conversa';
+  }
+
+  @override
+  String onDeviceQueueWaiting(String duration) {
+    return '$duration aguardando transcrição';
+  }
+
+  @override
+  String get onDeviceQueueChargingBody =>
+      'Elas ficarão prontas depois que você colocar o telefone para carregar. A gravação continua normalmente.';
+
+  @override
+  String get onDeviceQueueHoursBody => 'O Omi coloca tudo em dia a cada poucas horas. A gravação continua normalmente.';
+
+  @override
+  String get onDeviceQueueLowBatteryBody =>
+      'Aguardando o carregador porque a bateria está fraca. A gravação continua normalmente.';
+
+  @override
+  String get onDeviceTranscribeNow => 'Transcrever agora';
+
+  @override
+  String get onDeviceUsesBattery => 'Usa bateria';
+
+  @override
+  String get onDeviceTranscribing => 'Transcrevendo…';
+
+  @override
+  String get onDeviceWaitingForCharger => 'Aguardando carregador';
+
+  @override
+  String get onDeviceWaitingToTranscribe => 'Aguardando transcrição';
+
+  @override
+  String get onDeviceWaitingForSetup => 'Salvo, aguardando configuração';
+
+  @override
+  String get onDeviceTranscribedOnIphone => 'Transcrito neste iPhone';
+
+  @override
+  String get onDeviceTranscribedOnPhone => 'Transcrito neste telefone';
+
+  @override
+  String get onDeviceTranscribedSummarizedOnIphone => 'Transcrito e resumido neste iPhone';
+
+  @override
+  String get onDeviceSummarizedByCloud => 'Resumido pelo Omi Cloud';
+
+  @override
+  String get onDeviceWhyPhoneTitle => 'Por que isso foi feito no seu telefone';
+
+  @override
+  String get onDeviceWhyLiveHoursUsed =>
+      'Você atingiu o limite deste mês, então o Omi transcreveu isto no seu telefone.';
+
+  @override
+  String get onDeviceWhySavingLiveHours => 'Você escolheu transcrever neste telefone para economizar uso.';
+
+  @override
+  String get onDeviceWhySummaryOnPhone => 'O resumo também foi escrito neste iPhone.';
+
+  @override
+  String get onDeviceWhyNoSummary => 'Você mantém tudo neste telefone, então não há resumo.';
+
+  @override
+  String get onDeviceWhyCloudTitle => 'Por que o Omi Cloud escreveu este resumo';
+
+  @override
+  String get onDeviceWhyCloudIphone =>
+      'Este iPhone não consegue resumir sozinho (é preciso um iPhone 15 Pro ou mais recente). A transcrição foi feita no seu telefone, e só o texto dela foi enviado ao Omi para resumir. Isso não conta no seu uso.';
+
+  @override
+  String get onDeviceWhyCloudPhone =>
+      'Este telefone não consegue resumir sozinho. A transcrição foi feita no seu telefone, e só o texto dela foi enviado ao Omi para resumir. Isso não conta no seu uso.';
+
+  @override
+  String get onDeviceRedoWithCloud => 'Refazer com o Omi Cloud';
+
+  @override
+  String get onDeviceRedoHint => 'Faça upgrade para Pro para separar os falantes e obter maior precisão';
+
+  @override
+  String get onDeviceKeepEverything => 'Manter tudo neste telefone';
+
+  @override
+  String get onDeviceKeepEverythingSubtitle => 'Só transcrições, sem resumos';
+
+  @override
+  String get onDeviceAfterLiveHours => 'Quando você atingir seu limite';
+
+  @override
+  String get onDeviceWhen => 'Quando';
+
+  @override
+  String get onDeviceSummaries => 'Resumos';
+
+  @override
+  String get onDeviceSummariesOnIphone => 'Neste iPhone';
+
+  @override
+  String get onDeviceSummariesCloud => 'Pelo Omi Cloud';
+
+  @override
+  String get onDeviceSaveLiveHours => 'Sempre transcrever neste telefone';
+
+  @override
+  String get onDeviceSaveLiveHoursSubtitle => 'Economiza seu uso. Sem rótulos de falantes.';
+
+  @override
+  String get onDeviceOnThisPhone => 'Neste telefone';
+
+  @override
+  String get onDeviceAudioWaiting => 'Áudio aguardando no telefone';
+
+  @override
+  String get onDeviceRemoveModel => 'Remover modelo de fala';
+
+  @override
+  String get onDeviceRemoveModelTitle => 'Remover modelo de fala?';
+
+  @override
+  String get onDeviceRemoveModelMessage =>
+      'As gravações ficarão neste telefone até você baixá-lo de novo ou seu uso ser redefinido.';
+
+  @override
+  String get onDeviceRemove => 'Remover';
+
+  @override
+  String get onDeviceFinishSetupTitle => 'Conclua a configuração para ver suas transcrições';
+
+  @override
+  String get onDeviceFinishSetupBody =>
+      'Você atingiu o limite deste mês. O Omi ainda está gravando e salvando áudio no seu telefone. Baixe o modelo de fala e ele alcança o que ficou para trás.';
+
+  @override
+  String onDeviceDownloadSize(String size) {
+    return 'Download de $size';
+  }
+
+  @override
+  String get onDeviceUnsupportedBody =>
+      'Este telefone ainda não consegue executar o modelo de fala. O áudio fica salvo até seu uso ser redefinido ou você fizer upgrade.';
+
+  @override
+  String get onDeviceEntrySubtitle => 'Quando atingir seu limite, transcreva neste telefone';
+
+  @override
+  String onDeviceMeterLineShort(int percent, String reset) {
+    return '$percent% usado · $reset';
+  }
+
+  @override
+  String onDeviceMeterLineHours(int percent, int hours, String reset) {
+    return '$percent% usado · cerca de $hours horas de gravação restantes · $reset';
+  }
+
+  @override
+  String get onDeviceGetMoreUsage => 'Obter mais uso';
+
+  @override
+  String onDeviceGettingSpeechReady(int percent) {
+    return 'Preparando a fala · $percent%';
+  }
+
+  @override
+  String heldAudioSavedBody(String date) {
+    return 'Você atingiu o limite deste mês. Suas gravações estão salvas e serão transcritas depois que seu limite for redefinido em $date.';
+  }
+
+  @override
+  String heldAudioPhoneChosenBody(String date) {
+    return 'Novas gravações serão transcritas neste telefone. As gravações em espera serão transcritas depois que seu limite for redefinido em $date.';
+  }
+
+  @override
+  String heldAudioRecordingTitle(String time) {
+    return 'Gravação, $time';
+  }
+
+  @override
+  String heldAudioRecordingSubtitle(String duration) {
+    return '$duration · Aguardando transcrição';
+  }
+
+  @override
+  String get heldAudioLiveTitle => 'Transcrição na nuvem pausada';
+
+  @override
+  String get heldAudioLiveBody => 'Você atingiu o limite deste mês. A Omi continua gravando.';
+
+  @override
+  String heldAudioRecordedSinceLimit(int minutes) {
+    return '$minutes min gravados desde o limite';
+  }
+
+  @override
+  String heldAudioTranscribesOn(String date) {
+    return 'Transcreve depois que seu limite for redefinido em $date';
+  }
+
+  @override
+  String heldAudioWaiting(String duration) {
+    return '$duration aguardando';
+  }
+
+  @override
+  String heldAudioWaitingOn(String date) {
+    return 'Transcrito depois que seu limite for redefinido em $date';
+  }
+
+  @override
+  String heldAudioCardTitle(String duration) {
+    return '$duration aguardando transcrição';
+  }
+
+  @override
+  String heldAudioAndMore(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'e mais $count',
+      one: 'e mais 1',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get heldAudioRecovering => 'Transcrevendo suas gravações pendentes';
+
+  @override
+  String get processingPaused => 'Processamento pausado. Atingiu o limite deste mês.';
+
+  @override
+  String get processingStored =>
+      'As suas gravações e transcrições estão guardadas. As gravações pendentes continuarão à espera até escolher processá-las.';
+
+  @override
+  String processingWaiting(String duration, String percent) {
+    return '$duration em espera · Processar agora usa cerca de $percent% deste mês';
+  }
+
+  @override
+  String processingEstimate(String hours, String percent) {
+    return 'Cerca de $hours horas de processamento · $percent% da quota deste mês.';
+  }
+
+  @override
+  String get processingNewestFirst =>
+      'Vamos processar primeiro as gravações mais recentes, até ao limite disponível. As restantes continuarão em espera.';
+
+  @override
+  String get processingAction => 'Processar gravações pendentes';
+
+  @override
+  String get processingProgress => 'A processar as suas gravações pendentes…';
+
+  @override
+  String get processingDeferred => 'À espera de processamento';
+
+  @override
+  String processingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count conversas em espera',
+      one: '1 conversa em espera',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String playbackPartialAudioSaved(String saved, String total) {
+    return '$saved de $total de áudio guardado';
+  }
+
+  @override
+  String get activityAttentionLinkStalledSubtitle => 'O Omi continua gravando';
 }
