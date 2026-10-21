@@ -285,7 +285,7 @@ final class PTTAttemptLifecycleRecorder {
 
   /// Sink for emitted snapshots. Default routes through the diagnostics manager;
   /// tests inject a capturing closure so the classification is verifiable in
-  /// isolation without touching the shared PostHog/Sentry singleton.
+  /// isolation without touching the shared PostHog singleton.
   var emit: (Snapshot) -> Void = { DesktopDiagnosticsManager.shared.recordPTTAttemptLifecycle($0) }
 
   /// Injectable clock so timing buckets are deterministic in tests.

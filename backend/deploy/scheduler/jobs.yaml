@@ -264,22 +264,6 @@ environments:
           min_backoff: 5s
         attempt_deadline: 1800s
         owner: .github/workflows/gcp_scheduler_reconcile.yml
-      - name: sentry-feedback-poll
-        region: us-central1
-        schedule: "*/5 * * * *"
-        time_zone: Etc/UTC
-        state: ENABLED
-        target:
-          type: http
-          uri: https://desktop-backend-208440318997.us-central1.run.app/v1/webhooks/sentry/poll
-          method: POST
-        retry:
-          max_backoff: 3600s
-          max_doublings: 5
-          max_retry: 0s
-          min_backoff: 5s
-        attempt_deadline: 60s
-        owner: unassigned; manually created; David decision required
       - name: finops-unit-cost-daily
         region: us-central1
         schedule: "30 10 * * *"

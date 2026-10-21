@@ -1,0 +1,3 @@
+{
+  "change": "Removed the Sentry crash/error reporter from the app; diagnostics now stay local (redacted bundles, Save Diagnostics, PostHog metrics)"
+}

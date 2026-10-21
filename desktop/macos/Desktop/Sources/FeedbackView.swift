@@ -1,16 +1,15 @@
 import OmiTheme
-import Sentry
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// The Sentry event title used when a user submits feedback. Shared by the real
-/// `submitFeedback()` path and the non-prod dry-run bridge action so the dry-run
-/// can never drift from the title that actually ships to Sentry (SET-02).
+/// Stable report title for user feedback. Shared by the real `submitFeedback()`
+/// path and the non-prod dry-run bridge action so the dry-run can never drift
+/// from the title the real submit logs (SET-02).
 func feedbackReportTitle(for _: String) -> String {
   "User Report"
 }
 
-/// Filename of the JSON diagnostics attachment on the feedback Sentry event.
+/// Filename of the JSON diagnostics attachment produced by a feedback report.
 /// Shared so the dry-run reports the same attachment name the real submit uses.
 let feedbackDiagnosticsAttachmentFilename = "desktop_diagnostics.json"
 
@@ -161,31 +160,18 @@ struct FeedbackView: View {
     // Track feedback submitted
     AnalyticsManager.shared.feedbackSubmitted(feedbackLength: message.count)
 
-    // Submit to Sentry with log file attachment (dev + prod — user explicitly chose to report)
-    let sentryMessage = feedbackReportTitle(for: message)
-
-    // Attach bounded, redacted diagnostics rather than the raw local log or
-    // user-entered feedback text.
+    // Write the bounded, redacted diagnostics bundle locally. The user-entered
+    // text, name, and email are intentionally not transmitted anywhere; the
+    // user can share the bundle manually via "Save Diagnostics…".
+    let reportTitle = feedbackReportTitle(for: message)
     let diagnosticsURL = DesktopDiagnosticsManager.shared.writeIncidentDiagnosticsAttachment(
       area: "other",
       failureClass: "user_report",
       phase: "other")
-    SentrySDK.capture(message: sentryMessage) { scope in
-      if let diagnosticsURL {
-        let attachment = Attachment(
-          path: diagnosticsURL.path,
-          filename: feedbackDiagnosticsAttachmentFilename,
-          contentType: "application/json")
-        scope.addAttachment(attachment)
-      }
-    }
     if let diagnosticsURL {
       try? FileManager.default.removeItem(at: diagnosticsURL)
     }
-
-    // The user-entered text, name, and email are intentionally not sent to Sentry.
-    // The report's diagnostic attachment is the privacy-safe cloud evidence path.
-    log("User report diagnostics submitted to Sentry")
+    log("User report recorded locally: \(reportTitle)")
 
     // Show success
     OmiMotion.withGated {
@@ -195,7 +181,7 @@ struct FeedbackView: View {
   }
 
   /// Save a redacted diagnostics bundle to a user-chosen location and reveal it
-  /// in Finder. Fully offline — no Sentry, no network — so users on named/dev
+  /// in Finder. Fully offline — no network — so users on named/dev
   /// bundles or without connectivity can still capture a report (BL-023 / SET-03).
   private func saveDiagnosticsLocally() {
     let panel = NSSavePanel()

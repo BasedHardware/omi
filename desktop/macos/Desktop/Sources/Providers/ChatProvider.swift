@@ -5550,7 +5550,7 @@ class ChatProvider: ObservableObject {
       }
 
       // Preserve only a bounded error class in analytics. Raw details stay
-      // in the local log and Sentry error above.
+      // in the local error log above.
       if isOnboarding {
         let onboardingRole: String
         if !watchdogFired, !toolStallAbortFired, let explicitStopReason {

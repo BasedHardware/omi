@@ -105,7 +105,6 @@ def test_manifest_declares_both_projects_and_frame_retention_jobs_without_retire
         "notifications-job-scheduler-trigger",
         "omi-admin-stats-precompute",
         "omi-tv-rollup-daily",
-        "sentry-feedback-poll",
         "sync-backfill-uid-sequencer",
     }
     rollup = prod_jobs["omi-tv-rollup-daily"]
