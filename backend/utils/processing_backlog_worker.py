@@ -17,7 +17,7 @@ from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.executors import db_executor, postprocess_executor, storage_executor, run_blocking
 from utils.sync import cap_hold, cap_hold_recovery, cap_work_budget
 from config.rate_card import recording_units_per_hour
-from config.stt_cap_dispatch import hold_lane
+from config.stt_cap_dispatch import hold_lane, recovery_cohort_admits
 
 logger = logging.getLogger(__name__)
 PAGE = 10
@@ -139,7 +139,7 @@ async def run(
     uid: str, *, continuation: bool = False, max_items: int = PAGE, time_budget: float | None = None
 ) -> bool | None:
     """True permits another round; false/None parks a blocked or inactive owner."""
-    if not funded_processing.enabled(uid):
+    if not recovery_cohort_admits(uid) or not funded_processing.enabled(uid):
         return
     max_items = max(1, min(max_items, 100))
     if not continuation and not await run_blocking(db_executor, cap_hold.recovery_cooldown, uid):

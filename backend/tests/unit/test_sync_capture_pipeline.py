@@ -685,7 +685,7 @@ def test_dark_empty_recovery_runs_through_real_legacy_assignment(pipeline, monke
 
 def test_cached_multilingual_response_does_not_increment_submitted_audio(pipeline, monkeypatch):
     module, _ = pipeline
-    module.stt_cap_dispatch_enabled = lambda uid, lane: True
+    module.cap_enabled = lambda uid, lane: True
     module.sync_allowed = lambda uid, *, lane='sync': True
     module.compute_sync_segment_id = lambda *args: 'stable-synthetic-segment'
     module.dispatch_empty_recovery_once = lambda uid, sid, dispatch: (
