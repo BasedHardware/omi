@@ -44,16 +44,34 @@ class FcmTokenResponse(BaseModel):
 
 
 class SendNotificationRequest(BaseModel):
-    uid: str
-    title: str
-    body: str
+    uid: str = Field(min_length=1, max_length=128)
+    title: str = Field(min_length=1, max_length=500)
+    body: str = Field(min_length=1, max_length=2000)
     data: dict = Field(default_factory=dict)
+
+    @field_validator('uid', 'title', 'body', mode='before')
+    @classmethod
+    def strip_and_validate_non_empty(cls, v: Any) -> Any:
+        if isinstance(v, str):
+            v = v.strip()
+            if not v:
+                raise ValueError("cannot be empty or whitespace")
+        return v
 
 
 class SendAppNotificationRequest(BaseModel):
-    aid: str
-    message: str
-    uid: str
+    aid: str = Field(min_length=1, max_length=128)
+    message: str = Field(max_length=2000)
+    uid: str = Field(min_length=1, max_length=128)
+
+    @field_validator('aid', 'uid', mode='before')
+    @classmethod
+    def strip_and_validate_non_empty(cls, v: Any) -> Any:
+        if isinstance(v, str):
+            v = v.strip()
+            if not v:
+                raise ValueError("cannot be empty or whitespace")
+        return v
 
 
 class UploadProfile(BaseModel):

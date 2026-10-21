@@ -1,5 +1,5 @@
 import os
-from typing import Any, Dict, Optional, cast
+from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from fastapi.responses import JSONResponse
@@ -12,7 +12,13 @@ from utils.apps import (
 )
 import database.notifications as notification_db
 from utils.integration_telemetry import emit_posthog_event
-from models.other import FcmTokenResponse, SaveFcmTokenRequest, SyncUserTimeZoneRequest
+from models.other import (
+    FcmTokenResponse,
+    SaveFcmTokenRequest,
+    SendAppNotificationRequest,
+    SendNotificationRequest,
+    SyncUserTimeZoneRequest,
+)
 from models.integrations import IntegrationNotificationResponse
 from utils.notifications import (
     send_notification,
@@ -77,41 +83,36 @@ def sync_user_time_zone(
 
 
 @router.post('/v1/notification')
-def send_notification_to_user(data: Dict[str, Any], secret_key: str = Header(...)) -> Dict[str, str]:
-    if not secret_key or secret_key != os.getenv('ADMIN_KEY'):
+def send_notification_to_user(data: SendNotificationRequest, secret_key: str = Header(...)) -> Dict[str, str]:
+    admin_key = os.getenv('ADMIN_KEY')
+    if not admin_key or secret_key != admin_key:
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
-    if not data.get('uid'):
-        raise HTTPException(status_code=400, detail='uid is required')
-    uid = cast(str, data['uid'])
-    title = cast(str, data['title'])
-    body = cast(str, data['body'])
-    notification_data = cast(Dict[str, Any], data.get('data', {}))
-    send_notification(uid, title, body, notification_data)
+    send_notification(data.uid, data.title, data.body, data.data)
     return {'status': 'Ok'}
 
 
 @router.post('/v1/integrations/notification', response_model=IntegrationNotificationResponse)
 def send_app_notification_to_user(
     request: Request,
-    data: Dict[str, Any],
+    data: SendAppNotificationRequest,
     authorization: Optional[str] = Header(None),
 ) -> JSONResponse:
-    # Check app-based auth
-    if 'aid' not in data:
+    if not (data.aid and data.aid.strip()):
         raise HTTPException(status_code=400, detail='aid (app id) in request body is required')
-    if not data.get('message'):
+    if not (data.message and data.message.strip()):
         raise HTTPException(status_code=400, detail='message is required')
-
-    if not data.get('uid'):
+    if not (data.uid and data.uid.strip()):
         raise HTTPException(status_code=400, detail='uid is required')
-    uid = cast(str, data['uid'])
 
     # Verify API key from Authorization header
     if not authorization or not authorization.startswith('Bearer '):
         raise HTTPException(status_code=401, detail="Missing or invalid Authorization header. Must be 'Bearer API_KEY'")
 
     api_key = authorization.replace('Bearer ', '')
-    aid = cast(str, data['aid'])
+    aid = data.aid.strip()
+    uid = data.uid.strip()
+    message = data.message.strip()
+
     if not verify_api_key(aid, api_key):
         raise HTTPException(status_code=403, detail="Invalid API key")
 
@@ -125,8 +126,6 @@ def send_app_notification_to_user(
     user_enabled = set(get_enabled_apps(uid))
     if app.id not in user_enabled:
         raise HTTPException(status_code=403, detail='User does not have this app installed')
-
-    message = cast(str, data['message'])
 
     # Determine target from manifest (defaults to 'app' if not configured).
     # Resolve it before dispatch so the typed payload carries the same navigation

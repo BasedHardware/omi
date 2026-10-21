@@ -96,7 +96,8 @@ finally:
     _restore(_snap)
 
 from fastapi import HTTPException  # noqa: E402
-from models.other import SendAppNotificationRequest  # noqa: E402
+from models.other import SendAppNotificationRequest, SendNotificationRequest  # noqa: E402
+from pydantic import ValidationError  # noqa: E402
 
 
 def test_missing_message_returns_400():
@@ -107,3 +108,50 @@ def test_missing_message_returns_400():
             authorization=None,
         )
     assert e.value.status_code == 400
+
+
+def test_whitespace_message_returns_400():
+    with pytest.raises(HTTPException) as e:
+        notif_mod.send_app_notification_to_user(
+            request=MagicMock(),
+            data=SendAppNotificationRequest(aid='app1', message='   ', uid='uid1'),
+            authorization=None,
+        )
+    assert e.value.status_code == 400
+
+
+def test_send_notification_admin_key_unauthorized():
+    req = SendNotificationRequest(uid='u1', title='Test Title', body='Test Body')
+    with patch.dict(os.environ, {'ADMIN_KEY': 'secret_pass'}):
+        with pytest.raises(HTTPException) as exc:
+            notif_mod.send_notification_to_user(data=req, secret_key='wrong_key')
+        assert exc.value.status_code == 403
+
+
+def test_send_notification_admin_key_unset():
+    req = SendNotificationRequest(uid='u1', title='Test Title', body='Test Body')
+    with patch.dict(os.environ, {}, clear=True):
+        with pytest.raises(HTTPException) as exc:
+            notif_mod.send_notification_to_user(data=req, secret_key='')
+        assert exc.value.status_code == 403
+
+
+def test_send_notification_success():
+    req = SendNotificationRequest(uid='u1', title='Test Title', body='Test Body', data={'custom': 'val'})
+    with patch.dict(os.environ, {'ADMIN_KEY': 'secret_pass'}):
+        with patch.object(notif_mod, 'send_notification') as mock_send:
+            res = notif_mod.send_notification_to_user(data=req, secret_key='secret_pass')
+            assert res == {'status': 'Ok'}
+            mock_send.assert_called_once_with('u1', 'Test Title', 'Test Body', {'custom': 'val'})
+
+
+def test_send_notification_request_validation():
+    # Blank/empty title or body should be rejected by model validation
+    with pytest.raises(ValidationError):
+        SendNotificationRequest(uid='u1', title='   ', body='Valid Body')
+
+    with pytest.raises(ValidationError):
+        SendNotificationRequest(uid='u1', title='Valid Title', body='   ')
+
+    with pytest.raises(ValidationError):
+        SendNotificationRequest(uid='   ', title='Valid Title', body='Valid Body')
