@@ -46,18 +46,73 @@ image of the same SHA is still built and pushed by every deploy.
 
 ## B3 cutover order (lead-owned deploys)
 
-1. `llm-gateway` and `pusher`. The stack path above covers the gateway only in
-   development (`deploy_gateway=true`); production gateway ships through
-   `gcp_llm_gateway.yml` and pusher through `gcp_backend_pusher.yml`, which
-   still build their own images: each needs a role-digest input (pusher's
-   `pusher_image_digest` qualification flow must accept `backend-pusher`)
-   before its production cutover.
-2. `messaging-maintenance-job`: switch the admitted image in
-   `backend/deploy/messaging/maintenance-job.json` / `messaging_operations.py`
-   to the `backend-workers` digest.
-3. `backend-listen`: `service_images=backend-listen=…` with `deploy_targets=all`
+Every step takes a digest that the **build-only** run of the same admitted
+SHA printed (`gcp_backend.yml` `mode=build-only`: job summary and the
+`role-images-<environment>` artifact). The standalone deploys admit a bare
+digest through `backend/scripts/admit_role_image.py`: the repository is not
+an input but derived from the registry (`services.<name>.image`), and the
+image must be labelled `org.opencontainers.image.revision=<deployed SHA>` and
+carry that role's `OMI_ROLE`, or the run fails before any mutation. Blank
+inputs are the default everywhere and deploy exactly what ships today.
+
+1. `llm-gateway` through `gcp_llm_gateway.yml` (production; development may
+   also use the stack path, `service_images=llm-gateway=…` with
+   `deploy_gateway=true`):
+
+   ```
+   gh workflow run gcp_llm_gateway.yml --ref main \
+     -f environment=<development|prod> -f branch=main -f release_sha=<sha> \
+     -f gateway_image_digest=sha256:<64 hex of backend-gateway at that sha>
+   ```
+
+   With a digest the run skips its own `llm-gateway:<sha7>` build, deploys
+   `gcr.io/<project>/backend-gateway@<digest>` through `deploy-llm-gateway.sh`
+   (`image.repository` + `image.digest`), proves the rolled-out Deployment
+   template runs that exact reference, and runs the Cloud Run VPC probe and the
+   smoke pod from the same image.
+
+2. `pusher` through `gcp_backend_pusher.yml`:
+   - Development: `-f environment=development
+     -f pusher_role_image_digest=sha256:<64 hex of backend-pusher>` skips the
+     fat build and deploys `gcr.io/based-hardware-dev/backend-pusher@<digest>`
+     through the unchanged live-capacity gate, Helm release and receipts.
+     Production rejects this input.
+   - Production still ships only a development-qualified digest
+     (`pusher_image_digest` + `pusher_dev_qualification_run_id`). The
+     qualification flow admits evidence that names either
+     `gcr.io/based-hardware-dev/pusher` or
+     `gcr.io/based-hardware-dev/backend-pusher`
+     (`verify_pusher_promotion_evidence.py --expected-repository` takes the
+     comma-separated pair); the promotion keeps the repository name, so a
+     role-image pusher lands as `gcr.io/based-hardware/backend-pusher@<digest>`
+     and the final receipt is checked against that.
+   - **Still needed before the production pusher cutover:** qualification
+     evidence is produced only by `gcp_backend_pusher_auto_deploy.yml`, which
+     builds the fat `pusher` image. That workflow has to deploy `backend-pusher`
+     (a `.github` change for David to name), then one green run on the cutover
+     SHA supplies the digest and run ID. Editing either pusher workflow or the
+     verifier changes the promotion contract fingerprint, so qualification runs
+     older than the change stop promoting; use the first green run after it.
+
+3. `messaging-maintenance-job`: switch the admitted image to the
+   `backend-workers` digest (prod registry, `gcr.io/based-hardware`):
+
+   ```
+   python3 backend/scripts/messaging_operations.py job --check --image gcr.io/based-hardware/backend-workers@sha256:<64 hex>
+   python3 backend/scripts/messaging_operations.py job --validate --image gcr.io/based-hardware/backend-workers@sha256:<64 hex>
+   python3 backend/scripts/messaging_operations.py job --apply --image gcr.io/based-hardware/backend-workers@sha256:<64 hex>
+   ```
+
+   `desired_job` admits exactly `gcr.io/based-hardware/backend@sha256:…`
+   (today) or `gcr.io/based-hardware/backend-workers@sha256:…`; any other
+   repository, registry or tag fails before gcloud authentication. The job's
+   entrypoint `utils.messaging.maintenance` is one of the `backend-workers`
+   image's probed entrypoints.
+
+4. `backend-listen`: `service_images=backend-listen=…` with `deploy_targets=all`
    (development), then the production path.
-4. The Cloud Run four in one train (`backend` → `backend-api`, the other three →
+
+5. The Cloud Run four in one train (`backend` → `backend-api`, the other three →
    `backend-workers`; `OMI_ROLE` stays unread until B8).
 
 After each cutover, delete the replaced image entry, its `outside_role_split`
