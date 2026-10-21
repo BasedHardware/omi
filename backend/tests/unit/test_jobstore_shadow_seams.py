@@ -105,3 +105,17 @@ def test_seam_failure_keeps_the_plain_primary(monkeypatch):
     monkeypatch.setattr(dual_store, 'shadow_from_env', lambda _p: (_ for _ in ()).throw(RuntimeError('x')))
     primary = FirestoreStore('batch_pipeline_dev')
     assert hook.shadow_from_env(primary) is primary
+
+
+def test_provider_stt_stage_store_is_the_shadow_seam(monkeypatch):
+    """The provider-STT consumer writes jobs/owners through ``store.run``; its store is the deferred seam."""
+    import utils.batch_pipeline.provider_stt as provider_stt
+
+    tree = ast.parse(inspect.getsource(provider_stt._service_stage))
+    calls = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call) and getattr(node.func, 'id', None) == 'FirestoreStore'
+    ]
+    parents = {child: node for node in ast.walk(tree) for child in ast.iter_child_nodes(node)}
+    assert len(calls) == 1 and getattr(parents[calls[0]].func, 'id', None) == 'shadow_from_env'

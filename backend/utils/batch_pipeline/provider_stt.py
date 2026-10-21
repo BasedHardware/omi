@@ -483,11 +483,12 @@ RETRY_SECONDS = 30.0
 
 def _service_stage() -> ProviderSttStage:
     # Deferred: the batch store namespace and artifact bucket are resolved per host stage.
+    from database.batch_pipeline_shadow_hook import shadow_from_env
     from database.batch_pipeline_store import FirestoreStore
     from utils.batch_pipeline.intake import artifacts_for
     from utils.sync.stage import current_stage
 
-    store = FirestoreStore(f'batch_pipeline_{current_stage()}')
+    store = shadow_from_env(FirestoreStore(f'batch_pipeline_{current_stage()}'))  # A2 seam: provider-STT writes
     return ProviderSttStage(store, artifacts_for(store))
 
 
