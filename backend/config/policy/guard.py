@@ -79,7 +79,7 @@ def env_reads(source):
 # Positive resolution edges: admission or a CAS owner may resolve; every other
 # imported resolver/getter call is rejected, regardless of its directory.
 RESOLUTION_EDGES = {
-    'database/batch_pipeline_shadow.py': {'start_recovery'},  # Isolated first-writer shadow recovery CAS.
+    'database/batch_pipeline_shadow.py': {'pin_shadow_recovery'},  # Isolated first-writer shadow recovery CAS.
     'config/batch_pipeline.py': {'*'},  # Legacy/E1b facade; in-tree unit callers use parts.
     'config/batch_live_preview.py': {'*'},  # E2 pre-unit routing.
     'database/batch_pipeline_policy.py': {'admission_fallback', 'stage_in_transaction', 'refresh_disabled_recovery'},

@@ -286,7 +286,7 @@ class ShadowStore:
         return self.store.run(prepare)
 
     def start_recovery(self, segment):
-        def start(tx):
+        def pin_shadow_recovery(tx):
             job = tx.get('shadow_jobs', segment)
             if not shadow_percent() or job.get('shadow') is not True or job.get('state') != 'recovery_ready':
                 return None
@@ -305,7 +305,7 @@ class ShadowStore:
             tx.put('shadow_jobs', segment, updated)
             return updated
 
-        return self.store.run(start)
+        return self.store.run(pin_shadow_recovery)
 
     def recovery_transport_failed(self, segment):
         def settle(tx):

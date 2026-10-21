@@ -369,6 +369,13 @@ def with_backend_storage_env(payload: str) -> str:
 def with_cloud_run_oauth_secrets(payload: str) -> str:
     # Keep integration snapshots complete while tests remove unrelated fields.
     payload = re.sub(
+        r'("backend(?:-sync|-sync-backfill|-integration)?":\s*\{.*?"env":\s*\[)',
+        r'\1\n        {"name": "BATCH_PIPELINE_SHADOW_PERCENT", "value": "0"},'
+        r'\n        {"name": "BATCH_PIPELINE_SHADOW_PAID_RECOVERY_PER_HOUR", "value": "200"},',
+        payload,
+        flags=re.DOTALL,
+    )
+    payload = re.sub(
         r'("backend-integration":\s*\{.*?"flags":\s*\{)',
         r'\1"--timeout": "3600s", ',
         payload,
