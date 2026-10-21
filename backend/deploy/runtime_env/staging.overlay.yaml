@@ -69,6 +69,9 @@ cloud_run:
     REDIS_DB_HOST: '{input:STAGING_REDIS_HOST}'
     REDIS_DB_PORT: '6379'
     BUCKET_TEMPORAL_SYNC_LOCAL: based-hardware-dev-staging-sync
+    # utils/other/storage.py defaults this to the PROD private-cloud-sync bucket when unset (P13b,
+    # 2026-10-21 bridge 403); the fence now requires it in staging.
+    BUCKET_PRIVATE_CLOUD_SYNC: based-hardware-dev-staging-sync
     BUCKET_BATCH_PIPELINE: based-hardware-dev-staging-batch
     BUCKET_SCREEN_FRAMES: based-hardware-dev-staging-batch
     BATCH_PIPELINE_API_URL: '{run_url:backend-sync}'

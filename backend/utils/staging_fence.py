@@ -48,6 +48,8 @@ PROD_DATA_PLANE_HASHES: frozenset[str] = frozenset(
         '5a3876404fd446627a18288e59b5b413af051b6fd706597199e89dbc74a534ec',
         # dev BUCKET_BATCH_PIPELINE (based-hardware-dev-batch-pipeline-staging)
         hashlib.sha256(b'based-hardware-dev-batch-pipeline-staging').hexdigest(),
+        # prod BUCKET_PRIVATE_CLOUD_SYNC (also its code default in utils/other/storage.py)
+        hashlib.sha256(b'omi-private-cloud-sync').hexdigest(),
         # prod PINECONE_INDEX_NAME
         'fa470fd0229b9b377540ff00056310ddd710614c17af769190a9700b3d08eb59',
         # prod/dev REDIS_DB_HOST: added once bootstrap_iam.sh prints its hash (the host
@@ -81,6 +83,9 @@ _IPV4 = re.compile(r'(?<![0-9.])(?:[0-9]{1,3}\.){3}[0-9]{1,3}(?![0-9.])')
 _PROJECT_ENV = ('OMI_CUSTOMER_DATA_PROJECT', 'GOOGLE_CLOUD_PROJECT')
 _OPTIONAL_PROJECT_ENV = ('OMI_FIRESTORE_DATA_PLANE_PROJECT', 'GCLOUD_PROJECT', 'GCP_PROJECT', 'FIREBASE_PROJECT_ID')
 _KEY_CREDENTIAL_ENV = ('SERVICE_ACCOUNT_JSON', 'FIREBASE_AUTH_CREDENTIALS_PATH')
+# Keys whose in-code default is a production resource: an unset key is a prod reference the
+# value scan cannot see (2026-10-21: BUCKET_PRIVATE_CLOUD_SYNC fell back to the prod bucket).
+_REQUIRED_EXPLICIT_ENV = ('BUCKET_PRIVATE_CLOUD_SYNC',)
 
 
 class StagingFenceError(RuntimeError):
@@ -189,6 +194,11 @@ def staging_violations(env: Mapping[str, str]) -> list[tuple[str, str]]:
     signer = value('FIREBASE_SIGNER_SERVICE_ACCOUNT')
     if signer and not signer.endswith(STAGING_SA_DOMAIN):
         violations.append(('signer', 'FIREBASE_SIGNER_SERVICE_ACCOUNT'))
+
+    # 2b. Keys whose code default points at production must be set explicitly.
+    for name in _REQUIRED_EXPLICIT_ENV:
+        if not value(name):
+            violations.append(('prod_default', name))
 
     # 3. Redis must be a private staging address, never a known prod host.
     redis_host = value('REDIS_DB_HOST')

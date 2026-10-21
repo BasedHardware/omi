@@ -27,6 +27,7 @@ def _clean_env() -> dict[str, str]:
         'REDIS_DB_PORT': '6379',
         'BUCKET_TEMPORAL_SYNC_LOCAL': 'based-hardware-dev-staging-sync',
         'BUCKET_BATCH_PIPELINE': 'based-hardware-dev-staging-batch',
+        'BUCKET_PRIVATE_CLOUD_SYNC': 'based-hardware-dev-staging-sync',
         'SYNC_TASKS_QUEUE': 'staging-sync-jobs',
         'BATCH_PIPELINE_API_URL': 'https://backend-sync-staging-dt5lrfkkoa-uc.a.run.app',
     }
@@ -299,3 +300,18 @@ def test_jobstore_shadow_refuses_the_staging_flag_on_a_non_staging_db(database_i
 
 def test_jobstore_shadow_admits_other_namespaces():
     assert staging_fence.jobstore_shadow_admits('batch_pipeline_dev', {})
+
+
+def test_unset_key_with_a_prod_code_default_is_refused():
+    # utils/other/storage.py falls back to the prod private-cloud-sync bucket when this is unset.
+    env = _clean_env()
+    del env['BUCKET_PRIVATE_CLOUD_SYNC']
+    assert ('prod_default', 'BUCKET_PRIVATE_CLOUD_SYNC') in staging_violations(env)
+    with pytest.raises(StagingFenceError):
+        assert_staging_isolation(env)
+
+
+def test_prod_private_cloud_sync_bucket_is_refused():
+    env = _clean_env()
+    env['BUCKET_PRIVATE_CLOUD_SYNC'] = 'omi-private-cloud-sync'
+    assert ('prod_hash', 'BUCKET_PRIVATE_CLOUD_SYNC') in staging_violations(env)

@@ -36,6 +36,8 @@ STAGING_ENV = {
     'OMI_CUSTOMER_DATA_PROJECT': 'based-hardware-dev',
     'FIRESTORE_DATABASE_ID': 'staging',
     'FIREBASE_AUTH_PROJECT_ID': 'based-hardware-dev',
+    # Code default is the prod bucket; the staging fence requires an explicit staging value.
+    'BUCKET_PRIVATE_CLOUD_SYNC': 'based-hardware-dev-staging-sync',
 }
 _NAME = re.compile(r'[A-Z][A-Z0-9_]*')
 PROBE_MOUNT = '/asrctx-probe'
