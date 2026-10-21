@@ -102,3 +102,24 @@ Interpretation:
 - `Allowlisted live-managed keys` (`LIVE_MANAGED_ENV_ALLOWLIST` in `backend/scripts/check_cloud_run_env_drift.py`) covers keys intentionally managed outside `runtime_env.yaml`: per-revision provenance (`OMI_BACKEND_RELEASE_SHA`) and live-managed canary UID allowlists (`BATCH_PIPELINE_UID_ALLOWLIST`, `FIRST_SUMMARY_UID_ALLOWLIST`, `SYNC_BACKFILL_ORDER_UID_ALLOWLIST`, `FAIR_USE_EXEMPT_UIDS`, `DREAM_AGENT_FULL_CONTEXT_UIDS`). Any feature flag whose allowlist is live-managed must fail safe (deny all at `*_PERCENT=0` when the allowlist key is absent) so a service recreate cannot widen rollout.
 - `Unallowlisted live keys missing from manifest` lists keys surviving on the live service only because Cloud Run deploys merge env vars. Promote active runtime config into `backend/deploy/runtime_env/{_base,dev.overlay,prod.overlay}.yaml` (and regenerate `backend/deploy/runtime_env.yaml` with `python3 backend/deploy/compose_runtime_env.py`), or retire dead keys via `forbidden_env` / `--remove-env-vars`.
 - `.github/actions/deploy-backend-stack/action.yml` runs `check_cloud_run_env_drift.py` as a non-blocking report step after post-deploy runtime env validation and appends the table to `$GITHUB_STEP_SUMMARY`. Pass `--strict` when running as an enforcing gate.
+
+## Post-deploy ancestry verification
+
+During and after rollouts, deploy verification often requires proving that an intended PR merge or candidate commit is contained within the deployed release SHA. To check this mechanically without cloning a full Git repository:
+
+```bash
+python3 backend/scripts/verify_deploy_ancestry.py \
+  --release <deployed_release_sha> \
+  --contains <candidate_or_merge_sha>
+```
+
+Options:
+- `--json`: Output machine-readable JSON status for automated verification gates.
+- `--quiet`: Suppress diagnostic output and rely strictly on process exit code.
+- `--repository <owner/repo>`: Target repository (defaults to `BasedHardware/omi` or `$GITHUB_REPOSITORY`).
+- `--token <token>`: GitHub authentication token (defaults to `$GH_TOKEN` or `$GITHUB_TOKEN`).
+
+Exit codes:
+- `0`: `<contains>` is an ancestor of `<release>` (the intended change is confirmed live).
+- `1`: `<contains>` is NOT an ancestor of `<release>`.
+- `2`: Resolution, network, or argument error.
