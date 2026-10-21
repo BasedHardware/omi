@@ -32,6 +32,7 @@ from google.cloud.firestore_v1 import FieldFilter
 from pydantic import ValidationError
 
 import database.memories as memories_db
+from database import memory_source_index
 import database.vector_db as vector_db
 from utils.memory.index_window import (
     MemoryIndexWindowLimit,
@@ -4465,15 +4466,14 @@ class MemoryService:
         # target instead of deleting both source and target memories.
         if on_authoritative_commit is not None:
             on_authoritative_commit()
-        historical_ids = [
-            record.memory.id
-            for record in self.history.all_live(uid)
-            if record.memory.conversation_id == conversation_id
-            or any(
-                evidence.source_type == "conversation" and evidence.source_id == conversation_id
-                for evidence in record.memory.evidence
-            )
-        ]
+        # The source index skips the full legacy scan for a donor no live row names.
+        historical_ids = memory_source_index.retraction_historical_ids(
+            uid,
+            conversation_id,
+            scan=lambda: self.history.all_live(uid),
+            fresh_pages=memories_db.historical_scan_memo_suspended,
+            firestore_client=self.db_client,
+        )
         retracted_ids = list(dict.fromkeys(list(result.get("retracted_memory_ids") or []) if result else []))
         all_ids = list(dict.fromkeys(retracted_ids + historical_ids))
         if coalesce:
