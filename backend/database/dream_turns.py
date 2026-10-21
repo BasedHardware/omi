@@ -10,7 +10,7 @@ from hashlib import sha256
 
 from google.cloud import firestore
 
-from database import dream_store
+from database import dream_store, firestore_transaction_retry
 from config.dream_agent import enabled
 from utils.dream_cost import minute_burndown_tokens
 
@@ -99,7 +99,10 @@ def reserve(uid, run_id, tokens, caps, *, cost_micro_usd=None, now=None, firesto
         for shard, used in capacities.items():
             tx.set(headroom_ref(database, shard), {'minute': minute, 'tokens': used})
 
-    claim(database.transaction())
+    # The SDK retries commit aborts, but read-time shard contention escapes it.
+    firestore_transaction_retry.run_with_transaction_contention_retry(
+        database.transaction, claim, operation_name='dream_turn_reserve'
+    )
 
 
 def settle(uid, run_id, turn, *, firestore_client=None):
@@ -187,4 +190,6 @@ def settle(uid, run_id, turn, *, firestore_client=None):
             },
         )
 
-    receipt(database.transaction())
+    firestore_transaction_retry.run_with_transaction_contention_retry(
+        database.transaction, receipt, operation_name='dream_turn_settle'
+    )

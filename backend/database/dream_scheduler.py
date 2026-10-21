@@ -2,6 +2,7 @@
 
 from datetime import datetime, timezone, timedelta
 from google.cloud import firestore
+from database import firestore_transaction_retry
 from database._client import get_firestore_client
 from config.dream_agent import allowlist_uids, eligibility, eligible, enabled, hunt_interval
 
@@ -87,7 +88,9 @@ def discover(database, now, *, pages=20):
             if listed is None:
                 tx.set(cursor, {'after': rows[-1].id})
 
-        initialize(database.transaction())
+        firestore_transaction_retry.run_with_transaction_contention_retry(
+            database.transaction, initialize, operation_name='dream_discover'
+        )
         after = rows[-1].id
 
 
