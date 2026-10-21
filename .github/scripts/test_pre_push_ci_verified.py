@@ -291,7 +291,15 @@ class HookTests(unittest.TestCase):
     @staticmethod
     def clean_env() -> dict[str, str]:
         env = dict(os.environ)
-        for key in ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_COMMON_DIR"):
+        # The hook under test must not inherit the caller's push context (lane push wrappers export these).
+        for key in (
+            "GIT_DIR",
+            "GIT_WORK_TREE",
+            "GIT_INDEX_FILE",
+            "GIT_COMMON_DIR",
+            "PRE_PUSH_BASE_BRANCH",
+            "OMI_PR_BODY_FILE",
+        ):
             env.pop(key, None)
         return env
 
