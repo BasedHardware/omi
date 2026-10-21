@@ -61,6 +61,21 @@ def _clean_token(value: Any, *, max_chars: int = _MAX_UID_LENGTH, max_bytes: int
     return token
 
 
+def _coerce_document_id(value: Any) -> Any:
+    """Mirror the historical ``str(row['id'])`` coercion for numeric row ids.
+
+    ``_clean_token`` only accepts ``str``, so without this a writer passing a
+    numeric primary key (``{'id': 123}``) would silently stop marking the
+    document dirty - a regression against the pre-hardening behaviour.
+    Booleans are left untouched on purpose so they stay rejected.
+    """
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, int):
+        return str(value)
+    return value
+
+
 def _clean_ids(values: Any) -> list[str]:
     """Drop unusable ids, keep first-seen order, and cap the fan-out at ``_MAX_REFS``."""
     if isinstance(values, (str, bytes)) or not isinstance(values, (list, tuple, set)):
@@ -129,7 +144,9 @@ def _ids_for(collection: str, data: Any, result: Any) -> list[str]:
         ids = [data]
     else:
         rows = data if isinstance(data, list) else [data]
-        ids = [row['id'] for row in rows if isinstance(row, dict) and row.get('id')]
+        ids = [
+            _coerce_document_id(row['id']) for row in rows if isinstance(row, dict) and row.get('id')
+        ]
     if collection == 'action_items' and not isinstance(data, str):
         ids = [result] if isinstance(result, str) else result if isinstance(result, list) else ids
     if collection == 'memory_items' and isinstance(result, str):
@@ -139,6 +156,13 @@ def _ids_for(collection: str, data: Any, result: Any) -> list[str]:
 
         if isinstance(result, CandidateRecord):
             ids = [result.candidate_id]
+    if isinstance(ids, (list, tuple, set)) and len(ids) > _MAX_REFS:
+        logger.warning(
+            'Dream dirty fan-out truncated collection=%s requested=%s cap=%s',
+            collection,
+            len(ids),
+            _MAX_REFS,
+        )
     return _clean_ids(ids)
 
 
