@@ -80,9 +80,13 @@ async def prepare(source: Publication, upload: Callable[[], dict]) -> None:
         source.put_started = True
         future: Future = submit_with_context(storage_executor, upload)
         source.upload_attempts.append(future)
+        deadline = asyncio.timeout(UPLOAD_ATTEMPT_SECONDS)
         try:
-            fields = await asyncio.wait_for(asyncio.shield(asyncio.wrap_future(future)), UPLOAD_ATTEMPT_SECONDS)
+            async with deadline:
+                fields = await asyncio.shield(asyncio.wrap_future(future))
         except asyncio.TimeoutError:
+            if not deadline.expired():
+                raise  # An operation's bare TimeoutError is not a transport retry.
             last_error = requests.exceptions.ReadTimeout('immutable live upload wait deadline')
         except Exception as error:
             last_error = error

@@ -1399,6 +1399,7 @@ async def test_second_upload_timeout_fails_without_a_third_attempt():
     'error',
     [
         ValueError('permanent'),
+        TimeoutError('caller signal'),
         ResourceExhausted('throttle'),
         DeadlineExceeded('Firestore'),
         RetryError('permanent', InvalidArgument('bad')),
