@@ -119,6 +119,22 @@ def log_sync_lineage_stamp_append(span_delta_bucket: str) -> None:
         pass
 
 
+def log_sync_lineage_stamp_gap_refused() -> None:
+    """Both legacy and batch projection report a committed stamp-gap reroute."""
+    try:
+        logger.info('event=sync_lineage_stamp_append outcome=stamp_gap_refused span_delta_bucket=0')
+    except Exception:
+        pass
+    record_fallback(
+        component='sync_dispatch',
+        from_mode='explicit_target',
+        to_mode='temporal_assignment',
+        reason='policy',
+        outcome='degraded',
+        log=logger,
+    )
+
+
 def complete_sync_intake(
     *,
     uid: str,
@@ -165,15 +181,7 @@ def complete_sync_intake(
     if stamp_bucket is not None:
         log_sync_lineage_stamp_append(stamp_bucket)
     if stamp_gap_refused:
-        logger.info('event=sync_lineage_stamp_append outcome=stamp_gap_refused span_delta_bucket=0')
-        record_fallback(
-            component='sync_dispatch',
-            from_mode='explicit_target',
-            to_mode='temporal_assignment',
-            reason='policy',
-            outcome='degraded',
-            log=logger,
-        )
+        log_sync_lineage_stamp_gap_refused()
     store_audio(conversation_id)
     mark_finalize()
     if not repeat_only or existing_completion:
