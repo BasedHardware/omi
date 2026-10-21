@@ -27,9 +27,10 @@ class FakeEmulator:
 
     The fake activity reports ACTIVE after ``polls_before_active`` logcat
     polls and, like the real probe activity, stops the service only once the
-    runner broadcasts ACTION_VERIFIED (or, with ``fallback``, after its own
-    timeout). ``active`` controls whether the service is actually foreground
-    with its wake lock when ACTIVE is reported.
+    runner broadcasts ACTION_VERIFIED. With ``fallback`` that stop is labelled
+    with the activity's VERIFY_TIMEOUT marker instead of VERIFIED; the
+    activity's own 30 s timer is not modelled. ``active`` controls whether the
+    service is actually foreground with its wake lock when ACTIVE is reported.
     """
 
     def __init__(self, mode, *, active=True, polls_before_active=1, fallback=False):
@@ -120,7 +121,9 @@ class ProbeRunnerTests(unittest.TestCase):
         self.assertEqual(files, ["0-burst-active-power.log", "0-burst-active-services.log", "0-burst-active.log"])
         self.assertEqual(device.indexes("shell", "am", "broadcast"), [])
 
-    def test_activity_fallback_timeout_fails_the_case(self):
+    def test_runner_rejects_the_activity_fallback_marker(self):
+        # Pins the runner's half only: the activity's 30 s timer that emits
+        # VERIFY_TIMEOUT runs on the device and is not modelled here.
         device = FakeEmulator("restart", fallback=True)
         result, _ = run(device, "restart")
         self.assertFalse(result["passed"])
