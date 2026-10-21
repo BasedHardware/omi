@@ -11,6 +11,20 @@ SPEC.loader.exec_module(REPORT)
 
 
 class ReportTests(unittest.TestCase):
+    def test_names_android_tap_unittest_go_and_browser_failures(self):
+        samples = {
+            "com.example.CaptureTest > reopensAfterDrop FAILED": "com.example.CaptureTest > reopensAfterDrop",
+            "not ok 3 - agent reconnects after transport close": "agent reconnects after transport close",
+            "FAIL: test_restart (test_service.ServiceTests)": "test_restart (test_service.ServiceTests)",
+            "--- FAIL: TestReconnect (0.01s)": "TestReconnect",
+            "✘ Test reconnect() failed after 0.1 seconds": "reconnect()",
+            "1) [chromium] › flows/capture.spec.ts:20:3 › resumes after drop": "[chromium] › flows/capture.spec.ts:20:3 › resumes after drop",
+            "FAIL src/capture.test.ts > recorder > reconnects": "src/capture.test.ts > recorder > reconnects",
+        }
+        for record, expected in samples.items():
+            with self.subTest(record=record):
+                self.assertEqual(REPORT.failing_tests(record), [expected])
+
     def test_extracts_each_pytest_swift_dart_rust_and_web_failure(self):
         log = "\n".join([
             "2026-10-21T00:00:00.000Z FAILED tests/unit/test_audio.py::test_reconnect - AssertionError: private payload",

@@ -41,6 +41,12 @@ def failing_tests(log):
             r"❌\s+(.+?)(?:\s+\(failed\))?$",
             r"^\s*(?:FAIL|FAILURE)\s+([^\n]+\.(?:test|spec)\.[jt]sx?(?:\s+>.*)?)",
             r"^\s*●\s+(.+?\s+›\s+.+)$",
+            r"^\s*(\S+\s+>\s+.+?)\s+FAILED\b",
+            r"^\s*not ok\s+\d+\s+-\s+(.+)$",
+            r"^\s*(?:FAIL|ERROR):\s+(.+)$",
+            r"^\s*--- FAIL:\s+(\S+)",
+            r"✘\s+Test\s+(.+?)\s+(?:failed|recorded an issue)\b",
+            r"^\s*\d+\)\s+(\[[^\]]+\]\s+›.+)$",
             r"^\s*test\s+(\S+)\s+\.\.\.\s+FAILED",
             r"^\s*\d+\s*-\s*(\S+)\s+\(Failed\)",
         )
