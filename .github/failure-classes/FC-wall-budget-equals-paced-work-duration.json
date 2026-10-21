@@ -12,7 +12,8 @@
     "backend/utils/stt/replay_delivery.py",
     "backend/utils/stt/resilient_stream.py",
     "backend/config/live_stt_replay.py",
-    "backend/routers/listen/receiver.py"
+    "backend/routers/listen/receiver.py",
+    "backend/routers/listen/demand_switch.py"
   ],
   "status": "open"
 }
