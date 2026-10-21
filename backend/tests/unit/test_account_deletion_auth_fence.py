@@ -1,5 +1,6 @@
 """The durable account-deletion marker is an authentication access barrier."""
 
+import logging
 from unittest.mock import MagicMock
 
 import pytest
@@ -60,6 +61,26 @@ def test_deletion_state_read_failure_fails_closed(monkeypatch):
 
     assert error.value.status_code == 503
     assert error.value.detail == {"code": "account_deletion_state_unavailable", "retryable": True}
+
+
+def test_deletion_state_read_failure_logs_no_uid_or_error_detail(monkeypatch, caplog):
+    sentinel_uid = "uid-sentinel-a1b2c3"
+    monkeypatch.setattr(endpoints, "verify_token", lambda _token: sentinel_uid)
+
+    def unavailable(_uid):
+        raise RuntimeError("firestore unreachable via credential-secret-xyz")
+
+    monkeypatch.setattr(endpoints, "get_user_deletion_wipe_status", unavailable)
+
+    with caplog.at_level(logging.ERROR, logger="utils.other.endpoints"):
+        with pytest.raises(HTTPException) as error:
+            endpoints.get_current_user_uid(authorization="Bearer token")
+
+    assert error.value.status_code == 503
+    assert error.value.detail == {"code": "account_deletion_state_unavailable", "retryable": True}
+    assert sentinel_uid not in caplog.text
+    assert "credential-secret-xyz" not in caplog.text
+    assert "error_type=RuntimeError" in caplog.text
 
 
 def test_websocket_auth_uses_typed_account_deletion_close(monkeypatch):
@@ -204,3 +225,45 @@ def test_auth_fence_fails_closed_when_the_resolved_data_plane_read_raises(monkey
 
     assert error.value.status_code == 503
     assert error.value.detail == {"code": "account_deletion_state_unavailable", "retryable": True}
+
+
+def test_reset_recovery_runs_only_after_auth_deletion_cutover_and_byok_checks(monkeypatch):
+    from types import SimpleNamespace
+    from utils import locked_content_recovery
+
+    events = []
+    monkeypatch.setattr(endpoints, 'get_user_deletion_wipe_status', lambda uid: events.append('deletion') or None)
+    monkeypatch.setattr(endpoints, '_enforce_cutover_http_if_request', lambda uid, request: events.append('cutover'))
+    monkeypatch.setattr(endpoints, 'validate_byok_request', lambda uid: events.append('byok'))
+    monkeypatch.setattr(locked_content_recovery, 'recover_locked_content', lambda uid: events.append('recovery'))
+    assert (
+        endpoints.get_current_user_uid(authorization='Bearer token', request=SimpleNamespace(method='GET')) == 'old-uid'
+    )
+    assert events == ['deletion', 'cutover', 'byok', 'recovery']
+
+
+def test_deleting_account_never_runs_reset_recovery(monkeypatch):
+    from types import SimpleNamespace
+    from utils import locked_content_recovery
+
+    recovery = MagicMock()
+    monkeypatch.setattr(endpoints, 'get_user_deletion_wipe_status', lambda uid: 'running')
+    monkeypatch.setattr(locked_content_recovery, 'recover_locked_content', recovery)
+    with pytest.raises(HTTPException):
+        endpoints.get_current_user_uid(authorization='Bearer token', request=SimpleNamespace(method='GET'))
+    recovery.assert_not_called()
+
+
+def test_delete_request_does_not_run_reset_recovery(monkeypatch):
+    from types import SimpleNamespace
+    from utils import locked_content_recovery
+
+    recovery = MagicMock()
+    monkeypatch.setattr(endpoints, 'get_user_deletion_wipe_status', lambda uid: None)
+    monkeypatch.setattr(endpoints, '_enforce_cutover_http_if_request', lambda uid, request: None)
+    monkeypatch.setattr(locked_content_recovery, 'recover_locked_content', recovery)
+    assert (
+        endpoints.get_current_user_uid(authorization='Bearer token', request=SimpleNamespace(method='DELETE'))
+        == 'old-uid'
+    )
+    recovery.assert_not_called()

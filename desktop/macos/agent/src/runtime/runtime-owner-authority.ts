@@ -65,22 +65,6 @@ export function establishRuntimeOwner(
   };
 }
 
-/**
- * Token refresh may establish the first explicit owner or refresh the current
- * owner. A different owner must first clear the old authority, preventing a
- * delayed owner-A token from switching a live owner-B runtime back to A.
- * Credential mutation runs only after this validation succeeds.
- */
-export function authorizeRuntimeTokenRefresh(
-  state: RuntimeOwnerAuthorityState,
-  requestedOwnerId: string | undefined,
-  commitCredentials: () => void,
-): RuntimeOwnerAuthorityTransition {
-  const transition = establishRuntimeOwner(state, requestedOwnerId);
-  commitCredentials();
-  return transition;
-}
-
 export function clearRuntimeOwnerAuthority(
   state: RuntimeOwnerAuthorityState,
   requestedOwnerId: string | undefined,

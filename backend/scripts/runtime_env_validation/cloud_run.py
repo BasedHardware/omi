@@ -14,6 +14,7 @@ from scripts.runtime_env_validation.common import (
     _validate_cloud_run_secret_entries,
     _validate_env_entries,
     _validate_forbidden_env_entries,
+    _validate_service_identity,
     compute_project,
 )
 from scripts.runtime_env_validation.workflows import _validate_workflow_flags
@@ -80,7 +81,11 @@ def _fetch_live_cloud_run_state(env_config: ConfigDict) -> ConfigDict:
         first_container = _as_config_dict(containers[0]) or {}
         services[service] = {
             'env': first_container.get('env', []),
-            'flags': _cloud_run_network_flags_from_annotations(annotations),
+            'flags': {
+                **_cloud_run_network_flags_from_annotations(annotations),
+                '--timeout': f"{template_spec.get('timeoutSeconds', 300)}s",
+            },
+            'service_account': template_spec.get('serviceAccountName'),
         }
     return {'services': services}
 
@@ -132,9 +137,17 @@ def _validate_cloud_run(
         errors.extend(
             _validate_workflow_flags(
                 scope=f'cloud_run/{service}',
-                expected=_network_flags(env_config),
+                expected={**_network_flags(env_config), **service_config.get('flags', {})},
                 actual=service_state.get('flags', {}),
                 strict_provisional=strict_provisional,
+            )
+        )
+        errors.extend(
+            _validate_service_identity(
+                scope=f'cloud_run/{service}',
+                service_config=service_config,
+                actual_service_account=service_state.get('service_account'),
+                actual_env_names=set(actual_env),
             )
         )
     state_jobs = _as_config_dict(cloud_run_state.get('jobs'))

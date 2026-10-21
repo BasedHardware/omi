@@ -141,12 +141,11 @@ For v1, build the gateway as a separate FastAPI app in the backend tree, using t
 Promotion model:
 
 1. Start with no live product traffic while service startup, readiness, config validation, and service auth are verified.
-2. Route non-embedding features through the gateway in shadow mode (`OMI_LLM_GATEWAY_DEV_SHADOW_ALL_*` and feature shadow flags).
-3. Promote **dev** to gateway-serving with `OMI_LLM_GATEWAY_FEATURE_MODE=gateway`. When serving is on, turn shadow flags **off** so callers do not double-hit the gateway. Keep `OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION=false`: gateway-mode model calls fail closed and never fall back to a provider from product code.
-4. Run prod shadow before prod serving when the feature touches user content or user-visible behavior. Prod serving also requires `OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE=true` and an explicit gateway URL.
-5. Promote prod serving only after rollback has been tested and the route artifact has suitable eval evidence.
+2. Promote **dev** to gateway-serving with `OMI_LLM_GATEWAY_FEATURE_MODE=gateway`. Keep `OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION=false`: gateway-mode model calls fail closed and never fall back to a provider from product code.
+3. Validate dev serving before prod. Prod serving also requires `OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE=true` and an explicit gateway URL.
+4. Promote prod serving only after rollback has been tested and the route artifact has suitable eval evidence.
 
-**Dev serving rollback (config-only):** unset `OMI_LLM_GATEWAY_FEATURE_MODE` (or set it to anything other than `gateway`/`true`/`1`/`yes`) on Cloud Run `backend` / `backend-sync` / `backend-integration` and GKE `backend-listen`. Optionally restore shadow flags. Do not set feature mode on prod without the prod allow env.
+**Dev serving rollback (config-only):** unset `OMI_LLM_GATEWAY_FEATURE_MODE` (or set it to anything other than `gateway`/`true`/`1`/`yes`) on Cloud Run `backend` / `backend-sync` / `backend-integration` and GKE `backend-listen`. Do not set feature mode on prod without the prod allow env.
 
 Do not start by embedding the gateway router into `backend/main.py`. That would make the gateway look separate in code while still sharing the main backend process, lifecycle, scaling, and blast radius.
 
@@ -189,14 +188,9 @@ Backend-listen env:
 | `OMI_LLM_GATEWAY_URL` | Internal service URL above |
 | `OMI_LLM_GATEWAY_SERVICE_TOKEN` | `*-omi-backend-secrets` key `OMI_LLM_GATEWAY_SERVICE_TOKEN` |
 | `OMI_LLM_GATEWAY_FEATURE_MODE` | `gateway` routes non-BYOK `get_llm` traffic through per-feature `omi:auto:*` lanes |
-| `PUBLIC_SHARED_CONVERSATION_CHAT_MODE` | Independent `off` or `gateway` switch, default and checked-in value `off`; gateway mode has no direct-provider fallback |
+| `PUBLIC_SHARED_CONVERSATION_CHAT_MODE` | Independent `off` or `gateway` switch; dev is checked in as `gateway`, prod and default remain `off`; gateway mode has no direct-provider fallback |
 | `OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE` | Required and set to `true` on prod callers; prevents an accidental production route flip without an explicit checked-in enablement |
 | `OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION` | When `true`, acknowledged direct surfaces (BYOK, agentic, file chat, omni realtime) stay on providers |
-| `OMI_LLM_GATEWAY_DEV_SHADOW_ALL_ENABLED` | Broad dev shadow kill switch; keep `false` while feature mode is serving |
-| `OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED` | Feature-level shadow kill switch for conversation structure extraction |
-| `OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE` | Deterministic sample rate from `0.0` to `1.0` for conversation structure shadow traffic |
-| `OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_ENABLED` | Feature-level shadow kill switch for conversation action-item extraction |
-| `OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_SAMPLE_RATE` | Deterministic sample rate from `0.0` to `1.0` for conversation action-item shadow traffic |
 
 Gateway env:
 
@@ -213,7 +207,6 @@ Gateway env:
 | `METRICS_SECRET` | existing `*-omi-backend-secrets` key `METRICS_SECRET` |
 | `LLM_GATEWAY_ACCOUNTING_ENABLED` | `true` in deployed values; enables immutable Firestore usage-attempt events |
 | `LLM_GATEWAY_ACCOUNTING_WRITE_TIMEOUT_SECONDS` | Bounded non-fatal Firestore-write timeout; `1` in deployed values |
-| `OMI_LLM_GATEWAY_OUTPUT_BUDGET_EXPERIMENTS` | Empty by default; enable a named, route-owned budget experiment only after its quality review |
 
 Gemini gateway lanes use native Vertex `generateContent` / `streamGenerateContent` with Application Default Credentials. The Kubernetes service account is annotated at deploy time from the environment-scoped GitHub variable `LLM_GATEWAY_GSA`; it must already be mapped through GKE Workload Identity to a dedicated Google service account with the required Vertex invocation permission (for example, `roles/aiplatform.user`) in the configured project. The exact dev/prod Google service-account identities and IAM bindings are an external platform prerequisite, not chart defaults or secrets.
 

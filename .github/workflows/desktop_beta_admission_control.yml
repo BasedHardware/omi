@@ -29,6 +29,8 @@ concurrency:
 jobs:
   control-beta-admission:
     environment: prod
+    permissions:
+      id-token: write
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -63,7 +65,9 @@ jobs:
       - name: Use the existing production Google identity
         uses: google-github-actions/auth@v3
         with:
-          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+          # Prod GitHub WIF (credential-hygiene WS-C); no JSON key, no Owner.
+          workload_identity_provider: projects/208440318997/locations/global/workloadIdentityPools/omi-gha-deploy-prod/providers/github
+          service_account: omi-ci-desktop-release-prod@based-hardware.iam.gserviceaccount.com
 
       - name: Change only the desktop Beta admission fence
         env:

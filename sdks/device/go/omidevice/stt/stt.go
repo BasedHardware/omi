@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"strings"
 	"sync/atomic"
+	"time"
 
 	"github.com/gorilla/websocket"
 )
@@ -65,8 +66,11 @@ func ParakeetWSURL(apiURL string, sampleRate int) string {
 				continue
 			}
 			k, _, _ := strings.Cut(part, "=")
-			if k == "sample_rate" {
-				newParts = append(newParts, fmt.Sprintf("sample_rate=%d", sampleRate))
+			key, err := url.QueryUnescape(k)
+			if err == nil && key == "sample_rate" {
+				if !foundSampleRate {
+					newParts = append(newParts, fmt.Sprintf("sample_rate=%d", sampleRate))
+				}
 				foundSampleRate = true
 			} else {
 				newParts = append(newParts, part)
@@ -81,9 +85,26 @@ func ParakeetWSURL(apiURL string, sampleRate int) string {
 	return u.String()
 }
 
+// Engine-specific graceful-stop frames: Deepgram flushes and closes on a
+// CloseStream JSON control message, Parakeet on a plain "finalize" text frame.
+// Sending Parakeet's frame to Deepgram is ignored, so the socket would close
+// with the server's final results never emitted.
+var (
+	deepgramFinalize = []byte(`{"type":"CloseStream"}`)
+	parakeetFinalize = []byte("finalize")
+)
+
+// defaultDrainTimeout bounds how long Stop waits for the server's trailing
+// results after the finalize frame before closing the socket.
+const defaultDrainTimeout = 2 * time.Second
+
 type wsTranscriber struct {
-	conn  *websocket.Conn
-	ready atomic.Bool
+	conn      *websocket.Conn
+	ready     atomic.Bool
+	finalize  []byte
+	done      chan struct{} // closed when the read loop returns
+	readErr   error         // why the read loop returned; read only after done is closed
+	drainWait time.Duration
 }
 
 func (t *wsTranscriber) AppendPCM(pcm []byte) error {
@@ -91,17 +112,52 @@ func (t *wsTranscriber) AppendPCM(pcm []byte) error {
 		return fmt.Errorf("not connected")
 	}
 	if !t.ready.Load() {
-		return nil
+		return t.closedBeforeReady()
 	}
 	return t.conn.WriteMessage(websocket.BinaryMessage, pcm)
+}
+
+// closedBeforeReady reports a stream the server closed before sending ready,
+// e.g. Parakeet's 1013 capacity_full or service_not_ready. Such a stream never
+// becomes ready, so treating it as still pending would drop every later chunk.
+// It returns nil while the stream may still become ready.
+func (t *wsTranscriber) closedBeforeReady() error {
+	select {
+	case <-t.done:
+	default:
+		return nil
+	}
+	// done closes after the read loop's last write to ready and readErr.
+	if t.ready.Load() || t.readErr == nil {
+		return nil
+	}
+	return fmt.Errorf("stream closed before ready: %w", t.readErr)
 }
 
 func (t *wsTranscriber) Stop() error {
 	if t.conn == nil {
 		return nil
 	}
-	_ = t.conn.WriteMessage(websocket.TextMessage, []byte("finalize"))
-	return t.conn.Close()
+	if t.finalize != nil {
+		_ = t.conn.WriteMessage(websocket.TextMessage, t.finalize)
+	}
+	// Closing right after finalize drops the trailing results the server
+	// emits in response; wait for the read loop to see the server close, or
+	// for the bounded drain deadline, before tearing the socket down.
+	wait := t.drainWait
+	if wait <= 0 {
+		wait = defaultDrainTimeout
+	}
+	select {
+	case <-t.done:
+	case <-time.After(wait):
+	}
+	// Check before Close: closing also ends a read loop still awaiting ready.
+	refused := t.closedBeforeReady()
+	if err := t.conn.Close(); err != nil {
+		return err
+	}
+	return refused
 }
 
 func NewDeepgram(apiKey string, sampleRate int, onTranscript Handler) (StreamingTranscriber, error) {
@@ -121,9 +177,12 @@ func NewDeepgram(apiKey string, sampleRate int, onTranscript Handler) (Streaming
 	if err != nil {
 		return nil, err
 	}
-	t := &wsTranscriber{conn: conn}
+	t := &wsTranscriber{conn: conn, finalize: deepgramFinalize, done: make(chan struct{})}
 	t.ready.Store(true)
-	go readDeepgram(conn, onTranscript)
+	go func() {
+		defer close(t.done)
+		readDeepgram(conn, onTranscript)
+	}()
 	return t, nil
 }
 
@@ -165,12 +224,14 @@ func NewParakeet(apiURL string, sampleRate int, onTranscript Handler) (Streaming
 	if err != nil {
 		return nil, err
 	}
-	t := &wsTranscriber{conn: conn}
+	t := &wsTranscriber{conn: conn, finalize: parakeetFinalize, done: make(chan struct{})}
 	// wait ready in background and stream
 	go func() {
+		defer close(t.done)
 		for {
 			_, data, err := conn.ReadMessage()
 			if err != nil {
+				t.readErr = err
 				return
 			}
 			var msg map[string]any
@@ -220,11 +281,13 @@ func (w *whisperBatch) AppendPCM(pcm []byte) error {
 		return nil
 	}
 	chunk := w.buf
-	w.buf = nil
 	text, err := w.runner(chunk)
 	if err != nil {
+		// Keep the buffered audio so the next call retries the same samples
+		// instead of silently dropping them.
 		return err
 	}
+	w.buf = nil
 	if text != "" && w.onTranscript != nil {
 		w.onTranscript(text)
 	}

@@ -2,7 +2,9 @@
 
 Invoke through ``run.sh`` so Firebase owns a fresh Firestore emulator.  The
 supervisor starts private Redis plus independent admission and worker ASGI
-processes; it never probes, reuses, or stops developer services.
+processes; it never probes, reuses, or stops developer services.  The
+batch-lane scenarios (``batch.py``) add a serving ASGI process and a batch
+worker process; ``--only sync|batch`` selects one family.
 """
 
 from __future__ import annotations
@@ -33,6 +35,8 @@ import redis
 from google.auth import credentials as google_auth_credentials
 from google.cloud import firestore
 
+from .local_oidc import local_oidc_token
+
 ROOT = Path(__file__).resolve().parents[3]
 BACKEND = ROOT / 'backend'
 PYTHON = BACKEND / '.venv' / 'bin' / 'python'
@@ -40,13 +44,13 @@ PROJECT = 'demo-omi-sync-cloud-tasks-stack'
 ADMIN_KEY = 'omi-sync-cloud-tasks-stack-admin-'
 LOCAL_OIDC_AUDIENCE = 'https://sync-stack.local/v2/sync-jobs/run'
 LOCAL_INVOKER_SA = 'sync-stack-invoker@demo-omi-sync-cloud-tasks-stack.iam.gserviceaccount.com'
-LOCAL_OIDC_TOKEN = f'local-sync-oidc:{LOCAL_INVOKER_SA}'
+LOCAL_OIDC_TOKEN = local_oidc_token(LOCAL_OIDC_AUDIENCE, LOCAL_INVOKER_SA)
 SYNC_QUEUE = 'sync-jobs'
 SENSITIVE_UID = 'sync-stack-sensitive-uid'
 TRANSCRIPT_TOKEN = 'Sync stack transcript verified.'
 DEVICE_HASH = '01234567'
 DEVICE_ID = f'ios_{DEVICE_HASH}'
-ENCRYPTION_SECRET = 'omi_sync_cloud_tasks_stack_test_secret_32_bytes'
+ENCRYPTION_SECRET = 'omi_sync_cloud_tasks_stack_test_secret_32_bytes'  # pragma: allowlist secret
 
 
 class StackFailure(AssertionError):
@@ -70,10 +74,28 @@ def _anonymous_google_credentials(
 google.auth.default = _anonymous_google_credentials
 
 
+def _free_ports(count: int) -> list[int]:
+    """Reserve and return `count` distinct ephemeral ports on loopback.
+
+    Holding all probe sockets open simultaneously guarantees that the kernel
+    allocates non-conflicting, unique port numbers across the stack's services (#20322).
+    """
+    probes = []
+    ports = []
+    try:
+        for _ in range(count):
+            probe = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            probe.bind(('127.0.0.1', 0))
+            probes.append(probe)
+            ports.append(int(probe.getsockname()[1]))
+        return ports
+    finally:
+        for probe in probes:
+            probe.close()
+
+
 def _free_port() -> int:
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
-        probe.bind(('127.0.0.1', 0))
-        return int(probe.getsockname()[1])
+    return _free_ports(1)[0]
 
 
 def _wait_for_port(port: int, *, label: str, timeout: float = 30.0) -> None:
@@ -145,9 +167,10 @@ class Stack:
         self.evidence_dir = state_dir / 'evidence'
         self.storage_dir = state_dir / 'local-storage'
         self.gate_dir = state_dir / 'processor-gate' if hold_processor else None
-        self.redis_port = _free_port()
-        self.admission_port = _free_port()
-        self.worker_port = _free_port()
+        ports = _free_ports(3)
+        self.redis_port = ports[0]
+        self.admission_port = ports[1]
+        self.worker_port = ports[2]
         self.task_ack_failures = task_ack_failures
         self.worker_failures = worker_failures
         self.pre_ledger_failures = pre_ledger_failures
@@ -216,9 +239,9 @@ class Stack:
                 'SYNC_TASKS_INVOKER_SA': LOCAL_INVOKER_SA,
                 'SYNC_TASKS_MAX_ATTEMPTS': '2',
                 'HTTP_SYNC_JOBS_RUN_TIMEOUT': '30',
+                'SYNC_JOB_HANDLER_BUDGET_SECONDS': '20',
                 'FAIR_USE_ENABLED': 'true',
                 'MAX_DAILY_AUDIO_HOURS': '30',
-                'TRIAL_PAYWALL_ENABLED': 'false',
                 'STT_PRERECORDED_MODEL': 'parakeet',
                 'STT_SERVICE_MODELS': 'parakeet',
                 'HOSTED_PARAKEET_API_URL': 'http://127.0.0.1:1',
@@ -643,7 +666,11 @@ def _assert_durable_success(stack: Stack, uid: str, job_id: str) -> str:
     if not isinstance(content_id, str):
         raise StackFailure('task content id is missing')
     ledger = (
-        stack.firestore.collection('users').document(uid).collection('sync_content_ledger').document(content_id).get()
+        stack.firestore.collection('users')
+        .document(uid)
+        .collection('sync_content_ledger_offline')
+        .document(content_id)
+        .get()
     )
     ledger_data = ledger.to_dict() if ledger.exists else None
     if not isinstance(ledger_data, dict) or ledger_data.get('status') != 'completed':
@@ -722,7 +749,11 @@ def _content_ledger_data(stack: Stack, uid: str, task: dict[str, Any]) -> dict[s
     if not isinstance(content_id, str):
         raise StackFailure('Sync task omitted durable content identity')
     ledger = (
-        stack.firestore.collection('users').document(uid).collection('sync_content_ledger').document(content_id).get()
+        stack.firestore.collection('users')
+        .document(uid)
+        .collection('sync_content_ledger_offline')
+        .document(content_id)
+        .get()
     )
     ledger_data = ledger.to_dict() if ledger.exists else None
     if not isinstance(ledger_data, dict):
@@ -853,34 +884,36 @@ def _concurrent_delivery_is_lease_fenced(stack: Stack) -> None:
         raise StackFailure('concurrent delivery ran the provider pipeline more than once')
 
 
-def _persistence_fenced_backfill_is_terminal(stack: Stack) -> None:
-    """A lifecycle-fenced processor result is not a Cloud Tasks retry."""
-    uid = stack.scenario_uid('persistence-fenced-backfill')
+def _nonprod_legacy_backfill_is_acked_before_worker_state(stack: Stack) -> None:
+    """A dev-style legacy backfill delivery cannot reach shared worker state."""
+    uid = stack.scenario_uid('nonprod-legacy-backfill')
     job_id, task = _submit_and_capture_task(stack, uid)
     body = task.get('body')
     if not isinstance(body, dict):
         raise StackFailure('captured backfill task body is missing')
     backfill_task = {**task, 'body': {**body, 'lane': 'backfill'}}
-    slot_key = f'sync_backfill:inflight:{uid}'
+    slot_key = f'offline:sync_backfill:inflight:{uid}'
     worker_redis = redis.Redis(host='127.0.0.1', port=stack.redis_port)
     worker_redis.set(slot_key, job_id)
+    prod_sequencer_keys = set(worker_redis.keys('sync_backfill:uid_sequencer:*'))
 
     first = _deliver_task(backfill_task, retry_count=0)
-    if first.status_code != 200 or first.json() != {'status': 'superseded'}:
-        raise StackFailure('lifecycle-fenced backfill worker was retried instead of terminally ACKed')
-    status = _poll_terminal_job(stack, uid, job_id)
-    if status.get('status') != 'completed':
-        raise StackFailure('lifecycle-fenced backfill worker did not publish its terminal superseded outcome')
-    if worker_redis.get(slot_key) is not None:
-        raise StackFailure('lifecycle-fenced backfill worker did not release its exact backfill slot')
-    if _stt_invocation_count(stack, job_id) != 1:
-        raise StackFailure('lifecycle-fenced worker did not run the real pipeline boundary exactly once')
+    if first.status_code != 200 or first.json() != {'status': 'foreign_stage'}:
+        raise StackFailure('non-prod legacy backfill delivery was not ACKed before worker state')
+    if _job_status(stack, uid, job_id).get('status') != 'queued':
+        raise StackFailure('non-prod legacy backfill delivery changed the queued job')
+    if worker_redis.get(slot_key) != job_id.encode():
+        raise StackFailure('non-prod legacy backfill delivery touched the backfill slot')
+    if set(worker_redis.keys('sync_backfill:uid_sequencer:*')) != prod_sequencer_keys:
+        raise StackFailure('non-prod legacy backfill delivery wrote a production sequencer key')
+    if _stt_invocation_count(stack, job_id) != 0:
+        raise StackFailure('non-prod legacy backfill delivery entered the provider pipeline')
 
     duplicate = _deliver_task(backfill_task, retry_count=1)
-    if duplicate.status_code != 200 or duplicate.json().get('status') != 'acked':
-        raise StackFailure('duplicate lifecycle-fenced task was not safely ACKed after terminalization')
-    if _stt_invocation_count(stack, job_id) != 1:
-        raise StackFailure('duplicate lifecycle-fenced task re-ran the provider pipeline')
+    if duplicate.status_code != 200 or duplicate.json() != {'status': 'foreign_stage'}:
+        raise StackFailure('duplicate non-prod legacy backfill delivery was not ACKed')
+    if _stt_invocation_count(stack, job_id) != 0:
+        raise StackFailure('duplicate non-prod legacy backfill delivery entered the provider pipeline')
 
 
 def _ambiguous_enqueue_and_expired_blob(stack: Stack) -> None:
@@ -970,6 +1003,12 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--state-dir', type=Path, help='directory for sanitized evidence and private process logs')
     parser.add_argument('--keep', action='store_true', help='preserve state after a successful run')
+    parser.add_argument(
+        '--only',
+        choices=('all', 'sync', 'batch'),
+        default='all',
+        help='run only the legacy Sync Cloud Tasks scenarios or only the batch-lane scenarios',
+    )
     args = parser.parse_args()
     if not PYTHON.exists():
         raise SystemExit(f'missing backend virtual environment: {PYTHON}; run backend/scripts/sync-python-deps.sh')
@@ -978,26 +1017,38 @@ def main() -> int:
     state_dir.mkdir(parents=True, exist_ok=True)
     succeeded = False
     try:
-        _run_scenario(state_dir / 'happy-duplicate', scenario=_happy_path_and_terminal_duplicate)
-        _run_scenario(state_dir / 'cleanup-retry', cleanup_failures=1, scenario=_cleanup_retry_preserves_terminal_work)
-        _run_scenario(state_dir / 'pre-ledger-retry', pre_ledger_failures=1, scenario=_pre_ledger_failure_retries_once)
-        _run_scenario(
-            state_dir / 'post-ledger-retry', post_ledger_failures=1, scenario=_post_ledger_failure_converges_once
-        )
-        _run_scenario(
-            state_dir / 'final-attempt-ledger',
-            worker_failures=1,
-            post_ledger_failures=1,
-            scenario=_final_attempt_post_ledger_failure_converges,
-        )
-        _run_scenario(state_dir / 'terminal-failure', worker_failures=2, scenario=_retry_budget_terminalizes_truthfully)
-        _run_scenario(state_dir / 'concurrent', hold_processor=True, scenario=_concurrent_delivery_is_lease_fenced)
-        _run_scenario(
-            state_dir / 'persistence-fenced-backfill',
-            process_persistence_fenced=True,
-            scenario=_persistence_fenced_backfill_is_terminal,
-        )
-        _run_scenario(state_dir / 'lost-ack-expired', task_ack_failures=1, scenario=_ambiguous_enqueue_and_expired_blob)
+        if args.only in {'all', 'sync'}:
+            _run_scenario(state_dir / 'happy-duplicate', scenario=_happy_path_and_terminal_duplicate)
+            _run_scenario(
+                state_dir / 'cleanup-retry', cleanup_failures=1, scenario=_cleanup_retry_preserves_terminal_work
+            )
+            _run_scenario(
+                state_dir / 'pre-ledger-retry', pre_ledger_failures=1, scenario=_pre_ledger_failure_retries_once
+            )
+            _run_scenario(
+                state_dir / 'post-ledger-retry', post_ledger_failures=1, scenario=_post_ledger_failure_converges_once
+            )
+            _run_scenario(
+                state_dir / 'final-attempt-ledger',
+                worker_failures=1,
+                post_ledger_failures=1,
+                scenario=_final_attempt_post_ledger_failure_converges,
+            )
+            _run_scenario(
+                state_dir / 'terminal-failure', worker_failures=2, scenario=_retry_budget_terminalizes_truthfully
+            )
+            _run_scenario(state_dir / 'concurrent', hold_processor=True, scenario=_concurrent_delivery_is_lease_fenced)
+            _run_scenario(
+                state_dir / 'nonprod-legacy-backfill',
+                scenario=_nonprod_legacy_backfill_is_acked_before_worker_state,
+            )
+            _run_scenario(
+                state_dir / 'lost-ack-expired', task_ack_failures=1, scenario=_ambiguous_enqueue_and_expired_blob
+            )
+        if args.only in {'all', 'batch'}:
+            from .batch import run_batch_scenarios
+
+            run_batch_scenarios(state_dir / 'batch')
         succeeded = True
         print(f'Sync Cloud Tasks stack gauntlet passed; sanitized evidence: {state_dir}')
         return 0

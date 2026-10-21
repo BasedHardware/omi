@@ -2,20 +2,38 @@
 Import endpoints for importing data from external sources.
 """
 
+import asyncio
 import logging
 import os
-from typing import List
+import re
 
-from utils.executors import db_executor, storage_executor, run_blocking
+from datetime import datetime, timezone
+from typing import List, Optional
+
+from utils.executors import db_executor, storage_executor, run_blocking, start_background_task, submit_with_context
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel
+from redis.exceptions import RedisError
 
 import database.import_jobs as import_jobs_db
+import database.import_quotas as import_quotas_db
 from models.import_job import ImportJobResponse, ImportJobStatus, ImportSourceType
 from utils.other import endpoints as auth
 from utils.imports.limitless import create_import_job, process_limitless_import
-from utils.multipart import IMPORT_MAX_PART_SIZE, MultipartMaxPartSizeRoute, max_part_size
+from utils.imports.transcript_files import (
+    TRANSCRIPT_ORIGINS,
+    UPLOAD_EXTENSIONS,
+    create_transcript_import_job,
+    process_transcript_import,
+)
+from utils.multipart import (
+    IMPORT_MAX_PART_SIZE,
+    MultipartMaxPartSizeRoute,
+    max_part_size,
+    multipart_limits,
+    single_file_limits,
+)
 
 router = APIRouter(route_class=MultipartMaxPartSizeRoute)
 
@@ -23,6 +41,14 @@ logger = logging.getLogger(__name__)
 
 # Temp directory for uploaded files
 TEMP_DIR = '_temp'
+
+
+def _job_source_type(job: dict) -> Optional[ImportSourceType]:
+    """The importer that created a stored job; unknown or missing values stay unset."""
+    try:
+        return ImportSourceType(job.get('source_type'))
+    except (ValueError, TypeError):
+        return None
 
 
 class DeleteLimitlessConversationsResponse(BaseModel):
@@ -88,7 +114,154 @@ async def import_limitless_data(
     return ImportJobResponse(
         job_id=job.id,
         status=ImportJobStatus.pending,
+        source_type=ImportSourceType.limitless,
     )
+
+
+@router.post(
+    '/v1/import/transcripts',
+    response_model=ImportJobResponse,
+    tags=['import'],
+)
+@max_part_size(IMPORT_MAX_PART_SIZE)
+# The form is parsed before auth and the rate limit: one file part and no fields, in a
+# body no larger than that file allows, bound what any request can make the server spool.
+@multipart_limits(single_file_limits(IMPORT_MAX_PART_SIZE))
+async def import_transcript_files(
+    file: UploadFile = File(...),
+    language: str = 'en',
+    tz: str = 'UTC',
+    origin: str = 'other',
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, 'import:upload', fail_closed=True)),
+):
+    """
+    Start importing transcripts exported from other tools.
+
+    Accepts one ``.srt``, ``.vtt`` or ``.txt`` transcript, or a ``.zip`` of them. Each
+    transcript becomes a completed conversation (no AI processing); re-importing the
+    same file is skipped. ``tz`` reads dates in file names, and ``origin`` is ``plaud``
+    or ``other``. Poll GET /v1/import/jobs/{job_id} for progress.
+    """
+    language = language.strip()
+    if not re.fullmatch(r'[A-Za-z0-9_-]{1,16}', language):
+        language = 'en'
+    # A file or origin we will not import must not spend a monthly upload slot.
+    filename = os.path.basename((file.filename or '').replace('\\', '/'))
+    if not filename.lower().endswith(UPLOAD_EXTENSIONS):
+        raise HTTPException(status_code=400, detail="Upload a .zip, .srt, .vtt or .txt file")
+    if origin not in TRANSCRIPT_ORIGINS:
+        raise HTTPException(status_code=400, detail=f"origin must be one of: {', '.join(sorted(TRANSCRIPT_ORIGINS))}")
+
+    try:
+        admitted = await run_blocking(db_executor, import_quotas_db.reserve_import_quota, uid, 'upload', 1)
+    except RedisError as exc:
+        raise HTTPException(status_code=503, detail='Import quota unavailable') from exc
+    if admitted is None:
+        raise HTTPException(status_code=429, detail='Monthly transcript upload limit reached. Try again later.')
+
+    try:
+        job = await run_blocking(db_executor, create_transcript_import_job, uid)
+    except asyncio.CancelledError:
+        submit_with_context(db_executor, _release_admitted_upload, uid, admitted)
+        raise
+    except Exception:
+        await run_blocking(db_executor, _release_admitted_upload, uid, admitted)
+        raise
+    os.makedirs(TEMP_DIR, exist_ok=True)
+    # Staged under the job ID: a user's file name can exceed the file-system name limit.
+    upload_path = os.path.join(TEMP_DIR, f"{job.id}{os.path.splitext(filename)[1].lower()}")
+    try:
+        f = await run_blocking(storage_executor, open, upload_path, 'wb')
+        try:
+            while contents := await file.read(1024 * 1024):
+                await run_blocking(storage_executor, f.write, contents)
+        finally:
+            f.close()
+    except asyncio.CancelledError:
+        # The request deadline cancelled the handler. Under that cancellation every
+        # further await is interrupted too, so the cleanup goes to a pool unawaited.
+        submit_with_context(
+            db_executor, _abandon_transcript_import, job.id, upload_path, 'Failed to save uploaded file'
+        )
+        submit_with_context(db_executor, _release_admitted_upload, uid, admitted)
+        raise
+    except Exception as e:
+        logger.error('transcript import upload not staged job_id=%s error_class=%s', job.id, type(e).__name__)
+        try:
+            await run_blocking(
+                db_executor, _abandon_transcript_import, job.id, upload_path, 'Failed to save uploaded file'
+            )
+        finally:
+            await run_blocking(db_executor, _release_admitted_upload, uid, admitted)
+        raise HTTPException(status_code=500, detail="Failed to save uploaded file")
+
+    # An async coordinator, not a pool task: it borrows a thread per step (one file,
+    # one job write) instead of holding a slot for the whole import.
+    worker = process_transcript_import(
+        job.id,
+        uid,
+        upload_path,
+        original_filename=filename,
+        language_code=language,
+        tz=tz,
+        origin=origin,
+    )
+    try:
+        start_background_task(worker, name=f'transcript_import:{job.id}')
+    except Exception as e:
+        worker.close()
+        logger.error('transcript import could not be queued job_id=%s error_class=%s', job.id, type(e).__name__)
+        try:
+            await run_blocking(
+                db_executor,
+                _abandon_transcript_import,
+                job.id,
+                upload_path,
+                'The import could not be started. Please try again.',
+            )
+        finally:
+            await run_blocking(db_executor, _release_admitted_upload, uid, admitted)
+        raise HTTPException(status_code=503, detail="The import could not be started. Try again shortly.")
+    return ImportJobResponse(job_id=job.id, status=ImportJobStatus.pending, source_type=job.source_type)
+
+
+def _discard_staged_upload(upload_path: str) -> None:
+    try:
+        os.remove(upload_path)
+    except FileNotFoundError:
+        pass
+    except OSError as e:
+        logger.error('transcript import staged upload cleanup failed error_class=%s', type(e).__name__)
+
+
+def _release_admitted_upload(uid: str, reservation: str) -> None:
+    """Return a monthly upload slot when the request never starts an import.
+
+    Redis errors stay in the log and the slot remains spent: a lost release must
+    not let the handler look successful.
+    """
+    try:
+        import_quotas_db.release_import_quota(uid, 'upload', reservation)
+    except Exception as exc:
+        logger.error('transcript import upload quota release failed error_class=%s', type(exc).__name__)
+
+
+def _abandon_transcript_import(job_id: str, upload_path: str, error: str) -> None:
+    """Fail a job whose upload will never reach the worker, so it is not left pending, and drop the file.
+
+    The file goes even when the job update raises.
+    """
+    try:
+        import_jobs_db.update_import_job_unless_cancelled(
+            job_id,
+            {
+                'status': ImportJobStatus.failed.value,
+                'error': error,
+                'completed_at': datetime.now(timezone.utc).isoformat(),
+            },
+        )
+    finally:
+        _discard_staged_upload(upload_path)
 
 
 @router.get(
@@ -120,6 +293,7 @@ def get_import_jobs(
                 ImportJobResponse(
                     job_id=job['id'],
                     status=ImportJobStatus(job['status']),
+                    source_type=_job_source_type(job),
                     total_files=job.get('total_files'),
                     processed_files=job.get('processed_files'),
                     conversations_created=job.get('conversations_created'),
@@ -170,6 +344,7 @@ def get_import_job_status(
     return ImportJobResponse(
         job_id=job['id'],
         status=status_val,
+        source_type=_job_source_type(job),
         total_files=job.get('total_files'),
         processed_files=job.get('processed_files'),
         conversations_created=job.get('conversations_created'),
@@ -187,13 +362,14 @@ def cancel_import_job(job_id: str, uid: str = Depends(auth.get_current_user_uid)
         raise HTTPException(status_code=404, detail="Import job not found")
     if job['uid'] != uid:
         raise HTTPException(status_code=403, detail="Not authorized to modify this import job")
-    if job.get('status') not in (ImportJobStatus.pending.value, ImportJobStatus.processing.value):
-        raise HTTPException(status_code=409, detail="Only a pending or processing import can be cancelled")
-
-    import_jobs_db.update_import_job(job_id, {'status': ImportJobStatus.cancelled.value, 'error': 'Cancelled by user'})
+    if not import_jobs_db.cancel_import_job_if_active(job_id):
+        if import_jobs_db.get_import_job(job_id) is None:
+            raise HTTPException(status_code=404, detail='Import job not found')
+        raise HTTPException(status_code=409, detail='Only a pending or processing import can be cancelled')
     return ImportJobResponse(
         job_id=job['id'],
         status=ImportJobStatus.cancelled,
+        source_type=_job_source_type(job),
         total_files=job.get('total_files'),
         processed_files=job.get('processed_files'),
         conversations_created=job.get('conversations_created'),

@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
-import json
+import os
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Callable, Optional
 
 import typer
+from rich.markup import escape
 
+from omi_cli.client import path_segment
 from omi_cli.datetime_options import ISO_DATETIME_FORMATS
 from omi_cli.errors import UsageError
 from omi_cli.json_input import load_json_input
@@ -30,6 +32,14 @@ def _ctx(typer_ctx: typer.Context) -> "AppContext":
     return obj  # type: ignore[no-any-return]
 
 
+def _probe(check: Callable[[], bool]) -> bool:
+    """A best-effort ``Path.is_*`` that never turns a read error into a new one."""
+    try:
+        return bool(check())
+    except OSError:
+        return False
+
+
 _LIST_COLUMNS = ["id", "title", "category", "started_at", "source"]
 
 
@@ -47,19 +57,44 @@ def list_conversations(
     categories: Optional[str] = typer.Option(None, "--categories", help="Comma-separated category filter."),
     include_transcript: bool = typer.Option(False, "--include-transcript", help="Include transcript_segments."),
 ) -> None:
+    server_page_size = 200
     ctx = _ctx(typer_ctx)
     with ctx.make_client() as client:
-        items = client.get(
-            "/v1/dev/user/conversations",
-            params={
-                "limit": limit,
-                "offset": offset,
-                "start_date": start_date.isoformat() if start_date else None,
-                "end_date": end_date.isoformat() if end_date else None,
-                "categories": categories,
-                "include_transcript": include_transcript,
-            },
-        )
+        if limit <= server_page_size:
+            items = client.get(
+                "/v1/dev/user/conversations",
+                params={
+                    "limit": limit,
+                    "offset": offset,
+                    "start_date": start_date.isoformat() if start_date else None,
+                    "end_date": end_date.isoformat() if end_date else None,
+                    "categories": categories,
+                    "include_transcript": include_transcript,
+                },
+            )
+        else:
+            items = []
+            current_offset = offset
+            while len(items) < limit:
+                batch_limit = min(limit - len(items), server_page_size)
+                page = client.get(
+                    "/v1/dev/user/conversations",
+                    params={
+                        "limit": batch_limit,
+                        "offset": current_offset,
+                        "start_date": start_date.isoformat() if start_date else None,
+                        "end_date": end_date.isoformat() if end_date else None,
+                        "categories": categories,
+                        "include_transcript": include_transcript,
+                    },
+                )
+                if not page:
+                    break
+                items.extend(page)
+                current_offset += batch_limit
+            if len(items) > limit:
+                items = items[:limit]
+
     if ctx.renderer.json_mode:
         ctx.renderer.emit(items)
         return
@@ -68,7 +103,7 @@ def list_conversations(
         structured = c.get("structured") or {}
         rows.append(
             {
-                "id": shorten(c.get("id"), 14),
+                "id": c.get("id"),
                 "title": shorten(structured.get("title"), 50),
                 "category": structured.get("category"),
                 "started_at": c.get("started_at"),
@@ -87,7 +122,7 @@ def get_conversation(
     ctx = _ctx(typer_ctx)
     with ctx.make_client() as client:
         result = client.get(
-            f"/v1/dev/user/conversations/{conversation_id}",
+            f"/v1/dev/user/conversations/{path_segment(conversation_id)}",
             params={"include_transcript": include_transcript},
         )
     ctx.renderer.emit(result, title="conversation")
@@ -121,10 +156,24 @@ def create_conversation(
             )
         text = sys.stdin.read()
 
+    cleaned_text = text.strip()
+    if not cleaned_text:
+        raise UsageError(
+            message="Empty text",
+            detail="Conversation text cannot be empty or whitespace.",
+        )
+
+    cleaned_lang = language.strip()
+    if not cleaned_lang:
+        raise UsageError(
+            message="Invalid language",
+            detail="Language code cannot be empty.",
+        )
+
     body: dict[str, object] = {
-        "text": text,
+        "text": cleaned_text,
         "text_source": text_source.value,
-        "language": language,
+        "language": cleaned_lang,
     }
     if text_source_spec is not None:
         body["text_source_spec"] = text_source_spec
@@ -135,7 +184,9 @@ def create_conversation(
 
     with ctx.make_client() as client:
         result = client.post("/v1/dev/user/conversations", json_body=body)
-    ctx.renderer.success(f"Conversation queued: [bold]{result.get('id')}[/bold] (status={result.get('status')})")
+    ctx.renderer.success(
+        f"Conversation queued: [bold]{escape(str(result.get('id')))}[/bold] (status={escape(str(result.get('status')))})"
+    )
     ctx.renderer.emit(result)
 
 
@@ -149,10 +200,45 @@ def from_segments(
     language: str = typer.Option("en", "--language"),
 ) -> None:
     ctx = _ctx(typer_ctx)
-    if not segments_file.exists():
-        raise UsageError(message=f"File not found: {segments_file}")
+    cleaned_lang = language.strip()
+    if not cleaned_lang:
+        raise UsageError(
+            message="Invalid language",
+            detail="Language code cannot be empty.",
+        )
+    # Open directly. ``Path.exists()`` re-raises ``PermissionError`` (an
+    # unsearchable parent) and swallows ``ENOTDIR`` as "missing", so a stat
+    # pre-check either escapes as an unexpected error or hides the real one.
     try:
-        payload = load_json_input(segments_file.read_bytes())
+        data = segments_file.read_bytes()
+    except IsADirectoryError as exc:
+        raise UsageError(
+            message=f"Expected a file, but found a directory: {segments_file}",
+            detail="Provide the path to a JSON file containing transcript_segments.",
+        ) from exc
+    except FileNotFoundError as exc:
+        # Windows reports a path under a regular file as not found (POSIX: ENOTDIR).
+        # Win32 collapses `..` before the filesystem sees it (except for \\?\ and
+        # \\.\ paths), so walk the path the OS actually resolved.
+        raw = str(segments_file)
+        resolved = segments_file if raw.startswith(("\\\\?\\", "\\\\.\\")) else Path(os.path.normpath(raw))
+        blocker = next((parent for parent in resolved.parents if _probe(parent.is_file)), None)
+        if blocker is not None:
+            raise UsageError(
+                message=f"Cannot read file {segments_file}", detail=f"Not a directory: {blocker}"
+            ) from exc
+        raise UsageError(message=f"File not found: {segments_file}") from exc
+    except OSError as exc:
+        # Windows opens a directory as PermissionError, not IsADirectoryError.
+        if _probe(segments_file.is_dir):
+            raise UsageError(
+                message=f"Expected a file, but found a directory: {segments_file}",
+                detail="Provide the path to a JSON file containing transcript_segments.",
+            ) from exc
+        raise UsageError(message=f"Cannot read file {segments_file}", detail=str(exc)) from exc
+
+    try:
+        payload = load_json_input(data)
     except (ValueError, UnicodeDecodeError) as exc:
         raise UsageError(message=f"Invalid JSON in {segments_file}", detail=str(exc))
 
@@ -163,7 +249,7 @@ def from_segments(
             detail="Each segment needs at least 'text', 'start', 'end'.",
         )
 
-    body: dict[str, object] = {"transcript_segments": segments, "language": language}
+    body: dict[str, object] = {"transcript_segments": segments, "language": cleaned_lang}
     if source is not None:
         body["source"] = source
     if started_at is not None:
@@ -173,7 +259,7 @@ def from_segments(
 
     with ctx.make_client() as client:
         result = client.post("/v1/dev/user/conversations/from-segments", json_body=body)
-    ctx.renderer.success(f"Conversation queued: [bold]{result.get('id')}[/bold]")
+    ctx.renderer.success(f"Conversation queued: [bold]{escape(str(result.get('id')))}[/bold]")
     ctx.renderer.emit(result)
 
 
@@ -187,14 +273,17 @@ def update_conversation(
     ctx = _ctx(typer_ctx)
     body: dict[str, object] = {}
     if title is not None:
-        body["title"] = title
+        cleaned_title = title.strip()
+        if not cleaned_title:
+            raise UsageError(message="Invalid title", detail="Title cannot be empty or whitespace.")
+        body["title"] = cleaned_title
     if discarded is not None:
         body["discarded"] = discarded
     if not body:
         raise UsageError(message="No fields to update", detail="Provide --title or --discarded/--no-discarded.")
     with ctx.make_client() as client:
-        result = client.patch(f"/v1/dev/user/conversations/{conversation_id}", json_body=body)
-    ctx.renderer.success(f"Updated conversation [bold]{conversation_id}[/bold].")
+        result = client.patch(f"/v1/dev/user/conversations/{path_segment(conversation_id)}", json_body=body)
+    ctx.renderer.success(f"Updated conversation [bold]{escape(conversation_id)}[/bold].")
     ctx.renderer.emit(result)
 
 
@@ -206,9 +295,9 @@ def delete_conversation(
 ) -> None:
     ctx = _ctx(typer_ctx)
     if not confirm:
-        typer.confirm(f"Delete conversation {conversation_id}?", abort=True)
+        typer.confirm(f"Delete conversation {conversation_id}?", abort=True, err=ctx.renderer.json_mode)
     with ctx.make_client() as client:
-        result = client.delete(f"/v1/dev/user/conversations/{conversation_id}")
+        result = client.delete(f"/v1/dev/user/conversations/{path_segment(conversation_id)}")
     if ctx.renderer.json_mode:
         ctx.renderer.emit(result)
-    ctx.renderer.success(f"Deleted conversation [bold]{conversation_id}[/bold].")
+    ctx.renderer.success(f"Deleted conversation [bold]{escape(conversation_id)}[/bold].")

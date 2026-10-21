@@ -16,13 +16,17 @@ from typing import Any, Dict, List, Optional, cast
 
 gc.disable()
 
-from fastapi import FastAPI, Form, UploadFile, File, WebSocket, WebSocketDisconnect, Query
+from fastapi import FastAPI, Form, UploadFile, File, Request, WebSocket, WebSocketDisconnect, Query
 from fastapi.responses import JSONResponse
 from prometheus_client import Counter, Gauge, Histogram
 from prometheus_client import make_asgi_app  # type: ignore[reportUnknownVariableType]  # prometheus_client partially typed
 
 from gpu_worker import GPUWorker, AudioDurationExceededError
-from batch_engine import BatchEngine, QueueFullError
+from batch_engine import BatchEngine, QueueFullError, QueueTimeoutError
+
+# The image build overwrites omi_logging_config.py with backend/utils/logging_config.py.
+# Importing utils.logging_config in the NeMo process hits NeMo's utils package.
+from omi_logging_config import configure_split_stream_logging, quiet_repetitive_nemo_logs
 from transcribe import (
     transcribe_file,
     transcribe_file_v2,
@@ -32,12 +36,16 @@ from transcribe import (
 )
 from stream_handler import StreamSession, warmup_rnnt_decoder
 from admission import StreamAdmissionController
+from bounded_audio import submit_audio
 
-logging.basicConfig(level=logging.INFO)
-# httpx logs every outbound request at INFO; the per-segment diarizer embedding
-# calls (one per audio segment) flood the log pipeline with 200 OK noise. Keep
-# only warnings/errors (4xx/5xx, timeouts) from httpx. See issue #8080.
-logging.getLogger("httpx").setLevel(logging.WARNING)
+# INFO/DEBUG to stdout, WARNING+ to stderr. Also quiets httpx/httpcore.
+# The internal HTTP LB already logs every request (successes sampled, errors in
+# full), so Uvicorn's per-request access line is a duplicate.
+configure_split_stream_logging(level=logging.INFO)
+logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
+# nemo_logger does not propagate. Drop only the per-batch timestamps INFO and
+# the two repetitive Lhotse dataloader warnings; other NeMo errors still emit.
+quiet_repetitive_nemo_logs()
 logger = logging.getLogger(__name__)
 
 _ASR_BUCKETS = (0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0)
@@ -46,6 +54,23 @@ _AUDIO_LEN_BUCKETS = (1, 5, 10, 30, 60, 120, 300, 600, 1800, 3600, 7200, 18000, 
 ACTIVE_STREAMS = Gauge('parakeet_active_streams', 'Active /v3/stream WebSocket connections')
 ACTIVE_BATCH = Gauge('parakeet_active_batch_requests', 'Active batch transcription requests')
 PENDING_REQUESTS = Gauge('parakeet_batch_pending_requests', 'Pending requests in batch engine queue')
+LANE_PENDING = Gauge('parakeet_batch_lane_pending_requests', 'Pending batch requests by lane', ['lane'])
+LANE_OLDEST = Gauge('parakeet_batch_lane_oldest_pending_seconds', 'Age of oldest queued GPU quantum', ['lane'])
+SERVICE_RTF = Histogram(
+    'parakeet_service_seconds_per_audio_second',
+    'GPU batch service seconds / summed audio seconds; excludes upload, queue, diarization',
+    ['lane'],
+    buckets=(0.001, 0.0025, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1),
+)
+LANE_QUEUE_WAIT = Histogram(
+    'parakeet_batch_lane_queue_wait_seconds',
+    'Time waiting before GPU batch assembly by lane',
+    ['lane'],
+    buckets=_ASR_BUCKETS,
+)
+LANE_REFUSALS = Counter(
+    'parakeet_batch_lane_refusals_total', 'Batch queue refusals by lane and reason', ['lane', 'reason']
+)
 REQUEST_DURATION = Histogram(
     'parakeet_request_duration_seconds',
     'Request latency',
@@ -84,6 +109,9 @@ GPU_FATAL_ERRORS_TOTAL = Counter(
     'Fatal CUDA errors that make a Parakeet GPU worker unavailable',
 )
 REQUESTS_TOTAL = Counter('parakeet_requests_total', 'Total requests by status', ['endpoint', 'status'])
+PRERECORDED_REQUESTS = Counter(
+    'parakeet_prerecorded_requests_total', 'Pre-recorded requests excluding live windowed TDT', ['status']
+)
 
 gpu_worker: Optional[GPUWorker] = None
 batch_engine: Optional[BatchEngine] = None
@@ -92,6 +120,9 @@ start_time: float = 0
 _diarize_pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix="diarize")
 _io_pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix="file-io")
 _max_file_duration_sec = float(os.getenv("PARAKEET_MAX_FILE_DURATION", "0"))
+_packing_enabled = os.getenv('PARAKEET_PACKING_ENABLED', 'false').lower() == 'true'
+_LIVE_QUEUE_BUDGET_CAP_SECONDS = 8.0
+_TIMEOUT_HEADER = "X-Omi-STT-Timeout-Seconds"
 
 
 def _get_audio_duration_from_bytes(data: bytes) -> float:
@@ -149,13 +180,22 @@ async def lifespan(app: FastAPI):
             max_wait_seconds=float(os.getenv("PARAKEET_BATCH_WAIT_SECONDS", "0.002")),
             max_queue_depth=int(os.getenv("PARAKEET_MAX_QUEUE_DEPTH", "4096")),
             on_batch_complete=_on_batch_complete,
+            on_queue_wait=lambda lane, seconds: LANE_QUEUE_WAIT.labels(lane=lane).observe(seconds),
             on_gpu_oom=_on_gpu_oom,
             vram_safety_factor=float(os.getenv("PARAKEET_VRAM_SAFETY_FACTOR", "0.8")),
             vram_bytes_per_t2=float(os.getenv("PARAKEET_VRAM_BYTES_PER_T2", "136.6")),
             starvation_timeout_sec=float(os.getenv("PARAKEET_STARVATION_TIMEOUT", "5.0")),
             max_inflight=int(os.getenv("PARAKEET_MAX_INFLIGHT", "2")),
+            packing=_packing_enabled,
+            on_service_time=lambda lane, seconds, audio: (
+                SERVICE_RTF.labels(lane=lane).observe(seconds / audio) if audio > 0 else None
+            ),
         )
         await batch_engine.start()
+        # Scrapes must refresh gauges even when nobody polls /batch/metrics.
+        # The snapshot is produced on the owning event loop, never on the
+        # prometheus ASGI worker thread (which must not mutate asyncio futures).
+        app.state.pressure_task = asyncio.create_task(_refresh_pressure_metrics())
         logger.info("Server started, GPU model loading in background...")
     else:
         logger.info("Parakeet ASR server ready (NIM mode)")
@@ -165,6 +205,12 @@ async def lifespan(app: FastAPI):
 
     logger.info("Shutting down...")
     if batch_engine:
+        app.state.pressure_task.cancel()
+        try:
+            await app.state.pressure_task
+        except asyncio.CancelledError:
+            pass
+    if batch_engine:
         await batch_engine.stop()
     if gpu_worker:
         gpu_worker.stop()
@@ -172,6 +218,17 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 app.mount("/metrics", cast(Any, make_asgi_app()))
+
+
+async def _refresh_pressure_metrics() -> None:
+    while True:
+        if batch_engine is not None:
+            snapshot = batch_engine.pressure_snapshot()
+            PENDING_REQUESTS.set(snapshot['pending_requests'])
+            for lane in ('live', 'backfill'):
+                LANE_PENDING.labels(lane=lane).set(snapshot[f'{lane}_pending_requests'])
+                LANE_OLDEST.labels(lane=lane).set(snapshot[f'{lane}_oldest_pending_seconds'])
+        await asyncio.sleep(0.1)
 
 
 def _write_file(path: str, data: bytes) -> None:
@@ -187,10 +244,32 @@ def _remove_file(path: str) -> None:
 
 
 @app.post("/v1/transcribe", response_model=None)
-async def transcribe(file: UploadFile = File(...)) -> JSONResponse | Dict[str, Any]:
+async def transcribe(request: Request, file: UploadFile = File(...)) -> JSONResponse | Dict[str, Any]:
+    surface = request.headers.get('X-Omi-STT-Surface')
+    lane = 'live' if surface == 'live-window' or (_packing_enabled and surface == 'live-stream') else 'backfill'
+    prerecorded = lane == 'backfill'
+    request_start = time.monotonic()
     if gpu_worker is not None and not gpu_worker.is_ready:
+        LANE_REFUSALS.labels(lane=lane, reason='not_ready').inc()
         REQUESTS_TOTAL.labels(endpoint="v1_transcribe", status="error").inc()
+        if prerecorded:
+            PRERECORDED_REQUESTS.labels(status='error').inc()
         return JSONResponse(status_code=503, content={"detail": "Model loading, try again shortly"})
+    queue_deadline: Optional[float] = None
+    if lane == 'live':
+        budget = _LIVE_QUEUE_BUDGET_CAP_SECONDS
+        supplied_raw = request.headers.get(_TIMEOUT_HEADER)
+        if supplied_raw is not None:
+            try:
+                supplied = float(supplied_raw)
+            except ValueError:
+                supplied = float('nan')
+            if not math.isfinite(supplied) or supplied <= 0:
+                LANE_REFUSALS.labels(lane=lane, reason='invalid_timeout').inc()
+                REQUESTS_TOTAL.labels(endpoint="v1_transcribe", status="error").inc()
+                return JSONResponse(status_code=400, content={"detail": f"Invalid {_TIMEOUT_HEADER} budget"})
+            budget = min(budget, supplied)
+        queue_deadline = request_start + budget
     upload_id = str(uuid.uuid4())
     file_path = f"_temp/{upload_id}_{file.filename}"
     ACTIVE_BATCH.inc()
@@ -198,33 +277,67 @@ async def transcribe(file: UploadFile = File(...)) -> JSONResponse | Dict[str, A
     audio_dur = 0.0
     status = "success"
     loop = asyncio.get_running_loop()
+    file_written = False
+    submit_called = False
+    write_orphaned = False
     try:
         data = await file.read()
         audio_dur = _get_audio_duration_from_bytes(data)
         if _max_file_duration_sec > 0 and audio_dur > _max_file_duration_sec:
             status = "rejected"
+            LANE_REFUSALS.labels(lane=lane, reason='duration').inc()
             return JSONResponse(
                 status_code=413,
                 content={"detail": _duration_limit_detail(audio_dur)},
             )
         if audio_dur > 0 and math.isfinite(audio_dur):
             AUDIO_DURATION.observe(audio_dur)
-        await loop.run_in_executor(_io_pool, _write_file, file_path, data)
+        write_work = _io_pool.submit(_write_file, file_path, data)
+        try:
+            await asyncio.wrap_future(write_work)
+            file_written = True
+        except asyncio.CancelledError:
+            write_orphaned = True
+            write_work.add_done_callback(lambda _f, p=file_path: _remove_file(p))
+            raise
+        except Exception:
+            file_written = True
+            raise
 
         if batch_engine is not None:
-            PENDING_REQUESTS.set(len(batch_engine._pending))  # type: ignore[reportPrivateUsage]  # batch_engine internal queue
-            result = cast(Dict[str, Any], await batch_engine.submit(file_path, timestamps=True, owns_file=True))  # type: ignore[reportUnknownMemberType]  # batch_engine.submit partially typed
-            PENDING_REQUESTS.set(len(batch_engine._pending))  # type: ignore[reportPrivateUsage]  # batch_engine internal queue
+            submit_called = True
+            result = await submit_audio(
+                batch_engine,
+                file_path,
+                _io_pool,
+                packing=_packing_enabled,
+                owns_file=True,
+                lane=lane,
+                queue_deadline=queue_deadline,
+            )
             return JSONResponse(content=_transcribe_from_gpu_result(result))
         else:
             result = await loop.run_in_executor(_diarize_pool, transcribe_file, file_path)
             return result
     except QueueFullError:
         status = "error"
+        LANE_REFUSALS.labels(lane=lane, reason='queue_full').inc()
         return JSONResponse(status_code=503, content={"detail": "Server overloaded — try again later"})
+    except QueueTimeoutError:
+        status = "error"
+        LANE_REFUSALS.labels(lane=lane, reason='queue_timeout').inc()
+        return JSONResponse(
+            status_code=503,
+            content={"detail": "Queued transcription request expired — try again", "error": "queue_timeout"},
+            headers={"X-Omi-STT-Error": "queue_timeout"},
+        )
     except AudioDurationExceededError as e:
         status = "rejected"
+        LANE_REFUSALS.labels(lane=lane, reason='duration').inc()
         return JSONResponse(status_code=413, content={"detail": str(e)})
+    except asyncio.CancelledError:
+        status = "cancelled"
+        raise
     except Exception:
         status = "error"
         raise
@@ -232,10 +345,14 @@ async def transcribe(file: UploadFile = File(...)) -> JSONResponse | Dict[str, A
         elapsed = time.monotonic() - t0
         REQUEST_DURATION.labels(endpoint="v1_transcribe").observe(elapsed)
         REQUESTS_TOTAL.labels(endpoint="v1_transcribe", status=status).inc()
+        if prerecorded:
+            PRERECORDED_REQUESTS.labels(status=status).inc()
         if status == "success" and audio_dur > 0 and elapsed > 0:
             RTFX.set(audio_dur / elapsed)
         ACTIVE_BATCH.dec()
-        if batch_engine is None:
+        if batch_engine is not None:
+            PENDING_REQUESTS.set(batch_engine.pressure_snapshot()['pending_requests'])
+        if not submit_called and not write_orphaned and (file_written or batch_engine is None):
             await loop.run_in_executor(_io_pool, _remove_file, file_path)
 
 
@@ -249,9 +366,11 @@ async def transcribe_v2(
 ) -> JSONResponse | Dict[str, Any]:
     if gpu_worker is not None and not gpu_worker.is_ready:
         REQUESTS_TOTAL.labels(endpoint="v2_transcribe", status="error").inc()
+        PRERECORDED_REQUESTS.labels(status='error').inc()
         return JSONResponse(status_code=503, content={"detail": "Model loading, try again shortly"})
     if min_speakers is not None and max_speakers is not None and min_speakers > max_speakers:
         REQUESTS_TOTAL.labels(endpoint="v2_transcribe", status="error").inc()
+        PRERECORDED_REQUESTS.labels(status='error').inc()
         return JSONResponse(
             status_code=422,
             content={"detail": f"min_speakers ({min_speakers}) cannot exceed max_speakers ({max_speakers})"},
@@ -261,6 +380,7 @@ async def transcribe_v2(
         # consistent with min > max above; silently preferring one would leave the
         # caller believing a bound they set was honoured.
         REQUESTS_TOTAL.labels(endpoint="v2_transcribe", status="error").inc()
+        PRERECORDED_REQUESTS.labels(status='error').inc()
         return JSONResponse(
             status_code=422,
             content={"detail": "num_speakers cannot be combined with min_speakers or max_speakers"},
@@ -292,7 +412,7 @@ async def transcribe_v2(
 
         if batch_engine is not None:
             PENDING_REQUESTS.set(len(batch_engine._pending))  # type: ignore[reportPrivateUsage]  # batch_engine internal queue
-            gpu_result = cast(Dict[str, Any], await batch_engine.submit(file_path, timestamps=True, owns_file=False))  # type: ignore[reportUnknownMemberType]  # batch_engine.submit partially typed
+            gpu_result = await submit_audio(batch_engine, file_path, _io_pool, packing=_packing_enabled)
             PENDING_REQUESTS.set(len(batch_engine._pending))  # type: ignore[reportPrivateUsage]  # batch_engine internal queue
             result = cast(
                 Dict[str, Any],
@@ -328,6 +448,7 @@ async def transcribe_v2(
         elapsed = time.monotonic() - t0
         REQUEST_DURATION.labels(endpoint="v2_transcribe").observe(elapsed)
         REQUESTS_TOTAL.labels(endpoint="v2_transcribe", status=status).inc()
+        PRERECORDED_REQUESTS.labels(status=status).inc()
         if status == "success" and audio_dur > 0 and elapsed > 0:
             RTFX.set(audio_dur / elapsed)
         ACTIVE_BATCH.dec()
@@ -361,6 +482,7 @@ async def stream_transcribe(
 
     session: Optional[StreamSession] = None
     active_gauge_owned = False
+    finalize_requested = False
     t0 = time.monotonic()
     try:
         session = StreamSession(sample_rate=sample_rate, vad_threshold=vad_threshold, hangover_s=hangover_s)
@@ -373,12 +495,24 @@ async def stream_transcribe(
             except asyncio.TimeoutError:
                 continue
 
+            if msg.get("type") == "websocket.disconnect":
+                # A client hanging up is an expected lifecycle event, not a
+                # server fault. Starlette delivers the hang-up as a normal
+                # message and then raises 'Cannot call "receive" once a
+                # disconnect message has been received.' if the loop re-arms,
+                # so every clean client disconnect used to end the session on
+                # this generic RuntimeError and log a v3/stream ERROR (prod
+                # 2026-09: ~42/30m). Break to the normal finalization path
+                # instead, like every other backend websocket receive loop.
+                break
+
             if "bytes" in msg:
                 segments = cast(List[Any], await session.feed(msg["bytes"]))
                 for seg in segments:
                     await websocket.send_json(seg)
             elif "text" in msg:
                 if msg["text"] == "finalize":
+                    finalize_requested = True
                     break
     except WebSocketDisconnect:
         pass
@@ -397,6 +531,11 @@ async def stream_transcribe(
                         await websocket.send_json(seg)
                     except Exception:
                         break
+                else:
+                    # Finish only after every tail segment was delivered. A
+                    # handler return alone can drop TCP without a close frame.
+                    if finalize_requested:
+                        await websocket.close(code=1000)
         except Exception as e:
             logger.error(f"v3/stream flush error: {e}")
         finally:
@@ -433,6 +572,10 @@ async def health_check() -> JSONResponse | Dict[str, Any]:
 @app.get("/batch/metrics")
 async def batch_metrics() -> Dict[str, Any]:
     if batch_engine is not None:
-        PENDING_REQUESTS.set(len(batch_engine._pending))  # type: ignore[reportPrivateUsage]  # batch_engine internal queue
-        return cast(Dict[str, Any], batch_engine.metrics)  # type: ignore[reportUnknownMemberType]  # batch_engine.metrics partially typed
+        metrics = dict(batch_engine.metrics)
+        metrics.update(batch_engine.pressure_snapshot())
+        PENDING_REQUESTS.set(metrics['pending_requests'])
+        for lane in ('live', 'backfill'):
+            LANE_PENDING.labels(lane=lane).set(metrics[f'{lane}_pending_requests'])
+        return metrics
     return {}

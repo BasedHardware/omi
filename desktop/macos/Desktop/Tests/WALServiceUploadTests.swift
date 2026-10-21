@@ -361,6 +361,25 @@ import XCTest
       XCTAssertEqual(metadata.wals.first?.status, .synced)
     }
 
+    func testRecordingTimersInvalidateOnDeinit() {
+      weak var chunk: Timer?
+      weak var flush: Timer?
+      autoreleasepool {
+        let isolated = makeService()
+        isolated.startRecording(device: "dev1", codec: "opus")
+        chunk = isolated.debugChunkTimer
+        flush = isolated.debugFlushTimer
+        XCTAssertEqual(chunk?.isValid, true)
+        XCTAssertEqual(flush?.isValid, true)
+      }
+      XCTAssertNotEqual(
+        chunk?.isValid, true,
+        "deinit must invalidate the chunk timer so it cannot starve later main-async drains")
+      XCTAssertNotEqual(
+        flush?.isValid, true,
+        "deinit must invalidate the flush timer so it cannot starve later main-async drains")
+    }
+
     func testDegradedDirectoryRetainsCurrentFramesAndRecordsHealth() throws {
       service = makeService(walDirectoryAvailable: false)
       service.startRecording(device: "dev1", codec: "opus")

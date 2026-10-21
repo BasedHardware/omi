@@ -1,4 +1,4 @@
-# Calendar capture: discard override, auto-link gating, capture gaps (SCA-381)
+# Calendar capture: discard override, write-back, capture gaps (SCA-381)
 
 Detail moved out of `backend/AGENTS.md` (lean budget). The one-line contract lives in the
 backend Service Map; this file carries the full rules.
@@ -21,22 +21,24 @@ Rules:
   verdict standing. The override only fires on a positive overlap hit — never keeps because
   a lookup failed, never fails the conversation.
 - No Google Calendar writes in this path.
-- A kept scrap then satisfies the auto-link `not discarded` gate, so it can still link.
+- A kept scrap is still eligible for manual calendar linking through
+  `backend/routers/conversations.py`; automatic linking during processing was removed.
 
 ## Overlap matching (shared, pure)
 
 `backend/utils/conversations/calendar_linking.py` `select_overlapping_calendar_event` holds the rules for
-both auto-link and the discard override: overlap ≥ `MIN_OVERLAP_SECONDS` (10s) **and**
+the discard override and manual linking: overlap ≥ `MIN_OVERLAP_SECONDS` (10s) **and**
 (≥ `MIN_OVERLAP_PERCENTAGE` (50%) of the event **or** of the conversation). The OR is a
 product decision — a 25s scrap wholly inside a 30m meeting matches through conversation
-coverage. `require_accepted=False` (auto-link) keeps the linker's historical behavior of
-matching any overlapping event.
+coverage. `require_accepted=False` (manual linking) keeps the linker's historical behavior of
+matching any overlapping timed event. Events without `start.dateTime` (all-day blocks) are
+skipped before the overlap math on both paths.
 
-## Auto-link gating
+## Calendar write-back
 
-`GOOGLE_CALENDAR_AUTO_LINK_ENABLED` (code default off) gates calendar write-back during
-conversation processing. Enabled only in the **dev** `backend-listen` runtime env
-(`backend/deploy/runtime_env/dev.overlay.yaml`); prod and local stay off.
+The `GOOGLE_CALENDAR_AUTO_LINK_ENABLED` env flag and the automatic derived-effect linking
+path were removed. Calendar write-back now happens only through explicit user action in
+`backend/routers/conversations.py`.
 
 ## Capture gaps
 

@@ -256,7 +256,7 @@ def test_collect_day3_candidates_maps_signup_os_and_excludes_off_window_and_off_
     docs = {
         'users/uid-mac': _user_doc('macos'),
         'users/uid-win': _user_doc('windows'),
-        # coarse bucket 'mobile' never matches the query's signup_os=='desktop' filter.
+        # coarse bucket 'mobile' never matches the query's signup_platform=='desktop' filter.
         'users/uid-mobile': {
             'signup_platform': 'mobile',
             'signup_os': 'ios',
@@ -270,14 +270,62 @@ def test_collect_day3_candidates_maps_signup_os_and_excludes_off_window_and_off_
     candidates = day3_reengagement.collect_day3_candidates(now=NOW, firestore_client=FakeFirestore(docs=docs))
     by_uid = {c.uid: c for c in candidates}
 
-    assert set(by_uid) == {'uid-mac', 'uid-win'}
-    # Granular signup_os is carried through verbatim, so
-    # evaluate_candidate's unmodified `!= 'macos'` check still does the real
-    # platform narrowing -- a Windows desktop signup fails it like any other
-    # non-macOS signup.
+    # The Windows signup is excluded by the query's signup_os `in` filter
+    # rather than fetched and rejected later, so it cannot occupy a page slot.
+    assert set(by_uid) == {'uid-mac'}
     assert by_uid['uid-mac'].signup_os == 'macos'
-    assert by_uid['uid-win'].signup_os == 'windows'
-    assert day3_reengagement.evaluate_candidate(by_uid['uid-win'], now=NOW).reason == 'not_macos'
+    # evaluate_candidate remains the source of truth for the predicate: a
+    # Windows signup reaching it by any other path still fails as not_macos.
+    windows_facts = day3_reengagement.CandidateFacts(
+        uid='uid-win',
+        signup_at=BASE_SIGNUP_AT,
+        signup_os='windows',
+        email='win@example.com',
+        day_zero_conversation_count=0,
+        conversations_after_day_zero=0,
+        opted_out=False,
+        already_sent=False,
+    )
+    assert day3_reengagement.evaluate_candidate(windows_facts, now=NOW).reason == 'not_macos'
+
+
+def test_collect_day3_candidates_does_not_let_non_macos_signups_consume_the_page(monkeypatch):
+    """The page limit must be spent on rows the job can actually send to.
+
+    `limit` is applied to the raw stream. While the macOS narrowing lived only
+    in `evaluate_candidate`, Windows rows filled the page and were then dropped
+    as `not_macos`, so an eligible macOS signup sorted behind them never
+    arrived. The job runs once a day against a window exactly one day wide, so
+    the next run rejects that user as `too_late`: the miss is permanent and the
+    funnel counts cannot show it, because the row was never fetched.
+    """
+    docs = {
+        # Older than the Mac signup, so these sort ahead of it and would fill
+        # a page limit of three on their own.
+        'users/uid-win-1': _user_doc('windows', hours_ago=95),
+        'users/uid-win-2': _user_doc('windows', hours_ago=94),
+        'users/uid-win-3': _user_doc('win32', hours_ago=93),
+        'users/uid-mac-late': _user_doc('macos', hours_ago=80),
+    }
+    _fake_get_user_from_uid(monkeypatch, {'uid-mac-late': 'mac@example.com'})
+
+    candidates = day3_reengagement.collect_day3_candidates(now=NOW, firestore_client=FakeFirestore(docs=docs), limit=3)
+
+    assert [c.uid for c in candidates] == ['uid-mac-late']
+
+
+def test_collect_day3_candidates_matches_every_macos_signup_os_alias(monkeypatch):
+    """`signup_os` is the lowercased header, not a canonical value, so the
+    query has to match the whole alias set or it silently drops real Macs."""
+    docs = {
+        f'users/uid-{alias.replace(" ", "-")}': _user_doc(alias, hours_ago=80 + index)
+        for index, alias in enumerate(sorted(day3_reengagement.MACOS_SIGNUP_OS_VALUES))
+    }
+    _fake_get_user_from_uid(monkeypatch, {uid.split('/')[1]: 'mac@example.com' for uid in docs})
+
+    candidates = day3_reengagement.collect_day3_candidates(now=NOW, firestore_client=FakeFirestore(docs=docs))
+
+    assert {c.signup_os for c in candidates} == set(day3_reengagement.MACOS_SIGNUP_OS_VALUES)
 
 
 def _conversation(created_at, *, discarded=False, status='completed'):

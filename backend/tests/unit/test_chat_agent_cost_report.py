@@ -7,6 +7,7 @@ from typing import Any
 
 import pytest
 import yaml
+from utils.llm.model_config import LUNA_MODEL
 
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
 
@@ -130,10 +131,10 @@ def test_luna_30_minute_cache_writes_use_the_luna_write_rate(report) -> None:
     totals = report.build_totals(
         [
             _row(
-                actual_model_version='gpt-5.6-luna',
+                actual_model_version=LUNA_MODEL,
                 cache_write_tokens=1_000_000,
                 cache_write_ttl='30m',
-                estimated_cost_micro_usd=250_000,
+                estimated_cost_micro_usd=125_000,
             )
         ]
     )
@@ -144,11 +145,11 @@ def test_luna_30_minute_cache_writes_use_the_luna_write_rate(report) -> None:
     assert totals.cache_write_untagged_tokens == 0
 
     card_path = BACKEND_ROOT / 'llm_gateway' / 'config' / 'cost_rate_cards.yaml'
-    rates = report.load_rates('gpt-5.6-luna', card_path)
+    rates = report.load_rates(LUNA_MODEL, card_path)
     by_name = {component.name: component for component in report.cost_components(totals, rates)}
 
-    assert rates.cache_write_micro_usd == 250_000
-    assert by_name['cache write 30m'].cost_micro_usd == 250_000
+    assert rates.cache_write_micro_usd == 125_000
+    assert by_name['cache write 30m'].cost_micro_usd == 125_000
     assert by_name['cache write 1h'].cost_micro_usd == 0
     assert 'cache write 30m' in report.render(totals, rates, 'chat_agent')
 
@@ -222,15 +223,15 @@ def test_a_range_spanning_a_routing_change_is_priced_per_model(report) -> None:
     grouped = report.build_totals_by_pricing_basis(
         [
             _row(actual_model_version='claude-sonnet-5', output_tokens=1_000, date='2026-08-01'),
-            _row(actual_model_version='gpt-5.6-luna', output_tokens=400, date='2026-08-03'),
-            _row(actual_model_version='gpt-5.6-luna', output_tokens=600, date='2026-08-04'),
+            _row(actual_model_version=LUNA_MODEL, output_tokens=400, date='2026-08-03'),
+            _row(actual_model_version=LUNA_MODEL, output_tokens=600, date='2026-08-04'),
         ]
     )
 
-    assert {model for model, _card in grouped} == {'claude-sonnet-5', 'gpt-5.6-luna'}
+    assert {model for model, _card in grouped} == {'claude-sonnet-5', LUNA_MODEL}
     assert grouped[('claude-sonnet-5', '')].attempts == 1
-    assert grouped[('gpt-5.6-luna', '')].attempts == 2
-    assert grouped[('gpt-5.6-luna', '')].output_tokens == 1_000
+    assert grouped[(LUNA_MODEL, '')].attempts == 2
+    assert grouped[(LUNA_MODEL, '')].output_tokens == 1_000
 
     # Each group is priceable on its own card, which is the point of splitting them.
     card_path = BACKEND_ROOT / 'llm_gateway' / 'config' / 'cost_rate_cards.yaml'

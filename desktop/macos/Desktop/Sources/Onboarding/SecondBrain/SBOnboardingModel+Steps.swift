@@ -529,7 +529,7 @@ extension SBOnboardingModel {
     // app on the Mac for as long as Omi runs. ⌃⌘O collides with nothing, and is already the app's
     // own always-on summon chord (`registerSummonHotkey`). ⌘O stays offered, with its price named.
     [
-      ("ctrlCmdO", ShortcutSettings.askOmiControlCommandOShortcut, "press to set"),
+      ("ctrlCmdO", ShortcutSettings.askOmiControlCommandOShortcut, "recommended"),
       ("cmdO", ShortcutSettings.askOmiCommandOShortcut, "replaces File ▸ Open"),
       ("cmdReturn", ShortcutSettings.askOmiCommandReturnShortcut, "press to set"),
     ]
@@ -537,9 +537,11 @@ extension SBOnboardingModel {
 
   /// Push-to-talk options (hold to talk, hands-free).
   var talkShortcutOptions: [(id: String, shortcut: ShortcutSettings.KeyboardShortcut, sub: String)] {
+    // Settings' order (`ShortcutSettings.pttPresets`, whose first entry is the default), so the two
+    // surfaces recommend the same key.
     [
+      ("opt", ShortcutSettings.KeyboardShortcut(modifierOnly: .option), "recommended"),
       ("fn", ShortcutSettings.KeyboardShortcut(modifierOnly: .function), "press to set"),
-      ("opt", ShortcutSettings.KeyboardShortcut(modifierOnly: .option), "press to set"),
       ("ctrl", ShortcutSettings.KeyboardShortcut(modifierOnly: .control), "press to set"),
     ]
   }
@@ -550,42 +552,26 @@ extension SBOnboardingModel {
   /// NSMenu key equivalents that AppKit dispatches before local monitors). Both are
   /// restored on leave. This is why the earlier attempt's monitor never fired.
   func armShortcutSummon() {
-    shortcutRegistrationError = nil
-    // Preserve a choice when the user returns with Back. A fresh stage still
-    // starts empty, while an already-confirmed shortcut stays visible/editable.
-    let rememberedSelection: ShortcutSettings.KeyboardShortcut?
-    let isTalk: Bool
-    switch step {
-    case .shortcutOpen:
-      rememberedSelection = openShortcutSelection
-      isTalk = false
-    case .shortcutTalk:
-      rememberedSelection = talkShortcutSelection
-      isTalk = true
-    default:
-      rememberedSelection = nil
-      isTalk = false
-    }
-    if let rememberedSelection {
-      shortcutPicked = true
-      shortcutPressed = false
-      shortcutRecording = false
-      shortcutNeedsModifier = false
-      pendingModifierOnlyShortcut = nil
-      shortcutTokens = rememberedSelection.displayTokens
-      chosenShortcut = rememberedSelection
-    } else {
-      // Same reset as `beginShortcutRecording` but with recording left off: the fresh
-      // stage shows the preset rows + a Custom button instead of entering capture mode,
-      // so `handleShortcutEvent` only recognizes the three preset candidates until the
-      // user explicitly taps Custom.
-      beginShortcutRecording(isTalk: isTalk)
-      shortcutRecording = false
-    }
     GlobalShortcutManager.shared.setRegistrationSuspended(true)
+    prepareShortcutSelection()
     if savedMainMenu == nil { savedMainMenu = NSApp.mainMenu }
     NSApp.mainMenu = nil
     installShortcutMonitors()
+  }
+
+  /// Back keeps the current choice; a relaunch preserves saved chords before recommending a default.
+  func prepareShortcutSelection(defaults: UserDefaults = .standard) {
+    let isTalk = step == .shortcutTalk
+    let saved = ShortcutSettings.savedOnboardingShortcut(isTalk: isTalk, defaults: defaults)
+    let selection =
+      isTalk
+      ? talkShortcutSelection ?? saved ?? ShortcutSettings.KeyboardShortcut(modifierOnly: .option)
+      : openShortcutSelection ?? saved ?? ShortcutSettings.askOmiControlCommandOShortcut
+    pickShortcut(selection, isTalk: isTalk)
+  }
+
+  var canContinueShortcut: Bool {
+    shortcutPicked && !shortcutRecording && shortcutRegistrationError == nil
   }
 
   func disarmShortcutSummon() {
@@ -607,6 +593,12 @@ extension SBOnboardingModel {
     if let l = NSEvent.addLocalMonitorForEvents(
       matching: mask,
       handler: { [weak self] event in
+        // The main menu is detached on these steps (see `armShortcutSummon`), which also took ⌘Q
+        // with it. Quitting must never depend on finishing a setup step.
+        if Self.isQuitChord(event) {
+          NSApp.terminate(nil)
+          return nil
+        }
         let matched = self?.handleShortcutEvent(event) ?? false
         return matched ? nil : event
       })
@@ -621,6 +613,13 @@ extension SBOnboardingModel {
     {
       shortcutMonitors.append(g)
     }
+  }
+
+  /// ⌘Q exactly (no other modifiers). Never a candidate chord, so it cannot collide with a pick.
+  nonisolated static func isQuitChord(_ event: NSEvent) -> Bool {
+    event.type == .keyDown
+      && event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command
+      && event.charactersIgnoringModifiers?.lowercased() == "q"
   }
 
   /// The shortcuts offered on the current step — used so the user can just PRESS
@@ -771,18 +770,22 @@ extension SBOnboardingModel {
     ShortcutSettings.isSafePushToTalkShortcut(shortcut)
   }
 
-  func answerShortcutOpen() {
-    guard shortcutPicked, shortcutPressed else { return }
-    guard GlobalShortcutManager.shared.validateAskOmiShortcutForOnboarding() == .registered else {
+  func answerShortcutOpen(
+    validateRegistration: () -> GlobalShortcutManager.HotKeyRegistrationOutcome = {
+      GlobalShortcutManager.shared.validateAskOmiShortcutForOnboarding()
+    }
+  ) {
+    guard canContinueShortcut else { return }
+    guard validateRegistration() == .registered else {
       shortcutRegistrationError =
-        "That shortcut is already in use. Choose a different Open Omi shortcut and test it again."
+        "That shortcut is already in use. Choose a different Open Omi shortcut."
       shortcutPressed = false
       return
     }
     advance(userAnswer: "Works", to: .shortcutTalk)
   }
   func answerShortcutTalk() {
-    guard shortcutPicked, shortcutPressed else { return }
+    guard canContinueShortcut else { return }
     UserDefaults.standard.set(true, forKey: Self.shortcutsCompletedKey)
     advance(userAnswer: "Works", to: .screenDemo)
   }
@@ -1341,6 +1344,15 @@ extension SBOnboardingModel {
     case "calendar": markGoogleContextImported("calendar")
     case "email": markGoogleContextImported("gmail")
     default: markContextImportConnected(connectorID)
+    }
+  }
+
+  /// A reconnect failure intentionally hands focus to browser sign-in. Only terminal states
+  /// that keep the user in Omi should summon the onboarding window.
+  nonisolated static func shouldRefocusContext(from oldStates: [String: String], to newStates: [String: String]) -> Bool
+  {
+    oldStates.contains { id, state in
+      state == "connecting" && (newStates[id] == "on" || newStates[id] == "error")
     }
   }
 

@@ -1,6 +1,6 @@
 import os
-from mcp import ClientSession, StdioServerParameters
-from mcp.client.stdio import stdio_client
+from mcp import ClientSession
+from mcp.client.streamable_http import streamablehttp_client
 
 import dspy
 from dotenv import load_dotenv
@@ -11,8 +11,9 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# Create server parameters for stdio connection
-server_params = StdioServerParameters(command="uvx", args=["mcp-server-omi"], env=None)
+# Hosted Streamable HTTP endpoint — Bearer MCP key auth, no local process.
+MCP_URL = "https://api.omi.me/v1/mcp"
+HEADERS = {"Authorization": f"Bearer {os.environ['OMI_MCP_API_KEY']}"}
 # mlflow.set_experiment("DSPy Omi Agent")
 
 
@@ -20,7 +21,6 @@ class DSPyOmiAgent(dspy.Signature):
     """You are an Omi agent. You understand the user's OMI data and can answer questions about it."""
 
     user_request: str = dspy.InputField()
-    user_uid: str = dspy.InputField()
 
     response: str = dspy.OutputField(desc="A response to the user's request, based on the user's OMI data.")
 
@@ -29,9 +29,10 @@ dspy.configure(lm=dspy.LM("openai/o4-mini", temperature=1, max_tokens=24000))
 
 
 async def run(user_request):
-    async with stdio_client(server_params) as (read, write):
+    async with streamablehttp_client(MCP_URL, headers=HEADERS) as (read, write, _):
         async with ClientSession(read, write) as session:
-            # Initialize the connection
+            # Initialize the connection (older handshake-era protocol; the
+            # hosted endpoint remains compatible with handshake clients).
             await session.initialize()
             # List available tools
             tools = await session.list_tools()
@@ -44,7 +45,7 @@ async def run(user_request):
             # Create the agent
             react = dspy.ReAct(DSPyOmiAgent, tools=dspy_tools)
 
-            result = await react.acall(user_request=user_request, user_uid=os.getenv("OMI_UID"))
+            result = await react.acall(user_request=user_request)
             # print(result.reasoning)
             print(result.response)
 

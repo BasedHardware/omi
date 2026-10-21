@@ -124,13 +124,18 @@ struct MemoryAssistantDurabilityRequest: Sendable {
   let sourceApp: String
   let confidence: Double
   let screenshotId: Int64?
+  let captureTime: Date?
   let contextSummary: String
   let windowTitle: String?
   let ownerID: String
+  /// Provenance of the source frame. Only known origin fields are sent; the
+  /// client deliberately does not invent an independence group or lineage.
+  let captureContext: APIClient.MemoryCaptureContext
 
   init(
     memory: ExtractedMemory,
     screenshotId: Int64?,
+    captureTime: Date? = nil,
     contextSummary: String,
     windowTitle: String?,
     ownerID: String
@@ -140,9 +145,18 @@ struct MemoryAssistantDurabilityRequest: Sendable {
     sourceApp = memory.sourceApp
     confidence = memory.confidence
     self.screenshotId = screenshotId
+    self.captureTime = captureTime
     self.contextSummary = contextSummary
     self.windowTitle = windowTitle
     self.ownerID = ownerID
+    captureContext = APIClient.MemoryCaptureContext(
+      sourceType: "screen",
+      capturedAt: captureTime,
+      sourceId: screenshotId.map(String.init),
+      sourceSignal: "ocr",
+      sourceVersion: nil,
+      attribution: "screen"
+    )
   }
 }
 
@@ -306,6 +320,7 @@ actor MemoryAssistantLiveDurabilityOperations: MemoryAssistantDurabilityOperatin
         sourceApp: request.sourceApp,
         contextSummary: request.contextSummary,
         windowTitle: request.windowTitle,
+        captureContext: request.captureContext,
         expectedOwnerId: request.ownerID
       )
       guard RuntimeOwnerIdentity.currentOwnerId() == request.ownerID else {

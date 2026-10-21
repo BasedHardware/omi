@@ -8,12 +8,16 @@ known feature (Target 3); every other dependency failure denies.
 
 from __future__ import annotations
 
+import logging
 import os
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
 from typing import Any
+from unittest.mock import Mock
 
 import pytest
+
+from tests.unit.fixtures.cap_rollout import full_cap_dispatch_rollout  # noqa: F401
 
 os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv')
 
@@ -167,6 +171,22 @@ def test_byok_enrolled_with_validated_key_is_allowed_off_allowlist(monkeypatch, 
     monkeypatch.setattr(mc, 'get_provider', lambda _feature: 'openai')
     decision = _authorize(mc, OFF_ALLOWLIST_FEATURE, 'byok')
     assert (decision.allowed, decision.reason) == (True, 'byok')
+
+
+def test_gemini_byok_remains_authorized_for_luna_managed_feature(monkeypatch, mc) -> None:
+    """A managed Luna route must still recognize the feature's separate Gemini BYOK provider."""
+    _situate(
+        monkeypatch,
+        mc,
+        plan=PlanType.basic,
+        byok_enrolled=True,
+        byok_validated=True,
+        byok_key_provider='gemini',
+    )
+    monkeypatch.setattr(mc, 'get_provider', lambda _feature: 'openai')
+    monkeypatch.setattr(mc, 'get_byok_provider', lambda _feature: 'gemini')
+
+    assert mc.request_carries_validated_byok_key('screen_frame_judge') is True
 
 
 # red-proof: fall through to omi (`plan_paid`) when funding_owner='byok' has no request key
@@ -575,6 +595,20 @@ def test_every_reason_produced_across_the_matrix_is_in_the_module_constant(monke
     monkeypatch.setattr(mc, 'get_all_configured_features', lambda: (_ for _ in ()).throw(RuntimeError('down')))
     collect(_authorize(mc, OFF_ALLOWLIST_FEATURE))
 
+    _situate(monkeypatch, mc, plan=PlanType.plus)
+    monkeypatch.setattr(mc, 'get_all_configured_features', lambda: {OFF_ALLOWLIST_FEATURE})
+    monkeypatch.setattr(mc.ladder_v1, 'feature_allowed', lambda *args: False)
+    collect(_authorize(mc, OFF_ALLOWLIST_FEATURE))
+    monkeypatch.setattr(mc.ladder_v1, 'feature_allowed', lambda *args: True)
+    monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', 'true')
+    monkeypatch.setenv('STT_CAP_DISPATCH_COHORT', 'uid:uid')
+    monkeypatch.setenv('STT_CAP_DISPATCH_LANES', 'batch')
+    monkeypatch.setattr(mc, 'generated_compute_allowed', lambda *args, **kwargs: False)
+    collect(_authorize(mc, OFF_ALLOWLIST_FEATURE))
+    monkeypatch.setattr(mc, 'generated_compute_allowed', lambda *args, **kwargs: True)
+    monkeypatch.setattr(mc.ladder_v1, 'account', lambda *args: {'plan_id': 'basic'})
+    collect(_authorize(mc, OFF_ALLOWLIST_FEATURE))
+
     assert produced <= set(mc.DECISION_REASONS)
     expected = {
         'unknown_feature',
@@ -585,6 +619,9 @@ def test_every_reason_produced_across_the_matrix_is_in_the_module_constant(monke
         'invalid_funding_owner',
         'uid_required',
         'plan_paid',
+        'ladder_pro_required',
+        'usage_budget_exhausted',
+        'ladder_budget_available',
         'byok',
         'byok_not_validated',
         'byok_not_enrolled',
@@ -593,3 +630,220 @@ def test_every_reason_produced_across_the_matrix_is_in_the_module_constant(monke
     }
     assert produced == expected
     assert expected == set(mc.DECISION_REASONS)
+
+
+# --- 11. one structured decision log per authorization -----------------------------------------
+
+
+_PRIVATE_UID = 'user-should-not-appear-9f3a'
+
+
+def _decision_lines(caplog: pytest.LogCaptureFixture) -> list[logging.LogRecord]:
+    return [record for record in caplog.records if record.message.startswith('managed_compute_decision ')]
+
+
+def _expected_decision_line(
+    *,
+    feature: str,
+    funding_owner: str,
+    outcome: str,
+    reason: str,
+    plan: str,
+    plan_resolved: str,
+) -> str:
+    return (
+        f'managed_compute_decision request_id=none feature={feature} funding_owner={funding_owner} '
+        f'outcome={outcome} reason={reason} plan={plan} plan_resolved={plan_resolved}'
+    )
+
+
+# red-proof: log only on deny, or log once per return site (a second line appears)
+def test_allow_paid_emits_exactly_one_decision_log(monkeypatch, mc, caplog) -> None:
+    _situate(monkeypatch, mc, plan=PlanType.plus)
+    with caplog.at_level(logging.INFO, logger=mc.logger.name):
+        decision = _authorize(mc, OFF_ALLOWLIST_FEATURE, uid=_PRIVATE_UID)
+    assert (decision.allowed, decision.reason, decision.plan, decision.plan_resolved) == (
+        True,
+        'plan_paid',
+        PlanType.plus,
+        True,
+    )
+    lines = _decision_lines(caplog)
+    assert len(lines) == 1
+    assert lines[0].levelno == logging.INFO
+    assert lines[0].message == _expected_decision_line(
+        feature=OFF_ALLOWLIST_FEATURE,
+        funding_owner='omi',
+        outcome='allowed',
+        reason='plan_paid',
+        plan='plus',
+        plan_resolved='true',
+    )
+    assert _PRIVATE_UID not in lines[0].message
+
+
+# red-proof: silent basic deny (the prod gap) — zero decision lines
+def test_deny_basic_not_entitled_emits_exactly_one_decision_log(monkeypatch, mc, caplog) -> None:
+    _situate(monkeypatch, mc, plan=PlanType.basic)
+    with caplog.at_level(logging.INFO, logger=mc.logger.name):
+        decision = _authorize(mc, OFF_ALLOWLIST_FEATURE, uid=_PRIVATE_UID)
+    assert (decision.allowed, decision.reason, decision.plan) == (False, 'basic_not_entitled', PlanType.basic)
+    lines = _decision_lines(caplog)
+    assert len(lines) == 1
+    assert lines[0].levelno == logging.INFO
+    assert lines[0].message == _expected_decision_line(
+        feature=OFF_ALLOWLIST_FEATURE,
+        funding_owner='omi',
+        outcome='denied',
+        reason='basic_not_entitled',
+        plan='basic',
+        plan_resolved='true',
+    )
+    assert _PRIVATE_UID not in lines[0].message
+
+
+# red-proof: unknown-feature deny returns before the log
+def test_deny_unknown_feature_emits_exactly_one_decision_log(monkeypatch, mc, caplog) -> None:
+    _situate(monkeypatch, mc, plan=PlanType.plus)
+    with caplog.at_level(logging.INFO, logger=mc.logger.name):
+        decision = _authorize(mc, UNKNOWN_FEATURE, uid=_PRIVATE_UID)
+    assert (decision.allowed, decision.reason, decision.plan, decision.plan_resolved) == (
+        False,
+        'unknown_feature',
+        None,
+        False,
+    )
+    lines = _decision_lines(caplog)
+    assert len(lines) == 1
+    assert lines[0].levelno == logging.INFO
+    assert lines[0].message == _expected_decision_line(
+        feature=UNKNOWN_FEATURE,
+        funding_owner='omi',
+        outcome='denied',
+        reason='unknown_feature',
+        plan='none',
+        plan_resolved='false',
+    )
+    assert _PRIVATE_UID not in lines[0].message
+
+
+# red-proof: exception path logs the WARNING and skips the decision line, or logs it at WARNING
+def test_authorization_unavailable_keeps_warning_and_emits_one_decision_log(monkeypatch, mc, caplog) -> None:
+    _situate(monkeypatch, mc, plan=PlanType.plus)
+
+    def boom(*_args, **_kwargs):
+        raise RuntimeError('dependency unavailable')
+
+    monkeypatch.setattr(mc, 'get_all_configured_features', boom)
+    with caplog.at_level(logging.INFO, logger=mc.logger.name):
+        decision = _authorize(mc, OFF_ALLOWLIST_FEATURE, uid=_PRIVATE_UID)
+    assert (decision.allowed, decision.reason, decision.plan, decision.plan_resolved) == (
+        False,
+        'authorization_unavailable',
+        None,
+        False,
+    )
+    warnings = [
+        record
+        for record in caplog.records
+        if record.levelno == logging.WARNING
+        and record.message == 'managed compute authorization unavailable: RuntimeError'
+    ]
+    assert len(warnings) == 1
+    lines = _decision_lines(caplog)
+    assert len(lines) == 1
+    assert lines[0].levelno == logging.INFO
+    assert lines[0].message == _expected_decision_line(
+        feature=OFF_ALLOWLIST_FEATURE,
+        funding_owner='omi',
+        outcome='denied',
+        reason='authorization_unavailable',
+        plan='none',
+        plan_resolved='false',
+    )
+    assert _PRIVATE_UID not in lines[0].message
+
+
+# red-proof: a logging fault inside the authorize try becomes authorization_unavailable
+def test_decision_log_failure_does_not_change_the_answer(monkeypatch, mc) -> None:
+    _situate(monkeypatch, mc, plan=PlanType.plus)
+
+    def boom(*_args, **_kwargs):
+        raise RuntimeError('log sink down')
+
+    monkeypatch.setattr(mc.logger, 'info', boom)
+    decision = _authorize(mc, OFF_ALLOWLIST_FEATURE)
+    assert (decision.allowed, decision.reason, decision.plan) == (True, 'plan_paid', PlanType.plus)
+
+
+def test_flagged_pro_gate_also_applies_to_byok_features(monkeypatch, mc):
+    _situate(monkeypatch, mc, plan=PlanType.basic, byok_enrolled=True, byok_validated=True, byok_key_provider='openai')
+    monkeypatch.setattr(mc, 'get_provider', lambda feature: 'openai')
+    monkeypatch.setattr(mc, 'get_all_configured_features', lambda: {OFF_ALLOWLIST_FEATURE})
+    monkeypatch.setattr(mc.ladder_v1, 'feature_allowed', lambda *args: False)
+    denied = _authorize(mc, OFF_ALLOWLIST_FEATURE, 'byok')
+    assert not denied.allowed and denied.reason == 'ladder_pro_required'
+
+
+@pytest.mark.parametrize('legacy,ladder', [(False, False), (False, True), (True, False), (True, True)])
+@pytest.mark.parametrize('cohort,lanes', [('uid:other', 'batch'), ('', 'batch'), ('uid:uid', 'live')])
+@pytest.mark.parametrize('plan', [None, PlanType.plus])
+@pytest.mark.parametrize('pro_gates', [False, True])
+def test_excluded_batch_authorization_preserves_plan_without_budget_reads(
+    monkeypatch, mc, legacy, ladder, cohort, lanes, plan, pro_gates
+):
+    _situate(monkeypatch, mc, plan=plan)
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', str(legacy).lower())
+    monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', str(ladder).lower())
+    monkeypatch.setenv('STT_CAP_DISPATCH_COHORT', cohort)
+    monkeypatch.setenv('STT_CAP_DISPATCH_LANES', lanes)
+    monkeypatch.setenv('LADDER_V1_PRO_GATES_ENABLED', str(pro_gates).lower())
+    budget = Mock(side_effect=AssertionError('excluded execution read budget'))
+    monkeypatch.setattr(mc.ladder_v1, 'budget_snapshot', budget)
+    # Actual generated gate must return before reaching funded allowance IO.
+    from utils import funded_processing
+
+    monkeypatch.setattr(funded_processing, 'processing_allowed', budget)
+    monkeypatch.setattr(funded_processing, 'allowance', budget)
+    decision = mc.authorize_managed_compute(
+        'uid', 'app_generator', 'omi', subscription=None if plan is None else SimpleNamespace(plan=plan)
+    )
+    assert decision.allowed is (plan is not None)
+    assert decision.reason == ('basic_not_entitled' if plan is None else 'plan_paid')
+    free = mc.authorize_managed_compute('uid', 'daily_summary', 'omi', subscription=None)
+    assert free.allowed and free.reason == 'free_allowlist'
+    budget.assert_not_called()
+
+
+def test_excluded_batch_still_honors_independent_pro_feature_policy(monkeypatch, mc):
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'false')
+    monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', 'true')
+    monkeypatch.setenv('STT_CAP_DISPATCH_COHORT', 'all')
+    monkeypatch.setenv('STT_CAP_DISPATCH_LANES', 'live')
+    monkeypatch.setenv('LADDER_V1_PRO_GATES_ENABLED', 'true')
+    _situate(monkeypatch, mc, plan=None)
+    feature = next(f for f in CONFIGURED_FEATURES if mc.ladder_v1.policy.pro_trigger(f))
+    decision = mc.authorize_managed_compute('uid', feature, 'omi', subscription=None)
+    assert not decision.allowed and decision.reason == 'ladder_pro_required'
+
+
+@pytest.mark.parametrize('available', [False, True])
+def test_actual_selected_ladder_authorizer_uses_shared_admission_once(monkeypatch, mc, available):
+    from utils import funded_processing
+
+    _situate(monkeypatch, mc, plan=None)
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'false')
+    monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', 'true')
+    monkeypatch.setenv('STT_CAP_DISPATCH_COHORT', 'uid:uid')
+    monkeypatch.setenv('STT_CAP_DISPATCH_LANES', 'batch')
+    monkeypatch.setenv('LADDER_V1_PRO_GATES_ENABLED', 'false')
+    allowance = Mock(return_value=available)
+    monkeypatch.setattr(funded_processing, 'consent_allows', lambda uid: True)
+    monkeypatch.setattr(funded_processing, 'processing_allowed', allowance)
+    monthly = Mock(side_effect=AssertionError('second monthly budget read'))
+    monkeypatch.setattr(mc.ladder_v1, 'budget_snapshot', monthly)
+    decision = mc.authorize_managed_compute('uid', 'app_generator', 'omi', subscription=None)
+    assert decision.allowed is available
+    assert decision.reason == ('ladder_budget_available' if available else 'usage_budget_exhausted')
+    allowance.assert_called_once_with('uid')
+    monthly.assert_not_called()

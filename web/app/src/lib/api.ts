@@ -1,8 +1,13 @@
 import { getIdToken } from './firebase';
+import { version as webAppVersion } from '../../package.json';
 import { getWebDeviceIdHash } from './clientDevice';
 import {
+  parseStorefront,
+  type PlanStorefront,
+  type StorefrontTrigger,
+} from './planStorefront';
+import {
   invalidateCache,
-  invalidateCacheKey,
   invalidationPatterns,
   fetchWithCache,
   cacheKeys,
@@ -31,6 +36,7 @@ import type {
   CreateConversationResponse,
   ActionItemsResponse,
   FairUseStatusResponse,
+  StoreRecordingPermissionResponse,
 } from './omiApi.generated';
 import {
   normalizeKnowledgeLedgerMemories,
@@ -62,10 +68,26 @@ import type {
 // Always use proxy to avoid CORS (browser → proxy → api.omi.me)
 const API_BASE_URL = '/api/proxy';
 
+/** Retain the status for safe endpoint-specific recovery messages. */
+export class ApiHttpError extends Error {
+  constructor(public readonly status: number, message: string) {
+    super(message);
+    this.name = 'ApiHttpError';
+  }
+}
+
 /**
  * Make an authenticated API request
  */
-async function fetchWithAuth<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+interface AuthenticatedResponse<T> {
+  data: T;
+  response: Response;
+}
+
+async function fetchWithAuthResponse<T>(
+  endpoint: string,
+  options: RequestInit = {},
+): Promise<AuthenticatedResponse<T>> {
   let token: string | null = null;
 
   try {
@@ -90,6 +112,8 @@ async function fetchWithAuth<T>(endpoint: string, options: RequestInit = {}): Pr
   }
   new Headers(options.headers).forEach((value, name) => headers.set(name, value));
   headers.set('X-App-Platform', 'web');
+  headers.set('X-App-Version', webAppVersion);
+  headers.set('X-Omi-Plan-Identity', '1');
   if (deviceIdHash) {
     headers.set('X-Device-Id-Hash', deviceIdHash);
   }
@@ -108,17 +132,20 @@ async function fetchWithAuth<T>(endpoint: string, options: RequestInit = {}): Pr
       }
 
       if (response.status === 401) {
-        throw new Error('Unauthorized - please sign in again');
+        throw new ApiHttpError(401, 'Unauthorized - please sign in again');
       }
-      throw new Error(`API error: ${response.status} ${response.statusText}`);
+      throw new ApiHttpError(
+        response.status,
+        `API error: ${response.status} ${response.statusText}`,
+      );
     }
 
     // Handle 204 No Content responses (common for DELETE operations)
     if (response.status === 204) {
-      return undefined as T;
+      return { data: undefined as T, response };
     }
 
-    return response.json();
+    return { data: await response.json(), response };
   } catch (fetchError) {
     if (fetchError instanceof TypeError && fetchError.message === 'Failed to fetch') {
       console.error('Network error - possible CORS issue or API unavailable');
@@ -128,6 +155,11 @@ async function fetchWithAuth<T>(endpoint: string, options: RequestInit = {}): Pr
     }
     throw fetchError;
   }
+}
+
+async function fetchWithAuth<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+  const { data } = await fetchWithAuthResponse<T>(endpoint, options);
+  return data;
 }
 
 /**
@@ -141,6 +173,7 @@ export interface GetConversationsParams {
   startDate?: Date;
   endDate?: Date;
   folderId?: string;
+  starred?: boolean;
 }
 
 export async function getConversations(
@@ -154,6 +187,7 @@ export async function getConversations(
     startDate,
     endDate,
     folderId,
+    starred,
   } = params;
 
   const queryParams = new URLSearchParams({
@@ -173,6 +207,10 @@ export async function getConversations(
 
   if (folderId) {
     queryParams.set('folder_id', folderId);
+  }
+
+  if (starred !== undefined) {
+    queryParams.set('starred', starred.toString());
   }
 
   return fetchWithAuth<Conversation[]>(`/v1/conversations?${queryParams}`);
@@ -230,7 +268,9 @@ export async function toggleStarred(id: string, starred: boolean): Promise<void>
  * Delete a conversation
  */
 export async function deleteConversation(id: string): Promise<void> {
-  await fetchWithAuth(`/v1/conversations/${id}`, {
+  // The server default is still cascade=false (Q8). Mobile and macOS already
+  // send true, which is what removes memories extracted from the recording.
+  await fetchWithAuth(`/v1/conversations/${id}?cascade=true`, {
     method: 'DELETE',
   });
   invalidateCache(invalidationPatterns.conversations);
@@ -245,19 +285,15 @@ export async function deleteConversation(id: string): Promise<void> {
 
 /**
  * Get the approved screenshot set (banner + strip) for a conversation.
- * Uses the same fetch-with-cache idiom as `getConversation`; a short TTL
- * balances against the frame set's signed URLs expiring after 60 minutes.
+ * Deliberately uncached: every response carries signed URLs that expire
+ * after 60 minutes, and a cached GET that resolved after a delete would
+ * serve the deleted frames again on reopen. The set is small.
  */
 export async function getConversationScreenFrames(
   conversationId: string,
 ): Promise<ConversationScreenFrameSet> {
-  return fetchWithCache<ConversationScreenFrameSet>(
-    cacheKeys.screenFrames(conversationId),
-    () =>
-      fetchWithAuth<ConversationScreenFrameSet>(
-        `/v1/conversations/${conversationId}/screenshots`,
-      ),
-    { ttl: CACHE_TTL.SHORT },
+  return fetchWithAuth<ConversationScreenFrameSet>(
+    `/v1/conversations/${conversationId}/screenshots`,
   );
 }
 
@@ -275,7 +311,6 @@ export async function deleteScreenFrame(
     `/v1/conversations/${conversationId}/screenshots/${frameId}`,
     { method: 'DELETE' },
   );
-  invalidateCacheKey(cacheKeys.screenFrames(conversationId));
   return result;
 }
 
@@ -287,7 +322,6 @@ export async function deleteAllScreenFrames(
     `/v1/conversations/${conversationId}/screenshots`,
     { method: 'DELETE' },
   );
-  invalidateCacheKey(cacheKeys.screenFrames(conversationId));
   return result;
 }
 
@@ -304,7 +338,6 @@ export async function patchScreenFrameSharing(
     `/v1/conversations/${conversationId}/screenshot-sharing`,
     { method: 'PATCH', body: JSON.stringify(body) },
   );
-  invalidateCacheKey(cacheKeys.screenFrames(conversationId));
   return result;
 }
 
@@ -415,6 +448,11 @@ export async function getActionItems(
   };
 }
 
+/** One action item by id (404 when it is gone or not the caller's). */
+export async function getActionItem(id: string): Promise<ActionItem> {
+  return fetchWithAuth<ActionItem>(`/v1/action-items/${encodeURIComponent(id)}`);
+}
+
 /**
  * Create a new action item
  */
@@ -492,6 +530,35 @@ export interface GetMemoriesParams {
   limit?: number;
   offset?: number;
   categories?: MemoryCategory[];
+  cursor?: string;
+}
+
+export interface MemoriesPage {
+  memories: Memory[];
+  nextCursor: string | null;
+  truncated: boolean;
+}
+
+/** Read one server-ordered page and retain pagination/capability receipts. */
+export async function getMemoriesPage(
+  params: GetMemoriesParams = {},
+): Promise<MemoriesPage> {
+  const { limit = 100, offset = 0, cursor } = params;
+
+  const queryParams = new URLSearchParams({
+    limit: limit.toString(),
+    offset: cursor ? '0' : offset.toString(),
+  });
+  if (cursor) queryParams.set('cursor', cursor);
+
+  const { data: raw, response } = await fetchWithAuthResponse<unknown>(
+    `/v3/memories?${queryParams}`,
+  );
+  return {
+    memories: normalizeKnowledgeLedgerMemories(raw),
+    nextCursor: response.headers.get('X-Omi-Memory-Next-Cursor'),
+    truncated: response.headers.get('X-Omi-List-Truncated')?.toLowerCase() === 'true',
+  };
 }
 
 /**
@@ -504,15 +571,45 @@ export interface GetMemoriesParams {
  * `@/lib/memoryCategory`, which mirrors how the desktop clients do it.
  */
 export async function getMemories(params: GetMemoriesParams = {}): Promise<Memory[]> {
-  const { limit = 100, offset = 0 } = params;
+  return (await getMemoriesPage(params)).memories;
+}
 
-  const queryParams = new URLSearchParams({
-    limit: limit.toString(),
-    offset: offset.toString(),
-  });
-
-  const raw = await fetchWithAuth<unknown>(`/v3/memories?${queryParams}`);
-  return normalizeKnowledgeLedgerMemories(raw);
+/**
+ * Find memories by id. The backend has no memory-by-id read, so this walks the
+ * owner-wide list and stops once every id is found. `complete` is false
+ * when the walk stopped early (page cap, truncated read): an id missing then
+ * may still exist and must not be reported as deleted.
+ */
+export async function findMemoriesByIds(
+  ids: readonly string[],
+  options: { maxPages?: number; fetchPage?: typeof getMemoriesPage } = {},
+): Promise<{ found: Map<string, Memory>; complete: boolean }> {
+  const { maxPages = 20, fetchPage = getMemoriesPage } = options;
+  const wanted = new Set(ids);
+  const found = new Map<string, Memory>();
+  if (wanted.size === 0) return { found, complete: true };
+  const limit = 500;
+  let offset = 0;
+  let cursor: string | undefined;
+  const seenCursors = new Set<string>();
+  for (let page = 0; page < maxPages; page++) {
+    const result = await fetchPage({ limit, offset, cursor });
+    for (const memory of result.memories) {
+      if (wanted.has(memory.id)) found.set(memory.id, memory);
+    }
+    if (found.size === wanted.size) return { found, complete: true };
+    if (result.truncated) return { found, complete: false };
+    if (result.nextCursor) {
+      if (seenCursors.has(result.nextCursor)) return { found, complete: false };
+      seenCursors.add(result.nextCursor);
+      cursor = result.nextCursor;
+    } else if (cursor || result.memories.length < limit) {
+      return { found, complete: true };
+    } else {
+      offset += result.memories.length;
+    }
+  }
+  return { found, complete: false };
 }
 
 /**
@@ -981,7 +1078,9 @@ export async function sendMessageStream(
     queryParams.set('chat_session_id', options.chatSessionId);
   }
 
-  const url = `${API_BASE_URL}/v2/messages${queryParams.toString() ? `?${queryParams}` : ''}`;
+  const url = `${API_BASE_URL}/v2/messages${
+    queryParams.toString() ? `?${queryParams}` : ''
+  }`;
 
   const response = await fetch(url, {
     method: 'POST',
@@ -993,6 +1092,7 @@ export async function sendMessageStream(
     body: JSON.stringify({
       text,
       file_ids: options?.fileIds || [],
+      time_zone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       context: options?.context
         ? {
             type: options.context.type === 'general' ? 'recap' : options.context.type,
@@ -1007,6 +1107,17 @@ export async function sendMessageStream(
 
   if (!response.ok) {
     const errorText = await response.text().catch(() => 'No error body');
+    if (response.status === 402) {
+      try {
+        const pause = JSON.parse(errorText)?.detail?.chat_at_cap;
+        if (pause?.state === 'paused' && pause.trigger === 'usage_budget') {
+          window.dispatchEvent(new CustomEvent('omi-chat-paused', { detail: pause }));
+          throw new Error(pause.title);
+        }
+      } catch (error) {
+        if (error instanceof Error && !(error instanceof SyntaxError)) throw error;
+      }
+    }
     console.error('Send message error:', response.status, errorText);
     throw new Error(`Failed to send message: ${response.status}`);
   }
@@ -1098,7 +1209,9 @@ export async function uploadChatFiles(
     queryParams.set('app_id', appId);
   }
 
-  const url = `${API_BASE_URL}/v2/files${queryParams.toString() ? `?${queryParams}` : ''}`;
+  const url = `${API_BASE_URL}/v2/files${
+    queryParams.toString() ? `?${queryParams}` : ''
+  }`;
 
   const formData = new FormData();
   for (const file of files) {
@@ -1528,16 +1641,13 @@ export async function getNotificationScopes(): Promise<NotificationScope[]> {
     const token = await getIdToken();
     if (!token) return [];
 
-    const response = await fetch(
-      `${API_BASE_URL}/v1/apps/proactive-notification-scopes`,
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-          'X-App-Platform': 'web',
-        },
+    const response = await fetch(`${API_BASE_URL}/v1/app/proactive-notification-scopes`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        'X-App-Platform': 'web',
       },
-    );
+    });
 
     if (!response.ok) return [];
     return response.json();
@@ -1669,13 +1779,17 @@ export async function deleteDailySummary(id: string): Promise<void> {
 }
 
 /**
- * Generate a test daily summary for a specific date
+ * Generate or return a recap without requiring or sending push notifications.
  */
-export async function generateTestDailySummary(date: string): Promise<DailySummary> {
-  return fetchWithAuth<DailySummary>('/v1/users/daily-summary-settings/test', {
+export async function createDailySummary(date: string): Promise<DailySummary> {
+  const recap = await fetchWithAuth<DailySummary>('/v1/users/daily-summaries', {
     method: 'POST',
     body: JSON.stringify({ date }),
   });
+  if (!recap || typeof recap.id !== 'string' || !recap.id || recap.date !== date) {
+    throw new Error('Invalid recap response');
+  }
+  return recap;
 }
 
 /**
@@ -1687,7 +1801,10 @@ export async function getTranscriptionPreferences(): Promise<TranscriptionPrefer
 
 // Webhook type enum matching backend API
 type WebhookType =
-  'memory_created' | 'realtime_transcript' | 'audio_bytes' | 'day_summary';
+  | 'memory_created'
+  | 'realtime_transcript'
+  | 'audio_bytes'
+  | 'day_summary';
 
 /**
  * Get developer webhook URL
@@ -1735,7 +1852,10 @@ export async function getDeveloperWebhooksStatus(): Promise<DeveloperWebhooks> {
  * Get store recording permission
  */
 export async function getRecordingPermission(): Promise<RecordingPermission> {
-  return fetchWithAuth<RecordingPermission>('/v1/users/store-recording-permission');
+  const response = await fetchWithAuth<StoreRecordingPermissionResponse>(
+    '/v1/users/store-recording-permission',
+  );
+  return { enabled: response.store_recording_permission };
 }
 
 /**
@@ -1805,9 +1925,6 @@ export async function getAllUsageData(): Promise<AllUsageData> {
   return { today, monthly, yearly, all_time };
 }
 
-/**
- * Get user subscription info
- */
 export async function getUserSubscription(): Promise<UserSubscription | null> {
   try {
     const response = await fetchWithAuth<UserSubscriptionResponse>(
@@ -1819,9 +1936,10 @@ export async function getUserSubscription(): Promise<UserSubscription | null> {
       plan: plan.raw ?? '',
       plan_identity: plan,
       status: response.subscription?.status || 'active',
-      // Unknown plans are deliberately excluded. A future wire value must not
-      // inherit paid capability merely because it is non-empty.
+      // Unknown plans never infer paid capability.
       is_unlimited: planGrantsPaidCapability(plan),
+      transcription_seconds_used: response.transcription_seconds_used,
+      transcription_seconds_limit: response.transcription_seconds_limit,
       current_period_end: response.subscription?.current_period_end,
       stripe_subscription_id: response.subscription?.stripe_subscription_id,
       cancel_at_period_end: response.subscription?.cancel_at_period_end,
@@ -1851,6 +1969,22 @@ export async function getAvailablePlans(): Promise<AvailablePlansResponse | null
 }
 
 /**
+ * Ladder-v1 plans sheet payload (`GET /v2/payments/plans`). Throws on any
+ * failure so the sheet shows its error state; there is no fallback catalog.
+ */
+export async function getStorefront(params: {
+  source: string;
+  trigger?: StorefrontTrigger | null;
+  locale?: string;
+}): Promise<PlanStorefront> {
+  const query = new URLSearchParams({ source: params.source });
+  if (params.trigger) query.set('trigger', params.trigger);
+  if (params.locale) query.set('locale', params.locale);
+  const raw = await fetchWithAuth<unknown>(`/v2/payments/plans?${query.toString()}`);
+  return parseStorefront(raw);
+}
+
+/**
  * Create a checkout session for subscription
  */
 export async function createCheckoutSession(
@@ -1867,7 +2001,7 @@ export async function createCheckoutSession(
     return response;
   } catch (error) {
     console.error('createCheckoutSession error:', error);
-    return null;
+    throw error;
   }
 }
 
@@ -1888,7 +2022,7 @@ export async function upgradeSubscription(
     return response;
   } catch (error) {
     console.error('upgradeSubscription error:', error);
-    return null;
+    throw error;
   }
 }
 
@@ -1949,10 +2083,12 @@ export async function createPerson(name: string): Promise<Person> {
  * Update person name
  */
 export async function updatePersonName(personId: string, name: string): Promise<void> {
-  await fetchWithAuth(`/v1/users/people/${personId}/name`, {
-    method: 'PATCH',
-    body: JSON.stringify({ name }),
-  });
+  await fetchWithAuth(
+    `/v1/users/people/${personId}/name?value=${encodeURIComponent(name)}`,
+    {
+      method: 'PATCH',
+    },
+  );
 }
 
 /**
@@ -2084,13 +2220,14 @@ import type {
   CustomerPortalResponse,
 } from '@/types/user';
 
-/**
- * Get user's developer API keys
- */
-export async function getDeveloperApiKeys(): Promise<DeveloperApiKey[]> {
+/** Get user's developer API keys; opt into errors for settings. */
+export async function getDeveloperApiKeys(
+  options: { throwOnError?: boolean } = {},
+): Promise<DeveloperApiKey[]> {
   try {
     return await fetchWithAuth<DeveloperApiKey[]>('/v1/dev/keys');
-  } catch {
+  } catch (error) {
+    if (options.throwOnError) throw error;
     return [];
   }
 }
@@ -2103,7 +2240,8 @@ export async function createDeveloperApiKey(
   scopes?: string[],
 ): Promise<DeveloperApiKey> {
   const body: { name: string; scopes?: string[] } = { name };
-  if (scopes && scopes.length > 0) {
+  if (scopes) {
+    if (scopes.length === 0) throw new Error('Select at least one permission');
     body.scopes = scopes;
   }
   return fetchWithAuth<DeveloperApiKey>('/v1/dev/keys', {
@@ -2112,9 +2250,7 @@ export async function createDeveloperApiKey(
   });
 }
 
-/**
- * Delete a developer API key
- */
+/** Delete a developer API key */
 export async function deleteDeveloperApiKey(keyId: string): Promise<void> {
   await fetchWithAuth(`/v1/dev/keys/${keyId}`, {
     method: 'DELETE',
@@ -2125,24 +2261,34 @@ export async function deleteDeveloperApiKey(keyId: string): Promise<void> {
 // MCP API Keys
 // ============================================================================
 
-/**
- * Get user's MCP API keys
- */
-export async function getMcpApiKeys(): Promise<McpApiKey[]> {
+/** Get user's MCP API keys; opt into errors for settings. */
+export async function getMcpApiKeys(
+  options: { throwOnError?: boolean } = {},
+): Promise<McpApiKey[]> {
   try {
     return await fetchWithAuth<McpApiKey[]>('/v1/mcp/keys');
-  } catch {
+  } catch (error) {
+    if (options.throwOnError) throw error;
     return [];
   }
 }
 
-/**
- * Create a new MCP API key
- */
-export async function createMcpApiKey(name: string): Promise<McpApiKey> {
+/** Default read-only scopes for newly minted MCP API keys. */
+export const MCP_READ_ONLY_SCOPES = [
+  'memories.read',
+  'conversations.read',
+  'action_items.read',
+  'goals.read',
+] as const;
+
+/** Create a new MCP API key */
+export async function createMcpApiKey(
+  name: string,
+  scopes: readonly string[] = MCP_READ_ONLY_SCOPES,
+): Promise<McpApiKey> {
   return fetchWithAuth<McpApiKey>('/v1/mcp/keys', {
     method: 'POST',
-    body: JSON.stringify({ name }),
+    body: JSON.stringify({ name, scopes }),
   });
 }
 
@@ -2173,7 +2319,11 @@ export async function exportAllData(): Promise<Blob> {
   if (!response.ok) {
     throw new Error(`Export failed: ${response.status} ${response.statusText}`);
   }
-  return response.blob();
+  const blob = await response.blob();
+  if (blob.size === 0) {
+    throw new Error('Export failed: server returned an empty file');
+  }
+  return blob;
 }
 
 /**
@@ -2190,16 +2340,19 @@ export async function deleteKnowledgeGraph(): Promise<void> {
 // ============================================================================
 
 /**
- * Get custom vocabulary words from transcription preferences
+ * Get custom vocabulary words from transcription preferences.
+ *
+ * Returns null when the list could not be fetched, so a failure is not read as
+ * an empty vocabulary. The save path replaces the whole list.
  */
-export async function getCustomVocabulary(): Promise<string[]> {
+export async function getCustomVocabulary(): Promise<string[] | null> {
   try {
     const result = await fetchWithAuth<TranscriptionPreferences>(
       '/v1/users/transcription-preferences',
     );
     return result.vocabulary || [];
   } catch {
-    return [];
+    return null;
   }
 }
 
@@ -2351,7 +2504,9 @@ export async function reprocessConversation(
     queryParams.set('app_id', appId);
   }
 
-  const endpoint = `/v1/conversations/${conversationId}/reprocess${queryParams.toString() ? `?${queryParams}` : ''}`;
+  const endpoint = `/v1/conversations/${conversationId}/reprocess${
+    queryParams.toString() ? `?${queryParams}` : ''
+  }`;
   return fetchWithAuth<Conversation>(endpoint, {
     method: 'POST',
   });

@@ -37,8 +37,8 @@ const formatSeconds = (value: number | null | undefined) =>
   value == null
     ? "N/A"
     : value < 60
-      ? `${value.toFixed(1)}s`
-      : `${(value / 60).toFixed(1)}m`;
+    ? `${value.toFixed(1)}s`
+    : `${(value / 60).toFixed(1)}m`;
 
 const formatDay = (value: string) =>
   new Date(`${value}T00:00:00Z`).toLocaleDateString("en-US", {
@@ -50,7 +50,7 @@ const formatDay = (value: string) =>
 const rateWithCounts = (
   value: number,
   success: number,
-  failure: number,
+  failure: number
 ): string => `${formatRate(value)} (${success}/${success + failure})`;
 
 function combinedSuccessRate(point: ReliabilityDailyPoint): number | null {
@@ -74,33 +74,49 @@ function ChannelReliabilityChart({
   return (
     <div className="flex h-full min-w-0 flex-col gap-2">
       {data.partial && (
-        <div className="flex items-center gap-1.5 text-xs text-amber-500">
+        <div
+          className="flex items-center gap-1.5 text-xs text-amber-500"
+          data-testid="reliability-partial"
+        >
           <AlertTriangle className="h-3.5 w-3.5" />
-          Partial data — a telemetry source failed or rows were truncated.
+          Partial data — a telemetry source failed, a feed is stale or
+          incomplete, or rows were truncated.
         </div>
       )}
+      <p
+        className="text-xs text-muted-foreground"
+        data-testid="reliability-voice-population"
+      >
+        {data.voiceSource === "physical_shortcut"
+          ? "Voice population: physical shortcut"
+          : data.voiceSource === "floating_voice"
+          ? "Voice population: floating voice"
+          : "Voice telemetry unavailable"}
+      </p>
       <div
         className="grid divide-x border-y py-2 text-xs"
         style={{ gridTemplateColumns: "repeat(3, minmax(0, 1fr))" }}
       >
-        <div className="pr-3">
+        <div className="pr-3" data-testid="reliability-chat-success">
           <span className="text-muted-foreground">Chat success</span>
           <div className="mt-0.5 font-semibold tabular-nums">
             {formatRate(chat?.successRate)} · avg{" "}
             {formatSeconds(chat?.averageFullAnswerSeconds)}
           </div>
         </div>
-        <div className="px-3">
+        <div className="px-3" data-testid="reliability-voice-success">
           <span className="text-muted-foreground">Voice success</span>
           <div className="mt-0.5 font-semibold tabular-nums">
             {formatRate(voice?.successRate)} · avg{" "}
             {formatSeconds(voice?.averageFullAnswerSeconds)}
           </div>
         </div>
-        <div className="pl-3">
+        <div className="pl-3" data-testid="reliability-failures">
           <span className="text-muted-foreground">Failures</span>
           <div
-            className={`mt-0.5 font-semibold tabular-nums ${failures > 0 ? "text-red-600" : ""}`}
+            className={`mt-0.5 font-semibold tabular-nums ${
+              failures > 0 ? "text-red-600" : ""
+            }`}
           >
             {failures.toLocaleString()}
           </div>
@@ -131,7 +147,7 @@ function ChannelReliabilityChart({
                 formatter={(
                   value: number,
                   name: string,
-                  item: { payload?: ReliabilityDailyPoint },
+                  item: { payload?: ReliabilityDailyPoint }
                 ) => {
                   const point = item.payload;
                   if (!point) return [formatRate(value), name];
@@ -140,7 +156,7 @@ function ChannelReliabilityChart({
                     rateWithCounts(
                       value,
                       isChat ? point.chatSuccess : point.voiceSuccess,
-                      isChat ? point.chatFailure : point.voiceFailure,
+                      isChat ? point.chatFailure : point.voiceFailure
                     ),
                     name,
                   ];
@@ -183,6 +199,43 @@ function ChannelReliabilityChart({
   );
 }
 
+export function ResponseReliabilityFixturePanels({
+  data,
+}: {
+  data: ResponseReliabilityPayload;
+}) {
+  return (
+    <div>
+      {(["production", "beta"] as const).map((channel) => (
+        <section key={channel} data-testid={`reliability-panel-${channel}`}>
+          <ChannelReliabilityChart
+            data={data.channels[channel]}
+            daily={trimDailyToCoverage(data.channels[channel].daily)}
+          />
+        </section>
+      ))}
+    </div>
+  );
+}
+
+export function reliabilityPanelSnapshot(series: ResponseReliabilitySeries) {
+  const chat = series.summary.chat;
+  const voice = series.summary.voice;
+  return {
+    partial: series.partial,
+    voiceSource: series.voiceSource,
+    chatSuccessRate: chat?.successRate ?? null,
+    voiceSuccessRate: voice?.successRate ?? null,
+    chatAverageSeconds: chat?.averageFullAnswerSeconds ?? null,
+    voiceAverageSeconds: voice?.averageFullAnswerSeconds ?? null,
+    voiceSuccess: voice?.success ?? null,
+    voiceFailure: voice?.failure ?? null,
+    voiceExcluded: voice?.excluded ?? null,
+    voiceUnresolved: voice?.unresolved ?? null,
+    failures: (chat?.failure ?? 0) + (voice?.failure ?? 0),
+  };
+}
+
 export function useResponseReliabilityItems({
   token,
 }: {
@@ -191,7 +244,7 @@ export function useResponseReliabilityItems({
   const { data, error, isLoading } = useSWR<ResponseReliabilityPayload>(
     token ? ["/api/omi/stats/response-reliability?days=30", token] : null,
     authenticatedFetcher,
-    { revalidateOnFocus: false },
+    { revalidateOnFocus: false }
   );
 
   return useMemo(() => {
@@ -249,7 +302,7 @@ export function useResponseReliabilityItems({
         periodChange: latestPeriodChange(
           coveredByChannel.production,
           combinedSuccessRate,
-          "vs previous day",
+          "vs previous day"
         ),
         subtitle: subtitle("production"),
         icon: <MessageSquare className="h-4 w-4" />,
@@ -262,7 +315,7 @@ export function useResponseReliabilityItems({
         periodChange: latestPeriodChange(
           coveredByChannel.beta,
           combinedSuccessRate,
-          "vs previous day",
+          "vs previous day"
         ),
         subtitle: subtitle("beta"),
         icon: <Mic2 className="h-4 w-4" />,

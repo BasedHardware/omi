@@ -86,6 +86,42 @@ class GeneratedKnowledgeGraphResponse {
   }
 }
 
+class GeneratedCanonicalKnowledgeGraphResponse {
+  final List<Map<String, dynamic>> catalogNodes;
+  final List<Map<String, dynamic>> edges;
+  final bool hasMore;
+  final String? nextCursor;
+  final List<Map<String, dynamic>> nodes;
+
+  const GeneratedCanonicalKnowledgeGraphResponse({
+    this.catalogNodes = const [],
+    required this.edges,
+    required this.hasMore,
+    this.nextCursor,
+    required this.nodes,
+  });
+
+  factory GeneratedCanonicalKnowledgeGraphResponse.fromJson(Map<String, dynamic> json) {
+    return GeneratedCanonicalKnowledgeGraphResponse(
+      catalogNodes: _required(_readFieldValue<List<Map<String, dynamic>>>(_readField(json, const ["catalog_nodes"]), "catalog_nodes", _readMapList, requiredField: false, nullable: false, defaultValue: const []), "catalog_nodes"),
+      edges: _required(_readFieldValue<List<Map<String, dynamic>>>(_readField(json, const ["edges"]), "edges", _readMapList, requiredField: true, nullable: false), "edges"),
+      hasMore: _required(_readFieldValue<bool>(_readField(json, const ["has_more"]), "has_more", _readBool, requiredField: true, nullable: false), "has_more"),
+      nextCursor: _readFieldValue<String>(_readField(json, const ["next_cursor"]), "next_cursor", _readString, requiredField: false, nullable: true),
+      nodes: _required(_readFieldValue<List<Map<String, dynamic>>>(_readField(json, const ["nodes"]), "nodes", _readMapList, requiredField: true, nullable: false), "nodes"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'catalog_nodes': catalogNodes,
+      'edges': edges,
+      'has_more': hasMore,
+      'next_cursor': nextCursor,
+      'nodes': nodes,
+    };
+  }
+}
+
 class GeneratedRebuildResponse {
   final int edgesCount;
   final int nodesCount;
@@ -130,6 +166,94 @@ class GeneratedErrorResponse {
   Map<String, dynamic> toJson() {
     return {
       'detail': detail,
+    };
+  }
+}
+
+class GeneratedStatusResponse {
+  final String status;
+
+  const GeneratedStatusResponse({
+    required this.status,
+  });
+
+  factory GeneratedStatusResponse.fromJson(Map<String, dynamic> json) {
+    return GeneratedStatusResponse(
+      status: _required(_readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: true, nullable: false), "status"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'status': status,
+    };
+  }
+}
+
+class GeneratedTtsVoice {
+  final String id;
+  final String name;
+
+  const GeneratedTtsVoice({
+    required this.id,
+    required this.name,
+  });
+
+  factory GeneratedTtsVoice.fromJson(Map<String, dynamic> json) {
+    return GeneratedTtsVoice(
+      id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
+      name: _required(_readFieldValue<String>(_readField(json, const ["name"]), "name", _readString, requiredField: true, nullable: false), "name"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'name': name,
+    };
+  }
+}
+
+class GeneratedTtsVoiceCatalog {
+  final String defaultVoiceId;
+  final List<GeneratedTtsVoice> voices;
+
+  const GeneratedTtsVoiceCatalog({
+    required this.defaultVoiceId,
+    required this.voices,
+  });
+
+  factory GeneratedTtsVoiceCatalog.fromJson(Map<String, dynamic> json) {
+    return GeneratedTtsVoiceCatalog(
+      defaultVoiceId: _required(_readFieldValue<String>(_readField(json, const ["default_voice_id"]), "default_voice_id", _readString, requiredField: true, nullable: false), "default_voice_id"),
+      voices: _required(_readFieldValue<List<GeneratedTtsVoice>>(_readField(json, const ["voices"]), "voices", (value) => _readObjectList(value, GeneratedTtsVoice.fromJson), requiredField: true, nullable: false), "voices"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'default_voice_id': defaultVoiceId,
+      'voices': voices.map((value) => value.toJson()).toList(),
+    };
+  }
+}
+
+class GeneratedAssistantVoicePreference {
+  final String voiceId;
+
+  const GeneratedAssistantVoicePreference({
+    required this.voiceId,
+  });
+
+  factory GeneratedAssistantVoicePreference.fromJson(Map<String, dynamic> json) {
+    return GeneratedAssistantVoicePreference(
+      voiceId: _required(_readFieldValue<String>(_readField(json, const ["voice_id"]), "voice_id", _readString, requiredField: true, nullable: false), "voice_id"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'voice_id': voiceId,
     };
   }
 }

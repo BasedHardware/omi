@@ -4,14 +4,25 @@ from datetime import datetime, timedelta, timezone
 import json
 from pathlib import Path
 
+import fakeredis
 import pytest
 from pydantic import ValidationError
 
+import database.action_items_cache as action_items_cache
 import database.candidate_integration_outbox as integration_outbox_db
 import database.candidates as candidates_db
 from models.candidate import CandidateCreate, CandidateStatus
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from utils.task_intelligence import candidate_service
+
+
+@pytest.fixture(autouse=True)
+def _no_outbound_reminders(monkeypatch):
+    """Accepting a Candidate reconciles the task's client reminder; keep that off the wire."""
+    import utils.notifications as notifications
+
+    monkeypatch.setattr(notifications, 'send_action_item_update_message', lambda **kwargs: None)
+    monkeypatch.setattr(notifications, 'send_action_item_deletion_message', lambda **kwargs: None)
 
 
 @pytest.fixture
@@ -45,7 +56,9 @@ def fake_db(monkeypatch):
     monkeypatch.setattr(candidates_db, 'db', database)
     monkeypatch.setattr(candidates_db.firestore, 'transactional', transactional)
     monkeypatch.setattr(integration_outbox_db, 'db', database)
+    monkeypatch.setattr(integration_outbox_db, 'get_firestore_client', lambda: database)
     monkeypatch.setattr(integration_outbox_db.firestore, 'transactional', transactional)
+    monkeypatch.setattr(candidate_service, 'get_user_deletion_wipe_status', lambda uid: None)
     candidate_service.clear_workstream_candidate_resolver()
     candidate_service.task_links.clear_workstream_goal_resolver()
     candidate_service.task_links.register_goal_existence_resolver(lambda uid, goal_id: goal_id == 'goal-1')
@@ -69,13 +82,13 @@ def task_create_proposal(**overrides):
     return CandidateCreate.model_validate(payload)
 
 
-def create_record(fake_db, **overrides):
+def create_record(fake_db, *, now=None, **overrides):
     return candidates_db.create_candidate(
         'user-1',
         task_create_proposal(**overrides),
         idempotency_key='conversation-1:item-1',
         account_generation=3,
-        now=datetime(2026, 7, 9, tzinfo=timezone.utc),
+        now=now,
     )
 
 
@@ -197,8 +210,8 @@ def test_candidate_union_rejects_mixed_or_invalid_payloads(patch):
 
 
 def test_candidate_create_and_accept_are_idempotent_and_preserve_envelope(fake_db):
-    record = create_record(fake_db)
-    duplicate = create_record(fake_db)
+    record = create_record(fake_db, now=datetime(2026, 7, 9, tzinfo=timezone.utc))
+    duplicate = create_record(fake_db, now=record.created_at)
     first = candidates_db.resolve_task_candidate(
         'user-1', record.candidate_id, account_generation=3, now=datetime(2026, 7, 10, tzinfo=timezone.utc)
     )
@@ -258,6 +271,48 @@ def test_task_mutation_preserves_origin_and_merges_provenance(fake_db):
     assert task['description'] == 'Updated task'
     assert task['source'] == 'manual'
     assert task['provenance'] == [original, added]
+
+
+def test_accepting_task_candidates_invalidates_cached_task_list_pages(fake_db, monkeypatch):
+    # GET /v1/action-items serves a cached page until the per-uid list version moves. Accepting
+    # writes the task outside database.action_items, so it must move that version itself.
+    redis = fakeredis.FakeRedis()
+    monkeypatch.setattr(action_items_cache, '_redis', lambda: redis)
+    params = {'limit': 100, 'offset': 0, 'completed': False}
+
+    def cached_page_key():
+        version = action_items_cache.get_action_items_list_version('user-1')
+        return action_items_cache.list_cache_key('user-1', version, params)
+
+    def cache_task_list_page():
+        action_items_cache.write_cached_list(cached_page_key(), body={'action_items': []}, etag='W/"old"', ttl=30)
+
+    task_path = ('users', 'user-1', 'action_items', 'task-1')
+    fake_db.rows[task_path] = {
+        'id': 'task-1',
+        'description': 'Send the slides',
+        'status': 'active',
+        'completed': False,
+        'goal_id': 'goal-1',
+    }
+    create = create_record(fake_db)
+    complete = candidates_db.create_candidate(
+        'user-1',
+        task_create_proposal(proposed_action='complete', task_id='task-1', task_change={'status': 'completed'}),
+        idempotency_key='feedback:complete-task-1',
+        account_generation=3,
+    )
+
+    cache_task_list_page()
+    assert action_items_cache.read_cached_list(cached_page_key()) is not None
+    created = candidates_db.resolve_task_candidate('user-1', create.candidate_id, account_generation=3)
+    assert ('users', 'user-1', 'action_items', created.task_id) in fake_db.rows
+    assert action_items_cache.read_cached_list(cached_page_key()) is None
+
+    cache_task_list_page()
+    candidates_db.resolve_task_candidate('user-1', complete.candidate_id, account_generation=3)
+    assert fake_db.rows[task_path]['completed'] is True
+    assert action_items_cache.read_cached_list(cached_page_key()) is None
 
 
 def test_candidate_idempotency_key_rejects_a_different_proposal(fake_db):
@@ -586,7 +641,9 @@ def test_accepted_active_task_coalesces_exact_cross_source_capture_until_work_cl
         account_generation=3,
         now=datetime(2026, 7, 9, tzinfo=timezone.utc),
     )
-    receipt = candidates_db.resolve_task_candidate('user-1', first.candidate_id, account_generation=3)
+    receipt = candidates_db.resolve_task_candidate(
+        'user-1', first.candidate_id, account_generation=3, now=first.created_at
+    )
     task_path = ('users', 'user-1', 'action_items', receipt.task_id)
     second_proposal = task_create_proposal(
         task_change={
@@ -1130,10 +1187,10 @@ def test_integration_outbox_dispatches_once_and_retry_observes_completion(fake_d
 
     async def sync(uid, task, **kwargs):
         dispatched.append(task['id'])
-        return {'synced': True}
+        return {'synced': True}, 'accepted', None
 
     monkeypatch.setattr(candidate_service.action_items_db, 'get_action_item', lambda uid, task_id: {'id': task_id})
-    monkeypatch.setattr(candidate_service, 'auto_sync_action_item', sync)
+    monkeypatch.setattr(candidate_service, 'auto_sync_action_item_with_outcome', sync)
     monkeypatch.setattr(candidate_service, 'submit_with_context', lambda executor, function: function())
 
     first = candidate_service.accept_candidate('user-1', record.candidate_id, account_generation=3)
@@ -1144,6 +1201,26 @@ def test_integration_outbox_dispatches_once_and_retry_observes_completion(fake_d
     assert dispatched == [first.task_id]
     outbox = next(data for path, data in fake_db.rows.items() if 'candidate_integration_outbox' in path)
     assert outbox['status'] == 'completed'
+    assert outbox['attempt_count'] == 1
+
+
+def test_accept_schedules_integration_without_waiting_for_the_provider(fake_db, monkeypatch):
+    record = create_record(fake_db)
+    calls = []
+
+    async def sync(uid, task, **kwargs):
+        calls.append(task['id'])
+        return {'synced': True}, 'accepted', None
+
+    monkeypatch.setattr(candidate_service.action_items_db, 'get_action_item', lambda uid, task_id: {'id': task_id})
+    monkeypatch.setattr(candidate_service, 'auto_sync_action_item_with_outcome', sync)
+    monkeypatch.setattr(candidate_service, 'submit_with_context', lambda executor, function: None)
+
+    candidate_service.accept_candidate('user-1', record.candidate_id, account_generation=3)
+
+    assert calls == []
+    outbox = next(data for path, data in fake_db.rows.items() if 'candidate_integration_outbox' in path)
+    assert outbox['status'] == 'processing'
     assert outbox['attempt_count'] == 1
 
 
@@ -1178,10 +1255,10 @@ def test_unsynced_integration_result_stays_retryable(fake_db, monkeypatch):
     record = create_record(fake_db)
 
     async def unsynced(uid, task, **kwargs):
-        return {'synced': False, 'platform': 'todoist', 'error': 'temporary'}
+        return {'synced': False, 'platform': 'todoist', 'error': 'temporary'}, 'in_doubt', None
 
     monkeypatch.setattr(candidate_service.action_items_db, 'get_action_item', lambda uid, task_id: {'id': task_id})
-    monkeypatch.setattr(candidate_service, 'auto_sync_action_item', unsynced)
+    monkeypatch.setattr(candidate_service, 'auto_sync_action_item_with_outcome', unsynced)
     monkeypatch.setattr(candidate_service, 'submit_with_context', lambda executor, function: function())
 
     candidate_service.accept_candidate('user-1', record.candidate_id, account_generation=3)
@@ -1197,10 +1274,10 @@ def test_drain_recovers_crash_after_accept_commit(fake_db, monkeypatch):
 
     async def sync(uid, task, **kwargs):
         dispatched.append(task['id'])
-        return {'synced': True}
+        return {'synced': True}, 'accepted', None
 
     monkeypatch.setattr(candidate_service.action_items_db, 'get_action_item', lambda uid, task_id: {'id': task_id})
-    monkeypatch.setattr(candidate_service, 'auto_sync_action_item', sync)
+    monkeypatch.setattr(candidate_service, 'auto_sync_action_item_with_outcome', sync)
     monkeypatch.setattr(candidate_service, 'submit_with_context', lambda executor, function: function())
     monkeypatch.setattr(
         integration_outbox_db,
@@ -1358,6 +1435,176 @@ def test_integration_poison_reaches_dead_letter_with_error_text(fake_db):
         'user-1', record.candidate_id, account_generation=3
     )
     assert fake_db.rows[('users', 'user-1', 'candidate_integration_outbox', record.candidate_id)]['status'] == 'pending'
+
+
+def test_claim_dead_letters_in_doubt_without_another_attempt(fake_db):
+    record = create_record(fake_db)
+    candidates_db.resolve_task_candidate('user-1', record.candidate_id, account_generation=3)
+    path = ('users', 'user-1', 'candidate_integration_outbox', record.candidate_id)
+    fake_db.rows[path]['status'] = 'failed'
+    fake_db.rows[path]['provider_attempt_outcome'] = 'in_doubt'
+    fake_db.rows[path]['attempt_count'] = 2
+
+    assert (
+        integration_outbox_db.claim_candidate_integration_dispatch('user-1', record.candidate_id, account_generation=3)
+        is None
+    )
+
+    assert fake_db.rows[path]['status'] == 'dead_letter'
+    assert fake_db.rows[path]['dead_letter_reason'] == 'in_doubt'
+    assert fake_db.rows[path]['provider_attempt_outcome'] == 'in_doubt'
+    assert fake_db.rows[path]['attempt_count'] == 2
+
+
+def test_claim_dead_letters_a_legacy_failure_with_no_recorded_outcome(fake_db):
+    # Pre-migration failed rows never recorded whether the provider accepted the create.
+    record = create_record(fake_db)
+    candidates_db.resolve_task_candidate('user-1', record.candidate_id, account_generation=3)
+    path = ('users', 'user-1', 'candidate_integration_outbox', record.candidate_id)
+    fake_db.rows[path]['status'] = 'failed'
+    fake_db.rows[path].pop('provider_attempt_outcome', None)
+    fake_db.rows[path]['attempt_count'] = 1
+
+    assert (
+        integration_outbox_db.claim_candidate_integration_dispatch('user-1', record.candidate_id, account_generation=3)
+        is None
+    )
+
+    assert fake_db.rows[path]['status'] == 'dead_letter'
+    assert fake_db.rows[path]['dead_letter_reason'] == 'in_doubt'
+    assert fake_db.rows[path]['attempt_count'] == 1
+
+
+def test_claim_dead_letters_a_row_past_the_attempt_budget(fake_db):
+    record = create_record(fake_db)
+    candidates_db.resolve_task_candidate('user-1', record.candidate_id, account_generation=3)
+    path = ('users', 'user-1', 'candidate_integration_outbox', record.candidate_id)
+    fake_db.rows[path]['status'] = 'failed'
+    fake_db.rows[path]['provider_attempt_outcome'] = 'not_sent'
+    fake_db.rows[path]['attempt_count'] = integration_outbox_db.CANDIDATE_INTEGRATION_POLICY.max_attempts
+
+    assert (
+        integration_outbox_db.claim_candidate_integration_dispatch('user-1', record.candidate_id, account_generation=3)
+        is None
+    )
+
+    assert fake_db.rows[path]['status'] == 'dead_letter'
+    assert fake_db.rows[path]['dead_letter_reason'] == 'attempt_budget_exhausted'
+    assert fake_db.rows[path]['attempt_count'] == integration_outbox_db.CANDIDATE_INTEGRATION_POLICY.max_attempts
+
+
+def test_claim_leaves_a_live_in_doubt_lease_alone(fake_db):
+    record = create_record(fake_db)
+    candidates_db.resolve_task_candidate('user-1', record.candidate_id, account_generation=3)
+    path = ('users', 'user-1', 'candidate_integration_outbox', record.candidate_id)
+    fake_db.rows[path]['status'] = 'processing'
+    fake_db.rows[path]['provider_attempt_outcome'] = 'in_doubt'
+    fake_db.rows[path]['lease_token'] = 'owner'
+    fake_db.rows[path]['claimed_at'] = datetime.now(timezone.utc)
+    fake_db.rows[path]['attempt_count'] = 1
+
+    assert (
+        integration_outbox_db.claim_candidate_integration_dispatch('user-1', record.candidate_id, account_generation=3)
+        is None
+    )
+
+    assert fake_db.rows[path]['status'] == 'processing'
+    assert fake_db.rows[path]['lease_token'] == 'owner'
+    assert fake_db.rows[path]['provider_attempt_outcome'] == 'in_doubt'
+    assert fake_db.rows[path]['attempt_count'] == 1
+
+
+def test_claim_exports_a_recorded_external_id_with_its_platform(fake_db):
+    record = create_record(fake_db)
+    receipt = candidates_db.resolve_task_candidate('user-1', record.candidate_id, account_generation=3)
+    path = ('users', 'user-1', 'candidate_integration_outbox', record.candidate_id)
+    fake_db.rows[path]['status'] = 'failed'
+    fake_db.rows[path]['provider_attempt_outcome'] = 'in_doubt'
+    fake_db.rows[path]['external_task_id'] = 'ext-recorded'
+    fake_db.rows[path]['export_platform'] = 'todoist'
+    fake_db.rows[path]['attempt_count'] = 1
+
+    assert (
+        integration_outbox_db.claim_candidate_integration_dispatch('user-1', record.candidate_id, account_generation=3)
+        is None
+    )
+
+    assert fake_db.rows[path]['status'] == 'completed'
+    assert fake_db.rows[path]['external_task_id'] == 'ext-recorded'
+    assert fake_db.rows[path]['export_platform'] == 'todoist'
+    assert fake_db.rows[path]['provider_attempt_outcome'] == 'accepted'
+    assert fake_db.rows[path]['attempt_count'] == 1
+    item = fake_db.rows[('users', 'user-1', 'action_items', receipt.task_id)]
+    assert item['exported'] is True
+    assert item['external_task_id'] == 'ext-recorded'
+    assert item['export_platform'] == 'todoist'
+    assert isinstance(item['export_date'], datetime)
+
+
+def test_repeated_acceptance_does_not_resend_an_in_doubt_create(fake_db, monkeypatch):
+    record = create_record(fake_db)
+    calls = []
+
+    async def sync(uid, task, skip_apple_reminders=False, on_provider_attempt=None):
+        if on_provider_attempt is not None:
+            assert on_provider_attempt('asana') is True
+        calls.append(task['id'])
+        return {'synced': False, 'error': 'marker write failed'}, 'in_doubt', 'ext-9'
+
+    monkeypatch.setattr(candidate_service.action_items_db, 'get_action_item', lambda uid, task_id: {'id': task_id})
+    monkeypatch.setattr(candidate_service, 'auto_sync_action_item_with_outcome', sync)
+    monkeypatch.setattr(candidate_service, 'submit_with_context', lambda executor, function: function())
+
+    candidate_service.accept_candidate('user-1', record.candidate_id, account_generation=3)
+    outbox = next(data for path, data in fake_db.rows.items() if path[-2] == 'candidate_integration_outbox')
+    assert outbox['status'] == 'failed'
+    assert outbox['provider_attempt_outcome'] == 'in_doubt'
+    assert outbox['external_task_id'] == 'ext-9'
+    assert outbox['export_platform'] == 'asana'
+    assert calls == [outbox['task_id']]
+
+    candidate_service.accept_candidate('user-1', record.candidate_id, account_generation=3)
+
+    assert calls == [outbox['task_id']]
+    assert outbox['status'] == 'completed'
+    item = fake_db.rows[('users', 'user-1', 'action_items', outbox['task_id'])]
+    assert item['exported'] is True
+    assert item['export_platform'] == 'asana'
+    assert item['external_task_id'] == 'ext-9'
+
+
+def test_drain_does_not_resend_an_in_doubt_row(fake_db, monkeypatch):
+    record = create_record(fake_db)
+    receipt = candidates_db.resolve_task_candidate('user-1', record.candidate_id, account_generation=3)
+    path = ('users', 'user-1', 'candidate_integration_outbox', record.candidate_id)
+    fake_db.rows[path]['status'] = 'failed'
+    fake_db.rows[path]['provider_attempt_outcome'] = 'in_doubt'
+    fake_db.rows[path]['attempt_count'] = 1
+
+    async def sync(*args, **kwargs):
+        raise AssertionError('provider called')
+
+    monkeypatch.setattr(candidate_service, 'auto_sync_action_item_with_outcome', sync)
+    monkeypatch.setattr(candidate_service, 'submit_with_context', lambda executor, function: function())
+    monkeypatch.setattr(
+        integration_outbox_db,
+        'list_candidate_integration_dispatches',
+        lambda uid, account_generation, limit=100: [
+            {
+                'candidate_id': record.candidate_id,
+                'task_id': receipt.task_id,
+                'status': 'failed',
+                'account_generation': account_generation,
+                'provider_attempt_outcome': 'in_doubt',
+            }
+        ],
+    )
+
+    assert candidate_service.drain_candidate_integrations('user-1', account_generation=3) == 0
+    assert fake_db.rows[path]['status'] == 'dead_letter'
+    assert fake_db.rows[path]['dead_letter_reason'] == 'in_doubt'
+    assert fake_db.rows[path]['provider_attempt_outcome'] == 'in_doubt'
+    assert fake_db.rows[path]['attempt_count'] == 1
 
 
 def test_claim_refuses_dead_letter(fake_db):
@@ -1528,3 +1775,79 @@ def test_candidate_queries_have_required_firestore_composite_indexes():
     assert ('candidates', ('account_generation', 'created_at', '__name__')) in signatures
     assert ('candidates', ('status', 'account_generation', 'created_at', '__name__')) in signatures
     assert ('candidate_integration_outbox', ('account_generation', 'status', '__name__')) in signatures
+
+
+def test_accepting_a_task_candidate_with_a_due_date_arms_its_reminder(fake_db, monkeypatch):
+    import utils.notifications as notifications
+
+    scheduled = []
+    monkeypatch.setattr(
+        notifications,
+        'send_action_item_update_message',
+        lambda **kwargs: scheduled.append(kwargs),
+    )
+    monkeypatch.setattr(notifications, 'send_action_item_deletion_message', lambda **kwargs: None)
+    monkeypatch.setattr(
+        candidate_service.action_items_db,
+        'get_action_item',
+        lambda uid, task_id: fake_db.rows.get(('users', uid, 'action_items', task_id)),
+    )
+    # The integration outbox dispatch is a separate concern and talks to Firestore.
+    monkeypatch.setattr(candidate_service, '_dispatch_task_integration', lambda *_args, **_kwargs: None)
+    due_at = datetime.now(timezone.utc) + timedelta(days=1)
+    candidate = candidates_db.create_candidate(
+        'user-1',
+        task_create_proposal(
+            task_change={
+                'description': 'Send the budget',
+                'owner': 'user',
+                'due_confidence': 0.9,
+                'due_at': due_at.isoformat(),
+            },
+        ),
+        idempotency_key='accept-with-due-date',
+        account_generation=3,
+    )
+
+    receipt = candidate_service.accept_candidate('user-1', candidate.candidate_id, account_generation=3)
+
+    assert receipt.task_id
+    assert [call['action_item_id'] for call in scheduled] == [receipt.task_id]
+
+
+@pytest.mark.parametrize(
+    'status,completed,deleted',
+    [
+        ('active', False, False),
+        ('cancelled', False, False),
+        ('superseded', False, False),
+        ('completed', True, False),
+        ('active', False, True),
+    ],
+)
+def test_candidate_reminder_uses_saved_task_lifecycle(monkeypatch, status, completed, deleted):
+    due_at = datetime(2099, 10, 9, 17, tzinfo=timezone.utc)
+    saved = {
+        'description': 'Saved task',
+        'completed': completed,
+        'due_at': due_at,
+        'status': status,
+        'deleted': deleted,
+    }
+    calls = []
+    monkeypatch.setattr(candidate_service.action_items_db, 'get_action_item', lambda uid, task_id: saved)
+    monkeypatch.setattr(candidate_service, 'sync_action_item_reminder', lambda **kwargs: calls.append(kwargs))
+
+    candidate_service._sync_task_reminder('user-1', 'task-1')
+
+    assert calls == [
+        {
+            'user_id': 'user-1',
+            'action_item_id': 'task-1',
+            'description': 'Saved task',
+            'completed': completed,
+            'due_at': due_at,
+            'status': status,
+            'deleted': deleted,
+        }
+    ]

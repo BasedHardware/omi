@@ -1,0 +1,214 @@
+#!/usr/bin/env bash
+# Amp orb setup for the Omi repository (Debian 12).
+# Installs the toolchains and dependencies a fresh orb needs to build and test
+# this repo: backend Python (uv, pylock.toml), Node packages (root firebase
+# emulator tests, web/admin, web/frontend, web/personas-open-source, desktop
+# windows Electron), web/app (Bun), mcp (uv), and the pinned Flutter SDK for
+# app/ tests. Also installs system prerequisites (Redis, Java for the Firebase
+# emulator), seeds the offline backend env stage, and installs git hooks.
+#
+# Idempotent and non-interactive. Long-lived services live in .amp/services.yaml
+# (Redis), never here. Must finish well under Amp's 20-minute setup limit; warm
+# runs after a snapshot restore should be fast because every step checks first.
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT"
+LOG_PREFIX="[omi-setup]"
+
+step() { echo "$LOG_PREFIX [$((SECONDS / 60))m$((SECONDS % 60))s] $*"; }
+
+# ── System packages ──────────────────────────────────────────────────────────
+# Check first so a stale snapshot does not rerun apt-get update.
+NEEDED_APT=()
+command -v redis-server >/dev/null 2>&1 || NEEDED_APT+=(redis-server)
+if ! command -v java >/dev/null 2>&1; then
+  # The Firestore emulator (firebase-tools) is a Java process. CI pins temurin
+  # 21; Debian 12 ships OpenJDK 17, which the emulator supports (Java 11+).
+  NEEDED_APT+=(openjdk-17-jre-headless)
+fi
+if [ "${#NEEDED_APT[@]}" -gt 0 ]; then
+  step "apt-get install: ${NEEDED_APT[*]}"
+  export DEBIAN_FRONTEND=noninteractive
+  if [ "$(id -u)" -eq 0 ]; then
+    apt-get update -qq
+    apt-get install -y --no-install-recommends "${NEEDED_APT[@]}" >/dev/null
+  else
+    sudo -n env DEBIAN_FRONTEND=noninteractive apt-get update -qq
+    sudo -n apt-get install -y --no-install-recommends "${NEEDED_APT[@]}" >/dev/null
+  fi
+else
+  step "system packages already present (redis, java)"
+fi
+
+# ── Pinned Python toolchain (uv manages the interpreter) ─────────────────────
+BACKEND_PYTHON_VERSION="$(tr -d '[:space:]' < backend/.python-version)"
+if ! uv python list --only-installed 2>/dev/null | grep -q " $BACKEND_PYTHON_VERSION "; then
+  step "uv python install $BACKEND_PYTHON_VERSION"
+  uv python install "$BACKEND_PYTHON_VERSION"
+else
+  step "python $BACKEND_PYTHON_VERSION already installed via uv"
+fi
+
+# ── Language-package installs (parallel; each logs to /tmp for diagnosis) ────
+PIDS=()
+# npm ci always deletes node_modules and reinstalls from scratch, so without a
+# guard every setup run (including warm runs on a restored snapshot) repays the
+# full multi-minute install. A lockfile-hash marker records the last completed
+# install; the marker lives in $HOME/.cache (persisted by the orb snapshot,
+# outside the repo) and is only written after a successful install, so a failed
+# run retries on the next setup.
+CACHE_DIR="$HOME/.cache/omi-orb-setup"
+mkdir -p "$CACHE_DIR"
+
+run_install() { # run_install <name> <lockfile...> -- <check-path> <cmd...>
+  local name="$1"; shift
+  local lockfiles=()
+  while [ "$#" -gt 0 ] && [ "$1" != "--" ]; do lockfiles+=("$1"); shift; done
+  shift # consume --
+  local check_path="$1"; shift
+  local marker="$CACHE_DIR/$name" hash
+  hash="$(cat "${lockfiles[@]}" | sha256sum | cut -d' ' -f1)"
+  if [ -e "$check_path" ] && [ -f "$marker" ] && [ "$(cat "$marker")" = "$hash" ]; then
+    step "skip: $name (lockfiles unchanged since last install)"
+    return
+  fi
+  step "start: $name"
+  ( "$@" && printf '%s' "$hash" >"$marker" ) >"/tmp/omi-setup-$name.log" 2>&1 &
+  PIDS+=("$!")
+}
+
+# Backend locked virtualenv (267 packages from pylock.toml).
+run_install backend backend/pylock.toml -- backend/.venv/bin/python \
+  bash backend/scripts/sync-python-deps.sh
+# Root package.json: Firebase emulator tooling (firebase-tools) used by the
+# emulator test scripts and preflight gates.
+run_install npm-root package-lock.json -- node_modules \
+  npm ci --no-audit --no-fund
+# web/app uses Bun (its Dockerfile installs from bun.lock; never npm there).
+run_install web-app web/app/bun.lock -- web/app/node_modules \
+  bash -c 'cd web/app && bun install --frozen-lockfile'
+# web/admin, web/frontend, web/personas-open-source are npm-managed.
+for app in admin frontend personas-open-source; do
+  run_install "web-$app" "web/$app/package-lock.json" -- "web/$app/node_modules" \
+    bash -c "cd web/$app && npm ci --no-audit --no-fund"
+done
+# desktop/windows pins pnpm major 10 (CI: pnpm/action-setup@v6 version 10);
+# the system pnpm (12) breaks its .npmrc node-linker=hoisted resolution.
+run_install desktop-windows desktop/windows/pnpm-lock.yaml -- desktop/windows/node_modules \
+  bash -c 'cd desktop/windows && npx -y pnpm@10 install --frozen-lockfile'
+# mcp/ is a uv project.
+run_install mcp mcp/uv.lock mcp/pyproject.toml -- mcp/.venv/bin/python \
+  bash -c 'cd mcp && uv sync --frozen'
+
+# Flutter is not in the orb base image; install the CI-pinned stable build.
+FLUTTER_VERSION="3.44.5"
+FLUTTER_ROOT="/opt/flutter"
+# /opt is root-owned in the orb; stage extraction with sudo when needed.
+FLUTTER_PARENT="/opt"
+if [ ! -w /opt ] && [ "$(id -u)" -ne 0 ]; then
+  FLUTTER_PARENT="$HOME/.local/share"
+  FLUTTER_ROOT="$FLUTTER_PARENT/flutter"
+  mkdir -p "$FLUTTER_PARENT"
+fi
+if [ ! -x "$FLUTTER_ROOT/bin/flutter" ]; then
+  step "start: flutter-$FLUTTER_VERSION"
+  (
+    set -euo pipefail
+    tgz="/tmp/flutter-$FLUTTER_VERSION-stable.tar.xz"
+    if [ ! -f "$tgz" ]; then
+      curl -fsSL --retry 3 -o "$tgz" \
+        "https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_${FLUTTER_VERSION}-stable.tar.xz"
+    fi
+    tar -xJf "$tgz" -C "$FLUTTER_PARENT"
+    "$FLUTTER_ROOT/bin/flutter" --version
+    # Disable analytics/telemetry; orbs must not phone home per user config.
+    "$FLUTTER_ROOT/bin/flutter" config --no-analytics >/dev/null
+    cd "$ROOT/app" && "$FLUTTER_ROOT/bin/flutter" pub get
+  ) >"/tmp/omi-setup-flutter.log" 2>&1 &
+  PIDS+=("$!")
+fi
+[ -x "$FLUTTER_ROOT/bin/flutter" ] && step "flutter already installed at $FLUTTER_ROOT"
+
+FAILED=0
+for i in "${!PIDS[@]}"; do
+  if ! wait "${PIDS[$i]}"; then
+    FAILED=1
+    echo "$LOG_PREFIX FAIL: parallel install failed — see /tmp/omi-setup-*.log" >&2
+  fi
+done
+step "parallel installs joined"
+[ "$FAILED" -eq 0 ] || exit 1
+
+# Flutter CLI must reach login shells and services: symlink into PATH rather
+# than relying on this process's environment.
+if [ "$(id -u)" -eq 0 ]; then
+  ln -sfn "$FLUTTER_ROOT/bin/flutter" /usr/local/bin/flutter
+  ln -sfn "$FLUTTER_ROOT/bin/dart" /usr/local/bin/dart
+else
+  mkdir -p "$HOME/.local/bin"
+  ln -sfn "$FLUTTER_ROOT/bin/flutter" "$HOME/.local/bin/flutter"
+  ln -sfn "$FLUTTER_ROOT/bin/dart" "$HOME/.local/bin/dart"
+  case ":$PATH:" in
+    *":$HOME/.local/bin:"*) ;;
+    *) export PATH="$HOME/.local/bin:$PATH" ;;
+  esac
+fi
+
+# ── Backend offline env stage (hermetic default; no API keys needed) ────────
+# load_backend_env() reads OMI_ENV_STAGE (offline when PROVIDER_MODE=offline),
+# loads backend/.env.<stage>, then backend/.env overrides.
+if [ ! -f backend/.env.offline ]; then
+  cp backend/.env.offline.template backend/.env.offline
+fi
+if [ ! -e backend/.env ]; then
+  ln -s .env.offline backend/.env
+fi
+step "backend offline env stage seeded (.env -> .env.offline)"
+
+# ── Git hooks (pre-commit auto-format + bounded pre-push gate) ──────────────
+bash scripts/install-git-hooks.sh
+step "git hooks installed"
+
+# ── Orb guidance for agents working in this repo ─────────────────────────────
+AMP_AGENTS="$HOME/.config/amp/AGENTS.md"
+mkdir -p "$(dirname "$AMP_AGENTS")"
+if [ ! -f "$AMP_AGENTS" ]; then
+  touch "$AMP_AGENTS"
+fi
+# Content-addressed guidance block: the marker embeds a hash of the block body,
+# so editing the content below (e.g. a new Flutter pin) refreshes the notes on
+# the next setup run instead of leaving stale guidance behind (review of
+# #14692). The end marker bounds removal so content appended to AGENTS.md by
+# anything else is never touched.
+NOTES_BODY="$(cat <<EOF
+- Backend: no GCP credentials in the orb. Use \`PROVIDER_MODE=offline make dev-up\`
+  (repo root) for the hermetic harness; \`OMI_ENV_STAGE=offline\` is seeded via
+  \`backend/.env -> .env.offline\`. Authenticate endpoint self-tests with
+  \`ADMIN_KEY\` in \`backend/.env\` (Bearer \`<ADMIN_KEY><uid>\`).
+- Redis runs as a supervised orb service (\`.amp/services.yaml\`); it fails open
+  in backend code, so tests work even if it is down.
+- Flutter/dart are pinned to $FLUTTER_VERSION at $FLUTTER_ROOT (app/).
+- Emulator tests need Java (installed) + firebase-tools (root node_modules); run
+  the \`test:*:emulator\` scripts from the root package.json.
+EOF
+)"
+NOTES_START="<!-- omi orb env notes v:$(printf '%s' "$NOTES_BODY" | sha256sum | cut -c1-12) -->"
+NOTES_END="<!-- /omi orb env notes -->"
+if ! grep -Fqx "$NOTES_START" "$AMP_AGENTS"; then
+  tmp="$(mktemp)"
+  # Drop every previous version of the block (start line through its end
+  # marker; the pre-versioning format had no end marker, so its block ends at
+  # EOF — it was always the last thing this script appended).
+  awk '
+    /^<!-- omi orb env notes/ { inblock = 1; next }
+    inblock && /^<!-- \/omi orb env notes/ { inblock = 0; next }
+    inblock { next }
+    { print }
+  ' "$AMP_AGENTS" >"$tmp"
+  printf '%s\n%s\n%s\n' "$NOTES_START" "$NOTES_BODY" "$NOTES_END" >>"$tmp"
+  mv "$tmp" "$AMP_AGENTS"
+fi
+step "orb agent notes written"
+
+step "done"

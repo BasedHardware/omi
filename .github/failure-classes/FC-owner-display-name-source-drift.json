@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "id": "FC-owner-display-name-source-drift",
+  "violated_contract": "All backend owner display labels must resolve from the same ordered identity sources, and a stored owner voiceprint must remain usable without its original audio artifact. An account with no Firebase displayName or Firestore name but an explicit first-line AI-profile identity appeared as User, The User, or Speaker 0; independent rendering and speaker-cache paths omitted that identity, while live matching gated a stored embedding on GCS audio presence.",
+  "canonical_prevention": "Use database.auth.get_user_name for Firebase, explicit Firestore name, and a conservative first-line AI-profile identity bullet with preserved caller defaults and cache TTL. Load stored owner embeddings independently of audio availability and resolve cache labels through that same helper. Keep the existing introduction guard shared, casefold owner-name comparisons, and cover observed junk-name mishears without creating another detection path.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_user_name_resolution.py",
+    "backend/tests/unit/test_owner_speaker_profiles.py",
+    "backend/tests/unit/test_live_speaker_person_creation.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/database/auth.py",
+    "backend/utils/conversations/render.py",
+    "backend/utils/conversations/transcript_for_llm.py",
+    "backend/utils/llm/chat.py",
+    "backend/routers/listen/speakers.py",
+    "backend/routers/listen/transcripts.py",
+    "backend/utils/sync/pipeline.py"
+  ],
+  "status": "open"
+}

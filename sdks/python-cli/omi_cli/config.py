@@ -14,6 +14,8 @@ holds bearer credentials.
 
 from __future__ import annotations
 
+import errno
+import math
 import os
 import secrets
 import sys
@@ -39,6 +41,15 @@ ENV_API_BASE = "OMI_API_BASE"
 ENV_LOCAL_API_URL = "OMI_LOCAL_API_URL"
 ENV_LOCAL_TOKEN = "OMI_LOCAL_TOKEN"
 ENV_PROFILE = "OMI_PROFILE"
+
+
+class ConfigWriteRefused(PermissionError):
+    """:func:`save` refused to overwrite a config that failed to parse on load.
+
+    A deliberate refusal, not an unexpected fault, so the CLI's error ladder
+    can report it as such. Still a ``PermissionError`` so existing callers
+    that catch that keep working.
+    """
 
 
 def default_config_path() -> Path:
@@ -170,38 +181,68 @@ class Config:
 def load(path: Optional[Path] = None) -> Config:
     """Load the config from disk, returning an empty Config if the file is missing.
 
-    A malformed or undecodable TOML file also yields an empty Config rather
-    than raising, so read-only diagnostics such as ``omi version`` and
-    ``omi config path`` keep working precisely when the config needs repair.
-    The parse failure is recorded on :attr:`Config.load_error`, and
-    :func:`save` refuses to overwrite such a file so a write command cannot
+    A file that is malformed, undecodable, or unreadable altogether also yields
+    an empty Config rather than raising, so read-only diagnostics such as
+    ``omi version`` and ``omi config path`` keep working precisely when the
+    config needs repair. The reason is recorded on :attr:`Config.load_error`,
+    and :func:`save` refuses to overwrite such a file so a write command cannot
     silently destroy config the user could still repair by hand.
     """
     p = path or default_config_path()
-    if not p.exists():
-        return Config(path=p, active_profile=DEFAULT_PROFILE_NAME, profiles={})
-
-    with p.open("rb") as fh:
-        try:
+    try:
+        with p.open("rb") as fh:
             data = tomllib.load(fh)
-        except tomllib.TOMLDecodeError as exc:
+    except FileNotFoundError:
+        if _has_non_directory_parent(p):
+            # A regular file where a parent directory should be. POSIX raises
+            # NotADirectoryError for it; Windows reports the path as not found.
+            # Record it the POSIX way on every OS, so the path is not mistaken
+            # for a config that was never written and save() refuses it.
+            not_a_dir = NotADirectoryError(errno.ENOTDIR, os.strerror(errno.ENOTDIR), str(p))
             return Config(
                 path=p,
                 active_profile=DEFAULT_PROFILE_NAME,
                 profiles={},
-                load_error=f"config file is not valid TOML: {exc}",
+                load_error=f"config file could not be read: {not_a_dir}",
             )
-        except UnicodeDecodeError as exc:
-            return Config(
-                path=p,
-                active_profile=DEFAULT_PROFILE_NAME,
-                profiles={},
-                load_error=f"config file is not valid UTF-8: {exc}",
-            )
+        return Config(path=p, active_profile=DEFAULT_PROFILE_NAME, profiles={})
+    except tomllib.TOMLDecodeError as exc:
+        return Config(
+            path=p,
+            active_profile=DEFAULT_PROFILE_NAME,
+            profiles={},
+            load_error=f"config file is not valid TOML: {exc}",
+        )
+    except UnicodeDecodeError as exc:
+        return Config(
+            path=p,
+            active_profile=DEFAULT_PROFILE_NAME,
+            profiles={},
+            load_error=f"config file is not valid UTF-8: {exc}",
+        )
+    except OSError as exc:
+        # The file is there but we cannot read it — wrong owner after a `sudo`
+        # run, a mode the user tightened, a directory in its place. That is the
+        # state this function exists to survive, so record it like a parse
+        # failure: diagnostics keep working and save() still refuses to clobber.
+        return Config(
+            path=p,
+            active_profile=DEFAULT_PROFILE_NAME,
+            profiles={},
+            load_error=f"config file could not be read: {exc}",
+        )
 
     active = data.get("active_profile", DEFAULT_PROFILE_NAME)
+    if not isinstance(active, str):
+        return Config(
+            path=p,
+            active_profile=DEFAULT_PROFILE_NAME,
+            profiles={},
+            load_error=f"'active_profile' must be a string, got {type(active).__name__}",
+        )
+
     profiles_data = data.get("profiles", {})
-    
+
     # Validate that profiles is a table (dict), not a string or other scalar.
     if not isinstance(profiles_data, dict):
         return Config(
@@ -210,9 +251,18 @@ def load(path: Optional[Path] = None) -> Config:
             profiles={},
             load_error=f"'profiles' must be a table, got {type(profiles_data).__name__}",
         )
-    
-    # Validate each profile value is a table before constructing Profile objects.
+
+    # Validate each profile value is a table and known fields have valid types before constructing Profile objects.
     profiles = {}
+    string_fields = (
+        "auth_method",
+        "api_key",
+        "id_token",
+        "refresh_token",
+        "api_base",
+        "local_api_url",
+        "local_token",
+    )
     for name, raw in profiles_data.items():
         if not isinstance(raw, dict):
             return Config(
@@ -221,10 +271,54 @@ def load(path: Optional[Path] = None) -> Config:
                 profiles={},
                 load_error=f"profile '{name}' must be a table, got {type(raw).__name__}",
             )
+        for field_name in string_fields:
+            if field_name in raw:
+                val = raw[field_name]
+                if val is not None and not isinstance(val, str):
+                    return Config(
+                        path=p,
+                        active_profile=DEFAULT_PROFILE_NAME,
+                        profiles={},
+                        load_error=f"profile '{name}' field '{field_name}' must be a string, got {type(val).__name__}",
+                    )
+        if "id_token_expires_at" in raw:
+            val = raw["id_token_expires_at"]
+            if val is not None:
+                if isinstance(val, bool) or not isinstance(val, (int, float)):
+                    return Config(
+                        path=p,
+                        active_profile=DEFAULT_PROFILE_NAME,
+                        profiles={},
+                        load_error=f"profile '{name}' field 'id_token_expires_at' must be finite numeric, got {type(val).__name__}",
+                    )
+                try:
+                    if not math.isfinite(val):
+                        return Config(
+                            path=p,
+                            active_profile=DEFAULT_PROFILE_NAME,
+                            profiles={},
+                            load_error=f"profile '{name}' field 'id_token_expires_at' must be finite numeric, got non-finite ({val})",
+                        )
+                except OverflowError:
+                    return Config(
+                        path=p,
+                        active_profile=DEFAULT_PROFILE_NAME,
+                        profiles={},
+                        load_error=f"profile '{name}' field 'id_token_expires_at' must be finite numeric, got overflow",
+                    )
         profiles[name] = Profile.from_toml_dict(name, raw)
 
     extra = {key: value for key, value in data.items() if key not in {"active_profile", "profiles"}}
     return Config(path=p, active_profile=active, profiles=profiles, extra=extra)
+
+
+def _has_non_directory_parent(path: Path) -> bool:
+    """True when a parent of ``path`` exists but is not a directory."""
+    for parent in path.parents:
+        if os.path.exists(parent):
+            # Everything above the nearest existing parent is a directory.
+            return not os.path.isdir(parent)
+    return False
 
 
 def save(config: Config) -> None:
@@ -234,23 +328,28 @@ def save(config: Config) -> None:
     written. POSIX uses mode ``0o600``; Windows uses a protected owner-rights
     DACL supplied directly to ``CreateFileW``.
 
-    Raises PermissionError when the on-disk file failed to parse on load:
-    overwriting it would silently destroy profiles/credentials the user could
-    still repair by hand. The caller (a write command) surfaces that error
-    instead of clobbering the corrupt file.
+    Raises :class:`ConfigWriteRefused` (a ``PermissionError``) when the on-disk
+    file failed to parse on load: overwriting it would silently destroy
+    profiles/credentials the user could still repair by hand. ``main()``
+    surfaces that refusal as a normal CLI error rather than letting it reach
+    the last-chance handler, which would report a deliberate safety stop as an
+    unexpected one.
     """
     if config.load_error is not None:
-        raise PermissionError(
-            f"refusing to overwrite {config.path}: {config.load_error}. "
-            "Fix or remove the config file and try again."
+        raise ConfigWriteRefused(
+            f"refusing to overwrite {config.path}: {config.load_error}. " "Fix or remove the config file and try again."
         )
-    config.path.parent.mkdir(parents=True, exist_ok=True)
-    # Tighten parent dir perms too — credentials live underneath. Best-effort:
-    # don't fail if the user has a custom mode they want to keep.
-    try:
-        os.chmod(config.path.parent, 0o700)
-    except OSError:
-        pass
+    parent = config.path.parent
+    parent_existed = parent.exists()
+    parent.mkdir(parents=True, exist_ok=True)
+    # Owner-only perms on a directory we create ourselves. Leave a
+    # pre-existing (e.g. user-selected via $OMI_CONFIG, possibly shared)
+    # directory's permissions untouched — best-effort, don't fail on it.
+    if not parent_existed:
+        try:
+            os.chmod(parent, 0o700)
+        except OSError:
+            pass
 
     payload: dict[str, Any] = {
         **config.extra,
@@ -278,8 +377,12 @@ def save(config: Config) -> None:
         try:
             with os.fdopen(fd, "wb") as fh:
                 tomli_w.dump(payload, fh)
+            # Atomic rename. The destination inherits the temp's 0o600 mode.
+            os.replace(tmp_path, config.path)
         except Exception:
-            # Best-effort cleanup if the dump itself failed mid-write.
+            # Best-effort cleanup of our own temp file, whether the dump or
+            # the replace failed. A failed replace (e.g. destination locked
+            # on Windows) must not leave a credential-bearing temp behind.
             try:
                 os.unlink(tmp_path)
             except FileNotFoundError:
@@ -287,9 +390,6 @@ def save(config: Config) -> None:
             raise
     finally:
         os.umask(old_umask)
-
-    # Atomic rename. The destination inherits the temp's 0o600 mode.
-    os.replace(tmp_path, config.path)
 
 
 def resolve_profile_name(cli_flag: Optional[str], config: Config) -> str:

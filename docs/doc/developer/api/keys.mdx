@@ -19,12 +19,50 @@ description: "Manage your Developer API keys"
 </CardGroup>
 
 <Note>
-Developer API keys are self-service: while signed in to Omi, open **Developer → API Keys** to create,
-list, and revoke your keys. The lifecycle endpoints below use that signed-in Omi/Firebase session; an
+Developer API keys are self-service: while signed in to Omi, open the
+[Developers page](https://app.omi.me/developers) on the web to create, list, and revoke your keys. The lifecycle endpoints below use that signed-in Omi/Firebase session; an
 `omi_dev_...` key cannot create, list, or revoke keys itself.
 </Note>
 
+
+## Hand a key to an agent without pasting it
+
+After you create a key there, choose **Send to My Agent Securely**. Omi encrypts the key in your
+browser and stores only the ciphertext in [ZK Relay](https://zkr.scalingforever.com) as a one-time
+share that expires after one hour or its first reveal. The copy-paste prompt then contains only the
+share's **agent link** (`https://zkr.scalingforever.com/a/<id>#v1.<key>.<token>`), never the raw key.
+The decryption key and access token live in the link's `#` fragment, which is never sent to any
+server.
+
+Your agent installs the `zkr` receiver if needed (see
+[llms.txt](https://zkr.scalingforever.com/llms.txt)), runs
+`zkr receive --link-stdin --output <relative-path>`, moves the value into its own secret store or
+environment variable, and deletes the file. If the link was already opened or has expired, create a
+new one. **Show the key instead** remains available when you would rather store the key yourself.
+
 ---
+
+## Inspect the Calling Key
+
+`GET /v1/dev/key` accepts any valid Developer API key, regardless of data scopes or memory readiness. It returns only that credential's metadata, never user content, the secret, or its hash. Use it to validate a key without reading memories.
+
+```bash
+curl -H "Authorization: Bearer $OMI_API_KEY" \
+  "https://api.omi.me/v1/dev/key"
+```
+
+```json
+{
+  "id": "key_123abc",
+  "name": "Task reader",
+  "key_prefix": "omi_dev_abc123",
+  "scopes": ["action_items:read"],
+  "created_at": "2025-01-15T10:30:00Z",
+  "last_used_at": "2025-01-20T14:22:00Z"
+}
+```
+
+`scopes` reports effective permissions: legacy keys with missing scopes receive the read-only scopes; an explicit empty list stays empty. `last_used_at` is approximate: authentication updates it on cache misses, roughly hourly, so it is not an activity log and null does not prove a key has never been used. Invalid keys return `401`; the endpoint has its own rate-limit budget (see [Quick Start](/doc/developer/api/overview#rate-limits)).
 
 ## List API Keys
 
@@ -95,7 +133,7 @@ This endpoint requires your signed-in Omi/Firebase session. The secret key value
     | `name` | string | Descriptive name you gave the key |
     | `key_prefix` | string | First part of the key (for identification) |
     | `created_at` | datetime | When the key was created |
-    | `last_used_at` | datetime | When the key was last used (null if never used) |
+    | `last_used_at` | datetime | Approximate last authentication cache miss; may lag activity by about an hour (null if not recorded) |
     | `scopes` | array | Permissions assigned to the key |
   </Accordion>
 </AccordionGroup>
@@ -283,9 +321,9 @@ If a key is compromised, revoke it immediately and create a new one.
     ```python
     import requests
 
-    API_KEY = "omi_dev_your_api_key"
+    FIREBASE_ID_TOKEN = "your_signed_in_firebase_id_token"
     headers = {
-        "Authorization": f"Bearer {API_KEY}",
+        "Authorization": f"Bearer {FIREBASE_ID_TOKEN}",
         "Content-Type": "application/json"
     }
 
@@ -333,9 +371,9 @@ If a key is compromised, revoke it immediately and create a new one.
   </Tab>
   <Tab title="JavaScript">
     ```javascript
-    const API_KEY = process.env.OMI_API_KEY;
+    const FIREBASE_ID_TOKEN = process.env.FIREBASE_ID_TOKEN;
     const headers = {
-      Authorization: `Bearer ${API_KEY}`,
+      Authorization: `Bearer ${FIREBASE_ID_TOKEN}`,
       "Content-Type": "application/json"
     };
 
@@ -387,14 +425,15 @@ If a key is compromised, revoke it immediately and create a new one.
 
 ## Managing Keys in the App
 
-You can also manage API keys directly in the Omi app:
+You can also manage API keys in the Omi mobile app (the web
+[Developers page](https://app.omi.me/developers) is the primary place):
 
 <Steps>
   <Step title="Open Omi App" icon="mobile">
     Launch the Omi app on your device
   </Step>
   <Step title="Navigate to Settings" icon="gear">
-    Go to **Settings → Developer**
+    Go to **Settings → Developer Settings**
   </Step>
   <Step title="Manage Keys" icon="key">
     Under "Developer API Keys" you can:
@@ -407,3 +446,8 @@ You can also manage API keys directly in the Omi app:
 <Info>
 Keys created in the app and via the API are the same - you can manage them from either place.
 </Info>
+
+Additional opt-in read scopes are `people:read`, `profile:read`, and
+`screen_activity:read`. Include them in `scopes` when creating a Developer key
+with `POST /v1/dev/keys`. Omitted scopes retain the existing read-only defaults
+and do not include these new capabilities.

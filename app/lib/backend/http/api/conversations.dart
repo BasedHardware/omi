@@ -1,16 +1,24 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:omi/backend/http/api_fallback.dart';
+import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/schema/gen/action_items_folders_wire.g.dart' as action_items_wire;
 import 'package:omi/backend/schema/gen/apps_wire.g.dart' as apps_wire;
 import 'package:omi/backend/schema/gen/conversation_wire.g.dart' as wire;
+import 'package:omi/backend/schema/gen/misc_wire.g.dart' as misc_wire;
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/env/env.dart';
+import 'package:omi/services/capture/calendar_capture_gap_monitor.dart';
+import 'package:omi/services/capture/empty_recording_notice.dart';
+import 'package:omi/services/integrations/google_calendar_service.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/logger.dart';
+import 'package:omi/utils/off_ui_isolate.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/utils/wal_sync_upload.dart';
 
@@ -25,33 +33,41 @@ import 'package:omi/utils/wal_sync_upload.dart';
 bool isBenignInProgressConversationCreateStatus(int statusCode) => statusCode == 404;
 
 Future<CreateConversationResponse?> processInProgressConversation() async {
+  return (await processInProgressConversationOutcome()).response;
+}
+
+Future<InProgressProcessOutcome> processInProgressConversationOutcome() async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/conversations',
     headers: {},
     method: 'POST',
     body: jsonEncode({}),
   );
-  if (response == null) return null;
+  if (response == null) return const InProgressProcessOutcome(absence: ProcessAbsence.transport);
   Logger.debug('createConversationServer: ${response.body}');
   if (response.statusCode == 200) {
-    return CreateConversationResponse.fromGeneratedWireJson(jsonDecode(response.body) as Map<String, dynamic>);
+    final parsed = CreateConversationResponse.fromGeneratedWireJson(jsonDecode(response.body) as Map<String, dynamic>);
+    if (parsed.conversation == null) {
+      return InProgressProcessOutcome(response: parsed, absence: ProcessAbsence.emptyBody);
+    }
+    return InProgressProcessOutcome(response: parsed);
   } else if (isBenignInProgressConversationCreateStatus(response.statusCode)) {
     Logger.debug('processInProgressConversation: no in-progress conversation (already finalized), skipping');
-  } else {
-    PlatformManager.instance.crashReporter.reportCrash(
-      Exception('Failed to create conversation'),
-      StackTrace.current,
-      userAttributes: {'response': response.body},
-    );
+    return const InProgressProcessOutcome(absence: ProcessAbsence.notFound);
   }
-  return null;
+  PlatformManager.instance.crashReporter.reportCrash(
+    Exception('Failed to create conversation'),
+    StackTrace.current,
+    userAttributes: {'response': response.body},
+  );
+  return const InProgressProcessOutcome(absence: ProcessAbsence.transport);
 }
 
 Future<List<ServerConversation>> getConversations({
   int limit = 50,
   int offset = 0,
   List<ConversationStatus> statuses = const [],
-  bool includeDiscarded = true,
+  bool includeDiscarded = false,
   DateTime? startDate,
   DateTime? endDate,
   String? folderId,
@@ -78,37 +94,35 @@ Future<({List<ServerConversation> items, bool ok, bool truncated})> getConversat
   int limit = 50,
   int offset = 0,
   List<ConversationStatus> statuses = const [],
-  bool includeDiscarded = true,
+  bool includeDiscarded = false,
   DateTime? startDate,
   DateTime? endDate,
   String? folderId,
   bool? starred,
 }) async {
-  String url =
-      '${Env.apiBaseUrl}v1/conversations?include_discarded=$includeDiscarded&limit=$limit&offset=$offset&statuses=${statuses.map((val) => val.toString().split(".").last).join(",")}';
-
-  // Add date filters if provided
-  if (startDate != null) {
-    url += '&start_date=${startDate.toUtc().toIso8601String()}';
-  }
-  if (endDate != null) {
-    url += '&end_date=${endDate.toUtc().toIso8601String()}';
-  }
-  if (folderId != null) {
-    url += '&folder_id=$folderId';
-  }
-  if (starred != null) {
-    url += '&starred=$starred';
-  }
+  String url = conversationCollectionUrl(
+    Env.apiBaseUrl ?? '',
+    limit: limit,
+    offset: offset,
+    statuses: statuses,
+    includeDiscarded: includeDiscarded,
+    startDate: startDate,
+    endDate: endDate,
+    folderId: folderId,
+    starred: starred,
+  );
 
   var response = await makeApiCall(url: url, headers: {}, method: 'GET', body: '');
   if (response == null) return (items: <ServerConversation>[], ok: false, truncated: false);
   if (response.statusCode == 200) {
-    // decode body bytes to utf8 string and then parse json so as to avoid utf8 char issues
-    var body = utf8.decode(response.bodyBytes);
-    var memories = (jsonDecode(body) as List<dynamic>)
-        .map((conversation) => ServerConversation.fromJson(conversation as Map<String, dynamic>))
-        .toList();
+    final bodyBytes = response.bodyBytes;
+    // Unlocked rows carry full transcripts, so a page can be megabytes; parse
+    // it off the UI isolate (this runs on resume, right as the user scrolls).
+    final memories = await offUiIsolate(
+        () => parseConversationListBody(jsonDecode(utf8.decode(bodyBytes)) as List<dynamic>),
+        size: bodyBytes.length,
+        threshold: conversationListBackgroundParseBytes,
+        debugName: 'conversation_list_parse');
     Logger.debug('getConversations length: ${memories.length}');
     return (items: memories, ok: true, truncated: isOmiListTruncated(response));
   }
@@ -116,19 +130,140 @@ Future<({List<ServerConversation> items, bool ok, bool truncated})> getConversat
   return (items: <ServerConversation>[], ok: false, truncated: false);
 }
 
-Future<ServerConversation?> reProcessConversationServer(String conversationId, {String? appId}) async {
-  var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/conversations/$conversationId/reprocess${appId != null ? '?app_id=$appId' : ''}',
+/// Response bodies at or above this size are parsed on a background isolate.
+@visibleForTesting
+int conversationListBackgroundParseBytes = 64 * 1024;
+
+/// Maps a decoded list body (decode the UTF-8 bytes first so multi-byte
+/// characters survive) into conversations.
+List<ServerConversation> parseConversationListBody(List<dynamic> decoded) {
+  return decoded.map((conversation) => ServerConversation.fromJson(conversation as Map<String, dynamic>)).toList();
+}
+
+bool hasSpeakerReceiptSummaryCapability(Map<String, String> headers) => headers['x-omi-speaker-receipt-summary'] == '1';
+
+/// What POST /v1/conversations/{id}/reprocess did. Never null: the detail page needs to tell "the
+/// server is already working on it" (409) and "too many regenerations" (429) from a plain failure.
+sealed class ReprocessResult {
+  const ReprocessResult();
+
+  /// The reprocessed conversation, only on [ReprocessSuccess].
+  ServerConversation? get conversation => null;
+
+  /// Adapts a call that only knows "a conversation or nothing" (older seams, list-row retries).
+  static ReprocessResult fromConversation(ServerConversation? conversation) =>
+      conversation == null ? const ReprocessFailed() : ReprocessSuccess(conversation);
+}
+
+final class ReprocessSuccess extends ReprocessResult {
+  const ReprocessSuccess(this.conversation);
+
+  @override
+  final ServerConversation conversation;
+}
+
+/// Another writer holds the conversation's processing claim (HTTP 409
+/// `conversation_processing_in_progress`).
+final class ReprocessBusy extends ReprocessResult {
+  const ReprocessBusy();
+}
+
+/// The hourly reprocess limit (HTTP 429). [retryAfter] when the server said how long.
+final class ReprocessRateLimited extends ReprocessResult {
+  const ReprocessRateLimited({this.retryAfter});
+
+  final Duration? retryAfter;
+}
+
+/// Anything else: transport failure, 5xx (502 `app_result_failed` when the selected template
+/// returned nothing), an app the server will not run, an unacknowledged speaker receipt, an
+/// undecodable body.
+final class ReprocessFailed extends ReprocessResult {
+  const ReprocessFailed({this.statusCode});
+
+  final int? statusCode;
+}
+
+/// A reprocess runs the whole summary pipeline and can take minutes. It is not idempotent, so the
+/// pool must never retry it (a timeout or 5xx retry starts a second, duplicate reprocess).
+const Duration reprocessRequestTimeout = Duration(seconds: 180);
+
+/// The reprocess query: `app_id` for a template, `source=omi` for Omi's own notes ([forceOmi]),
+/// nothing for the legacy "regenerate" (Omi notes plus the user's server preferred template).
+/// A backend that predates `source` ignores the unknown parameter.
+@visibleForTesting
+String reprocessQuery({String? appId, bool forceOmi = false}) {
+  if (appId != null) return '?app_id=${Uri.encodeQueryComponent(appId)}';
+  if (forceOmi) return '?source=omi';
+  return '';
+}
+
+Future<ReprocessResult> reProcessConversationServer(
+  String conversationId, {
+  String? appId,
+  bool requireSpeakerReceipt = false,
+  bool forceOmi = false,
+}) async {
+  final route = '${Env.apiBaseUrl}v1/conversations/$conversationId/reprocess';
+  final response = await makeApiCall(
+    url: '$route${reprocessQuery(appId: appId, forceOmi: forceOmi)}',
     headers: {},
     method: 'POST',
     body: '',
+    timeout: reprocessRequestTimeout,
+    retries: 0,
   );
-  if (response == null) return null;
-  Logger.debug('reProcessConversationServer: ${response.body}');
-  if (response.statusCode == 200) {
-    return ServerConversation.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+  if (response == null) return const ReprocessFailed();
+  Logger.debug('reProcessConversationServer: ${response.statusCode}');
+  return reprocessResultFromResponse(response, requireSpeakerReceipt: requireSpeakerReceipt);
+}
+
+/// Maps a reprocess response to its [ReprocessResult].
+@visibleForTesting
+ReprocessResult reprocessResultFromResponse(
+  http.Response response, {
+  bool requireSpeakerReceipt = false,
+  DateTime Function() now = DateTime.now,
+}) {
+  switch (response.statusCode) {
+    case 200:
+      // A pre-fix backend can return 200 with a summary made from stale speaker
+      // labels. Keep the detail page's retry action until the receipt-aware
+      // processor explicitly acknowledges its summary path.
+      if (requireSpeakerReceipt && !hasSpeakerReceiptSummaryCapability(response.headers)) {
+        return const ReprocessFailed(statusCode: 200);
+      }
+      try {
+        return ReprocessSuccess(ServerConversation.fromJson(jsonDecode(response.body) as Map<String, dynamic>));
+      } catch (e) {
+        Logger.debug('reProcessConversationServer decode failed: ${e.runtimeType}');
+        return const ReprocessFailed(statusCode: 200);
+      }
+    case 409:
+      // 409 is busy only with the structured `conversation_processing_in_progress` detail. The same
+      // route answers 409 with a string detail when the selected app is disabled or not enabled:
+      // that is the template failing, not the conversation being busy.
+      return _detailCode(response.body) == 'conversation_processing_in_progress'
+          ? const ReprocessBusy()
+          : const ReprocessFailed(statusCode: 409);
+    case 429:
+      return ReprocessRateLimited(retryAfter: parseApiRetryAfter(response, now));
+    default:
+      return ReprocessFailed(statusCode: response.statusCode);
   }
-  return null;
+}
+
+/// The `detail.code` of an error body (`{"detail": {"code": ..., "message": ...}}`), if any.
+String? _detailCode(String body) {
+  try {
+    // omi-perf-allow: history-json-on-ui -- a small error body, never a conversation list
+    final decoded = jsonDecode(body);
+    final detail = decoded is Map ? decoded['detail'] : null;
+    final code = detail is Map ? detail['code'] : null;
+    return code is String ? code : null;
+  } catch (_) {
+    return null;
+  }
 }
 
 Future<bool> deleteConversationServer(String conversationId) async {
@@ -205,6 +340,7 @@ Future<List<CalendarEventLink>> listGoogleCalendarEvents({
   String? query,
   int maxResults = 20,
 }) async {
+  final cacheOwner = GoogleCalendarService.meetingCacheOwner;
   String url = '${Env.apiBaseUrl}v1/calendar/google/events?max_results=$maxResults';
 
   if (timeMin != null) {
@@ -221,39 +357,22 @@ Future<List<CalendarEventLink>> listGoogleCalendarEvents({
   if (response == null) return [];
   if (response.statusCode == 200) {
     var body = utf8.decode(response.bodyBytes);
-    return (jsonDecode(body) as List<dynamic>)
+    final events = (jsonDecode(body) as List<dynamic>)
         .map(
           (event) =>
               CalendarEventLink.fromGenerated(wire.GeneratedCalendarEventLink.fromJson(event as Map<String, dynamic>)),
         )
         .toList();
+    if (cacheOwner == GoogleCalendarService.meetingCacheOwner) {
+      GoogleCalendarService.rememberMeetings(
+        cacheOwner,
+        events.map((e) => CalendarCaptureWindow(e.eventId, e.startTime, e.endTime)),
+        now: DateTime.now(),
+      );
+    }
+    return events;
   }
   debugPrint('listGoogleCalendarEvents error: ${response.statusCode} - ${response.body}');
-  return [];
-}
-
-/// Fetch calendar events in [start, end] that have no recorded conversation.
-/// Returns capture-gap rows (never conversations), or an empty list on error.
-Future<List<CalendarCaptureGap>> getCalendarCaptureGaps({
-  required DateTime start,
-  required DateTime end,
-}) async {
-  final url =
-      '${Env.apiBaseUrl}v1/calendar/capture-gaps?start=${start.toUtc().toIso8601String()}&end=${end.toUtc().toIso8601String()}';
-  var response = await makeApiCall(url: url, headers: {}, method: 'GET', body: '');
-  if (response == null) return [];
-  if (response.statusCode == 200) {
-    var body = utf8.decode(response.bodyBytes);
-    return (jsonDecode(body) as List<dynamic>)
-        .map(
-          (row) => CalendarCaptureGap.fromGenerated(
-            wire.GeneratedCalendarCaptureGap.fromJson(row as Map<String, dynamic>),
-          ),
-        )
-        .toList();
-  }
-  // 400 means no connected calendar — nothing was captured, so nothing to show.
-  debugPrint('getCalendarCaptureGaps: ${response.statusCode} - ${response.body}');
   return [];
 }
 
@@ -284,6 +403,105 @@ Future<ServerConversation?> getConversationById(String conversationId) async {
   return (await getConversationByIdResult(conversationId)).item;
 }
 
+String conversationCollectionUrl(
+  String baseUrl, {
+  int limit = 50,
+  int offset = 0,
+  List<ConversationStatus> statuses = const [],
+  bool includeDiscarded = false,
+  DateTime? startDate,
+  DateTime? endDate,
+  String? folderId,
+  bool? starred,
+}) {
+  final root = baseUrl.endsWith('/') ? baseUrl : '$baseUrl/';
+  var url =
+      '${root}v1/conversations?include_discarded=$includeDiscarded&limit=$limit&offset=$offset&statuses=${statuses.map((val) => val.toString().split(".").last).join(",")}';
+  if (startDate != null) {
+    url += '&start_date=${startDate.toUtc().toIso8601String()}';
+  }
+  if (endDate != null) {
+    url += '&end_date=${endDate.toUtc().toIso8601String()}';
+  }
+  if (folderId != null) {
+    url += '&folder_id=$folderId';
+  }
+  if (starred != null) {
+    url += '&starred=$starred';
+  }
+  return url;
+}
+
+/// Typed conversation list/detail. Legacy [getConversations]/[getConversationById]
+/// stay for unmigrated callers; 403/503/missing are distinct here instead of null.
+class ConversationApi {
+  ConversationApi({required String baseUrl, ApiSend? send})
+      : _baseUrl = baseUrl.endsWith('/') ? baseUrl : '$baseUrl/',
+        _send = send;
+
+  final String _baseUrl;
+  final ApiSend? _send;
+
+  Future<ApiResult<List<ServerConversation>>> list({
+    int limit = 50,
+    int offset = 0,
+    List<ConversationStatus> statuses = const [],
+    bool includeDiscarded = false,
+    DateTime? startDate,
+    DateTime? endDate,
+    String? folderId,
+    bool? starred,
+  }) async {
+    final sent = await executeApi<String>(
+      request: ApiRequest(
+        url: conversationCollectionUrl(
+          _baseUrl,
+          limit: limit,
+          offset: offset,
+          statuses: statuses,
+          includeDiscarded: includeDiscarded,
+          startDate: startDate,
+          endDate: endDate,
+          folderId: folderId,
+          starred: starred,
+        ),
+        method: 'GET',
+      ),
+      send: _send,
+      decode: (body) => body,
+    );
+    return switch (sent) {
+      ApiFailure(:final problem) => ApiFailure(problem),
+      ApiSuccess(:final data, :final truncated) => switch (decodeApiRows<ServerConversation>(
+          data,
+          ServerConversation.fromJson,
+          fallback: recordFallback,
+        )) {
+          ApiSuccess(:final data, :final rejectedRows) => ApiSuccess(
+              data,
+              rejectedRows: rejectedRows,
+              truncated: truncated,
+            ),
+          ApiFailure(:final problem) => ApiFailure(problem),
+        },
+    };
+  }
+
+  Future<ApiResult<ServerConversation>> byId(String id) {
+    return executeApi<ServerConversation>(
+      request: ApiRequest(url: '${_baseUrl}v1/conversations/$id', method: 'GET'),
+      send: _send,
+      decode: (body) {
+        final decoded = jsonDecode(body);
+        if (decoded is! Map<String, dynamic>) {
+          throw const FormatException('conversation detail is not an object');
+        }
+        return ServerConversation.fromJson(decoded);
+      },
+    );
+  }
+}
+
 /// Fetches conversation-lifetime photo bytes for storage-backed photos. Legacy
 /// inline base64 photos continue to render without a network round trip.
 Future<Uint8List?> getConversationPhotoImage(String conversationId, String photoId) async {
@@ -298,9 +516,13 @@ Future<Uint8List?> getConversationPhotoImage(String conversationId, String photo
   return response!.bodyBytes;
 }
 
+@visibleForTesting
+String conversationTitlePath(String conversationId, String title) =>
+    'v1/conversations/$conversationId/title?title=${Uri.encodeQueryComponent(title)}';
+
 Future<bool> updateConversationTitle(String conversationId, String title) async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/conversations/$conversationId/title?title=$title',
+    url: '${Env.apiBaseUrl}${conversationTitlePath(conversationId, title)}',
     headers: {},
     method: 'PATCH',
     body: '',
@@ -394,6 +616,7 @@ Future<bool> assignBulkConversationTranscriptSegments(
   List<String> segmentIds, {
   bool? isUser,
   String? personId,
+  int? speakerId,
 }) async {
   String assignType;
   String? value;
@@ -406,13 +629,17 @@ Future<bool> assignBulkConversationTranscriptSegments(
   }
 
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/conversations/$conversationId/segments/assign-bulk',
+    url: speakerId == null
+        ? '${Env.apiBaseUrl}v1/conversations/$conversationId/segments/assign-bulk'
+        : '${Env.apiBaseUrl}v1/conversations/$conversationId/assign-speaker/$speakerId?${Uri(queryParameters: {
+                'assign_type': assignType,
+                'value': value ?? 'null'
+              }).query}',
     headers: {},
     method: 'PATCH',
     body: jsonEncode({'segment_ids': segmentIds, 'assign_type': assignType, 'value': value}),
   );
   if (response == null) return false;
-  Logger.debug('assignBulkConversationTranscriptSegments: ${response.body}');
   return response.statusCode == 200;
 }
 
@@ -438,6 +665,27 @@ Future<bool> setConversationStarred(String conversationId, bool starred) async {
   if (response == null) return false;
   Logger.debug('setConversationStarred: ${response.body}');
   return response.statusCode == 200;
+}
+
+enum CaptureGroupSeparationResult { separated, unchanged, failed }
+
+/// Separates [conversationId] from the capture group (one event recorded by
+/// several devices) it belongs to. Sticky on the server: the recording is never
+/// regrouped with the members it left. `unchanged` means it was not grouped.
+Future<CaptureGroupSeparationResult> separateConversationFromCaptureGroup(String conversationId) async {
+  final response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/conversations/$conversationId/capture-group/separate',
+    headers: {},
+    method: 'POST',
+    body: '',
+  );
+  if (response == null || response.statusCode != 200) return CaptureGroupSeparationResult.failed;
+  try {
+    final status = misc_wire.GeneratedStatusResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>).status;
+    return status == 'unchanged' ? CaptureGroupSeparationResult.unchanged : CaptureGroupSeparationResult.separated;
+  } catch (_) {
+    return CaptureGroupSeparationResult.separated;
+  }
 }
 
 Future<bool> setConversationActionItemState(String conversationId, List<int> actionItemsIdx, List<bool> values) async {
@@ -489,10 +737,12 @@ Future<bool> deleteConversationActionItem(String conversationId, ActionItem item
 class UploadFilesResult {
   final String? jobId;
   final SyncLocalFilesResponse? completed;
+  final int pollAfterMs;
 
-  const UploadFilesResult._(this.jobId, this.completed);
-  factory UploadFilesResult.queued(String jobId) => UploadFilesResult._(jobId, null);
-  factory UploadFilesResult.done(SyncLocalFilesResponse result) => UploadFilesResult._(null, result);
+  const UploadFilesResult._(this.jobId, this.completed, this.pollAfterMs);
+  factory UploadFilesResult.queued(String jobId, {int pollAfterMs = 20000}) =>
+      UploadFilesResult._(jobId, null, pollAfterMs);
+  factory UploadFilesResult.done(SyncLocalFilesResponse result) => UploadFilesResult._(null, result, 0);
 
   bool get isQueued => jobId != null;
 }
@@ -510,8 +760,8 @@ class SyncUploadHttpException implements Exception {
 /// Server-provided classification for a sync upload HTTP 429.
 ///
 /// Fair use is deliberately opt-in: an unknown, proxy-generated, or platform
-/// 429 is backend capacity unless the response carries Omi's explicit reason.
-enum SyncRateLimitKind { fairUse, backendCapacity }
+/// 429 is an edge throttle unless the response carries Omi's explicit capacity reason.
+enum SyncRateLimitKind { fairUse, backendCapacity, edgeThrottle }
 
 @visibleForTesting
 bool shouldRequestSyncCaptureManifest(String? conversationId, bool claimLiveCapture) =>
@@ -544,13 +794,16 @@ Future<String?> _createSyncCaptureManifest(List<File> files, String conversation
 
 /// Thrown when a sync upload is rate-limited (HTTP 429).
 /// [retryAfterSeconds] is the server's Retry-After when provided.
+/// [reasonCode] is the bounded `X-Omi-Rate-Limit-Reason` header when present.
 class SyncRateLimitedException implements Exception {
   final SyncRateLimitKind kind;
   final int? retryAfterSeconds;
-  SyncRateLimitedException({required this.kind, this.retryAfterSeconds});
+  final String? reasonCode;
+  final int? statusCode;
+  SyncRateLimitedException({required this.kind, this.retryAfterSeconds, this.reasonCode, this.statusCode});
 
   @override
-  String toString() => 'SyncRateLimitedException(kind=$kind, retryAfter=$retryAfterSeconds)';
+  String toString() => 'SyncRateLimitedException(kind=$kind, retryAfter=$retryAfterSeconds, reason=$reasonCode)';
 }
 
 /// Thrown when the server permanently refuses a recording because its capture
@@ -613,10 +866,72 @@ int? _parseRetryAfterSeconds(http.Response response) {
 /// Classifies a sync 429 without relying on human-readable error text.
 ///
 /// The application-generated restriction response carries this bounded header.
-/// Everything else remains a generic backend-capacity limit.
+/// Everything else is an unclassified throttle, not evidence of global capacity.
 SyncRateLimitKind syncRateLimitKindForResponse(http.Response response) {
+  final reason = syncRateLimitReasonCode(response);
+  if (reason == 'fair_use') return SyncRateLimitKind.fairUse;
+  if (reason == 'backfill_capacity' || reason == 'backfill_paced') return SyncRateLimitKind.backendCapacity;
+  return SyncRateLimitKind.edgeThrottle;
+}
+
+/// Bounded `X-Omi-Rate-Limit-Reason` value, or null when the header is absent.
+String? syncRateLimitReasonCode(http.Response response) {
   final reason = response.headers['x-omi-rate-limit-reason']?.trim().toLowerCase();
-  return reason == 'fair_use' ? SyncRateLimitKind.fairUse : SyncRateLimitKind.backendCapacity;
+  if (reason == null || reason.isEmpty) return null;
+  return reason;
+}
+
+/// Historical-recovery pacing the backend asks the client to wait out.
+///
+/// One predicate for the upload response and the job reconciler. `backfill_paced`
+/// and `backfill_capacity` stay pending and retry on Retry-After; they are not
+/// a second failure taxonomy.
+bool isPacedBackfillReasonCode(String? reasonCode) {
+  switch (reasonCode?.trim().toLowerCase()) {
+    case 'backfill_paced':
+    case 'backfill_capacity':
+      return true;
+    default:
+      return false;
+  }
+}
+
+/// Upload responses that are admission throttles rather than processing failures.
+///
+/// Every 429 is a throttle. A 503 is a throttle only when the backend scopes it
+/// with `backfill_capacity`. An unscoped 503, including job-status finalization
+/// retry and `sync_dispatch_unavailable`, is not this predicate.
+bool isSyncUploadRateLimitResponse(http.Response response) {
+  if (response.statusCode == 429) return true;
+  return response.statusCode == 503 && syncRateLimitReasonCode(response) == 'backfill_capacity';
+}
+
+/// The server still owns these bytes; wait without spending recording retries.
+@visibleForTesting
+bool isSyncContentInProgressResponse(http.Response response) {
+  if (response.statusCode != 409) return false;
+  try {
+    final body = wire.GeneratedSyncContentInProgressResponse.fromJson(
+      jsonDecode(response.body) as Map<String, dynamic>,
+    );
+    return body.code == 'sync_content_in_progress';
+  } catch (_) {
+    return false;
+  }
+}
+
+/// Optional owner id in the additive 409 contract; old servers omit it.
+@visibleForTesting
+UploadFilesResult? syncContentInProgressResult(http.Response response) {
+  if (!isSyncContentInProgressResponse(response)) return null;
+  final body = wire.GeneratedSyncContentInProgressResponse.fromJson(
+    jsonDecode(response.body) as Map<String, dynamic>,
+  );
+  final id = body.jobId;
+  if (id == null || id.trim().isEmpty) return null;
+  final pollAfterMs = body.pollAfterMs ?? 20000;
+  return UploadFilesResult.queued(id,
+      pollAfterMs: max(20000, max(pollAfterMs, (_parseRetryAfterSeconds(response) ?? 10) * 1000)));
 }
 
 /// Upload-only: POST files and return as soon as the server acknowledges
@@ -629,6 +944,10 @@ Future<UploadFilesResult> uploadLocalFilesV2(
   List<File> files, {
   UploadProgressCallback? onUploadProgress,
   String? conversationId,
+  String? captureEvidence,
+  String? recordingSessionId,
+  double? audioStartSeconds,
+  double? audioEndSeconds,
   bool claimLiveCapture = false,
   Geolocation? geolocation,
 }) async {
@@ -638,14 +957,21 @@ Future<UploadFilesResult> uploadLocalFilesV2(
     captureManifest = await _createSyncCaptureManifest(files, conversationId!);
   }
   var url = '${Env.apiBaseUrl}v2/sync-local-files';
-  if (conversationId != null) {
-    url += '?conversation_id=${Uri.encodeQueryComponent(conversationId)}';
+  final query = <String, String>{
+    if (conversationId != null && conversationId.isNotEmpty) 'conversation_id': conversationId,
+    if (recordingSessionId != null && recordingSessionId.isNotEmpty) 'recording_session_id': recordingSessionId,
+    if (audioStartSeconds != null) 'audio_start_seconds': audioStartSeconds.toString(),
+    if (audioEndSeconds != null) 'audio_end_seconds': audioEndSeconds.toString(),
+  };
+  if (query.isNotEmpty) {
+    url += '?${query.entries.map((entry) => '${entry.key}=${Uri.encodeQueryComponent(entry.value)}').join('&')}';
   }
   var response = await makeMultipartApiCall(
     url: url,
     files: files,
     headers: {
       if (captureManifest != null) 'X-Omi-Sync-Capture-Manifest': captureManifest,
+      if (captureEvidence != null) 'X-Omi-Capture-Evidence': captureEvidence,
       if (geolocation != null) 'X-Omi-Conversation-Geolocation': jsonEncode(geolocation.toJson()),
     },
     onUploadProgress: onUploadProgress,
@@ -667,7 +993,7 @@ Future<UploadFilesResult> uploadLocalFilesV2(
     if (start.jobId.isEmpty) {
       throw Exception('Upload accepted but no job id returned');
     }
-    return UploadFilesResult.queued(start.jobId);
+    return UploadFilesResult.queued(start.jobId, pollAfterMs: start.pollAfterMs);
   }
   if (response.statusCode == 400) {
     throw SyncUploadHttpException(response.statusCode, 'Audio file could not be processed by server');
@@ -675,12 +1001,20 @@ Future<UploadFilesResult> uploadLocalFilesV2(
     throw SyncUploadHttpException(response.statusCode, 'Upload authentication failed');
   } else if (response.statusCode == 413) {
     throw SyncUploadHttpException(response.statusCode, 'Audio file is too large to upload');
-  } else if (response.statusCode == 429 ||
-      (response.statusCode == 503 &&
-          response.headers['x-omi-rate-limit-reason']?.trim().toLowerCase() == 'backfill_capacity')) {
+  } else if (isSyncContentInProgressResponse(response)) {
+    final existingJob = syncContentInProgressResult(response);
+    if (existingJob != null) return existingJob;
+    throw SyncRateLimitedException(
+      kind: SyncRateLimitKind.edgeThrottle,
+      retryAfterSeconds: max(60, _parseRetryAfterSeconds(response) ?? 60),
+      reasonCode: 'sync_content_in_progress',
+    );
+  } else if (isSyncUploadRateLimitResponse(response)) {
     throw SyncRateLimitedException(
       kind: syncRateLimitKindForResponse(response),
       retryAfterSeconds: _parseRetryAfterSeconds(response),
+      reasonCode: syncRateLimitReasonCode(response),
+      statusCode: response.statusCode,
     );
   } else if (isSyncRecoveryWindowExceededResponse(response)) {
     throw const SyncRecoveryWindowExceededException();
@@ -693,13 +1027,35 @@ Future<UploadFilesResult> uploadLocalFilesV2(
 /// Why a single job-status fetch did not yield a usable status.
 /// - [notFound]  : 404/403 — job expired, unknown, or not ours. Unrecoverable
 ///                 for this job_id; the caller must fall back to re-upload.
+/// - [throttled] : 429 — stop the pass and honor the account cooldown.
 /// - [transient] : network/5xx/null — retry later, job may still be alive.
-enum SyncJobFetchOutcome { ok, notFound, transient }
+///                 Includes the 503 returned while backfill finalization is
+///                 still retrying: the WAL stays `uploaded`, and this poll is
+///                 not an upload failure.
+enum SyncJobFetchOutcome { ok, notFound, transient, throttled }
+
+/// Maps a job-status HTTP code before the body is parsed.
+///
+/// 503 while a failed backfill job is still finalizing is [SyncJobFetchOutcome.transient]:
+/// keep the local recording pending and poll again. It is not a missing job
+/// and not a terminal failure. Unscoped 5xx on this GET stay transient too;
+/// user-visible upload failures are minted only for admitted upload attempts.
+@visibleForTesting
+SyncJobFetchOutcome syncJobFetchOutcomeForStatusCode(int statusCode) {
+  if (statusCode == 429) return SyncJobFetchOutcome.throttled;
+  if (statusCode == 404 || statusCode == 403) return SyncJobFetchOutcome.notFound;
+  if (statusCode != 200) return SyncJobFetchOutcome.transient;
+  return SyncJobFetchOutcome.ok;
+}
 
 class SyncJobFetch {
   final SyncJobFetchOutcome outcome;
   final SyncJobStatusResponse? status;
-  const SyncJobFetch(this.outcome, [this.status]);
+  final SyncRateLimitedException? rateLimit;
+  const SyncJobFetch(this.outcome, [this.status]) : rateLimit = null;
+  const SyncJobFetch.throttled(this.rateLimit)
+      : outcome = SyncJobFetchOutcome.throttled,
+        status = null;
 }
 
 /// Single GET of a sync job's status — no polling loop. The reconciler owns
@@ -715,7 +1071,15 @@ Future<SyncJobFetch> fetchSyncJobStatus(String jobId) async {
     DebugLogManager.logEvent('fetch_sync_job_status', {'jobId': jobId, 'httpStatus': null, 'outcome': 'transient'});
     return const SyncJobFetch(SyncJobFetchOutcome.transient);
   }
-  if (response.statusCode == 404 || response.statusCode == 403) {
+  final outcome = syncJobFetchOutcomeForStatusCode(response.statusCode);
+  if (outcome == SyncJobFetchOutcome.throttled) {
+    return SyncJobFetch.throttled(SyncRateLimitedException(
+      kind: syncRateLimitKindForResponse(response),
+      retryAfterSeconds: _parseRetryAfterSeconds(response),
+      reasonCode: syncRateLimitReasonCode(response),
+    ));
+  }
+  if (outcome == SyncJobFetchOutcome.notFound) {
     DebugLogManager.logEvent('fetch_sync_job_status', {
       'jobId': jobId,
       'httpStatus': response.statusCode,
@@ -723,7 +1087,7 @@ Future<SyncJobFetch> fetchSyncJobStatus(String jobId) async {
     });
     return const SyncJobFetch(SyncJobFetchOutcome.notFound);
   }
-  if (response.statusCode != 200) {
+  if (outcome == SyncJobFetchOutcome.transient) {
     DebugLogManager.logEvent('fetch_sync_job_status', {
       'jobId': jobId,
       'httpStatus': response.statusCode,
@@ -749,7 +1113,36 @@ Future<SyncJobFetch> fetchSyncJobStatus(String jobId) async {
 /// Convert to UTC first, matching the conversation-list date filter.
 String serializeConversationSearchDateBound(DateTime date) => date.toUtc().toIso8601String();
 
-Future<(List<ServerConversation>, int, int)> searchConversationsServer(
+enum ConversationSearchResultOutcome { success, failure }
+
+/// A search response keeps transport/parse failures distinct from an empty,
+/// successful result. An empty list is valid data only when [outcome] is
+/// [ConversationSearchResultOutcome.success].
+class ConversationSearchResult {
+  final List<ServerConversation> items;
+  final int currentPage;
+  final int totalPages;
+  final ConversationSearchResultOutcome outcome;
+  final int? statusCode;
+
+  const ConversationSearchResult({
+    required this.items,
+    required this.currentPage,
+    required this.totalPages,
+    required this.outcome,
+    this.statusCode,
+  });
+
+  const ConversationSearchResult.failure({this.statusCode})
+      : items = const [],
+        currentPage = 0,
+        totalPages = 0,
+        outcome = ConversationSearchResultOutcome.failure;
+
+  bool get isSuccess => outcome == ConversationSearchResultOutcome.success;
+}
+
+Future<ConversationSearchResult> searchConversationsServerResult(
   String query, {
   int? page,
   int? limit,
@@ -763,6 +1156,8 @@ Future<(List<ServerConversation>, int, int)> searchConversationsServer(
     url: '${Env.apiBaseUrl}v1/conversations/search',
     headers: {},
     method: 'POST',
+    timeout: const Duration(seconds: 15),
+    retries: 0,
     body: jsonEncode({
       'query': query,
       'page': page ?? 1,
@@ -773,15 +1168,51 @@ Future<(List<ServerConversation>, int, int)> searchConversationsServer(
       if (speakerId != null) 'speaker_id': speakerId,
     }),
   );
-  if (response == null) return (<ServerConversation>[], 0, 0);
+  if (response == null) return const ConversationSearchResult.failure();
   if (response.statusCode == 200) {
-    final data = wire.GeneratedSearchConversationsResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
-    // Search items are ConversationSearchItem (includes match_snippets); parse via JSON so
-    // ServerConversation keeps seek-to-moment evidence without widening GeneratedConversation.
-    final convos = data.items.map((conversation) => ServerConversation.fromJson(conversation.toJson())).toList();
-    return (convos, data.currentPage, data.totalPages);
+    try {
+      final data = wire.GeneratedSearchConversationsResponse.fromJson(
+        jsonDecode(response.body) as Map<String, dynamic>,
+      );
+      // Search items are ConversationSearchItem (includes match_snippets); parse via JSON so
+      // ServerConversation keeps seek-to-moment evidence without widening GeneratedConversation.
+      final convos = data.items.map((conversation) => ServerConversation.fromJson(conversation.toJson())).toList();
+      return ConversationSearchResult(
+        items: convos,
+        currentPage: data.currentPage,
+        totalPages: data.totalPages,
+        outcome: ConversationSearchResultOutcome.success,
+        statusCode: response.statusCode,
+      );
+    } catch (e) {
+      Logger.debug('searchConversationsServer parse error: $e');
+      return ConversationSearchResult.failure(statusCode: response.statusCode);
+    }
   }
-  return (<ServerConversation>[], 0, 0);
+  return ConversationSearchResult.failure(statusCode: response.statusCode);
+}
+
+/// Compatibility tuple for callers that do not yet consume typed outcomes.
+/// New product journeys should use [searchConversationsServerResult].
+Future<(List<ServerConversation>, int, int)> searchConversationsServer(
+  String query, {
+  int? page,
+  int? limit,
+  bool includeDiscarded = true,
+  DateTime? startDate,
+  DateTime? endDate,
+  String? speakerId,
+}) async {
+  final result = await searchConversationsServerResult(
+    query,
+    page: page,
+    limit: limit,
+    includeDiscarded: includeDiscarded,
+    startDate: startDate,
+    endDate: endDate,
+    speakerId: speakerId,
+  );
+  return (result.items, result.currentPage, result.totalPages);
 }
 
 Future<String> testConversationPrompt(String prompt, String conversationId) async {
@@ -834,7 +1265,9 @@ Future<ActionItemsResponse> getActionItems({
   }
 }
 
-Future<List<App>> getConversationSuggestedApps(String conversationId) async {
+/// The templates the server suggests for this conversation; null when the request failed (an
+/// empty list is a real "no suggestions").
+Future<List<App>?> getConversationSuggestedApps(String conversationId) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/conversations/$conversationId/suggested-apps',
     headers: {},
@@ -842,15 +1275,18 @@ Future<List<App>> getConversationSuggestedApps(String conversationId) async {
     body: '',
   );
 
-  if (response == null) return [];
-  Logger.debug('getConversationSuggestedApps: ${response.body}');
-  if (response.statusCode == 200) {
+  if (response == null) return null;
+  Logger.debug('getConversationSuggestedApps: ${response.statusCode}');
+  if (response.statusCode != 200) return null;
+  try {
     final data = apps_wire.GeneratedConversationSuggestedAppsResponse.fromJson(
       jsonDecode(response.body) as Map<String, dynamic>,
     );
     return data.suggestedApps.map(App.fromGeneratedDetail).toList();
+  } catch (e) {
+    Logger.debug('getConversationSuggestedApps decode failed: ${e.runtimeType}');
+    return null;
   }
-  return [];
 }
 
 // *********************************

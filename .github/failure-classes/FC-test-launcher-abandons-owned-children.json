@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-test-launcher-abandons-owned-children",
+  "violated_contract": "A test launcher that starts a process owns that process and the descendants that stay in its session or keep its ownership token. Success, failure, SIGINT, and SIGTERM must reap that set within a bounded deadline, and a reused pid whose start identity does not match must not be signalled.",
+  "canonical_prevention": "Launch the owned command through the process supervisor, record the leader pid, process group, start identity, and an unguessable token, and reap only that set on exit, signal, timeout, and launcher death. Behavioral tests start synthetic children, including a setsid grandchild, and prove none survive those paths while a foreign process stays alive.",
+  "canonical_prevention_artifact": [
+    "desktop/macos/tests/test-owned-process-lifecycle.sh",
+    "desktop/macos/tests/test-fault-suite-owned-app-cleanup.sh"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "desktop/macos/scripts/",
+    "desktop/macos/tests/"
+  ],
+  "status": "open"
+}

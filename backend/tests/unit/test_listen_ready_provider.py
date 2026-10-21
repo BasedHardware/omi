@@ -27,6 +27,13 @@ from utils.stt import provider_resilience, streaming
 from utils.stt.streaming import STTService
 
 
+@pytest.fixture(autouse=True)
+def _byok_provider_route(monkeypatch):
+    # BYOK sessions still use the legacy connector; managed sessions always
+    # follow the configured chain after the connect-order graduation.
+    monkeypatch.setattr('utils.byok.get_byok_keys', lambda: {'deepgram': 'test-key'})
+
+
 @pytest.fixture
 def anyio_backend():
     return 'asyncio'
@@ -235,11 +242,13 @@ def test_ready_provider_is_resolved_at_emission_time_not_at_selection():
 async def test_bootstrap_records_the_selected_provider_for_fallback_comparison(monkeypatch):
     """``_bootstrap`` must keep the selected provider so ``ready`` can spot a fallback."""
     import routers.listen.runtime as runtime_module
+    from config.policy.listen import resolve_listen_policy
     from utils.listen_session_bootstrap import ListenConnectBase
 
     runtime = object.__new__(ListenSessionRuntime)
     runtime.request = ListenRequest(websocket=SimpleNamespace(), uid='select-user', stt_service='parakeet')
     runtime.use_custom_stt = False
+    runtime.is_multi_channel = False
     runtime.session_id = 'select-session'
     runtime.language = 'en'
 
@@ -256,6 +265,12 @@ async def test_bootstrap_records_the_selected_provider_for_fallback_comparison(m
         raise AssertionError('bootstrap must not close the socket in this test')
 
     monkeypatch.setattr(runtime_module, 'load_listen_connect_base', lambda *_a, **_k: _resolved(base))
+    # Policy storage is outside this provider-selection regression.
+    monkeypatch.setattr(
+        runtime_module,
+        'initialize_session_policy',
+        AsyncMock(return_value=resolve_listen_policy('select-user', flags={})),
+    )
     monkeypatch.setattr(
         runtime_module,
         'get_stt_service_for_language',

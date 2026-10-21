@@ -61,6 +61,7 @@ dependency_exists_in_bundle() {
     "$EXECUTABLE_DIR"
     "$CONTENTS_DIR/Resources"
     "$CONTENTS_DIR/Resources/Omi Computer_Omi Computer.bundle"
+    "$CONTENTS_DIR/Resources/Omi Computer_Omi Computer.bundle/Contents/Resources"
     "$CONTENTS_DIR/Resources/agent"
     "$CONTENTS_DIR/Resources/pi-mono-extension"
   )
@@ -232,6 +233,10 @@ done < <(
 )
 
 node_bin="$CONTENTS_DIR/Resources/Omi Computer_Omi Computer.bundle/Contents/Resources/node"
+resource_bundle="$CONTENTS_DIR/Resources/Omi Computer_Omi Computer.bundle"
+if [[ ! -f "$resource_bundle/Contents/Resources/ffmpeg" && ! -f "$resource_bundle/ffmpeg" ]]; then
+  report_error "bundled ffmpeg is missing from both SwiftPM resource layouts: $resource_bundle"
+fi
 if [[ -x "$node_bin" ]]; then
   "$node_bin" --version >/dev/null 2>&1 || report_error "bundled node failed runtime probe: $node_bin"
   codesign --verify --verbose=1 "$node_bin" >/dev/null 2>&1 || report_error "bundled node failed codesign verification: $node_bin"

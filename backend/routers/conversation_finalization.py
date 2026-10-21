@@ -4,10 +4,13 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 from typing import Any
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
+
+from config.summary_guarantee import enabled as summary_deadline_enabled
 
 from database import conversation_finalization_jobs as jobs_db
 from database.sync_jobs import release_job_run_lock, try_acquire_job_run_lock
@@ -18,21 +21,33 @@ from services.conversation_finalization import (
 from utils.cloud_tasks import verify_listen_finalization_cloud_tasks_oidc
 from utils.account_cutover.access import should_skip_background_account_mutation
 from utils.conversations import lifecycle as lifecycle_service
+from utils.conversations.processing_trigger import trigger_for_finalization_job
+from utils.conversations.recovery import RecoveryStructureUnavailableError, recovery_minimum_terminal_enabled
 from utils.conversations.finalizer import (
     ConversationFinalizationDisposition,
     ConversationFinalizationError,
     finalize_persisted_conversation,
 )
-from utils.executors import db_executor, run_blocking
+from utils.executors import db_executor, postprocess_executor, sync_executor, run_blocking
 from utils.metrics import LISTEN_FINALIZATION_RETRIES_TOTAL
 from utils.observability.journeys import (
     record_capture_finalization_terminal,
     record_conversation_finalization_client_terminal,
 )
+from utils.observability.finalization import finalization_diagnostic_id
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+def _durable_attempt_cap_enabled() -> bool:
+    return os.getenv('LISTEN_FINALIZATION_DURABLE_ATTEMPT_CAP_ENABLED', 'true').strip().lower() in {
+        '1',
+        'true',
+        'yes',
+        'on',
+    }
 
 
 def _parse_task_payload(payload: Any) -> tuple[str, int] | None:
@@ -53,18 +68,23 @@ async def _retry_or_dead_letter(
     dispatch_generation: int,
     lease_epoch: int,
     task_retry_count: int,
+    failed_attempts: int,
     reason: str,
 ) -> bool:
     """Record a task failure; return whether this was the terminal delivery."""
     max_attempts = get_listen_finalization_tasks_max_attempts_for_worker()
-    if task_retry_count >= max_attempts - 1:
+    # Cloud Tasks resets its retry header when reconciliation issues a new
+    # dispatch generation. The job's failed-processing count survives that
+    # handoff and is the authoritative budget (as on the pusher path).
+    this_attempt = max(task_retry_count, failed_attempts) + 1
+    if this_attempt >= max_attempts:
         marked_dead_letter = await run_blocking(
             db_executor,
             final_attempt_failed,
             job_id,
             dispatch_generation,
             lease_epoch,
-            task_retry_count + 1,
+            this_attempt,
         )
         if not marked_dead_letter:
             return False
@@ -88,14 +108,37 @@ async def run_listen_finalization_job(
     task_retry_count: int = Depends(verify_listen_finalization_cloud_tasks_oidc),
 ):
     try:
-        parsed = _parse_task_payload(await request.json())
+        payload = await request.json()
     except Exception:
-        parsed = None
+        payload = None
+    if isinstance(payload, dict) and payload.get('kind') == 'sync_reprocess':
+        # The same OIDC identity owns both durable queues. This preserves the
+        # existing outbox protocol for listen/pusher hosts without sync bindings.
+        from utils.batch_pipeline.enrichment import run_enrichment
+
+        if set(payload) != {'kind', 'key', 'task_token'}:
+            return JSONResponse(status_code=400, content={'status': 'invalid_enrichment_task'})
+        try:
+            executor = postprocess_executor if summary_deadline_enabled() else sync_executor
+            status = await run_blocking(executor, run_enrichment, payload['key'], payload['task_token'])
+            if status == 'busy':
+                logger.info('event=conversation_finalization_sync_reprocess outcome=busy')
+                return JSONResponse(status_code=409, content={'status': status})
+            return JSONResponse(status_code=200, content={'status': status})
+        except (ValueError, TypeError):
+            return JSONResponse(status_code=400, content={'status': 'invalid_enrichment_task'})
+        except Exception:
+            return JSONResponse(status_code=503, content={'status': 'retry'})
+    parsed = _parse_task_payload(payload)
     if parsed is None:
         logger.warning('listen finalization handler dropped invalid opaque task payload')
         return JSONResponse(status_code=200, content={'status': 'dropped', 'reason': 'invalid_payload'})
 
     job_id, dispatch_generation = parsed
+    from utils.conversations.demand_processing import admit
+
+    if not await run_blocking(db_executor, admit, job_id, token=dispatch_generation):
+        return JSONResponse(status_code=200, content={'status': 'priority_wait'})
     lock_key = f'listen-finalization:{job_id}'
     lock_token = await run_blocking(db_executor, try_acquire_job_run_lock, lock_key)
     if not lock_token:
@@ -103,6 +146,7 @@ async def run_listen_finalization_job(
 
     release_lock = True
     claimed_lease_epoch: int | None = None
+    failed_attempts = 0
     job: dict[str, Any] | None = None
     try:
         claim = await run_blocking(
@@ -110,6 +154,7 @@ async def run_listen_finalization_job(
             jobs_db.claim_finalization_job,
             job_id,
             dispatch_generation,
+            count_worker_claim=True,
         )
         claim_status = claim['status']
         if claim_status == 'completed':
@@ -129,6 +174,7 @@ async def run_listen_finalization_job(
         if claim_status != 'claimed':
             return JSONResponse(status_code=200, content={'status': 'dropped', 'reason': claim_status})
         claimed_lease_epoch = claim['lease_epoch']
+        failed_attempts = int(claim.get('attempt_count') or 0) if _durable_attempt_cap_enabled() else 0
         if claimed_lease_epoch is None:
             logger.error('listen finalization claim returned no lease epoch job=%s', job_id)
             return JSONResponse(status_code=500, content={'status': 'retry'})
@@ -136,10 +182,13 @@ async def run_listen_finalization_job(
         job = await run_blocking(db_executor, jobs_db.get_finalization_job, job_id)
         if not job or not isinstance(job.get('uid'), str) or not isinstance(job.get('conversation_id'), str):
             terminal = await _retry_or_dead_letter(
-                job_id, dispatch_generation, claimed_lease_epoch, task_retry_count, 'invalid_job'
+                job_id, dispatch_generation, claimed_lease_epoch, task_retry_count, failed_attempts, 'invalid_job'
             )
             if terminal:
-                logger.error('listen finalization final attempt failed job=%s error=invalid_job', job_id)
+                logger.error(
+                    'listen finalization final attempt failed job_hash=%s error=invalid_job',
+                    finalization_diagnostic_id(job_id),
+                )
                 return JSONResponse(status_code=200, content={'status': 'dead_letter'})
             return JSONResponse(status_code=500, content={'status': 'retry'})
 
@@ -158,6 +207,37 @@ async def run_listen_finalization_job(
             record_conversation_finalization_client_terminal('cancelled', job)
             return JSONResponse(status_code=200, content={'status': 'skipped', 'reason': 'account_cutover'})
 
+        # A killed worker cannot record its failure. Its fenced claim still
+        # consumed a durable slot, so close an already exhausted generation
+        # before paying for another processing attempt.
+        if (
+            _durable_attempt_cap_enabled()
+            and failed_attempts >= get_listen_finalization_tasks_max_attempts_for_worker()
+        ):
+            if job.get('fanout_status') == 'completed':
+                completed = await run_blocking(
+                    db_executor, jobs_db.mark_finalization_completed, job_id, dispatch_generation, claimed_lease_epoch
+                )
+                if not completed:
+                    return JSONResponse(status_code=409, content={'status': 'completion_conflict'})
+                record_capture_finalization_terminal('success', job.get('created_at'))
+                record_conversation_finalization_client_terminal('success', job)
+                logger.info(
+                    'listen finalization completed committed fanout job_hash=%s', finalization_diagnostic_id(job_id)
+                )
+                return JSONResponse(status_code=200, content={'status': 'done'})
+            terminal = await run_blocking(
+                db_executor, final_attempt_failed, job_id, dispatch_generation, claimed_lease_epoch, failed_attempts
+            )
+            if terminal:
+                logger.error(
+                    'listen finalization attempt budget exhausted job_hash=%s failed_attempts=%s',
+                    finalization_diagnostic_id(job_id),
+                    failed_attempts,
+                )
+                return JSONResponse(status_code=200, content={'status': 'dead_letter'})
+            return JSONResponse(status_code=409, content={'status': 'completion_conflict'})
+
         try:
             disposition = await finalize_persisted_conversation(
                 job['uid'],
@@ -165,18 +245,58 @@ async def run_listen_finalization_job(
                 finalization_job_id=job_id,
                 dispatch_generation=dispatch_generation,
                 lease_epoch=claimed_lease_epoch,
-                force_process=bool(job.get('force_process')),
-                final_attempt=task_retry_count >= get_listen_finalization_tasks_max_attempts_for_worker() - 1,
+                trigger=trigger_for_finalization_job(job),
+                final_attempt=max(task_retry_count, failed_attempts)
+                >= get_listen_finalization_tasks_max_attempts_for_worker() - 1,
             )
-        except ConversationFinalizationError:
+        except ConversationFinalizationError as error:
+            if recovery_minimum_terminal_enabled() and isinstance(error.__cause__, RecoveryStructureUnavailableError):
+                # A completed fanout wins even if its worker failed before
+                # acknowledging the job. The lease-fenced transaction also
+                # preserves a still-bound conversation as visible transcript.
+                if job.get('fanout_status') == 'completed':
+                    completed = await run_blocking(
+                        db_executor,
+                        jobs_db.mark_finalization_completed,
+                        job_id,
+                        dispatch_generation,
+                        claimed_lease_epoch,
+                    )
+                    if not completed:
+                        return JSONResponse(status_code=409, content={'status': 'completion_conflict'})
+                    return JSONResponse(status_code=200, content={'status': 'done'})
+                terminal = await run_blocking(
+                    db_executor,
+                    final_attempt_failed,
+                    job_id,
+                    dispatch_generation,
+                    claimed_lease_epoch,
+                    max(task_retry_count, failed_attempts) + 1,
+                    failure_code='recovery_structure_unavailable',
+                )
+                if not terminal:
+                    return JSONResponse(status_code=409, content={'status': 'completion_conflict'})
+                logger.error(
+                    'listen finalization recovery minimum terminal job_hash=%s dispatch_generation=%s',
+                    finalization_diagnostic_id(job_id),
+                    dispatch_generation,
+                )
+                return JSONResponse(status_code=200, content={'status': 'dead_letter'})
             terminal = await _retry_or_dead_letter(
-                job_id, dispatch_generation, claimed_lease_epoch, task_retry_count, 'processing_failed'
+                job_id, dispatch_generation, claimed_lease_epoch, task_retry_count, failed_attempts, 'processing_failed'
             )
             if terminal:
-                logger.error('listen finalization final attempt failed job=%s failure=processing_failed', job_id)
+                logger.error(
+                    'listen finalization final attempt failed job_hash=%s failure=processing_failed',
+                    finalization_diagnostic_id(job_id),
+                )
                 return JSONResponse(status_code=200, content={'status': 'dead_letter'})
             return JSONResponse(status_code=500, content={'status': 'retry'})
 
+        if disposition == ConversationFinalizationDisposition.deferred:
+            # Acknowledge this delivery: the queued durable job is re-dispatched
+            # by reconciliation with a new generation, not a retry-header budget.
+            return JSONResponse(status_code=200, content={'status': 'deferred'})
         if disposition == ConversationFinalizationDisposition.fenced:
             completed = await run_blocking(
                 db_executor,
@@ -202,12 +322,19 @@ async def run_listen_finalization_job(
         else:
             record_capture_finalization_terminal('success', accepted_at)
             record_conversation_finalization_client_terminal('success', job)
+            logger.info('listen finalization completed job_hash=%s', finalization_diagnostic_id(job_id))
         return JSONResponse(status_code=200, content={'status': 'done'})
     except asyncio.CancelledError:
         release_lock = False
         logger.warning('listen finalization handler cancelled job=%s; preserving run lock until TTL', job_id)
         raise
-    except Exception:
+    except Exception as error:
+        logger.warning(
+            'listen finalization worker failed stage=handler exception_type=%s job_hash=%s dispatch_generation=%s',
+            type(error).__name__,
+            finalization_diagnostic_id(job_id),
+            dispatch_generation,
+        )
         if claimed_lease_epoch is not None:
             try:
                 terminal = await _retry_or_dead_letter(
@@ -215,13 +342,17 @@ async def run_listen_finalization_job(
                     dispatch_generation,
                     claimed_lease_epoch,
                     task_retry_count,
+                    failed_attempts,
                     'worker_failed',
                 )
             except Exception:
                 logger.error('listen finalization recovery update failed job=%s failure=worker_failed', job_id)
             else:
                 if terminal:
-                    logger.error('listen finalization final attempt failed job=%s failure=worker_failed', job_id)
+                    logger.error(
+                        'listen finalization final attempt failed job_hash=%s failure=worker_failed',
+                        finalization_diagnostic_id(job_id),
+                    )
                     return JSONResponse(status_code=200, content={'status': 'dead_letter'})
                 return JSONResponse(status_code=500, content={'status': 'retry'})
         logger.error('listen finalization handler failed job=%s failure=worker_failed', job_id)

@@ -1,9 +1,17 @@
+import asyncio
 import copy
 import hashlib
 import json
+import os
+import sys
+from collections import OrderedDict
+from contextlib import contextmanager
+from contextvars import ContextVar
 from datetime import datetime, timezone
 from functools import wraps
-from typing import Any, Callable, Dict, List, Optional, TypedDict, cast
+from threading import RLock
+from typing import Any, Callable, Dict, Iterator, List, Optional, TypedDict, cast
+from database.dream_dirty import after_write
 
 try:
     from google.api_core.exceptions import NotFound as FirestoreNotFound  # type: ignore[reportAssignmentType]  # fallback class below rebinds the name in stub-less test envs
@@ -17,8 +25,12 @@ from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 from google.cloud.firestore_v1 import transactional  # type: ignore[reportUnknownVariableType]  # firestore transactional decorator is untyped
 
+from utils.memory.index_window_cursor import BookmarkDict, decode_cursor, query_scope
+from utils.observability.fallback import record_fallback
+
 from config.memory_confidence import SOURCE_SIGNAL_CAPTURE_PRIORS
-from database import memory_ledger
+from config import firestore_read_levers
+from database import memory_ledger, memory_source_index
 from database.firestore_index_registry import (
     CANONICAL_MEMORIES_CAPTURED_RANGE_QUERY,
     MEMORIES_CREATED_RANGE_QUERY,
@@ -26,19 +38,204 @@ from database.firestore_index_registry import (
     UNIVERSAL_HISTORICAL_UPDATED_LIST_SCAN_QUERY,
 )
 from database.memory_collections import MemoryCollections
+from database.memory_list_index import (
+    MemoryListIndexState,
+    memory_passes_list_visibility as _memory_passes_list_visibility,
+    merge_memory_list_index_docs,
+)
 from database.legal_holds import external_write_fence
 from database import short_term_memories as short_term_db
 from ._client import get_firestore_client
 from models.memories import confidence_fields_for_evidence, merge_evidence_sets
 from utils import encryption
-from utils.other.list_budget import ListReadBudget, budgeted_get_all, budgeted_stream_list
+from utils.other.list_budget import ListReadBudget, ListReadBudgetExhausted, budgeted_get_all, budgeted_stream_list
+from utils.other.portability_read import current_portability_read, verified_encrypted_read
 from .helpers import set_data_protection_level, prepare_for_write, prepare_for_read
 import logging
+
+BATCH_LIMIT = 500  # Firestore hard limit
 
 logger = logging.getLogger(__name__)
 
 memories_collection = 'memories'
 users_collection = 'users'
+
+
+def _historical_scan_memo_cap(name: str, default: int) -> int:
+    try:
+        return max(0, int(os.environ.get(name, str(default))))
+    except ValueError:
+        return default
+
+
+def _historical_scan_memo_bytes(value: Any) -> int:
+    """Recursively size retained Firestore payload containers, counting shared objects once."""
+    seen: set[int] = set()
+
+    def size(item: Any) -> int:
+        if id(item) in seen:
+            return 0
+        seen.add(id(item))
+        total = sys.getsizeof(item)
+        if isinstance(item, dict):
+            total += sum(size(key) + size(child) for key, child in item.items())
+        elif isinstance(item, (list, tuple)):
+            total += sum(size(child) for child in item)
+        return total
+
+    return size(value)
+
+
+def _historical_scan_task() -> Any:
+    try:
+        return asyncio.current_task()
+    except RuntimeError:  # Blocking executor threads have no event loop.
+        return None
+
+
+class _HistoricalScanMemo:
+    def __init__(self, uid: str) -> None:
+        self.uid = uid
+        self.owner_task = _historical_scan_task()
+        self.entries: OrderedDict[tuple[Any, ...], tuple[Any, Any, Any, Any, int]] = OrderedDict()
+        self.max_entries = _historical_scan_memo_cap('FIRESTORE_HISTORICAL_SCAN_MEMO_MAX_ENTRIES', 64)
+        self.max_bytes = _historical_scan_memo_cap('FIRESTORE_HISTORICAL_SCAN_MEMO_MAX_BYTES', 8 * 1024 * 1024)
+        self.payload_bytes = 0
+        self.generation = 0
+        self.writers = 0
+        self.closed = False
+        self.lock = RLock()
+
+    def clear(self) -> None:
+        # Called under lock, including on entry/exit of each writer. Generations
+        # prevent an in-flight pre-write scan from repopulating after a fence.
+        self.entries.clear()
+        self.payload_bytes = 0
+        self.generation += 1
+
+
+_historical_scan_memo: ContextVar[Optional[_HistoricalScanMemo]] = ContextVar('historical_scan_memo', default=None)
+
+
+@contextmanager
+def historical_scan_memo_scope(uid: str) -> Iterator[None]:
+    """Wrap exactly one sync-task attempt; never initialize implicitly on a read.
+
+    Explicitly copied executor contexts may participate in this attempt. A
+    different asyncio task cannot reuse the owner's entries, and a context
+    retained after scope exit sees a closed memo. Each retry needs a fresh scope.
+    No scope (or lever off) preserves the original Firestore path.
+    """
+    if not firestore_read_levers.lever_enabled('historical_scan_memo', uid):
+        yield
+        return
+    previous = _historical_scan_memo.get()
+    if previous is not None:
+        with previous.lock:
+            previous.clear()
+    memo = _HistoricalScanMemo(uid)
+    token = _historical_scan_memo.set(memo)
+    try:
+        yield
+    finally:
+        with memo.lock:
+            memo.closed = True
+            memo.clear()
+        _historical_scan_memo.reset(token)
+        if previous is not None:
+            # Nested scopes must not restore pages from before their writes.
+            with previous.lock:
+                previous.clear()
+
+
+@contextmanager
+def historical_scan_memo_suspended() -> Iterator[None]:
+    """Read fresh pages: a scan that builds the source index must postdate its epoch read.
+
+    Reads only. A write inside this block would not fence the outer memo.
+    """
+    token = _historical_scan_memo.set(None)
+    try:
+        yield
+    finally:
+        _historical_scan_memo.reset(token)
+
+
+def _active_historical_scan_memo(uid: str) -> Optional[_HistoricalScanMemo]:
+    memo = _historical_scan_memo.get()
+    if memo is None or memo.closed or memo.uid != uid:
+        return None
+    task = _historical_scan_task()
+    if task is not None and task is not memo.owner_task:
+        return None
+    return memo
+
+
+def _historical_scan_write(function: Callable[..., Any]) -> Callable[..., Any]:
+    """Fence the complete synchronous write, including transaction callbacks/retries.
+
+    Also invalidates the owner's historical source index around the write. Use
+    ``_historical_scan_write_without_new_sources`` only for a write that can
+    never add a conversation reference, make a hidden row live again, or move
+    a row that stays live in the scan's ``updated_at``/``created_at`` order.
+    """
+    memo_fenced = _historical_scan_write_without_new_sources(function)
+
+    @wraps(function)
+    def wrapped(uid: str, *args: Any, **kwargs: Any) -> Any:
+        with memory_source_index.fence(uid, kwargs.get('firestore_client')):
+            return memo_fenced(uid, *args, **kwargs)
+
+    return wrapped
+
+
+def _historical_scan_write_without_new_sources(function: Callable[..., Any]) -> Callable[..., Any]:
+    """Memo fence only: deletes, invalidation, unlocks, re-encryption and flags.
+
+    These shrink (or keep) the set of conversation ids live historical rows
+    name and leave every still-live row's timestamps alone, so a concurrent
+    scan cannot miss a row and a stored index stays a valid superset.
+    """
+
+    @wraps(function)
+    def wrapped(uid: str, *args: Any, **kwargs: Any) -> Any:
+        # Invalidate even if rollout changed to OFF after this scope was opened.
+        memo = _historical_scan_memo.get()
+        if memo is None or memo.closed or memo.uid != uid:
+            return function(uid, *args, **kwargs)
+        with _historical_scan_mutation(memo):
+            return function(uid, *args, **kwargs)
+
+    return wrapped
+
+
+def _historical_scan_transaction_write(function: Callable[..., Any]) -> Callable[..., Any]:
+    """Wrap outside @transactional so the fence covers commit and retries too."""
+
+    @wraps(function)
+    def wrapped(transaction: Any, uid: str, *args: Any, **kwargs: Any) -> Any:
+        client = kwargs.get('firestore_client') or getattr(transaction, '_client', None)
+        with memory_source_index.fence(uid, client):
+            memo = _historical_scan_memo.get()
+            if memo is None or memo.closed or memo.uid != uid:
+                return function(transaction, uid, *args, **kwargs)
+            with _historical_scan_mutation(memo):
+                return function(transaction, uid, *args, **kwargs)
+
+    return wrapped
+
+
+@contextmanager
+def _historical_scan_mutation(memo: _HistoricalScanMemo) -> Iterator[None]:
+    with memo.lock:
+        memo.clear()
+        memo.writers += 1
+    try:
+        yield
+    finally:
+        with memo.lock:
+            memo.clear()
+            memo.writers -= 1
 
 
 def _account_write_gated(function: Callable[..., Any]) -> Callable[..., Any]:
@@ -54,7 +251,12 @@ def _destination_account_write_gated(function: Callable[..., Any]) -> Callable[.
     @wraps(function)
     def wrapped(prev_uid: str, new_uid: str, *args: Any, **kwargs: Any) -> Any:
         with external_write_fence(new_uid, firestore_client=kwargs.get("firestore_client")):
-            return function(prev_uid, new_uid, *args, **kwargs)
+            with memory_source_index.fence(new_uid, kwargs.get("firestore_client")):
+                memo = _historical_scan_memo.get()
+                if memo is None or memo.closed or memo.uid != new_uid:
+                    return function(prev_uid, new_uid, *args, **kwargs)
+                with _historical_scan_mutation(memo):
+                    return function(prev_uid, new_uid, *args, **kwargs)
 
     return wrapped
 
@@ -125,6 +327,7 @@ def _get_db(firestore_client: Any = None) -> Any:
     return firestore_client if firestore_client is not None else get_firestore_client()
 
 
+@_historical_scan_write_without_new_sources  # only caller sets kg_extracted, never a source
 def _update_memory_if_exists(
     uid: str,
     memory_id: str,
@@ -154,11 +357,6 @@ def get_memory_ids(uid: str, *, firestore_client: Any = None) -> List[str]:
     return [doc.id for doc in coll.select([]).stream()]
 
 
-# *********************************
-# ******* ENCRYPTION HELPERS ******
-# *********************************
-
-
 def _encrypt_memory_data(memory_data: Dict[str, Any], uid: str) -> Dict[str, Any]:
     data = copy.deepcopy(memory_data)
 
@@ -172,17 +370,21 @@ def _encrypt_memory_data(memory_data: Dict[str, Any], uid: str) -> Dict[str, Any
 def _decrypt_memory_data(memory_data: Dict[str, Any], uid: str) -> Dict[str, Any]:
     data = copy.deepcopy(memory_data)
 
+    in_portability_export = current_portability_read() is not None
     if 'content' in data and isinstance(data['content'], str):
+        raw_content = data['content']
         try:
-            data['content'] = encryption.decrypt(data['content'], uid)
+            data['content'] = encryption.decrypt(raw_content, uid)
         except Exception:
             pass
+        data['content'] = verified_encrypted_read(raw_content, data['content'])
     if 'evidence' in data and isinstance(data['evidence'], str):
         try:
-            decrypted = encryption.decrypt(data['evidence'], uid)
+            decrypted = verified_encrypted_read(data['evidence'], encryption.decrypt(data['evidence'], uid))
             data['evidence'] = json.loads(decrypted)
         except Exception:
-            pass
+            if in_portability_export:
+                raise
     return data
 
 
@@ -241,47 +443,44 @@ _MEMORY_LIST_CANDIDATE_WINDOW_MAX = 5000
 _MEMORY_SCORING_VISIBLE_PAGE_SCAN_SLACK = 2000
 
 
-def _memory_passes_list_visibility(memory: Dict[str, Any], *, include_invalidated: bool) -> bool:
-    """Return whether a historical memory row should appear in list/read results.
-
-    Product rule: exclude user-rejected rows (``user_review is False``) and, unless
-    ``include_invalidated``, exclude superseded/retracted rows (``invalid_at`` set).
-
-    This cannot be expressed as a Firestore ``where`` without changing results for
-    legacy documents: inequality / ``not-in`` / ``!=`` exclude docs missing the
-    field, while ``== None`` only matches an explicit null — not a missing field.
-    Missing ``user_review`` and missing ``invalid_at`` both mean "still visible"
-    (see #4498). Closest safe query: omit those predicates and filter here.
-    """
-    return memory.get('user_review') is not False and (include_invalidated or memory.get('invalid_at') is None)
-
-
-def _memory_list_sort_key(memory: Dict[str, Any]) -> tuple[float, str]:
-    value = memory.get('updated_at') or memory.get('created_at')
-    if isinstance(value, str):
-        try:
-            value = datetime.fromisoformat(value.replace('Z', '+00:00'))
-        except ValueError:
-            value = None
-    if not isinstance(value, datetime):
-        timestamp = float('-inf')
-    else:
-        if value.tzinfo is None:
-            value = value.replace(tzinfo=timezone.utc)
-        timestamp = value.timestamp()
-    return (-timestamp, str(memory.get('id') or ''))
-
-
 def _stream_memory_list_index_window(
     memories_ref: Any,
     order_field: str,
     candidate_limit: int,
     *,
     budget: Optional[ListReadBudget] = None,
+    cursor_snapshot: Any = None,
+    uid: Optional[str] = None,
+    cursor: Optional[str] = None,
+    full_documents: bool = False,
 ) -> List[Any]:
+    if uid is not None and cursor is not None and firestore_read_levers.lever_enabled("memory_list_index_window", uid):
+        try:
+            position = decode_cursor(cursor, query_scope({"uid": uid, "order": order_field})) if cursor else None
+        except ValueError:
+            record_fallback(
+                component='firestore_read',
+                from_mode='cursor_page',
+                to_mode='offset_read',
+                reason='other',
+                outcome='degraded',
+                log=logger,
+            )
+        else:
+            query = memories_ref if full_documents else memories_ref.select(list(_MEMORY_LIST_INDEX_FIELDS))
+            query = query.order_by(order_field, direction=firestore.Query.DESCENDING).order_by("__name__")
+            if position is not None:
+                stamp, memory_id = position
+                query = query.start_after(
+                    BookmarkDict({order_field: stamp, "__name__": memories_ref.document(memory_id)})
+                )
+            # The route clamps its requested page to 1..500. No offset or hidden-row slack.
+            return budgeted_stream_list(query.limit(max(1, min(int(candidate_limit), 500))), budget)
     query = memories_ref.select(list(_MEMORY_LIST_INDEX_FIELDS)).order_by(
         order_field, direction=firestore.Query.DESCENDING
     )
+    if cursor_snapshot is not None:
+        query = query.start_after(cursor_snapshot)
     return budgeted_stream_list(query.limit(candidate_limit), budget)
 
 
@@ -290,21 +489,10 @@ def _merge_memory_list_index_docs(
     *,
     include_invalidated: bool,
 ) -> List[Dict[str, Any]]:
-    by_id: Dict[str, Dict[str, Any]] = {}
-    for doc in candidate_docs:
-        payload = _typed_doc(doc)
-        doc_id = getattr(doc, 'id', None) or payload.get('id')
-        if not isinstance(doc_id, str) or not doc_id:
-            continue
-        payload.setdefault('id', doc_id)
-        by_id.setdefault(doc_id, payload)
-    return sorted(
-        (
-            memory
-            for memory in by_id.values()
-            if _memory_passes_list_visibility(memory, include_invalidated=include_invalidated)
-        ),
-        key=_memory_list_sort_key,
+    return merge_memory_list_index_docs(
+        candidate_docs,
+        include_invalidated=include_invalidated,
+        typed_doc=_typed_doc,
     )
 
 
@@ -319,16 +507,24 @@ def list_memory_updated_or_created_index(
     *,
     firestore_client: Any = None,
     budget: Optional[ListReadBudget] = None,
+    index_state: Optional[MemoryListIndexState] = None,
 ) -> List[Dict[str, Any]]:
     """Newest-first historical index rows without content or decrypt.
 
     Streams two candidate windows of ``min(limit+offset, 5000)`` metadata
     documents (``updated_at`` DESC and ``created_at`` DESC), merges them, and
-    returns the requested slice. Callers hydrate only the page they will emit.
+    returns the requested slice. A window that hidden rows leave short of
+    ``limit+offset`` visible rows grows to double size via snapshot seeks, by at most the
+    scoring scan's flat slack beyond the rows the page needs.
+    Callers hydrate only the page they will emit.
     With a ``budget`` both windows charge their fetched rows and each stream
     gets the budget's per-RPC timeout (#11831).
     """
     database = _get_db(firestore_client)
+    if index_state is not None:
+        if index_state.uid != uid or (index_state.client is not None and index_state.client is not database):
+            raise ValueError("Memory list index state cannot cross users or clients")
+        index_state.client = database
     memories_ref = database.collection(users_collection).document(uid).collection(memories_collection)
     if categories:
         memories_ref = memories_ref.where(filter=FieldFilter('category', 'in', categories))
@@ -337,10 +533,96 @@ def list_memory_updated_or_created_index(
     if end_date:
         memories_ref = memories_ref.where(filter=FieldFilter('created_at', '<=', end_date))
     candidate_limit = max(1, min(int(limit) + max(int(offset), 0), _MEMORY_LIST_CANDIDATE_WINDOW_MAX))
-    candidate_docs = _stream_memory_list_index_window(memories_ref, 'updated_at', candidate_limit, budget=budget)
-    candidate_docs.extend(_stream_memory_list_index_window(memories_ref, 'created_at', candidate_limit, budget=budget))
+    window_cap = candidate_limit + _MEMORY_SCORING_VISIBLE_PAGE_SCAN_SLACK
+    candidate_docs: List[Any] = []
+    for order_field in ('updated_at', 'created_at'):
+        # Hidden rows (user-rejected, invalidated) take window slots. A window short of
+        # visible rows returns a short page that callers read as end-of-data, so grow it
+        # until it holds the page, its order is exhausted, or it spends the flat slack.
+        window_limit = candidate_limit
+        window_docs: List[Any] = []
+        # Date inequalities can normalize additional SDK order fields for a
+        # snapshot cursor. Preserve the released prefix query for those callers.
+        incremental = (
+            start_date is None
+            and end_date is None
+            and os.getenv('OMI_MEMORY_INCREMENTAL_INDEX_WINDOWS_ENABLED', '').strip().lower() != 'false'
+        )
+        while True:
+            if incremental and index_state is not None and not categories:
+                retained = index_state.windows.setdefault(order_field, [])
+                if len(retained) < window_limit and order_field not in index_state.exhausted:
+                    batch_limit = window_limit - len(retained)
+                    batch = _stream_memory_list_index_window(
+                        memories_ref,
+                        order_field,
+                        batch_limit,
+                        budget=budget,
+                        cursor_snapshot=retained[-1] if retained else None,
+                    )
+                    retained.extend(batch)
+                    if len(batch) < batch_limit:
+                        index_state.exhausted.add(order_field)
+                # Preserve this round's exact prefix even when a previous
+                # hidden-row expansion retained more metadata.
+                window_docs = retained[:window_limit]
+                exhausted = len(window_docs) < window_limit
+            elif incremental:
+                # Retain each fetched prefix and seek after its last snapshot.
+                # Projection contains both ordering fields; snapshots also carry
+                # the implicit document-name tiebreaker used by Firestore.
+                batch_limit = window_limit - len(window_docs)
+                batch = _stream_memory_list_index_window(
+                    memories_ref,
+                    order_field,
+                    batch_limit,
+                    budget=budget,
+                    cursor_snapshot=window_docs[-1] if window_docs else None,
+                )
+                window_docs.extend(batch)
+                exhausted = len(batch) < batch_limit
+            else:
+                window_docs = _stream_memory_list_index_window(memories_ref, order_field, window_limit, budget=budget)
+                exhausted = len(window_docs) < window_limit
+            visible = sum(
+                1
+                for doc in window_docs
+                if _memory_passes_list_visibility(_typed_doc(doc), include_invalidated=include_invalidated)
+            )
+            if visible >= candidate_limit or exhausted or window_limit >= window_cap:
+                break
+            window_limit = min(window_limit * 2, window_cap)
+        candidate_docs.extend(window_docs)
     memories = _merge_memory_list_index_docs(candidate_docs, include_invalidated=include_invalidated)
     return memories[max(0, int(offset)) : max(0, int(offset)) + max(1, int(limit))]
+
+
+def scan_memory_list_index_window(
+    uid: str,
+    *,
+    order_field: str,
+    limit: int,
+    cursor: Optional[str] = None,
+    firestore_client: Any = None,
+    budget: Optional[ListReadBudget] = None,
+) -> tuple[list[dict[str, Any]], list[tuple[datetime, str]], bool]:
+    """Public storage seam for one raw cursor window, preserving exact timestamps."""
+    bounded_limit = max(1, min(int(limit), 500))
+    database = _get_db(firestore_client)
+    collection = database.collection(users_collection).document(uid).collection(memories_collection)
+    docs = _stream_memory_list_index_window(
+        collection, order_field, bounded_limit, uid=uid, cursor=cursor, full_documents=True, budget=budget
+    )
+    payloads = []
+    positions = []
+    for doc in docs:
+        raw = _typed_doc(doc)
+        raw['id'] = doc.id
+        payloads.append(raw)
+        order_raw = raw.get(order_field)
+        order_time = order_raw if isinstance(order_raw, datetime) else datetime.fromtimestamp(0, tz=timezone.utc)
+        positions.append((order_time, doc.id))
+    return payloads, positions, len(docs) < bounded_limit
 
 
 def _fetch_memory_docs_by_ids(
@@ -552,6 +834,35 @@ def count_memories_created(uid: str, start_date: datetime, end_date: datetime, *
     return 0
 
 
+def count_default_visible_memories(uid: str, *, firestore_client: Any = None) -> int:
+    """Cheap approximation of how many memories the default ``/v3/memories`` list shows.
+
+    Uses at most two single-field ``count()`` aggregations and no new index:
+
+    * Canonical store first: ``memory_items`` with ``status == 'active'``. This
+      drops superseded, hidden, and tombstoned items like the default list, but
+      still counts Archive-tier items (hidden unless ``include_archive``) and does
+      not apply short-term expiry or device-scope filtering, which only run in
+      Python after the read.
+    * An account with no active canonical item falls back to the whole legacy
+      ``memories`` collection. User-rejected or invalidated legacy rows cannot be
+      excluded server-side (see ``_memory_passes_list_visibility``), so they are
+      counted.
+
+    The two stores are never summed: dual-store ids would be double-counted
+    (see ``count_memories_created``).
+    """
+    database = _get_db(firestore_client)
+    canonical_collection = database.collection(MemoryCollections(uid=uid).memory_items)
+    canonical_active = canonical_collection.where(filter=FieldFilter('status', '==', 'active')).count().get()
+    canonical_count = int(canonical_active[0][0].value or 0)
+    if canonical_count:
+        return canonical_count
+    legacy_collection = database.collection(users_collection).document(uid).collection(memories_collection)
+    legacy_count = legacy_collection.count().get()
+    return int(legacy_count[0][0].value or 0)
+
+
 _HISTORICAL_SCAN_PAGE_MAX = 500
 HistoricalScanCursor = tuple[datetime, str]
 
@@ -583,6 +894,26 @@ def _historical_scan_page(
     are charged (#11831).
     """
     database = _get_db(firestore_client)
+    memo = None
+    memo_key: tuple[Any, ...] = ()
+    generation = -1
+    if firestore_read_levers.lever_enabled('historical_scan_memo', uid):
+        memo = _active_historical_scan_memo(uid)
+    if memo is not None:
+        # Retain the identity-bearing objects with each entry to prevent id reuse.
+        # Budget identity is deliberately conservative: separate budgets/modes
+        # never share pages, even when their initial allowances happen to match.
+        memo_key = (uid, order_field, id(query_spec), start_after, limit, id(database), id(budget))
+        with memo.lock:
+            generation = memo.generation
+            cached = memo.entries.get(memo_key) if not memo.writers else None
+            if cached is not None:
+                if budget is not None:
+                    budget.check()
+                    budget.rpc_timeout()
+                # Consumers mutate historical payloads during adaptation. Keep
+                # a private snapshot; a hit performs no RPC or budget charge.
+                return copy.deepcopy(cached[3])
     memories_ref = database.collection(users_collection).document(uid).collection(memories_collection)
     bounded_limit = max(1, min(int(limit or 100), _HISTORICAL_SCAN_PAGE_MAX))
     query = query_spec.build(memories_ref, {}, field_filter_factory=FieldFilter)
@@ -614,6 +945,29 @@ def _historical_scan_page(
         payloads.append(payload)
         cursors.append((order_time, doc_id))
     exhausted = len(snapshots) < bounded_limit
+    if memo is not None:
+        # Size the retained snapshot itself: deepcopy can change container
+        # capacity, and callers own (and may mutate) the original payloads.
+        result = copy.deepcopy((payloads, cursors, exhausted))
+        payload_bytes = _historical_scan_memo_bytes(result)
+        with memo.lock:
+            if (
+                not memo.closed
+                and not memo.writers
+                and generation == memo.generation
+                and memo.max_entries > 0
+                and payload_bytes <= memo.max_bytes
+            ):
+                old = memo.entries.pop(memo_key, None)
+                if old is not None:
+                    memo.payload_bytes -= old[4]
+                while memo.entries and (
+                    len(memo.entries) >= memo.max_entries or memo.payload_bytes + payload_bytes > memo.max_bytes
+                ):
+                    _, evicted = memo.entries.popitem(last=False)
+                    memo.payload_bytes -= evicted[4]
+                memo.entries[memo_key] = (query_spec, database, budget, result, payload_bytes)
+                memo.payload_bytes += payload_bytes
     return payloads, cursors, exhausted
 
 
@@ -696,6 +1050,8 @@ def get_non_filtered_memories(
 
 @set_data_protection_level(data_arg_name='data')
 @prepare_for_write(data_arg_name='data', prepare_func=_prepare_data_for_write)
+@after_write('memories')
+@_historical_scan_write
 def create_memory(uid: str, data: Dict[str, Any], *, firestore_client: Any = None) -> Dict[str, Any]:
     database = _get_db(firestore_client)
     user_ref = database.collection(users_collection).document(uid)
@@ -723,6 +1079,8 @@ def create_memory(uid: str, data: Dict[str, Any], *, firestore_client: Any = Non
 
 @set_data_protection_level(data_arg_name='data')
 @prepare_for_write(data_arg_name='data', prepare_func=_prepare_data_for_write)
+@after_write('memories')
+@_historical_scan_write
 def save_memories(uid: str, data: List[Dict[str, Any]], *, firestore_client: Any = None) -> Optional[Dict[str, Any]]:
     if not data:
         return
@@ -763,6 +1121,7 @@ def save_memories(uid: str, data: List[Dict[str, Any]], *, firestore_client: Any
     )
 
 
+@_historical_scan_transaction_write
 @transactional
 def _set_memory_transaction(  # type: ignore[reportUnusedFunction]  # reserved: pre-ledger transactional write path
     transaction: Any, uid: str, memory_ref: Any, memory: Dict[str, Any]
@@ -772,6 +1131,7 @@ def _set_memory_transaction(  # type: ignore[reportUnusedFunction]  # reserved: 
     transaction.set(memory_ref, _merge_memory_for_write(uid, existing_data, memory))
 
 
+@_historical_scan_transaction_write
 @transactional
 def _set_memories_transaction(  # type: ignore[reportUnusedFunction]  # reserved: pre-ledger transactional write path
     transaction: Any, uid: str, refs_and_data: List[tuple[Any, Dict[str, Any]]]
@@ -831,6 +1191,7 @@ def _merge_evidence(  # type: ignore[reportUnusedFunction]  # reserved: thin ali
     return merge_evidence_sets(existing, incoming)
 
 
+@_historical_scan_write_without_new_sources
 def delete_memories(uid: str, *, firestore_client: Any = None) -> None:
     database = _get_db(firestore_client)
     user_ref = database.collection(users_collection).document(uid)
@@ -882,18 +1243,30 @@ def get_memories_by_ids(
     memories_ref = user_ref.collection(memories_collection)
 
     doc_refs = [memories_ref.document(memory_id) for memory_id in memory_ids]
-    docs = budgeted_get_all(database, doc_refs, budget)
 
-    memories: List[Dict[str, Any]] = []
-    for doc in docs:
-        if doc.exists:
-            memory_data = _prepare_memory_for_read(_typed_doc(doc), uid)
-            if memory_data:
-                memories.append(memory_data)
+    def _memories_from_docs(docs: List[Any]) -> List[Dict[str, Any]]:
+        memories: List[Dict[str, Any]] = []
+        for doc in docs:
+            if doc.exists:
+                memory_data = _prepare_memory_for_read(_typed_doc(doc), uid)
+                if memory_data:
+                    memories.append(memory_data)
+        return memories
 
-    return memories
+    try:
+        docs = budgeted_get_all(database, doc_refs, budget)
+    except ListReadBudgetExhausted as exc:
+        fetched = getattr(exc, 'partial_snapshots', None)
+        if not fetched:
+            raise
+        # Charge exhausted after the batch was fetched. Hand the prepared rows
+        # to the hydration caller and keep the budget flagged truncated.
+        setattr(exc, 'partial_memories', _memories_from_docs(fetched))
+        raise
+    return _memories_from_docs(docs)
 
 
+@_historical_scan_write
 def review_memory(uid: str, memory_id: str, value: bool, *, firestore_client: Any = None) -> None:
     database = _get_db(firestore_client)
     user_ref = database.collection(users_collection).document(uid)
@@ -906,6 +1279,7 @@ def set_memory_kg_extracted(uid: str, memory_id: str, *, firestore_client: Any =
     _update_memory_if_exists(uid, memory_id, {'kg_extracted': True}, 'kg_extracted', firestore_client=firestore_client)
 
 
+@_historical_scan_write
 def change_memory_visibility(uid: str, memory_id: str, value: str, *, firestore_client: Any = None) -> None:
     database = _get_db(firestore_client)
     user_ref = database.collection(users_collection).document(uid)
@@ -914,6 +1288,8 @@ def change_memory_visibility(uid: str, memory_id: str, value: str, *, firestore_
     memory_ref.update({'visibility': value})
 
 
+@after_write('memories')
+@_historical_scan_write
 def update_memory_fields(uid: str, memory_id: str, data: Dict[str, Any], *, firestore_client: Any = None) -> None:
     """Updates specified fields for a memory and sets the updated_at timestamp."""
     if not data:
@@ -929,6 +1305,7 @@ def update_memory_fields(uid: str, memory_id: str, data: Dict[str, Any], *, fire
     memory_ref.update(update_payload)
 
 
+@_historical_scan_write
 def add_evidence(uid: str, memory_id: str, evidence: Dict[str, Any], *, firestore_client: Any = None) -> None:
     """Append one provenance Evidence row to a memory if it is not already present."""
     database = _get_db(firestore_client)
@@ -962,6 +1339,7 @@ def recompute_evidence(uid: str, memory_id: str, *, firestore_client: Any = None
     return (memory or {}).get('evidence', [])
 
 
+@_historical_scan_write
 def edit_memory(uid: str, memory_id: str, value: str, *, firestore_client: Any = None) -> Optional[Dict[str, Any]]:
     database = _get_db(firestore_client)
     user_ref = database.collection(users_collection).document(uid)
@@ -999,6 +1377,7 @@ def edit_memory(uid: str, memory_id: str, value: str, *, firestore_client: Any =
     )
 
 
+@_historical_scan_write
 def refine_memory(
     uid: str, memory_id: str, arg_changes: Dict[str, Any], *, firestore_client: Any = None
 ) -> Optional[Dict[str, Any]]:
@@ -1027,6 +1406,7 @@ def refine_memory(
 
 @set_data_protection_level(data_arg_name='new_memory')
 @prepare_for_write(data_arg_name='new_memory', prepare_func=_prepare_data_for_write)
+@_historical_scan_write
 def merge_contradict_memory(
     uid: str,
     new_memory: Dict[str, Any],
@@ -1103,6 +1483,7 @@ def projection_update_for_refine(
     return update_payload
 
 
+@_historical_scan_write_without_new_sources
 def invalidate_memory(
     uid: str,
     memory_id: str,
@@ -1157,6 +1538,7 @@ def invalidate_memory(
     )
 
 
+@_historical_scan_write_without_new_sources
 def delete_memory(uid: str, memory_id: str, *, firestore_client: Any = None) -> None:
     database = _get_db(firestore_client)
     user_ref = database.collection(users_collection).document(uid)
@@ -1165,6 +1547,7 @@ def delete_memory(uid: str, memory_id: str, *, firestore_client: Any = None) -> 
     memory_ref.delete()
 
 
+@_historical_scan_write_without_new_sources
 def delete_memories_batch(uid: str, memory_ids: List[str], *, firestore_client: Any = None) -> None:
     """Delete multiple memories in a single batched Firestore write.
 
@@ -1190,6 +1573,7 @@ def delete_memories_batch(uid: str, memory_ids: List[str], *, firestore_client: 
         batch.commit()
 
 
+@_historical_scan_write_without_new_sources
 def delete_all_memories(uid: str, *, firestore_client: Any = None) -> None:
     database = _get_db(firestore_client)
     user_ref = database.collection(users_collection).document(uid)
@@ -1210,6 +1594,7 @@ def delete_all_memories(uid: str, *, firestore_client: Any = None) -> None:
         batch.commit()
 
 
+@_historical_scan_write
 def ripple_source_deletion(uid: str, source_id: str, *, firestore_client: Any = None) -> Dict[str, Any]:
     database = _get_db(firestore_client)
     user_ref = database.collection(users_collection).document(uid)
@@ -1397,38 +1782,44 @@ def delete_memories_for_conversation(uid: str, memory_id: str, *, firestore_clie
     return result
 
 
+class MemoryUnlockCount(int):
+    """Sum of unlocked memory rows, plus whether either bounded page filled up."""
+
+    page_saturated: bool
+
+    def __new__(cls, total: int, *, page_saturated: bool) -> 'MemoryUnlockCount':
+        value = int.__new__(cls, total)
+        value.page_saturated = page_saturated
+        return value
+
+
 @_account_write_gated
-def unlock_all_memories(uid: str, *, firestore_client: Any = None) -> None:
+@_historical_scan_write_without_new_sources
+def unlock_all_memories(uid: str, *, firestore_client: Any = None, limit: Optional[int] = None) -> int:
     """
     Unlock both released legacy rows and canonical product-memory rows.
+
+    The numeric value is ``legacy_count + canonical_count``. When ``limit`` is
+    set, ``page_saturated`` is true if either collection returned a full page.
+    A 60 + 60 pair is drained; callers must not treat the sum as one page.
     """
     database = _get_db(firestore_client)
     legacy_ref = database.collection(users_collection).document(uid).collection(memories_collection)
     canonical_ref = database.collection(MemoryCollections(uid=uid).memory_items)
 
-    def commit_updates(docs: Any, update: Dict[str, Any]) -> int:
-        batch = database.batch()
-        count = 0
-        total = 0
-        for doc in docs:
-            batch.update(doc.reference, update)
-            count += 1
-            total += 1
-            if count >= 499:  # Firestore batch limit is 500
-                batch.commit()
-                batch = database.batch()
-                count = 0
-        if count > 0:
-            batch.commit()
-        return total
+    from database.locked_content import unlock_query_rows
 
-    legacy_count = commit_updates(
-        legacy_ref.where(filter=FieldFilter('is_locked', '==', True)).stream(),
+    legacy_count = unlock_query_rows(
+        database,
+        legacy_ref.where(filter=FieldFilter('is_locked', '==', True)),
         {'is_locked': False},
+        limit=limit,
     )
-    canonical_count = commit_updates(
-        canonical_ref.where(filter=FieldFilter('promotion.is_locked', '==', True)).stream(),
+    canonical_count = unlock_query_rows(
+        database,
+        canonical_ref.where(filter=FieldFilter('promotion.is_locked', '==', True)),
         {'promotion.is_locked': False},
+        limit=limit,
     )
     logger.info(
         "Unlocked all memories for user %s legacy_count=%d canonical_count=%d",
@@ -1436,6 +1827,8 @@ def unlock_all_memories(uid: str, *, firestore_client: Any = None) -> None:
         legacy_count,
         canonical_count,
     )
+    page_saturated = limit is not None and (legacy_count >= limit or canonical_count >= limit)
+    return MemoryUnlockCount(legacy_count + canonical_count, page_saturated=page_saturated)
 
 
 # **************************************
@@ -1464,6 +1857,7 @@ def get_memories_to_migrate(uid: str, target_level: str, *, firestore_client: An
 
 
 @_account_write_gated
+@_historical_scan_write_without_new_sources
 def migrate_memories_level_batch(
     uid: str, memory_ids: List[str], target_level: str, *, firestore_client: Any = None
 ) -> None:
@@ -1476,6 +1870,7 @@ def migrate_memories_level_batch(
     doc_refs = [memories_ref.document(mem_id) for mem_id in memory_ids]
     doc_snapshots = database.get_all(doc_refs)
 
+    batch_count = 0
     for doc_snapshot in doc_snapshots:
         if not doc_snapshot.exists:
             logger.warning(f"Memory {doc_snapshot.id} not found, skipping.")
@@ -1499,8 +1894,14 @@ def migrate_memories_level_batch(
         # Update the document with the migrated data and the new protection level.
         update_data = {'data_protection_level': target_level, 'content': migrated_content}
         batch.update(doc_snapshot.reference, update_data)
+        batch_count += 1
+        if batch_count >= BATCH_LIMIT:
+            batch.commit()
+            batch = database.batch()
+            batch_count = 0
 
-    batch.commit()
+    if batch_count > 0:
+        batch.commit()
 
 
 @_destination_account_write_gated
@@ -1531,6 +1932,7 @@ def migrate_memories(prev_uid: str, new_uid: str, app_id: Optional[str] = None, 
 
     # Create batch for destination user
     batch = database.batch()
+    batch_count = 0
     new_user_ref = database.collection(users_collection).document(new_uid)
     new_memories_ref = new_user_ref.collection(memories_collection)
 
@@ -1553,8 +1955,14 @@ def migrate_memories(prev_uid: str, new_uid: str, app_id: Optional[str] = None, 
                 memory = {**memory, 'content': encryption.encrypt(plaintext, new_uid)}
         memory_ref = new_memories_ref.document(memory['id'])
         batch.set(memory_ref, memory)
+        batch_count += 1
+        if batch_count >= BATCH_LIMIT:
+            batch.commit()
+            batch = database.batch()
+            batch_count = 0
 
     # Commit batch
-    batch.commit()
+    if batch_count > 0:
+        batch.commit()
     logger.info(f'Migrated {len(memories_to_migrate)} memories from {prev_uid} to {new_uid}')
     return len(memories_to_migrate)

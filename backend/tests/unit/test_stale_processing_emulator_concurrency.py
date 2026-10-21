@@ -2,16 +2,18 @@
 
 These tests require a running Firestore emulator (FIRESTORE_EMULATOR_HOST).
 They are wired into the listen-pusher gauntlet (run.sh) so CI always exercises
-them against a provisioned emulator.  They verify three correctness invariants
+them against a provisioned emulator.  They verify four correctness invariants
 that unit tests with mocks cannot prove:
 
-1. Multi-pod cursor CAS — two pods advancing the cursor concurrently; exactly
+1. Live-session fencing — recording-session creation/renewal racing recovery
+   stays serializable and never exposes a committed binding without its marker.
+2. Multi-pod cursor CAS — two pods advancing the cursor concurrently; exactly
    one CAS succeeds and the generation advances by exactly one.
-2. Production durable-finalization owner vs orphan race — the real
+3. Production durable-finalization owner vs orphan race — the real
    ``create_or_get_finalization_intent`` transaction and orphan terminalization
    race on the same conversation; exactly one commits and no active work is
    falsely completed.
-3. Deferred reacquire vs orphan sweep — the atomic ``reacquire_deferred_processing``
+4. Deferred reacquire vs orphan sweep — the atomic ``reacquire_deferred_processing``
    transaction and orphan terminalization race; exactly one commits and no stale
    processor produces side effects.
 
@@ -26,8 +28,10 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from database import conversation_finalization_jobs as jobs_db
+from database import recording_sessions as recording_sessions_db
 from database.firestore_transaction_retry import FirestoreContentionExhausted
 from utils.conversations import lifecycle as lifecycle_service
+from utils.conversations.processing_trigger import ProcessingTrigger
 from firebase_admin import firestore
 from google.api_core.exceptions import Aborted
 
@@ -53,6 +57,175 @@ def _cleanup_cursor():
 def _cleanup_conversation(uid: str, cid: str):
     client = _client()
     client.collection('users').document(uid).collection('conversations').document(cid).delete()
+
+
+def _cleanup_recording_session(uid: str, recording_session_id: str):
+    client = _client()
+    client.collection('users').document(uid).collection('recording_sessions').document(recording_session_id).delete()
+
+
+def test_recording_session_creation_and_recovery_sweep_race_is_serializable():
+    """Opening a session commits its conversation marker in the same transaction."""
+    uid = 'test-race-user'
+    cid = 'live-recording-creation-race'
+    recording_session_id = 'new-live-recording-session'
+    now = datetime.now(timezone.utc)
+    _cleanup_conversation(uid, cid)
+    _cleanup_recording_session(uid, recording_session_id)
+    _cleanup_finalization_jobs(uid, cid)
+
+    client = _client()
+    conv_ref = client.collection('users').document(uid).collection('conversations').document(cid)
+    conv_ref.set(
+        {
+            'id': cid,
+            'status': 'in_progress',
+            'source': 'omi',
+            'finished_at': now - timedelta(hours=3),
+            'audio_files': [{'id': 'live-audio'}],
+            'external_data': {'preserved': True},
+        }
+    )
+
+    barrier = threading.Barrier(2)
+    results: dict[str, object] = {}
+    errors: list[BaseException] = []
+
+    def open_session():
+        barrier.wait()
+        try:
+            results['binding'] = lifecycle_service.open_live_recording_session(
+                uid,
+                recording_session_id,
+                cid,
+                firestore_client=client,
+            )
+        except Exception as error:
+            errors.append(error)
+
+    def sweep_recovery():
+        barrier.wait()
+        try:
+            results['intent'] = jobs_db.create_or_get_finalization_intent(
+                uid,
+                cid,
+                requires_byok=False,
+                finalization_admission=lambda conv: lifecycle_service._finalization_admission(conv, cid),
+                trigger=ProcessingTrigger.SERVER_RECOVERY,
+                recovery_cutoff=now - timedelta(hours=2),
+                firestore_client=client,
+            )
+        except Exception as error:
+            errors.append(error)
+
+    opener = threading.Thread(target=open_session)
+    sweep = threading.Thread(target=sweep_recovery)
+    opener.start()
+    sweep.start()
+    opener.join(timeout=15)
+    sweep.join(timeout=15)
+
+    assert not errors, f'unexpected emulator failures surfaced: {errors}'
+    final_conversation = conv_ref.get().to_dict() or {}
+    assert final_conversation['external_data'] == {
+        'preserved': True,
+        'recording_session_id': recording_session_id,
+    }
+    assert results['binding']['conversation_id'] == cid
+    if results['intent']['status'] == 'refused_active_recording_session':
+        assert final_conversation['status'] == 'in_progress'
+        assert results['binding']['conversation_snapshot']['status'] == 'in_progress'
+        assert not final_conversation.get('finalization_job_id')
+    else:
+        # Recovery linearized first; the later session open observes a
+        # processing row rather than creating an unfenced in-progress window.
+        assert results['intent']['status'] == 'queued'
+        assert final_conversation['status'] == 'processing'
+        assert results['binding']['conversation_snapshot']['status'] == 'processing'
+        assert final_conversation.get('finalization_job_id')
+
+    _cleanup_conversation(uid, cid)
+    _cleanup_recording_session(uid, recording_session_id)
+    _cleanup_finalization_jobs(uid, cid)
+
+
+def test_live_recording_lease_and_recovery_sweep_race_keeps_session_in_progress():
+    """A renewal racing SERVER_RECOVERY conflicts on the same session lease."""
+    uid = 'test-race-user'
+    cid = 'live-recording-recovery-race'
+    recording_session_id = 'live-recording-session'
+    now = datetime.now(timezone.utc)
+    _cleanup_conversation(uid, cid)
+    _cleanup_recording_session(uid, recording_session_id)
+    _cleanup_finalization_jobs(uid, cid)
+
+    client = _client()
+    conv_ref = client.collection('users').document(uid).collection('conversations').document(cid)
+    conv_ref.set(
+        {
+            'id': cid,
+            'status': 'in_progress',
+            'source': 'omi',
+            'finished_at': now - timedelta(hours=3),
+            'audio_files': [{'id': 'live-audio'}],
+            'external_data': {'recording_session_id': recording_session_id},
+        }
+    )
+    recording_sessions_db.create_or_get_recording_session(
+        uid,
+        recording_session_id,
+        cid,
+        firestore_client=client,
+    )
+
+    barrier = threading.Barrier(2)
+    results: dict[str, object] = {}
+    errors: list[BaseException] = []
+
+    def renew_live_lease():
+        barrier.wait()
+        try:
+            results['renewed'] = recording_sessions_db.renew_recording_session_lease(
+                uid,
+                recording_session_id,
+                cid,
+                firestore_client=client,
+            )
+        except Exception as error:
+            errors.append(error)
+
+    def sweep_recovery():
+        barrier.wait()
+        try:
+            results['intent'] = jobs_db.create_or_get_finalization_intent(
+                uid,
+                cid,
+                requires_byok=False,
+                finalization_admission=lambda conv: lifecycle_service._finalization_admission(conv, cid),
+                trigger=ProcessingTrigger.SERVER_RECOVERY,
+                recovery_cutoff=now - timedelta(hours=2),
+                firestore_client=client,
+            )
+        except Exception as error:
+            errors.append(error)
+
+    renewal = threading.Thread(target=renew_live_lease)
+    sweep = threading.Thread(target=sweep_recovery)
+    renewal.start()
+    sweep.start()
+    renewal.join(timeout=15)
+    sweep.join(timeout=15)
+
+    assert not errors, f'unexpected emulator failures surfaced: {errors}'
+    assert results['renewed'] is True
+    assert results['intent']['status'] == 'refused_active_recording_session'
+    final_conversation = conv_ref.get().to_dict() or {}
+    assert final_conversation['status'] == 'in_progress'
+    assert not final_conversation.get('finalization_job_id')
+
+    _cleanup_conversation(uid, cid)
+    _cleanup_recording_session(uid, recording_session_id)
+    _cleanup_finalization_jobs(uid, cid)
 
 
 # ---------------------------------------------------------------------------
@@ -378,3 +551,176 @@ def test_unstampable_orphan_is_fenced_by_the_server_owned_update_time():
     assert jobs_db.complete_unstampable_orphan_conversation(uid, cid, stale_after=timedelta(seconds=0)) is False
 
     _cleanup_conversation(uid, cid)
+
+
+@pytest.mark.parametrize('status', ['queued', 'leased'])
+def test_byok_lost_owner_reclaims_through_real_query_and_reconnect(status):
+    """Legacy discovery and stale-epoch fencing execute on the local emulator."""
+    client = _client()
+    now = datetime.now(timezone.utc)
+    job_id = f'byok-lease-reclaim-{status}'
+    ref = client.collection(jobs_db.FINALIZATION_JOBS_COLLECTION).document(job_id)
+    for state in ('queued', 'leased'):
+        client.collection(jobs_db.STALE_PROCESSING_SWEEP_STATE_COLLECTION).document(f'byok_reclaim_{state}').delete()
+    ref.set(
+        {
+            'status': status,
+            'requires_byok': True,
+            'dispatch_generation': 1,
+            'lease_epoch': 7,
+            'lease_expires_at': now - timedelta(seconds=1),
+            'created_at': now - timedelta(days=30),
+            'updated_at': now - timedelta(hours=1),
+            'fanout_status': 'completed',
+        }
+    )
+    try:
+        result = jobs_db.recover_stranded_byok_jobs(limit=1, firestore_client=client)
+        assert result['errors'] == 0
+        reclaimed = ref.get().to_dict()
+        assert reclaimed['status'] == 'blocked_byok'
+        assert reclaimed['lease_epoch'] == 8
+        assert 'reconcile_after_at' not in reclaimed
+        assert not jobs_db.mark_finalization_completed(job_id, 1, 7, firestore_client=client)
+        assert (
+            jobs_db.claim_finalization_job(job_id, 1, allow_byok=False, firestore_client=client)['status']
+            == 'blocked_byok'
+        )
+        assert jobs_db.resume_blocked_byok_job_for_live_session(job_id, firestore_client=client)['status'] == 'queued'
+        assert 'reconcile_after_at' in ref.get().to_dict()
+        claim = jobs_db.claim_finalization_job(job_id, 1, allow_byok=True, firestore_client=client)
+        assert claim['status'] == 'claimed' and claim['lease_epoch'] == 9
+        assert not jobs_db.mark_finalization_completed(job_id, 1, 7, firestore_client=client)
+        assert jobs_db.mark_finalization_completed(job_id, 1, 9, firestore_client=client)
+        # Cursor snapshot remains usable after its row has changed status.
+        assert jobs_db.recover_stranded_byok_jobs(limit=1, firestore_client=client)['errors'] == 0
+    finally:
+        ref.delete()
+        for state in ('queued', 'leased'):
+            client.collection(jobs_db.STALE_PROCESSING_SWEEP_STATE_COLLECTION).document(
+                f'byok_reclaim_{state}'
+            ).delete()
+
+
+@pytest.mark.parametrize('winner', ['reconnect', 'abandonment', 'concurrent'])
+def test_reclaim_and_abandonment_fence_reconnect_on_local_emulator(winner):
+    """Real query plus transactions: either live reconnect or terminal wins."""
+    client = _client()
+    now = datetime.now(timezone.utc)
+    old_activity = now - timedelta(days=30)
+    uid = f'byok-compose-{winner}'
+    job_id = f'byok-compose-{winner}'
+    cid = 'conversation'
+    job_ref = client.collection(jobs_db.FINALIZATION_JOBS_COLLECTION).document(job_id)
+    conv_ref = client.collection('users').document(uid).collection('conversations').document(cid)
+    job_ref.set(
+        {
+            'uid': uid,
+            'conversation_id': cid,
+            'finalization_revision': 1,
+            'requires_byok': True,
+            'status': 'leased',
+            'dispatch_generation': 1,
+            'lease_epoch': 7,
+            'lease_expires_at': now - timedelta(seconds=1),
+            'created_at': old_activity,
+            'updated_at': old_activity,
+            'fanout_status': 'pending',
+        }
+    )
+    conv_ref.set(
+        {
+            'id': cid,
+            'status': 'processing',
+            'finalization_job_id': job_id,
+            'finalization_revision': 1,
+            'structured': {'title': 'Retained recording'},
+        }
+    )
+    bound = jobs_db.get_byok_abandoned_after()
+    try:
+        jobs_db.claim_finalization_replay(job_id, stale_after=timedelta(minutes=5), firestore_client=client)
+        data = job_ref.get().to_dict()
+        assert data['status'] == 'blocked_byok' and data['lease_epoch'] == 8
+        assert data['byok_last_activity_at'] == old_activity
+        # An abandonment candidate scanned before reclaim loses its status/epoch fence.
+        stale = jobs_db.abandon_byok_finalization_job(
+            job_id,
+            expected_status='leased',
+            expected_dispatch_generation=1,
+            expected_lease_epoch=7,
+            abandoned_after=bound,
+            firestore_client=client,
+        )
+        assert stale['status'] == 'fenced'
+        candidates = jobs_db.get_abandoned_byok_job_candidates(abandoned_after=bound, firestore_client=client)
+        assert any(row['job_id'] == job_id and row['status'] == 'blocked_byok' for row in candidates['candidates'])
+
+        def abandon():
+            return jobs_db.abandon_byok_finalization_job(
+                job_id,
+                expected_status='blocked_byok',
+                expected_dispatch_generation=1,
+                expected_lease_epoch=8,
+                abandoned_after=bound,
+                firestore_client=client,
+            )
+
+        if winner == 'concurrent':
+            barrier = threading.Barrier(2)
+            outcomes = {}
+            errors = []
+
+            def race(name, action):
+                try:
+                    barrier.wait(timeout=10)
+                    outcomes[name] = action()['status']
+                except Exception as error:
+                    errors.append(error)
+
+            threads = [
+                threading.Thread(target=race, args=('abandon', abandon)),
+                threading.Thread(
+                    target=race,
+                    args=(
+                        'resume',
+                        lambda: jobs_db.resume_blocked_byok_job_for_live_session(
+                            job_id,
+                            firestore_client=client,
+                        ),
+                    ),
+                ),
+            ]
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join(timeout=60)
+                assert not thread.is_alive()
+            assert not errors, errors
+            assert (outcomes['resume'], outcomes['abandon']) in {
+                ('queued', 'fenced'),
+                ('dead_letter', 'abandoned'),
+            }
+            expected = 'processing' if outcomes['resume'] == 'queued' else 'completed'
+            assert conv_ref.get().to_dict()['status'] == expected
+        elif winner == 'reconnect':
+            resumed = jobs_db.resume_blocked_byok_job_for_live_session(job_id, firestore_client=client)
+            assert resumed['status'] == 'queued'
+            assert 'byok_last_activity_at' not in job_ref.get().to_dict()
+            assert abandon()['status'] == 'fenced'
+            claim = jobs_db.claim_finalization_job(job_id, 1, allow_byok=True, firestore_client=client)
+            assert claim['status'] == 'claimed' and claim['lease_epoch'] == 9
+            assert conv_ref.get().to_dict()['status'] == 'processing'
+        else:
+            assert abandon() == {'status': 'abandoned', 'conversation_outcome': 'closed'}
+            assert job_ref.get().to_dict()['last_failure_code'] == jobs_db.BYOK_ABANDONED_FAILURE_CODE
+            assert conv_ref.get().to_dict()['status'] == 'completed'
+            assert (
+                jobs_db.resume_blocked_byok_job_for_live_session(job_id, firestore_client=client)['status']
+                == 'dead_letter'
+            )
+            assert abandon()['status'] == 'fenced'
+            assert not jobs_db.mark_finalization_completed(job_id, 1, 7, firestore_client=client)
+    finally:
+        job_ref.delete()
+        conv_ref.delete()

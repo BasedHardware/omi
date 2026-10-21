@@ -147,6 +147,29 @@ class TestRealCaptureFf8b9998:
         assert context.calendar_source == 'screen_activity'
         assert context.platform == 'Google Chrome'
 
+    def test_a_supplied_transcript_span_drives_duration_minutes(self):
+        context = context_from_screen_activity(
+            _rows(PRE_JOIN_OCR),
+            started_at=CONVERSATION_START,
+            finished_at=CONVERSATION_END,
+            duration_seconds=90.0,
+        )
+
+        assert context is not None
+        # 90 seconds of transcript, not the ~29-minute screen-activity window (#4056).
+        assert context.duration_minutes == 1
+
+    def test_without_a_span_the_window_stays_the_fallback(self):
+        context = context_from_screen_activity(
+            _rows(PRE_JOIN_OCR),
+            started_at=CONVERSATION_START,
+            finished_at=CONVERSATION_END,
+        )
+
+        assert context is not None
+        window_minutes = int((CONVERSATION_END - CONVERSATION_START).total_seconds() / 60)
+        assert context.duration_minutes == max(1, window_minutes)
+
     def test_the_roster_frame_is_reached_even_when_it_is_not_first(self):
         # The 12k character budget used to be spent on whichever full-desktop frames
         # came first chronologically, so the pre-join card could fall outside it.

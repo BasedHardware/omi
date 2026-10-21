@@ -23,7 +23,7 @@ import os
 import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Dict, List, Optional, Tuple
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlsplit
 
 import httpx
 
@@ -34,7 +34,6 @@ from database._client import db
 from database.vector_db import upsert_x_post_vectors_batch
 from models.memories import MemoryDB
 from models.memory_contracts import MemoryExtractionError
-from utils.free_tier_memory_policy import managed_memory_formation_suppressed
 from utils.llm.memories import extract_memories_from_text
 from utils.memory.memory_service import MemoryService
 from utils.memory.memory_system import MemorySystem
@@ -78,7 +77,6 @@ _STATE_PREFIX = 'x_oauth_state:'
 # them without a collection-group query/index. Written on connect, removed on
 # disconnect.
 _REGISTRY_COLLECTION = 'x_connector_users'
-SYNC_JOB_INTERVAL_HOURS = 6  # background sync cadence (the cron fires hourly)
 _SYNC_JOB_USER_SPACING_SEC = 1.5  # gap between users to stay gentle on X limits
 
 # Cap how much we pull per sync to stay well within X rate limits.
@@ -104,11 +102,46 @@ def _gen_pkce() -> Tuple[str, str]:
     return verifier, challenge
 
 
+# Schemes a post-OAuth deep link may use: the desktop app's own URL scheme plus
+# a dev build, and plain web redirects. Everything else — javascript:, data:,
+# vbscript:, file:, etc. — is rejected so a crafted success_redirect_url cannot
+# become a stored-XSS or open-redirect vector.
+_ALLOWED_REDIRECT_SCHEMES = frozenset({'omi', 'omi-computer', 'omi-computer-dev', 'http', 'https'})
+_MAX_REDIRECT_URL_LEN = 2048
+
+
+def sanitize_redirect_url(url: Optional[str]) -> Optional[str]:
+    """Return *url* if it is a safe post-OAuth redirect target, else ``None``.
+
+    The URL round-trips through Redis as a ``\\n``-delimited state field, so it
+    must also be free of CR/LF/control characters — a newline there would
+    desynchronize state unpacking.
+    """
+    if not isinstance(url, str):
+        return None
+    url = url.strip()
+    if not url or len(url) > _MAX_REDIRECT_URL_LEN:
+        return None
+    if any(c in url for c in '\r\n\t\x00\x0b\x0c'):
+        return None
+    try:
+        scheme = urlsplit(url).scheme.lower()
+    except ValueError:
+        return None
+    if scheme not in _ALLOWED_REDIRECT_SCHEMES:
+        return None
+    return url
+
+
 def build_authorize_url(uid: str, success_redirect_url: Optional[str] = None) -> str:
     """Create the X authorize URL and stash the PKCE verifier + uid in Redis,
     keyed by the opaque `state` we hand to X."""
     if not is_oauth_configured():
         raise RuntimeError('X OAuth is not configured (missing X_OAUTH_CLIENT_ID/SECRET/REDIRECT_URI)')
+
+    if success_redirect_url is not None and sanitize_redirect_url(success_redirect_url) is None:
+        # Fail closed: refuse to stash (and later emit) a redirect we cannot vouch for.
+        raise ValueError('success_redirect_url is not an allowed redirect target')
 
     verifier, challenge = _gen_pkce()
     state = secrets.token_urlsafe(32)
@@ -116,7 +149,8 @@ def build_authorize_url(uid: str, success_redirect_url: Optional[str] = None) ->
     payload = {'uid': uid, 'verifier': verifier}
     if success_redirect_url:
         payload['success_redirect_url'] = success_redirect_url
-    # store as a simple delimited string to avoid json import churn
+    # store as a simple delimited string to avoid json import churn; the sanitized
+    # URL above is guaranteed newline-free so the third field stays atomic.
     redis_db.r.setex(
         f'{_STATE_PREFIX}{state}',
         OAUTH_STATE_TTL,
@@ -145,10 +179,14 @@ def consume_oauth_state(state: str) -> Optional[Dict[str, str]]:
     parts = raw.split('\n')
     if len(parts) < 2:
         return None
+    # A stored redirect is re-validated on the way out: an older or tampered state
+    # holding a newline, an unsafe scheme, or a control char must not reach the
+    # redirect page.
+    stored_redirect = sanitize_redirect_url(parts[2]) if len(parts) > 2 else None
     return {
         'uid': parts[0],
         'verifier': parts[1],
-        'success_redirect_url': parts[2] if len(parts) > 2 else '',
+        'success_redirect_url': stored_redirect or '',
     }
 
 
@@ -210,14 +248,14 @@ def _register_user(uid: str) -> None:
             {'uid': uid, 'updated_at': datetime.now(timezone.utc)}, merge=True
         )
     except Exception as e:
-        logger.warning(f'x_connector: failed to register user {uid} for sync: {e}')
+        logger.warning('x_connector: failed to register user %s for sync (error_type=%s)', uid, type(e).__name__)
 
 
 def _unregister_user(uid: str) -> None:
     try:
         db.collection(_REGISTRY_COLLECTION).document(uid).delete()
     except Exception as e:
-        logger.warning(f'x_connector: failed to unregister user {uid}: {e}')
+        logger.warning('x_connector: failed to unregister user %s (error_type=%s)', uid, type(e).__name__)
 
 
 async def get_valid_access_token(uid: str) -> Optional[str]:
@@ -254,7 +292,7 @@ async def get_valid_access_token(uid: str) -> Optional[str]:
         emit_auth_refresh_succeeded(telemetry_context)
         return token_resp['access_token']
     except Exception as e:
-        logger.warning(f'x_connector: token refresh failed for uid={uid}: {e}')
+        logger.warning('x_connector: token refresh failed for uid=%s (error_type=%s)', uid, type(e).__name__)
         emit_auth_refresh_failed(telemetry_context, e)
         return None
 
@@ -320,7 +358,7 @@ async def fetch_bookmarks(token: str, x_user_id: str) -> List[Dict]:
             token, f'/users/{x_user_id}/bookmarks', x_posts_db.KIND_BOOKMARK, MAX_BOOKMARK_PAGES, {}
         )
     except Exception as e:
-        logger.info(f'x_connector: bookmarks fetch skipped/failed: {e}')
+        logger.info('x_connector: bookmarks fetch skipped/failed (error_type=%s)', type(e).__name__)
         return []
 
 
@@ -340,16 +378,6 @@ def _extract_and_index(
     vector-index the resulting memories. Returns memories created."""
     if not posts:
         return 0
-    # §1.8 (flip-review F-3): the X connector is one of the managed
-    # memory-formation doors that ran ungated for basic. The shared producer
-    # gate sits above every chunk's extractor spend, exactly like the
-    # coordinator's extraction boundary. Skipped posts stay pending —
-    # unformed memories are never backfilled (the eager-extraction
-    # asymmetry), so a later upgrade forms them on the next sync instead of
-    # a suppression window mass-forming a backlog.
-    if managed_memory_formation_suppressed(uid, 'x_connector'):
-        return 0
-
     chunks: List[Tuple[str, List[str]]] = []
     buf: List[str] = []
     buf_ids: List[str] = []
@@ -486,7 +514,9 @@ async def sync_x_for_user(uid: str, *, background_flex: Optional[PromotionFlexRu
                 new_posts = tweets + bookmarks
                 source = 'oauth'
         except Exception as e:
-            logger.warning(f'x_connector: official API sync failed for uid={uid}, falling back: {e}')
+            logger.warning(
+                'x_connector: official API sync failed for uid=%s, falling back (error_type=%s)', uid, type(e).__name__
+            )
             emit_sync_failed(
                 IntegrationTelemetryContext(
                     integration_name=X,
@@ -504,6 +534,14 @@ async def sync_x_for_user(uid: str, *, background_flex: Optional[PromotionFlexRu
             await run_blocking(db_executor, users_db.set_integration, uid, INTEGRATION_KEY, {'syncing': False})
             emit_sync_failed(sync_context, 'not_connected')
             return {'success': False, 'error': 'not_connected', 'new_posts': 0, 'memories_created': 0}
+        if not social.is_rapid_api_configured():
+            # Unset RapidAPI credentials are a permanent condition for this
+            # deployment, not a fetch error: skip the fallback instead of
+            # burning retries per user on a guaranteed failure.
+            await run_blocking(db_executor, users_db.set_integration, uid, INTEGRATION_KEY, {'syncing': False})
+            logger.info('x_connector: RapidAPI fallback skipped for uid=%s: credentials are not configured', uid)
+            emit_sync_failed(sync_context, 'rapidapi_not_configured')
+            return {'success': False, 'error': 'rapidapi_not_configured', 'new_posts': 0, 'memories_created': 0}
         try:
             timeline = await social.get_twitter_timeline(handle)
             new_posts = [
@@ -517,7 +555,7 @@ async def sync_x_for_user(uid: str, *, background_flex: Optional[PromotionFlexRu
             ]
             source = 'rapidapi'
         except Exception as e:
-            logger.error(f'x_connector: RapidAPI fallback failed for uid={uid}: {e}')
+            logger.error('x_connector: RapidAPI fallback failed for uid=%s (error_type=%s)', uid, type(e).__name__)
             await run_blocking(db_executor, users_db.set_integration, uid, INTEGRATION_KEY, {'syncing': False})
             emit_sync_failed(
                 IntegrationTelemetryContext(
@@ -552,7 +590,13 @@ async def sync_x_for_user(uid: str, *, background_flex: Optional[PromotionFlexRu
             try:
                 await run_blocking(db_executor, upsert_x_post_vectors_batch, uid, items_to_index[i : i + 100])
             except Exception as e:
-                logger.warning(f'x_connector: failed to index x_posts chunk[{i}:{i+100}] for uid={uid}: {e}')
+                logger.warning(
+                    'x_connector: failed to index x_posts chunk[%s:%s] for uid=%s (error_type=%s)',
+                    i,
+                    i + 100,
+                    uid,
+                    type(e).__name__,
+                )
         extraction_llm = (
             background_flex.llm_for_uid(
                 uid,
@@ -594,14 +638,22 @@ async def sync_x_for_user(uid: str, *, background_flex: Optional[PromotionFlexRu
         try:
             await run_blocking(db_executor, users_db.set_integration, uid, INTEGRATION_KEY, {'syncing': False})
         except Exception as cleanup_error:
-            logger.warning(f'x_connector: failed to clear syncing after Flex deferral for uid={uid}: {cleanup_error}')
+            logger.warning(
+                'x_connector: failed to clear syncing after Flex deferral for uid=%s (error_type=%s)',
+                uid,
+                type(cleanup_error).__name__,
+            )
         logger.info('x_connector: scheduled Flex extraction deferred uid=%s', uid)
         raise
     except Exception as e:
         try:
             await run_blocking(db_executor, users_db.set_integration, uid, INTEGRATION_KEY, {'syncing': False})
         except Exception as cleanup_error:
-            logger.warning(f'x_connector: failed to clear syncing after sync failure for uid={uid}: {cleanup_error}')
+            logger.warning(
+                'x_connector: failed to clear syncing after sync failure for uid=%s (error_type=%s)',
+                uid,
+                type(cleanup_error).__name__,
+            )
         emit_sync_failed(
             IntegrationTelemetryContext(integration_name=X, operation='sync_posts', uid=uid, sync_source=source),
             e,
@@ -643,26 +695,33 @@ def disconnect(uid: str) -> None:
 
 
 # ----------------------------------------------------------------------------
-# Periodic background sync (driven by the hourly cron in modal/job.py)
+# Periodic background sync (hosted by x-connector-sync-job; Scheduler owns cadence)
 # ----------------------------------------------------------------------------
-
-
-def should_run_x_sync_job() -> bool:
-    """Gate the sync to every SYNC_JOB_INTERVAL_HOURS (the cron fires hourly)."""
-    return datetime.now(timezone.utc).hour % SYNC_JOB_INTERVAL_HOURS == 0
 
 
 async def run_x_sync_job(*, job_started_at: Optional[float] = None) -> Dict:
     """Incrementally sync every connected X user. Errors are isolated per user;
-    a slow/failed account never blocks the others."""
+    a slow/failed account never blocks the others.
+
+    The summary always includes ``failed`` and ``errors``. Global listing
+    failures populate ``errors`` so the Cloud Run entrypoint can exit non-zero
+    instead of looking healthy to Scheduler (#9298 / #11183).
+    """
     try:
         uids = [d.id for d in db.collection(_REGISTRY_COLLECTION).stream()]
     except Exception as e:
-        logger.error(f'x_connector: sync job could not list users: {e}')
-        return {'users': 0, 'synced': 0, 'new_posts': 0}
+        logger.error('x_connector: sync job could not list users (error_type=%s)', type(e).__name__)
+        return {
+            'users': 0,
+            'synced': 0,
+            'new_posts': 0,
+            'failed': 0,
+            'errors': [f'list_users: {type(e).__name__}'],
+        }
 
     background_flex = PromotionFlexRunRouter(db_client=db, started_at=job_started_at)
     synced = 0
+    failed = 0
     new_posts = 0
     for uid in uids:
         try:
@@ -670,11 +729,41 @@ async def run_x_sync_job(*, job_started_at: Optional[float] = None) -> Dict:
             if result.get('success'):
                 synced += 1
                 new_posts += int(result.get('new_posts', 0))
+            else:
+                failed += 1
         except PromotionFlexDeferred:
             logger.info('x_connector: scheduled Flex extraction deferred uid=%s', uid)
         except Exception as e:
-            logger.warning(f'x_connector: sync job failed for uid={uid}: {e}')
+            failed += 1
+            logger.warning('x_connector: sync job failed for uid=%s (error_type=%s)', uid, type(e).__name__)
         await asyncio.sleep(_SYNC_JOB_USER_SPACING_SEC)
 
-    logger.info(f'x_connector: sync job done — users={len(uids)} synced={synced} new_posts={new_posts}')
-    return {'users': len(uids), 'synced': synced, 'new_posts': new_posts}
+    logger.info(
+        f'x_connector: sync job done — users={len(uids)} synced={synced} ' f'failed={failed} new_posts={new_posts}'
+    )
+    return {
+        'users': len(uids),
+        'synced': synced,
+        'new_posts': new_posts,
+        'failed': failed,
+        'errors': [],
+    }
+
+
+def raise_if_x_sync_job_failed(summary: Dict) -> None:
+    """Fail the Cloud Run Job when the scheduled sync contract could not complete.
+
+    Mirrors memory-maintenance-job: inspect the summary and raise so Scheduler /
+    Cloud Run show a failed execution instead of a silent healthy no-op.
+    """
+    errors = list(summary.get('errors') or [])
+    if errors:
+        raise RuntimeError(f"x-connector-sync-job failed: {'; '.join(str(e) for e in errors)}")
+
+    users = int(summary.get('users') or 0)
+    synced = int(summary.get('synced') or 0)
+    failed = int(summary.get('failed') or 0)
+    # Empty registry is a valid healthy run. Total failure across every connected
+    # user means the sync contract did not complete even though listing worked.
+    if users > 0 and synced == 0 and failed >= users:
+        raise RuntimeError(f"x-connector-sync-job failed: synced 0/{users} connected user(s) (failed={failed})")

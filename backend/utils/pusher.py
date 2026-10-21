@@ -136,6 +136,7 @@ async def connect_to_trigger_pusher(
     retries: int = 3,
     is_active: Optional[Callable[..., Any]] = None,
     client_kind: str = 'unknown',
+    audio_timeline: Optional[int] = None,
 ):
     breaker = get_circuit_breaker()
     logger.info(f"connect_to_trigger_pusher {uid} (breaker={breaker.state.value})")
@@ -157,7 +158,7 @@ async def connect_to_trigger_pusher(
             raise PusherCircuitBreakerOpen(f"Circuit breaker half-open, probe in progress {uid}")
 
         try:
-            result = await _connect_to_trigger_pusher(uid, sample_rate, client_kind)
+            result = await _connect_to_trigger_pusher(uid, sample_rate, client_kind, audio_timeline)
             breaker.record_success(is_probe=is_probe)
             return result
         except asyncio.CancelledError:
@@ -181,7 +182,9 @@ async def connect_to_trigger_pusher(
     raise Exception(f'Could not open socket: All retry attempts failed.', uid)
 
 
-async def _connect_to_trigger_pusher(uid: str, sample_rate: int = 8000, client_kind: str = 'unknown'):
+async def _connect_to_trigger_pusher(
+    uid: str, sample_rate: int = 8000, client_kind: str = 'unknown', audio_timeline: Optional[int] = None
+):
     try:
         logger.info(f"Connecting to Pusher transcripts trigger WebSocket... {uid}")
         if not PusherAPI:
@@ -189,14 +192,18 @@ async def _connect_to_trigger_pusher(uid: str, sample_rate: int = 8000, client_k
         parsed = urlsplit(PusherAPI)
         if parsed.scheme not in {'http', 'https'} or not parsed.netloc:
             raise ValueError('HOSTED_PUSHER_API_URL must be an absolute HTTP URL')
-        query = urlencode(
-            (
-                *parse_qsl(parsed.query, keep_blank_values=True),
-                ('uid', uid),
-                ('sample_rate', sample_rate),
-                ('client_kind', client_kind),
-            )
-        )
+        # audio_timeline is the opt-in v2 WebSocket query parameter: an old
+        # pusher ignores the unknown key, a new pusher answers with the
+        # pusher->listen acknowledgment opcode after acceptance.
+        params = [
+            *parse_qsl(parsed.query, keep_blank_values=True),
+            ('uid', uid),
+            ('sample_rate', sample_rate),
+            ('client_kind', client_kind),
+        ]
+        if audio_timeline is not None:
+            params.append(('audio_timeline', audio_timeline))
+        query = urlencode(params)
         ws_url = urlunsplit(
             (
                 'wss' if parsed.scheme == 'https' else 'ws',

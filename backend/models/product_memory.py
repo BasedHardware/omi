@@ -191,8 +191,6 @@ class MemoryItem(BaseModel):
     primary_capture_device: Optional[str] = None
     corroboration_count: int = 0
     last_corroborated_at: Optional[datetime] = None
-    half_life_days: Optional[float] = None
-    belief_class: Optional[str] = None
     confidence: Optional[float] = None
     superseded_by: Optional[str] = None
     subject_entity_id: Optional[str] = None
@@ -375,6 +373,8 @@ def effective_short_term_expiry(item: MemoryItem) -> datetime:
 
 
 def _base_policy_checks(item: MemoryItem, policy: MemoryAccessPolicy, now: datetime) -> Optional[AccessDecision]:
+    if (item.promotion or {}).get('chat_deleted') is True:
+        return AccessDecision(False, 'owner_removed_from_chat')
     if item.status != MemoryItemStatus.active:
         return AccessDecision(False, "not_active")
     if item.processing_state == ProcessingState.blocked:

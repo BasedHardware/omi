@@ -241,7 +241,7 @@ abstract class BaseBatchAudioWriter internal constructor(
     private fun recoverStalePartFiles(dir: File) {
         try {
             val parts = dir.listFiles { f ->
-                f.isFile && f.name.startsWith(recoveryPrefix) && f.name.endsWith(".bin$PART_SUFFIX")
+                f.isFile && (f.name.startsWith(recoveryPrefix) || (recoveryPrefix == "audio_omibatch_" && f.name.startsWith("audio_omibatchoverflow_"))) && f.name.endsWith(".bin$PART_SUFFIX")
             } ?: return
             for (p in parts) {
                 val completeBytes = try {
@@ -290,4 +290,8 @@ abstract class BaseBatchAudioWriter internal constructor(
 
     protected fun boolPref(key: String, defaultValue: Boolean): Boolean =
         preferenceValues.boolean(key, defaultValue)
+
+    /** Current native admission policy, resolved synchronously at a sink boundary. */
+    protected fun captureAdmissionPolicy(): CaptureAdmissionPolicy =
+        CaptureAdmissionPolicy.load(preferenceValues)
 }

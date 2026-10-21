@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:omi/backend/http/error_detail.dart';
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/schema/gen/imports_integrations_wire.g.dart' as wire;
 import 'package:omi/env/env.dart';
@@ -29,10 +30,38 @@ enum ImportJobStatus {
   }
 }
 
+/// Which importer created a job. Jobs from before the server reported it were
+/// all Limitless imports; an importer this build does not know is [other].
+enum ImportJobSource {
+  limitless('limitless'),
+  transcriptFiles('transcript_files'),
+
+  /// The unknown importer's own name is not kept; `other` reads back as [other].
+  other('other');
+
+  const ImportJobSource(this.wireValue);
+
+  /// The job's `source_type` on the wire.
+  final String wireValue;
+
+  static ImportJobSource fromWire(String? value) {
+    switch (value) {
+      case null:
+      case 'limitless':
+        return ImportJobSource.limitless;
+      case 'transcript_files':
+        return ImportJobSource.transcriptFiles;
+      default:
+        return ImportJobSource.other;
+    }
+  }
+}
+
 /// Import job response model
 class ImportJobResponse {
   final String jobId;
   final ImportJobStatus status;
+  final ImportJobSource source;
   final int? totalFiles;
   final int? processedFiles;
   final int? conversationsCreated;
@@ -43,6 +72,7 @@ class ImportJobResponse {
   ImportJobResponse({
     required this.jobId,
     required this.status,
+    this.source = ImportJobSource.limitless,
     this.totalFiles,
     this.processedFiles,
     this.conversationsCreated,
@@ -59,6 +89,7 @@ class ImportJobResponse {
     return ImportJobResponse(
       jobId: generated.jobId,
       status: ImportJobStatus.fromString(generated.status),
+      source: ImportJobSource.fromWire(generated.sourceType),
       totalFiles: generated.totalFiles,
       processedFiles: generated.processedFiles,
       conversationsCreated: generated.conversationsCreated,
@@ -85,6 +116,7 @@ class ImportJobResponse {
     return wire.GeneratedImportJobResponse(
       jobId: jobId,
       status: status.name,
+      sourceType: source.wireValue,
       totalFiles: totalFiles,
       processedFiles: processedFiles,
       conversationsCreated: conversationsCreated,
@@ -102,6 +134,73 @@ class ImportJobResponse {
   bool get isCompleted => status == ImportJobStatus.completed;
   bool get isFailed => status == ImportJobStatus.failed;
   bool get isProcessing => status == ImportJobStatus.processing || status == ImportJobStatus.pending;
+}
+
+/// File types the transcript importer accepts: one transcript, or a ZIP of them.
+const transcriptImportExtensions = ['zip', 'srt', 'vtt', 'txt'];
+
+String transcriptImportUrl(String baseUrl, {required String language, String? timeZone, String origin = 'other'}) {
+  return Uri.parse('${baseUrl}v1/import/transcripts').replace(
+    queryParameters: {
+      'language': language.isEmpty ? 'en' : language,
+      'tz': (timeZone == null || timeZone.isEmpty) ? 'UTC' : timeZone,
+      'origin': origin,
+    },
+  ).toString();
+}
+
+/// The largest upload the import routes accept (`IMPORT_MAX_PART_SIZE` in
+/// backend/utils/multipart.py). A larger file is refused before it is sent.
+const transcriptImportMaxUploadBytes = 100 * 1024 * 1024;
+
+/// The outcome of starting an import: the job to poll, or why it was refused: the
+/// file was too large to send, or the server's status code and plain-text `detail`.
+class ImportStartResult {
+  const ImportStartResult.started(ImportJobResponse this.job)
+      : statusCode = null,
+        errorDetail = null,
+        tooLarge = false;
+  const ImportStartResult.failed({this.statusCode, this.errorDetail})
+      : job = null,
+        tooLarge = false;
+  const ImportStartResult.tooLarge()
+      : job = null,
+        statusCode = null,
+        errorDetail = null,
+        tooLarge = true;
+
+  final ImportJobResponse? job;
+  final int? statusCode;
+  final String? errorDetail;
+  final bool tooLarge;
+}
+
+/// Start importing SRT, VTT or TXT transcripts (or a ZIP of them) exported from
+/// other apps. `origin` stays API-only: the app always sends the default.
+Future<ImportStartResult> startTranscriptImport(
+  File file, {
+  String language = 'en',
+  String? timeZone,
+  String origin = 'other',
+  int maxUploadBytes = transcriptImportMaxUploadBytes,
+}) async {
+  try {
+    if (await file.length() > maxUploadBytes) return const ImportStartResult.tooLarge();
+    final response = await makeMultipartApiCall(
+      url: transcriptImportUrl(Env.apiBaseUrl ?? '', language: language, timeZone: timeZone, origin: origin),
+      files: [file],
+      fileFieldName: 'file',
+    );
+    if (response.statusCode == 200) {
+      final data = wire.GeneratedImportJobResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+      return ImportStartResult.started(ImportJobResponse.fromGenerated(data));
+    }
+    Logger.debug('Failed to start transcript import. Status: ${response.statusCode}');
+    return ImportStartResult.failed(statusCode: response.statusCode, errorDetail: errorDetailMessage(response.body));
+  } catch (e) {
+    Logger.debug('Error starting transcript import: $e');
+    return const ImportStartResult.failed();
+  }
 }
 
 /// Start a Limitless import from a ZIP file

@@ -67,7 +67,7 @@ struct RewindStorageSummary: View {
       if case .unavailable = RewindStorageSummaryState.resolve(
         stats: stats, didCompleteRead: didCompleteRead)
       {
-        Button("Retry") {
+        Button("Try Again") {
           Task { await read() }
         }
         .buttonStyle(OmiButtonStyle(.primary, size: .compact))

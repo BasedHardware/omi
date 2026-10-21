@@ -6,7 +6,7 @@ const { getWebDeviceIdHash } = vi.hoisted(() => ({ getWebDeviceIdHash: vi.fn() }
 vi.mock('@/lib/firebase', () => ({ getIdToken }));
 vi.mock('@/lib/clientDevice', () => ({ getWebDeviceIdHash }));
 
-import { createMemory, getMemories } from '@/lib/api';
+import { createMemory, getMemories, getMemoriesPage } from '@/lib/api';
 
 describe('getMemories ledger boundary', () => {
   beforeEach(() => {
@@ -16,8 +16,10 @@ describe('getMemories ledger boundary', () => {
   });
 
   it('normalizes malformed/future rows at the used API consumer without dropping text rows', async () => {
-    const fetchMock = vi.fn(
-      async () =>
+    const fetchMock = vi.fn<
+      (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
+    >(
+      async (_input?: RequestInfo | URL, _init?: RequestInit) =>
         new Response(
           JSON.stringify([
             {
@@ -85,6 +87,44 @@ describe('getMemories ledger boundary', () => {
     ]) {
       expect(memories[1]).not.toHaveProperty(field);
     }
+  });
+
+  it('reads the standard memory list and retains pagination receipts', async () => {
+    const fetchMock = vi.fn<
+      (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
+    >(
+      async () =>
+        new Response(
+          JSON.stringify([
+            {
+              id: 'current',
+              uid: 'web-user-1',
+              content: 'Current text',
+              created_at: '2026-08-23T00:00:00Z',
+              updated_at: '2026-08-23T00:00:00Z',
+            },
+          ]),
+          {
+            headers: {
+              'content-type': 'application/json',
+              'X-Omi-Memory-Next-Cursor': 'next-page',
+            },
+          },
+        ),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const page = await getMemoriesPage({ limit: 25 });
+
+    expect(String(fetchMock.mock.calls[0]?.[0])).toContain(
+      '/v3/memories?limit=25&offset=0',
+    );
+    expect(page).toMatchObject({
+      nextCursor: 'next-page',
+      truncated: false,
+    });
+    expect(page).not.toHaveProperty('beliefEnabled');
+    expect(page.memories[0]).not.toHaveProperty('currency_band');
   });
 
   it('normalizes the actual createMemory response before returning it', async () => {

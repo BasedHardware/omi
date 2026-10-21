@@ -306,9 +306,13 @@ def test_legacy_binding_migration_rejects_multi_container_services_without_mutat
     ]
 
 
-def test_legacy_binding_migration_rejects_mismatched_projects_without_gcloud_calls() -> None:
+def test_legacy_binding_migration_rejects_mismatched_projects_without_gcloud_calls(tmp_path: Path) -> None:
     preflight = _load_preflight()
     calls: list[list[str]] = []
+    # Project admission needs only this scope; unrelated service bindings make
+    # parsing the full production manifest dominate this fast boundary test.
+    manifest = tmp_path / 'runtime-env.yaml'
+    manifest.write_text('environments:\n  prod:\n    compute_project: based-hardware\n')
 
     with pytest.raises(ValueError, match="prod expects project 'based-hardware'"):
         preflight.migrate_legacy_public_bindings(
@@ -316,6 +320,7 @@ def test_legacy_binding_migration_rejects_mismatched_projects_without_gcloud_cal
             env='prod',
             project='based-hardware-dev',
             region='us-central1',
+            manifest_path=manifest,
             runner=lambda command, **_kwargs: calls.append(command),
         )
 
@@ -401,25 +406,36 @@ def test_dev_deploy_invokes_legacy_binding_migration_only_for_dev_services() -> 
 
 
 def test_static_backend_deploys_only_check_the_serving_firestore_schema() -> None:
+    composite = (BACKEND_DIR.parent / '.github/actions/firestore-readiness/action.yml').read_text(encoding='utf-8')
     workflows = (
         BACKEND_DIR.parent / '.github/workflows/gcp_backend_auto_dev.yml',
         BACKEND_DIR.parent / '.github/workflows/gcp_backend.yml',
     )
 
+    assert composite.count('backend/scripts/reconcile_firestore_indexes.py') == 2
+    assert composite.count('--check-only') == 1
+    assert composite.count('--validate-proposal') == 1
+    assert '--provision-missing' not in composite
+    assert '--proposal-output "$FIRESTORE_PROPOSAL_PATH"' in composite
+    assert '--source-commit "$FIRESTORE_SOURCE_COMMIT"' in composite
+    assert '--proposal-ttl-seconds 3600' in composite
+    assert 'actions/upload-artifact@v7' in composite
+    assert 'steps.validate_firestore_proposal.outcome == \'success\'' in composite
+    assert 'if-no-files-found: error' in composite
+    assert 'retention-days: 1' in composite
+    assert 'export_environment_variables: false' in composite
+    assert 'create_credentials_file: true' in composite
+    assert 'CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE' in composite
+    assert 'backend/docs/runbooks/firestore-missing-index.md' in composite
+
     for workflow in workflows:
         text = workflow.read_text(encoding='utf-8')
-        assert text.count('backend/scripts/reconcile_firestore_indexes.py') == 2
-        assert '--project "${{ vars.RUNTIME_GCP_PROJECT_ID }}"' in text
-        assert text.count('--check-only') == 1
-        assert text.count('--validate-proposal') == 1
-        assert '--provision-missing' not in text
-        assert '--proposal-output "$FIRESTORE_PROPOSAL_PATH"' in text
-        assert '--source-commit "$FIRESTORE_SOURCE_COMMIT"' in text
-        assert '--proposal-ttl-seconds 3600' in text
-        assert 'actions/upload-artifact@v7' in text
-        assert 'steps.validate_firestore_proposal.outcome == \'success\'' in text
-        assert 'if-no-files-found: error' in text
-        assert 'retention-days: 1' in text
+        assert 'backend/scripts/reconcile_firestore_indexes.py' not in text
+        assert '--check-only' not in text
+        assert 'uses: ./.github/firestore-workflow/.github/actions/firestore-readiness' in text
+        assert 'ref: ${{ github.workflow_sha }}' in text
+        assert 'path: .github/firestore-workflow' in text
+        assert 'project_id: ${{ vars.RUNTIME_GCP_PROJECT_ID }}' in text
         assert 'credentials_json: ${{ secrets.GCP_FIRESTORE_READONLY_CREDENTIALS }}' in text
         assert 'needs: firestore_readiness' in text
 
@@ -428,17 +444,20 @@ def test_dev_firestore_readiness_requires_read_only_credentials_for_the_runtime_
     workflow = BACKEND_DIR.parent / '.github/workflows/gcp_backend_auto_dev.yml'
     text = workflow.read_text(encoding='utf-8')
     readiness = text.split('\n  firestore_readiness:\n', 1)[1].split('\n  deploy:\n', 1)[0]
+    composite = (BACKEND_DIR.parent / '.github/actions/firestore-readiness/action.yml').read_text(encoding='utf-8')
 
-    assert 'Verify read-only Firestore credentials target the development runtime project' in readiness
-    assert 'RUNTIME_GCP_PROJECT_ID: ${{ vars.RUNTIME_GCP_PROJECT_ID }}' in readiness
-    assert 'credential_project="$(gcloud config get-value project 2>/dev/null)"' in readiness
-    assert '"$credential_project" != "$RUNTIME_GCP_PROJECT_ID"' in readiness
-    assert readiness.index('Google Auth for read-only Firestore inventory') < readiness.index(
-        'Verify read-only Firestore credentials target the development runtime project'
+    assert "verify_credential_project: 'true'" in readiness
+    assert 'Verify read-only Firestore credentials target the runtime project' in composite
+    assert "if: inputs.verify_credential_project == 'true'" in composite
+    assert 'RUNTIME_GCP_PROJECT_ID: ${{ inputs.project_id }}' in composite
+    assert 'credential_project="$(gcloud config get-value project 2>/dev/null)"' in composite
+    assert '"$credential_project" != "$RUNTIME_GCP_PROJECT_ID"' in composite
+    assert composite.index('Google Auth for read-only Firestore inventory') < composite.index(
+        'Verify read-only Firestore credentials target the runtime project'
     )
-    assert readiness.index(
-        'Verify read-only Firestore credentials target the development runtime project'
-    ) < readiness.index('Verify serving Firestore indexes')
+    assert composite.index('Verify read-only Firestore credentials target the runtime project') < composite.index(
+        'Verify serving Firestore indexes'
+    )
 
 
 def test_firestore_readiness_fails_before_admitted_source_checkout_when_read_only_credentials_are_missing() -> None:
@@ -457,7 +476,7 @@ def test_firestore_readiness_fails_before_admitted_source_checkout_when_read_onl
         assert 'if [ -z "$GCP_FIRESTORE_READONLY_CREDENTIALS" ]; then' in readiness
         assert readiness.index('Require read-only Firestore credentials') < readiness.index(checkout_marker)
         assert readiness.index('Require read-only Firestore credentials') < readiness.index(
-            'Google Auth for read-only Firestore inventory'
+            'Verify serving Firestore indexes'
         )
         if workflow.name == 'gcp_backend_auto_dev.yml':
             assert readiness.index('Resolve and verify the newest proven main source') < readiness.index(
@@ -501,7 +520,11 @@ def test_static_firestore_index_migration_is_approved_and_main_scoped() -> None:
     assert 'ref: ${{ github.sha }}' in text
     assert 'git rev-parse HEAD' in text
     assert 'if [[ "$checked_sha" != "$GITHUB_SHA" ]]; then' in text
-    assert 'credentials_json: ${{ secrets.GCP_CREDENTIALS }}' in text
+    # Both lanes authenticate keylessly: prod through omi-gha-deploy-prod, development
+    # through omi-gha-deploy-dev. No JSON key is passed.
+    assert 'secrets.GCP_CREDENTIALS' not in text
+    assert 'omi-gha-deploy-prod/providers/github' in text
+    assert 'omi-gha-deploy-dev/providers/github' in text
     composite = text.split('\n  reconcile_composite_indexes:', 1)[1].split(
         '\n  reconcile_development_composite_indexes:', 1
     )[0]
@@ -540,7 +563,10 @@ def test_static_firestore_index_migration_is_approved_and_main_scoped() -> None:
     assert '--dry-run' in plan
     assert '--dry-run' in plan
     assert '--dry-run' not in apply
-    assert '--timeout-seconds 3600' in apply
+    assert 'timeout-minutes: 240' in composite
+    assert 'timeout-minutes: 240' in development
+    assert '--timeout-seconds 10800' in apply
+    assert '--timeout-seconds 10800' in development
 
     # Firestore documents `gcloud firestore indexes fields update --disable-indexes`
     # as an explicit field override that does not affect composites. Keep that
@@ -573,10 +599,7 @@ def test_static_manual_deploy_requires_an_admitted_main_source() -> None:
     assert '.github/scripts/verify_backend_release_admission.py' in readiness
     assert "printf 'admitted_sha=%s\\n' \"$DEPLOY_SHA\" >> \"$GITHUB_OUTPUT\"" in readiness
     assert 'admitted_sha: ${{ needs.firestore_readiness.outputs.admitted_sha }}' in deploy
-    assert readiness.index('Verify exact admitted main source') < readiness.index(
-        'Google Auth for read-only Firestore inventory'
-    )
-    assert readiness.index('Verify exact admitted main source') < readiness.index('--check-only')
+    assert readiness.index('Verify exact admitted main source') < readiness.index('Verify serving Firestore indexes')
     assert 'secrets.GCP_CREDENTIALS' not in readiness
 
 
@@ -714,6 +737,47 @@ def test_evaluate_accepts_matching_deployed_composition() -> None:
     expectation = _expectation()
 
     assert verifier.evaluate(expectation, _documents(expectation)) == []
+
+
+def test_role_image_opt_in_expects_each_moved_service_at_its_digest() -> None:
+    api = 'gcr.io/based-hardware-dev/backend-api@sha256:' + 'c' * 64
+    listen = 'gcr.io/based-hardware-dev/backend-realtime@sha256:' + 'd' * 64
+    expectation = verifier.build_expectation(
+        commit_sha='abcdef1234567890',
+        deploy_run_id='12345',
+        deploy_run_attempt='1',
+        project='based-hardware-dev',
+        region='us-central1',
+        environment='dev',
+        service_images={'backend': api, 'backend-listen': listen},
+    )
+    documents = _documents(expectation)
+    # Today's image on a moved service is a stale composition, not a pass.
+    assert verifier.evaluate(expectation, documents) == [
+        f'cloud_run/backend: template image is not {api}',
+        f'gke/deployment: template image is not {listen}',
+    ]
+    documents['cloud_run/backend']['spec']['template']['spec']['containers'][0]['image'] = api
+    documents['gke/deployment']['spec']['template']['spec']['containers'][0]['image'] = listen
+    assert verifier.evaluate(expectation, documents) == []
+    report = verifier.evidence(expectation, documents, [])
+    assert report['release_vector']['service_images'] == {'backend': api, 'backend-listen': listen}
+    assert report['release_vector']['backend_listen']['image'] == listen
+
+
+def test_role_image_opt_in_rejects_unknown_services_and_tags() -> None:
+    kwargs = dict(
+        commit_sha='abcdef1234567890',
+        deploy_run_id='12345',
+        deploy_run_attempt='1',
+        project='based-hardware-dev',
+        region='us-central1',
+        environment='dev',
+    )
+    with pytest.raises(ValueError, match='unknown services'):
+        verifier.build_expectation(**kwargs, service_images={'pusher': 'x@sha256:' + 'c' * 64})
+    with pytest.raises(ValueError, match='digest references'):
+        verifier.build_expectation(**kwargs, service_images={'backend': 'gcr.io/p/backend-api:abcdef1'})
 
 
 def test_evaluate_fails_closed_when_a_stale_revision_is_serving() -> None:

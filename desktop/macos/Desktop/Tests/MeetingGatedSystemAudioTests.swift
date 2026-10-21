@@ -6,6 +6,13 @@ import XCTest
   // omi-release-compile: this suite drives DEBUG-only test seams; the release-mode
   // notification regression step must compile the bundle without them.
 
+  private func meetingProbeSnapshot(detected: Bool) -> CallAudioSnapshot {
+    CallAudioSnapshot(
+      processes: detected ? [.init(bundleID: "us.zoom.xos", pid: 1, isRunningInput: true, isRunningOutput: false)] : [],
+      defaultInputDeviceID: 0,
+      browserWindows: [])
+  }
+
   private final class Box<T>: @unchecked Sendable {
     var value: T
     init(_ v: T) { self.value = v }
@@ -89,6 +96,18 @@ import XCTest
       // fires while in a Discord voice channel, Slack huddle, or WhatsApp call.
       XCTAssertTrue(ConferencingApps.isNativeCallApp(bundleID: "com.hnc.Discord"))
       XCTAssertTrue(ConferencingApps.isNativeCallApp(bundleID: "com.hnc.discord"))  // case-insensitive
+      // A Discord call holds the mic in the Electron renderer helper (probe, 2026-09-26).
+      XCTAssertTrue(ConferencingApps.isNativeCallApp(bundleID: "com.hnc.Discord.helper.Renderer"))
+      XCTAssertEqual(
+        ConferencingApps.nativeCallAppID(bundleID: "com.hnc.Discord.helper.Renderer"), "com.hnc.discord")
+      XCTAssertEqual(ConferencingApps.nativeCallAppID(bundleID: "com.hnc.Discord.helper"), "com.hnc.discord")
+      XCTAssertEqual(
+        ConferencingApps.nativeCallAppID(bundleID: "com.tinyspeck.slackmacgap.helper"), "com.tinyspeck.slackmacgap")
+      // Sibling apps are not helpers: a dotted prefix is required.
+      XCTAssertEqual(ConferencingApps.nativeCallAppID(bundleID: "com.hnc.DiscordPTB"), "com.hnc.discordptb")
+      XCTAssertEqual(ConferencingApps.nativeCallAppID(bundleID: "com.microsoft.teams2.helper"), "com.microsoft.teams2")
+      XCTAssertNil(ConferencingApps.nativeCallAppID(bundleID: "com.hnc.discordian"))
+      XCTAssertNil(ConferencingApps.nativeCallAppID(bundleID: "com.google.Chrome.helper"))
       XCTAssertTrue(ConferencingApps.isNativeCallApp(bundleID: "com.tinyspeck.slackmacgap"))
       XCTAssertTrue(ConferencingApps.isNativeCallApp(bundleID: "net.whatsapp.WhatsApp"))
       // Omi itself and browsers are not native call apps (browser calls are matched
@@ -195,7 +214,7 @@ import XCTest
       )
     }
 
-    func testTurnsOnImmediatelyWhenMeetingDetected() {
+    func testProvisionalCaptureTurnsOnImmediatelyWhenMeetingDetected() {
       var changes = [Bool]()
       let detector = makeDetector(onChange: { changes.append($0) })
 
@@ -204,6 +223,7 @@ import XCTest
 
       XCTAssertTrue(detector.hasObservedState)
       XCTAssertTrue(detector.isMeetingActive)
+      XCTAssertFalse(detector.isMeetingConfirmed)
       XCTAssertEqual(changes, [true])
     }
 
@@ -287,10 +307,10 @@ import XCTest
       let detector = MeetingDetector(
         pollInterval: 60.0,
         offGracePeriod: 8.0,
-        isMeetingNow: {
+        snapshot: {
           probeStarted.signal()
           _ = releaseProbe.wait(timeout: .now() + 2)
-          return true
+          return meetingProbeSnapshot(detected: true)
         },
         now: { [weak self] in self?.now ?? Date(timeIntervalSince1970: 0) },
         onInitialStateObserved: {
@@ -330,7 +350,7 @@ import XCTest
       let detector = MeetingDetector(
         pollInterval: 60.0,
         offGracePeriod: 8.0,
-        isMeetingNow: {
+        snapshot: {
           probeLock.lock()
           probeCount.value += 1
           let probeIndex = probeCount.value
@@ -339,12 +359,12 @@ import XCTest
           if probeIndex == 1 {
             firstProbeStarted.signal()
             _ = releaseFirstProbe.wait(timeout: .now() + 2)
-            return true
+            return meetingProbeSnapshot(detected: true)
           }
 
           secondProbeStarted.signal()
           _ = releaseSecondProbe.wait(timeout: .now() + 2)
-          return false
+          return meetingProbeSnapshot(detected: false)
         },
         now: { [weak self] in self?.now ?? Date(timeIntervalSince1970: 0) },
         onInitialStateObserved: { initialObservedCount += 1 },
@@ -492,6 +512,7 @@ import XCTest
           meetingStateReady: true,
           shouldCapture: false,
           segmentCount: 12,
+          conversationRole: .meeting,
           hasSpeakerSegments: false
         )
       )
@@ -504,6 +525,7 @@ import XCTest
           meetingStateReady: true,
           shouldCapture: false,
           segmentCount: 0,
+          conversationRole: .meeting,
           hasSpeakerSegments: true
         )
       )
@@ -516,6 +538,7 @@ import XCTest
           meetingStateReady: true,
           shouldCapture: false,
           segmentCount: 0,
+          conversationRole: .meeting,
           hasSpeakerSegments: false
         )
       )
@@ -528,6 +551,7 @@ import XCTest
           meetingStateReady: true,
           shouldCapture: false,
           segmentCount: 12,
+          conversationRole: .meeting,
           hasSpeakerSegments: true
         )
       )
@@ -537,6 +561,7 @@ import XCTest
           meetingStateReady: true,
           shouldCapture: false,
           segmentCount: 12,
+          conversationRole: .meeting,
           hasSpeakerSegments: true
         )
       )
@@ -549,6 +574,7 @@ import XCTest
           meetingStateReady: true,
           shouldCapture: true,
           segmentCount: 12,
+          conversationRole: .meeting,
           hasSpeakerSegments: true
         )
       )
@@ -561,6 +587,7 @@ import XCTest
           meetingStateReady: false,
           shouldCapture: false,
           segmentCount: 12,
+          conversationRole: .meeting,
           hasSpeakerSegments: true
         )
       )

@@ -1,3 +1,52 @@
 {
-  "entries": []
+  "entries": [
+    {
+      "path": "backend/utils/external_oauth/admission.py",
+      "reason": "External OAuth control-plane scaffold is intentionally unwired: activation requires an explicit owner admission decision against config/external_oauth_admission.json (fail-closed by design). Contract behavior is exercised by backend/tests/unit/external_oauth/*; see docs/integrations/oauth-control-plane.md"
+    },
+    {
+      "path": "backend/utils/external_oauth/authorization.py",
+      "reason": "External OAuth control-plane scaffold is intentionally unwired: activation requires an explicit owner admission decision against config/external_oauth_admission.json (fail-closed by design). Contract behavior is exercised by backend/tests/unit/external_oauth/*; see docs/integrations/oauth-control-plane.md"
+    },
+    {
+      "path": "backend/utils/external_oauth/fake_provider.py",
+      "reason": "External OAuth control-plane scaffold is intentionally unwired: activation requires an explicit owner admission decision against config/external_oauth_admission.json (fail-closed by design). Contract behavior is exercised by backend/tests/unit/external_oauth/*; see docs/integrations/oauth-control-plane.md"
+    },
+    {
+      "path": "backend/utils/external_oauth/google_reads.py",
+      "reason": "External OAuth control-plane scaffold is intentionally unwired: activation requires an explicit owner admission decision against config/external_oauth_admission.json (fail-closed by design). Contract behavior is exercised by backend/tests/unit/external_oauth/*; see docs/integrations/oauth-control-plane.md"
+    },
+    {
+      "path": "backend/utils/external_oauth/repository.py",
+      "reason": "External OAuth control-plane scaffold is intentionally unwired: activation requires an explicit owner admission decision against config/external_oauth_admission.json (fail-closed by design). Contract behavior is exercised by backend/tests/unit/external_oauth/*; see docs/integrations/oauth-control-plane.md"
+    },
+    {
+      "path": "backend/utils/external_oauth/service.py",
+      "reason": "External OAuth control-plane scaffold is intentionally unwired: activation requires an explicit owner admission decision against config/external_oauth_admission.json (fail-closed by design). Contract behavior is exercised by backend/tests/unit/external_oauth/*; see docs/integrations/oauth-control-plane.md"
+    },
+    {
+      "path": "backend/utils/external_oauth/vault.py",
+      "reason": "External OAuth control-plane scaffold is intentionally unwired: activation requires an explicit owner admission decision against config/external_oauth_admission.json (fail-closed by design). Contract behavior is exercised by backend/tests/unit/external_oauth/*; see docs/integrations/oauth-control-plane.md"
+    },
+    {
+      "path": "backend/utils/llm/episode_notes_prompts.py",
+      "reason": "The shaped rollout removes the production legacy writer. The pure prompt contract remains imported by backend/testing/episode_notes/prompts.py for synthetic episode evaluations and by test_episode_evidence.py; deleting it would break that separate evaluation harness."
+    },
+    {
+      "path": "backend/models/episode_extraction.py",
+      "reason": "The legacy serving parser is removed, but backend/testing/episode_notes/prompts.py still imports EpisodeStructuredExtraction to construct the synthetic evaluator schema. Retain the evaluation contract without restoring a serving path."
+    },
+    {
+      "path": "backend/utils/conversations/episode_vacuity.py",
+      "reason": "The legacy repair caller is removed, but backend/testing/episode_notes/runner.py still uses the vacuity classifier when scoring synthetic candidate notes. Retain this evaluation scorer independently of shaped serving."
+    },
+    {
+      "path": "backend/utils/llm/episode_writer.py",
+      "reason": "The legacy writer and exclusive retry/baseline factories are removed. backend/testing/episode_notes/selection.py still calls episode_budget_exceeded for the synthetic selection experiment and deterministic baseline admission."
+    },
+    {
+      "path": "backend/utils/conversations/episode_evidence.py",
+      "reason": "Production capture and claim validation were removed with the legacy writer. backend/testing/episode_notes/prompts.py still imports EvidenceItem and render_episode_evidence for synthetic evaluation; runner.py imports restore_episode_claim_ids. Retain these evaluation adapters without restoring production capture."
+    }
+  ]
 }

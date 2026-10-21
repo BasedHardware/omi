@@ -22,9 +22,13 @@ on:
       - 'backend/utils/memory/**'
       - 'backend/database/**'
       - 'backend/models/memory_apply.py'
+      - 'backend/models/daily_sweep_dispatch.py'
+      - 'backend/utils/llm/memories.py'
       - 'backend/models/product_memory.py'
       - 'backend/scripts/*_emulator_test.py'
       - 'backend/scripts/run-emulator-proofs.sh'
+      - 'backend/tests/integration/test_summary_task_promotion_emulator.py'
+      - 'backend/tests/integration/test_candidate_accept_expiry_emulator.py'
       - 'backend/pylock.toml'
       - 'firebase.json'
       - 'firestore.rules'
@@ -34,9 +38,13 @@ on:
       - 'backend/utils/memory/**'
       - 'backend/database/**'
       - 'backend/models/memory_apply.py'
+      - 'backend/models/daily_sweep_dispatch.py'
+      - 'backend/utils/llm/memories.py'
       - 'backend/models/product_memory.py'
       - 'backend/scripts/*_emulator_test.py'
       - 'backend/scripts/run-emulator-proofs.sh'
+      - 'backend/tests/integration/test_summary_task_promotion_emulator.py'
+      - 'backend/tests/integration/test_candidate_accept_expiry_emulator.py'
       - 'backend/pylock.toml'
       - 'firebase.json'
       - 'firestore.rules'
@@ -45,6 +53,12 @@ on:
 concurrency:
   group: backend-emulator-proofs-${{ github.ref }}
   cancel-in-progress: true
+
+env:
+  # Abort a git HTTP transfer that stays under 1 KB/s for 60 s, so actions/checkout
+  # retries instead of hanging 7-10 min until the TCP reset (#22890).
+  GIT_HTTP_LOW_SPEED_LIMIT: "1000"
+  GIT_HTTP_LOW_SPEED_TIME: "60"
 
 jobs:
   emulator-proofs:
@@ -92,5 +106,5 @@ jobs:
         run: |
           firebase emulators:exec \
             --only firestore \
-            --project demo-omi-jit-qa \
+            --project demo-omi-isolated-tests \
             'bash backend/scripts/run-emulator-proofs.sh'

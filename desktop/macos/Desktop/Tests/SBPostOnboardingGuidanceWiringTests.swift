@@ -152,6 +152,30 @@ final class SBPostOnboardingGuidanceWiringTests: XCTestCase {
     XCTAssertTrue(PostOnboardingPromptSuggestions.shouldShowPopup)
   }
 
+  func testPersistedMidOnboardingStateResumesAndCompletes() {
+    let model = makeConfiguredModel()
+    let previousCompletion = appState?.hasCompletedOnboarding ?? false
+    appState?.hasCompletedOnboarding = false
+    defer {
+      appState?.hasCompletedOnboarding = previousCompletion
+      UserDefaults.standard.removeObject(forKey: SBOnboardingModel.resumeStepSchemaKey)
+    }
+
+    UserDefaults.standard.set(
+      SBOnboardingModel.Step.notifications.rawValue, forKey: SBOnboardingModel.resumeStepKey)
+    UserDefaults.standard.set(
+      SBOnboardingModel.resumeStepSchemaVersion, forKey: SBOnboardingModel.resumeStepSchemaKey)
+    model.begin()
+    XCTAssertEqual(model.step, .notifications, "a persisted resume step must be honored")
+
+    model.finishOnboardingHandoff(clearOnboardingChatFlag: true)
+
+    XCTAssertTrue(try XCTUnwrap(appState).hasCompletedOnboarding)
+    XCTAssertNil(
+      UserDefaults.standard.object(forKey: sbOnboardingResumeStepKey),
+      "completing onboarding must clear the persisted resume step")
+  }
+
   func testCaptureChoiceAdvancesToOptionalReferralBeforeCompletion() {
     let model = makeConfiguredModel()
     let previousMode = AssistantSettings.shared.audioRecordingMode

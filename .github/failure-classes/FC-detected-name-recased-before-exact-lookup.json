@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "FC-detected-name-recased-before-exact-lookup",
+  "violated_contract": "A person name read out of transcript text is an identity key: live and sync find people by exact name, and a live explicit introduction that finds nobody creates a person with the detected name. Detection must return the name as transcribed. detect_speaker_introduction ran str.capitalize() on every non-CJK name, which also lowercases everything after the first letter, so \"My name is McDonald\" returned \"Mcdonald\". The exact lookup missed the existing McDonald, and the live path suggested and created a misspelled duplicate.",
+  "canonical_prevention": "Normalize a detected name only with transforms that leave correctly cased input unchanged (capitalize the first letter, keep the rest as transcribed), so the lookup key matches the stored name. Pin mixed-case names through detect_speaker_introduction and through the live person lookup that consumes them.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_speaker_id_pipeline.py",
+    "backend/tests/unit/test_live_speaker_person_creation.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/speaker_identification.py"
+  ],
+  "status": "open"
+}

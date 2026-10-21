@@ -109,3 +109,8 @@ the backend or backend-listen deployment first when initializing an environment.
    shape is introduced.
 5. Run the checker and the relevant deployment contract tests before opening a
    PR.
+
+`SPEAKER_MATCH_SCORES_ENABLED` is non-secret runtime `config`, pinned true on
+production conversation capture/processing hosts. Its rollout authority is the
+production runtime overlay and listener/pusher chart values; rollback sets it
+false on those hosts.

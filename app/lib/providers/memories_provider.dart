@@ -9,18 +9,34 @@ import 'package:tuple/tuple.dart';
 import 'package:uuid/uuid.dart';
 
 import 'package:omi/services/client_device_service.dart';
+import 'package:omi/services/siri_integration.dart';
 import 'package:omi/backend/http/api/memories.dart';
+import 'package:omi/backend/http/read_retry.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/widgets/extensions/string.dart';
 
+part 'memories_provider_loading.dart';
+
 typedef FetchMemoriesRequest = Future<GetMemoriesResult> Function({int limit, int offset, bool thisDeviceOnly});
+typedef FetchMemoriesCursorRequest = Future<GetMemoriesResult> Function({
+  int limit,
+  int offset,
+  bool thisDeviceOnly,
+  String? cursor,
+});
 typedef FetchLedgerHistoryRequest = Future<GetLedgerHistoryResult> Function({int limit, int offset});
+typedef FetchLedgerHistoryCursorRequest = Future<GetLedgerHistoryResult> Function(
+    {int limit, int offset, String? cursor});
 typedef ReviewMemoryRequest = Future<bool> Function(String memoryId, bool value);
 typedef EditMemoryRequest = Future<EditMemoryResult> Function(String memoryId, String value);
 typedef RevertMemoryRequest = Future<RevertMemoryResult> Function(String memoryId, String operationId);
+
+/// The default memory collection contains current memories. Ledger history is
+/// an explicit owner view over retained historical rows.
+enum MemoryCollectionView { usefulNow, history, all }
 
 Future<GetLedgerHistoryResult> _noLedgerHistory({int limit = 500, int offset = 0}) async =>
     const GetLedgerHistoryResult([], supported: false);
@@ -35,6 +51,10 @@ class MemoriesProvider extends ChangeNotifier {
   bool _deviceScopeSupported = true;
   bool _ledgerHistorySupported = false;
   bool _ledgerHistoryTruncated = false;
+  bool _ledgerHistoryHasMore = false;
+  int _ledgerHistoryOffset = 0;
+  String? _ledgerHistoryNextCursor;
+  MemoryCollectionView _collectionView = MemoryCollectionView.usefulNow;
   bool _loadFailed = false;
   bool _hasLoaded = false;
   Future<void>? _clientDeviceInitialization;
@@ -44,12 +64,19 @@ class MemoriesProvider extends ChangeNotifier {
   // Connectivity handling for offline sync
   ConnectivityProvider? _connectivityProvider;
   bool _isSyncing = false;
+  int _syncGeneration = 0;
   int _sessionGeneration = 0;
   int _loadSequence = 0;
   int _ledgerProjectionRevision = 0;
   final FetchMemoriesRequest _fetchMemoriesRequest;
+  late final FetchMemoriesCursorRequest? _fetchMemoriesCursorRequest;
+  ReadRetry _memoriesReadRetry;
   final FetchLedgerHistoryRequest _fetchLedgerHistoryRequest;
+  final FetchLedgerHistoryCursorRequest? _fetchLedgerHistoryCursorRequest;
   final Future<bool> Function(String) _deleteMemoryRequest;
+  final Future<bool> Function() _deleteAllMemoriesRequest;
+  final Future<Memory?> Function(String, String, String) _createMemoryRequest;
+  final Future<bool> Function(String, String) _updateMemoryVisibilityRequest;
   final ReviewMemoryRequest _reviewMemoryRequest;
   final EditMemoryRequest _editMemoryRequest;
   final RevertMemoryRequest _revertMemoryRequest;
@@ -75,23 +102,48 @@ class MemoriesProvider extends ChangeNotifier {
   int _inFlightLoadLimit = 100;
   bool _inFlightLoadDeviceScoped = false;
 
+  /// True while a history continuation is in flight. A second concurrent
+  /// load-more must not read the same offset page and advance the offset
+  /// again; it returns and the next tap continues from the completed page.
+  bool _loadingMoreHistory = false;
+  int _ledgerHistoryRequestSequence = 0;
+
   MemoriesProvider({
     FetchMemoriesRequest? fetchMemoriesRequest,
+    FetchMemoriesCursorRequest? fetchMemoriesCursorRequest,
     FetchLedgerHistoryRequest? fetchLedgerHistoryRequest,
+    FetchLedgerHistoryCursorRequest? fetchLedgerHistoryCursorRequest,
     Future<bool> Function(String)? deleteMemoryRequest,
+    Future<bool> Function()? deleteAllMemoriesRequest,
+    Future<Memory?> Function(String, String, String)? createMemoryRequest,
+    Future<bool> Function(String, String)? updateMemoryVisibilityRequest,
     ReviewMemoryRequest? reviewMemoryRequest,
     EditMemoryRequest? editMemoryRequest,
     RevertMemoryRequest? revertMemoryRequest,
+    ReadRetry? memoriesReadRetry,
   })  : _fetchMemoriesRequest = fetchMemoriesRequest ?? getMemoriesResult,
+        _memoriesReadRetry = memoriesReadRetry ?? ReadRetry(),
         _fetchLedgerHistoryRequest =
             fetchLedgerHistoryRequest ?? (fetchMemoriesRequest == null ? getLedgerHistory : _noLedgerHistory),
+        _fetchLedgerHistoryCursorRequest = fetchLedgerHistoryCursorRequest ??
+            (fetchMemoriesRequest == null && fetchLedgerHistoryRequest == null ? getLedgerHistory : null),
         _deleteMemoryRequest = deleteMemoryRequest ?? deleteMemoryServer,
+        _deleteAllMemoriesRequest = deleteAllMemoriesRequest ?? deleteAllMemoriesServer,
+        _createMemoryRequest = createMemoryRequest ?? createMemoryServer,
+        _updateMemoryVisibilityRequest = updateMemoryVisibilityRequest ?? updateMemoryVisibilityServer,
         _reviewMemoryRequest = reviewMemoryRequest ?? reviewMemoryServer,
         _editMemoryRequest = editMemoryRequest ?? editMemoryServer,
-        _revertMemoryRequest = revertMemoryRequest ?? revertMemoryServer;
+        _revertMemoryRequest = revertMemoryRequest ?? revertMemoryServer {
+    _fetchMemoriesCursorRequest =
+        fetchMemoriesCursorRequest ?? (fetchMemoriesRequest == null ? _getMemoriesCursorPage : null);
+  }
 
   List<Memory> get memories => _memories;
   bool get loading => _loading;
+
+  /// True while an offline pending-memory sync is in flight. A stuck-true
+  /// value would block every later sync attempt.
+  bool get isSyncing => _isSyncing;
   String get searchQuery => _searchQuery;
   Set<MemoryCategory> get selectedCategories => _selectedCategories;
   bool get showOnlyManual => _showOnlyManual;
@@ -100,7 +152,16 @@ class MemoriesProvider extends ChangeNotifier {
   int get pendingMemoriesCount => SharedPreferencesUtil().pendingMemories.length;
   bool get ledgerHistorySupported => _ledgerHistorySupported;
   bool get ledgerHistoryTruncated => _ledgerHistoryTruncated;
+  bool get ledgerHistoryHasMore => _ledgerHistoryHasMore;
+  String? get ledgerHistoryNextCursor => _ledgerHistoryNextCursor;
+  MemoryCollectionView get collectionView => _collectionView;
+  bool get showHistory => _collectionView == MemoryCollectionView.history;
+  bool get showAll => _collectionView == MemoryCollectionView.all;
   bool get loadFailed => _loadFailed;
+
+  /// A partial load: some pages landed, a later one failed, and the retained
+  /// rows are visible. The page shows a retry notice beside them.
+  bool get showPartialLoadError => _loadFailed && _memories.isNotEmpty;
 
   /// Whether a load attempt has already completed in this session (success or
   /// failure). `_loading` starts `true` before anything was ever fetched, so
@@ -186,13 +247,23 @@ class MemoriesProvider extends ChangeNotifier {
 
   List<Memory> get filteredMemories {
     return _memories.where((memory) {
+      final collectionMatch = switch (_collectionView) {
+        MemoryCollectionView.usefulNow => memory.isUsefulNow,
+        MemoryCollectionView.history => memory.isHistoricalKnowledgeLedgerRow,
+        MemoryCollectionView.all => true,
+      };
+
       // Apply search filter
       final matchesSearch =
           _searchQuery.isEmpty || memory.content.decodeString.toLowerCase().contains(_searchQuery.toLowerCase());
 
       // Apply category filter or exclusion logic
       bool categoryMatch;
-      if (_showOnlyManual) {
+      if (_searchQuery.isNotEmpty) {
+        // A search looks in every category, as Global Search does when it opens this list filtered
+        // by its query. A category filter saved on an earlier visit must not hide the tapped memory.
+        categoryMatch = true;
+      } else if (_showOnlyManual) {
         // Show only manual memories (exclude system and interesting)
         categoryMatch = memory.category == MemoryCategory.manual;
       } else if (_selectedCategories.isNotEmpty) {
@@ -213,9 +284,17 @@ class MemoriesProvider extends ChangeNotifier {
             captureDeviceIds: memory.captureDeviceIds,
           );
 
-      return matchesSearch && categoryMatch && deviceMatch;
+      return collectionMatch && matchesSearch && categoryMatch && deviceMatch;
     }).toList()
       ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+  }
+
+  void setCollectionView(MemoryCollectionView view) {
+    if (_collectionView == view) return;
+    _collectionView = view;
+    notifyListeners();
+    // The collection view changes only local presentation. The current list
+    // and the owner-scoped ledger history are already loaded independently.
   }
 
   void setFilterThisDeviceOnly(bool enabled) {
@@ -243,7 +322,8 @@ class MemoriesProvider extends ChangeNotifier {
   }
 
   void setSearchQuery(String query) {
-    _searchQuery = query.toLowerCase();
+    // Kept as typed so the Memories search field can show it again; filteredMemories ignores case.
+    _searchQuery = query;
     notifyListeners();
   }
 
@@ -272,7 +352,15 @@ class MemoriesProvider extends ChangeNotifier {
   }
 
   void clearUserData() {
+    _memoriesReadRetry.close();
+    _memoriesReadRetry = _memoriesReadRetry.newSession();
     _sessionGeneration++;
+    // Break the load-coalescing join: a caller that arrives after the clear
+    // must start a fresh load, not await the retired session's in-flight one
+    // (whose result the generation guard would then discard).
+    _inFlightLoad = null;
+    _inFlightLoadLimit = 100;
+    _inFlightLoadDeviceScoped = false;
     _memories = [];
     _selectedCategories = {};
     _showOnlyManual = false;
@@ -280,6 +368,10 @@ class MemoriesProvider extends ChangeNotifier {
     _filterThisDeviceOnly = false;
     _ledgerHistorySupported = false;
     _ledgerHistoryTruncated = false;
+    _ledgerHistoryHasMore = false;
+    _ledgerHistoryOffset = 0;
+    _ledgerHistoryNextCursor = null;
+    _collectionView = MemoryCollectionView.usefulNow;
     categories = [];
     selectedCategory = null;
     _loading = false;
@@ -302,6 +394,8 @@ class MemoriesProvider extends ChangeNotifier {
     // Assuming we are updating all call sites.
   }
 
+  void _notify() => notifyListeners();
+
   void _setCategories() {
     categories = MemoryCategory.values.map((category) {
       final count = memories.where((memory) => memory.category == category).length;
@@ -312,14 +406,91 @@ class MemoriesProvider extends ChangeNotifier {
 
   Future<void> init() async {
     final generation = _sessionGeneration;
-    await _ensureClientDeviceInitialized();
+    // Device-id hydration and saved-filter loading are best-effort. A failure
+    // here (secure storage / SharedPreferences hiccup) must NOT abort init
+    // before loadMemories() runs, or _loading stays at its constructor default
+    // `true` and the screen is stuck on the loading skeleton forever.
+    try {
+      await _ensureClientDeviceInitialized();
+    } catch (e) {
+      Logger.error('MemoriesProvider: client-device init failed (non-fatal): $e');
+    }
     if (generation != _sessionGeneration) return;
-    await _loadFilter();
+    try {
+      await _loadFilter();
+    } catch (e) {
+      Logger.error('MemoriesProvider: filter load failed (non-fatal): $e');
+    }
     if (generation != _sessionGeneration) return;
     await loadMemories();
     if (generation != _sessionGeneration) return;
     // Try to sync any pending memories on init
     await syncPendingMemories();
+  }
+
+  Future<void> loadMemories({int limit = 100}) async {
+    // Coalesce concurrent callers: several review cards can mount while the
+    // first fetch is still in flight (before `hasLoaded` flips), and racing
+    // loads would be discarded one after another by the sequence guard. A
+    // caller with different parameters gets its own load, which supersedes the
+    // in-flight one via the sequence guard as before.
+    final inFlight = _inFlightLoad;
+    if (inFlight != null && _inFlightLoadLimit == limit && _inFlightLoadDeviceScoped == _filterThisDeviceOnly) {
+      try {
+        await inFlight;
+      } catch (_) {}
+      return;
+    }
+    await _startMemoryLoad(limit: limit);
+  }
+
+  Future<void> _startMemoryLoad({required int limit}) async {
+    final loadFuture = _loadMemoriesInternal(limit: limit);
+    _inFlightLoad = loadFuture;
+    _inFlightLoadLimit = limit;
+    _inFlightLoadDeviceScoped = _filterThisDeviceOnly;
+    try {
+      await loadFuture;
+    } finally {
+      if (identical(_inFlightLoad, loadFuture)) {
+        _inFlightLoad = null;
+      }
+    }
+  }
+
+  Future<void> loadMoreHistory({int limit = 500}) async {
+    if (_filterThisDeviceOnly || !_ledgerHistorySupported || !_ledgerHistoryHasMore) {
+      return;
+    }
+    if (_loadingMoreHistory) return;
+    final requestSequence = ++_ledgerHistoryRequestSequence;
+    _loadingMoreHistory = true;
+    try {
+      final generation = _sessionGeneration;
+      final loadSequence = _loadSequence;
+      final ledgerProjectionRevision = _ledgerProjectionRevision;
+      final cursor = _ledgerHistoryNextCursor;
+      final result = await _fetchHistoryPage(limit: limit, offset: _ledgerHistoryOffset, cursor: cursor);
+      // Continuation pages carry the same capability contract as the initial
+      // page; do not let a stale true value survive a missing/false header.
+      if (generation != _sessionGeneration ||
+          loadSequence != _loadSequence ||
+          ledgerProjectionRevision != _ledgerProjectionRevision) {
+        return;
+      }
+      if (!result.supported) return;
+
+      final existing = _memories.map((memory) => memory.id).toSet();
+      _memories.addAll(result.memories.where((memory) => existing.add(memory.id)));
+      _ledgerHistoryOffset += result.memories.length;
+      _ledgerHistoryNextCursor = result.nextCursor;
+      _ledgerHistoryHasMore =
+          result.nextCursor != null || result.truncated || (cursor == null && result.memories.length >= limit);
+      _ledgerHistoryTruncated = result.truncated || _ledgerHistoryHasMore;
+      _setCategories();
+    } finally {
+      if (requestSequence == _ledgerHistoryRequestSequence) _loadingMoreHistory = false;
+    }
   }
 
   /// Set the connectivity provider to listen for connection changes
@@ -339,6 +510,9 @@ class MemoriesProvider extends ChangeNotifier {
 
   @override
   void dispose() {
+    _memoriesReadRetry.close();
+    _sessionGeneration++;
+    _cancelDeletionTimer();
     _connectivityProvider?.removeListener(_onConnectivityChanged);
     super.dispose();
   }
@@ -363,151 +537,6 @@ class MemoriesProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> loadMemories({int limit = 100}) async {
-    // Coalesce concurrent callers: several review cards can mount while the
-    // first fetch is still in flight (before `hasLoaded` flips), and racing
-    // loads would be discarded one after another by the sequence guard. A
-    // caller with different parameters gets its own load, which supersedes the
-    // in-flight one via the sequence guard as before.
-    final inFlight = _inFlightLoad;
-    if (inFlight != null && _inFlightLoadLimit == limit && _inFlightLoadDeviceScoped == _filterThisDeviceOnly) {
-      try {
-        await inFlight;
-      } catch (_) {}
-      return;
-    }
-    final loadFuture = _loadMemoriesInternal(limit: limit);
-    _inFlightLoad = loadFuture;
-    _inFlightLoadLimit = limit;
-    _inFlightLoadDeviceScoped = _filterThisDeviceOnly;
-    try {
-      await loadFuture;
-    } finally {
-      if (identical(_inFlightLoad, loadFuture)) {
-        _inFlightLoad = null;
-      }
-    }
-  }
-
-  Future<void> _loadMemoriesInternal({int limit = 100}) async {
-    final generation = _sessionGeneration;
-    final loadSequence = ++_loadSequence;
-    final ledgerProjectionRevision = _ledgerProjectionRevision;
-    // Snapshot the pending-deletion ID before any await: a refresh that
-    // started during the undo window must still suppress the deleted item
-    // even if _finalizeDeletion() clears the field while the fetch is in
-    // flight.
-    final tombstoneId = _pendingDeletionId;
-    _loading = true;
-    notifyListeners();
-
-    if (_filterThisDeviceOnly) {
-      await _ensureClientDeviceInitialized();
-      if (generation != _sessionGeneration || loadSequence != _loadSequence) {
-        return;
-      }
-    }
-
-    // Page until a short page: backend no longer expands the first page to 5000
-    // (prod GET /v3/memories 504s). Cap total fetch so a huge account cannot hang the UI.
-    const maxPages = 20;
-    final all = <Memory>[];
-    var offset = 0;
-    var deviceScopeSupported = true;
-    var ledgerHistorySupported = false;
-    var ledgerHistoryTruncated = false;
-    for (var page = 0; page < maxPages; page++) {
-      final result = await _fetchMemoriesRequest(limit: limit, offset: offset, thisDeviceOnly: _filterThisDeviceOnly);
-      if (generation != _sessionGeneration || loadSequence != _loadSequence) {
-        return;
-      }
-      if (!result.ok) {
-        _loadFailed = true;
-        _loading = false;
-        _hasLoaded = true;
-        notifyListeners();
-        return;
-      }
-      deviceScopeSupported = result.deviceScopeSupported;
-      all.addAll(result.memories);
-      // A truncated page is an honest partial response with no resumable cursor;
-      // stop loading instead of continuing with an unstable offset.
-      if (result.truncated || result.memories.length < limit) {
-        if (result.truncated) {
-          Logger.warning('MemoriesProvider: server returned a truncated list; stopping at $offset rows');
-        }
-        break;
-      }
-      offset += result.memories.length;
-    }
-    // History is an additive owner-scoped projection, fetched independently
-    // from the current list because GET /v3/memories intentionally filters
-    // rejected and closed rows. Device-scoped history has no ratified server
-    // contract, so the "This device" view remains current-only.
-    if (!_filterThisDeviceOnly) {
-      final seen = all.map((memory) => memory.id).toSet();
-      const historyPageSize = 500;
-      const maxHistoryPages = 10;
-      var historyOffset = 0;
-      var historyRowsLoaded = 0;
-      for (var page = 0; page < maxHistoryPages; page++) {
-        final result = await _fetchLedgerHistoryRequest(limit: historyPageSize, offset: historyOffset);
-        if (generation != _sessionGeneration || loadSequence != _loadSequence) return;
-        ledgerHistorySupported = result.supported;
-        if (!result.supported) break;
-        all.addAll(result.memories.where((memory) => seen.add(memory.id)));
-        historyRowsLoaded += result.memories.length;
-        if (result.truncated || result.memories.length < historyPageSize) {
-          ledgerHistoryTruncated = result.truncated;
-          break;
-        }
-        historyOffset += result.memories.length;
-        if (page == maxHistoryPages - 1) ledgerHistoryTruncated = true;
-      }
-      if (ledgerHistoryTruncated) {
-        Logger.warning('MemoriesProvider: ledger history is partial; loaded $historyRowsLoaded rows');
-      }
-    }
-    if (generation != _sessionGeneration ||
-        loadSequence != _loadSequence ||
-        ledgerProjectionRevision != _ledgerProjectionRevision) {
-      if (generation == _sessionGeneration && loadSequence == _loadSequence) {
-        _loading = false;
-        _hasLoaded = true;
-        notifyListeners();
-      }
-      return;
-    }
-    // Keep an optimistic delete hidden throughout its undo window. Use the
-    // snapshot taken before the fetch so a concurrent finalization that
-    // clears _pendingDeletionId mid-fetch cannot reinsert the row.
-    // Re-check _pendingDeletionId at apply time: if the user deleted a memory
-    // after loadMemories() started (tombstoneId was null at snapshot), the
-    // stale response still contains it and would reinsert the row.
-    final currentTombstoneId = _pendingDeletionId;
-    final effectiveTombstoneId = currentTombstoneId ?? tombstoneId;
-    _memories = effectiveTombstoneId != null ? all.where((memory) => memory.id != effectiveTombstoneId).toList() : all;
-    _deviceScopeSupported = deviceScopeSupported;
-    _ledgerHistorySupported = ledgerHistorySupported;
-    _ledgerHistoryTruncated = ledgerHistoryTruncated;
-    _loadFailed = false;
-
-    // Merge pending memories that haven't synced yet
-    final pendingMemories = SharedPreferencesUtil().pendingMemories;
-    for (var pending in pendingMemories) {
-      if (pending.id != effectiveTombstoneId && !_memories.any((m) => m.id == pending.id)) {
-        _memories.add(pending);
-      }
-    }
-    _revertOperationIds.removeWhere(
-      (memoryId, _) => !_memories.any((memory) => memory.id == memoryId && canRevertSupersededFact(memory)),
-    );
-
-    _loading = false;
-    _hasLoaded = true;
-    _setCategories();
-  }
-
   /// Sync pending memories to server when online
   Future<void> syncPendingMemories() async {
     if (_isSyncing) return;
@@ -519,31 +548,60 @@ class MemoriesProvider extends ChangeNotifier {
     if (pendingMemories.isEmpty) return;
 
     _isSyncing = true;
-    Logger.debug('MemoriesProvider: Syncing ${pendingMemories.length} pending memories...');
+    final syncGeneration = ++_syncGeneration;
+    // Release the latch on every exit: a bare guard-return after a session
+    // invalidation (delete-all, clear) would otherwise leave _isSyncing stuck
+    // true and block every later sync for the provider's lifetime.
+    try {
+      Logger.debug('MemoriesProvider: Syncing ${pendingMemories.length} pending memories...');
 
-    for (var memory in List.from(pendingMemories)) {
-      if (generation != _sessionGeneration) return;
-      try {
-        final serverMemory = await createMemoryServer(memory.content, memory.visibility.name, memory.category.name);
-
-        if (serverMemory != null) {
-          SharedPreferencesUtil().removePendingMemory(memory.id, ownerUid: ownerUid);
-          if (generation != _sessionGeneration) return;
-          final idx = _memories.indexWhere((m) => m.id == memory.id);
-          if (idx != -1) {
-            _memories[idx].id = serverMemory.id;
-          }
-        }
+      for (var memory in List.from(pendingMemories)) {
         if (generation != _sessionGeneration) return;
-      } catch (e) {
-        Logger.debug('MemoriesProvider: Failed to sync memory ${memory.id}: $e');
-        // Keep in pending list for next sync attempt
-      }
-    }
+        try {
+          final serverMemory = await _createMemoryRequest(
+            memory.content,
+            memory.visibility.toString().split('.').last,
+            memory.category.toString().split('.').last,
+          );
 
-    if (generation == _sessionGeneration) {
-      _isSyncing = false;
-      notifyListeners();
+          if (serverMemory != null) {
+            SharedPreferencesUtil().removePendingMemory(memory.id, ownerUid: ownerUid);
+            if (generation != _sessionGeneration) return;
+            final idx = _memories.indexWhere((m) => m.id == memory.id);
+            if (idx != -1) {
+              // Keep the authoritative server projection, including temporal
+              // assessment fields that are absent from an offline draft.
+              _memories[idx] = serverMemory;
+            }
+            _ledgerProjectionRevision++;
+            _inFlightLoad = null;
+            SharedPreferencesUtil().cachedMemories = [
+              ...SharedPreferencesUtil()
+                  .cachedMemories
+                  .where((cached) => cached.id != memory.id && cached.id != serverMemory.id),
+              serverMemory,
+            ];
+            SiriIntegration.current.queueUpsertMemories([serverMemory]);
+          }
+          if (generation != _sessionGeneration) return;
+        } catch (e) {
+          Logger.debug('MemoriesProvider: Failed to sync memory ${memory.id}: $e');
+          // Keep in pending list for next sync attempt
+        }
+      }
+
+      if (generation == _sessionGeneration) {
+        SharedPreferencesUtil().cachedMemories = List<Memory>.unmodifiable(_memories);
+        notifyListeners();
+      }
+    } finally {
+      // The latch belongs to whichever sync invocation started last. An old
+      // invocation whose session was invalidated (delete-all, account clear)
+      // must not clear the latch a newer invocation already owns: that would
+      // let the next callback double-submit the new account's pending rows.
+      if (syncGeneration == _syncGeneration) {
+        _isSyncing = false;
+      }
     }
   }
 
@@ -572,6 +630,8 @@ class MemoriesProvider extends ChangeNotifier {
         // live row (a later refresh, another surface) still wins: this map is
         // only consulted when the id does not resolve.
         _settledUnresolvedReviews[memory.id] = value;
+        memory.userReview = value;
+        SiriIntegration.current.queueUpsertMemories([memory]);
         notifyListeners();
         return true;
       } catch (error) {
@@ -600,6 +660,7 @@ class MemoriesProvider extends ChangeNotifier {
       notifyListeners();
       return false;
     }
+    SiriIntegration.current.queueUpsertMemories([memory]);
     return true;
   }
 
@@ -610,7 +671,9 @@ class MemoriesProvider extends ChangeNotifier {
   /// fully validated canonical row. A session change discards the late result.
   Future<bool> revertSupersededFact(Memory memory) async {
     final sourceIndex = _memories.indexWhere((candidate) => candidate.id == memory.id);
-    if (sourceIndex == -1 || !canRevertSupersededFact(memory) || isRevertingMemory(memory.id)) return false;
+    if (sourceIndex == -1 || !canRevertSupersededFact(memory) || isRevertingMemory(memory.id)) {
+      return false;
+    }
 
     final generation = _sessionGeneration;
     if (!_revertingMemoryIds.add(memory.id)) return false;
@@ -658,10 +721,12 @@ class MemoriesProvider extends ChangeNotifier {
       // exposing the replacement; do not forge lifecycle fields locally.
       if (staleCurrentTail != null) {
         _memories.removeWhere((candidate) => candidate.id == staleCurrentTail.id);
+        SiriIntegration.current.queueDelete('memory', staleCurrentTail.id);
       }
       if (existingReplacementIndex == -1) {
         _memories.add(replacement);
       }
+      SiriIntegration.current.queueUpsertMemories([replacement]);
       _setCategories();
       await _refreshLedgerHistoryAfterRevert(
         generation,
@@ -681,7 +746,9 @@ class MemoriesProvider extends ChangeNotifier {
     required String? closedTailId,
     required String replacementId,
   }) async {
-    if (_filterThisDeviceOnly || closedTailId == null || generation != _sessionGeneration) return;
+    if (_filterThisDeviceOnly || closedTailId == null || generation != _sessionGeneration) {
+      return;
+    }
 
     try {
       const historyPageSize = 500;
@@ -802,31 +869,29 @@ class MemoriesProvider extends ChangeNotifier {
 
   Memory? get lastDeletedMemory => _lastDeletedMemory;
 
-  void deleteMemory(Memory memory) {
+  Future<void> deleteMemory(Memory memory) async {
     _cancelDeletionTimer();
-
+    if (_pendingDeletionId != null) unawaited(_finalizeDeletion());
     _lastDeletedMemory = memory;
     _pendingDeletionId = memory.id;
-
     _memories.remove(memory);
     _setCategories();
     notifyListeners();
-
     _startDeletionTimer();
+    SiriIntegration.current.queueDelete('memory', memory.id);
   }
 
   void _cancelDeletionTimer() {
-    if (_deletionTimer != null && _deletionTimer!.isActive) {
-      _deletionTimer!.cancel();
-      _deletionTimer = null;
-    }
+    _deletionTimer?.cancel();
+    _deletionTimer = null;
   }
 
-  void _startDeletionTimer() {
-    _deletionTimer = Timer(const Duration(seconds: 4), () async {
-      await _finalizeDeletion();
-    });
-  }
+  /// Backstop commit; the Undo toast (OmiFeedbackTiming.undo) commits sooner and must close first.
+  static const Duration pendingDeletionWindow = Duration(seconds: 8);
+
+  void _startDeletionTimer() => _deletionTimer = Timer(pendingDeletionWindow, () async {
+        await _finalizeDeletion();
+      });
 
   Future<void> _finalizeDeletion() async {
     if (_pendingDeletionId == null) {
@@ -834,6 +899,8 @@ class MemoriesProvider extends ChangeNotifier {
       return;
     }
 
+    final generation = _sessionGeneration;
+    final ownerUid = SharedPreferencesUtil().uid;
     final id = _pendingDeletionId!;
 
     final deletedMemory = _lastDeletedMemory;
@@ -852,11 +919,18 @@ class MemoriesProvider extends ChangeNotifier {
       }
     }
 
-    if (!deleteSucceeded && _pendingDeletionId == id && deletedMemory?.id == id) {
+    if (deleteSucceeded) {
+      if (generation == _sessionGeneration && SharedPreferencesUtil().uid == ownerUid) {
+        _ledgerProjectionRevision++;
+        SharedPreferencesUtil().cachedMemories =
+            SharedPreferencesUtil().cachedMemories.where((memory) => memory.id != id).toList();
+      }
+    } else if (deletedMemory?.id == id) {
       if (!_memories.any((memory) => memory.id == id)) {
         _memories.add(deletedMemory!);
       }
       _setCategories();
+      SiriIntegration.current.queueUpsertMemories([deletedMemory!], restoreDeleted: true);
       notifyListeners();
     }
 
@@ -866,35 +940,66 @@ class MemoriesProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> confirmPendingDeletion() async {
+  /// Commits now; with [id], only if that memory is still the pending one (a stale toast must not).
+  Future<void> confirmPendingDeletion({String? id}) async {
+    if (id != null && id != _pendingDeletionId) return;
     _cancelDeletionTimer();
     await _finalizeDeletion();
   }
 
-  // Restore the last deleted memory
-  Future<bool> restoreLastDeletedMemory() async {
-    if (_lastDeletedMemory == null) return false;
+  /// Restores the pending deletion; with [id], only if still pending (a stale toast must not restore).
+  Future<bool> restoreLastDeletedMemory({String? id}) async {
+    if (_lastDeletedMemory == null || (id != null && _lastDeletedMemory!.id != id)) return false;
 
     _cancelDeletionTimer();
     _pendingDeletionId = null;
-
-    _memories.add(_lastDeletedMemory!);
+    final restored = _lastDeletedMemory!;
+    _memories.add(restored);
     _lastDeletedMemory = null;
-
     _setCategories();
     notifyListeners();
+    SiriIntegration.current.queueUpsertMemories([restored], restoreDeleted: true);
 
     return true;
   }
 
-  void deleteAllMemories() async {
+  Future<bool> deleteAllMemories() async {
+    final generation = _sessionGeneration;
+    final ownerUid = SharedPreferencesUtil().uid;
     final int countBeforeDeletion = _memories.length;
-    await deleteAllMemoriesServer();
+    final indexedIds = _memories.map((memory) => memory.id).toList();
+    if (!await _deleteAllMemoriesRequest()) return false;
+    if (generation != _sessionGeneration || SharedPreferencesUtil().uid != ownerUid) return false;
+    // Invalidate any in-flight progressive load: its next provisional
+    // publication would replace this emptied list with pre-deletion rows, and
+    // its final path would cache and re-index them again.
+    _sessionGeneration++;
+    _loadSequence++;
+    _ledgerProjectionRevision++;
+    _ledgerHistoryRequestSequence++;
+    _inFlightLoad = null;
+    // The fenced load returns at its guards without releasing _loading; this
+    // mutation owns the terminal state and retires the history pager too.
+    _loading = false;
+    _ledgerHistoryRequestSequence++;
+    _loadingMoreHistory = false;
+    _ledgerHistoryOffset = 0;
+    _ledgerHistoryNextCursor = null;
+    _ledgerHistoryHasMore = false;
+    _ledgerHistoryTruncated = false;
     _memories.clear();
+    _cancelDeletionTimer();
+    _pendingDeletionId = null;
+    _lastDeletedMemory = null;
+    SharedPreferencesUtil().pendingMemories = [];
+    SharedPreferencesUtil().cachedMemories = [];
+    SiriIntegration.current.queueDeleteMany('memory', indexedIds, expectedUid: ownerUid);
+    SiriIntegration.current.queueReconcileMemories([]);
     if (countBeforeDeletion > 0) {
       PlatformManager.instance.analytics.memoriesAllDeleted(countBeforeDeletion);
     }
     _setCategories();
+    return true;
   }
 
   /// Create a memory - works offline by saving locally first, then syncing
@@ -927,19 +1032,30 @@ class MemoriesProvider extends ChangeNotifier {
 
     // Save to pending memories for persistence across app restarts
     SharedPreferencesUtil().addPendingMemory(newMemory);
+    final pendingId = newMemory.id;
 
     // Try to sync to server immediately
-    final serverMemory = await createMemoryServer(content, visibility.name, category.name);
+    final serverMemory = await _createMemoryRequest(content, visibility.name, category.name);
 
     if (serverMemory != null) {
       // Remove from the original account's pending queue even if the visible
       // session changed while the request was in flight.
-      SharedPreferencesUtil().removePendingMemory(newMemory.id, ownerUid: ownerUid);
+      SharedPreferencesUtil().removePendingMemory(pendingId, ownerUid: ownerUid);
       if (generation != _sessionGeneration) return true;
-      final idx = _memories.indexWhere((m) => m.id == newMemory.id);
+      final idx = _memories.indexWhere((m) => m.id == pendingId);
       if (idx != -1) {
         _memories[idx].id = serverMemory.id;
       }
+      _ledgerProjectionRevision++;
+      _inFlightLoad = null;
+      SharedPreferencesUtil().cachedMemories = [
+        ...SharedPreferencesUtil()
+            .cachedMemories
+            .where((cached) => cached.id != pendingId && cached.id != serverMemory.id),
+        serverMemory,
+      ];
+      SiriIntegration.current.queueUpsertMemories([serverMemory]);
+      unawaited(SiriIntegration.instance.donateUiAction('memory', serverMemory.id));
     }
     if (generation != _sessionGeneration) return true;
 
@@ -947,8 +1063,10 @@ class MemoriesProvider extends ChangeNotifier {
     return true;
   }
 
-  Future<void> updateMemoryVisibility(Memory memory, MemoryVisibility visibility) async {
-    await updateMemoryVisibilityServer(memory.id, visibility.name);
+  Future<bool> updateMemoryVisibility(Memory memory, MemoryVisibility visibility) async {
+    final generation = _sessionGeneration;
+    if (!await _updateMemoryVisibilityRequest(memory.id, visibility.name)) return false;
+    if (generation != _sessionGeneration) return false;
 
     final idx = _memories.indexWhere((m) => m.id == memory.id);
     if (idx != -1) {
@@ -958,7 +1076,9 @@ class MemoriesProvider extends ChangeNotifier {
 
       PlatformManager.instance.analytics.memoryVisibilityChanged(memoryToUpdate, visibility);
       _setCategories();
+      SiriIntegration.current.queueUpsertMemories([memoryToUpdate]);
     }
+    return true;
   }
 
   Future<bool> toggleMemoryBaseline(Memory memory, bool isBaseline) async {
@@ -976,6 +1096,7 @@ class MemoriesProvider extends ChangeNotifier {
   }
 
   Future<bool> editMemory(Memory memory, String value, [MemoryCategory? category]) async {
+    final generation = _sessionGeneration;
     if (memory.isKnowledgeLedger &&
         (memory.deleted ||
             memory.invalidAt != null ||
@@ -985,6 +1106,7 @@ class MemoriesProvider extends ChangeNotifier {
       return false;
     }
     final result = await _editMemoryRequest(memory.id, value);
+    if (generation != _sessionGeneration) return false;
 
     if (result.persisted) {
       final idx = _memories.indexWhere((m) => m.id == memory.id);
@@ -1010,6 +1132,11 @@ class MemoriesProvider extends ChangeNotifier {
             return false;
           }
           _memories[idx] = replacement;
+          // An authoritative replacement changes the ledger projection; a
+          // progressive load still traversing old pages must not republish the
+          // superseded row from its stale snapshot.
+          _ledgerProjectionRevision++;
+          SiriIntegration.current.queueDelete('memory', memory.id);
         } else {
           memory.content = value;
           if (category != null) {
@@ -1020,23 +1147,41 @@ class MemoriesProvider extends ChangeNotifier {
           _memories[idx] = memory;
         }
 
+        SiriIntegration.current.queueUpsertMemories([_memories[idx]]);
+
         _setCategories();
         notifyListeners();
+      } else if (memory.isKnowledgeLedger) {
+        // A recap may edit a row outside the loaded page. Remove the stale
+        // source projection until an authoritative replacement is available.
+        SiriIntegration.current.queueDelete('memory', memory.id);
+      } else {
+        memory.content = value;
+        if (category != null) memory.category = category;
+        memory.updatedAt = DateTime.now();
+        memory.edited = true;
+        SiriIntegration.current.queueUpsertMemories([memory]);
       }
     }
 
     return result.persisted;
   }
 
-  Future<void> updateAllMemoriesVisibility(bool makePrivate) async {
+  Future<bool> updateAllMemoriesVisibility(bool makePrivate) async {
+    final generation = _sessionGeneration;
     final visibility = makePrivate ? MemoryVisibility.private : MemoryVisibility.public;
     int updatedCount = 0;
+    var allUpdated = true;
     List<Memory> memoriesSuccessfullyUpdated = [];
 
     for (var memory in List.from(_memories)) {
       if (memory.visibility != visibility) {
         try {
-          await updateMemoryVisibilityServer(memory.id, visibility.name);
+          if (!await _updateMemoryVisibilityRequest(memory.id, visibility.name)) {
+            allUpdated = false;
+            continue;
+          }
+          if (generation != _sessionGeneration) return false;
           final idx = _memories.indexWhere((m) => m.id == memory.id);
           if (idx != -1) {
             _memories[idx].visibility = visibility;
@@ -1044,15 +1189,18 @@ class MemoriesProvider extends ChangeNotifier {
             updatedCount++;
           }
         } catch (e) {
+          allUpdated = false;
           print('Failed to update visibility for memory ${memory.id}: $e');
         }
       }
     }
 
     if (updatedCount > 0) {
+      SiriIntegration.current.queueUpsertMemories(memoriesSuccessfullyUpdated);
       PlatformManager.instance.analytics.memoriesAllVisibilityChanged(visibility, updatedCount);
     }
 
     _setCategories();
+    return allUpdated;
   }
 }

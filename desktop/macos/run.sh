@@ -82,7 +82,6 @@ Options (via environment variables):
   OMI_FORCE_REWIND_SEED=1   Replace an existing named-bundle Rewind history with a fresh snapshot
   OMI_DEV_EAGER_PERMISSIONS=1  Preserve eager mic/screen/file startup behavior in named bundles
   OMI_PYTHON_API_URL="..."  Python backend URL (explicit override; named bundles default to dev)
-  OMI_JIT_QA_TARGET="..."   omi-jit-qa only: local-dev-gcp, deployed-dev, or cloud-qa atomic endpoint tuple
   OMI_SIGN_IDENTITY="..."  Code signing identity (auto-detected if not set)
   OMI_FORCE_FULL_BUNDLE=1  Rebuild the complete app bundle on this launch
                           (E2E pool slots: refused while the fast bundle is reusable — use --fast-only)
@@ -160,32 +159,13 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 # shellcheck source=fast-dev-bundle.sh
 source "$SCRIPT_DIR/scripts/fast-dev-bundle.sh"
+# shellcheck source=desktop-build-identity.sh
+source "$SCRIPT_DIR/scripts/desktop-build-identity.sh"
 # shellcheck source=local-profile-env.sh
 source "$SCRIPT_DIR/scripts/local-profile-env.sh"
-# shellcheck source=jit-qa-target.sh
-source "$SCRIPT_DIR/scripts/jit-qa-target.sh"
 
 # Reject an invalid reserved-bundle request before dev-instance creates a
 # scratch directory or the launcher acquires a build lock.
-REQUESTED_LOCAL_PROFILE=false
-[ "${OMI_DESKTOP_LOCAL_PROFILE:-0}" = "1" ] && REQUESTED_LOCAL_PROFILE=true
-omi_preflight_jit_qa_launch_request \
-    "${OMI_APP_NAME:-}" "${OMI_BUNDLE_ID:-}" "$YOLO_MODE" "$REQUESTED_LOCAL_PROFILE" || exit $?
-if [ -n "${OMI_JIT_QA_TARGET:-}" ]; then
-    omi_jit_qa_set_exact_tuple || exit $?
-fi
-
-# The backend .env is shell-sourced later and the selected app env is copied
-# into the bundle. Reject stale/mixed source tuples before dev-instance creates
-# scratch state or the launcher acquires a build lock.
-EARLY_BACKEND_DIR="$(cd "$SCRIPT_DIR/../../backend" && pwd)"
-omi_preflight_jit_qa_config_file "$EARLY_BACKEND_DIR/.env" || exit $?
-if [ -f "$SCRIPT_DIR/.env.app.dev" ]; then
-    omi_preflight_jit_qa_config_file "$SCRIPT_DIR/.env.app.dev" || exit $?
-elif [ -f "$SCRIPT_DIR/.env.app" ]; then
-    omi_preflight_jit_qa_config_file "$SCRIPT_DIR/.env.app" || exit $?
-fi
-
 # shellcheck source=python-desktop-backend-dev.sh
 source "$SCRIPT_DIR/scripts/python-desktop-backend-dev.sh"
 
@@ -210,17 +190,8 @@ substep() {
     printf "[%6.1fs]   ├─ %s\n" "$total_elapsed" "$1"
 }
 
-macos_copy_tree() {
-    local src="$1"
-    local dest="$2"
-    if [ "$(uname -s)" = "Darwin" ] && command -v ditto >/dev/null 2>&1; then
-        ditto --norsrc "$src" "$dest"
-    elif [ "$(uname -s)" = "Darwin" ]; then
-        cp -R -X "$src" "$dest"
-    else
-        cp -R "$src" "$dest"
-    fi
-}
+# shellcheck source=scripts/macos-copy-tree.sh
+source "$SCRIPT_DIR/scripts/macos-copy-tree.sh"
 
 # Per-worktree isolation: derive unique ports + bundle name so parallel worktrees don't
 # collide. Sets OMI_INSTANCE / RUST_PORT / PYTHON_PORT / AUTOMATION_PORT / OMI_APP_NAME /
@@ -254,10 +225,6 @@ if [ "$IS_NAMED_BUNDLE" = true ]; then
 fi
 LOCAL_PROFILE=false
 [ "${OMI_DESKTOP_LOCAL_PROFILE:-0}" = "1" ] && LOCAL_PROFILE=true
-
-# Gate-G bundle routing is a whole-tuple authority. Revalidate the fully
-# derived app identity, then reapply after .env loads below.
-omi_prepare_jit_qa_target "$APP_NAME" "$BUNDLE_ID" "$YOLO_MODE" derived "$LOCAL_PROFILE" || exit $?
 
 # A named QA bundle should exercise the shared development service unless its
 # launcher deliberately selects another profile.  Check variable *presence*,
@@ -690,7 +657,6 @@ fast_bundle_fingerprint() {
         "desktop-api-url=$desktop_api_fingerprint" \
         "python-api-url=$python_api_fingerprint" \
         "auth-api-url=$auth_api_fingerprint" \
-        "jit-qa-target=${OMI_JIT_QA_TARGET:-}" \
         "env-stage=${OMI_ENV_STAGE:-}" \
         "backend-port=$BACKEND_PORT"
 }
@@ -749,7 +715,6 @@ prepare_fast_only_configuration() {
     if [ "$YOLO_MODE" = "1" ] || [ "$NAMED_BUNDLE_DEFAULT_DEV_BACKEND" = true ]; then
         apply_yolo_env
     fi
-    omi_prepare_jit_qa_target "$APP_NAME" "$BUNDLE_ID" "$YOLO_MODE" refresh "$LOCAL_PROFILE" || exit $?
 }
 
 FAST_BUNDLE_STAMP="$OMI_DEV_DIR/fast-dev-bundles/$BUNDLE_ID.stamp"
@@ -1103,7 +1068,6 @@ fi
 if [ -f "$BACKEND_DIR/.env" ]; then
     set -a; source "$BACKEND_DIR/.env"; set +a
 fi
-omi_prepare_jit_qa_target "$APP_NAME" "$BUNDLE_ID" "$YOLO_MODE" refresh "$LOCAL_PROFILE" || exit $?
 if [ "$YOLO_MODE" = "1" ] || [ "$NAMED_BUNDLE_DEFAULT_DEV_BACKEND" = true ]; then
     apply_yolo_env
 fi
@@ -1293,7 +1257,7 @@ fi
 
 if [ "$FAST_BUNDLE" = "1" ]; then
     step "Building Swift app (swift build -c debug)..."
-    xcrun swift build -c debug --package-path Desktop
+    xcrun swift build -c debug --package-path Desktop -Xswiftc -emit-const-values
 
     step "Patching installed app executable..."
     PATCHED_BINARY="$(mktemp "$APP_PATH/Contents/MacOS/.omi-fast-executable.XXXXXX")"
@@ -1302,14 +1266,18 @@ if [ "$FAST_BUNDLE" = "1" ]; then
     install_name_tool -add_rpath "@executable_path/../Frameworks" "$PATCHED_BINARY" 2>/dev/null || true
     rewrite_bundled_dylib_load_path "$PATCHED_BINARY" "libwebp.7.dylib"
     mv -f "$PATCHED_BINARY" "$APP_PATH/Contents/MacOS/$BINARY_NAME"
+    step "Embedding App Intents metadata..."
+    ./scripts/embed-app-intents-metadata.sh Desktop "$APP_PATH" Debug "$(uname -m)"
     if [ "$LOCAL_PROFILE" = true ]; then
         EFFECTIVE_API_URL="$OMI_DESKTOP_API_URL"
         omi_write_local_profile_env "$APP_PATH/Contents/Resources/.env"
         substep "Refreshed local-profile bundle environment"
     else
         update_app_desktop_api_url "$APP_PATH/Contents/Resources/.env"
-        omi_write_jit_qa_bundle_env "$APP_PATH/Contents/Resources/.env" || exit $?
     fi
+
+    step "Stamping source identity..."
+    omi_stamp_desktop_build_identity "$SCRIPT_DIR" "$APP_PATH/Contents/Info.plist"
 
     step "Signing updated app with hardened runtime..."
     sign_app_bundle "$APP_PATH" false
@@ -1345,7 +1313,7 @@ if [ -f scripts/check_schema_docs.sh ]; then
 fi
 
 step "Building Swift app (swift build -c debug)..."
-xcrun swift build -c debug --package-path Desktop
+xcrun swift build -c debug --package-path Desktop -Xswiftc -emit-const-values
 
 step "Creating app bundle..."
 substep "Removing prior bundle (if any)"
@@ -1357,6 +1325,8 @@ mkdir -p "$APP_BUNDLE/Contents/Frameworks"
 
 substep "Copying binary ($(du -h "Desktop/.build/debug/$BINARY_NAME" 2>/dev/null | cut -f1))"
 cp -f "Desktop/.build/debug/$BINARY_NAME" "$APP_BUNDLE/Contents/MacOS/$BINARY_NAME"
+substep "Embedding App Intents metadata"
+./scripts/embed-app-intents-metadata.sh Desktop "$APP_BUNDLE" Debug "$(uname -m)"
 
 substep "Adding rpath for Frameworks"
 install_name_tool -add_rpath "@executable_path/../Frameworks" "$APP_BUNDLE/Contents/MacOS/$BINARY_NAME" 2>/dev/null || true
@@ -1410,6 +1380,7 @@ cp -f Desktop/Info.plist "$APP_BUNDLE/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleName $APP_NAME" "$APP_BUNDLE/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName $APP_NAME" "$APP_BUNDLE/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleURLTypes:0:CFBundleURLSchemes:0 $URL_SCHEME" "$APP_BUNDLE/Contents/Info.plist"
+omi_stamp_desktop_build_identity "$SCRIPT_DIR" "$APP_BUNDLE/Contents/Info.plist"
 
 substep "Copying GoogleService-Info.plist"
 if [ "$LOCAL_PROFILE" = true ] && [ -f "Desktop/Sources/GoogleService-Info-Local.plist" ]; then
@@ -1518,7 +1489,6 @@ else
     echo "OMI_PYTHON_API_URL=$PYTHON_API_URL" >> "$APP_BUNDLE/Contents/Resources/.env"
 fi
 substep "Set OMI_PYTHON_API_URL=$PYTHON_API_URL"
-omi_write_jit_qa_bundle_env "$APP_BUNDLE/Contents/Resources/.env" || exit $?
 fi # end non-local .env.app merge
 
 copy_app_icon() {
@@ -1751,14 +1721,6 @@ printf 'launch_mode=%s fast_reason=%s bundle_id=%s profile_root=%q\n' \
 # direct-exec fallback below inherits this shell's environment.
 build_launch_env_args() {
     LAUNCH_ENV_ARGS=()
-    if [ -n "${OMI_JIT_QA_TARGET:-}" ]; then
-        LAUNCH_ENV_ARGS+=(
-            --env "OMI_PYTHON_API_URL=$OMI_PYTHON_API_URL"
-            --env "OMI_DESKTOP_API_URL=$OMI_DESKTOP_API_URL"
-            --env "OMI_AUTH_API_URL=$OMI_AUTH_API_URL"
-            --env "OMI_ENV_STAGE=$OMI_ENV_STAGE"
-        )
-    fi
     if [ -n "${OMI_FORCE_CANONICAL_MEMORY_ATLAS:-}" ]; then
         LAUNCH_ENV_ARGS+=(--env "OMI_FORCE_CANONICAL_MEMORY_ATLAS=$OMI_FORCE_CANONICAL_MEMORY_ATLAS")
     fi
@@ -1771,8 +1733,8 @@ build_launch_env_args() {
     if [ -n "${OMI_FORCE_BUCKET_WORKSTREAMS:-}" ]; then
         LAUNCH_ENV_ARGS+=(--env "OMI_FORCE_BUCKET_WORKSTREAMS=$OMI_FORCE_BUCKET_WORKSTREAMS")
     fi
-    if [ -n "${OMI_FORCE_MEETING_NOTE_SCREENSHOTS:-}" ]; then
-        LAUNCH_ENV_ARGS+=(--env "OMI_FORCE_MEETING_NOTE_SCREENSHOTS=$OMI_FORCE_MEETING_NOTE_SCREENSHOTS")
+    if [ -n "${OMI_FORCE_EXPERIMENT_VARIANT:-}" ]; then
+        LAUNCH_ENV_ARGS+=(--env "OMI_FORCE_EXPERIMENT_VARIANT=$OMI_FORCE_EXPERIMENT_VARIANT")
     fi
     # Forward automation token overrides when the caller already pinned them
     # (e.g. desktop-core-harness.sh). Default token discovery prefers Darwin

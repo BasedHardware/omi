@@ -7,6 +7,13 @@ private final class MemoryMutationURLCapture: URLProtocol, @unchecked Sendable {
   private nonisolated(unsafe) static var _request: URLRequest?
   private nonisolated(unsafe) static var _body: Data?
   private nonisolated(unsafe) static var _requests: [(method: String, path: String)] = []
+  private nonisolated(unsafe) static var failingRequests = Set<String>()
+
+  static func failNextRequests(method: String, path: String) {
+    lock.lock()
+    failingRequests.insert("\(method) \(path)")
+    lock.unlock()
+  }
 
   static var request: URLRequest? {
     lock.lock()
@@ -31,6 +38,7 @@ private final class MemoryMutationURLCapture: URLProtocol, @unchecked Sendable {
     _request = nil
     _body = nil
     _requests = []
+    failingRequests = []
     lock.unlock()
   }
 
@@ -43,7 +51,14 @@ private final class MemoryMutationURLCapture: URLProtocol, @unchecked Sendable {
     Self._request = request
     Self._body = body
     Self._requests.append((request.httpMethod ?? "GET", request.url?.path ?? ""))
+    let shouldFail = Self.failingRequests.contains(
+      "\(request.httpMethod ?? "GET") \(request.url?.path ?? "")")
     Self.lock.unlock()
+
+    if shouldFail {
+      client?.urlProtocol(self, didFailWithError: URLError(.badServerResponse))
+      return
+    }
 
     let response = HTTPURLResponse(
       url: request.url!,
@@ -56,6 +71,10 @@ private final class MemoryMutationURLCapture: URLProtocol, @unchecked Sendable {
     if request.httpMethod == "GET", request.url?.path == "/v1/users/transcription-preferences" {
       payload = Data(
         "{\"single_language_mode\":false,\"vocabulary\":[\"Omi\",\"Codex\"],\"language\":\"en\"}".utf8)
+    } else if request.httpMethod == "POST", request.url?.path == "/v3/memories" {
+      payload = Data(
+        "{\"id\":\"memory-created\",\"content\":\"screen claim\",\"category\":\"system\",\"created_at\":\"2026-06-21T10:00:00Z\",\"updated_at\":\"2026-06-21T10:00:00Z\"}"
+          .utf8)
     } else {
       payload = Data("{\"status\":\"ok\"}".utf8)
     }
@@ -134,6 +153,35 @@ final class APIClientMemoryMutationRequestTests: XCTestCase {
     XCTAssertEqual(request.url?.query, "value=true")
   }
 
+  func testCreateMemorySendsScreenCaptureContextWithoutInventedLineage() async throws {
+    let client = await makeClient()
+    let context = APIClient.MemoryCaptureContext(
+      sourceType: "screen",
+      capturedAt: Date(timeIntervalSince1970: 1_700_000_000),
+      sourceId: "42",
+      sourceSignal: "ocr",
+      sourceVersion: nil,
+      attribution: "screen"
+    )
+
+    _ = try await client.createMemory(
+      content: "screen claim",
+      source: "screenshot",
+      captureContext: context)
+
+    let body = try XCTUnwrap(MemoryMutationURLCapture.body)
+    let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
+    let capture = try XCTUnwrap(json["capture_context"] as? [String: Any])
+    XCTAssertEqual(capture["source_type"] as? String, "screen")
+    XCTAssertEqual(capture["captured_at"] as? String, "2023-11-14T22:13:20.000Z")
+    XCTAssertEqual(capture["source_id"] as? String, "42")
+    XCTAssertEqual(capture["source_signal"] as? String, "ocr")
+    XCTAssertEqual(capture["attribution"] as? String, "screen")
+    XCTAssertNil(capture["source_version"])
+    XCTAssertNil(capture["independence_group"])
+    XCTAssertNil(capture["lineage_id"])
+  }
+
   func testEditMemorySendsValueInJSONBody() async throws {
     let client = await makeClient()
 
@@ -161,6 +209,25 @@ final class APIClientMemoryMutationRequestTests: XCTestCase {
   func testUpdateTranscriptionPreferencesReadsCanonicalStateAfterStatusResponse() async throws {
     let client = await makeClient()
 
+    let saved = try await client.updateTranscriptionPreferences(vocabulary: ["Omi", "Codex"])
+
+    XCTAssertEqual(saved.vocabulary, ["Omi", "Codex"])
+    XCTAssertEqual(
+      MemoryMutationURLCapture.requests.map { "\($0.method) \($0.path)" },
+      [
+        "PATCH /v1/users/transcription-preferences",
+        "GET /v1/users/transcription-preferences",
+      ]
+    )
+  }
+
+  func testUpdateTranscriptionPreferencesKeepsSaveWhenFollowUpReadFails() async throws {
+    let client = await makeClient()
+    MemoryMutationURLCapture.failNextRequests(
+      method: "GET", path: "/v1/users/transcription-preferences")
+
+    // The PATCH itself never fails here (only the follow-up GET does), so this must not throw
+    // and must not report the vocabulary change as unsaved.
     let saved = try await client.updateTranscriptionPreferences(vocabulary: ["Omi", "Codex"])
 
     XCTAssertEqual(saved.vocabulary, ["Omi", "Codex"])

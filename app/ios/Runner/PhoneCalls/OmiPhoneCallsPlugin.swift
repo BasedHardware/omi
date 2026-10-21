@@ -109,11 +109,12 @@ class OmiPhoneCallsPlugin: NSObject, FlutterPlugin {
     static func register(with registrar: FlutterPluginRegistrar) {
         let instance = OmiPhoneCallsPlugin()
 
-        instance.methodChannel = FlutterMethodChannel(
+        let methodChannel = FlutterMethodChannel(
             name: "com.omi/phone_calls",
             binaryMessenger: registrar.messenger()
         )
-        registrar.addMethodCallDelegate(instance, channel: instance.methodChannel!)
+        instance.methodChannel = methodChannel
+        registrar.addMethodCallDelegate(instance, channel: methodChannel)
 
         instance.eventChannel = FlutterEventChannel(
             name: "com.omi/phone_calls/events",

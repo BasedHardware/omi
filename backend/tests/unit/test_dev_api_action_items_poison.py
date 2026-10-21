@@ -154,6 +154,8 @@ from fastapi.testclient import TestClient  # noqa: E402
 from routers.developer import router as developer_router  # noqa: E402
 import routers.developer as developer_module  # noqa: E402
 from dependencies import (  # noqa: E402
+    ApiKeyAuth,
+    get_api_key_auth,
     get_uid_with_action_items_read,
     get_uid_with_action_items_write,
 )
@@ -162,6 +164,8 @@ from dependencies import (  # noqa: E402
 def _build():
     app = FastAPI()
     app.include_router(developer_router)
+    auth = ApiKeyAuth('uid1', ['action_items:read', 'action_items:write'], app_id='test-app', key_id='test-key')
+    app.dependency_overrides[get_api_key_auth] = lambda: auth
     app.dependency_overrides[get_uid_with_action_items_read] = lambda: 'uid1'
     app.dependency_overrides[get_uid_with_action_items_write] = lambda: 'uid1'
     return TestClient(app, raise_server_exceptions=False)
@@ -221,6 +225,8 @@ def test_developer_patch_explicit_null_clears_due_date_and_reminder():
         description='Original task',
         completed=False,
         due_at=None,
+        status=None,
+        deleted=False,
     )
     assert response.json()['due_at'] is None
 
@@ -241,7 +247,17 @@ def test_developer_patch_omitted_due_date_preserves_existing_value():
 
     assert response.status_code == 200
     assert update.call_args.args[2] == {'description': 'Updated task'}
-    sync.assert_not_called()
+    # The due date is left alone, and the phone reminder is re-armed at that same time with the
+    # new title instead of firing with the old one.
+    sync.assert_called_once_with(
+        user_id='uid1',
+        action_item_id='a1',
+        description='Updated task',
+        completed=False,
+        due_at=due,
+        status=None,
+        deleted=False,
+    )
     assert response.json()['due_at'] == due.isoformat().replace('+00:00', 'Z')
 
 
@@ -274,3 +290,83 @@ def test_developer_patch_rejects_empty_payload():
 
     assert exc.value.status_code == 422
     assert exc.value.detail == 'At least one field must be provided'
+
+
+def test_developer_patch_rejects_blank_description():
+    # #13933: {"description": "   "} satisfied min_length=1, so the handler persisted ''
+    # while the sibling create path rejected it with 422. Blank text must now fail at the
+    # request-model boundary and never reach the Firestore update.
+    existing, _ = _update_fixture()
+
+    with (
+        patch.object(action_items_db, 'get_action_item', return_value=existing),
+        patch.object(action_items_db, 'update_action_item', return_value=True) as update,
+    ):
+        response = _build().patch('/v1/dev/user/action-items/a1', json={'description': '   '})
+
+    assert response.status_code == 422
+    update.assert_not_called()
+
+
+def test_developer_patch_strips_padded_description():
+    existing, _ = _update_fixture()
+    updated = {**existing, 'description': 'Updated task'}
+
+    with (
+        patch.object(action_items_db, 'get_action_item', side_effect=[existing, updated]),
+        patch.object(action_items_db, 'update_action_item', return_value=True) as update,
+    ):
+        response = _build().patch('/v1/dev/user/action-items/a1', json={'description': '  Updated task  '})
+
+    assert response.status_code == 200
+    assert update.call_args.args[2] == {'description': 'Updated task'}
+
+
+def test_update_action_item_request_null_description_means_unchanged():
+    # The other half of the PATCH contract: an omitted/null description is "leave unchanged",
+    # not a rejection — the validator must pass None through.
+    request = developer_module.UpdateActionItemRequest.model_validate({'description': None, 'completed': True})
+    assert request.description is None
+    assert request.completed is True
+
+
+@pytest.mark.parametrize('status,deleted', [('cancelled', False), ('superseded', False), ('active', True)])
+def test_developer_due_edit_passes_saved_terminal_state(status, deleted):
+    existing, due = _update_fixture()
+    saved = {**existing, 'status': status, 'deleted': deleted}
+    with (
+        patch.object(action_items_db, 'get_action_item', side_effect=[existing, saved]),
+        patch.object(action_items_db, 'update_action_item', return_value=True),
+        patch.object(developer_module, 'sync_action_item_reminder') as sync,
+    ):
+        developer_module.update_action_item('a1', developer_module.UpdateActionItemRequest(due_at=due), uid='uid1')
+    assert sync.call_args.kwargs['status'] == status
+    assert sync.call_args.kwargs['deleted'] is deleted
+
+
+def test_developer_reopen_passes_saved_active_state_not_prior_cancelled_state():
+    existing, _ = _update_fixture()
+    existing['status'] = 'cancelled'
+    saved = {**existing, 'status': 'active'}
+    with (
+        patch.object(action_items_db, 'get_action_item', side_effect=[existing, saved]),
+        patch.object(action_items_db, 'update_action_item', return_value=True),
+        patch.object(developer_module, 'sync_action_item_reminder') as sync,
+    ):
+        developer_module.update_action_item('a1', developer_module.UpdateActionItemRequest(completed=False), uid='uid1')
+    assert sync.call_args.kwargs['completed'] is False
+    assert sync.call_args.kwargs['status'] == 'active'
+
+
+def test_developer_list_shares_budget_and_returns_honest_partial_array():
+    def slow_list(**kwargs):
+        assert kwargs['limit'] == 1000
+        assert kwargs['start_date'] == datetime(2000, 1, 1, tzinfo=timezone.utc)
+        kwargs['budget'].mark_exhausted('deadline')
+        return [_valid('verified')]
+
+    with patch.object(action_items_db, 'get_action_items', side_effect=slow_list):
+        response = _build().get('/v1/dev/user/action-items?start_date=2000-01-01T00:00:00Z&limit=1000')
+    assert response.status_code == 200
+    assert response.headers['X-Omi-List-Truncated'] == 'true'
+    assert [row['id'] for row in response.json()] == ['verified']

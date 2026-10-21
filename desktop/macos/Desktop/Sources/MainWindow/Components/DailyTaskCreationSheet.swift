@@ -104,7 +104,7 @@ struct DailyTaskCreationSheet: View {
             } else {
               Image(systemName: "plus.circle.fill")
             }
-            Text(isCreating ? "Creating..." : "Create Daily Task")
+            Text(isCreating ? "Creating…" : "Create Daily Task")
           }
           .scaledFont(size: OmiType.body, weight: .medium)
           .foregroundColor(Ink.surface)

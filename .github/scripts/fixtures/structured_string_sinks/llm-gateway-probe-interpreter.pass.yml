@@ -1,0 +1,8 @@
+name: probe interpreter fixture
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |-
+          bash backend/scripts/probe-llm-gateway-from-cloud-run.sh \
+            --project test-project

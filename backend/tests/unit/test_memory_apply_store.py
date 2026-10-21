@@ -13,7 +13,11 @@ import pytest
 from database.read_boundary import MalformedDocError
 from testing.import_isolation import load_module_fresh, stub_modules
 
+from models.feedback import FeedbackEvent
 from models.memory_evidence import (
+    EVIDENCE_IDENTITY_FIELDS,
+    EVIDENCE_METADATA_FIELDS,
+    EVIDENCE_STATE_FIELDS,
     ArtifactPreservationState,
     MemoryEvidence,
     ProvenanceVisibility,
@@ -35,8 +39,6 @@ from models.memory_operations import (
     MemoryOperationStatus,
     MemoryOperationType,
 )
-from models.jit_trigger_feedback import JITTriggerFeedbackReceipt
-from models.jit_proactivity import JITProactivityEventReceipt
 from models.memory_promotion import PromotionGraphPlan, build_promotion_admission_receipt
 from models.product_memory import (
     LedgerWriteReason,
@@ -49,6 +51,7 @@ from models.product_memory import (
     ProcessingState,
     is_default_access_eligible,
 )
+from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore, StrictFirestoreTransaction
 
 backend = Path(__file__).resolve().parents[2]
 
@@ -118,12 +121,13 @@ def store():
         def permitted_cleanup_gate(*_args, **_kwargs):
             yield "retention-cleanup-token"
 
+        module.assert_destructive_gate_still_ours = MagicMock()
         module.destructive_operation_gate = permitted_cleanup_gate
         yield module
 
 
 def test_global_intake_pause_is_enforced_inside_apply_boundary(store, monkeypatch):
-    monkeypatch.setenv("MEMORY_MODE", "off")
+    monkeypatch.setenv("MEMORY_ENABLED", "off")
     db_client = MagicMock()
 
     with pytest.raises(store.CanonicalMemoryIntakePausedError, match="globally paused"):
@@ -138,7 +142,7 @@ def test_global_intake_pause_is_enforced_inside_apply_boundary(store, monkeypatc
 
 
 def test_global_intake_pause_is_enforced_inside_source_replacement_boundary(store, monkeypatch):
-    monkeypatch.setenv("MEMORY_MODE", "shadow")
+    monkeypatch.setenv("MEMORY_ENABLED", "shadow")
     db_client = MagicMock()
 
     with pytest.raises(store.CanonicalMemoryIntakePausedError, match="globally paused"):
@@ -270,6 +274,53 @@ class _FakeDb:
 
     def collection(self, path):
         return _FakeReceiptQuery(self, path)
+
+
+class _RollbackStrictTransaction(StrictFirestoreTransaction):
+    """Strict transaction double that buffers writes until commit."""
+
+    def __init__(self, database, *, allow_reads_after_writes=False, fail_prefix=None):
+        super().__init__(database, allow_reads_after_writes=allow_reads_after_writes)
+        self.fail_prefix = fail_prefix
+
+    def set(self, ref, data):
+        self._assert_reference_belongs(ref)
+        if self.fail_prefix and "/".join(ref.path).startswith(self.fail_prefix):
+            raise RuntimeError("injected feedback receipt write failure")
+        self.has_written = True
+        self.sets.append((ref.path, copy.deepcopy(data)))
+
+    def delete(self, ref, *args, **kwargs):
+        self._assert_reference_belongs(ref)
+        self.has_written = True
+        self.updates.append((ref.path, {"__delete__": True}))
+
+    def _commit(self):
+        for path, data in self.sets:
+            self._database.rows[path] = copy.deepcopy(data)
+        for path, update in self.updates:
+            if update == {"__delete__": True}:
+                self._database.rows.pop(path, None)
+
+    def _rollback(self):
+        self.sets.clear()
+        self.updates.clear()
+        self.has_written = False
+
+
+class _RollbackStrictFirestore(StrictFirestore):
+    def __init__(self, rows=None, *, fail_prefix=None):
+        super().__init__(rows)
+        self.fail_prefix = fail_prefix
+
+    def transaction(self):
+        transaction = _RollbackStrictTransaction(
+            self,
+            allow_reads_after_writes=self._allow_reads_after_writes,
+            fail_prefix=self.fail_prefix,
+        )
+        self.transactions.append(transaction)
+        return transaction
 
 
 def _evidence(**overrides):
@@ -1370,6 +1421,105 @@ def test_firestore_empty_conversation_replacement_is_journaled_and_idempotent(st
     )
 
 
+def test_firestore_empty_replacement_without_gate_token_retracts_when_gate_not_required(store):
+    """Sync-bridge donor retraction admits empty replacement without the exclusive gate.
+
+    Prod 2026-09-21: finish_sync_bridges logged ``exception_type=AssertionError``
+    with an empty message on every retry. ``claim_destructive_gate=False`` sets
+    ``require_deletion_gate=False`` and ``deletion_gate_token=None``; the empty-writes
+    commit-id path still asserted the token, so donors with live canonical rows
+    never converged.
+    """
+    control = MemoryControlState(
+        uid="u1",
+        head_commit_id="head0",
+        account_generation=1,
+        source_generation=2,
+    )
+    old = _short_term_target(memory_id="mem1")
+    db = _db_with(control=control, target_items=[old])
+    replacement_id, replacement_digest, replacement_operation, _ = _replacement_operation_and_write(
+        store, control, include_new=False
+    )
+
+    first = store.replace_conversation_source_firestore(
+        uid="u1",
+        conversation_id="conv1",
+        replacement_id=replacement_id,
+        replacement_digest=replacement_digest,
+        replacement_operation=replacement_operation,
+        observed_control=control,
+        expected_source_items=[old],
+        expected_reactivation_items=[],
+        writes=[],
+        deletion_gate_token=None,
+        require_deletion_gate=False,
+        db_client=db,
+    )
+    docs_after_first = copy.deepcopy(db.docs)
+    replay = store.replace_conversation_source_firestore(
+        uid="u1",
+        conversation_id="conv1",
+        replacement_id=replacement_id,
+        replacement_digest=replacement_digest,
+        replacement_operation=replacement_operation,
+        observed_control=control,
+        expected_source_items=[old],
+        expected_reactivation_items=[],
+        writes=[],
+        deletion_gate_token=None,
+        require_deletion_gate=False,
+        db_client=db,
+    )
+
+    assert first.retracted_memory_ids == ["mem1"]
+    assert first.committed_memory_ids == []
+    assert first.control_state.source_generation == 3
+    assert first.control_state.commit_sequence == 1
+    assert first.control_state.projection_watermark_commit_id is None
+    assert first.control_state.vector_watermark_commit_id is None
+    assert db.docs["users/u1/memory_items/mem1"]["status"] == MemoryItemStatus.tombstoned.value
+    assert replay == first
+    assert db.docs == docs_after_first
+
+
+def test_firestore_empty_replacement_without_token_stays_typed_when_gate_required(store):
+    control = MemoryControlState(
+        uid="u1",
+        head_commit_id="head0",
+        account_generation=1,
+        source_generation=2,
+    )
+    old = _short_term_target(memory_id="mem1")
+    db = _db_with(control=control, target_items=[old])
+    replacement_id, replacement_digest, replacement_operation, _ = _replacement_operation_and_write(
+        store, control, include_new=False
+    )
+    original_docs = copy.deepcopy(db.docs)
+
+    with pytest.raises(
+        store.ConversationSourceReplacementConflict,
+        match="empty replacement requires privacy gate authority uid=u1 conversation_id=conv1",
+    ):
+        store.replace_conversation_source_firestore(
+            uid="u1",
+            conversation_id="conv1",
+            replacement_id=replacement_id,
+            replacement_digest=replacement_digest,
+            replacement_operation=replacement_operation,
+            observed_control=control,
+            expected_source_items=[old],
+            expected_reactivation_items=[],
+            writes=[],
+            deletion_gate_token=None,
+            require_deletion_gate=True,
+            db_client=db,
+        )
+
+    assert db.docs == original_docs
+    assert db.docs["users/u1/memory_items/mem1"]["status"] == MemoryItemStatus.active.value
+
+
 def test_firestore_conversation_replacement_does_not_replay_stale_a_b_a_receipt(store):
     control = MemoryControlState(
         uid="u1",
@@ -1864,6 +2014,80 @@ def test_firestore_apply_rejects_changed_source_version_for_existing_evidence_id
 
     assert db.docs["users/u1/memory_evidence/ev1"]["source_version"] == "v1"
     assert db.transaction_obj.mutations == []
+
+
+def test_every_evidence_field_has_exactly_one_identity_class():
+    # A new MemoryEvidence field must be classified before it can ship; an
+    # unclassified field is how capture metadata once decided identity (#17296).
+    classes = [EVIDENCE_IDENTITY_FIELDS, EVIDENCE_METADATA_FIELDS, EVIDENCE_STATE_FIELDS]
+    classified = [field for fields in classes for field in fields]
+    assert len(classified) == len(set(classified))
+    assert set(classified) == set(MemoryEvidence.model_fields)
+
+
+def test_firestore_apply_accepts_replay_whose_evidence_adds_capture_metadata(store):
+    # Evidence written before capture metadata existed stores those fields as
+    # null. A replay of the same source now proposes them; that is the same
+    # source, not a conflict (#17296).
+    operation = _operation()
+    db = _db_with(operation=operation, evidence=_evidence())
+    evidence_path = "users/u1/memory_evidence/ev1"
+    stored_before = copy.deepcopy(db.docs[evidence_path])
+
+    result = store.apply_long_term_patch_firestore(
+        uid="u1",
+        operation_id=operation.operation_id,
+        patch_payload=_patch(),
+        proposed_operation=operation,
+        proposed_evidence=[
+            _evidence(
+                source_signal="manual",
+                extractor_id="memory_extractor",
+                extractor_version="v1",
+                capture_confidence=0.95,
+                independence_group="conv1",
+            )
+        ],
+        db_client=db,
+    )
+
+    assert result.status == ApplyStatus.committed
+    assert db.docs[evidence_path] == stored_before
+    assert evidence_path not in [path for path, _ in db.transaction_obj.sets]
+
+
+def test_firestore_apply_keeps_stored_capture_metadata_when_a_replay_disagrees(store):
+    operation = _operation()
+    db = _db_with(operation=operation, evidence=_evidence(source_signal="manual", capture_confidence=0.95))
+    evidence_path = "users/u1/memory_evidence/ev1"
+
+    result = store.apply_long_term_patch_firestore(
+        uid="u1",
+        operation_id=operation.operation_id,
+        patch_payload=_patch(),
+        proposed_operation=operation,
+        proposed_evidence=[_evidence(source_signal="api", capture_confidence=0.5)],
+        db_client=db,
+    )
+
+    assert result.status == ApplyStatus.committed
+    assert db.docs[evidence_path]["source_signal"] == "manual"
+    assert db.docs[evidence_path]["capture_confidence"] == 0.95
+
+
+def test_firestore_apply_raises_typed_conflict_for_a_different_source(store):
+    operation = _operation()
+    db = _db_with(operation=operation, evidence=_evidence(source_id="conv1"))
+
+    with pytest.raises(store.EvidenceIdentityConflict):
+        store.apply_long_term_patch_firestore(
+            uid="u1",
+            operation_id=operation.operation_id,
+            patch_payload=_patch(),
+            proposed_operation=operation,
+            proposed_evidence=[_evidence(source_id="conv2", conversation_id=None)],
+            db_client=db,
+        )
 
 
 @pytest.mark.parametrize("source_state", [SourceState.tombstoned, SourceState.purged])
@@ -2484,124 +2708,85 @@ def test_firestore_transaction_set_failure_leaves_store_unchanged_and_retry_comm
     assert retry.operation.committed_outbox_event_ids == [event.event_id for event in retry.outbox_events]
 
 
-def test_explicit_trigger_feedback_receipt_commits_and_replays_with_the_canonical_revision(store):
-    feedback_id = "f" * 64
-    trigger = _target_item(
-        memory_id="trigger-1",
-        user_asserted=True,
-        ledger_schema_version="knowledge_ledger.v1",
-        kind=MemoryKind.trigger,
-        subject_scope=MemorySubjectScope.primary_user,
-        slot=None,
-        trigger_condition={
-            "keywords": ["release"],
-            "action": {"type": "agent_prompt", "prompt": "Give the next release step."},
-        },
-        intent_backed=True,
-        write_reason=LedgerWriteReason.standing_trigger,
-    )
-    source_packet_id = f"user_mutation:jit_trigger_feedback:{feedback_id}:trigger-1:r1:receipt"
-    patch = {
-        "patch_id": f"patch-{feedback_id}",
-        "packet_id": feedback_id,
-        "run_id": feedback_id,
-        "observed_head_commit_id": "head0",
-        "idempotency_key": feedback_id,
-        "decision": DurablePatchDecision.update.value,
-        "target_memory_id": trigger.memory_id,
-        "result_status": LifecycleState.active.value,
-        "evidence_ids": ["ev1"],
-        "expected_item_revision": trigger.item_revision,
-        "expected_content_hash": trigger.content_hash,
-        "arguments": {
-            "jit_trigger_feedback": {
-                "applied_feedback_ids": [feedback_id],
-                "last_action": "useful",
-                "feedback_count": 1,
-            }
-        },
-        "curation_weight": 1,
-    }
-    mutation_identity = build_patch_mutation_identity(patch)
-    patch["mutation_metadata"] = mutation_identity
-    operation = MemoryOperation.new(
-        uid="u1",
-        operation_type=MemoryOperationType.ledger_mutation,
-        source_packet_id=source_packet_id,
-        target_memory_id=trigger.memory_id,
-        evidence_ids=["ev1"],
-        logical_payload={
-            "decision": DurablePatchDecision.update.value,
-            "memory_text": None,
-            "target_memory_id": trigger.memory_id,
-            "result_status": LifecycleState.active.value,
-            "supersedes": [],
-            "arguments": patch["arguments"],
-            "mutation_metadata": mutation_identity,
-        },
-        account_generation=1,
-        source_generation=2,
-        observed_head_commit_id="head0",
-    )
-    receipt = JITTriggerFeedbackReceipt(
-        uid="u1",
-        feedback_id=feedback_id,
-        event_id="e" * 64,
-        trigger_memory_id=trigger.memory_id,
-        account_generation=1,
-        expected_trigger_revision=trigger.item_revision,
-        action="useful",
-        recorded_at=datetime.now(timezone.utc),
-        request_hash="a" * 64,
-    )
-    db = _db_with(operation=operation, target_items=[trigger])
-    db.docs[f"users/u1/jit_proactivity_events/{'e' * 64}"] = _stored_model(
-        JITProactivityEventReceipt(
-            uid="u1",
-            event_id="e" * 64,
-            candidate_id="c" * 64,
-            operation="planned_notification",
-            account_generation=1,
-            trigger_memory_id=trigger.memory_id,
-            trigger_revision=trigger.item_revision,
-            budget_day="2026-08-24",
-            device_id="d" * 64,
-            created_at=datetime.now(timezone.utc),
-            request_hash="c" * 64,
-        )
-    )
+def test_deletion_receipt_cleanup_empty_query_never_acquires_gate(store, monkeypatch):
+    gate = MagicMock(side_effect=AssertionError("empty sweep must not acquire gate"))
+    monkeypatch.setattr(store, "destructive_operation_gate", gate)
+    assert store.cleanup_expired_memory_deletion_receipts("u1", db_client=_db_with()) == 0
+    gate.assert_not_called()
 
-    first = store.apply_direct_user_long_term_patch_firestore(
-        uid="u1",
-        operation_id=operation.operation_id,
-        patch_payload=patch,
-        proposed_operation=operation,
-        trigger_feedback_receipt=receipt,
-        db_client=db,
+
+@pytest.mark.parametrize("place_hold", [False, True])
+def test_receipt_sweep_stops_after_peer_takeover_preserving_next_receipt(store, monkeypatch, place_hold, caplog):
+    from database import legal_holds
+
+    now = datetime.now(timezone.utc)
+    db = _db_with()
+    authority = StrictFirestore()
+
+    class HoldTransaction(StrictFirestoreTransaction):
+        def set(self, ref, payload, merge=False):
+            # Legal hold placement merges one row; retain strict read ordering.
+            if merge:
+                payload = {**(ref.get(transaction=self).to_dict() or {}), **payload}
+            super().set(ref, payload)
+
+    monkeypatch.setattr(authority, "transaction", lambda: HoldTransaction(authority))
+    monkeypatch.setattr(legal_holds, "account_deletion_firestore_client", lambda **kwargs: authority)
+    paths = [f"users/u1/memory_deletion_receipts/receipt-{i}" for i in range(2)]
+    for i, path in enumerate(paths):
+        db.docs[path] = {
+            "schema_version": "memory_deletion_receipt.v2",
+            "uid": "u1",
+            "receipt_id": f"receipt-{i}",
+            "privacy_epoch_commit_id": "privacy-commit",
+            "expires_at": now,
+        }
+
+    def _unwrap(fn):
+        return getattr(fn, "to_wrap", fn)
+
+    monkeypatch.setattr(
+        legal_holds,
+        "_acquire_destructive_operation_transaction",
+        _unwrap(legal_holds._acquire_destructive_operation_transaction),
     )
-
-    assert first.status == ApplyStatus.committed, first.reason
-    persisted = db.docs[f"users/u1/jit_trigger_feedback/{feedback_id}"]
-    assert persisted["request_hash"] == "a" * 64
-    assert persisted["applied_trigger_revision"] == trigger.item_revision + 1
-    assert db.docs["users/u1/memory_items/trigger-1"]["curation_weight"] == 1
-
-    replay = store.apply_direct_user_long_term_patch_firestore(
-        uid="u1",
-        operation_id=operation.operation_id,
-        patch_payload=patch,
-        proposed_operation=operation,
-        trigger_feedback_receipt=receipt,
-        db_client=db,
+    monkeypatch.setattr(
+        legal_holds,
+        "_finish_destructive_operation_transaction",
+        _unwrap(legal_holds._finish_destructive_operation_transaction),
     )
-    assert replay.status == ApplyStatus.idempotent_skip
+    monkeypatch.setattr(
+        legal_holds, "_place_legal_hold_transaction", _unwrap(legal_holds._place_legal_hold_transaction)
+    )
+    monkeypatch.setattr(store, "destructive_operation_gate", legal_holds.destructive_operation_gate)
+    monkeypatch.setattr(store, "assert_destructive_gate_still_ours", legal_holds.assert_destructive_gate_still_ours)
+    original_delete = _FakeDocumentRef.delete
 
-    with pytest.raises(store.MemoryFirestoreApplyError, match="different payload"):
-        store.apply_direct_user_long_term_patch_firestore(
-            uid="u1",
-            operation_id=operation.operation_id,
-            patch_payload=patch,
-            proposed_operation=operation,
-            trigger_feedback_receipt=receipt.model_copy(update={"request_hash": "b" * 64}),
-            db_client=db,
-        )
+    def rotate_after_delete(ref):
+        original_delete(ref)
+        if ref.path == paths[0]:
+            # Simulate a peer acquiring AFTER this holder's gate went stale, then
+            # completing — the only way a same-kind rotation can occur now that
+            # fresh same-kind acquires block instead of replacing.
+            from datetime import timedelta as _td
+
+            future = datetime.now(timezone.utc) + timedelta(seconds=legal_holds.GATE_STALE_AFTER_SECONDS + 1)
+            legal_holds.acquire_destructive_operation(
+                "u1", kind="retention_cleanup", token="peer", firestore_client=db, now=future
+            )
+            legal_holds.finish_destructive_operation(
+                "u1", kind="retention_cleanup", token="peer", outcome="completed", firestore_client=db, now=future
+            )
+            if place_hold:
+                legal_holds.place_legal_hold("u1", issuer="admin", firestore_client=db)
+
+    monkeypatch.setattr(_FakeDocumentRef, "delete", rotate_after_delete)
+    with caplog.at_level("INFO"):
+        assert store.cleanup_expired_memory_deletion_receipts("u1", db_client=db, now=now) == 1
+    assert paths[0] not in db.docs
+    assert paths[1] in db.docs
+    assert "deleted=1 skipped-after-takeover=1" in caplog.text
+    if place_hold:
+        assert authority.rows[("legal_holds", "u1")]["active"] is True
+        assert store.cleanup_expired_memory_deletion_receipts("u1", db_client=db, now=now) == 0
+        assert paths[1] in db.docs

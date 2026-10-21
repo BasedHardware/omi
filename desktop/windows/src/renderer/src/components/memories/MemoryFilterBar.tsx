@@ -44,7 +44,7 @@ export function MemoryFilterBar({
   categoryCounts,
   layerExposed,
   layer,
-  onLayerChange
+  onLayerChange,
 }: MemoryFilterBarProps): React.JSX.Element {
   return (
     <div className="flex flex-wrap items-center gap-2">

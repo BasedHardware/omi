@@ -71,6 +71,7 @@ Memory _fact({
   bool? userReview,
   String? supersededBy,
   DateTime? invalidAt,
+  String? ledgerStatus,
   KnowledgeLedgerKind kind = KnowledgeLedgerKind.fact,
   String schemaVersion = 'knowledge_ledger.v1',
   bool intentBacked = true,
@@ -90,6 +91,7 @@ Memory _fact({
     userReview: userReview,
     supersededBy: supersededBy,
     invalidAt: invalidAt,
+    ledgerStatus: ledgerStatus,
   );
 }
 
@@ -181,6 +183,50 @@ void main() {
     expect(find.text('Some memory history is unavailable. Showing the history received so far.'), findsOneWidget);
     expect(find.byIcon(Icons.info_outline), findsOneWidget);
     expect(find.byType(TextButton), findsNothing);
+  });
+
+  testWidgets('history load-more stays reachable by semantics when actionable', (tester) async {
+    final handle = tester.ensureSemantics();
+
+    await tester.pumpWidget(
+      const MaterialApp(
+        localizationsDelegates: [
+          AppLocalizations.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(body: MemoryHistoryStatusBanner()),
+      ),
+    );
+    expect(find.byKey(const Key('memory_history_load_more')), findsNothing);
+    expect(find.bySemanticsLabel('show more ↓'), findsNothing);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        localizationsDelegates: const [
+          AppLocalizations.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(body: MemoryHistoryStatusBanner(onLoadMore: () {})),
+      ),
+    );
+    expect(find.byKey(const Key('memory_history_load_more')), findsOneWidget);
+    expect(find.bySemanticsLabel('show more ↓'), findsOneWidget);
+    // Descendant semantics are preserved (not replaced) when actionable, so
+    // the banner text merges with the button into one readable node.
+    expect(
+      find.bySemanticsLabel(
+        RegExp('Some memory history is unavailable. Showing the history received so far.*'),
+      ),
+      findsWidgets,
+    );
+
+    handle.dispose();
   });
 
   testWidgets('current and rejected facts are editable but superseded history is read-only', (tester) async {

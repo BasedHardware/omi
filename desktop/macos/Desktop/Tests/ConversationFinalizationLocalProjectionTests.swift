@@ -1,4 +1,5 @@
 import Foundation
+import GRDB
 import XCTest
 
 @testable import Omi_Computer
@@ -182,6 +183,65 @@ private final class LocalProjectionURLStub: URLProtocol, @unchecked Sendable {
         try? FileManager.default.removeItem(at: userDir)
       }
       try await super.tearDown()
+    }
+
+    func testCrashRecoveryUploadsCaptureEndFourDaysAfterRecording() async throws {
+      await installClient(
+        hooks: LocalProjectionTestHooks(
+          flagEnabled: false, entitlement: .planGated, thermalState: .nominal, summarizer: nil
+        ))
+      let id = try await TranscriptionStorage.shared.startSession(
+        source: "desktop", finalizationStrategy: .localSegments
+      )
+      let start = Date(timeIntervalSince1970: floor(Date().timeIntervalSince1970) - 4 * 86_400)
+      let pool = await RewindDatabase.shared.getDatabaseQueue()
+      let db = try XCTUnwrap(pool)
+      try await db.write { database in
+        try database.execute(
+          sql: "UPDATE transcription_sessions SET startedAt = ?, createdAt = ? WHERE id = ?",
+          arguments: [start, start, id]
+        )
+      }
+      for (speaker, end) in [(0, 45.0), (1, 12.0)] {
+        try await TranscriptionStorage.shared.appendSegment(
+          sessionId: id, speaker: speaker, text: "Recovery fixture", startTime: 0, endTime: end
+        )
+      }
+      let emptyID = try await TranscriptionStorage.shared.startSession(
+        source: "desktop", finalizationStrategy: .localSegments
+      )
+      let invalidID = try await TranscriptionStorage.shared.startSession(
+        source: "desktop", finalizationStrategy: .localSegments
+      )
+      try await db.write { database in
+        try database.execute(
+          sql: "UPDATE transcription_sessions SET startedAt = ?, createdAt = ? WHERE id IN (?, ?)",
+          arguments: [start, start, emptyID, invalidID]
+        )
+      }
+      try await TranscriptionStorage.shared.appendSegment(
+        sessionId: invalidID, speaker: 0, text: "Invalid legacy timing", startTime: 10, endTime: 9
+      )
+      // Drive launch recovery, including the real storage transition and API encoder.
+      await TranscriptionRetryService.shared.recoverPendingTranscriptions()
+      await TranscriptionRetryService.shared.recoverPendingTranscriptions()
+
+      let json = try firstFromSegmentsJSON()
+      let iso = ISO8601DateFormatter()
+      XCTAssertEqual(json["started_at"] as? String, iso.string(from: start))
+      XCTAssertEqual(json["finished_at"] as? String, iso.string(from: start.addingTimeInterval(45)))
+      XCTAssertEqual(json["conversation_finalization_reason"] as? String, "crash_recovery")
+      XCTAssertEqual((json["transcript_segments"] as? [[String: Any]])?.count, 2)
+      let posts = LocalProjectionURLStub.requests.filter { $0.url.path == "/v1/conversations/from-segments" }
+      XCTAssertEqual(posts.count, 1, "Repeated launch recovery must not upload again")
+      let stored = try await TranscriptionStorage.shared.getSession(id: id)
+      XCTAssertEqual(stored?.status, .completed)
+      XCTAssertEqual(stored?.finishedAt, start.addingTimeInterval(45))
+      let empty = try await TranscriptionStorage.shared.getSession(id: emptyID)
+      XCTAssertNil(empty, "Empty crash rows keep their existing deletion behavior")
+      let invalid = try await TranscriptionStorage.shared.getSession(id: invalidID)
+      XCTAssertEqual(invalid?.status, .recording)
+      XCTAssertNil(invalid?.finishedAt, "Invalid legacy evidence must not become an invented upload interval")
     }
 
     func testPaidPlanDoesNotAttachOrCallSummarizer() async throws {

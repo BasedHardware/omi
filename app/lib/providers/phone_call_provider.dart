@@ -1,9 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:typed_data';
-
 import 'package:omi/utils/platform/platform_manager.dart';
-import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_contacts/flutter_contacts.dart';
 // hide PermissionStatus: flutter_contacts has its own PermissionStatus enum, and this
 // file never spells out permission_handler's version by name (only inferred via `var`).
@@ -25,6 +23,14 @@ enum TranscriptionStatus { idle, connecting, active, reconnecting, failed, noAud
 
 class PhoneCallProvider extends ChangeNotifier {
   final PhoneCallService _nativeService = PhoneCallService();
+
+  // App-level read-only snapshot used by lightweight guards that must not
+  // construct the lazy provider just to inspect whether a call is active.
+  // Keep this notifier alive for the app lifetime; provider instances reset
+  // its value through the same state transition path as the provider itself.
+  static final ValueNotifier<PhoneCallState> _appCallState = ValueNotifier<PhoneCallState>(PhoneCallState.idle);
+
+  static ValueListenable<PhoneCallState> get callStateListenable => _appCallState;
 
   // Call state
   PhoneCallState _callState = PhoneCallState.idle;
@@ -107,6 +113,18 @@ class PhoneCallProvider extends ChangeNotifier {
   /// the transcription socket without the Twilio/API flow.
   @visibleForTesting
   void debugSetCallIdForTesting(String callId) => _currentCallId = callId;
+
+  @visibleForTesting
+  void debugSetCallStateForTesting(PhoneCallState state) => _setCallState(state);
+
+  @visibleForTesting
+  Future<void> connectTranscriptionSocketForTesting() => _connectTranscriptionSocket();
+
+  @visibleForTesting
+  int get wsReconnectAttemptsForTesting => _wsReconnectAttempts;
+
+  @visibleForTesting
+  Timer? get wsReconnectTimerForTesting => _wsReconnectTimer;
   // Verified phone numbers
   List<VerifiedPhoneNumber> _verifiedNumbers = [];
   List<VerifiedPhoneNumber> get verifiedNumbers => _verifiedNumbers;
@@ -253,7 +271,7 @@ class PhoneCallProvider extends ChangeNotifier {
 
     _error = null;
     _lastError = null;
-    _callState = PhoneCallState.connecting;
+    _setCallState(PhoneCallState.connecting);
     _remoteNumber = phoneNumber;
     final callId = DateTime.now().millisecondsSinceEpoch.toString();
     _currentCallId = callId;
@@ -268,7 +286,7 @@ class PhoneCallProvider extends ChangeNotifier {
     var micStatus = await Permission.microphone.request();
     if (generation != _sessionGeneration) return false;
     if (!micStatus.isGranted) {
-      _callState = PhoneCallState.idle;
+      _setCallState(PhoneCallState.idle);
       _error = 'Microphone permission is required to make calls';
       notifyListeners();
       return false;
@@ -283,7 +301,7 @@ class PhoneCallProvider extends ChangeNotifier {
     if (generation != _sessionGeneration) return false;
     var token = tokenResult.token;
     if (token == null) {
-      _callState = PhoneCallState.idle;
+      _setCallState(PhoneCallState.idle);
       // The backend refuses for several different reasons (no verified number, quota
       // exhausted, plan without calling). Reporting its own reason beats guessing one.
       _error = tokenResult.error ?? 'Failed to get call token. Please try again.';
@@ -295,7 +313,7 @@ class PhoneCallProvider extends ChangeNotifier {
     var initialized = await _nativeService.initialize(token.accessToken);
     if (generation != _sessionGeneration) return false;
     if (!initialized) {
-      _callState = PhoneCallState.idle;
+      _setCallState(PhoneCallState.idle);
       _error = 'Failed to initialize call service';
       notifyListeners();
       return false;
@@ -317,7 +335,7 @@ class PhoneCallProvider extends ChangeNotifier {
     }
 
     if (!callStarted) {
-      _callState = PhoneCallState.idle;
+      _setCallState(PhoneCallState.idle);
       _error = 'Failed to start call';
       PlatformManager.instance.analytics.phoneCallFailed(error: 'Failed to start call');
       _disconnectTranscriptionSocket();
@@ -384,7 +402,7 @@ class PhoneCallProvider extends ChangeNotifier {
 
   void _onCallStateChanged(PhoneCallState state) {
     if (!_sessionEnabled) return;
-    _callState = state;
+    _setCallState(state);
     if (state == PhoneCallState.active && _callStartTime == null) {
       _callStartTime = DateTime.now();
       _startDurationTimer();
@@ -499,7 +517,7 @@ class PhoneCallProvider extends ChangeNotifier {
     _noAudioWatchdog = null;
     _reportTranscriptSession();
     PlatformManager.instance.analytics.phoneCallEnded(durationSeconds: _callDuration.inSeconds);
-    _callState = PhoneCallState.ended;
+    _setCallState(PhoneCallState.ended);
     _stopDurationTimer();
     _disconnectTranscriptionSocket();
     _tokenRefreshTimer?.cancel();
@@ -511,7 +529,7 @@ class PhoneCallProvider extends ChangeNotifier {
     // Reset state after a short delay so UI can show "Call Ended"
     Future.delayed(const Duration(seconds: 2), () {
       if (_disposed) return;
-      _callState = PhoneCallState.idle;
+      _setCallState(PhoneCallState.idle);
       _currentCallId = null;
       _remoteNumber = null;
       _contactName = null;
@@ -529,6 +547,13 @@ class PhoneCallProvider extends ChangeNotifier {
     _error = error.message;
     Logger.error('PhoneCallProvider: native error: ${error.code} - ${error.message}');
     notifyListeners();
+  }
+
+  void _setCallState(PhoneCallState state) {
+    _callState = state;
+    if (_appCallState.value != state) {
+      _appCallState.value = state;
+    }
   }
 
   void _onMuteConfirmed(bool muted) {
@@ -617,6 +642,7 @@ class PhoneCallProvider extends ChangeNotifier {
             _transcriptionStatus = TranscriptionStatus.active;
             _wsAccepted = true;
             _wsAcceptedAt ??= DateTime.now();
+            _wsReconnectAttempts = 0;
             notifyListeners();
             _armNoAudioWatchdog();
           }
@@ -632,12 +658,13 @@ class PhoneCallProvider extends ChangeNotifier {
         },
         onDone: () {
           if (generation != _sessionGeneration || !_sessionEnabled) return;
-          Logger.info('PhoneCallProvider: WebSocket closed');
+          final closeCode = _transcriptionSocket?.closeCode;
+          final closeReason = _transcriptionSocket?.closeReason;
+          Logger.info('PhoneCallProvider: WebSocket closed (code: $closeCode, reason: $closeReason)');
           _transcriptionSocket = null;
           _scheduleReconnect();
         },
       );
-      _wsReconnectAttempts = 0;
     } on AuthTokenUnavailableException catch (e) {
       Logger.debug('PhoneCallProvider: authenticated WebSocket blocked before connect: ${e.result.runtimeType}');
       _transcriptionSocket = null;
@@ -780,6 +807,7 @@ class PhoneCallProvider extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    _setCallState(PhoneCallState.idle);
     _noAudioWatchdog?.cancel();
     _noAudioWatchdog = null;
     _stopDurationTimer();
@@ -797,7 +825,7 @@ class PhoneCallProvider extends ChangeNotifier {
     _disconnectTranscriptionSocket();
     _tokenRefreshTimer?.cancel();
     _tokenRefreshTimer = null;
-    _callState = PhoneCallState.idle;
+    _setCallState(PhoneCallState.idle);
     _currentCallId = null;
     _audioBuffer.clear();
     _resetTranscriptSessionStats();

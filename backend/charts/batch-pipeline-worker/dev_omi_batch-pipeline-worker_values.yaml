@@ -1,0 +1,29 @@
+enabled: true
+image:
+  repository: gcr.io/based-hardware-dev/batch-pipeline-worker
+  digest: ""
+serviceAccountName: batch-pipeline-worker
+gcpServiceAccount: batch-pipeline-worker@based-hardware-dev.iam.gserviceaccount.com
+bucket: based-hardware-dev-batch-pipeline-staging
+dataPlaneProject: based-hardware
+stage: dev
+namespace: batch_pipeline_dev
+secretName: dev-omi-backend-secrets
+replicaCount: 1
+autoscaling:
+  enabled: false
+nodeSelector:
+  cloud.google.com/gke-nodepool: batch-pipeline-pool
+  service: batch-pipeline
+  env: dev
+tolerations:
+  - key: omi.ai/batch-pipeline
+    operator: Equal
+    value: "true"
+    effect: NoSchedule
+  - key: nvidia.com/gpu
+    operator: Equal
+    value: present
+    effect: NoSchedule
+worker:
+  headPriorityEnabled: false

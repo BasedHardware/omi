@@ -28,6 +28,7 @@ class AppSessionTelemetry {
 
   void recordBackgrounded() {
     _isBackgrounded = true;
+    _analytics.setForeground(false);
   }
 
   void recordResumed() {
@@ -37,10 +38,12 @@ class AppSessionTelemetry {
   }
 
   void _emit(AppSessionStartKind kind) {
+    final sessionId = _createSessionId();
+    _analytics.setSessionContext(sessionId);
     _analytics.track(
       'App Session Started',
       properties: {
-        'app_session_id': _createSessionId(),
+        'app_session_id': sessionId,
         'start_kind': kind.name,
       },
     );

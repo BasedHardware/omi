@@ -1,6 +1,9 @@
 import logging
+import math
+from database.fsr_read_cache import cache_writer, cached_read, plane_id, ttl
 from datetime import datetime, time, timedelta, timezone
-from typing import Any, Dict, Iterable, List, Optional, Tuple, cast
+from functools import wraps
+from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple, cast
 
 import pytz
 from google.cloud import firestore
@@ -8,7 +11,9 @@ from google.cloud.firestore_v1 import FieldFilter
 
 from ._client import db
 from .firestore_read_metrics import FirestoreReadFamily, FirestoreReadMode, record_firestore_read
-from .llm_usage import resolve_usage_plan_id
+from .firestore_index_registry import HOURLY_USAGE_UTC_DAY_QUERY
+from .llm_usage import nest_usage_fields, resolve_usage_plan_id
+from .usage_units import hourly_shadow, normalize_plan_usage
 from models.user_usage import UsageStats
 
 logger = logging.getLogger(__name__)
@@ -319,8 +324,8 @@ def get_usage_by_plan(
     )
     for snap in query.stream():
         data = _typed_doc(snap)
-        plan_usage = data.get('plan_usage')
-        if not isinstance(plan_usage, dict):
+        plan_usage = normalize_plan_usage(data)
+        if not plan_usage:
             row = report.setdefault(_UNATTRIBUTED_PLAN, _plan_usage_row())
             _accumulate_plan_data(row, data)
             row['cost_status'] = 'missing'
@@ -349,6 +354,7 @@ def get_usage_by_plan(
     return report
 
 
+@cache_writer('usage_month_cache')
 def update_hourly_usage(
     uid: str,
     date: datetime,
@@ -358,6 +364,7 @@ def update_hourly_usage(
     cost_usd: float | None = None,
     cost_status: str = 'missing',
     cost_exclusion: str | None = None,
+    usage_metadata: Mapping[str, Any] | None = None,
     firestore_client: Any | None = None,
 ) -> None:
     """Updates or creates usage stats for a specific hour using Firestore atomic increments.
@@ -416,7 +423,8 @@ def update_hourly_usage(
     if platform in ('desktop', 'mobile'):
         update_doc['platforms'] = firestore.ArrayUnion([platform])
 
-    hourly_usage_ref.set(update_doc, merge=True)
+    update_doc.update(hourly_shadow(updates, usage_metadata))
+    hourly_usage_ref.set(nest_usage_fields(update_doc), merge=True)
 
 
 @firestore.transactional
@@ -435,6 +443,7 @@ def _update_hourly_usage_once_transaction(
     return True
 
 
+@cache_writer('usage_month_cache')
 def update_hourly_usage_once(
     uid: str,
     date: datetime,
@@ -444,6 +453,7 @@ def update_hourly_usage_once(
     cost_usd: float | None = None,
     cost_status: str = 'missing',
     cost_exclusion: str | None = None,
+    usage_metadata: Mapping[str, Any] | None = None,
     firestore_client: Any | None = None,
 ) -> bool:
     """Atomically increment hourly usage once for a stable sync content key."""
@@ -452,50 +462,27 @@ def update_hourly_usage_once(
     doc_id = f'{date.year}-{date.month:02d}-{date.day:02d}-{date.hour:02d}'
     usage_ref = user_ref.collection('hourly_usage').document(doc_id)
     marker_ref = user_ref.collection('sync_content_ledger').document(idempotency_key)
-    update_doc: Dict[str, Any] = {
-        'last_updated': datetime.now(timezone.utc),
-        'year': date.year,
-        'month': date.month,
-        'day': date.day,
-        'hour': date.hour,
-        'id': doc_id,
-    }
-    for key, value in updates.items():
-        if (
-            key
-            in {'transcription_seconds', 'words_transcribed', 'insights_gained', 'memories_created', 'speech_seconds'}
-            and value > 0
-        ):
-            update_doc[key] = firestore.Increment(value)
-    has_increments = any(
+    from database.hourly_usage_updates import prepare_hourly_usage_updates
+
+    if not any(
         key in {'transcription_seconds', 'words_transcribed', 'insights_gained', 'memories_created', 'speech_seconds'}
-        for key in update_doc
-    )
-    if not has_increments:
+        and value > 0
+        for key, value in updates.items()
+    ):
         return False
-    plan_key = resolve_usage_plan_id(uid, firestore_client=client) or _UNATTRIBUTED_PLAN
-    plan_prefix = f'plan_usage.{plan_key}'
-    for key, value in updates.items():
-        if (
-            key
-            in {'transcription_seconds', 'words_transcribed', 'insights_gained', 'memories_created', 'speech_seconds'}
-            and value > 0
-        ):
-            update_doc[f'{plan_prefix}.{key}'] = firestore.Increment(value)
-    if cost_usd is not None:
-        update_doc[f'{plan_prefix}.cost_usd'] = firestore.Increment(cost_usd)
-    normalized_status = cost_status if cost_status in {'complete', 'partial', 'missing', 'excluded'} else 'missing'
-    effective_exclusion = cost_exclusion or (
-        'provider_cost_not_recorded' if normalized_status in {'missing', 'partial'} else None
+    update_doc = prepare_hourly_usage_updates(
+        date,
+        updates,
+        resolve_usage_plan_id(uid, firestore_client=client),
+        cost_usd=cost_usd,
+        cost_status=cost_status,
+        cost_exclusion=cost_exclusion,
+        usage_metadata=usage_metadata,
     )
-    update_doc[f'{plan_prefix}._metadata.cost_status_counts.{normalized_status}'] = firestore.Increment(1)
-    update_doc[f'{plan_prefix}._metadata.last_cost_status'] = normalized_status
-    if effective_exclusion:
-        safe_exclusion = effective_exclusion.replace('.', '_').replace('/', '_')
-        update_doc[f'{plan_prefix}._metadata.cost_exclusions.{safe_exclusion}'] = firestore.Increment(1)
     return _update_hourly_usage_once_transaction(client.transaction(), marker_ref, usage_ref, update_doc)
 
 
+@cache_writer('usage_month_cache')
 def batch_update_hourly_usage(uid: str, hourly_updates: Dict[datetime, Dict[str, Any]]) -> None:
     """Batch updates or creates usage stats for multiple hours."""
     batch_size = 400
@@ -585,6 +572,36 @@ def _aggregate_stats_with_count(docs: Iterable[Any]) -> Tuple[Dict[str, Any], in
     return stats, document_count
 
 
+def _s4_valid_month_stats(value) -> bool:
+    fields = ('transcription_seconds', 'words_transcribed', 'insights_gained', 'memories_created', 'speech_seconds')
+    return isinstance(value, dict) and all(
+        type(value.get(key)) in (int, float) and math.isfinite(value[key]) and value[key] >= 0 for key in fields
+    )
+
+
+def _s4_month_cache(since=False):
+    def decorate(fn):
+        @wraps(fn)
+        def read(uid, date, *args, **kwargs):
+            variant = f'{plane_id(db)}:{date.year}-{date.month:02d}:all'
+            if since:
+                start_date = args[0] if args else kwargs['start_date']
+                variant = f'{plane_id(db)}:{date.year}-{date.month:02d}:since:{start_date.date().isoformat()}'
+            return cached_read(
+                'usage_month_cache',
+                uid,
+                variant,
+                lambda: fn(uid, date, *args, **kwargs),
+                seconds=ttl('FSR_USAGE_MONTH_TTL_SECONDS', 60),
+                cacheable=_s4_valid_month_stats,
+            )
+
+        return read
+
+    return decorate
+
+
+@_s4_month_cache()
 def get_monthly_usage_stats(uid: str, date: datetime) -> Dict[str, Any]:
     """Aggregates hourly usage stats for a given month from Firestore."""
     user_ref = db.collection('users').document(uid)
@@ -596,6 +613,7 @@ def get_monthly_usage_stats(uid: str, date: datetime) -> Dict[str, Any]:
     return _aggregate_stats(query)
 
 
+@_s4_month_cache(since=True)
 def get_monthly_usage_stats_since(uid: str, date: datetime, start_date: datetime) -> Dict[str, Any]:
     """Aggregates hourly usage stats for a given month from Firestore, starting from a specific date."""
     user_ref = db.collection('users').document(uid)
@@ -625,42 +643,137 @@ def get_yearly_usage_stats(uid: str, date: datetime) -> Dict[str, Any]:
     return _aggregate_stats(query)
 
 
+def _local_boundary_utc(user_tz: Any, local_boundary: datetime) -> datetime:
+    """Resolve a local period boundary to its first possible UTC instant.
+
+    A repeated midnight begins at its DST occurrence. A skipped midnight
+    begins at the first valid wall time after the gap.
+    """
+
+    try:
+        localized = user_tz.localize(local_boundary, is_dst=None)
+    except pytz.AmbiguousTimeError:
+        localized = user_tz.localize(local_boundary, is_dst=True)
+    except pytz.NonExistentTimeError:
+        lower = local_boundary
+        step = timedelta(minutes=1)
+        while True:
+            upper = local_boundary + step
+            try:
+                user_tz.localize(upper, is_dst=None)
+                break
+            except pytz.AmbiguousTimeError:
+                break
+            except pytz.NonExistentTimeError:
+                lower = upper
+                step *= 2
+        while upper - lower > timedelta(microseconds=1):
+            middle = lower + (upper - lower) // 2
+            try:
+                user_tz.localize(middle, is_dst=None)
+                upper = middle
+            except pytz.AmbiguousTimeError:
+                upper = middle
+            except pytz.NonExistentTimeError:
+                lower = middle
+        localized = user_tz.localize(upper, is_dst=True)
+    return localized.astimezone(timezone.utc)
+
+
+def _local_period_usage(
+    uid: str, now: datetime, user_tz: Any, period: str
+) -> Tuple[Dict[str, Any], List[Dict[str, Any]]]:
+    """Read the UTC period plus at most two boundary days, then bucket locally.
+
+    Hourly documents are UTC keyed. The adjacent day reads cover time zone
+    offsets without scanning adjacent whole months or years.
+    """
+    local_now = now.astimezone(user_tz)
+    if period == 'monthly':
+        local_start = datetime(local_now.year, local_now.month, 1)
+        local_end = datetime(local_now.year + (local_now.month == 12), local_now.month % 12 + 1, 1)
+    else:
+        local_start = datetime(local_now.year, 1, 1)
+        local_end = datetime(local_now.year + 1, 1, 1)
+    start = _local_boundary_utc(user_tz, local_start)
+    end = _local_boundary_utc(user_tz, local_end)
+    collection = db.collection('users').document(uid).collection('hourly_usage')
+    main = collection.where(filter=FieldFilter('year', '==', local_now.year))
+    if period == 'monthly':
+        main = main.where(filter=FieldFilter('month', '==', local_now.month))
+    docs = list(main.stream())
+    boundary_days = {start.date(), (end - timedelta(microseconds=1)).date()}
+    for boundary in boundary_days:
+        if boundary.year == local_now.year and (period == 'yearly' or boundary.month == local_now.month):
+            continue
+        query = HOURLY_USAGE_UTC_DAY_QUERY.build(
+            collection,
+            {'year': boundary.year, 'month': boundary.month, 'day': boundary.day},
+            field_filter_factory=FieldFilter,
+        )
+        docs.extend(query.stream())
+
+    stats = _aggregate_stats_from_docs([])
+    buckets: Dict[str, Dict[str, int]] = {}
+    for doc in docs:
+        data = _typed_doc(doc)
+        try:
+            hour = datetime(
+                int(data['year']), int(data['month']), int(data['day']), int(data['hour']), tzinfo=timezone.utc
+            )
+        except (KeyError, ValueError, TypeError):
+            continue
+        if not start <= hour < end:
+            continue
+        local = hour.astimezone(user_tz)
+        key = local.strftime('%Y-%m-%d' if period == 'monthly' else '%Y-%m-01')
+        bucket = buckets.setdefault(key, {name: 0 for name in stats})
+        for name in stats:
+            value = int(data.get(name, 0) or 0)
+            stats[name] += value
+            bucket[name] += value
+    return stats, [{'date': key, **buckets[key]} for key in sorted(buckets)]
+
+
 def get_all_time_usage_stats(uid: str) -> Dict[str, Any]:
     """Aggregates all hourly usage stats for a user from Firestore."""
     stats, _ = _read_all_time_usage(uid)
     return stats
 
 
-def get_hourly_history_for_today(uid: str, date: datetime) -> List[Dict[str, Any]]:
+def get_hourly_history_for_today(uid: str, start: datetime, end: datetime) -> List[Dict[str, Any]]:
     """Gets hourly usage for a specific day by aggregating hourly data."""
     user_ref = db.collection('users').document(uid)
     hourly_usage_collection = user_ref.collection('hourly_usage')
-    query = (
-        hourly_usage_collection.where(filter=FieldFilter('year', '==', date.year))
-        .where(filter=FieldFilter('month', '==', date.month))
-        .where(filter=FieldFilter('day', '==', date.day))
-    )
-    docs = query.stream()
-    hourly_totals: Dict[int, Dict[str, int]] = {}
-    for doc in docs:
-        data: Dict[str, Any] = _typed_doc(doc)
-        hour = cast(int, data.get('hour', 0))
-        if hour not in hourly_totals:
-            hourly_totals[hour] = {
-                'transcription_seconds': 0,
-                'words_transcribed': 0,
-                'insights_gained': 0,
-                'memories_created': 0,
-            }
+    hourly_totals: Dict[datetime, Dict[str, int]] = {}
+    cursor = start.replace(hour=0, minute=0, second=0, microsecond=0)
+    while cursor < end:
+        query = (
+            hourly_usage_collection.where(filter=FieldFilter('year', '==', cursor.year))
+            .where(filter=FieldFilter('month', '==', cursor.month))
+            .where(filter=FieldFilter('day', '==', cursor.day))
+        )
+        for doc in query.stream():
+            data: Dict[str, Any] = _typed_doc(doc)
+            bucket = cursor.replace(hour=int(data.get('hour', 0)))
+            if not start <= bucket < end:
+                continue
+            if bucket not in hourly_totals:
+                hourly_totals[bucket] = {
+                    'transcription_seconds': 0,
+                    'words_transcribed': 0,
+                    'insights_gained': 0,
+                    'memories_created': 0,
+                }
 
-        hourly_totals[hour]['transcription_seconds'] += cast(int, data.get('transcription_seconds', 0))
-        hourly_totals[hour]['words_transcribed'] += cast(int, data.get('words_transcribed', 0))
-        hourly_totals[hour]['insights_gained'] += cast(int, data.get('insights_gained', 0))
-        hourly_totals[hour]['memories_created'] += cast(int, data.get('memories_created', 0))
+            hourly_totals[bucket]['transcription_seconds'] += cast(int, data.get('transcription_seconds', 0))
+            hourly_totals[bucket]['words_transcribed'] += cast(int, data.get('words_transcribed', 0))
+            hourly_totals[bucket]['insights_gained'] += cast(int, data.get('insights_gained', 0))
+            hourly_totals[bucket]['memories_created'] += cast(int, data.get('memories_created', 0))
+        cursor += timedelta(days=1)
 
     history: List[Dict[str, Any]] = [
-        {'date': f"{date.year}-{date.month:02d}-{date.day:02d}T{hour:02d}:00:00Z", **stats}
-        for hour, stats in hourly_totals.items()
+        {'date': bucket.strftime('%Y-%m-%dT%H:00:00Z'), **stats} for bucket, stats in hourly_totals.items()
     ]
     history.sort(key=lambda x: cast(str, x['date']))
     return history
@@ -801,37 +914,49 @@ def get_current_user_usage(
 ) -> Dict[str, Any]:
     """Gets usage for the current user for a specific period from Firestore.
 
-    ``tz_name`` (IANA zone, e.g. "America/Los_Angeles") anchors period='today'
-    to the caller's local calendar day instead of the UTC calendar day. Without
-    it, users west of UTC see "today" reset hours before their real midnight,
-    and users east of UTC see the tail of their local yesterday counted as
-    "today" — since usage docs are written on UTC dates but this endpoint is
-    read by a user thinking in their own timezone.
+    ``tz_name`` anchors today, month, and year to the user's calendar. All-time
+    remains UTC-yearly because it scans the full history once and has no local
+    period boundary to constrain an additional read.
     """
     now = now or datetime.now(timezone.utc)
     response: Dict[str, Any] = {}
+    user_tz = None
+    if tz_name:
+        try:
+            user_tz = pytz.timezone(tz_name)
+        except Exception as e:
+            logger.error('usage tz fallback to UTC uid=%s tz=%s: %s', uid, tz_name, e)
 
     if period == 'today':
         start = now.replace(hour=0, minute=0, second=0, microsecond=0)
         end = start + timedelta(days=1)
-        if tz_name:
+        if user_tz is not None:
             try:
-                user_tz = pytz.timezone(tz_name)
                 display_date = now.astimezone(user_tz).date()
-                start = user_tz.localize(datetime.combine(display_date, time.min)).astimezone(timezone.utc)
-                end = user_tz.localize(datetime.combine(display_date, time.max)).astimezone(timezone.utc)
+                start = _local_boundary_utc(user_tz, datetime.combine(display_date, time.min))
+                end = _local_boundary_utc(user_tz, datetime.combine(display_date + timedelta(days=1), time.min))
             except Exception as e:
                 # Keep serving the UTC day rather than failing the request, but say so: a stored
                 # zone we cannot parse is a data problem worth seeing, not something to swallow.
                 logger.error('usage today tz fallback to UTC uid=%s tz=%s: %s', uid, tz_name, e)
         response['today'] = UsageStats(**get_today_usage_stats(uid, start, end)).model_dump()
-        response['history'] = get_hourly_history_for_today(uid, now)
+        response['history'] = get_hourly_history_for_today(uid, start, end)
     elif period == 'monthly':
-        response['monthly'] = UsageStats(**get_monthly_usage_stats(uid, now)).model_dump()
-        response['history'] = get_daily_history_for_month(uid, now)
+        stats, history = (
+            _local_period_usage(uid, now, user_tz, period)
+            if user_tz
+            else (get_monthly_usage_stats(uid, now), get_daily_history_for_month(uid, now))
+        )
+        response['monthly'] = UsageStats(**stats).model_dump()
+        response['history'] = history
     elif period == 'yearly':
-        response['yearly'] = UsageStats(**get_yearly_usage_stats(uid, now)).model_dump()
-        response['history'] = get_monthly_history_for_year(uid, now)
+        stats, history = (
+            _local_period_usage(uid, now, user_tz, period)
+            if user_tz
+            else (get_yearly_usage_stats(uid, now), get_monthly_history_for_year(uid, now))
+        )
+        response['yearly'] = UsageStats(**stats).model_dump()
+        response['history'] = history
     elif period == 'all_time':
         all_time, history = _read_all_time_usage(uid)
         response['all_time'] = UsageStats(**all_time).model_dump()

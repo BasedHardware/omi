@@ -82,7 +82,7 @@ def _plan_key(uid: str, firestore_client: Any | None) -> str:
     return resolve_usage_plan_id(uid, firestore_client=firestore_client) or _UNATTRIBUTED_PLAN
 
 
-def _nested(update: Dict[str, Any]) -> Dict[str, Any]:
+def nest_usage_fields(update: Dict[str, Any]) -> Dict[str, Any]:
     """Expand dotted field paths into nested maps, for writes that use ``set(..., merge=True)``.
 
     Firestore treats a dot as a field PATH in ``update()`` but as a literal character in ``set()``. These
@@ -178,6 +178,10 @@ def record_llm_usage(
     input_tokens: int,
     output_tokens: int,
     *,
+    cache_read_tokens: int = 0,
+    cache_write_tokens: int = 0,
+    surface: str | None = None,
+    turn_id: str | None = None,
     cost_usd: float | None = None,
     cost_status: str = 'missing',
     cost_exclusion: str | None = None,
@@ -191,7 +195,7 @@ def record_llm_usage(
     Args:
         uid: User ID
         feature: Feature name (e.g., "chat", "rag", "conversation_processing")
-        model: Model name (e.g., "gpt-5.6-luna", "gpt-5-nano")
+        model: Model name (e.g., "gpt-x-luna", "gpt-5-nano")
         input_tokens: Number of input/prompt tokens
         output_tokens: Number of output/completion tokens
     """
@@ -245,7 +249,36 @@ def record_llm_usage(
         cost_exclusion=cost_exclusion,
     )
 
-    usage_ref.set(_nested(update_data), merge=True)
+    for prefix in (f'{feature}.{safe_model}', plan_prefix):
+        if feature == 'chat_agent':
+            update_data[f'{prefix}.cache_read_tokens'] = firestore.Increment(cache_read_tokens)
+            update_data[f'{prefix}.cache_write_tokens'] = firestore.Increment(cache_write_tokens)
+    if feature == 'chat_agent' and surface in {'app', 'telegram', 'imessage', 'other'}:
+        counters = {
+            'input_tokens': input_tokens,
+            'output_tokens': output_tokens,
+            'cache_read_tokens': cache_read_tokens,
+            'cache_write_tokens': cache_write_tokens,
+            'call_count': 1,
+        }
+        for field, value in counters.items():
+            update_data[f'chat_agent_surfaces.{surface}.{safe_model}.{field}'] = firestore.Increment(value)
+        if turn_id:
+            batch = client.batch()
+            batch.set(usage_ref, nest_usage_fields(update_data), merge=True)
+            turn_ref = usage_ref.collection('chat_agent_turns').document(hashlib.sha256(turn_id.encode()).hexdigest())
+            batch.set(
+                turn_ref,
+                {
+                    'surface': surface,
+                    'updated_at': now,
+                    'models': {safe_model: {k: firestore.Increment(v) for k, v in counters.items()}},
+                },
+                merge=True,
+            )
+            batch.commit()
+            return
+    usage_ref.set(nest_usage_fields(update_data), merge=True)
 
 
 @transactional  # pyright: ignore[reportUntypedFunctionDecorator]
@@ -279,7 +312,7 @@ def _record_chat_quota_question_transaction(
         update.update(usage_update_for(plan_key, doc_id))
     else:
         _record_plan_metadata(update, plan_key, cost_status='missing', cost_exclusion='chat_token_cost_not_recorded')
-    transaction.set(usage_ref, _nested(update), merge=True)
+    transaction.set(usage_ref, nest_usage_fields(update), merge=True)
     return True
 
 
@@ -335,6 +368,69 @@ def record_chat_quota_question(
     return _record_chat_quota_question_transaction(
         transaction, usage_ref, event_ref, event_data, doc_id, plan_key, usage_update_for
     )
+
+
+@transactional  # pyright: ignore[reportUntypedFunctionDecorator]
+def _release_chat_quota_question_transaction(
+    transaction: Any,
+    usage_ref: Any,
+    event_ref: Any,
+    doc_id: str,
+) -> bool:
+    """Give back one recorded question, exactly once.
+
+    Returns False when the event was never recorded (nothing charged) or was
+    already released — a retried failure path must not double-refund. The
+    decrement lands in the plan bucket the question was attributed to, read
+    from the stored event rather than re-resolved, so a plan change between
+    the charge and the release cannot leak the refund into the wrong bucket.
+    """
+    event_snapshot = event_ref.get(transaction=transaction)
+    if not getattr(event_snapshot, "exists", False):
+        return False
+    event = event_snapshot.to_dict() or {}
+    if event.get('released'):
+        return False
+
+    now = datetime.now(timezone.utc)
+    transaction.set(event_ref, {'released': True, 'released_at': now}, merge=True)
+    plan_key = event.get('plan_id') or _UNATTRIBUTED_PLAN
+    update: Dict[str, Any] = {
+        'backend_chat.quota_questions': firestore.Increment(-1),
+        'date': doc_id,
+        'last_updated': now,
+    }
+    _record_plan_bucket(update, plan_key, 'backend_chat', quota_questions=-1, count_call=False)
+    transaction.set(usage_ref, nest_usage_fields(update), merge=True)
+    return True
+
+
+def release_chat_quota_question(
+    uid: str,
+    idempotency_key: str,
+    *,
+    firestore_client: Any | None = None,
+) -> bool:
+    """Release one question previously recorded by :func:`record_chat_quota_question`.
+
+    Called when the billable turn failed terminally after the question was
+    charged — the user should not pay quota for a failed answer. Idempotent:
+    keyed on the same ``uid:idempotency_key`` event doc, marked ``released`` in
+    the same transaction as the decrement.
+    """
+    if not idempotency_key:
+        return False
+
+    doc_id = datetime.now(timezone.utc).strftime('%Y-%m-%d')
+    event_id = hashlib.sha256(f'{uid}:{idempotency_key}'.encode('utf-8')).hexdigest()
+
+    client = _usage_client(firestore_client)
+    user_ref = client.collection('users').document(uid)
+    usage_ref = user_ref.collection('llm_usage').document(doc_id)
+    event_ref = user_ref.collection('chat_quota_events').document(event_id)
+
+    transaction = client.transaction()
+    return _release_chat_quota_question_transaction(transaction, usage_ref, event_ref, doc_id)
 
 
 def get_daily_usage(uid: str, date: Optional[datetime] = None) -> Dict[str, Any]:
@@ -541,7 +637,7 @@ def record_llm_usage_bucket(
         count_call=count_call,
         firestore_client=firestore_client,
     )
-    ref.set(_nested(update), merge=True)
+    ref.set(nest_usage_fields(update), merge=True)
 
 
 def usage_bucket_update(
@@ -632,7 +728,7 @@ def record_llm_cost_exclusion(
     plan_key = _plan_key(uid, firestore_client)
     update: Dict[str, Any] = {'date': today, 'last_updated': datetime.now(timezone.utc)}
     _record_plan_metadata(update, plan_key, cost_status='excluded', cost_exclusion=cost_exclusion)
-    ref.set(_nested(update), merge=True)
+    ref.set(nest_usage_fields(update), merge=True)
 
 
 def _merge_cost_status(existing: str | None, observed: str) -> str:

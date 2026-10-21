@@ -9,6 +9,7 @@ covers:
   - desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTyping/TextInsertionSink.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTyping/VoiceTypeSession.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTyping/DictationPolisher.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTyping/VoiceTypingChatRecordPolicy.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/NotchVoiceMorphMark.swift
 preconditions:
   - auth_ready
@@ -27,6 +28,10 @@ steps:
   - id: S2b
     name: Clean acknowledgement skips polish
     do: "In the same disposable editor, hold PTT and say 'type Thanks', then release. On a capture whose acknowledgement payload is already clean and matches the locally formatted text, with no on-screen spelling hints, verify unchanged insertion and the llm_polish-to-local_format policy diagnostic with no remote polish request. If recognition changed casing or formatting, record that as ineligible rather than claiming a skip. Repeat with 'type Meet at three, no, four' and verify the normal polish path still runs."
+    verify: true
+  - id: S2c
+    name: Silent Type dictation stays out of the chat
+    do: "In Settings → Transcription turn Silent Type on. In the disposable editor hold PTT, say 'type Silent check', then release. Verify the text is still typed into the editor and the chat transcript gains no dictation turn for it. Toggle Silent Type back off and repeat once, verifying the chat records the dictation again as before."
     verify: true
   - id: S3
     name: Changed target copies instead of writing

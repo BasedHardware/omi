@@ -823,7 +823,8 @@ enum RealtimeHubToolFailureKind: String, Equatable {
         default:
           return .backendTransport
         }
-      case .unsupportedTierScopedBulkMutation, .syncUploadRejected, .accountCutoverOfflineQueueBlocked:
+      case .unsupportedTierScopedBulkMutation, .syncUploadRejected, .accountCutoverOfflineQueueBlocked,
+        .memoryDeleteGateBusy:
         return .backendClientRejected
       }
     }
@@ -1170,4 +1171,7 @@ enum RealtimeProviderCloseRecoveryResult: String {
   /// Idle-teardown re-warm deferred because the user is away from the machine
   /// (RealtimeHubWarmPresencePolicy); warming resumes on returned input.
   case deferredUserAway = "deferred_user_away"
+  /// Automatic managed re-warm skipped because the plan is gated or the
+  /// server returned typed 402 `plan_gated`. User-initiated PTT still attempts.
+  case deferredPlanGated = "deferred_plan_gated"
 }

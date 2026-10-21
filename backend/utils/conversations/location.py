@@ -31,6 +31,11 @@ def get_google_maps_location(latitude: float, longitude: float) -> Optional[Geol
         logging.warning('Failed to read geocode cache error_type=%s', type(e).__name__)
 
     key = os.getenv('GOOGLE_MAPS_API_KEY')
+    if not key:
+        # Never call Google keyless: the request can never succeed, and offline
+        # harness stages strip provider secrets by design, so a keyless call is
+        # pure egress noise (observed from PROVIDER_MODE=offline sessions).
+        return None
     url = f"https://maps.googleapis.com/maps/api/geocode/json?latlng={latitude},{longitude}&key={key}"
     try:
         response = httpx.get(url, timeout=10.0)
@@ -109,6 +114,10 @@ async def async_get_google_maps_location(latitude: float, longitude: float) -> O
         logging.warning('Failed to read geocode cache error_type=%s', type(e).__name__)
 
     key = os.getenv('GOOGLE_MAPS_API_KEY')
+    if not key:
+        # See the sync twin: a keyless geocode can never succeed and offline
+        # stages strip the key — skip the egress entirely.
+        return None
     try:
         async with get_maps_semaphore():
             client = get_maps_client()

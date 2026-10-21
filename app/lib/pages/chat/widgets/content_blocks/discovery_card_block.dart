@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import 'package:omi/backend/schema/chat_content_block.dart';
+import 'package:omi/ui/ui.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 
 import 'chat_block_chrome.dart';
 
@@ -25,7 +27,7 @@ class _DiscoveryCardBlockState extends State<DiscoveryCardBlock> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
+    final l10n = context.l10n;
     final summary = widget.block.summary.trim();
     final fullText = widget.block.fullText.trim();
     // Expanding is only worth offering when there is more than the summary.
@@ -34,12 +36,12 @@ class _DiscoveryCardBlockState extends State<DiscoveryCardBlock> {
 
     return ChatBlockCard(
       onTap: hasMore ? () => setState(() => _isExpanded = !_isExpanded) : null,
-      semanticsLabel: 'Discovery: ${widget.block.title}',
+      semanticsLabel: '${l10n.discovery}: ${widget.block.title}',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          const ChatBlockEyebrow(icon: Icons.auto_awesome_outlined, label: 'Discovery'),
+          ChatBlockEyebrow(icon: Icons.auto_awesome_outlined, label: l10n.discovery),
           const SizedBox(height: 6),
           if (widget.block.title.trim().isNotEmpty)
             Text(
@@ -48,7 +50,7 @@ class _DiscoveryCardBlockState extends State<DiscoveryCardBlock> {
             ),
           if (body.isNotEmpty) ...[
             const SizedBox(height: 4),
-            Text(body, style: theme.textTheme.bodySmall?.copyWith(color: colorScheme.onSurfaceVariant)),
+            Text(body, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
           ],
           if (hasMore) ...[
             const SizedBox(height: 8),
@@ -56,17 +58,16 @@ class _DiscoveryCardBlockState extends State<DiscoveryCardBlock> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  _isExpanded ? 'Show less' : 'Show more',
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: colorScheme.onSurfaceVariant,
-                    fontWeight: FontWeight.w600,
-                  ),
+                  _isExpanded ? l10n.chatBlockShowLess : l10n.chatBlockShowMore,
+                  style: OmiType.caption.copyWith(color: OmiColors.textSecondary, fontWeight: FontWeight.w600),
                 ),
                 const SizedBox(width: 2),
-                Icon(
-                  _isExpanded ? Icons.expand_less : Icons.expand_more,
-                  size: 16,
-                  color: colorScheme.onSurfaceVariant,
+                ExcludeSemantics(
+                  child: Icon(
+                    _isExpanded ? Icons.expand_less : Icons.expand_more,
+                    size: 16,
+                    color: OmiColors.textSecondary,
+                  ),
                 ),
               ],
             ),

@@ -41,7 +41,9 @@ extension SettingsContentView {
                   try? await AuthService.shared.signOut()
                 }
               }
-              .buttonStyle(OmiButtonStyle(.primary, size: .compact))
+              // Secondary: signing out is reversible and is not what this page is for, so it is not
+              // the loudest control on it.
+              .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
               .disabled(isDeletingAccount)
             }
           }
@@ -86,17 +88,15 @@ extension SettingsContentView {
           }
         }
       }
-      .alert("Delete Account and Data?", isPresented: $showDeleteAccountAlert) {
-        Button("Cancel", role: .cancel) {
-          AnalyticsManager.shared.deleteAccountCancelled()
-        }
-        Button("Delete Permanently", role: .destructive) {
-          deleteAccountAndData()
-        }
-      } message: {
-        Text(
-          "This cannot be undone. Your account, chat history, and all server data will be permanently deleted. Local data for this account will be cleared and you'll return to onboarding."
-        )
+      .shellConfirmation(
+        isPresented: $showDeleteAccountAlert,
+        title: "Delete Account & Data?",
+        message: "This can't be undone. Your account, chat history, and all server data will be permanently "
+          + "deleted. Local data for this account will be cleared and you'll return to onboarding.",
+        confirmTitle: "Delete Permanently",
+        onCancel: { AnalyticsManager.shared.deleteAccountCancelled() }
+      ) {
+        deleteAccountAndData()
       }
 
       //            settingsCard {
@@ -266,110 +266,125 @@ extension SettingsContentView {
     VStack(spacing: OmiSpacing.xl) {
       trialCountdownCard
 
-      settingsCard(settingId: "planusage.current") {
-        VStack(alignment: .leading, spacing: OmiSpacing.md) {
-          HStack(spacing: OmiSpacing.lg) {
-            Image(systemName: "creditcard.fill")
-              .scaledFont(size: OmiType.title)
-              .foregroundColor(Ink.secondary)
+      if PlanStorefrontGate.sheetEnabled {
+        storefrontPlanSection
+      } else {
+        settingsCard(settingId: "planusage.current") {
+          VStack(alignment: .leading, spacing: OmiSpacing.md) {
+            HStack(spacing: OmiSpacing.lg) {
+              Image(systemName: "creditcard.fill")
+                .scaledFont(size: OmiType.title)
+                .foregroundColor(Ink.secondary)
 
-            VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
-              Text(currentPlanTitle)
-                .scaledFont(size: OmiType.subheading, weight: .semibold)
-                .foregroundColor(Ink.primary)
+              VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
+                Text(currentPlanTitle)
+                  .scaledFont(size: OmiType.subheading, weight: .semibold)
+                  .foregroundColor(Ink.primary)
 
-              Text(currentPlanSubtitle)
-                .scaledFont(size: OmiType.body)
+                Text(currentPlanSubtitle)
+                  .scaledFont(size: OmiType.body)
+                  .foregroundColor(Ink.secondary)
+              }
+
+              Spacer()
+
+              if isLoadingSubscription {
+                ProgressView()
+                  .controlSize(.small)
+              } else if hasPaidSubscription {
+                CurrentPlanCardActions(
+                  cancelAtPeriodEnd: userSubscription?.subscription.cancelAtPeriodEnd == true,
+                  currentPriceId: userSubscription?.subscription.currentPriceId,
+                  checkoutBusy: activeCheckoutPriceId != nil
+                    && activeCheckoutPriceId == userSubscription?.subscription.currentPriceId,
+                  portalBusy: isOpeningCustomerPortal,
+                  onResubscribe: { startCheckout(for: $0) },
+                  onManage: openCustomerPortal
+                )
+              } else {
+                Button("Refresh") {
+                  loadSubscriptionInfo()
+                }
+                .buttonStyle(OmiButtonStyle(.primary, size: .compact))
+                .disabled(isLoadingSubscription)
+              }
+            }
+
+            if let periodText = currentPlanPeriodText {
+              GlassSeparator()
+
+              Text(periodText)
+                .scaledFont(size: OmiType.caption)
                 .foregroundColor(Ink.secondary)
             }
 
-            Spacer()
-
-            if isLoadingSubscription {
-              ProgressView()
-                .controlSize(.small)
-            } else if hasPaidSubscription {
-              Button(action: openCustomerPortal) {
-                if isOpeningCustomerPortal {
-                  ProgressView()
-                    .controlSize(.small)
-                } else {
-                  Text("Manage")
-                    .scaledFont(size: OmiType.body, weight: .semibold)
-                }
-              }
-              .buttonStyle(OmiButtonStyle(.primary, size: .compact))
-              .disabled(isOpeningCustomerPortal)
-            } else {
-              Button("Refresh") {
-                loadSubscriptionInfo()
-              }
-              .buttonStyle(OmiButtonStyle(.primary, size: .compact))
-              .disabled(isLoadingSubscription)
+            if let confirmation = subscriptionConfirmation {
+              Text(confirmation)
+                .scaledFont(size: OmiType.caption, weight: .semibold)
+                .foregroundColor(Ink.listeningGreen)
             }
-          }
 
-          if let periodText = currentPlanPeriodText {
-            GlassSeparator()
+            if let userSubscription {
+              GlassSeparator()
+              Text(TranscriptionAllowancePresentation.statusText(userSubscription.transcriptionAllowance))
+                .scaledFont(size: OmiType.caption)
+                .foregroundColor(Ink.secondary)
+            }
 
-            Text(periodText)
-              .scaledFont(size: OmiType.caption)
-              .foregroundColor(Ink.secondary)
-          }
-
-          if let error = subscriptionError {
-            Text(error)
-              .scaledFont(size: OmiType.caption)
-              .foregroundColor(SettingsInk.notice)
-          }
-        }
-      }
-
-      if let subscription = userSubscription?.subscription,
-        subscription.deprecated == true
-      {
-        settingsCard(settingId: "planusage.deprecation") {
-          VStack(alignment: .leading, spacing: OmiSpacing.md) {
-            HStack(spacing: OmiSpacing.sm) {
-              Image(systemName: "exclamationmark.triangle.fill")
+            if let error = subscriptionError {
+              Text(error)
+                .scaledFont(size: OmiType.caption)
                 .foregroundColor(SettingsInk.notice)
-                .scaledFont(size: OmiType.subheading)
-              Text("Plan Retiring")
-                .scaledFont(size: OmiType.subheading, weight: .semibold)
-                .foregroundColor(Ink.primary)
             }
-
-            Text(
-              subscription.deprecationMessage
-                ?? "Your Unlimited plan is being retired. Try the new Operator plan — same great features at \(operatorDeprecationFallbackPrice)."
-            )
-            .scaledFont(size: OmiType.body)
-            .foregroundColor(Ink.secondary)
-            .fixedSize(horizontal: false, vertical: true)
-
-            Button(action: {
-              selectedPlanIdForCheckout = "operator"
-            }) {
-              Text("Try Operator")
-                .scaledFont(size: OmiType.body, weight: .semibold)
-            }
-            .buttonStyle(OmiButtonStyle(.primary, size: .compact))
           }
         }
-      }
 
-      if shouldShowPlanPurchaseOptions {
-        // Deliberately a `settingsGroup` and not a `settingsCard`: each plan tile draws its own
-        // fill, corner and selected border, so wrapping the row in a card put a card inside a card
-        // — two grounds, two radii and two borders for one block of content, against the one-card
-        // recipe every other pane follows. The tiles *are* the cards; the group only carries the
-        // `settingId` so the deep link still lands.
-        settingsGroup(settingId: "planusage.purchase") {
-          // All plan cards share the row width — no horizontal scrolling.
-          HStack(alignment: .top, spacing: OmiSpacing.lg) {
-            ForEach(subscriptionPlansForDisplay) { plan in
-              subscriptionPlanCard(plan)
-                .frame(maxWidth: .infinity, alignment: .topLeading)
+        if let subscription = userSubscription?.subscription,
+          subscription.deprecated == true
+        {
+          settingsCard(settingId: "planusage.deprecation") {
+            VStack(alignment: .leading, spacing: OmiSpacing.md) {
+              HStack(spacing: OmiSpacing.sm) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                  .foregroundColor(SettingsInk.notice)
+                  .scaledFont(size: OmiType.subheading)
+                Text("Plan Retiring")
+                  .scaledFont(size: OmiType.subheading, weight: .semibold)
+                  .foregroundColor(Ink.primary)
+              }
+
+              Text(
+                subscription.deprecationMessage
+                  ?? "Your Unlimited plan is being retired. Try the new Pro plan — same great features at \(operatorDeprecationFallbackPrice)."
+              )
+              .scaledFont(size: OmiType.body)
+              .foregroundColor(Ink.secondary)
+              .fixedSize(horizontal: false, vertical: true)
+
+              Button(action: {
+                selectedPlanIdForCheckout = "operator"
+              }) {
+                Text("Try Pro")
+                  .scaledFont(size: OmiType.body, weight: .semibold)
+              }
+              .buttonStyle(OmiButtonStyle(.primary, size: .compact))
+            }
+          }
+        }
+
+        if shouldShowPlanPurchaseOptions {
+          // Deliberately a `settingsGroup` and not a `settingsCard`: each plan tile draws its own
+          // fill, corner and selected border, so wrapping the row in a card put a card inside a card
+          // — two grounds, two radii and two borders for one block of content, against the one-card
+          // recipe every other pane follows. The tiles *are* the cards; the group only carries the
+          // `settingId` so the deep link still lands.
+          settingsGroup(settingId: "planusage.purchase") {
+            // All plan cards share the row width — no horizontal scrolling.
+            HStack(alignment: .top, spacing: OmiSpacing.lg) {
+              ForEach(subscriptionPlansForDisplay) { plan in
+                subscriptionPlanCard(plan)
+                  .frame(maxWidth: .infinity, alignment: .topLeading)
+              }
             }
           }
         }
@@ -383,6 +398,14 @@ extension SettingsContentView {
     }
     .sheet(isPresented: $showOverageExplainer) {
       overageExplainerSheet
+    }
+    .onAppear {
+      // The plan grid is part of this settings section, so this is a settings
+      // impression, not a blocked purchase gate. Quota and usage-limit surfaces
+      // keep their own sources.
+      AnalyticsManager.shared.paywallOpened(
+        source: "macos_settings_view",
+        currentPlan: userSubscription?.subscription.plan.rawValue ?? "unknown")
     }
   }
 
@@ -457,12 +480,7 @@ extension SettingsContentView {
             .scaledFont(size: OmiType.heading, weight: .semibold)
             .foregroundColor(Ink.primary)
           Spacer()
-          Button(action: { showOverageExplainer = false }) {
-            Image(systemName: "xmark.circle.fill")
-              .scaledFont(size: OmiType.heading)
-              .foregroundColor(Ink.secondary)
-          }
-          .buttonStyle(.plain)
+          DismissButton(action: { showOverageExplainer = false })
         }
 
         Text(overageInfo?.explainerBody ?? "")
@@ -522,22 +540,18 @@ extension SettingsContentView {
             .scaledFont(size: OmiType.heading)
             .foregroundColor(Ink.secondary)
           VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
-            Text(APIKeyService.isByokActive ? "Free plan active" : "Use Omi free forever")
+            Text(byokStatusTitle)
               .scaledFont(size: OmiType.subheading, weight: .semibold)
               .foregroundColor(Ink.primary)
-            Text(
-              APIKeyService.isByokActive
-                ? "You're using your own OpenAI, Anthropic, Gemini, and Deepgram keys. No subscription."
-                : "Provide your own OpenAI, Anthropic, Gemini, and Deepgram keys to skip the subscription entirely."
-            )
-            .scaledFont(size: OmiType.caption)
-            .foregroundColor(Ink.secondary)
+            Text(byokUsageDescription)
+              .scaledFont(size: OmiType.caption)
+              .foregroundColor(Ink.secondary)
           }
           Spacer()
         }
 
         Button(action: openBYOKSettings) {
-          Text(APIKeyService.isByokActive ? "Manage your keys" : "Switch to your own keys")
+          Text(APIKeyService.isByokActive ? "Manage Keys" : "Add Keys")
             .scaledFont(size: OmiType.body, weight: .semibold)
         }
         .buttonStyle(OmiButtonStyle(.primary, size: .compact))

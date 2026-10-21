@@ -23,6 +23,13 @@ _list_budget_spec = _importlib_util.spec_from_file_location("_omi_real_list_budg
 list_budget_real = _importlib_util.module_from_spec(_list_budget_spec)
 _list_budget_spec.loader.exec_module(list_budget_real)
 
+_portability_read_path = _BACKEND / "utils" / "other" / "portability_read.py"
+_portability_read_spec = _importlib_util.spec_from_file_location(
+    "_omi_real_portability_read", str(_portability_read_path)
+)
+portability_read_real = _importlib_util.module_from_spec(_portability_read_spec)
+_portability_read_spec.loader.exec_module(portability_read_real)
+
 
 class _FieldFilter:
     def __init__(self, field_path, op_string, value):
@@ -48,8 +55,9 @@ class _CountResult:
 
 
 class _Query:
-    def __init__(self, rows):
+    def __init__(self, rows, observations):
         self._rows = rows
+        self.observations = observations
         self.filters = []
         self.events = []
         self._order_field = None
@@ -58,29 +66,42 @@ class _Query:
         self.selected_fields = None
 
     def where(self, *, filter):
-        self.filters.append((filter.field_path, filter.op_string, filter.value))
-        self.events.append(("where", filter.field_path, filter.op_string, filter.value))
-        return self
+        query = self._clone()
+        query.filters.append((filter.field_path, filter.op_string, filter.value))
+        query.events.append(("where", filter.field_path, filter.op_string, filter.value))
+        return query
+
+    def _clone(self):
+        from copy import copy
+
+        query = copy(self)
+        query.filters = list(self.filters)
+        query.events = list(self.events)
+        return query
 
     def order_by(self, field_path, direction=None):
-        self._order_field = field_path
-        self.events.append(("order_by", field_path, direction))
-        return self
+        query = self._clone()
+        query._order_field = field_path
+        query.events.append(("order_by", field_path, direction))
+        return query
 
     def select(self, field_paths):
-        self.selected_fields = list(field_paths)
-        self.events.append(("select", tuple(field_paths)))
-        return self
+        query = self._clone()
+        query.selected_fields = list(field_paths)
+        query.events.append(("select", tuple(field_paths)))
+        return query
 
     def limit(self, value):
-        self._limit = value
-        self.events.append(("limit", value))
-        return self
+        query = self._clone()
+        query._limit = value
+        query.events.append(("limit", value))
+        return query
 
     def offset(self, value):
-        self._offset = value
-        self.events.append(("offset", value))
-        return self
+        query = self._clone()
+        query._offset = value
+        query.events.append(("offset", value))
+        return query
 
     def _matching_rows(self):
         rows = list(self._rows)
@@ -89,7 +110,9 @@ class _Query:
                 rows = [row for row in rows if row.get(field_path) == expected]
             elif operator == "in":
                 rows = [row for row in rows if row.get(field_path) in expected]
-            else:  # pragma: no cover - this test contract only uses equality and membership.
+            elif operator == '>':
+                rows = [row for row in rows if isinstance(row.get(field_path), str) and row[field_path] > expected]
+            else:
                 raise AssertionError(f"unexpected Firestore operator: {operator}")
         if self._order_field:
             rows.sort(key=lambda row: row[self._order_field], reverse=True)
@@ -97,6 +120,7 @@ class _Query:
 
     def stream(self):
         self.events.append(("stream",))
+        self.observations.append(self)
         rows = self._matching_rows()
         if self._limit is not None:
             rows = rows[self._offset : self._offset + self._limit]
@@ -104,6 +128,7 @@ class _Query:
 
     def count(self):
         self.events.append(("count",))
+        self.observations.append(self)
         return SimpleNamespace(get=lambda: [[_CountResult(len(self._matching_rows()))]])
 
 
@@ -120,9 +145,7 @@ class _Firestore:
         assert name in {"users", "conversations"}
         if name == "users":
             return self
-        query = _Query(self.rows)
-        self.queries.append(query)
-        return query
+        return _Query(self.rows, self.queries)
 
 
 def _decorator(*_args, **_kwargs):
@@ -132,6 +155,12 @@ def _decorator(*_args, **_kwargs):
 @pytest.fixture
 def conversations_db():
     """Load the production query function against a minimal in-memory Firestore seam."""
+    # Load the pure policy/registry before the fixture closes the utils import path.
+    import config.dream_agent  # noqa: F401
+    from utils.conversations import summary_delivery
+    from database import sync_live_overlap
+    from utils.sync import live_overlap
+
     firestore = _Firestore([])
 
     google = ModuleType("google")
@@ -148,6 +177,7 @@ def conversations_db():
     exceptions_module = ModuleType("google.api_core.exceptions")
     exceptions_module.AlreadyExists = type("AlreadyExists", (Exception,), {})
     exceptions_module.Conflict = type("Conflict", (Exception,), {})
+    exceptions_module.FailedPrecondition = type("FailedPrecondition", (Exception,), {})
     exceptions_module.NotFound = type("NotFound", (Exception,), {})
 
     database_client = ModuleType("database._client")
@@ -173,6 +203,10 @@ def conversations_db():
     utils_other.__path__ = []
     utils_conversations = ModuleType("utils.conversations")
     utils_conversations.__path__ = []
+    utils_llm = ModuleType("utils.llm")
+    utils_llm.__path__ = []
+    utils_llm_model_constants = ModuleType("utils.llm.model_constants")
+    utils_llm_model_constants.LUNA_MODEL = "gpt-6-luna"
 
     fakes = {
         "google": google,
@@ -184,6 +218,12 @@ def conversations_db():
         "database._client": database_client,
         "database.firestore_read_metrics": firestore_read_metrics,
         "database.helpers": database_helpers,
+        # Archive reads do not execute sync admission. Keep the real pure
+        # overlap policy and discovery seam loaded before closing utils paths.
+        "database.sync_live_overlap": sync_live_overlap,
+        "utils.sync.live_overlap": live_overlap,
+        "database.speaker_assignment_effects": AutoMockModule("database.speaker_assignment_effects"),
+        "database.speaker_learning_jobs": AutoMockModule("database.speaker_learning_jobs"),
         "database.users": AutoMockModule("database.users"),
         "models": models,
         "models.audio_file": AutoMockModule("models.audio_file"),
@@ -192,10 +232,21 @@ def conversations_db():
         "models.transcript_segment": AutoMockModule("models.transcript_segment"),
         "utils": utils,
         "utils.conversations": utils_conversations,
+        "utils.conversations.summary_delivery": summary_delivery,
+        "utils.llm": utils_llm,
+        "utils.llm.model_constants": utils_llm_model_constants,
         "utils.encryption": AutoMockModule("utils.encryption"),
+        # database.conversations imports this helper at module load, but archive
+        # filtering never calls it; keep the contract isolated from its graph.
+        "utils.person_evidence": AutoMockModule("utils.person_evidence"),
+        "utils.owner_voice_evidence": AutoMockModule("utils.owner_voice_evidence"),
+        "utils.observability.speaker_identification": AutoMockModule("utils.observability.speaker_identification"),
+        "utils.observability.speaker_learning_jobs": AutoMockModule("utils.observability.speaker_learning_jobs"),
+        "utils.observability.fallback": AutoMockModule("utils.observability.fallback"),
         "utils.other": utils_other,
         "utils.other.hume": AutoMockModule("utils.other.hume"),
         "utils.other.list_budget": list_budget_real,
+        "utils.other.portability_read": portability_read_real,
         "utils.other.storage": AutoMockModule("utils.other.storage"),
     }
 
@@ -213,15 +264,48 @@ def conversations_db():
         "utils.conversations.transcript_hash",
         os.path.join(str(_BACKEND), "utils", "conversations", "transcript_hash.py"),
     )
+    fragment_visibility_real = load_module_fresh(
+        "utils.conversations.fragment_visibility",
+        os.path.join(str(_BACKEND), "utils", "conversations", "fragment_visibility.py"),
+    )
+    # Receipt policy is stdlib + TranscriptSegment: load it against the real
+    # models.* graph before the stub block, then install the real module. An
+    # AutoMock here would hide apply_manual_assignments / remap_absorbed_receipt
+    # from database.conversations.
+    manual_assignments_real = load_module_fresh(
+        "utils.manual_speaker_assignments",
+        os.path.join(str(_BACKEND), "utils", "manual_speaker_assignments.py"),
+    )
+    fakes["models.note_claims"] = load_module_fresh("models.note_claims", str(_BACKEND / "models" / "note_claims.py"))
     fakes["models.client_processing"] = client_processing_real
     fakes["utils.conversations.transcript_hash"] = transcript_hash_real
+    fakes["utils.conversations.fragment_visibility"] = fragment_visibility_real
+    fakes["utils.manual_speaker_assignments"] = manual_assignments_real
+    # The write-only score size guard is pure; keep its real module available
+    # when the fixture replaces the utils package with an empty import path.
+    fakes["utils.firestore_document_size"] = load_module_fresh(
+        "utils.firestore_document_size", str(_BACKEND / "utils" / "firestore_document_size.py")
+    )
+    fakes["utils.other.playback_identity"] = load_module_fresh(
+        "utils.other.playback_identity", str(_BACKEND / "utils" / "other" / "playback_identity.py")
+    )
+    # database.conversations imports the WQ4 cursor codec at module level; the
+    # codec is stdlib-only outside google.api_core's DatetimeWithNanoseconds, so
+    # load the real module for the isolated utils package.
+    fakes["utils.conversation_page_cursor"] = load_module_fresh(
+        "utils.conversation_page_cursor", str(_BACKEND / "utils" / "conversation_page_cursor.py")
+    )
 
     with stub_modules(fakes):
         module = load_module_fresh(
             "database.conversations",
             os.path.join(str(_BACKEND), "database", "conversations.py"),
         )
-        yield module, firestore
+        pages_module = load_module_fresh(
+            "database.mcp_conversation_pages",
+            os.path.join(str(_BACKEND), "database", "mcp_conversation_pages.py"),
+        )
+        yield module, pages_module, firestore
 
 
 def _conversation(conversation_id, *, created_at, source, status="completed", discarded=False):
@@ -235,7 +319,7 @@ def _conversation(conversation_id, *, created_at, source, status="completed", di
 
 
 def test_archive_filter_precedes_pagination_and_matches_count(conversations_db):
-    module, firestore = conversations_db
+    module, _pages_module, firestore = conversations_db
     firestore.rows = [
         _conversation("discarded-omi", created_at=8, source="omi", discarded=True),
         _conversation("failed-omi", created_at=7, source="omi", status="failed"),
@@ -282,7 +366,7 @@ def test_archive_filter_precedes_pagination_and_matches_count(conversations_db):
 
 
 def test_sources_honor_legacy_include_discarded_default(conversations_db):
-    module, firestore = conversations_db
+    module, _pages_module, firestore = conversations_db
     firestore.rows = [
         _conversation("discarded-omi", created_at=3, source="omi", discarded=True),
         _conversation("friend", created_at=2, source="friend"),
@@ -305,7 +389,7 @@ def test_sources_honor_legacy_include_discarded_default(conversations_db):
 
 
 def test_sources_omitted_preserves_legacy_filter_chain(conversations_db):
-    module, firestore = conversations_db
+    module, _pages_module, firestore = conversations_db
     firestore.rows = [
         _conversation("discarded-omi", created_at=3, source="omi", discarded=True),
         _conversation("friend", created_at=2, source="friend"),
@@ -321,7 +405,7 @@ def test_sources_omitted_preserves_legacy_filter_chain(conversations_db):
 
 
 def test_hosted_mcp_list_uses_transcript_and_photo_free_projection(conversations_db):
-    module, firestore = conversations_db
+    module, pages_module, firestore = conversations_db
     firestore.rows = [
         {
             **_conversation("conversation-1", created_at=1, source="omi"),
@@ -334,7 +418,7 @@ def test_hosted_mcp_list_uses_transcript_and_photo_free_projection(conversations
         }
     ]
 
-    result = module.get_mcp_conversation_cards(
+    result = pages_module.get_mcp_conversation_cards(
         "user-1",
         20,
         0,
@@ -347,8 +431,11 @@ def test_hosted_mcp_list_uses_transcript_and_photo_free_projection(conversations
     assert "structured.overview" in selected_fields
     assert "transcript_segments" not in selected_fields
     assert "photos" not in selected_fields
+    # Visibility needs only user-owned metadata; generated arrays are never read.
     assert "structured.action_items" not in selected_fields
-    assert ("select", tuple(module._MCP_CONVERSATION_CARD_FIELD_PATHS)) in firestore.queries[0].events
+    assert "structured.sections" not in selected_fields
+    assert "structured.events" not in selected_fields
+    assert ("select", tuple(module.MCP_CONVERSATION_CARD_FIELD_PATHS)) in firestore.queries[0].events
     transcript_fields = set(module._MCP_CONVERSATION_TRANSCRIPT_FIELD_PATHS)
     assert "transcript_segments" in transcript_fields
     assert "photos" not in transcript_fields

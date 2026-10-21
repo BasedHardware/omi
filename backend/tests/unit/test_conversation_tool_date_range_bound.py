@@ -66,7 +66,7 @@ for _p in [
     importlib.import_module(_p)
 for _name, _attrs in {
     "database.conversations": [],
-    "database.notifications": ["get_user_time_zone"],
+    "database.auth": ["get_user_name"],
     "database.users": ["get_people_by_ids"],
     "database.vector_db": [],
     "models.conversation": ["Conversation"],
@@ -86,6 +86,26 @@ for _name, _attrs in {
     _m = _mod(_name)
     for _a in _attrs:
         setattr(_m, _a, MagicMock())
+
+sys.modules["database.auth"].get_user_name.return_value = "Test User"
+
+
+class _ChatTranscriptSearch:
+    def __init__(self, rows, searched):
+        self.rows = rows
+        self.searched = searched
+
+    @property
+    def conversation_ids(self):
+        return list(dict.fromkeys(row['conversation_id'] for row in self.rows))
+
+
+_transcript_search = sys.modules['utils.conversations.mcp_transcript_search']
+_transcript_search.ChatTranscriptSearch = _ChatTranscriptSearch
+_transcript_search.chat_transcript_coverage_note = MagicMock(return_value='Transcript coverage is partial.')
+_transcript_search.chat_transcript_excerpts = MagicMock(return_value={})
+_transcript_search.merge_chat_conversation_ids = MagicMock(return_value=[])
+_transcript_search.search_chat_transcript_chunks = MagicMock(return_value=_ChatTranscriptSearch([], False))
 
 
 def _apply_chat_scope_dates(scope, start_date, end_date):
@@ -108,7 +128,6 @@ ct = _load(
     "utils.retrieval.tools._conversation_tools_date_range_test",
     "utils/retrieval/tools/conversation_tools.py",
 )
-jit = importlib.import_module("utils.retrieval.tools.conversation_jit")
 
 
 class TestExactConversationReference:
@@ -124,21 +143,30 @@ class TestExactConversationReference:
             return_value=[{"id": conversation_id, "transcript_segments": [], "is_locked": False}]
         )
         ct.deserialize_conversation = MagicMock(
-            return_value=SimpleNamespace(transcript_segments=[], model_dump=lambda: {"id": conversation_id})
+            return_value=SimpleNamespace(
+                id=conversation_id, transcript_segments=[], model_dump=lambda: {"id": conversation_id}
+            )
         )
         ct.conversations_to_string = MagicMock(return_value="[formatted]")
-        ct.notification_db.get_user_time_zone = MagicMock(return_value="UTC")
 
         result = ct.search_conversations_tool.invoke(
             {"query": conversation_id},
-            config={"configurable": {"user_id": "test-uid", "conversations_collected": []}},
+            config={
+                "configurable": {
+                    "user_id": "test-uid",
+                    "user_timezone": "UTC",
+                    "conversations_collected": [],
+                }
+            },
         )
 
         assert "matching exactly" in result
         assert "[formatted]" in result
         ct.keyword_search_conversation_ids.assert_not_called()
         ct.vector_db.query_vectors.assert_not_called()
-        ct.conversations_db.get_conversations_by_id.assert_called_once_with("test-uid", [conversation_id])
+        ct.conversations_db.get_conversations_by_id.assert_called_once_with(
+            "test-uid", [conversation_id], include_discarded=True
+        )
 
 
 class TestCapConversationsForLlm:
@@ -169,8 +197,8 @@ class TestBoundedResult:
     def test_truncated_appends_guidance_note(self):
         out = ct._bounded_result("Conversation #1\nsome summary", total_found=150, truncated=True)
         assert "150 conversations" in out
-        assert "Summarize what is shown" in out
-        assert "narrow" in out
+        assert "remaining 149 were omitted, not absent" in out
+        assert "Narrow the date range" in out
 
     def test_not_truncated_short_result_unchanged(self):
         body = "Conversation #1\nshort"
@@ -183,49 +211,4 @@ class TestBoundedResult:
         assert "Conversation #2" not in out
         assert "yyyy" not in out
         assert len(out) <= ct.MAX_RESULT_CHARS + 400  # budget plus the appended note
-        assert "Summarize what is shown" in out
-
-
-class TestJITConversationRetrieval:
-    def test_summary_card_is_transcript_free_and_has_stable_refs(self):
-        raw = {
-            "id": "conv-42",
-            "created_at": "2026-08-23T12:00:00+00:00",
-            "transcript_segments": [{"id": "secret", "text": "must not be in the card"}],
-            "structured": {
-                "title": "Planning",
-                "overview": "A bounded overview",
-                "category": "work",
-                "action_items": [{"description": "Ship the plan"}],
-            },
-        }
-
-        card = jit._summary_card_from_data(raw)
-        result = jit.format_jit_results([raw])
-
-        assert card["conversation_ref"] == "conversation:conv-42"
-        assert card["summary_evidence_ref"] == "conversation:conv-42:summary"
-        assert card["action_items"] == ["Ship the plan"]
-        assert "A bounded overview" in result
-        assert "conversation:conv-42:summary" in result
-        assert "must not be in the card" not in result
-
-    def test_bounded_window_caps_segments_and_uses_index_fallback_refs(self):
-        segments = [{"id": f"s{i}", "start": i, "end": i + 1, "text": f"line {i}"} for i in range(40)]
-
-        window = jit._bounded_transcript_window(
-            segments,
-            offset=5,
-            limit=999,
-            conversation_id="conv-42",
-        )
-
-        assert len(window) == jit.MAX_JIT_TRANSCRIPT_WINDOW_SEGMENTS
-        assert window[0]["evidence_ref"] == "conversation:conv-42:segment:s5"
-        assert window[-1]["evidence_ref"] == "conversation:conv-42:segment:s28"
-
-    def test_unratified_jit_options_are_not_exposed_on_production_tools(self):
-        for tool in (ct.get_conversations_tool, ct.search_conversations_tool):
-            fields = tool.args_schema.model_fields
-            assert "summary_card_only" not in fields
-            assert "hydrate_transcript_windows" not in fields
+        assert "remaining 1 were omitted, not absent" in out

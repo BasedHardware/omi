@@ -22,7 +22,7 @@ from tests.unit.test_memory_service_parity import _load_memory_service, _sample_
 
 @pytest.fixture
 def service_mod(monkeypatch):
-    monkeypatch.setenv("MEMORY_MODE", "read")
+    monkeypatch.setenv("MEMORY_ENABLED", "on")
     return _load_memory_service(monkeypatch)
 
 

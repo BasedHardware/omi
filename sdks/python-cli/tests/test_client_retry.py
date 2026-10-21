@@ -10,7 +10,14 @@ import pytest
 from omi_cli import __version__
 from omi_cli import config as cfg
 from omi_cli.auth.store import store_oauth_tokens
-from omi_cli.client import USER_AGENT, OmiClient
+from omi_cli.client import (
+    KNOWN_RATE_LIMIT_POLICIES,
+    USER_AGENT,
+    OmiClient,
+    _detect_rate_limit_policy,
+    _parse_retry_after,
+    describe_rate_limit_policy,
+)
 from omi_cli.errors import AuthError, CliError, NotFoundError, RateLimitError, ServerError
 
 
@@ -99,6 +106,20 @@ def test_404_maps_to_not_found(authed_profile, respx_mock) -> None:
             client.get("/v1/dev/user/memories")
 
 
+def test_404_empty_body_raises_not_found(authed_profile, respx_mock) -> None:
+    respx_mock.get("/v1/dev/user/conversations/missing").respond(404)
+    with OmiClient(authed_profile) as client:
+        with pytest.raises(NotFoundError):
+            client.get("/v1/dev/user/conversations/missing")
+
+
+def test_200_empty_body_returns_none(authed_profile, respx_mock) -> None:
+    respx_mock.delete("/v1/dev/user/conversations/c1").respond(200)
+    with OmiClient(authed_profile) as client:
+        result = client.delete("/v1/dev/user/conversations/c1")
+    assert result is None
+
+
 def test_401_maps_to_auth_error(authed_profile, respx_mock) -> None:
     respx_mock.get("/v1/dev/user/memories").respond(401, json={"detail": "Invalid API Key"})
     with OmiClient(authed_profile) as client:
@@ -185,7 +206,7 @@ def test_500_then_200_succeeds_after_retry(authed_profile, respx_mock) -> None:
 
 @pytest.mark.parametrize(
     ("retry_after", "expected_wait"),
-    [("3", 3.0), ("99999", 60.0), ("invalid", 0.25), (None, 0.25)],
+    [("3", 3.0), ("invalid", 0.25), (None, 0.25)],
 )
 def test_cli_503_uses_retry_after_or_backoff(
     authed_profile, respx_mock, monkeypatch, cli_runner, retry_after, expected_wait
@@ -269,6 +290,44 @@ def test_429_surfaces_rate_limit_with_policy(authed_profile, respx_mock) -> None
     assert "12s" in (err.detail or "")
 
 
+def test_429_names_a_known_policy_with_its_budget(authed_profile, respx_mock) -> None:
+    respx_mock.post("/v1/dev/user/memories").mock(
+        side_effect=[httpx.Response(429, json={"detail": "Rate limit exceeded for policy dev:memories"})] * 4
+    )
+    with OmiClient(authed_profile) as client:
+        with pytest.raises(RateLimitError) as info:
+            client.post("/v1/dev/user/memories", json_body={"content": "x"})
+    assert info.value.message == "Rate limited: dev:memories (120/hr)"
+
+
+def test_429_on_an_unknown_policy_names_it_once(authed_profile, respx_mock) -> None:
+    # A policy this version does not carry has no budget to show. It must not
+    # be restated as its own budget ("dev:future_thing (dev:future_thing)").
+    respx_mock.post("/v1/dev/user/memories").mock(
+        side_effect=[httpx.Response(429, json={"detail": "Rate limit exceeded for policy dev:future_thing"})] * 4
+    )
+    with OmiClient(authed_profile) as client:
+        with pytest.raises(RateLimitError) as info:
+            client.post("/v1/dev/user/memories", json_body={"content": "x"})
+    assert info.value.message == "Rate limited: dev:future_thing"
+
+
+def test_per_minute_policy_keeps_its_own_window() -> None:
+    # dev:memories_write_burst is 30 requests per 60s. A label hardcoded to
+    # "/hr" would report it as a 30-an-hour budget, 60x stricter than it is.
+    assert describe_rate_limit_policy("dev:memories_write_burst") == "30/min"
+    assert describe_rate_limit_policy("dev:memories_batch") == "15/hr"
+    assert describe_rate_limit_policy("dev:not_a_policy") is None
+
+
+def test_every_known_policy_name_is_detectable() -> None:
+    # The table is only reachable through _detect_rate_limit_policy's regex, so
+    # a name the regex cannot match whole is a row that can never be used.
+    for policy in KNOWN_RATE_LIMIT_POLICIES:
+        detected = _detect_rate_limit_policy(f"Rate limit exceeded for policy {policy}")
+        assert detected == policy, policy
+
+
 def test_204_returns_none(authed_profile, respx_mock) -> None:
     respx_mock.delete("/v1/dev/user/memories/abc").respond(204)
     with OmiClient(authed_profile) as client:
@@ -283,6 +342,42 @@ def test_param_filtering_drops_none(authed_profile, respx_mock) -> None:
     request = route.calls.last.request
     assert "categories" not in request.url.params
     assert request.url.params["limit"] == "25"
+
+
+def test_parse_retry_after_rejects_non_finite_numbers() -> None:
+    assert _parse_retry_after("12") == 12.0
+    assert _parse_retry_after("  300  ") == 300.0
+    assert _parse_retry_after("inf") is None
+    assert _parse_retry_after("Infinity") is None
+    assert _parse_retry_after("1e999") is None
+    assert _parse_retry_after("NaN") is None
+    assert _parse_retry_after("nan") is None
+    assert _parse_retry_after("9" * 400) is None
+
+
+@pytest.mark.parametrize("value", ["-5", "+30", "1.5", ".5", "5.", "1e2", "1_000", "\uff16\uff10", "0x10", "12 s"])
+def test_parse_retry_after_rejects_non_rfc_delay_seconds(value: str) -> None:
+    """RFC 9110 delay-seconds is ``1*DIGIT``; other float() syntax is not a cooldown."""
+    assert _parse_retry_after(value) is None
+
+
+def test_non_rfc_retry_after_falls_back_to_backoff(authed_profile, respx_mock, monkeypatch) -> None:
+    """``1e2`` is not delay-seconds, so it must not abort retries as a 100s cooldown."""
+    sleeps: list[float] = []
+    monkeypatch.setattr(time, "sleep", sleeps.append)
+
+    route = respx_mock.get("/v1/dev/user/memories").mock(
+        side_effect=[
+            httpx.Response(429, headers={"Retry-After": "1e2"}, json={"detail": "slow down"}),
+            httpx.Response(200, json=[]),
+        ]
+    )
+    with OmiClient(authed_profile) as client:
+        result = client.get("/v1/dev/user/memories")
+    assert result == []
+    assert route.call_count == 2
+    assert len(sleeps) == 1
+    assert sleeps[0] < 100.0
 
 
 def test_429_with_retry_after_waits_at_least_that_long(authed_profile, respx_mock, monkeypatch) -> None:
@@ -313,25 +408,79 @@ def test_429_with_retry_after_waits_at_least_that_long(authed_profile, respx_moc
     assert sleeps[0] == 3.0
 
 
-def test_429_retry_after_is_capped(authed_profile, respx_mock, monkeypatch) -> None:
-    """A pathologically large Retry-After value must be capped so the CLI
-    doesn't pin for hours on a misbehaving upstream."""
-    import time
+@pytest.mark.parametrize(
+    ("method", "path", "status", "json_body", "error_type"),
+    [
+        ("GET", "/v1/dev/user/memories", 429, None, RateLimitError),
+        ("GET", "/v1/dev/user/goals", 503, None, ServerError),
+        ("POST", "/v1/dev/user/conversations", 429, {"text": "x"}, RateLimitError),
+    ],
+)
+def test_long_retry_after_aborts_automatic_retries(
+    authed_profile, respx_mock, monkeypatch, method, path, status, json_body, error_type
+) -> None:
+    """Retry-After values above MAX_RETRY_AFTER_SECONDS must not sleep or retry early."""
+    sleeps: list[float] = []
+    monkeypatch.setattr(time, "sleep", sleeps.append)
+
+    responses = [
+        httpx.Response(status, headers={"Retry-After": "300"}, json={"detail": "synthetic cooldown"}),
+        httpx.Response(200, json={"synthetic": True}),
+    ]
+    route = getattr(respx_mock, method.lower())(path).mock(side_effect=responses)
+    with OmiClient(authed_profile) as client:
+        with pytest.raises(error_type) as info:
+            if method == "GET":
+                client.get(path)
+            else:
+                client.post(path, json_body=json_body)
+    assert route.call_count == 1
+    assert sleeps == []
+    if error_type is RateLimitError:
+        assert info.value.retry_after_seconds == 300.0
+
+
+def test_long_retry_after_http_date_aborts_automatic_retries(authed_profile, respx_mock, monkeypatch) -> None:
+    from email.utils import formatdate
 
     sleeps: list[float] = []
-    monkeypatch.setattr(time, "sleep", lambda s: sleeps.append(s))
-
-    from omi_cli import client as client_module
-
-    respx_mock.get("/v1/dev/user/memories").mock(
+    monkeypatch.setattr(time, "sleep", sleeps.append)
+    future_date = formatdate(time.time() + 300.0, usegmt=True)
+    route = respx_mock.get("/v1/dev/user/goals").mock(
         side_effect=[
-            httpx.Response(429, headers={"Retry-After": "99999"}, json={"detail": "wait"}),
+            httpx.Response(503, headers={"Retry-After": future_date}, json={"detail": "Maintenance"}),
             httpx.Response(200, json=[]),
         ]
     )
-    with OmiClient(authed_profile) as cli:
-        cli.get("/v1/dev/user/memories")
-    assert sleeps[0] == client_module.MAX_RETRY_AFTER_SECONDS
+    with OmiClient(authed_profile) as client:
+        with pytest.raises(ServerError):
+            client.get("/v1/dev/user/goals")
+    assert route.call_count == 1
+    assert sleeps == []
+
+
+def test_retry_after_at_cap_still_retries(authed_profile, respx_mock, monkeypatch) -> None:
+    """Retry-After exactly at MAX_RETRY_AFTER_SECONDS keeps the wait-then-retry path."""
+    sleeps: list[float] = []
+    monkeypatch.setattr(time, "sleep", sleeps.append)
+
+    from omi_cli import client as client_module
+
+    route = respx_mock.get("/v1/dev/user/memories").mock(
+        side_effect=[
+            httpx.Response(
+                429,
+                headers={"Retry-After": str(int(client_module.MAX_RETRY_AFTER_SECONDS))},
+                json={"detail": "slow down"},
+            ),
+            httpx.Response(200, json=[]),
+        ]
+    )
+    with OmiClient(authed_profile) as client:
+        result = client.get("/v1/dev/user/memories")
+    assert result == []
+    assert route.call_count == 2
+    assert sleeps == [client_module.MAX_RETRY_AFTER_SECONDS]
 
 
 def test_validation_error_detail_string_is_formatted(authed_profile, respx_mock) -> None:
@@ -436,3 +585,78 @@ def test_main_cli_transport_error_json_mode(authed_profile, respx_mock, monkeypa
     payload = json.loads(captured.err)
     assert payload["error"] == "Connection failed"
     assert "Unable to reach the Omi API" in payload["detail"]
+
+
+def test_oauth_profile_sends_dev_key_on_dev_user_paths(config_path, respx_mock) -> None:
+    """A browser-login profile carries BOTH a Firebase ID token and the minted
+    dev key. ``/v1/dev/user/*`` resolves through ``get_api_key_auth`` — a JWT
+    there 401s — while ``/v2/*`` takes the ID token. The client must pick the
+    bearer per endpoint family, not send one credential for everything."""
+    store_oauth_tokens(
+        "default",
+        id_token="fresh_id_token",
+        refresh_token="refr_x",
+        expires_at=time.time() + 1800,
+        api_base="https://api.test.omi.local",
+        api_key="omi_dev_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    )
+    dev_route = respx_mock.get("/v1/dev/user/memories").respond(json=[])
+    v2_route = respx_mock.get("/v2/conversations").respond(json={"conversations": []})
+    keys_route = respx_mock.post("/v1/dev/keys").respond(json={"key": "k"})
+
+    profile = cfg.load().get_profile("default")
+    with OmiClient(profile) as client:
+        client.get("/v1/dev/user/memories")
+        client.get("/v2/conversations")
+        client.post("/v1/dev/keys", json_body={"name": "cli"})
+
+    assert (
+        dev_route.calls[0].request.headers["Authorization"] == "Bearer omi_dev_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    ), "dev-user endpoints must send the stored omi_dev_ key, not the JWT"
+    assert v2_route.calls[0].request.headers["Authorization"] == "Bearer fresh_id_token"
+    assert (
+        keys_route.calls[0].request.headers["Authorization"] == "Bearer fresh_id_token"
+    ), "the keys-mint route authenticates with the ID token, not a dev key"
+
+
+def test_oauth_profile_sends_dev_key_to_key_introspection(config_path, respx_mock) -> None:
+    """``GET /v1/dev/key`` is the dev key describing itself (``get_api_key_auth``
+    again, no Firebase fallback), and it is the first call ``auth login
+    --browser`` makes after minting the key. Sending the ID token there 401s,
+    which the login flow reads as a bad key and rolls the whole session back."""
+    from omi_cli.key_info import verify_key
+
+    store_oauth_tokens(
+        "default",
+        id_token="fresh_id_token",
+        refresh_token="refr_x",
+        expires_at=time.time() + 1800,
+        api_base="https://api.test.omi.local",
+        api_key="omi_dev_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    )
+    key_route = respx_mock.get("/v1/dev/key").respond(json={"id": "k", "name": "omi-cli", "scopes": ["memories:read"]})
+
+    profile = cfg.load().get_profile("default")
+    with OmiClient(profile) as client:
+        assert verify_key(client) == (["memories:read"], None)
+
+    assert (
+        key_route.calls[0].request.headers["Authorization"] == "Bearer omi_dev_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    ), "key introspection must carry the dev key it describes, not the JWT"
+
+
+def test_api_key_profile_sends_same_key_everywhere(config_path, respx_mock) -> None:
+    """The api_key path is unchanged — one credential serves every family."""
+    from omi_cli.auth.store import store_api_key
+
+    store_api_key("default", "omi_dev_key123", api_base="https://api.test.omi.local")
+    dev_route = respx_mock.get("/v1/dev/user/goals").respond(json=[])
+    v2_route = respx_mock.get("/v2/conversations").respond(json={"conversations": []})
+
+    profile = cfg.load().get_profile("default")
+    with OmiClient(profile) as client:
+        client.get("/v1/dev/user/goals")
+        client.get("/v2/conversations")
+
+    assert dev_route.calls[0].request.headers["Authorization"] == "Bearer omi_dev_key123"
+    assert v2_route.calls[0].request.headers["Authorization"] == "Bearer omi_dev_key123"

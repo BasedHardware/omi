@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import os
-import re
 import types
 import importlib
 from contextlib import contextmanager
@@ -327,8 +326,26 @@ def mock_typesense():
     typesense_client = MagicMock()
 
     def _quoted_filter_values(filter_by):
-        values = re.findall(r"`((?:\\.|[^`])*)`", filter_by)
-        return [re.sub(r"\\(.)", r"\1", value) for value in values]
+        values = []
+        index = 0
+        while index < len(filter_by):
+            if filter_by[index] != '`':
+                index += 1
+                continue
+            index += 1
+            value = []
+            while index < len(filter_by):
+                char = filter_by[index]
+                if char == '`':
+                    index += 1
+                    break
+                if char == '\\' and index + 1 < len(filter_by):
+                    index += 1
+                    char = filter_by[index]
+                value.append(char)
+                index += 1
+            values.append(''.join(value))
+        return values
 
     def _upsert(doc):
         docs_store[doc["id"]] = doc

@@ -10,15 +10,17 @@ from typing import Mapping
 
 
 class TranslationProvider(str, Enum):
-    gemini = 'gemini'
-    # Internal compatibility alias: this must never produce "google" telemetry.
-    google = 'gemini'
+    luna = 'luna'
+    # Legacy provider names remain aliases for stored/runtime configuration.
+    # They resolve to the gateway-backed Luna provider and never select Google.
+    gemini = 'luna'
+    google = 'luna'
     nllb = 'nllb'
 
     @staticmethod
     def get_display_name(value: 'TranslationProvider') -> str:
-        if value == TranslationProvider.gemini:
-            return 'Gemini 2.5 Flash-Lite via LLM gateway'
+        if value == TranslationProvider.luna:
+            return 'Luna via LLM gateway'
         if value == TranslationProvider.nllb:
             return 'NLLB-200 (self-hosted)'
         return str(value)
@@ -37,6 +39,9 @@ class TranslationProfile:
     max_batch_size: int = 100
     unsupported_tokens: tuple[str, ...] = ()
     unavailable_tokens: tuple[str, ...] = ()
+    policy_version: str = 'legacy'
+    max_output_tokens: int = 0
+    deadline_seconds: float = 0.0
 
     @property
     def primary_provider(self) -> TranslationProvider:
@@ -63,8 +68,8 @@ def resolve_translation_profile(env: Mapping[str, str] | None = None) -> Transla
         token = raw_token.strip().lower()
         if not token:
             continue
-        if token in {TranslationProvider.gemini.value, 'google'}:
-            provider = TranslationProvider.gemini
+        if token in {'gemini', 'google', 'luna'}:
+            provider = TranslationProvider.luna
         elif token == TranslationProvider.nllb.value:
             provider = TranslationProvider.nllb
         else:
@@ -121,3 +126,80 @@ def _positive_int(raw: str, name: str) -> int:
     if value <= 0:
         raise ValueError(f'{name} must be greater than zero')
     return value
+
+
+@dataclass(frozen=True)
+class OnDemandTranslationConfig:
+    gate_enabled: bool
+    onopen_enabled: bool
+    max_segments: int
+    max_chars: int
+    deadline_seconds: float
+    max_output_tokens: int
+    uid_daily_chars: int
+    global_daily_chars: int
+    max_catchup_pages: int
+
+    @property
+    def spend_configured(self) -> bool:
+        return self.uid_daily_chars > 0 and self.global_daily_chars > 0
+
+
+def resolve_ondemand_config(env: Mapping[str, str] | None = None) -> OnDemandTranslationConfig:
+    values = process_environ if env is None else env
+
+    # On-demand ships enabled; these switches stop live or on-open translation.
+    switch_defaults = {
+        'TRANSLATION_DEMAND_GATE_ENABLED': 'true',
+        'TRANSLATION_ONOPEN_ENABLED': 'true',
+    }
+
+    def switch(name: str) -> bool:
+        raw = values.get(name, switch_defaults[name]).strip().lower()
+        if raw not in {'true', 'false'}:
+            raise ValueError(f'{name} must be true or false')
+        return raw == 'true'
+
+    def bounded_int(name: str, default: int, maximum: int, *, zero_allowed: bool = False) -> int:
+        raw = values.get(name, str(default))
+        try:
+            value = int(raw)
+        except (TypeError, ValueError) as error:
+            raise ValueError(f'{name} must be an integer') from error
+        if value < (0 if zero_allowed else 1) or value > maximum:
+            raise ValueError(f'{name} is outside its allowed range')
+        return value
+
+    deadline = _positive_float(
+        values.get('TRANSLATION_ONDEMAND_DEADLINE_SECONDS', '3'), 'TRANSLATION_ONDEMAND_DEADLINE_SECONDS'
+    )
+    if deadline > 30:
+        raise ValueError('TRANSLATION_ONDEMAND_DEADLINE_SECONDS must be at most 30')
+    return OnDemandTranslationConfig(
+        gate_enabled=switch('TRANSLATION_DEMAND_GATE_ENABLED'),
+        onopen_enabled=switch('TRANSLATION_ONOPEN_ENABLED'),
+        max_segments=bounded_int('TRANSLATION_ONDEMAND_MAX_SEGMENTS', 50, 50),
+        max_chars=bounded_int('TRANSLATION_ONDEMAND_MAX_CHARS', 12000, 12000),
+        deadline_seconds=deadline,
+        max_output_tokens=bounded_int('TRANSLATION_ONDEMAND_MAX_OUTPUT_TOKENS', 4096, 8192),
+        uid_daily_chars=bounded_int('TRANSLATION_ONDEMAND_UID_DAILY_CHARS', 10_000_000, 10_000_000, zero_allowed=True),
+        global_daily_chars=bounded_int(
+            'TRANSLATION_ONDEMAND_GLOBAL_DAILY_CHARS', 1_000_000_000, 1_000_000_000, zero_allowed=True
+        ),
+        max_catchup_pages=bounded_int('TRANSLATION_ONDEMAND_MAX_CATCHUP_PAGES', 4, 100),
+    )
+
+
+def viewed_translation_profile(legacy: TranslationProfile, config: OnDemandTranslationConfig) -> TranslationProfile:
+    """Luna-only quality policy; the configured gateway route remains authoritative."""
+    return TranslationProfile(
+        providers=(TranslationProvider.luna,),
+        nllb_url=legacy.nllb_url,
+        nllb_timeout_seconds=legacy.nllb_timeout_seconds,
+        cache_ttl_seconds=legacy.cache_ttl_seconds,
+        negative_cache_ttl_seconds=legacy.negative_cache_ttl_seconds,
+        max_batch_size=min(config.max_segments, 50),
+        policy_version='viewed_v1',
+        max_output_tokens=config.max_output_tokens,
+        deadline_seconds=config.deadline_seconds,
+    )

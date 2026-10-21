@@ -295,6 +295,28 @@ private actor ContextAdmissionRetryTestState {
 }
 
 final class AgentRuntimeProcessTests: XCTestCase {
+  func testAgentEnvironmentStripsYoloModeOnlyInProduction() {
+    let inherited = ["OMI_YOLO_MODE": "1", "PATH": "/usr/bin", "OMI_UNRELATED": "keep"]
+
+    let production = AgentRuntimeCredentialPolicy.agentEnvironment(
+      inherited, isNonProduction: false)
+    XCTAssertNil(
+      production["OMI_YOLO_MODE"],
+      "production must never let an inherited YOLO override reach the agent subprocess")
+    XCTAssertEqual(production["PATH"], "/usr/bin")
+    XCTAssertEqual(production["OMI_UNRELATED"], "keep")
+
+    let productionOff = AgentRuntimeCredentialPolicy.agentEnvironment(
+      ["OMI_YOLO_MODE": "0"], isNonProduction: false)
+    XCTAssertNil(
+      productionOff["OMI_YOLO_MODE"],
+      "an explicit =0 must also be stripped so a shipped bundle can never carry the key")
+
+    let nonProduction = AgentRuntimeCredentialPolicy.agentEnvironment(
+      inherited, isNonProduction: true)
+    XCTAssertEqual(nonProduction, inherited)
+  }
+
   func testHermeticFaultModelTokenIsNonProductionOnlyAndAvoidsFirebaseRefresh() {
     let environment = [
       AgentRuntimeCredentialPolicy.hermeticFaultModelTokenEnvironmentKey: "fault-suite-model-token"
@@ -468,7 +490,7 @@ final class AgentRuntimeProcessTests: XCTestCase {
   func testRuntimeHandshakeRejectsStaleV2RuntimeWithoutRequiredCapability() throws {
     let valid = try XCTUnwrap(
       AgentRuntimeProcess.RuntimeMessage.parse(
-        #"{"type":"init","protocolVersion":2,"sessionId":"","agentControlTools":[],"runtimeVersion":"1.0.0","runtimeCapabilities":["journal_import_remote_turn","runtime_adapter_availability","chat_first_capability_projection"]}"#
+        #"{"type":"init","protocolVersion":2,"sessionId":"","agentControlTools":[],"runtimeVersion":"1.0.0","runtimeCapabilities":["journal_import_remote_turn","runtime_adapter_availability","chat_first_capability_projection","request_scoped_model_credentials"]}"#
       ))
     let handshake = try AgentRuntimeProcess.validateRuntimeHandshake(valid)
     XCTAssertEqual(handshake.protocolVersion, AgentRuntimeProcess.expectedProtocolVersion)
@@ -476,13 +498,13 @@ final class AgentRuntimeProcessTests: XCTestCase {
 
     let stale = try XCTUnwrap(
       AgentRuntimeProcess.RuntimeMessage.parse(
-        #"{"type":"init","protocolVersion":2,"sessionId":"","agentControlTools":[],"runtimeVersion":"1.0.0","runtimeCapabilities":[]}"#
+        #"{"type":"init","protocolVersion":2,"sessionId":"","agentControlTools":[],"runtimeVersion":"1.0.0","runtimeCapabilities":["journal_import_remote_turn","runtime_adapter_availability","chat_first_capability_projection"]}"#
       ))
     XCTAssertThrowsError(try AgentRuntimeProcess.validateRuntimeHandshake(stale))
 
     let wrongProtocol = try XCTUnwrap(
       AgentRuntimeProcess.RuntimeMessage.parse(
-        #"{"type":"init","protocolVersion":1,"sessionId":"","agentControlTools":[],"runtimeVersion":"1.0.0","runtimeCapabilities":["journal_import_remote_turn","runtime_adapter_availability","chat_first_capability_projection"]}"#
+        #"{"type":"init","protocolVersion":1,"sessionId":"","agentControlTools":[],"runtimeVersion":"1.0.0","runtimeCapabilities":["journal_import_remote_turn","runtime_adapter_availability","chat_first_capability_projection","request_scoped_model_credentials"]}"#
       ))
     XCTAssertThrowsError(try AgentRuntimeProcess.validateRuntimeHandshake(wrongProtocol))
   }
@@ -820,25 +842,78 @@ final class AgentRuntimeProcessTests: XCTestCase {
     XCTAssertNil(snapshot.sentOwnerId, "stale refresh must not mutate runtime owner credentials")
   }
 
+  func testConnectClaudeAsksTheRuntimeForASignInURL() {
+    // The agent runtime's `case "start_provider_auth"` answers with `auth_required`
+    // carrying a URL; a turn whose token expired produces none.
+    XCTAssertEqual(
+      AgentRuntimeProcess.providerAuthRequestWireMessage()["type"] as? String, "start_provider_auth")
+    let url = "https://claude.ai/oauth/authorize?state=s"
+    let pressed = Date(timeIntervalSince1970: 1_000)
+    XCTAssertTrue(
+      ChatProvider.opensClaudeSignIn(
+        connectRequestedAt: pressed, now: pressed.addingTimeInterval(2), authUrl: url))
+    XCTAssertFalse(ChatProvider.opensClaudeSignIn(connectRequestedAt: nil, now: pressed, authUrl: url))
+    XCTAssertFalse(ChatProvider.opensClaudeSignIn(connectRequestedAt: pressed, now: pressed, authUrl: nil))
+    // A Connect the runtime never answered must not open a later, unrelated sign-in URL.
+    XCTAssertFalse(
+      ChatProvider.opensClaudeSignIn(
+        connectRequestedAt: pressed,
+        now: pressed.addingTimeInterval(ChatProvider.claudeConnectAnswerWindow + 1),
+        authUrl: url))
+  }
+
+  func testClaudeSignInMessagePointsAtClearChatNotAMissingNewChat() {
+    // The chat-first shell has no "new chat"; Clear Chat is what moves a pinned chat
+    // onto the selected provider, so the message must not send people looking for one.
+    let message = ChatProvider.providerAuthRequiredUserMessage(isUserClaudeMode: false)
+    XCTAssertFalse(message.contains("new chat"))
+    XCTAssertTrue(message.contains("Clear the chat"))
+  }
+
+  @MainActor
+  func testClearedChatProviderMoveMigratesOnlyOnMismatchAndKeepsProviderOnRefusal() async {
+    var calls = 0
+    let same = await ChatProvider.moveSessionToSelectedProvider(pinnedAdapterId: "acp", selectedAdapterId: "acp") {
+      calls += 1
+      return "acp"
+    }
+    guard case .unchanged = same else { return XCTFail("same adapter must not migrate, got \(same)") }
+    XCTAssertEqual(calls, 0)
+
+    let moved = await ChatProvider.moveSessionToSelectedProvider(
+      pinnedAdapterId: "pi-mono", selectedAdapterId: "acp"
+    ) {
+      calls += 1
+      return "acp"
+    }
+    guard case .moved(let from, let to) = moved else { return XCTFail("mismatch must migrate, got \(moved)") }
+    XCTAssertEqual([from, to], ["pi-mono", "acp"])
+    XCTAssertEqual(calls, 1)
+
+    struct RunActive: Error {}
+    let refused = await ChatProvider.moveSessionToSelectedProvider(
+      pinnedAdapterId: "pi-mono", selectedAdapterId: "acp"
+    ) { throw RunActive() }
+    guard case .refused(let error) = refused else { return XCTFail("refusal must be kept, got \(refused)") }
+    XCTAssertTrue(error is RunActive)
+  }
+
   func testRuntimeRefreshTokenWireRequiresCapturedOwnerToRemainCurrent() {
-    let authorized = AgentRuntimeProcess.refreshTokenWireMessage(
-      token: "owner-a-token",
+    let authorized = AgentRuntimeProcess.modelCredentialsReadyWireMessage(
       expectedOwnerId: "owner-a",
       currentOwnerId: "owner-a"
     )
 
-    XCTAssertEqual(authorized?["type"] as? String, "refresh_token")
-    XCTAssertEqual(authorized?["token"] as? String, "owner-a-token")
+    XCTAssertEqual(authorized?["type"] as? String, "refresh_owner")
+    XCTAssertNil(authorized?["token"])
     XCTAssertEqual(authorized?["ownerId"] as? String, "owner-a")
     XCTAssertNil(
-      AgentRuntimeProcess.refreshTokenWireMessage(
-        token: "owner-a-token",
+      AgentRuntimeProcess.modelCredentialsReadyWireMessage(
         expectedOwnerId: "owner-a",
         currentOwnerId: "owner-b"
       ))
     XCTAssertNil(
-      AgentRuntimeProcess.refreshTokenWireMessage(
-        token: "owner-a-token",
+      AgentRuntimeProcess.modelCredentialsReadyWireMessage(
         expectedOwnerId: "owner-a",
         currentOwnerId: nil
       ))
@@ -955,6 +1030,21 @@ final class AgentRuntimeProcessTests: XCTestCase {
     XCTAssertNil(message?.requestKey)
   }
 
+  func testQueryResultPreservesResponseObservedProviderTargets() async throws {
+    let message = try XCTUnwrap(
+      AgentRuntimeProcess.RuntimeMessage.parse(
+        #"{"type":"result","protocolVersion":2,"requestId":"req-provider","clientId":"main-chat","sessionId":"omi-1","runId":"run-1","attemptId":"attempt-1","terminalStatus":"succeeded","text":"done","modelsUsed":["gpt-6-luna"],"providerTargets":["openai-codex"]}"#
+      )
+    )
+
+    let bridgeResult = await AgentRuntimeProcess.shared.queryResult(from: message)
+    let clientResult = AgentClient.QueryResult(bridgeResult)
+
+    XCTAssertEqual(bridgeResult.modelsUsed, ["gpt-6-luna"])
+    XCTAssertEqual(bridgeResult.providerTargets, ["openai-codex"])
+    XCTAssertEqual(clientResult.providerTargets, ["openai-codex"])
+  }
+
   func testHarnessModeMapsNamedAdapters() {
     XCTAssertEqual(AgentRuntimeProcess.adapterId(forHarnessMode: "piMono"), "pi-mono")
     XCTAssertEqual(AgentRuntimeProcess.adapterId(forHarnessMode: "pi-mono"), "pi-mono")
@@ -988,9 +1078,6 @@ final class AgentRuntimeProcessTests: XCTestCase {
     XCTAssertTrue(bridgeSource.contains("shouldRequirePiMonoCredentials("))
     XCTAssertTrue(bridgeSource.contains("shouldFetchManagedToken"))
     XCTAssertFalse(bridgeSource.contains("if adapterId == AgentAdapterId.piMono.rawValue"))
-    XCTAssertTrue(
-      bridgeSource.contains(
-        "if requiresCredentials {\n      ensureTokenRefreshTask(authorizationSnapshot: authorizationSnapshot)"))
     XCTAssertFalse(bridgeSource.contains("guard isPiMonoHarness else { return false }"))
     XCTAssertFalse(bridgeSource.contains(#"harnessMode == "piMono""#))
   }
@@ -1162,42 +1249,6 @@ final class AgentRuntimeProcessTests: XCTestCase {
     XCTAssertTrue(source.contains(#"env["OMI_HERMES_ADAPTER_COMMAND"]"#))
   }
 
-  func testJITQABackendTupleIsPreservedInAgentChildEnvironment() {
-    let localTuple = [
-      "OMI_PYTHON_API_URL": "http://127.0.0.1:18080",
-      "OMI_DESKTOP_API_URL": "http://127.0.0.1:18081",
-      "OMI_AUTH_API_URL": "http://127.0.0.1:18080",
-      "OMI_ENV_STAGE": "dev",
-    ]
-    let localChild = AgentRuntimeProcess.childBackendRoutingEnvironment(
-      baseEnvironment: localTuple,
-      rustBase: "http://127.0.0.1:18081"
-    )
-    XCTAssertEqual(localChild["OMI_PYTHON_API_URL"], "http://127.0.0.1:18080")
-    XCTAssertEqual(localChild["OMI_DESKTOP_API_URL"], "http://127.0.0.1:18081")
-    XCTAssertEqual(localChild["OMI_AUTH_API_URL"], "http://127.0.0.1:18080")
-    XCTAssertEqual(localChild["OMI_ENV_STAGE"], "dev")
-    XCTAssertEqual(localChild["OMI_API_BASE_URL"], "http://127.0.0.1:18081/v2")
-
-    let deployedTuple = [
-      "OMI_PYTHON_API_URL": "https://api.omiapi.com",
-      "OMI_DESKTOP_API_URL": "https://desktop-backend-dt5lrfkkoa-uc.a.run.app",
-      "OMI_AUTH_API_URL": "https://api.omiapi.com",
-      "OMI_ENV_STAGE": "dev",
-    ]
-    let deployedChild = AgentRuntimeProcess.childBackendRoutingEnvironment(
-      baseEnvironment: deployedTuple,
-      rustBase: "https://desktop-backend-dt5lrfkkoa-uc.a.run.app/"
-    )
-    XCTAssertEqual(deployedChild["OMI_PYTHON_API_URL"], "https://api.omiapi.com")
-    XCTAssertEqual(deployedChild["OMI_AUTH_API_URL"], "https://api.omiapi.com")
-    XCTAssertEqual(
-      deployedChild["OMI_API_BASE_URL"],
-      "https://desktop-backend-dt5lrfkkoa-uc.a.run.app/v2"
-    )
-    XCTAssertFalse(deployedChild.values.contains { $0.contains("api.omi.me") })
-  }
-
   @MainActor
   func testUsableByokEnvironmentSuppressesAllKeysWhenOneProviderIsKnownBad() {
     let savedSelectedProvider = UserDefaults.standard.string(forKey: .byokLLMProvider)
@@ -1254,7 +1305,7 @@ final class AgentRuntimeProcessTests: XCTestCase {
   }
 
   @MainActor
-  func testUsableByokEnvironmentIncludesAllKeysWhenAllProvidersAreUsable() {
+  func testUsableByokEnvironmentIncludesEnrolledSelectedLLMAndDeepgram() {
     let savedSelectedProvider = UserDefaults.standard.string(forKey: .byokLLMProvider)
     let savedKeys = Dictionary(
       uniqueKeysWithValues: BYOKProvider.allCases.map { provider in
@@ -1288,10 +1339,10 @@ final class AgentRuntimeProcessTests: XCTestCase {
           ($0.rawValue, APIKeyService.byokFingerprint("sk-agent-\($0.rawValue)"))
         }))
     UserDefaults.standard.set(BYOKLLMProvider.openrouter.rawValue, forKey: .byokLLMProvider)
-    // usableBYOKEnvironment() gates on isByokActive, which requires the
-    // selected provider's key to be enrolled (#11454's fingerprint contract).
+    // Runtime forwarding requires each current key's fingerprint to be enrolled.
     APIKeyService.persistEnrolledFingerprints([
-      BYOKProvider.openrouter.rawValue: APIKeyService.byokFingerprint("sk-agent-openrouter")
+      BYOKProvider.openrouter.rawValue: APIKeyService.byokFingerprint("sk-agent-openrouter"),
+      BYOKProvider.deepgram.rawValue: APIKeyService.byokFingerprint("sk-agent-deepgram"),
     ])
 
     let result = AgentRuntimeProcess.usableBYOKEnvironment()
@@ -1320,31 +1371,6 @@ final class AgentRuntimeProcessTests: XCTestCase {
     XCTAssertNil(env["OmI_bYoK_LEGACY"])
     XCTAssertEqual(env["OMI_AUTH_TOKEN"], "token")
     XCTAssertEqual(env["PATH"], "/usr/bin")
-  }
-
-  func testPiMonoStartupRefreshesAuthTokenAndFiltersByokEnvironment() throws {
-    let sourceURL = URL(fileURLWithPath: #filePath)
-      .deletingLastPathComponent()
-      .deletingLastPathComponent()
-      .appendingPathComponent("Sources/Chat/AgentRuntimeProcess.swift")
-    let source = try String(contentsOf: sourceURL, encoding: .utf8)
-    let whitespaceNormalizedSource = source.split(whereSeparator: \.isWhitespace).joined(separator: " ")
-
-    XCTAssertTrue(source.contains("Self.removeInheritedBYOKEnvironment(from: &env)"))
-    XCTAssertTrue(source.contains("let byok = await Self.usableBYOKEnvironment()"))
-    XCTAssertTrue(
-      whitespaceNormalizedSource.contains(
-        "let forceRefreshToken = preferredAdapterId == .piMono "
-          + "&& AgentRuntimeCredentialPolicy.shouldForceRefreshAtStartup("
-      ))
-    XCTAssertTrue(source.contains("isDesktopLocalProfile: DesktopLocalProfile.isEnabled"))
-    XCTAssertTrue(source.contains("getAuthHeader("))
-    XCTAssertTrue(source.contains("forceRefresh: forceRefreshToken"))
-    XCTAssertTrue(source.contains("expectedUserId: authorizationSnapshot.ownerID"))
-    XCTAssertFalse(
-      source.contains(
-        "log(\"AgentRuntimeProcess: pi-mono BYOK active, forwarding \\(BYOKProvider.allCases.count) user keys\")"))
-    XCTAssertTrue(source.contains("forwarding \\(byok.values.count) usable user keys"))
   }
 
   func testOpenClawAdapterCommandUsesSiblingNodeWhenAvailable() throws {

@@ -1,3 +1,4 @@
+import { credentialedModelFetch, type ModelHeadersReply } from "../agent/dist/runtime/model-fetch.js";
 // Omi Provider Extension for pi-mono
 //
 // Responsibilities:
@@ -77,442 +78,6 @@ export function omiReasoningEffortFromRelayContext(raw: string): string | undefi
     return parsed.reasoningEffort === "adaptive" || parsed.reasoningEffort === "fast"
       ? parsed.reasoningEffort
       : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-export type OmiJitBudget = {
-  contractVersion: string;
-  executionID: string;
-  maxProviderAttempts: number;
-  maxOutputTokensPerAttempt: number;
-  maxNormalizedInputTokensPerAttempt: number;
-  maxEstimatedSpendMicroUSD: number;
-};
-
-export type OmiJitGatewayAttemptReceipt = {
-  attemptID: string;
-  provider: string;
-  configuredModel: string;
-  actualModelVersion?: string;
-  providerResponseID?: string;
-  rateCardID?: string;
-  costBasis: string;
-  usageStatus: string;
-  costStatus: string;
-  normalizedUncachedInputTokens: number;
-  cachedInputTokens: number;
-  cacheWriteTokens: number;
-  outputTokens: number;
-  estimatedCostMicroUSD: number | null;
-};
-
-export type OmiJitGatewayReceipt = {
-  schemaVersion: "jit-gateway-receipt-v1";
-  runID: string;
-  contractVersion: string;
-  attempts: OmiJitGatewayAttemptReceipt[];
-  aggregate: {
-    attemptCount: number;
-    normalizedUncachedInputTokens: number;
-    cachedInputTokens: number;
-    cacheWriteTokens: number;
-    outputTokens: number;
-    estimatedCostMicroUSD: number | null;
-    costStatus: string;
-  };
-};
-
-function receiptString(value: unknown): string | undefined {
-  return typeof value === "string" && value.length > 0 && value.length <= 256 ? value : undefined;
-}
-
-function receiptInteger(value: unknown, allowNull = false): number | null | undefined {
-  if (allowNull && value === null) return null;
-  return Number.isSafeInteger(value) && Number(value) >= 0 ? Number(value) : undefined;
-}
-
-function parseOmiJitGatewayReceipt(value: unknown): OmiJitGatewayReceipt | undefined {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
-  const raw = value as Record<string, unknown>;
-  if (raw.schema_version !== "jit-gateway-receipt-v1") return undefined;
-  const runID = receiptString(raw.run_id);
-  const contractVersion = receiptString(raw.contract_version);
-  if (!runID || !OMI_REQUEST_ID_PATTERN.test(runID) || !contractVersion) return undefined;
-  if (!Array.isArray(raw.attempts) || raw.attempts.length === 0) return undefined;
-  const attempts: OmiJitGatewayAttemptReceipt[] = [];
-  for (const candidate of raw.attempts) {
-    if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) return undefined;
-    const attempt = candidate as Record<string, unknown>;
-    const normalized = receiptInteger(attempt.normalized_uncached_input_tokens);
-    const cached = receiptInteger(attempt.cached_input_tokens);
-    const cacheWrite = receiptInteger(attempt.cache_write_tokens);
-    const output = receiptInteger(attempt.output_tokens);
-    const cost = receiptInteger(attempt.estimated_cost_micro_usd, true);
-    const attemptID = receiptString(attempt.attempt_id);
-    const provider = receiptString(attempt.provider);
-    const configuredModel = receiptString(attempt.configured_model);
-    const costBasis = receiptString(attempt.cost_basis);
-    const usageStatus = receiptString(attempt.usage_status);
-    const costStatus = receiptString(attempt.cost_status);
-    if (normalized === undefined || cached === undefined || cacheWrite === undefined || output === undefined
-      || cost === undefined || !attemptID || !provider || !configuredModel || !costBasis || !usageStatus || !costStatus) {
-      return undefined;
-    }
-    attempts.push({
-      attemptID,
-      provider,
-      configuredModel,
-      actualModelVersion: receiptString(attempt.actual_model_version),
-      providerResponseID: receiptString(attempt.provider_response_id),
-      rateCardID: receiptString(attempt.rate_card_id),
-      costBasis,
-      usageStatus,
-      costStatus,
-      normalizedUncachedInputTokens: normalized,
-      cachedInputTokens: cached,
-      cacheWriteTokens: cacheWrite,
-      outputTokens: output,
-      estimatedCostMicroUSD: cost,
-    });
-  }
-  const aggregate = raw.aggregate;
-  if (!aggregate || typeof aggregate !== "object" || Array.isArray(aggregate)) return undefined;
-  const summary = aggregate as Record<string, unknown>;
-  const attemptCount = receiptInteger(summary.attempt_count);
-  const normalized = receiptInteger(summary.normalized_uncached_input_tokens);
-  const cached = receiptInteger(summary.cached_input_tokens);
-  const cacheWrite = receiptInteger(summary.cache_write_tokens);
-  const output = receiptInteger(summary.output_tokens);
-  const cost = receiptInteger(summary.estimated_cost_micro_usd, true);
-  const costStatus = receiptString(summary.cost_status);
-  if (attemptCount !== attempts.length || normalized === undefined || cached === undefined || cacheWrite === undefined
-    || output === undefined || cost === undefined || !costStatus) return undefined;
-  return {
-    schemaVersion: "jit-gateway-receipt-v1",
-    runID,
-    contractVersion,
-    attempts,
-    aggregate: {
-      attemptCount,
-      normalizedUncachedInputTokens: normalized,
-      cachedInputTokens: cached,
-      cacheWriteTokens: cacheWrite,
-      outputTokens: output,
-      estimatedCostMicroUSD: cost,
-      costStatus,
-    },
-  };
-}
-
-export function omiJitGatewayReceiptFromHeader(value: string | undefined): OmiJitGatewayReceipt | undefined {
-  if (!value) return undefined;
-  try {
-    const normalized = value.replace(/-/g, "+").replace(/_/g, "/") + "===";
-    return parseOmiJitGatewayReceipt(JSON.parse(Buffer.from(normalized, "base64").toString("utf8")));
-  } catch {
-    return undefined;
-  }
-}
-
-export function omiJitGatewayReceiptFromSSE(value: string): OmiJitGatewayReceipt | undefined {
-  for (const line of value.split(/\r?\n/)) {
-    if (!line.startsWith("data:")) continue;
-    try {
-      const parsed = JSON.parse(line.slice(5).trim()) as { omi_jit_receipt?: unknown };
-      const receipt = parseOmiJitGatewayReceipt(parsed.omi_jit_receipt);
-      if (receipt) return receipt;
-    } catch { /* ignore provider frames */ }
-  }
-  return undefined;
-}
-
-export function omiJitReceiptPathFromRelayContext(raw: string | undefined): string | undefined {
-  if (!raw) return undefined;
-  try {
-    const value = (JSON.parse(raw) as { jitReceiptPath?: unknown }).jitReceiptPath;
-    return typeof value === "string" && value.startsWith("/") && value.length <= 512 ? value : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-type OmiJitReceiptState = {
-  providerAttempts: number;
-  costMicroUSD: number | null;
-  invalid: boolean;
-  /** Last request activity. States are retained after invalidation so an
-   * unknown receipt cannot be bypassed by starting a fresh state object. */
-  lastTouchedAt: number;
-};
-
-const omiJitReceiptStates = new Map<string, OmiJitReceiptState>();
-let omiJitFetchGuardInstalled = false;
-let omiJitUpstreamFetch: typeof globalThis.fetch | undefined;
-const OMI_JIT_STATE_TTL_MS = 30 * 60 * 1_000;
-
-function pruneExpiredOmiJitReceiptStates(now = Date.now()): void {
-  for (const [executionID, state] of omiJitReceiptStates) {
-    if (now - state.lastTouchedAt > OMI_JIT_STATE_TTL_MS) omiJitReceiptStates.delete(executionID);
-  }
-}
-
-/** Test-only reset; the extension installs its fetch guard at most once per
- * process, while unit tests need to restore the host fetch between cases. */
-export function __resetOmiJitFetchGuardForTest(): void {
-  if (omiJitUpstreamFetch) globalThis.fetch = omiJitUpstreamFetch;
-  omiJitUpstreamFetch = undefined;
-  omiJitFetchGuardInstalled = false;
-  omiJitReceiptStates.clear();
-}
-
-export function __omiJitReceiptStateCountForTest(): number {
-  return omiJitReceiptStates.size;
-}
-
-function omiJitBudgetFromRequestHeaders(headers: Headers): OmiJitBudget | undefined {
-  const contractVersion = headers.get("x-omi-jit-contract-version") || undefined;
-  const executionID = headers.get("x-omi-jit-run-id") || undefined;
-  const values = {
-    maxProviderAttempts: Number(headers.get("x-omi-jit-max-attempts")),
-    maxOutputTokensPerAttempt: Number(headers.get("x-omi-jit-max-output-tokens")),
-    maxNormalizedInputTokensPerAttempt: Number(headers.get("x-omi-jit-max-input-tokens")),
-    maxEstimatedSpendMicroUSD: Number(headers.get("x-omi-jit-max-spend-micro-usd")),
-  };
-  if (!contractVersion || !executionID || !OMI_REQUEST_ID_PATTERN.test(executionID)
-    || !Object.values(values).every((value) => Number.isSafeInteger(value) && value > 0)) return undefined;
-  return { contractVersion, executionID, ...values };
-}
-
-async function appendOmiJitReceipt(path: string | undefined, receipt: OmiJitGatewayReceipt): Promise<void> {
-  if (!path) return;
-  await appendFile(path, `${JSON.stringify({
-    schema_version: receipt.schemaVersion,
-    run_id: receipt.runID,
-    contract_version: receipt.contractVersion,
-    attempts: receipt.attempts.map((attempt) => ({
-      attempt_id: attempt.attemptID,
-      provider: attempt.provider,
-      configured_model: attempt.configuredModel,
-      actual_model_version: attempt.actualModelVersion,
-      provider_response_id: attempt.providerResponseID,
-      rate_card_id: attempt.rateCardID,
-      cost_basis: attempt.costBasis,
-      usage_status: attempt.usageStatus,
-      cost_status: attempt.costStatus,
-      normalized_uncached_input_tokens: attempt.normalizedUncachedInputTokens,
-      cached_input_tokens: attempt.cachedInputTokens,
-      cache_write_tokens: attempt.cacheWriteTokens,
-      output_tokens: attempt.outputTokens,
-      estimated_cost_micro_usd: attempt.estimatedCostMicroUSD,
-    })),
-    aggregate: {
-      attempt_count: receipt.aggregate.attemptCount,
-      normalized_uncached_input_tokens: receipt.aggregate.normalizedUncachedInputTokens,
-      cached_input_tokens: receipt.aggregate.cachedInputTokens,
-      cache_write_tokens: receipt.aggregate.cacheWriteTokens,
-      output_tokens: receipt.aggregate.outputTokens,
-      estimated_cost_micro_usd: receipt.aggregate.estimatedCostMicroUSD,
-      cost_status: receipt.aggregate.costStatus,
-    },
-  })}\n`, "utf8");
-}
-
-/** Capture the gateway's authenticated receipt before pi-ai applies its
- * configured model rates (which intentionally remain zero). The guard also
- * enforces the run-wide ceiling across multiple tool-round HTTP requests. */
-function installOmiJitFetchGuard(): void {
-  if (omiJitFetchGuardInstalled || typeof globalThis.fetch !== "function") return;
-  omiJitFetchGuardInstalled = true;
-  const upstreamFetch = globalThis.fetch.bind(globalThis);
-  omiJitUpstreamFetch = upstreamFetch;
-  globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
-    const requestHeaders = new Headers(input instanceof Request ? input.headers : undefined);
-    if (init?.headers) new Headers(init.headers).forEach((value, key) => requestHeaders.set(key, value));
-    const budget = omiJitBudgetFromRequestHeaders(requestHeaders);
-    if (!budget) return upstreamFetch(input, init);
-    pruneExpiredOmiJitReceiptStates();
-    const state = omiJitReceiptStates.get(budget.executionID) ?? {
-      providerAttempts: 0,
-      costMicroUSD: 0,
-      invalid: false,
-      lastTouchedAt: Date.now(),
-    };
-    state.lastTouchedAt = Date.now();
-    omiJitReceiptStates.set(budget.executionID, state);
-    if (state.invalid || state.providerAttempts >= budget.maxProviderAttempts
-      || (state.costMicroUSD !== null && state.costMicroUSD >= budget.maxEstimatedSpendMicroUSD)) {
-      throw new Error("JIT gateway receipt missing or qualification budget exhausted");
-    }
-    try {
-      const response = await upstreamFetch(input, init);
-      let receipt = omiJitGatewayReceiptFromHeader(response.headers.get("x-omi-jit-gateway-receipt") || undefined);
-      let receiptAccepted = false;
-      const recordReceipt = async (candidate: OmiJitGatewayReceipt | undefined): Promise<void> => {
-        const relayContext = await omiRelayContextRaw();
-        if (!candidate || candidate.runID !== budget.executionID || candidate.contractVersion !== budget.contractVersion
-          || candidate.aggregate.attemptCount !== candidate.attempts.length) {
-          state.invalid = true;
-          return;
-        }
-        state.providerAttempts += candidate.aggregate.attemptCount;
-        if (candidate.aggregate.costStatus === "estimated"
-          && Number.isSafeInteger(candidate.aggregate.estimatedCostMicroUSD)
-          && Number(candidate.aggregate.estimatedCostMicroUSD) >= 0
-          && state.costMicroUSD !== null) {
-          state.costMicroUSD += Number(candidate.aggregate.estimatedCostMicroUSD);
-        } else {
-          // Unknown attribution is terminal for this execution. Retaining the
-          // invalid state prevents a later tool round from spending blindly.
-          state.costMicroUSD = null;
-          state.invalid = true;
-        }
-        if (!state.invalid) receiptAccepted = true;
-        await appendOmiJitReceipt(omiJitReceiptPathFromRelayContext(relayContext), candidate);
-      };
-      if (receipt) {
-        await recordReceipt(receipt);
-        return response;
-      }
-      if (!response.body) {
-        await recordReceipt(undefined);
-        return response;
-      }
-
-      // Keep the provider body byte-for-byte intact while inspecting SSE
-      // frames. A clone().text() here would consume/buffer the whole stream
-      // before pi-ai can receive its first delta.
-      const decoder = new TextDecoder();
-      let lineBuffer = "";
-      let bodyReceipt: OmiJitGatewayReceipt | undefined;
-      let receiptRecorded = false;
-      let bodyTerminal = false;
-      let bodyCancelled = false;
-      const inspect = (chunk: Uint8Array, flush = false): OmiJitGatewayReceipt | undefined => {
-        let newlyObserved: OmiJitGatewayReceipt | undefined;
-        lineBuffer += decoder.decode(chunk, { stream: !flush });
-        const lines = lineBuffer.split(/\r\n|\n|\r/);
-        lineBuffer = lines.pop() ?? "";
-        for (const line of lines) {
-          if (line.trim() === "data: [DONE]" || line.trim() === "data:[DONE]") bodyTerminal = true;
-          if (!line.startsWith("data:")) continue;
-          try {
-            const parsed = JSON.parse(line.slice(5).trim()) as { omi_jit_receipt?: unknown };
-            const parsedReceipt = parseOmiJitGatewayReceipt(parsed.omi_jit_receipt);
-            if (parsedReceipt && !bodyReceipt) {
-              bodyReceipt = parsedReceipt;
-              newlyObserved = parsedReceipt;
-            }
-          } catch { /* provider frames are not necessarily JSON */ }
-        }
-        if (flush && lineBuffer.startsWith("data:")) {
-          if (lineBuffer.trim() === "data: [DONE]" || lineBuffer.trim() === "data:[DONE]") bodyTerminal = true;
-          try {
-            const parsed = JSON.parse(lineBuffer.slice(5).trim()) as { omi_jit_receipt?: unknown };
-            const parsedReceipt = parseOmiJitGatewayReceipt(parsed.omi_jit_receipt);
-            if (parsedReceipt && !bodyReceipt) {
-              bodyReceipt = parsedReceipt;
-              newlyObserved = parsedReceipt;
-            }
-          } catch { /* incomplete provider frame */ }
-          lineBuffer = "";
-        }
-        return newlyObserved;
-      };
-      const sourceReader = response.body.getReader();
-      let bodyFinalized = false;
-      const finalizeBody = async (): Promise<void> => {
-        if (bodyFinalized) return;
-        bodyFinalized = true;
-        const newlyObserved = inspect(new Uint8Array(), true);
-        if (!receiptRecorded) {
-          receiptRecorded = true;
-          await recordReceipt(newlyObserved ?? bodyReceipt);
-        }
-      };
-      const body = new ReadableStream<Uint8Array>({
-        async pull(controller) {
-          try {
-            const { done, value } = await sourceReader.read();
-            if (bodyCancelled) return;
-            if (done) {
-              await finalizeBody();
-              controller.close();
-              return;
-            }
-            const newlyObserved = inspect(value);
-            // Pi may stop consuming immediately after the [DONE] frame. The
-            // receipt must be durable before this chunk becomes visible so
-            // the adapter can join it even when EOF is never read.
-            if (newlyObserved && !receiptRecorded) {
-              receiptRecorded = true;
-              await recordReceipt(newlyObserved);
-            }
-            // Preserve the exact bytes and chunk boundaries supplied by the
-            // provider; only the side-channel inspection is transformed.
-            controller.enqueue(value);
-          } catch (error) {
-            if (bodyCancelled) return;
-            state.invalid = true;
-            controller.error(error);
-          }
-        },
-        async cancel(reason) {
-          // A consumer abort before EOF makes the receipt incomplete. Keep
-          // the execution blocked rather than allowing a later round to spend.
-          // Pi normally cancels immediately after consuming [DONE], though;
-          // once that terminal marker and a validated receipt were both seen,
-          // the run is complete and its known budget may continue.
-          bodyCancelled = true;
-          if (!(bodyTerminal && receiptAccepted)) state.invalid = true;
-          await sourceReader.cancel(reason);
-        },
-      });
-      return new Response(body, {
-        status: response.status,
-        statusText: response.statusText,
-        headers: new Headers(response.headers),
-      });
-    } catch (error) {
-      state.invalid = true;
-      throw error;
-    }
-  };
-}
-
-/** Test-only entry point for the process-global fetch guard. */
-export function __installOmiJitFetchGuardForTest(): void {
-  installOmiJitFetchGuard();
-}
-
-export function omiJitBudgetFromRelayContext(raw: string): OmiJitBudget | undefined {
-  try {
-    const parsed = JSON.parse(raw) as { jitBudget?: unknown };
-    const value = parsed.jitBudget;
-    if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
-    const budget = value as Record<string, unknown>;
-    if (typeof budget.contractVersion !== "string" || !budget.contractVersion
-      || typeof budget.executionID !== "string" || !OMI_REQUEST_ID_PATTERN.test(budget.executionID)) {
-      return undefined;
-    }
-    const numericKeys = [
-      "maxProviderAttempts",
-      "maxOutputTokensPerAttempt",
-      "maxNormalizedInputTokensPerAttempt",
-      "maxEstimatedSpendMicroUSD",
-    ] as const;
-    if (!numericKeys.every((key) => Number.isSafeInteger(budget[key]) && Number(budget[key]) > 0)) {
-      return undefined;
-    }
-    return {
-      contractVersion: budget.contractVersion,
-      executionID: budget.executionID,
-      maxProviderAttempts: Number(budget.maxProviderAttempts),
-      maxOutputTokensPerAttempt: Number(budget.maxOutputTokensPerAttempt),
-      maxNormalizedInputTokensPerAttempt: Number(budget.maxNormalizedInputTokensPerAttempt),
-      maxEstimatedSpendMicroUSD: Number(budget.maxEstimatedSpendMicroUSD),
-    };
   } catch {
     return undefined;
   }
@@ -1007,6 +572,26 @@ function connectOmiPipe(pipePath: string): Promise<void> {
   });
 }
 
+async function requestModelHeaders(forceRefresh: boolean, capabilityRef?: string): Promise<ModelHeadersReply> {
+  const connection = omiPipeConnection;
+  if (!connection || connection !== omiPipeConnection || !capabilityRef) {
+    return { failureCode: "transport_interruption" };
+  }
+  const callId = `model-headers-${++omiCallIdCounter}`;
+  return new Promise(resolve => {
+    const timer = setTimeout(() => {
+      omiPendingCalls.delete(callId);
+      resolve({ failureCode: "transport_interruption" });
+    }, OMI_TOOL_TIMEOUT_MS);
+    omiPendingCalls.set(callId, { connection, resolve: result => {
+      clearTimeout(timer);
+      try { resolve(JSON.parse(result)); }
+      catch { resolve({ failureCode: "transport_interruption" }); }
+    } });
+    connection.write(JSON.stringify({ type: "model_headers", callId, capabilityRef, forceRefresh }) + "\n");
+  });
+}
+
 async function callSwiftTool(name: string, input: Record<string, unknown>, signal?: AbortSignal, timeoutMs = OMI_TOOL_TIMEOUT_MS): Promise<string> {
   const connection: Socket | null = omiPipeConnection;
   if (!connection) return Promise.resolve("Error: not connected to Omi bridge");
@@ -1087,19 +672,14 @@ export function applyOmiProviderHeaders(
 ): void {
   headers["x-omi-chat-contract-version"] = OMI_CHAT_CONTRACT_VERSION;
   if (relayContextRaw === undefined) return;
+  try {
+    const context = JSON.parse(relayContextRaw);
+    if (typeof context.capabilityRef === "string") headers["x-omi-local-capability"] = context.capabilityRef;
+  } catch { /* Missing authority fails closed at the credential request boundary. */ }
   const requestId = omiRequestIdFromRelayContext(relayContextRaw);
   if (requestId) headers["x-omi-request-id"] = requestId;
   const reasoningEffort = omiReasoningEffortFromRelayContext(relayContextRaw);
   if (reasoningEffort) headers["x-omi-reasoning-effort"] = reasoningEffort;
-  const jitBudget = omiJitBudgetFromRelayContext(relayContextRaw);
-  if (jitBudget) {
-    headers["x-omi-jit-contract-version"] = jitBudget.contractVersion;
-    headers["x-omi-jit-run-id"] = jitBudget.executionID;
-    headers["x-omi-jit-max-attempts"] = String(jitBudget.maxProviderAttempts);
-    headers["x-omi-jit-max-output-tokens"] = String(jitBudget.maxOutputTokensPerAttempt);
-    headers["x-omi-jit-max-input-tokens"] = String(jitBudget.maxNormalizedInputTokensPerAttempt);
-    headers["x-omi-jit-max-spend-micro-usd"] = String(jitBudget.maxEstimatedSpendMicroUSD);
-  }
 }
 
 export { isSafeSkillName };
@@ -1277,9 +857,6 @@ export function omiToolProjectionContextFromEnv(
     controlGeneration: Number.isSafeInteger(chatFirstControlGeneration) && chatFirstControlGeneration >= 0
       ? chatFirstControlGeneration
       : null,
-    // Only an explicit string true can widen the client-side catalog. The
-    // backend still authorizes every relay independently.
-    jitKnowledgeToolsEnabled: env.OMI_JIT_KNOWLEDGE_TOOLS_ENABLED === "true",
   };
 }
 
@@ -1798,39 +1375,22 @@ export function __resetUserMcpForTest(): void {
 // ---------------------------------------------------------------------------
 
 export default async function omiProvider(pi: ExtensionAPI): Promise<void> {
-  installOmiJitFetchGuard();
   // Best-effort, never fatal: tighten a pre-existing audit log to owner-only.
   void restrictAuditLogPermissions();
 
   const baseUrl = process.env.OMI_API_BASE_URL || "https://api.omi.me/v2";
-  const apiKey = process.env.OMI_API_KEY || "";
-
-  // BYOK: the Swift app sets OMI_BYOK_* env vars for the selected LLM provider and
-  // optional Deepgram key. Attach configured capabilities as X-BYOK-* headers on
-  // every request so the backend applies the LLM BYOK quota exemption and routes
-  // inference through the selected provider key instead of Omi's server key.
-  const byokMap: Array<[string, string]> = [
-    ["OMI_BYOK_OPENROUTER", "X-BYOK-OpenRouter"],
-    ["OMI_BYOK_OPENAI", "X-BYOK-OpenAI"],
-    ["OMI_BYOK_ANTHROPIC", "X-BYOK-Anthropic"],
-    ["OMI_BYOK_GEMINI", "X-BYOK-Gemini"],
-    ["OMI_BYOK_DEEPGRAM", "X-BYOK-Deepgram"],
-  ];
-  const byokHeaders: Record<string, string> = {};
-  for (const [envName, headerName] of byokMap) {
-    const value = process.env[envName];
-    if (value && value.length > 0) byokHeaders[headerName] = value;
-  }
-  const byokActive = Object.keys(byokHeaders).length > 0;
-  if (byokActive) {
-    process.stderr.write(`[omi-provider] BYOK active — attaching ${Object.keys(byokHeaders).length} X-BYOK headers\n`);
-  }
-
+  // The SDK swallows before_provider_headers exceptions. Acquire credentials
+  // at fetch instead, so a failed refresh cannot send stale headers upstream.
+  globalThis.fetch = credentialedModelFetch({
+    baseUrl,
+    fetch: globalThis.fetch.bind(globalThis),
+    headers: requestModelHeaders,
+    report: status => process.stdout.write(JSON.stringify(status) + "\n"),
+  });
   pi.registerProvider("omi", {
     api: "openai-completions",
     baseUrl,
-    apiKey,
-    ...(byokActive ? { headers: byokHeaders } : {}),
+    apiKey: "omi-request-scoped",
     models: [
       {
         id: "omi-sonnet",
@@ -1909,7 +1469,7 @@ export default async function omiProvider(pi: ExtensionAPI): Promise<void> {
 
   // Register Omi-specific tools (execute_sql, semantic_search, etc.)
   // These forward to Swift via the OMI_BRIDGE_PIPE Unix socket.
-  void registerOmiTools(pi);
+  await registerOmiTools(pi);
 
   // User MCP servers from the Apps page, exposed through the two proxy tools
   // (progressive disclosure). Awaited (pi waits for async extension factories)
@@ -1929,6 +1489,7 @@ export const __connectOmiPipeForTest = connectOmiPipe;
 
 /** Test-only: call a Swift tool through the pipe relay. */
 export const __callSwiftToolForTest = callSwiftTool;
+export const __requestModelHeadersForTest = requestModelHeaders;
 export const __omiRelayCapabilityRefForTest = omiRelayCapabilityRef;
 
 /** Test-only: access to pending calls map for assertions. */

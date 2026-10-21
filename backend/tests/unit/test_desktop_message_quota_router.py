@@ -70,6 +70,11 @@ def _make_client():
     # protobuf descriptor pool rejects the duplicate registration.
     feedback_utils = _install_module('utils.feedback', ModuleType('utils.feedback'))
     feedback_utils.record_chat_message_feedback = MagicMock()
+    # Same class of dependency: product_metrics reaches Firestore through its
+    # account_cutover import chain, so stub it before the router import.
+    product_metrics = _install_module('utils.product_metrics', ModuleType('utils.product_metrics'))
+    product_metrics.extract_app_build = MagicMock(return_value='unknown')
+    product_metrics.record_product_event = MagicMock()
 
     chat_utils = _install_module('utils.chat', ModuleType('utils.chat'))
     chat_utils.initial_message_util = MagicMock()

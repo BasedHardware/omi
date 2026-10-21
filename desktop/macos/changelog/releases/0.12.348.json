@@ -1,0 +1,7 @@
+{
+  "version": "0.12.348",
+  "date": "2026-09-14",
+  "changes": [
+    "Fixed dragging a file onto the chat composer only working over its border, not the input area itself"
+  ]
+}

@@ -22,6 +22,24 @@ def test_child_env_for_offline_mode() -> None:
     assert child["OMI_HARNESS_INSTANCE"] == "default"
     assert child["FIREBASE_API_KEY"] == config.LOCAL_FIREBASE_API_KEY
     assert child["OMI_LLM_GATEWAY_FEATURE_MODE"] == "off"
+    assert child["STT_SERVICE_MODELS"] == "parakeet"
+    assert "soniox" not in child["STT_SERVICE_MODELS"]
+    # Offline pre-recorded STT has no keyless provider chain; the deterministic
+    # stub (double-gated to offline stages in utils.stt.prerecorded_stub) lets
+    # uploaded captures complete transcript → conversation.
+    assert child["OMI_STT_STUB"] == "1"
+
+
+def test_child_env_for_local_mode_never_sets_stt_stub(monkeypatch) -> None:
+    monkeypatch.setattr(config, "provider_secrets_from_file", lambda cfg: {})
+    cfg = config.HarnessConfig(
+        repo_root=REPO_ROOT,
+        instance="default",
+        provider_mode="local",
+        layout=safety.layout_for_instance(REPO_ROOT, "default"),
+    )
+    child = config.child_env_for(cfg)
+    assert "OMI_STT_STUB" not in child
 
 
 def test_local_storage_links_use_dev_host_for_physical_devices() -> None:
@@ -55,9 +73,9 @@ def test_child_env_for_real_mode() -> None:
     assert child["BUCKET_MEMORIES_RECORDINGS"] == "memories-recordings"
     assert child["BUCKET_SCREEN_FRAMES"] == "screen-frames"
     assert child["SCREEN_FRAME_SIGNING_SECRET"] == config.LOCAL_SCREEN_FRAME_SIGNING_SECRET
-    # Without this the harness backend refuses every adjudication with 409, which is
-    # correct for production and useless for the machine meant to exercise the feature.
-    assert child["SCREEN_FRAME_EGRESS_ENABLED"] == "true"
+    # Retired local-processing cohort values cannot select the cap projection path.
+    assert "FREE_TIER_LOCAL_PROCESSING" not in child
+    assert "FREE_TIER_LOCAL_PROCESSING_COHORT" not in child
 
 
 def test_offline_mode_still_supplies_the_screen_frame_signing_secret() -> None:

@@ -12,7 +12,11 @@ export const KNOWLEDGE_LEDGER_SCHEMA_VERSION = 'knowledge_ledger.v1' as const
 export type KnowledgeLedgerKind = 'fact' | 'document' | 'trigger' | 'unknown'
 export type KnowledgeLedgerStatus = 'active' | 'superseded' | 'tombstoned' | 'purged' | 'unknown'
 export type KnowledgeLedgerSubjectScope =
-  'primary_user' | 'user_owned_project' | 'user_relationship' | 'third_party' | 'unknown'
+  | 'primary_user'
+  | 'user_owned_project'
+  | 'user_relationship'
+  | 'third_party'
+  | 'unknown'
 
 export type KnowledgeLedgerEvidence = {
   artifact_ref?: Record<string, unknown>
@@ -99,10 +103,20 @@ export type KnowledgeLedgerMemory = {
 }
 
 export type ChatEvidenceReferenceKind =
-  'conversation_summary' | 'conversation_segment' | 'screen' | 'keyframe' | 'request' | 'unknown'
+  | 'conversation_summary'
+  | 'conversation_segment'
+  | 'screen'
+  | 'keyframe'
+  | 'request'
+  | 'unknown'
 
 export type ChatEvidenceReferenceState =
-  'available' | 'loading' | 'offline' | 'pruned' | 'failed' | 'unknown'
+  | 'available'
+  | 'loading'
+  | 'offline'
+  | 'pruned'
+  | 'failed'
+  | 'unknown'
 
 export type ChatEvidenceReference = {
   id: string

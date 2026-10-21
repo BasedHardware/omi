@@ -512,131 +512,136 @@ final class RealtimeTurnEvidenceTests: XCTestCase {
     XCTAssertEqual(ledger.evidence(for: key), evidence)
   }
 
-  func testOCRBeforeJournalRowDoesNotAttachAndLaterAdmissionCarriesEvidence() async throws {
-    try await withNativeEvidenceTestOwner { ownerID in
-      let controller = RealtimeHubController()
-      let turnID = VoiceTurnID()
-      let continuityKey = RealtimeHubController.voiceContinuityKey(for: turnID)
-      let surface = AgentSurfaceReference.mainChat(chatId: "chat")
-      let key = try XCTUnwrap(
-        controller.turnEvidenceLedger.begin(
-          ownerID: ownerID, turnID: turnID, continuityKey: continuityKey, surface: surface))
-      var attachCount = 0
-      controller.turnEvidenceLedger.testingAttachRealtimeUserEvidence = { _, _, _, _ in
-        attachCount += 1
-        return true
-      }
-
-      controller.resolveNativeTurnEvidence(
-        turnID: turnID,
-        ownerID: ownerID,
-        capturedAt: Date(timeIntervalSince1970: 11),
-        text: "form instructions")
-
-      XCTAssertEqual(attachCount, 0)
-      let resolved = try XCTUnwrap(controller.turnEvidenceLedger.evidence(for: key))
-      XCTAssertEqual(resolved.bodyText, "form instructions")
-      XCTAssertEqual(controller.turnEvidenceLedger.entry(for: key)?.persistenceFailed, false)
-      XCTAssertNil(controller.turnEvidenceLedger.entry(for: key)?.journalUserTurnID)
-
-      let projection = RealtimeStreamingJournalProjection(
-        ownerID: ownerID, continuityKey: continuityKey, admissionSurface: surface,
-        evidence: [resolved])
-      XCTAssertEqual(projection.userMessage(text: "which form?").metadata?.evidence, [resolved])
-
-      XCTAssertTrue(
-        controller.turnEvidenceLedger.attachJournalUserTurn(key: key, turnID: projection.userTurnID))
-      let persisted = await controller.persistNativeEvidenceAfterJournalAdmission(
-        ownerID: ownerID, continuityKey: continuityKey)
-      XCTAssertTrue(persisted)
-      XCTAssertEqual(attachCount, 1)
-      XCTAssertEqual(controller.turnEvidenceLedger.entry(for: key)?.evidencePersisted, true)
-      XCTAssertEqual(controller.turnEvidenceLedger.entry(for: key)?.persistenceFailed, false)
-    }
-  }
-
-  func testOCRAfterBoundUserRowAndFinalizedStreamingAttachesOnce() async throws {
-    try await withNativeEvidenceTestOwner { ownerID in
-      let controller = RealtimeHubController()
-      let turnID = VoiceTurnID()
-      let continuityKey = RealtimeHubController.voiceContinuityKey(for: turnID)
-      let surface = AgentSurfaceReference.mainChat(chatId: "chat")
-      let producingRow = KernelTurnProjection.stableTurnID(continuityKey: continuityKey, role: "user")
-      let key = try XCTUnwrap(
-        controller.turnEvidenceLedger.begin(
-          ownerID: ownerID, turnID: turnID, continuityKey: continuityKey, surface: surface))
-      XCTAssertTrue(controller.turnEvidenceLedger.attachJournalUserTurn(key: key, turnID: producingRow))
-
-      let projection = RealtimeStreamingJournalProjection(
-        ownerID: ownerID, continuityKey: continuityKey, admissionSurface: surface)
-      XCTAssertTrue(
-        controller.streamingJournalWriteLedger.begin(projection: projection) { _ in true })
-      let finalized = await controller.streamingJournalWriteLedger.finalize(
-        continuityKey: continuityKey
-      ) { _ in true }
-      XCTAssertEqual(finalized, .completed(true))
-      XCTAssertFalse(controller.streamingJournalWriteLedger.contains(continuityKey: continuityKey))
-
-      var attachedTurnIDs: [String] = []
-      await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-        controller.turnEvidenceLedger.testingAttachRealtimeUserEvidence = { _, _, userTurnID, _ in
-          attachedTurnIDs.append(userTurnID)
-          continuation.resume()
-          return true
-        }
-        controller.resolveNativeTurnEvidence(
-          turnID: turnID,
-          ownerID: ownerID,
-          capturedAt: Date(timeIntervalSince1970: 12),
-          text: "visible form")
-      }
-
-      XCTAssertEqual(attachedTurnIDs, [producingRow])
-      XCTAssertEqual(controller.turnEvidenceLedger.entry(for: key)?.evidencePersisted, true)
-    }
-  }
-
-  func testOCRWhileStreamingLedgerContainsKeyWaitsForRecordTask() async throws {
-    try await withNativeEvidenceTestOwner { ownerID in
-      let controller = RealtimeHubController()
-      let turnID = VoiceTurnID()
-      let continuityKey = RealtimeHubController.voiceContinuityKey(for: turnID)
-      let surface = AgentSurfaceReference.mainChat(chatId: "chat")
-      let key = try XCTUnwrap(
-        controller.turnEvidenceLedger.begin(
-          ownerID: ownerID, turnID: turnID, continuityKey: continuityKey, surface: surface))
-      let projection = RealtimeStreamingJournalProjection(
-        ownerID: ownerID, continuityKey: continuityKey, admissionSurface: surface)
-      let recordLatch = MainActorLatch()
-      var events: [String] = []
-      XCTAssertTrue(
-        controller.streamingJournalWriteLedger.begin(projection: projection) { _ in
-          await recordLatch.wait()
-          events.append("record")
-          return true
-        })
-      await Task.yield()
-
-      await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+  #if DEBUG
+    // These three tests drive `RealtimeTurnEvidenceLedger.testingAttachRealtimeUserEvidence`,
+    // a seam that exists only in DEBUG builds. `swift test -c release` compiles this file
+    // too (the UserNotifications release regression step), so the release build must not see them.
+    func testOCRBeforeJournalRowDoesNotAttachAndLaterAdmissionCarriesEvidence() async throws {
+      try await withNativeEvidenceTestOwner { ownerID in
+        let controller = RealtimeHubController()
+        let turnID = VoiceTurnID()
+        let continuityKey = RealtimeHubController.voiceContinuityKey(for: turnID)
+        let surface = AgentSurfaceReference.mainChat(chatId: "chat")
+        let key = try XCTUnwrap(
+          controller.turnEvidenceLedger.begin(
+            ownerID: ownerID, turnID: turnID, continuityKey: continuityKey, surface: surface))
+        var attachCount = 0
         controller.turnEvidenceLedger.testingAttachRealtimeUserEvidence = { _, _, _, _ in
-          events.append("attach")
-          continuation.resume()
+          attachCount += 1
           return true
         }
+
         controller.resolveNativeTurnEvidence(
           turnID: turnID,
           ownerID: ownerID,
-          capturedAt: Date(timeIntervalSince1970: 13),
-          text: "streaming screen")
-        XCTAssertEqual(events, [])
-        XCTAssertEqual(controller.turnEvidenceLedger.entry(for: key)?.persistenceFailed, false)
-        recordLatch.release()
-      }
+          capturedAt: Date(timeIntervalSince1970: 11),
+          text: "form instructions")
 
-      XCTAssertEqual(events, ["record", "attach"])
-      XCTAssertEqual(controller.turnEvidenceLedger.entry(for: key)?.evidencePersisted, true)
+        XCTAssertEqual(attachCount, 0)
+        let resolved = try XCTUnwrap(controller.turnEvidenceLedger.evidence(for: key))
+        XCTAssertEqual(resolved.bodyText, "form instructions")
+        XCTAssertEqual(controller.turnEvidenceLedger.entry(for: key)?.persistenceFailed, false)
+        XCTAssertNil(controller.turnEvidenceLedger.entry(for: key)?.journalUserTurnID)
+
+        let projection = RealtimeStreamingJournalProjection(
+          ownerID: ownerID, continuityKey: continuityKey, admissionSurface: surface,
+          evidence: [resolved])
+        XCTAssertEqual(projection.userMessage(text: "which form?").metadata?.evidence, [resolved])
+
+        XCTAssertTrue(
+          controller.turnEvidenceLedger.attachJournalUserTurn(key: key, turnID: projection.userTurnID))
+        let persisted = await controller.persistNativeEvidenceAfterJournalAdmission(
+          ownerID: ownerID, continuityKey: continuityKey)
+        XCTAssertTrue(persisted)
+        XCTAssertEqual(attachCount, 1)
+        XCTAssertEqual(controller.turnEvidenceLedger.entry(for: key)?.evidencePersisted, true)
+        XCTAssertEqual(controller.turnEvidenceLedger.entry(for: key)?.persistenceFailed, false)
+      }
     }
-  }
+
+    func testOCRAfterBoundUserRowAndFinalizedStreamingAttachesOnce() async throws {
+      try await withNativeEvidenceTestOwner { ownerID in
+        let controller = RealtimeHubController()
+        let turnID = VoiceTurnID()
+        let continuityKey = RealtimeHubController.voiceContinuityKey(for: turnID)
+        let surface = AgentSurfaceReference.mainChat(chatId: "chat")
+        let producingRow = KernelTurnProjection.stableTurnID(continuityKey: continuityKey, role: "user")
+        let key = try XCTUnwrap(
+          controller.turnEvidenceLedger.begin(
+            ownerID: ownerID, turnID: turnID, continuityKey: continuityKey, surface: surface))
+        XCTAssertTrue(controller.turnEvidenceLedger.attachJournalUserTurn(key: key, turnID: producingRow))
+
+        let projection = RealtimeStreamingJournalProjection(
+          ownerID: ownerID, continuityKey: continuityKey, admissionSurface: surface)
+        XCTAssertTrue(
+          controller.streamingJournalWriteLedger.begin(projection: projection) { _ in true })
+        let finalized = await controller.streamingJournalWriteLedger.finalize(
+          continuityKey: continuityKey
+        ) { _ in true }
+        XCTAssertEqual(finalized, .completed(true))
+        XCTAssertFalse(controller.streamingJournalWriteLedger.contains(continuityKey: continuityKey))
+
+        var attachedTurnIDs: [String] = []
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+          controller.turnEvidenceLedger.testingAttachRealtimeUserEvidence = { _, _, userTurnID, _ in
+            attachedTurnIDs.append(userTurnID)
+            continuation.resume()
+            return true
+          }
+          controller.resolveNativeTurnEvidence(
+            turnID: turnID,
+            ownerID: ownerID,
+            capturedAt: Date(timeIntervalSince1970: 12),
+            text: "visible form")
+        }
+
+        XCTAssertEqual(attachedTurnIDs, [producingRow])
+        XCTAssertEqual(controller.turnEvidenceLedger.entry(for: key)?.evidencePersisted, true)
+      }
+    }
+
+    func testOCRWhileStreamingLedgerContainsKeyWaitsForRecordTask() async throws {
+      try await withNativeEvidenceTestOwner { ownerID in
+        let controller = RealtimeHubController()
+        let turnID = VoiceTurnID()
+        let continuityKey = RealtimeHubController.voiceContinuityKey(for: turnID)
+        let surface = AgentSurfaceReference.mainChat(chatId: "chat")
+        let key = try XCTUnwrap(
+          controller.turnEvidenceLedger.begin(
+            ownerID: ownerID, turnID: turnID, continuityKey: continuityKey, surface: surface))
+        let projection = RealtimeStreamingJournalProjection(
+          ownerID: ownerID, continuityKey: continuityKey, admissionSurface: surface)
+        let recordLatch = MainActorLatch()
+        var events: [String] = []
+        XCTAssertTrue(
+          controller.streamingJournalWriteLedger.begin(projection: projection) { _ in
+            await recordLatch.wait()
+            events.append("record")
+            return true
+          })
+        await Task.yield()
+
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+          controller.turnEvidenceLedger.testingAttachRealtimeUserEvidence = { _, _, _, _ in
+            events.append("attach")
+            continuation.resume()
+            return true
+          }
+          controller.resolveNativeTurnEvidence(
+            turnID: turnID,
+            ownerID: ownerID,
+            capturedAt: Date(timeIntervalSince1970: 13),
+            text: "streaming screen")
+          XCTAssertEqual(events, [])
+          XCTAssertEqual(controller.turnEvidenceLedger.entry(for: key)?.persistenceFailed, false)
+          recordLatch.release()
+        }
+
+        XCTAssertEqual(events, ["record", "attach"])
+        XCTAssertEqual(controller.turnEvidenceLedger.entry(for: key)?.evidencePersisted, true)
+      }
+    }
+  #endif
 }
 
 @MainActor

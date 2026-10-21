@@ -1498,11 +1498,13 @@ final class ChatTimelineContinuityTests: XCTestCase {
     )
 
     XCTAssertTrue(
-      chatBubbleSource.contains("OmiMarkdown(text: summary.output, sender: .ai)"),
+      chatBubbleSource.contains(
+        "OmiMarkdown(text: summary.output, sender: .ai, appKitProseSelection: true)"),
       "background agent summary body must render markdown"
     )
     XCTAssertTrue(
-      chatBubbleSource.contains("OmiMarkdown(text: output, sender: .ai)"),
+      chatBubbleSource.contains(
+        "OmiMarkdown(text: output, sender: .ai, appKitProseSelection: true)"),
       "agent completion body must render markdown"
     )
     XCTAssertTrue(chatBubbleSource.contains("StableChatCardHeader("))

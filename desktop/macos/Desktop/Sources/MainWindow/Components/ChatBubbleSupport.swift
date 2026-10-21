@@ -505,7 +505,7 @@ struct ProactiveNotificationBadge: Equatable {
       (label, systemImage) = ("Memory", "brain.head.profile")
     case .integration:
       (label, systemImage) = ("Integration", "sparkles.rectangle.stack")
-    case .functional:
+    case .functional, .proactivityV2:
       (label, systemImage) = ("Omi", "bell")
     case .general:
       // Decode-only: rows journaled before proactive kinds were part of the
@@ -772,11 +772,13 @@ enum ChatTurnFailurePresentation: Equatable {
   case emptyTurnStamp
   /// The turn failed after saying something: show it, then mark the cut.
   case truncatedAnswer
+  case sessionExpired
 
   static func of(_ message: ChatMessage) -> Self {
     guard message.sender == .ai, !message.isStreaming, message.journalStatus == .failed else {
       return .none
     }
+    if message.failureCode == .authentication { return .sessionExpired }
     guard message.text.isEmpty, message.contentBlocks.isEmpty else { return .truncatedAnswer }
     return .emptyTurnStamp
   }

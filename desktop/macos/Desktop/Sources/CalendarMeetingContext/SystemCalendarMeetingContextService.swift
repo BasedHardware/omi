@@ -88,6 +88,16 @@ protocol SystemCalendarEventProviding: Sendable {
 
 protocol DesktopMeetingUploading: Sendable {
   func upload(_ payload: DesktopMeetingPayload) async throws
+  /// Owner-bound upload: rejected before sending if `authorizationSnapshot` no longer names the
+  /// signed-in session, and its transport auth is bound to that owner.
+  func upload(_ payload: DesktopMeetingPayload, authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot?) async throws
+}
+
+extension DesktopMeetingUploading {
+  func upload(_ payload: DesktopMeetingPayload, authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot?) async throws
+  {
+    try await upload(payload)
+  }
 }
 
 actor EventKitSystemCalendarProvider: SystemCalendarEventProviding {
@@ -182,8 +192,20 @@ actor EventKitSystemCalendarProvider: SystemCalendarEventProviding {
 
 struct BackendDesktopMeetingUploader: DesktopMeetingUploading {
   func upload(_ payload: DesktopMeetingPayload) async throws {
+    try await upload(payload, authorizationSnapshot: nil)
+  }
+
+  func upload(_ payload: DesktopMeetingPayload, authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot?) async throws
+  {
     let apiClient = APIClient.shared
-    let headers = try await apiClient.buildHeaders(requireAuth: true, includeBYOK: false)
+    if let authorizationSnapshot, !RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) {
+      throw AuthError.userChangedDuringRequest
+    }
+    let headers = try await apiClient.buildHeaders(
+      requireAuth: true, includeBYOK: false, expectedAuthOwnerId: authorizationSnapshot?.ownerID)
+    if let authorizationSnapshot, !RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) {
+      throw AuthError.userChangedDuringRequest
+    }
     let baseURL = await apiClient.baseURL
     let generatedClient = OmiAPI.OmiApiClient(baseURL: baseURL, headers: headers)
     _ = try await OmiAPI.storeCalendarMeetingV1CalendarMeetingsPost(
@@ -215,7 +237,8 @@ actor SystemCalendarMeetingContextService {
     self.uploader = uploader
   }
 
-  /// Called asynchronously when a meeting is detected. This is the only path that can prompt.
+  /// Called asynchronously when a meeting is detected. This recording-context path can prompt;
+  /// the meeting-brief setting also has an explicit user-initiated request path.
   /// A denied/restricted decision is terminal until macOS reports a different authorization state.
   func prepareAroundNow(now: Date = Date()) async {
     switch await provider.authorizationState() {
@@ -238,36 +261,26 @@ actor SystemCalendarMeetingContextService {
     await sync(interval: Self.queryInterval(overlapping: recordingInterval))
   }
 
+  /// A deliberate settings gesture may request Calendar access for the local meeting-brief pilot.
+  /// Reading upcoming events never uploads them or triggers the recording-context sync path.
+  func requestBriefAccess() async -> Bool {
+    switch await provider.authorizationState() {
+    case .allowed: return true
+    case .notDetermined: return await provider.requestAccess()
+    case .unavailable: return false
+    }
+  }
+
+  func upcomingAuthorizedEvents(now: Date, horizon: TimeInterval) async -> [SystemCalendarEventSnapshot] {
+    guard await provider.authorizationState() == .allowed, horizon > 0 else { return [] }
+    let interval = DateInterval(start: now, end: now.addingTimeInterval(horizon))
+    return await provider.events(in: interval)
+      .filter { !$0.isAllDay && !$0.isCanceled && $0.startTime > now && $0.startTime <= interval.end }
+      .sorted { $0.startTime < $1.startTime }
+  }
+
   /// Local trigger observations consume an existing calendar grant only. This
   /// path never calls requestAccess and never uploads event content.
-  func authorizedTriggerEvents(
-    around date: Date,
-    maximumCount: Int = maximumTriggerEvents
-  ) async -> [KnowledgeLedgerTriggerCalendarEvent] {
-    guard await provider.authorizationState() == .allowed,
-      maximumCount > 0,
-      maximumCount <= Self.maximumTriggerEvents
-    else { return [] }
-    let interval = Self.queryInterval(overlapping: DateInterval(start: date, end: date))
-    var seen = Set<KnowledgeLedgerTriggerCalendarEvent>()
-    return await provider.events(in: interval)
-      .filter {
-        !$0.isCanceled && !$0.isAllDay && $0.startTime < interval.end
-          && $0.endTime > interval.start && $0.endTime > $0.startTime
-      }
-      .sorted {
-        if $0.startTime == $1.startTime { return $0.calendarEventID < $1.calendarEventID }
-        return $0.startTime < $1.startTime
-      }
-      .compactMap { snapshot in
-        let title = snapshot.title.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !title.isEmpty else { return nil }
-        let event = KnowledgeLedgerTriggerCalendarEvent(title: title, eventType: "meeting")
-        return seen.insert(event).inserted ? event : nil
-      }
-      .prefix(maximumCount)
-      .map { $0 }
-  }
 
   private func sync(interval: DateInterval) async {
     let payloads = Self.payloads(from: await provider.events(in: interval), within: interval)

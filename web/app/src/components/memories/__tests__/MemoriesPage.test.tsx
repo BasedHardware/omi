@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoriesPage } from '@/components/memories/MemoriesPage';
 
@@ -7,8 +7,10 @@ const mocks = vi.hoisted(() => ({
   loading: false,
   reducedMotion: false,
   hasMore: false,
+  truncated: false,
   activeCategories: [] as string[],
   loadMore: vi.fn<() => Promise<void>>(),
+  refresh: vi.fn<() => Promise<void>>(),
 }));
 
 vi.mock('framer-motion', async () => {
@@ -51,7 +53,9 @@ vi.mock('@/hooks/useMemories', () => ({
     loading: mocks.loading,
     error: null,
     hasMore: mocks.hasMore,
+    truncated: mocks.truncated,
     loadMore: mocks.loadMore,
+    refresh: mocks.refresh,
     addMemory: vi.fn(),
     editMemory: vi.fn(),
     removeMemory: vi.fn(),
@@ -77,7 +81,9 @@ vi.mock('@/components/chat/ChatContext', () => ({
 }));
 
 vi.mock('@/components/layout/PageToolbar', () => ({
-  PageToolbar: () => <div data-testid="memories-toolbar" />,
+  PageToolbar: ({ controls }: { controls?: React.ReactNode }) => (
+    <div data-testid="memories-toolbar">{controls}</div>
+  ),
 }));
 
 vi.mock('@/components/memories/MemoryQuickAdd', () => ({
@@ -96,8 +102,10 @@ describe('MemoriesPage list layout', () => {
     mocks.loading = false;
     mocks.reducedMotion = false;
     mocks.hasMore = false;
+    mocks.truncated = false;
     mocks.activeCategories = [];
     mocks.loadMore.mockReset();
+    mocks.refresh.mockReset();
   });
 
   it('gives the desktop list column the remaining height without changing mobile flow', () => {
@@ -162,5 +170,14 @@ describe('MemoriesPage list layout', () => {
 
     expect(screen.getByTestId('memory-list')).toHaveAttribute('data-has-more', 'true');
     expect(mocks.loadMore).not.toHaveBeenCalled();
+  });
+
+  it('reports a bounded partial read instead of claiming the end of history', () => {
+    mocks.truncated = true;
+    render(<MemoriesPage />);
+
+    expect(screen.getByRole('status')).toHaveTextContent('memory view is partial');
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    expect(mocks.refresh).toHaveBeenCalledOnce();
   });
 });

@@ -1,0 +1,8 @@
+{
+  "version": "0.12.360",
+  "date": "2026-09-17",
+  "changes": [
+    "Fixed chat failing after long sessions or an offline period, and show sign-in recovery when a session expires",
+    "Fixed repeated meeting summaries, preserved cached notes and sources, and improved headings and lists"
+  ]
+}

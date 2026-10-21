@@ -9,6 +9,7 @@ import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart'
 import 'package:omi/pages/conversation_detail/page.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/other/temp.dart';
 
 import 'chat_block_chrome.dart';
 
@@ -40,9 +41,7 @@ Future<bool> openChatBlockConversation(
   }
 
   context.read<ConversationDetailProvider>().updateConversation(conversation.id, date);
-  await Navigator.of(context).push(
-    MaterialPageRoute(builder: (c) => ConversationDetailPage(conversation: conversation)),
-  );
+  await routeToPage(context, ConversationDetailPage(conversation: conversation));
   return true;
 }
 

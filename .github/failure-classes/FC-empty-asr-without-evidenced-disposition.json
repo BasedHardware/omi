@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "id": "FC-empty-asr-without-evidenced-disposition",
+  "violated_contract": "Empty ASR or words outside a unit's ownership core are not a terminal acoustic verdict: accepted units need strict speech evidence, a bounded fenced recovery, and truthful silence or failure completion.",
+  "canonical_prevention": "Use one strict in-memory VAD disposition primitive for fresh recovery and owner-scoped historical repair. Only affirmative no-speech creates silence; speech retains the durable at-most-once provider intent. Preserve closed stage/reason failures and exercise all-sibling client completion and lost-reply replay.",
+  "canonical_prevention_artifact": [
+    "backend/utils/batch_pipeline/recovery_disposition.py",
+    "backend/tests/unit/test_batch_pipeline_empty_disposition.py",
+    "backend/utils/batch_pipeline/speech_redrive.py",
+    "backend/tests/unit/test_batch_pipeline_speech_redrive.py",
+    "backend/database/batch_pipeline_terminal_empty.py",
+    "backend/tests/unit/test_batch_pipeline_terminal_empty.py",
+    "backend/tests/unit/test_sync_empty_recovery.py",
+    "backend/tests/unit/test_sync_empty_recovery_intent.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/batch_pipeline/**",
+    "backend/database/batch_pipeline_quarantine_recovery.py",
+    "backend/diarizer/batch_pipeline.py"
+  ],
+  "status": "open"
+}

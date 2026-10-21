@@ -158,6 +158,18 @@ class ChatToolExecutor {
     "full_disk_access",
   ]
 
+  /// Permissions the device tool surface needs but onboarding never asks for.
+  /// `contacts` backs search_contacts; the rest are the TCC grants macOS demands
+  /// when run_applescript drives Calendar, Reminders, or Photos.
+  nonisolated static let deviceToolPermissionTypes = [
+    "contacts",
+    "calendars",
+    "reminders",
+    "photos",
+  ]
+
+  nonisolated static let allPermissionTypes = onboardingPermissionTypes + deviceToolPermissionTypes
+
   nonisolated static var onboardingPermissionTypesDescription: String {
     onboardingPermissionTypes.joined(separator: ", ")
   }
@@ -270,7 +282,7 @@ class ChatToolExecutor {
     expectedOwnerID: String?,
     backendAPIClient: APIClient
   ) async -> String {
-    log("Executing tool: \(toolCall.name) with args: \(toolCall.arguments)")
+    log("Executing tool: \(toolCall.name) with args: \(redactedArgumentSummary(for: toolCall))")
     let telemetryContext = ScreenContextTelemetryContext.from(
       surfaceRef: originatingSurfaceRef,
       runId: originatingRunId
@@ -514,6 +526,37 @@ class ChatToolExecutor {
         context: telemetryContext,
         expectedOwnerID: expectedOwnerID)
 
+    case .searchContacts:
+      return await executeSearchContacts(toolCall.arguments)
+
+    case .listMessageChats:
+      return await executeListMessageChats(toolCall.arguments)
+
+    case .readMessageHistory:
+      return await executeReadMessageHistory(toolCall.arguments)
+
+    case .listMailMessages:
+      return await executeListMailMessages(toolCall.arguments)
+
+    // send_message and run_applescript actuate the machine. The kernel already
+    // resolved a dispatch or scoped grant before dispatching here; the owner
+    // bind below is the second gate, matching request_permission.
+    case .sendMessage:
+      guard
+        let result = await performOwnerBoundAsyncPhysicalEffect(
+          expectedOwnerID: expectedOwnerID,
+          effect: { await executeSendMessage(toolCall.arguments) })
+      else { return authorizedOwnerChangedResult() }
+      return result
+
+    case .runApplescript:
+      guard
+        let result = await performOwnerBoundAsyncPhysicalEffect(
+          expectedOwnerID: expectedOwnerID,
+          effect: { await executeRunAppleScript(toolCall.arguments) })
+      else { return authorizedOwnerChangedResult() }
+      return result
+
     case .fillCloudConnectorForm:
       guard
         let result = await performOwnerBoundAsyncPhysicalEffect(
@@ -537,20 +580,17 @@ class ChatToolExecutor {
         expectedOwnerID: expectedOwnerID,
         api: backendAPIClient)
 
-    // JIT knowledge-ledger tools — generic passthrough to the Python backend's
-    // /v1/agent/execute-tool endpoint. These have no bespoke typed REST route:
-    // the backend re-validates the JIT rollout server-side on every call, so
-    // this client dispatch is UX-only, not an authorization boundary.
-    case .searchKnowledge, .readPlaybook, .searchHistoricalFacts, .getEntityTimelineTool,
-      .savePlaybook, .createStandingTrigger, .closeFact:
-      return await executeAgentLedgerTool(
-        toolCall,
-        expectedOwnerID: expectedOwnerID,
-        api: backendAPIClient)
+    case .getProductKb:
+      return ProductKnowledgeTool.execute(arguments: toolCall.arguments)
 
     case .unhandled:
       if toolCall.name == "get_local_status" {
         return await executeLocalStatus(expectedOwnerID: expectedOwnerID)
+      }
+      if toolCall.name == "search_transcripts" {
+        return await ChatLocalHybridTool.execute(
+          toolCall.arguments, runID: originatingRunId, attemptID: originatingAttemptId,
+          expectedOwnerID: expectedOwnerID, sourceKinds: [.transcriptChunk])
       }
       if toolCall.name == "web_search" {
         return await executeWebSearch(
@@ -726,6 +766,26 @@ class ChatToolExecutor {
     }
   }
 
+  nonisolated static func awaitCancellableAsyncRequest<Value: Sendable>(
+    _ operation: @escaping @Sendable () async -> Value
+  ) async -> Value? {
+    let state = CancellablePermissionContinuation<Value>()
+    return await withTaskCancellationHandler {
+      await withCheckedContinuation { continuation in
+        state.install(continuation)
+        guard !Task.isCancelled else {
+          state.finish(nil)
+          return
+        }
+        Task {
+          state.finish(await operation())
+        }
+      }
+    } onCancel: {
+      state.finish(nil)
+    }
+  }
+
   nonisolated static func authorizedOwnerChangedResult() -> String {
     #"{"ok":false,"error":{"code":"authorized_execution_owner_changed","message":"The signed-in account changed while the authorized tool was executing."}}"#
   }
@@ -752,10 +812,12 @@ class ChatToolExecutor {
       ownerIsCurrent ?? {
         isExpectedOwnerCurrent($0, authorizationSnapshot: authorizationSnapshot)
       }
-    guard validateOwner(expectedOwnerID) else { return nil }
+    guard !Task.isCancelled, validateOwner(expectedOwnerID) else { return nil }
     await prepare()
-    guard validateOwner(expectedOwnerID) else { return nil }
-    return await effect()
+    guard !Task.isCancelled, validateOwner(expectedOwnerID) else { return nil }
+    let value = await effect()
+    guard !Task.isCancelled, validateOwner(expectedOwnerID) else { return nil }
+    return value
   }
 
   // MARK: - Physical Execution Preconditions
@@ -769,7 +831,7 @@ class ChatToolExecutor {
     toolName: String
   ) -> PhysicalExecutionPrecondition {
     switch toolName {
-    case "capture_screen", "get_screenshot", "look_at_frame", "show_rewind_evidence":
+    case "capture_screen", "get_screenshot", "show_rewind_evidence":
       if isChatScreenshotSharingEnabled {
         return .satisfied
       }
@@ -1196,7 +1258,7 @@ class ChatToolExecutor {
           dbQueue: databaseQueue,
           expectedOwnerID: expectedOwnerID,
           timeZone: timeZone)
-      } else if isInsert || isUpdate || isDelete {
+      } else if !readOnly && (isInsert || isUpdate || isDelete) {
         return try await executeWriteQuery(
           trimmed,
           parameters: parameters,
@@ -1207,7 +1269,7 @@ class ChatToolExecutor {
       }
     } catch {
       logError("Tool execute_sql failed", error: error)
-      return "SQL Error: The local database could not complete that query."
+      return "Error: The local database could not complete that query."
     }
   }
 
@@ -1771,12 +1833,34 @@ class ChatToolExecutor {
 
   // MARK: - Semantic Search
 
+  private struct ScreenHistorySearchResult: Sendable {
+    let screenshotId: Int64
+    let score: Double
+    let relevance: String
+    let isLocal: Bool
+  }
+
+  struct SemanticSearchDependencies: Sendable {
+    var runtime: LocalEmbeddingRuntime = .makeDefault()
+    var policy: ScreenEmbeddingPolicy? = nil
+    var legacySearch:
+      @Sendable (String, Date, Date, String?, Int) async throws -> [(screenshotId: Int64, similarity: Float)] = {
+        query, start, end, app, topK in
+        try await OCREmbeddingService.shared.searchSimilar(
+          query: query, startDate: start, endDate: end, appFilter: app, topK: topK)
+      }
+    var screenshot: @Sendable (Int64) async throws -> Screenshot? = { id in
+      try await RewindDatabase.shared.getScreenshot(id: id)
+    }
+  }
+
   /// Search screenshots using vector similarity
-  private static func executeSemanticSearch(
+  static func executeSemanticSearch(
     _ args: [String: Any],
     runID: String?,
     attemptID: String?,
-    expectedOwnerID: String?
+    expectedOwnerID: String?,
+    dependencies: SemanticSearchDependencies = SemanticSearchDependencies()
   ) async -> String {
     guard isExpectedOwnerCurrent(expectedOwnerID) else { return authorizedOwnerChangedResult() }
     guard let query = args["query"] as? String, !query.isEmpty else {
@@ -1792,16 +1876,35 @@ class ChatToolExecutor {
     let startDate = calendar.date(byAdding: .day, value: -days, to: endDate) ?? endDate
 
     do {
-      let vectorResults = try await OCREmbeddingService.shared.searchSimilar(
-        query: query,
-        startDate: startDate,
-        endDate: endDate,
-        appFilter: appFilter,
-        topK: max(limit * 2, 20)
-      )
+      let runtime = dependencies.runtime
+      let searchResults = try await ScreenHistorySearchRoute.search(runtime: runtime, policy: dependencies.policy) {
+        engine in
+        guard let owner = RewindCaptureOwnerSnapshot.capture(), owner.isCurrent() else {
+          throw LocalMutationAuthorizationError.revoked
+        }
+        let store = try await RewindDatabase.shared.localEmbeddingStore(owner: owner)
+        let search = LocalHybridSearch(
+          store: store, runtime: runtime,
+          authorization: LocalMutationAuthorization { owner.isCurrent() })
+        let hits = try await search.search(
+          query: query, engine: engine, startDate: startDate,
+          endDate: endDate, appFilter: appFilter, limit: limit, sourceKinds: [.screenshot])
+        return hits.map {
+          ScreenHistorySearchResult(
+            screenshotId: $0.sourceId, score: $0.fusedScore,
+            relevance: "hybrid: \($0.matchedBy.rawValue)", isLocal: true)
+        }
+      } legacy: {
+        let results = try await dependencies.legacySearch(query, startDate, endDate, appFilter, max(limit * 2, 20))
+        return results.map {
+          ScreenHistorySearchResult(
+            screenshotId: $0.screenshotId, score: Double($0.similarity),
+            relevance: "similarity: \(String(format: "%.2f", $0.similarity))", isLocal: false)
+        }
+      }
       guard isExpectedOwnerCurrent(expectedOwnerID) else { return authorizedOwnerChangedResult() }
 
-      log("Tool semantic_search: vector returned \(vectorResults.count) results")
+      log("Tool semantic_search returned \(searchResults.count) candidates")
 
       // Filter by similarity threshold and fetch screenshot details
       let displayTimeZone = TimeZone.current
@@ -1810,12 +1913,12 @@ class ChatToolExecutor {
       var sources = [APIClient.ToolSource]()
       var count = 0
 
-      for result in vectorResults where result.similarity > 0.3 {
+      for result in searchResults where result.isLocal || result.score > Double(Float(0.3)) {
         guard isExpectedOwnerCurrent(expectedOwnerID) else {
           return authorizedOwnerChangedResult()
         }
         guard
-          let screenshot = try? await RewindDatabase.shared.getScreenshot(id: result.screenshotId)
+          let screenshot = try? await dependencies.screenshot(result.screenshotId)
         else {
           continue
         }
@@ -1829,7 +1932,7 @@ class ChatToolExecutor {
         let windowTitle = screenshot.windowTitle ?? ""
         let titlePart = windowTitle.isEmpty ? "" : " - \(windowTitle)"
         lines.append(
-          "\n\(count). [\(dateStr)] \(screenshot.appName)\(titlePart) (screenshot_id: \(result.screenshotId), similarity: \(String(format: "%.2f", result.similarity)))"
+          "\n\(count). [\(dateStr)] \(screenshot.appName)\(titlePart) (screenshot_id: \(result.screenshotId), \(result.relevance))"
         )
 
         // Include OCR text preview (truncated)
@@ -1879,7 +1982,7 @@ class ChatToolExecutor {
         lines.joined(separator: "\n"), references: references)
     } catch {
       logError("Tool semantic_search failed", error: error)
-      return "Failed to search: \(error.localizedDescription). "
+      return "Error: Failed to search: \(error.localizedDescription). "
         + "For recent-work or document/page/file location, call get_work_context instead of querying screenshots.ocrText."
     }
   }
@@ -1949,6 +2052,9 @@ class ChatToolExecutor {
     expectedOwnerID: String?
   ) async -> String {
     guard isExpectedOwnerCurrent(expectedOwnerID) else { return authorizedOwnerChangedResult() }
+    guard let authorization = RuntimeOwnerIdentity.captureAuthorizationSnapshot(expectedOwnerID: expectedOwnerID) else {
+      return authorizedOwnerChangedResult()
+    }
     guard let query = args["query"] as? String, !query.isEmpty else {
       return "Error: query is required"
     }
@@ -1975,7 +2081,7 @@ class ChatToolExecutor {
       // instead of the old staged-first/action-fallback guessing that returned an
       // unrelated task when action_item and staged_task rowids collided.
       let queryEmbedding = try await EmbeddingService.shared.embed(
-        text: query, taskType: "RETRIEVAL_QUERY")
+        text: query, taskType: "RETRIEVAL_QUERY", authorization: authorization)
       guard isExpectedOwnerCurrent(expectedOwnerID) else { return authorizedOwnerChangedResult() }
 
       // Search the in-memory index (action_items + staged_tasks share this index)
@@ -2393,12 +2499,18 @@ class ChatToolExecutor {
       )
 
     default:
+      if deviceToolPermissionTypes.contains(type) {
+        return await requestDeviceToolPermission(
+          type,
+          expectedOwnerID: expectedOwnerID,
+          authorizationSnapshot: authorizationSnapshot)
+      }
       return permissionJSON([
         "ok": false,
         "status": "error",
         "error": "unknown_permission_type",
         "permission": type,
-        "valid_types": onboardingPermissionTypes,
+        "valid_types": allPermissionTypes,
       ])
     }
   }
@@ -2426,15 +2538,17 @@ class ChatToolExecutor {
         expectedOwnerID,
         authorizationSnapshot: authorizationSnapshot)
     else { return authorizedOwnerChangedResult() }
-    if let type = permissionType(from: args), onboardingPermissionTypes.contains(type) {
+    var allStatuses = statuses.merging(deviceToolPermissionStatuses()) { existing, _ in existing }
+    allStatuses["full_disk_access"] = fullDiskAccessStatus()
+    if let type = permissionType(from: args), allPermissionTypes.contains(type) {
       return permissionJSON([
         "ok": true,
         "permission": type,
-        "status": statuses[type] ?? "unknown",
+        "status": allStatuses[type] ?? "unknown",
       ])
     }
 
-    return permissionJSON(["ok": true, "permissions": statuses])
+    return permissionJSON(["ok": true, "permissions": allStatuses])
   }
 
   private static func permissionType(from args: [String: Any]) -> String? {
@@ -2730,18 +2844,7 @@ class ChatToolExecutor {
   }
 
   private static func checkFullDiskAccessDirectly() -> Bool {
-    let home = FileManager.default.homeDirectoryForCurrentUser.path
-    let protectedPaths = [
-      "\(home)/Library/Safari",
-      "\(home)/Library/Mail",
-      "\(home)/Library/Messages",
-    ]
-    for path in protectedPaths {
-      if FileManager.default.fileExists(atPath: path) {
-        return (try? FileManager.default.contentsOfDirectory(atPath: path)) != nil
-      }
-    }
-    return false
+    FullDiskAccessProbe.currentState() == .granted
   }
 
   /// Scan files BLOCKING — triggers folder access dialogs, waits for scan, returns results
@@ -3722,35 +3825,6 @@ class ChatToolExecutor {
       return toolFailureEnvelope(
         code: "backend_tool_unreachable",
         message: "Error calling backend: \(error.localizedDescription)")
-    }
-  }
-
-  /// Generic passthrough for the JIT-gated knowledge-ledger tools (search_knowledge,
-  /// read_playbook, search_historical_facts, get_entity_timeline_tool, save_playbook,
-  /// create_standing_trigger, close_fact). Unlike the typed `/v1/tools/*` routes above,
-  /// these share one backend contract — `POST /v1/agent/execute-tool` with
-  /// `{tool_name, params}` — so there is no bespoke per-tool Swift wrapper. The backend
-  /// re-validates the JIT rollout for `tool_name` on every call regardless of whether the
-  /// manifest advertised it, so this dispatch is a UX convenience, not an authorization
-  /// decision.
-  private static func executeAgentLedgerTool(
-    _ toolCall: ToolCall,
-    expectedOwnerID: String?,
-    api: APIClient
-  ) async -> String {
-    do {
-      let resp = try await api.executeAgentTool(
-        toolName: toolCall.name,
-        params: toolCall.arguments,
-        expectedOwnerId: expectedOwnerID,
-        authorizationSnapshot: currentOwnerAuthorizationSnapshot)
-      if let error = resp.error, !error.isEmpty {
-        return "Error: \(error)"
-      }
-      return resp.result ?? ""
-    } catch {
-      log("Agent ledger tool error (\(toolCall.name)): \(error)")
-      return "Error calling backend: \(error.localizedDescription)"
     }
   }
 

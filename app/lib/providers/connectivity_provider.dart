@@ -3,7 +3,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import 'package:omi/services/connectivity_service.dart';
-import 'package:omi/widgets/dialog.dart';
+import 'package:omi/ui/feedback/omi_dialogs.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 
 class ConnectivityProvider extends ChangeNotifier {
   bool _isConnected = true;
@@ -44,17 +45,10 @@ class ConnectivityProvider extends ChangeNotifier {
   }
 
   static void showNoInternetDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (c) => getDialog(
-        context,
-        () => Navigator.pop(context),
-        () => Navigator.pop(context),
-        'No Internet Connection',
-        'You need an internet connection to execute this action. Please check your connection and try again.',
-        singleButton: true,
-        okButtonText: 'Ok',
-      ),
+    showOmiAlert(
+      context,
+      title: context.l10n.noInternetConnection,
+      message: context.l10n.pleaseCheckInternetConnectionAndTryAgain,
     );
   }
 }

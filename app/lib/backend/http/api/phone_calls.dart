@@ -1,45 +1,11 @@
 import 'dart:convert';
 
+import 'package:omi/backend/http/error_detail.dart';
 import 'package:omi/backend/http/shared.dart';
-import 'package:omi/backend/schema/gen/misc_wire.g.dart' as misc_wire;
 import 'package:omi/backend/schema/gen/phone_calls_wire.g.dart' as wire;
 import 'package:omi/backend/schema/phone_call.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/utils/logger.dart';
-
-// ************************************************
-// ************** ERROR REPORTING *****************
-// ************************************************
-
-/// Human-readable reason out of a FastAPI error body, or null when the body
-/// carries none.
-///
-/// ``detail`` is deliberately untyped on the wire: most phone-call endpoints
-/// answer with a plain string, but the quota error answers with a map (see
-/// ``check_call_access`` in ``backend/utils/phone_calls.py``). Reading it as a
-/// string crashes on that map, so both shapes are handled here once.
-String? errorDetailMessage(String body) {
-  try {
-    final parsed = misc_wire.GeneratedErrorResponse.fromJson(jsonDecode(body) as Map<String, dynamic>);
-    final detail = parsed.detail;
-    if (detail is String) {
-      return detail.trim().isEmpty ? null : detail;
-    }
-    if (detail is Map) {
-      final code = detail['error'];
-      if (code == 'phone_call_quota_exceeded') {
-        final limit = detail['monthly_limit'];
-        return limit is int
-            ? 'Monthly call limit reached ($limit calls). It resets at the start of next month.'
-            : 'Monthly call limit reached. It resets at the start of next month.';
-      }
-      if (code is String && code.trim().isNotEmpty) {
-        return code;
-      }
-    }
-  } catch (_) {}
-  return null;
-}
 
 // ************************************************
 // *********** PHONE NUMBER MANAGEMENT ************
@@ -120,7 +86,8 @@ class PhoneCallTokenResult {
 Future<PhoneCallTokenResult> getPhoneCallToken() async {
   var response = await makeApiCall(url: '${Env.apiBaseUrl}v1/phone/token', headers: {}, method: 'POST', body: '');
   if (response == null) return const PhoneCallTokenResult();
-  Logger.debug('getPhoneCallToken: ${response.body}');
+  // A 200 body is a live call access token; log only the status.
+  Logger.debug('getPhoneCallToken: ${response.statusCode}');
   if (response.statusCode == 200) {
     final generated = wire.GeneratedTokenResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
     return PhoneCallTokenResult(token: PhoneCallToken.fromGenerated(generated));

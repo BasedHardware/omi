@@ -656,7 +656,11 @@ export function Memories(): React.JSX.Element {
         {!manage && (
           <ul className="mx-auto grid max-w-4xl grid-cols-1 gap-3 lg:grid-cols-2">
             {rendered.map((m) => (
-              <MemoryCard key={m.id} memory={m} onOpen={setDetailMemory} />
+              <MemoryCard
+                key={m.id}
+                memory={m}
+                onOpen={setDetailMemory}
+              />
             ))}
           </ul>
         )}

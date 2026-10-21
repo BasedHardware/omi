@@ -13,7 +13,7 @@ os.environ.setdefault(
 
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState
 from models.product_memory import MemoryItem, MemoryItemStatus, MemoryLayer, ProcessingState
-from utils.memory.canonical_consolidation import list_pending_consolidation_items
+from utils.memory.canonical_consolidation import _required_intake_page
 from utils.memory.required_promotion import REQUIRED_PROCESSING_STATUS_PENDING
 
 UID = "uid-consolidation-query"
@@ -157,6 +157,7 @@ def _item(
         source_type="conversation",
         source_version="v1",
         source_state=source_state,
+        source_state_reason='deleted_by_user' if source_state != SourceState.active else None,
         artifact_preservation=ArtifactPreservationState.preserved,
     )
     return MemoryItem(
@@ -183,132 +184,35 @@ def _db_for(items: list[MemoryItem]) -> _Db:
     return _Db([(f"users/{UID}/memory_items/{item.memory_id}", item.model_dump(mode="python")) for item in items])
 
 
-def test_consolidation_query_filters_orders_and_limits_before_streaming() -> None:
+def test_required_intake_page_filters_orders_and_bounds_before_streaming():
     same_capture = NOW - timedelta(hours=36)
-    db = _db_for(
-        [
-            _item("eligible-b", captured_at=same_capture),
-            _item("eligible-a", captured_at=same_capture),
-            _item("eligible-c", captured_at=NOW - timedelta(days=1)),
-        ]
-    )
-
-    pending = list_pending_consolidation_items(UID, db_client=db, now=NOW, limit=2)
-
-    assert [item.memory_id for item in pending] == ["eligible-a", "eligible-b"]
-    assert db.stream_limit == 2
-    assert db.streamed_count == 2
+    db = _db_for([_item("b", captured_at=same_capture), _item("a", captured_at=same_capture)])
+    snapshots = _required_intake_page(UID, db_client=db)
+    assert [row.to_dict()["memory_id"] for row in snapshots] == ["a", "b"]
+    assert db.stream_limit == 100
     assert db.order_fields == ["captured_at", "memory_id"]
-    assert ("tier", "==", MemoryLayer.short_term.value) in db.filters
-    assert ("status", "==", MemoryItemStatus.active.value) in db.filters
-    assert ("processing_state", "==", ProcessingState.processed.value) in db.filters
-    assert ("source_state", "==", SourceState.active.value) in db.filters
-
-
-def test_ineligible_earlier_ids_cannot_starve_consolidation_at_the_query_cap() -> None:
-    ineligible = [
-        _item(
-            f"a-ineligible-{index:03d}",
-            captured_at=NOW - timedelta(days=100, minutes=index),
-            status=MemoryItemStatus.superseded,
-        )
-        for index in range(251)
+    assert db.filters == [
+        ("tier", "==", "short_term"),
+        ("status", "==", "active"),
+        ("processing_state", "==", "processed"),
+        ("source_state", "==", "active"),
     ]
-    eligible = _item("z-eligible", captured_at=NOW - timedelta(days=1))
-    db = _db_for([*ineligible, eligible])
-
-    pending = list_pending_consolidation_items(UID, db_client=db, now=NOW)
-
-    assert [item.memory_id for item in pending] == ["z-eligible"]
-    assert db.stream_limit == 250
-    assert db.streamed_count == 1
 
 
-def test_quarantined_blocked_rows_cannot_fill_the_oldest_query_window() -> None:
-    quarantined = [
-        _item(
-            f"a-quarantined-{index:03d}",
-            captured_at=NOW - timedelta(days=100, minutes=index),
-            processing_state=ProcessingState.blocked,
-        )
-        for index in range(251)
+def test_required_intake_page_paginates_and_wraps():
+    db = _db_for([_item("a", captured_at=NOW), _item("b", captured_at=NOW)])
+    rows = _required_intake_page(UID, db_client=db, cursor={"captured_at": NOW, "memory_id": "a"})
+    assert [row.to_dict()["memory_id"] for row in rows] == ["b"]
+    rows = _required_intake_page(UID, db_client=db, cursor={"captured_at": NOW, "memory_id": "z"})
+    assert [row.to_dict()["memory_id"] for row in rows] == ["a", "b"]
+
+
+def test_ordinary_stale_or_pending_observations_are_not_semantically_promoted():
+    items = [
+        _item("hidden", captured_at=NOW, status=MemoryItemStatus.hidden),
+        _item("pending", captured_at=NOW, processing_state=ProcessingState.pending),
+        _item("deleted-source", captured_at=NOW, source_state=SourceState.tombstoned),
+        _item("visible", captured_at=NOW),
     ]
-    healthy = _item("z-healthy", captured_at=NOW - timedelta(days=1))
-    db = _db_for([*quarantined, healthy])
-
-    pending = list_pending_consolidation_items(UID, db_client=db, now=NOW)
-
-    assert [item.memory_id for item in pending] == ["z-healthy"]
-    assert db.stream_limit == 250
-    assert db.streamed_count == 1
-
-
-def test_blocked_page_cursor_preserves_stable_order_while_advancing_the_window() -> None:
-    captured_at = NOW - timedelta(days=1)
-    db = _db_for(
-        [
-            _item("memory-a", captured_at=captured_at),
-            _item("memory-b", captured_at=captured_at),
-            _item("memory-c", captured_at=captured_at),
-        ]
-    )
-
-    pending = list_pending_consolidation_items(
-        UID,
-        db_client=db,
-        now=NOW,
-        start_after=(captured_at, "memory-b"),
-    )
-
-    assert [item.memory_id for item in pending] == ["memory-c"]
-
-
-def test_pending_required_items_merge_into_oldest_first_consolidation_batch() -> None:
-    older = NOW - timedelta(hours=5)
-    newer = NOW - timedelta(hours=1)
-    required = _item(
-        "req-explicit",
-        captured_at=older,
-        processing_state=ProcessingState.pending,
-        promotion={
-            "required": True,
-            "processing_status": REQUIRED_PROCESSING_STATUS_PENDING,
-        },
-    )
-    processed = _item("stm-processed", captured_at=newer)
-    skipped = _item(
-        "req-after-cursor",
-        captured_at=newer + timedelta(minutes=1),
-        processing_state=ProcessingState.pending,
-        promotion={
-            "required": True,
-            "processing_status": REQUIRED_PROCESSING_STATUS_PENDING,
-        },
-    )
-    db = _db_for([processed, required, skipped])
-
-    pending = list_pending_consolidation_items(UID, db_client=db, now=NOW, limit=2)
-
-    assert [item.memory_id for item in pending] == ["req-explicit", "stm-processed"]
-    assert pending[0].processing_state == ProcessingState.pending
-    assert pending[1].processing_state == ProcessingState.processed
-
-
-def test_expired_required_submissions_stay_eligible_for_consolidation() -> None:
-    required = _item(
-        "req-expired",
-        captured_at=NOW - timedelta(hours=60),
-        processing_state=ProcessingState.pending,
-        promotion={
-            "required": True,
-            "processing_status": REQUIRED_PROCESSING_STATUS_PENDING,
-        },
-    )
-    required = required.model_copy(update={"expires_at": NOW - timedelta(hours=12)})
-    processed_expired = _item("stm-expired", captured_at=NOW - timedelta(hours=60))
-    processed_expired = processed_expired.model_copy(update={"expires_at": NOW - timedelta(hours=12)})
-    db = _db_for([required, processed_expired])
-
-    pending = list_pending_consolidation_items(UID, db_client=db, now=NOW, limit=10)
-
-    assert [item.memory_id for item in pending] == ["req-expired"]
+    db = _db_for(items)
+    assert [row.to_dict()["memory_id"] for row in _required_intake_page(UID, db_client=db)] == ["visible"]

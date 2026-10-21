@@ -4,14 +4,12 @@ import { useState, useEffect, useRef } from 'react';
 import { useRouter, useSearchParams } from '@tschk/moonshine-next/navigation';
 import Image from '@tschk/moonshine-next/image';
 import Link from '@tschk/moonshine-next/link';
+import { PlanStorefrontGate } from '@/lib/planStorefrontGate';
+import { BudgetUpsellBanner, StorefrontPanel } from './storefront/StorefrontHost';
 import {
-  User,
-  Bell,
   Shield,
-  Code,
   LogOut,
   Trash2,
-  Globe,
   Clock,
   ChevronDown,
   Loader2,
@@ -19,32 +17,13 @@ import {
   Copy,
   Check,
   AlertTriangle,
-  BarChart3,
-  Puzzle,
   Plus,
   X,
-  Key,
-  Webhook,
-  BookOpen,
   MessageSquare,
-  Calendar,
-  Github,
-  Twitter,
   Settings,
   Brain,
-  Server,
-  Monitor,
-  Download,
-  Network,
   Mic,
-  Radio,
-  FileText,
-  FlaskConical,
-  Activity,
-  UserPlus,
   Lightbulb,
-  Target,
-  ArrowLeft,
   Crown,
   ChevronRight,
   Zap,
@@ -52,14 +31,15 @@ import {
   Scale,
 } from 'lucide-react';
 import { useAuth } from '@/components/auth/AuthProvider';
-import { useToast } from '@/components/ui/Toast';
 import { cn } from '@/lib/utils';
 import { DEFAULT_PLAN_FEATURES } from '@/lib/planFeatures';
 import { PageHeader } from '@/components/layout/PageHeader';
+import { Toggle } from './SettingsToggle';
+import { Card } from '@/components/settings/SettingsCard';
 import {
-  CLAUDE_CONNECTOR_OAUTH,
   SECTION_INFO,
   SIGNED_OUT_DESTINATION,
+  developerRedirectTarget,
   isSettingsSectionId,
   type SettingsSectionId,
 } from '@/lib/settingsSections';
@@ -77,38 +57,35 @@ import {
   getUserSubscription,
   getCustomVocabulary,
   updateCustomVocabulary,
-  getDeveloperWebhook,
-  getDeveloperWebhooksStatus,
-  setDeveloperWebhook,
-  enableDeveloperWebhook,
-  disableDeveloperWebhook,
-  getDeveloperApiKeys,
-  createDeveloperApiKey,
-  deleteDeveloperApiKey,
-  getMcpApiKeys,
-  createMcpApiKey,
-  deleteMcpApiKey,
-  exportAllData,
-  deleteKnowledgeGraph,
   getAvailablePlans,
   createCheckoutSession,
   upgradeSubscription,
   cancelSubscription,
   getCustomerPortal,
 } from '@/lib/api';
-import { SUPPORTED_LANGUAGES, API_KEY_SCOPES } from '@/types/user';
-import { decodePlan, planGrantsPaidCapability } from '@/types/user';
+import { SUPPORTED_LANGUAGES } from '@/types/user';
+import { decodePlan, planDisplayName, planGrantsPaidCapability } from '@/types/user';
+import {
+  RESUBSCRIBE_FIRST,
+  isPendingCancelConflict,
+  renewalDateSeconds,
+  yourPlanEndsOn,
+  yourPlanWillRenewOn,
+} from '@/lib/cancelPending';
 import type {
   DailySummarySettings,
-  UserUsage,
   UserSubscription,
   AllUsageData,
-  DeveloperWebhooks,
-  DeveloperApiKey,
-  McpApiKey,
   UsageHistoryPoint,
   PricingOption,
 } from '@/types/user';
+import {
+  trackPaywallOpened,
+  trackUpgradePlanSelected,
+  trackUpgradeSucceeded,
+} from '@/lib/analytics/subscriptionFunnel';
+import { TranscriptionUsageMeter } from './TranscriptionUsageMeter';
+import { clearRetiredExperimentalFeaturesStorage } from './retiredExperimentalFeatures';
 
 // ============================================================================
 // Types
@@ -120,61 +97,6 @@ type SettingsSection = SettingsSectionId;
 // Reusable Components
 // ============================================================================
 
-function Toggle({
-  enabled,
-  onChange,
-  disabled = false,
-}: {
-  enabled: boolean;
-  onChange: (enabled: boolean) => void;
-  disabled?: boolean;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={() => !disabled && onChange(!enabled)}
-      disabled={disabled}
-      className={cn(
-        'relative w-11 h-6 rounded-full transition-all duration-200 flex-shrink-0',
-        enabled
-          ? 'bg-text-primary shadow-[0_0_12px_rgba(255,255,255,0.25)]'
-          : 'bg-white/[0.08]',
-        disabled && 'opacity-50 cursor-not-allowed',
-      )}
-    >
-      <div
-        className={cn(
-          'absolute top-0.5 w-5 h-5 rounded-full bg-white transition-all duration-200 shadow-sm',
-          enabled ? 'left-[22px]' : 'left-0.5',
-        )}
-      />
-    </button>
-  );
-}
-
-function Card({
-  children,
-  className,
-}: {
-  children: React.ReactNode;
-  className?: string;
-}) {
-  return (
-    <div
-      className={cn(
-        'rounded-2xl p-5',
-        // Layered background for depth instead of harsh border
-        'bg-gradient-to-b from-white/[0.03] to-white/[0.01]',
-        // Soft shadow stack
-        'shadow-[0_0_0_1px_rgba(255,255,255,0.04),0_2px_4px_rgba(0,0,0,0.1),0_8px_16px_rgba(0,0,0,0.1)]',
-        className,
-      )}
-    >
-      {children}
-    </div>
-  );
-}
-
 function SettingRow({
   label,
   description,
@@ -185,11 +107,11 @@ function SettingRow({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex items-center justify-between py-4 border-b border-white/[0.04] last:border-0">
-      <div className="flex-1 min-w-0 mr-4">
-        <p className="text-[15px] text-white/85 font-medium">{label}</p>
+    <div className="flex items-center justify-between border-b border-white/[0.04] py-4 last:border-0">
+      <div className="mr-4 min-w-0 flex-1">
+        <p className="text-[15px] font-medium text-white/85">{label}</p>
         {description && (
-          <p className="text-[13px] text-white/40 mt-0.5 leading-relaxed">
+          <p className="mt-0.5 text-[13px] leading-relaxed text-white/40">
             {description}
           </p>
         )}
@@ -231,16 +153,16 @@ function Dropdown({
         type="button"
         onClick={() => setIsOpen(!isOpen)}
         className={cn(
-          'flex items-center justify-between gap-2 px-4 py-2.5 rounded-xl',
+          'flex items-center justify-between gap-2 rounded-xl px-4 py-2.5',
           'bg-white/[0.04] ring-1 ring-white/[0.06]',
-          'text-white/80 min-w-[160px]',
-          'hover:bg-white/[0.06] transition-colors',
+          'min-w-[160px] text-white/80',
+          'transition-colors hover:bg-white/[0.06]',
         )}
       >
         <span className="truncate text-sm">{selectedOption?.label || placeholder}</span>
         <ChevronDown
           className={cn(
-            'w-4 h-4 text-white/40 transition-transform',
+            'h-4 w-4 text-white/40 transition-transform',
             isOpen && 'rotate-180',
           )}
         />
@@ -249,7 +171,7 @@ function Dropdown({
       {isOpen && (
         <div
           className={cn(
-            'absolute z-50 w-full mt-2 py-1.5 rounded-xl max-h-64 overflow-y-auto',
+            'absolute z-50 mt-2 max-h-64 w-full overflow-y-auto rounded-xl py-1.5',
             'bg-[#1a1a1f]/95 backdrop-blur-xl',
             'shadow-[0_0_0_1px_rgba(255,255,255,0.06),0_10px_30px_-5px_rgba(0,0,0,0.5)]',
           )}
@@ -263,7 +185,7 @@ function Dropdown({
                 setIsOpen(false);
               }}
               className={cn(
-                'w-full px-4 py-2.5 text-left transition-colors flex items-center justify-between text-sm',
+                'flex w-full items-center justify-between px-4 py-2.5 text-left text-sm transition-colors',
                 option.value === value
                   ? 'bg-white/[0.08] text-white'
                   : 'text-white/70 hover:bg-white/[0.04] hover:text-white/90',
@@ -271,7 +193,7 @@ function Dropdown({
             >
               <span>{option.label}</span>
               {option.value === value && (
-                <Check className="w-4 h-4 text-text-secondary" />
+                <Check className="h-4 w-4 text-text-secondary" />
               )}
             </button>
           ))}
@@ -332,24 +254,24 @@ function ConfirmDialog({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/60" onClick={onCancel} />
-      <div className="relative bg-bg-secondary rounded-2xl p-6 max-w-md w-full mx-4 shadow-2xl border border-white/[0.06]">
-        <div className="flex items-start gap-4 mb-4">
+      <div className="relative mx-4 w-full max-w-md rounded-2xl border border-white/[0.06] bg-bg-secondary p-6 shadow-2xl">
+        <div className="mb-4 flex items-start gap-4">
           <div
             className={cn(
-              'p-2 rounded-full',
+              'rounded-full p-2',
               isDestructive ? 'bg-red-500/10' : 'bg-white/[0.08]',
             )}
           >
             <AlertTriangle
               className={cn(
-                'w-6 h-6',
+                'h-6 w-6',
                 isDestructive ? 'text-red-400' : 'text-text-secondary',
               )}
             />
           </div>
           <div>
             <h3 className="text-lg font-semibold text-text-primary">{title}</h3>
-            <p className="text-text-secondary mt-1">{message}</p>
+            <p className="mt-1 text-text-secondary">{message}</p>
           </div>
         </div>
         <div className="flex justify-end gap-3">
@@ -357,9 +279,9 @@ function ConfirmDialog({
             onClick={onCancel}
             disabled={isLoading}
             className={cn(
-              'px-4 py-2 rounded-xl font-medium',
+              'rounded-xl px-4 py-2 font-medium',
               'bg-bg-tertiary text-text-primary',
-              'hover:bg-bg-quaternary transition-colors',
+              'transition-colors hover:bg-bg-quaternary',
               'disabled:opacity-50',
             )}
           >
@@ -369,14 +291,14 @@ function ConfirmDialog({
             onClick={onConfirm}
             disabled={isLoading}
             className={cn(
-              'px-4 py-2 rounded-xl font-medium flex items-center gap-2',
+              'flex items-center gap-2 rounded-xl px-4 py-2 font-medium',
               isDestructive
                 ? 'bg-red-500 text-white hover:bg-red-600'
                 : 'bg-text-primary text-bg-primary hover:bg-text-primary/90',
               'transition-colors disabled:opacity-50',
             )}
           >
-            {isLoading && <Loader2 className="w-4 h-4 animate-spin" />}
+            {isLoading && <Loader2 className="h-4 w-4 animate-spin" />}
             {confirmLabel}
           </button>
         </div>
@@ -404,11 +326,11 @@ function ProfileSection({
   user: any;
   onCopyUserId: () => void;
   language: string;
-  vocabulary: string[];
+  vocabulary: string[] | null;
   onLanguageChange: (lang: string) => void;
   onAddWord: (word: string) => void;
   onRemoveWord: (word: string) => void;
-  dailySummary: DailySummarySettings;
+  dailySummary: DailySummarySettings | null;
   onDailySummaryToggle: (enabled: boolean) => void;
   onDailySummaryHourChange: (hour: number) => void;
 }) {
@@ -421,8 +343,10 @@ function ProfileSection({
     setTimeout(() => setCopiedUserId(false), 2000);
   };
 
+  const words = vocabulary ?? [];
+
   const handleAddWord = () => {
-    if (newWord.trim()) {
+    if (vocabulary !== null && newWord.trim()) {
       onAddWord(newWord.trim());
       setNewWord('');
     }
@@ -436,32 +360,32 @@ function ProfileSection({
   return (
     <div className="space-y-8">
       {/* Account Info */}
-      <div id="account-info" className="space-y-3 scroll-mt-4">
-        <h3 className="text-sm font-medium text-text-tertiary uppercase tracking-wider">
+      <div id="account-info" className="scroll-mt-4 space-y-3">
+        <h3 className="text-sm font-medium uppercase tracking-wider text-text-tertiary">
           Account
         </h3>
         <Card>
           <div className="flex items-center gap-5">
-            <div className="w-20 h-20 rounded-full overflow-hidden bg-bg-tertiary ring-2 ring-white/25 flex-shrink-0">
+            <div className="h-20 w-20 flex-shrink-0 overflow-hidden rounded-full bg-bg-tertiary ring-2 ring-white/25">
               {user?.photoURL ? (
                 <Image
                   src={user.photoURL}
                   alt={user.displayName || 'User'}
                   width={80}
                   height={80}
-                  className="object-cover w-full h-full"
+                  className="h-full w-full object-cover"
                 />
               ) : (
-                <div className="w-full h-full flex items-center justify-center text-text-tertiary text-2xl font-medium">
+                <div className="flex h-full w-full items-center justify-center text-2xl font-medium text-text-tertiary">
                   {user?.displayName?.charAt(0) || 'U'}
                 </div>
               )}
             </div>
-            <div className="flex-1 min-w-0">
-              <h3 className="text-lg font-semibold text-text-primary truncate">
+            <div className="min-w-0 flex-1">
+              <h3 className="truncate text-lg font-semibold text-text-primary">
                 {user?.displayName || 'User'}
               </h3>
-              <p className="text-text-tertiary truncate">{user?.email}</p>
+              <p className="truncate text-text-tertiary">{user?.email}</p>
             </div>
           </div>
         </Card>
@@ -469,22 +393,22 @@ function ProfileSection({
         <Card>
           <SettingRow label="User ID" description="Your unique identifier">
             <div className="flex items-center gap-2">
-              <code className="text-sm text-text-tertiary font-mono bg-bg-tertiary px-3 py-1.5 rounded-lg">
+              <code className="rounded-lg bg-bg-tertiary px-3 py-1.5 font-mono text-sm text-text-tertiary">
                 {user?.uid?.slice(0, 8)}...{user?.uid?.slice(-4)}
               </code>
               <button
                 onClick={handleCopy}
                 className={cn(
-                  'p-2 rounded-lg transition-colors',
+                  'rounded-lg p-2 transition-colors',
                   copiedUserId
                     ? 'bg-green-500/10 text-green-400'
                     : 'bg-bg-tertiary text-text-secondary hover:bg-bg-quaternary',
                 )}
               >
                 {copiedUserId ? (
-                  <Check className="w-4 h-4" />
+                  <Check className="h-4 w-4" />
                 ) : (
-                  <Copy className="w-4 h-4" />
+                  <Copy className="h-4 w-4" />
                 )}
               </button>
             </div>
@@ -493,8 +417,8 @@ function ProfileSection({
       </div>
 
       {/* Language & Transcription */}
-      <div id="language" className="space-y-3 scroll-mt-4">
-        <h3 className="text-sm font-medium text-text-tertiary uppercase tracking-wider">
+      <div id="language" className="scroll-mt-4 space-y-3">
+        <h3 className="text-sm font-medium uppercase tracking-wider text-text-tertiary">
           Language & Transcription
         </h3>
         <Card>
@@ -512,8 +436,8 @@ function ProfileSection({
       </div>
 
       {/* Custom Vocabulary */}
-      <div id="vocabulary" className="space-y-3 scroll-mt-4">
-        <h3 className="text-sm font-medium text-text-tertiary uppercase tracking-wider">
+      <div id="vocabulary" className="scroll-mt-4 space-y-3">
+        <h3 className="text-sm font-medium uppercase tracking-wider text-text-tertiary">
           Custom Vocabulary
         </h3>
         <Card>
@@ -530,48 +454,53 @@ function ProfileSection({
                 onKeyDown={(e) => e.key === 'Enter' && handleAddWord()}
                 placeholder="Enter a word or phrase"
                 className={cn(
-                  'flex-1 px-4 py-2.5 rounded-xl',
-                  'bg-bg-tertiary border border-white/[0.06]',
+                  'flex-1 rounded-xl px-4 py-2.5',
+                  'border border-white/[0.06] bg-bg-tertiary',
                   'text-text-primary placeholder:text-text-quaternary',
-                  'focus:outline-none focus:border-white/25',
+                  'focus:border-white/25 focus:outline-none',
                 )}
               />
               <button
                 onClick={handleAddWord}
-                disabled={!newWord.trim()}
+                disabled={vocabulary === null || !newWord.trim()}
                 className={cn(
-                  'px-4 py-2.5 rounded-xl font-medium',
+                  'rounded-xl px-4 py-2.5 font-medium',
                   'bg-text-primary text-bg-primary',
-                  'hover:bg-text-primary/90 transition-colors',
-                  'disabled:opacity-50 disabled:cursor-not-allowed',
+                  'transition-colors hover:bg-text-primary/90',
+                  'disabled:cursor-not-allowed disabled:opacity-50',
                 )}
               >
-                <Plus className="w-5 h-5" />
+                <Plus className="h-5 w-5" />
               </button>
             </div>
 
-            {vocabulary.length > 0 && (
+            {words.length > 0 && (
               <div className="flex flex-wrap gap-2 pt-2">
-                {vocabulary.map((word) => (
+                {words.map((word) => (
                   <span
                     key={word}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-bg-tertiary text-text-secondary text-sm"
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-bg-tertiary px-3 py-1.5 text-sm text-text-secondary"
                   >
                     {word}
                     <button
                       onClick={() => onRemoveWord(word)}
-                      className="text-text-quaternary hover:text-red-400 transition-colors"
+                      className="text-text-quaternary transition-colors hover:text-red-400"
                     >
-                      <X className="w-3.5 h-3.5" />
+                      <X className="h-3.5 w-3.5" />
                     </button>
                   </span>
                 ))}
               </div>
             )}
 
-            {vocabulary.length === 0 && (
-              <p className="text-sm text-text-quaternary text-center py-4">
+            {vocabulary !== null && words.length === 0 && (
+              <p className="py-4 text-center text-sm text-text-quaternary">
                 No custom vocabulary added yet
+              </p>
+            )}
+            {vocabulary === null && (
+              <p className="py-4 text-center text-sm text-text-quaternary">
+                Could not load your vocabulary
               </p>
             )}
           </div>
@@ -579,19 +508,28 @@ function ProfileSection({
       </div>
 
       {/* Notifications */}
-      <div id="notifications" className="space-y-3 scroll-mt-4">
-        <h3 className="text-sm font-medium text-text-tertiary uppercase tracking-wider">
+      <div id="notifications" className="scroll-mt-4 space-y-3">
+        <h3 className="text-sm font-medium uppercase tracking-wider text-text-tertiary">
           Notifications
         </h3>
         <Card>
           <SettingRow
             label="Daily Summary"
-            description="Receive a daily digest of your action items"
+            description={
+              dailySummary === null
+                ? 'Could not load your daily summary settings'
+                : 'Receive a daily digest of your action items'
+            }
           >
-            <Toggle enabled={dailySummary.enabled} onChange={onDailySummaryToggle} />
+            <Toggle
+              enabled={dailySummary?.enabled ?? false}
+              onChange={onDailySummaryToggle}
+              disabled={dailySummary === null}
+              label="Daily Summary"
+            />
           </SettingRow>
 
-          {dailySummary.enabled && (
+          {dailySummary?.enabled && (
             <SettingRow
               label="Delivery Time"
               description="When to receive your daily summary"
@@ -627,25 +565,34 @@ function PrivacySection({
           label="Store Recordings"
           description="Allow storing audio recordings for improved accuracy"
         >
-          <Toggle enabled={recordingPermission} onChange={onRecordingChange} />
+          <Toggle
+            enabled={recordingPermission}
+            onChange={onRecordingChange}
+            label="Store Recordings"
+          />
         </SettingRow>
 
         <SettingRow
           label="Training Data"
           description="Help improve Omi by contributing anonymous usage data"
         >
-          <Toggle enabled={trainingDataOptIn} onChange={onTrainingDataChange} />
+          <Toggle
+            enabled={trainingDataOptIn}
+            onChange={onTrainingDataChange}
+            disabled={trainingDataOptIn}
+            label="Training Data"
+          />
         </SettingRow>
       </Card>
 
       <Card className="border-white/25">
         <div className="flex items-start gap-4">
-          <div className="p-2 rounded-lg bg-white/[0.08]">
-            <Shield className="w-5 h-5 text-text-secondary" />
+          <div className="rounded-lg bg-white/[0.08] p-2">
+            <Shield className="h-5 w-5 text-text-secondary" />
           </div>
           <div>
-            <h3 className="text-text-primary font-medium">Your Privacy Matters</h3>
-            <p className="text-sm text-text-tertiary mt-1">
+            <h3 className="font-medium text-text-primary">Your Privacy Matters</h3>
+            <p className="mt-1 text-sm text-text-tertiary">
               Your data is encrypted and never shared with third parties. You have full
               control over what data is collected and stored.
             </p>
@@ -653,10 +600,10 @@ function PrivacySection({
               href="https://omi.me/privacy"
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 text-sm text-text-secondary hover:underline mt-2"
+              className="mt-2 inline-flex items-center gap-1 text-sm text-text-secondary hover:underline"
             >
               Learn more about our privacy policy
-              <ExternalLink className="w-3.5 h-3.5" />
+              <ExternalLink className="h-3.5 w-3.5" />
             </a>
           </div>
         </div>
@@ -691,7 +638,7 @@ function UsageChart({
 
   if (!history || history.length === 0) {
     return (
-      <Card className="h-48 flex items-center justify-center">
+      <Card className="flex h-48 items-center justify-center">
         <p className="text-text-quaternary">No activity data available</p>
       </Card>
     );
@@ -815,7 +762,7 @@ function UsageChart({
   return (
     <Card>
       {/* Header with metric selector */}
-      <div className="flex items-center justify-between mb-4">
+      <div className="mb-4 flex items-center justify-between">
         <h4 className="text-sm font-semibold text-text-secondary">Activity Over Time</h4>
         <div className="flex gap-1">
           {metricConfig.map((metric) => (
@@ -823,7 +770,7 @@ function UsageChart({
               key={metric.key}
               onClick={() => setSelectedMetric(metric.key)}
               className={cn(
-                'px-2.5 py-1 rounded-md text-xs font-medium transition-all',
+                'rounded-md px-2.5 py-1 text-xs font-medium transition-all',
                 selectedMetric === metric.key
                   ? 'opacity-100'
                   : 'opacity-40 hover:opacity-60',
@@ -853,10 +800,10 @@ function UsageChart({
             ? `rgba(${rgbMatch[1]}, ${rgbMatch[2]}, ${rgbMatch[3]}, 0.5)`
             : currentMetric.color;
           return (
-            <div key={i} className="flex-1 flex flex-col items-center">
+            <div key={i} className="flex flex-1 flex-col items-center">
               {/* Value on top */}
               <span
-                className="text-xs font-bold mb-2 whitespace-nowrap"
+                className="mb-2 whitespace-nowrap text-xs font-bold"
                 style={{ color: currentMetric.color }}
               >
                 {formatValueWithUnit(value)}
@@ -870,7 +817,7 @@ function UsageChart({
                 }}
               />
               {/* Label */}
-              <span className="text-xs text-text-quaternary mt-2 font-medium">
+              <span className="mt-2 text-xs font-medium text-text-quaternary">
                 {d.label}
               </span>
             </div>
@@ -887,14 +834,14 @@ function UnknownPlanCard() {
   return (
     <Card>
       <div className="flex items-start gap-3">
-        <div className="w-10 h-10 rounded-xl bg-white/[0.08] flex items-center justify-center flex-shrink-0">
-          <AlertTriangle className="w-5 h-5 text-text-secondary" />
+        <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-white/[0.08]">
+          <AlertTriangle className="h-5 w-5 text-text-secondary" />
         </div>
         <div>
           <h3 className="text-lg font-semibold text-text-primary">Plan unavailable</h3>
-          <p className="text-sm text-text-tertiary mt-1">
-            This account uses a plan that this version of Omi does not recognize yet.
-            Plan features are unavailable until the plan can be identified.
+          <p className="mt-1 text-sm text-text-tertiary">
+            This account uses a plan that this version of Omi does not recognize yet. Plan
+            features are unavailable until the plan can be identified.
           </p>
         </div>
       </div>
@@ -902,7 +849,7 @@ function UnknownPlanCard() {
   );
 }
 
-function UsageSectionContent({
+export function UsageSectionContent({
   allUsage,
   subscription,
   onSubscriptionUpdate,
@@ -918,9 +865,19 @@ function UsageSectionContent({
   const [selectedPriceId, setSelectedPriceId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [renewalConfirmation, setRenewalConfirmation] = useState<string | null>(null);
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [isCanceling, setIsCanceling] = useState(false);
   const [showUpgradeOptions, setShowUpgradeOptions] = useState(false);
+  const [storefrontEnabled, setStorefrontEnabled] = useState(false);
+
+  useEffect(() => {
+    let live = true;
+    void PlanStorefrontGate.sheetEnabled().then((on) => live && setStorefrontEnabled(on));
+    return () => {
+      live = false;
+    };
+  }, []);
 
   // Set initial selected price when plans load, and keep it in sync when the
   // subscription's current price changes (e.g. after a plan change or
@@ -966,26 +923,28 @@ function UsageSectionContent({
   const monthlyUsage = allUsage?.monthly;
   const periods: UsagePeriod[] = ['today', 'monthly', 'yearly', 'all_time'];
 
-  // Default limits for basic plan (1200 minutes = 72000 seconds)
-  const limits = {
-    transcription_seconds: 72000, // 1200 minutes
-    words_transcribed: 50000,
-    insights_gained: 100,
-    memories_created: 50,
-  };
-
   const planIdentity = subscription
     ? subscription.plan_identity ?? decodePlan(subscription.plan)
     : null;
-  const isUnlimited = planIdentity ? planGrantsPaidCapability(planIdentity) : false;
+  // Paid status chooses billing actions, never the size of the listening allowance.
+  const isPaid = planIdentity ? planGrantsPaidCapability(planIdentity) : false;
   const isUnknownPlan = planIdentity?.kind === 'unknown';
+  const currentPlanName = planIdentity
+    ? planDisplayName(planIdentity)
+    : 'Plan unavailable';
   const isCancelingSubscription = subscription?.cancel_at_period_end;
-
-  // Calculate usage percentages for basic plan
-  const getUsagePercent = (used: number, limit: number) => {
-    if (limit <= 0) return 0;
-    return Math.min((used / limit) * 100, 100);
-  };
+  // `Paywall Opened` is an impression of the plan choices actually being
+  // visible. Basic users reach them through "See plans", paid users see the
+  // grid on mount; unknown-plan users never see choices here.
+  const plansImpressionRecorded = useRef(false);
+  useEffect(() => {
+    if (activeTab !== 'plan' || !cachedPlans?.length) return;
+    if (!subscription || plansImpressionRecorded.current) return;
+    if (isUnknownPlan) return;
+    if (!isPaid && !showUpgradeOptions) return;
+    plansImpressionRecorded.current = true;
+    trackPaywallOpened('usage_page', subscription.plan);
+  }, [subscription, isPaid, isUnknownPlan, showUpgradeOptions, activeTab, cachedPlans]);
 
   // Sort pricing options: monthly first, then annual
   const sortedOptions = cachedPlans
@@ -1012,13 +971,17 @@ function UsageSectionContent({
         selectedOption?.id === subscription?.current_price_id;
 
       if (isCancelingSubscription && selectedPriceId !== subscription?.current_price_id) {
-        setError('Plan changes are available after your current subscription ends.');
+        setError(RESUBSCRIBE_FIRST);
         return;
       }
 
-      if (isUnlimited && !isCancelingSubscription && !isCurrentPlan) {
+      const tier = selectedOption?.plan_id ?? 'unknown';
+      const interval = selectedOption?.interval ?? selectedOption?.title ?? 'unknown';
+      trackUpgradePlanSelected(tier, interval, 'usage_page');
+      if (isPaid && !isCancelingSubscription && !isCurrentPlan) {
         const result = await upgradeSubscription(selectedPriceId);
         if (result?.status === 'success' || result?.scheduled_start) {
+          trackUpgradeSucceeded(tier, interval);
           onSubscriptionUpdate();
         } else {
           setError(result?.message || 'Failed to upgrade plan');
@@ -1033,13 +996,28 @@ function UsageSectionContent({
           };
           window.addEventListener('focus', handleFocus);
         } else if (result?.status === 'reactivated') {
+          const seconds = renewalDateSeconds(
+            result.next_billing_date,
+            subscription?.current_period_end,
+          );
+          setRenewalConfirmation(
+            seconds == null
+              ? 'Your plan will renew.'
+              : yourPlanWillRenewOn(currentPlanName, formatDate(seconds)),
+          );
+          setError(null);
+          trackUpgradeSucceeded(tier, interval);
           onSubscriptionUpdate();
         } else {
           setError('Failed to create checkout session');
         }
       }
     } catch (err) {
-      setError('An error occurred. Please try again.');
+      setError(
+        isPendingCancelConflict(err)
+          ? RESUBSCRIBE_FIRST
+          : 'An error occurred. Please try again.',
+      );
     } finally {
       setIsLoading(false);
     }
@@ -1086,14 +1064,14 @@ function UsageSectionContent({
   return (
     <div className="space-y-6">
       {/* Tab Switcher */}
-      <div className="flex gap-1 p-1 bg-bg-tertiary rounded-xl w-fit">
+      <div className="flex w-fit gap-1 rounded-xl bg-bg-tertiary p-1">
         <button
           onClick={() => setActiveTab('plan')}
           className={cn(
-            'px-4 py-2 rounded-lg text-sm font-medium transition-all',
+            'rounded-lg px-4 py-2 text-sm font-medium transition-all',
             activeTab === 'plan'
               ? 'bg-text-primary text-bg-primary shadow-md'
-              : 'text-text-secondary hover:text-text-primary hover:bg-bg-quaternary',
+              : 'text-text-secondary hover:bg-bg-quaternary hover:text-text-primary',
           )}
         >
           Plan
@@ -1101,36 +1079,59 @@ function UsageSectionContent({
         <button
           onClick={() => setActiveTab('usage')}
           className={cn(
-            'px-4 py-2 rounded-lg text-sm font-medium transition-all',
+            'rounded-lg px-4 py-2 text-sm font-medium transition-all',
             activeTab === 'usage'
               ? 'bg-text-primary text-bg-primary shadow-md'
-              : 'text-text-secondary hover:text-text-primary hover:bg-bg-quaternary',
+              : 'text-text-secondary hover:bg-bg-quaternary hover:text-text-primary',
           )}
         >
           Usage
         </button>
       </div>
 
+      <p className="text-sm leading-relaxed text-text-tertiary">
+        <strong className="font-medium text-text-secondary">
+          Using your own keys on desktop?
+        </strong>{' '}
+        Those keys stay on that device and are not synced to the web app. This web app
+        uses your Omi plan. Omi-hosted usage draws from the same account allowance across
+        devices. Desktop BYOK applies only when that service uses your own key.
+      </p>
+
       {/* Tab Content */}
       {activeTab === 'plan' ? (
         /* PLAN TAB - Unknown plans remain neutral; known plans choose Basic vs paid. */
         <div className="space-y-6">
-          {isUnknownPlan ? (
+          {storefrontEnabled ? (
+            /* Ladder-v1 plans payload; the backend owns every plan string. */
+            <>
+              <BudgetUpsellBanner
+                showMeter={false}
+                livePlanId={subscription?.plan}
+                onSubscriptionUpdate={onSubscriptionUpdate}
+              />
+              <StorefrontPanel
+                source="web_plans"
+                livePlanId={subscription?.plan}
+                onSubscriptionUpdate={onSubscriptionUpdate}
+              />
+            </>
+          ) : isUnknownPlan ? (
             <UnknownPlanCard />
-          ) : !isUnlimited ? (
+          ) : !isPaid ? (
             /* BASIC PLAN VIEW */
             <>
               {/* Current Plan Card */}
               <Card className="relative overflow-hidden">
                 {/* Header */}
-                <div className="flex items-start justify-between mb-6">
+                <div className="mb-6 flex items-start justify-between">
                   <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 rounded-2xl bg-white/[0.08] flex items-center justify-center">
-                      <Zap className="w-6 h-6 text-text-secondary" />
+                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/[0.08]">
+                      <Zap className="h-6 w-6 text-text-secondary" />
                     </div>
                     <div>
                       <h3 className="text-xl font-semibold text-text-primary">
-                        Basic Plan
+                        {currentPlanName}
                       </h3>
                       <p className="text-sm text-text-tertiary">Free tier</p>
                     </div>
@@ -1138,15 +1139,15 @@ function UsageSectionContent({
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => setShowUpgradeOptions(true)}
-                      className="px-5 py-2.5 bg-text-primary hover:bg-text-primary/90 text-bg-primary text-sm font-semibold rounded-xl transition-all shadow-lg shadow-black/40"
+                      className="rounded-xl bg-text-primary px-5 py-2.5 text-sm font-semibold text-bg-primary shadow-lg shadow-black/40 transition-all hover:bg-text-primary/90"
                     >
-                      Upgrade to Unlimited
+                      See plans
                     </button>
                     {subscription?.stripe_subscription_id && (
                       <button
                         onClick={handleManagePayment}
                         disabled={isLoading}
-                        className="px-4 py-2.5 border border-bg-quaternary text-text-secondary hover:text-text-primary text-sm font-medium rounded-xl transition-colors disabled:opacity-50"
+                        className="rounded-xl border border-bg-quaternary px-4 py-2.5 text-sm font-medium text-text-secondary transition-colors hover:text-text-primary disabled:opacity-50"
                       >
                         Billing &amp; Invoices
                       </button>
@@ -1154,93 +1155,28 @@ function UsageSectionContent({
                   </div>
                 </div>
 
-                {/* Monthly Listening Usage */}
-                <div className="p-4 bg-amber-500/5 border border-amber-500/20 rounded-xl mb-6">
-                  <div className="flex items-center gap-2 mb-3">
-                    <Clock className="w-4 h-4 text-amber-400" />
-                    <span className="text-sm font-semibold text-amber-400">
-                      Monthly Listening Limit
-                    </span>
-                  </div>
-                  <div className="flex items-baseline justify-between mb-2">
-                    <span className="text-2xl font-bold text-text-primary">
-                      {monthlyUsage
-                        ? Math.round(monthlyUsage.transcription_seconds / 60)
-                        : 0}
-                      <span className="text-sm font-normal text-text-tertiary ml-1">
-                        / 1,200 min
-                      </span>
-                    </span>
-                    <span className="text-sm text-text-tertiary">
-                      {monthlyUsage
-                        ? 1200 - Math.round(monthlyUsage.transcription_seconds / 60)
-                        : 1200}{' '}
-                      min left
-                    </span>
-                  </div>
-                  <div className="h-2.5 bg-bg-quaternary rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-gradient-to-r from-amber-500 to-amber-400 rounded-full transition-all duration-500"
-                      style={{
-                        width: `${monthlyUsage ? getUsagePercent(monthlyUsage.transcription_seconds, limits.transcription_seconds) : 0}%`,
-                      }}
-                    />
-                  </div>
-                </div>
+                <TranscriptionUsageMeter subscription={subscription} />
 
                 {/* What's Included - Checklist */}
                 <div>
-                  <h4 className="text-sm font-semibold text-text-secondary mb-3">
+                  <h4 className="mb-3 text-sm font-semibold text-text-secondary">
                     What&apos;s included
                   </h4>
-                  <div className="space-y-3">
-                    <div className="flex items-center gap-3">
-                      <div className="w-5 h-5 rounded bg-amber-500/20 flex items-center justify-center flex-shrink-0">
-                        <Clock className="w-3 h-3 text-amber-400" />
-                      </div>
-                      <span className="text-sm text-text-secondary">
-                        <span className="font-medium text-text-primary">
-                          1,200 minutes
-                        </span>{' '}
-                        of listening per month
-                        <span className="text-amber-400 text-xs ml-1">(limited)</span>
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <div className="w-5 h-5 rounded bg-green-500/20 flex items-center justify-center flex-shrink-0">
-                        <Check className="w-3 h-3 text-green-400" />
-                      </div>
-                      <span className="text-sm text-text-secondary">
-                        <span className="font-medium text-text-primary">Unlimited</span>{' '}
-                        words transcribed
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <div className="w-5 h-5 rounded bg-green-500/20 flex items-center justify-center flex-shrink-0">
-                        <Check className="w-3 h-3 text-green-400" />
-                      </div>
-                      <span className="text-sm text-text-secondary">
-                        <span className="font-medium text-text-primary">Unlimited</span>{' '}
-                        insights
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <div className="w-5 h-5 rounded bg-green-500/20 flex items-center justify-center flex-shrink-0">
-                        <Check className="w-3 h-3 text-green-400" />
-                      </div>
-                      <span className="text-sm text-text-secondary">
-                        <span className="font-medium text-text-primary">Unlimited</span>{' '}
-                        memories
-                      </span>
-                    </div>
-                  </div>
+                  <ul className="space-y-3">
+                    {DEFAULT_PLAN_FEATURES.map((feature) => (
+                      <li key={feature} className="flex items-center gap-3">
+                        <Check className="h-4 w-4 text-text-secondary" />
+                        <span className="text-sm text-text-secondary">{feature}</span>
+                      </li>
+                    ))}
+                  </ul>
                 </div>
               </Card>
 
               {/* Billing error surfaced in the Basic view (not only the upgrade panel) */}
               {error && !showUpgradeOptions && (
-                <div className="flex items-center gap-2 p-3 bg-red-500/10 rounded-xl border border-red-500/20">
-                  <AlertTriangle className="w-4 h-4 text-red-400 flex-shrink-0" />
+                <div className="flex items-center gap-2 rounded-xl border border-red-500/20 bg-red-500/10 p-3">
+                  <AlertTriangle className="h-4 w-4 flex-shrink-0 text-red-400" />
                   <p className="text-sm text-red-400">{error}</p>
                 </div>
               )}
@@ -1248,26 +1184,24 @@ function UsageSectionContent({
               {/* Upgrade Options (shown when clicked) */}
               {showUpgradeOptions && (
                 <Card className="border-white/25">
-                  <div className="flex items-center justify-between mb-5">
+                  <div className="mb-5 flex items-center justify-between">
                     <div>
                       <h4 className="text-lg font-semibold text-text-primary">
                         Choose a Plan
                       </h4>
-                      <p className="text-sm text-text-tertiary">
-                        Unlock unlimited listening time
-                      </p>
+                      <p className="text-sm text-text-tertiary">Choose your plan</p>
                     </div>
                     <button
                       onClick={() => setShowUpgradeOptions(false)}
-                      className="p-2 hover:bg-bg-tertiary rounded-lg transition-colors"
+                      className="rounded-lg p-2 transition-colors hover:bg-bg-tertiary"
                     >
-                      <X className="w-5 h-5 text-text-quaternary" />
+                      <X className="h-5 w-5 text-text-quaternary" />
                     </button>
                   </div>
 
                   {/* Plan Selection */}
                   {sortedOptions.length > 0 ? (
-                    <div className="grid grid-cols-2 gap-4 mb-5">
+                    <div className="mb-5 grid grid-cols-2 gap-4">
                       {sortedOptions.map((option) => {
                         const isSelected = selectedPriceId === option.id;
                         const isAnnual =
@@ -1279,25 +1213,25 @@ function UsageSectionContent({
                             key={option.id}
                             onClick={() => setSelectedPriceId(option.id)}
                             className={cn(
-                              'relative p-5 rounded-2xl border-2 text-left transition-all',
+                              'relative rounded-2xl border-2 p-5 text-left transition-all',
                               isSelected
                                 ? 'border-white/25 bg-white/[0.08] shadow-lg shadow-black/40'
-                                : 'border-bg-tertiary hover:border-white/25 bg-bg-tertiary/30',
+                                : 'border-bg-tertiary bg-bg-tertiary/30 hover:border-white/25',
                             )}
                           >
                             {isAnnual && (
-                              <span className="absolute -top-2.5 right-3 px-3 py-1 bg-text-primary text-bg-primary text-[10px] font-bold rounded-full uppercase tracking-wide">
+                              <span className="absolute -top-2.5 right-3 rounded-full bg-text-primary px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-bg-primary">
                                 Best Value
                               </span>
                             )}
-                            <h4 className="font-semibold text-text-primary mb-1">
+                            <h4 className="mb-1 font-semibold text-text-primary">
                               {option.title}
                             </h4>
                             <p className="text-2xl font-bold text-text-primary">
                               {option.price_string}
                             </p>
                             {option.description && (
-                              <p className="text-xs text-text-secondary mt-2 font-medium">
+                              <p className="mt-2 text-xs font-medium text-text-secondary">
                                 {option.description}
                               </p>
                             )}
@@ -1307,14 +1241,14 @@ function UsageSectionContent({
                     </div>
                   ) : (
                     <div className="flex items-center justify-center py-8">
-                      <Loader2 className="w-6 h-6 text-text-primary animate-spin" />
+                      <Loader2 className="h-6 w-6 animate-spin text-text-primary" />
                     </div>
                   )}
 
                   {/* Error Message */}
                   {error && (
-                    <div className="flex items-center gap-2 p-3 bg-red-500/10 rounded-xl mb-4 border border-red-500/20">
-                      <AlertTriangle className="w-4 h-4 text-red-400 flex-shrink-0" />
+                    <div className="mb-4 flex items-center gap-2 rounded-xl border border-red-500/20 bg-red-500/10 p-3">
+                      <AlertTriangle className="h-4 w-4 flex-shrink-0 text-red-400" />
                       <p className="text-sm text-red-400">{error}</p>
                     </div>
                   )}
@@ -1323,16 +1257,16 @@ function UsageSectionContent({
                     onClick={handleSubscribe}
                     disabled={isLoading || !selectedPriceId}
                     className={cn(
-                      'w-full py-3.5 rounded-xl font-semibold transition-all',
+                      'w-full rounded-xl py-3.5 font-semibold transition-all',
                       'bg-text-primary text-bg-primary',
                       'hover:bg-text-primary/90',
                       'shadow-lg shadow-black/40',
-                      'disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none',
+                      'disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none',
                     )}
                   >
                     {isLoading ? (
                       <span className="flex items-center justify-center gap-2">
-                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <Loader2 className="h-4 w-4 animate-spin" />
                         Processing...
                       </span>
                     ) : (
@@ -1344,13 +1278,13 @@ function UsageSectionContent({
 
               {/* This Month Stats - Compact Single Row */}
               <Card>
-                <h4 className="text-sm font-semibold text-text-secondary mb-4">
+                <h4 className="mb-4 text-sm font-semibold text-text-secondary">
                   This month
                 </h4>
                 <div className="grid grid-cols-4 gap-3">
                   <div className="text-center">
-                    <div className="w-10 h-10 mx-auto rounded-xl bg-blue-500/10 flex items-center justify-center mb-2">
-                      <Mic className="w-5 h-5 text-blue-400" />
+                    <div className="mx-auto mb-2 flex h-10 w-10 items-center justify-center rounded-xl bg-blue-500/10">
+                      <Mic className="h-5 w-5 text-blue-400" />
                     </div>
                     <p className="text-xl font-bold text-blue-400">
                       {monthlyUsage
@@ -1360,8 +1294,8 @@ function UsageSectionContent({
                     <p className="text-xs text-text-quaternary">Listening</p>
                   </div>
                   <div className="text-center">
-                    <div className="w-10 h-10 mx-auto rounded-xl bg-green-500/10 flex items-center justify-center mb-2">
-                      <MessageSquare className="w-5 h-5 text-green-400" />
+                    <div className="mx-auto mb-2 flex h-10 w-10 items-center justify-center rounded-xl bg-green-500/10">
+                      <MessageSquare className="h-5 w-5 text-green-400" />
                     </div>
                     <p className="text-xl font-bold text-green-400">
                       {monthlyUsage ? formatNumber(monthlyUsage.words_transcribed) : '0'}
@@ -1369,8 +1303,8 @@ function UsageSectionContent({
                     <p className="text-xs text-text-quaternary">Words</p>
                   </div>
                   <div className="text-center">
-                    <div className="w-10 h-10 mx-auto rounded-xl bg-orange-500/10 flex items-center justify-center mb-2">
-                      <Lightbulb className="w-5 h-5 text-orange-400" />
+                    <div className="mx-auto mb-2 flex h-10 w-10 items-center justify-center rounded-xl bg-orange-500/10">
+                      <Lightbulb className="h-5 w-5 text-orange-400" />
                     </div>
                     <p className="text-xl font-bold text-orange-400">
                       {monthlyUsage?.insights_gained || 0}
@@ -1378,8 +1312,8 @@ function UsageSectionContent({
                     <p className="text-xs text-text-quaternary">Insights</p>
                   </div>
                   <div className="text-center">
-                    <div className="w-10 h-10 mx-auto rounded-xl bg-white/[0.08] flex items-center justify-center mb-2">
-                      <Brain className="w-5 h-5 text-text-secondary" />
+                    <div className="mx-auto mb-2 flex h-10 w-10 items-center justify-center rounded-xl bg-white/[0.08]">
+                      <Brain className="h-5 w-5 text-text-secondary" />
                     </div>
                     <p className="text-xl font-bold text-text-secondary">
                       {monthlyUsage?.memories_created || 0}
@@ -1390,26 +1324,33 @@ function UsageSectionContent({
               </Card>
             </>
           ) : (
-            /* UNLIMITED PLAN VIEW */
+            /* PAID PLAN VIEW — the server allowance remains independent. */
             <>
               {/* Header */}
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-white/[0.14] flex items-center justify-center">
-                  <Crown className="w-5 h-5 text-text-secondary" />
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white/[0.14]">
+                  <Crown className="h-5 w-5 text-text-secondary" />
                 </div>
                 <div>
                   <h3 className="text-lg font-semibold text-text-primary">
-                    {isCancelingSubscription ? 'Your Plan' : 'Manage Your Plan'}
+                    {currentPlanName}
                   </h3>
-                  {subscription?.current_period_end && (
+                  {renewalConfirmation ? (
+                    <p className="text-xs text-green-400">{renewalConfirmation}</p>
+                  ) : subscription?.current_period_end ? (
                     <p className="text-xs text-text-quaternary">
                       {isCancelingSubscription
-                        ? `Cancels on ${formatDate(subscription.current_period_end)}`
+                        ? yourPlanEndsOn(
+                            currentPlanName,
+                            formatDate(subscription.current_period_end),
+                          )
                         : `Renews ${formatDate(subscription.current_period_end)}`}
                     </p>
-                  )}
+                  ) : null}
                 </div>
               </div>
+
+              <TranscriptionUsageMeter subscription={subscription} />
 
               {/* Plan Selection */}
               {sortedOptions.length > 0 ? (
@@ -1426,38 +1367,34 @@ function UsageSectionContent({
                       <button
                         key={option.id}
                         onClick={() => setSelectedPriceId(option.id)}
-                        disabled={isCancelingSubscription && !isCurrent}
                         className={cn(
-                          'relative p-4 rounded-xl border-2 text-left transition-all',
+                          'relative rounded-xl border-2 p-4 text-left transition-all',
                           isSelected
                             ? 'border-white/25 bg-white/[0.08]'
-                            : 'border-bg-tertiary hover:border-bg-quaternary bg-bg-tertiary/50',
-                          isCancelingSubscription &&
-                            !isCurrent &&
-                            'cursor-not-allowed opacity-50',
+                            : 'border-bg-tertiary bg-bg-tertiary/50 hover:border-bg-quaternary',
                         )}
                       >
                         {isAnnual && (
-                          <span className="absolute -top-2 right-2 px-2 py-0.5 bg-text-primary text-bg-primary text-[10px] font-medium rounded-full">
+                          <span className="absolute -top-2 right-2 rounded-full bg-text-primary px-2 py-0.5 text-[10px] font-medium text-bg-primary">
                             POPULAR
                           </span>
                         )}
 
-                        <h4 className="font-medium text-text-primary mb-1">
+                        <h4 className="mb-1 font-medium text-text-primary">
                           {option.title}
                         </h4>
                         <p className="text-lg font-bold text-text-primary">
                           {option.price_string}
                         </p>
                         {option.description && (
-                          <p className="text-xs text-text-secondary mt-1">
+                          <p className="mt-1 text-xs text-text-secondary">
                             {option.description}
                           </p>
                         )}
 
                         {isCurrent && (
-                          <span className="inline-flex items-center gap-1 mt-2 px-2 py-0.5 bg-green-500/10 text-green-400 text-xs rounded-full">
-                            <Check className="w-3 h-3" />
+                          <span className="mt-2 inline-flex items-center gap-1 rounded-full bg-green-500/10 px-2 py-0.5 text-xs text-green-400">
+                            <Check className="h-3 w-3" />
                             Current
                           </span>
                         )}
@@ -1467,16 +1404,14 @@ function UsageSectionContent({
                 </div>
               ) : (
                 <div className="flex items-center justify-center py-8">
-                  <Loader2 className="w-6 h-6 text-text-primary animate-spin" />
+                  <Loader2 className="h-6 w-6 animate-spin text-text-primary" />
                 </div>
               )}
 
-              {isCancelingSubscription && subscription?.current_period_end && (
-                <p className="text-sm text-text-tertiary">
-                  You can reactivate your current plan now. Plan changes are available
-                  after {formatDate(subscription.current_period_end)}.
-                </p>
-              )}
+              {isCancelingSubscription &&
+                selectedPriceId !== subscription?.current_price_id && (
+                  <p className="text-sm text-text-tertiary">{RESUBSCRIBE_FIRST}</p>
+                )}
 
               {/* Features List */}
               <div className="space-y-2">
@@ -1484,7 +1419,7 @@ function UsageSectionContent({
                 <ul className="space-y-2">
                   {DEFAULT_PLAN_FEATURES.map((feature, idx) => (
                     <li key={idx} className="flex items-start gap-2">
-                      <Check className="w-4 h-4 text-text-secondary flex-shrink-0 mt-0.5" />
+                      <Check className="mt-0.5 h-4 w-4 flex-shrink-0 text-text-secondary" />
                       <span className="text-sm text-text-tertiary">{feature}</span>
                     </li>
                   ))}
@@ -1493,8 +1428,8 @@ function UsageSectionContent({
 
               {/* Error Message */}
               {error && (
-                <div className="flex items-center gap-2 p-3 bg-red-500/10 rounded-lg">
-                  <AlertTriangle className="w-4 h-4 text-red-400 flex-shrink-0" />
+                <div className="flex items-center gap-2 rounded-lg bg-red-500/10 p-3">
+                  <AlertTriangle className="h-4 w-4 flex-shrink-0 text-red-400" />
                   <p className="text-sm text-red-400">{error}</p>
                 </div>
               )}
@@ -1507,24 +1442,22 @@ function UsageSectionContent({
                   !selectedPriceId ||
                   (!isCancelingSubscription &&
                     (selectedOption?.is_active ||
-                      selectedOption?.id === subscription?.current_price_id)) ||
-                  (isCancelingSubscription &&
-                    selectedPriceId !== subscription?.current_price_id)
+                      selectedOption?.id === subscription?.current_price_id))
                 }
                 className={cn(
-                  'w-full py-3 rounded-xl font-medium transition-colors',
+                  'w-full rounded-xl py-3 font-medium transition-colors',
                   'bg-text-primary text-bg-primary',
                   'hover:bg-text-primary/90',
-                  'disabled:opacity-50 disabled:cursor-not-allowed',
+                  'disabled:cursor-not-allowed disabled:opacity-50',
                 )}
               >
                 {isLoading ? (
                   <span className="flex items-center justify-center gap-2">
-                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <Loader2 className="h-4 w-4 animate-spin" />
                     Processing...
                   </span>
                 ) : isCancelingSubscription ? (
-                  'Reactivate Subscription'
+                  'Resubscribe'
                 ) : selectedOption?.is_active ||
                   selectedOption?.id === subscription?.current_price_id ? (
                   'Current Plan'
@@ -1534,13 +1467,13 @@ function UsageSectionContent({
               </button>
 
               {/* Secondary Actions */}
-              <div className="pt-4 border-t border-bg-tertiary space-y-3">
+              <div className="space-y-3 border-t border-bg-tertiary pt-4">
                 <button
                   onClick={handleManagePayment}
                   disabled={isLoading}
-                  className="w-full flex items-center justify-center gap-2 py-2.5 text-text-secondary hover:text-text-primary transition-colors"
+                  className="flex w-full items-center justify-center gap-2 py-2.5 text-text-secondary transition-colors hover:text-text-primary"
                 >
-                  <CreditCard className="w-4 h-4" />
+                  <CreditCard className="h-4 w-4" />
                   <span className="text-sm">Manage Billing &amp; Invoices</span>
                 </button>
 
@@ -1548,7 +1481,7 @@ function UsageSectionContent({
                   <button
                     onClick={() => setShowCancelConfirm(true)}
                     disabled={isLoading}
-                    className="w-full py-2.5 text-sm text-red-400/70 hover:text-red-400 transition-colors"
+                    className="w-full py-2.5 text-sm text-red-400/70 transition-colors hover:text-red-400"
                   >
                     Cancel Subscription
                   </button>
@@ -1561,16 +1494,16 @@ function UsageSectionContent({
         /* USAGE TAB */
         <div className="space-y-6">
           {/* Period Tabs */}
-          <div className="flex gap-1 p-1 bg-bg-tertiary rounded-xl">
+          <div className="flex gap-1 rounded-xl bg-bg-tertiary p-1">
             {periods.map((period) => (
               <button
                 key={period}
                 onClick={() => setSelectedPeriod(period)}
                 className={cn(
-                  'flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-all',
+                  'flex-1 rounded-lg px-3 py-2 text-sm font-medium transition-all',
                   selectedPeriod === period
                     ? 'bg-text-primary text-bg-primary shadow-md'
-                    : 'text-text-secondary hover:text-text-primary hover:bg-bg-quaternary',
+                    : 'text-text-secondary hover:bg-bg-quaternary hover:text-text-primary',
                 )}
               >
                 {PERIOD_LABELS[period]}
@@ -1582,8 +1515,8 @@ function UsageSectionContent({
           <Card>
             <div className="grid grid-cols-4 gap-3">
               <div className="text-center">
-                <div className="w-10 h-10 mx-auto rounded-xl bg-blue-500/10 flex items-center justify-center mb-2">
-                  <Mic className="w-5 h-5 text-blue-400" />
+                <div className="mx-auto mb-2 flex h-10 w-10 items-center justify-center rounded-xl bg-blue-500/10">
+                  <Mic className="h-5 w-5 text-blue-400" />
                 </div>
                 <p className="text-xl font-bold text-blue-400">
                   {usage ? formatDuration(usage.transcription_seconds) : '0m'}
@@ -1591,8 +1524,8 @@ function UsageSectionContent({
                 <p className="text-xs text-text-quaternary">Listening</p>
               </div>
               <div className="text-center">
-                <div className="w-10 h-10 mx-auto rounded-xl bg-green-500/10 flex items-center justify-center mb-2">
-                  <MessageSquare className="w-5 h-5 text-green-400" />
+                <div className="mx-auto mb-2 flex h-10 w-10 items-center justify-center rounded-xl bg-green-500/10">
+                  <MessageSquare className="h-5 w-5 text-green-400" />
                 </div>
                 <p className="text-xl font-bold text-green-400">
                   {usage ? formatNumber(usage.words_transcribed) : '0'}
@@ -1600,8 +1533,8 @@ function UsageSectionContent({
                 <p className="text-xs text-text-quaternary">Words</p>
               </div>
               <div className="text-center">
-                <div className="w-10 h-10 mx-auto rounded-xl bg-orange-500/10 flex items-center justify-center mb-2">
-                  <Lightbulb className="w-5 h-5 text-orange-400" />
+                <div className="mx-auto mb-2 flex h-10 w-10 items-center justify-center rounded-xl bg-orange-500/10">
+                  <Lightbulb className="h-5 w-5 text-orange-400" />
                 </div>
                 <p className="text-xl font-bold text-orange-400">
                   {usage?.insights_gained || 0}
@@ -1609,8 +1542,8 @@ function UsageSectionContent({
                 <p className="text-xs text-text-quaternary">Insights</p>
               </div>
               <div className="text-center">
-                <div className="w-10 h-10 mx-auto rounded-xl bg-white/[0.08] flex items-center justify-center mb-2">
-                  <Brain className="w-5 h-5 text-text-secondary" />
+                <div className="mx-auto mb-2 flex h-10 w-10 items-center justify-center rounded-xl bg-white/[0.08]">
+                  <Brain className="h-5 w-5 text-text-secondary" />
                 </div>
                 <p className="text-xl font-bold text-text-secondary">
                   {usage?.memories_created || 0}
@@ -1631,7 +1564,9 @@ function UsageSectionContent({
         title="Cancel Subscription?"
         message={
           subscription?.current_period_end
-            ? `Your subscription will remain active until ${formatDate(subscription.current_period_end)}. After that, you'll be moved to the Free plan.`
+            ? `Your subscription will remain active until ${formatDate(
+                subscription.current_period_end,
+              )}. After that, you'll be moved to the Free plan.`
             : "Are you sure you want to cancel your subscription? You'll lose access to unlimited features."
         }
         confirmLabel="Cancel Subscription"
@@ -1640,1273 +1575,6 @@ function UsageSectionContent({
         isDestructive={true}
         isLoading={isCanceling}
       />
-    </div>
-  );
-}
-
-// ============================================================================
-// Developer Section
-// ============================================================================
-
-// Create API Key Dialog
-function CreateApiKeyDialog({
-  isOpen,
-  onClose,
-  onCreateKey,
-}: {
-  isOpen: boolean;
-  onClose: () => void;
-  onCreateKey: (name: string, scopes: string[]) => Promise<DeveloperApiKey | null>;
-}) {
-  const [keyName, setKeyName] = useState('');
-  const [scopes, setScopes] = useState<Record<string, boolean>>({
-    'conversations:read': false,
-    'conversations:write': false,
-    'memories:read': false,
-    'memories:write': false,
-    'action_items:read': false,
-    'action_items:write': false,
-  });
-  const [isCreating, setIsCreating] = useState(false);
-  const [createdKey, setCreatedKey] = useState<DeveloperApiKey | null>(null);
-  const [copied, setCopied] = useState(false);
-
-  const selectedScopes = Object.entries(scopes)
-    .filter(([, v]) => v)
-    .map(([k]) => k);
-  const isReadOnly =
-    scopes['conversations:read'] &&
-    scopes['memories:read'] &&
-    scopes['action_items:read'] &&
-    !scopes['conversations:write'] &&
-    !scopes['memories:write'] &&
-    !scopes['action_items:write'];
-  const isFullAccess = Object.values(scopes).every((v) => v);
-
-  const selectReadOnly = () => {
-    setScopes({
-      'conversations:read': true,
-      'conversations:write': false,
-      'memories:read': true,
-      'memories:write': false,
-      'action_items:read': true,
-      'action_items:write': false,
-    });
-  };
-
-  const selectFullAccess = () => {
-    setScopes(Object.fromEntries(Object.keys(scopes).map((k) => [k, true])));
-  };
-
-  const handleCreate = async () => {
-    if (!keyName.trim()) return;
-    setIsCreating(true);
-    const key = await onCreateKey(
-      keyName.trim(),
-      selectedScopes.length > 0 ? selectedScopes : (undefined as unknown as string[]),
-    );
-    if (key) {
-      setCreatedKey(key);
-    }
-    setIsCreating(false);
-  };
-
-  const handleCopy = () => {
-    if (createdKey?.key) {
-      navigator.clipboard.writeText(createdKey.key);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    }
-  };
-
-  const handleClose = () => {
-    setKeyName('');
-    setScopes(Object.fromEntries(Object.keys(scopes).map((k) => [k, false])));
-    setCreatedKey(null);
-    setCopied(false);
-    onClose();
-  };
-
-  if (!isOpen) return null;
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
-      onClick={handleClose}
-    >
-      <div
-        className="bg-bg-secondary rounded-2xl w-full max-w-md mx-4 overflow-hidden"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {createdKey ? (
-          <div className="p-6">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="p-3 rounded-xl bg-green-500/20">
-                <Check className="w-6 h-6 text-green-400" />
-              </div>
-              <div>
-                <h3 className="text-lg font-semibold text-text-primary">
-                  API Key Created
-                </h3>
-                <p className="text-sm text-text-tertiary">
-                  Save this key now - you won&apos;t see it again!
-                </p>
-              </div>
-            </div>
-            <div className="p-4 rounded-xl bg-bg-tertiary mb-4">
-              <p className="text-xs text-text-tertiary mb-2">Your API Key</p>
-              <code className="text-sm text-text-primary font-mono break-all">
-                {createdKey.key}
-              </code>
-            </div>
-            <div className="flex gap-3">
-              <button
-                onClick={handleCopy}
-                className={cn(
-                  'flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl font-medium transition-colors',
-                  copied
-                    ? 'bg-green-500/20 text-green-400'
-                    : 'bg-text-primary text-bg-primary hover:bg-text-primary/90',
-                )}
-              >
-                {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-                {copied ? 'Copied!' : 'Copy Key'}
-              </button>
-              <button
-                onClick={handleClose}
-                className="px-4 py-3 rounded-xl bg-bg-tertiary text-text-secondary hover:bg-bg-quaternary transition-colors"
-              >
-                Done
-              </button>
-            </div>
-          </div>
-        ) : (
-          <div className="p-6">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-lg font-semibold text-text-primary">Create API Key</h3>
-              <button
-                onClick={handleClose}
-                className="p-2 rounded-lg hover:bg-bg-tertiary transition-colors"
-              >
-                <X className="w-5 h-5 text-text-tertiary" />
-              </button>
-            </div>
-
-            <div className="space-y-6">
-              <div>
-                <label className="block text-xs font-semibold text-text-tertiary uppercase tracking-wider mb-2">
-                  Key Name
-                </label>
-                <input
-                  type="text"
-                  value={keyName}
-                  onChange={(e) => setKeyName(e.target.value)}
-                  placeholder="e.g., My App Integration"
-                  className="w-full px-4 py-3 rounded-xl bg-bg-tertiary border border-white/[0.06] text-text-primary placeholder:text-text-quaternary focus:outline-none focus:border-white/25"
-                />
-              </div>
-
-              <div>
-                <div className="flex items-center justify-between mb-3">
-                  <label className="text-xs font-semibold text-text-tertiary uppercase tracking-wider">
-                    Permissions
-                  </label>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={selectReadOnly}
-                      className={cn(
-                        'px-3 py-1.5 rounded-full text-xs font-medium transition-colors',
-                        isReadOnly
-                          ? 'bg-text-primary text-bg-primary'
-                          : 'bg-bg-tertiary text-text-secondary hover:bg-bg-quaternary',
-                      )}
-                    >
-                      Read Only
-                    </button>
-                    <button
-                      onClick={selectFullAccess}
-                      className={cn(
-                        'px-3 py-1.5 rounded-full text-xs font-medium transition-colors',
-                        isFullAccess
-                          ? 'bg-text-primary text-bg-primary'
-                          : 'bg-bg-tertiary text-text-secondary hover:bg-bg-quaternary',
-                      )}
-                    >
-                      Full Access
-                    </button>
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  {['Conversations', 'Memories', 'Action Items'].map((resource) => {
-                    const readKey = `${resource.toLowerCase().replace(' ', '_')}:read`;
-                    const writeKey = `${resource.toLowerCase().replace(' ', '_')}:write`;
-                    return (
-                      <div
-                        key={resource}
-                        className="flex items-center justify-between p-3 rounded-xl bg-bg-tertiary"
-                      >
-                        <span className="text-sm text-text-primary">{resource}</span>
-                        <div className="flex bg-bg-quaternary rounded-lg overflow-hidden">
-                          <button
-                            onClick={() =>
-                              setScopes({ ...scopes, [readKey]: !scopes[readKey] })
-                            }
-                            className={cn(
-                              'px-3 py-1.5 text-xs font-semibold transition-colors',
-                              scopes[readKey]
-                                ? 'bg-blue-500 text-white'
-                                : 'text-text-quaternary hover:text-text-secondary',
-                            )}
-                          >
-                            R
-                          </button>
-                          <button
-                            onClick={() =>
-                              setScopes({ ...scopes, [writeKey]: !scopes[writeKey] })
-                            }
-                            className={cn(
-                              'px-3 py-1.5 text-xs font-semibold transition-colors',
-                              scopes[writeKey]
-                                ? 'bg-text-primary text-bg-primary'
-                                : 'text-text-quaternary hover:text-text-secondary',
-                            )}
-                          >
-                            W
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-                <p className="text-xs text-text-quaternary mt-2">
-                  R = Read, W = Write. Defaults to read-only if nothing selected.
-                </p>
-              </div>
-
-              <button
-                onClick={handleCreate}
-                disabled={!keyName.trim() || isCreating}
-                className={cn(
-                  'w-full py-3 rounded-xl font-medium transition-colors',
-                  keyName.trim() && !isCreating
-                    ? 'bg-text-primary text-bg-primary hover:bg-text-primary/90'
-                    : 'bg-bg-tertiary text-text-quaternary cursor-not-allowed',
-                )}
-              >
-                {isCreating ? 'Creating...' : 'Create Key'}
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// Create MCP Key Dialog
-function CreateMcpKeyDialog({
-  isOpen,
-  onClose,
-  onCreateKey,
-}: {
-  isOpen: boolean;
-  onClose: () => void;
-  onCreateKey: (name: string) => Promise<McpApiKey | null>;
-}) {
-  const [keyName, setKeyName] = useState('');
-  const [isCreating, setIsCreating] = useState(false);
-  const [createdKey, setCreatedKey] = useState<McpApiKey | null>(null);
-  const [copied, setCopied] = useState(false);
-
-  const handleCreate = async () => {
-    if (!keyName.trim()) return;
-    setIsCreating(true);
-    const key = await onCreateKey(keyName.trim());
-    if (key) {
-      setCreatedKey(key);
-    }
-    setIsCreating(false);
-  };
-
-  const handleCopy = () => {
-    if (createdKey?.key) {
-      navigator.clipboard.writeText(createdKey.key);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    }
-  };
-
-  const handleClose = () => {
-    setKeyName('');
-    setCreatedKey(null);
-    setCopied(false);
-    onClose();
-  };
-
-  if (!isOpen) return null;
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
-      onClick={handleClose}
-    >
-      <div
-        className="bg-bg-secondary rounded-2xl w-full max-w-md mx-4 overflow-hidden"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {createdKey ? (
-          <div className="p-6">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="p-3 rounded-xl bg-green-500/20">
-                <Check className="w-6 h-6 text-green-400" />
-              </div>
-              <div>
-                <h3 className="text-lg font-semibold text-text-primary">
-                  MCP Key Created
-                </h3>
-                <p className="text-sm text-text-tertiary">
-                  Save this key now - you won&apos;t see it again!
-                </p>
-              </div>
-            </div>
-            <div className="p-4 rounded-xl bg-bg-tertiary mb-4">
-              <p className="text-xs text-text-tertiary mb-2">Your MCP Key</p>
-              <code className="text-sm text-text-primary font-mono break-all">
-                {createdKey.key}
-              </code>
-            </div>
-            <div className="flex gap-3">
-              <button
-                onClick={handleCopy}
-                className={cn(
-                  'flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl font-medium transition-colors',
-                  copied
-                    ? 'bg-green-500/20 text-green-400'
-                    : 'bg-text-primary text-bg-primary hover:bg-text-primary/90',
-                )}
-              >
-                {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-                {copied ? 'Copied!' : 'Copy Key'}
-              </button>
-              <button
-                onClick={handleClose}
-                className="px-4 py-3 rounded-xl bg-bg-tertiary text-text-secondary hover:bg-bg-quaternary transition-colors"
-              >
-                Done
-              </button>
-            </div>
-          </div>
-        ) : (
-          <div className="p-6">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-lg font-semibold text-text-primary">Create MCP Key</h3>
-              <button
-                onClick={handleClose}
-                className="p-2 rounded-lg hover:bg-bg-tertiary transition-colors"
-              >
-                <X className="w-5 h-5 text-text-tertiary" />
-              </button>
-            </div>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-text-tertiary uppercase tracking-wider mb-2">
-                  Key Name
-                </label>
-                <input
-                  type="text"
-                  value={keyName}
-                  onChange={(e) => setKeyName(e.target.value)}
-                  placeholder="e.g., Claude Desktop"
-                  className="w-full px-4 py-3 rounded-xl bg-bg-tertiary border border-white/[0.06] text-text-primary placeholder:text-text-quaternary focus:outline-none focus:border-white/25"
-                />
-              </div>
-              <button
-                onClick={handleCreate}
-                disabled={!keyName.trim() || isCreating}
-                className={cn(
-                  'w-full py-3 rounded-xl font-medium transition-colors',
-                  keyName.trim() && !isCreating
-                    ? 'bg-text-primary text-bg-primary hover:bg-text-primary/90'
-                    : 'bg-bg-tertiary text-text-quaternary cursor-not-allowed',
-                )}
-              >
-                {isCreating ? 'Creating...' : 'Create Key'}
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function DeveloperSection({
-  apiKeys,
-  mcpKeys,
-  webhooks,
-  onCreateApiKey,
-  onDeleteApiKey,
-  onCreateMcpKey,
-  onDeleteMcpKey,
-  onWebhookChange,
-  onExportData,
-  isExporting,
-  onDeleteKnowledgeGraph,
-}: {
-  apiKeys: DeveloperApiKey[];
-  mcpKeys: McpApiKey[];
-  webhooks: DeveloperWebhooks;
-  onCreateApiKey: (name: string, scopes: string[]) => Promise<DeveloperApiKey | null>;
-  onDeleteApiKey: (keyId: string) => void;
-  onCreateMcpKey: (name: string) => Promise<McpApiKey | null>;
-  onDeleteMcpKey: (keyId: string) => void;
-  onWebhookChange: (type: string, enabled: boolean, url?: string, delay?: string) => void;
-  onExportData: () => void;
-  isExporting?: boolean;
-  onDeleteKnowledgeGraph: () => void;
-}) {
-  const [showApiKeyDialog, setShowApiKeyDialog] = useState(false);
-  const [showMcpKeyDialog, setShowMcpKeyDialog] = useState(false);
-  const [showDeleteGraphDialog, setShowDeleteGraphDialog] = useState(false);
-  const [copiedConfig, setCopiedConfig] = useState(false);
-  const [copiedUrl, setCopiedUrl] = useState(false);
-  const [copiedClaudeName, setCopiedClaudeName] = useState(false);
-  const [copiedClaudeUrl, setCopiedClaudeUrl] = useState(false);
-  const [copiedClaudeClientId, setCopiedClaudeClientId] = useState(false);
-  const [copiedClaudeSecret, setCopiedClaudeSecret] = useState(false);
-
-  const mcpServerUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.omi.me'}/v1/mcp/sse`;
-
-  // Claude connector values — mirror the 4 fields in Claude's "Add custom connector" form
-  const claudeConnectorName = 'Omi Memory';
-  const claudeConnectorUrl = mcpServerUrl;
-  const claudeConnectorClientId = CLAUDE_CONNECTOR_OAUTH.clientId;
-  const claudeConnectorSecret: string = CLAUDE_CONNECTOR_OAUTH.clientSecret;
-
-  // Experimental features (stored in localStorage)
-  const [experimentalFeatures, setExperimentalFeatures] = useState({
-    transcriptionDiagnostics: false,
-    autoCreateSpeakers: false,
-    followUpQuestions: false,
-    goalTracker: false,
-  });
-
-  // Load experimental features from localStorage on mount
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('omi_experimental_features');
-      if (saved) {
-        try {
-          setExperimentalFeatures(JSON.parse(saved));
-        } catch {
-          // Ignore parse errors
-        }
-      }
-    }
-  }, []);
-
-  // Save experimental features to localStorage when they change
-  const updateExperimentalFeature = (
-    key: keyof typeof experimentalFeatures,
-    value: boolean,
-  ) => {
-    const updated = { ...experimentalFeatures, [key]: value };
-    setExperimentalFeatures(updated);
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('omi_experimental_features', JSON.stringify(updated));
-    }
-  };
-
-  // Parse audio_bytes URL which may contain comma-separated URL and delay (e.g., "https://example.com,5")
-  const parseAudioBytesUrl = (rawUrl: string) => {
-    if (!rawUrl) return { url: '', delay: '5' };
-    const parts = rawUrl.split(',');
-    if (parts.length >= 2) {
-      return { url: parts[0], delay: parts[1] };
-    }
-    return { url: rawUrl, delay: '5' };
-  };
-
-  const initialAudioBytes = parseAudioBytesUrl(webhooks.audio_bytes?.url || '');
-
-  const [webhookUrls, setWebhookUrls] = useState<Record<string, string>>({
-    memory_created: webhooks.memory_created?.url || '',
-    transcript_received: webhooks.transcript_received?.url || '',
-    audio_bytes: initialAudioBytes.url,
-    day_summary: webhooks.day_summary?.url || '',
-  });
-  const [audioBytesDelay, setAudioBytesDelay] = useState(initialAudioBytes.delay);
-
-  // Update webhook URLs when webhooks prop changes
-  useEffect(() => {
-    const audioBytes = parseAudioBytesUrl(webhooks.audio_bytes?.url || '');
-    setWebhookUrls({
-      memory_created: webhooks.memory_created?.url || '',
-      transcript_received: webhooks.transcript_received?.url || '',
-      audio_bytes: audioBytes.url,
-      day_summary: webhooks.day_summary?.url || '',
-    });
-    setAudioBytesDelay(audioBytes.delay);
-  }, [webhooks]);
-
-  const webhookTypes = [
-    {
-      id: 'memory_created',
-      label: 'Conversation Events',
-      description: 'New conversation created',
-      icon: MessageSquare,
-    },
-    {
-      id: 'transcript_received',
-      label: 'Real-time Transcript',
-      description: 'Transcript received',
-      icon: FileText,
-    },
-    {
-      id: 'audio_bytes',
-      label: 'Audio Bytes',
-      description: 'Audio data received',
-      icon: Radio,
-      hasDelay: true,
-    },
-    {
-      id: 'day_summary',
-      label: 'Day Summary',
-      description: 'Summary generated',
-      icon: Calendar,
-    },
-  ];
-
-  const claudeDesktopConfig = `{
-  "mcpServers": {
-    "omi": {
-      "command": "docker",
-      "args": ["run", "--rm", "-i", "-e", "OMI_API_KEY=your_api_key_here", "omiai/mcp-server:latest"]
-    }
-  }
-}`;
-
-  const copyConfig = () => {
-    navigator.clipboard.writeText(claudeDesktopConfig);
-    setCopiedConfig(true);
-    setTimeout(() => setCopiedConfig(false), 2000);
-  };
-
-  const copyUrl = () => {
-    navigator.clipboard.writeText(mcpServerUrl);
-    setCopiedUrl(true);
-    setTimeout(() => setCopiedUrl(false), 2000);
-  };
-
-  return (
-    <div className="space-y-8">
-      {/* Developer API Keys */}
-      <div id="api-keys" className="space-y-3 scroll-mt-4">
-        <div className="flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-text-tertiary uppercase tracking-wider">
-            Developer API Keys
-          </h3>
-          <button
-            onClick={() => setShowApiKeyDialog(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/[0.08] text-text-secondary text-xs font-medium hover:bg-white/[0.14] transition-colors"
-          >
-            <Plus className="w-3 h-3" />
-            Create Key
-          </button>
-        </div>
-        <Card>
-          {apiKeys.length > 0 ? (
-            <div className="space-y-3">
-              {apiKeys.map((apiKey) => (
-                <div
-                  key={apiKey.id}
-                  className="flex items-center justify-between p-3 rounded-xl bg-bg-tertiary"
-                >
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-sm text-text-primary font-medium">
-                        {apiKey.name}
-                      </span>
-                      <code className="text-xs text-text-tertiary font-mono bg-bg-quaternary px-2 py-0.5 rounded">
-                        {apiKey.key_prefix}...
-                      </code>
-                      {apiKey.scopes && apiKey.scopes.length > 0 && (
-                        <span className="text-xs text-text-secondary bg-white/[0.08] px-2 py-0.5 rounded">
-                          {apiKey.scopes.length} scopes
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-xs text-text-quaternary mt-1">
-                      Created {new Date(apiKey.created_at).toLocaleDateString()}
-                      {apiKey.last_used_at &&
-                        ` • Last used ${new Date(apiKey.last_used_at).toLocaleDateString()}`}
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => onDeleteApiKey(apiKey.id)}
-                    className="p-2 rounded-lg text-text-secondary hover:text-red-400 hover:bg-red-500/10 transition-colors"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-sm text-text-quaternary text-center py-6">
-              No API keys created yet
-            </p>
-          )}
-        </Card>
-      </div>
-
-      {/* MCP Section */}
-      <div id="mcp" className="space-y-3 scroll-mt-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <h3 className="text-sm font-semibold text-text-tertiary uppercase tracking-wider">
-              MCP
-            </h3>
-            <a
-              href="https://docs.omi.me/doc/developer/MCP"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-xs text-text-secondary hover:text-text-secondary transition-colors"
-            >
-              Docs ↗
-            </a>
-          </div>
-          <button
-            onClick={() => setShowMcpKeyDialog(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/[0.08] text-text-secondary text-xs font-medium hover:bg-white/[0.14] transition-colors"
-          >
-            <Plus className="w-3 h-3" />
-            Create Key
-          </button>
-        </div>
-
-        {/* MCP Keys List */}
-        <Card>
-          {mcpKeys.length > 0 ? (
-            <div className="space-y-3">
-              {mcpKeys.map((key) => (
-                <div
-                  key={key.id}
-                  className="flex items-center justify-between p-3 rounded-xl bg-bg-tertiary"
-                >
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm text-text-primary font-medium">
-                        {key.name}
-                      </span>
-                      <code className="text-xs text-text-tertiary font-mono bg-bg-quaternary px-2 py-0.5 rounded">
-                        {key.key_prefix}...
-                      </code>
-                    </div>
-                    <p className="text-xs text-text-quaternary mt-1">
-                      Created {new Date(key.created_at).toLocaleDateString()}
-                      {key.last_used_at &&
-                        ` • Last used ${new Date(key.last_used_at).toLocaleDateString()}`}
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => onDeleteMcpKey(key.id)}
-                    className="p-2 rounded-lg text-text-secondary hover:text-red-400 hover:bg-red-500/10 transition-colors"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-sm text-text-quaternary text-center py-6">
-              No MCP keys created yet
-            </p>
-          )}
-        </Card>
-
-        {/* Claude Desktop Config */}
-        <Card>
-          <div className="flex items-center gap-3 mb-4">
-            <div className="p-2 rounded-lg bg-bg-tertiary">
-              <Monitor className="w-5 h-5 text-text-tertiary" />
-            </div>
-            <div>
-              <p className="text-text-primary font-medium">Claude Desktop</p>
-              <p className="text-xs text-text-tertiary">
-                Add to claude_desktop_config.json
-              </p>
-            </div>
-          </div>
-          <div className="p-4 rounded-xl bg-[#0d0d0d] border border-white/[0.06] font-mono text-xs overflow-x-auto">
-            <pre className="text-text-secondary whitespace-pre">
-              {claudeDesktopConfig}
-            </pre>
-          </div>
-          <button
-            onClick={copyConfig}
-            className={cn(
-              'w-full mt-3 flex items-center justify-center gap-2 py-2.5 rounded-xl transition-colors',
-              copiedConfig
-                ? 'bg-green-500/20 text-green-400'
-                : 'bg-bg-tertiary text-text-secondary hover:bg-bg-quaternary',
-            )}
-          >
-            {copiedConfig ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-            {copiedConfig ? 'Copied!' : 'Copy Config'}
-          </button>
-        </Card>
-
-        {/* Generic MCP Server Info */}
-        <Card>
-          <div className="flex items-center gap-3 mb-4">
-            <div className="p-2 rounded-lg bg-bg-tertiary">
-              <Server className="w-5 h-5 text-text-tertiary" />
-            </div>
-            <div>
-              <p className="text-text-primary font-medium">MCP Server</p>
-              <p className="text-xs text-text-tertiary">
-                Connect ChatGPT, Codex, Claude, or any MCP client to your data
-              </p>
-            </div>
-          </div>
-
-          <div className="space-y-4">
-            <div>
-              <p className="text-xs font-semibold text-text-tertiary uppercase tracking-wider mb-2">
-                Server URL
-              </p>
-              <button
-                onClick={copyUrl}
-                className="w-full flex items-center justify-between p-3 rounded-xl bg-[#0d0d0d] border border-white/[0.06] hover:border-white/25 transition-colors"
-              >
-                <code className="text-sm text-text-primary font-mono truncate mr-2">
-                  {mcpServerUrl}
-                </code>
-                {copiedUrl ? (
-                  <Check className="w-4 h-4 text-green-400 flex-shrink-0" />
-                ) : (
-                  <Copy className="w-4 h-4 text-text-quaternary flex-shrink-0" />
-                )}
-              </button>
-            </div>
-
-            <div className="border-t border-white/[0.06] pt-4">
-              <p className="text-xs font-semibold text-text-tertiary uppercase tracking-wider mb-2">
-                API Key Auth
-              </p>
-              <div className="flex items-center gap-4 text-sm">
-                <span className="text-text-tertiary">Header</span>
-                <code className="text-text-quaternary font-mono text-xs">
-                  Authorization: Bearer &lt;key&gt;
-                </code>
-              </div>
-            </div>
-
-            <div className="border-t border-white/[0.06] pt-4">
-              <p className="text-xs font-semibold text-text-tertiary uppercase tracking-wider mb-2">
-                OAuth
-              </p>
-              <div className="space-y-2 text-sm">
-                <div className="flex items-center gap-4">
-                  <span className="text-text-tertiary w-24">Client ID</span>
-                  <code className="text-text-primary font-mono">omi</code>
-                </div>
-                <div className="flex items-center gap-4">
-                  <span className="text-text-tertiary w-24">Client Secret</span>
-                  <span className="text-text-quaternary italic text-xs">
-                    Use your MCP API key
-                  </span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </Card>
-
-        {/* Claude Connector — 4 copy fields mirroring Claude's "Add custom connector" form */}
-        <Card>
-          <div className="flex items-center gap-3 mb-4">
-            <div className="w-12 h-12 rounded-xl overflow-hidden bg-gradient-to-br from-orange-500/20 to-orange-600/10 border border-orange-500/20 flex items-center justify-center flex-shrink-0">
-              <span className="text-lg font-semibold text-orange-400">C</span>
-            </div>
-            <div>
-              <p className="text-text-primary font-medium">Claude</p>
-              <p className="text-xs text-text-tertiary">Live MCP or memory pack</p>
-            </div>
-          </div>
-
-          <p className="text-sm text-text-secondary mb-4">
-            Connect over MCP so Claude reads your memories live, or copy a memory pack.
-            Each field below maps to Claude&rsquo;s{' '}
-            <span className="text-text-tertiary">
-              Settings → Connectors → Add custom connector
-            </span>{' '}
-            form.
-          </p>
-
-          <div className="space-y-3">
-            {/* Field 1: Name → pastes into Claude's "Name" input */}
-            <div>
-              <p className="text-xs font-medium text-text-tertiary mb-1.5">
-                1. Name{' '}
-                <span className="text-text-secondary font-normal">
-                  → Claude &quot;Name&quot;
-                </span>
-              </p>
-              <button
-                onClick={() => {
-                  navigator.clipboard.writeText(claudeConnectorName);
-                  setCopiedClaudeName(true);
-                  setTimeout(() => setCopiedClaudeName(false), 2000);
-                }}
-                className="w-full flex items-center justify-between p-3 rounded-xl bg-[#0d0d0d] border border-white/[0.06] hover:border-white/25 transition-colors group"
-              >
-                <code className="text-sm text-text-primary font-mono">
-                  {claudeConnectorName}
-                </code>
-                {copiedClaudeName ? (
-                  <Check className="w-4 h-4 text-green-400" />
-                ) : (
-                  <Copy className="w-4 h-4 text-text-quaternary group-hover:text-text-secondary transition-colors" />
-                )}
-              </button>
-            </div>
-
-            {/* Field 2: Server URL → pastes into Claude's "Remote MCP server URL" input */}
-            <div>
-              <p className="text-xs font-medium text-text-tertiary mb-1.5">
-                2. Remote MCP server URL{' '}
-                <span className="text-text-secondary font-normal">
-                  → Claude &quot;Remote MCP server URL&quot;
-                </span>
-              </p>
-              <button
-                onClick={() => {
-                  navigator.clipboard.writeText(claudeConnectorUrl);
-                  setCopiedClaudeUrl(true);
-                  setTimeout(() => setCopiedClaudeUrl(false), 2000);
-                }}
-                className="w-full flex items-center justify-between p-3 rounded-xl bg-[#0d0d0d] border border-white/[0.06] hover:border-white/25 transition-colors group"
-              >
-                <code className="text-sm text-text-primary font-mono truncate mr-2">
-                  {claudeConnectorUrl}
-                </code>
-                {copiedClaudeUrl ? (
-                  <Check className="w-4 h-4 text-green-400 flex-shrink-0" />
-                ) : (
-                  <Copy className="w-4 h-4 text-text-quaternary group-hover:text-text-secondary transition-colors flex-shrink-0" />
-                )}
-              </button>
-            </div>
-
-            {/* Field 3: OAuth Client ID → pastes into Claude's Advanced "OAuth Client ID" */}
-            <div>
-              <p className="text-xs font-medium text-text-tertiary mb-1.5">
-                3. OAuth Client ID{' '}
-                <span className="text-text-secondary font-normal">
-                  → Claude Advanced &quot;OAuth Client ID&quot;
-                </span>
-              </p>
-              <button
-                onClick={() => {
-                  navigator.clipboard.writeText(claudeConnectorClientId);
-                  setCopiedClaudeClientId(true);
-                  setTimeout(() => setCopiedClaudeClientId(false), 2000);
-                }}
-                className="w-full flex items-center justify-between p-3 rounded-xl bg-[#0d0d0d] border border-white/[0.06] hover:border-white/25 transition-colors group"
-              >
-                <code className="text-sm text-text-primary font-mono">
-                  {claudeConnectorClientId}
-                </code>
-                {copiedClaudeClientId ? (
-                  <Check className="w-4 h-4 text-green-400" />
-                ) : (
-                  <Copy className="w-4 h-4 text-text-quaternary group-hover:text-text-secondary transition-colors" />
-                )}
-              </button>
-            </div>
-
-            {/* Field 4: OAuth Client Secret → pastes into Claude's Advanced "OAuth Client Secret" */}
-            <div>
-              <p className="text-xs font-medium text-text-tertiary mb-1.5">
-                4. OAuth Client Secret{' '}
-                <span className="text-text-secondary font-normal">
-                  → Claude Advanced &quot;OAuth Client Secret&quot;
-                </span>
-              </p>
-              {claudeConnectorSecret ? (
-                <button
-                  onClick={() => {
-                    navigator.clipboard.writeText(claudeConnectorSecret);
-                    setCopiedClaudeSecret(true);
-                    setTimeout(() => setCopiedClaudeSecret(false), 2000);
-                  }}
-                  className="w-full flex items-center justify-between p-3 rounded-xl bg-[#0d0d0d] border border-white/[0.06] hover:border-white/25 transition-colors group"
-                >
-                  <code className="text-sm text-text-primary font-mono truncate mr-2">
-                    {claudeConnectorSecret.slice(0, 8)}…{claudeConnectorSecret.slice(-4)}
-                  </code>
-                  {copiedClaudeSecret ? (
-                    <Check className="w-4 h-4 text-green-400 flex-shrink-0" />
-                  ) : (
-                    <Copy className="w-4 h-4 text-text-quaternary group-hover:text-text-secondary transition-colors flex-shrink-0" />
-                  )}
-                </button>
-              ) : (
-                <div className="w-full flex items-center justify-between p-3 rounded-xl bg-[#0d0d0d] border border-white/[0.06] opacity-60">
-                  <span className="text-sm text-text-quaternary italic">Leave blank</span>
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div className="mt-4 pt-4 border-t border-white/[0.06]">
-            <ol className="text-xs text-text-tertiary space-y-1.5 list-decimal list-inside">
-              <li>
-                Open{' '}
-                <span className="text-text-secondary">
-                  claude.ai → Settings → Connectors → Add custom connector
-                </span>
-              </li>
-              <li>
-                Click each <span className="text-text-secondary">Copy</span> button above
-                and paste into the matching field
-              </li>
-              <li>
-                Under <span className="text-text-secondary">Advanced settings</span>,
-                paste OAuth Client ID + Secret
-              </li>
-              <li>
-                Click <span className="text-text-secondary">Add</span>, then{' '}
-                <span className="text-text-secondary">Connect</span>
-              </li>
-            </ol>
-          </div>
-        </Card>
-      </div>
-
-      {/* Webhooks */}
-      <div id="webhooks" className="space-y-3 scroll-mt-4">
-        <div className="flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-text-tertiary uppercase tracking-wider">
-            Webhooks
-          </h3>
-          <a
-            href="https://docs.omi.me/doc/developer/apps/Introduction"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-xs text-text-secondary hover:text-text-secondary transition-colors"
-          >
-            Docs ↗
-          </a>
-        </div>
-        <Card>
-          <div className="space-y-1">
-            {webhookTypes.map((webhook, index) => {
-              const webhookData = webhooks[webhook.id as keyof DeveloperWebhooks];
-              const isEnabled = webhookData?.enabled || false;
-              const Icon = webhook.icon;
-
-              return (
-                <div key={webhook.id}>
-                  {index > 0 && <div className="border-t border-white/[0.06] my-4" />}
-                  <div className="py-2">
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-3">
-                        <div className="p-2 rounded-lg bg-bg-tertiary">
-                          <Icon className="w-4 h-4 text-text-tertiary" />
-                        </div>
-                        <div>
-                          <p className="text-text-primary font-medium text-sm">
-                            {webhook.label}
-                          </p>
-                          <p className="text-xs text-text-tertiary">
-                            {webhook.description}
-                          </p>
-                        </div>
-                      </div>
-                      <Toggle
-                        enabled={isEnabled}
-                        onChange={(enabled) =>
-                          onWebhookChange(
-                            webhook.id,
-                            enabled,
-                            webhookUrls[webhook.id],
-                            webhook.hasDelay ? audioBytesDelay : undefined,
-                          )
-                        }
-                      />
-                    </div>
-                    {isEnabled && (
-                      <div className="mt-3 space-y-2">
-                        <input
-                          type="url"
-                          value={webhookUrls[webhook.id] || ''}
-                          onChange={(e) =>
-                            setWebhookUrls({
-                              ...webhookUrls,
-                              [webhook.id]: e.target.value,
-                            })
-                          }
-                          onBlur={() =>
-                            onWebhookChange(
-                              webhook.id,
-                              true,
-                              webhookUrls[webhook.id],
-                              webhook.hasDelay ? audioBytesDelay : undefined,
-                            )
-                          }
-                          placeholder="https://your-server.com/webhook"
-                          className="w-full px-3 py-2 rounded-lg bg-bg-tertiary border border-white/[0.06] text-text-primary text-sm placeholder:text-text-quaternary focus:outline-none focus:border-white/25"
-                        />
-                        {webhook.hasDelay && (
-                          <input
-                            type="number"
-                            value={audioBytesDelay}
-                            onChange={(e) => setAudioBytesDelay(e.target.value)}
-                            onBlur={() =>
-                              onWebhookChange(
-                                webhook.id,
-                                true,
-                                webhookUrls[webhook.id],
-                                audioBytesDelay,
-                              )
-                            }
-                            placeholder="Interval (seconds)"
-                            className="w-full px-3 py-2 rounded-lg bg-bg-tertiary border border-white/[0.06] text-text-primary text-sm placeholder:text-text-quaternary focus:outline-none focus:border-white/25"
-                          />
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </Card>
-      </div>
-
-      {/* Data Management */}
-      <div id="data-management" className="space-y-3 scroll-mt-4">
-        <h3 className="text-sm font-semibold text-text-tertiary uppercase tracking-wider">
-          Data Management
-        </h3>
-        <Card>
-          <button
-            onClick={onExportData}
-            disabled={isExporting}
-            className={cn(
-              'w-full flex items-center gap-4 py-3 transition-colors',
-              isExporting
-                ? 'text-text-tertiary cursor-not-allowed'
-                : 'text-text-primary hover:text-text-secondary',
-            )}
-          >
-            <div className="p-2 rounded-lg bg-bg-tertiary">
-              {isExporting ? (
-                <Loader2 className="w-5 h-5 text-text-tertiary animate-spin" />
-              ) : (
-                <Download className="w-5 h-5 text-text-tertiary" />
-              )}
-            </div>
-            <div className="flex-1 text-left">
-              <p className="font-medium">
-                {isExporting ? 'Exporting...' : 'Export All Data'}
-              </p>
-              <p className="text-xs text-text-tertiary">
-                {isExporting
-                  ? 'This may take a moment'
-                  : 'Export conversations to a JSON file'}
-              </p>
-            </div>
-            {!isExporting && <ExternalLink className="w-4 h-4 text-text-quaternary" />}
-          </button>
-        </Card>
-        <Card className="border-red-500/20">
-          <button
-            onClick={() => setShowDeleteGraphDialog(true)}
-            className="w-full flex items-center gap-4 py-3 text-text-primary hover:text-red-400 transition-colors"
-          >
-            <div className="p-2 rounded-lg bg-red-500/10">
-              <Network className="w-5 h-5 text-red-400" />
-            </div>
-            <div className="flex-1 text-left">
-              <p className="font-medium">Delete Knowledge Graph</p>
-              <p className="text-xs text-text-tertiary">
-                Clear all nodes and connections
-              </p>
-            </div>
-            <Trash2 className="w-4 h-4 text-text-quaternary" />
-          </button>
-        </Card>
-      </div>
-
-      {/* Experimental Features */}
-      <div id="experimental" className="space-y-3 scroll-mt-4">
-        <div className="flex items-center gap-2">
-          <h3 className="text-sm font-semibold text-text-tertiary uppercase tracking-wider">
-            Experimental
-          </h3>
-          <FlaskConical className="w-4 h-4 text-text-secondary" />
-        </div>
-        <Card>
-          <div className="space-y-1">
-            {/* Transcription Diagnostics */}
-            <div className="flex items-center justify-between py-3 border-b border-white/[0.06]">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-bg-tertiary">
-                  <Activity className="w-4 h-4 text-text-tertiary" />
-                </div>
-                <div>
-                  <p className="text-text-primary font-medium text-sm">
-                    Transcription Diagnostics
-                  </p>
-                  <p className="text-xs text-text-tertiary">
-                    Detailed diagnostic messages
-                  </p>
-                </div>
-              </div>
-              <Toggle
-                enabled={experimentalFeatures.transcriptionDiagnostics}
-                onChange={(v) => updateExperimentalFeature('transcriptionDiagnostics', v)}
-              />
-            </div>
-
-            {/* Auto-create Speakers */}
-            <div className="flex items-center justify-between py-3 border-b border-white/[0.06]">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-bg-tertiary">
-                  <UserPlus className="w-4 h-4 text-text-tertiary" />
-                </div>
-                <div>
-                  <p className="text-text-primary font-medium text-sm">
-                    Auto-create Speakers
-                  </p>
-                  <p className="text-xs text-text-tertiary">
-                    Auto-create when name detected
-                  </p>
-                </div>
-              </div>
-              <Toggle
-                enabled={experimentalFeatures.autoCreateSpeakers}
-                onChange={(v) => updateExperimentalFeature('autoCreateSpeakers', v)}
-              />
-            </div>
-
-            {/* Follow-up Questions */}
-            <div className="flex items-center justify-between py-3 border-b border-white/[0.06]">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-bg-tertiary">
-                  <Lightbulb className="w-4 h-4 text-text-tertiary" />
-                </div>
-                <div>
-                  <p className="text-text-primary font-medium text-sm">
-                    Follow-up Questions
-                  </p>
-                  <p className="text-xs text-text-tertiary">
-                    Suggest questions after conversations
-                  </p>
-                </div>
-              </div>
-              <Toggle
-                enabled={experimentalFeatures.followUpQuestions}
-                onChange={(v) => updateExperimentalFeature('followUpQuestions', v)}
-              />
-            </div>
-
-            {/* Goal Tracker */}
-            <div className="flex items-center justify-between py-3 border-b border-white/[0.06]">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-bg-tertiary">
-                  <Target className="w-4 h-4 text-text-tertiary" />
-                </div>
-                <div>
-                  <p className="text-text-primary font-medium text-sm">Goal Tracker</p>
-                  <p className="text-xs text-text-tertiary">
-                    Track your personal goals on homepage
-                  </p>
-                </div>
-              </div>
-              <Toggle
-                enabled={experimentalFeatures.goalTracker}
-                onChange={(v) => updateExperimentalFeature('goalTracker', v)}
-              />
-            </div>
-          </div>
-        </Card>
-      </div>
-
-      {/* Links */}
-      <Card>
-        <a
-          href="https://docs.omi.me"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex items-center justify-between py-3 text-text-primary hover:text-text-secondary transition-colors"
-        >
-          <div className="flex items-center gap-3">
-            <BookOpen className="w-5 h-5 text-text-tertiary" />
-            <span>API Documentation</span>
-          </div>
-          <ExternalLink className="w-4 h-4" />
-        </a>
-      </Card>
-
-      {/* Dialogs */}
-      <CreateApiKeyDialog
-        isOpen={showApiKeyDialog}
-        onClose={() => setShowApiKeyDialog(false)}
-        onCreateKey={onCreateApiKey}
-      />
-      <CreateMcpKeyDialog
-        isOpen={showMcpKeyDialog}
-        onClose={() => setShowMcpKeyDialog(false)}
-        onCreateKey={onCreateMcpKey}
-      />
-
-      {/* Delete Knowledge Graph Dialog */}
-      {showDeleteGraphDialog && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
-          onClick={() => setShowDeleteGraphDialog(false)}
-        >
-          <div
-            className="bg-bg-secondary rounded-2xl w-full max-w-md mx-4 p-6"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center gap-3 mb-4">
-              <div className="p-3 rounded-xl bg-red-500/20">
-                <AlertTriangle className="w-6 h-6 text-red-400" />
-              </div>
-              <h3 className="text-lg font-semibold text-text-primary">
-                Delete Knowledge Graph?
-              </h3>
-            </div>
-            <p className="text-text-secondary text-sm mb-6">
-              This will delete all derived knowledge graph data (nodes and connections).
-              Your original memories will remain safe. The graph will be rebuilt over
-              time.
-            </p>
-            <div className="flex gap-3">
-              <button
-                onClick={() => setShowDeleteGraphDialog(false)}
-                className="flex-1 py-3 rounded-xl bg-bg-tertiary text-text-secondary hover:bg-bg-quaternary transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => {
-                  onDeleteKnowledgeGraph();
-                  setShowDeleteGraphDialog(false);
-                }}
-                className="flex-1 py-3 rounded-xl bg-red-500 text-white hover:bg-red-600 transition-colors"
-              >
-                Delete
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
@@ -2947,10 +1615,10 @@ function AccountSection({
         <Card>
           <Link
             href="/fair-use"
-            className="flex items-center justify-between py-2 text-text-primary hover:text-text-secondary transition-colors"
+            className="flex items-center justify-between py-2 text-text-primary transition-colors hover:text-text-secondary"
           >
             <div className="flex items-center gap-3">
-              <Scale className="w-5 h-5 text-text-tertiary" />
+              <Scale className="h-5 w-5 text-text-tertiary" />
               <div>
                 <span className="font-medium">Fair Use</span>
                 <p className="text-sm text-text-quaternary">
@@ -2958,22 +1626,22 @@ function AccountSection({
                 </p>
               </div>
             </div>
-            <ChevronRight className="w-4 h-4 text-text-quaternary" />
+            <ChevronRight className="h-4 w-4 text-text-quaternary" />
           </Link>
         </Card>
       </div>
 
       {/* Account Actions */}
-      <div id="actions" className="space-y-3 scroll-mt-4">
-        <h3 className="text-sm font-medium text-text-tertiary uppercase tracking-wider">
+      <div id="actions" className="scroll-mt-4 space-y-3">
+        <h3 className="text-sm font-medium uppercase tracking-wider text-text-tertiary">
           Account Actions
         </h3>
         <Card>
           <button
             onClick={onSignOut}
-            className="w-full flex items-center gap-3 py-3 text-text-primary hover:text-text-secondary transition-colors"
+            className="flex w-full items-center gap-3 py-3 text-text-primary transition-colors hover:text-text-secondary"
           >
-            <LogOut className="w-5 h-5" />
+            <LogOut className="h-5 w-5" />
             <span className="font-medium">Sign Out</span>
           </button>
         </Card>
@@ -2981,11 +1649,11 @@ function AccountSection({
         <Card className="border-red-500/20">
           <button
             onClick={onDeleteAccount}
-            className="w-full flex items-center gap-3 py-3 text-red-400 hover:text-red-300 transition-colors"
+            className="flex w-full items-center gap-3 py-3 text-red-400 transition-colors hover:text-red-300"
           >
-            <Trash2 className="w-5 h-5" />
+            <Trash2 className="h-5 w-5" />
             <div className="text-left">
-              <span className="font-medium block">Delete Account</span>
+              <span className="block font-medium">Delete Account</span>
               <span className="text-sm text-red-400/70">
                 Permanently delete your account and all data
               </span>
@@ -2995,8 +1663,8 @@ function AccountSection({
       </div>
 
       {/* Support */}
-      <div id="support" className="space-y-3 scroll-mt-4">
-        <h3 className="text-sm font-medium text-text-tertiary uppercase tracking-wider">
+      <div id="support" className="scroll-mt-4 space-y-3">
+        <h3 className="text-sm font-medium uppercase tracking-wider text-text-tertiary">
           Support
         </h3>
         <Card>
@@ -3004,19 +1672,19 @@ function AccountSection({
             href="https://feedback.omi.me"
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center justify-between py-3 border-b border-white/[0.06] text-text-primary hover:text-text-secondary transition-colors"
+            className="flex items-center justify-between border-b border-white/[0.06] py-3 text-text-primary transition-colors hover:text-text-secondary"
           >
             <span>Feedback & Bug Reports</span>
-            <ExternalLink className="w-4 h-4" />
+            <ExternalLink className="h-4 w-4" />
           </a>
           <a
             href="https://help.omi.me"
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center justify-between py-3 text-text-primary hover:text-text-secondary transition-colors"
+            className="flex items-center justify-between py-3 text-text-primary transition-colors hover:text-text-secondary"
           >
             <span>Help Center</span>
-            <ExternalLink className="w-4 h-4" />
+            <ExternalLink className="h-4 w-4" />
           </a>
         </Card>
       </div>
@@ -3034,13 +1702,21 @@ export function SettingsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user, signOut } = useAuth();
-  const { showToast } = useToast();
-  const [isExporting, setIsExporting] = useState(false);
 
   // Get section from URL, default to 'account'
   const sectionParam = searchParams.get('section');
   const activeSection: SettingsSection =
     sectionParam && isSettingsSectionId(sectionParam) ? sectionParam : 'account';
+
+  // Developer moved to its own destination; old `?section=developer` links
+  // (docs, desktop, mobile, bookmarks) land there with their anchor intact.
+  const developerRedirect = developerRedirectTarget(
+    sectionParam,
+    typeof window === 'undefined' ? '' : window.location.hash,
+  );
+  useEffect(() => {
+    if (developerRedirect) router.replace(developerRedirect);
+  }, [developerRedirect, router]);
 
   // Track which sections have been loaded (using ref to avoid dependency issues)
   const loadedSectionsRef = useRef<Set<SettingsSection>>(new Set());
@@ -3048,24 +1724,28 @@ export function SettingsPage() {
 
   // Settings state - each section's data
   const [language, setLanguage] = useState('en');
-  const [vocabulary, setVocabulary] = useState<string[]>([]);
-  const [dailySummary, setDailySummary] = useState<DailySummarySettings>({
-    enabled: true,
-    hour: 22,
-  });
+  // null until the list is known: saving replaces the whole vocabulary, so a
+  // failed load must not be sent back as an empty one.
+  const [vocabulary, setVocabulary] = useState<string[] | null>(null);
+  // null until the settings are known: the save sends the whole object, so a
+  // default must not be written over the user's delivery time.
+  const [dailySummary, setDailySummary] = useState<DailySummarySettings | null>(null);
   const [recordingPermission, setRecordingPermissionState] = useState(false);
   const [trainingDataOptIn, setTrainingDataOptInState] = useState(false);
   const [allUsage, setAllUsage] = useState<AllUsageData | null>(null);
   const [subscription, setSubscription] = useState<UserSubscription | null>(null);
   const [cachedPlans, setCachedPlans] = useState<PricingOption[] | null>(null);
-  const [apiKeys, setApiKeys] = useState<DeveloperApiKey[]>([]);
-  const [mcpKeys, setMcpKeys] = useState<McpApiKey[]>([]);
-  const [webhooks, setWebhooks] = useState<DeveloperWebhooks>({});
 
   // Dialog states
   const [showSignOutDialog, setShowSignOutDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      clearRetiredExperimentalFeaturesStorage(() => window.localStorage);
+    }
+  }, []);
 
   // Load section data on demand
   useEffect(() => {
@@ -3089,8 +1769,8 @@ export function SettingsPage() {
             // groups together, so it loads both sets in one pass.
             const [lang, vocab, summary, usageData, sub, plansData] = await Promise.all([
               getUserLanguage().catch(() => 'en'),
-              getCustomVocabulary().catch(() => []),
-              getDailySummarySettings().catch(() => ({ enabled: true, hour: 22 })),
+              getCustomVocabulary().catch(() => null),
+              getDailySummarySettings().catch(() => null),
               getAllUsageData().catch(() => null),
               getUserSubscription().catch(() => null),
               getAvailablePlans().catch(() => null),
@@ -3103,53 +1783,6 @@ export function SettingsPage() {
             if (plansData?.plans) {
               setCachedPlans(plansData.plans);
             }
-            break;
-          case 'developer':
-            // Fetch API keys, MCP keys, webhook status, and individual webhook URLs in parallel
-            // Note: Status API returns boolean fields, URL API returns {url: string}
-            const [
-              keys,
-              mKeys,
-              webhookStatus,
-              memoryUrl,
-              transcriptUrl,
-              audioBytesUrl,
-              daySummaryUrl,
-            ] = await Promise.all([
-              getDeveloperApiKeys().catch(() => []),
-              getMcpApiKeys().catch(() => []),
-              getDeveloperWebhooksStatus().catch(() => ({})),
-              getDeveloperWebhook('memory_created').catch(() => ({ url: '' })),
-              getDeveloperWebhook('realtime_transcript').catch(() => ({ url: '' })),
-              getDeveloperWebhook('audio_bytes').catch(() => ({ url: '' })),
-              getDeveloperWebhook('day_summary').catch(() => ({ url: '' })),
-            ]);
-            setApiKeys(keys);
-            // Full MCP key is only returned at creation time; keep secrets in memory for this session only.
-            if (typeof window !== 'undefined') {
-              localStorage.removeItem('omi_mcp_api_key_secrets');
-            }
-            setMcpKeys(mKeys);
-            // Combine status (booleans) with URLs
-            const statusMap = webhookStatus as Record<string, boolean>;
-            setWebhooks({
-              memory_created: {
-                url: memoryUrl?.url || '',
-                enabled: statusMap['memory_created'] ?? false,
-              },
-              transcript_received: {
-                url: transcriptUrl?.url || '',
-                enabled: statusMap['realtime_transcript'] ?? false,
-              },
-              audio_bytes: {
-                url: audioBytesUrl?.url || '',
-                enabled: statusMap['audio_bytes'] ?? false,
-              },
-              day_summary: {
-                url: daySummaryUrl?.url || '',
-                enabled: statusMap['day_summary'] ?? false,
-              },
-            });
             break;
           // sections not listed here don't need API calls
         }
@@ -3176,6 +1809,7 @@ export function SettingsPage() {
   };
 
   const handleAddWord = async (word: string) => {
+    if (vocabulary === null) return;
     const newVocabulary = [...vocabulary, word];
     setVocabulary(newVocabulary);
     try {
@@ -3186,6 +1820,7 @@ export function SettingsPage() {
   };
 
   const handleRemoveWord = async (word: string) => {
+    if (vocabulary === null) return;
     const newVocabulary = vocabulary.filter((w) => w !== word);
     setVocabulary(newVocabulary);
     try {
@@ -3196,6 +1831,7 @@ export function SettingsPage() {
   };
 
   const handleDailySummaryToggle = async (enabled: boolean) => {
+    if (dailySummary === null) return;
     const oldSettings = dailySummary;
     setDailySummary({ ...dailySummary, enabled });
     try {
@@ -3206,6 +1842,7 @@ export function SettingsPage() {
   };
 
   const handleDailySummaryHourChange = async (hour: number) => {
+    if (dailySummary === null) return;
     const oldSettings = dailySummary;
     setDailySummary({ ...dailySummary, hour });
     try {
@@ -3226,6 +1863,7 @@ export function SettingsPage() {
   };
 
   const handleTrainingDataChange = async (optIn: boolean) => {
+    if (!optIn) return;
     const oldValue = trainingDataOptIn;
     setTrainingDataOptInState(optIn);
     try {
@@ -3254,113 +1892,6 @@ export function SettingsPage() {
     }
   };
 
-  const handleCreateApiKey = async (
-    name: string,
-    scopes: string[],
-  ): Promise<DeveloperApiKey | null> => {
-    try {
-      const newKey = await createDeveloperApiKey(name, scopes);
-      setApiKeys([...apiKeys, newKey]);
-      return newKey;
-    } catch (error) {
-      console.error('Failed to create API key:', error);
-      return null;
-    }
-  };
-
-  const handleDeleteApiKey = async (keyId: string) => {
-    try {
-      await deleteDeveloperApiKey(keyId);
-      setApiKeys(apiKeys.filter((k) => k.id !== keyId));
-    } catch (error) {
-      console.error('Failed to delete API key:', error);
-    }
-  };
-
-  const handleCreateMcpKey = async (name: string): Promise<McpApiKey | null> => {
-    try {
-      const newKey = await createMcpApiKey(name);
-      setMcpKeys([...mcpKeys, newKey]);
-      return newKey;
-    } catch (error) {
-      console.error('Failed to create MCP key:', error);
-      return null;
-    }
-  };
-
-  const handleDeleteMcpKey = async (keyId: string) => {
-    try {
-      await deleteMcpApiKey(keyId);
-      setMcpKeys(mcpKeys.filter((k) => k.id !== keyId));
-    } catch (error) {
-      console.error('Failed to delete MCP key:', error);
-    }
-  };
-
-  const handleExportData = async () => {
-    if (isExporting) return;
-    setIsExporting(true);
-    try {
-      const blob = await exportAllData();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'omi-export.json';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      showToast('Data exported successfully', 'success');
-    } catch (error) {
-      console.error('Failed to export data:', error);
-      showToast('Failed to export data. Please try again.', 'error');
-    } finally {
-      setIsExporting(false);
-    }
-  };
-
-  const handleDeleteKnowledgeGraph = async () => {
-    try {
-      await deleteKnowledgeGraph();
-    } catch (error) {
-      console.error('Failed to delete knowledge graph:', error);
-    }
-  };
-
-  const handleWebhookChange = async (
-    type: string,
-    enabled: boolean,
-    url?: string,
-    delay?: string,
-  ) => {
-    // Convert internal type names to API type names
-    // UI uses 'transcript_received' but API expects 'realtime_transcript'
-    const apiType = type === 'transcript_received' ? 'realtime_transcript' : type;
-    const webhookType = apiType as
-      'memory_created' | 'realtime_transcript' | 'audio_bytes' | 'day_summary';
-    try {
-      // For audio_bytes, combine URL and delay if both are provided
-      const webhookUrl = type === 'audio_bytes' && url && delay ? `${url},${delay}` : url;
-      if (webhookUrl) {
-        await setDeveloperWebhook(webhookType, webhookUrl);
-      }
-      if (enabled) {
-        await enableDeveloperWebhook(webhookType);
-      } else {
-        await disableDeveloperWebhook(webhookType);
-      }
-      setWebhooks({
-        ...webhooks,
-        [type]: {
-          enabled,
-          url: url || webhooks[type as keyof DeveloperWebhooks]?.url || '',
-        },
-      });
-    } catch (error) {
-      console.error('Failed to update webhook:', error);
-    }
-  };
-
   const handleSignOut = async () => {
     await signOut();
     router.push(SIGNED_OUT_DESTINATION);
@@ -3381,8 +1912,8 @@ export function SettingsPage() {
     // Show loading spinner when section is loading
     if (sectionLoading === activeSection) {
       return (
-        <div className="h-64 flex items-center justify-center">
-          <Loader2 className="w-8 h-8 text-text-primary animate-spin" />
+        <div className="flex h-64 items-center justify-center">
+          <Loader2 className="h-8 w-8 animate-spin text-text-primary" />
         </div>
       );
     }
@@ -3422,22 +1953,6 @@ export function SettingsPage() {
             />
           </div>
         );
-      case 'developer':
-        return (
-          <DeveloperSection
-            apiKeys={apiKeys}
-            mcpKeys={mcpKeys}
-            webhooks={webhooks}
-            onCreateApiKey={handleCreateApiKey}
-            onDeleteApiKey={handleDeleteApiKey}
-            onCreateMcpKey={handleCreateMcpKey}
-            onDeleteMcpKey={handleDeleteMcpKey}
-            onWebhookChange={handleWebhookChange}
-            onExportData={handleExportData}
-            isExporting={isExporting}
-            onDeleteKnowledgeGraph={handleDeleteKnowledgeGraph}
-          />
-        );
       default:
         return null;
     }
@@ -3459,14 +1974,6 @@ export function SettingsPage() {
           { id: 'actions', label: 'Actions' },
           { id: 'support', label: 'Support' },
         ];
-      case 'developer':
-        return [
-          { id: 'api-keys', label: 'API Keys' },
-          { id: 'mcp', label: 'MCP' },
-          { id: 'webhooks', label: 'Webhooks' },
-          { id: 'data-management', label: 'Data' },
-          { id: 'experimental', label: 'Experimental' },
-        ];
       default:
         return [];
     }
@@ -3474,51 +1981,25 @@ export function SettingsPage() {
 
   const quickNavSections = getQuickNavSections();
 
-  return (
-    <div className="h-full flex flex-col">
-      {/* Export in-progress dialog */}
-      {isExporting && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/60" />
-          <div className="relative bg-bg-secondary rounded-2xl p-6 max-w-sm w-full mx-4 shadow-2xl border border-white/[0.06]">
-            <div className="flex flex-col items-center text-center gap-4">
-              <div className="p-3 rounded-full bg-white/[0.08]">
-                <Loader2 className="w-8 h-8 text-text-secondary animate-spin" />
-              </div>
-              <div>
-                <h3 className="text-lg font-semibold text-text-primary">
-                  Exporting Your Data
-                </h3>
-                <p className="text-text-secondary mt-2 text-sm">
-                  This may take a moment depending on the amount of data in your account.
-                </p>
-              </div>
-              <div className="flex items-center gap-2 bg-yellow-500/10 rounded-xl px-4 py-2">
-                <AlertTriangle className="w-4 h-4 text-yellow-400 flex-shrink-0" />
-                <span className="text-xs text-yellow-400">
-                  Please don&apos;t close this tab
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+  if (developerRedirect) return null;
 
+  return (
+    <div className="flex h-full flex-col">
       {/* Page Header */}
       <PageHeader title={sectionInfo.title} icon={Settings} showBackButton />
 
       {/* Main Content with optional Quick Nav */}
       <main className="flex-1 overflow-y-auto pb-12">
-        <div className="max-w-4xl mx-auto px-6 lg:px-8 pt-6">
+        <div className="mx-auto max-w-4xl px-6 pt-6 lg:px-8">
           <div className="flex gap-6">
             {/* Main content */}
-            <div className="flex-1 min-w-0">{renderSection()}</div>
+            <div className="min-w-0 flex-1">{renderSection()}</div>
 
             {/* Quick Nav Sidebar - only show on desktop when there are sections */}
             {quickNavSections.length > 0 && (
-              <div className="hidden lg:block w-32 flex-shrink-0">
+              <div className="hidden w-32 flex-shrink-0 lg:block">
                 <div className="sticky top-4">
-                  <p className="text-xs font-medium text-text-quaternary uppercase tracking-wider mb-3">
+                  <p className="mb-3 text-xs font-medium uppercase tracking-wider text-text-quaternary">
                     On this page
                   </p>
                   <nav className="space-y-1">
@@ -3526,7 +2007,7 @@ export function SettingsPage() {
                       <a
                         key={section.id}
                         href={`#${section.id}`}
-                        className="block text-sm text-text-tertiary hover:text-text-primary transition-colors py-1"
+                        className="block py-1 text-sm text-text-tertiary transition-colors hover:text-text-primary"
                       >
                         {section.label}
                       </a>

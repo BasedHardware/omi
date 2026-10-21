@@ -412,7 +412,7 @@ def prerequisite_report(cfg: config.HarnessConfig) -> tuple[list[str], list[str]
     if not (cfg.repo_root / "backend" / "main.py").is_file():
         missing.append("backend/main.py")
     if not _python_importable("uvicorn"):
-        missing.append("Python package uvicorn (install backend requirements before starting backend)")
+        missing.append("Python package uvicorn (run: make lane-backend)")
     provider_report = providers.provider_preflight(cfg.repo_root, env=config.preflight_env(cfg))
     missing.extend(provider_report.missing)
     warnings.extend(provider_report.warnings)

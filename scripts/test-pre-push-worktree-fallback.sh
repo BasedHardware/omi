@@ -82,10 +82,12 @@ for script in pre-push-singleflight pr-preflight; do
   esac
 done
 
-# scripts/pre-push resolves the root, cd's into it, then fails fast on a missing
-# base ref (this bare repo has no origin/main). The point is that it gets past
-# resolution: the abort must be the base-ref failure, never the work-tree fatal.
-out="$(cd "$ROOT" && GIT_DIR="$BARE_ENV" bash "$ROOT/scripts/pre-push" origin file://"$BARE" </dev/null 2>&1)" && true
+# scripts/pre-push resolves the root, cd's into it, and drops the inherited
+# GIT_DIR, so later lookups use the work tree; a base branch no repository has
+# makes it fail fast there. The point is that it gets past resolution: the abort
+# must be the base-ref failure, never the work-tree fatal.
+out="$(cd "$ROOT" && GIT_DIR="$BARE_ENV" PRE_PUSH_BASE_BRANCH=omi-missing-base-for-fallback-test \
+  bash "$ROOT/scripts/pre-push" origin file://"$BARE" </dev/null 2>&1)" && true
 case "$out" in
   *"must be run in a work tree"*) fail "scripts/pre-push still aborts with the work-tree failure: $out" ;;
   *"cannot find"*) : ;;

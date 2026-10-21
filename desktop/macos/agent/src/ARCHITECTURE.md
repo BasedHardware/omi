@@ -120,3 +120,13 @@ When a change crosses an ownership boundary, add a behavioral contract test at
 that boundary. Protocol changes require Swift and Node decode tests. Durable
 changes require restart/idempotency tests. Provider or mode fallback paths must
 use the repository's bounded fallback telemetry contract.
+
+## Request-scoped managed model credentials
+
+`runtime/model-credentials.ts` routes one capability-checked credential request
+through Swift and discards the reply after forwarding. `runtime/model-fetch.ts`
+wraps only the configured Omi completions endpoint, acquires fresh headers for
+all HTTP attempts, retries one pre-stream managed 401, and emits a typed status
+before pi serializes its error. The extension imports this helper from the
+already-packaged agent dist tree. Neither the adapter config nor the environment
+carries a managed token. See `../../docs/agent-model-credentials.md`.

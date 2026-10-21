@@ -163,35 +163,31 @@ final class SystemCalendarMeetingContextServiceTests: XCTestCase {
     XCTAssertEqual(counts.reads, 2)
   }
 
-  func testTriggerObservationUsesExistingGrantWithoutPromptOrUploadAndCapsAt32() async {
-    let events = (0..<40).map { index in
-      snapshot(
-        id: "event-\(index)", title: "Planning \(index)",
-        start: referenceDate.addingTimeInterval(-60),
-        end: referenceDate.addingTimeInterval(60))
-    }
-    let provider = SystemCalendarProviderStub(state: .allowed, snapshots: events)
+  func testMeetingBriefReadNeverPromptsOrUploads() async {
+    let event = snapshot(
+      id: "upcoming", title: "Design sync",
+      start: referenceDate.addingTimeInterval(900), end: referenceDate.addingTimeInterval(1800))
+    let provider = SystemCalendarProviderStub(state: .allowed, snapshots: [event])
     let uploader = SystemCalendarUploaderStub()
     let service = SystemCalendarMeetingContextService(provider: provider, uploader: uploader)
 
-    let observed = await service.authorizedTriggerEvents(around: referenceDate)
+    let events = await service.upcomingAuthorizedEvents(now: referenceDate, horizon: 3600)
 
-    XCTAssertEqual(observed.count, 32)
-    XCTAssertTrue(observed.allSatisfy { $0.eventType == "meeting" })
+    XCTAssertEqual(events.map(\.calendarEventID), ["upcoming"])
     let counts = await provider.counts()
-    let uploaded = await uploader.uploadedPayloads()
     XCTAssertEqual(counts.requests, 0)
     XCTAssertEqual(counts.reads, 1)
+    let uploaded = await uploader.uploadedPayloads()
     XCTAssertTrue(uploaded.isEmpty)
   }
 
-  func testTriggerObservationWithoutGrantIsNoMatchInputAndNeverPrompts() async {
+  func testMeetingBriefReadWithoutGrantIsSilent() async {
     let provider = SystemCalendarProviderStub(state: .notDetermined)
-    let service = SystemCalendarMeetingContextService(
-      provider: provider, uploader: SystemCalendarUploaderStub())
+    let service = SystemCalendarMeetingContextService(provider: provider, uploader: SystemCalendarUploaderStub())
 
-    let observed = await service.authorizedTriggerEvents(around: referenceDate)
-    XCTAssertTrue(observed.isEmpty)
+    let events = await service.upcomingAuthorizedEvents(now: referenceDate, horizon: 3600)
+
+    XCTAssertTrue(events.isEmpty)
     let counts = await provider.counts()
     XCTAssertEqual(counts.requests, 0)
     XCTAssertEqual(counts.reads, 0)

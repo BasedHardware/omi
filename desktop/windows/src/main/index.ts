@@ -45,6 +45,7 @@ import {
   registerBarIpc,
   destroyBar,
   handleSummonPress,
+  summonFromTray,
   setSummonGestureAccelerator,
   setBarEnabled,
   setPeekWatchSuspended,
@@ -74,6 +75,7 @@ import { registerAssistantSettingsHandlers } from './ipc/assistantSettings'
 import { registerBillingIpc } from './billing/checkoutWindow'
 import { registerAppsIpc } from './apps/checkAppSetup'
 import { helperProcess } from './ocr/helperProcess'
+import { registerProactivityConsumer } from './proactivity/register'
 import { registerInsightHandlers } from './ipc/insight'
 import {
   createInsightToastWindow,
@@ -121,14 +123,10 @@ import { maybeGenerateOnStartup as maybeGenerateAiProfileOnStartup } from './ass
 import { setTokenRefresher } from './assistants/core/session'
 import { makeRendererTokenRefresher } from './assistants/core/tokenPull'
 import { registerFocusAssistant } from './assistants/focus/register'
-import { registerInsightAssistant } from './assistants/insight/register'
 import { registerMemoryAssistant } from './assistants/memory/register'
 import { registerTaskAssistant, bringUpTaskEmbeddingIndex } from './assistants/tasks/register'
 import { startTaskPromotionService } from './assistants/tasks/promotionService'
 import { registerGoalGeneration } from './assistants/goals/register'
-import { registerJitAssistant } from './jit/register'
-import { registerJitFeedbackHandlers } from './jit/jitFeedbackIpc'
-import { clearRendererConversationBinding } from './jit/rendererConversationBinding'
 import { startRendererServer, rendererBaseUrl } from './rendererServer'
 import { startRewindCapture } from './rewind/captureService'
 import {
@@ -446,7 +444,6 @@ import {
   getLocalConversation,
   listLocalConversations,
   deleteLocalConversation,
-  deleteJitConversationKeyframe,
   updateLocalConversationTitle,
   updateLocalConversationSync,
   claimConversationForPosting,
@@ -799,9 +796,6 @@ app.whenReady().then(async () => {
   ipcMain.handle('db:deleteLocalConversation', async (_e, id: string) =>
     deleteLocalConversation(id)
   )
-  ipcMain.handle('jit:conversationDeleted', async (_e, id: string) =>
-    deleteJitConversationKeyframe(id)
-  )
   ipcMain.handle('db:updateLocalConversationTitle', async (_e, id: string, title: string) =>
     updateLocalConversationTitle(id, title)
   )
@@ -895,20 +889,10 @@ app.whenReady().then(async () => {
   registerIntegrationsHandlers()
   registerUsageHandlers()
   registerMemoryCleanupHandlers()
-  registerRewindHandlers({
-    focusFrame: (frameId) => {
-      withMainWindow((win) => {
-        if (win.isMinimized()) win.restore()
-        win.show()
-        win.focus()
-        win.webContents.send('rewind:focus-frame', frameId)
-      })
-    }
-  })
+  registerRewindHandlers()
   registerScreenHandlers()
   registerChatPrivacyHandlers()
   registerAssistantSettingsHandlers()
-  registerJitFeedbackHandlers()
   registerBillingIpc()
   registerAppsIpc()
   // Cross-window conversations refresh: any renderer that writes a local
@@ -921,6 +905,7 @@ app.whenReady().then(async () => {
     }
   })
   registerInsightHandlers()
+  registerProactivityConsumer(() => mainWindow)
   registerMeetingHandlers()
   // What's-new toast (Phase 8): the renderer pulls the pending payload on mount
   // (push-during-load race), and opens the release notes in the system browser.
@@ -1006,7 +991,6 @@ app.whenReady().then(async () => {
   onSessionReset(() => {
     resetPendingDeletes()
     resetBackendDegraded()
-    clearRendererConversationBinding()
   })
   // FIX (ii): keep the in-memory task-embedding index consistent — every hard-delete
   // path in the sync engine (deleteTask + the reconcile sweep) hands the storage-
@@ -1072,6 +1056,13 @@ app.whenReady().then(async () => {
       surfaceMainWindow()
       withMainWindow((win) => win.webContents.send('tray:open-settings'))
     },
+    // Manual bar fallback: the bar is otherwise summon-only via the global
+    // hotkey (see bar/window.ts), which can't register on native Wayland
+    // (no XWayland grab semantics) — see AGENTS.md's Linux dev environment
+    // section. Uses summonFromTray() rather than handleSummonPress() so the
+    // click does not enter the gesture machine or emit PTT phases — a tray
+    // click has no physical key to sample.
+    openBar: () => summonFromTray(),
     // Manual update check (mirrors Settings → About and Mac's "Check for Updates").
     // checkForUpdatesNow never throws; log the outcome for a manual tester.
     checkForUpdates: () => {
@@ -1242,10 +1233,6 @@ app.whenReady().then(async () => {
         // that turns the proactive stack on. The glow window above is pre-created; the
         // renderer relays a session that Focus (and the AI profile) read.
         { name: 'focusAssistant', run: () => registerFocusAssistant() },
-        // Track 3 (Insight assistant): Mac's two-phase tool-calling "Advice" pipeline.
-        // A coordinator peer to Focus (same shared loop); the sole Insight engine now
-        // that the renderer bootstrap no longer runs one.
-        { name: 'insightAssistant', run: () => registerInsightAssistant() },
         // Track 3 (Memory assistant): Mac's interval-based single-shot memory
         // extractor. A coordinator peer to Focus/Insight (same shared loop); no glow,
         // no notification — it records durable facts silently.
@@ -1268,7 +1255,6 @@ app.whenReady().then(async () => {
         // Suggest IPC and starts the periodic scheduler; both no-op until a session is
         // relayed and the goalAutoGenerationEnabled toggle is on (default OFF).
         { name: 'goalGeneration', run: () => registerGoalGeneration() },
-        { name: 'jitAssistant', run: () => registerJitAssistant() }
       ],
       undefined,
       undefined,

@@ -11,6 +11,9 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# Fixture tests symlink this file. Helpers must come from the real script
+# directory; SCRIPT_DIR stays the invocation path so stub launchers win.
+SOURCE_DIR="$(python3 -c 'import os,sys; print(os.path.dirname(os.path.realpath(sys.argv[1])))' "$0")"
 DESKTOP_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 REPO_ROOT="$(cd "$DESKTOP_DIR/../.." && pwd)"
 HARNESS_ROOT="$DESKTOP_DIR/.harness/desktop-core"
@@ -40,7 +43,7 @@ Options:
   --self-check                Static checks (flow lint + gauntlet self-check; backend contracts locally)
   --readiness                 Pre-tag readiness: self-check + offline dev-stack probe; if a
                               launched named bundle is already listening on --port, also verify
-                              automation /health identity + agent protocol readiness
+                              automation /health bundle/source identity + agent protocol readiness
                               (no app launch required; offline-only unit checks stay possible)
   --skip-backend-contracts    With --self-check, skip backend preflight + pytest contracts (CI desktop gate)
   --help                      Show this help
@@ -151,13 +154,21 @@ run_self_check() {
   # Hermetic /health identity+protocol contract. Skip under OMI_TEST_SCENARIO so
   # readiness teardown fixtures that stub python3 remain offline-only.
   if [[ -z "${OMI_TEST_SCENARIO:-}" ]]; then
+    local fixture_source_identity
+    fixture_source_identity='{"revision":"0123456789abcdef0123456789abcdef01234567","schemaVersion":1,"workingTreeState":"clean"}'
     evaluate_bridge_health_payload "com.omi.omi-core-e2e" \
-      '{"ok":true,"bundleIdentifier":"com.omi.omi-core-e2e","agentRuntimeRunning":true,"agentRuntimeExpectedProtocolVersion":3,"agentRuntimeProtocolVersion":3,"agentRuntimeVersion":"test"}' \
-      --require-protocol >/dev/null
+      '{"ok":true,"bundleIdentifier":"com.omi.omi-core-e2e","sourceIdentity":{"revision":"0123456789abcdef0123456789abcdef01234567","schemaVersion":1,"workingTreeState":"clean"},"agentRuntimeRunning":true,"agentRuntimeExpectedProtocolVersion":3,"agentRuntimeProtocolVersion":3,"agentRuntimeVersion":"test"}' \
+      --require-protocol "$fixture_source_identity" >/dev/null
     if evaluate_bridge_health_payload "com.omi.omi-core-e2e" \
-      '{"ok":true,"bundleIdentifier":"com.omi.omi-core-e2e","agentRuntimeRunning":true,"agentRuntimeExpectedProtocolVersion":3,"agentRuntimeProtocolVersion":2}' \
-      --require-protocol >/dev/null 2>&1; then
+      '{"ok":true,"bundleIdentifier":"com.omi.omi-core-e2e","sourceIdentity":{"revision":"0123456789abcdef0123456789abcdef01234567","schemaVersion":1,"workingTreeState":"clean"},"agentRuntimeRunning":true,"agentRuntimeExpectedProtocolVersion":3,"agentRuntimeProtocolVersion":2}' \
+      --require-protocol "$fixture_source_identity" >/dev/null 2>&1; then
       echo "desktop-core-harness: protocol mismatch fixture should fail" >&2
+      exit 1
+    fi
+    if evaluate_bridge_health_payload "com.omi.omi-core-e2e" \
+      '{"ok":true,"bundleIdentifier":"com.omi.omi-core-e2e","sourceIdentity":{"revision":"ffffffffffffffffffffffffffffffffffffffff","schemaVersion":1,"workingTreeState":"clean"},"agentRuntimeRunning":true,"agentRuntimeExpectedProtocolVersion":3,"agentRuntimeProtocolVersion":3}' \
+      --require-protocol "$fixture_source_identity" >/dev/null 2>&1; then
+      echo "desktop-core-harness: source identity mismatch fixture should fail" >&2
       exit 1
     fi
   fi
@@ -222,57 +233,49 @@ maybe_teardown_dev_stack() {
 }
 
 bridge_health() {
-  local expected_bundle_id
+  local expected_bundle_id expected_source_identity
   # shellcheck source=app-config.sh
   source "$SCRIPT_DIR/app-config.sh"
   derive_omi_app_config "$BUNDLE"
   expected_bundle_id="$BUNDLE_ID"
-  evaluate_bridge_health_http "$PORT" "$expected_bundle_id" --require-protocol
+  expected_source_identity="$(checkout_source_identity)"
+  evaluate_bridge_health_http \
+    "$PORT" "$expected_bundle_id" --require-protocol "$expected_source_identity"
 }
 
-# Evaluate an unauthenticated /health payload for bundle identity, and optionally
-# negotiated agent-runtime protocol readiness. Shared by readiness + tier paths;
-# hermetic callers can feed fixture JSON through evaluate_bridge_health_payload.
+checkout_source_identity() {
+  # shellcheck source=desktop-build-identity.sh
+  source "$SCRIPT_DIR/desktop-build-identity.sh"
+  omi_desktop_build_identity "$REPO_ROOT"
+}
+
+# Evaluate an unauthenticated /health payload for bundle identity, source
+# identity, and optionally negotiated agent-runtime protocol readiness. Shared
+# by readiness + tier paths; hermetic callers can feed fixture JSON through
+# evaluate_bridge_health_payload.
 evaluate_bridge_health_payload() {
   local expected_bundle_id="$1"
   local health_json="$2"
   local require_protocol="${3:-}"
-  python3 - "$expected_bundle_id" "$health_json" "$require_protocol" <<'PY'
-import json
-import sys
-
-expected, raw, require_protocol = sys.argv[1:4]
-payload = json.loads(raw)
-if not payload.get("ok"):
-    raise SystemExit(f"bridge unhealthy: {payload}")
-actual = payload.get("bundleIdentifier")
-if actual != expected:
-    raise SystemExit(f"wrong bundle on port: expected {expected}, got {actual}")
-if require_protocol == "--require-protocol":
-    running = payload.get("agentRuntimeRunning")
-    expected_proto = payload.get("agentRuntimeExpectedProtocolVersion")
-    negotiated = payload.get("agentRuntimeProtocolVersion")
-    if running is not True:
-        raise SystemExit(f"agent runtime not running on bridge: {payload}")
-    if not isinstance(expected_proto, int):
-        raise SystemExit(f"missing agentRuntimeExpectedProtocolVersion: {payload}")
-    if negotiated != expected_proto:
-        raise SystemExit(
-            f"agent protocol not ready: expected {expected_proto}, negotiated {negotiated}"
-        )
-    print(
-        f"bridge health ok: bundleIdentifier={actual} "
-        f"protocol={negotiated} runtime={payload.get('agentRuntimeVersion')}"
-    )
-else:
-    print(f"bridge health ok: bundleIdentifier={actual}")
-PY
+  local expected_source_identity="${4:-}"
+  local args=(
+    --expected-bundle "$expected_bundle_id"
+    --health-json "$health_json"
+  )
+  if [[ -n "$expected_source_identity" ]]; then
+    args+=(--expected-source-identity "$expected_source_identity")
+  fi
+  if [[ "$require_protocol" == "--require-protocol" ]]; then
+    args+=(--require-protocol)
+  fi
+  python3 "$SCRIPT_DIR/desktop-health-check.py" "${args[@]}"
 }
 
 evaluate_bridge_health_http() {
   local port="$1"
   local expected_bundle_id="$2"
   local require_protocol="${3:-}"
+  local expected_source_identity="${4:-}"
   local health_json
   health_json="$(python3 - "$port" <<'PY'
 import json
@@ -284,16 +287,20 @@ with urllib.request.urlopen(f"http://127.0.0.1:{port}/health", timeout=5) as res
     sys.stdout.write(response.read().decode("utf-8"))
 PY
 )"
-  evaluate_bridge_health_payload "$expected_bundle_id" "$health_json" "$require_protocol"
+  evaluate_bridge_health_payload \
+    "$expected_bundle_id" "$health_json" "$require_protocol" "$expected_source_identity"
 }
 
 # Like bridge_health identity check, but against an explicit fault bundle id —
-# prevents running fault flows against a stale listener on $PORT. Fault inject
-# fixtures only advertise ok+bundleIdentifier, so protocol is not required here.
+# prevents running fault flows against a stale listener or source on $PORT.
+# Protocol is not required because the fault route does not exercise the agent
+# runtime, but the signed source receipt remains mandatory E2E evidence.
 verify_fault_bundle_health() {
   local port="$1"
   local expected_bundle="$2"
-  evaluate_bridge_health_http "$port" "$expected_bundle"
+  local expected_source_identity
+  expected_source_identity="$(checkout_source_identity)"
+  evaluate_bridge_health_http "$port" "$expected_bundle" "" "$expected_source_identity"
 }
 
 automation_port_listening() {
@@ -647,6 +654,7 @@ FAULT_CLEANUP_DONE=0
 FAULT_CLEANUP_STATUS=0
 FAULT_FLOW_PID=""
 FAULT_FLOW_RESULT_FILE=""
+FAULT_FLOW_RECEIPT=""
 
 fault_token_for_run() {
   local token="${OMI_FAULT_RUN_TOKEN:-}"
@@ -853,12 +861,29 @@ print(config.load_config(repo_root).auth_host)
 PY
 }
 
+stop_fault_flow() {
+  local status=0
+  # Receipt proof is the only signal path. A bare pid may have been reused.
+  if [[ -n "${FAULT_FLOW_RECEIPT:-}" && -f "$FAULT_FLOW_RECEIPT" ]]; then
+    if ! python3 "$SOURCE_DIR/owned_process.py" stop \
+      --receipt "$FAULT_FLOW_RECEIPT" \
+      --shutdown-deadline "${OMI_FAULT_FLOW_SHUTDOWN_DEADLINE:-10}"; then
+      status=1
+    fi
+  fi
+  if [[ -n "${FAULT_FLOW_PID:-}" ]]; then
+    if ! kill -0 "$FAULT_FLOW_PID" 2>/dev/null; then
+      wait "$FAULT_FLOW_PID" 2>/dev/null || true
+    fi
+    FAULT_FLOW_PID=""
+  fi
+  return "$status"
+}
+
 stop_fault_stack() {
   local status=0
-  if [[ -n "$FAULT_FLOW_PID" ]]; then
-    kill -TERM "$FAULT_FLOW_PID" 2>/dev/null || true
-    wait "$FAULT_FLOW_PID" 2>/dev/null || true
-    FAULT_FLOW_PID=""
+  if ! stop_fault_flow; then
+    status=1
   fi
   if [[ "$FAULT_RUN_STARTED" -eq 1 ]]; then
     if [[ -n "$FAULT_RUN_PID" ]]; then
@@ -1051,12 +1076,20 @@ PY
 run_fault_flow_file() {
   local flow_path="$1" run_dir="$2" worker_status=0 flow_passed
   FAULT_FLOW_RESULT_FILE="$run_dir/fault-flow-result"
-  (
-    run_flow_file "$flow_path" "$run_dir"
-    printf '%s\n%s\n' "$PASSED" "$FLOW_RESULTS" > "$FAULT_FLOW_RESULT_FILE"
-  ) &
-  FAULT_FLOW_PID=$!
+  FAULT_FLOW_RECEIPT="$run_dir/fault-flow-process.json"
+  rm -f "$FAULT_FLOW_RESULT_FILE"
+  # The worker used to be a nested subshell. Killing that shell left
+  # `python3 scripts/omi-harness run` reparented under launchd. The supervisor
+  # is the direct child; its session owns the harness process and grandchildren.
   set +e
+  python3 "$SOURCE_DIR/owned_process.py" supervise \
+    --receipt "$FAULT_FLOW_RECEIPT" \
+    --label omi-fault-flow \
+    --shutdown-deadline "${OMI_FAULT_FLOW_SHUTDOWN_DEADLINE:-10}" \
+    --run-deadline "${OMI_FAULT_FLOW_RUN_DEADLINE:-900}" \
+    --cwd "$DESKTOP_DIR" \
+    -- bash "$SOURCE_DIR/fault-flow-worker.sh" "$flow_path" "$run_dir" "$PORT" "$DESKTOP_DIR" &
+  FAULT_FLOW_PID=$!
   wait "$FAULT_FLOW_PID"
   worker_status=$?
   set -e

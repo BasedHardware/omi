@@ -1,16 +1,18 @@
 """Lab-local token pricing. Copied rates, not a production import.
 
 Uses the same Luna short-context list prices as the maintenance planner
-(``openai.gpt-5.6-luna.2026-07-30``) so harness cost notes stay comparable
-to other backend planning estimates without pulling production modules.
+(the gpt-x-luna card dated 2026-09-22, half of gpt-5.6-luna per operator
+directive David Zhang 2026-09-23, pending official published rates) so
+harness cost notes stay comparable to other backend planning estimates
+without pulling production modules.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 
-LUNA_SHORT_INPUT_USD_PER_MILLION = 0.20
-LUNA_SHORT_OUTPUT_USD_PER_MILLION = 1.20
+LUNA_SHORT_INPUT_USD_PER_MILLION = 0.10
+LUNA_SHORT_OUTPUT_USD_PER_MILLION = 0.60
 DEFAULT_MODEL = 'omi:auto:conversation-notes'
 
 

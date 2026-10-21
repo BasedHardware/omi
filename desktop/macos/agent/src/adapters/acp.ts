@@ -191,6 +191,34 @@ export function beginProviderAuthWithoutBlocking(deps: ProviderAuthKickoffDeps):
   });
 }
 
+/** Seams for {@link requestProviderAuthFromHost}. */
+export type HostProviderAuthRequestDeps = {
+  /** The sign-in URL of the OAuth flow still waiting for its callback, if any. */
+  activeAuthUrl: () => string | undefined;
+  /** Send that URL to Swift again as `auth_required`. */
+  announceAuthUrl: (authUrl: string) => void;
+  startAuthFlow: () => Promise<void>;
+  logErr: (message: string) => void;
+};
+
+/**
+ * The host's Connect Claude control. A token that expires mid-turn only signals
+ * `auth_required` with no URL, so without this the user has no way to sign in again.
+ * A flow still waiting for its callback is announced again rather than replaced,
+ * because its local callback server is the one listening. Otherwise a fresh flow
+ * starts and announces its own URL.
+ */
+export function requestProviderAuthFromHost(deps: HostProviderAuthRequestDeps): void {
+  const authUrl = deps.activeAuthUrl();
+  if (authUrl) {
+    deps.announceAuthUrl(authUrl);
+    return;
+  }
+  void deps.startAuthFlow().catch((error) => {
+    deps.logErr(`Host-requested auth flow failed: ${error instanceof Error ? error.message : String(error)}`);
+  });
+}
+
 const MAX_RECENT_STDERR_CHARS = 2_000;
 
 const EXTERNAL_TERMINAL_HTTP_FAILURE = /^\s*HTTP\s+([45]\d{2})\s*:\s*(?:\{|\[)/i;
@@ -536,12 +564,18 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
     const adapterSessionId = context.binding.adapterNativeSessionId;
     let fullText = "";
     const pendingTools: PendingToolActivity[] = [];
+    const reportedModels = new Set<string>();
     let syntheticToolIdCounter = 0;
     const previousHandler = this.notificationHandler;
     let lastProgressAt = Date.now();
     this.notificationHandler = (method, params) => {
       previousHandler?.(method, params);
       if (signal.aborted || method !== "session/update") return;
+      const updateSessionId = (params as { sessionId?: unknown } | undefined)?.sessionId;
+      if (typeof updateSessionId === "string" && updateSessionId !== adapterSessionId) {
+        return;
+      }
+      lastProgressAt = Date.now();
       const didProgress = this.translateSessionUpdate(
         params as Record<string, unknown>,
         pendingTools,
@@ -549,7 +583,8 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
         sink,
         (text) => {
           fullText += text;
-        }
+        },
+        reportedModels,
       );
       if (didProgress) {
         lastProgressAt = Date.now();
@@ -573,8 +608,17 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
           cachedReadTokens?: number | null;
           cachedWriteTokens?: number | null;
         };
-        _meta?: { costUsd?: number };
+        _meta?: { costUsd?: number; model?: unknown; servedModel?: unknown };
+        model?: unknown;
       };
+
+      this.emitObservedModelUsed(
+        sink,
+        reportedModels,
+        this.observedModelFromValue(result.model)
+          ?? this.observedModelFromValue(result._meta?.model)
+          ?? this.observedModelFromValue(result._meta?.servedModel),
+      );
 
       const failure = signal.aborted ? undefined : externalTerminalHttpFailure(this.adapterId, fullText);
       return {
@@ -767,17 +811,54 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
     }
   }
 
+  private observedModelFromValue(value: unknown): string | undefined {
+    if (typeof value !== "string") return undefined;
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : undefined;
+  }
+
+  private observedModelFromUpdate(update: Record<string, unknown>): string | undefined {
+    const direct = this.observedModelFromValue(update.model)
+      ?? this.observedModelFromValue(update.modelId)
+      ?? this.observedModelFromValue(update.currentModel);
+    if (direct) return direct;
+
+    const modelUsage = update.modelUsage;
+    if (modelUsage && typeof modelUsage === "object" && !Array.isArray(modelUsage)) {
+      for (const key of Object.keys(modelUsage as Record<string, unknown>)) {
+        const observed = this.observedModelFromValue(key);
+        if (observed) return observed;
+      }
+    }
+    return undefined;
+  }
+
+  private emitObservedModelUsed(
+    sink: AdapterEventSink,
+    reportedModels: Set<string>,
+    model: string | undefined,
+  ): void {
+    if (!model || reportedModels.has(model)) return;
+    reportedModels.add(model);
+    sink({ type: "model_used", model });
+  }
+
   private translateSessionUpdate(
     params: Record<string, unknown>,
     pendingTools: PendingToolActivity[],
     nextSyntheticToolId: () => string,
     sink: AdapterEventSink,
-    onText: (text: string) => void
+    onText: (text: string) => void,
+    reportedModels?: Set<string>,
   ): boolean {
     const update = params.update as Record<string, unknown> | undefined;
     if (!update) {
       this.log(`session/update missing 'update' field: ${JSON.stringify(params).slice(0, 200)}`);
       return false;
+    }
+
+    if (reportedModels) {
+      this.emitObservedModelUsed(sink, reportedModels, this.observedModelFromUpdate(update));
     }
 
     const sessionUpdate = update.sessionUpdate as string;
@@ -868,6 +949,9 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
 
       case "available_commands_update":
       case "usage_update": {
+        if (reportedModels) {
+          this.emitObservedModelUsed(sink, reportedModels, this.observedModelFromUpdate(update));
+        }
         return false;
       }
 

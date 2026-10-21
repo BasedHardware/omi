@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "id": "FC-privacy-delete-fails-on-unprovisioned-derived-store",
+  "violated_contract": "An explicit privacy deletion must stay available on every deployment that serves the data it deletes. After the authoritative tombstone commits, a derived projection that the deployment never provisions (no vector store, no search index configured) has nothing to purge, so treating that absence as a cleanup failure — or hard-gating cleanup on an initialized third-party client — makes every delete of that data type raise 5xx forever on that deployment. The server error surfaces directly on clients that report failures, and clients that optimistically hide the row treat the 5xx as a failed delete and let the item resurface on the next refresh, so the user-visible effect is 'deleting does not work' although the tombstone actually held.",
+  "canonical_prevention": "Classify each derived-data cleanup step's 'dependency not configured' state as the trivially-confirmed desired absence (nothing to purge, log and continue) distinct from a configured dependency that raised (fail closed, retryable). Write the regression test by stubbing the dependency handle to its unconfigured state — not by removing it — so a future hardening that re-adds the gate fails the suite instead of shipping.",
+  "canonical_prevention_artifact": [
+    "backend/database/vector_db.py",
+    "backend/utils/memory/memory_service.py",
+    "backend/tests/unit/test_canonical_memory_vectors.py",
+    "backend/tests/unit/test_universal_memory_service.py",
+    "backend/tests/unit/test_ws_j_delete_privacy.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/database/vector_db.py",
+    "backend/utils/memory/memory_service.py",
+    "backend/utils/memory/canonical_memory_adapter.py",
+    "backend/routers/conversations.py",
+    "backend/routers/memories.py"
+  ],
+  "status": "open"
+}

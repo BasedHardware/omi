@@ -19,14 +19,15 @@ final class DashboardCaptureStateTests: XCTestCase {
     XCTAssertFalse(appState.isLiveCapturing)
   }
 
-  /// An armed Only Meetings wait is switched on — the next call is recorded — so the control wears
-  /// the green dot and no off-slash. Off is only the state where nothing will be recorded.
+  /// An armed Only Meetings wait is switched on but records nothing yet, so it is its own state:
+  /// no off-slash, and not the green "recording now" dot. Off is only the state where nothing will
+  /// be recorded.
   @MainActor
-  func testListeningStatusIsActiveWhileArmedForAMeeting() {
+  func testListeningStatusIsArmedWhileWaitingForAMeeting() {
     let appState = AppState()
     appState.isTranscribing = true
     appState.isAwaitingMeeting = true
-    XCTAssertEqual(CaptureListeningLogic.listeningStatus(appState: appState), .active)
+    XCTAssertEqual(CaptureListeningLogic.listeningStatus(appState: appState), .armed)
 
     appState.isAwaitingMeeting = false
     XCTAssertEqual(CaptureListeningLogic.listeningStatus(appState: appState), .active)

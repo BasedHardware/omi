@@ -7,11 +7,12 @@ import argparse
 import json
 import subprocess
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 CLOUD_RUN_SERVICES = ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration')
+LISTENER_SERVICE = 'backend-listen'
 MIN_CLOUD_RUN_TIMEOUT_SECONDS = 300
 
 
@@ -28,6 +29,12 @@ class DeploymentExpectation:
     revisions: Mapping[str, str]
     listener_deployment: str
     listener_service: str
+    # Per-service immutable refs for services a deploy moved onto a role image
+    # (deploy-backend-stack service_images); every other service expects `image`.
+    service_images: Mapping[str, str] = field(default_factory=dict)
+
+    def image_for(self, service: str) -> str:
+        return self.service_images.get(service, self.image)
 
 
 def build_expectation(
@@ -40,6 +47,7 @@ def build_expectation(
     environment: str,
     short_sha: str | None = None,
     expected_image: str | None = None,
+    service_images: Mapping[str, str] | None = None,
 ) -> DeploymentExpectation:
     """Derive an immutable desired release vector from deploy-run metadata.
 
@@ -71,6 +79,12 @@ def build_expectation(
         resolved_short_sha = normalized_sha[:7]
     if expected_image is not None and not expected_image.strip():
         raise ValueError('expected image must not be empty')
+    service_images = dict(service_images or {})
+    unknown = sorted(set(service_images) - {*CLOUD_RUN_SERVICES, LISTENER_SERVICE})
+    if unknown:
+        raise ValueError(f'service images name unknown services: {unknown}')
+    if any('@sha256:' not in ref for ref in service_images.values()):
+        raise ValueError('service images must be digest references')
     suffix = f'{resolved_short_sha}-{deploy_run_id}-{deploy_run_attempt}'
     return DeploymentExpectation(
         commit_sha=normalized_sha,
@@ -86,6 +100,7 @@ def build_expectation(
         revisions={service: f'{service}-{suffix}' for service in CLOUD_RUN_SERVICES},
         listener_deployment=f'{environment}-omi-backend-listen',
         listener_service=f'{environment}-omi-backend-listen',
+        service_images=service_images,
     )
 
 
@@ -212,7 +227,7 @@ def evaluate(
                 evaluate_cloud_run_service(
                     service,
                     expected_revision,
-                    expectation.image,
+                    expectation.image_for(service),
                     document,
                     expected_environment=expectation.environment,
                     require_serving_traffic=require_serving_traffic,
@@ -297,8 +312,8 @@ def evaluate_listener_deployment(expectation: DeploymentExpectation, document: M
     errors: list[str] = []
     if metadata.get('name') != expectation.listener_deployment:
         errors.append(f'gke/deployment: name is not {expectation.listener_deployment}')
-    if image != expectation.image:
-        errors.append(f'gke/deployment: template image is not {expectation.image}')
+    if image != expectation.image_for(LISTENER_SERVICE):
+        errors.append(f'gke/deployment: template image is not {expectation.image_for(LISTENER_SERVICE)}')
     if not template_spec.get('serviceAccountName'):
         errors.append('gke/deployment: service account is missing')
     if not isinstance(desired, int) or desired < 1 or status.get('availableReplicas') != desired:
@@ -396,6 +411,9 @@ def evidence(
         'result': 'pass' if not errors else 'fail',
         'errors': list(errors),
     }
+    if expectation.service_images:
+        # Only a role-image opt-in records per-service refs; the default vector is unchanged.
+        report['release_vector']['service_images'] = dict(expectation.service_images)
     if include_listener:
         deployment = documents.get('gke/deployment', {})
         deployment_spec = _mapping(deployment.get('spec'))
@@ -404,7 +422,7 @@ def evidence(
         containers = _list(template_spec.get('containers'))
         report['release_vector']['backend_listen'] = {
             'deployment': expectation.listener_deployment,
-            'image': expectation.image,
+            'image': expectation.image_for(LISTENER_SERVICE),
         }
         report['gke_listener'] = {
             'deployment': expectation.listener_deployment,
@@ -475,6 +493,13 @@ def main() -> int:
         help='immutable image reference recorded by a release-ring deployment',
     )
     parser.add_argument(
+        '--service-image',
+        action='append',
+        default=[],
+        metavar='SERVICE=REF',
+        help='digest a deploy moved SERVICE onto (deploy-backend-stack service_images); repeatable',
+    )
+    parser.add_argument(
         '--candidate',
         action='store_true',
         help='verify a ready no-traffic candidate release vector before promotion',
@@ -496,6 +521,7 @@ def main() -> int:
             region=args.region,
             environment=args.environment,
             expected_image=args.expected_image,
+            service_images=dict(item.split('=', 1) for item in args.service_image),
         )
         commands = build_read_only_commands(
             expectation,

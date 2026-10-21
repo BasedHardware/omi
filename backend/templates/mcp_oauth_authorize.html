@@ -69,13 +69,21 @@
                             </svg>
                         </span>
                     </div>
-                    <h1>Connect {{ display_client_name }}</h1>
-                    <p class="oauth-subtitle">Sign in to review what <strong>{{ display_client_name }}</strong> can access and allow the
+                    <h1>Connect <span dir="ltr">{{ display_client_name }}</span></h1>
+                    <p class="oauth-subtitle">Sign in to review what <strong dir="ltr">{{ display_client_name }}</strong> can access and allow the
                         connection to your Omi account.</p>
                 </div>
 
+                {% if unverified_client %}
+                <div class="unverified-client" dir="ltr">
+                    <span class="unverified-client-badge">Unverified third-party app</span>
+                    <span class="unverified-client-host-label">Client ID host:</span>
+                    <span class="unverified-client-host">{{ client_host }}</span>
+                </div>
+                {% endif %}
+
                 <section class="permissions-card" aria-labelledby="permissions-title">
-                    <p class="permissions-title" id="permissions-title">{{ display_client_name }} will be able to</p>
+                    <p class="permissions-title" id="permissions-title"><span dir="ltr">{{ display_client_name }}</span> will be able to</p>
                     <ul class="permissions-list" tabindex="0" role="list" aria-labelledby="permissions-title">
                         {% for permission in permissions %}
                         <li>
@@ -140,7 +148,7 @@
                     <path d="M9 12l2 2 4-4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"
                         stroke-linejoin="round" />
                 </svg>
-                <span>Only continue if you trust <strong>{{ display_client_name }}</strong> with the Omi data shown above. You can revoke
+                <span>Only continue if you trust <strong dir="ltr">{{ display_client_name }}</strong> with the Omi data shown above. You can revoke
                     access anytime from your Omi settings.</span>
             </div>
         </div>

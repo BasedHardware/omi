@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-memory-review.png",
+      "platform": "mobile-ios",
+      "description": "Synthetic Flutter widget render of the memory supersession Review card and current/suggested facts; no real user content.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-applied-changes.png",
+      "platform": "mobile-ios",
+      "description": "Offline Dev app on iPhone 17 Pro simulator: synthetic Recent Changes with Before/After, surrounding speech and Undo; no customer data.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-mobile-ios-undone-changes.png",
+      "platform": "mobile-ios",
+      "description": "Same offline synthetic simulator fixture after tapping Undo; Redo available.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

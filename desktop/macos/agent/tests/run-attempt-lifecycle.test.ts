@@ -2,7 +2,7 @@ import { mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "n
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { baseRunInput, createKernelHarness, waitUntil } from "./kernel-fakes.js";
+import { baseRunInput, createKernelHarness, FakeRuntimeAdapter, waitUntil } from "./kernel-fakes.js";
 import { OmiArtifactStorage } from "../src/runtime/artifact-storage.js";
 import { SqliteAgentStore } from "../src/runtime/sqlite-store.js";
 
@@ -15,6 +15,35 @@ afterEach(() => {
 });
 
 describe("AgentRuntimeKernel run and attempt lifecycle", () => {
+  it("persists served model ids for hermes when the adapter reports model_used", async () => {
+    const { store, kernel } = createKernelHarness(
+      newDatabasePath(),
+      "hermes",
+      4,
+      undefined,
+      undefined,
+      () => {
+        const fake = new FakeRuntimeAdapter("hermes");
+        const baseExecute = fake.executeAttempt.bind(fake);
+        fake.executeAttempt = async (context, sink, signal) => {
+          sink({ type: "model_used", model: "gpt-5.5" });
+          return baseExecute(context, sink, signal);
+        };
+        return fake;
+      },
+    );
+    const result = await kernel.executeRun({
+      ...baseRunInput,
+      adapterId: "hermes",
+      defaultAdapterId: "hermes",
+    });
+
+    expect(result.run.status).toBe("succeeded");
+    expect(store.getRow("SELECT requested_model_id FROM runs WHERE run_id = ?", [result.run.runId]).requested_model_id)
+      .toBe("gpt-5.5");
+    store.close();
+  });
+
   it("creates one run per accepted query and one attempt per adapter execution", async () => {
     const { store, adapter, kernel } = createKernelHarness(newDatabasePath());
 
@@ -119,6 +148,45 @@ describe("AgentRuntimeKernel run and attempt lifecycle", () => {
     expect(JSON.parse(readFileSync(openedContextFile!, "utf8"))).toEqual({
       capabilityRef: adapter.executed[1].toolCapabilityRef,
     });
+    store.close();
+  });
+
+  it("hands the tool relay socket to Omi's tools server only", async () => {
+    const { store, adapter, kernel } = createKernelHarness(newDatabasePath());
+    const servers = (pipe: string) => [
+      {
+        name: "omi-tools",
+        command: "node",
+        args: ["omi-tools-stdio.js"],
+        env: [
+          { name: "OMI_BRIDGE_PIPE", value: pipe },
+          { name: "OMI_REQUEST_ID", value: "request-scoped" },
+        ],
+      },
+      {
+        name: "notes",
+        command: "node",
+        args: ["notes.js"],
+        env: [
+          { name: "OMI_BRIDGE_PIPE", value: pipe },
+          { name: "NOTES_TOKEN", value: "user-configured" },
+        ],
+      },
+    ];
+
+    await kernel.executeRun({ ...baseRunInput, mcpServers: servers("/tmp/omi-tools-1.sock") });
+    await kernel.executeRun({ ...baseRunInput, requestId: "request-2", mcpServers: servers("/tmp/omi-tools-2.sock") });
+
+    // A new socket path is not a new binding; the resumed binding gets the current socket.
+    expect(adapter.opened).toHaveLength(1);
+    expect(adapter.resumed).toHaveLength(1);
+    expect(serverEnv(adapter.opened[0].mcpServers, "omi-tools")).toMatchObject({ OMI_BRIDGE_PIPE: "/tmp/omi-tools-1.sock" });
+    expect(serverEnv(adapter.resumed[0].mcpServers, "omi-tools")).toMatchObject({ OMI_BRIDGE_PIPE: "/tmp/omi-tools-2.sock" });
+    for (const opened of [adapter.opened[0], adapter.resumed[0]]) {
+      expect(serverEnv(opened.mcpServers, "omi-tools")).not.toHaveProperty("OMI_REQUEST_ID");
+      expect(serverEnv(opened.mcpServers, "notes")).not.toHaveProperty("OMI_BRIDGE_PIPE");
+      expect(serverEnv(opened.mcpServers, "notes")).toMatchObject({ NOTES_TOKEN: "user-configured" });
+    }
     store.close();
   });
 
@@ -1159,6 +1227,12 @@ function mkdtempTrackedIn(parent: string, prefix: string): string {
   const dir = mkdtempSync(join(parent, prefix));
   createdDirs.push(dir);
   return dir;
+}
+
+function serverEnv(mcpServers: Record<string, unknown>[] | undefined, serverName: string): Record<string, string> {
+  const env = mcpServers?.find((server) => server.name === serverName)?.env;
+  if (!Array.isArray(env)) throw new Error(`no env for MCP server ${serverName}`);
+  return Object.fromEntries(env.map((entry: { name?: unknown; value?: unknown }) => [String(entry.name), String(entry.value)]));
 }
 
 function mcpEnvValue(mcpServers: Record<string, unknown>[] | undefined, name: string): string | undefined {

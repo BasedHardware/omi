@@ -47,11 +47,6 @@ class LockContract:
 # shared target must keep resolving to the same value. Keep this explicit so a
 # new deploy writer cannot silently bypass the audited lock graph.
 LOCK_CONTRACTS = {
-    "jit_qa_cloud_run.yml": LockContract("jit-isolated-qa-cloud-run-development"),
-    # The projection rebuild mutates the same named QA Typesense service that
-    # the application-plane workflow deploys and verifies. Keep both writers
-    # in one workflow-level lock so a rebuild cannot race service rollout.
-    "jit_qa_typesense_projection.yml": LockContract("jit-isolated-qa-cloud-run-development"),
     "desktop_backend_auto_dev.yml": LockContract("desktop-backend-auto-dev"),
     "desktop_backend_prod.yml": LockContract("desktop-backend-prod"),
     "desktop_backend_recover_prod.yml": LockContract("desktop-backend-prod"),
@@ -79,7 +74,9 @@ LOCK_CONTRACTS = {
         "${{ (github.event.inputs.service || 'pusher') == 'llm-gateway' && format('deploy-backend-stack-{0}', github.event.inputs.environment) || format('deploy-gke-pusher-{0}', github.event.inputs.environment) }}"
     ),
     "gcp_backend_pusher_auto_deploy.yml": LockContract("deploy-gke-pusher-development"),
-    "gcp_diarizer.yml": LockContract("deploy-gke-diarizer-${{ github.event.inputs.environment }}"),
+    "gcp_diarizer.yml": LockContract(
+        "deploy-gke-${{ github.event.inputs.service || 'diarizer' }}-${{ github.event.inputs.environment }}"
+    ),
     "gcp_frontend.yml": LockContract(
         "deploy-cloud-run-frontend-${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || github.ref == 'refs/heads/development' && 'development' || github.ref == 'refs/heads/main' && 'prod' || format('nondeploy-{0}', github.run_id) }}"
     ),
@@ -91,22 +88,22 @@ LOCK_CONTRACTS = {
         "deploy-cloud-run-memory-maintenance-job-${{ github.event.inputs.environment }}"
     ),
     "gcp_memory_maintenance_job_auto_dev.yml": LockContract("deploy-cloud-run-memory-maintenance-job-development"),
-    "gcp_daily_memory_sweep_job.yml": LockContract(
-        "deploy-cloud-run-daily-memory-sweep-job-${{ github.event.inputs.environment }}"
-    ),
-    "gcp_daily_memory_sweep_job_auto_dev.yml": LockContract(
-        "deploy-cloud-run-daily-memory-sweep-job-development"
-    ),
     "gcp_day3_reengagement_email_job.yml": LockContract(
         "deploy-cloud-run-day3-reengagement-email-job-${{ github.event.inputs.environment }}"
     ),
     "gcp_day3_reengagement_email_job_auto_dev.yml": LockContract(
         "deploy-cloud-run-day3-reengagement-email-job-development"
     ),
+    "gcp_finops_unit_cost_job.yml": LockContract(
+        "deploy-cloud-run-finops-unit-cost-job-${{ github.event.inputs.environment }}"
+    ),
     "gcp_models.yml": LockContract("deploy-gke-vad-${{ github.event.inputs.environment }}"),
     "gcp_nllb_translation.yml": LockContract("deploy-gke-nllb-translation-${{ github.event.inputs.environment }}"),
     "gcp_notifications_job.yml": LockContract(
         "deploy-cloud-run-notifications-job-${{ github.event.inputs.environment }}"
+    ),
+    "gcp_x_connector_sync_job.yml": LockContract(
+        "deploy-cloud-run-x-connector-sync-job-${{ github.event.inputs.environment }}"
     ),
     "gcp_parakeet.yml": LockContract("deploy-gke-parakeet-${{ github.event.inputs.environment }}"),
     "gcp_personas.yml": LockContract(
@@ -116,12 +113,7 @@ LOCK_CONTRACTS = {
 }
 
 
-# This workflow writes a run-ID-scoped Kubernetes Job and does not mutate the
-# persistent Parakeet release. The required marker makes the exemption fail
-# closed if that isolation is removed.
-RUN_SCOPED_EXEMPTIONS = {
-    "parakeet_gpu_tests.yml": "JOB_NAME: parakeet-gpu-test-${{ github.run_id }}",
-}
+RUN_SCOPED_EXEMPTIONS: dict[str, str] = {}
 
 READ_ONLY_WORKFLOW_EXEMPTIONS: dict[str, str] = {}
 
@@ -687,7 +679,6 @@ def validate_shared_families(groups: dict[str, str]) -> list[str]:
         ("gcp_backend_listen_helm.yml", "gcp_backend_auto_dev.yml"),
         ("gcp_llm_gateway.yml", "gcp_backend_auto_dev.yml"),
         ("gcp_memory_maintenance_job.yml", "gcp_memory_maintenance_job_auto_dev.yml"),
-        ("gcp_daily_memory_sweep_job.yml", "gcp_daily_memory_sweep_job_auto_dev.yml"),
         ("gcp_day3_reengagement_email_job.yml", "gcp_day3_reengagement_email_job_auto_dev.yml"),
         ("gcp_backend_pusher.yml", "gcp_backend_pusher_auto_deploy.yml"),
     )
@@ -706,11 +697,11 @@ def validate_shared_families(groups: dict[str, str]) -> list[str]:
         "gcp_frame_request_retention_job.yml",
         "gcp_llm_gateway.yml",
         "gcp_memory_maintenance_job.yml",
-        "gcp_daily_memory_sweep_job.yml",
         "gcp_day3_reengagement_email_job.yml",
         "gcp_models.yml",
         "gcp_nllb_translation.yml",
         "gcp_notifications_job.yml",
+        "gcp_x_connector_sync_job.yml",
         "gcp_parakeet.yml",
         "gcp_plugins.yml",
     )

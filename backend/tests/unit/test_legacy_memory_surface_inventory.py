@@ -89,6 +89,56 @@ def test_representative_paths_keep_evidence_backed_potential_roles() -> None:
     assert lifecycle_worker and {item.potential_roles for item in lifecycle_worker} == {("reader", "writer", "job")}
 
 
+def test_canonical_metadata_and_tier_reads_do_not_count_as_legacy_lifecycle(tmp_path: Path) -> None:
+    short_term_rule = next(rule for rule in inventory.RULES if rule.classification == "short_term_lifecycle")
+    consolidation_rule = next(rule for rule in inventory.RULES if rule.classification == "consolidation_promotion")
+    rules = (
+        inventory.InventoryRule(
+            short_term_rule.classification,
+            ("fixtures/*.py",),
+            short_term_rule.pattern,
+            short_term_rule.symbol,
+            short_term_rule.potential_roles,
+        ),
+        inventory.InventoryRule(
+            consolidation_rule.classification,
+            ("fixtures/*.py",),
+            consolidation_rule.pattern,
+            consolidation_rule.symbol,
+            consolidation_rule.potential_roles,
+        ),
+    )
+    fixture_dir = tmp_path / "fixtures"
+    fixture_dir.mkdir()
+    (fixture_dir / "canonical.py").write_text(
+        "promotion = item.promotion or {}\n"
+        "if item.tier == MemoryLayer.short_term:\n"
+        "    return item\n"
+        "run_short_term_lifecycle(item)\n"
+        "run_canonical_consolidation(item)\n"
+        "consolidate_memories(item)\n"
+        "from legacy_memory import promotion\n"
+        "promotion(item)\n"
+        "promotion_worker(item)\n"
+        "promotion = promotion_worker(item)\n"
+        "promotion = canonical_kg_promotion(item)\n",
+        encoding="utf-8",
+    )
+
+    findings = inventory.scan(tmp_path, rules)
+
+    assert {(item.classification, item.line) for item in findings} == {
+        ("consolidation_promotion", 5),
+        ("consolidation_promotion", 6),
+        ("consolidation_promotion", 7),
+        ("consolidation_promotion", 8),
+        ("consolidation_promotion", 9),
+        ("consolidation_promotion", 10),
+        ("consolidation_promotion", 11),
+        ("short_term_lifecycle", 4),
+    }
+
+
 def test_report_labels_source_evidence_without_claiming_runtime_proof() -> None:
     payload = inventory.report()
 
@@ -143,3 +193,17 @@ def test_checked_in_inventory_has_no_baseline_growth() -> None:
     growth, _shrinkage = inventory.compare_counts(current, baseline)
 
     assert growth == []
+
+
+def test_canonical_apply_metadata_key_is_not_a_legacy_promotion_surface(tmp_path):
+    root = tmp_path / 'backend' / 'utils' / 'memory'
+    root.mkdir(parents=True)
+    (root / 'fixture.py').write_text(
+        "patch = {'promotion_audit': metadata}\n"
+        "promotion_audit_worker(item)\n"
+        "from legacy import promotion_audit\n"
+        "promotion(item)\n"
+    )
+    rule = next(rule for rule in inventory.RULES if rule.classification == 'consolidation_promotion')
+    findings = inventory.scan(tmp_path, (rule,))
+    assert [finding.line for finding in findings] == [2, 3, 4]

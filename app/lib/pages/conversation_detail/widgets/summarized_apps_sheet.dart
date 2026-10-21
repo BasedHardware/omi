@@ -1,5 +1,4 @@
 import 'package:omi/utils/platform/platform_manager.dart';
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 import 'package:cached_network_image/cached_network_image.dart';
@@ -14,114 +13,66 @@ import 'package:omi/pages/apps/widgets/capability_apps_page.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/widgets/create_template_bottom_sheet.dart';
+import 'package:omi/pages/conversation_detail/widgets/summary_template_sheet.dart';
+import 'package:omi/services/experiments/summary_generation_gate.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/temp.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/widgets/extensions/string.dart';
 
+/// Opens the summary-template picker for the conversation on screen: the "Summarize with" sheet
+/// when [SummaryGenerationV2Gate] is on, otherwise the template list.
+Future<void> showSummarizedAppsSheet(BuildContext context) {
+  if (SummaryGenerationV2Gate.isEnabled) return showSummaryTemplateSheet(context);
+  return showOmiSheet<void>(
+    context: context,
+    title: context.l10n.summaryTemplate,
+    padding: EdgeInsets.zero,
+    builder: (_) => const SummarizedAppsBottomSheet(),
+  );
+}
+
+/// Body of the summary-template picker; present it with [showSummarizedAppsSheet].
 class SummarizedAppsBottomSheet extends StatelessWidget {
   const SummarizedAppsBottomSheet({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return DraggableScrollableSheet(
-      initialChildSize: 0.7,
-      minChildSize: 0.5,
-      maxChildSize: 0.9,
-      expand: false,
-      builder: (context, scrollController) {
-        return Consumer<ConversationDetailProvider>(
-          builder: (context, provider, _) {
-            final summarizedApp = provider.getSummarizedApp();
-            final currentAppId = summarizedApp?.appId;
-            final conversationId = provider.conversation.id;
-
-            PlatformManager.instance.analytics.summarizedAppSheetViewed(
-              conversationId: conversationId,
-              currentSummarizedAppId: currentAppId,
-            );
-
-            return _SheetContainer(
-              scrollController: scrollController,
-              children: [
-                const _SheetHeader(),
-                Expanded(
-                  child: _AppsList(provider: provider, currentAppId: currentAppId),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-  }
-}
-
-class _SheetContainer extends StatelessWidget {
-  final ScrollController scrollController;
-  final List<Widget> children;
-
-  const _SheetContainer({required this.scrollController, required this.children});
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: () => Navigator.pop(context),
-      child: Container(
-        color: Colors.black,
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-        child: Column(children: children),
-      ),
-    );
-  }
-}
-
-class _SheetHeader extends StatelessWidget {
-  const _SheetHeader();
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        // Handle indicator
-        Container(
-          width: 40,
-          height: 4,
-          margin: const EdgeInsets.symmetric(vertical: 8),
-          decoration: BoxDecoration(color: Colors.grey[600], borderRadius: BorderRadius.circular(2)),
-        ),
-
-        // Title
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(context.l10n.summaryTemplate, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-            IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(context)),
-          ],
-        ),
-        const SizedBox(height: 16),
-      ],
+    return SizedBox(
+      height: MediaQuery.sizeOf(context).height * 0.7,
+      // The list listens to the provider itself; a Consumer here rebuilt it twice per change.
+      child: _AppsList(provider: context.read<ConversationDetailProvider>()),
     );
   }
 }
 
 class _AppsList extends StatefulWidget {
   final ConversationDetailProvider provider;
-  final String? currentAppId;
 
-  const _AppsList({required this.provider, required this.currentAppId});
+  const _AppsList({required this.provider});
 
   @override
   State<_AppsList> createState() => _AppsListState();
 }
 
 class _AppsListState extends State<_AppsList> {
-  // Track app installation state
-  static final Map<String, bool> _installingApps = {};
+  // Installs started from this sheet; a new sheet starts with none.
+  final Map<String, bool> _installingApps = {};
+
+  String? get _currentAppId {
+    final selection = widget.provider.getSummarySelection();
+    return selection.isApp ? selection.appId : null;
+  }
 
   @override
   void initState() {
     super.initState();
+    // Once per sheet, not once per rebuild.
+    PlatformManager.instance.analytics.summarizedAppSheetViewed(
+      conversationId: widget.provider.conversation.id,
+      currentSummarizedAppId: _currentAppId,
+    );
     _fetchApps();
     // Listen to provider changes to rebuild when apps are fetched
     widget.provider.addListener(_onProviderUpdate);
@@ -171,7 +122,7 @@ class _AppsListState extends State<_AppsList> {
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
           child: Text(
             context.l10n.suggestedTemplates,
-            style: const TextStyle(color: Colors.grey, fontSize: 14, fontWeight: FontWeight.w600),
+            style: OmiType.footnote.copyWith(color: OmiColors.textTertiary, fontWeight: FontWeight.w600),
           ),
         ),
         _buildShimmerListItem(),
@@ -182,7 +133,7 @@ class _AppsListState extends State<_AppsList> {
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
           child: Text(
             context.l10n.availableTemplates,
-            style: const TextStyle(color: Colors.grey, fontSize: 14, fontWeight: FontWeight.w600),
+            style: OmiType.footnote.copyWith(color: OmiColors.textTertiary, fontWeight: FontWeight.w600),
           ),
         ),
         _buildShimmerListItem(),
@@ -194,8 +145,8 @@ class _AppsListState extends State<_AppsList> {
 
   Widget _buildShimmerListItem() {
     return ShimmerWithTimeout(
-      baseColor: const Color(0xFF1F1F25),
-      highlightColor: const Color(0xFF35343B),
+      baseColor: OmiColors.surface1,
+      highlightColor: OmiColors.surface3,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         child: Row(
@@ -204,7 +155,7 @@ class _AppsListState extends State<_AppsList> {
             Container(
               width: 32,
               height: 32,
-              decoration: BoxDecoration(color: const Color(0xFF1F1F25), borderRadius: BorderRadius.circular(16)),
+              decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
             ),
             const SizedBox(width: 16),
             // Title and subtitle placeholders
@@ -215,13 +166,15 @@ class _AppsListState extends State<_AppsList> {
                   Container(
                     width: double.infinity,
                     height: 16,
-                    decoration: BoxDecoration(color: const Color(0xFF1F1F25), borderRadius: BorderRadius.circular(4)),
+                    decoration: BoxDecoration(
+                        color: OmiColors.surface1, borderRadius: const BorderRadius.all(Radius.circular(4))),
                   ),
                   const SizedBox(height: 8),
                   Container(
                     width: 200,
                     height: 12,
-                    decoration: BoxDecoration(color: const Color(0xFF1F1F25), borderRadius: BorderRadius.circular(4)),
+                    decoration: BoxDecoration(
+                        color: OmiColors.surface1, borderRadius: const BorderRadius.all(Radius.circular(4))),
                   ),
                 ],
               ),
@@ -234,6 +187,7 @@ class _AppsListState extends State<_AppsList> {
 
   @override
   Widget build(BuildContext context) {
+    final currentAppId = _currentAppId;
     final enabledApps = widget.provider.cachedEnabledConversationApps;
     final suggestedApps = widget.provider.cachedSuggestedApps;
 
@@ -283,15 +237,15 @@ class _AppsListState extends State<_AppsList> {
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
             child: Text(
               context.l10n.suggestedTemplates,
-              style: const TextStyle(color: Colors.grey, fontSize: 14, fontWeight: FontWeight.w600),
+              style: OmiType.footnote.copyWith(color: OmiColors.textTertiary, fontWeight: FontWeight.w600),
             ),
           ),
           ...suggestedApps.map((app) {
             final isAvailable = widget.provider.isSuggestedAppAvailable(app.id);
-            final isInstalling = _AppsListState._installingApps[app.id] == true;
+            final isInstalling = _installingApps[app.id] == true;
             return _AppListItem(
               app: app,
-              isSelected: app.id == widget.currentAppId,
+              isSelected: app.id == currentAppId,
               onTap: () => isAvailable ? _handleAppTap(context, app) : _handleUnavailableAppTap(context, app),
               isSuggested: true,
               isDefault: app.id == preferredAppId && preferredAppId?.isNotEmpty == true,
@@ -307,14 +261,14 @@ class _AppsListState extends State<_AppsList> {
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
             child: Text(
               suggestedApps.isNotEmpty ? context.l10n.otherTemplates : context.l10n.availableTemplates,
-              style: const TextStyle(color: Colors.grey, fontSize: 14, fontWeight: FontWeight.w600),
+              style: OmiType.footnote.copyWith(color: OmiColors.textTertiary, fontWeight: FontWeight.w600),
             ),
           ),
           // 1. Show default/preferred app first if available (and not in suggested)
           if (preferredApp != null && !suggestedAppIds.contains(preferredApp.id))
             _AppListItem(
               app: preferredApp,
-              isSelected: preferredApp.id == widget.currentAppId,
+              isSelected: preferredApp.id == currentAppId,
               onTap: () => _handleAppTap(context, preferredApp),
               isDefault: true,
               provider: widget.provider,
@@ -323,7 +277,7 @@ class _AppsListState extends State<_AppsList> {
           if (lastUsedApp != null && lastUsedApp.id != preferredAppId)
             _AppListItem(
               app: lastUsedApp,
-              isSelected: lastUsedApp.id == widget.currentAppId,
+              isSelected: lastUsedApp.id == currentAppId,
               onTap: () => _handleAppTap(context, lastUsedApp),
               isLastUsed: true,
               isDefault: false,
@@ -333,7 +287,7 @@ class _AppsListState extends State<_AppsList> {
           ...otherApps.map(
             (app) => _AppListItem(
               app: app,
-              isSelected: app.id == widget.currentAppId,
+              isSelected: app.id == currentAppId,
               onTap: () => _handleAppTap(context, app),
               isDefault: false,
               provider: widget.provider,
@@ -346,7 +300,7 @@ class _AppsListState extends State<_AppsList> {
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
           child: Text(
             context.l10n.getCreative,
-            style: const TextStyle(color: Colors.grey, fontSize: 14, fontWeight: FontWeight.w600),
+            style: OmiType.footnote.copyWith(color: OmiColors.textTertiary, fontWeight: FontWeight.w600),
           ),
         ),
 
@@ -362,7 +316,10 @@ class _AppsListState extends State<_AppsList> {
   void _handleAppTap(BuildContext context, App app) async {
     // Reprocess with the selected app
     final provider = context.read<ConversationDetailProvider>();
-    final previousAppId = provider.getSummarizedApp()?.appId;
+    // A reprocess is already running: the tap does nothing (no analytics, no close, no last-used).
+    if (provider.loadingReprocessConversation) return;
+    final previousSelection = provider.getSummarySelection();
+    final previousAppId = previousSelection.isApp ? previousSelection.appId : null;
     final conversationId = provider.conversation.id;
 
     PlatformManager.instance.analytics.summarizedAppSelected(
@@ -382,13 +339,13 @@ class _AppsListState extends State<_AppsList> {
 
   void _handleUnavailableAppTap(BuildContext context, App app) async {
     // Check if app is already being installed
-    if (_AppsListState._installingApps[app.id] == true) {
+    if (_installingApps[app.id] == true) {
       return;
     }
 
     // Set installing state
     setState(() {
-      _AppsListState._installingApps[app.id] = true;
+      _installingApps[app.id] = true;
     });
 
     try {
@@ -399,13 +356,7 @@ class _AppsListState extends State<_AppsList> {
 
       if (!success) {
         if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(context.l10n.failedToInstallApp(app.name)),
-              duration: const Duration(seconds: 3),
-              backgroundColor: Colors.red,
-            ),
-          );
+          OmiFeedback.error(context, context.l10n.failedToInstallApp(app.name));
         }
         return;
       }
@@ -414,7 +365,8 @@ class _AppsListState extends State<_AppsList> {
       PlatformManager.instance.analytics.summarizedAppSelected(
         conversationId: conversationId,
         selectedAppId: app.id,
-        previousAppId: conversationProvider.getSummarizedApp()?.appId,
+        previousAppId:
+            conversationProvider.getSummarySelection().isApp ? conversationProvider.getSummarySelection().appId : null,
       );
 
       // Track the last used app
@@ -429,19 +381,13 @@ class _AppsListState extends State<_AppsList> {
     } catch (e) {
       // Handle installation error
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(context.l10n.errorInstallingApp(app.name, e.toString())),
-            duration: const Duration(seconds: 3),
-            backgroundColor: Colors.red,
-          ),
-        );
+        OmiFeedback.error(context, context.l10n.errorInstallingApp(app.name, e.toString()));
       }
     } finally {
       // Clear installing state
       if (mounted) {
         setState(() {
-          _AppsListState._installingApps[app.id] = false;
+          _installingApps[app.id] = false;
         });
       }
     }
@@ -486,14 +432,13 @@ class _AppListItemState extends State<_AppListItem> {
         if (confirmed == true) {
           // Set as preferred app
           if (widget.provider != null) {
-            widget.provider!.setPreferredSummarizationApp(widget.app.id);
+            final saved = await widget.provider!.setPreferredSummarizationApp(widget.app.id);
             if (context.mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(context.l10n.setAsDefaultSuccess(widget.app.name.decodeString)),
-                  duration: const Duration(seconds: 2),
-                ),
-              );
+              if (saved) {
+                OmiFeedback.confirm(context, context.l10n.setAsDefaultSuccess(widget.app.name.decodeString));
+              } else {
+                OmiFeedback.error(context, context.l10n.failedToSaveCheckConnection);
+              }
             }
           }
         }
@@ -507,29 +452,12 @@ class _AppListItemState extends State<_AppListItem> {
     );
   }
 
-  Future<bool?> _showSetDefaultConfirmation(BuildContext context) {
-    return showCupertinoDialog<bool>(
-      context: context,
-      builder: (BuildContext dialogContext) {
-        return CupertinoAlertDialog(
-          title: Text(context.l10n.setDefaultApp),
-          content: Padding(
-            padding: const EdgeInsets.only(top: 8.0),
-            child: Text(context.l10n.setDefaultAppContent(widget.app.name.decodeString)),
-          ),
-          actions: [
-            CupertinoDialogAction(
-              isDefaultAction: true,
-              onPressed: () => Navigator.of(dialogContext).pop(false),
-              child: Text(context.l10n.cancel),
-            ),
-            CupertinoDialogAction(
-              onPressed: () => Navigator.of(dialogContext).pop(true),
-              child: Text(context.l10n.setDefaultButton),
-            ),
-          ],
-        );
-      },
+  Future<bool> _showSetDefaultConfirmation(BuildContext context) {
+    return showOmiConfirm(
+      context,
+      title: context.l10n.setDefaultApp,
+      message: context.l10n.setDefaultAppContent(widget.app.name.decodeString),
+      confirmLabel: context.l10n.setDefaultButton,
     );
   }
 
@@ -539,7 +467,7 @@ class _AppListItemState extends State<_AppListItem> {
         gradient: LinearGradient(
           begin: isLeft ? Alignment.centerLeft : Alignment.centerRight,
           end: isLeft ? Alignment.centerRight : Alignment.centerLeft,
-          colors: [Colors.deepPurple.withValues(alpha: 0.7), Colors.transparent],
+          colors: [OmiColors.surface3, Colors.transparent],
         ),
       ),
       alignment: isLeft ? Alignment.centerLeft : Alignment.centerRight,
@@ -551,7 +479,7 @@ class _AppListItemState extends State<_AppListItem> {
           const SizedBox(height: 2),
           Text(
             context.l10n.defaultLabel,
-            style: const TextStyle(color: Colors.white70, fontWeight: FontWeight.w600, fontSize: 11),
+            style: OmiType.caption.copyWith(color: OmiColors.textSecondary, fontWeight: FontWeight.w600),
           ),
         ],
       ),
@@ -567,18 +495,14 @@ class _AppListItemState extends State<_AppListItem> {
           leading: _buildLeadingIcon(),
           title: Text(
             widget.app.name.decodeString,
-            style: TextStyle(
-              color: Colors.white,
-              fontWeight: widget.isSelected ? FontWeight.bold : FontWeight.w500,
-              fontSize: 16,
-            ),
+            style: OmiType.callout.copyWith(fontWeight: widget.isSelected ? FontWeight.bold : FontWeight.w500),
           ),
           subtitle: _buildSubtitle(),
           trailing: _buildTrailingWidget(),
           selected: widget.isSelected,
           onTap: widget.onTap,
         ),
-        Divider(height: 1, thickness: 0.5, color: Colors.grey.withValues(alpha: 0.2), indent: 56, endIndent: 16),
+        Divider(height: 1, thickness: 0.5, color: OmiColors.border, indent: 56, endIndent: 16),
       ],
     );
   }
@@ -593,7 +517,7 @@ class _AppListItemState extends State<_AppListItem> {
           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
           decoration: BoxDecoration(
             color: Colors.amber.shade300.withValues(alpha: 0.15),
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: OmiRadius.smAll,
           ),
           child: Center(
             child: Row(
@@ -607,7 +531,7 @@ class _AppListItemState extends State<_AppListItem> {
                 const SizedBox(width: 4),
                 Text(
                   context.l10n.defaultLabel,
-                  style: TextStyle(color: Colors.amber.shade300, fontSize: 9, fontWeight: FontWeight.w600),
+                  style: OmiType.caption.copyWith(color: Colors.amber.shade300, fontWeight: FontWeight.w600),
                 ),
               ],
             ),
@@ -622,7 +546,7 @@ class _AppListItemState extends State<_AppListItem> {
           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
           decoration: BoxDecoration(
             color: Colors.grey.shade600.withValues(alpha: 0.3),
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: OmiRadius.smAll,
           ),
           child: Center(
             child: Row(
@@ -636,7 +560,7 @@ class _AppListItemState extends State<_AppListItem> {
                 const SizedBox(width: 4),
                 Text(
                   context.l10n.lastUsedLabel,
-                  style: TextStyle(color: Colors.grey.shade400, fontSize: 9, fontWeight: FontWeight.w600),
+                  style: OmiType.caption.copyWith(color: OmiColors.textSecondary, fontWeight: FontWeight.w600),
                 ),
               ],
             ),
@@ -662,19 +586,9 @@ class _AppListItemState extends State<_AppListItem> {
         widget.provider!.selectedAppForReprocessing?.id == widget.app.id;
 
     if (widget.isSelected) {
-      return const Icon(Icons.check, color: Colors.green, size: 20);
-    } else if (widget.isInstalling) {
-      return const SizedBox(
-        width: 20,
-        height: 20,
-        child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation<Color>(Colors.white)),
-      );
-    } else if (isProcessing) {
-      return const SizedBox(
-        width: 20,
-        height: 20,
-        child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation<Color>(Colors.white)),
-      );
+      return Icon(Icons.check, color: OmiColors.textPrimary, size: 20);
+    } else if (widget.isInstalling || isProcessing) {
+      return const OmiSpinner(size: OmiSpinnerSize.small);
     } else {
       return const SizedBox.shrink();
     }
@@ -694,13 +608,9 @@ class _AppListItemState extends State<_AppListItem> {
         );
       },
       progressIndicatorBuilder: (context, url, progress) => CircleAvatar(
-        backgroundColor: Colors.white,
+        backgroundColor: OmiColors.surface2,
         radius: 16,
-        child: CircularProgressIndicator(
-          value: progress.progress,
-          valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
-          strokeWidth: 2,
-        ),
+        child: const OmiSpinner(size: OmiSpinnerSize.small),
       ),
     );
   }
@@ -723,24 +633,39 @@ class _CreateTemplateListItem extends StatelessWidget {
           ),
           title: Text(
             context.l10n.createCustomTemplate,
-            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 16),
+            style: OmiType.callout.copyWith(fontWeight: FontWeight.w500),
           ),
-          trailing: const Icon(Icons.arrow_forward_ios, color: Colors.white, size: 16),
-          onTap: () {
-            final conversationId = context.read<ConversationDetailProvider>().conversation.id;
-            PlatformManager.instance.analytics.summarizedAppCreateTemplateClicked(conversationId: conversationId);
-
-            // Close the current bottom sheet first
-            Navigator.pop(context);
-
-            // Show the quick create template bottom sheet
-            showCreateTemplateBottomSheet(context, conversationId: conversationId);
-          },
+          trailing: Icon(Icons.arrow_forward_ios, color: OmiColors.textPrimary, size: 16),
+          onTap: () => openCreateSummaryTemplate(context),
         ),
-        Divider(height: 1, thickness: 0.5, color: Colors.grey.withValues(alpha: 0.2), indent: 56, endIndent: 16),
+        Divider(height: 1, thickness: 0.5, color: OmiColors.border, indent: 56, endIndent: 16),
       ],
     );
   }
+}
+
+/// Closes the sheet and opens the catalog of summary templates. Everything read from the sheet's
+/// context is read before it closes.
+void openSummaryTemplateCatalog(BuildContext context) {
+  final conversationId = context.read<ConversationDetailProvider>().conversation.id;
+  final memoriesApps = context.read<AppProvider>().apps.where((app) => app.worksWithMemories()).toList();
+  final capability = AppCapability(title: context.l10n.summary, id: 'memories');
+  final navigator = Navigator.of(context);
+  final pageContext = navigator.context;
+  navigator.pop();
+  PlatformManager.instance.analytics.summarizedAppEnableAppsClicked(conversationId: conversationId);
+  routeToPage(pageContext, CapabilityAppsPage(capability: capability, apps: memoriesApps));
+  PlatformManager.instance.analytics.pageOpened('Summary Apps');
+}
+
+/// Closes the sheet and opens the quick template creator for the open conversation.
+void openCreateSummaryTemplate(BuildContext context) {
+  final conversationId = context.read<ConversationDetailProvider>().conversation.id;
+  PlatformManager.instance.analytics.summarizedAppCreateTemplateClicked(conversationId: conversationId);
+  final navigator = Navigator.of(context);
+  final pageContext = navigator.context;
+  navigator.pop();
+  showCreateTemplateBottomSheet(pageContext, conversationId: conversationId);
 }
 
 class _EnableAppsListItem extends StatelessWidget {
@@ -760,29 +685,12 @@ class _EnableAppsListItem extends StatelessWidget {
           ),
           title: Text(
             context.l10n.allTemplates,
-            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 16),
+            style: OmiType.callout.copyWith(fontWeight: FontWeight.w500),
           ),
-          trailing: const Icon(Icons.arrow_forward_ios, color: Colors.white, size: 16),
-          onTap: () {
-            Navigator.pop(context);
-            final conversationId = context.read<ConversationDetailProvider>().conversation.id;
-            PlatformManager.instance.analytics.summarizedAppEnableAppsClicked(conversationId: conversationId);
-
-            // Navigate to Summary (memories) capability apps page
-            final appProvider = context.read<AppProvider>();
-            final memoriesApps = appProvider.apps.where((app) => app.worksWithMemories()).toList();
-
-            routeToPage(
-              context,
-              CapabilityAppsPage(
-                capability: AppCapability(title: context.l10n.summary, id: 'memories'),
-                apps: memoriesApps,
-              ),
-            );
-            PlatformManager.instance.analytics.pageOpened('Summary Apps');
-          },
+          trailing: Icon(Icons.arrow_forward_ios, color: OmiColors.textPrimary, size: 16),
+          onTap: () => openSummaryTemplateCatalog(context),
         ),
-        Divider(height: 1, thickness: 0.5, color: Colors.grey.withValues(alpha: 0.2), indent: 56, endIndent: 16),
+        Divider(height: 1, thickness: 0.5, color: OmiColors.border, indent: 56, endIndent: 16),
       ],
     );
   }

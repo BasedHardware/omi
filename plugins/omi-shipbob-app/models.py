@@ -25,6 +25,65 @@ class ChatToolResponse(BaseModel):
     error: Optional[str] = None
 
 
+class GetInventoryRequest(BaseModel):
+    """Request model for get_inventory."""
+
+    uid: str
+    product_name: Optional[str] = None
+    limit: Optional[int] = 10
+
+
+class GetProductsRequest(BaseModel):
+    """Request model for get_products."""
+
+    uid: str
+    limit: Optional[int] = 10
+    search: Optional[str] = None
+
+
+class CreateWroRequest(BaseModel):
+    """Request model for create_wro."""
+
+    uid: str
+    product_name: str
+    quantity: int
+    fulfillment_center_id: Optional[int] = None
+    expected_arrival_date: Optional[str] = None
+    tracking_number: Optional[str] = None
+    purchase_order_number: Optional[str] = None
+    packaging_type: Optional[str] = "EverythingInOneBox"
+    package_type: Optional[str] = "Package"
+
+
+class GetWrosRequest(BaseModel):
+    """Request model for get_wros."""
+
+    uid: str
+    limit: Optional[int] = 10
+    status: Optional[str] = None
+
+
+class CancelWroRequest(BaseModel):
+    """Request model for cancel_wro."""
+
+    uid: str
+    wro_id: str
+
+
+class GetOrdersRequest(BaseModel):
+    """Request model for get_orders."""
+
+    uid: str
+    limit: Optional[int] = 10
+    status: Optional[str] = None
+
+
+class GetFulfillmentCentersRequest(BaseModel):
+    """Request model for get_fulfillment_centers."""
+
+    uid: str
+
+
 # ShipBob Data Models
 class ShipBobUser(BaseModel):
     """ShipBob user information."""

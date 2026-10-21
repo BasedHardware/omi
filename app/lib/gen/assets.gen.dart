@@ -485,6 +485,26 @@ class $AssetsIntegrationAppLogosGen {
       ];
 }
 
+class $AssetsModelsGen {
+  const $AssetsModelsGen();
+
+  /// File path: assets/models/silero_vad.onnx
+  String get sileroVad => 'assets/models/silero_vad.onnx';
+
+  /// List of all assets
+  List<String> get values => [sileroVad];
+}
+
+class $AssetsTestGen {
+  const $AssetsTestGen();
+
+  /// File path: assets/test/tts_progressive_probe.mp3
+  String get ttsProgressiveProbe => 'assets/test/tts_progressive_probe.mp3';
+
+  /// List of all assets
+  List<String> get values => [ttsProgressiveProbe];
+}
+
 abstract final class Assets {
   static const $AssetsCompetitorLogosGen competitorLogos =
       $AssetsCompetitorLogosGen();
@@ -492,6 +512,8 @@ abstract final class Assets {
   static const $AssetsImagesGen images = $AssetsImagesGen();
   static const $AssetsIntegrationAppLogosGen integrationAppLogos =
       $AssetsIntegrationAppLogosGen();
+  static const $AssetsModelsGen models = $AssetsModelsGen();
+  static const $AssetsTestGen test = $AssetsTestGen();
   static const String shorebird = 'shorebird.yaml';
 
   /// List of all assets

@@ -1,3 +1,4 @@
+import 'package:omi/models/stt_provider.dart';
 import 'package:flutter/foundation.dart';
 
 import 'package:omi/models/custom_stt_config.dart';
@@ -57,13 +58,13 @@ class SttModeResolver {
 
   final bool Function() flagReader;
   final TranscriptionAllowanceSnapshot? Function() allowanceReader;
-  final Future<FreemiumReadiness> Function() readinessReader;
+  final Future<FreemiumReadiness> Function({String? language}) readinessReader;
   final CustomSttConfig? Function() onDeviceConfigBuilder;
 
   SttModeResolver({
     bool Function()? flagReader,
     TranscriptionAllowanceSnapshot? Function()? allowanceReader,
-    Future<FreemiumReadiness> Function()? readinessReader,
+    Future<FreemiumReadiness> Function({String? language})? readinessReader,
     CustomSttConfig? Function()? onDeviceConfigBuilder,
   })  : flagReader = flagReader ?? _defaultFlag,
         allowanceReader = allowanceReader ?? _defaultAllowance,
@@ -79,7 +80,8 @@ class SttModeResolver {
 
   static TranscriptionAllowanceSnapshot? _defaultAllowance() => TranscriptionAllowanceCache.current;
 
-  static Future<FreemiumReadiness> _defaultReadiness() => FreemiumTranscriptionService().checkReadiness();
+  static Future<FreemiumReadiness> _defaultReadiness({String? language}) =>
+      FreemiumTranscriptionService().checkReadiness(language: language);
 
   static CustomSttConfig? _defaultOnDeviceConfig() {
     final config = FreemiumTranscriptionService().getFreemiumConfig();
@@ -87,15 +89,18 @@ class SttModeResolver {
     return config.copyWith(identity: freemiumOnDeviceId, sendRawAudioToOmi: false);
   }
 
-  Future<SttModeDecision> decide({
-    required CustomSttConfig persistedCustomStt,
-    required BleAudioCodec codec,
-  }) async {
+  Future<SttModeDecision> decide({required CustomSttConfig persistedCustomStt, required BleAudioCodec codec}) async {
     FreemiumReadiness readiness = FreemiumReadiness.ready;
     final flag = flagReader();
     final allowance = allowanceReader();
-    if (flag && !persistedCustomStt.isEnabled && _needsOnDeviceReadiness(allowance)) {
-      readiness = await readinessReader();
+    if ((persistedCustomStt.provider == SttProvider.onDeviceWhisper &&
+            !kIsWeb &&
+            defaultTargetPlatform == TargetPlatform.iOS) ||
+        (flag && !persistedCustomStt.isEnabled && _needsOnDeviceReadiness(allowance))) {
+      readiness = await readinessReader(
+          language: persistedCustomStt.isEnabled && persistedCustomStt.provider == SttProvider.onDeviceWhisper
+              ? persistedCustomStt.language
+              : null);
     }
     return resolve(
       flagEnabled: flag,
@@ -119,6 +124,10 @@ class SttModeResolver {
     required BleAudioCodec codec,
   }) {
     if (persistedCustomStt.isEnabled) {
+      if (persistedCustomStt.provider == SttProvider.onDeviceWhisper && readiness != FreemiumReadiness.ready) {
+        return const SttModeDecision(
+            path: SttResolvedPath.blocked, reason: 'on_device_not_ready', allowanceOnDevice: true);
+      }
       return SttModeDecision(
         path: SttResolvedPath.honorCustom,
         customSttConfig: persistedCustomStt,
@@ -154,11 +163,7 @@ class SttModeResolver {
       );
     }
 
-    if (TranscriptSocketServiceFactory.shouldBlockUnsupportedCodecFallback(
-      codec,
-      null,
-      allowanceOnDevice: true,
-    )) {
+    if (TranscriptSocketServiceFactory.shouldBlockUnsupportedCodecFallback(codec, null, allowanceOnDevice: true)) {
       return const SttModeDecision(
         path: SttResolvedPath.blocked,
         reason: 'unsupported_codec_on_device',
@@ -182,4 +187,19 @@ class SttModeResolver {
       allowanceOnDevice: true,
     );
   }
+}
+
+PurePollingSocket? customSttPollingSocket(Object? socket) {
+  final primary = socket is CompositeTranscriptionSocket ? socket.primarySocket : socket;
+  return primary is PurePollingSocket ? primary : null;
+}
+
+/// When custom STT is configured, its polling socket keeps buffering audio
+/// locally and retrying instead of tearing the transcription socket down on
+/// every failure (see PurePollingSocket). Surface that local state so the
+/// recording UI can show "offline, buffering" instead of silently showing
+/// "Listening" while nothing is actually being transcribed.
+Duration? customSttBufferingFor(Object? socket, [DateTime? now]) {
+  final since = customSttPollingSocket(socket)?.bufferingSince;
+  return since == null ? null : (now ?? DateTime.now()).difference(since);
 }

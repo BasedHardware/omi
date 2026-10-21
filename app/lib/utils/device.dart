@@ -37,6 +37,15 @@ class DeviceUtils {
     }
   }
 
+  static Version? _tryParseVersion(Object? value) {
+    if (value is! String || value.isEmpty) return null;
+    try {
+      return Version.parse(value);
+    } catch (e) {
+      return null;
+    }
+  }
+
   static Future<(String, bool, String)> shouldUpdateFirmware({
     required String currentFirmware,
     required Map latestFirmwareDetails,
@@ -47,22 +56,36 @@ class DeviceUtils {
     if (latestFirmwareDetails.isEmpty || latestFirmwareDetails['version'] == null) {
       return ('Latest Version Not Available', false, '');
     }
-    if (latestFirmwareDetails['draft']) {
+    if (latestFirmwareDetails['draft'] == true) {
       return ('Latest Version Not Available', false, '');
     }
 
-    Version currentVersion = Version.parse(currentFirmware);
+    Version? currentVersion = _tryParseVersion(currentFirmware);
+    if (currentVersion == null) {
+      return ('Unable to determine current firmware version', false, '');
+    }
     String latestVersionStr = latestFirmwareDetails['version'];
-    Version latestVersion = Version.parse(latestVersionStr);
-    Version minVersion = Version.parse(latestFirmwareDetails['min_version']);
+    Version? latestVersion = _tryParseVersion(latestVersionStr);
+    Version? minVersion = _tryParseVersion(latestFirmwareDetails['min_version']);
+    if (latestVersion == null || minVersion == null) {
+      return ('Latest Version Not Available', false, '');
+    }
 
     if (currentVersion < minVersion) {
       return ('0', false, latestVersionStr);
     } else {
       if (latestVersion > currentVersion) {
         PackageInfo packageInfo = await PackageInfo.fromPlatform();
-        if (Version.parse(packageInfo.version) <= Version.parse(latestFirmwareDetails['min_app_version']) &&
-            int.parse(packageInfo.buildNumber) < int.parse(latestFirmwareDetails['min_app_version_code'])) {
+        final appVersion = _tryParseVersion(packageInfo.version);
+        final minAppVersion = _tryParseVersion(latestFirmwareDetails['min_app_version']);
+        final buildNumber = int.tryParse(packageInfo.buildNumber);
+        final minBuildNumber = int.tryParse('${latestFirmwareDetails['min_app_version_code']}');
+        if (appVersion != null &&
+            minAppVersion != null &&
+            buildNumber != null &&
+            minBuildNumber != null &&
+            appVersion <= minAppVersion &&
+            buildNumber < minBuildNumber) {
           return (
             'The latest version of firmware is not compatible with this version of App (${packageInfo.version}+${packageInfo.buildNumber}). Please update the app from ${Platform.isAndroid ? 'Play Store' : 'App Store'}',
             false,

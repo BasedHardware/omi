@@ -3,8 +3,8 @@ import Foundation
 
 /// S12 summarizer-only debug harness. Runs the S10 chunk-map-reduce
 /// summarizer over supplied sessions (live: last K GRDB rows) and writes
-/// schema-validity + timings. Memory-structure metrics and the AFM adapter
-/// stay cut — S5b/S10b are not on `main`, and AFM remains a fail-closed name.
+/// schema-validity + timings. Pass `engine=afm` or `engine=local-server` to
+/// pin the runtime; the production default follows AFM availability.
 enum LocalSummaryBenchmark {
   static let reportKind = "local_summary_benchmark"
   static let reportVersion = 1

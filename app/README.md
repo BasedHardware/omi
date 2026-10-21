@@ -19,8 +19,9 @@ Before getting started, make sure your device is connected and unlocked. If you'
    PROVIDER_MODE=offline make dev-up
    ```
 
-   `make dev-init` builds `backend/.venv` from whatever `python3` resolves to,
-   and the backend requires **Python 3.11** (not 3.12+). The harness also needs a
+   `make dev-init` resolves a pinned **Python 3.11** on its own — `python3.11`
+   on `PATH`, then Homebrew's `python@3.11`, then a `uv`-managed install — so
+   your default `python3` doesn't need to be 3.11. The harness also needs a
    Java runtime and `firebase-tools`/`npx`; `make dev-up` names what's missing.
 
    `make dev-status` shows what came up; `make dev-down` stops it. Ports, seeded
@@ -86,6 +87,25 @@ build.
    flutter run --flavor dev
    ```
 
+
+### Verifying changes
+
+The fast path for app changes is the unified verify entrypoint (no device, no
+credentials — loopback fixtures and synthetic data only):
+
+```bash
+make mobile-verify ARGS="doctor"                              # lane readiness + remedy
+make mobile-verify ARGS="fast --paths app/lib/pages/chat/page.dart"  # focused journeys
+make mobile-verify ARGS="fast --all"                          # full hermetic suite
+```
+
+Selection is mechanical: journeys are discovered from
+`integration_test/journeys/`, changed paths map to the behaviors they can
+break, unknown `app/lib` changes fall back to the full suite, and an empty
+selection fails instead of passing. CI runs the same command in the
+`journeys-hermetic` lane when app/journey inputs change. Receipts, selection
+rules, simulator smoke, and the separate physical-device path:
+[`scripts/dev-harness/MOBILE_VERIFY.md`](../scripts/dev-harness/MOBILE_VERIFY.md).
 
 ### Building and Deploying to iPhone
 

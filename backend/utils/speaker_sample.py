@@ -13,6 +13,7 @@ from config.stt_provider_policy import normalized_stt_language
 from utils.executors import sync_executor, run_blocking
 from utils.other.storage import delete_speech_profile_blob, download_speech_profile_bytes
 from utils.stt.pre_recorded import prerecorded_from_bytes as deepgram_prerecorded_from_bytes
+from utils.stt.pre_recorded import verification_stt_deadline
 from utils.text_utils import compute_text_containment
 
 MIN_WORDS = 5
@@ -66,6 +67,28 @@ async def verify_and_transcribe_sample(
     except RuntimeError as e:
         # Transient transcription failure - distinguish from quality issues
         return None, False, f"transcription_failed: {e}"
+    return _validate_transcription(raw_words, expected_text, language)
+
+
+def verify_and_transcribe_sample_in_worker(
+    audio_bytes: bytes,
+    sample_rate: int,
+    expected_text: Optional[str],
+    language: Optional[str],
+    deadline: float,
+) -> Tuple[Optional[str], bool, str]:
+    """Verify list clips inside the isolated worker without borrowing a shared STT thread."""
+    try:
+        with verification_stt_deadline(deadline):
+            raw_words = deepgram_prerecorded_from_bytes(audio_bytes, sample_rate, True, language=language)
+    except RuntimeError as e:
+        return None, False, f"transcription_failed: {e}"
+    return _validate_transcription(raw_words, expected_text, language)
+
+
+def _validate_transcription(
+    raw_words: Any, expected_text: Optional[str], language: Optional[str]
+) -> Tuple[Optional[str], bool, str]:
 
     # deepgram_prerecorded_from_bytes returns List[dict] or (when return_language=True) Tuple[List[dict], str].
     # return_language defaults to False, so the runtime value is always the list; narrow for the type system.

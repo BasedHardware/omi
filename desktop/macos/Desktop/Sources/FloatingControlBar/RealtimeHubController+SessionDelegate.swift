@@ -548,7 +548,8 @@ extension RealtimeHubController {
       prepareVoiceOutputForDeterministicSlowToolAcknowledgement()
       FloatingBarVoicePlaybackService.shared.speakRealtimeSlowToolAcknowledgement(
         acknowledgement,
-        provider: acknowledgementProvider)
+        provider: acknowledgementProvider,
+        voiceName: Self.acknowledgementVoiceName(acknowledgementProvider, session?.assistantVoiceID))
     }
     switch tool {
     case .getTasks:
@@ -678,7 +679,6 @@ extension RealtimeHubController {
     guard isCurrentSession(source) else { return }
     AgentCompletionVoiceDelivery.shared.voiceSessionDidOpenInputWindow()
     NotchCardVoiceDelivery.shared.voiceSessionDidOpenInputWindow()
-    InterjectClassificationDelivery.shared.voiceSessionDidOpenInputWindow()
   }
 
   func hubDidConnect(source: RealtimeHubSession) {
@@ -687,7 +687,6 @@ extension RealtimeHubController {
     hubConnected = true  // authenticated + ready — PTT may now route turns to the hub
     AgentCompletionVoiceDelivery.shared.voiceSessionDidConnect()
     NotchCardVoiceDelivery.shared.voiceSessionDidConnect()
-    InterjectClassificationDelivery.shared.voiceSessionDidConnect()
     let replayedReconnectTurn = reconnectAudioBuffer != nil
     let replayedReplacementTurn = replacementAudioBuffer != nil
     if replayedReplacementTurn {
@@ -731,7 +730,7 @@ extension RealtimeHubController {
     let automationSelection = RealtimeAutomationTranscriptOverridePolicy.select(
       providerText: text,
       providerIsFinal: isFinal,
-      forcedText: testProviderTranscriptOverride)
+      forcedText: testProviderTranscriptOverride ?? wakeWordInputTranscript)
     if automationSelection.usedOverride {
       turnTranscript = automationSelection.text
       providerTranscriptFinalized = automationSelection.isFinal
@@ -831,6 +830,11 @@ extension RealtimeHubController {
     source: RealtimeHubSession
   ) {
     guard acceptsTurnEvent(identity, source: source), let identity else { return }
+    // The session speaks this text itself, so the microphone hears it and ambient capture
+    // returns it as the user. Recording it here is what lets `VoicePlaybackEchoPolicy`
+    // recognise the model's own answer coming back — the service that normally owns that
+    // history never sees realtime audio, because the hub plays it natively.
+    FloatingBarVoicePlaybackService.shared.recordExternallySpokenText(text)
     guard
       RealtimeProviderOutputPresentationPolicy.decide(
         screenGroundingState: screenGroundingState,
@@ -854,7 +858,7 @@ extension RealtimeHubController {
       }
     }
     if isFinal {
-      let reply = InterjectVoiceFeedbackRouting.spokenText(from: assistantText)
+      let reply = LegacyReplyTokenSanitizer.spokenText(from: assistantText)
         .trimmingCharacters(in: .whitespacesAndNewlines)
       // Fallback only: if the model produced text but no native audio this turn,
       // speak it through the selected app voice. Normally both providers stream
@@ -943,14 +947,6 @@ extension RealtimeHubController {
         turnID: turnID,
         callId: callId,
         reportIdentity: toolIdentity,
-        arguments: arguments,
-        expectedTurnEpoch: toolTurnEpoch)
-      return
-    }
-    if name == HubTool.recordInterjectFeedback.rawValue {
-      handleInterjectFeedbackReport(
-        source: source,
-        callId: callId,
         arguments: arguments,
         expectedTurnEpoch: toolTurnEpoch)
       return
@@ -1111,6 +1107,13 @@ extension RealtimeHubController {
       testProviderTranscriptOverride = nil
       heard = forced
       log("RealtimeHub: TEST override provider transcript → \"\(forced.prefix(60))\"")
+    }
+    let completedInputTranscript = Self.journalInputTranscript(
+      providerText: heard,
+      wakeWordInputTranscript: wakeWordInputTranscript)
+    if heard.isEmpty, !completedInputTranscript.isEmpty {
+      heard = completedInputTranscript
+      log("RealtimeHub: using wake-word text for the journal input transcript")
     }
     let providerReply = assistantText.trimmingCharacters(in: .whitespacesAndNewlines)
     let acceptedSpawnOwnerID = acceptedSpawnJournalReceiptByContinuityKey[turnIdempotencyKey]?.ownerID
@@ -1539,28 +1542,11 @@ extension RealtimeHubController {
       fallbackProvider = nil
       pendingFailoverReason = nil
     }
-    if deferIdleRewarmIfUserAway(closeCategory: closeCategory) {
-      recordCloseResolution(
-        turnOutcome: turnOutcome,
-        recoveryAction: .sessionRewarm,
-        recoveryResult: .deferredUserAway)
-      return
-    }
-    guard !reconnectPending, hubReconnectStrikes < Self.maxReconnectStrikes else {
-      teardownSession()
-      recordCloseResolution(
-        turnOutcome: turnOutcome,
-        recoveryAction: .sessionRewarm,
-        recoveryResult: .exhausted)
-      return
-    }
-    hubReconnectStrikes += 1
-    reconnectPending = true
-    replaceSessionAfterDrain(reconnectDelayNanoseconds: 1_500_000_000)
+    let recovery = continueWarmAfterLifecycleClose(closeCategory: closeCategory)
     recordCloseResolution(
       turnOutcome: turnOutcome,
       recoveryAction: .sessionRewarm,
-      recoveryResult: .started)
+      recoveryResult: recovery)
   }
 
   /// A warm background socket must never terminate a Deepgram/Omni fallback

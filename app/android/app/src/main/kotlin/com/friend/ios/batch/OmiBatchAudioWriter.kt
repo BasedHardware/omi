@@ -87,9 +87,11 @@ class OmiBatchAudioWriter(context: Context) : BaseBatchAudioWriter(context, TAG,
         if (!config.deviceId.equals(address, ignoreCase = true)) return
         if (!matches(config, serviceUuid, characteristicUuid)) return
 
-        // Muted: drop the packet but keep the open file's gap timer alive so unmute
-        // resumes the same recording instead of starting a new one.
-        if (boolPref("batchMuted", false)) {
+        // Stamp the packet before doing any work. The policy is checked again under
+        // the write lock so a packet admitted before mute/revision change cannot
+        // cross the native file boundary.
+        val admittedRevision = captureAdmissionPolicy().revision
+        if (captureAdmissionPolicy().muted) {
             synchronized(lock) { if (isOpenLocked) lastFrameMs = System.currentTimeMillis() }
             return
         }
@@ -104,6 +106,12 @@ class OmiBatchAudioWriter(context: Context) : BaseBatchAudioWriter(context, TAG,
 
         synchronized(lock) {
             val now = System.currentTimeMillis()
+
+            val currentPolicy = captureAdmissionPolicy()
+            if (!currentPolicy.permits(admittedRevision)) {
+                if (isOpenLocked) lastFrameMs = now
+                return
+            }
 
             // Gap finalize: a pause longer than GAP_MS starts a new file (so the
             // backend places resumed audio as a separate conversation).
@@ -122,10 +130,18 @@ class OmiBatchAudioWriter(context: Context) : BaseBatchAudioWriter(context, TAG,
                 // recordings apart from offline-sync WAL flushes, which share this directory
                 // and the same audio_*.bin naming. The backend ignores this segment; keep it
                 // in sync with Dart's `batchRecordingDevice`.
-                val name = "audio_omibatch_${config.codec}_${config.sampleRate}_1_fs${frameSize}_${startSec}.bin$PART_SUFFIX"
+                val marker = if (boolPref("onDeviceOverflowActive", false)) "omibatchoverflow" else "omibatch"
+                val name = "audio_${marker}_${config.codec}_${config.sampleRate}_1_fs${frameSize}_${startSec}.bin$PART_SUFFIX"
                 if (!openLocked(config.dir, name, startSec, now)) return // storage full or open failed — drop this packet
             }
 
+            // Opening/rotating a file can run arbitrary filesystem work. Re-read
+            // immediately before the write so a policy transition during that
+            // work cannot admit this packet.
+            if (!captureAdmissionPolicy().permits(admittedRevision)) {
+                if (isOpenLocked) lastFrameMs = now
+                return
+            }
             if (!writeFramesLocked(frames)) return
 
             lastFrameMs = now
@@ -169,7 +185,7 @@ class OmiBatchAudioWriter(context: Context) : BaseBatchAudioWriter(context, TAG,
     // ── Config ──
 
     private fun loadConfig(): Config? {
-        if (!boolPref("batchModeEnabled", false)) return null
+        if (!boolPref("batchModeEnabled", false) && !boolPref("onDeviceOverflowActive", false)) return null
         val dir = stringPref("batchAudioDir")
         if (dir.isEmpty()) return null
         val raw = stringPref("nativeBleStreamConfig")

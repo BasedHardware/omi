@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Reject unapproved growth of oversized product-source files.
 
-The target branch is the ratchet. For every changed Swift, Rust, or backend
-Python source, this check compares ``--base`` with the synthetic merge of
-``--base`` and ``--head``.
+The target branch is the ratchet. For every changed Swift, Rust, backend
+Python, or hand-written Dart under ``app/lib`` source, this check compares
+``--base`` with the synthetic merge of ``--base`` and ``--head``.
 Reductions therefore become the next ceiling automatically after merge, and
 unrelated pull requests never edit a shared line-count ledger.
 
@@ -40,6 +40,7 @@ EXCEPTION_RE = re.compile(
 )
 DESKTOP_ROOT = "desktop/macos/"
 BACKEND_ROOT = "backend/"
+APP_LIB_ROOT = "app/lib/"
 VENDORED_PARTS = {
     ".git",
     ".build",
@@ -55,6 +56,27 @@ VENDORED_PARTS = {
     "target",
 }
 TEST_PARTS = {"test", "tests", "Tests"}
+# Dart-only generated path parts. Swift already uses the capital-G ``Generated``
+# directory; Flutter writes ``lib/gen/`` and ``lib/backend/schema/gen/``.
+DART_GENERATED_PATH_PARTS = {"gen"}
+DART_GENERATED_NAME_PREFIXES = ("firebase_options",)
+
+
+def _is_generated_app_dart(path: PurePosixPath) -> bool:
+    """Match the generated Dart the existing ``.g.`` / ``.gen.`` / ``Generated`` filters miss."""
+
+    if any(part in DART_GENERATED_PATH_PARTS for part in path.parts):
+        return True
+    name = path.name
+    if name.startswith(DART_GENERATED_NAME_PREFIXES):
+        return True
+    # Hand-written ``app_localizations_helper.dart`` must stay in scope; only
+    # the flutter_gen_l10n outputs under ``l10n/`` / ``gen_l10n/`` are generated.
+    if name.startswith("app_localizations") and any(part in {"l10n", "gen_l10n"} for part in path.parts):
+        return True
+    return False
+
+
 @dataclass(frozen=True)
 class LineCountException:
     path: str
@@ -91,6 +113,8 @@ def is_product_source(relative: str) -> bool:
         return path.suffix == ".py"
     if relative.startswith(DESKTOP_ROOT):
         return path.suffix in {".swift", ".rs"}
+    if relative.startswith(APP_LIB_ROOT) and path.suffix == ".dart":
+        return not _is_generated_app_dart(path)
     return False
 
 

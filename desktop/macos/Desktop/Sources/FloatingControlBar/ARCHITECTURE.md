@@ -68,11 +68,13 @@ The fuller recovery, insertion, and notch contract lives in
      offline even if a path comes back mid-hold. A route that already
      produced a backend transcript (omni STT, batch STT after a warm-wait)
      hands it in as `knownTranscript` so the audio is not transcribed twice.
-     Every fallback is recorded (`area=voice_typing`). The 12 s cap (and the
-     polisher's 6 s) is enforced at the boundary by `DeadlinedOperation`: a
-     request stuck before its first cancellation check is abandoned at the
-     cap, not waited for. Cancelling the turn cancels the transcription and
-     tries no fallback.
+     Every fallback is recorded (`area=voice_typing`). Both recognizers have a
+     12 s cap (and the polisher has 6 s), enforced at the boundary by
+     `DeadlinedOperation`: a request or first model load stuck before its first
+     cancellation check is abandoned at the cap, not waited for. Cancelling the
+     turn cancels the transcription and tries no fallback. The automation
+     result names `on_device_transcription_timeout` so a cold signed-out slot
+     finishes with a typed unavailable result instead of holding its client.
   2. **No chat corrector.** `PTTTranscriptContextualCorrector` is not run on
      a dictation. Its greeting rule respells the first word of "<word>, …"
      from on-screen text; live it turned "So, this is a test" into "Sil, …"
@@ -219,6 +221,23 @@ The controller may call the kernel-facing manager for typed context and durable
 journal operations, but it must not reach directly into `ChatProvider` or make
 agent-routing decisions. Provider tools remain untrusted until the kernel
 returns an authorized command.
+
+Automatic / idle / launch warming of a **managed** (ephemeral) session consults
+`SubscriptionEntitlement.decision` via `ManagedPlanGateLatch` (shared with
+LiveNotes). Identified basic without a **usable** realtime BYOK key skips
+keep-warm. A stored voice key whose fingerprint `canUseBYOK` rejects is not an
+exemption unless failover can still reach a usable alternate — that reconnect
+is client-direct at $0. Only when no usable route exists does the known-bad
+path fall through to managed mint, which the gate skips. Unknown plans fail
+open. Warming is governed by `resolvedRealtimeWarmCredential()` (Voice Model
+key + credential health + one failover), not text-lane
+`APIKeyService.isByokActive`. `ensureWarm(userInitiated: true)` (PTT) still
+attempts. Launch uses `PushToTalkManager.warmHubOnLaunchIfNeeded` →
+`prepareAutomaticWarm()` so an existing away deferral cannot block an entitled
+re-entrant `setup`. A typed server `plan_gated` denial latches automatic retries
+for ten minutes (one bounded re-drive) or until the decision becomes allow / the
+owner changes. Entitlement refresh is owner-fenced and time-bounded so a hung
+fetch cannot stick `entitlementRefreshInFlight`.
 
 ## Verification
 

@@ -238,7 +238,7 @@ final class SBPostOnboardingGuidanceTests: XCTestCase {
     setup.listening = .always
     XCTAssertEqual(
       SBPostOnboardingGuidance.listeningCue(for: setup).title,
-      "I'm listening now, and I'll remember what matters.")
+      "I'm listening now. Your conversations will show up here as you have them.")
 
     setup.listening = .meetingsOnly
     XCTAssertEqual(

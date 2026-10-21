@@ -8,18 +8,20 @@ from pydantic import BaseModel
 from pydub import AudioSegment
 
 from database.redis_db import set_speech_profile_duration, get_speech_profile_duration
-from database.users import set_user_speaker_embedding
+from database.users import get_person, invalidate_person_speech_profile, set_user_speaker_embedding
 from utils.other import endpoints as auth
 from utils.other.storage import (
     upload_profile_audio,
     get_profile_audio_if_exists,
     delete_additional_profile_audio,
     get_additional_profile_recordings,
+    delete_speech_profile_blob,
     delete_user_person_speech_sample,
     get_user_person_speech_samples,
     get_user_has_speech_profile,
 )
 from utils.multipart import MultipartMaxPartSizeRoute, SPEECH_PROFILE_MAX_PART_SIZE, max_part_size
+from utils.speech_profile_deletion import teaching_segment_ids_for_deleted_sample
 from utils.stt.speaker_embedding import extract_embedding
 from utils.stt.streaming import is_stt_available
 from utils.stt.vad import apply_vad_for_speech_profile, VADEmptyError
@@ -176,6 +178,10 @@ def delete_extra_speech_profile_sample(
 
     if person_id:
         delete_user_person_speech_sample(uid, person_id, file_name)
+        segment_ids = teaching_segment_ids_for_deleted_sample(get_person(uid, person_id), memory_id)
+        if segment_ids:
+            for path in invalidate_person_speech_profile(uid, person_id, memory_id, segment_ids):
+                delete_speech_profile_blob(path)
     else:
         delete_additional_profile_audio(uid, file_name)
 

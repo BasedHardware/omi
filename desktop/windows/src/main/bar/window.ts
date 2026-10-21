@@ -883,6 +883,19 @@ export function handleSummonPress(): void {
   gesture?.fire()
 }
 
+/** Toggle the bar from a non-keyboard source (e.g. tray menu item).
+ *  Applies tap UI behavior directly — peek when hidden, hide when cleanly
+ *  presented — without routing through the gesture machine or emitting PTT
+ *  phases. A tray click has no physical key to sample, so entering the
+ *  gesture state machine would start ~1 s of unintended microphone capture
+ *  via the GetAsyncKeyState sampler before the repeat-gap timer ends it. */
+export function summonFromTray(): void {
+  if (!barEnabled) return
+  broadcast('overlay:summoned')
+  if (isBarCleanlyPresented()) hideBar()
+  else showBar('peek', 'summon')
+}
+
 /** (Re)build the gesture machine for an accelerator — call at startup and
  *  after every rebind so hold detection tracks the current chord. */
 export function setSummonGestureAccelerator(accelerator: string): void {

@@ -4,7 +4,9 @@
 from __future__ import annotations
 
 import importlib.util
+import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -113,6 +115,65 @@ class TestQualityRatchetTests(unittest.TestCase):
         self.assertIsNone(CHECKER.WALL_CLOCK_WAIT_RE.search(masked))
 
 
+class SharedDefaultsRatchetTests(unittest.TestCase):
+    def scan_text(self, text: str):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "Fixture.swift"
+            path.write_text(text)
+            return CHECKER.scan_swift_file(path, relative_path=path.name, role="test")
+
+    def test_counts_direct_multiline_mutations_but_not_reads_or_owned_defaults(self) -> None:
+        report = self.scan_text("""UserDefaults.standard.set("owner", forKey: "auth_userId")
+UserDefaults
+  .standard
+  .removeObject(forKey: "auth_userId")
+UserDefaults.standard.setPersistentDomain([:], forName: "domain")
+UserDefaults.standard.register(defaults: [:])
+UserDefaults.standard.string(forKey: "auth_userId")
+let defaults = try makeIsolatedDefaults()
+defaults.set("owner", forKey: "auth_userId")
+// UserDefaults.standard.removeObject(forKey: "comment")
+let prose = "UserDefaults.standard.set(true, forKey: key)"
+""")
+        self.assertEqual([finding.line for finding in report.defaults_findings], [1, 2, 5, 6])
+        self.assertEqual(report.annotation_findings, ())
+
+    def test_integration_escape_is_local_and_requires_a_reason(self) -> None:
+        report = self.scan_text("""// omi-test-quality: shared-defaults -- integration: singleton has no defaults injection seam
+UserDefaults.standard.set("owner", forKey: "auth_userId")
+UserDefaults.standard.removeObject(forKey: "unannotated")
+// omi-test-quality: shared-defaults -- convenient setup is not an integration boundary
+UserDefaults.standard.removeObject(forKey: "invalid")
+// omi-test-quality: shared-defaults -- integration: short
+UserDefaults.standard.removeObject(forKey: "short")
+""")
+        self.assertEqual([finding.line for finding in report.defaults_findings], [3, 5, 7])
+        self.assertEqual([finding.line for finding in report.annotation_findings], [4, 6])
+
+    def test_no_increase_boundary_is_enforced_by_cli(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / CHECKER.COLLECTION_ROOT).mkdir(parents=True)
+            tests = root / CHECKER.TEST_ROOT
+            tests.mkdir(parents=True)
+            fixture = tests / "Legacy.swift"
+            mutation = 'UserDefaults.standard.removeObject(forKey: "auth_userId")\n'
+            for count, expected_status in [
+                (CHECKER.SHARED_DEFAULTS_MUTATION_BASELINE, 0),
+                (CHECKER.SHARED_DEFAULTS_MUTATION_BASELINE + 1, 1),
+            ]:
+                with self.subTest(count=count):
+                    fixture.write_text(mutation * count)
+                    result = subprocess.run(
+                        [sys.executable, str(SCRIPT_PATH), "--root", str(root)],
+                        capture_output=True, text=True, check=False,
+                    )
+                    self.assertEqual(result.returncode, expected_status, result.stdout + result.stderr)
+                    if expected_status:
+                        self.assertIn("makeIsolatedDefaults()", result.stderr)
+                        self.assertIn("#13260", result.stderr)
+
+
 class GuardrailWiringTests(unittest.TestCase):
     def test_component_suite_and_manifest_run_the_guard(self) -> None:
         suite = (REPO_ROOT / "desktop/macos/scripts/swift-test-suites.sh").read_text()
@@ -122,6 +183,8 @@ class GuardrailWiringTests(unittest.TestCase):
         self.assertIn('python3 "$SCRIPT_DIR/check_desktop_test_quality.py"', suite)
         self.assertIn("desktop-test-quality", manifest)
         self.assertIn("check_desktop_test_quality.py", manifest)
+        self.assertIn("desktop-test-quality-fixtures", manifest)
+        self.assertIn("test_check_desktop_test_quality.py", manifest)
 
 
 if __name__ == "__main__":

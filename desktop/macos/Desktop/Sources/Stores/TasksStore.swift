@@ -2405,7 +2405,8 @@ class TasksStore: ObservableObject {
   func retryUnsyncedItems(
     includeRecent: Bool = false,
     expectedOwnerID: String? = nil,
-    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil,
+    operations: UnsyncedTaskSyncOperations = UnsyncedTaskSyncOperations()
   ) async {
     guard
       let lease = captureOwnerLease(
@@ -2413,11 +2414,11 @@ class TasksStore: ObservableObject {
         authorizationSnapshot: authorizationSnapshot
       )
     else { return }
-    let ownerID = lease.ownerID
-    guard await AccountCutoverOfflineUploadAdmission.allowsUploadOffMainActor() else {
+    guard await operations.allowsUpload() else {
       log("TasksStore: Skipping retryUnsyncedItems — account cutover offline upload gate closed")
       return
     }
+    guard isCurrent(lease) else { return }
     guard activeRetryLease == nil else {
       log("TasksStore: Skipping retryUnsyncedItems (already in progress)")
       return
@@ -2426,10 +2427,14 @@ class TasksStore: ObservableObject {
     defer {
       if activeRetryLease == lease { activeRetryLease = nil }
     }
+    let flushDeletions: @MainActor () async -> Void =
+      operations.flushDeletions ?? {
+        await self.flushPendingBackendDeletions(lease: lease)
+      }
 
     let items: [ActionItemRecord]
     do {
-      items = try await ActionItemStorage.shared.getUnsyncedActionItems(includeRecent: includeRecent)
+      items = try await operations.loadPending(includeRecent)
     } catch {
       if isCurrent(lease) {
         logError("TasksStore: Failed to fetch unsynced items", error: error)
@@ -2439,7 +2444,7 @@ class TasksStore: ObservableObject {
     guard isCurrent(lease) else { return }
 
     if items.isEmpty {
-      await flushPendingBackendDeletions(lease: lease)
+      await flushDeletions()
       return
     }
     log("TasksStore: Retrying sync for \(items.count) unsynced items")
@@ -2447,55 +2452,37 @@ class TasksStore: ObservableObject {
     var synced = 0
     for item in items {
       guard isCurrent(lease) else { return }
-      guard await AccountCutoverOfflineUploadAdmission.allowsUploadOffMainActor() else {
+      guard await operations.allowsUpload() else {
         log("TasksStore: Interrupted retryUnsyncedItems — account cutover offline upload gate closed")
         return
       }
+      guard isCurrent(lease) else { return }
       guard let localId = item.id else { continue }
 
-      // Re-check: the normal sync path may have synced this item while we were iterating
-      if let current = try? await ActionItemStorage.shared.getActionItem(id: localId),
-        current.backendSynced || (current.backendId != nil && !current.backendId!.isEmpty)
-      {
-        continue
-      }
-      guard isCurrent(lease) else { return }
-
-      // Parse metadata back from JSON
-      var metadata: [String: Any]?
-      if let json = item.metadataJson, let data = json.data(using: .utf8) {
-        metadata = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-      }
-
       do {
-        let response = try await APIClient.shared.createActionItem(
-          description: item.description,
-          dueAt: item.dueAt,
-          source: item.source,
-          priority: item.priority,
-          category: item.category,
-          metadataBox: ActionItemMetadataBox(metadata),
-          relevanceScore: item.relevanceScore,
-          // Carry completion in the create call itself — a separate follow-up
-          // PATCH here could fail silently (try?) while markSynced still ran,
-          // permanently stranding the backend row as incomplete since a
-          // synced item is never revisited by this retry loop.
-          completed: item.completed ? true : nil,
-          expectedOwnerId: ownerID,
-          authorizationSnapshot: lease.authorizationSnapshot
-        )
+        // A pending-list snapshot is only an enumeration hint. The user or
+        // another sync path may have edited, deleted, or linked the row since.
+        let current = try await operations.reloadCurrent(localId)
         guard isCurrent(lease) else { return }
-        try await ActionItemStorage.shared.markSynced(
+        guard let current, current.id == localId, !current.deleted,
+          !current.backendSynced,
+          (current.backendId ?? "").isEmpty
+        else { continue }
+        let projection = try UnsyncedTaskCreateProjection(record: current)
+        let response = try await operations.createRemote(projection, lease.authorizationSnapshot)
+        guard isCurrent(lease) else { return }
+        try await operations.markSynced(
           id: localId,
           backendId: response.id,
-          authorization: Self.localMutationAuthorization(
-            snapshot: lease.authorizationSnapshot
-          )
+          authorization: Self.localMutationAuthorization(snapshot: lease.authorizationSnapshot)
         )
         guard isCurrent(lease) else { return }
         synced += 1
       } catch {
-        // Skip this item, will retry next launch
+        guard isCurrent(lease) else { return }
+        // A malformed projection or failed create stays pending, never
+        // acknowledged after silently dropping repeat/evidence fields.
+        logError("TasksStore: Failed to recover unsynced task", error: error)
         continue
       }
     }
@@ -2503,7 +2490,8 @@ class TasksStore: ObservableObject {
     if isCurrent(lease) {
       log("TasksStore: Retry sync completed — \(synced)/\(items.count) items synced")
     }
-    await flushPendingBackendDeletions(lease: lease)
+    guard isCurrent(lease) else { return }
+    await flushDeletions()
   }
 
   /// Push unacknowledged deletions to the backend and purge the tombstones it confirms.
@@ -2751,35 +2739,13 @@ class TasksStore: ObservableObject {
   // MARK: - Recurrence Helpers
 
   /// Compute the next due date for a recurring task, skipping past dates.
-  private func nextFutureDueDate(from dueDate: Date, rule: String) -> Date? {
-    let calendar = Calendar.current
-    func nextDate(from date: Date) -> Date? {
-      switch rule {
-      case "daily":
-        return calendar.date(byAdding: .day, value: 1, to: date)
-      case "weekdays":
-        var next = calendar.date(byAdding: .day, value: 1, to: date)!
-        while calendar.isDateInWeekend(next) {
-          next = calendar.date(byAdding: .day, value: 1, to: next)!
-        }
-        return next
-      case "weekly":
-        return calendar.date(byAdding: .weekOfYear, value: 1, to: date)
-      case "biweekly":
-        return calendar.date(byAdding: .weekOfYear, value: 2, to: date)
-      case "monthly":
-        return calendar.date(byAdding: .month, value: 1, to: date)
-      default:
-        return nil
-      }
-    }
-    guard var next = nextDate(from: dueDate) else { return nil }
-    // Skip past dates to avoid pile-up when completing late
-    while next < Date() {
-      guard let n = nextDate(from: next) else { return nil }
-      next = n
-    }
-    return next
+  func nextFutureDueDate(
+    from dueDate: Date,
+    rule: String,
+    now: Date = Date(),
+    calendar: Calendar = .current
+  ) -> Date? {
+    TaskRecurrenceDatePolicy.nextDueDate(from: dueDate, rule: rule, now: now, calendar: calendar)
   }
 
   // MARK: - Task Actions
@@ -2945,8 +2911,8 @@ class TasksStore: ObservableObject {
         )
       }
       guard isCurrent(lease) else { return }
-
       // Spawn next recurring instance when completing a recurring task
+      if newCompleted, operationOverrides == nil, #available(macOS 27, *) { SiriDonations.taskCompleted(task.id) }
       if newCompleted, let rule = task.recurrenceRule, !rule.isEmpty {
         let baseDueDate = task.dueAt ?? Date()
         if let nextDue = nextFutureDueDate(from: baseDueDate, rule: rule) {

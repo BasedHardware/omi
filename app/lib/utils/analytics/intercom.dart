@@ -14,6 +14,11 @@ class IntercomManager {
   IntercomManager._internal();
 
   Intercom get intercom => Intercom.instance;
+
+  /// Whether the messenger can be shown on this platform with the configured
+  /// credentials. UI that offers a chat entry point hides itself when false.
+  bool get isIntercomEnabled => _isIntercomEnabled;
+
   bool get _isIntercomEnabled =>
       PlatformService.isIntercomSupported && (Env.intercomAppId != null && Env.intercomAppId!.isNotEmpty);
 

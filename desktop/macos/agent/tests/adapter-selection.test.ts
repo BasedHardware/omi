@@ -22,7 +22,7 @@ describe("adapter selection and activation", () => {
 
   it("keeps activation separate from implementation", () => {
     expect(adapterActivationEnv("acp")).toBeUndefined();
-    expect(adapterActivationEnv("pi-mono")).toBe("OMI_AUTH_TOKEN");
+    expect(adapterActivationEnv("pi-mono")).toBe("OMI_MODEL_CREDENTIALS");
     expect(adapterActivationEnv("hermes")).toBe("OMI_HERMES_ADAPTER_COMMAND");
     expect(adapterActivationEnv("openclaw")).toBe("OMI_OPENCLAW_ADAPTER_COMMAND");
 
@@ -60,7 +60,7 @@ describe("adapter selection and activation", () => {
     expect(adapterActivationError("pi-mono")).toBe(
       "Omi AI is not available. Sign in and try again."
     );
-    expect(adapterActivationError("pi-mono")).not.toContain("OMI_AUTH_TOKEN");
+    expect(adapterActivationError("pi-mono")).not.toContain("OMI_MODEL_CREDENTIALS");
   });
 
   it("source: daemon registers Hermes/OpenClaw explicitly and does not stamp MCP env as ACP", () => {

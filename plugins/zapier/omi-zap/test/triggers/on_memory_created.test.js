@@ -8,13 +8,20 @@ zapier.tools.env.inject();
 
 describe('triggers.on_memory_created', () => {
   it('should run', async () => {
-    const bundle = { inputData: {} };
+    const bundle = {
+      inputData: {},
+      cleanedRequest: {
+        id: 123,
+        title: 'Test Memory',
+      },
+    };
 
     const results = await appTester(
       App.triggers['on_memory_created'].operation.perform,
       bundle
     );
     expect(results).toBeDefined();
-    // TODO: add more assertions
+    expect(results.length).toBe(1);
+    expect(results[0]).toEqual(bundle.cleanedRequest);
   });
 });

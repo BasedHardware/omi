@@ -72,7 +72,7 @@ class Renderer:
             return
 
         if isinstance(data, list):
-            self._emit_table(data, columns=columns, title=title)
+            self._emit_table(coalesce_rows(data), columns=columns, title=title)
         elif isinstance(data, Mapping):
             self._emit_mapping(data, title=title)
         else:

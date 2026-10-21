@@ -15,6 +15,7 @@ import time
 import unittest
 import urllib.error
 from pathlib import Path
+from typing import TextIO
 from unittest.mock import Mock, patch
 
 import preflight_runner
@@ -33,6 +34,7 @@ from pr_preflight import (
     resolve_pr_metadata,
     run_git,
     run_python_capture,
+    run_local_checks,
     select_checks,
 )
 
@@ -40,6 +42,81 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 RUNNER = SCRIPT_DIR / "preflight_runner.py"
 REPO_ROOT = SCRIPT_DIR.parents[1]
 
+
+class LocalSlotsTests(unittest.TestCase):
+    def test_inactive_gate_preserves_child_argv(self) -> None:
+        command = [sys.executable, "checks.py"]
+        for lane, env in (("local", {}), ("ci", {"OMI_PREFLIGHT_LOCAL_SLOTS": "2"}),
+                          ("local", {"OMI_PREFLIGHT_LOCAL_SLOTS": "2", "GITHUB_ACTIONS": "true"})):
+            with self.subTest(lane=lane, env=env), patch.dict(os.environ, env, clear=True):
+                with patch("pr_preflight.subprocess.run") as run:
+                    run_local_checks(command, REPO_ROOT, lane)
+                run.assert_called_once_with(command, cwd=REPO_ROOT, check=False)
+
+    @unittest.skipIf(os.name == "nt", "flock admission requires POSIX")
+    def test_active_gate_holds_slot_and_wraps_priority(self) -> None:
+        import fcntl
+
+        command = [sys.executable, "checks.py"]
+        with tempfile.TemporaryDirectory() as tmp:
+            env = {"OMI_PREFLIGHT_LOCAL_SLOTS": "1", "OMI_PREFLIGHT_LOCAL_DIR": tmp}
+            def child(argv: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+                self.assertEqual(argv, ["/usr/bin/taskpolicy", "-b", *command])
+                self.assertEqual(len(kwargs["pass_fds"]), 1)
+                with (Path(tmp) / "0").open("r+") as probe:
+                    with self.assertRaises(BlockingIOError):
+                        fcntl.flock(probe, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    self.assertEqual(probe.read(), str(os.getpid()))
+                return subprocess.CompletedProcess(argv, 17)
+            with patch.dict(os.environ, env, clear=True), patch("pr_preflight.sys.platform", "darwin"):
+                with patch("pr_preflight.os.access", return_value=True), patch("pr_preflight.subprocess.run", side_effect=child):
+                    self.assertEqual(run_local_checks(command, REPO_ROOT, "local").returncode, 17)
+            with (Path(tmp) / "0").open("r+") as probe:
+                fcntl.flock(probe, fcntl.LOCK_EX | fcntl.LOCK_NB)
+
+    @unittest.skipIf(os.name == "nt", "flock admission requires POSIX")
+    def test_priority_controls_and_missing_binary(self) -> None:
+        command = [sys.executable, "checks.py"]
+        for background, platform, binary, prefix in (
+            ("0", "darwin", True, []),
+            ("true", "darwin", False, []),
+            ("1", "linux", "/usr/bin/nice", ["/usr/bin/nice", "-n", "19"]),
+            ("1", "linux", None, []),
+        ):
+            with self.subTest(background=background, platform=platform, binary=binary), tempfile.TemporaryDirectory() as tmp:
+                env = {"OMI_PREFLIGHT_LOCAL_SLOTS": "1", "OMI_PREFLIGHT_LOCAL_DIR": tmp,
+                       "OMI_PREFLIGHT_BACKGROUND": background}
+                with patch.dict(os.environ, env, clear=True), patch("pr_preflight.sys.platform", platform):
+                    with patch("pr_preflight.os.access", return_value=bool(binary)), patch("pr_preflight.shutil.which", return_value=binary):
+                        with patch("pr_preflight.subprocess.run") as run:
+                            run_local_checks(command, REPO_ROOT, "local")
+                self.assertEqual(run.call_args.args[0], prefix + command)
+                self.assertIn("pass_fds", run.call_args.kwargs)
+
+    @unittest.skipIf(os.name == "nt", "flock admission requires POSIX")
+    def test_exhaustion_fails_without_running_child(self) -> None:
+        import fcntl
+
+        with tempfile.TemporaryDirectory() as tmp:
+            env = {"OMI_PREFLIGHT_LOCAL_SLOTS": "1", "OMI_PREFLIGHT_LOCAL_WAIT": "0", "OMI_PREFLIGHT_LOCAL_DIR": tmp}
+            with (Path(tmp) / "0").open("w") as holder:
+                fcntl.flock(holder, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                output = io.StringIO()
+                with patch.dict(os.environ, env, clear=True), redirect_stderr(output):
+                    with patch("pr_preflight.subprocess.run") as run:
+                        result = run_local_checks(["checks"], REPO_ROOT, "local")
+                run.assert_not_called()
+                self.assertEqual(result.returncode, 75)
+                self.assertIn("OMI_PREFLIGHT_LOCAL_SLOTS", output.getvalue())
+                self.assertIn("OMI_PREFLIGHT_LOCAL_WAIT", output.getvalue())
+
+    def test_invalid_configuration_fails_closed(self) -> None:
+        for slots, wait in (("0", "1"), ("bad", "1"), ("1", "nan"), ("1", "-1")):
+            with self.subTest(slots=slots, wait=wait):
+                with patch.dict(os.environ, {"OMI_PREFLIGHT_LOCAL_SLOTS": slots, "OMI_PREFLIGHT_LOCAL_WAIT": wait}, clear=True):
+                    with patch("pr_preflight.subprocess.run") as run, redirect_stderr(io.StringIO()):
+                        self.assertEqual(run_local_checks(["checks"], REPO_ROOT, "local").returncode, 2)
+                run.assert_not_called()
 
 class FakeResponse(io.BytesIO):
     def __enter__(self) -> "FakeResponse":
@@ -508,6 +585,84 @@ class SelectionTests(unittest.TestCase):
                 self.assertEqual(sorted(live_diff), ["pr_file.txt"])
                 self.assertEqual(sorted(stale_diff), ["pr_file.txt", "unrelated_file.txt"])
 
+    def test_changed_files_agrees_on_branch_head_and_both_merge_parent_orders(self) -> None:
+        """make preflight / product-invariants consume this list.
+
+        Two-dot `main HEAD` includes files unique to main on the branch head
+        and drops them on GitHub's merge ref. Three-dot is parent-order
+        invariant.
+        """
+        git_isolation = ["-c", "core.hooksPath=/dev/null", "-c", "commit.gpgsign=false"]
+
+        def run(*args: str, cwd: Path) -> None:
+            subprocess.run(
+                ["git", *git_isolation, *args],
+                cwd=cwd,
+                check=True,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+            )
+
+        def rev_parse(cwd: Path, ref: str = "HEAD") -> str:
+            result = subprocess.run(
+                ["git", *git_isolation, "rev-parse", ref],
+                cwd=cwd,
+                check=True,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+            )
+            return result.stdout.strip()
+
+        with patch.dict(os.environ):
+            for key in list(os.environ):
+                if key.startswith("GIT_"):
+                    del os.environ[key]
+            with tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                run("init", "-q", "-b", "main", cwd=root)
+                run("config", "user.email", "test@example.com", cwd=root)
+                run("config", "user.name", "Test", cwd=root)
+                (root / "root.txt").write_text("root", encoding="utf-8")
+                run("add", "root.txt", cwd=root)
+                run("commit", "-q", "-m", "root", cwd=root)
+
+                run("checkout", "-q", "-b", "pr", cwd=root)
+                (root / "pr_file.txt").write_text("pr", encoding="utf-8")
+                run("add", "pr_file.txt", cwd=root)
+                run("commit", "-q", "-m", "pr", cwd=root)
+                pr_sha = rev_parse(root)
+
+                run("checkout", "-q", "main", cwd=root)
+                (root / "unrelated_file.txt").write_text("main", encoding="utf-8")
+                run("add", "unrelated_file.txt", cwd=root)
+                run("commit", "-q", "-m", "main advanced", cwd=root)
+                main_sha = rev_parse(root)
+
+                run("checkout", "-q", "--detach", pr_sha, cwd=root)
+                run("merge", "--no-ff", "-q", "-m", "branch-first", main_sha, cwd=root)
+                branch_first = rev_parse(root)
+                run("checkout", "-q", "--detach", main_sha, cwd=root)
+                run("merge", "--no-ff", "-q", "-m", "base-first", pr_sha, cwd=root)
+                base_first = rev_parse(root)
+
+                expected = ["pr_file.txt"]
+                self.assertEqual(changed_files(root, "main", pr_sha), expected)
+                self.assertEqual(changed_files(root, "main", branch_first), expected)
+                self.assertEqual(changed_files(root, "main", base_first), expected)
+                # Two-dot against the live main tip is the parent-order defect:
+                # on the branch head it includes main's unique file.
+                two_dot_branch = subprocess.run(
+                    ["git", *git_isolation, "diff", "--name-only", main_sha, pr_sha],
+                    cwd=root,
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                    encoding="utf-8",
+                ).stdout.splitlines()
+                self.assertIn("unrelated_file.txt", two_dot_branch)
+
     def test_make_preflight_resolves_pr_metadata_before_running_checks(self) -> None:
         result = subprocess.run(
             ["make", "-n", "preflight"],
@@ -550,6 +705,7 @@ class SelectionTests(unittest.TestCase):
                 "failure-class-protocol",
                 "failure-class-guard-artifact-ratchet",
                 "desktop-changelog-data",
+                "mobile-changelog-data",
                 "deferred-work-markers",
                 "lifecycle-headers",
                 "version-prefixed-filenames",
@@ -815,6 +971,7 @@ class SingleFlightTests(unittest.TestCase):
         command: list[str],
         *,
         extra_env: dict[str, str] | None = None,
+        stdout_file: TextIO | None = None,
     ) -> subprocess.Popen[str]:
         env = {**os.environ, "OMI_PREFLIGHT_STATE_DIR": str(state_root)}
         if extra_env:
@@ -824,7 +981,7 @@ class SingleFlightTests(unittest.TestCase):
             cwd=REPO_ROOT,
             env=env,
             stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
+            stdout=stdout_file if stdout_file is not None else subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
             encoding="utf-8",
@@ -832,10 +989,34 @@ class SingleFlightTests(unittest.TestCase):
 
     def wait_for_lock(self, state_root: Path) -> None:
         lock = state_root / "test" / "lock" / "owner.json"
-        deadline = time.monotonic() + 5
+        # The runner fingerprints before acquiring, and the fingerprint runs
+        # `git rev-parse HEAD` — seconds, not milliseconds, on a host with a
+        # contended object store. Keep the deadline generous so slow hosts are
+        # not misread as a missing lock.
+        deadline = time.monotonic() + 30
         while not lock.exists() and time.monotonic() < deadline:
             time.sleep(0.02)
         self.assertTrue(lock.exists(), "runner did not acquire its lock")
+
+    def wait_for_join(self, process: subprocess.Popen[str], log: Path) -> None:
+        # The second runner reaches the lock only after its own fingerprint
+        # (again `git rev-parse HEAD`). Releasing the hold before the join is
+        # observed lets the first child finish and release the lock first, so
+        # the second acquires freshly and re-runs the command — the double
+        # execution this test exists to catch, but as a host-timing artifact.
+        # Wait for the join line instead of sleeping a fixed interval.
+        deadline = time.monotonic() + 30
+        while time.monotonic() < deadline:
+            try:
+                output = log.read_text(encoding="utf-8", errors="replace")
+            except FileNotFoundError:
+                output = ""
+            if "Joining identical preflight" in output:
+                return
+            if process.poll() is not None:
+                self.fail(f"second runner exited before joining; output:\n{output}")
+            time.sleep(0.05)
+        self.fail(f"second runner did not report joining within 30s; output:\n{output}")
 
     @unittest.skipUnless(os.name == "nt", "Windows-only")
     def test_process_liveness_check_does_not_send_windows_ctrl_c(self) -> None:
@@ -866,7 +1047,7 @@ class SingleFlightTests(unittest.TestCase):
                 f"hold = Path({str(hold)!r})\n"
                 "p.write_text(p.read_text() + 'x' if p.exists() else 'x')\n"
                 "print('==> focused-tests', flush=True)\n"
-                "deadline = time.monotonic() + 10\n"
+                "deadline = time.monotonic() + 30\n"
                 "while hold.exists() and time.monotonic() < deadline:\n"
                 "    time.sleep(0.02)\n"
             )
@@ -876,20 +1057,20 @@ class SingleFlightTests(unittest.TestCase):
             first.stdin.write("same\n")
             first.stdin.close()
             self.wait_for_lock(temp)
-            second = self.run_runner(temp, command)
-            assert second.stdin is not None
-            second.stdin.write("same\n")
-            second.stdin.close()
-            time.sleep(0.3)
-            hold.unlink(missing_ok=True)
-            first_output = first.stdout.read() if first.stdout else ""
-            second_output = second.stdout.read() if second.stdout else ""
-            self.assertEqual(first.wait(), 0, first_output)
-            self.assertEqual(second.wait(), 0, second_output)
+            second_log = temp / "second.log"
+            with second_log.open("w", encoding="utf-8") as second_output_file:
+                second = self.run_runner(temp, command, stdout_file=second_output_file)
+                assert second.stdin is not None
+                second.stdin.write("same\n")
+                second.stdin.close()
+                self.wait_for_join(second, second_log)
+                hold.unlink(missing_ok=True)
+                first_output = first.stdout.read() if first.stdout else ""
+                self.assertEqual(first.wait(), 0, first_output)
+                self.assertEqual(second.wait(), 0)
             if first.stdout:
                 first.stdout.close()
-            if second.stdout:
-                second.stdout.close()
+            second_output = second_log.read_text(encoding="utf-8")
             self.assertEqual(counter.read_text(), "x")
             self.assertIn("Joining identical preflight", second_output)
             status = json.loads((temp / "test" / "status.json").read_text())

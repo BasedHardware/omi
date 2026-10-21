@@ -33,6 +33,7 @@ enum ChatProseRenderCache {
     let fontScaleMilli: Int
     /// Sorted ordinals named by the block, or empty.
     let citationOrdinals: [Int]
+    var documentProse: Bool = false
   }
 
   final class Entry {

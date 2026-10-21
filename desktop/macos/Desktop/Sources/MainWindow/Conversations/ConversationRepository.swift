@@ -89,11 +89,24 @@ protocol ConversationLocalDataSource: Sendable {
     scope: ConversationCacheWriteScope,
     generation: Int
   ) async throws
+  func storeMany(
+    _ conversations: [ServerConversation],
+    scope: ConversationCacheWriteScope,
+    generation: Int
+  ) async throws
   func delete(
     id: String,
     scope: ConversationCacheWriteScope,
     generation: Int
   ) async throws
+}
+
+extension ConversationLocalDataSource {
+  func storeMany(
+    _ conversations: [ServerConversation], scope: ConversationCacheWriteScope, generation: Int
+  ) async throws {
+    for conversation in conversations { try? await store(conversation, scope: scope, generation: generation) }
+  }
 }
 
 struct LiveConversationRemoteDataSource: ConversationRemoteDataSource {
@@ -185,6 +198,20 @@ struct LiveConversationLocalDataSource: ConversationLocalDataSource {
       cacheScope: scope,
       cacheGeneration: generation
     )
+  }
+
+  func storeMany(
+    _ conversations: [ServerConversation], scope: ConversationCacheWriteScope, generation: Int
+  ) async throws {
+    var committed: [String] = []
+    for conversation in conversations {
+      do {
+        _ = try await TranscriptionStorage.shared.syncServerConversation(
+          conversation, cacheScope: scope, cacheGeneration: generation, notifySiri: false)
+        committed.append(conversation.id)
+      } catch { log("Conversation cache sync deferred: \(error.localizedDescription)") }
+    }
+    if scope.isCurrent(generation) { SiriIndexHooks.conversationsChanged(committed) }
   }
 
   func delete(
@@ -455,6 +482,21 @@ final class ConversationRepository {
     seed: ServerConversation,
     onCached: ((ServerConversation) -> Void)? = nil
   ) async throws -> ServerConversation {
+    try await detail(id: id, fallback: seed, onCached: onCached)
+  }
+
+  /// A detail known only by id — another device's recording of an event, which
+  /// the loaded list may not hold. Same cache-then-revalidate path, but with no
+  /// seed to fall back on a failed fetch with nothing cached throws.
+  func detail(id: String) async throws -> ServerConversation {
+    try await detail(id: id, fallback: nil, onCached: nil)
+  }
+
+  private func detail(
+    id: String,
+    fallback seed: ServerConversation?,
+    onCached: ((ServerConversation) -> Void)?
+  ) async throws -> ServerConversation {
     let session = cacheWriteScope.capture()
     if let cached = try? await local.detail(id: id) {
       try ensureCurrentSession(session)
@@ -482,6 +524,7 @@ final class ConversationRepository {
         return cached
       }
       try ensureCurrentSession(session)
+      guard let seed else { throw error }
       return seed
     }
   }
@@ -758,9 +801,7 @@ final class ConversationRepository {
   }
 
   private func storeInBackground(_ server: [ServerConversation], session: Int) async {
-    for conversation in server {
-      try? await local.store(conversation, scope: cacheWriteScope, generation: session)
-    }
+    try? await local.storeMany(server, scope: cacheWriteScope, generation: session)
   }
 
   private func emit(_ source: ConversationSnapshotSource) {

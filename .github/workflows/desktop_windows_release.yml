@@ -55,6 +55,12 @@ concurrency:
   group: desktop-windows-release-main
   cancel-in-progress: false
 
+env:
+  # Abort a git HTTP transfer that stays under 1 KB/s for 60 s, so actions/checkout
+  # retries instead of hanging 7-10 min until the TCP reset (#22890).
+  GIT_HTTP_LOW_SPEED_LIMIT: "1000"
+  GIT_HTTP_LOW_SPEED_TIME: "60"
+
 jobs:
   plan-and-tag:
     runs-on: ubuntu-latest
@@ -268,9 +274,9 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
-      - name: Provision .env (ships public Firebase/PostHog config)
+      - name: Provision Beta .env (dev memory serving plane)
         shell: pwsh
-        run: Copy-Item .env.example .env
+        run: Copy-Item .env.beta.example .env
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -325,6 +331,7 @@ jobs:
             -c.win.azureSignOptions.endpoint="$AZURE_ENDPOINT" \
             -c.win.azureSignOptions.certificateProfileName="$AZURE_PROFILE" \
             -c.win.azureSignOptions.codeSigningAccountName="$AZURE_ACCOUNT"
+          pnpm verify:packaged-main
 
       - name: Build unsigned installer
         if: steps.signing.outputs.signed != 'true'

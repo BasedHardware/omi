@@ -178,6 +178,11 @@ final class SuggestionAssistantTelemetryTests: XCTestCase {
       Set([
         "delivered", "filtered_low_confidence", "filtered_duplicate",
         "filtered_ungrounded_commitment", "rejected_owner",
+        // Deferrals, not filters: the suggestion was deliverable and was withheld on
+        // audience or on the user's explicit silence, and is left eligible afterwards.
+        // Extending the closed set here is the review this guard exists to force — a
+        // sixth outcome added without touching this line still fails.
+        "suppressed_presenting", "suppressed_snoozed",
       ])
     )
 
@@ -198,6 +203,61 @@ final class SuggestionAssistantTelemetryTests: XCTestCase {
     XCTAssertEqual(SuggestionAssistantTelemetry.latencyBucket(10), .from10To30Seconds)
     XCTAssertEqual(SuggestionAssistantTelemetry.latencyBucket(30), .from30To120Seconds)
     XCTAssertEqual(SuggestionAssistantTelemetry.latencyBucket(120), .over120Seconds)
+  }
+
+  @MainActor
+  func testRepeatedDwellAndCooldownAnalyticsAreSuppressedWithoutChangingPacing() {
+    final class Capture {
+      var properties: [[String: Any]] = []
+    }
+    let capture = Capture()
+    AnalyticsManager.shared.setSuggestionAssistantTelemetryCaptureForTests { _, properties in
+      capture.properties.append(properties)
+    }
+    defer { AnalyticsManager.shared.setSuggestionAssistantTelemetryCaptureForTests(nil) }
+
+    let now = Date(timeIntervalSince1970: 1_800_000_000)
+    let dwell = SuggestionGatePolicy.decide(
+      isEnabled: true,
+      isAppExcluded: false,
+      now: now,
+      lastEvaluationAt: nil,
+      cooldown: 180,
+      dwell: 0,
+      requiredDwell: 30,
+      evaluationsToday: 0,
+      dailyBudget: 40
+    )
+    let cooldown = SuggestionGatePolicy.decide(
+      isEnabled: true,
+      isAppExcluded: false,
+      now: now,
+      lastEvaluationAt: now,
+      cooldown: 180,
+      dwell: 30,
+      requiredDwell: 30,
+      evaluationsToday: 0,
+      dailyBudget: 40
+    )
+    XCTAssertEqual(dwell, .skippedDwell)
+    XCTAssertEqual(cooldown, .skippedCooldown)
+    XCTAssertFalse(SuggestionAssistantTelemetry.GateOutcome(dwell).emitsAnalytics)
+    XCTAssertFalse(SuggestionAssistantTelemetry.GateOutcome(cooldown).emitsAnalytics)
+
+    AnalyticsManager.shared.suggestionAssistantGateOutcome(.init(dwell))
+    AnalyticsManager.shared.suggestionAssistantGateOutcome(.init(cooldown))
+    XCTAssertTrue(capture.properties.isEmpty, "repeated dwell and cooldown skips are not analytics events")
+
+    for outcome: SuggestionAssistantTelemetry.GateOutcome in [
+      .eligible, .disabled, .excludedApp, .dailyBudget, .noGrounding,
+    ] {
+      XCTAssertTrue(outcome.emitsAnalytics)
+      AnalyticsManager.shared.suggestionAssistantGateOutcome(outcome)
+    }
+    XCTAssertEqual(
+      capture.properties.map { $0["outcome"] as? String },
+      ["eligible", "disabled", "excluded_app", "daily_budget", "no_grounding"]
+    )
   }
 }
 

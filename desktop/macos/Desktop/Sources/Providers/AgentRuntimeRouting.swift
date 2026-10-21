@@ -22,9 +22,36 @@ enum AgentAdapterId: String {
 }
 
 enum AgentRuntimeRouting {
+  /// Adapters that register a single model and ignore cloud QoS hints must not
+  /// persist `ModelQoS.Claude.chat` as the session/run model id.
+  static func adapterOwnsModelSelection(harnessMode: String, chatBridgeMode: String) -> Bool {
+    switch AgentHarnessMode(rawValue: harnessMode) {
+    case .hermes, .openclaw:
+      return true
+    case .piMono:
+      return chatBridgeMode == ChatProvider.BridgeMode.local.rawValue
+    case .acp, .none:
+      return false
+    }
+  }
+
+  static func defaultModelProfile(harnessMode: String, chatBridgeMode: String) -> String? {
+    adapterOwnsModelSelection(harnessMode: harnessMode, chatBridgeMode: chatBridgeMode)
+      ? nil : ModelQoS.Claude.chat
+  }
+
+  /// Default model profile for a concrete run harness. Global chat provider
+  /// preference affects only managed pi-mono runs (local LM server mode).
+  static func defaultModelProfileForRunHarness(
+    _ harnessMode: String,
+    persistedChatBridgeMode: String
+  ) -> String? {
+    defaultModelProfile(harnessMode: harnessMode, chatBridgeMode: persistedChatBridgeMode)
+  }
+
   static func harnessMode(for mode: ChatProvider.BridgeMode) -> AgentHarnessMode {
     switch mode {
-    case .omiAI, .piMono:
+    case .omiAI, .piMono, .local:
       return .piMono
     case .userClaude:
       return .acp
@@ -39,12 +66,16 @@ enum AgentRuntimeRouting {
     switch rawValue {
     case AgentHarnessMode.piMono.rawValue, "pi-mono":
       return .piMono
-    case AgentHarnessMode.acp.rawValue:
+    case AgentHarnessMode.acp.rawValue, ChatProvider.BridgeMode.userClaude.rawValue:
+      // "claudeCode" is the persisted chatBridgeMode spelling for the Claude
+      // provider; the adapter-side spelling is "acp".
       return .acp
     case AgentHarnessMode.hermes.rawValue:
       return .hermes
     case AgentHarnessMode.openclaw.rawValue, "openClaw":
       return .openclaw
+    case ChatProvider.BridgeMode.local.rawValue:
+      return .piMono
     default:
       return nil
     }

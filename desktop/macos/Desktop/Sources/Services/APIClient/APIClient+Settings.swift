@@ -11,15 +11,26 @@ extension APIClient {
   }
 
   /// Updates daily summary settings
-  func updateDailySummarySettings(enabled: Bool? = nil, hour: Int? = nil) async throws
-    -> DailySummarySettings
-  {
+  func updateDailySummarySettings(
+    enabled: Bool? = nil, hour: Int? = nil, depth: DailySummaryDepth? = nil
+  ) async throws {
     struct UpdateRequest: Encodable {
       let enabled: Bool?
       let hour: Int?
+      let depth: DailySummaryDepth?
     }
-    let body = UpdateRequest(enabled: enabled, hour: hour)
-    return try await patch("v1/users/daily-summary-settings", body: body)
+    struct StatusResponse: Decodable {
+      let status: String
+      let depth: DailySummaryDepth?
+    }
+    let body = UpdateRequest(enabled: enabled, hour: hour, depth: depth)
+    let response: StatusResponse = try await patch("v1/users/daily-summary-settings", body: body)
+    guard response.status == "ok" else {
+      throw DailySummaryDepthSaveError.notConfirmed
+    }
+    if let depth, response.depth != depth {
+      throw DailySummaryDepthSaveError.notConfirmed
+    }
   }
 
   /// Fetches transcription preferences
@@ -43,7 +54,15 @@ extension APIClient {
     let body = UpdateRequest(singleLanguageMode: singleLanguageMode, vocabulary: vocabulary)
     struct StatusResponse: Decodable { let status: String }
     let _: StatusResponse = try await patch("v1/users/transcription-preferences", body: body)
-    return try await getTranscriptionPreferences()
+    // The PATCH above already succeeded, so the account has stored this change. A failed
+    // follow-up read (offline, a transient server error) must not make the caller treat the
+    // save itself as failed and roll it back — fall back to what was just confirmed saved.
+    do {
+      return try await getTranscriptionPreferences()
+    } catch {
+      return TranscriptionPreferences(
+        singleLanguageMode: singleLanguageMode ?? false, vocabulary: vocabulary ?? [])
+    }
   }
 
   /// Fetches user language preference
@@ -288,10 +307,32 @@ extension APIClient {
 
 // MARK: - User Settings Models
 
-/// Daily summary notification settings
-struct DailySummarySettings: Codable {
+enum DailySummaryDepth: String, Codable, CaseIterable {
+  case brief
+  case normal
+  case deep
+}
+
+enum DailySummaryDepthSaveError: Error {
+  case notConfirmed
+}
+
+/// Daily summary notification settings. Older backends omit depth; brief remains the default.
+struct DailySummarySettings: Decodable {
   let enabled: Bool
   let hour: Int
+  let depth: DailySummaryDepth
+
+  private enum CodingKeys: String, CodingKey {
+    case enabled, hour, depth
+  }
+
+  init(from decoder: Decoder) throws {
+    let values = try decoder.container(keyedBy: CodingKeys.self)
+    enabled = try values.decode(Bool.self, forKey: .enabled)
+    hour = try values.decode(Int.self, forKey: .hour)
+    depth = (try? values.decode(DailySummaryDepth.self, forKey: .depth)) ?? .brief
+  }
 }
 
 /// Transcription preferences
@@ -302,6 +343,11 @@ struct TranscriptionPreferences: Codable {
   enum CodingKeys: String, CodingKey {
     case singleLanguageMode = "single_language_mode"
     case vocabulary
+  }
+
+  init(singleLanguageMode: Bool, vocabulary: [String]) {
+    self.singleLanguageMode = singleLanguageMode
+    self.vocabulary = vocabulary
   }
 
   init(from decoder: Decoder) throws {
@@ -365,11 +411,11 @@ struct NotificationSettingsResponse: Codable {
 enum SubscriptionPlanType: Codable, Equatable, RawRepresentable {
   case basic  // display "Free"
   case plus
-  case unlimited  // legacy — display "Unlimited (legacy)"
+  case unlimited  // legacy — display "Neo"
   case unlimitedV2
   case architect  // display "Architect" ($400/mo, cost_usd quota)
   case pro  // backward compat: old Firestore docs may still say "pro"
-  case `operator`  // new — display "Operator"
+  case `operator`  // display "Pro"
   case unknown(String)
 
   init(rawValue: String) {
@@ -413,10 +459,10 @@ enum SubscriptionPlanType: Codable, Equatable, RawRepresentable {
     switch self {
     case .basic: return "Free"
     case .plus: return "Plus"
-    case .unlimited: return "Unlimited (legacy)"
+    case .unlimited: return "Neo"
     case .unlimitedV2: return "Unlimited"
     case .architect, .pro: return "Architect"
-    case .operator: return "Operator"
+    case .operator: return "Pro"
     case .unknown: return "Plan unavailable"
     }
   }
@@ -427,6 +473,27 @@ enum SubscriptionPlanType: Codable, Equatable, RawRepresentable {
     case .basic, .unknown: return false
     case .plus, .unlimited, .unlimitedV2, .architect, .pro, .operator: return true
     }
+  }
+}
+
+/// Title compatibility for catalogs that predate explicit plan IDs.
+/// Bare Pro is Operator; the retired Omi Pro title still identifies Architect.
+enum SubscriptionPlanNames {
+  static func planId(from title: String) -> String? {
+    let normalized = title.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    if normalized.contains("architect") || normalized.contains("omi pro") { return "architect" }
+    if normalized.contains("operator") || normalized == "pro" || normalized.hasPrefix("pro ") {
+      return "operator"
+    }
+    if normalized.contains("plus") { return "plus" }
+    if normalized.contains("neo") || normalized.contains("legacy")
+      || normalized == "unlimited plan" || normalized.hasPrefix("unlimited plan ")
+      || normalized.hasPrefix("omi unlimited")
+    {
+      return "unlimited"
+    }
+    if normalized.contains("unlimited") { return "unlimited_v2" }
+    return nil
   }
 }
 
@@ -492,6 +559,8 @@ struct SubscriptionPlanOption: Codable, Identifiable {
   let features: [String]
   let prices: [SubscriptionPriceOption]
 
+  var displayTitle: String { SubscriptionPlanType(rawValue: id).displayName }
+
   init(
     id: String, title: String, subtitle: String? = nil, description: String? = nil, eyebrow: String? = nil,
     features: [String] = [], prices: [SubscriptionPriceOption] = []
@@ -503,6 +572,17 @@ struct SubscriptionPlanOption: Codable, Identifiable {
     self.eyebrow = eyebrow
     self.features = features
     self.prices = prices
+  }
+}
+
+struct TranscriptionAllowanceSnapshot: Codable {
+  let mode: String
+  let remainingSeconds: Int?
+  let reason: String
+
+  enum CodingKeys: String, CodingKey {
+    case mode, reason
+    case remainingSeconds = "remaining_seconds"
   }
 }
 
@@ -518,6 +598,9 @@ struct UserSubscriptionResponse: Codable {
   let memoriesCreatedLimit: Int
   let availablePlans: [SubscriptionPlanOption]
   let showSubscriptionUI: Bool
+  /// Server-resolved allowance for this request, including its validated BYOK headers.
+  /// Nil on older backends; the UI must not infer unlimited STT from a BYOK plan.
+  let transcriptionAllowance: TranscriptionAllowanceSnapshot?
   // Set for Neo subscribers whose current billing period started before the
   // policy change in #7496 — they retain desktop access until this unix-seconds
   // timestamp (their `current_period_end`). Null for everyone else.
@@ -535,6 +618,7 @@ struct UserSubscriptionResponse: Codable {
     case memoriesCreatedLimit = "memories_created_limit"
     case availablePlans = "available_plans"
     case showSubscriptionUI = "show_subscription_ui"
+    case transcriptionAllowance = "transcription_allowance"
     case desktopGrandfatherUntil = "desktop_grandfather_until"
   }
 
@@ -555,6 +639,8 @@ struct UserSubscriptionResponse: Codable {
     memoriesCreatedLimit = try c.decodeIfPresent(Int.self, forKey: .memoriesCreatedLimit) ?? 0
     availablePlans = try c.decodeIfPresent([SubscriptionPlanOption].self, forKey: .availablePlans) ?? []
     showSubscriptionUI = try c.decodeIfPresent(Bool.self, forKey: .showSubscriptionUI) ?? true
+    transcriptionAllowance = try? c.decodeIfPresent(
+      TranscriptionAllowanceSnapshot.self, forKey: .transcriptionAllowance)
     desktopGrandfatherUntil = try c.decodeIfPresent(Int.self, forKey: .desktopGrandfatherUntil)
   }
 }
@@ -843,24 +929,6 @@ struct TaskSettingsResponse: Codable {
   }
 }
 
-struct InsightSettingsResponse: Codable {
-  var enabled: Bool?
-  var analysisPrompt: String?
-  var extractionInterval: Double?
-  var minConfidence: Double?
-  var notificationsEnabled: Bool?
-  var excludedApps: [String]?
-
-  enum CodingKeys: String, CodingKey {
-    case enabled
-    case analysisPrompt = "analysis_prompt"
-    case extractionInterval = "extraction_interval"
-    case minConfidence = "min_confidence"
-    case notificationsEnabled = "notifications_enabled"
-    case excludedApps = "excluded_apps"
-  }
-}
-
 struct MemorySettingsResponse: Codable {
   var enabled: Bool?
   var analysisPrompt: String?
@@ -944,7 +1012,6 @@ enum AssistantSettingsJSONValue: Codable, Equatable {
 struct AssistantSettingsResponse: Codable {
   var shared: SharedAssistantSettingsResponse?
   var task: TaskSettingsResponse?
-  var insight: InsightSettingsResponse?
   var memory: MemorySettingsResponse?
   var floatingBar: FloatingBarSettingsResponse?
   var updateChannel: String?
@@ -952,7 +1019,6 @@ struct AssistantSettingsResponse: Codable {
 
   enum CodingKeys: String, CodingKey, CaseIterable {
     case shared, task
-    case insight = "advice"
     case memory
     case floatingBar = "floating_bar"
     case updateChannel = "update_channel"
@@ -961,7 +1027,6 @@ struct AssistantSettingsResponse: Codable {
   init(
     shared: SharedAssistantSettingsResponse? = nil,
     task: TaskSettingsResponse? = nil,
-    insight: InsightSettingsResponse? = nil,
     memory: MemorySettingsResponse? = nil,
     floatingBar: FloatingBarSettingsResponse? = nil,
     updateChannel: String? = nil,
@@ -969,7 +1034,6 @@ struct AssistantSettingsResponse: Codable {
   ) {
     self.shared = shared
     self.task = task
-    self.insight = insight
     self.memory = memory
     self.floatingBar = floatingBar
     self.updateChannel = updateChannel
@@ -980,7 +1044,6 @@ struct AssistantSettingsResponse: Codable {
     let container = try decoder.container(keyedBy: CodingKeys.self)
     shared = Self.decodeLossy(SharedAssistantSettingsResponse.self, from: container, forKey: .shared)
     task = Self.decodeLossy(TaskSettingsResponse.self, from: container, forKey: .task)
-    insight = Self.decodeLossy(InsightSettingsResponse.self, from: container, forKey: .insight)
     memory = Self.decodeLossy(MemorySettingsResponse.self, from: container, forKey: .memory)
     floatingBar = Self.decodeLossy(
       FloatingBarSettingsResponse.self, from: container, forKey: .floatingBar)
@@ -1000,7 +1063,6 @@ struct AssistantSettingsResponse: Codable {
     var container = encoder.container(keyedBy: CodingKeys.self)
     try container.encodeIfPresent(shared, forKey: .shared)
     try container.encodeIfPresent(task, forKey: .task)
-    try container.encodeIfPresent(insight, forKey: .insight)
     try container.encodeIfPresent(memory, forKey: .memory)
     try container.encodeIfPresent(floatingBar, forKey: .floatingBar)
     try container.encodeIfPresent(updateChannel, forKey: .updateChannel)

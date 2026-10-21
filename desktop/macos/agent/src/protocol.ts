@@ -1,3 +1,4 @@
+import type { ModelHeadersReply } from "./runtime/model-fetch.js";
 // JSON lines protocol between Swift app and Node.js agent runtime
 // Extended from agent protocol with authentication message types
 
@@ -8,6 +9,7 @@ export const RUNTIME_CAPABILITIES = [
   "journal_import_remote_turn",
   "runtime_adapter_availability",
   "chat_first_capability_projection",
+  "request_scoped_model_credentials",
 ] as const;
 export type ProtocolVersion = typeof PROTOCOL_VERSION;
 
@@ -48,55 +50,9 @@ export interface QueryMessage extends ProtocolEnvelope {
    * x-omi-reasoning-effort header; never interpreted by the runtime.
    */
   reasoningEffort?: string;
-  /**
-   * Per-turn client-computed capability flag: true when the desktop's JIT
-   * knowledge-ledger rollout is enabled for the current user. This is a UX
-   * gate only — the backend independently re-checks entitlement on every
-   * `/v1/agent/execute-tool` call, so an absent or stale value only affects
-   * which tools the model is offered, never authorization.
-   */
-  jitKnowledgeToolsEnabled?: boolean;
-  /** QA-only source-owned prompt projection; persisted beside the admitted
-   * snapshot and hashed by the runtime before the run is inserted. */
-  jitCostEvidenceProjection?: JitCostEvidenceProjection;
-  /** Qualification-only JIT budget; absent for all normal chat. */
-  jitBudget?: {
-    contractVersion: string;
-    executionID: string;
-    maxProviderAttempts: number;
-    maxOutputTokensPerAttempt: number;
-    maxNormalizedInputTokensPerAttempt: number;
-    maxEstimatedSpendMicroUSD: number;
-  };
+
 }
 
-export interface JitCostEvidenceProjection {
-  schema_version: string;
-  owner_id: string;
-  execution_id: string;
-  producer_lane: "planned" | "ambient";
-  matched_input: {
-    evaluation_time: string;
-    timezone: string;
-    context_id: string;
-    evidence_sha256?: string;
-  };
-  legacy: {
-    prompt: string;
-    uncached_prompt: string;
-    [key: string]: unknown;
-  };
-  nano: {
-    prompt: string;
-    [key: string]: unknown;
-  };
-  full: {
-    prompt: string;
-    [key: string]: unknown;
-  };
-  evidence_sha256?: string;
-  [key: string]: unknown;
-}
 
 export interface QueryAttachment {
   attachmentId: string;
@@ -617,17 +573,22 @@ export interface ChatFirstDeferralDeliveryResultMessage extends ProtocolEnvelope
   errorCode?: string;
 }
 
-/** Swift pushes a refreshed Firebase ID token to the bridge (piMono mode) */
-export interface RefreshTokenMessage {
-  type: "refresh_token";
-  token: string;
-  ownerId: string;
+/** Request-scoped credentials; never persist or log this response. */
+export interface ModelHeadersResultMessage {
+  type: "model_headers_result";
+  requestId: string;
+  result: ModelHeadersReply;
 }
 
 /** Swift establishes the signed-in owner even when a local adapter needs no Firebase token. */
 export interface RefreshOwnerMessage {
   type: "refresh_owner";
   ownerId: string;
+}
+
+/** Swift's Connect Claude control asks the runtime for a provider sign-in URL. */
+export interface StartProviderAuthMessage {
+  type: "start_provider_auth";
 }
 
 /**
@@ -683,8 +644,9 @@ export type InboundMessage =
   | JournalBackendReconcileResultMessage
   | ChatFirstDeferralDeliveryResultMessage
   | ChatFirstHarnessExecutorBeginMessage
-  | RefreshTokenMessage
-  | RefreshOwnerMessage;
+  | ModelHeadersResultMessage
+  | RefreshOwnerMessage
+  | StartProviderAuthMessage;
 
 const INBOUND_RESPONSE_MESSAGE_TYPES = new Set<InboundMessage["type"]>([
   "authorized_tool_execution_result",
@@ -780,6 +742,7 @@ export interface ExternalSurfaceRunBeginResultMessage extends OutboundEnvelope {
   type: "external_surface_run_begin_result";
   ownerId: string;
   sessionId: string;
+  surfaceKind?: string;
   turnId: string;
   ok: boolean;
   runId?: string;
@@ -855,13 +818,9 @@ export interface ResultMessage extends QueryScopedOutbound {
   outputTokens?: number;
   cacheReadTokens?: number;
   cacheWriteTokens?: number;
-  /** Qualification-only gateway attribution; null is explicit unknown. */
-  jitCostStatus?: "estimated" | "unknown";
-  jitEstimatedCostUsd?: number | null;
-  jitProviderAttempts?: number;
-  jitReceiptAttemptIDs?: string[];
   /// Served model identities observed on this run's completions, deduplicated.
   modelsUsed?: string[];
+  providerTargets?: string[];
   artifacts?: SerializedArtifact[];
   completionDeltaArtifacts?: SerializedArtifact[];
 }
@@ -946,9 +905,6 @@ export interface ErrorMessage extends QueryScopedOutbound {
   type: "error";
   message: string;
   failure?: RuntimeFailurePayload;
-  /** Qualification-only gateway attribution; failures are always unknown. */
-  jitCostStatus?: "unknown";
-  jitEstimatedCostUsd?: null;
 }
 
 /** Sent when ACP requires user authentication (OAuth) */
@@ -1321,7 +1277,16 @@ export interface ChatFirstDeferralDeliveryMessage extends OutboundEnvelope {
   payloadHash: string;
 }
 
+export interface ModelHeadersRequestMessage {
+  type: "model_headers_request";
+  protocolVersion: number;
+  requestId: string;
+  ownerId: string;
+  forceRefresh: boolean;
+}
+
 export type OutboundMessage =
+  | ModelHeadersRequestMessage
   | InitMessage
   | TextDeltaMessage
   | ToolUseMessage
@@ -1362,6 +1327,7 @@ type DraftEnvelope<T extends OutboundWithEnvelope> = Omit<T, "protocolVersion"> 
 
 /** Outbound payload before correlation / envelope enrichment (adapters, transport internals). */
 export type OutboundMessageDraft =
+  | DraftEnvelope<ModelHeadersRequestMessage>
   | DraftEnvelope<InitMessage>
   | AuthRequiredMessage
   | AuthSuccessMessage

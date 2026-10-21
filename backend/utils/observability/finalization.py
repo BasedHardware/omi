@@ -4,12 +4,18 @@ from __future__ import annotations
 
 import logging
 import threading
+import hashlib
 from enum import Enum
 
 from fastapi import HTTPException
 from prometheus_client import Counter
 
 logger = logging.getLogger(__name__)
+
+
+def finalization_diagnostic_id(value: str) -> str:
+    """Stable correlation key for logs, without exposing a stored identifier."""
+    return hashlib.sha256(value.encode('utf-8')).hexdigest()[:16]
 
 
 class FinalizationFailureReason(str, Enum):
@@ -110,5 +116,6 @@ __all__ = [
     'FINALIZATION_FAILURES_TOTAL',
     'FinalizationFailureReason',
     'classify_finalization_failure',
+    'finalization_diagnostic_id',
     'record_finalization_failure',
 ]

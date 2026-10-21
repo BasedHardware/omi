@@ -62,6 +62,86 @@ final class SBOnboardingBackNavigationTests: XCTestCase {
     XCTAssertEqual(model.step, .promise)
   }
 
+  func testBackNeverLandsOnAPermissionStepThatWasSkipped() {
+    let appState = AppState()
+    let model = SBOnboardingModel(appState: appState, chatProvider: ChatProvider(), onComplete: nil)
+    appState.hasAccessibilityPermission = false
+    appState.hasAutomationPermission = true
+    appState.hasNotificationPermission = false
+    model.step = .accessibility
+
+    model.advance(userAnswer: nil, to: .automation)
+    XCTAssertEqual(model.step, .notifications, "a granted Automation step is skipped")
+
+    model.goBack()
+    XCTAssertEqual(model.step, .accessibility, "Back returns to the step shown, not the skipped one")
+    XCTAssertEqual(
+      UserDefaults.standard.integer(forKey: SBOnboardingModel.resumeStepKey),
+      SBOnboardingModel.Step.accessibility.rawValue)
+  }
+
+  func testProgressCountsOnlyShownStepsAndMovesOneDotPerAnswer() {
+    let appState = AppState()
+    let model = SBOnboardingModel(appState: appState, chatProvider: ChatProvider(), onComplete: nil)
+    appState.hasAccessibilityPermission = false
+    appState.hasAutomationPermission = true
+    appState.hasNotificationPermission = true
+    let allSteps = SBOnboardingModel.Step.allCases
+
+    let start = model.progress
+    XCTAssertEqual(start.current, 0)
+    XCTAssertEqual(start.total, allSteps.filter { !model.wouldSkip($0) }.count)
+    XCTAssertLessThanOrEqual(start.total, allSteps.count - 2, "granted permissions draw no dot")
+
+    model.step = .accessibility
+    model.shownStepHistory = model.predictedShownSteps(before: .accessibility)
+    let before = model.progress
+
+    model.advance(userAnswer: nil, to: .automation)
+    XCTAssertEqual(model.step, .shortcutOpen)
+    XCTAssertEqual(model.progress.current, before.current + 1, "two skipped steps still move one dot")
+    XCTAssertEqual(model.progress.total, before.total, "the dot count does not jump when steps are skipped")
+
+    model.goBack()
+    XCTAssertEqual(model.step, .accessibility)
+    XCTAssertEqual(model.progress, before)
+  }
+
+  func testResumedRunSeedsHistoryWithoutSkippedSteps() {
+    let completedKey = SBOnboardingModel.shortcutsCompletedKey
+    let previousCompleted = UserDefaults.standard.bool(forKey: completedKey)
+    defer { UserDefaults.standard.set(previousCompleted, forKey: completedKey) }
+    // omi-test-quality: shared-defaults -- integration: the onboarding completion gate owns standard defaults
+    UserDefaults.standard.set(false, forKey: completedKey)
+    UserDefaults.standard.set(SBOnboardingModel.Step.shortcutOpen.rawValue, forKey: resumeStepKey)
+    let appState = AppState()
+    appState.hasAccessibilityPermission = false
+    appState.hasAutomationPermission = true
+    appState.hasNotificationPermission = true
+    let model = SBOnboardingModel(appState: appState, chatProvider: ChatProvider(), onComplete: nil)
+
+    model.begin()
+
+    XCTAssertEqual(model.step, .shortcutOpen)
+    XCTAssertFalse(model.shownStepHistory.contains(.automation))
+    XCTAssertFalse(model.shownStepHistory.contains(.notifications))
+    XCTAssertEqual(model.progress.current, model.shownStepHistory.count)
+    model.goBack()
+    XCTAssertEqual(model.step, .accessibility)
+  }
+
+  func testScreenDemoAlwaysOffersSkipUntilOmiHasAnswered() {
+    let model = SBOnboardingModel(
+      appState: AppState(), chatProvider: ChatProvider(), onComplete: nil)
+    model.step = .screenDemo
+    model.threeDoorsOpened = false
+    model.screenDemoDone = false
+    XCTAssertEqual(model.screenDemoFooter, .skip, "Skip is offered before the doors are opened")
+
+    model.screenDemoDone = true
+    XCTAssertEqual(model.screenDemoFooter, .continue)
+  }
+
   func testVoiceDemoArmsPTTOnlyAfterBridgeWarmupWhileStillOnDemoStage() async {
     let model = SBOnboardingModel(
       appState: AppState(), chatProvider: ChatProvider(), onComplete: nil)
@@ -286,38 +366,101 @@ final class SBOnboardingBackNavigationTests: XCTestCase {
     XCTAssertTrue(settings.pttEnabled)
   }
 
-  func testShortcutStagesCannotAdvanceUntilSelectedShortcutIsExercised() {
+  func testRecommendedShortcutsCanContinueWithoutATestPress() throws {
+    let defaults = try makeIsolatedDefaults()
     let settings = ShortcutSettings.shared
     let previousOpenShortcut = settings.askOmiShortcut
     let previousOpenEnabled = settings.askOmiEnabled
     let previousTalkShortcut = settings.pttShortcut
     let previousTalkEnabled = settings.pttEnabled
+    let completedKey = SBOnboardingModel.shortcutsCompletedKey
+    let previousCompleted = UserDefaults.standard.object(forKey: completedKey)
     defer {
       settings.askOmiShortcut = previousOpenShortcut
       settings.askOmiEnabled = previousOpenEnabled
       settings.pttShortcut = previousTalkShortcut
       settings.pttEnabled = previousTalkEnabled
+      // omi-test-quality: shared-defaults -- integration: the onboarding completion gate owns standard defaults
+      UserDefaults.standard.set(previousCompleted, forKey: completedKey)
     }
-
-    let model = SBOnboardingModel(
-      appState: AppState(), chatProvider: ChatProvider(), onComplete: nil)
-
+    // omi-test-quality: shared-defaults -- integration: the onboarding completion gate owns standard defaults
+    UserDefaults.standard.set(false, forKey: completedKey)
+    let appState = AppState()
+    let model = SBOnboardingModel(appState: appState, chatProvider: ChatProvider(), onComplete: nil)
     model.step = .shortcutOpen
-    model.pickShortcut(ShortcutSettings.askOmiCommandOShortcut, isTalk: false)
-    model.answerShortcutOpen()
-    XCTAssertEqual(model.step, .shortcutOpen)
-
-    model.shortcutPressed = true
-    model.answerShortcutOpen()
+    model.prepareShortcutSelection(defaults: defaults)
+    XCTAssertEqual(model.chosenShortcut, ShortcutSettings.askOmiControlCommandOShortcut)
+    XCTAssertFalse(model.shortcutPressed)
+    XCTAssertTrue(model.canContinueShortcut)
+    XCTAssertFalse(model.canSkipOnboarding)
+    model.answerShortcutOpen(validateRegistration: { .registered })
     XCTAssertEqual(model.step, .shortcutTalk)
+    XCTAssertFalse(UserDefaults.standard.bool(forKey: completedKey))
 
-    model.pickShortcut(ShortcutSettings.KeyboardShortcut(modifierOnly: .option), isTalk: true)
-    model.answerShortcutTalk()
-    XCTAssertEqual(model.step, .shortcutTalk)
-
-    model.shortcutPressed = true
+    model.prepareShortcutSelection(defaults: defaults)
+    XCTAssertEqual(model.chosenShortcut, ShortcutSettings.KeyboardShortcut(modifierOnly: .option))
+    XCTAssertFalse(model.shortcutPressed)
+    XCTAssertTrue(model.canContinueShortcut)
     model.answerShortcutTalk()
     XCTAssertEqual(model.step, .screenDemo)
+    XCTAssertTrue(UserDefaults.standard.bool(forKey: completedKey))
+    XCTAssertTrue(model.canSkipOnboarding)
+    model.streamTask?.cancel()
+  }
+
+  func testResumedShortcutStagesPreservePersistedChoices() throws {
+    let defaults = try makeIsolatedDefaults()
+    let settings = ShortcutSettings.shared
+    let previousOpen = settings.askOmiShortcut
+    let previousOpenEnabled = settings.askOmiEnabled
+    let previousTalk = settings.pttShortcut
+    let previousTalkEnabled = settings.pttEnabled
+    defer {
+      settings.updateAskOmiRegistration(enabled: previousOpenEnabled, shortcut: previousOpen)
+      settings.pttShortcut = previousTalk
+      settings.pttEnabled = previousTalkEnabled
+    }
+    let open = ShortcutSettings.askOmiCommandReturnShortcut
+    let talk = ShortcutSettings.KeyboardShortcut(modifierOnly: .control)
+    let openData = try JSONEncoder().encode(open)
+    let talkData = try JSONEncoder().encode(talk)
+    defaults.set(openData, forKey: ShortcutSettings.askOmiShortcutDefaultsKey)
+    defaults.set(talkData, forKey: ShortcutSettings.pttShortcutDefaultsKey)
+    let appState = AppState()
+    let model = SBOnboardingModel(appState: appState, chatProvider: ChatProvider(), onComplete: nil)
+    for (step, expected) in [(SBOnboardingModel.Step.shortcutOpen, open), (.shortcutTalk, talk)] {
+      model.step = step
+      model.prepareShortcutSelection(defaults: defaults)
+      XCTAssertEqual(model.chosenShortcut, expected)
+      XCTAssertTrue(model.canContinueShortcut)
+      XCTAssertFalse(model.shortcutPressed)
+    }
+    XCTAssertEqual(settings.askOmiShortcut, open)
+    XCTAssertEqual(settings.pttShortcut, talk)
+    XCTAssertEqual(defaults.data(forKey: ShortcutSettings.askOmiShortcutDefaultsKey), openData)
+    XCTAssertEqual(defaults.data(forKey: ShortcutSettings.pttShortcutDefaultsKey), talkData)
+  }
+
+  func testRegistrationFailureRequiresAnotherChoiceAndCustomStillRequiresAChoice() {
+    let settings = ShortcutSettings.shared
+    let previousShortcut = settings.askOmiShortcut
+    let previousEnabled = settings.askOmiEnabled
+    defer { settings.updateAskOmiRegistration(enabled: previousEnabled, shortcut: previousShortcut) }
+    let appState = AppState()
+    let model = SBOnboardingModel(appState: appState, chatProvider: ChatProvider(), onComplete: nil)
+    model.step = .shortcutOpen
+    model.prepareShortcutSelection()
+    model.answerShortcutOpen(validateRegistration: { .alreadyInUse })
+    XCTAssertEqual(model.step, .shortcutOpen)
+    XCTAssertNotNil(model.shortcutRegistrationError)
+    XCTAssertFalse(model.canContinueShortcut)
+    model.beginShortcutRecording(isTalk: false)
+    XCTAssertFalse(model.canContinueShortcut)
+    model.pickShortcut(ShortcutSettings.askOmiCommandReturnShortcut, isTalk: false)
+    XCTAssertNil(model.shortcutRegistrationError)
+    XCTAssertTrue(model.canContinueShortcut)
+    model.prepareShortcutSelection()
+    XCTAssertEqual(model.chosenShortcut, ShortcutSettings.askOmiCommandReturnShortcut)
   }
 
   func testFullOnboardingSkipUnlocksOnlyAfterRequiredShortcutStages() {
@@ -356,6 +499,7 @@ final class SBOnboardingBackNavigationTests: XCTestCase {
     // Simulate a legacy user who persisted a resume state past the shortcut stages
     // before shortcuts were mandatory, without the completion flag.
     UserDefaults.standard.set(SBOnboardingModel.Step.screenDemo.rawValue, forKey: resumeKey)
+    // omi-test-quality: shared-defaults -- integration: the onboarding completion gate owns standard defaults
     UserDefaults.standard.set(false, forKey: completedKey)
 
     // Hold a strong reference to AppState for the life of the test. SBOnboardingModel
@@ -373,6 +517,7 @@ final class SBOnboardingBackNavigationTests: XCTestCase {
     // A legacy resume at exactly shortcutTalk (without the completion flag) is also
     // clamped back to shortcutOpen — completing only Talk would bypass Open Omi.
     UserDefaults.standard.set(SBOnboardingModel.Step.shortcutTalk.rawValue, forKey: resumeKey)
+    // omi-test-quality: shared-defaults -- integration: the onboarding completion gate owns standard defaults
     UserDefaults.standard.set(false, forKey: completedKey)
     let modelMid = SBOnboardingModel(
       appState: appState, chatProvider: ChatProvider(), onComplete: nil)

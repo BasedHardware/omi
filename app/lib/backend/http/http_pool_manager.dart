@@ -1,9 +1,13 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/io_client.dart';
 import 'package:pool/pool.dart';
+
+import 'package:omi/services/dev_controls/journey_faults.dart';
+import 'package:omi/backend/http/api_edge_throttle_telemetry.dart';
 
 class HttpPoolManager {
   static final HttpPoolManager instance = HttpPoolManager._();
@@ -52,23 +56,80 @@ class HttpPoolManager {
     });
 
     if (isGet) {
-      _pendingGets[url] = future;
-      future.whenComplete(() => _pendingGets.remove(url));
+      // Share the cleanup future with callers so request failures cannot escape
+      // through a second, unobserved future (even when the caller catches them).
+      final tracked = future.whenComplete(() {
+        _pendingGets.remove(url);
+      });
+      _pendingGets[url] = tracked;
+      return tracked;
     }
-
     return future;
   }
+
+  /// Local-dev journey fault chokepoint. Every pooled request consults the
+  /// gate; with no fault armed (and always in production-family builds, where
+  /// arming is impossible) this is a no-op and the request is untouched.
+  void _applyJourneyFaults(http.BaseRequest request) {
+    if (!kDebugMode) return;
+    final gate = JourneyFaultGate.instance;
+    if (gate.armed.isEmpty) return;
+    final decision = gate.beforeSend(request.method, request.url, request.headers['Authorization']);
+    if (decision.drop) {
+      // Surfaced as a connection failure so the app's existing transient
+      // error classification (and nothing else) reacts — the mutation is
+      // "the request never left the app", not a new error channel.
+      throw SocketException('dev-journey-fault:suppress-send (${request.url})');
+    }
+    final swapped = decision.swappedBearer;
+    if (swapped != null && request.headers.containsKey('Authorization')) {
+      request.headers['Authorization'] = 'Bearer $swapped';
+    }
+  }
+
+  /// Exercises the fault chokepoint without sending. Production sends go
+  /// through [send] and [sendStreaming].
+  @visibleForTesting
+  void applyJourneyFaultsForTesting(http.BaseRequest request) => _applyJourneyFaults(request);
 
   Future<http.Response> _executeWithRetry(http.Request Function() requestBuilder, Duration timeout, int retries) async {
     http.Response? lastResponse;
     Object? lastError;
 
     for (var i = 0; i <= retries; i++) {
+      final attemptDeadline = Stopwatch()..start();
+      final abort = Completer<void>();
       try {
-        final request = requestBuilder();
+        final built = requestBuilder();
+        final request = http.AbortableRequest(built.method, built.url, abortTrigger: abort.future)
+          ..followRedirects = built.followRedirects
+          ..maxRedirects = built.maxRedirects
+          ..persistentConnection = built.persistentConnection
+          ..encoding = built.encoding
+          ..headers.addAll(built.headers)
+          ..bodyBytes = built.bodyBytes;
         stampRequestTime(request);
-        final streamed = await _client.send(request).timeout(timeout);
-        lastResponse = await http.Response.fromStream(streamed);
+        _applyJourneyFaults(request);
+        final streamed = await _client.send(request).timeout(
+          timeout,
+          onTimeout: () {
+            if (!abort.isCompleted) abort.complete();
+            throw TimeoutException('Request timeout');
+          },
+        );
+        ApiEdgeThrottleTelemetry.instance.observe(request, streamed);
+        // One deadline covers headers and body: a server that sends headers
+        // and then stalls the body must not extend the caller's budget to
+        // timeout + timeout. Spend only what is left of this attempt.
+        final bodyBudget = timeout - attemptDeadline.elapsed;
+        if (bodyBudget <= Duration.zero) throw TimeoutException('Request timeout');
+        lastResponse = await http.Response.fromStream(streamed).timeout(
+          bodyBudget,
+          onTimeout: () {
+            if (!abort.isCompleted) abort.complete();
+            throw TimeoutException('Request timeout');
+          },
+        );
 
         if (lastResponse.statusCode < 500) {
           return lastResponse;
@@ -101,7 +162,11 @@ class HttpPoolManager {
     Duration timeout = const Duration(minutes: 5),
   }) {
     stampRequestTime(request);
-    return _client.send(request).timeout(timeout);
+    _applyJourneyFaults(request);
+    return _client.send(request).timeout(timeout).then((response) {
+      ApiEdgeThrottleTelemetry.instance.observe(request, response);
+      return response;
+    });
   }
 
   void dispose() {

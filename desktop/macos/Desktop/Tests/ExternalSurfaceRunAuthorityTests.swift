@@ -6,6 +6,7 @@ final class ExternalSurfaceRunAuthorityTests: XCTestCase {
   private let binding = ExternalSurfaceRunBinding(
     ownerID: "owner-1",
     sessionID: "session-1",
+    surfaceKind: "floating_chat",
     turnID: "voice-turn-7",
     runID: "run-1",
     attemptID: "attempt-1",

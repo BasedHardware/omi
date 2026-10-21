@@ -287,11 +287,6 @@ class RewindViewModel: ObservableObject {
       await loadScreenshotsForDate(selectedDate)
       guard ownerSnapshot.isCurrent() else { return }
 
-      // Load available apps for filtering
-      let loadedApps = try await RewindDatabase.shared.getUniqueAppNames()
-      guard ownerSnapshot.isCurrent() else { return }
-      availableApps = loadedApps
-
       // Mark as initialized after successful load
       isInitialized = true
 
@@ -316,12 +311,28 @@ class RewindViewModel: ObservableObject {
     // windows only as zoom or pan reaches them.
     Task { await self.surveyCapturedHistory(ownerSnapshot: ownerSnapshot) }
 
+    // The app-filter list is a full-table DISTINCT scan over every captured
+    // frame. The overlay's first paint and rewindPageDidLoad must not wait
+    // on it, so it loads after the page reports ready.
+    Task { await self.loadAvailableApps(ownerSnapshot: ownerSnapshot) }
+
     // Load stats asynchronously (includes storage size calculation which can be slow)
     Task {
       if let indexerStats = await RewindIndexer.shared.getStats() {
         guard ownerSnapshot.isCurrent() else { return }
         stats = indexerStats
       }
+    }
+  }
+
+  /// Populate the app filter list without gating the overlay's open path.
+  private func loadAvailableApps(ownerSnapshot: RewindCaptureOwnerSnapshot) async {
+    do {
+      let loadedApps = try await RewindDatabase.shared.getUniqueAppNames()
+      guard ownerSnapshot.isCurrent() else { return }
+      availableApps = loadedApps
+    } catch {
+      logError("RewindViewModel: Failed to load app filter list: \(error)")
     }
   }
 
@@ -430,41 +441,10 @@ class RewindViewModel: ObservableObject {
 
     searchTask = Task {
       do {
-        // Run FTS and vector search in parallel
-        async let ftsResults = RewindDatabase.shared.search(
-          query: trimmedQuery,
-          appFilter: selectedApp,
-          startDate: nil,
-          endDate: nil,
-          limit: 100
-        )
-        async let vectorResults = OCREmbeddingService.shared.searchSimilar(
-          query: trimmedQuery,
-          startDate: nil,
-          endDate: nil,
-          appFilter: selectedApp,
-          topK: 50
-        )
-
-        let fts = try await ftsResults
-        // Vector search failures are non-fatal — FTS results still show
-        let vector = (try? await vectorResults) ?? []
-        guard ownerSnapshot.isCurrent() else { return }
-
-        if !Task.isCancelled {
-          // Merge: FTS first, then add vector-only results above threshold
-          let ftsIds = Set(fts.compactMap { $0.id })
-          var merged = fts
-          for result in vector where result.similarity > 0.5 && !ftsIds.contains(result.screenshotId) {
-            if let screenshot = try? await RewindDatabase.shared.getScreenshot(id: result.screenshotId) {
-              guard ownerSnapshot.isCurrent() else { return }
-              merged.append(screenshot)
-            }
-          }
-          guard ownerSnapshot.isCurrent() else { return }
-          screenshots = merged
-          emitRewindSearchAnalytics(query: trimmedQuery, resultsCount: merged.count)
-        }
+        let merged = try await RewindScreenSearch.search(query: trimmedQuery, appFilter: selectedApp)
+        guard ownerSnapshot.isCurrent(), !Task.isCancelled else { return }
+        screenshots = merged
+        emitRewindSearchAnalytics(query: trimmedQuery, resultsCount: merged.count)
       } catch {
         if !Task.isCancelled {
           logError("RewindViewModel: Search failed: \(error)")

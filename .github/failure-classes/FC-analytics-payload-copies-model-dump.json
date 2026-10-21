@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "id": "FC-analytics-payload-copies-model-dump",
+  "violated_contract": "An analytics event must name the fields it sends. Spreading a model's serialized form (toJson, to_dict, or an equivalent dump) into the payload ships whatever that model gains later — raw identifiers, nested locators, new persistence keys — even when hashed stand-ins already sit on the same event. The defect is the spread itself, not any particular field that happened to leak today.",
+  "canonical_prevention": "Build each product-analytics payload from an explicit allowlist; hashed identity for join keys, never the persistence dump. The hermetic test drives Device Connected and Device Paired through AnalyticsManager and asserts that the emitted key set intersected with BtDevice.toJson().keys is empty except the dictionary-named spelling `type`; a synthetic spread of the same dump still fails that intersection, so a field added to toJson later fails the test without updating a pinned key list. The test does not prove other AnalyticsManager events, backend emit_product_event, or desktop Device Connected; it does not prove historical PostHog rows are gone; it does not grep source text for `...toJson()`.",
+  "canonical_prevention_artifact": [
+    "app/test/utils/analytics/device_identity_analytics_test.dart"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "app/lib/utils/analytics/**"
+  ],
+  "status": "open"
+}

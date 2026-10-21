@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:developer';
 import 'dart:io';
 
+import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
@@ -52,8 +53,10 @@ Future<List<Map<String, dynamic>>> retrieveAppsGrouped({
 }) async {
   final url = '${Env.apiBaseUrl}v2/apps?offset=$offset&limit=$limit&include_reviews=$includeReviews';
   final response = await makeApiCall(url: url, headers: {}, body: '', method: 'GET');
+  if (response == null || response.statusCode != 200 || response.body.isEmpty) {
+    throw Exception('Failed to load the app catalog');
+  }
   try {
-    if (response == null || response.statusCode != 200 || response.body.isEmpty) return [];
     final data = wire.GeneratedAppCatalogResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
 
     final List<Map<String, dynamic>> parsed = [];
@@ -73,7 +76,7 @@ Future<List<Map<String, dynamic>>> retrieveAppsGrouped({
   } catch (e, stackTrace) {
     Logger.debug(e.toString());
     PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
-    return [];
+    rethrow;
   }
 }
 
@@ -177,6 +180,27 @@ Future<({List<App> apps, Map<String, dynamic> pagination, Map<String, dynamic>? 
   }
 }
 
+Future<ApiResult<wire.GeneratedAppSearchResponse>> retrieveInstalledChatApps({
+  int offset = 0,
+  int limit = 100,
+  ApiSend? send,
+}) {
+  return executeApi<wire.GeneratedAppSearchResponse>(
+    request: ApiRequest(
+      url: '${Env.apiBaseUrl}v2/apps/search?installed_apps=true&offset=$offset&limit=$limit',
+      method: 'GET',
+    ),
+    // Reject scalar and list bodies before generated decoding so malformed
+    // success replies stay classified as response format errors.
+    decode: (body) {
+      final decoded = jsonDecode(body);
+      if (decoded is Map<String, dynamic>) return wire.GeneratedAppSearchResponse.fromJson(decoded);
+      throw const FormatException('Expected a JSON object for the app search response');
+    },
+    send: send,
+  );
+}
+
 Future<List<App>> retrievePopularApps() async {
   var response = await makeApiCall(url: '${Env.apiBaseUrl}v1/apps/popular', headers: {}, body: '', method: 'GET');
   if (response != null && response.statusCode == 200 && response.body.isNotEmpty) {
@@ -199,13 +223,13 @@ Future<List<App>> retrievePopularApps() async {
 
 Future<List<String>> getEnabledAppsServer() async {
   var response = await makeApiCall(url: '${Env.apiBaseUrl}v1/apps/enabled', headers: {}, body: '', method: 'GET');
+  if (response == null || response.statusCode != 200) throw Exception('Failed to load enabled apps');
   try {
-    if (response == null || response.statusCode != 200) return [];
     return wire.GeneratedEnabledAppsResponse.fromJsonList(jsonDecode(response.body) as List<dynamic>).items;
   } catch (e, stackTrace) {
     Logger.debug(e.toString());
     PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
-    return [];
+    rethrow;
   }
 }
 
@@ -372,11 +396,23 @@ Future<String> getAppMarkdown(String appMarkdownPath) async {
   return response?.body ?? '';
 }
 
+String appSetupUrlWithUid(String url, String uid) {
+  final hashIndex = url.indexOf('#');
+  final head = hashIndex < 0 ? url : url.substring(0, hashIndex);
+  final fragment = hashIndex < 0 ? '' : url.substring(hashIndex);
+  final uidParam = 'uid=${Uri.encodeQueryComponent(uid)}';
+  final queryIndex = head.indexOf('?');
+  if (queryIndex < 0) return '$head?$uidParam$fragment';
+  final kept =
+      head.substring(queryIndex + 1).split('&').where((pair) => pair.isNotEmpty && pair.split('=').first != 'uid');
+  return '${head.substring(0, queryIndex)}?${[...kept, uidParam].join('&')}$fragment';
+}
+
 Future<bool> isAppSetupCompleted(String? url) async {
   if (url == null || url.isEmpty) return true;
   Logger.debug('isAppSetupCompleted: $url');
   var response = await makeApiCall(
-    url: '$url?uid=${SharedPreferencesUtil().uid}',
+    url: appSetupUrlWithUid(url, SharedPreferencesUtil().uid),
     method: 'GET',
     headers: {},
     body: '',
@@ -688,7 +724,8 @@ Future<List<AppApiKey>> listApiKeysServer(String appId) async {
   var response = await makeApiCall(url: '${Env.apiBaseUrl}v1/apps/$appId/keys', headers: {}, body: '', method: 'GET');
   try {
     if (response == null || response.statusCode != 200) return [];
-    log('listApiKeysServer: ${response.body}');
+    // The key schema carries an optional `secret`; never echo the body into logs.
+    Logger.debug('listApiKeysServer: ${response.statusCode}');
     return (jsonDecode(response.body) as List)
         .map((item) => wire.GeneratedAppApiKeyResponse.fromJson(item as Map<String, dynamic>))
         .map(AppApiKey.fromGenerated)
@@ -706,7 +743,8 @@ Future<Map<String, dynamic>> createApiKeyServer(String appId) async {
     if (response == null || response.statusCode != 200) {
       throw Exception('Failed to create apps API key');
     }
-    log('createApiKeyServer: ${response.body}');
+    // The body holds the newly generated key secret; log only the status.
+    Logger.debug('createApiKeyServer: ${response.statusCode}');
     return wire.GeneratedAppApiKeyResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>).toJson();
   } catch (e, stackTrace) {
     Logger.debug(e.toString());
@@ -769,7 +807,8 @@ Future<Map<String, dynamic>?> addMcpServer(String name, String serverUrl, {Strin
   );
   try {
     if (response == null) return null;
-    Logger.debug('addMcpServer: ${response.statusCode} ${response.body}');
+    // The body can carry an OAuth `auth_url` with its state token; log only the status.
+    Logger.debug('addMcpServer: ${response.statusCode}');
     if (response.statusCode == 200) {
       return wire.GeneratedMcpAddServerResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>).toJson();
     }

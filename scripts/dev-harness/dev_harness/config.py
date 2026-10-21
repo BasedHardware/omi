@@ -389,7 +389,6 @@ def _harness_service_extra(cfg: HarnessConfig) -> dict[str, str]:
         "OMI_LLM_GATEWAY_FEATURE_MODE": gateway_feature_mode,
         # Production ships default-off and turns this on deliberately; the harness is
         # the one place the feature must be on, since running it is the whole point.
-        "SCREEN_FRAME_EGRESS_ENABLED": "true",
         "SCREEN_FRAME_SIGNING_SECRET": LOCAL_SCREEN_FRAME_SIGNING_SECRET,
         **LOCAL_STORAGE_BUCKET_ENV,
     }
@@ -407,6 +406,15 @@ def child_env_for(cfg: HarnessConfig) -> dict[str, str]:
     env = safety.build_child_env(provider_mode=cfg.provider_mode, extra=extra)
     if cfg.provider_mode == "offline":
         env.update(safety.offline_provider_placeholders())
+        # Offline strips real provider keys. Default STT_SERVICE_MODELS includes
+        # soniox, and backend startup then fails closed on an empty SONIOX_API_KEY.
+        # Pin a keyless chain so isolated sessions can boot without paid STT.
+        env["STT_SERVICE_MODELS"] = "parakeet"
+        # Pre-recorded STT has no keyless chain: without the deterministic stub,
+        # uploaded captures dead-end at PrerecordedSTTConfigurationError and
+        # conversations never finalize. Stub output is self-declaring synthetic
+        # text and is double-gated to offline stages (utils.stt.prerecorded_stub).
+        env["OMI_STT_STUB"] = "1"
     return env
 
 
@@ -423,4 +431,5 @@ def desktop_backend_child_env_for(cfg: HarnessConfig) -> dict[str, str]:
     if cfg.provider_mode == "offline":
         env.update(safety.offline_provider_placeholders())
         env["OMI_LLM_STUB"] = "1"
+        env["STT_SERVICE_MODELS"] = "parakeet"
     return env

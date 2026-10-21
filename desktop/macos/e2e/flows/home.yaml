@@ -4,6 +4,8 @@ tier: manual
 description: Home tab — chat-first panel under the always-on search bar, plus its header controls and Capture/Listening status (v0.12.119+ redesign; the only Home flow since dashboard.yaml was retired with DashboardPage)
 app: com.omi.computer-macos
 covers:
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/HomeAskBarControls.swift
+  - desktop/macos/Desktop/Sources/WhatsNewToast.swift
   - desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift
   - desktop/macos/Desktop/Sources/MainWindow/DesktopTopBar.swift
   - desktop/macos/Desktop/Sources/MainWindow/TopNavigationDestinations.swift
@@ -52,7 +54,7 @@ steps:
 
   - id: S2c
     name: Conversation menu and the way back
-    do: "Open the '…' menu in the panel's corner and verify it offers Copy conversation, Clear conversation and AI settings. Type in the search bar and verify the panel shows live-narrowing results; clear it (or press esc) and verify the same conversation returns with no duplicated turns."
+    do: "Open the '…' menu in the panel's corner and verify it offers Copy Chat and Clear Chat…, and that Clear Chat… asks for confirmation before clearing. Type in the search bar and verify the panel shows live-narrowing results; clear it (or press esc) and verify the same conversation returns with no duplicated turns."
     expect:
       interactive_count: { min: 2 }
 

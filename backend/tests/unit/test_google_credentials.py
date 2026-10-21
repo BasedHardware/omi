@@ -87,6 +87,7 @@ def test_customer_data_service_account_requires_project_id(monkeypatch, tmp_path
 def test_customer_data_service_account_returns_none_without_service_account_json(monkeypatch):
     monkeypatch.delenv('SERVICE_ACCOUNT_JSON', raising=False)
     monkeypatch.delenv('GOOGLE_APPLICATION_CREDENTIALS', raising=False)
+    monkeypatch.delenv('OMI_CUSTOMER_DATA_PROJECT', raising=False)
 
     assert google_credentials.customer_data_service_account() is None
 
@@ -132,6 +133,7 @@ def test_customer_entitlement_service_account_reads_auth_file_without_adc(monkey
     monkeypatch.delenv('GOOGLE_APPLICATION_CREDENTIALS', raising=False)
     monkeypatch.setenv('FIREBASE_AUTH_CREDENTIALS_PATH', str(credentials_path))
     monkeypatch.setenv('GOOGLE_CLOUD_PROJECT', 'based-hardware-dev')
+    monkeypatch.delenv('OMI_CUSTOMER_DATA_PROJECT', raising=False)
 
     fake_credentials = object()
 
@@ -150,3 +152,54 @@ def test_customer_entitlement_service_account_reads_auth_file_without_adc(monkey
     assert credentials is fake_credentials
     assert 'GOOGLE_APPLICATION_CREDENTIALS' not in os.environ
     assert google_credentials.customer_data_service_account() is None
+
+
+def test_customer_data_pin_selects_adc_without_service_account_json(monkeypatch):
+    monkeypatch.delenv('SERVICE_ACCOUNT_JSON', raising=False)
+    monkeypatch.delenv('GOOGLE_APPLICATION_CREDENTIALS', raising=False)
+    monkeypatch.setenv('OMI_CUSTOMER_DATA_PROJECT', ' based-hardware ')
+    # The compute project must not become the customer-data project.
+    monkeypatch.setenv('GOOGLE_CLOUD_PROJECT', 'based-hardware-dev')
+
+    assert google_credentials.customer_data_service_account() == (None, 'based-hardware')
+    assert google_credentials.customer_entitlement_service_account() == (None, 'based-hardware')
+
+
+@requires_owner_only_permissions
+def test_service_account_json_wins_over_customer_data_pin(monkeypatch, tmp_path):
+    monkeypatch.setattr(google_credentials, 'RUNTIME_GOOGLE_CREDENTIALS_PATH', tmp_path / 'google-credentials.json')
+    monkeypatch.setenv('SERVICE_ACCOUNT_JSON', '{"type":"service_account","project_id":"json-project"}')
+    monkeypatch.delenv('GOOGLE_APPLICATION_CREDENTIALS', raising=False)
+    monkeypatch.setenv('OMI_CUSTOMER_DATA_PROJECT', 'pinned-project')
+    fake_credentials = object()
+    monkeypatch.setattr(
+        'google.oauth2.service_account.Credentials.from_service_account_info',
+        lambda _info: fake_credentials,
+    )
+
+    assert google_credentials.customer_data_service_account() == (fake_credentials, 'json-project')
+
+
+def test_keyless_entitlement_pins_adc_to_the_data_plane_project(monkeypatch):
+    for name in ('SERVICE_ACCOUNT_JSON', 'GOOGLE_APPLICATION_CREDENTIALS', 'FIREBASE_AUTH_CREDENTIALS_PATH'):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.delenv('OMI_CUSTOMER_DATA_PROJECT', raising=False)
+    monkeypatch.setenv('GOOGLE_CLOUD_PROJECT', 'based-hardware-dev')
+    monkeypatch.setenv('OMI_FIRESTORE_DATA_PLANE_PROJECT', 'based-hardware')
+
+    assert google_credentials.customer_data_service_account() is None
+    assert google_credentials.customer_entitlement_service_account() == (None, 'based-hardware')
+
+
+def test_no_pin_and_no_key_keeps_bare_adc(monkeypatch):
+    for name in (
+        'SERVICE_ACCOUNT_JSON',
+        'GOOGLE_APPLICATION_CREDENTIALS',
+        'FIREBASE_AUTH_CREDENTIALS_PATH',
+        'OMI_CUSTOMER_DATA_PROJECT',
+        'OMI_FIRESTORE_DATA_PLANE_PROJECT',
+    ):
+        monkeypatch.delenv(name, raising=False)
+
+    assert google_credentials.customer_data_service_account() is None
+    assert google_credentials.customer_entitlement_service_account() is None

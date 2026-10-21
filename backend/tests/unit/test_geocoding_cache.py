@@ -11,8 +11,18 @@ Verifies that:
 import json
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from models.geolocation import Geolocation
 from utils.conversations.location import get_google_maps_location
+
+
+@pytest.fixture(autouse=True)
+def _maps_api_key_present(monkeypatch):
+    """Give every test a dummy key so the API-transport path (post-#14485
+    keyless guard) is exercised. The explicit no-key cache-hit test patches
+    the environment with clear=True itself, preserving its intent."""
+    monkeypatch.setenv("GOOGLE_MAPS_API_KEY", "test-key-for-unit-suite")
 
 
 class TestCacheKeyPrecision:

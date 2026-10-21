@@ -555,6 +555,9 @@ assert_helper_runtime_integrity() {
   [[ -z "${missing_runtime_payload// /}" ]] \
     || fail "agent runtime payload incomplete: $missing_runtime_payload"
   [[ -x "$resources/Omi Computer_Omi Computer.bundle/Contents/Resources/node" ]] || fail "bundled node missing"
+  local resource_bundle="$resources/Omi Computer_Omi Computer.bundle"
+  [[ -x "$resource_bundle/Contents/Resources/ffmpeg" || -x "$resource_bundle/ffmpeg" ]] \
+    || fail "bundled ffmpeg missing from SwiftPM resource bundle"
   local sharp_arch expected_arch sharp_native libvips_native
   for sharp_arch in arm64 x64; do
     expected_arch="$sharp_arch"

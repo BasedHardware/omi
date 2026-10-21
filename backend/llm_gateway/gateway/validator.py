@@ -28,6 +28,26 @@ class ValidatedEmbeddingRequest:
 
 
 MAX_EMBEDDING_INPUTS = 2048
+
+
+@dataclass(frozen=True)
+class ValidatedSystemOneRequest:
+    """A decision-model request: one shared state, typed questions, no text generation."""
+
+    model: str
+    state: str
+    questions: Mapping[str, Mapping[str, Any]]
+
+
+# The upstream route's context window is 32k tokens. Callers truncate first;
+# this bound only keeps an oversized body from reaching the provider at all.
+MAX_SYSTEMONE_STATE_CHARS = 96_000
+MAX_SYSTEMONE_QUESTIONS = 16
+SYSTEMONE_QUESTION_TYPES = frozenset({'noul', 'choice', 'score'})
+_SYSTEMONE_QUESTION_KEYS = frozenset({'type', 'instructions', 'criteria'})
+_MAX_SYSTEMONE_CHOICES = 255
+_MIN_SYSTEMONE_SCORE_RUNGS = 2
+_MAX_SYSTEMONE_SCORE_RUNGS = 10
 CONTROL_PARAMS = frozenset({'model', 'messages', 'response_format', 'stream', 'tools', 'tool_choice'})
 GATEWAY_LOCAL_PARAMS = frozenset({'metadata'})
 FORWARDED_CHAT_COMPLETION_PARAMS = frozenset(
@@ -131,6 +151,82 @@ def validate_embedding_request(request: Mapping[str, Any], lane: LaneConfig) -> 
         inputs=tuple(inputs),
         task_type=normalized_task_type,
         title=normalized_title,
+    )
+
+
+def validate_systemone_request(request: Mapping[str, Any]) -> ValidatedSystemOneRequest:
+    """Validate a decision-model request before it reaches the provider."""
+    model = request.get('model')
+    if not isinstance(model, str) or not model.strip():
+        raise GatewayInvalidRequestError('model is required', param='model')
+    unsupported = sorted(set(request.keys()) - {'model', 'state', 'questions', 'metadata'})
+    if unsupported:
+        raise GatewayInvalidRequestError(f'unsupported systemone parameter: {unsupported[0]}', param=unsupported[0])
+    state = request.get('state')
+    if not isinstance(state, str) or not state.strip():
+        raise GatewayInvalidRequestError('state must be a non-empty string', param='state')
+    if len(state) > MAX_SYSTEMONE_STATE_CHARS:
+        raise GatewayInvalidRequestError(f'state must be at most {MAX_SYSTEMONE_STATE_CHARS} characters', param='state')
+    raw_questions = request.get('questions')
+    if not isinstance(raw_questions, Mapping) or not raw_questions:
+        raise GatewayInvalidRequestError('questions must be a non-empty object', param='questions')
+    questions_map = cast(Mapping[object, object], raw_questions)
+    if len(questions_map) > MAX_SYSTEMONE_QUESTIONS:
+        raise GatewayInvalidRequestError(
+            f'questions must contain at most {MAX_SYSTEMONE_QUESTIONS} entries', param='questions'
+        )
+    questions: dict[str, Mapping[str, Any]] = {}
+    for name, question in questions_map.items():
+        param = f'questions.{name}'
+        if not isinstance(name, str) or not name.strip():
+            raise GatewayInvalidRequestError('question names must be non-empty strings', param='questions')
+        if not isinstance(question, Mapping):
+            raise GatewayInvalidRequestError('each question must be an object', param=param)
+        questions[name] = _validate_systemone_question(cast(Mapping[str, Any], question), param=param)
+    return ValidatedSystemOneRequest(model=model.strip(), state=state, questions=questions)
+
+
+def _validate_systemone_question(question: Mapping[str, Any], *, param: str) -> Mapping[str, Any]:
+    unsupported = sorted(set(question.keys()) - _SYSTEMONE_QUESTION_KEYS)
+    if unsupported:
+        raise GatewayInvalidRequestError(f'unsupported question field: {unsupported[0]}', param=param)
+    question_type = question.get('type')
+    if question_type not in SYSTEMONE_QUESTION_TYPES:
+        raise GatewayInvalidRequestError('question type must be noul, choice, or score', param=f'{param}.type')
+    instructions = question.get('instructions')
+    if not isinstance(instructions, str) or not instructions.strip():
+        raise GatewayInvalidRequestError('question instructions are required', param=f'{param}.instructions')
+    criteria = question.get('criteria')
+    if question_type == 'noul':
+        if criteria is not None and not _is_string_map(criteria, allowed_keys=frozenset({'true', 'false'})):
+            raise GatewayInvalidRequestError('noul criteria must map true/false to strings', param=f'{param}.criteria')
+    elif question_type == 'choice':
+        if not _is_string_map(criteria) or not 2 <= len(cast(Mapping[str, str], criteria)) <= _MAX_SYSTEMONE_CHOICES:
+            raise GatewayInvalidRequestError(
+                f'choice criteria must map 2-{_MAX_SYSTEMONE_CHOICES} options to strings', param=f'{param}.criteria'
+            )
+    else:
+        rungs = cast(list[object], criteria) if isinstance(criteria, list) else None
+        if (
+            rungs is None
+            or not _MIN_SYSTEMONE_SCORE_RUNGS <= len(rungs) <= _MAX_SYSTEMONE_SCORE_RUNGS
+            or not all(isinstance(rung, str) and rung.strip() for rung in rungs)
+        ):
+            raise GatewayInvalidRequestError(
+                f'score criteria must list {_MIN_SYSTEMONE_SCORE_RUNGS}-{_MAX_SYSTEMONE_SCORE_RUNGS} rungs',
+                param=f'{param}.criteria',
+            )
+    return dict(question)
+
+
+def _is_string_map(value: object, *, allowed_keys: frozenset[str] | None = None) -> bool:
+    if not isinstance(value, Mapping):
+        return False
+    items = cast(Mapping[object, object], value)
+    if allowed_keys is not None and not set(items.keys()) <= allowed_keys:
+        return False
+    return all(
+        isinstance(key, str) and key.strip() and isinstance(text, str) and text.strip() for key, text in items.items()
     )
 
 

@@ -3,6 +3,7 @@ from datetime import datetime
 from enum import Enum
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Literal, Optional, Union
+from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, Field, ValidationInfo, field_validator, model_validator
 
@@ -33,6 +34,30 @@ class MessageConversation(BaseModel):
     id: str
     structured: MessageConversationStructured
     created_at: datetime
+
+    @classmethod
+    def safe_build_many(cls, items, on_error=None) -> list['MessageConversation']:
+        """Build members without raising on a malformed item.
+
+        Chat callers hand in memory docs as dicts, partially-filled documents,
+        or live pydantic objects, and run this AFTER the chat message is already
+        persisted — a throw there orphans the persisted id while a fresh
+        in-memory id desyncs the client. Bad members skip; ``on_error(member,
+        exc)`` is invoked per skip so drops stay visible in logs.
+        """
+        out: list['MessageConversation'] = []
+        for m in items:
+            try:
+                if isinstance(m, cls):
+                    out.append(m)
+                elif isinstance(m, dict):
+                    out.append(cls.model_validate(m))
+                else:
+                    out.append(cls.model_validate(m.model_dump() if hasattr(m, 'model_dump') else vars(m)))
+            except Exception as exc:
+                if on_error is not None:
+                    on_error(m, exc)
+        return out
 
 
 # Chat Completions `file` content parts (purpose=user_data) accept these document
@@ -336,6 +361,23 @@ def chat_file_is_document(name: str, mime_type: Optional[str]) -> bool:
     return bool(mime) and mime in CHAT_FILE_DOCUMENT_MIME_TYPES
 
 
+class ChatFileVideo(BaseModel):
+    """A video attachment stored as stills (utils.media.video_frames); the clip itself is not kept.
+
+    The FileChat's own file is the overview contact sheet. The filmstrip holds every sampled
+    frame for closer looks at a time window. ``transcript`` is encrypted at rest like chat text.
+    """
+
+    duration_seconds: float
+    frame_times: List[float] = Field(default_factory=list)
+    strip_file_id: str = ''
+    strip_times: List[float] = Field(default_factory=list)
+    strip_columns: int = 0
+    strip_cell_width: int = 0
+    strip_cell_height: int = 0
+    transcript: str = ''
+
+
 class FileChat(BaseModel):
     id: str
     name: str
@@ -344,6 +386,7 @@ class FileChat(BaseModel):
     openai_file_id: str
     created_at: datetime
     thumb_name: Optional[str] = ""
+    video: Optional[ChatFileVideo] = None
 
     def is_image(self):
         return self.mime_type.startswith("image")
@@ -354,6 +397,13 @@ class FileChat(BaseModel):
     def model_dump(self, **kwargs):
         exclude_fields = {'thumb_name'}
         return super().model_dump(exclude=exclude_fields, **kwargs)
+
+    def client_dump(self) -> Dict[str, Any]:
+        """Upload response: clients get the video length, never the transcript or filmstrip ids."""
+        row = self.model_dump()
+        if self.video:
+            row['video'] = {'duration_seconds': self.video.duration_seconds}
+        return row
 
 
 class ChartDataPoint(BaseModel):
@@ -486,6 +536,25 @@ class ChatEvidenceEnvelope(BaseModel):
                 reference.model_copy(update={'kind': 'unknown', 'state': 'unknown'}) for reference in self.references
             ]
         return self
+
+
+class EditReceiptBlock(BaseModel):
+    """Server-authored write receipt. IDs and URLs never encode item content."""
+
+    type: Literal['editReceipt'] = 'editReceipt'
+    id: str
+    receiptId: str
+    targetKind: Literal['conversation', 'memory', 'task', 'person']
+    action: Literal['created', 'updated', 'deleted', 'completed', 'uncompleted', 'renamed']
+    targetId: str
+    summary: str = Field(min_length=1, max_length=300)
+    undoable: bool = True
+    undoneAt: Optional[datetime] = None
+
+
+class UndoChatReceiptResponse(BaseModel):
+    status: Literal['undone', 'already_undone', 'unavailable']
+    block: EditReceiptBlock
 
 
 class Message(BaseModel):
@@ -713,6 +782,41 @@ class SendMessageRequest(BaseModel):
     text: str
     file_ids: Optional[List[str]] = []
     context: Optional[PageContext] = None
+    time_zone: Optional[str] = None
+
+    # Tools this client can execute on the device itself. Declared per request
+    # because it depends on the device in hand: an iPad with no messaging
+    # service, or a denied Contacts grant, advertises fewer than an iPhone.
+    # A tool the client did not declare is never offered to the model.
+    device_tools: Optional[List[str]] = None
+
+    @field_validator("time_zone", mode="before")
+    @classmethod
+    def _validate_time_zone(cls, value: Any) -> Optional[str]:
+        if value is None:
+            return None
+        if not isinstance(value, str):
+            raise ValueError("time_zone must be a string")
+        stripped = value.strip()
+        if not stripped:
+            return None
+        try:
+            ZoneInfo(stripped)
+        except Exception as exc:
+            raise ValueError("time_zone must be a valid IANA timezone") from exc
+        return stripped
+
+
+class DeviceToolResultRequest(BaseModel):
+    """A client's result for one in-flight device tool call."""
+
+    result: Dict[str, Any]
+
+
+class DeviceToolResultResponse(BaseModel):
+    """Acknowledgement that a device tool result was handed over."""
+
+    status: str
 
 
 class GenerateReplyTurn(BaseModel):

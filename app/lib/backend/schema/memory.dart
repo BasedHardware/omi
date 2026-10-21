@@ -51,7 +51,16 @@ MemoryCategory _parseMemoryCategory(String? category) {
   if (category == 'system') return MemoryCategory.system;
   if (category == 'workflow') return MemoryCategory.workflow;
   // Legacy categories map to system (facts about user)
-  if (['core', 'hobbies', 'lifestyle', 'interests', 'work', 'skills', 'habits', 'other'].contains(category)) {
+  if ([
+    'core',
+    'hobbies',
+    'lifestyle',
+    'interests',
+    'work',
+    'skills',
+    'habits',
+    'other',
+  ].contains(category)) {
     return MemoryCategory.system;
   }
   // 'learnings' and 'auto' map to system as well
@@ -76,14 +85,21 @@ class Memory {
   bool manuallyAdded;
   bool edited;
   bool deleted;
+  bool isDismissed;
   MemoryVisibility visibility;
   bool isLocked;
   bool isBaseline;
   final MemoryLayer? layer;
   final bool layerIsExplicit;
+
+  /// Decoding remains tolerant for the whole Memories page; Siri excludes a
+  /// malformed or contradictory tier on the individual row.
+  final bool siriTierValid;
+  final bool siriVisibilityValid;
   final String? primaryCaptureDevice;
   final List<String> captureDeviceIds;
   final String? ledgerSchemaVersion;
+  final String? ledgerStatus;
   final KnowledgeLedgerKind? ledgerKind;
   final String? ledgerBody;
   final String? ledgerSlot;
@@ -91,9 +107,21 @@ class Memory {
   final String? subjectEntityId;
   final String? supersededBy;
   final DateTime? invalidAt;
+
+  /// Older compatibility responses can expire a memory without ledger invalidation.
+  final DateTime? expiresAt;
+  DateTime? get siriExpiryAt {
+    if (invalidAt == null) return expiresAt;
+    if (expiresAt == null) return invalidAt;
+    return invalidAt!.isBefore(expiresAt!) ? invalidAt : expiresAt;
+  }
+
   final DateTime? validAt;
   final bool intentBacked;
   final int curationWeight;
+
+  /// Server-owned auxiliary state is retained for forward-compatible decoding.
+  Map<String, dynamic>? arguments;
   final Map<String, dynamic> triggerCondition;
   final String? writeReason;
   final List<Map<String, dynamic>> evidence;
@@ -111,14 +139,18 @@ class Memory {
     this.manuallyAdded = false,
     this.edited = false,
     this.deleted = false,
+    this.isDismissed = false,
     required this.visibility,
     this.isLocked = false,
     this.isBaseline = false,
     this.layer,
     this.layerIsExplicit = false,
+    this.siriTierValid = true,
+    this.siriVisibilityValid = true,
     this.primaryCaptureDevice,
     this.captureDeviceIds = const [],
     this.ledgerSchemaVersion,
+    this.ledgerStatus,
     this.ledgerKind,
     this.ledgerBody,
     this.ledgerSlot,
@@ -126,13 +158,28 @@ class Memory {
     this.subjectEntityId,
     this.supersededBy,
     this.invalidAt,
+    this.expiresAt,
     this.validAt,
     this.intentBacked = false,
     this.curationWeight = 0,
+    this.arguments,
     this.triggerCondition = const {},
     this.writeReason,
     this.evidence = const [],
   });
+
+  /// Rows without a server assessment stay visible in the useful-now list so
+  /// an older response cannot make memories disappear. They are rendered as
+  /// unassessed and are not eligible for current claims or proactive use.
+  /// A deleted row never re-enters the list, even when a legacy or cached row
+  /// predates assessments entirely.
+  bool get isUsefulNow => !deleted && !isHistoricalKnowledgeLedgerRow;
+
+  static DateTime? _parseOptionalDateTime(Object? value) {
+    if (value is DateTime) return value;
+    if (value is String && value.isNotEmpty) return DateTime.tryParse(value);
+    return null;
+  }
 
   bool get isKnowledgeLedger => ledgerSchemaVersion == 'knowledge_ledger.v1' && ledgerKind != null;
 
@@ -140,6 +187,7 @@ class Memory {
       isKnowledgeLedger &&
       intentBacked &&
       !deleted &&
+      (ledgerStatus == null || ledgerStatus == 'active') &&
       invalidAt == null &&
       (supersededBy == null || supersededBy!.trim().isEmpty) &&
       userReview != false;
@@ -159,16 +207,21 @@ class Memory {
     final rawLayer = normalizedJson['layer'] as String?;
     final rawTier = normalizedJson['tier'] as String?;
     final rawMemoryTier = normalizedJson['memory_tier'] as String?;
-    normalizedJson['layer'] ??= rawTier ?? rawMemoryTier ?? MemoryLayer.longTerm.apiValue;
-    normalizedJson['memory_tier'] ??= rawTier ?? rawLayer ?? MemoryLayer.longTerm.apiValue;
-
-    final generated = wire.GeneratedMemoryDB.fromJson(normalizedJson);
-    final rawLayerValue = MemoryLayer.tryParse(rawLayer);
-    final layerValue = MemoryLayer.tryParse(generated.layer);
+    final layerValue = MemoryLayer.tryParse(rawLayer);
     final tierValue = MemoryLayer.tryParse(rawTier);
     final memoryTierValue = MemoryLayer.tryParse(rawMemoryTier);
-    final layerIsExplicit = rawLayerValue != null || tierValue != null || memoryTierValue != null;
-    final resolvedLayer = layerValue ?? tierValue ?? memoryTierValue ?? MemoryLayer.longTerm;
+    // A bad Siri lifecycle field must not reject an otherwise valid app page.
+    // The backend normally rejects an unknown canonical enum; if one reaches
+    // this older-client decoder, keep the row visible but exclude it from Siri.
+    final siriTierValid = (rawMemoryTier == null || memoryTierValue != null) &&
+        [layerValue, tierValue, memoryTierValue].whereType<MemoryLayer>().toSet().length <= 1 &&
+        normalizedJson['siri_tier_valid'] != false;
+    normalizedJson['layer'] = (layerValue ?? tierValue ?? memoryTierValue ?? MemoryLayer.longTerm).apiValue;
+    normalizedJson['memory_tier'] = (memoryTierValue ?? tierValue ?? layerValue ?? MemoryLayer.longTerm).apiValue;
+
+    final generated = wire.GeneratedMemoryDB.fromJson(normalizedJson);
+    final layerIsExplicit = layerValue != null || tierValue != null || memoryTierValue != null;
+    final resolvedLayer = MemoryLayer.tryParse(generated.layer) ?? MemoryLayer.longTerm;
 
     return Memory(
       id: generated.id,
@@ -183,6 +236,7 @@ class Memory {
       manuallyAdded: generated.manuallyAdded,
       edited: generated.edited,
       deleted: json['deleted'] as bool? ?? false,
+      isDismissed: generated.isDismissed,
       visibility: generated.visibility != null
           ? (MemoryVisibility.values.asNameMap()[generated.visibility!] ?? MemoryVisibility.public)
           : MemoryVisibility.public,
@@ -190,9 +244,13 @@ class Memory {
       isBaseline: json['is_baseline'] as bool? ?? false,
       layer: resolvedLayer,
       layerIsExplicit: layerIsExplicit,
+      siriTierValid: siriTierValid,
+      siriVisibilityValid: json['siri_visibility_valid'] != false &&
+          (json['visibility'] == null || MemoryVisibility.values.asNameMap().containsKey(json['visibility'])),
       primaryCaptureDevice: generated.primaryCaptureDevice,
       captureDeviceIds: generated.captureDeviceIds ?? const [],
       ledgerSchemaVersion: generated.ledgerSchemaVersion,
+      ledgerStatus: generated.ledgerStatus,
       ledgerKind: KnowledgeLedgerKind.tryParse(generated.kind),
       ledgerBody: generated.body,
       ledgerSlot: generated.slot,
@@ -200,9 +258,11 @@ class Memory {
       subjectEntityId: generated.subjectEntityId,
       supersededBy: generated.supersededBy,
       invalidAt: generated.invalidAt,
+      expiresAt: _parseOptionalDateTime(json['expires_at']),
       validAt: generated.validAt,
       intentBacked: generated.intentBacked,
       curationWeight: generated.curationWeight,
+      arguments: generated.arguments == null ? null : Map<String, dynamic>.from(generated.arguments!),
       triggerCondition: generated.triggerCondition ?? const {},
       writeReason: generated.writeReason,
       evidence: generated.evidence?.map((item) => item.toJson()).toList(growable: false) ?? const [],
@@ -224,10 +284,14 @@ class Memory {
       'manually_added': manuallyAdded,
       'edited': edited,
       'deleted': deleted,
+      'is_dismissed': isDismissed,
+      if (!siriTierValid) 'siri_tier_valid': false,
+      if (!siriVisibilityValid) 'siri_visibility_valid': false,
       'visibility': visibility.name,
       'is_locked': isLocked,
       'is_baseline': isBaseline,
       if (ledgerSchemaVersion != null) 'ledger_schema_version': ledgerSchemaVersion,
+      if (ledgerStatus != null) 'ledger_status': ledgerStatus,
       if (ledgerKind != null) 'kind': ledgerKind!.apiValue,
       if (ledgerBody != null) 'body': ledgerBody,
       if (ledgerSlot != null) 'slot': ledgerSlot,
@@ -235,9 +299,11 @@ class Memory {
       if (subjectEntityId != null) 'subject_entity_id': subjectEntityId,
       if (supersededBy != null) 'superseded_by': supersededBy,
       if (invalidAt != null) 'invalid_at': invalidAt!.toUtc().toIso8601String(),
+      if (expiresAt != null) 'expires_at': expiresAt!.toUtc().toIso8601String(),
       if (validAt != null) 'valid_at': validAt!.toUtc().toIso8601String(),
       'intent_backed': intentBacked,
       'curation_weight': curationWeight,
+      if (arguments != null) 'arguments': arguments,
       if (triggerCondition.isNotEmpty) 'trigger_condition': triggerCondition,
       if (writeReason != null) 'write_reason': writeReason,
       if (evidence.isNotEmpty) 'evidence': evidence,

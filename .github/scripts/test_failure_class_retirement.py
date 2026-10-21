@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -150,6 +151,40 @@ class RetirementDiffTests(unittest.TestCase):
         self.assertIn("FC-recurred", text)
 
 
+class ReportConsumerTests(unittest.TestCase):
+    """An absent report is never evidence that nothing recurred."""
+
+    def run_report(self, returncode: int, stdout: str, stderr: str = "") -> dict:
+        def runner(command, **_):
+            return subprocess.CompletedProcess(command, returncode, stdout, stderr)
+
+        return retirement.run_report(
+            Path("events.json"),
+            "14d",
+            datetime(2026, 8, 20, tzinfo=timezone.utc),
+            Path("."),
+            runner=runner,
+        )
+
+    def test_crashed_report_is_refused(self) -> None:
+        with self.assertRaises(retirement.RetirementError) as caught:
+            self.run_report(1, "", "Traceback (most recent call last):\nKeyError: 'status'")
+        self.assertIn("produced no output", str(caught.exception))
+
+    def test_blank_report_is_refused(self) -> None:
+        with self.assertRaises(retirement.RetirementError):
+            self.run_report(1, "   \n")
+
+    def test_non_zero_exit_naming_no_error_is_refused(self) -> None:
+        with self.assertRaises(retirement.RetirementError) as caught:
+            self.run_report(1, json.dumps({"ok": True, "errors": [], "classes": []}))
+        self.assertIn("without reporting an error", str(caught.exception))
+
+    def test_clean_report_is_returned(self) -> None:
+        report = self.run_report(0, json.dumps({"ok": True, "errors": [], "classes": [{"id": "FC-a"}]}))
+        self.assertEqual([entry["id"] for entry in report["classes"]], ["FC-a"])
+
+
 class EndToEndTests(unittest.TestCase):
     """Drive main() against a real failure-class definition tree and feed."""
 
@@ -242,6 +277,43 @@ class EndToEndTests(unittest.TestCase):
 
         self.assertEqual(exit_code, 1)
         self.assertIn("Reopen required", self.evidence.read_text(encoding="utf-8"))
+
+    def test_recurrence_still_fails_the_run_when_a_neighbour_is_unreadable(self) -> None:
+        """A malformed definition must not silence the reopen signal.
+
+        `report` used to die on the unreadable file, and this consumer read its
+        empty stdout as an empty report: no errors, no classes, so the job
+        announced "nothing to retire, nothing to reopen" and went green while a
+        retired class had in fact been classified again.
+        """
+        recurred = self.definitions / "FC-recurred.json"
+        recurred.write_text(
+            json.dumps(definition("FC-recurred", status="dormant", dormant_since="2026-08-01T00:00:00Z"), indent=2) + "\n",
+            encoding="utf-8",
+        )
+        unreadable = definition("FC-unreadable")
+        del unreadable["status"]
+        (self.definitions / "FC-unreadable.json").write_text(
+            json.dumps(unreadable, indent=2) + "\n", encoding="utf-8"
+        )
+        self._write_feed(
+            [{"number": 7, "body": "Failure-Class: FC-recurred\n", "merged_at": "2026-08-15T00:00:00Z"}]
+        )
+
+        exit_code = retirement.main(
+            [
+                "--since",
+                "14d",
+                "--now",
+                NOW,
+                "--events-file",
+                str(self.feed),
+                "--root",
+                str(self.tmp),
+            ]
+        )
+
+        self.assertEqual(exit_code, 1)
 
     def test_empty_feed_fails_before_any_edit(self) -> None:
         stale = self.definitions / "FC-stale.json"

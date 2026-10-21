@@ -8,7 +8,7 @@ import 'package:omi/utils/logger.dart';
 
 Future<List<Folder>> getFolders() async {
   var response = await makeApiCall(url: '${Env.apiBaseUrl}v1/folders', headers: {}, method: 'GET', body: '');
-  if (response == null) return [];
+  if (response == null) throw Exception('Failed to load folders');
   if (response.statusCode == 200) {
     var body = utf8.decode(response.bodyBytes);
     var folders = (jsonDecode(body) as List<dynamic>)
@@ -20,7 +20,7 @@ Future<List<Folder>> getFolders() async {
   } else {
     Logger.debug('getFolders error ${response.statusCode}');
   }
-  return [];
+  throw Exception('Failed to load folders');
 }
 
 /// Create a new custom folder.

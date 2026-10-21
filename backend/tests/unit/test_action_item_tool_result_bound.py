@@ -4,8 +4,7 @@ Asking the chat to "show me all my tasks" can pull a full 500-item page and rend
 several lines, which floods the chat model's context so it freezes or refuses ("that's quite a bit
 of information to process at once") -- the same failure already fixed for the conversations tool in
 #8503. get_action_items_tool now caps how many items (and how many characters) it returns and
-appends a note telling the model to summarize what it has and offer to narrow. These tests cover the
-two pure bounding helpers.
+appends a note that identifies omitted rows. These tests cover the two pure bounding helpers.
 """
 
 import importlib.util
@@ -62,12 +61,19 @@ _SYS_MODULE_NAMES = [
     "database.action_items",
     "database.notifications",
     "utils",
+    "utils.model_text",
+    "utils.user_clock",
     "utils.notifications",
     "utils.conversations",
     "utils.conversations.render",
     "utils.retrieval",
     "utils.retrieval.agentic",
     "utils.retrieval.chat_scope",
+    "utils.retrieval.turn_refs",
+    "utils.messaging",
+    "utils.messaging.undo",
+    "utils.messaging.projection",
+    "utils.messaging.turn_context",
     "utils.retrieval.tools",
     "utils.retrieval.tools.action_item_tools",
 ]
@@ -76,6 +82,7 @@ _SYS_MODULES_SNAPSHOT = snapshot_sys_modules(_SYS_MODULE_NAMES)
 for _p in [
     "database",
     "utils",
+    "utils.messaging",
     "utils.conversations",
     "utils.retrieval",
     "utils.retrieval.tools",
@@ -92,6 +99,7 @@ for _name, _attrs in {
     ],
     "utils.conversations.render": ["resolve_display_tz", "format_local_time"],
     "utils.retrieval.agentic": ["agent_config_context"],
+    "utils.messaging.undo": ["record_write"],
 }.items():
     _m = _mod(_name)
     for _a in _attrs:
@@ -113,6 +121,14 @@ _chat_scope = _mod("utils.retrieval.chat_scope")
 _chat_scope.apply_chat_scope_dates = _apply_chat_scope_dates
 _chat_scope.chat_scope_from_config = _chat_scope_from_config
 
+_mod("utils.messaging.projection").surface_runtime = types.SimpleNamespace(get=lambda: None)
+_model_text = _load("utils.model_text", "utils/model_text.py")
+sys.modules["utils"].model_text = _model_text
+_load("utils.user_clock", "utils/user_clock.py")
+rb = _load("utils.retrieval.tools._result_bounds_test", "utils/retrieval/tools/result_bounds.py")
+_load("utils.messaging.turn_context", "utils/messaging/turn_context.py")
+_load("utils.retrieval.turn_refs", "utils/retrieval/turn_refs.py")
+
 ai = _load("utils.retrieval.tools.action_item_tools", "utils/retrieval/tools/action_item_tools.py")
 
 restore_sys_modules(_SYS_MODULES_SNAPSHOT)
@@ -125,7 +141,7 @@ class TestCapActionItemsForLlm:
         capped, truncated = ai._cap_action_items_for_llm(items)
         assert truncated is True
         assert len(capped) == ai.MAX_ACTION_ITEMS_FOR_LLM
-        assert capped == items[: ai.MAX_ACTION_ITEMS_FOR_LLM]  # first (most relevant) kept
+        assert capped == items[: ai.MAX_ACTION_ITEMS_FOR_LLM]  # first rows in database order kept
 
     def test_under_cap_is_untouched(self):
         items = list(range(50))
@@ -145,8 +161,8 @@ class TestCapActionItemsForLlm:
 class TestBoundedActionItemsResult:
     def test_truncated_appends_guidance_note_without_claiming_a_total(self):
         out = ai._bounded_action_items_result("1. [Pending] ship it\n   ID: a", truncated=True)
-        assert "more may exist" in out
-        assert "Summarize what is shown" in out
+        assert "more were omitted, not absent" in out
+        assert "Showing 1 action items" in out
         assert "narrower" in out
         # No definitive total is claimed: the page is limit-capped, not necessarily the full set.
         assert "total" not in out.lower()
@@ -159,9 +175,18 @@ class TestBoundedActionItemsResult:
         big = "1. [Pending] first\n" + ("x" * 30000) + "\n2. [Pending] second\n" + ("y" * 40000)
         out = ai._bounded_action_items_result(big, truncated=False)
         assert len(out) <= ai.MAX_RESULT_CHARS + 400  # budget plus the appended note
-        assert "Summarize what is shown" in out
+        assert "more were omitted, not absent" in out
         # Clipped back to a line boundary, so the final record before the note is not sliced
         # mid-field (the trailing 40k-character run is dropped whole, not cut partway).
-        note_idx = out.index("[Only the most relevant")
+        note_idx = out.index("[Showing")
         body = out[:note_idx].rstrip("\n")
         assert not body.endswith("y")
+
+    def test_shared_bound_note_does_not_claim_relevance_and_accepts_order(self):
+        generic = rb.bounded_result("one result line", truncated=True)
+        assert "more may exist" in generic
+        assert "most relevant" not in generic
+
+        ordered = rb.bounded_result("1. row", truncated=True, noun="events", order="newest first", shown=1)
+        assert "Rows are ordered newest first" in ordered
+        assert "Showing 1 events" in ordered

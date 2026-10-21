@@ -33,6 +33,7 @@ final class ConversationRepositoryTests: XCTestCase {
     XCTAssertEqual(snapshots[2].conversations[0].status, .completed)
     XCTAssertFalse(snapshots[2].isLoading)
     XCTAssertEqual(local.stored.map(\.updatedAt), [server.updatedAt])
+    XCTAssertEqual(local.storeBatchCalls, 1, "A server page must enter the cache through one Siri sync batch")
   }
 
   func testCacheReloadDuringPendingMutationKeepsOptimisticStar() async throws {
@@ -153,6 +154,41 @@ final class ConversationRepositoryTests: XCTestCase {
     XCTAssertEqual(result.transcript, "You: server transcript")
     XCTAssertEqual(local.stored.last?.updatedAt, serverDetail.updatedAt)
     XCTAssertEqual(repository.conversations[0].structured.overview, "Fresh server summary")
+  }
+
+  func testDetailByIdFetchesAConversationTheListNeverLoaded() async throws {
+    let member = makeConversation(id: "other-device", title: "Pendant recording", revision: 2)
+    let remote = FakeConversationRemote(detailResult: .success(member))
+    let local = FakeConversationLocal()
+    let repository = ConversationRepository(remote: remote, local: local)
+
+    let result = try await repository.detail(id: "other-device")
+
+    XCTAssertEqual(result.structured.title, "Pendant recording")
+    XCTAssertEqual(local.stored.map(\.id), ["other-device"], "A fetched member is cached like any detail")
+  }
+
+  func testDetailByIdWithNothingCachedThrowsInsteadOfInventingARow() async {
+    let repository = ConversationRepository(
+      remote: FakeConversationRemote(detailResult: .failure(TestFailure.offline)),
+      local: FakeConversationLocal()
+    )
+    do {
+      _ = try await repository.detail(id: "missing")
+      XCTFail("A failed by-id fetch with no cache and no seed must throw")
+    } catch {
+      XCTAssertTrue(error is TestFailure)
+    }
+  }
+
+  func testDetailByIdFallsBackToTheCacheWhenOffline() async throws {
+    let cached = makeConversation(id: "other-device", title: "Cached pendant", revision: 1)
+    let repository = ConversationRepository(
+      remote: FakeConversationRemote(detailResult: .failure(TestFailure.offline)),
+      local: FakeConversationLocal(detailResult: cached)
+    )
+    let result = try await repository.detail(id: "other-device")
+    XCTAssertEqual(result.structured.title, "Cached pendant")
   }
 
   func testResetRejectsDetailResponseFromPreviousSessionBeforeCacheWrite() async {
@@ -958,6 +994,7 @@ private final class FakeConversationLocal: ConversationLocalDataSource {
   var countValue: Int
   var detailResult: ServerConversation?
   var stored: [ServerConversation] = []
+  var storeBatchCalls = 0
   var deletedIds: [String] = []
   var events: [String] = []
   var storeHandler: ((ServerConversation) async throws -> Void)?
@@ -984,6 +1021,17 @@ private final class FakeConversationLocal: ConversationLocalDataSource {
     try scope.withCurrent(generation) {
       stored.append(conversation)
       events.append("store:\(conversation.id)")
+    }
+  }
+
+  func storeMany(
+    _ conversations: [ServerConversation],
+    scope: ConversationCacheWriteScope,
+    generation: Int
+  ) async throws {
+    storeBatchCalls += 1
+    for conversation in conversations {
+      try await store(conversation, scope: scope, generation: generation)
     }
   }
 

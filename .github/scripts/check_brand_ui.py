@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """INV-UI-1: no-increase ratchet on purple UI literals in changed files.
 
+Flutter's neutral accent is white on the dark palette and black on the light palette.
+Both palettes remain subject to the same purple-literal guard.
+
 Compares purple-hit counts in changed UI sources against the merge base.
 Existing debt may remain; introducing new purple (raising a file's count, or
 adding purple in a new file) fails.

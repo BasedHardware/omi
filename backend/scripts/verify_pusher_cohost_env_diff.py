@@ -25,6 +25,7 @@ Stdlib-only. Runs in pre-push/CI and in the pusher deploy workflows::
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import sys
 from dataclasses import dataclass
@@ -35,22 +36,121 @@ ENVIRONMENTS = ("dev", "prod")
 
 REQUIRED_IDENTICAL_LITERALS = (
     "MEMORY_ENABLED",
-    "CONVERSATION_NOTES_V2_ENABLED",
-    "CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED",
-    "CONVERSATION_OCR_CONTEXT_ENABLED",
+    "MEETING_NOTES_EVIDENCE_WAIT_SECONDS",
+    "CLIENT_SUMMARIES_AT_CAP_ENABLED",
+    # Both process_conversation hosts must read the same managed-spend ledger
+    # switch; a listen-only value would leave pusher-hosted direct-provider
+    # spend invisible to llm_gateway_attempts (free-tier program, Move 1).
+    "LLM_GATEWAY_ACCOUNTING_ENABLED",
 )
 
 # Explained listen-only residuals. New listen-only keys fail until added here
 # *or* declared on pusher. Do not copy secret refs onto pusher from this list
 # without an ExternalSecret inventory (#12298).
+_TRANSLATION_LISTEN_ONLY = frozenset(
+    {
+        # Visibility belongs to authenticated listen sockets and opt-in detail
+        # reads; pusher hosts neither transport and must not admit this spend.
+        'TRANSLATION_DEMAND_GATE_ENABLED',
+        'TRANSLATION_ONOPEN_ENABLED',
+        'TRANSLATION_ONDEMAND_MAX_SEGMENTS',
+        'TRANSLATION_ONDEMAND_MAX_CHARS',
+        'TRANSLATION_ONDEMAND_DEADLINE_SECONDS',
+        'TRANSLATION_ONDEMAND_MAX_OUTPUT_TOKENS',
+        'TRANSLATION_ONDEMAND_UID_DAILY_CHARS',
+        'TRANSLATION_ONDEMAND_GLOBAL_DAILY_CHARS',
+        'TRANSLATION_ONDEMAND_MAX_CATCHUP_PAGES',
+        # Translation cache TTLs belong to backend-listen and Cloud Run API
+        # callers; pusher has no TranslationService/cache callsite.
+        'TRANSLATION_CACHE_TTL',
+        'TRANSLATION_NEGATIVE_CACHE_TTL',
+    }
+)
+# The API domain and the Review routes run on backend-listen. Pusher's
+# pusher/main.py entrypoint does not mount routers/review.py.
+_REVIEW_SURFACE_LISTEN_ONLY = frozenset({'REVIEW_SURFACE_MODE'})
+# Demand policy owns /v4/listen provider handovers and client_state presence.
+# Pusher only receives the adopted transcript/audio; it never selects this lane.
+_DEMAND_LISTEN_ONLY = frozenset(
+    {
+        'STT_LIVE_DEMAND_ENABLED',
+        'STT_LIVE_DEMAND_PERCENT',
+        'STT_LIVE_DEMAND_UID_ALLOWLIST',
+        'STT_LIVE_DEMAND_MIN_DWELL_SECONDS',
+    }
+)
+# main.py owns sync intake, recovery RPC and serving startup. pusher.main mounts
+# none of those surfaces and never starts the dedicated GPU process.
+_BATCH_PIPELINE_LISTEN_ONLY = frozenset(
+    {
+        'BATCH_PIPELINE_ENABLED',
+        'BATCH_PIPELINE_UID_ALLOWLIST',
+        'BATCH_PIPELINE_PERCENT',
+        'BATCH_PIPELINE_SERVING_ENABLED',
+        'BATCH_PIPELINE_API_URL',
+        'BATCH_PIPELINE_WORKER_ENABLED',
+        'BATCH_PIPELINE_WORKER_AUDIENCE',
+        'BATCH_PIPELINE_WORKER_SERVICE_ACCOUNT',
+        'BATCH_PIPELINE_UNIT_SECONDS',
+        'BATCH_PIPELINE_SHARED_LIVE_ENABLED',
+        'BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED',
+        'BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED',
+        'BATCH_PIPELINE_RECOVERY_ALL_ADMITTED',
+        'BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED',
+        'BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED',
+        # Only main.py's batch worker RPC and serving loop schedule merge heads
+        # and projection follow-ups; pusher mounts neither surface.
+        'BATCH_PIPELINE_HEAD_PRIORITY_ENABLED',
+        'BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED',
+        'BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED',
+        'BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED',
+        'BATCH_PIPELINE_SPEECH_EMPTY_MULTILINGUAL_ENABLED',
+        'BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED',
+        'BATCH_PIPELINE_RECOVERY_MODE',
+        'BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST',
+        'BUCKET_BATCH_PIPELINE',
+    }
+)
 LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
     "dev": frozenset(
         {
+            # Managed listen-only STT rollout; pusher is not a live audio receiver.
+            "PARAKEET_BATCH_PRESSURE_MIN_REPLICAS",
+            "PARAKEET_BATCH_PRESSURE_POOL_HOST",
+            "PARAKEET_WINDOW_ALLOCATION_PERCENT",
+            "PARAKEET_WINDOW_DIARIZATION",
+            # Pusher never creates a window decoder or owns its delivery deadline.
+            "PARAKEET_WINDOW_DEADLINE_CUT_ENABLED",
+            "PARAKEET_WINDOW_DEADLINE_CUT_POST_LATENCY_SECONDS",
+            "PARAKEET_WINDOW_MAX_SESSIONS",
+            "PARAKEET_WINDOW_MAX_CONTEXT_SECONDS",
+            "PARAKEET_WINDOW_PACE_SECONDS",
+            "PARAKEET_WINDOW_POST_TIMEOUT_SECONDS",
+            "SONIOX_CIRCUIT_COOLDOWN_SECONDS",
+            "SONIOX_CIRCUIT_FAILURE_THRESHOLD",
+            "STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS",
+            "STT_CIRCUIT_HALF_OPEN_PROBES",
+            "STT_SHED_CONNECT_FAILURES",
+            "STT_RESILIENT_RECONNECT",
+            "STT_FAILOVER_RECOVERY_ENABLED",
+            "STT_LEARNED_LANGUAGE_PROFILE",
+            "STT_MULTI_LANGUAGE_HINTS",
+            "STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT",
+            # Fleet live routing and runway polling run on backend-listen only.
+            "STT_NO_TEXT_SECONDS",
+            "STT_ROUTING_MODE",
+            "STT_ROUTING_ON_PERCENT",
+            "STT_ROUTING_TARGETS_JSON",
+            "STT_ROUTING_DISRUPTION_GATE",
+            "STT_ROUTING_REDIS_TIMEOUT_SECONDS",
+            # Sync HTTP intake is mounted by main.py; pusher mounts no sync router.
+            "SYNC_FINALIZE_TARGET_RECOVERY_ENABLED",
             "ACCOUNT_CUTOVER_ENFORCEMENT",
-            "DEEPGRAM_API_KEY",
             "DEEPGRAM_SELF_HOSTED_ENABLED",
             "DESKTOP_UPDATE_POINTERS_MODE",
             "DESKTOP_UPDATE_RECONCILE_SAMPLE_RATE",
+            # Legacy mobile HTTP TTS rollback; pusher mounts no TTS router.
+            "ELEVENLABS_API_KEY",
             "FAIR_USE_3DAY_SPEECH_MS",
             "FAIR_USE_BUCKET_SECONDS",
             "FAIR_USE_CHECK_INTERVAL_SECONDS",
@@ -67,27 +167,18 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "FAIR_USE_WEEKLY_SPEECH_MS",
             "GCP_LOCATION",
             "GEMINI_API_KEY",
-            "GOOGLE_APPLICATION_CREDENTIALS",
-            "GOOGLE_CALENDAR_AUTO_LINK_ENABLED",
             "GROQ_API_KEY",
             "HOSTED_PUSHER_API_URL",
             "HOSTED_TRANSLATION_API_URL",
             "HOSTED_VAD_API_URL",
             "LISTEN_FINALIZATION_BYOK_ABANDONMENT_ENABLED",
             "LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS",
-            "LLM_GATEWAY_ACCOUNTING_ENABLED",
+            # Reconnect admission is local to the /v4/listen runtime; pusher does not open client listen sockets.
+            "LISTEN_RECONNECT_BUDGET_PER_MIN",
             "MCP_OAUTH_CHATGPT_CLIENT_SECRET",
-            "MEETING_RECEIPT_RECONCILER_ENABLED",
             "MEMORY_CANONICAL_MAINTENANCE_ENABLED",
             "MEMORY_TYPESENSE_COLLECTION",
             "OMI_FIRESTORE_DATA_PLANE_PROJECT",
-            "OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_ENABLED",
-            "OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_SAMPLE_RATE",
-            "OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED",
-            "OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE",
-            "OMI_LLM_GATEWAY_DEV_SHADOW_ALL_ENABLED",
-            "OMI_LLM_GATEWAY_DEV_SHADOW_ALL_SAMPLE_RATE",
-            "OMI_LLM_GPT56_EXPLICIT_CACHE_ENABLED",
             "OMI_PARITY_PACK_ALLOWED_PRINCIPALS",
             "OMI_PARITY_PACK_CAPTURE",
             "OMI_PARITY_PACK_EXPORT_INTERVAL_SECONDS",
@@ -95,11 +186,16 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "OMI_PARITY_PACK_ROOT",
             "OPENROUTER_API_KEY",
             "POSTHOG_PROJECT_API_KEY",
+            # Only backend-listen serves api.omiapi.com; its shared-chat route
+            # validates the frontend service OIDC identity at the API edge.
+            "PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE",
+            "PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_INVOKER_SA",
             "PUBLIC_SHARED_CONVERSATION_CHAT_MODE",
             "RAPID_API_KEY",
             "REFERRAL_PUBLIC_BASE_URL",
-            "SONIOX_API_KEY",
             "TRANSLATION_SERVICE_MODELS",
+            # HTTP read-aloud routers mount only on backend-listen, not pusher.
+            "TTS_PROVIDER",
             "TWILIO_API_KEY_SECRET",
             "TWILIO_AUTH_TOKEN",
             "USE_VERTEX_AI",
@@ -107,15 +203,66 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "WAKE_WORD_ADJUDICATION_ENABLED",
             "X_OAUTH_CLIENT_SECRET",
         }
-    ),
+    )
+    | _TRANSLATION_LISTEN_ONLY
+    | _REVIEW_SURFACE_LISTEN_ONLY
+    | _DEMAND_LISTEN_ONLY
+    | _BATCH_PIPELINE_LISTEN_ONLY,
     "prod": frozenset(
         {
+            # Only listen's runtime reads these to advertise mobile control-channel
+            # admission. Pusher never grants permission; sync archives unconditionally.
+            "MOBILE_STANDARD_BATCH_ENABLED",
+            "MOBILE_STANDARD_BATCH_PERCENT",
+            "MOBILE_STANDARD_BATCH_UIDS",
+            # Managed listen-only STT rollout; pusher is not a live audio receiver.
+            "PARAKEET_BATCH_PRESSURE_MIN_REPLICAS",
+            "PARAKEET_BATCH_PRESSURE_POOL_HOST",
+            "PARAKEET_WINDOW_ALLOCATION_PERCENT",
+            "PARAKEET_WINDOW_DIARIZATION",
+            # Pusher never creates a window decoder or owns its delivery deadline.
+            "PARAKEET_WINDOW_DEADLINE_CUT_ENABLED",
+            "PARAKEET_WINDOW_DEADLINE_CUT_POST_LATENCY_SECONDS",
+            "PARAKEET_WINDOW_MAX_SESSIONS",
+            "PARAKEET_WINDOW_FIRST_TEXT_DEADLINE_SECONDS",
+            "PARAKEET_WINDOW_MAX_EMPTY_STREAK",
+            "PARAKEET_WINDOW_MAX_CONTEXT_SECONDS",
+            "PARAKEET_WINDOW_PACE_SECONDS",
+            "PARAKEET_WINDOW_POST_TIMEOUT_SECONDS",
+            # Pusher runs keyless on Workload Identity; listen still mounts the nik-164 key until
+            # its own cut-over (credential hygiene D4 phase 2), which removes this entry.
+            "SERVICE_ACCOUNT_JSON",
+            "SONIOX_CIRCUIT_COOLDOWN_SECONDS",
+            "SONIOX_CIRCUIT_FAILURE_THRESHOLD",
+            "STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS",
+            "STT_CIRCUIT_HALF_OPEN_PROBES",
+            "STT_SHED_CONNECT_FAILURES",
+            "STT_RESILIENT_RECONNECT",
+            "STT_FAILOVER_RECOVERY_ENABLED",
+            "STT_NO_TEXT_RESCUE_ENABLED",
+            "STT_LEARNED_LANGUAGE_PROFILE",
+            "STT_MULTI_LANGUAGE_HINTS",
+            "STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT",
+            # Staged sync-lineage rollout: the live revision fence runs in listen
+            # transcript writes; pusher reaches no sync intake or live-write site.
+            "SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST",
+            # Fleet live routing and runway polling run on backend-listen only.
+            "STT_NO_TEXT_SECONDS",
+            "STT_ROUTING_MODE",
+            "STT_ROUTING_ON_PERCENT",
+            "STT_ROUTING_TARGETS_JSON",
+            "STT_ROUTING_DISRUPTION_GATE",
+            "STT_ROUTING_REDIS_TIMEOUT_SECONDS",
+            # Sync HTTP intake is mounted by main.py; pusher mounts no sync router.
+            "SYNC_FINALIZE_TARGET_RECOVERY_ENABLED",
             "ACCOUNT_CUTOVER_ENFORCEMENT",
             "ACCOUNT_DELETION_DISPATCH_MODE",
             "ACCOUNT_DELETION_TASKS_QUEUE",
             "BETA_PROMOTION_TOKEN",
             "DESKTOP_UPDATE_POINTERS_MODE",
             "DESKTOP_UPDATE_RECONCILE_SAMPLE_RATE",
+            # Legacy mobile HTTP TTS rollback; pusher mounts no TTS router.
+            "ELEVENLABS_API_KEY",
             "FAIR_USE_3DAY_SPEECH_MS",
             "FAIR_USE_BUCKET_SECONDS",
             "FAIR_USE_CHECK_INTERVAL_SECONDS",
@@ -138,23 +285,25 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "HOSTED_VAD_API_URL",
             "LISTEN_FINALIZATION_BYOK_ABANDONMENT_ENABLED",
             "LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS",
-            "LLM_GATEWAY_ACCOUNTING_ENABLED",
+            # Reconnect admission is local to the /v4/listen runtime; pusher does not open client listen sockets.
+            "LISTEN_RECONNECT_BUDGET_PER_MIN",
             "MCP_OAUTH_CHATGPT_CLIENT_SECRET",
             "MCP_OAUTH_CLIENTS_JSON",
-            "MEETING_RECEIPT_RECONCILER_ENABLED",
-            "MEMORY_BELIEF_MODEL_ENABLED",
             "MEMORY_CANONICAL_MAINTENANCE_ENABLED",
             "MEMORY_TYPESENSE_COLLECTION",
             "MEMORY_V3_CURSOR_SECRET",
             "OMI_FIRESTORE_DATA_PLANE_PROJECT",
-            "OMI_LLM_GPT56_EXPLICIT_CACHE_ENABLED",
-            "POSTHOG_PROJECT_API_KEY",
+            # Only backend-listen serves api.omi.me; its shared-chat route
+            # validates the frontend service OIDC identity at the API edge.
+            "PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE",
+            "PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_INVOKER_SA",
             "PUBLIC_SHARED_CONVERSATION_CHAT_MODE",
             "REFERRAL_PUBLIC_BASE_URL",
-            "SONIOX_API_KEY",
             "SYNC_TASKS_LOCATION",
             "SYNC_TASKS_PROJECT",
             "TRANSLATION_SERVICE_MODELS",
+            # HTTP read-aloud routers mount only on backend-listen, not pusher.
+            "TTS_PROVIDER",
             "TWILIO_API_KEY_SECRET",
             "TWILIO_AUTH_TOKEN",
             "USE_VERTEX_AI",
@@ -162,19 +311,91 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "WAKE_WORD_ADJUDICATION_ENABLED",
             "X_OAUTH_CLIENT_SECRET",
         }
-    ),
+    )
+    | _TRANSLATION_LISTEN_ONLY
+    | _REVIEW_SURFACE_LISTEN_ONLY
+    | _DEMAND_LISTEN_ONLY
+    | (_BATCH_PIPELINE_LISTEN_ONLY - {'BATCH_PIPELINE_UID_ALLOWLIST'}),
+}
+
+# Pusher owns the process-local shadow worker; sync/backfill also runs the
+# authoritative final pass from stage B. Backend-listen must stay excluded. Validate
+# exact literals below as well as names, rather than exempting arbitrary values.
+PROD_FINAL_PASS_SHADOW_VALUES = {
+    "HOSTED_DIARIZATION_API_URL": ("http://172.16.160.20/diarizer-batch", None),
+    "TRANSCRIPTION_FINAL_PASS_DIARIZER": ("pyannote_shadow", None),
+    "TRANSCRIPTION_FINAL_PASS_BACKEND": ("pyannote", None),
+    "TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST": ("vi7SA9ckQCe4ccobWNxlbdcNdC23", None),
+    "TRANSCRIPTION_FINAL_PASS_PERCENT": ("0", None),
+    "TRANSCRIPTION_FINAL_PASS_AUTHORITATIVE": ("true", None),
+    "TRANSCRIPTION_FINAL_PASS_SYNC_ENABLED": ("true", None),
+    "TRANSCRIPTION_SYNC_FINAL_PASS_HOURLY_AUDIO_HOURS": ("10", None),
+    "TRANSCRIPTION_SYNC_FINAL_PASS_HOURLY_REQUESTS": ("1000", None),
 }
 
 PUSHER_ONLY_ALLOWED: dict[str, frozenset[str]] = {
     "dev": frozenset({"GOOGLE_CLIENT_ID", "REDIS_DB_HOST", "TYPESENSE_HOST"}),
-    "prod": frozenset({"DEEPGRAM_SELF_HOSTED_URL", "REDIS_DB_HOST", "TYPESENSE_HOST"}),
+    # Pusher retains its cloud/BYOK credential; listen has no managed cloud key.
+    "prod": frozenset(
+        {
+            "DEEPGRAM_API_KEY",
+            # Late identity retries are scheduled only by prod pusher audio drain.
+            "OWNER_IDENTITY_RETRY_COALESCE_ENABLED",
+            "REDIS_DB_HOST",
+            "TYPESENSE_HOST",
+            # Process-local final-pass shadow is admitted only on the prod pusher.
+            "TRANSCRIPTION_SHADOW_ENABLED",
+            "TRANSCRIPTION_SHADOW_KILL_SWITCH",
+            "TRANSCRIPTION_SHADOW_UID_ALLOWLIST",
+            "TRANSCRIPTION_SHADOW_PERCENT",
+            "TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS",
+        }
+    )
+    | frozenset(PROD_FINAL_PASS_SHADOW_VALUES),
 }
+
+# Queue-age publishing is active only on backend-listen. Pusher may omit the
+# setting or carry the explicit disabled value used by the shared runtime env.
+LISTEN_ONLY_ZERO_OR_ABSENT = frozenset({"FSR_QUEUE_AGE_PUBLISHER"})
 
 # Shared keys whose *literal* values are allowed to differ. Name-only diffs
 # belong in the only-allowed sets above, not here.
 SHARED_VALUE_DIFF_ALLOWED: dict[str, frozenset[str]] = {
-    "dev": frozenset({"DD_SERVICE", "STRIPE_ARCHITECT_MONTHLY_PRICE_ID"}),
-    "prod": frozenset({"BUCKET_SPEECH_PROFILES", "DD_SERVICE", "DEEPGRAM_SELF_HOSTED_ENABLED"}),
+    # Live TDT is a listen-only experiment; pusher retains its existing STT route.
+    # Final-pass shadow runs on the dev pusher finalizer only. Backend-listen
+    # dispatches finalization but cannot own this process-local shadow worker.
+    "dev": frozenset(
+        {
+            "DD_SERVICE",
+            "STRIPE_ARCHITECT_MONTHLY_PRICE_ID",
+            "STT_SERVICE_MODELS",
+            "TRANSCRIPTION_SHADOW_ENABLED",
+            "TRANSCRIPTION_SHADOW_UID_ALLOWLIST",
+            "TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS",
+            # Backend-listen publishes queue age; pusher stays explicitly disabled.
+            "FSR_QUEUE_AGE_PUBLISHER",
+        }
+    ),
+    # The 1% windowed-TDT canary is listen-only. Pusher retains its streaming
+    # and prerecorded policy while allocated listen sessions may lead with TDT.
+    # Backend-listen also owns the queue-age publisher; pusher remains disabled.
+    "prod": frozenset({"BUCKET_SPEECH_PROFILES", "DD_SERVICE", "STT_SERVICE_MODELS", "FSR_QUEUE_AGE_PUBLISHER"}),
+}
+
+DEV_SHADOW_VALUES = {
+    "TRANSCRIPTION_SHADOW_ENABLED": ("true", "false"),
+    "TRANSCRIPTION_SHADOW_KILL_SWITCH": ("false", "false"),
+    "TRANSCRIPTION_SHADOW_UID_ALLOWLIST": ("omi-release-probe", ""),
+    "TRANSCRIPTION_SHADOW_PERCENT": ("0", "0"),
+    "TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS": ("1", "0"),
+}
+
+PROD_SHADOW_VALUES = {
+    "TRANSCRIPTION_SHADOW_ENABLED": ("true", None),
+    "TRANSCRIPTION_SHADOW_KILL_SWITCH": ("false", None),
+    "TRANSCRIPTION_SHADOW_UID_ALLOWLIST": ("vi7SA9ckQCe4ccobWNxlbdcNdC23", None),
+    "TRANSCRIPTION_SHADOW_PERCENT": ("0", None),
+    "TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS": ("1", None),
 }
 
 
@@ -292,6 +513,14 @@ def validate_preflight(root: Path = ROOT) -> list[str]:
                 f"listen={sorted(listen_from)} — co-hosts must share the same bulk source"
             )
 
+        publisher = "FSR_QUEUE_AGE_PUBLISHER"
+        pusher_publisher = pusher_env.get(publisher)
+        listen_publisher = listen_env.get(publisher)
+        if listen_publisher is None or listen_publisher.value != "1":
+            errors.append(f"[{env}] {publisher} must be '1' on backend-listen")
+        if pusher_publisher is not None and pusher_publisher.value != "0":
+            errors.append(f"[{env}] {publisher} must be '0' or absent on pusher")
+
         for flag in REQUIRED_IDENTICAL_LITERALS:
             pusher_entry = pusher_env.get(flag)
             listen_entry = listen_env.get(flag)
@@ -315,7 +544,7 @@ def validate_preflight(root: Path = ROOT) -> list[str]:
         pusher_only = set(pusher_env) - set(listen_env)
         allowed_listen = LISTEN_ONLY_ALLOWED[env]
         allowed_pusher = PUSHER_ONLY_ALLOWED[env]
-        unexplained_listen = sorted(listen_only - allowed_listen)
+        unexplained_listen = sorted(listen_only - allowed_listen - LISTEN_ONLY_ZERO_OR_ABSENT)
         unexplained_pusher = sorted(pusher_only - allowed_pusher)
         stale_listen = sorted(allowed_listen - listen_only)
         stale_pusher = sorted(allowed_pusher - pusher_only)
@@ -337,6 +566,30 @@ def validate_preflight(root: Path = ROOT) -> list[str]:
 
         allowed_value_diff = SHARED_VALUE_DIFF_ALLOWED[env]
         shared = set(pusher_env) & set(listen_env)
+        # Accept only a complete reviewed stage, never independently widened flags.
+        prod_scope = {**PROD_SHADOW_VALUES, **PROD_FINAL_PASS_SHADOW_VALUES}
+        if env == "prod":
+            stages = json.loads((root / "config/diarization-cohort-stages.json").read_text())
+            selected = next(
+                (
+                    values
+                    for values in stages.values()
+                    if all(name in pusher_env and pusher_env[name].value == value for name, value in values.items())
+                ),
+                None,
+            )
+            if selected is None:
+                errors.append("[prod] shadow scope must match a complete reviewed stage")
+            else:
+                prod_scope = {name: (value, prod_scope[name][1]) for name, value in selected.items()}
+        for name, (expected_pusher, expected_listen) in (DEV_SHADOW_VALUES if env == "dev" else prod_scope).items():
+            actual_pusher = pusher_env[name].value if name in pusher_env else None
+            actual_listen = listen_env[name].value if name in listen_env else None
+            if (actual_pusher, actual_listen) != (expected_pusher, expected_listen):
+                errors.append(
+                    f"[{env}] shadow scope {name} must be pusher={expected_pusher!r} "
+                    f"listen={expected_listen!r}, got pusher={actual_pusher!r} listen={actual_listen!r}"
+                )
         for name in sorted(shared):
             pusher_value = pusher_env[name].value
             listen_value = listen_env[name].value
@@ -353,7 +606,7 @@ def validate_preflight(root: Path = ROOT) -> list[str]:
                     f"[{env}] unexplained literal value diff for shared env {name}: "
                     f"pusher={pusher_value!r} listen={listen_value!r}"
                 )
-        for name in sorted(allowed_value_diff - shared):
+        for name in sorted(allowed_value_diff - shared - LISTEN_ONLY_ZERO_OR_ABSENT):
             errors.append(f"[{env}] SHARED_VALUE_DIFF_ALLOWED entry {name} is not shared; remove it")
     return errors
 

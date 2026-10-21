@@ -51,6 +51,7 @@ def sa():
         "database": _pkg("database"),
         "utils": _pkg("utils"),
         "utils.llm": _pkg("utils.llm"),
+        "utils.ladder_v1": _leaf("utils.ladder_v1", ["feature_allowed"]),
         "utils.retrieval": _pkg("utils.retrieval"),
         "utils.retrieval.tools": _pkg("utils.retrieval.tools"),
         # Leaf modules screen_activity_tools binds at import.
@@ -62,6 +63,8 @@ def sa():
         "utils.retrieval.agentic": _leaf("utils.retrieval.agentic", ["agent_config_context"]),
     }
     with stub_modules(fakes):
+        load_module_fresh("utils.model_text", str(_BACKEND / "utils" / "model_text.py"))
+        load_module_fresh("utils.user_clock", str(_BACKEND / "utils" / "user_clock.py"))
         module = load_module_fresh(
             "utils.retrieval.tools.screen_activity_tools",
             os.path.join(str(_BACKEND), "utils", "retrieval", "tools", "screen_activity_tools.py"),
@@ -94,14 +97,14 @@ class TestCapAppsForLlm:
 
 class TestBoundedScreenActivityResult:
     def test_truncated_appends_guidance_note(self, sa):
-        out = sa._bounded_screen_activity_result("**Chrome** ~5 min", truncated=True)
-        assert "more may exist" in out
-        assert "Summarize what is shown" in out
+        out = sa._bounded_screen_activity_result("**Chrome** — 5 observations", truncated=True)
+        assert "Showing 1 app records" in out
+        assert "more were omitted, not absent" in out
         assert "specific app" in out
         assert "narrower date range" in out
 
     def test_not_truncated_short_result_unchanged(self, sa):
-        body = "**Chrome** ~5 min (100 screenshots)"
+        body = "**Chrome** — 100 observations"
         assert sa._bounded_screen_activity_result(body, truncated=False) == body
 
     # The summary header precedes the first app record in real output, so the first record is itself
@@ -109,15 +112,15 @@ class TestBoundedScreenActivityResult:
     HEADER = "Screen Activity Summary (999 screenshots, ~50 min total):\n\n"
 
     def test_oversized_result_is_clipped_at_a_record_boundary_with_note(self, sa):
-        rec1 = "**Chrome** ~5 min (100 screenshots)\n  Top windows: a, b\n"
-        rec2 = "**Slack** ~3 min (50 screenshots)\n  Top windows: " + ("x" * 70000) + "\n"
+        rec1 = "**Chrome** — 100 observations\n  Sampled windows: a, b\n"
+        rec2 = "**Slack** — 50 observations\n  Sampled windows: " + ("x" * 70000) + "\n"
         big = self.HEADER + rec1 + "\n" + rec2 + "\n"  # rec2 overflows the budget
         out = sa._bounded_screen_activity_result(big, truncated=False)
         assert len(out) <= sa.MAX_RESULT_CHARS + 400  # budget plus the appended note
-        assert "Summarize what is shown" in out
+        assert "more were omitted, not absent" in out
         # Clipped at the app-record boundary: the first complete record is kept and the oversized
         # second record is dropped whole, never left as a partial "**Slack**" block.
-        note_idx = out.index("[Only the most-used apps")
+        note_idx = out.index("[Showing")
         body = out[:note_idx].rstrip("\n")
         assert "Chrome" in body
         assert "Slack" not in body
@@ -126,10 +129,76 @@ class TestBoundedScreenActivityResult:
     def test_single_oversized_record_keeps_truncated_data_not_just_header(self, sa):
         # A single app whose window titles alone exceed the budget must still return its (truncated)
         # data, not collapse to just the header (cubic on #8530).
-        only = "**Chrome** ~5 min (100 screenshots)\n  Top windows: " + ("x" * 70000) + "\n"
+        only = "**Chrome** — 100 observations\n  Sampled windows: " + ("x" * 70000) + "\n"
         big = self.HEADER + only
         out = sa._bounded_screen_activity_result(big, truncated=False)
         assert len(out) <= sa.MAX_RESULT_CHARS + 400
-        note_idx = out.index("[Only the most-used apps")
+        note_idx = out.index("[Showing")
         body = out[:note_idx]
         assert "**Chrome**" in body  # the app record is present, not dropped down to the header
+
+
+@pytest.mark.parametrize('truncated', [False, True])
+def test_chat_summary_reports_observations_without_invented_duration(monkeypatch, sa, truncated):
+    summary = {
+        'apps': {
+            'Editor': {
+                'count': 120,
+                'first_seen': '2026-07-03 01:00:00.000',
+                'last_seen': '2026-07-03 12:00:00.000',
+                'window_titles': ['Example'],
+            }
+        },
+        'total_screenshots': 120,
+        'coverage': {
+            'truncated': truncated,
+            'first_observed_at': '2026-07-03 01:00:00.000',
+            'last_observed_at': '2026-07-03 12:00:00.000',
+        },
+    }
+    monkeypatch.setattr(sa.screen_activity_db, 'get_screen_activity_summary', lambda *a, **k: summary, raising=False)
+    tool = sa.get_screen_activity_tool.func
+    result = tool(
+        '2026-07-03',
+        '2026-07-04',
+        config={'configurable': {'user_id': 'synthetic-user', 'user_timezone': 'Asia/Ho_Chi_Minh'}},
+    )
+    assert '120 synced screen observations' in result
+    assert '**Editor** — 120 observations' in result
+    assert (
+        'Observed: Fri 3 Jul 2026, 08:00 Asia/Ho_Chi_Minh (UTC+07:00) to Fri 3 Jul 2026, 19:00 Asia/Ho_Chi_Minh (UTC+07:00)'
+        in result
+    )
+    assert 'Sampled windows:' in result
+    assert '<untrusted source="screen_window_title">' in result
+    assert 'Example' in result
+    assert result.count(sa.UNTRUSTED_LEGEND) == 1
+    assert 'Capture and sync completeness are unknown' in result
+    assert 'not measured usage durations or proof of intent' in result
+    assert ' min' not in result
+    assert 'Active:' not in result
+    assert ('Only the earliest observations were summarized' in result) is truncated
+    # Absence from a capped sample must not become a claim about the whole date range.
+    missing = tool(
+        '2026-07-03',
+        '2026-07-04',
+        app_filter='Later app',
+        config={'configurable': {'user_id': 'synthetic-user', 'user_timezone': 'Asia/Ho_Chi_Minh'}},
+    )
+    assert 'in the summarized rows' in missing
+    assert ('Only the earliest observations were summarized' in missing) is truncated
+
+
+def test_empty_chat_summary_does_not_infer_inactivity(monkeypatch, sa):
+    monkeypatch.setattr(
+        sa.screen_activity_db,
+        'get_screen_activity_summary',
+        lambda *a, **k: {'apps': {}, 'total_screenshots': 0},
+        raising=False,
+    )
+    result = sa.get_screen_activity_tool.func(
+        '2026-07-03', '2026-07-04', config={'configurable': {'user_id': 'synthetic-user'}}
+    )
+    assert 'No synced screen observations' in result
+    assert 'completeness are unknown' in result
+    assert 'does not establish that the user was inactive' in result

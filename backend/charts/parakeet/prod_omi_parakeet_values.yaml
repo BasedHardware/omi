@@ -3,7 +3,7 @@
 # Declare variables to be passed into your templates.
 
 # This will set the replicaset count more information can be found here: https://kubernetes.io/docs/concepts/workloads/controllers/replicaset/
-replicaCount: 1
+replicaCount: 2
 
 # This sets the container image more information can be found here: https://kubernetes.io/docs/concepts/containers/images/
 image:
@@ -82,6 +82,10 @@ ingress:
   #      - chart-example.local
 
 env:
+  - name: PARAKEET_PACKING_ENABLED
+    value: "false"
+  - name: PARAKEET_EXPLICIT_CUDA_GRAPHS
+    value: "false"
   - name: HUGGINGFACE_TOKEN
     valueFrom:
       secretKeyRef:
@@ -94,8 +98,9 @@ env:
         key: ENCRYPTION_SECRET
   - name: PARAKEET_MODEL
     value: "nvidia/parakeet-tdt-0.6b-v3"
-  - name: PARAKEET_STREAM_MODEL
-    value: "nvidia/parakeet-rnnt-1.1b"
+  # No PARAKEET_STREAM_MODEL in prod: /v3/stream (PTT) serves VAD utterances with
+  # the TDT model above. Prod has run this way since the 2026-07-23 fatal-CUDA
+  # mitigation removed RNNT by hand; loading RNNT here is a separate rollout.
   - name: PARAKEET_INFERENCE_MODE
     value: "nemo"
   - name: PARAKEET_MAX_SPEECH_S
@@ -123,9 +128,11 @@ env:
   - name: PARAKEET_STARVATION_TIMEOUT
     value: "5.0"
   - name: PARAKEET_MAX_INFLIGHT
-    value: "2"
+    # Keep dispatch at the GPU batch boundary so backfill cannot queue ahead
+    # of newly arrived live work in the worker's FIFO queue.
+    value: "1"
   - name: HOSTED_SPEAKER_EMBEDDING_API_URL
-    value: "http://prod-omi-diarizer.prod-omi-backend.svc.cluster.local:8080"
+    value: "http://172.16.160.20/diarizer"
 
 terminationGracePeriodSeconds: 150
 
@@ -183,23 +190,40 @@ prometheus-adapter:
 # This section is for setting up autoscaling more information can be found here: https://kubernetes.io/docs/concepts/workloads/autoscaling/
 autoscaling:
   enabled: true
-  minReplicas: 1
-  maxReplicas: 2
+  # Dark: one-line activation after mixed-load live-latency qualification.
+  # Roll back to false to restore the existing External Value latency guard.
+  workloadOnly: false
+  # The ratified 2 active requests / 35% GPU targets trigger scale-out;
+  # they are not hard per-pod capacity. Five to seven pods carry the 7-day peak.
+  # Floor 3 controls idle cost; cap 12 gives the demand-routing ramp headroom.
+  minReplicas: 3
+  maxReplicas: 12
   behavior:
     scaleUp:
       stabilizationWindowSeconds: 0
       policies:
       - type: Pods
         value: 1
-        periodSeconds: 300
+        # Request the next replica sooner. A new GPU pod is not serving until
+        # startup succeeds. Cold starts still need the qualified floor and fallback.
+        periodSeconds: 60
     scaleDown:
-      stabilizationWindowSeconds: 600
+      stabilizationWindowSeconds: 900
       policies:
       - type: Pods
         value: 1
-        periodSeconds: 600
-  requestsPerPod: 20
-  targetGPUUtilization: 70
+        periodSeconds: 900
+  # Live window admission refuses new sessions at ~3 active requests per pod and ~27% GPU
+  # (measured 2026-10-01 evening peak: 6.7% refusals while the old 20 / 70 targets never
+  # fired). Scale before the live gate refuses, not after.
+  # The 2026-10-04 dev L4 test passed eight paced sessions provisionally, but
+  # synchronized uploads missed POST p95 <3s and final-step DCGM read all zeros.
+  # Retain these targets until delivery and GPU telemetry qualify higher ones.
+  requestsPerPod: 2
+  targetGPUUtilization: 35
+  # Adapter exports seconds. HPA takes the highest metric recommendation.
+  # This is a scale-out guard; lead must separately qualify POST p95 <3s.
+  requestLatencyP99: 3
 
 # Additional volumes on the output Deployment definition.
 volumes: []
@@ -232,9 +256,19 @@ affinity:
               values:
                 - prod
 
+topologySpreadConstraints:
+  - maxSkew: 1
+    topologyKey: topology.kubernetes.io/zone
+    whenUnsatisfiable: ScheduleAnyway
+
 
 strategy:
   type: RollingUpdate
   rollingUpdate:
     maxUnavailable: 1
     maxSurge: 0
+
+# Route activation does not switch callers. Install the shared Gateway first.
+gateway:
+  enabled: true
+  name: prod-omi-internal-gateway

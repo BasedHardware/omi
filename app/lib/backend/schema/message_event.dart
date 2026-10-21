@@ -32,6 +32,8 @@ abstract class MessageEvent {
         return OnboardingCompleteEvent.fromJson(json);
       case 'freemium_threshold_reached':
         return FreemiumThresholdReachedEvent.fromJson(json);
+      case 'stt_cap_live_held':
+        return SttCapLiveHeldEvent.fromJson(json);
       case 'segments_deleted':
         return SegmentsDeletedEvent.fromJson(json);
       default:
@@ -52,6 +54,7 @@ class MessageServiceStatusEvent extends MessageEvent {
   final String? provider;
   final bool? retryable;
   final String? reason;
+  final bool mobileStandardBatch;
 
   MessageServiceStatusEvent({
     required this.status,
@@ -60,6 +63,7 @@ class MessageServiceStatusEvent extends MessageEvent {
     this.provider,
     this.retryable,
     this.reason,
+    this.mobileStandardBatch = false,
   }) : super(eventType: 'service_status');
 
   factory MessageServiceStatusEvent.fromJson(Map<String, dynamic> json) {
@@ -70,6 +74,7 @@ class MessageServiceStatusEvent extends MessageEvent {
       provider: json['provider'] as String?,
       retryable: json['retryable'] as bool?,
       reason: json['reason'] as String?,
+      mobileStandardBatch: json['mobile_standard_batch'] == true,
     );
   }
 }
@@ -151,19 +156,40 @@ class SpeakerLabelSuggestionEvent extends MessageEvent {
   final String personName;
   final String segmentId;
 
+  /// With an empty [personId]: a pinned person this voice nearly matched. A question, never a label.
+  final String? suggestedPersonId;
+  final bool retracted;
+
   SpeakerLabelSuggestionEvent({
     required this.speakerId,
     required this.personId,
     required this.personName,
     required this.segmentId,
+    this.suggestedPersonId,
+    this.retracted = false,
   }) : super(eventType: 'speaker_label_suggestion');
 
   factory SpeakerLabelSuggestionEvent.fromJson(Map<String, dynamic> json) {
+    final retracted = json['retracted'] == true;
+    if (json['speaker_id'] is! int ||
+        (json['speaker_id'] as int) < 0 ||
+        json['person_id'] is! String ||
+        json['person_name'] is! String ||
+        (!retracted && (json['person_name'] as String).trim().isEmpty) ||
+        (retracted && (json['person_id'] != '' || json['person_name'] != '')) ||
+        json['segment_id'] is! String ||
+        (json['segment_id'] as String).isEmpty) {
+      return SpeakerLabelSuggestionEvent.empty();
+    }
     return SpeakerLabelSuggestionEvent(
+      retracted: retracted,
       speakerId: json['speaker_id'],
       personId: json['person_id'],
       personName: json['person_name'],
       segmentId: json['segment_id'],
+      suggestedPersonId: json['suggested_person_id'] is String && (json['suggested_person_id'] as String).isNotEmpty
+          ? json['suggested_person_id'] as String
+          : null,
     );
   }
 
@@ -255,6 +281,26 @@ class FreemiumThresholdReachedEvent extends MessageEvent {
     return FreemiumThresholdReachedEvent(
       remainingSeconds: json['remaining_seconds'] ?? 0,
       action: FreemiumAction.fromString(json['action']),
+    );
+  }
+}
+
+/// UI acknowledgement of audio durably saved by this listen connection.
+class SttCapLiveHeldEvent extends MessageEvent {
+  final String sessionId;
+  final int heldSeconds;
+  final int resetAt;
+  final bool paused;
+
+  SttCapLiveHeldEvent({required this.sessionId, required this.heldSeconds, required this.paused, this.resetAt = 0})
+      : super(eventType: 'stt_cap_live_held');
+
+  factory SttCapLiveHeldEvent.fromJson(Map<String, dynamic> json) {
+    return SttCapLiveHeldEvent(
+      sessionId: json['session_id'] as String,
+      heldSeconds: json['held_seconds'] as int,
+      resetAt: json['reset_at'] as int? ?? 0,
+      paused: json['paused'] as bool,
     );
   }
 }

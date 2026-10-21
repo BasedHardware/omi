@@ -49,6 +49,17 @@ def _runtime(uid='test-user', source='desktop'):
 class TestAdmissionPhase:
     """Exercise admission through the extracted runtime instead of source ordering."""
 
+    @pytest.fixture(autouse=True)
+    def _fresh_reconnect_budget(self):
+        # _admit() consumes a process-global reconnect token (burst 3) keyed by
+        # 'test-user'; without this the second admission test in a session is
+        # shed with close 1011 before it reaches the sample-rate validation.
+        from utils.listen_reconnect_budget import listen_reconnect_budget
+
+        listen_reconnect_budget._buckets.clear()
+        yield
+        listen_reconnect_budget._buckets.clear()
+
     @pytest.mark.asyncio
     async def test_paywall_rejects_before_session_start(self, monkeypatch):
         runtime, websocket = _runtime()
@@ -75,6 +86,26 @@ class TestAdmissionPhase:
         assert await invalid_audio._admit() is False
         assert invalid_audio_socket.closed == [(1003, 'bad_audio')]
         assert invalid_audio.task_supervisor._session_started is False
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize('codec', ['pcm8', 'pcm16', 'aac'])
+    @pytest.mark.parametrize('sample_rate', [30_000_000, 0, -16000])
+    async def test_out_of_range_sample_rate_closes_before_bootstrap(self, monkeypatch, codec, sample_rate):
+        # sample_rate=30000000 used to reach AudioRingBuffer at bootstrap and allocate ~3.6 GB.
+        async def not_paywalled(_executor, function, *args):
+            return False
+
+        monkeypatch.setattr('routers.listen.runtime.run_blocking', not_paywalled)
+        websocket = FakeWebSocket()
+        runtime = ListenSessionRuntime(
+            ListenRequest(websocket=websocket, uid='test-user', source='desktop', codec=codec, sample_rate=sample_rate)
+        )
+        assert await runtime._admit() is False
+        assert len(websocket.closed) == 1
+        code, reason = websocket.closed[0]
+        assert code == 1003
+        assert str(sample_rate) in reason
+        assert runtime.task_supervisor._session_started is False
 
 
 class TestNoPaywallBlockInSession:
@@ -342,7 +373,9 @@ class TestIsTrialPaywalledBehavioral:
         self._sub.redis_db.delete_generic_cache.assert_any_call('trial_paywall:expired:test-uid-123:deepgram')
         self._sub.redis_db.delete_generic_cache.assert_any_call('trial_paywall:expired:test-uid-123:deepgram:strict')
         self._sub.redis_db.delete_generic_cache.assert_any_call('trial_paywall:expired:test-uid-123')
-        assert self._sub.redis_db.delete_generic_cache.call_count == 7
+        self._sub.redis_db.delete_generic_cache.assert_any_call('trial_paywall:expired:test-uid-123:managed')
+        self._sub.redis_db.delete_generic_cache.assert_any_call('trial_paywall:expired:test-uid-123:openai:managed')
+        assert self._sub.redis_db.delete_generic_cache.call_count == 14
 
 
 class TestByokRequestEscapeHatch:
@@ -468,6 +501,14 @@ class TestByokRequestEscapeHatch:
         self._byok._byok_validated_ctx.set(True)
         self._byok.set_byok_uid('uid-stale-firestore')
         assert self._sub.is_trial_paywalled('uid-stale-firestore', 'desktop') is False
+
+    def test_managed_credential_surface_does_not_accept_byok_exemption(self):
+        self._byok.set_byok_keys({'openai': 'sk-stub'})
+        self._byok.set_byok_uid('uid-stale-firestore')
+        self._byok._byok_validated_ctx.set(True)
+
+        assert self._sub.is_trial_paywalled('uid-stale-firestore', 'desktop', byok_exempt=False) is True
+        self._sub.redis_db.get_generic_cache.assert_called_with('trial_paywall:expired:uid-stale-firestore:managed')
 
     def test_validated_deepgram_only_header_still_paywalls(self):
         self._byok.set_byok_keys({'deepgram': 'stub-deepgram'})

@@ -5,6 +5,8 @@ import android.content.SharedPreferences
 /** Typed reads avoid SharedPreferences.getAll(), which copies the entire preferences map.
  * Retain legacy scalar representations used by Flutter's preferences bridge. */
 internal class SharedPreferencesValues(private val prefs: SharedPreferences) : NativeBlePreferences {
+    override fun contains(key: String): Boolean = prefs.contains("flutter.$key")
+
     override fun string(key: String, defaultValue: String): String {
         val name = "flutter.$key"
         return try { prefs.getString(name, defaultValue) ?: defaultValue } catch (_: ClassCastException) {

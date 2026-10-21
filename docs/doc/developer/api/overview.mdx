@@ -32,10 +32,16 @@ The Omi Developer API provides programmatic access to your personal Omi data, al
 
 <Steps>
   <Step title="Get Your API Key" icon="key">
-    While signed in, open the Omi web app and navigate to **Developer → API Keys**. Create a key and choose
-    only the scopes your integration needs.
+    While signed in, open the **Developers** page in the Omi web app
+    ([app.omi.me/developers](https://app.omi.me/developers)). Create a key and choose only the scopes
+    your integration needs.
 
-    <Tip>Copy the key immediately - you won't be able to see it again!</Tip>
+    <Tip>
+    Connecting an agent rather than writing code yourself? Choose **Create API Key & Prompt**, then
+    **Send to My Agent Securely**: the agent receives a one-time encrypted link instead of the key. See
+    [Hand a key to an agent](/doc/developer/api/keys#hand-a-key-to-an-agent-without-pasting-it).
+    Otherwise copy the key immediately — you won't be able to see it again.
+    </Tip>
   </Step>
   <Step title="Make Your First Request" icon="terminal">
     <Tabs>
@@ -136,14 +142,16 @@ For self-hosted instances, replace with your backend URL.
 
 ## Authentication
 
-All API requests require your Developer API key in the `Authorization` header:
+Resource endpoints under `/v1/dev/user/...` and credential introspection at `/v1/dev/key` require a Developer API key in the `Authorization` header:
 
 ```http
 Authorization: Bearer omi_dev_your_api_key_here
 ```
 
+Key management (`GET`/`POST /v1/dev/keys` and `DELETE /v1/dev/keys/{key_id}`) instead requires a signed-in Firebase ID token. A developer key cannot manage other keys. See [API Keys](/doc/developer/api/keys).
+
 <Warning>
-MCP keys (`omi_mcp_...`) only authenticate MCP clients against `/v1/mcp/sse`. They do not authenticate
+MCP keys (`omi_mcp_...`) only authenticate MCP clients against `/v1/mcp`. They do not authenticate
 REST Developer API calls. For memories, conversations, folders, and action items over HTTP, create a
 Developer API key (`omi_dev_...`) and call endpoints under `/v1/dev/user/...` such as
 `/v1/dev/user/memories`. Never commit API keys to version control or share them publicly.
@@ -151,20 +159,51 @@ Developer API key (`omi_dev_...`) and call endpoints under `/v1/dev/user/...` su
 
 ---
 
+## List freshness
+
+Conversation, memory, and action-item list responses may be reused for up to **10 seconds** for the same
+credential and query. After any write (including edits or deletion in another app), a list may reflect the
+previous state for up to 10 seconds. Authentication, permission checks, and rate limits apply to every poll.
+
+A `200` response with `X-Omi-List-Truncated: true` contains incomplete results. Do not interpret an empty
+or short truncated page as the end of your data. See the conversation pagination guidance below.
+
 ## Rate Limits
 
-| Limit | Value |
-|-------|-------|
-| Per minute | 100 requests per API key |
-| Per day | 10,000 requests per user |
+Budgets are operation-specific, per credential context (user/app/key), rather than a blanket per-minute or daily allowance. Default budgets are:
 
-Rate limit headers are included in responses:
+| Operation | Requests per hour |
+|-----------|-------------------|
+| Calling key metadata | 120 |
+| Memory reads | 120 |
+| Action item reads / writes (separate buckets) | 120 each |
+| Goal reads / writes (separate buckets) | 120 each |
+| Conversation reads, shared across list/detail/transcript | 60 |
+| Conversation list / detail (additional separate buckets) | 60 each |
+| Transcript fetch (additional bucket) | 25 |
+| Conversation writes, shared | 25 |
+| Conversation from-segments (additional bucket) | 30 |
+| Ask | 25 |
+| Memory writes | 120 |
+| Memory batch writes | 15 |
+
+Single-memory creation also has a 30 requests/minute burst limit. Overlapping budgets all apply; for example, transcript fetches consume the shared conversation-read, detail-read, and transcript buckets. Deployment configuration may adjust effective limits.
+
+Each fixed window begins with its first counted request and resets when the bucket expires, rather than on a clock-hour boundary. Denied requests do not extend the window. There is no general 10,000/day developer quota.
+
+Quota headers are sent on rate-limit denials; do not expect them on every successful response or expect an `X-RateLimit-Reset` timestamp. Use `Retry-After` (seconds until the denied bucket resets):
 
 ```http
-X-RateLimit-Limit: 100
-X-RateLimit-Remaining: 95
-X-RateLimit-Reset: 1642694400
+HTTP/1.1 429 Too Many Requests
+Content-Type: application/json
+X-RateLimit-Limit: 120
+X-RateLimit-Remaining: 0
+Retry-After: 1800
+
+{"detail": "Rate limit exceeded. Try again in 1800s."}
 ```
+
+Wait at least the indicated time before retrying. Retry writes only when you know they were rejected before execution; avoid repeating ambiguous writes after transport failures.
 
 ---
 
@@ -279,3 +318,21 @@ Looking for different API capabilities? Omi offers several APIs for different us
 <Info>
 The **Developer API** (this section) is for accessing your own personal data. The APIs above are for building apps that interact with other users' data (with their permission).
 </Info>
+
+## Additional read surfaces
+
+The Developer API shares these reads with hosted MCP:
+
+| Endpoint | Required explicit scope | Response |
+| --- | --- | --- |
+| `GET /v1/dev/user/people` | `people:read` | `{people: [...]}` |
+| `GET /v1/dev/user/profile` | `profile:read` | Stored AI profile, or `profile: null` with a message |
+| `GET /v1/dev/user/screen-activity` | `screen_activity:read` | `{screen_activity: [...], next_cursor?}` |
+
+These scopes must be selected when creating a key; existing read-only keys do
+not acquire them automatically. Screen activity accepts UTC dates (`start_date`,
+`end_date`, YYYY-MM-DD, both inclusive with the entire end day), `app`, `limit`
+(1–1000), and `cursor`. Repeat identical filters with `next_cursor` to continue.
+People and profile accept no query parameters. Unknown parameters return 400.
+Daily summaries are available at `/v1/dev/user/daily-summaries` with
+`conversations:read`. Audio download is not exposed by either surface.

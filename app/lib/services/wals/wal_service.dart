@@ -1,4 +1,9 @@
+import 'dart:async';
+
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/services/wals/sync_upload_gate.dart';
+
+import 'package:omi/services/wals/local_wal_sync.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
 import 'package:omi/services/wals/wal_syncs.dart';
@@ -11,8 +16,23 @@ class WalService implements IWalService, IWalSyncListener {
   late WalSyncs _syncs;
   WalSyncs get syncs => _syncs;
 
-  WalService() {
-    _syncs = WalSyncs(this);
+  WalService({
+    SyncUploadGate? phoneUploadGate,
+    DateTime Function()? phoneNow,
+    Timer Function(Duration, void Function(Timer))? phonePeriodic,
+    Future<SyncJobFetch> Function(String jobId)? phoneJobStatusFetcher,
+    WalCoverageTelemetryEmitter? phoneCoverageTelemetry,
+    Future<int?> Function()? phoneFreeDiskBytes,
+  }) {
+    _syncs = WalSyncs(
+      this,
+      phoneUploadGate: phoneUploadGate,
+      phoneNow: phoneNow,
+      phonePeriodic: phonePeriodic,
+      phoneJobStatusFetcher: phoneJobStatusFetcher,
+      phoneCoverageTelemetry: phoneCoverageTelemetry,
+      phoneFreeDiskBytes: phoneFreeDiskBytes,
+    );
   }
 
   @override

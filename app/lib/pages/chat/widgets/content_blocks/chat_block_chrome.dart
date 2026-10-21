@@ -1,33 +1,39 @@
 import 'package:flutter/material.dart';
 
+import 'package:omi/ui/ui.dart';
+
 /// Shared visual chrome for chat content-block components.
 ///
-/// Deliberately mirrors [ChatEvidenceReferenceCard]'s paddings, radius, and
-/// colors so structured blocks read as one family inside the transcript.
+/// Deliberately uses compact link-card paddings, radius, and colors so
+/// structured blocks read as one family inside the transcript.
 class ChatBlockCard extends StatelessWidget {
   const ChatBlockCard({
     super.key,
     required this.child,
     this.onTap,
     this.semanticsLabel,
+    this.explicitChildNodes = false,
   });
 
   final Widget child;
   final VoidCallback? onTap;
   final String? semanticsLabel;
 
-  static const double radius = 10;
+  /// Keep inner controls (an Undo button) as their own accessibility nodes
+  /// instead of folding them into the card's label.
+  final bool explicitChildNodes;
+
+  static const BorderRadius radius = OmiRadius.mdAll;
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
     final card = Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.sm, vertical: 10),
       decoration: BoxDecoration(
-        color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.55),
-        borderRadius: BorderRadius.circular(radius),
-        border: Border.all(color: colorScheme.outline.withValues(alpha: 0.55)),
+        color: OmiColors.surface1,
+        borderRadius: radius,
+        border: Border.all(color: OmiColors.border),
       ),
       child: child,
     );
@@ -36,13 +42,14 @@ class ChatBlockCard extends StatelessWidget {
         ? card
         : InkWell(
             onTap: onTap,
-            borderRadius: BorderRadius.circular(radius),
+            borderRadius: radius,
             child: card,
           );
 
     if (semanticsLabel == null) return content;
     return Semantics(
       container: true,
+      explicitChildNodes: explicitChildNodes,
       label: semanticsLabel,
       button: onTap != null,
       enabled: onTap != null,
@@ -53,26 +60,29 @@ class ChatBlockCard extends StatelessWidget {
 
 /// Small caption row naming the block's entity ("Task", "Goal", ...).
 class ChatBlockEyebrow extends StatelessWidget {
-  const ChatBlockEyebrow({super.key, required this.icon, required this.label});
+  const ChatBlockEyebrow({super.key, required this.icon, required this.label, this.ellipsis = false});
 
   final IconData icon;
   final String label;
 
+  /// Ellipsize [label] when the row is narrower than the text, as at a large
+  /// text scale beside another control.
+  final bool ellipsis;
+
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
+    final text = Text(
+      label,
+      maxLines: ellipsis ? 1 : null,
+      overflow: ellipsis ? TextOverflow.ellipsis : null,
+      style: OmiType.caption.copyWith(color: OmiColors.textSecondary, fontWeight: FontWeight.w600),
+    );
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, size: 14, color: colorScheme.onSurfaceVariant),
+        ExcludeSemantics(child: Icon(icon, size: 14, color: OmiColors.textSecondary)),
         const SizedBox(width: 6),
-        Text(
-          label,
-          style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                color: colorScheme.onSurfaceVariant,
-                fontWeight: FontWeight.w600,
-              ),
-        ),
+        if (ellipsis) Flexible(child: text) else text,
       ],
     );
   }
@@ -93,7 +103,6 @@ class ChatBlockUnavailable extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
     return ChatBlockCard(
       semanticsLabel: '$label: $message',
       child: Column(
@@ -102,10 +111,7 @@ class ChatBlockUnavailable extends StatelessWidget {
         children: [
           ChatBlockEyebrow(icon: icon, label: label),
           const SizedBox(height: 6),
-          Text(
-            message,
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: colorScheme.onSurfaceVariant),
-          ),
+          Text(message, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
         ],
       ),
     );
@@ -127,22 +133,14 @@ class ChatBlockLoading extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
     return ChatBlockCard(
       semanticsLabel: '$label: $message',
       child: Row(
         children: [
-          SizedBox(
-            width: 14,
-            height: 14,
-            child: CircularProgressIndicator(strokeWidth: 2, color: colorScheme.onSurfaceVariant),
-          ),
+          OmiSpinner(size: OmiSpinnerSize.small, color: OmiColors.textSecondary),
           const SizedBox(width: 10),
           Expanded(
-            child: Text(
-              message,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(color: colorScheme.onSurfaceVariant),
-            ),
+            child: Text(message, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
           ),
         ],
       ),
@@ -176,7 +174,6 @@ class ChatBlockLinkCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
     return ChatBlockCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -189,23 +186,13 @@ class ChatBlockLinkCard extends StatelessWidget {
           const SizedBox(height: 8),
           Align(
             alignment: Alignment.centerLeft,
-            child: TextButton.icon(
+            child: OmiButton.tertiary(
               key: actionKey,
+              label: actionTitle,
+              icon: Icons.open_in_new,
+              size: OmiButtonSize.compact,
+              isLoading: isOpening,
               onPressed: isOpening ? null : onAction,
-              icon: isOpening
-                  ? SizedBox(
-                      width: 14,
-                      height: 14,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: colorScheme.onSurfaceVariant),
-                    )
-                  : const Icon(Icons.open_in_new, size: 16),
-              label: Text(actionTitle),
-              style: TextButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                minimumSize: const Size(0, 32),
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                foregroundColor: colorScheme.onSurface,
-              ),
             ),
           ),
         ],

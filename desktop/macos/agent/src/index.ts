@@ -1,3 +1,4 @@
+import { ModelCredentialRelay } from "./runtime/model-credentials.js";
 /**
  * ACP Bridge — translates between OMI's JSON-lines protocol and the
  * Agent Client Protocol (ACP) used by claude-code-acp.
@@ -73,7 +74,7 @@ import type {
   ChatFirstHarnessExecutorBeginMessage,
   RefreshOwnerMessage,
   RevokeOwnerRuntimeMessage,
-  RefreshTokenMessage,
+  ModelHeadersResultMessage,
   AuthMethod,
 } from "./protocol.js";
 import {
@@ -93,6 +94,7 @@ import {
   AcpError,
   AcpRuntimeAdapter,
   beginProviderAuthWithoutBlocking,
+  requestProviderAuthFromHost,
   isAcpProviderAuthFailure,
 } from "./adapters/acp.js";
 import { AdapterRegistry } from "./runtime/adapter-registry.js";
@@ -101,6 +103,7 @@ import { nextJournalPumpDelayMs } from "./runtime/journal-pump-backoff.js";
 import { pumpJournalOutboxDeliveries } from "./runtime/journal-outbox-pump.js";
 import { JsonlTransport, type McpServerBuildContext } from "./runtime/jsonl-transport.js";
 import { AgentRuntimeKernel } from "./runtime/kernel.js";
+import { OMI_TOOLS_MCP_SERVER_NAME } from "./runtime/kernel-support.js";
 import {
   adapterActivationError,
   adapterIdForHarnessMode,
@@ -166,7 +169,6 @@ import {
 } from "./runtime/conversation-journal.js";
 import { DirectControlExecutionBroker } from "./runtime/direct-control-execution.js";
 import {
-  authorizeRuntimeTokenRefresh,
   establishRuntimeOwner,
   requireActiveRuntimeOwner,
   runRuntimeOwnerRevocationBarrier,
@@ -933,6 +935,15 @@ function writeFinalizedRelayToolResult(client: Socket, callId: string, result: s
   }
 }
 
+const modelCredentialRelay = new ModelCredentialRelay(
+  (capabilityRef, ownerId) => {
+    if (!runtimeKernel) throw new Error("runtime unavailable");
+    const capability = runtimeKernel.assertLiveRunToolCapability({ capabilityRef, activeOwnerId: ownerId });
+    if (capability.adapterId !== "pi-mono") throw new Error("model credentials require pi-mono");
+  },
+  request => send(request),
+);
+
 /** Start Unix socket server for omi-tools stdio processes to connect to */
 function startOmiToolsRelay(): Promise<string> {
   const pipePath = join(tmpdir(), `omi-tools-${process.pid}.sock`);
@@ -965,8 +976,13 @@ function startOmiToolsRelay(): Promise<string> {
               name: string;
               input: Record<string, unknown>;
               capabilityRef?: string;
+              forceRefresh?: boolean;
             };
 
+            if (msg.type === "model_headers") {
+              modelCredentialRelay.request(client, msg.callId, msg.capabilityRef ?? "", currentOwnerId, msg.forceRefresh === true);
+              continue;
+            }
             if (msg.type === "tool_use") {
               const capabilityRef = msg.capabilityRef?.trim();
               const invocationId = msg.invocationId?.trim() || msg.callId?.trim();
@@ -1238,6 +1254,7 @@ function startOmiToolsRelay(): Promise<string> {
       });
 
       client.on("close", () => {
+        modelCredentialRelay.disconnect(client);
         omiToolsClients = omiToolsClients.filter((c) => c !== client);
         resolveClientToolCalls(client, "Error: omi-tools relay client disconnected");
       });
@@ -1470,12 +1487,6 @@ function buildMcpServers(
     if (context?.screenContext === true) {
       omiToolsEnv.push({ name: "OMI_SCREEN_CONTEXT", value: "true" });
     }
-    if (context?.jitKnowledgeToolsEnabled === true) {
-      omiToolsEnv.push({ name: "OMI_JIT_KNOWLEDGE_TOOLS_ENABLED", value: "true" });
-    }
-    if (context?.jitProactivity === true) {
-      omiToolsEnv.push({ name: "OMI_JIT_PROACTIVITY_MODE", value: "true" });
-    }
     // Keep the exact surface marker for every typed chat run. Legacy typed
     // chat uses it to project coordinator-only writes (such as create_memory),
     // while the optional chat-first flags remain main-chat rollout-gated below.
@@ -1493,7 +1504,7 @@ function buildMcpServers(
       value: context?.executionRole === "leaf" ? "leaf" : "coordinator",
     });
     servers.push({
-      name: "omi-tools",
+      name: OMI_TOOLS_MCP_SERVER_NAME,
       command: process.execPath,
       args: [omiToolsStdioScript],
       env: omiToolsEnv,
@@ -1685,21 +1696,18 @@ async function main(): Promise<void> {
   kernel.subscribe(rejectPendingToolCallsForKernelEvent);
   runtimeKernel = kernel;
   let piMonoClasses: typeof import("./adapters/pi-mono.js") | undefined;
-  let piMonoAuthToken = process.env.OMI_AUTH_TOKEN;
   const piMonoAdapters = new Set<import("./adapters/pi-mono.js").PiMonoAdapter>();
   const localAcpAdapters = new Set<RuntimeAdapter>();
   const stopLocalAcpAdapters = async (): Promise<void> => {
     await Promise.all([...localAcpAdapters].map((adapter) => adapter.stop()));
   };
-  const ensurePiMonoAdapter = async (authToken: string | undefined): Promise<boolean> => {
-    if (!authToken) return false;
-    piMonoAuthToken = authToken;
+  const ensurePiMonoAdapter = async (): Promise<boolean> => {
+    if (process.env.OMI_MODEL_CREDENTIALS !== "on_demand") return false;
     piMonoClasses ??= await import("./adapters/pi-mono.js");
     if (!registry.has("pi-mono")) {
       registry.register("pi-mono", () => {
         const harness = new piMonoClasses!.PiMonoAdapter({
           omiApiBaseUrl: process.env.OMI_API_BASE_URL,
-          authToken: piMonoAuthToken,
           onDisposed: () => piMonoAdapters.delete(harness),
         });
         piMonoAdapters.add(harness);
@@ -1710,7 +1718,7 @@ async function main(): Promise<void> {
     return true;
   };
 
-  const piMonoAvailable = await ensurePiMonoAdapter(process.env.OMI_AUTH_TOKEN);
+  const piMonoAvailable = await ensurePiMonoAdapter();
   const ensureHermesAdapter = async (): Promise<boolean> => {
     return ensureRegisteredAdapter(registry, "hermes", {
       log: logErr,
@@ -1728,7 +1736,7 @@ async function main(): Promise<void> {
   const hermesAvailable = await ensureHermesAdapter();
   const openClawAvailable = await ensureOpenClawAdapter();
   if (!piMonoAvailable && defaultAdapterId === "pi-mono" && process.env.OMI_AGENT_ALLOW_CONTROL_ONLY !== "1") {
-    const msg = "pi-mono mode requires OMI_AUTH_TOKEN (Firebase ID token); refusing to start";
+    const msg = "pi-mono mode requires on-demand model credentials; refusing to start";
     logErr(msg);
     send({ type: "error", message: msg });
     process.exit(1);
@@ -1965,7 +1973,7 @@ async function main(): Promise<void> {
             await startAcpProcess();
             await initializeAcp();
           } else if (adapterId === "pi-mono") {
-            if (!(await ensurePiMonoAdapter(process.env.OMI_AUTH_TOKEN))) {
+            if (!(await ensurePiMonoAdapter())) {
               throw new Error(adapterActivationError("pi-mono"));
             }
           } else if (adapterId === "hermes") {
@@ -2283,6 +2291,7 @@ async function main(): Promise<void> {
             clientId,
             ownerId,
             sessionId: result.sessionId,
+            surfaceKind: result.surfaceKind,
             turnId: result.turnId,
             ok: true,
             runId: result.runId,
@@ -3936,6 +3945,16 @@ async function main(): Promise<void> {
         break;
       }
 
+      case "start_provider_auth": {
+        requestProviderAuthFromHost({
+          activeAuthUrl: () => activeOAuthFlow?.authUrl,
+          announceAuthUrl: (authUrl) => send({ type: "auth_required", methods: authMethods, authUrl }),
+          startAuthFlow,
+          logErr,
+        });
+        break;
+      }
+
       case "refresh_owner": {
         const owner = msg as RefreshOwnerMessage;
         const transition = establishRuntimeOwner(
@@ -3983,36 +4002,9 @@ async function main(): Promise<void> {
         break;
       }
 
-      case "refresh_token": {
-        const rtm = msg as RefreshTokenMessage;
-        const transition = authorizeRuntimeTokenRefresh(
-          { ownerId: currentOwnerId, established: ownerAuthorityEstablished },
-          rtm.ownerId,
-          () => { process.env.OMI_AUTH_TOKEN = rtm.token; },
-        );
-        if (transition.changed) {
-          directControlExecutions.transitionOwner(transition.previousOwnerId, transition.ownerId);
-          kernel.revokeRunToolCapabilitiesForOwner(transition.previousOwnerId, "owner_changed");
-          rejectPendingToolCallsForOwner(transition.previousOwnerId);
-        }
-        currentOwnerId = transition.ownerId;
-        ownerAuthorityEstablished = true;
-        lastOwnerRuntimeRevocation = null;
-        if (transition.changed || transition.firstEstablishment) {
-          triggerBackendReconcile({ ownerId: currentOwnerId });
-          pumpJournalOutbox();
-        }
-        try {
-          await ensurePiMonoAdapter(rtm.token);
-          for (const adapter of piMonoAdapters) {
-            const restarted = await adapter.updateAuthToken(rtm.token);
-            if (restarted) {
-              logErr("Pi-mono: token refresh restarted subprocess");
-            }
-          }
-        } catch (err) {
-          logErr(`Pi-mono token refresh error: ${err}`);
-        }
+      case "model_headers_result": {
+        const result = msg as ModelHeadersResultMessage;
+        modelCredentialRelay.receive(result.requestId, result.result, currentOwnerId);
         break;
       }
 

@@ -124,3 +124,27 @@ describe('runMigrations', () => {
     expect(columns(db, 'local_conversation')).toContain('sync_state')
   })
 })
+
+
+describe('legacy local data compatibility', () => {
+  it('does not migrate or delete existing JIT and ledger tables', () => {
+    const db = new DatabaseSync(':memory:')
+    db.exec(OLD_SCHEMA)
+    runMigrations(db, MIGRATIONS.slice(0, 2))
+    const legacy = ['jit_trigger_mirror', 'jit_snapshot_receipt', 'jit_wakeup_receipt',
+      'jit_proactivity_reservation_receipt', 'jit_ambient_context_state', 'jit_feedback_outbox',
+      'jit_installation_identity', 'jit_fact_mirror', 'jit_history_mirror', 'jit_playbook_mirror',
+      'jit_alias_mirror', 'jit_ledger_mirror_receipt', 'jit_keyframe_pin',
+      'jit_keyframe_cleanup_outbox', 'rewind_frames', 'focus_session', 'insight_history']
+    for (const table of legacy) {
+      db.exec(`CREATE TABLE ${table} (id TEXT PRIMARY KEY); INSERT INTO ${table} VALUES ('sentinel')`)
+    }
+    expect(runMigrations(db)).toBe(0)
+    expect(runMigrations(db)).toBe(0)
+    for (const table of legacy) {
+      expect(db.prepare(`SELECT id FROM ${table}`).get()).toEqual({ id: 'sentinel' })
+    }
+    expect(db.prepare('PRAGMA foreign_key_check').all()).toEqual([])
+    db.close()
+  })
+})

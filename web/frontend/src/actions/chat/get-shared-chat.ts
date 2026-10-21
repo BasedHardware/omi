@@ -1,6 +1,7 @@
 'use server';
 
 import envConfig from '@/src/constants/envConfig';
+import { sharedApiUrl } from '@/src/lib/shared-api-url.mjs';
 
 export interface SharedChatMessage {
   id: string;
@@ -19,12 +20,15 @@ export default async function getSharedChat(
   token: string,
 ): Promise<SharedChatData | undefined> {
   try {
-    const response = await fetch(`${envConfig.API_URL}/v2/messages/shared/${token}`, {
-      headers: {
-        'Content-Type': 'application/json',
+    const response = await fetch(
+      sharedApiUrl(envConfig.API_URL, 'v2', 'messages', 'shared', token),
+      {
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        cache: 'no-cache',
       },
-      cache: 'no-cache',
-    });
+    );
 
     if (!response.ok) {
       return undefined;

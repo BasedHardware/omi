@@ -329,6 +329,62 @@ final class AgentControlServiceTests: XCTestCase {
     XCTAssertNotNil(artifactError)
     XCTAssertTrue(artifactError!.contains("couldn't resolve"))
   }
+
+  // MARK: - currentHarnessMode persisted-preference routing (#11149)
+
+  /// The four persisted provider spellings must each resolve to their own
+  /// harness: "hermes"/"openclaw" were previously collapsed to "acp", which
+  /// bound chat sessions to the wrong adapter ("Claude sign-in is required").
+  func testCurrentHarnessModeRoutesPersistedProviderSpellings() {
+    let saved = UserDefaults.standard.string(forKey: .chatBridgeMode)
+    defer {
+      Self.restoreChatBridgeMode(saved)
+    }
+    for (persisted, expected) in [
+      (ChatProvider.BridgeMode.piMono.rawValue, "piMono"),
+      (ChatProvider.BridgeMode.userClaude.rawValue, "acp"),
+      (ChatProvider.BridgeMode.hermes.rawValue, "hermes"),
+      (ChatProvider.BridgeMode.openClaw.rawValue, "openclaw"),
+    ] {
+      UserDefaults.standard.set(persisted, forKey: .chatBridgeMode)
+      XCTAssertEqual(AgentControlService.currentHarnessMode(), expected, persisted)
+    }
+  }
+
+  /// An unset or unknown persisted value must fall back to "piMono" (the
+  /// UserDefaults default), never to another harness.
+  func testCurrentHarnessModeFallsBackToPiMonoForUnsetOrUnknownValues() {
+    let saved = UserDefaults.standard.string(forKey: .chatBridgeMode)
+    defer {
+      Self.restoreChatBridgeMode(saved)
+    }
+    for persisted in [nil, "agentSDK", "not-a-real-mode"] {
+      if let persisted {
+        UserDefaults.standard.set(persisted, forKey: .chatBridgeMode)
+      } else {
+        UserDefaults.standard.removeObject(forKey: .chatBridgeMode)
+      }
+      XCTAssertEqual(AgentControlService.currentHarnessMode(), "piMono", persisted ?? "nil")
+    }
+  }
+
+  private static func restoreChatBridgeMode(_ saved: String?) {
+    if let saved {
+      UserDefaults.standard.set(saved, forKey: .chatBridgeMode)
+    } else {
+      UserDefaults.standard.removeObject(forKey: .chatBridgeMode)
+    }
+  }
+
+  /// The raw-value routing table must recognize the persisted Claude
+  /// spelling: "claudeCode" is what Settings writes for the Claude provider,
+  /// and collapsing it to piMono would silently route Claude users to the
+  /// Omi AI agent.
+  func testHarnessModeFromRawValueRecognizesPersistedClaudeCodeSpelling() {
+    XCTAssertEqual(AgentRuntimeRouting.harnessMode(from: "claudeCode"), .acp)
+    XCTAssertEqual(AgentRuntimeRouting.harnessMode(from: "acp"), .acp)
+    XCTAssertNil(AgentRuntimeRouting.harnessMode(from: "unknown"))
+  }
 }
 
 final class RealtimeProviderToolResultPolicyTests: XCTestCase {

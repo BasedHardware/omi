@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:path_provider/path_provider.dart';
 
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
@@ -5,7 +7,8 @@ import 'package:omi/backend/schema/geolocation.dart';
 
 const chunkSizeInSeconds = 60;
 const flushIntervalInSeconds = 90;
-const sdcardChunkSizeSecs = 180;
+
+const sdcardChunkSizeSecs = 60;
 const newFrameSyncDelaySeconds = 15;
 const framesPerFlashPage = 8;
 const secondsPerFlashPage = 1.4;
@@ -25,7 +28,24 @@ const secondsPerFlashPage = 1.4;
 ///                  (HTTP 422 `backfill_lookback_exceeded`). The local file is
 ///                  intact, but re-uploading it can never succeed, so it is
 ///                  terminal for sync rather than pending work.
-enum WalStatus { inProgress, miss, uploaded, synced, corrupted, outsideRecoveryWindow }
+/// - [unsupportedAudio] — the server accepted the bytes and its job then failed
+///                  on the audio itself (`sync_invalid_audio` / `stt_invalid_input`).
+///                  The same bytes produce the same verdict every time, so like
+///                  [outsideRecoveryWindow] this is terminal rather than pending.
+///                  The local file is kept; only deletion is offered.
+/// - [uploadRejected] — the upload endpoint definitively refused these bytes
+///                  (HTTP 400/403/413). Connectivity restoration cannot change
+///                  that response, so automatic drains must stop.
+enum WalStatus {
+  inProgress,
+  miss,
+  uploaded,
+  synced,
+  corrupted,
+  outsideRecoveryWindow,
+  unsupportedAudio,
+  uploadRejected,
+}
 
 enum WalStorage { mem, disk, sdcard, flashPage }
 
@@ -45,10 +65,63 @@ enum SyncMethod { ble }
 /// - [outsideRecoveryWindow] — too old for the server to accept; retrying
 ///                  cannot help, so the row explains that instead of offering
 ///                  a Retry the user would spend forever
-enum WalSyncDisplayState { syncing, uploaded, synced, waiting, retrying, failed, corrupted, outsideRecoveryWindow }
+/// - [unsupportedAudio] — the server could not read the audio; re-uploading the
+///                  same bytes cannot change that, so the row offers deletion
+///                  rather than a Retry that is guaranteed to fail
+enum WalSyncDisplayState {
+  syncing,
+  uploaded,
+  synced,
+  waiting,
+  retrying,
+  failed,
+  corrupted,
+  outsideRecoveryWindow,
+  unsupportedAudio,
+  uploadRejected,
+}
 
-/// Max automatic sync attempts before a recording is considered [WalSyncDisplayState.failed].
-/// Mirrors the `maxRetries` used by the auto-sync loop in capture_provider.
+/// Worst user-facing sync outcome across a set of WALs, so an aggregate
+/// indicator (the live-capture one) can name the state that matters instead
+/// of always claiming a healthy local save. Ordering: a WAL that can no
+/// longer upload on its own (failed/corrupted/outside the recovery window)
+/// outranks one that is retrying, which outranks one that is uploading;
+/// healthy/quiet states lose to everything.
+WalSyncDisplayState? worstSessionSyncState(Iterable<Wal> wals) {
+  WalSyncDisplayState? worst;
+  for (final wal in wals) {
+    final state = wal.syncDisplayState;
+    if (worst == null || _syncOutcomeRank(state) > _syncOutcomeRank(worst)) {
+      worst = state;
+    }
+  }
+  return worst;
+}
+
+/// Whether the state is terminal for automatic uploads and a deliberate
+/// retry can still help (the sync pages' "Failed — tap Retry" case, which
+/// resets the auto-retry budget). Corrupted and out-of-window recordings
+/// cannot be retried into success.
+bool isRetryableSyncState(WalSyncDisplayState state) => state == WalSyncDisplayState.failed;
+
+int _syncOutcomeRank(WalSyncDisplayState state) => switch (state) {
+      WalSyncDisplayState.failed => 4,
+      WalSyncDisplayState.corrupted => 4,
+      WalSyncDisplayState.outsideRecoveryWindow => 4,
+      WalSyncDisplayState.unsupportedAudio => 4,
+      WalSyncDisplayState.uploadRejected => 4,
+      WalSyncDisplayState.retrying => 3,
+      WalSyncDisplayState.syncing => 2,
+      WalSyncDisplayState.uploaded => 1,
+      WalSyncDisplayState.synced => 1,
+      WalSyncDisplayState.waiting => 1,
+    };
+
+/// Max automatic sync attempts before a recording is considered
+/// [WalSyncDisplayState.failed]. This is the budget itself, not a display
+/// mirror: `isAutoUploadEligible` in local_wal_sync.dart drops a recording that
+/// has spent it from every automatic drain, so the label and the behaviour
+/// cannot drift apart. Only the per-recording manual Retry ignores it.
 const int walMaxAutoRetries = 3;
 
 class WalStats {
@@ -103,6 +176,23 @@ class Wal {
   WalStatus status;
   WalStorage storage;
 
+  /// Explicit phone-only custody. Never admitted to a cloud audio drain.
+  bool onDeviceOnly;
+  Map<String, dynamic>? onDeviceConversation;
+
+  /// Recording-time custody evidence. Null identifies pre-fix dev records.
+  bool? capturedOnDeviceOnly;
+
+  /// Imported device storage was never part of the phone's live STT route.
+  /// Repair only the erroneous pre-fix stamp, preserving explicit capture consent.
+  void repairLegacyImportedCustody() {
+    if (capturedOnDeviceOnly == null &&
+        onDeviceConversation == null &&
+        (originalStorage == WalStorage.sdcard || originalStorage == WalStorage.flashPage)) {
+      onDeviceOnly = false;
+    }
+  }
+
   String? filePath;
   List<List<int>> data;
   int storageOffset = 0;
@@ -113,6 +203,11 @@ class Wal {
   DateTime? syncStartedAt;
   int? syncEtaSeconds;
   double? syncSpeedKBps;
+
+  /// 0..1 fraction of this recording's device transfer. Runtime only.
+  /// Null when this recording is not the active device download.
+  /// Zero means the transfer has started but no countable bytes have arrived.
+  double? deviceDownloadFraction;
   SyncMethod syncMethod = SyncMethod.ble;
 
   int frameSize = 160;
@@ -125,6 +220,27 @@ class Wal {
   /// The conversation this WAL belongs to. Stamped when ConversationProcessingStartedEvent
   /// arrives so WALs survive app kill and can be recovered on startup.
   String? conversationId;
+
+  /// Client recording id (`activeRecordingId` / `external_data.recording_session_id`).
+  /// Stamped when the WAL is created so a safety copy that misses
+  /// ConversationProcessingStarted can still bind to the live conversation.
+  String? recordingSessionId;
+
+  /// The account that created this recording, stamped from the signed-in uid
+  /// at creation (or back-filled at logout). Loaded records owned by another
+  /// account are parked durably instead of being loaded, so a session never
+  /// renders or uploads another account's recordings after an account switch.
+  /// Null on records written before this field existed (pre-upgrade data).
+  String? ownerUid;
+  String? captureRoot;
+  int? sourceFrameStart;
+  int? sourceClockEpoch;
+
+  int? liveRingId;
+  int? liveOrdinalStart;
+  int? liveOrdinalEnd;
+
+  int? liveConnectionEpoch;
 
   /// Canonical start-time location snapshot for delayed/offline finalization.
   Geolocation? geolocation;
@@ -143,6 +259,21 @@ class Wal {
   /// Unix timestamp (seconds) when the audio was uploaded (202 received).
   int uploadedAt;
 
+  /// Unix timestamp (seconds) when the server confirmed this recording synced
+  /// (job resolved to [WalStatus.synced], or the live-stream ack completed it).
+  /// 0 = unknown: records synced before this field existed, and WALs whose
+  /// status was migrated without a timestamp. The synced-copy auto-remove
+  /// policy deliberately skips records with 0 — never delete on unknown age.
+  int syncedAt;
+
+  bool keptForTranscriptRecovery;
+
+  /// Set only when [timerStart] is an app estimate (the device gave no
+  /// trustworthy recording time): names the one contiguous device recording
+  /// this audio belongs to. The upload filename carries it so the backend
+  /// never merges it with audio outside that run by invented adjacency.
+  String? clockRun;
+
   String get id => '${device}_$timerStart';
 
   /// Single source of truth for how this recording's sync state is shown to the
@@ -154,6 +285,8 @@ class Wal {
     // behind by an interrupted attempt.
     if (status == WalStatus.corrupted) return WalSyncDisplayState.corrupted;
     if (status == WalStatus.outsideRecoveryWindow) return WalSyncDisplayState.outsideRecoveryWindow;
+    if (status == WalStatus.unsupportedAudio) return WalSyncDisplayState.unsupportedAudio;
+    if (status == WalStatus.uploadRejected) return WalSyncDisplayState.uploadRejected;
     if (isSyncing) return WalSyncDisplayState.syncing;
     switch (status) {
       case WalStatus.uploaded:
@@ -164,6 +297,10 @@ class Wal {
         return WalSyncDisplayState.corrupted;
       case WalStatus.outsideRecoveryWindow:
         return WalSyncDisplayState.outsideRecoveryWindow;
+      case WalStatus.unsupportedAudio:
+        return WalSyncDisplayState.unsupportedAudio;
+      case WalStatus.uploadRejected:
+        return WalSyncDisplayState.uploadRejected;
       case WalStatus.miss:
         if (retryCount >= walMaxAutoRetries) return WalSyncDisplayState.failed;
         if (retryCount > 0) return WalSyncDisplayState.retrying;
@@ -194,6 +331,30 @@ class Wal {
     syncSpeedKBps = null;
   }
 
+  /// Marks this recording as permanently unreadable by the server's transcription
+  /// job. Like [markOutsideRecoveryWindow] the local file is kept and only the
+  /// sync attempt is terminal; the job id is dropped because it has been resolved.
+  void markUnsupportedAudio() {
+    status = WalStatus.unsupportedAudio;
+    jobId = null;
+    isSyncing = false;
+    syncStartedAt = null;
+    syncEtaSeconds = null;
+    syncSpeedKBps = null;
+  }
+
+  /// Marks a definitive upload-endpoint refusal. The bytes stay available for
+  /// review/deletion and automatic connectivity wakes do not re-offer them;
+  /// an explicit manual retry may still re-submit after user intervention.
+  void markUploadRejected() {
+    status = WalStatus.uploadRejected;
+    jobId = null;
+    isSyncing = false;
+    syncStartedAt = null;
+    syncEtaSeconds = null;
+    syncSpeedKBps = null;
+  }
+
   Wal({
     required this.timerStart,
     required this.codec,
@@ -202,6 +363,9 @@ class Wal {
     this.channel = 1,
     this.status = WalStatus.inProgress,
     this.storage = WalStorage.mem,
+    this.onDeviceOnly = false,
+    this.onDeviceConversation,
+    this.capturedOnDeviceOnly,
     this.filePath,
     this.device = "phone",
     this.deviceModel,
@@ -213,11 +377,22 @@ class Wal {
     this.syncedFrameOffset = 0,
     this.originalStorage,
     this.conversationId,
+    this.recordingSessionId,
+    this.ownerUid,
+    this.captureRoot,
+    this.sourceFrameStart,
+    this.sourceClockEpoch,
+    this.liveRingId,
+    this.liveOrdinalStart,
+    this.liveOrdinalEnd,
     this.geolocation,
     this.retryCount = 0,
     this.lastRetryAt = 0,
     this.jobId,
     this.uploadedAt = 0,
+    this.syncedAt = 0,
+    this.keptForTranscriptRecovery = false,
+    this.clockRun,
   }) : data = data ?? [] {
     frameSize = codec.getFrameSize();
   }
@@ -230,6 +405,10 @@ class Wal {
       sampleRate: json['sample_rate'] ?? 16000,
       status: WalStatus.values.asNameMap()[json['status']] ?? WalStatus.inProgress,
       storage: WalStorage.values.asNameMap()[json['storage']] ?? WalStorage.mem,
+      onDeviceOnly: json['on_device_only'] == true,
+      onDeviceConversation:
+          json['on_device_conversation'] is Map ? Map<String, dynamic>.from(json['on_device_conversation']) : null,
+      capturedOnDeviceOnly: json['captured_on_device_only'] as bool?,
       filePath: json['file_path'],
       seconds: json['seconds'] ?? chunkSizeInSeconds,
       device: json['device'] ?? "phone",
@@ -242,6 +421,14 @@ class Wal {
       originalStorage:
           json['original_storage'] != null ? WalStorage.values.asNameMap()[json['original_storage']] : null,
       conversationId: json['conversation_id'],
+      recordingSessionId: json['recording_session_id'],
+      ownerUid: json['owner_uid'],
+      captureRoot: json['capture_root'],
+      sourceFrameStart: json['source_frame_start'],
+      sourceClockEpoch: json['source_clock_epoch'],
+      liveRingId: json['live_ring_id'],
+      liveOrdinalStart: json['live_ordinal_start'],
+      liveOrdinalEnd: json['live_ordinal_end'],
       geolocation: json['geolocation'] is Map<String, dynamic>
           ? Geolocation.fromJson(json['geolocation'] as Map<String, dynamic>)
           : null,
@@ -249,7 +436,10 @@ class Wal {
       lastRetryAt: json['last_retry_at'] ?? 0,
       jobId: json['job_id'],
       uploadedAt: json['uploaded_at'] ?? 0,
-    );
+      syncedAt: json['synced_at'] ?? 0,
+      keptForTranscriptRecovery: json['kept_for_transcript_recovery'] == true,
+      clockRun: json['clock_run'] as String?,
+    )..repairLegacyImportedCustody();
   }
 
   Map<String, dynamic> toJson() {
@@ -260,6 +450,9 @@ class Wal {
       'sample_rate': sampleRate,
       'status': status.name,
       'storage': storage.name,
+      'on_device_only': onDeviceOnly,
+      'on_device_conversation': onDeviceConversation,
+      if (capturedOnDeviceOnly != null) 'captured_on_device_only': capturedOnDeviceOnly,
       'file_path': filePath,
       'seconds': seconds,
       'device': device,
@@ -271,22 +464,42 @@ class Wal {
       'synced_frame_offset': syncedFrameOffset,
       'original_storage': originalStorage?.name,
       'conversation_id': conversationId,
+      'recording_session_id': recordingSessionId,
+      'owner_uid': ownerUid,
+      if (captureRoot != null) 'capture_root': captureRoot,
+      if (sourceFrameStart != null) 'source_frame_start': sourceFrameStart,
+      if (sourceClockEpoch != null) 'source_clock_epoch': sourceClockEpoch,
+      if (liveRingId != null) 'live_ring_id': liveRingId,
+      if (liveOrdinalStart != null) 'live_ordinal_start': liveOrdinalStart,
+      if (liveOrdinalEnd != null) 'live_ordinal_end': liveOrdinalEnd,
       'geolocation': geolocation?.toJson(),
       'retry_count': retryCount,
       'last_retry_at': lastRetryAt,
       'job_id': jobId,
       'uploaded_at': uploadedAt,
+      'synced_at': syncedAt,
+      if (keptForTranscriptRecovery) 'kept_for_transcript_recovery': true,
+      if (clockRun != null) 'clock_run': clockRun,
     };
   }
 
   static List<Wal> fromJsonList(List<dynamic> jsonList) => jsonList.map((e) => Wal.fromJson(e)).toList();
 
   getFileName() {
-    return "audio_${device.replaceAll(RegExp(r'[^a-zA-Z0-9]'), "").toLowerCase()}_${codec}_${sampleRate}_${channel}_fs${frameSize}_${timerStart}.bin";
+    return getFileNameByTimeStarts(timerStart, clockRun: clockRun);
   }
 
-  getFileNameByTimeStarts(int timestarts) {
-    return "audio_${device.replaceAll(RegExp(r'[^a-zA-Z0-9]'), "").toLowerCase()}_${codec}_${sampleRate}_${channel}_fs${frameSize}_${timestarts}.bin";
+  /// `_clke<run>` sits directly before the timestamp: older backends read only
+  /// `_fs<n>` and the trailing part, so they ignore it.
+  getFileNameByTimeStarts(int timestarts, {String? clockRun}) {
+    final clock = clockRun == null ? '' : '_clke$clockRun';
+    return "audio_${device.replaceAll(RegExp(r'[^a-zA-Z0-9]'), "").toLowerCase()}_${codec}_${sampleRate}_${channel}_fs$frameSize${clock}_$timestarts.bin";
+  }
+
+  /// A fresh run name for audio whose recording time the app had to estimate.
+  static String newClockRun() {
+    final random = Random.secure();
+    return List.generate(12, (_) => '0123456789abcdefghijklmnopqrstuvwxyz'[random.nextInt(36)]).join();
   }
 
   static Future<String?> getFilePath(String? pathOrName) async {

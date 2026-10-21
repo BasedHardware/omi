@@ -49,6 +49,8 @@ cat >"$REPO/web/frontend/package-lock.json" <<LOCK
 LOCK
 printf 'const a = 0\n' >"$REPO/web/frontend/src/a.ts"
 printf 'void main() {}\n' >"$REPO/app/lib/main.dart"
+mkdir -p "$REPO/app/.dart_tool"
+printf '{"configVersion": 2, "packages": []}\n' >"$REPO/app/.dart_tool/package_config.json"
 git -C "$REPO" add -A
 git -C "$REPO" commit -qm base
 
@@ -85,6 +87,29 @@ make_prettier_lock() {
       "version": "0.3.0"
     }
   }
+}
+
+LOCK
+}
+
+make_bun_lock() {
+  target_dir="$1"
+  version="$2"
+  cat >"$target_dir/bun.lock" <<LOCK
+{
+  "lockfileVersion": 1,
+  "workspaces": {
+    "": {
+      "devDependencies": {
+        "prettier": "^$version",
+        "prettier-plugin-tailwindcss": "^0.3.0",
+      },
+    },
+  },
+  "packages": {
+    "prettier": ["prettier@$version", "", {}, "sha512-fixture"],
+    "prettier-plugin-tailwindcss": ["prettier-plugin-tailwindcss@0.3.0", "", {}, "sha512-fixture"],
+  },
 }
 LOCK
 }
@@ -232,6 +257,39 @@ git -C "$REPO" add app/lib/main.dart
 run_hook GIT_DIR="$REPO/.git" >/dev/null
 grep -q 'DART_FORMATTED' "$REPO/app/lib/main.dart"
 
+# --- Dart: without package_config.json the SDK ignores the package language
+# version and rewrites whole files, so the hook must refuse ---
+mv "$REPO/app/.dart_tool/package_config.json" "$TMPDIR/package_config.json"
+printf 'void main() {  }\n' >"$REPO/app/lib/main.dart"
+git -C "$REPO" add app/lib/main.dart
+expect_refusal "missing app package_config.json"
+test "$(cat "$REPO/app/lib/main.dart")" = "void main() {  }"
+mv "$TMPDIR/package_config.json" "$REPO/app/.dart_tool/package_config.json"
+
+# --- Merge commit: files staged exactly as the incoming side has them are left
+# alone (no reformat, no toolchain refusal); a resolved file is still formatted ---
+git -C "$REPO" reset -q --hard
+git -C "$REPO" checkout -q -b incoming
+printf 'void incoming() {  }\n' >"$REPO/app/lib/incoming.dart"
+printf 'void resolved() {  }\n' >"$REPO/app/lib/resolved.dart"
+printf 'const incoming = {x:1}\n' >"$REPO/web/frontend/src/incoming.ts"
+git -C "$REPO" add -A
+git -C "$REPO" commit -qm incoming
+git -C "$REPO" checkout -q -
+printf 'void branch() {}\n' >"$REPO/app/lib/branch.dart"
+git -C "$REPO" add -A
+git -C "$REPO" commit -qm branch
+git -C "$REPO" merge -q --no-commit --no-ff incoming >/dev/null 2>&1
+printf 'void resolved() {   }\n' >"$REPO/app/lib/resolved.dart"
+git -C "$REPO" add app/lib/resolved.dart
+rm -rf "$REPO/web/frontend/node_modules"
+run_hook >/dev/null
+test "$(cat "$REPO/app/lib/incoming.dart")" = "void incoming() {  }"
+test "$(cat "$REPO/web/frontend/src/incoming.ts")" = "const incoming = {x:1}"
+grep -q 'DART_FORMATTED' "$REPO/app/lib/resolved.dart"
+git -C "$REPO" merge --abort
+git -C "$REPO" branch -q -D incoming
+
 # --- Both hatches leave staged files untouched and still commit ---
 git -C "$REPO" reset -q --hard
 printf 'const c = {d:1}\n' >"$REPO/web/frontend/src/a.ts"
@@ -248,11 +306,21 @@ git -C "$REPO" reset -q --hard
 for webdir in web/app web/admin; do
   mkdir -p "$REPO/$webdir/src"
   printf '{\n  "devDependencies": {\n    "prettier": "^2.8.8",\n    "prettier-plugin-tailwindcss": "^0.3.0"\n  }\n}\n' >"$REPO/$webdir/package.json"
-  make_prettier_lock "$REPO/$webdir" 2.8.8
+  if [ "$webdir" = "web/app" ]; then
+    make_bun_lock "$REPO/$webdir" 2.8.8
+  else
+    make_prettier_lock "$REPO/$webdir" 2.8.8
+  fi
   make_prettier_stub "$REPO/$webdir" 2.8.8
   make_prettier_plugin "$REPO/$webdir" 0.3.0
   printf 'const %s = {b:1}\n' "$(basename "$webdir")" >"$REPO/$webdir/src/a.ts"
   git -C "$REPO" add -A
+  if [ "$webdir" = "web/app" ]; then
+    make_prettier_stub "$REPO/$webdir" 2.0.0
+    expect_refusal "bun lock prettier version mismatch"
+    test "$(cat "$REPO/$webdir/src/a.ts")" = "const app = {b:1}"
+    make_prettier_stub "$REPO/$webdir" 2.8.8
+  fi
   run_hook >/dev/null
   grep -q 'PRETTIER_2.8.8_FORMATTED' "$REPO/$webdir/src/a.ts"
   git -C "$REPO" reset -q --hard

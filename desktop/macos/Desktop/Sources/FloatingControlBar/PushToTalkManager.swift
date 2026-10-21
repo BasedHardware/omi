@@ -419,10 +419,22 @@ class PushToTalkManager: ObservableObject {
     // so the persistent socket is ready before the first PTT (and stays warm after).
     RealtimeHubController.shared.setup()
     // Hermetic local harness has no Firebase SDK and no live realtime providers.
-    if !DesktopLocalProfile.isEnabled {
-      RealtimeHubController.shared.ensureWarm(userInitiated: true)
-    }
+    // Launch is not a key press: plan-gated accounts must not mint a managed
+    // session just because the app started. PTT still uses `userInitiated: true`.
+    Self.warmHubOnLaunchIfNeeded(
+      localProfileEnabled: DesktopLocalProfile.isEnabled)
     log("PushToTalkManager: setup complete, micPermission=\(hasMicPermission)")
+  }
+
+  /// Launch keep-warm. Not a key press: the plan gate still applies. Tests pin
+  /// this symbol at the `setup` callsite so a revert to `ensureWarm()` fails.
+  static func warmHubOnLaunchIfNeeded(
+    localProfileEnabled: Bool,
+    hub: RealtimeHubController = .shared
+  ) {
+    if !localProfileEnabled {
+      hub.prepareAutomaticWarm()
+    }
   }
 
   func configureVoiceTurnCoordinator(barState: FloatingControlBarState) {
@@ -705,7 +717,7 @@ class PushToTalkManager: ObservableObject {
       break
 
     case .pendingLockDecision:
-      stopListening(endInterjectHold: false)
+      stopListening()
       enterLockedListening()
 
     case .lockedRecording:
@@ -798,6 +810,7 @@ class PushToTalkManager: ObservableObject {
     seenFinalSegmentIDs.removeAll()
     lastInterimText = ""
     voiceTypeSession.begin()
+    latchSilentTypeForTurnStart(turnID: currentVoiceTurnID)
     resetVoiceTypingSources()
     voiceTypingLastOutcome = VoiceTypingOutcome()
     currentContextSnapshot = nil
@@ -823,7 +836,6 @@ class PushToTalkManager: ObservableObject {
       micPermissionGranted: refreshedMicPermission())
     let preOverlayImage = captureTurnScreenEvidence()
     updateBarState()
-    FloatingControlBarManager.shared.interjectPushToTalkDidStart()
 
     captureContextAndStartAudio(preOverlayImage: preOverlayImage)
     log("PushToTalkManager: started listening (mode=\(mode))")
@@ -872,6 +884,7 @@ class PushToTalkManager: ObservableObject {
       seenFinalSegmentIDs.removeAll()
       lastInterimText = ""
       voiceTypeSession.begin()
+      latchSilentTypeForTurnStart(turnID: currentVoiceTurnID)
       resetVoiceTypingSources()
       voiceTypingLastOutcome = VoiceTypingOutcome()
       currentContextSnapshot = nil
@@ -880,7 +893,6 @@ class PushToTalkManager: ObservableObject {
     }
 
     updateBarState()
-    FloatingControlBarManager.shared.interjectPushToTalkDidStart()
     log("PushToTalkManager: entered locked listening mode (mode=\(mode))")
   }
 
@@ -892,10 +904,7 @@ class PushToTalkManager: ObservableObject {
     updateBarState()
   }
 
-  private func stopListening(endInterjectHold: Bool = true) {
-    if endInterjectHold {
-      FloatingControlBarManager.shared.interjectPushToTalkDidCancel()
-    }
+  private func stopListening() {
     if let turnID = currentVoiceTurnID,
       voiceTurnCoordinator.activeTurnID == turnID
     {
@@ -1344,7 +1353,6 @@ class PushToTalkManager: ObservableObject {
   }
 
   func finalize() {
-    FloatingControlBarManager.shared.interjectPushToTalkDidEnd()
     guard phase?.isRecording == true else { return }
     guard let turnID = currentVoiceTurnID else { return }
     voiceTurnCoordinator.publish(.finalize(turnID: turnID))
@@ -3255,6 +3263,29 @@ class PushToTalkManager: ObservableObject {
   }
   private var voiceTypingLastOutcome = VoiceTypingOutcome()
 
+  /// Silent Type for the current turn, read once at turn start. A mid-turn flip
+  /// must not split a turn: the delivery close path decides with the value the
+  /// turn started under, not whatever the toggle reads seconds later.
+  private var voiceTypingSilentTypeEnabled = false
+
+  /// Latches Silent Type at turn start, before anything can fail mid-turn.
+  ///
+  /// The delivery close path used to be the only place that named the turn as
+  /// suppressed — but a realtime provider failure while the dictation is still
+  /// finalizing reaches interrupted-turn recovery earlier, and recovery with no
+  /// receipt to stand down on journals the very text the toggle keeps out of
+  /// the chat. Arming at turn start means every recovery path mid-turn sees the
+  /// receipt. The toggle is read once per turn, so a mid-turn flip cannot
+  /// produce half-suppressed behavior. A turn that reaches the hub's commit is
+  /// a question, and `RealtimeHubController.commitTurn` ends the suppression
+  /// there; until then a question that dies mid-hold also stands recovery down
+  /// — the fail-closed direction for a privacy toggle.
+  func latchSilentTypeForTurnStart(turnID: VoiceTurnID?) {
+    voiceTypingSilentTypeEnabled = ShortcutSettings.shared.silentTypeEnabled
+    guard voiceTypingSilentTypeEnabled, let turnID else { return }
+    RealtimeHubController.shared.suppressJournalRecoveryAtTurnStart(turnID: turnID)
+  }
+
   private func resetVoiceTypingSources() {
     voiceTypingProbeSchedule.reset()
     voiceTypingOpeningDecoder.reset()
@@ -3464,6 +3495,7 @@ class PushToTalkManager: ObservableObject {
   struct DictationRun {
     var transcript: String?
     var transcriber = "none"
+    var transcriptionUnavailableReason: DictationTranscriber.UnavailableReason?
     /// True when the closing transcript did not read as a dictation (only
     /// the offline route can reach the pipeline unclaimed).
     var notADictation = false
@@ -3472,6 +3504,20 @@ class PushToTalkManager: ObservableObject {
     var completion: VoiceTypeSession.Completion = .none
     /// Set when the turn was superseded between steps; nothing was delivered.
     var abandoned = false
+
+    var automationTranscriptionFields: [String: String] {
+      guard let reason = transcriptionUnavailableReason else {
+        return ["transcription_status": "transcribed"]
+      }
+      var fields = [
+        "transcription_status": "unavailable",
+        "error_code": reason.rawValue,
+      ]
+      if reason == .onDeviceTimedOut {
+        fields["error"] = "on-device transcription did not complete within the 12-second deadline"
+      }
+      return fields
+    }
   }
 
   /// The dictation pipeline proper: transcribe once, correct, format, polish,
@@ -3493,11 +3539,19 @@ class PushToTalkManager: ObservableObject {
     if let knownTranscript {
       run.transcript = knownTranscript
       run.transcriber = "route"
-    } else if let result = await makeDictationTranscriber(
-      keywords: keywords, language: language, allowNetwork: allowNetwork
-    ).transcribe(audio) {
-      run.transcript = result.text
-      run.transcriber = result.source.rawValue
+    } else {
+      let outcome = await makeDictationTranscriber(
+        keywords: keywords, language: language, allowNetwork: allowNetwork
+      ).outcome(for: audio)
+      switch outcome {
+      case .transcribed(let result):
+        run.transcript = result.text
+        run.transcriber = result.source.rawValue
+      case .unavailable(let reason):
+        run.transcriptionUnavailableReason = reason
+      case .cancelled:
+        run.abandoned = true
+      }
     }
     guard isCurrent() else {
       run.abandoned = true
@@ -3522,7 +3576,7 @@ class PushToTalkManager: ObservableObject {
         area: "voice_typing", from: "llm_polish", to: "local_format", reason: "policy", outcome: .recovered)
     }
     if !text.isEmpty, polishPolicy == .required, allowNetwork, NetworkReachability.shared.isOnline,
-      let client = try? GeminiClient(model: ModelQoS.Gemini.dictation, workload: .interactive)
+      let client = try? GeminiClient(model: ModelQoS.Gemini.dictation, lane: .dictation, workload: .interactive)
     {
       do {
         if let polished = try await DictationPolisher.polish(text, context: context, using: client) {
@@ -3630,7 +3684,8 @@ class PushToTalkManager: ObservableObject {
       // a dictation that could not be delivered is still a classified attempt
       // rather than a hole in the telemetry.
       guard run.transcript != nil else {
-        log("PushToTalkManager: dictation produced no transcript from any recognizer")
+        let unavailable = run.transcriptionUnavailableReason?.rawValue ?? "no_transcript"
+        log("PushToTalkManager: dictation produced no transcript from any recognizer (\(unavailable))")
         self.voiceTypeSession.abandon()
         // The voice-typing pipeline ran, so the terminal is a dictation even
         // though no recognizer produced text.
@@ -3696,25 +3751,39 @@ class PushToTalkManager: ObservableObject {
         turnKind: .dictation, audioSeconds: totalSec, dictationTranscriber: run.transcriber)
       self.terminateVoiceTypingLifecycle(
         disposition: run.completion.isConfirmedDelivery ? .committed : .cancelled, totalSec: totalSec)
-      // The journal write is awaited before the turn ends, so a lifecycle
-      // change at turn end cannot drop it; the wait is bounded so a slow
-      // bridge cannot hold the bar, and the write itself is not cancelled
-      // at the bound — it finishes in the background.
-      let utterance = run.transcript ?? ""
-      let completion = run.completion
-      // Register the write under the native `voice:<uuid>` identity before the
-      // bounded wait so a timeout+cancel still sees persistPending.
-      let journal = RealtimeHubController.shared.enqueueTurnPersistence(
-        idempotencyKey: RealtimeHubController.voiceContinuityKey(for: turnID)
-      ) {
-        await self.recordVoiceTypingExchange(
-          utterance: utterance, completion: completion, turnID: turnID)
-      }
-      let journaled =
-        (try? await DeadlinedOperation.run(seconds: Self.voiceTypingJournalWaitSeconds) { await journal.value })
-        ?? false
-      if !journaled {
-        log("PushToTalkManager: voice typing exchange not confirmed journaled before the turn ended")
+      // The turn-start latch, not a fresh read: a mid-turn flip must not split
+      // a turn between suppressed and journaled behavior.
+      let record = VoiceTypingChatRecordPolicy.decide(
+        silentTypeEnabled: voiceTypingSilentTypeEnabled)
+      if !record.journalsExchange {
+        // Both consequences of not writing: the reserved native source has no
+        // producing row to attach to, and recovery must not resurrect the
+        // transcript on a later provider failure.
+        if record.suppressesJournalRecovery, record.retiresReservedEvidence {
+          RealtimeHubController.shared.suppressJournalRecoveryForUnwrittenTurn(turnID: turnID)
+        }
+        log("PushToTalkManager: silent type — dictation kept out of the chat transcript")
+      } else {
+        // The journal write is awaited before the turn ends, so a lifecycle
+        // change at turn end cannot drop it; the wait is bounded so a slow
+        // bridge cannot hold the bar, and the write itself is not cancelled
+        // at the bound — it finishes in the background.
+        let utterance = run.transcript ?? ""
+        let completion = run.completion
+        // Register the write under the native `voice:<uuid>` identity before the
+        // bounded wait so a timeout+cancel still sees persistPending.
+        let journal = RealtimeHubController.shared.enqueueTurnPersistence(
+          idempotencyKey: RealtimeHubController.voiceContinuityKey(for: turnID)
+        ) {
+          await self.recordVoiceTypingExchange(
+            utterance: utterance, completion: completion, turnID: turnID)
+        }
+        let journaled =
+          (try? await DeadlinedOperation.run(seconds: Self.voiceTypingJournalWaitSeconds) { await journal.value })
+          ?? false
+        if !journaled {
+          log("PushToTalkManager: voice typing exchange not confirmed journaled before the turn ended")
+        }
       }
       guard self.voiceTurnCoordinator.activeTurnID == turnID else { return }
       if let hint = run.completion.statusHint {
@@ -3777,7 +3846,7 @@ class PushToTalkManager: ObservableObject {
     case .pasteRequested: delivery = "paste_requested"
     case .insertionUncertain: delivery = "insertion_uncertain"
     }
-    return [
+    var result = [
       "accessibility_trusted": AXIsProcessTrusted() ? "true" : "false",
       "online": (allowNetwork && NetworkReachability.shared.isOnline) ? "true" : "false",
       "transcript": run.transcript ?? "",
@@ -3788,6 +3857,10 @@ class PushToTalkManager: ObservableObject {
       "delivery": delivery,
       "elapsed_ms": "\(Int(Date().timeIntervalSince(started) * 1000))",
     ]
+    for (key, value) in run.automationTranscriptionFields {
+      result[key] = value
+    }
+    return result
   }
 
   /// Puts a dictated turn in the chat transcript as `Typed: <text>`.

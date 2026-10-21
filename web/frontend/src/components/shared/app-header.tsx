@@ -3,6 +3,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import ShareButton from '../memories/share-button';
+import { isShareNotePath } from '@/src/lib/share-theme.mjs';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '../../hooks/useAuth';
 
@@ -200,6 +201,11 @@ export default function AppHeader({
       (item) => !defaultNavItems.find((di) => di.label === item.label),
     ),
   ];
+
+  // Shared conversations carry their own header (components/memories/share).
+  if (isShareNotePath(pathname)) {
+    return null;
+  }
 
   return !dreamforcePage ? (
     <>

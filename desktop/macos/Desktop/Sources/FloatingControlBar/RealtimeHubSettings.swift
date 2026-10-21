@@ -75,10 +75,24 @@ final class RealtimeHubSettings {
     }
   }
 
+  /// Whether `candidate` is a provider the user actually picked for voice.
+  ///
+  /// `.auto` is the default and is not a pick. It resolves through `AutoModelSelector`
+  /// (and falls back to Gemini Live), so treating it as a choice would spend a stored
+  /// Gemini key on behalf of every user who never opened Advanced → Voice Model — a
+  /// provider they never chose, selected by a benchmark rather than by them. Only an
+  /// explicit selection unlocks a key that the Developer Keys provider does not already
+  /// cover; `.auto` keeps the older, stricter rule.
+  func isVoiceModelChoice(_ candidate: RealtimeHubProvider) -> Bool {
+    RealtimeOmniSettings.shared.selectedProvider != .auto && candidate == provider
+  }
+
   /// True when the hub can connect client-direct with the user's own provider key
   /// (BYOK / dev key). Managed users without a key connect via a minted ephemeral
   /// token instead (see RealtimeHubController.ensureWarm); both reach the hub.
   var canConnect: Bool {
-    APIKeyService.selectedRealtimeBYOKKey(for: provider.byokProvider) != nil
+    APIKeyService.selectedRealtimeBYOKKey(
+      for: provider.byokProvider,
+      chosenForVoice: isVoiceModelChoice(provider)) != nil
   }
 }

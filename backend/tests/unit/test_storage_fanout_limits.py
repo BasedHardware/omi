@@ -7,6 +7,7 @@ Source-level tests (no heavy module imports) — checks code structure, not runt
 Behavioral tests use a standalone sliding-window implementation to verify the pattern.
 """
 
+import ast
 import os
 import re
 import threading
@@ -230,9 +231,21 @@ class TestSpeakerIdentificationPool:
     def test_speaker_id_uses_sync_executor_for_merge(self):
         """Parent call to download_audio_chunks_and_merge must use sync_executor, not storage_executor."""
         src = _read_source('utils/speaker_identification.py')
-        merge_idx = src.index('download_audio_chunks_and_merge')
-        context = src[max(0, merge_idx - 200) : merge_idx + 50]
-        assert 'sync_executor' in context
+        calls = [node for node in ast.walk(ast.parse(src)) if isinstance(node, ast.Call)]
+        merges = [
+            call
+            for call in calls
+            if isinstance(call.func, ast.Name)
+            and call.func.id == 'run_blocking'
+            and len(call.args) >= 2
+            and isinstance(call.args[1], ast.Name)
+            and call.args[1].id == 'download_audio_chunks_and_merge'
+        ]
+        assert merges, 'must inspect a real download/merge dispatch, not its import'
+        assert all(isinstance(call.args[0], ast.Name) and call.args[0].id == 'sync_executor' for call in merges)
+        assert not any(
+            isinstance(call.func, ast.Name) and call.func.id == 'download_audio_chunks_and_merge' for call in calls
+        ), 'download/merge must be dispatched, never called inline'
 
 
 def _bulk_summary_function_body() -> str:

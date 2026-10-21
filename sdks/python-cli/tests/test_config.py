@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import errno
 import json
 import os
 import stat
+import sys
 from pathlib import Path
 from typing import BinaryIO
 from unittest.mock import patch
@@ -13,7 +15,7 @@ import pytest
 
 from omi_cli import _secure_file
 from omi_cli import config as cfg
-from omi_cli.main import app
+from omi_cli.main import app, main
 
 
 def _assert_owner_only_descriptor(handle: BinaryIO) -> None:
@@ -70,6 +72,150 @@ def test_load_invalid_utf8_records_unicode_error(config_path: Path) -> None:
     assert "not valid UTF-8" in config.load_error
 
 
+def test_load_unreadable_file_records_error_instead_of_raising(config_path: Path) -> None:
+    """A config that exists but cannot be opened must degrade like a parse
+    failure. Before this was handled, the OSError escaped load() and every
+    command — including `omi version` — died on the generic last-chance
+    handler, which is the one situation the empty-Config path is for."""
+    config_path.mkdir(parents=True)  # exists, but is not a readable file
+    config = cfg.load()
+    assert config.path == config_path
+    assert config.active_profile == cfg.DEFAULT_PROFILE_NAME
+    assert config.profiles == {}
+    assert config.was_load_error
+    assert config.load_error is not None
+    assert "could not be read" in config.load_error
+
+
+def test_version_succeeds_with_unreadable_config(config_path: Path, cli_runner) -> None:
+    """`omi version` must keep working when the config cannot be read at all."""
+    config_path.mkdir(parents=True)
+    result = cli_runner.invoke(app, ["version"])
+    assert result.exit_code == 0, result.output
+    assert "omi-cli" in result.output
+
+
+def test_save_refuses_to_overwrite_unreadable_config(config_path: Path) -> None:
+    """The load_error from an unreadable file must also arm save()'s guard, so
+    a write command cannot replace config it was never able to read."""
+    config_path.mkdir(parents=True)
+    config = cfg.load()
+    assert config.was_load_error
+
+    with pytest.raises(PermissionError, match="refusing to overwrite"):
+        cfg.save(config)
+
+    assert config_path.is_dir()
+
+
+def test_load_stat_permission_error_records_error_instead_of_raising(
+    config_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """When ``sudo omi auth login`` creates ``~/.omi`` for the first time,
+    ``save()`` chmods the directory ``0o700`` owned by root. A subsequent
+    non-root invocation hits ``PermissionError`` before ``config.toml`` can
+    even be stat'd. ``p.exists()`` re-raises ``PermissionError`` instead of
+    returning ``False``, so ``load()`` must open directly inside ``try`` rather
+    than pre-checking ``p.exists()`` outside it."""
+    original_open = Path.open
+
+    def raising_open(self: Path, *args, **kwargs):
+        if self == config_path:
+            raise PermissionError(13, "Permission denied", str(self))
+        return original_open(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "open", raising_open)
+    config = cfg.load()
+    assert config.path == config_path
+    assert config.active_profile == cfg.DEFAULT_PROFILE_NAME
+    assert config.profiles == {}
+    assert config.was_load_error
+    assert config.load_error is not None
+    assert "could not be read" in config.load_error
+
+
+@pytest.mark.skipif(
+    os.name == "nt" or (hasattr(os, "geteuid") and os.geteuid() == 0),
+    reason="POSIX non-root directory traversal permissions only",
+)
+def test_version_succeeds_when_config_parent_dir_is_unsearchable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cli_runner
+) -> None:
+    """Real POSIX reproducer for ``~/.omi`` being mode ``0o000`` / root-owned ``0o700``:
+    ``Path.exists()`` on ``~/.omi/config.toml`` raises ``PermissionError``, which
+    previously escaped ``load()`` before the ``try`` block was reached."""
+    locked_dir = tmp_path / "locked_omi"
+    locked_dir.mkdir()
+    locked_cfg = locked_dir / "config.toml"
+    locked_cfg.write_text('active_profile = "default"\n', encoding="utf-8")
+    monkeypatch.setenv(cfg.ENV_CONFIG_PATH, str(locked_cfg))
+    locked_dir.chmod(0o000)
+    try:
+        config = cfg.load()
+        assert config.was_load_error
+        assert config.load_error is not None
+        assert "could not be read" in config.load_error
+
+        result = cli_runner.invoke(app, ["version"])
+        assert result.exit_code == 0, result.output
+        assert "omi-cli" in result.output
+
+        with pytest.raises(PermissionError, match="refusing to overwrite"):
+            cfg.save(config)
+    finally:
+        locked_dir.chmod(0o700)
+
+
+def test_load_file_as_parent_directory_records_error_and_arms_save_guard(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``Path.exists()`` swallows ``NotADirectoryError`` (``ENOTDIR``) and returns
+    ``False``. Opening directly inside ``try`` records the ``NotADirectoryError``
+    on ``load_error`` instead of misreporting the path as a clean missing file."""
+    blocker = tmp_path / "not_a_dir"
+    blocker.write_text("file", encoding="utf-8")
+    bad_cfg_path = blocker / "config.toml"
+    monkeypatch.setenv(cfg.ENV_CONFIG_PATH, str(bad_cfg_path))
+
+    config = cfg.load()
+    assert config.was_load_error
+    assert config.load_error is not None
+    assert "could not be read" in config.load_error
+
+    with pytest.raises(PermissionError, match="refusing to overwrite"):
+        cfg.save(config)
+
+
+def test_load_records_a_file_parent_the_os_reports_as_missing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Windows reports a file in the parent path as not found (ERROR_PATH_NOT_FOUND,
+    raised as ``FileNotFoundError``) where POSIX raises ``NotADirectoryError``.
+    ``open`` raises what Windows raises here, so every runner checks that load()
+    still records the path as unreadable instead of as a config never written."""
+    blocker = tmp_path / "not_a_dir"
+    blocker.write_text("file", encoding="utf-8")
+    bad_cfg_path = blocker / "omi" / "config.toml"
+    monkeypatch.setenv(cfg.ENV_CONFIG_PATH, str(bad_cfg_path))
+    original_open = Path.open
+
+    def windows_open(self: Path, *args, **kwargs):
+        if self == bad_cfg_path:
+            raise FileNotFoundError(2, "The system cannot find the path specified", str(self))
+        return original_open(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "open", windows_open)
+
+    config = cfg.load()
+    assert config.load_error is not None
+    assert "could not be read" in config.load_error
+    assert os.strerror(errno.ENOTDIR) in config.load_error
+    with pytest.raises(PermissionError, match="refusing to overwrite"):
+        cfg.save(config)
+    assert blocker.read_text(encoding="utf-8") == "file"
+
+    # A config directory that does not exist yet is still a clean first run.
+    assert cfg.load(tmp_path / "fresh" / "config.toml").load_error is None
+
+
 def test_save_refuses_to_overwrite_malformed_config(config_path: Path) -> None:
     """save() must refuse to overwrite a file that failed to parse on load:
     a write command would otherwise silently destroy profiles/credentials the
@@ -84,6 +230,50 @@ def test_save_refuses_to_overwrite_malformed_config(config_path: Path) -> None:
 
     # The corrupt file is left untouched.
     assert config_path.read_bytes() == original
+
+
+def test_write_command_reports_refusal_as_a_normal_error(config_path: Path, monkeypatch, capsys) -> None:
+    """A refusal to clobber an unparseable config is deliberate, so it must be
+    reported like any other CLI error rather than reaching main()'s
+    last-chance handler, which labels it 'unexpected error'."""
+    config_path.write_text("active_profile = [\n", encoding="utf-8")  # invalid TOML
+    original = config_path.read_bytes()
+    monkeypatch.setattr(sys, "argv", ["omi", "config", "set", "api_base", "https://x.test"])
+
+    with pytest.raises(SystemExit) as exc:
+        main()
+
+    assert exc.value.code == 1
+    err = capsys.readouterr().err
+    assert "refusing to overwrite" in err
+    assert "unexpected error" not in err
+    assert config_path.read_bytes() == original
+
+
+def test_write_command_refusal_is_structured_in_json_mode(config_path: Path, monkeypatch, capsys) -> None:
+    """JSON mode is the agent contract: the refusal has to arrive as a parseable
+    error object on stderr, not as a message about an unexpected fault."""
+    config_path.write_text("active_profile = [\n", encoding="utf-8")  # invalid TOML
+    monkeypatch.setattr(sys, "argv", ["omi", "--json", "config", "profile", "use", "work"])
+
+    with pytest.raises(SystemExit) as exc:
+        main()
+
+    assert exc.value.code == 1
+    payload = json.loads(capsys.readouterr().err)
+    assert "refusing to overwrite" in payload["error"]
+    assert "unexpected error" not in payload["error"]
+
+
+def test_refusal_is_still_a_permission_error_for_library_callers(config_path: Path) -> None:
+    """The typed class must stay a PermissionError so code catching that
+    keeps working."""
+    config_path.write_text("active_profile = [\n", encoding="utf-8")  # invalid TOML
+    config = cfg.load()
+    with pytest.raises(cfg.ConfigWriteRefused):
+        cfg.save(config)
+    with pytest.raises(PermissionError, match="refusing to overwrite"):
+        cfg.save(config)
 
 
 def test_version_succeeds_with_malformed_config(config_path: Path, cli_runner) -> None:
@@ -163,6 +353,40 @@ def test_save_creates_file_with_secure_perms(config_path: Path) -> None:
     config.set_profile(profile)
     cfg.save(config)
 
+    _assert_owner_only(config_path)
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX permission bits only")
+def test_save_tightens_perms_on_newly_created_parent_dir(config_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    nested = config_path.parent / "nested" / "config.toml"
+    monkeypatch.setenv(cfg.ENV_CONFIG_PATH, str(nested))
+    assert not nested.parent.exists()
+
+    config = cfg.load()
+    profile = config.get_profile()
+    profile.auth_method = "api_key"
+    profile.api_key = "omi_dev_secret"
+    config.set_profile(profile)
+    cfg.save(config)
+
+    assert stat.S_IMODE(nested.parent.stat().st_mode) == 0o700
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX permission bits only")
+def test_save_preserves_perms_on_existing_custom_parent_dir(config_path: Path) -> None:
+    """A pre-existing, user-selected $OMI_CONFIG directory may be shared with
+    other files/processes; save() must not silently tighten its mode."""
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    config_path.parent.chmod(0o750)
+
+    config = cfg.load()
+    profile = config.get_profile()
+    profile.auth_method = "api_key"
+    profile.api_key = "omi_dev_secret"
+    config.set_profile(profile)
+    cfg.save(config)
+
+    assert stat.S_IMODE(config_path.parent.stat().st_mode) == 0o750
     _assert_owner_only(config_path)
 
 
@@ -280,6 +504,36 @@ def test_save_retries_when_unique_temp_name_collides(config_path: Path, monkeypa
 
     reloaded = cfg.load().get_profile()
     assert reloaded.api_key == "omi_dev_retry"
+
+
+def test_save_cleans_up_temp_file_when_replace_fails(config_path: Path, monkeypatch) -> None:
+    """A failed os.replace() (e.g. the destination is locked on Windows) must
+    not leave the fully serialized, credential-bearing temp file on disk."""
+    config = cfg.load()
+    profile = config.get_profile()
+    profile.auth_method = "api_key"
+    profile.api_key = "omi_dev_secret"
+    config.set_profile(profile)
+
+    written_tmp_path: list[Path] = []
+    original_replace = cfg.os.replace
+
+    def failing_replace(src, dst):
+        written_tmp_path.append(Path(src))
+        raise PermissionError("destination is locked")
+
+    monkeypatch.setattr(cfg.os, "replace", failing_replace)
+
+    with pytest.raises(PermissionError, match="destination is locked"):
+        cfg.save(config)
+
+    assert written_tmp_path
+    assert not written_tmp_path[0].exists()
+    assert not config_path.exists()
+
+    monkeypatch.setattr(cfg.os, "replace", original_replace)
+    cfg.save(config)
+    assert cfg.load().get_profile().api_key == "omi_dev_secret"
 
 
 def test_save_concurrent_writers_retry_on_unique_name_collision(config_path: Path) -> None:
@@ -415,3 +669,262 @@ def test_no_profiles_section(config_path: Path) -> None:
     config = cfg.load()
     assert not config.was_load_error
     assert config.active_profile == "other"
+
+
+# -- Regression tests for non-string active_profile selector (Issue #13442) --
+
+
+@pytest.mark.parametrize(
+    "invalid_toml,expected_type",
+    [
+        ('active_profile = ["work"]\n', "list"),
+        ("active_profile = 42\n", "int"),
+        ("active_profile = true\n", "bool"),
+        ("[active_profile]\nname = 'work'\n", "dict"),
+    ],
+)
+def test_active_profile_non_string_records_load_error(config_path: Path, invalid_toml: str, expected_type: str) -> None:
+    """active_profile must be a string; non-string values should set load_error instead of crashing."""
+    config_path.write_text(invalid_toml, encoding="utf-8")
+    config = cfg.load()
+    assert config.was_load_error
+    assert config.active_profile == cfg.DEFAULT_PROFILE_NAME
+    assert config.profiles == {}
+    assert config.load_error is not None
+    assert f"'active_profile' must be a string, got {expected_type}" in config.load_error
+
+
+def test_active_profile_non_string_refuses_save_overwrite(config_path: Path) -> None:
+    """A config with invalid active_profile type must not be overwritten by save()."""
+    config_path.write_text(
+        'active_profile = ["work"]\n[profiles.work]\napi_base = "https://api.omi.me"\n', encoding="utf-8"
+    )
+    config = cfg.load()
+    assert config.was_load_error
+
+    with pytest.raises(PermissionError, match="refusing to overwrite"):
+        cfg.save(config)
+
+    # The file on disk is preserved intact
+    assert 'active_profile = ["work"]' in config_path.read_text(encoding="utf-8")
+
+
+def test_active_profile_non_string_diagnostics_succeed(config_path: Path, cli_runner) -> None:
+    """Read-only diagnostics commands must still succeed when active_profile is invalid."""
+    config_path.write_text('active_profile = ["work"]\n', encoding="utf-8")
+    result = cli_runner.invoke(app, ["version"])
+    assert result.exit_code == 0, result.output
+
+    result_path = cli_runner.invoke(app, ["config", "path"])
+    assert result_path.exit_code == 0, result_path.output
+
+
+# -- Regression tests for malformed profile field types (Issue #13775) --
+
+
+@pytest.mark.parametrize(
+    "field,value,expected_type",
+    [
+        ("local_token", "12345", "int"),
+        ("api_key", "12345", "int"),
+        ("api_base", "12345", "int"),
+        ("auth_method", "true", "bool"),
+        ("id_token", '["token"]', "list"),
+        ("refresh_token", "12345", "int"),
+        ("local_api_url", "8080", "int"),
+    ],
+)
+def test_profile_field_invalid_string_type_records_load_error(
+    config_path: Path, field: str, value: str, expected_type: str
+) -> None:
+    """Known string fields must be strings; non-string values should set load_error instead of crashing."""
+    config_path.write_text(f"[profiles.default]\n{field} = {value}\n", encoding="utf-8")
+    config = cfg.load()
+    assert config.was_load_error
+    assert config.active_profile == cfg.DEFAULT_PROFILE_NAME
+    assert config.profiles == {}
+    assert config.load_error is not None
+    assert f"profile 'default' field '{field}' must be a string, got {expected_type}" in config.load_error
+
+
+@pytest.mark.parametrize(
+    "value,expected_type",
+    [
+        ('"never"', "str"),
+        ("true", "bool"),
+        ("[12345]", "list"),
+        ("inf", "non-finite (inf)"),
+        ("-inf", "non-finite (-inf)"),
+        ("nan", "non-finite (nan)"),
+        ("9" * 400, "overflow"),
+        ("-" + "9" * 400, "overflow"),
+    ],
+)
+def test_profile_field_invalid_expiry_type_records_load_error(
+    config_path: Path, value: str, expected_type: str
+) -> None:
+    """id_token_expires_at must be finite numeric; non-numeric or non-finite values should set load_error."""
+    config_path.write_text(f"[profiles.default]\nid_token_expires_at = {value}\n", encoding="utf-8")
+    config = cfg.load()
+    assert config.was_load_error
+    assert config.active_profile == cfg.DEFAULT_PROFILE_NAME
+    assert config.profiles == {}
+    assert config.load_error is not None
+    assert (
+        f"profile 'default' field 'id_token_expires_at' must be finite numeric, got {expected_type}"
+        in config.load_error
+    )
+
+
+def test_profile_field_oversized_expiry_records_load_error(config_path: Path) -> None:
+    """An integer expiry that tomllib parses but math.isfinite cannot convert sets load_error."""
+    config_path.write_text(
+        "[profiles.default]\nid_token_expires_at = " + "9" * 400 + "\n",
+        encoding="utf-8",
+    )
+    config = cfg.load()
+    assert config.was_load_error
+    assert config.active_profile == cfg.DEFAULT_PROFILE_NAME
+    assert config.profiles == {}
+    assert config.load_error is not None
+    assert "profile 'default' field 'id_token_expires_at' must be finite numeric, got overflow" in config.load_error
+
+
+def test_profile_field_valid_numeric_expiry_loads_normally(config_path: Path) -> None:
+    """Numeric (int and float) id_token_expires_at should load normally without load_error."""
+    config_path.write_text(
+        '[profiles.default]\napi_key = "test_key"\nid_token_expires_at = 1726300000\n',
+        encoding="utf-8",
+    )
+    config = cfg.load()
+    assert not config.was_load_error
+    assert "default" in config.profiles
+    assert config.profiles["default"].id_token_expires_at == 1726300000
+
+    config_path.write_text(
+        '[profiles.default]\napi_key = "test_key"\nid_token_expires_at = 1726300000.5\n',
+        encoding="utf-8",
+    )
+    config_float = cfg.load()
+    assert not config_float.was_load_error
+    assert config_float.profiles["default"].id_token_expires_at == 1726300000.5
+
+
+def test_profile_invalid_field_refuses_save_overwrite(config_path: Path) -> None:
+    """A config with invalid profile field types must not be overwritten by save()."""
+    config_path.write_text("[profiles.default]\nlocal_token = 12345\n", encoding="utf-8")
+    config = cfg.load()
+    assert config.was_load_error
+
+    with pytest.raises(PermissionError, match="refusing to overwrite"):
+        cfg.save(config)
+
+    # The file on disk is preserved intact
+    assert "local_token = 12345" in config_path.read_text(encoding="utf-8")
+
+
+def test_profile_invalid_field_config_show_and_diagnostics_succeed(config_path: Path, cli_runner) -> None:
+    """Read-only diagnostics and config show must not crash when a profile field has an invalid type."""
+    config_path.write_text("[profiles.default]\nlocal_token = 12345\n", encoding="utf-8")
+    result_show = cli_runner.invoke(app, ["--json", "config", "show"])
+    assert result_show.exit_code == 0, result_show.output
+    data = json.loads(result_show.output)
+    assert data["active_profile"] == "default"
+    assert data["profiles"] == []
+
+    result_version = cli_runner.invoke(app, ["version"])
+    assert result_version.exit_code == 0, result_version.output
+
+    result_path = cli_runner.invoke(app, ["config", "path"])
+    assert result_path.exit_code == 0, result_path.output
+
+
+# -- Tests for URL scheme and token validation in `omi config set` --
+
+
+@pytest.mark.parametrize("key", ["api_base", "local_api_url"])
+@pytest.mark.parametrize(
+    "invalid_url",
+    [
+        "not-a-url",
+        "ftp://example.com",
+        "http://",
+        "https://",
+        "javascript:alert(1)",
+        "   ",
+    ],
+)
+def test_config_set_rejects_invalid_urls(config_path: Path, cli_runner, key: str, invalid_url: str) -> None:
+    result = cli_runner.invoke(app, ["config", "set", key, invalid_url])
+    assert result.exit_code != 0
+    assert "Invalid URL" in result.output
+    # The config file should remain uncorrupted
+    config = cfg.load()
+    profile = config.get_profile("default")
+    if key == "api_base":
+        assert profile.api_base == cfg.DEFAULT_API_BASE
+    else:
+        assert profile.local_api_url is None
+
+
+@pytest.mark.parametrize("key", ["api_base", "local_api_url"])
+@pytest.mark.parametrize(
+    "malformed_url",
+    [
+        # urlsplit raises eagerly on an unterminated IPv6 bracket...
+        "http://[",
+        # ...and lazily on a non-numeric or out-of-range port:
+        "http://example.test:abc",
+        "https://example.test:65536",
+        # authority present but no hostname:
+        "http://:47778",
+    ],
+)
+def test_config_set_rejects_malformed_urls(config_path: Path, cli_runner, key: str, malformed_url: str) -> None:
+    """Malformed URLs must produce a clean UsageError (no traceback) and must not be persisted."""
+    result = cli_runner.invoke(app, ["config", "set", key, malformed_url])
+    assert result.exit_code != 0
+    assert "Invalid URL" in result.output
+    config = cfg.load()
+    profile = config.get_profile("default")
+    if key == "api_base":
+        assert profile.api_base == cfg.DEFAULT_API_BASE
+    else:
+        assert profile.local_api_url is None
+
+
+@pytest.mark.parametrize(
+    "key,valid_url,expected_saved",
+    [
+        ("api_base", "https://api.staging.omi.me", "https://api.staging.omi.me"),
+        ("api_base", "https://api.staging.omi.me/", "https://api.staging.omi.me"),
+        ("local_api_url", "http://localhost:8000/", "http://localhost:8000"),
+        ("local_api_url", "http://127.0.0.1:47778", "http://127.0.0.1:47778"),
+        ("local_api_url", "http://[::1]:8000", "http://[::1]:8000"),
+    ],
+)
+def test_config_set_accepts_valid_urls_and_normalizes_trailing_slash(
+    config_path: Path, cli_runner, key: str, valid_url: str, expected_saved: str
+) -> None:
+    result = cli_runner.invoke(app, ["--json", "config", "set", key, valid_url])
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["ok"] is True
+    assert payload["key"] == key
+    assert payload["value"] == expected_saved
+
+    config = cfg.load()
+    profile = config.get_profile("default")
+    if key == "api_base":
+        assert profile.api_base == expected_saved
+    else:
+        assert profile.local_api_url == expected_saved
+
+
+@pytest.mark.parametrize("empty_token", ["", "   "])
+def test_config_set_rejects_empty_or_whitespace_local_token(config_path: Path, cli_runner, empty_token: str) -> None:
+    result = cli_runner.invoke(app, ["config", "set", "local_token", empty_token])
+    assert result.exit_code != 0
+    assert "Invalid value for 'local_token'" in result.output
+    config = cfg.load()
+    assert config.get_profile("default").local_token is None

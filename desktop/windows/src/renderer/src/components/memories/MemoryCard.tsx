@@ -68,7 +68,11 @@ type MemoryCardProps = {
 // of a ~120ms main-thread stall that made navigation feel laggy app-wide. Props
 // are referentially stable (memory rows and the setDetailMemory setter), so the
 // shallow-prop memo skips the whole list on navigation.
-function MemoryCardImpl({ memory, onOpen, now }: MemoryCardProps): React.JSX.Element {
+function MemoryCardImpl({
+  memory,
+  onOpen,
+  now
+}: MemoryCardProps): React.JSX.Element {
   const isNew = isNewMemory(memory, now)
   const protectedMem = isProtectedContent(memory.content)
   const layer = layerLabel(memory)
@@ -126,6 +130,7 @@ function MemoryCardImpl({ memory, onOpen, now }: MemoryCardProps): React.JSX.Ele
             <span className="max-w-[8rem] truncate">{memory.primary_capture_device}</span>
           </span>
         )}
+
 
         <span className="ml-auto flex items-center gap-1">
           <Tooltip.Provider delayDuration={200} disableHoverableContent={false}>

@@ -23,10 +23,18 @@ IDs belong in `source_segment_ids`, not the visible prose.
 ## Integration and verification
 
 Conversation notes stay on GPT-5.6 Luna. The gateway `conv_structure` override
-retains low reasoning; the direct/legacy profile and existing recovery behavior
-are unchanged. There is one writer call, with the existing deadline and no added
-retry or revision pass. L1 memory also stays on Luna, and the shared-prefix cache
-optimization remains enabled when eligible.
+retains low reasoning, and L1 memory remains unchanged. After parsing, a versioned
+presentation-contract gate validates evidence arrays, moves unambiguous inline
+citations into `source_segment_ids`, strips speaker placeholders, and neutralizes
+non-web Markdown links. This deterministic path adds no model call.
+
+A known transcript ID left in ordinary user-visible prose is deliberately not
+guessed at: the writer gets one correction pass with the original cacheable
+prefix. If that single revision still violates the contract, the server removes
+the internal ID before persistence. The bounded outcome and reason are counted
+without note text, transcript text, conversation IDs, or source IDs. The macOS
+reader applies the same conservative inline-citation recovery to older records
+in memory, without rewriting stored history.
 
 The full conversation prefix, response schema, task/event extraction rules and
 section-to-overview projection are preserved. Independent memory extraction
@@ -35,24 +43,28 @@ the prompt explicitly requires empty citation lists rather than invented IDs.
 
 `tests/unit/test_conversation_notes_v2.py` exercises the real writer with
 controlled provider responses: multiline bullet projection, marked and unmarked
-sources, action metadata, placeholders, shared-prefix construction and cache
-compatibility against real gateway/direct routes. Prompt-text assertions verify
-the contract, not whether a model obeys it. Run the backend selector and `test.sh`
-for the component verification contract.
+sources, action metadata, placeholders, static citation recovery, the one-pass
+revision ceiling, safe fallback, shared-prefix construction and cache compatibility
+against real gateway/direct routes. macOS selection tests pin historical read
+compatibility. Prompt-text assertions verify the instruction contract; runtime
+postconditions verify model obedience. Run the backend selector and `test.sh` for
+the component verification contract.
 
 ## Cost and diagnostic comparison
 
-The model, reasoning setting, call count and cache behavior are unchanged from
-the base branch. The prompt is longer, and generated-note length varies, so this
-is not a promise of identical token usage. Published standard Luna pricing on
-September 7, 2026 is $0.20 per million input tokens and $1.20 per million output
+The model and reasoning setting are unchanged from the base branch. Normal
+outputs still use one call; only ambiguous internal-ID leakage can spend one
+additional correction call, never more. The prompt is longer, and generated-note
+length varies, so this is not a promise of identical token usage. gpt-6-luna is priced at half of
+gpt-5.6-luna per operator directive (David Zhang, 2026-09-23), pending official
+published rates: $0.10 per million input tokens and $0.60 per million output
 tokens; cached input has a separate lower rate. See the [official Luna model
-documentation](https://developers.openai.com/api/docs/models/gpt-5.6-luna).
+documentation](https://developers.openai.com/api/docs/models/gpt-6-luna).
 
 Seven previously inspected difficult conversations were replayed with the same
 prompt at low and high reasoning on Chat Completions. Each arm used 33,585 input
 tokens. Low used 4,165 output tokens; high used 12,223. At uncached standard rates,
-that is approximately $0.0117 versus $0.0214 for all seven (about 1.83x). Median
+that is approximately $0.0059 versus $0.0107 for all seven (about 1.83x). Median
 direct-call time was 7.7 versus 15.3 seconds. These are diagnostic estimates,
 including reported reasoning usage, not invoices or production forecasts.
 

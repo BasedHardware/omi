@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-order-bearing-payload-through-unordered-container",
+  "violated_contract": "A payload whose key order carries meaning to its consumer must reach that consumer in its authored order. A JSON schema handed to a constrained decoder is such a payload: llama.cpp compiles json_schema to a grammar that emits properties in listed order, and Apple FoundationModels guided generation follows DynamicGenerationSchema property order, so property order is generation order. Parsing it into an unordered dictionary (JSONSerialization, [String: Any]) and re-serializing or iterating it -- including iterating keys.sorted() -- silently replaces the authored order with a hash or alphabetical one. The request still succeeds and still validates, so the defect is invisible except as worse or non-terminating model output.",
+  "canonical_prevention": "Carry order-bearing JSON as bytes and splice it verbatim, or read key order with an order-preserving scan; never rebuild it from an unordered container. Prove it with a test that captures the real bytes handed to the consumer (the HTTP body, the generated schema nodes) and asserts the authored order, not a test that compares parsed dictionaries, which are equal under any order.",
+  "canonical_prevention_artifact": [
+    "desktop/macos/Desktop/Sources/LocalInference/LocalServerInferenceAdapter.swift",
+    "desktop/macos/Desktop/Sources/LocalInference/AFMJSONSchemaBridge.swift",
+    "desktop/macos/Desktop/Tests/LocalServerInferenceAdapterTests.swift",
+    "desktop/macos/Desktop/Tests/AFMLocalInferenceAdapterTests.swift"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "desktop/macos/Desktop/Sources/LocalInference/**"
+  ],
+  "status": "open"
+}

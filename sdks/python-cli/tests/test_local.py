@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import json
 import sqlite3
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import httpx
@@ -48,6 +49,32 @@ def test_local_configure_persists_profile_config(config_path: Path, cli_runner) 
     profile = cfg.load().get_profile("default")
     assert profile.local_api_url == FAKE_LOCAL_URL
     assert profile.local_token == FAKE_LOCAL_TOKEN
+
+
+def test_local_configure_escapes_markup_like_profile_name(config_path: Path, cli_runner) -> None:
+    """Rich markup in a profile name must be escaped in the configure message.
+
+    `omi local configure` prints the profile name inside a Rich-markup
+    message; a profile named 'bad[/bold]' would otherwise crash the render
+    after the config had already been saved.
+    """
+    tricky = "bad[/bold]"
+    result = cli_runner.invoke(
+        app,
+        [
+            "--profile",
+            tricky,
+            "local",
+            "configure",
+            "--url",
+            FAKE_LOCAL_URL,
+            "--token",
+            FAKE_LOCAL_TOKEN,
+        ],
+    )
+    assert result.exit_code == 0, repr(result.exception)
+    assert "bad[/bold]" in result.output
+    assert cfg.load().get_profile(tricky).local_api_url == FAKE_LOCAL_URL
 
 
 def test_local_status_without_config_is_json(config_path: Path, cli_runner) -> None:
@@ -188,6 +215,72 @@ Found 1 screenshot(s) matching "Discord":
     assert payload["result_count"] == 1
     assert payload["results"][0]["screenshot_id"] == 42
     assert payload["results"][0]["ocr_preview"] == "Status update preview"
+    assert payload["results"][0]["similarity"] == 0.87
+    assert payload["results"][0]["matched_by"] is None
+
+
+def test_search_screen_structures_on_device_hybrid_results(config_path: Path, cli_runner) -> None:
+    """Desktop's on-device search labels hits ``hybrid: keyword|vector|both``
+    instead of a similarity score. JSON mode must still return them as results
+    rather than treat the search as empty and run the exact-text SQL fallback."""
+    _configure_local_profile(config_path)
+    response = """
+Found 3 screenshot(s) matching "budget":
+
+1. [2026-09-09 2:13:20 PM PDT (America/Los_Angeles)] Editor - Plan (screenshot_id: 3, hybrid: both)
+   Content: budget review
+
+2. [2026-09-09 2:12:40 PM PDT (America/Los_Angeles)] Notes (screenshot_id: 2, hybrid: keyword)
+   Content: budget notes
+
+3. [2026-09-09 2:10:05 PM PDT (America/Los_Angeles)] Safari - Q3 plan (screenshot_id: 1, hybrid: vector)
+""".strip()
+    with respx.mock(base_url=FAKE_LOCAL_URL, assert_all_called=True) as router:
+        route = router.post("/v1/local/tool").mock(return_value=httpx.Response(200, json=_tool_response(response)))
+        result = cli_runner.invoke(app, ["--json", "local", "search-screen", "budget"])
+
+    assert result.exit_code == 0, result.output
+    assert len(route.calls) == 1
+    payload = json.loads(result.stdout)
+    assert payload["result_count"] == 3
+    assert [hit["screenshot_id"] for hit in payload["results"]] == [3, 2, 1]
+    assert [hit["matched_by"] for hit in payload["results"]] == ["both", "keyword", "vector"]
+    assert [hit["similarity"] for hit in payload["results"]] == [None, None, None]
+    assert [hit["window_title"] for hit in payload["results"]] == ["Plan", None, "Q3 plan"]
+    assert payload["results"][0]["timestamp"] == "2026-09-09 2:13:20 PM PDT (America/Los_Angeles)"
+    assert payload["results"][1]["ocr_preview"] == "budget notes"
+    assert "exact_fallback" not in payload
+
+
+def test_search_screen_structures_exact_text_match_results(config_path: Path, cli_runner) -> None:
+    """Before new frames are embedded, Desktop answers from its exact-text index
+    and labels hits ``match: text``. JSON mode must return those hits too."""
+    _configure_local_profile(config_path)
+    response = """
+Found 1 screenshot(s) matching "riddle" (exact text match; newest frames may not be embedded yet):
+
+1. [2026-09-09 2:13:20 PM PDT (America/Los_Angeles)] Safari - Puzzles (screenshot_id: 7, match: text)
+   Content: The riddle on the first page
+""".strip()
+    with respx.mock(base_url=FAKE_LOCAL_URL, assert_all_called=True) as router:
+        route = router.post("/v1/local/tool").mock(return_value=httpx.Response(200, json=_tool_response(response)))
+        result = cli_runner.invoke(app, ["--json", "local", "search-screen", "riddle"])
+
+    assert result.exit_code == 0, result.output
+    assert len(route.calls) == 1
+    payload = json.loads(result.stdout)
+    assert payload["results"] == [
+        {
+            "rank": 1,
+            "timestamp": "2026-09-09 2:13:20 PM PDT (America/Los_Angeles)",
+            "app_name": "Safari",
+            "window_title": "Puzzles",
+            "screenshot_id": 7,
+            "similarity": None,
+            "matched_by": "text",
+            "ocr_preview": "The riddle on the first page",
+        }
+    ]
 
 
 def test_search_screen_no_results_is_structured_in_json(config_path: Path, cli_runner) -> None:
@@ -247,14 +340,66 @@ def test_search_screen_exact_fallback_constrains_app_filter(config_path: Path, c
     assert "WHERE (appName LIKE '%Discord%' ESCAPE '!') AND" in fallback_query
 
 
+def test_search_screen_no_results_survives_exact_fallback_sql_error(config_path: Path, cli_runner) -> None:
+    """When ``search_screen_history`` succeeds with zero matches, a failure in
+    the secondary ``execute_sql`` fallback must be recorded under
+    ``exact_fallback.result.error`` instead of aborting ``search-screen`` and
+    discarding the primary response."""
+    _configure_local_profile(config_path)
+    response = "No screen history is available yet."
+    sql_error = "SQL Error: The local database could not complete that query."
+    with respx.mock(base_url=FAKE_LOCAL_URL, assert_all_called=True) as router:
+        router.post("/v1/local/tool").mock(
+            side_effect=[
+                httpx.Response(200, json=_tool_response(response)),
+                httpx.Response(200, json=_tool_response(sql_error)),
+            ]
+        )
+        result = cli_runner.invoke(app, ["--json", "local", "search-screen", "Discord"])
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.stdout)
+    assert payload["results"] == []
+    assert payload["reason"] == response
+    assert payload["exact_fallback"]["result"] == {"error": sql_error}
+    assert "suggested_screenshot_ids" not in payload
+
+
+def test_search_screen_no_results_survives_exact_fallback_http_error(config_path: Path, cli_runner) -> None:
+    """An HTTP/tool error from the secondary ``execute_sql`` fallback must also
+    degrade inside ``exact_fallback.result`` rather than failing ``search-screen``."""
+    _configure_local_profile(config_path)
+    response = 'No matching screen-history results for "Discord" in the last 7 day(s).'
+    with respx.mock(base_url=FAKE_LOCAL_URL, assert_all_called=True) as router:
+        router.post("/v1/local/tool").mock(
+            side_effect=[
+                httpx.Response(200, json=_tool_response(response)),
+                httpx.Response(400, json={"ok": False, "error": "no such table: screenshots"}),
+            ]
+        )
+        result = cli_runner.invoke(app, ["--json", "local", "search-screen", "Discord"])
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.stdout)
+    assert payload["results"] == []
+    assert payload["reason"] == response
+    assert payload["exact_fallback"]["result"]["error"] == "Local Omi Desktop API error (400)"
+    assert payload["exact_fallback"]["result"]["detail"] == "no such table: screenshots"
+
+
 @pytest.mark.parametrize("literal,decoy", [("50%", "500"), ("a_b", "axb"), ("a!b", "ab"), ("it's", "its")])
 @pytest.mark.parametrize("field", ["appName", "windowTitle", "ocrText", "app_filter"])
 def test_search_screen_fallback_matches_literal_text(
     config_path: Path, cli_runner, literal: str, decoy: str, field: str
 ) -> None:
     _configure_local_profile(config_path)
+    now = datetime(2026, 9, 8, 12)
     with sqlite3.connect(":memory:") as db:
         db.row_factory = sqlite3.Row
+        # Keep the literal-match fixtures inside the search window on every run.
+        db.create_function(
+            "datetime", 2, lambda clock, modifier: (now + timedelta(days=int(modifier.split()[0]))).isoformat(" ")
+        )
         db.execute(
             "CREATE TABLE screenshots (id INTEGER, timestamp TEXT, appName TEXT, windowTitle TEXT, ocrText TEXT, isIndexed INTEGER)"
         )
@@ -329,6 +474,38 @@ def test_sql_json_structures_single_column_table_text(config_path: Path, cli_run
         "rows": [{"screenshots": "12"}],
         "row_count": 1,
     }
+
+
+def test_sql_json_falls_back_to_raw_text_when_cells_contain_pipes_or_newlines(config_path: Path, cli_runner) -> None:
+    _configure_local_profile(config_path)
+    # Cell with pipe delimiter in single column output
+    sql_text_pipe = "value\n-----\na|b\n\n1 row(s)"
+    with respx.mock(base_url=FAKE_LOCAL_URL, assert_all_called=True) as router:
+        router.post("/v1/local/tool").mock(return_value=httpx.Response(200, json=_tool_response(sql_text_pipe)))
+        result = cli_runner.invoke(app, ["--json", "local", "sql", "SELECT 'a|b' AS value"])
+
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.stdout) == {"text": sql_text_pipe}
+
+    # Multiline cell resulting in row count mismatch
+    sql_text_newline = "value\n-----\na\nb\n\n1 row(s)"
+    with respx.mock(base_url=FAKE_LOCAL_URL, assert_all_called=True) as router:
+        router.post("/v1/local/tool").mock(return_value=httpx.Response(200, json=_tool_response(sql_text_newline)))
+        result_nl = cli_runner.invoke(app, ["--json", "local", "sql", "SELECT 'a' || char(10) || 'b' AS value"])
+
+    assert result_nl.exit_code == 0, result_nl.output
+    assert json.loads(result_nl.stdout) == {"text": sql_text_newline}
+
+    # Multiline cell containing an empty continuation line
+    sql_text_empty_cont = "value\n-----\na\n\nb\n\n2 row(s)"
+    with respx.mock(base_url=FAKE_LOCAL_URL, assert_all_called=True) as router:
+        router.post("/v1/local/tool").mock(return_value=httpx.Response(200, json=_tool_response(sql_text_empty_cont)))
+        result_empty_cont = cli_runner.invoke(
+            app, ["--json", "local", "sql", "SELECT 'a' || char(10) || char(10) || 'b' AS value"]
+        )
+
+    assert result_empty_cont.exit_code == 0, result_empty_cont.output
+    assert json.loads(result_empty_cont.stdout) == {"text": sql_text_empty_cont}
 
 
 def test_task_commands_route_to_local_tools(config_path: Path, cli_runner) -> None:

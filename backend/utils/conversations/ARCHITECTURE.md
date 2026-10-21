@@ -5,12 +5,61 @@ and background processing.
 
 ## Boundaries
 
+- `live_continuation.py` coordinates durable reconnect admission through
+  `database/listen_continuations.py`. The original recording binding remains
+  immutable; its continuation metadata is adopted transactionally. Resume
+  requires the same source/device and an unlocked, nondeleted in-progress row
+  inside the shared continuity window. Expired empty and unexposed losing
+  generations use lifecycle's codec-aware transactional deletion; content,
+  lock, tombstone and sync revision prevent deletion.
+
 - `factory.py`, `location.py`, `search.py`, and `transcript_chunks.py` provide
   serialization, lookup, and read-model helpers; callers retain ownership of
   request authentication and response shaping.
 - `process_conversation.py` is the synchronous enrichment coordinator. It
   persists the completed conversation and delegates expensive child work to the
-  named executor lanes.
+  named executor lanes. Custom-STT conversations skip managed-STT credits but
+  still consult `should_skip_omi_paid_postprocessing` before Omi-paid
+  structuring, summary, and memory work (#7690). That gate sits after the
+  unpaid desktop on-device / `store_projection` path (#14513) so it cannot
+  strip a local summary.
+- `processing_trigger.py` owns *why* a conversation is processed. Every caller
+  of `process_conversation` (and every finalization job) names a
+  `ProcessingTrigger`; its `PROCESSING_MODES` row fixes run-now, reprocess,
+  first-open bypass, and relevance policy together. Callers never pass
+  mode flags directly.
+- `relevance.py` owns the one keep/discard decision. Triggers assess unless
+  they are themselves a user action (first open, reprocess, merge).
+  Assessment is tiered: user restore (`sync_relevance_user_kept`), then the
+  stdlib-only rules in `relevance_rules.py`, then the `conv_discard` model for
+  the ambiguous middle; a calendar overlap overrides any discard. The outcome
+  is stored as `relevance_decision` (server-only, outside the wire model) and
+  counted in `omi_conversation_relevance_decision_total`.
+  Jev replaces the ambiguous `conv_discard` model tier for the stable
+  conversation-hash cohort selected by `CONVERSATION_RELEVANCE_JEV_PERCENT`.
+  An unset value defaults to 0, preserving hosts that were previously off;
+  production stays at 100 and dev stays at 0. There is no keep-all arm, UID
+  allowlist, or relevance shadow path. The value is the sole Jev relevance
+  control and its ops kill setting is 0. Restores, deterministic rules, and
+  calendar overlap retain precedence.
+- `owner_attribution.py` owns typed source-cluster evidence for memory writes.
+  A passive memory may be attributed to the account owner only when the
+  transcript identifies exactly one owner speaker cluster, keyed by
+  `(speaker_id_scope, speaker_id)` so merged conversations cannot collapse
+  distinct sources. Speaker resolution (`speaker_resolution.py`, run by
+  `process_conversation` before summarization) rewrites resolved segments to
+  one `conversation:{id}` scope with one id per voice, so the owner is one
+  cluster instead of one per capture chunk. Segment `is_user` labels and model-authored `about=user`
+  cannot override that evidence, including for quote promotion. Legacy
+  transcripts without cluster IDs fail closed: a `TranscriptSegment` that
+  only materialized `speaker_id` from the SPEAKER_00 default is not
+  cluster evidence.
+  Owner attribution has no Jev override. Untrusted or missing cluster evidence
+  remains fail-closed until the source attribution is corrected.
+  `transcript_for_llm.memory_transcript_from_segments` is the memory-only
+  renderer: when owner evidence is untrusted it suppresses owner names and
+  prefixes an explicit UNTRUSTED header. Summary and action-item rendering keep
+  their existing presentation.
 - `wake_word.py` owns the pure, end-of-conversation matcher and trusted inline
   prompt marker. It has no realtime state, I/O, or speaker-identity gate. The
   independent invocation classifier lives in `utils/llm/`; task-intelligence
@@ -18,7 +67,62 @@ and background processing.
 - `finalizer.py` is the durable handoff boundary for a persisted conversation.
   A caller must have already acquired a finalization-job lease before invoking
   it; it loads the conversation, performs enrichment through the postprocess
-  bulkhead, and runs external integrations.
+  bulkhead, and runs external integrations. For `SERVER_RECOVERY`, a minimal
+  structure is a typed failure before persistence. The flagged Cloud Tasks
+  worker closes that job on its first occurrence, retaining the transcript as
+  a visible completed conversation; provider and parser errors still retry.
+  A clear rule-level discard is not a minimal structure: recovery records it
+  as an explicit server-recovery discard only after strict transcript decoding,
+  so contentless rows never surface. Discard persistence omits the transcript
+  fields, preserving the stored blob byte-for-byte. It rechecks protected
+  structure, user title, and the restore marker transactionally; a raced edit or
+  restore takes the same typed-minimum terminal path, retaining a visible row
+  with no new discard decision. Selfheal reports that job as dead-lettered.
+  Every terminal that moves a `processing` row into the list (dead-letter, BYOK
+  abandonment, orphan recovery) replaces an empty title with
+  `deterministic_minimum_title`; the dead-letter also marks a transient failure
+  `summary_retryable` (see `database/conversation_finalization_jobs.py`).
+- `smart_merge.py` folds a finished pendant conversation into the immediately
+  preceding one of the same device partition when Jev says it is the same
+  occasion (`CONVERSATION_SMART_MERGE_MODE=off|shadow|merge`, default `merge`; `off`
+  is the kill switch and an unrecognized value also means `off`). The
+  finalizer calls it behind the fanout claim and before any derived effect;
+  `CAPTURE_END` only. `smart_merge_policy.py` holds the pure gates and absorb
+  payloads, `smart_merge_state.py` the benchmark question and state (A is always
+  one fragment from the survivor's `smart_merge.fragments` ledger, never its
+  regenerated summary), and `database/smart_merge.py` the transactions. The
+  survivor keeps its id; the donor becomes the sync bridge's redirect tombstone
+  (`deleted`/`discarded`/`sync_merged_into`, survivor `sync_merged_from`), so
+  existing redirect readers and the deletion purge apply unchanged. The survivor
+  is reprocessed once per merge (`ProcessingTrigger.SMART_MERGE`); a retry of a
+  donor whose cleanup or refresh failed resumes it before the fanout claim, and a
+  failed refresh releases its own invocation lease. Resume first checks the job
+  epoch/generation/binding; terminal or stale deliveries do no work. Active refresh
+  leases exclude even same-job callers, and a processing receipt prevents a vector
+  retry from rerunning the completed bundle. Deferred cleanup remains retryable. An absorb
+  requires `refreshed_revision == revision`, so a refresh never persists over a
+  newer append. The absorb also advances `sync_content_revision` to fence
+  processors that read the old transcript, and refresh persistence checks the
+  current lease owner and revision. Custom-STT rows are excluded because their
+  processing budget can refuse the required refresh. Decisions are recorded as
+  server-only `smart_merge_decision` before the absorb transaction.
+  Constants and benchmark provenance live in `config/conversation_smart_merge.py`.
+  `CONVERSATION_SMART_MERGE_MODE` defaults to `merge`; `shadow` observes without
+  absorbing, and `off` is the stop lever. The wall-clock rescue is unconditional
+  after the exact legacy gate skips a pair proven to share a recording. It uses
+  the newest fragment's own server `finished_at` and the new row's `created_at`,
+  then rechecks the legacy-or-wallclock decision inside the absorb transaction.
+  Existing smart-merge logs retain `gap_path=legacy|wallclock`; the shadow-only
+  log and metric path is retired. This change admits about 800 additional
+  merges per day fleet-wide. Revert the change or set `MODE=off` to stop merges.
+- `duplicate_capture.py` owns the advisory cross-source overlap policy (#3244).
+  After durable finalization, it links the shorter completed capture using
+  `external_data.duplicate_capture_of` plus structured overlap evidence. The
+  database transaction rechecks both captures; discard and content stay independent.
+- `shared_speech.py` confirms a window match from content (word-trigram containment of
+  the smaller transcript). Confirmed pairs join a capture group through
+  `database/capture_groups.py`, the sole writer of `capture_group`; processing writes
+  strip it. Grouping is presentation metadata; content and derived work stay per capture.
 - `meeting_treatment.py` owns the post-capture meeting policy. It uses durable
   conversation timestamps plus the union of transcribed-speech intervals, so
   dual microphone/system-audio transcripts cannot double-count speech.
@@ -58,3 +162,25 @@ and background processing.
 This package receives persisted conversation data only. Request-scoped BYOK
 context may be propagated by a live Pusher caller into `finalizer.py`, but it
 must never be written here, passed to durable task payloads, or logged.
+
+Sync lifecycle intake computes unattended speech components transactionally. A
+compatible, non-deleted explicit target keeps its ID even when empty; timestamp
+hints never adopt live rows. Explicit live targets remain excluded from automatic
+bridges after sync appends. Different existing reconnect targets may therefore
+remain separate until realtime reuses its in-progress conversation on reconnect. The pipeline
+replays bridge effects once, after audio persistence, through existing merge
+retraction/copy helpers; tombstone revision receipts skip completed cleanup. Retained donor
+redirects preserve late audio. `merge_conversations.delete_conversation_with_sync_sources`
+owns retained-source purging for user/source deletion, called by the frame-evidence
+service and developer delete endpoint. Raw DB deletion and new-target rollback do
+not orchestrate external cleanup. The shared gap
+predicate lives in `utils/conversation_continuity.py`; both paths supply speech
+silence (sync uses the default timeout; realtime can configure it per session). See `utils/sync/ARCHITECTURE.md`.
+
+EXP-004 closed under David's 2026-10-18 rulings. Owner flip and owner
+measurement were retired because label evidence did not meet the bar; attribution
+is being corrected at the source. Relevance shadows and keep-all were retired,
+and the keep-rescue path was removed. Jev relevance remains governed only by
+`CONVERSATION_RELEVANCE_JEV_PERCENT` (prod 100, dev 0, unset 0). Existing
+Firestore shadow records are left untouched and expire through their existing
+TTL. See [the closure record](../../docs/experiments/EXP-004-jev-relevance-owner-ramp.md).

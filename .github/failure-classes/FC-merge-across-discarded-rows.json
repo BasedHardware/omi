@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "id": "FC-merge-across-discarded-rows",
+  "violated_contract": "A same-occasion fold may only span a gap of uninterrupted clean capture. Discarded rows of the same source and device partition inside the survivor-to-donor gap are evidence the silence split produced fragments the user or pipeline already threw away; folding across them resurrects discarded capture inside a live conversation. On 2026-10-05 live conversation ce79e585 produced a merged span of 13:06:10-13:46:05 across five discarded captures spanning 13:13-13:40. The regression test replays it with a synthetic pre-absorb split (survivor ending 13:12:00, fragment 13:42-13:46:05).",
+  "canonical_prevention": "Before Jev and again inside the absorb transaction, scan the donor's registered preceding-conversations query with discarded=True, no limit and created_at < datetime.max (no reliance on created_at ordering matching speech times, so delayed-ingest captures cannot hide) and reject when a same-device discarded row's started_at/finished_at interval intersects the open gap (survivor.finished_at, max(donor.started_at, donor.created_at)). Endpoint touches do not block; device equality is exact; is_locked is not a barrier exemption. The only exempt row is a verified own-constituent tombstone of the survivor: deleted, redirected into it via sync_merged_into, ledgered as its donor, and listed in the survivor's fragment ledger or sync_merged_from.",
+  "canonical_prevention_artifact": [
+    "backend/database/smart_merge.py",
+    "backend/utils/conversations/smart_merge.py",
+    "backend/tests/unit/test_conversation_smart_merge_intervening_discarded.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/database/smart_merge.py",
+    "backend/utils/conversations/smart_merge.py",
+    "backend/utils/conversations/smart_merge_policy.py",
+    "backend/utils/metrics_smart_merge.py",
+    "backend/tests/unit/test_conversation_smart_merge_intervening_discarded.py",
+    "backend/tests/unit/test_conversation_smart_merge.py"
+  ],
+  "status": "open"
+}

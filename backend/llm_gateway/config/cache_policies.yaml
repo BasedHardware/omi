@@ -1,0 +1,44 @@
+# Applies after route resolution, before provider translation. Unknown lanes
+# retain provider implicit caching; no persistent explicit owner cache by default.
+default: implicit
+prefixes:
+  omi:auto:desktop-vertex-: implicit
+providers:
+  openai:
+    prefixes:
+      omi:auto:desktop-vertex-: explicit
+lanes:
+  omi:auto:dream-reasoning: implicit
+  omi:auto:dream-verify: implicit
+  omi:auto:chat-agent: explicit
+  omi:auto:chat-graph: explicit
+  omi:auto:chat-responses: explicit
+  omi:auto:chat-structured: explicit
+  omi:auto:public-shared-conversation-chat: 'off'
+  omi:auto:persona-chat: explicit
+  omi:auto:persona-chat-premium: explicit
+  omi:auto:file-chat-vision: explicit
+  omi:auto:file-chat-documents: explicit
+  omi:auto:memory-l2: explicit
+  omi:auto:memory-l2-flex: explicit
+  omi:auto:conv-structure: explicit
+  omi:auto:conv-app-result: explicit
+  omi:auto:memory-l1: explicit
+  omi:auto:proactive-notification: explicit
+  omi:auto:app-generator: explicit
+  omi:auto:fair-use: 'off'
+  omi:auto:session-titles: 'off'
+  omi:auto:web-search: 'off'
+  omi:auto:conv-action-items: explicit
+  omi:auto:conv-app-select: explicit
+  omi:auto:external-structure: explicit
+  omi:auto:daily-summary: explicit
+  omi:auto:daily-summary-simple: explicit
+  omi:auto:knowledge-graph: explicit
+  omi:auto:memories: explicit
+  omi:auto:learnings: explicit
+  omi:auto:memory-conflict: explicit
+  omi:auto:memory-conflict-flex: explicit
+  omi:auto:notifications: explicit
+  omi:auto:translation: explicit
+  omi:auto:trends: explicit

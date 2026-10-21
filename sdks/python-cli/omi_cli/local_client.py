@@ -75,7 +75,13 @@ class LocalOmiClient:
         self._maybe_log(name, response)
         if not (200 <= response.status_code < 300):
             raise self._error_from_response(response)
-        return _unwrap_tool_response(_safe_parse_json(response))
+        result = _unwrap_tool_response(_safe_parse_json(response))
+        # Desktop reports this SQL failure as text inside an ok:true envelope.
+        # Match its full message: successful table headings can start with
+        # "SQL Error:" too. Both `local sql` and `local call` share this boundary.
+        if name == "execute_sql" and result == "SQL Error: The local database could not complete that query.":
+            raise CliError(message=result, exit_code=1)
+        return result
 
     def list_tools(self) -> Any:
         """Return Desktop-local tool descriptors."""

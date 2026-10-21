@@ -285,11 +285,37 @@ def _archive_default_read_offenders(path: Path, text: str) -> List[str]:
     offenders: List[str] = []
     lines = text.splitlines()
     archive_line_re = re.compile(r"Memory(?:Tier|Layer)\.archive\b")
+    archive_exclusion_lines: Set[int] = set()
+    tree = ast.parse(text)
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.If) or len(node.body) != 1:
+            continue
+        if not isinstance(node.body[0], ast.Continue):
+            continue
+        test = node.test
+        if not isinstance(test, ast.Compare) or len(test.ops) != 1 or not isinstance(test.ops[0], ast.Eq):
+            continue
+        if len(test.comparators) != 1:
+            continue
+        left = test.left
+        right = test.comparators[0]
+        if not (
+            isinstance(left, ast.Attribute)
+            and left.attr == "memory_tier"
+            and isinstance(right, ast.Attribute)
+            and isinstance(right.value, ast.Name)
+            and right.value.id in {"MemoryTier", "MemoryLayer"}
+            and right.attr == "archive"
+        ):
+            continue
+        archive_exclusion_lines.add(node.lineno)
 
     for index, line in enumerate(lines, start=1):
         if (rel_path, index) in _ARCHIVE_DEFAULT_READ_LINE_ALLOWLIST:
             continue
         if not archive_line_re.search(line):
+            continue
+        if index in archive_exclusion_lines:
             continue
 
         window_start = max(0, index - 8)
@@ -455,3 +481,30 @@ class TestInvMemSourceRatchet:
             text = _file_text(path)
             offenders.extend(_archive_default_read_offenders(path, text))
         assert offenders == [], "INV-MEM-1 forbidden archive in default-read paths:\n" + "\n".join(offenders)
+
+    def test_archive_exclusion_guard_is_recognized_structurally(self):
+        text = """
+def read_default(memories):
+    for memory in memories:
+        if memory.memory_tier == MemoryTier.archive:
+            continue
+"""
+        assert _archive_default_read_offenders(BACKEND_DIR / "utils/memory/example.py", text) == []
+
+    def test_archive_inclusion_remains_a_ratchet_offender(self):
+        text = """
+def read_default(memory):
+    if memory.memory_tier == MemoryTier.archive:
+        return memory
+"""
+        offenders = _archive_default_read_offenders(BACKEND_DIR / "utils/memory/example.py", text)
+        assert offenders == ["utils/memory/example.py:3: archive tier without explicit archive context"]
+
+    def test_archive_added_to_default_result_list_remains_a_ratchet_offender(self):
+        text = """
+def read_default(memory, selected):
+    if memory.memory_tier == MemoryTier.archive:
+        selected.append(memory)
+"""
+        offenders = _archive_default_read_offenders(BACKEND_DIR / "utils/memory/example.py", text)
+        assert offenders == ["utils/memory/example.py:3: archive tier without explicit archive context"]

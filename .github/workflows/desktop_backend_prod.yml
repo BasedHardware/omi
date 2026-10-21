@@ -32,6 +32,10 @@ concurrency:
   cancel-in-progress: false
 
 env:
+  # Abort a git HTTP transfer that stays under 1 KB/s for 60 s, so actions/checkout
+  # retries instead of hanging 7-10 min until the TCP reset (#22890).
+  GIT_HTTP_LOW_SPEED_LIMIT: "1000"
+  GIT_HTTP_LOW_SPEED_TIME: "60"
   SERVICE: desktop-backend
   REGION: us-central1
   FIREBASE_AUTH_PROJECT_ID: based-hardware
@@ -63,12 +67,13 @@ jobs:
           set -euo pipefail
           controls="$RUNNER_TEMP/desktop-backend-deploy-controls"
           rm -rf "$controls"
-          mkdir -p "$controls/.github/scripts" "$controls/backend/deploy" "$controls/backend/scripts" "$controls/scripts"
+          mkdir -p "$controls/.github/scripts" "$controls/backend/deploy" "$controls/backend/config" "$controls/backend/scripts" "$controls/scripts"
           cp .workflow-source/.github/scripts/desktop_backend_candidate_probe.py "$controls/.github/scripts/"
           cp .workflow-source/.github/scripts/verify_desktop_backend_image_lineage.py "$controls/.github/scripts/"
           cp .workflow-source/backend/deploy/cloud_run_gmp_sidecar.yaml "$controls/backend/deploy/"
           cp .workflow-source/backend/scripts/attach_cloud_run_gmp_sidecar.py "$controls/backend/scripts/"
           cp .workflow-source/backend/scripts/render_backend_runtime_env.py "$controls/backend/scripts/"
+          cp .workflow-source/backend/scripts/runtime_env_compat.py "$controls/backend/scripts/"
           cp .workflow-source/backend/deploy/runtime_env.yaml "$controls/backend/deploy/"
           cp .workflow-source/backend/scripts/firebase_release_probe_token.py "$controls/backend/scripts/"
           cp .workflow-source/backend/scripts/resolve_cloud_run_tagged_url.py "$controls/backend/scripts/"
@@ -167,11 +172,32 @@ jobs:
             echo "- Break glass: ${SKIP_PROOF:-false}"
           } >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Checkout immutable Firestore gate controls
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: .github/firestore-workflow
+          persist-credentials: false
+          fetch-depth: 1
+          sparse-checkout: |
+            .github/actions/firestore-readiness
+            backend/scripts
+            backend/database
+
+      - name: Verify serving Firestore indexes
+        uses: ./.github/firestore-workflow/.github/actions/firestore-readiness
+        with:
+          source_sha: ${{ steps.admitted-source.outputs.source_sha }}
+          project_id: ${{ vars.RUNTIME_GCP_PROJECT_ID }}
+          credentials_json: ${{ secrets.GCP_FIRESTORE_READONLY_CREDENTIALS }}
+
       - name: Google Auth
         id: auth
         uses: google-github-actions/auth@v3
         with:
-          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+          # Prod GitHub WIF (credential-hygiene WS-C); no JSON key, no Owner.
+          workload_identity_provider: projects/208440318997/locations/global/workloadIdentityPools/omi-gha-deploy-prod/providers/github
+          service_account: omi-ci-deployer-prod@based-hardware.iam.gserviceaccount.com
 
       - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@v3
@@ -218,7 +244,6 @@ jobs:
         run: |
           set -euo pipefail
           for secret in \
-            SERVICE_ACCOUNT_JSON \
             DESKTOP_GEMINI_API_KEY \
             DESKTOP_FIREBASE_API_KEY \
             DESKTOP_REDIS_DB_PASSWORD \
@@ -297,6 +322,29 @@ jobs:
             --region="${{ env.REGION }}" \
             --github-output "$GITHUB_OUTPUT"
 
+      # The sidecar attach re-serialises the live Cloud Run export, so it verifies
+      # the ingress env it is about to rewrite against what the manifest says it
+      # should be. Render that expectation from the manifest rather than
+      # restating it here, so the guard cannot drift from its source.
+      - name: Render desktop backend expected env state
+        id: desktop-expected-env
+        # Desktop customer-realm references resolve in the selected environment.
+        # Omitted inputs preserve existing bindings; commercial cutover is separate.
+        env:
+          SCREEN_VECTOR_STRIPE_READ_SECRET: ${{ vars.DESKTOP_SCREEN_VECTOR_STRIPE_READ_SECRET }}
+          LADDER_V1_PLUS_MONTH_PRICE_ID: ${{ vars.DESKTOP_LADDER_V1_PLUS_MONTH_PRICE_ID }}
+          LADDER_V1_PLUS_YEAR_PRICE_ID: ${{ vars.DESKTOP_LADDER_V1_PLUS_YEAR_PRICE_ID }}
+          LADDER_V1_PRO_MONTH_PRICE_ID: ${{ vars.DESKTOP_LADDER_V1_PRO_MONTH_PRICE_ID }}
+          LADDER_V1_PRO_YEAR_PRICE_ID: ${{ vars.DESKTOP_LADDER_V1_PRO_YEAR_PRICE_ID }}
+          LADDER_V1_ARCHITECT_MONTH_PRICE_ID: ${{ vars.DESKTOP_LADDER_V1_ARCHITECT_MONTH_PRICE_ID }}
+          LADDER_V1_ARCHITECT_YEAR_PRICE_ID: ${{ vars.DESKTOP_LADDER_V1_ARCHITECT_YEAR_PRICE_ID }}
+        run: |
+          set -euo pipefail
+          python3 "$DESKTOP_BACKEND_CONTROLS/backend/scripts/render_backend_runtime_env.py" \
+            --env prod \
+            --manifest "$DESKTOP_BACKEND_CONTROLS/backend/deploy/runtime_env.yaml" \
+            --desktop-state-output "$RUNNER_TEMP/desktop-backend-runtime-env-state.json" >> "$GITHUB_OUTPUT"
+
       - name: Deploy production candidate at zero traffic
         id: deploy-candidate
         uses: google-github-actions/deploy-cloudrun@v3
@@ -313,33 +361,55 @@ jobs:
             --network=${{ vars.CLOUD_RUN_VPC_NETWORK }}
             --subnet=${{ vars.CLOUD_RUN_VPC_SUBNET }}
             --vpc-egress=private-ranges-only
-            --remove-env-vars=OMI_DESKTOP_RELEASE_TAG,OMI_DESKTOP_RELEASE_SHA,OMI_DESKTOP_RELEASE_CHANNEL,AGENT_VM_TRUSTED_HEALTH_CHANNEL,AGENT_GCS_BUCKET,GCE_SERVICE_ACCOUNT,GCE_RUNTIME_SERVICE_ACCOUNT,GCE_PROJECT_ID,AGENT_VM_BOOT_IMAGE,AGENT_VM_STARTUP_URI,AGENT_VM_RELEASE_ID,AGENT_VM_IMAGE_DIGEST,AGENT_VM_STARTUP_SHA256,AGENT_VM_STOP_AUDIENCE
-            --remove-secrets=PINECONE_API_KEY,PINECONE_HOST
+            --remove-env-vars=GOOGLE_APPLICATION_CREDENTIALS,OMI_DESKTOP_RELEASE_TAG,OMI_DESKTOP_RELEASE_SHA,OMI_DESKTOP_RELEASE_CHANNEL,AGENT_VM_TRUSTED_HEALTH_CHANNEL,AGENT_GCS_BUCKET,GCE_SERVICE_ACCOUNT,GCE_RUNTIME_SERVICE_ACCOUNT,GCE_PROJECT_ID,AGENT_VM_BOOT_IMAGE,AGENT_VM_STARTUP_URI,AGENT_VM_RELEASE_ID,AGENT_VM_IMAGE_DIGEST,AGENT_VM_STARTUP_SHA256,AGENT_VM_STOP_AUDIENCE
+            --service-account=desktop-backend-runtime@based-hardware.iam.gserviceaccount.com
+            --remove-secrets=PINECONE_API_KEY,PINECONE_HOST,/secrets/firebase/service-account.json
           env_vars: |
+            STT_CAP_DISPATCH_ENFORCEMENT=false
+            STT_CAP_DISPATCH_COHORT=
+            STT_CAP_DISPATCH_LANES=live
+            DEMAND_PROCESSING_ENABLED=false
+            DEMAND_PROCESSING_LAZY_ENABLED=false
+            DEMAND_PROCESSING_TOOL_ENABLED=false
+            DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED=false
+            DEMAND_PROCESSING_UID_ALLOWLIST=
+            DEMAND_PROCESSING_PERCENT=0
+            PROACTIVITY_V2_POSTHOG_TOKEN=phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
+            PROACTIVITY_V2_POSTHOG_HOST=https://us.posthog.com
             FIREBASE_PROJECT_ID=${{ env.FIREBASE_AUTH_PROJECT_ID }}
             USE_VERTEX_AI=true
+            TTS_PROVIDER=gemini
             GOOGLE_CLOUD_PROJECT=${{ vars.GCP_PROJECT_ID }}
             GCP_LOCATION=us-central1
             OMI_FIRESTORE_DATA_PLANE_PROJECT=${{ vars.GCP_PROJECT_ID }}
-            GOOGLE_APPLICATION_CREDENTIALS=/secrets/firebase/service-account.json
             BASE_API_URL=${{ env.PRODUCTION_DESKTOP_BACKEND_URL }}
             OMI_DESKTOP_BACKEND_RELEASE_SHA=${{ steps.admitted-source.outputs.source_sha }}
             OMI_DESKTOP_BACKEND_RELEASE_CHANNEL=production
+            OMI_VERTEX_LEGACY_TASK_MIN_CAPABLE_MACOS_BUILD=12435
             OMI_LLM_GATEWAY_URL=${{ steps.gateway-serving.outputs.gateway_url }}
             OMI_LLM_GATEWAY_FEATURE_MODE=gateway
             OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE=true
             OMI_LLM_CHAT_AGENT_ROUTE=gateway
             LLM_GATEWAY_ACCOUNTING_ENABLED=true
+            CLIENT_SUMMARIES_AT_CAP_ENABLED=true
+            CLOUD_SCREEN_VECTORS_EMBED_REFUSAL_ENABLED=true
             PROMETHEUS_SIDECAR_PORT=9090
+            MENTOR_PIPELINE=cohort
+            POSTHOG_HOST=https://us.posthog.com
+            OMI_CUSTOMER_DATA_PROJECT=${{ vars.GCP_PROJECT_ID }}
+            FIRESTORE_READ_LEDGER=1
+            FIRESTORE_READ_LEDGER_SERVICE=desktop-backend
+            ${{ steps.desktop-expected-env.outputs.ladder_price_env_vars }}
+            ${{ steps.desktop-expected-env.outputs.firestore_read_env_vars }}
           secrets: |
-            /secrets/firebase/service-account.json=SERVICE_ACCOUNT_JSON:latest
+            ${{ vars.DESKTOP_SCREEN_VECTOR_STRIPE_READ_SECRET && format('SCREEN_VECTOR_STRIPE_API_KEY={0}:latest', vars.DESKTOP_SCREEN_VECTOR_STRIPE_READ_SECRET) || '' }}
             GEMINI_API_KEY=DESKTOP_GEMINI_API_KEY:latest
             OPENAI_API_KEY=OPENAI_API_KEY:latest
             ENCRYPTION_SECRET=ENCRYPTION_SECRET:latest
             REDIS_DB_PASSWORD=DESKTOP_REDIS_DB_PASSWORD:latest
-            FIREBASE_API_KEY=DESKTOP_FIREBASE_API_KEY:latest
             REDIS_DB_HOST=DESKTOP_REDIS_DB_HOST:latest
             REDIS_DB_PORT=DESKTOP_REDIS_DB_PORT:latest
+            FIREBASE_API_KEY=DESKTOP_FIREBASE_API_KEY:latest
             ANTHROPIC_API_KEY=DESKTOP_ANTHROPIC_API_KEY:latest
             DESKTOP_LEGACY_ANTHROPIC_KEY=DESKTOP_LEGACY_ANTHROPIC_KEY:latest
             GOOGLE_CALENDAR_API_KEY=DESKTOP_GOOGLE_CALENDAR_API_KEY:latest
@@ -347,22 +417,17 @@ jobs:
             METRICS_SECRET=METRICS_SECRET:latest
             POSTHOG_PROJECT_API_KEY=POSTHOG_PROJECT_API_KEY:latest
 
-      # The sidecar attach re-serialises the live Cloud Run export, so it verifies
-      # the ingress env it is about to rewrite against what the manifest says it
-      # should be. Render that expectation from the manifest rather than
-      # restating it here, so the guard cannot drift from its source.
-      - name: Render desktop backend expected env state
-        id: desktop-expected-env
-        run: |
-          set -euo pipefail
-          python3 "$DESKTOP_BACKEND_CONTROLS/backend/scripts/render_backend_runtime_env.py" \
-            --env prod \
-            --manifest "$DESKTOP_BACKEND_CONTROLS/backend/deploy/runtime_env.yaml" \
-            --desktop-state-output "$RUNNER_TEMP/desktop-backend-runtime-env-state.json"
-
       - name: Attach Managed Prometheus sidecar to production candidate
         id: attach-gmp-sidecar
         run: |
+          # Only probe a release whose deployed source serves /healthz/live (added in #21287). A rollback to an
+          # older SHA must not get a probe its app answers with 404, which would restart instances in a loop.
+          liveness_args=()
+          if grep -q '"/healthz/live"' backend/desktop_backend.py; then
+            liveness_args=(--desktop-backend-liveness-probe)
+          else
+            echo "::warning::Deployed source has no /healthz/live; deploying without the liveness probe."
+          fi
           python3 "$DESKTOP_BACKEND_CONTROLS/backend/scripts/attach_cloud_run_gmp_sidecar.py" \
             --project="${{ vars.GCP_PROJECT_ID }}" \
             --region="$REGION" \
@@ -372,6 +437,7 @@ jobs:
             --ingress-container=desktop-backend-1 \
             --config="$DESKTOP_BACKEND_CONTROLS/backend/deploy/cloud_run_gmp_sidecar.yaml" \
             --expected-env-state="$RUNNER_TEMP/desktop-backend-runtime-env-state.json" \
+            "${liveness_args[@]}" \
             --tag="$CANDIDATE_TAG"
 
       - name: Wait for no-traffic candidate readiness
@@ -400,6 +466,24 @@ jobs:
           # so that field went empty and the guard below started failing closed. Extract
           # the image by container name instead, and assert there is exactly one match so
           # the guard still fails closed if the container topology ever changes again.
+          expect_liveness=false
+          grep -q '"/healthz/live"' backend/desktop_backend.py && expect_liveness=true
+          revision_json="$(gcloud run revisions describe "${{ steps.admitted-source.outputs.revision }}" \
+            --project="$PROJECT_ID" \
+            --region="$REGION" \
+            --format=json)"
+          jq -e --argjson expect "$expect_liveness" '
+            [.spec.containers[]? | select(.name == "desktop-backend-1")] as $ingress |
+            ($ingress | length) == 1 and
+            $ingress[0].startupProbe.tcpSocket.port == 8080 and
+            (($expect | not) or (
+              $ingress[0].livenessProbe.httpGet.path == "/healthz/live" and
+              $ingress[0].livenessProbe.httpGet.port == 8080 and
+              $ingress[0].livenessProbe.periodSeconds == 10 and
+              $ingress[0].livenessProbe.timeoutSeconds == 5 and
+              $ingress[0].livenessProbe.failureThreshold == 3
+            ))
+          ' <<< "$revision_json" >/dev/null
           runtime_image_ref="$(
             gcloud run revisions describe "${{ steps.admitted-source.outputs.revision }}" \
               --project="$PROJECT_ID" \

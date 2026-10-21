@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-account-cohort-selects-conversation-fanout",
+  "violated_contract": "INV-MEM-5 requires conversation relevance treatment to be stable for the same conversation. Selecting the Jev treatment by a per-user allowlist can make retries or different processing hosts disagree about one conversation.",
+  "canonical_prevention": "Assign relevance treatment from the stable conversation identity, preserve monotone percentage ranges, and prove the percentage-only path is consistent across retries and hosts.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_jev_ramp.py",
+    "backend/tests/unit/test_backend_runtime_env_validator.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/config/jev_decisions.py",
+    "backend/deploy/runtime_env/",
+    "backend/utils/conversations/"
+  ],
+  "status": "open"
+}

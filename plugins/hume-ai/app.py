@@ -270,7 +270,11 @@ async def create_omi_memory(
         }
 
     try:
-        url = f"https://api.omi.me/v1/integrations/{app_id}/memories?uid={uid}"
+        # The backend only serves the v2 integration import route
+        # (POST /v2/integrations/{app_id}/user/memories); the old
+        # /v1/integrations/{app_id}/memories path 404s, so every
+        # emotion memory was silently dropped.
+        url = f"https://api.omi.me/v2/integrations/{app_id}/user/memories?uid={uid}"
 
         headers = {
             "Authorization": f"Bearer {api_key}",

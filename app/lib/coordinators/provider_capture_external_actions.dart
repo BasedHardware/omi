@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:omi/backend/http/api/conversations.dart';
 
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
@@ -8,6 +9,7 @@ import 'package:omi/providers/message_provider.dart';
 import 'package:omi/providers/people_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/services/capture/capture_external_actions.dart';
+import 'package:omi/services/capture/empty_recording_notice.dart';
 
 class ProviderCaptureExternalActions implements CaptureExternalActions {
   ProviderCaptureExternalActions({
@@ -22,6 +24,21 @@ class ProviderCaptureExternalActions implements CaptureExternalActions {
   final PeopleProvider peopleProvider;
   final UsageProvider usageProvider;
 
+  /// The proxy provider rebuilds this adapter on every upstream notify. Two
+  /// adapters over the same provider instances behave identically, so the
+  /// capture controller can skip re-installing (and re-notifying) it.
+  @override
+  bool operator ==(Object other) =>
+      other is ProviderCaptureExternalActions &&
+      identical(other.conversationProvider, conversationProvider) &&
+      identical(other.messageProvider, messageProvider) &&
+      identical(other.peopleProvider, peopleProvider) &&
+      identical(other.usageProvider, usageProvider);
+
+  @override
+  int get hashCode => Object.hash(identityHashCode(conversationProvider), identityHashCode(messageProvider),
+      identityHashCode(peopleProvider), identityHashCode(usageProvider));
+
   @override
   bool? get isOutOfCredits => usageProvider.isOutOfCredits;
 
@@ -35,12 +52,14 @@ class ProviderCaptureExternalActions implements CaptureExternalActions {
   Future<void> sendVoiceMessageStreamToServer(
     List<List<int>> data, {
     required VoidCallback onFirstChunkRecived,
+    required Future<void> Function() onNoSpeech,
     required BleAudioCodec codec,
     required bool playResponseAudio,
   }) {
     return messageProvider.sendVoiceMessageStreamToServer(
       data,
       onFirstChunkRecived: onFirstChunkRecived,
+      onNoSpeech: onNoSpeech,
       codec: codec,
       playResponseAudio: playResponseAudio,
     );
@@ -67,9 +86,23 @@ class ProviderCaptureExternalActions implements CaptureExternalActions {
   }
 
   @override
+  void showEmptyRecordingExplanation() => conversationProvider.showEmptyRecordingExplanation();
+
+  @override
+  DiscardedOnlyClaim claimDiscardedOnlyExplanation() => conversationProvider.claimDiscardedOnlyExplanation();
+
+  @override
+  void clearEmptyRecordingExplanation() => conversationProvider.clearEmptyRecordingExplanation();
+
+  @override
   Future<Person?> createPerson(String name) {
     return peopleProvider.createPersonProvider(name);
   }
+
+  @override
+  Future<bool> assignSpeaker(String conversationId, List<String> segmentIds, String personId, {int? speakerId}) =>
+      assignBulkConversationTranscriptSegments(conversationId, segmentIds,
+          isUser: personId == 'user', personId: personId == 'user' ? null : personId, speakerId: speakerId);
 
   @override
   Future<void> refreshPeople() {

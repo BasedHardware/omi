@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "id": "FC-waiting-copy-ignores-pipeline-state",
+  "violated_contract": "A user-facing waiting or progress state must be composed from the capture channels the session actually has and from the pipeline's current health. Copy that names a channel the user cannot produce (photos on an audio-only setup), or that keeps presenting a healthy indefinite wait after the pipeline has entered a state that cannot resolve (out of transcription credits, transcription socket dropped, device offline, upload auto-retries exhausted), hides both the failure and the user's next step — the screen reads as busy forever instead of telling the truth. The remedy is composing the string from live capability flags, never a static union of all possible channels.",
+  "canonical_prevention": "ConversationCapturingPage derives its empty state, title, and unsynced-audio indicator from live signals — photo-capable DeviceType (Ray-Ban Meta / OpenGlass), UsageProvider.isOutOfCredits, ConnectivityProvider.isConnected, RecordingState.interrupted, and the worst WalSyncDisplayState across the session's WALs (worstSessionSyncState) — and renders terminal variants with an actionable next step (tap-to-retry via CaptureController.retryFailedSessionWalUploads for retryable failures) instead of one static waiting line. Unit tests pin the worst-state ranking and retryability, and the onboarding voice-training view renders its uploading/memorizing/personalizing phases so the post-recording wait never reads as stuck.",
+  "canonical_prevention_artifact": [
+    "app/test/unit/wal_sync_display_state_test.dart",
+    "app/test/widgets/speech_profile_onboarding_test.dart"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "app/lib/pages/conversation_capturing/**",
+    "app/lib/pages/onboarding/speech_profile_widget.dart",
+    "app/lib/services/wals/wal.dart",
+    "app/lib/l10n/app_en.arb"
+  ],
+  "status": "open"
+}

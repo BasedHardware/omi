@@ -6,12 +6,15 @@ import 'package:flutter/material.dart';
 import 'package:collection/collection.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import 'package:omi/backend/schema/capture_group.dart';
+import 'package:omi/backend/schema/conversation_speakers.dart';
 import 'package:omi/backend/schema/gen/conversation_wire.g.dart' as wire;
 import 'package:omi/backend/schema/geolocation.dart';
 import 'package:omi/utils/audio/audio_timeline_mapper.dart';
 import 'package:omi/backend/schema/message.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
+import 'package:omi/ui/omi_tokens.dart';
 
 /// Grep-style transcript hit from conversation search (seek-to-moment).
 class TranscriptMatchSnippet {
@@ -279,55 +282,6 @@ class CalendarEventLink {
   Map<String, dynamic> toJson() => toGenerated().toJson();
 }
 
-/// A booked calendar event that has no recorded conversation (SCA-381).
-///
-/// The Conversations list renders these as an honest "Not captured" group
-/// beside the audio rows; they are calendar rows, never conversations.
-class CalendarCaptureGap {
-  final String eventId;
-  final String title;
-  final DateTime startTime;
-  final DateTime endTime;
-  final String status;
-  final String coverage;
-
-  CalendarCaptureGap({
-    required this.eventId,
-    required this.title,
-    required this.startTime,
-    required this.endTime,
-    this.status = 'confirmed',
-    this.coverage = 'not_captured',
-  });
-
-  factory CalendarCaptureGap.fromJson(Map<String, dynamic> json) {
-    return CalendarCaptureGap.fromGenerated(wire.GeneratedCalendarCaptureGap.fromJson(json));
-  }
-
-  factory CalendarCaptureGap.fromGenerated(wire.GeneratedCalendarCaptureGap generated) {
-    return CalendarCaptureGap(
-      eventId: generated.eventId,
-      title: generated.title,
-      startTime: generated.startTime,
-      endTime: generated.endTime,
-      status: generated.status,
-      coverage: generated.coverage,
-    );
-  }
-}
-
-/// Buckets capture gaps by the local day of their start, matching the
-/// conversation list's per-day grouping so a gap renders under its date header.
-Map<DateTime, List<CalendarCaptureGap>> groupCaptureGapsByLocalDay(List<CalendarCaptureGap> gaps) {
-  final byDay = <DateTime, List<CalendarCaptureGap>>{};
-  for (final gap in gaps) {
-    final local = gap.startTime.toLocal();
-    final day = DateTime(local.year, local.month, local.day);
-    (byDay[day] ??= <CalendarCaptureGap>[]).add(gap);
-  }
-  return byDay;
-}
-
 class AudioFile {
   final String id;
   final String uid;
@@ -412,6 +366,8 @@ class ConversationAudioInfo {
 
 class ServerConversation {
   final String id;
+  final Map<String, dynamic>? onDeviceProvenance;
+  final Map<String, dynamic>? clientProcessing;
   final DateTime createdAt;
   final DateTime? startedAt;
   final DateTime? finishedAt;
@@ -441,8 +397,28 @@ class ServerConversation {
   String? folderId;
   ConversationVisibility visibility;
 
+  /// The app keeps its historical private fallback for unknown wire values;
+  /// Siri excludes that row instead of inferring the owner's visibility.
+  final bool siriVisibilityValid;
+
   /// Search-only transcript evidence for find-and-play.
   final List<TranscriptMatchSnippet> matchSnippets;
+
+  /// The event this recording belongs to when other devices recorded it too;
+  /// null for a conversation captured by one surface.
+  final CaptureGroup? captureGroup;
+
+  /// Whether and which speaker ids are people; null on conversations processed before it existed.
+  final ConversationSpeakers? speakerResolution;
+
+  /// Server-authored: summarization failed on a transient error after its retries and a
+  /// reprocess can still succeed. Absent (false) on every other row, including rows where the
+  /// model ran and found nothing to summarize.
+  final bool summaryRetryable;
+  final bool processingDeferred;
+
+  /// Coverage projected from the server capture receipt; absent on legacy rows.
+  final String? captureCoverage;
 
   // local label
   bool isNew = false;
@@ -450,6 +426,8 @@ class ServerConversation {
   ServerConversation({
     required this.id,
     required this.createdAt,
+    this.onDeviceProvenance,
+    this.clientProcessing,
     required this.structured,
     this.startedAt,
     this.finishedAt,
@@ -471,11 +449,21 @@ class ServerConversation {
     this.starred = false,
     this.folderId,
     this.visibility = ConversationVisibility.private_,
+    this.siriVisibilityValid = true,
     this.matchSnippets = const [],
+    this.captureGroup,
+    this.speakerResolution,
+    this.summaryRetryable = false,
+    this.processingDeferred = false,
+    this.captureCoverage,
   });
 
   factory ServerConversation.fromJson(Map<String, dynamic> json) {
     final normalized = Map<String, dynamic>.from(json);
+    final captureEvidence = json['capture_evidence'];
+    if (captureEvidence is Map && captureEvidence['coverage'] is String) {
+      normalized['capture_coverage'] = captureEvidence['coverage'];
+    }
     final structured = json['structured'] is Map<String, dynamic> ? Structured.fromJson(json['structured']) : null;
     if (structured != null) {
       normalized['structured'] = structured.toGenerated().toJson();
@@ -504,7 +492,13 @@ class ServerConversation {
       structured: structured,
       geolocation: json['geolocation'] is Map<String, dynamic> ? Geolocation.fromJson(json['geolocation']) : null,
       deleted: json['deleted'] ?? false,
+      siriVisibilityValid: json['siri_visibility_valid'] != false &&
+          (json['visibility'] == null || const ['private', 'shared', 'public'].contains(json['visibility'])),
       matchSnippets: snippets,
+      processingDeferred: json['processing_deferred'] == true,
+      onDeviceProvenance:
+          json['on_device_provenance'] is Map ? Map<String, dynamic>.from(json['on_device_provenance']) : null,
+      clientProcessing: json['client_processing'] is Map ? Map<String, dynamic>.from(json['client_processing']) : null,
     );
   }
 
@@ -513,11 +507,17 @@ class ServerConversation {
     Structured? structured,
     Geolocation? geolocation,
     bool deleted = false,
+    bool siriVisibilityValid = true,
+    bool? processingDeferred,
     List<TranscriptMatchSnippet>? matchSnippets,
+    Map<String, dynamic>? onDeviceProvenance,
+    Map<String, dynamic>? clientProcessing,
   }) {
     final snippets = matchSnippets ?? const <TranscriptMatchSnippet>[];
     return ServerConversation(
       id: generated.id,
+      onDeviceProvenance: onDeviceProvenance,
+      clientProcessing: clientProcessing ?? generated.clientProcessing?.toJson(),
       createdAt: generated.createdAt,
       structured: structured ?? Structured.fromGenerated(generated.structured),
       startedAt: generated.startedAt,
@@ -549,13 +549,22 @@ class ServerConversation {
       starred: generated.starred,
       folderId: generated.folderId,
       visibility: ConversationVisibility.fromString(generated.visibility),
+      siriVisibilityValid: siriVisibilityValid,
       matchSnippets: snippets,
+      captureGroup: generated.captureGroup == null ? null : CaptureGroup.fromGenerated(generated.captureGroup!),
+      speakerResolution:
+          generated.speakerResolution == null ? null : ConversationSpeakers.fromGenerated(generated.speakerResolution!),
+      summaryRetryable: generated.summaryRetryable == true,
+      processingDeferred: processingDeferred ?? generated.toJson()['processing_deferred'] == true,
+      captureCoverage: generated.captureCoverage,
     );
   }
 
   Map<String, dynamic> toJson() {
     return {
       'id': id,
+      if (onDeviceProvenance != null) 'on_device_provenance': onDeviceProvenance,
+      if (clientProcessing != null) 'client_processing': clientProcessing,
       'created_at': createdAt.toUtc().toIso8601String(),
       'structured': structured.toJson(),
       'started_at': startedAt?.toUtc().toIso8601String(),
@@ -570,7 +579,9 @@ class ServerConversation {
       'photos': photos.map((photo) => photo.toJson()).toList(),
       'discarded': discarded,
       'deleted': deleted,
-      'source': source?.toString(),
+      // Cache/webhook payloads use the wire value (for example `sdcard`),
+      // not Dart's enum rendering (`ConversationSource.sdcard`).
+      'source': source?.name,
       'language': language,
       'external_data': externalIntegration?.toJson(),
       'calendar_event': calendarEvent?.toJson(),
@@ -579,6 +590,12 @@ class ServerConversation {
       'starred': starred,
       'folder_id': folderId,
       'visibility': visibility.value,
+      if (!siriVisibilityValid) 'siri_visibility_valid': false,
+      'capture_group': captureGroup?.toJson(),
+      'speaker_resolution': speakerResolution?.toJson(),
+      if (summaryRetryable) 'summary_retryable': true,
+      if (processingDeferred) 'processing_deferred': true,
+      if (captureCoverage != null) 'capture_coverage': captureCoverage,
     };
   }
 
@@ -608,6 +625,10 @@ class ServerConversation {
       starred: starred,
       folderId: folderId,
       visibility: visibility.value,
+      captureGroup: captureGroup?.toGenerated(),
+      speakerResolution: speakerResolution?.toGenerated(),
+      summaryRetryable: summaryRetryable ? true : null,
+      captureCoverage: captureCoverage,
     );
   }
 
@@ -644,12 +665,12 @@ class ServerConversation {
 
   Color getTagTextColor() {
     if (source == ConversationSource.screenpipe) return Colors.deepPurple;
-    return Colors.white;
+    return OmiColors.textPrimary;
   }
 
   Color getTagColor() {
     if (source == ConversationSource.screenpipe) return Colors.white;
-    return const Color(0xFF35343B);
+    return OmiColors.categorySurface;
   }
 
   VoidCallback? onTagPressed(BuildContext context) {
@@ -658,7 +679,11 @@ class ServerConversation {
   }
 
   String getTranscript({int? maxCount, bool generate = false}) {
-    var transcript = TranscriptSegment.segmentsAsString(transcriptSegments, includeTimestamps: true);
+    var transcript = TranscriptSegment.segmentsAsString(
+      transcriptSegments,
+      includeTimestamps: true,
+      unresolved: speakerResolution?.status == 'unavailable',
+    );
     if (maxCount != null && transcript.isNotEmpty) {
       transcript = transcript.substring(max(transcript.length - maxCount, 0));
     }
@@ -678,19 +703,37 @@ class ServerConversation {
     return _getDurationInSecondsByTranscripts();
   }
 
-  /// Calculates the conversation duration in seconds based on transcript segments
+  /// Calculates the conversation duration in seconds based on transcript segments.
+  ///
+  /// Computes the speech span (lastEndTime - firstStartTime) so that speech
+  /// recorded late in an ongoing continuous audio stream is not inflated by the
+  /// stream's session start offset (#18520).
   int _getDurationInSecondsByTranscripts() {
     if (transcriptSegments.isEmpty) return 0;
 
-    // Find the last segment's end time
-    double lastEndTime = 0;
+    double firstStartTime = transcriptSegments.first.start;
+    double lastEndTime = transcriptSegments.first.end;
+
     for (var segment in transcriptSegments) {
+      if (segment.start < firstStartTime) {
+        firstStartTime = segment.start;
+      }
       if (segment.end > lastEndTime) {
         lastEndTime = segment.end;
       }
     }
 
-    return lastEndTime.toInt();
+    if (firstStartTime < 0) firstStartTime = 0;
+    final duration = lastEndTime - firstStartTime;
+    return duration > 0 ? duration.toInt() : 0;
+  }
+
+  /// Show "Summary failed · Retry" only when the server says a reprocess can succeed
+  /// ([summaryRetryable]). Discarded, locked and in-flight rows stay quiet.
+  bool get showsSummaryRetry {
+    if (discarded || isLocked) return false;
+    if (status != ConversationStatus.completed) return false;
+    return summaryRetryable;
   }
 
   /// Check if this conversation has audio files available
@@ -789,6 +832,7 @@ class SyncJobStatusResponse {
   final String? lane;
   final String? reasonCode;
   final int? retryAfter;
+  final int? pollAfterMs;
 
   SyncJobStatusResponse({
     required this.jobId,
@@ -802,28 +846,15 @@ class SyncJobStatusResponse {
     this.lane,
     this.reasonCode,
     this.retryAfter,
+    this.pollAfterMs,
   });
 
   bool get isTerminal => status == 'completed' || status == 'partial_failure' || status == 'failed';
   bool get isSuccess => status == 'completed';
   bool get isPartialFailure => status == 'partial_failure';
 
-  factory SyncJobStatusResponse.fromJson(Map<String, dynamic> json) {
-    final generated = wire.GeneratedSyncJobStatusResponse.fromJson(json);
-    return SyncJobStatusResponse(
-      jobId: generated.jobId,
-      status: generated.status,
-      totalSegments: generated.totalSegments,
-      processedSegments: generated.processedSegments,
-      successfulSegments: generated.successfulSegments,
-      failedSegments: generated.failedSegments,
-      result: generated.result == null ? null : SyncLocalFilesResponse.fromGenerated(generated.result!),
-      error: generated.error,
-      lane: json['lane'] as String?,
-      reasonCode: json['reason_code'] as String?,
-      retryAfter: (json['retry_after'] as num?)?.toInt(),
-    );
-  }
+  factory SyncJobStatusResponse.fromJson(Map<String, dynamic> json) =>
+      SyncJobStatusResponse.fromGenerated(wire.GeneratedSyncJobStatusResponse.fromJson(json));
 
   factory SyncJobStatusResponse.fromGenerated(wire.GeneratedSyncJobStatusResponse generated) {
     return SyncJobStatusResponse(
@@ -835,6 +866,10 @@ class SyncJobStatusResponse {
       failedSegments: generated.failedSegments,
       result: generated.result == null ? null : SyncLocalFilesResponse.fromGenerated(generated.result!),
       error: generated.error,
+      lane: generated.lane,
+      reasonCode: generated.reasonCode,
+      retryAfter: generated.retryAfter,
+      pollAfterMs: generated.pollAfterMs,
     );
   }
 }

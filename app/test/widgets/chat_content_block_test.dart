@@ -114,7 +114,7 @@ void main() {
     await tester.pump();
   }
 
-  testWidgets('a follow-up block renders one chip that sends its own words', (tester) async {
+  testWidgets('a historical answer keeps its prose without an inline follow-up chip', (tester) async {
     final sent = <String>[];
     await pumpMessage(
       tester,
@@ -128,14 +128,10 @@ void main() {
       sendMessage: sent.add,
     );
 
-    final chip = find.byKey(const Key('chat_followup_chip'));
-    expect(chip, findsOneWidget);
-    expect(find.text('Want the rest of what she said?'), findsOneWidget);
-
-    await tester.tap(chip);
-    await tester.pump();
-
-    expect(sent, ['Want the rest of what she said?']);
+    expect(find.byKey(const Key('chat_followup_chip')), findsNothing);
+    expect(find.text('Want the rest of what she said?'), findsNothing);
+    expect(find.textContaining('You met Priya on Tuesday.'), findsOneWidget);
+    expect(sent, isEmpty);
   });
 
   testWidgets('keeps prose text blocks beside cards in a structured fallback', (tester) async {
@@ -422,10 +418,9 @@ void main() {
     expect(find.byKey(const Key('memory_review_fix_mem-1')), findsOneWidget);
   });
 
-  testWidgets('an answer that is only a follow-up asks it once, as the chip', (tester) async {
-    // With no prose of its own the message text falls back to its content
-    // blocks. The chip renders the question natively, so a prose copy would put
-    // the same words on screen twice.
+  testWidgets('a follow-up-only historical answer does not invent question prose', (tester) async {
+    // The latest follow-up is rendered by ChatPage above its composer. Historical
+    // rows must not synthesize another copy from the stored content block.
     await pumpMessage(
       tester,
       message: _decodedAiMessage(
@@ -437,8 +432,8 @@ void main() {
       ),
     );
 
-    expect(find.byKey(const Key('chat_followup_chip')), findsOneWidget);
-    expect(find.text('Want the rest of what she said?'), findsOneWidget);
+    expect(find.byKey(const Key('chat_followup_chip')), findsNothing);
+    expect(find.text('Want the rest of what she said?'), findsNothing);
   });
 
   testWidgets('a memoryReviewCard heading is not also rendered as prose', (tester) async {

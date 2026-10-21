@@ -1,14 +1,19 @@
 import asyncio
+from contextvars import copy_context
+from datetime import datetime, timezone
+import hashlib
 import json
 import types
-from unittest.mock import MagicMock, patch
+from unittest.mock import ANY, MagicMock, patch
 
 import pytest
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.testclient import TestClient
 
+from config.plan_catalog import LADDER_V1_PRICE_BINDINGS, RECOGNIZED_STRIPE_PRICE_PLAN_TYPES
 from routers import users as users_router
 from services.users import data_export
+from utils import byok, subscription as subscription_utils
 
 
 class _FakeRequest:
@@ -74,6 +79,10 @@ def test_location_context_consent_requires_disclosure_before_enabling():
 def test_run_account_deletion_wipe_retries_failed_wipe(monkeypatch):
     calls = []
 
+    async def run_wipe(*args):
+        calls.append((users_router.run_deletion_wipe_with_lease, args))
+        return False
+
     async def run_blocking(_executor, fn, *args):
         calls.append((fn, args))
         if fn is users_router.resolve_deletion_wipe_job_id:
@@ -82,13 +91,12 @@ def test_run_account_deletion_wipe_retries_failed_wipe(monkeypatch):
             return 'lock-token'
         if fn is users_router.claim_deletion_wipe_for_task:
             return 'claimed'
-        if fn is users_router.background_wipe_user_data:
-            return False
         if fn is users_router.release_job_run_lock:
             return None
         raise AssertionError(f'unexpected function {fn}')
 
     monkeypatch.setattr(users_router, 'run_blocking', run_blocking)
+    monkeypatch.setattr(users_router, 'run_deletion_wipe_with_lease', run_wipe)
     monkeypatch.setattr(users_router, 'get_account_deletion_tasks_max_attempts', lambda: 3)
 
     response = asyncio.run(
@@ -101,13 +109,17 @@ def test_run_account_deletion_wipe_retries_failed_wipe(monkeypatch):
         (users_router.resolve_deletion_wipe_job_id, ('job-1',)),
         (users_router.try_acquire_job_run_lock, ('account-deletion:uid1',)),
         (users_router.claim_deletion_wipe_for_task, ('uid1',)),
-        (users_router.background_wipe_user_data, ('uid1', 0, False)),
+        (users_router.run_deletion_wipe_with_lease, ('uid1', 0, False, 'lock-token')),
         (users_router.release_job_run_lock, ('account-deletion:uid1', 'lock-token')),
     ]
 
 
 def test_run_account_deletion_wipe_consumes_final_failed_attempt(monkeypatch):
     background_args = []
+
+    async def run_wipe(*args):
+        background_args.append(args)
+        return False
 
     async def run_blocking(_executor, fn, *args):
         if fn is users_router.resolve_deletion_wipe_job_id:
@@ -116,14 +128,12 @@ def test_run_account_deletion_wipe_consumes_final_failed_attempt(monkeypatch):
             return 'lock-token'
         if fn is users_router.claim_deletion_wipe_for_task:
             return 'claimed'
-        if fn is users_router.background_wipe_user_data:
-            background_args.append(args)
-            return False
         if fn is users_router.release_job_run_lock:
             return None
         raise AssertionError(f'unexpected function {fn}')
 
     monkeypatch.setattr(users_router, 'run_blocking', run_blocking)
+    monkeypatch.setattr(users_router, 'run_deletion_wipe_with_lease', run_wipe)
     monkeypatch.setattr(users_router, 'get_account_deletion_tasks_max_attempts', lambda: 2)
 
     response = asyncio.run(
@@ -134,7 +144,7 @@ def test_run_account_deletion_wipe_consumes_final_failed_attempt(monkeypatch):
 
     assert response.status_code == 200
     assert json.loads(response.body) == {'status': 'failed_final'}
-    assert background_args == [('uid1', 1, True)]
+    assert background_args == [('uid1', 1, True, 'lock-token')]
 
 
 def test_run_account_deletion_wipe_defers_when_locked(monkeypatch):
@@ -252,6 +262,11 @@ def test_persisted_wipe_recovers_after_enqueue_crash_and_handler_runs_once(monke
     assert reconcile() == {'requeued': 1, 'skipped': 0}
     assert state['enqueue_attempts'] == 2
 
+    async def run_wipe(*args):
+        state['wipe_runs'] += 1
+        state['status'] = 'completed'
+        return True
+
     async def run_blocking(_executor, fn, *args):
         if fn is users_router.resolve_deletion_wipe_job_id:
             if state['status'] == 'completed':
@@ -261,15 +276,12 @@ def test_persisted_wipe_recovers_after_enqueue_crash_and_handler_runs_once(monke
             return 'lock-token'
         if fn is users_router.claim_deletion_wipe_for_task:
             return 'claimed'
-        if fn is users_router.background_wipe_user_data:
-            state['wipe_runs'] += 1
-            state['status'] = 'completed'
-            return True
         if fn is users_router.release_job_run_lock:
             return None
         raise AssertionError(f'unexpected function {fn}')
 
     monkeypatch.setattr(users_router, 'run_blocking', run_blocking)
+    monkeypatch.setattr(users_router, 'run_deletion_wipe_with_lease', run_wipe)
 
     first = asyncio.run(
         users_router.run_account_deletion_wipe(_FakeRequest({'job_id': 'job-1'}), task_authentication=_task_auth())
@@ -310,6 +322,9 @@ def test_run_account_deletion_wipe_drops_non_actionable_job(monkeypatch):
 def test_run_account_deletion_wipe_preserves_lock_on_cancel(monkeypatch):
     released = []
 
+    async def run_wipe(*args):
+        raise asyncio.CancelledError()
+
     async def run_blocking(_executor, fn, *args):
         if fn is users_router.resolve_deletion_wipe_job_id:
             return {'outcome': 'resolved', 'uid': 'uid1'}
@@ -317,14 +332,13 @@ def test_run_account_deletion_wipe_preserves_lock_on_cancel(monkeypatch):
             return 'lock-token'
         if fn is users_router.claim_deletion_wipe_for_task:
             return 'claimed'
-        if fn is users_router.background_wipe_user_data:
-            raise asyncio.CancelledError()
         if fn is users_router.release_job_run_lock:
             released.append(args)
             return None
         raise AssertionError(f'unexpected function {fn}')
 
     monkeypatch.setattr(users_router, 'run_blocking', run_blocking)
+    monkeypatch.setattr(users_router, 'run_deletion_wipe_with_lease', run_wipe)
 
     try:
         asyncio.run(
@@ -346,7 +360,7 @@ def test_export_all_user_data_keeps_streaming_headers(monkeypatch):
 
     assert response.media_type == 'application/json'
     assert response.headers['content-disposition'] == 'attachment; filename="omi-export.json"'
-    iter_export.assert_called_once_with('uid1')
+    iter_export.assert_called_once_with('uid1', read_context=ANY)
 
     async def _consume():
         parts = []
@@ -420,7 +434,7 @@ def test_update_person_name_existing_returns_ok():
 def _managed_allowance():
     from utils.subscription import TranscriptionAllowance
 
-    return TranscriptionAllowance('managed', None, 'byok')
+    return TranscriptionAllowance('managed', None, 'byok', limit_seconds=None)
 
 
 @pytest.fixture(autouse=True)
@@ -436,11 +450,18 @@ def _stub_transcription_allowance():
         yield
 
 
-def test_byok_llm_only_subscription_meters_transcription_on_free_tier():
-    # Snapshot split: a validated LLM BYOK key unlocks unlimited chat/insights,
-    # but without a Deepgram header on the request the transcription/words
-    # fields must stay metered on the free-tier limits (Omi still pays for STT),
-    # not the 0/0 unlimited sentinel.
+@pytest.fixture
+def real_subscription_authority(monkeypatch):
+    """Synthetic BYOK/reviewer display plans still resolve real account entitlements."""
+    authority = MagicMock(return_value=users_router.get_default_basic_subscription())
+    monkeypatch.setattr(users_router.users_db, 'get_user_valid_subscription', authority)
+    return authority
+
+
+def test_byok_llm_only_subscription_meters_the_resolved_transcription_budget(real_subscription_authority):
+    # The LLM identity does not determine the resolved transcription budget.
+    from utils.subscription import TranscriptionAllowance
+
     basic_limits = users_router.PlanLimits(transcription_seconds=600, words_transcribed=8000)
     with patch.object(users_router.users_db, 'is_byok_active', MagicMock(return_value=True)), patch.object(
         users_router, 'request_has_llm_byok_key', MagicMock(return_value=True)
@@ -450,8 +471,14 @@ def test_byok_llm_only_subscription_meters_transcription_on_free_tier():
         users_router,
         'get_monthly_usage_for_subscription',
         MagicMock(return_value={'transcription_seconds': 120, 'words_transcribed': 500}),
+    ), patch.object(
+        users_router,
+        'resolve_transcription_allowance',
+        MagicMock(return_value=TranscriptionAllowance('managed', 480, 'plan_within_allowance', limit_seconds=600)),
     ):
-        response = users_router.get_user_subscription_endpoint(uid='uid1')
+        response = users_router.get_user_subscription_endpoint(
+            request=Request({'type': 'http', 'headers': []}), uid='uid1'
+        )
 
     assert response.subscription.plan == users_router.PlanType.unlimited
     assert response.subscription.features == ['byok']
@@ -459,15 +486,17 @@ def test_byok_llm_only_subscription_meters_transcription_on_free_tier():
     assert response.subscription.limits.insights_gained is None
     assert response.insights_gained_used == 0
     assert response.insights_gained_limit == 0
-    # Transcription/words are metered on the real free-tier usage.
+    # Transcription comes from the resolver; the existing words budget is preserved.
     assert response.subscription.limits.transcription_seconds == 600
     assert response.transcription_seconds_used == 120
     assert response.transcription_seconds_limit == 600
     assert response.words_transcribed_limit == 8000
     assert response.words_transcribed_used == 500
+    assert response.cloud_screen_vectors is False
+    real_subscription_authority.assert_called_once_with('uid1', provision=False)
 
 
-def test_byok_llm_deepgram_subscription_returns_fully_unlimited_plan():
+def test_byok_llm_deepgram_subscription_returns_fully_unlimited_plan(real_subscription_authority):
     # With a validated x-byok-deepgram header the whole snapshot is unlimited,
     # including transcription (None in the catalog, wire 0).
     with patch.object(users_router.users_db, 'is_byok_active', MagicMock(return_value=True)), patch.object(
@@ -475,7 +504,9 @@ def test_byok_llm_deepgram_subscription_returns_fully_unlimited_plan():
     ), patch.object(
         users_router, 'get_byok_key', MagicMock(side_effect=lambda p: 'dg-key' if p == 'deepgram' else None)
     ):
-        response = users_router.get_user_subscription_endpoint(uid='uid1')
+        response = users_router.get_user_subscription_endpoint(
+            request=Request({'type': 'http', 'headers': []}), uid='uid1'
+        )
 
     assert response.subscription.plan == users_router.PlanType.unlimited
     assert response.subscription.features == ['byok']
@@ -484,17 +515,23 @@ def test_byok_llm_deepgram_subscription_returns_fully_unlimited_plan():
     assert response.transcription_seconds_used == 0
     assert response.transcription_seconds_limit == 0
     assert response.words_transcribed_limit == 0
+    assert response.cloud_screen_vectors is False
+    real_subscription_authority.assert_called_once_with('uid1', provision=False)
 
 
-def test_marketplace_reviewer_subscription_endpoint_returns_unlimited_plan():
+def test_marketplace_reviewer_subscription_endpoint_returns_unlimited_plan(real_subscription_authority):
     # Same missing import on the reviewer branch (routers/users.py:1193).
     with patch.object(users_router.users_db, 'is_byok_active', MagicMock(return_value=False)), patch.dict(
         users_router.os.environ, {'MARKETPLACE_APP_REVIEWERS': 'reviewer-uid'}
     ):
-        response = users_router.get_user_subscription_endpoint(uid='reviewer-uid')
+        response = users_router.get_user_subscription_endpoint(
+            request=Request({'type': 'http', 'headers': []}), uid='reviewer-uid'
+        )
 
     assert response.subscription.plan == users_router.PlanType.unlimited
     assert response.subscription.limits.words_transcribed is None
+    assert response.cloud_screen_vectors is False
+    real_subscription_authority.assert_called_once_with('reviewer-uid', provision=False)
 
 
 def test_subscription_endpoint_falls_back_to_basic_when_no_valid_subscription():
@@ -521,7 +558,10 @@ def test_subscription_endpoint_falls_back_to_basic_when_no_valid_subscription():
         MagicMock(return_value={'used': 0.0, 'limit': None, 'unit': 'questions', 'allowed': True, 'reset_at': None}),
     ):
         response = users_router.get_user_subscription_endpoint(
-            uid='uid-without-subscription', x_app_platform='ios', x_app_version='1.0.0'
+            request=Request({'type': 'http', 'headers': []}),
+            uid='uid-without-subscription',
+            x_app_platform='ios',
+            x_app_version='1.0.0',
         )
 
     assert response.subscription.plan == users_router.PlanType.basic
@@ -552,8 +592,122 @@ def test_usage_quota_endpoint_reads_customer_firestore_like_desktop_enforcement(
         users_router.get_user_chat_usage_quota(uid='uid1', x_app_platform='desktop')
 
     snapshot_mock.assert_called_once_with(
-        'uid1', platform='desktop', firestore_client=sentinel_customer_client, provision=False
+        'uid1',
+        platform='desktop',
+        firestore_client=sentinel_customer_client,
+        provision=False,
+        required_llm_provider='anthropic',
     )
+
+
+def _mock_desktop_quota_storage(monkeypatch, *, enrolled, questions):
+    customer_client = object()
+    monkeypatch.setattr(users_router, 'get_customer_firestore_client', lambda: customer_client)
+    monkeypatch.setattr(subscription_utils, 'get_customer_firestore_client', lambda: customer_client)
+
+    def is_byok_active(uid, *, firestore_client=None):
+        assert firestore_client is customer_client
+        return enrolled
+
+    monkeypatch.setattr(users_router.users_db, 'is_byok_active', is_byok_active)
+    monkeypatch.setattr(subscription_utils, 'is_trial_paywalled', lambda *args, **kwargs: False)
+    monkeypatch.setattr(
+        subscription_utils.users_db,
+        'get_user_valid_subscription',
+        lambda *args, **kwargs: types.SimpleNamespace(plan=users_router.PlanType.basic),
+    )
+    monkeypatch.setattr(
+        subscription_utils.user_usage_db,
+        'get_monthly_chat_usage',
+        lambda *args, **kwargs: {'questions': questions, 'cost_usd': 0.0, 'reset_at': 1_790_812_800},
+    )
+
+
+@pytest.mark.parametrize(
+    'provider,enrolled,validated',
+    [
+        ('gemini', True, True),
+        ('openrouter', True, True),
+        ('openai', True, True),
+        ('deepgram', True, True),
+        ('anthropic', True, True),
+        (None, True, True),
+        ('anthropic', True, False),
+        ('anthropic', False, True),
+        (None, False, False),
+    ],
+)
+@pytest.mark.parametrize('questions', [29, 30])
+def test_desktop_usage_quota_matches_enforcement_for_enrolled_provider(
+    monkeypatch, provider, enrolled, validated, questions
+):
+    """#19331: an enrolled Gemini key cannot fund desktop's Anthropic chat."""
+    _mock_desktop_quota_storage(monkeypatch, enrolled=enrolled, questions=questions)
+
+    def exercise_request():
+        keys = {provider: 'fake-enrolled-key'} if provider else {}
+        if validated:
+            byok.set_validated_byok_keys(keys, uid='uid1')
+        else:
+            byok.set_byok_keys(keys)
+        quota = users_router.get_user_chat_usage_quota(uid='uid1', x_app_platform='macos')
+        if provider == 'anthropic' and enrolled and validated:
+            subscription_utils.enforce_desktop_chat_quota('uid1', platform='macos')
+            assert quota.allowed is True
+            assert quota.limit is None
+            assert quota.plan == 'Free (BYOK)'
+        elif questions == 30:
+            with pytest.raises(HTTPException) as exc:
+                subscription_utils.enforce_desktop_chat_quota('uid1', platform='macos')
+            assert exc.value.status_code == 402
+            assert quota.allowed is False
+            assert quota.used == exc.value.detail['used'] == 30
+            assert quota.limit == exc.value.detail['limit'] == 30
+            assert quota.reset_at == exc.value.detail['reset_at']
+            assert quota.plan_type == users_router.PlanType.basic.value
+        else:
+            subscription_utils.enforce_desktop_chat_quota('uid1', platform='macos')
+            assert quota.allowed is True
+            assert quota.used == questions
+            assert quota.limit == 30
+            assert quota.plan_type == users_router.PlanType.basic.value
+
+    copy_context().run(exercise_request)
+
+
+@pytest.mark.parametrize('provider', ['gemini', 'anthropic', None])
+def test_usage_quota_http_uses_the_validated_request_provider(monkeypatch, provider):
+    """Exercise header validation and response serialization, not a mocked gate."""
+    _mock_desktop_quota_storage(monkeypatch, enrolled=True, questions=30)
+    key = 'fake-enrolled-key'
+    state = {
+        'active': True,
+        'last_seen_at': datetime.now(timezone.utc),
+        'fingerprints': {provider: hashlib.sha256(key.encode()).hexdigest()} if provider else {},
+    }
+    monkeypatch.setattr(byok, 'get_cached_byok_state', lambda uid: state)
+    monkeypatch.setattr(users_router.auth, 'verify_token', lambda token: 'uid1')
+
+    async def authenticated_uid():
+        return 'uid1'
+
+    app = FastAPI()
+    app.add_middleware(byok.BYOKMiddleware)
+    app.dependency_overrides[users_router.auth.get_current_user_uid] = authenticated_uid
+    app.add_api_route(
+        '/v1/users/me/usage-quota', users_router.get_user_chat_usage_quota, response_model=users_router.ChatUsageQuota
+    )
+    headers = {'Authorization': 'Bearer fake-session', 'X-App-Platform': 'macos'}
+    if provider:
+        headers[byok.BYOK_HEADERS[provider]] = key
+    with TestClient(app) as client:
+        response = client.get('/v1/users/me/usage-quota', headers=headers)
+
+    assert response.status_code == 200
+    quota = response.json()
+    assert quota['allowed'] is (provider == 'anthropic')
+    assert quota['limit'] == (None if provider == 'anthropic' else 30)
+    assert quota['used'] == (0 if provider == 'anthropic' else 30)
 
 
 @pytest.mark.parametrize(
@@ -591,7 +745,7 @@ def test_usage_quota_endpoint_reports_catalog_exhaustion_policy(plan, expected_o
     assert quota.allowed is False
 
 
-def test_subscription_snapshot_carries_the_one_transcription_allowance_answer():
+def test_subscription_snapshot_carries_the_one_transcription_allowance_answer(real_subscription_authority):
     """The startup snapshot exposes exactly what the listen socket will enforce (free tier S16),
     resolved with the app platform standing in for the listen `source`."""
     from utils.subscription import TranscriptionAllowance
@@ -609,7 +763,9 @@ def test_subscription_snapshot_carries_the_one_transcription_allowance_answer():
     ), patch.object(
         users_router, 'resolve_transcription_allowance', resolver
     ):
-        response = users_router.get_user_subscription_endpoint(uid='uid1', x_app_platform='desktop')
+        response = users_router.get_user_subscription_endpoint(
+            request=Request({'type': 'http', 'headers': []}), uid='uid1', x_app_platform='desktop'
+        )
 
     assert seen == [('uid1', 'desktop')]
     assert response.transcription_allowance is not None
@@ -619,24 +775,75 @@ def test_subscription_snapshot_carries_the_one_transcription_allowance_answer():
         'reason': 'plan_allowance_exhausted',
     }
 
+    assert response.cloud_screen_vectors is False
+    real_subscription_authority.assert_called_once_with('uid1', provision=False)
 
-def test_subscription_snapshot_reuses_its_own_reads_for_the_allowance():
+
+@pytest.mark.parametrize('ladder_configured', [False, True])
+@pytest.mark.parametrize('identity_version', [None, '1'])
+@pytest.mark.parametrize('stored_price', [None, 'price_stale_firestore'])
+@pytest.mark.parametrize(
+    'real_plan,refreshed_price,expected_capability',
+    [
+        ('plus', 'price_ci_ladder_plus', False),
+        ('plus', None, None),  # Stripe outage retains the snapshot but omits unknown capability.
+        ('operator', 'price_ci_ladder_pro', True),
+        ('architect', 'price_ci_ladder_architect', True),
+        *[(plan.value, price, True) for price, plan in RECOGNIZED_STRIPE_PRICE_PLAN_TYPES.items()],
+    ],
+)
+def test_subscription_snapshot_reuses_its_own_reads_for_the_allowance(
+    monkeypatch, ladder_configured, identity_version, stored_price, real_plan, refreshed_price, expected_capability
+):
     """The ordinary branch reads the valid subscription and the monthly usage once; the resolver
     gets exactly those, so the snapshot and the allowance cannot come from different reads."""
     from utils.subscription import TranscriptionAllowance
 
+    for tier, price in [
+        ('PLUS', 'price_ci_ladder_plus'),
+        ('PRO', 'price_ci_ladder_pro'),
+        ('ARCHITECT', 'price_ci_ladder_architect'),
+    ]:
+        if ladder_configured:
+            monkeypatch.setenv(f'LADDER_V1_{tier}_MONTH_PRICE_ID', price)
+        else:
+            monkeypatch.delenv(f'LADDER_V1_{tier}_MONTH_PRICE_ID', raising=False)
+    if not ladder_configured:
+        for binding in LADDER_V1_PRICE_BINDINGS.values():
+            monkeypatch.delenv(binding['env_var'], raising=False)
+    if not ladder_configured and expected_capability is not None:
+        expected_capability = True  # Existing paid catalog mode stays legacy.
     seen: list[dict] = []
     subscription = users_router.Subscription(
-        plan=users_router.PlanType.plus, status=users_router.SubscriptionStatus.active
+        plan=users_router.PlanType(real_plan),
+        status=users_router.SubscriptionStatus.active,
+        current_price_id=stored_price,
+        stripe_subscription_id='sub_synthetic',
+        current_period_end=int(datetime.now(timezone.utc).timestamp()) + 3600,
     )
 
     def resolver(uid: str, source=None, **already_read) -> TranscriptionAllowance:
         seen.append(already_read)
         return TranscriptionAllowance('managed', 5, 'plan_within_allowance')
 
-    with patch.object(users_router.users_db, 'is_byok_active', MagicMock(return_value=False)), patch.object(
+    stripe_subscription = {'id': 'sub_synthetic', 'items': {'data': [{'price': {'id': refreshed_price}}]}}
+    with patch.object(
+        users_router.screen_vector_entitlements,
+        'read_stripe_subscription',
+        (
+            MagicMock(return_value=stripe_subscription)
+            if refreshed_price
+            else MagicMock(side_effect=RuntimeError('Stripe unavailable'))
+        ),
+    ) as billed_identity, patch.object(
+        users_router, 'should_show_new_plans', MagicMock(return_value=True)
+    ), patch.object(
+        users_router.users_db, 'is_byok_active', MagicMock(return_value=False)
+    ), patch.object(
         users_router, 'get_user_subscription', MagicMock(return_value=subscription)
-    ), patch.object(users_router, 'reconcile_basic_plan_with_stripe', MagicMock()), patch.object(
+    ), patch.object(
+        users_router, 'reconcile_basic_plan_with_stripe', MagicMock()
+    ), patch.object(
         users_router, 'get_user_valid_subscription', MagicMock(return_value=subscription)
     ), patch.object(
         users_router, 'get_monthly_usage_for_subscription', MagicMock(return_value={'transcription_seconds': 9})
@@ -662,14 +869,27 @@ def test_subscription_snapshot_reuses_its_own_reads_for_the_allowance():
     ), patch.dict(
         users_router.os.environ, {'MARKETPLACE_APP_REVIEWERS': ''}
     ):
-        response = users_router.get_user_subscription_endpoint(uid='uid1', x_app_platform='ios', x_app_version='1.0.0')
+        response = users_router.get_user_subscription_endpoint(
+            request=Request(
+                {'type': 'http', 'headers': [] if identity_version is None else [(b'x-omi-plan-identity', b'1')]}
+            ),
+            uid='uid1',
+            x_app_platform='ios',
+            x_app_version='1.0.0',
+        )
+        users_router.wire_plan_for_client.assert_called_once_with(
+            users_router.PlanType(real_plan), 'ios', '1.0.0', identity_version
+        )
 
     assert [sorted(read) for read in seen] == [['byok_active', 'subscription', 'usage']]
     assert seen[0]['byok_active'] is False
     assert seen[0]['usage'] == {'transcription_seconds': 9}
-    assert seen[0]['subscription'].plan is users_router.PlanType.plus  # not the client-facing remap
+    assert seen[0]['subscription'].plan is users_router.PlanType(real_plan)  # not the client-facing remap
+    assert seen[0]['subscription'].current_price_id == (refreshed_price or stored_price)
+    assert response.cloud_screen_vectors is expected_capability
     assert response.subscription.plan is users_router.PlanType.unlimited  # the remap still ships to the client
     assert response.transcription_allowance.remaining_seconds == 5
+    billed_identity.assert_called_once_with('sub_synthetic')
 
 
 def test_subscription_snapshot_survives_a_resolver_that_cannot_read_its_dependencies():
@@ -685,10 +905,28 @@ def test_subscription_snapshot_survives_a_resolver_that_cannot_read_its_dependen
         users_router, 'resolve_transcription_allowance', subscription_module.resolve_transcription_allowance
     ), patch.object(
         subscription_module, 'is_trial_paywalled', MagicMock(side_effect=RuntimeError('firestore unavailable'))
-    ):
-        response = users_router.get_user_subscription_endpoint(uid='uid1', x_app_platform='desktop')
+    ), patch.object(
+        users_router.users_db,
+        'get_user_valid_subscription',
+        MagicMock(side_effect=RuntimeError('subscription authority unavailable')),
+    ), patch.object(
+        users_router, 'record_fallback', MagicMock()
+    ) as fallback:
+        response = users_router.get_user_subscription_endpoint(
+            request=Request({'type': 'http', 'headers': []}), uid='uid1', x_app_platform='desktop'
+        )
 
     assert response.subscription.features == ['byok']  # the snapshot itself is intact
+    assert response.cloud_screen_vectors is None
+    assert 'cloud_screen_vectors' not in response.model_dump()
+    fallback.assert_called_once_with(
+        component='firestore_read',
+        from_mode='subscription_capability',
+        to_mode='unknown',
+        reason='unavailable',
+        outcome='degraded',
+        log=users_router.logger,
+    )
     assert response.transcription_allowance.model_dump() == {
         'mode': 'on_device',
         'remaining_seconds': 0,
@@ -772,7 +1010,9 @@ def test_llm_only_byok_snapshot_reads_monthly_usage_once_for_snapshot_and_allowa
     ), patch.dict(
         users_router.os.environ, {'MARKETPLACE_APP_REVIEWERS': ''}
     ):
-        response = users_router.get_user_subscription_endpoint(uid='uid1', x_app_platform='ios')
+        response = users_router.get_user_subscription_endpoint(
+            request=Request({'type': 'http', 'headers': []}), uid='uid1', x_app_platform='ios'
+        )
 
     assert usage_reads.call_count == 1
     assert response.transcription_seconds_used == 17_000
@@ -818,3 +1058,182 @@ def test_get_memory_summary_rating_without_score():
         result = users_router.get_memory_summary_rating(memory_id='mem-1')
 
     assert result == {'has_rating': False}
+
+
+@pytest.mark.parametrize(
+    'payload',
+    [
+        {'completed': True},
+        {'acquisition_source': 'Friend'},
+        {'device_onboarding_completed': True},
+        {'completed': False, 'acquisition_source': ''},
+        {},
+    ],
+)
+def test_onboarding_patch_writes_only_submitted_fields(payload):
+    with patch.object(users_router, 'get_user_onboarding_state') as read, patch.object(
+        users_router, 'set_user_onboarding_state'
+    ) as write:
+        result = users_router.update_onboarding_state(users_router.OnboardingStateUpdate(**payload), uid='owner')
+    assert result == {'status': 'ok'}
+    read.assert_not_called()
+    write.assert_called_once_with('owner', payload)
+
+
+def test_onboarding_patch_http_preserves_previous_completion(monkeypatch):
+    state = {'completed': False, 'acquisition_source': '', 'future_field': 'keep'}
+    monkeypatch.setattr(users_router, 'get_user_onboarding_state', lambda uid: dict(state))
+    monkeypatch.setattr(users_router, 'set_user_onboarding_state', lambda uid, updates: state.update(updates))
+    app = FastAPI()
+    app.include_router(users_router.router)
+    app.dependency_overrides[users_router.auth.get_current_user_uid] = lambda: 'fixture-owner'
+    with TestClient(app) as client:
+        completed = client.patch('/v1/users/onboarding', json={'completed': True})
+        source = client.patch('/v1/users/onboarding', json={'acquisition_source': 'Friend'})
+        tutorial = client.patch('/v1/users/onboarding', json={'device_onboarding_completed': True})
+    assert completed.status_code == source.status_code == tutorial.status_code == 200
+    assert completed.json() == {'status': 'ok', 'message': None}
+    assert state == {
+        'completed': True,
+        'acquisition_source': 'Friend',
+        'device_onboarding_completed': True,
+        'future_field': 'keep',
+    }
+
+
+@pytest.mark.parametrize('reason', ['subscription_inactive', 'usage_invalid', 'allowance_unavailable'])
+def test_closed_real_allowance_preserves_finite_snapshot_budget(monkeypatch, reason):
+    import utils.subscription as subscription_module
+
+    plan = users_router.PlanType.basic if reason == 'subscription_inactive' else users_router.PlanType.plus
+    cap = 18_000 if plan is users_router.PlanType.basic else 90_000
+    subscription = users_router.Subscription(plan=plan, status=users_router.SubscriptionStatus.active)
+    monkeypatch.setattr(users_router.users_db, 'is_byok_active', lambda uid: False)
+    monkeypatch.setattr(users_router, 'get_user_subscription', lambda uid: subscription)
+    monkeypatch.setattr(users_router, 'reconcile_basic_plan_with_stripe', lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        users_router,
+        'get_user_valid_subscription',
+        lambda uid: None if reason == 'subscription_inactive' else subscription,
+    )
+    monkeypatch.setattr(
+        users_router,
+        'get_monthly_usage_for_subscription',
+        lambda uid: {'transcription_seconds': -1 if reason == 'usage_invalid' else 10},
+    )
+    monkeypatch.setattr(users_router, 'get_paid_plan_definitions', lambda *args, **kwargs: [])
+    monkeypatch.setattr(users_router, 'should_hide_subscription_ui', lambda *args: False)
+    monkeypatch.setattr(
+        users_router,
+        'get_phone_call_quota_snapshot',
+        lambda *args, **kwargs: MagicMock(to_client_dict=lambda: {'has_access': False, 'is_paid': False}),
+    )
+    monkeypatch.setattr(
+        users_router,
+        'get_chat_quota_snapshot',
+        lambda *args, **kwargs: {'used': 0.0, 'limit': None, 'unit': 'questions', 'allowed': True, 'reset_at': None},
+    )
+    monkeypatch.setattr(
+        users_router, 'resolve_transcription_allowance', subscription_module.resolve_transcription_allowance
+    )
+    monkeypatch.setattr(
+        subscription_module,
+        'is_trial_paywalled',
+        (
+            MagicMock(side_effect=RuntimeError('dependency unavailable'))
+            if reason == 'allowance_unavailable'
+            else lambda *args, **kwargs: False
+        ),
+    )
+    monkeypatch.setattr(subscription_module, 'get_byok_key', lambda provider: None)
+    monkeypatch.setenv('MARKETPLACE_APP_REVIEWERS', '')
+    response = users_router.get_user_subscription_endpoint(
+        # Shipped clients do not declare the new six-plan capability.
+        request=Request({'type': 'http', 'headers': []}),
+        uid='fixture-user',
+        x_app_platform='ios',
+        x_app_version='1.0.600',
+    )
+    assert response.transcription_allowance.model_dump() == {
+        'mode': 'on_device',
+        'remaining_seconds': 0,
+        'reason': reason,
+    }
+    assert response.transcription_seconds_limit == cap
+    assert response.subscription.limits.transcription_seconds == cap
+
+
+@pytest.mark.parametrize('plan', [users_router.PlanType.plus, users_router.PlanType.unlimited_v2])
+@pytest.mark.parametrize(
+    'platform,version,identity,capable',
+    [
+        ('ios', '1.0.600', None, False),
+        ('android', '1.0.600', '0', False),
+        ('ios', '1.0.600', 'garbage', False),
+        ('ios', '1.0.600', '1', True),
+        ('android', '1.0.600', '1', True),
+        ('macos', '0.12.196', None, False),
+        ('macos', '0.12.197', None, True),
+        ('windows', '1.0.35', None, False),
+        ('windows', '1.0.35', '1', True),
+        ('web', '0.1.0', None, True),
+        (None, None, '1', False),
+        ('unknown', '99.0.0', '1', False),
+    ],
+)
+def test_subscription_http_negotiates_catalog_ids_before_response_validation(
+    monkeypatch, plan, platform, version, identity, capable
+):
+    """Real HTTP/response model, wire gate and allowance; only storage is fake."""
+    from utils import subscription as subscription_module
+
+    subscription = users_router.Subscription(plan=plan, status=users_router.SubscriptionStatus.active)
+    monkeypatch.setattr(users_router.users_db, 'is_byok_active', lambda uid: False)
+    monkeypatch.setattr(users_router, 'get_user_subscription', lambda uid: subscription.model_copy())
+    monkeypatch.setattr(users_router, 'get_user_valid_subscription', lambda uid: subscription.model_copy())
+    monkeypatch.setattr(users_router, 'reconcile_basic_plan_with_stripe', lambda *args: None)
+    monkeypatch.setattr(users_router, 'get_monthly_usage_for_subscription', lambda uid: {'transcription_seconds': 10})
+    monkeypatch.setattr(users_router, 'get_paid_plan_definitions', lambda *args, **kwargs: [])
+    monkeypatch.setattr(users_router, 'should_hide_subscription_ui', lambda *args: False)
+    monkeypatch.setattr(
+        users_router,
+        'get_phone_call_quota_snapshot',
+        lambda *args, **kwargs: MagicMock(to_client_dict=lambda: {'has_access': True, 'is_paid': True}),
+    )
+    monkeypatch.setattr(
+        users_router,
+        'get_chat_quota_snapshot',
+        lambda *args, **kwargs: {'used': 0.0, 'limit': None, 'unit': 'questions', 'allowed': True, 'reset_at': None},
+    )
+    monkeypatch.setattr(
+        users_router, 'resolve_transcription_allowance', subscription_module.resolve_transcription_allowance
+    )
+    monkeypatch.setattr(subscription_module, 'is_trial_paywalled', lambda *args, **kwargs: False)
+    monkeypatch.setattr(subscription_module, 'get_byok_key', lambda provider: None)
+    monkeypatch.setenv('MARKETPLACE_APP_REVIEWERS', '')
+    app = FastAPI()
+    app.add_api_route(
+        '/v1/users/me/subscription',
+        users_router.get_user_subscription_endpoint,
+        response_model=users_router.UserSubscriptionResponse,
+    )
+    app.dependency_overrides[users_router.auth.get_current_user_uid_no_byok_validation] = lambda: 'fixture-user'
+    headers = {
+        k: v
+        for k, v in {
+            'X-App-Platform': platform,
+            'X-App-Version': version,
+            'X-Omi-Plan-Identity': identity,
+        }.items()
+        if v is not None
+    }
+    with TestClient(app) as client:
+        response = client.get('/v1/users/me/subscription', headers=headers)
+    assert response.status_code == 200
+    body = response.json()
+    assert body['subscription']['plan'] == (plan.value if capable else 'unlimited')
+    # Remapping cannot change the real plan's budget or its enforcement answer.
+    assert body['transcription_seconds_limit'] == (90_000 if plan is users_router.PlanType.plus else 0)
+    assert body['transcription_allowance']['remaining_seconds'] == (
+        89_990 if plan is users_router.PlanType.plus else None
+    )

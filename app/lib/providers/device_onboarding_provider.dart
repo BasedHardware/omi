@@ -8,7 +8,13 @@ import 'package:omi/backend/schema/transcript_segment.dart';
 enum PowerCycleSubState { waitingForOff, deviceOff, waitingForReconnect, reconnected }
 
 class DeviceOnboardingProvider extends ChangeNotifier {
-  static const int totalSteps = 4;
+  static const int transcriptionStep = 0;
+  static const int askQuestionStep = 1;
+  static const int voiceReplyStep = 2;
+  static const int powerCycleStep = 3;
+  static const int doublePressStep = 4;
+  static const int allSetStep = 5;
+  static const int totalSteps = 6;
   static const int _wordThreshold = 5;
 
   int currentStep = 0;
@@ -23,6 +29,13 @@ class DeviceOnboardingProvider extends ChangeNotifier {
   bool voiceSessionActive = false;
   bool questionSent = false;
   String? aiResponse;
+  // True right after a question was dropped empty or came back with no speech
+  // detected, so the step can show a retry hint instead of processing forever.
+  bool questionFailed = false;
+
+  // Step 2: Voice reply preference. Null until the step is visited so a user
+  // who skips the tutorial before this point keeps their existing preference.
+  int? selectedVoiceResponseMode;
 
   // Step 2: Power cycle
   PowerCycleSubState powerCycleState = PowerCycleSubState.waitingForOff;
@@ -32,27 +45,34 @@ class DeviceOnboardingProvider extends ChangeNotifier {
   int doublePressCount = 0;
   bool showSingleTapHint = false;
 
+  /// A step reopened from the All Set summary; finishing it goes back to the summary instead of
+  /// walking through every later step again (#20787).
+  bool reviewingFromSummary = false;
+
   Timer? _hintTimer;
   bool _disposed = false;
 
   void startOnboarding() {
-    currentStep = 0;
+    currentStep = transcriptionStep;
     isOnboardingActive = true;
-    _resetStepState();
+    _resetOnboardingState();
     notifyListeners();
   }
 
-  void _resetStepState() {
+  void _resetOnboardingState() {
     demoSegments = [];
     wordCount = 0;
     transcriptionComplete = false;
     voiceSessionActive = false;
     questionSent = false;
     aiResponse = null;
+    questionFailed = false;
+    selectedVoiceResponseMode = null;
     powerCycleState = PowerCycleSubState.waitingForOff;
     selectedDoubleTapAction = -1;
     doublePressCount = 0;
     showSingleTapHint = false;
+    reviewingFromSummary = false;
     _hintTimer?.cancel();
     _hintTimer = null;
   }
@@ -60,9 +80,34 @@ class DeviceOnboardingProvider extends ChangeNotifier {
   void advanceStep() {
     if (currentStep < totalSteps - 1) {
       currentStep++;
-      _resetStepState();
       notifyListeners();
     }
+  }
+
+  void goToStep(int step) {
+    if (step < transcriptionStep || step >= totalSteps || step == currentStep) return;
+    reviewingFromSummary = currentStep == allSetStep;
+    currentStep = step;
+    notifyListeners();
+  }
+
+  void returnToSummary() {
+    reviewingFromSummary = false;
+    currentStep = allSetStep;
+    notifyListeners();
+  }
+
+  /// Returns true only when the tutorial establishes its initial selection.
+  bool initializeVoiceResponseMode({required bool firstRun, required int currentPreference}) {
+    if (selectedVoiceResponseMode != null) return false;
+    selectedVoiceResponseMode = firstRun ? 0 : currentPreference;
+    return true;
+  }
+
+  void selectVoiceResponseMode(int mode) {
+    if (selectedVoiceResponseMode == mode) return;
+    selectedVoiceResponseMode = mode;
+    notifyListeners();
   }
 
   void completeOnboarding() {
@@ -75,7 +120,7 @@ class DeviceOnboardingProvider extends ChangeNotifier {
   // --- Step 0: Transcription ---
 
   void onTranscriptSegments(List<TranscriptSegment> segments) {
-    if (currentStep != 0 || transcriptionComplete) return;
+    if (currentStep != transcriptionStep || transcriptionComplete) return;
 
     demoSegments = segments;
     int count = 0;
@@ -94,13 +139,13 @@ class DeviceOnboardingProvider extends ChangeNotifier {
 
   void onButtonEvent(int buttonState) {
     switch (currentStep) {
-      case 1:
+      case askQuestionStep:
         _handleStep1Button(buttonState);
         break;
-      case 2:
+      case powerCycleStep:
         // Button events not used for power cycle — we detect disconnect/reconnect instead
         break;
-      case 3:
+      case doublePressStep:
         _handleStep3Button(buttonState);
         break;
     }
@@ -111,6 +156,7 @@ class DeviceOnboardingProvider extends ChangeNotifier {
 
     if (!voiceSessionActive) {
       voiceSessionActive = true;
+      questionFailed = false;
       notifyListeners();
     } else {
       // Second press — question is being sent
@@ -121,15 +167,35 @@ class DeviceOnboardingProvider extends ChangeNotifier {
   }
 
   void onVoiceResponseReceived(String response) {
-    if (currentStep != 1) return;
+    if (currentStep != askQuestionStep) return;
     aiResponse = response;
+    notifyListeners();
+  }
+
+  /// Capture's 15 s voice-command timeout sent the question without the second press this step
+  /// counts, so move on to "Processing" exactly as the second press would (#20786).
+  void onQuestionAutoSubmitted() {
+    if (!isOnboardingActive || currentStep != askQuestionStep || !voiceSessionActive) return;
+    voiceSessionActive = false;
+    questionSent = true;
+    notifyListeners();
+  }
+
+  /// The question was dropped before sending (no audio captured) or the
+  /// server reported no speech detected. Reset back to the pre-press state
+  /// so the step can show a retry hint instead of processing forever.
+  void onVoiceQuestionFailed() {
+    if (currentStep != askQuestionStep || aiResponse != null) return;
+    voiceSessionActive = false;
+    questionSent = false;
+    questionFailed = true;
     notifyListeners();
   }
 
   // --- Step 2: Power cycle ---
 
   void onDeviceDisconnected() {
-    if (currentStep != 2) return;
+    if (currentStep != powerCycleStep) return;
     if (powerCycleState == PowerCycleSubState.waitingForOff) {
       powerCycleState = PowerCycleSubState.deviceOff;
       notifyListeners();
@@ -146,7 +212,7 @@ class DeviceOnboardingProvider extends ChangeNotifier {
   }
 
   void onDeviceReconnected() {
-    if (currentStep != 2) return;
+    if (currentStep != powerCycleStep) return;
     if (powerCycleState == PowerCycleSubState.waitingForReconnect || powerCycleState == PowerCycleSubState.deviceOff) {
       powerCycleState = PowerCycleSubState.reconnected;
       notifyListeners();

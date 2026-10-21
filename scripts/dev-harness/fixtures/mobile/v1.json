@@ -1,0 +1,19 @@
+{
+  "fixture_version": "v1",
+  "description": "Deterministic synthetic auth fixture: one local Auth-emulator user minted through the PR #11784 local-dev custom-token endpoint. No real account, provider key, or copied token.",
+  "auth": {
+    "users": [
+      {
+        "uid": "omi-fixture-v1-user-1",
+        "email": "omi-fixture-v1-user-1@local.test",
+        "display_name": "Omi Fixture v1 User 1",
+        "email_verified": true
+      }
+    ],
+    "default_user_index": 0
+  },
+  "data": {
+    "deterministic": true,
+    "notes": "v1 seeds identity only; deterministic app-data scenarios land with C2 journeys and carry their own scenario versions."
+  }
+}

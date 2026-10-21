@@ -21,12 +21,11 @@ extension AgentBridge {
     /// provider response stream), deduplicated by the adapter. Empty when the
     /// runtime predates the field or the run produced no completion.
     let modelsUsed: [String]
+    /// Provider identities observed beside served models on completion events.
+    /// Kept separate from the requested model and runtime adapter.
+    let providerTargets: [String]
     let artifacts: [AgentArtifactProjection]
     let completionDeltaArtifacts: [AgentArtifactProjection]
-    let jitCostStatus: String?
-    let jitEstimatedCostUsd: Double?
-    let jitProviderAttempts: Int?
-    let jitReceiptAttemptIDs: [String]
 
     init(
       text: String,
@@ -42,12 +41,9 @@ extension AgentBridge {
       cacheReadTokens: Int,
       cacheWriteTokens: Int,
       modelsUsed: [String] = [],
+      providerTargets: [String] = [],
       artifacts: [AgentArtifactProjection] = [],
-      completionDeltaArtifacts: [AgentArtifactProjection] = [],
-      jitCostStatus: String? = nil,
-      jitEstimatedCostUsd: Double? = nil,
-      jitProviderAttempts: Int? = nil,
-      jitReceiptAttemptIDs: [String] = []
+      completionDeltaArtifacts: [AgentArtifactProjection] = []
     ) {
       self.text = text
       self.costUsd = costUsd
@@ -62,12 +58,9 @@ extension AgentBridge {
       self.cacheReadTokens = cacheReadTokens
       self.cacheWriteTokens = cacheWriteTokens
       self.modelsUsed = modelsUsed
+      self.providerTargets = providerTargets
       self.artifacts = artifacts
       self.completionDeltaArtifacts = completionDeltaArtifacts
-      self.jitCostStatus = jitCostStatus
-      self.jitEstimatedCostUsd = jitEstimatedCostUsd
-      self.jitProviderAttempts = jitProviderAttempts
-      self.jitReceiptAttemptIDs = jitReceiptAttemptIDs
     }
 
     @discardableResult
@@ -108,16 +101,13 @@ extension AgentRuntimeProcess {
       cacheReadTokens: payload["cacheReadTokens"] as? Int ?? 0,
       cacheWriteTokens: payload["cacheWriteTokens"] as? Int ?? 0,
       modelsUsed: payload["modelsUsed"] as? [String] ?? [],
+      providerTargets: payload["providerTargets"] as? [String] ?? [],
       artifacts: AgentArtifactProjection.parseList(
         fromJSONArray: payload["artifacts"] as? [[String: Any]] ?? []
       ),
       completionDeltaArtifacts: AgentArtifactProjection.parseList(
         fromJSONArray: payload["completionDeltaArtifacts"] as? [[String: Any]] ?? []
-      ),
-      jitCostStatus: payload["jitCostStatus"] as? String,
-      jitEstimatedCostUsd: payload["jitEstimatedCostUsd"] as? Double,
-      jitProviderAttempts: payload["jitProviderAttempts"] as? Int,
-      jitReceiptAttemptIDs: payload["jitReceiptAttemptIDs"] as? [String] ?? []
+      )
     )
   }
 }

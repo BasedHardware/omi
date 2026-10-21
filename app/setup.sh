@@ -90,8 +90,13 @@ function warn_ios_debug_build_untethered() {
 
 ######################################
 # Generate device suffix from hostname
-######################################
 function generate_device_suffix() {
+  # Use hostname or a hash of it as suffix; a session harness (or two
+  # checkouts on one host) can inject a unique per-session suffix instead.
+  if [[ -n "${OMI_DEVICE_SUFFIX:-}" ]]; then
+    echo "${OMI_DEVICE_SUFFIX}"
+    return
+  fi
   # Use hostname or a hash of it as suffix
   HOSTNAME=$(hostname -s | tr '[:upper:]' '[:lower:]' | tr -cd '[:alnum:]')
   echo "${HOSTNAME}"
@@ -279,6 +284,18 @@ function prepare_mobile_build_env() {
   scripts/validate_mobile_build_config.sh --flavor "$flavor" --profile "$profile" || return 1
 }
 
+# Bake git SHA + build number into the binary. Missing dart-defines become
+# 'unknown' in Dart; local dirty trees get OMI_GIT_DIRTY=true.
+# Prints one --dart-define per line. Bash 3.2 (macOS /bin/bash) has no namerefs.
+function build_provenance_define_lines() {
+  local script_dir script
+  script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  script="$script_dir/scripts/build_provenance_dart_defines.sh"
+  if [[ -x "$script" ]]; then
+    "$script"
+  fi
+}
+
 # #######################
 # Set up Android Keystore
 # #######################
@@ -320,6 +337,10 @@ function run_build_android() {
   if [[ -n "$mode_flag" ]]; then
     flutter_args+=("$mode_flag")
   fi
+  local provenance_def
+  while IFS= read -r provenance_def; do
+    [[ -n "$provenance_def" ]] && flutter_args+=("$provenance_def")
+  done < <(build_provenance_define_lines)
   flutter pub get \
     && dart run build_runner build \
     && flutter run "${flutter_args[@]}"
@@ -409,6 +430,21 @@ function select_ios_device() {
   local count
   count=$(echo "$ios_devices" | jq 'length')
 
+  # Explicit non-interactive selection (mobile-session harnesses, CI, nested
+  # agents): pin the exact device id instead of enumerating and prompting.
+  # Fails precisely when the pinned device is absent rather than falling back
+  # to another destination.
+  local pinned="${OMI_IOS_DEVICE_ID:-}"
+  if [[ -n "$pinned" ]]; then
+    if echo "$ios_devices" | jq -e --arg id "$pinned" 'any(.[]; .id == $id)' >/dev/null; then
+      echo "$pinned"
+      return 0
+    fi
+    echo "❌ OMI_IOS_DEVICE_ID='$pinned' matches no connected iOS device or simulator." >&2
+    echo "   Available: $(echo "$ios_devices" | jq -r 'map("\(.id) \(.name)") | join(", ")')" >&2
+    return 1
+  fi
+
   if [[ "$count" -eq 0 ]]; then
     echo "❌ No iOS device or simulator found." >&2
     echo "   Boot a simulator (open -a Simulator) or connect a physical device, then retry." >&2
@@ -492,6 +528,10 @@ function run_build_ios() {
   if [[ -n "$mode_flag" ]]; then
     flutter_args+=("$mode_flag")
   fi
+  local provenance_def
+  while IFS= read -r provenance_def; do
+    [[ -n "$provenance_def" ]] && flutter_args+=("$provenance_def")
+  done < <(build_provenance_define_lines)
   local device_id
   device_id=$(select_ios_device) || return 1
   local physical_device=0

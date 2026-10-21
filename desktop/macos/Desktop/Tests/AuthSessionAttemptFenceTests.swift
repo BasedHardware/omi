@@ -184,6 +184,27 @@ final class AuthSessionAttemptFenceTests: XCTestCase {
     XCTAssertEqual(AuthState.shared.sessionPhase, .authenticated)
   }
 
+  func testLightSessionInvalidationPreservesOwnerWithoutClearingAuthUserId() async throws {
+    let ownerA = makeOwnerID("light-invalidate-a")
+    let seedAttempt = auth.beginSessionAttempt()
+    let seededOwnerA = try await auth.commitSignedInSession(
+      tokens: tokens(for: ownerA),
+      email: "a@example.test",
+      attempt: seedAttempt)
+    XCTAssertTrue(seededOwnerA)
+
+    let invalidateAttempt = auth.beginSessionAttempt()
+    let invalidated = try await auth.commitLightInvalidatedSession(attempt: invalidateAttempt)
+    XCTAssertTrue(invalidated)
+
+    XCTAssertEqual(UserDefaults.standard.string(forKey: .authUserId), ownerA)
+    XCTAssertEqual(UserDefaults.standard.string(forKey: .authUserEmail), "a@example.test")
+    XCTAssertNil(UserDefaults.standard.string(forKey: .authIdToken))
+    XCTAssertFalse(UserDefaults.standard.bool(forKey: .authIsSignedIn))
+    XCTAssertEqual(AuthState.shared.sessionPhase, .needsReauth)
+    XCTAssertEqual(RuntimeOwnerIdentity.currentOwnerId(), ownerA)
+  }
+
   func testStoragePreparationFailureLeavesPreviousCredentialGenerationIntact() async throws {
     enum PreparationFailure: Error { case injected }
 

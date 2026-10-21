@@ -148,7 +148,9 @@ def object_schema_to_ts(schema: dict[str, Any]) -> str:
     properties = schema.get('properties')
     additional = schema.get('additionalProperties')
 
-    if not isinstance(properties, dict):
+    if not isinstance(properties, dict) or not properties:
+        if additional is False:
+            return 'Record<string, never>'
         if isinstance(additional, dict):
             return f'Record<string, {schema_to_ts(additional)}>'
         if additional is True:

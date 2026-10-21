@@ -2,7 +2,8 @@
 
 **Status:** locked
 **Statement:** Purple is off-brand. UI accents and primary actions use
-white/neutral treatments, not purple hues, glows, or gradients.
+neutral treatments: white accents on dark surfaces and black accents on light surfaces, with
+the inverse color for content on the accent. No purple hues, glows, or gradients.
 
 ## MUST NOT
 

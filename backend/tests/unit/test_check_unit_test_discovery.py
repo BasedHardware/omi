@@ -26,7 +26,6 @@ from scripts.check_unit_test_discovery import (
 FAKE_WORKFLOWS = {
     'backend-hermetic-e2e.yml': 'run: bash backend/testing/e2e/run.sh',
     'desktop-backend-contracts.yml': 'run: python -m pytest backend/testing/contracts -v',
-    'parakeet_gpu_tests.yml': ('python -m pytest tests/container/test_parakeet_smoke.py -v\n'),
 }
 
 
@@ -36,10 +35,10 @@ def test_orphan_outside_all_runners_is_reported():
     assert find_orphans(all_files, selected, set(), FAKE_WORKFLOWS) == ['tests/newarea/test_orphan.py']
 
 
-def test_explicit_mode_requires_each_file_to_be_named_in_the_workflow():
+def test_retired_container_runner_requires_each_file_to_be_explicitly_manual():
     all_files = {
-        'tests/container/test_parakeet_smoke.py',  # named in the workflow
-        'tests/container/test_parakeet_unwired.py',  # not named -> orphan
+        'tests/container/test_parakeet_smoke.py',
+        'tests/container/test_parakeet_unwired.py',
     }
     assert find_orphans(all_files, set(), set(), FAKE_WORKFLOWS) == ['tests/container/test_parakeet_unwired.py']
 
@@ -56,9 +55,8 @@ def test_policy_excluded_and_allowlisted_files_are_not_orphans():
         'tests/test_legacy.py',
     }
     assert find_orphans(all_files, set(), {'tests/test_legacy.py'}, FAKE_WORKFLOWS) == []
-    assert MANUAL_ONLY_TESTS == {
-        'testing/desktop_beta_admission/firestore_contention_test.py': 'on-demand Firestore emulator proof for Beta admission fence; no scheduled runner',
-    }
+    assert 'testing/desktop_beta_admission/firestore_contention_test.py' in MANUAL_ONLY_TESTS
+    assert 'tests/container/test_parakeet_smoke.py' in MANUAL_ONLY_TESTS
 
 
 def test_commented_out_or_deselected_references_are_not_coverage():
@@ -92,9 +90,7 @@ def test_backslash_continuation_keeps_path_attached_to_its_invocation():
 
 
 def test_missing_workflow_file_is_an_error():
-    errors = workflow_map_errors(
-        {'backend-hermetic-e2e.yml': '', 'desktop-backend-contracts.yml': 'x', 'parakeet_gpu_tests.yml': 'x'}
-    )
+    errors = workflow_map_errors({'backend-hermetic-e2e.yml': '', 'desktop-backend-contracts.yml': 'x'})
     assert any('backend-hermetic-e2e.yml' in e and 'does not exist' in e for e in errors)
 
 

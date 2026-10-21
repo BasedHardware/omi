@@ -31,6 +31,7 @@ import {
   isSafeSkillName,
   __connectOmiPipeForTest,
   __callSwiftToolForTest,
+  __requestModelHeadersForTest,
   __omiRelayCapabilityRefForTest,
   __omiPendingCallsForTest,
   __registerOmiToolsForTest,
@@ -42,14 +43,9 @@ import {
   MCP_STDIO_START_CONCURRENCY,
   omiRequestIdFromRelayContext,
   omiReasoningEffortFromRelayContext,
-  omiJitBudgetFromRelayContext,
-  omiJitGatewayReceiptFromHeader,
-  omiJitGatewayReceiptFromSSE,
   omiBuiltInToolPolicyFromRelayContext,
   applyOmiProviderHeaders,
   OMI_CHAT_CONTRACT_VERSION,
-  __installOmiJitFetchGuardForTest,
-  __resetOmiJitFetchGuardForTest,
 } from "./index.ts";
 import type { ToolCallEvent } from "@earendil-works/pi-coding-agent";
 import { agentControlCapabilityManifest } from "../agent/dist/runtime/control-tool-manifest.js";
@@ -77,270 +73,6 @@ test("reasoning effort relay: strict two-token allowlist", () => {
   assert.equal(omiReasoningEffortFromRelayContext('{"reasoningEffort":"max"}'), undefined);
   assert.equal(omiReasoningEffortFromRelayContext('{"requestId":"req_1"}'), undefined);
   assert.equal(omiReasoningEffortFromRelayContext("not json"), undefined);
-});
-
-test("JIT budget relay is bounded and emits only opaque accounting headers", () => {
-  const raw = JSON.stringify({
-    jitBudget: {
-      contractVersion: "jit-cloud-qa-v1",
-      executionID: "a".repeat(64),
-      maxProviderAttempts: 3,
-      maxOutputTokensPerAttempt: 2048,
-      maxNormalizedInputTokensPerAttempt: 32768,
-      maxEstimatedSpendMicroUSD: 50000,
-    },
-  });
-  assert.equal(omiJitBudgetFromRelayContext(raw)?.executionID, "a".repeat(64));
-  assert.equal(omiJitBudgetFromRelayContext(JSON.stringify({ jitBudget: { executionID: "bad id" } })), undefined);
-  const headers: Record<string, string> = {};
-  applyOmiProviderHeaders(headers, raw);
-  assert.equal(headers["x-omi-jit-contract-version"], "jit-cloud-qa-v1");
-  assert.equal(headers["x-omi-jit-run-id"], "a".repeat(64));
-  assert.equal(headers["x-omi-jit-max-attempts"], "3");
-  assert.equal(headers["x-omi-jit-max-output-tokens"], "2048");
-  assert.equal(headers["x-omi-jit-max-input-tokens"], "32768");
-  assert.equal(headers["x-omi-jit-max-spend-micro-usd"], "50000");
-});
-
-test("JIT gateway receipt parser accepts trusted header and terminal SSE framing", () => {
-  const receipt = {
-    schema_version: "jit-gateway-receipt-v1",
-    run_id: "a".repeat(64),
-    contract_version: "jit-cloud-qa-v1",
-    attempts: [{
-      attempt_id: "invocation:1",
-      provider: "openai",
-      configured_model: "gpt-5.6-luna",
-      actual_model_version: "gpt-5.6-luna-20260901",
-      provider_response_id: "resp_1",
-      rate_card_id: "openai:gpt-5.6-luna:v1",
-      cost_basis: "rate_card",
-      usage_status: "confirmed",
-      cost_status: "estimated",
-      normalized_uncached_input_tokens: 10,
-      cached_input_tokens: 2,
-      cache_write_tokens: 0,
-      output_tokens: 4,
-      estimated_cost_micro_usd: 7,
-    }],
-    aggregate: {
-      attempt_count: 1,
-      normalized_uncached_input_tokens: 10,
-      cached_input_tokens: 2,
-      cache_write_tokens: 0,
-      output_tokens: 4,
-      estimated_cost_micro_usd: 7,
-      cost_status: "estimated",
-    },
-  };
-  const encoded = Buffer.from(JSON.stringify(receipt)).toString("base64url");
-  assert.equal(omiJitGatewayReceiptFromHeader(encoded)?.aggregate.estimatedCostMicroUSD, 7);
-  assert.equal(
-    omiJitGatewayReceiptFromSSE(`data: {"choices":[]}\n\nevent: omi_jit_receipt\ndata: ${JSON.stringify({ omi_jit_receipt: receipt })}\n\ndata: [DONE]\n\n`)?.attempts[0]?.provider,
-    "openai",
-  );
-  assert.equal(omiJitGatewayReceiptFromHeader("not-base64"), undefined);
-});
-
-test("JIT fetch guard forwards streaming bytes before the receipt arrives", async () => {
-  const originalFetch = globalThis.fetch;
-  const previousContextFile = process.env.OMI_CONTEXT_FILE;
-  const contextPath = pathJoin(tmpdir(), `omi-jit-context-${process.pid}-${Date.now()}.json`);
-  const receiptPath = `${contextPath}.receipts`;
-  const executionID = "b".repeat(64);
-  const receipt = {
-    schema_version: "jit-gateway-receipt-v1",
-    run_id: executionID,
-    contract_version: "jit-cloud-qa-v1",
-    attempts: [{
-      attempt_id: "invocation:stream",
-      provider: "openai",
-      configured_model: "gpt-5.6-luna",
-      cost_basis: "rate_card",
-      usage_status: "confirmed",
-      cost_status: "estimated",
-      normalized_uncached_input_tokens: 1,
-      cached_input_tokens: 0,
-      cache_write_tokens: 0,
-      output_tokens: 1,
-      estimated_cost_micro_usd: 1,
-    }],
-    aggregate: {
-      attempt_count: 1,
-      normalized_uncached_input_tokens: 1,
-      cached_input_tokens: 0,
-      cache_write_tokens: 0,
-      output_tokens: 1,
-      estimated_cost_micro_usd: 1,
-      cost_status: "estimated",
-    },
-  };
-  const budgetHeaders = {
-    "x-omi-jit-contract-version": "jit-cloud-qa-v1",
-    "x-omi-jit-run-id": executionID,
-    "x-omi-jit-max-attempts": "3",
-    "x-omi-jit-max-output-tokens": "2048",
-    "x-omi-jit-max-input-tokens": "32768",
-    "x-omi-jit-max-spend-micro-usd": "50000",
-  };
-  let controller: ReadableStreamDefaultController<Uint8Array> | undefined;
-  let upstreamCalls = 0;
-  const firstChunk = new TextEncoder().encode("data: {");
-  const secondChunk = new TextEncoder().encode(
-    `\"choices\":[]}${"\n\n"}data: ${JSON.stringify({ omi_jit_receipt: receipt })}\n\ndata: [DONE]\n\n`,
-  );
-  try {
-    await writeFile(contextPath, JSON.stringify({ jitReceiptPath: receiptPath }), "utf8");
-    process.env.OMI_CONTEXT_FILE = contextPath;
-    __resetOmiJitFetchGuardForTest();
-    globalThis.fetch = (async () => {
-      upstreamCalls += 1;
-      if (upstreamCalls > 1) {
-        return new Response("second", {
-          headers: {
-            "x-omi-jit-gateway-receipt": Buffer.from(JSON.stringify(receipt)).toString("base64url"),
-          },
-        });
-      }
-      return new Response(new ReadableStream<Uint8Array>({
-        start(streamController) {
-          controller = streamController;
-          streamController.enqueue(firstChunk);
-        },
-      }));
-    }) as typeof globalThis.fetch;
-    __installOmiJitFetchGuardForTest();
-
-    const response = await globalThis.fetch("https://qa.example/v1/chat", { headers: budgetHeaders });
-    const reader = response.body!.getReader();
-    const first = await reader.read();
-    assert.deepEqual(first.value, firstChunk);
-    controller!.enqueue(secondChunk);
-    const second = await reader.read();
-    assert.deepEqual(second.value, secondChunk);
-    // Pi stops after [DONE] and does not necessarily drain the HTTP body. The
-    // receipt must already be durable at this point.
-    assert.match(await readFile(receiptPath, "utf8"), new RegExp(executionID));
-    await reader.cancel("provider done");
-    const secondResponse = await globalThis.fetch("https://qa.example/v1/chat", { headers: budgetHeaders });
-    assert.equal(await secondResponse.text(), "second");
-  } finally {
-    __resetOmiJitFetchGuardForTest();
-    globalThis.fetch = originalFetch;
-    if (previousContextFile === undefined) delete process.env.OMI_CONTEXT_FILE;
-    else process.env.OMI_CONTEXT_FILE = previousContextFile;
-    await rm(contextPath, { force: true });
-    await rm(receiptPath, { force: true });
-  }
-});
-
-test("JIT fetch guard permanently blocks a run after unknown receipt cost", async () => {
-  const originalFetch = globalThis.fetch;
-  const previousContextFile = process.env.OMI_CONTEXT_FILE;
-  const executionID = "c".repeat(64);
-  const contextPath = pathJoin(tmpdir(), `omi-jit-context-${process.pid}-${Date.now()}.json`);
-  const receipt = {
-    schema_version: "jit-gateway-receipt-v1",
-    run_id: executionID,
-    contract_version: "jit-cloud-qa-v1",
-    attempts: [{
-      attempt_id: "invocation:unknown",
-      provider: "openai",
-      configured_model: "gpt-5.6-luna",
-      cost_basis: "rate_card",
-      usage_status: "unknown",
-      cost_status: "unknown",
-      normalized_uncached_input_tokens: 1,
-      cached_input_tokens: 0,
-      cache_write_tokens: 0,
-      output_tokens: 1,
-      estimated_cost_micro_usd: null,
-    }],
-    aggregate: {
-      attempt_count: 1,
-      normalized_uncached_input_tokens: 1,
-      cached_input_tokens: 0,
-      cache_write_tokens: 0,
-      output_tokens: 1,
-      estimated_cost_micro_usd: null,
-      cost_status: "unknown",
-    },
-  };
-  const headers = {
-    "x-omi-jit-contract-version": "jit-cloud-qa-v1",
-    "x-omi-jit-run-id": executionID,
-    "x-omi-jit-max-attempts": "3",
-    "x-omi-jit-max-output-tokens": "2048",
-    "x-omi-jit-max-input-tokens": "32768",
-    "x-omi-jit-max-spend-micro-usd": "50000",
-  };
-  try {
-    await writeFile(contextPath, JSON.stringify({ jitReceiptPath: `${contextPath}.receipts` }), "utf8");
-    process.env.OMI_CONTEXT_FILE = contextPath;
-    __resetOmiJitFetchGuardForTest();
-    globalThis.fetch = (async () => new Response(
-      `data: ${JSON.stringify({ omi_jit_receipt: receipt })}\n\n`,
-      { headers: { "content-type": "text/event-stream" } },
-    )) as typeof globalThis.fetch;
-    __installOmiJitFetchGuardForTest();
-    const response = await globalThis.fetch("https://qa.example/v1/chat", { headers });
-    await response.text();
-    await assert.rejects(
-      globalThis.fetch("https://qa.example/v1/chat", { headers }),
-      /receipt missing or qualification budget exhausted/,
-    );
-  } finally {
-    __resetOmiJitFetchGuardForTest();
-    globalThis.fetch = originalFetch;
-    if (previousContextFile === undefined) delete process.env.OMI_CONTEXT_FILE;
-    else process.env.OMI_CONTEXT_FILE = previousContextFile;
-    await rm(contextPath, { force: true });
-    await rm(`${contextPath}.receipts`, { force: true });
-  }
-});
-
-test("JIT fetch guard blocks later rounds when a body is cancelled before terminal receipt", async () => {
-  const originalFetch = globalThis.fetch;
-  const previousContextFile = process.env.OMI_CONTEXT_FILE;
-  const executionID = "d".repeat(64);
-  const contextPath = pathJoin(tmpdir(), `omi-jit-context-${process.pid}-${Date.now()}.json`);
-  const headers = {
-    "x-omi-jit-contract-version": "jit-cloud-qa-v1",
-    "x-omi-jit-run-id": executionID,
-    "x-omi-jit-max-attempts": "3",
-    "x-omi-jit-max-output-tokens": "2048",
-    "x-omi-jit-max-input-tokens": "32768",
-    "x-omi-jit-max-spend-micro-usd": "50000",
-  };
-  let controller: ReadableStreamDefaultController<Uint8Array> | undefined;
-  try {
-    await writeFile(contextPath, JSON.stringify({ jitReceiptPath: `${contextPath}.receipts` }), "utf8");
-    process.env.OMI_CONTEXT_FILE = contextPath;
-    __resetOmiJitFetchGuardForTest();
-    globalThis.fetch = (async () => new Response(new ReadableStream<Uint8Array>({
-      start(streamController) {
-        controller = streamController;
-        streamController.enqueue(new TextEncoder().encode("data: {\"choices\":[]}\n\n"));
-      },
-    }))) as typeof globalThis.fetch;
-    __installOmiJitFetchGuardForTest();
-    const response = await globalThis.fetch("https://qa.example/v1/chat", { headers });
-    const reader = response.body!.getReader();
-    await reader.read();
-    await reader.cancel("provider aborted before receipt");
-    await assert.rejects(
-      globalThis.fetch("https://qa.example/v1/chat", { headers }),
-      /receipt missing or qualification budget exhausted/,
-    );
-    assert.ok(controller, "the source stream was exercised");
-  } finally {
-    __resetOmiJitFetchGuardForTest();
-    globalThis.fetch = originalFetch;
-    if (previousContextFile === undefined) delete process.env.OMI_CONTEXT_FILE;
-    else process.env.OMI_CONTEXT_FILE = previousContextFile;
-    await rm(contextPath, { force: true });
-    await rm(`${contextPath}.receipts`, { force: true });
-  }
 });
 
 test("built-in tool authority requires an explicit kernel default token", () => {
@@ -1440,26 +1172,6 @@ test("OMI_TOOLS: exact pi-mono projection from canonical manifest", () => {
   );
 });
 
-test("OMI_TOOLS: the child env gate projects the JIT ledger catalog", () => {
-  const enabled = omiToolProjectionContextFromEnv({
-    OMI_EXECUTION_ROLE: "coordinator",
-    OMI_SURFACE_KIND: "main_chat",
-    OMI_JIT_KNOWLEDGE_TOOLS_ENABLED: "true",
-  });
-  const enabledNames = omiToolsForProjectionContext(enabled).map((tool) => tool.name);
-  assert.equal(enabled.jitKnowledgeToolsEnabled, true);
-  assert.ok(enabledNames.includes("create_standing_trigger"));
-
-  const disabled = omiToolProjectionContextFromEnv({
-    OMI_EXECUTION_ROLE: "coordinator",
-    OMI_SURFACE_KIND: "main_chat",
-    OMI_JIT_KNOWLEDGE_TOOLS_ENABLED: "false",
-  });
-  const disabledNames = omiToolsForProjectionContext(disabled).map((tool) => tool.name);
-  assert.equal(disabled.jitKnowledgeToolsEnabled, false);
-  assert.ok(!disabledNames.includes("create_standing_trigger"));
-});
-
 test("OMI_TOOLS: leaf projection omits every agent-management tool", () => {
   const names = omiToolsForExecutionRole("leaf").map((tool) => tool.name);
   assert.ok(!names.includes("spawn_agent"));
@@ -1614,12 +1326,25 @@ test("OMI_TOOLS: required fields match expected per tool", () => {
     check_permission_status: [],
     request_permission: ["type"],
     web_search: ["query", "scope"],
+    screenshot: [],
+    get_work_context: [],
+    search_contacts: ["query"],
+    list_message_chats: [],
+    read_message_history: [],
+    list_mail_messages: [],
+    send_message: ["to", "text"],
+    run_applescript: ["script"],
+    get_product_kb: [],
   };
   for (const tool of OMI_TOOLS) {
     const req = (tool.parameters as any).required ?? [];
+    assert.ok(
+      Object.prototype.hasOwnProperty.call(expected, tool.name),
+      `${tool.name} is missing from the expected required-field table`,
+    );
     assert.deepEqual(
       req.sort(),
-      (expected[tool.name] ?? []).sort(),
+      expected[tool.name].sort(),
       `${tool.name} required fields mismatch`,
     );
   }
@@ -3006,4 +2731,155 @@ test("registerUserMcpTools: a connecting server gets neutral frozen wording, and
     if (previous === undefined) delete process.env.OMI_LOCAL_MCP_FILE; else process.env.OMI_LOCAL_MCP_FILE = previous;
     await rm(dir, { recursive: true, force: true });
   }
+});
+
+// Numeric HTTP status is captured before pi turns errors into opaque strings.
+import { credentialedModelFetch, type ProviderStatus } from "../agent/dist/runtime/model-fetch.js";
+
+test("model request survives aged credentials and an offline refresh without a runtime restart", async () => {
+  let now = 0;
+  let expires = 60;
+  let online = true;
+  let refreshes = 0;
+  let requests = 0;
+  const reports: ProviderStatus[] = [];
+  const modelFetch = credentialedModelFetch({
+    baseUrl: "http://127.0.0.1:9999/v2",
+    headers: async force => {
+      if (force || now >= expires) {
+        refreshes++;
+        if (!online) return { failureCode: "transport_interruption" };
+        expires = now + 60;
+      }
+      return { headers: { Authorization: "Bearer inert-test-only" } };
+    },
+    fetch: async request => {
+      assert.ok(new Request(request).headers.has("authorization"));
+      requests++;
+      return new Response("data: ok\n\n", { headers: { "content-type": "text/event-stream" } });
+    },
+    report: status => reports.push(status),
+  });
+  const send = () => modelFetch("http://127.0.0.1:9999/v2/chat/completions", { method: "POST", body: "{}" });
+  await send(); // Runtime has already made a successful provider request.
+  now = 61;
+  online = false;
+  await assert.rejects(send(), /credentials unavailable/);
+  assert.equal(requests, 1, "failed refresh must not send stale credentials");
+  online = true;
+  reports.length = 0;
+  assert.equal(await (await send()).text(), "data: ok\n\n");
+  assert.equal(refreshes, 2);
+  assert.ok(reports.every(report => report.failureCode === undefined));
+});
+
+test("bare managed 401 refreshes once, preserves replay bytes and reports typed authentication", async () => {
+  const forces: boolean[] = [];
+  const reports: ProviderStatus[] = [];
+  const bodies: string[] = [];
+  const modelFetch = credentialedModelFetch({
+    baseUrl: "http://127.0.0.1:9999/v2",
+    headers: async force => { forces.push(force); return { headers: { Authorization: "Bearer inert-test-only" } }; },
+    fetch: async request => { bodies.push(await new Request(request).text()); return new Response(null, { status: 401 }); },
+    report: status => reports.push(status),
+  });
+  const response = await modelFetch("http://127.0.0.1:9999/v2/chat/completions", { method: "POST", body: "original bytes" });
+  assert.equal(response.status, 401);
+  assert.deepEqual(forces, [false, true]);
+  assert.deepEqual(bodies, ["original bytes", "original bytes"]);
+  assert.deepEqual(reports, [{ type: "omi_provider_status", status: 401, failureCode: "authentication" }]);
+});
+
+test("BYOK and third-party 401s never become Omi session failures", async () => {
+  const forces: boolean[] = [];
+  const reports: ProviderStatus[] = [];
+  const modelFetch = credentialedModelFetch({
+    baseUrl: "http://127.0.0.1:9999/v2",
+    headers: async force => { forces.push(force); return { headers: { Authorization: "Bearer inert-test-only", "X-BYOK-OpenAI": "inert-test-only" } }; },
+    fetch: async () => new Response(null, { status: 401 }),
+    report: status => reports.push(status),
+  });
+  await modelFetch("http://127.0.0.1:9999/v2/chat/completions");
+  assert.deepEqual(forces, [false]);
+  assert.equal(reports[0].failureCode, "provider_setup_needed");
+  reports.length = 0;
+  await modelFetch("http://127.0.0.1:9998/v2/chat/completions");
+  assert.equal(reports.length, 0);
+  assert.deepEqual(forces, [false]);
+});
+
+test("successful 401 replay exposes only successful SSE and retains cancellation", async () => {
+  const controller = new AbortController();
+  let count = 0;
+  const reports: ProviderStatus[] = [];
+  const modelFetch = credentialedModelFetch({
+    baseUrl: "http://127.0.0.1:9999/v2",
+    headers: async () => ({ headers: { Authorization: "Bearer inert-test-only" } }),
+    fetch: async request => {
+      assert.equal(new Request(request).signal.aborted, false);
+      return ++count === 1 ? new Response(null, { status: 401 }) : new Response("data: first\n\ndata: [DONE]\n\n");
+    },
+    report: status => reports.push(status),
+  });
+  const response = await modelFetch("http://127.0.0.1:9999/v2/chat/completions", { signal: controller.signal });
+  assert.equal(await response.text(), "data: first\n\ndata: [DONE]\n\n");
+  assert.deepEqual(reports, [{ type: "omi_provider_status", status: 200, failureCode: undefined }]);
+  controller.abort();
+  await assert.rejects(modelFetch("http://127.0.0.1:9999/v2/chat/completions", { signal: controller.signal }));
+  assert.equal(count, 2);
+});
+
+test("model credentials use the active Unix-pipe capability and leave no pending reply", async () => {
+  __resetOmiPipeForTest();
+  const { server, sockPath } = createMockBridge();
+  const context = await installRelayCapabilityContext("cap_model_request");
+  try {
+    await new Promise<void>(resolve => server.listen(sockPath, resolve));
+    server.on("connection", socket => {
+      let buffer = "";
+      socket.on("data", data => {
+        buffer += data.toString();
+        const end = buffer.indexOf("\n");
+        if (end < 0) return;
+        const request = JSON.parse(buffer.slice(0, end));
+        buffer = buffer.slice(end + 1);
+        assert.equal(request.type, "model_headers");
+        assert.equal(request.capabilityRef, "cap_model_request");
+        assert.equal(request.forceRefresh, true);
+        assert.equal(request.token, undefined);
+        socket.write(JSON.stringify({ type: "tool_result", callId: request.callId,
+          result: JSON.stringify({ headers: { Authorization: "Bearer inert-test-only" } }) }) + "\n");
+      });
+    });
+    await __connectOmiPipeForTest(sockPath);
+    const reply = await __requestModelHeadersForTest(true, "cap_model_request");
+    assert.ok(reply.headers?.Authorization);
+    assert.equal(__omiPendingCallsForTest.size, 0);
+  } finally {
+    __resetOmiPipeForTest();
+    server.close();
+    await context.cleanup();
+    try { await unlink(sockPath); } catch {}
+  }
+});
+
+test("request authority is captured before lookup and never leaves the machine", async () => {
+  const reports: ProviderStatus[] = [];
+  const modelFetch = credentialedModelFetch({
+    baseUrl: "http://127.0.0.1:9999/v2",
+    headers: async (_force, capability) => {
+      assert.equal(capability, "cap_original_request");
+      return { headers: { Authorization: "Bearer inert-test-only" } };
+    },
+    fetch: async (request, init) => {
+      assert.equal(new Request(request, init).headers.has("x-omi-local-capability"), false);
+      return new Response(null, { status: 200 });
+    },
+    report: status => reports.push(status),
+  });
+  const headers = { "x-omi-local-capability": "cap_original_request", "x-omi-request-id": "request-original" };
+  await modelFetch("http://127.0.0.1:9999/v2/chat/completions", { headers });
+  assert.equal(reports[0].requestId, "request-original");
+  await modelFetch("http://127.0.0.1:9998/third-party", { headers });
+  assert.equal(reports.length, 1);
 });

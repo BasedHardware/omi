@@ -27,12 +27,22 @@ internal, excluded from OpenAPI, and accepts only an OIDC token from the
 configured task invoker. The handler rejects extra task fields, so content and
 credentials cannot be introduced accidentally through task payload expansion.
 
+The worker's attempt budget is the job's durable `attempt_count`, not only
+Cloud Tasks' retry header. Reconciliation creates a new named task generation,
+which resets that header; the durable count still caps failed processing at the
+configured maximum. A fresh queued generation is enqueued only by the
+transaction that created it. On failure, `finalizer.py` logs a bounded stage,
+exception class, and truncated SHA-256 keys for the job and conversation. The
+keys are log correlation aids, never metric labels; exception messages and
+transcript data are excluded. Use the job key to distinguish repeated attempts
+from distinct failing conversations before interpreting an HTTP 500 rate.
+
 ## State machine and ownership
 
 | Status | Meaning | Recovery |
 | --- | --- | --- |
-| `queued` | Intent persisted; no worker currently holds the lease. | Cloud Tasks delivery or reconciler replay. |
-| `leased` | One pusher/finalizer worker owns the current claim epoch. | A duplicate delivery returns retryable conflict; an expired lease can be reclaimed with a new epoch. |
+| `queued` | Intent persisted; no worker currently holds the lease. | Cloud Tasks delivery or reconciler replay for platform keys; stale BYOK ownership returns to `blocked_byok`. |
+| `leased` | One pusher/finalizer worker owns the current claim epoch. | A duplicate delivery returns retryable conflict; an expired platform-key lease can be reclaimed with a new epoch; expired BYOK ownership returns to `blocked_byok`. |
 | `completed` | The persisted conversation is terminally completed and the job is acknowledged. | No replay. |
 | `dead_letter` | The configured final Cloud Tasks attempt failed. | Inspect and explicitly replay after resolving the cause. |
 | `blocked_byok` | The conversation requires request-scoped BYOK credentials. | A user must present valid keys again to resume the inline pusher path. |
@@ -71,8 +81,13 @@ LISTEN_FINALIZATION_RECONCILE_STALE_SECONDS=300
 configuration. The finalizer's queue deadline, HTTP timeout, and Redis run-lock
 TTL must remain compatible; the default 1,500-second handler timeout matches
 the existing durable-work contract. The production deploy creates or updates
-the dedicated queue with five attempts and four concurrent dispatches. Other
-environments remain deliberately unconfigured, so the exact-ID customer route
+the dedicated queue with five attempts and sixteen concurrent dispatches.
+Listen finalization and self-heal recovery share this queue, so its dispatch
+delay must stay below `LISTEN_FINALIZATION_RECONCILE_STALE_SECONDS` (default
+300 s): a longer delay makes the replay reconciler re-mint generations whose
+first task has not run yet, and the queue then fills with stale-generation
+acks. Four dispatches saturated it (median delay ~6 minutes, 2026-09-26 to
+2026-09-30). Other environments remain deliberately unconfigured, so the exact-ID customer route
 fails closed with `503` there instead of executing inline.
 
 ## Customer exact-ID finalization
@@ -96,8 +111,18 @@ the opaque handoff.
 Clients can poll `GET /v1/conversations/{conversation_id}/finalization` for
 the authoritative job id, status, terminal flag, retryable flag, and bounded
 attempt counts. `queued` is the retryable state; a `dead_letter` job is
-terminal and its conversation is transitioned to `failed` and `discarded`, not
-left on `processing`.
+terminal. Its still-bound processing conversation becomes `completed` with
+`finalization_status=dead_letter`, retaining the transcript in the normal list
+for explicit reprocess. If no structured result was stored, the terminal write
+adds an empty title/overview so the API can render an untitled transcript-only
+row. The job remains terminal and cannot retry itself.
+`LISTEN_FINALIZATION_DURABLE_ATTEMPT_CAP_ENABLED=false` disables the durable
+worker cap if this terminal policy must be rolled back; bounded failure
+diagnostics remain enabled. Accepted Cloud Tasks claims consume a durable
+worker slot, including a killed worker whose lease is later replayed. Duplicate
+deliveries and live pusher session handoffs do not consume worker slots.
+When an exhausted worker sees a committed fanout, it completes the fenced job
+without rerunning processing; the dead-letter transaction refuses that state.
 
 This first migration deliberately excludes `POST /v1/conversations` (the
 Redis current-conversation pointer), `reprocess`, and routes that create a
@@ -110,7 +135,9 @@ contracts need their own durable-admission migration.
 minutes. It only enqueues work when Cloud Tasks dispatch is enabled. The
 reconciler reads a server-side bounded page of due jobs using
 `reconcile_after_at`; terminal jobs do not retain that field. It transactionally
-increments `dispatch_generation`, then enqueues a new named task. An old
+increments `dispatch_generation` for platform-key jobs, then enqueues a new named task.
+For BYOK jobs it instead revokes expired live-session ownership to `blocked_byok`,
+without dispatching or processing the job. An old
 delivery becomes `stale_generation` and must not execute. Status totals use
 Firestore aggregation counts and overdue-age sampling is bounded, so historical
 terminal jobs cannot turn periodic reconciliation into an ever-growing scan.
@@ -119,22 +146,28 @@ Operational signals:
 
 | Metric | Action threshold |
 | --- | --- |
-| `listen_finalization_oldest_nonterminal_age_seconds` | Alert on sustained age above the queue/lease budget. |
+| `listen_finalization_oldest_nonterminal_age_seconds` | Oldest `queued` + `leased` job (system-owned work); alert on sustained age above the queue/lease budget. |
+| `listen_finalization_oldest_blocked_byok_age_seconds` | Oldest job waiting for the user to reconnect with keys; informational, no alert. |
 | `listen_finalization_jobs{status="queued"}` / `{status="leased"}` | Alert on sustained backlog, not a single recovery. |
 | `listen_finalization_retries_total` | Investigate a rate increase with queue/worker error rates. |
 | `listen_finalization_dead_letter_total` / `{status="dead_letter"}` | Page for terminal failures; they require explicit replay. |
 | `omi_fallback_total{component="pusher",reason="enqueue_failed"}` | Investigate task configuration or task API availability. |
 
-To replay a terminal job safely:
+To recover a terminal job safely:
 
 1. Inspect the job document and the referenced conversation; never copy
    transcript/BYOK data into tickets or logs.
 2. Fix the underlying worker/provider/configuration failure.
-3. In a Firestore transaction, transition `dead_letter` to `queued`, increment
-   `dispatch_generation`, clear its lease, and record the approved operator
-   action in the incident.
-4. Enqueue the named task with only the new `job_id` and generation. Verify the
-   job reaches `completed` and the conversation reaches `completed`.
+3. For a transcript-only completed conversation, use the explicit user
+   reprocess route to regenerate structured results. A job replay may treat
+   the already-completed conversation as finished and cannot be relied on to
+   regenerate its summary.
+4. For a partially completed conversation whose missing fanout needs operator
+   recovery, fence the exact job/revision in a Firestore transaction before
+   transitioning `dead_letter` to `queued`, incrementing its generation and
+   clearing its lease and resetting `attempt_count`, `worker_claim_count`, and
+   `task_retry_count` to zero. Record the approved operator action in the incident.
+   Enqueue only the opaque new job id/generation and verify the missing effect.
 
 Do not replay `blocked_byok` using Omi credentials. A durable offline BYOK
 design needs a separate approved credential broker with its own retention,
@@ -142,49 +175,51 @@ rotation, deletion, audit, and IAM review.
 
 ## Abandoned BYOK jobs
 
-A `requires_byok` job can only ever execute inside a live pusher session that
-presents the user's request-scoped keys. Both BYOK transitions
-(`_resume_blocked_byok_job_txn` and `_mark_finalization_retryable_txn`) delete
-`reconcile_after_at` on purpose, so the row is invisible to the credential-free
-replay query, and `_claim_finalization_job_txn` separately refuses
-`requires_byok` jobs for the Cloud Tasks worker. When that session ends without
-finishing, nothing owns the row at all: it accumulates in `queued` forever, and
-a conversation still bound to it can sit on `processing` forever with it.
+A `requires_byok` job can only execute inside a live pusher session presenting
+request-scoped keys. Resume and retry keep `reconcile_after_at` at the queue stale
+window (default 300 seconds); claim sets it to the lease expiry. A due queued row
+is reclaimed only after its latest server-owned activity is stale, and a leased
+row only after its lease expires. Unknown ownership timestamps fail closed.
+Reclaim transactionally moves either state to `blocked_byok`, removes the due
+field and lease expiry, increments the lease epoch, and moves projection counts
+from queued/leased to blocked. It keeps the dispatch generation so the existing
+live-session resume path can proceed normally with a new claim epoch. Repeated
+reclaims are no-ops; stale terminal writes fail their ownership fence.
 
-`reconcile_abandoned_byok_finalization_jobs()` gives those rows an owner for one
-purpose only: a truthful terminal. It is **not** a replay path. It never
-finalizes a conversation, never brokers or substitutes a credential, and never
-touches `blocked_byok` (that state is still legitimately waiting for a live
-session, and it is already visible on its own gauge).
+The credential-free replay consumer only enqueues newly created `queued`
+generations. BYOK reclaim returns `blocked_byok` without a created generation,
+and the Cloud Tasks claim path independently refuses BYOK. No keys are persisted
+or supplied by recovery.
 
-* Eligible: `requires_byok`, status `queued` or `leased` with an expired lease,
-  and a server-owned last-activity instant older than
-  `LISTEN_FINALIZATION_BYOK_ABANDONED_SECONDS` (default fourteen days, clamped
-  to a one-day floor and a 90-day ceiling). A row whose age cannot be established is
-  skipped, never terminalized.
-* Terminal: `dead_letter` with `last_failure_code = byok_session_abandoned`,
-  distinct from `final_attempt_failed`, and projection shard deltas moved so the
-  metric denominator stays correct.
-* The bound conversation is closed in the same transaction **only** when it is
-  still `processing`, not `deferred`, and still bound to this exact job
-  generation. It becomes
-  `completed` (not `failed`/`discarded`, as on the worker dead-letter path) so
-  the user's recording stays retrievable and can be reprocessed with their own
-  keys. Many stranded rows bind a conversation the inline pusher lane already
-  finalized: those job rows are orphaned bookkeeping and only the job is closed.
-* Work is bounded per invocation (fixed page size, capped scan, single-equality
-  query on `requires_byok`) and eventually complete through a persisted, rotated
-  CAS cursor, exactly like the stale bare-`processing` sweep.
+Legacy queued/leased rows lacking `reconcile_after_at` are discovered by
+`recover_stranded_byok_jobs()` on each startup/periodic finalization tick, including
+inline mode. It reads at most 50 oldest rows per active status (100 total) using
+the registered `conversation_finalization_jobs_oldest_nonterminal` status +
+created-at index, with separate persisted CAS cursors that rotate at exhaustion.
+Unrelated rows cannot permanently hide later BYOK rows. Each eligible row is
+rechecked in its own ownership transaction; failed rows return on a later
+rotation. No new composite index is needed. The due page separately remains
+capped at 100 jobs in Cloud Tasks mode. Reclaim changes bookkeeping ownership;
+it does not close or process the bound conversation.
 
-The sweep is gated by `LISTEN_FINALIZATION_BYOK_ABANDONMENT_ENABLED`, default
-`true` in every environment. It ships on because no environment can rehearse
-it: dev holds zero BYOK jobs, so an off-by-default flag would defer the
-disposition of stranded rows indefinitely without producing any evidence, and
-a resumed BYOK row is reachable by no consumer in the meantime. The bounded
-age is the safety control; the flag exists to **stop** the sweep during an
-incident, not to stage its rollout. To stop it, set the value to `false` in
-`backend/deploy/runtime_env/_base.yaml` and both backend-listen chart values
-and deploy -- a `kubectl set env` override survives only until the next deploy
-of any commit. Outcomes surface on
-`listen_finalization_byok_abandonments_total{outcome=...}`
-(`abandoned_conversation_closed`, `abandoned_bookkeeping`, `skipped`, `error`).
+`reconcile_abandoned_byok_finalization_jobs()` runs at startup and periodically,
+independently of prompt reclaim. `LISTEN_FINALIZATION_BYOK_ABANDONMENT_ENABLED`
+keeps its existing default-on stop-switch semantics. The real safety control is
+`get_byok_abandoned_after()` / `LISTEN_FINALIZATION_BYOK_ABANDONED_SECONDS`
+(default fourteen days, clamped to one through ninety days).
+
+Its bounded, rotating `requires_byok == True` single-field query selects every
+status. Client-side eligibility and the terminal transaction admit old `queued`,
+expired `leased`, and `blocked_byok` rows, including a row just reclaimed.
+Reclaim stores the prior last live activity in `byok_last_activity_at`; updating
+recovery bookkeeping does not restart the abandonment clock. A real reconnect
+clears that preserved instant and refreshes activity. Unknown-age rows and live
+leases remain excluded. No new index is required.
+
+After the bound, eligible jobs become `dead_letter` with
+`last_failure_code=byok_session_abandoned`. The still-bound, non-deferred
+`processing` conversation becomes `completed` atomically, retaining the recording
+for explicit reprocessing. Projection deltas include `blocked_byok -1` when
+applicable. Status, generation, epoch and activity checks fence reconnect and
+reclaim races: a stale scan cannot terminate a newly resumed owner, and a live
+session cannot resume an already dead-lettered job.

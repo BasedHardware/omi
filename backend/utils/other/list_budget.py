@@ -38,6 +38,8 @@ except ImportError:  # pragma: no cover - defensive, the dependency is pinned
         """Fallback when google-api-core is unavailable."""
 
 
+from database.firestore_retry import FIRESTORE_NO_RETRY
+
 # Response header set on the three list routes when the read was cut short by
 # the budget. Conversations and memories return bare arrays — the wire body
 # cannot grow an envelope without breaking released clients — so the header is
@@ -66,6 +68,11 @@ LIST_READ_DEFAULT_MAX_DOCUMENTS = 25_000
 LIST_READ_MIN_RPC_SECONDS = 0.05
 
 BudgetExhaustionReason = str  # 'deadline' | 'documents'
+
+
+def indexed_list_reads_enabled() -> bool:
+    """Dark rollout of index-gated memory and slim conversation list reads."""
+    return os.getenv('OMI_INDEXED_LIST_READS_ENABLED', '').strip().lower() in {'1', 'true', 'on', 'yes'}
 
 
 def _env_float(name: str) -> Optional[float]:
@@ -104,7 +111,14 @@ def resolve_list_read_budget_seconds() -> float:
     return LIST_READ_DEFAULT_BUDGET_SECONDS
 
 
-def resolve_list_read_max_documents() -> int:
+def resolve_list_read_max_documents(*, owner_uid: Optional[str] = None, context: Any = None) -> int:
+    """Single injectable document-limit authority for request budgets.
+
+    API routes supply the authenticated owner and authorization context, never
+    a client header/query identity. A future api_max_reads_per_request entitlement
+    belongs here; no plan lookup or extra read is performed today. Existing env
+    overrides and the 25,000-document fallback keep their released semantics.
+    """
     override = _env_int('OMI_LIST_READ_MAX_DOCUMENTS')
     if override is not None and override > 0:
         return override
@@ -157,6 +171,8 @@ class ListReadBudget:
         route: str,
         seconds: Optional[float] = None,
         max_documents: Optional[int] = None,
+        owner_uid: Optional[str] = None,
+        context: Any = None,
         clock: Callable[[], float] = time.monotonic,
     ) -> "ListReadBudget":
         """Build the route's budget from the middleware-stamped request start."""
@@ -169,7 +185,11 @@ class ListReadBudget:
             # Direct handler calls (tests) have no middleware stamp.
             started = now
         budget_seconds = resolve_list_read_budget_seconds() if seconds is None else max(0.0, float(seconds))
-        docs = resolve_list_read_max_documents() if max_documents is None else int(max_documents)
+        docs = (
+            resolve_list_read_max_documents(owner_uid=owner_uid, context=context)
+            if max_documents is None
+            else int(max_documents)
+        )
         return cls(
             deadline_monotonic=float(started) + budget_seconds,
             max_documents=docs,
@@ -267,6 +287,8 @@ def list_read_budget_for_request(
     route: str,
     seconds: Optional[float] = None,
     max_documents: Optional[int] = None,
+    owner_uid: Optional[str] = None,
+    context: Any = None,
     clock: Callable[[], float] = time.monotonic,
 ) -> ListReadBudget:
     """Route-facing factory: the one budget shared by a list GET's reads."""
@@ -275,6 +297,8 @@ def list_read_budget_for_request(
         route=route,
         seconds=seconds,
         max_documents=max_documents,
+        owner_uid=owner_uid,
+        context=context,
         clock=clock,
     )
 
@@ -291,17 +315,38 @@ def budgeted_stream_list(query: Any, budget: Optional[ListReadBudget]) -> List[A
         return list(query.stream())
     timeout = budget.rpc_timeout()
     try:
-        iterator = query.stream(timeout=timeout)
+        iterator = query.stream(timeout=timeout, retry=FIRESTORE_NO_RETRY)
     except TypeError:
         # Test fakes predating the budget seam do not accept a timeout kwarg;
         # the deadline still bites on the next charge/check.
         iterator = query.stream()
+    docs: List[Any] = []
+    exhausted: Optional[_FirestoreDeadlineExceeded] = None
     try:
-        docs = list(iterator)
-    except _FirestoreDeadlineExceeded as exc:
-        budget.mark_exhausted('deadline')
-        raise ListReadBudgetExhausted('deadline') from exc
-    budget.charge(len(docs))
+        try:
+            # Accumulate the full bounded page so the charge equals the rows
+            # the RPC physically fetched; a streaming loop abandoned at the
+            # allowance would under-count them (budget == physical reads).
+            for doc in iterator:
+                docs.append(doc)
+        except _FirestoreDeadlineExceeded as exc:
+            exhausted = exc
+            budget.mark_exhausted('deadline')
+        finally:
+            close = getattr(iterator, 'close', None)
+            if callable(close):
+                close()
+        if docs:
+            budget.charge(len(docs))
+        else:
+            budget.check()
+    except ListReadBudgetExhausted as exc:
+        setattr(exc, 'partial_snapshots', docs)
+        raise
+    if exhausted is not None:
+        failure = ListReadBudgetExhausted('deadline')
+        setattr(failure, 'partial_snapshots', docs)
+        raise failure from exhausted
     return docs
 
 
@@ -312,13 +357,20 @@ def budgeted_get_all(client: Any, refs: Iterable[Any], budget: Optional[ListRead
         return list(client.get_all(ref_list))
     timeout = budget.rpc_timeout()
     try:
-        snapshots = list(client.get_all(ref_list, timeout=timeout))
+        snapshots = list(client.get_all(ref_list, timeout=timeout, retry=FIRESTORE_NO_RETRY))
     except TypeError:
         snapshots = list(client.get_all(ref_list))
     except _FirestoreDeadlineExceeded as exc:
         budget.mark_exhausted('deadline')
         raise ListReadBudgetExhausted('deadline') from exc
-    budget.charge(len(snapshots))
+    try:
+        budget.charge(len(snapshots))
+    except ListReadBudgetExhausted as exc:
+        # The documents already crossed the wire. Historical hydration reads
+        # them back off the exception so a charge that lands on the last
+        # document still ships that prefix instead of dropping the fetch.
+        setattr(exc, 'partial_snapshots', snapshots)
+        raise
     return snapshots
 
 
@@ -328,7 +380,7 @@ def budgeted_document_get(reference: Any, budget: Optional[ListReadBudget]) -> A
         return reference.get()
     timeout = budget.rpc_timeout()
     try:
-        snapshot = reference.get(timeout=timeout)
+        snapshot = reference.get(timeout=timeout, retry=FIRESTORE_NO_RETRY)
     except TypeError:
         snapshot = reference.get()
     except _FirestoreDeadlineExceeded as exc:
@@ -339,36 +391,67 @@ def budgeted_document_get(reference: Any, budget: Optional[ListReadBudget]) -> A
     return snapshot
 
 
-def budgeted_stream_iter(query: Any, budget: Optional[ListReadBudget]) -> Iterable[Any]:
+_STREAM_RETRY_UNSET = object()
+
+
+def budgeted_stream_iter(
+    query: Any, budget: Optional[ListReadBudget], *, retry: Any = _STREAM_RETRY_UNSET
+) -> Iterable[Any]:
     """Iterate ``query.stream()`` lazily under the budget, charging per row.
 
     Unlike :func:`budgeted_stream_list` the rows fetched before exhaustion are
     still yielded to the caller, so a page cut mid-stream can keep its honest
     prefix. Deadline exceptions from the budget-derived RPC timeout become the
     typed exhaustion after the partial rows have been produced.
+
+    ``retry`` is forwarded to ``query.stream`` only when given; an omitted
+    retry means the shared no-retry policy (:data:`FIRESTORE_NO_RETRY`) for
+    budgeted streams, since Firestore's default query retry also retries
+    ``DeadlineExceeded`` and would restart the derived timeout. A bounded
+    scan may still pass an explicit retry that excludes it.
     """
     if budget is None:
         yield from query.stream()
         return
     timeout = budget.rpc_timeout()
+    stream_kwargs = {'timeout': timeout, 'retry': FIRESTORE_NO_RETRY}
+    if retry is not _STREAM_RETRY_UNSET:
+        stream_kwargs['retry'] = retry
     try:
-        iterator = query.stream(timeout=timeout)
+        iterator = query.stream(**stream_kwargs)
     except TypeError:
-        # Test fakes predating the budget seam do not accept a timeout kwarg.
-        iterator = query.stream()
-    while True:
         try:
-            doc = next(iterator)
-        except StopIteration:
-            return
-        except _FirestoreDeadlineExceeded as exc:
-            budget.mark_exhausted('deadline')
-            raise ListReadBudgetExhausted('deadline') from exc
-        budget.charge(1)
-        yield doc
+            # Test fakes predating the retry seam accept timeout only.
+            iterator = query.stream(timeout=timeout)
+        except TypeError:
+            # Test fakes predating the budget seam do not accept a timeout kwarg.
+            iterator = query.stream()
+    iterator = iter(iterator)
+    try:
+        while True:
+            try:
+                doc = next(iterator)
+            except StopIteration:
+                return
+            except _FirestoreDeadlineExceeded as exc:
+                budget.mark_exhausted('deadline')
+                raise ListReadBudgetExhausted('deadline') from exc
+            budget.charge(1)
+            yield doc
+    finally:
+        close = getattr(iterator, 'close', None)
+        if callable(close):
+            close()
 
 
 def apply_truncation_header(headers: Any, budget: Optional[ListReadBudget]) -> None:
     """Set the documented truncation header on a mutable header mapping."""
     if budget is not None and budget.truncated:
         headers[OMI_LIST_TRUNCATED_HEADER] = OMI_LIST_TRUNCATED_VALUE
+
+
+def finish_list_budget(response: Any, budget: ListReadBudget) -> None:
+    """Stamp the truncation header on the response (when one exists) and record the outcome."""
+    if response is not None:
+        apply_truncation_header(response.headers, budget)
+    budget.observe('truncated' if budget.truncated else 'complete')

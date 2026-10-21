@@ -331,11 +331,8 @@ final class MemoryExportStatusTests: XCTestCase {
     {
       "mcpServers": {
         "omi-memory": {
-          "type": "http",
-          "url": "\(MemoryExportDestination.mcpServerURL)",
-          "headers": {
-            "Authorization": "Bearer test-key"
-          }
+          "command": "npx",
+          "args": ["-y", "mcp-remote", "\(MemoryExportDestination.mcpServerURL)", "--header", "Authorization: Bearer test-key"]
         }
       }
     }
@@ -406,6 +403,419 @@ final class MemoryExportStatusTests: XCTestCase {
 
     XCTAssertTrue(status.isConfigured)
     XCTAssertTrue(status.hasConnection)
+  }
+
+  func testLegacyCodexMCPEntryNeedsUpdateNotConnected() async throws {
+    storeOwnedMCPKey()
+    let codex = tempHome.appendingPathComponent(".codex", isDirectory: true)
+    try FileManager.default.createDirectory(at: codex, withIntermediateDirectories: true)
+    try """
+    [mcp_servers.omi-memory]
+    command = "npx"
+    args = ["-y", "mcp-remote", "\(MemoryExportDestination.mcpLegacyServerURL)", "--header", "Authorization: Bearer test-key"]
+    """.write(to: codex.appendingPathComponent("config.toml"), atomically: true, encoding: .utf8)
+
+    let status = await MemoryExportService.shared.status(for: .codex)
+    let presentation = MemoryExportConnectionPresentation.make(
+      destination: .codex,
+      status: status,
+      isRunning: false)
+
+    XCTAssertFalse(status.hasConnection)
+    XCTAssertTrue(status.needsUpdate)
+    XCTAssertEqual(presentation.primaryActionTitle, "Update")
+  }
+
+  func testLegacyClaudeCodeMCPEntryNeedsUpdateNotConnected() async throws {
+    storeOwnedMCPKey()
+    try """
+    {
+      "mcpServers": {
+        "omi-memory": {
+          "type": "http",
+          "url": "\(MemoryExportDestination.mcpLegacyServerURL)",
+          "headers": {
+            "Authorization": "Bearer test-key"
+          }
+        }
+      }
+    }
+    """.write(to: tempHome.appendingPathComponent(".claude.json"), atomically: true, encoding: .utf8)
+
+    let status = await MemoryExportService.shared.status(for: .claudeCode)
+
+    XCTAssertFalse(status.hasConnection)
+    XCTAssertTrue(status.needsUpdate)
+  }
+
+  func testLegacyHermesMCPEntryNeedsUpdateNotConnected() async throws {
+    storeOwnedMCPKey()
+    let hermes = tempHome.appendingPathComponent(".hermes", isDirectory: true)
+    try FileManager.default.createDirectory(at: hermes, withIntermediateDirectories: true)
+    try """
+    mcp_servers:
+      omi-memory:
+        url: "\(MemoryExportDestination.mcpLegacyServerURL)"
+        headers:
+          Authorization: "Bearer test-key"
+    """.write(to: hermes.appendingPathComponent("config.yaml"), atomically: true, encoding: .utf8)
+
+    let status = await MemoryExportService.shared.status(for: .hermes)
+
+    XCTAssertFalse(status.hasConnection)
+    XCTAssertTrue(status.needsUpdate)
+  }
+
+  func testLegacyCodexMCPEntryWithStaleKeyNeedsNoUpdate() async throws {
+    storeOwnedMCPKey(key: "current-key")
+    let codex = tempHome.appendingPathComponent(".codex", isDirectory: true)
+    try FileManager.default.createDirectory(at: codex, withIntermediateDirectories: true)
+    try """
+    [mcp_servers.omi-memory]
+    command = "npx"
+    args = ["-y", "mcp-remote", "\(MemoryExportDestination.mcpLegacyServerURL)", "--header", "Authorization: Bearer old-key"]
+    """.write(to: codex.appendingPathComponent("config.toml"), atomically: true, encoding: .utf8)
+
+    let status = await MemoryExportService.shared.status(for: .codex)
+
+    XCTAssertFalse(status.hasConnection)
+    XCTAssertFalse(status.needsUpdate)
+  }
+
+  func testUnrelatedCodexSiblingEntryDoesNotTriggerNeedsUpdate() async throws {
+    storeOwnedMCPKey()
+    let codex = tempHome.appendingPathComponent(".codex", isDirectory: true)
+    try FileManager.default.createDirectory(at: codex, withIntermediateDirectories: true)
+    try """
+    [mcp_servers.other]
+    command = "npx"
+    args = ["-y", "mcp-remote", "\(MemoryExportDestination.mcpLegacyServerURL)", "--header", "Authorization: Bearer test-key"]
+    """.write(to: codex.appendingPathComponent("config.toml"), atomically: true, encoding: .utf8)
+
+    let status = await MemoryExportService.shared.status(for: .codex)
+
+    XCTAssertFalse(status.hasConnection)
+    XCTAssertFalse(status.needsUpdate)
+  }
+
+  func testCanonicalURLInUnrelatedCodexFieldDoesNotMarkConnected() async throws {
+    storeOwnedMCPKey()
+    let codex = tempHome.appendingPathComponent(".codex", isDirectory: true)
+    try FileManager.default.createDirectory(at: codex, withIntermediateDirectories: true)
+    try """
+    [mcp_servers.omi-memory]
+    note = "\(MemoryExportDestination.mcpServerURL)"
+    http_headers = { Authorization = "Bearer test-key" }
+    """.write(to: codex.appendingPathComponent("config.toml"), atomically: true, encoding: .utf8)
+
+    let status = await MemoryExportService.shared.status(for: .codex)
+
+    XCTAssertFalse(status.hasConnection)
+    XCTAssertFalse(status.needsUpdate)
+  }
+
+  func testConflictingCodexEndpointFieldsDoNotMarkConnected() async throws {
+    storeOwnedMCPKey()
+    let codex = tempHome.appendingPathComponent(".codex", isDirectory: true)
+    try FileManager.default.createDirectory(at: codex, withIntermediateDirectories: true)
+    try """
+    [mcp_servers.omi-memory]
+    url = "\(MemoryExportDestination.mcpServerURL)"
+    command = "npx"
+    args = ["-y", "mcp-remote", "\(MemoryExportDestination.mcpLegacyServerURL)", "--header", "Authorization: Bearer test-key"]
+    """.write(to: codex.appendingPathComponent("config.toml"), atomically: true, encoding: .utf8)
+
+    let status = await MemoryExportService.shared.status(for: .codex)
+
+    XCTAssertFalse(status.hasConnection)
+    XCTAssertFalse(status.needsUpdate)
+  }
+
+  func testCanonicalURLInJSONNoteFieldDoesNotMarkConnected() async throws {
+    storeOwnedMCPKey()
+    try """
+    {
+      "mcpServers": {
+        "omi-memory": {
+          "type": "http",
+          "note": "\(MemoryExportDestination.mcpServerURL)",
+          "headers": {
+            "Authorization": "Bearer test-key"
+          }
+        }
+      }
+    }
+    """.write(to: tempHome.appendingPathComponent(".claude.json"), atomically: true, encoding: .utf8)
+
+    let status = await MemoryExportService.shared.status(for: .claudeCode)
+
+    XCTAssertFalse(status.hasConnection)
+    XCTAssertFalse(status.needsUpdate)
+  }
+
+  func testConflictingJSONEndpointFieldsDoNotMarkConnected() async throws {
+    storeOwnedMCPKey()
+    try """
+    {
+      "mcpServers": {
+        "omi-memory": {
+          "type": "http",
+          "url": "\(MemoryExportDestination.mcpServerURL)",
+          "command": "npx",
+          "args": ["-y", "mcp-remote", "\(MemoryExportDestination.mcpLegacyServerURL)", "--header", "Authorization: Bearer test-key"],
+          "headers": {
+            "Authorization": "Bearer test-key"
+          }
+        }
+      }
+    }
+    """.write(to: tempHome.appendingPathComponent(".claude.json"), atomically: true, encoding: .utf8)
+
+    let status = await MemoryExportService.shared.status(for: .claudeCode)
+
+    XCTAssertFalse(status.hasConnection)
+    XCTAssertFalse(status.needsUpdate)
+  }
+
+  func testClaudeDesktopMCPRemoteArgsEntryMarksClaudeConnected() async throws {
+    storeOwnedMCPKey()
+    let claudeDesktop = tempHome.appendingPathComponent(
+      "Library/Application Support/Claude", isDirectory: true)
+    try FileManager.default.createDirectory(at: claudeDesktop, withIntermediateDirectories: true)
+    try """
+    {
+      "mcpServers": {
+        "omi-memory": {
+          "command": "npx",
+          "args": ["-y", "mcp-remote", "\(MemoryExportDestination.mcpServerURL)", "--header", "Authorization: Bearer test-key"]
+        }
+      }
+    }
+    """.write(to: claudeDesktop.appendingPathComponent("claude_desktop_config.json"), atomically: true, encoding: .utf8)
+
+    let status = await MemoryExportService.shared.status(for: .claude)
+
+    XCTAssertTrue(status.hasConnection)
+  }
+
+  func testClaudeCodeConnectedWinsAcrossSeparateConfigFiles() async throws {
+    storeOwnedMCPKey()
+    try """
+    {
+      "mcpServers": {
+        "omi-memory": {
+          "type": "http",
+          "url": "\(MemoryExportDestination.mcpServerURL)",
+          "headers": {
+            "Authorization": "Bearer test-key"
+          }
+        }
+      }
+    }
+    """.write(to: tempHome.appendingPathComponent(".claude.json"), atomically: true, encoding: .utf8)
+    let claudeDir = tempHome.appendingPathComponent(".claude", isDirectory: true)
+    try FileManager.default.createDirectory(at: claudeDir, withIntermediateDirectories: true)
+    try """
+    {
+      "mcpServers": {
+        "omi-memory": {
+          "type": "http",
+          "url": "\(MemoryExportDestination.mcpLegacyServerURL)",
+          "headers": {
+            "Authorization": "Bearer test-key"
+          }
+        }
+      }
+    }
+    """.write(to: claudeDir.appendingPathComponent("settings.json"), atomically: true, encoding: .utf8)
+
+    let status = await MemoryExportService.shared.status(for: .claudeCode)
+
+    XCTAssertTrue(status.hasConnection)
+    XCTAssertFalse(status.needsUpdate)
+  }
+
+  func testCanonicalURLInUnrelatedHermesFieldDoesNotMarkConnected() async throws {
+    storeOwnedMCPKey()
+    let hermes = tempHome.appendingPathComponent(".hermes", isDirectory: true)
+    try FileManager.default.createDirectory(at: hermes, withIntermediateDirectories: true)
+    try """
+    mcp_servers:
+      omi-memory:
+        note: "\(MemoryExportDestination.mcpServerURL)"
+        headers:
+          Authorization: "Bearer test-key"
+    """.write(to: hermes.appendingPathComponent("config.yaml"), atomically: true, encoding: .utf8)
+
+    let status = await MemoryExportService.shared.status(for: .hermes)
+
+    XCTAssertFalse(status.hasConnection)
+    XCTAssertFalse(status.needsUpdate)
+  }
+
+  func testClaudeDesktopRemoteHTTPEntryDoesNotMarkClaudeConnected() async throws {
+    storeOwnedMCPKey()
+    let claudeDesktop = tempHome.appendingPathComponent(
+      "Library/Application Support/Claude", isDirectory: true)
+    try FileManager.default.createDirectory(at: claudeDesktop, withIntermediateDirectories: true)
+    try """
+    {
+      "mcpServers": {
+        "omi-memory": {
+          "type": "http",
+          "url": "\(MemoryExportDestination.mcpServerURL)",
+          "headers": {
+            "Authorization": "Bearer test-key"
+          }
+        }
+      }
+    }
+    """.write(to: claudeDesktop.appendingPathComponent("claude_desktop_config.json"), atomically: true, encoding: .utf8)
+
+    let status = await MemoryExportService.shared.status(for: .claude)
+
+    XCTAssertFalse(status.hasConnection)
+    XCTAssertFalse(status.needsUpdate)
+  }
+
+  func testClaudeDesktopLegacyRemoteHTTPEntryDoesNotMarkNeedsUpdate() async throws {
+    storeOwnedMCPKey()
+    let claudeDesktop = tempHome.appendingPathComponent(
+      "Library/Application Support/Claude", isDirectory: true)
+    try FileManager.default.createDirectory(at: claudeDesktop, withIntermediateDirectories: true)
+    try """
+    {
+      "mcpServers": {
+        "omi-memory": {
+          "type": "http",
+          "url": "\(MemoryExportDestination.mcpLegacyServerURL)",
+          "headers": {
+            "Authorization": "Bearer test-key"
+          }
+        }
+      }
+    }
+    """.write(to: claudeDesktop.appendingPathComponent("claude_desktop_config.json"), atomically: true, encoding: .utf8)
+
+    let status = await MemoryExportService.shared.status(for: .claude)
+
+    XCTAssertFalse(status.hasConnection)
+    XCTAssertFalse(status.needsUpdate)
+  }
+
+  func testClaudeDesktopRemoteHTTPEntryDoesNotMaskClaudeCodeConnection() async throws {
+    storeOwnedMCPKey()
+    let claudeDesktop = tempHome.appendingPathComponent(
+      "Library/Application Support/Claude", isDirectory: true)
+    try FileManager.default.createDirectory(at: claudeDesktop, withIntermediateDirectories: true)
+    try """
+    {
+      "mcpServers": {
+        "omi-memory": {
+          "type": "http",
+          "url": "\(MemoryExportDestination.mcpServerURL)",
+          "headers": {
+            "Authorization": "Bearer test-key"
+          }
+        }
+      }
+    }
+    """.write(to: claudeDesktop.appendingPathComponent("claude_desktop_config.json"), atomically: true, encoding: .utf8)
+    try """
+    {
+      "mcpServers": {
+        "omi-memory": {
+          "type": "http",
+          "url": "\(MemoryExportDestination.mcpServerURL)",
+          "headers": {
+            "Authorization": "Bearer test-key"
+          }
+        }
+      }
+    }
+    """.write(to: tempHome.appendingPathComponent(".claude.json"), atomically: true, encoding: .utf8)
+
+    let claudeStatus = await MemoryExportService.shared.status(for: .claude)
+    let claudeCodeStatus = await MemoryExportService.shared.status(for: .claudeCode)
+
+    XCTAssertFalse(claudeStatus.hasConnection)
+    XCTAssertFalse(claudeStatus.needsUpdate)
+    XCTAssertTrue(claudeCodeStatus.hasConnection)
+  }
+
+  func testMalformedCodexArgsDoNotPassAsConnected() async throws {
+    storeOwnedMCPKey()
+    let codex = tempHome.appendingPathComponent(".codex", isDirectory: true)
+    try FileManager.default.createDirectory(at: codex, withIntermediateDirectories: true)
+    try """
+    [mcp_servers.omi-memory]
+    url = "\(MemoryExportDestination.mcpServerURL)"
+    args = "not-an-array"
+    http_headers = { Authorization = "Bearer test-key" }
+    """.write(to: codex.appendingPathComponent("config.toml"), atomically: true, encoding: .utf8)
+
+    let status = await MemoryExportService.shared.status(for: .codex)
+
+    XCTAssertFalse(status.hasConnection)
+    XCTAssertFalse(status.needsUpdate)
+  }
+
+  func testConflictingMCPRemoteArgsDoNotMarkConnected() async throws {
+    storeOwnedMCPKey()
+    let codex = tempHome.appendingPathComponent(".codex", isDirectory: true)
+    try FileManager.default.createDirectory(at: codex, withIntermediateDirectories: true)
+    try """
+    [mcp_servers.omi-memory]
+    command = "npx"
+    args = ["mcp-remote", "\(MemoryExportDestination.mcpServerURL)", "mcp-remote", "\(MemoryExportDestination.mcpLegacyServerURL)", "--header", "Authorization: Bearer test-key"]
+    """.write(to: codex.appendingPathComponent("config.toml"), atomically: true, encoding: .utf8)
+
+    let status = await MemoryExportService.shared.status(for: .codex)
+
+    XCTAssertFalse(status.hasConnection)
+    XCTAssertFalse(status.needsUpdate)
+  }
+
+  func testMalformedHermesArgsDoNotPassAsConnected() async throws {
+    storeOwnedMCPKey()
+    let hermes = tempHome.appendingPathComponent(".hermes", isDirectory: true)
+    try FileManager.default.createDirectory(at: hermes, withIntermediateDirectories: true)
+    try """
+    mcp_servers:
+      omi-memory:
+        url: "\(MemoryExportDestination.mcpServerURL)"
+        args: not-an-array
+        headers:
+          Authorization: "Bearer test-key"
+    """.write(to: hermes.appendingPathComponent("config.yaml"), atomically: true, encoding: .utf8)
+
+    let status = await MemoryExportService.shared.status(for: .hermes)
+
+    XCTAssertFalse(status.hasConnection)
+    XCTAssertFalse(status.needsUpdate)
+  }
+
+  func testMalformedJSONArgsDoNotPassAsConnected() async throws {
+    storeOwnedMCPKey()
+    try """
+    {
+      "mcpServers": {
+        "omi-memory": {
+          "type": "http",
+          "url": "\(MemoryExportDestination.mcpServerURL)",
+          "args": "not-an-array",
+          "headers": {
+            "Authorization": "Bearer test-key"
+          }
+        }
+      }
+    }
+    """.write(to: tempHome.appendingPathComponent(".claude.json"), atomically: true, encoding: .utf8)
+
+    let status = await MemoryExportService.shared.status(for: .claudeCode)
+
+    XCTAssertFalse(status.hasConnection)
+    XCTAssertFalse(status.needsUpdate)
   }
 
   func testMCPKeyOwnedByDifferentUserDoesNotConfigureAgentPrompt() async {
@@ -551,6 +961,112 @@ final class MemoryExportStatusTests: XCTestCase {
       windowTitle: nil,
       headline: nil
     )
+  }
+
+  /// Hosted MCP tool failures arrive as ``isError`` results — the status check
+  /// must surface ``structuredContent.error.message`` rather than reporting a
+  /// generic "did not return memory data".
+  func testHostedMCPToolErrorReadsStructuredMessage() {
+    let result: [String: Any] = [
+      "isError": true,
+      "content": [["type": "text", "text": "{\"error\":{\"code\":\"unavailable\",\"message\":\"wire text\"}}"]],
+      "structuredContent": ["error": ["code": "paid_plan_required", "message": "A paid plan is required."]],
+    ]
+    XCTAssertEqual(
+      MemoryExportService.hostedMCPToolErrorMessage(result: result, text: "{\"error\":{\"message\":\"wire text\"}}"),
+      "A paid plan is required."
+    )
+  }
+
+  func testHostedMCPToolErrorFallsBackToTextBlock() {
+    let result: [String: Any] = ["isError": true]
+    let message = MemoryExportService.hostedMCPToolErrorMessage(
+      result: result,
+      text: "{\"error\":{\"code\":\"not_found\",\"message\":\"Memory not found\"}}"
+    )
+    XCTAssertEqual(message, "Memory not found")
+  }
+
+  func testHostedMCPToolErrorFallsBackToRawTextThenGeneric() {
+    let result: [String: Any] = ["isError": true]
+    XCTAssertEqual(
+      MemoryExportService.hostedMCPToolErrorMessage(result: result, text: "plain failure text"),
+      "plain failure text"
+    )
+    XCTAssertEqual(
+      MemoryExportService.hostedMCPToolErrorMessage(result: result, text: nil),
+      "Tool call failed."
+    )
+  }
+
+  // The production response path in ``testHostedMCPMemoryCount`` delegates to
+  // ``parseHostedMCPMemoryCount`` — these tests exercise that path end to end
+  // from wire bytes rather than the message helper alone.
+
+  func testHostedMCPResponseParsesMemoryCount() throws {
+    let text = #"{"memories":[{"id":"m1"},{"id":"m2"},{"id":"m3"}]}"#
+    let rpc: [String: Any] = [
+      "result": ["content": [["type": "text", "text": text]]]
+    ]
+    let data = try JSONSerialization.data(withJSONObject: rpc)
+    XCTAssertEqual(try MemoryExportService.parseHostedMCPMemoryCount(data: data, statusCode: 200), 3)
+  }
+
+  func testHostedMCPResponseThrowsStructuredToolError() throws {
+    let rpc: [String: Any] = [
+      "result": [
+        "isError": true,
+        "content": [["type": "text", "text": #"{"error":{"message":"wire text"}}"#]],
+        "structuredContent": ["error": ["code": "paid_plan_required", "message": "A paid plan is required."]],
+      ]
+    ]
+    let data = try JSONSerialization.data(withJSONObject: rpc)
+    do {
+      _ = try MemoryExportService.parseHostedMCPMemoryCount(data: data, statusCode: 200)
+      XCTFail("An isError result must not produce a memory count")
+    } catch let error as MemoryExportError {
+      guard case .requestFailed(let message) = error else {
+        return XCTFail("Unexpected export error: \(error)")
+      }
+      XCTAssertEqual(message, "Hosted MCP failed: A paid plan is required.")
+    } catch {
+      XCTFail("Unexpected export error: \(error)")
+    }
+  }
+
+  func testHostedMCPResponseThrowsTextBlockToolError() throws {
+    let rpc: [String: Any] = [
+      "result": [
+        "isError": true,
+        "content": [["type": "text", "text": #"{"error":{"message":"Memory not found"}}"#]],
+      ]
+    ]
+    let data = try JSONSerialization.data(withJSONObject: rpc)
+    do {
+      _ = try MemoryExportService.parseHostedMCPMemoryCount(data: data, statusCode: 200)
+      XCTFail("An isError result must not produce a memory count")
+    } catch let error as MemoryExportError {
+      guard case .requestFailed(let message) = error else {
+        return XCTFail("Unexpected export error: \(error)")
+      }
+      XCTAssertEqual(message, "Hosted MCP failed: Memory not found")
+    } catch {
+      XCTFail("Unexpected export error: \(error)")
+    }
+  }
+
+  func testHostedMCPResponseRejectsNon2xxBeforeParsing() {
+    do {
+      _ = try MemoryExportService.parseHostedMCPMemoryCount(data: Data(), statusCode: 401)
+      XCTFail("A non-2xx status must not produce a memory count")
+    } catch let error as MemoryExportError {
+      guard case .requestFailed(let message) = error else {
+        return XCTFail("Unexpected export error: \(error)")
+      }
+      XCTAssertEqual(message, "Hosted MCP returned HTTP 401.")
+    } catch {
+      XCTFail("Unexpected export error: \(error)")
+    }
   }
 
   private func resetMemoryExportDefaults() {

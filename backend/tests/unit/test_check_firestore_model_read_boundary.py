@@ -59,3 +59,34 @@ def test_reports_only_count_increases():
         'backend/database/readers.py: found 2, baseline allows 1'
     ]
     assert _MODULE.violations({'backend/database/readers.py': 1}, {'backend/database/readers.py': 2}) == []
+
+
+def test_counts_validation_bypassing_and_alternate_factories():
+    """``model_validate`` is not the only way a reader turns a document into a model."""
+    source = '''
+from models.other import Person
+import models.other as other
+
+constructed = Person.model_construct(**payload)
+from_json = Person.model_validate_json(raw)
+from_strings = Person.model_validate_strings(payload)
+legacy_obj = Person.parse_obj(payload)
+legacy_raw = Person.parse_raw(raw)
+legacy_construct = Person.construct(**payload)
+legacy_orm = Person.from_orm(row)
+qualified = other.Person.model_construct(**payload)
+'''
+
+    assert _MODULE.count_model_constructions(source) == 8
+
+
+def test_ignores_factory_names_on_non_models_and_argument_free_calls():
+    source = '''
+from models.other import Person
+
+schema = Person.model_json_schema()
+empty = Person.model_construct()
+snapshot_side = snapshot.model_construct(**payload)
+'''
+
+    assert _MODULE.count_model_constructions(source) == 0

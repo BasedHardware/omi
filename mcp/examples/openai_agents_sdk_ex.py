@@ -2,15 +2,13 @@ import os
 from agents import Agent, ModelSettings, Runner, trace
 from dotenv import load_dotenv
 import asyncio
-import shutil
+
 from openai.types.shared import Reasoning
 
-from agents.mcp import MCPServer, MCPServerStdio
+from agents.mcp import MCPServer, MCPServerStreamableHttp
 
 
 load_dotenv()
-
-uid = os.getenv("OMI_UID")
 
 
 async def run(mcp_server: MCPServer):
@@ -20,7 +18,7 @@ async def run(mcp_server: MCPServer):
 
     agent = Agent(
         name="Omi Agent",
-        instructions=f"You are a helpful assistant that answers questions based on the user's OMI data, the user UID is {uid}.",
+        instructions="You are a helpful assistant that answers questions based on the user's OMI data.",
         mcp_servers=[mcp_server],
         model="o4-mini",
         model_settings=ModelSettings(
@@ -39,16 +37,17 @@ async def run(mcp_server: MCPServer):
 
 
 async def main():
-    async with MCPServerStdio(
+    # Hosted Streamable HTTP endpoint — Bearer MCP key auth, no local process.
+    async with MCPServerStreamableHttp(
         cache_tools_list=False,
-        params={"command": "uvx", "args": ["mcp-server-omi"]},
+        params={
+            "url": "https://api.omi.me/v1/mcp",
+            "headers": {"Authorization": f"Bearer {os.environ['OMI_MCP_API_KEY']}"},
+        },
     ) as server:
         with trace(workflow_name="MCP Omi Example"):
             await run(server)
 
 
 if __name__ == "__main__":
-    if not shutil.which("uvx"):
-        raise RuntimeError("uvx is not installed. Please install it with `pip install uvx`.")
-
     asyncio.run(main())

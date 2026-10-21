@@ -131,37 +131,59 @@ extension SettingsContentView {
       // constant and these two never dimmed. A greyed, unresponsive control is how the rest of
       // this pane says "the thing behind this is off" — spending that signal on a state no
       // setting can reach makes a live control read as dead.
-      voicePicker(settingId: "floatingbar.voice")
+      assistantVoicePicker(settingId: "floatingbar.voice")
 
       voiceSpeedSlider(settingId: "floatingbar.voicespeed")
     }
   }
 
-  func voicePicker(settingId: String) -> some View {
-    settingsCard(settingId: settingId) {
-      HStack(spacing: OmiSpacing.lg) {
-        VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
-          Text("Voice")
-            .scaledFont(size: OmiType.subheading, weight: .semibold)
-            .foregroundColor(Ink.primary)
-          Text(
-            ShortcutSettings.voiceOption(for: shortcutSettings.selectedVoiceID).description
-          )
-          .scaledFont(size: OmiType.body)
-          .foregroundColor(Ink.secondary)
-        }
-        Spacer()
-        SettingsMenuPicker(selection: $shortcutSettings.selectedVoiceID) {
-          ForEach(ShortcutSettings.availableVoices) { voice in
-            Text(voice.name).tag(voice.id)
-          }
-        }
-      }
-    }
-  }
-
   var shortcutsSection: some View {
     ShortcutsSettingsSection(highlightedSettingId: $highlightedSettingId)
+  }
+
+  /// Claude's account state under the AI Provider picker. Without the Connect
+  /// button, a signed-out Claude chat pointed the user here with no way to sign in.
+  @ViewBuilder
+  var claudeConnectionRow: some View {
+    if chatProvider?.isClaudeConnected == true {
+      HStack {
+        Image(systemName: "checkmark.circle.fill")
+          .foregroundColor(Ink.listeningGreen)
+          .scaledFont(size: OmiType.caption)
+        Text("Connected to Claude")
+          .scaledFont(size: OmiType.caption)
+          .foregroundColor(Ink.secondary)
+
+        Spacer()
+
+        Button("Disconnect") {
+          Task {
+            await chatProvider?.disconnectClaude()
+          }
+        }
+        .buttonStyle(.plain)
+        .scaledFont(size: OmiType.caption, weight: .medium)
+        .foregroundColor(Ink.errorRed)
+      }
+    } else {
+      HStack {
+        Image(systemName: "person.badge.key")
+          .foregroundColor(Ink.secondary)
+          .scaledFont(size: OmiType.caption)
+        Text("Not connected to Claude")
+          .scaledFont(size: OmiType.caption)
+          .foregroundColor(Ink.secondary)
+
+        Spacer()
+
+        Button("Connect Claude") {
+          Task {
+            await chatProvider?.connectClaude()
+          }
+        }
+        .buttonStyle(OmiButtonStyle(.primary, size: .compact))
+      }
+    }
   }
 
   var aiChatSection: some View {
@@ -208,28 +230,9 @@ extension SettingsContentView {
             }
           }
 
-          if chatBridgeMode == "claudeCode" && chatProvider?.isClaudeConnected == true {
+          if chatBridgeMode == "claudeCode" {
             GlassSeparator()
-
-            HStack {
-              Image(systemName: "checkmark.circle.fill")
-                .foregroundColor(Ink.listeningGreen)
-                .scaledFont(size: OmiType.caption)
-              Text("Connected to Claude")
-                .scaledFont(size: OmiType.caption)
-                .foregroundColor(Ink.secondary)
-
-              Spacer()
-
-              Button("Disconnect") {
-                Task {
-                  await chatProvider?.disconnectClaude()
-                }
-              }
-              .buttonStyle(.plain)
-              .scaledFont(size: OmiType.caption, weight: .medium)
-              .foregroundColor(Ink.errorRed)
-            }
+            claudeConnectionRow
           }
         }
       }
@@ -279,7 +282,7 @@ extension SettingsContentView {
 
             Spacer()
 
-            Button("Browse...") {
+            Button("Browse…") {
               let panel = NSOpenPanel()
               panel.canChooseFiles = false
               panel.canChooseDirectories = true
@@ -482,18 +485,13 @@ extension SettingsContentView {
                 .scaledFont(size: OmiType.caption)
                 .foregroundColor(Ink.secondary)
 
-              TextField("Search skills...", text: $skillSearchQuery)
+              TextField("Search skills…", text: $skillSearchQuery)
                 .textFieldStyle(.plain)
                 .scaledFont(size: OmiType.body)
                 .foregroundColor(Ink.primary)
 
               if !skillSearchQuery.isEmpty {
-                Button(action: { skillSearchQuery = "" }) {
-                  Image(systemName: "xmark.circle.fill")
-                    .scaledFont(size: OmiType.caption)
-                    .foregroundColor(Ink.secondary)
-                }
-                .buttonStyle(.plain)
+                ClearFieldButton { skillSearchQuery = "" }
               }
             }
             .padding(OmiSpacing.sm)
@@ -672,13 +670,13 @@ extension SettingsContentView {
                   UserDefaults.standard.set("", forKey: "playwrightExtensionToken")
                 }) {
                   HStack(spacing: OmiSpacing.xxs) {
-                    Image(systemName: "xmark")
+                    Image(systemName: "arrow.counterclockwise")
                       .scaledFont(size: OmiType.caption)
                     Text("Reset")
                       .scaledFont(size: OmiType.caption)
                   }
                 }
-                .buttonStyle(OmiButtonStyle(.primary, size: .compact))
+                .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
               }
             }
           }
@@ -760,12 +758,7 @@ extension SettingsContentView {
 
         Spacer()
 
-        Button(action: { showFileViewer = false }) {
-          Image(systemName: "xmark.circle.fill")
-            .scaledFont(size: OmiType.heading)
-            .foregroundColor(Ink.secondary)
-        }
-        .buttonStyle(.plain)
+        DismissButton(action: { showFileViewer = false })
       }
       .padding(OmiSpacing.lg)
 

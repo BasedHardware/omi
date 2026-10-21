@@ -38,6 +38,7 @@ const firebaseAuth = vi.hoisted(() => ({
     (_auth: unknown, _callback: (user: unknown) => void): (() => void) =>
       () => {},
   ),
+  getRedirectResult: vi.fn(async (): Promise<unknown> => null),
 }));
 
 vi.mock('firebase/app', () => ({
@@ -54,6 +55,8 @@ vi.mock('firebase/auth', () => ({
     addScope() {}
   },
   signInWithPopup: vi.fn(),
+  signInWithRedirect: vi.fn(),
+  getRedirectResult: firebaseAuth.getRedirectResult,
   signOut: vi.fn(),
   onAuthStateChanged: firebaseAuth.onAuthStateChanged,
 }));
@@ -65,8 +68,8 @@ vi.mock('firebase/messaging', () => ({
   isSupported: async () => false,
 }));
 
-vi.mock('@/lib/analytics/mixpanel', () => ({
-  MixpanelManager: {
+vi.mock('@/lib/analytics/posthog', () => ({
+  PostHogManager: {
     init: vi.fn(),
     identify: vi.fn(),
     track: vi.fn(),
@@ -82,11 +85,17 @@ async function renderProvider() {
   const { AuthProvider, useAuth } = await import('../AuthProvider');
 
   function Probe() {
-    const { user, loading } = useAuth();
+    const { user, loading, redirectSignInError } = useAuth();
+    const code =
+      typeof redirectSignInError === 'object' &&
+      redirectSignInError !== null &&
+      'code' in redirectSignInError
+        ? String((redirectSignInError as { code: unknown }).code)
+        : 'none';
     return createElement(
       'div',
       { 'data-testid': 'probe' },
-      `${loading ? 'loading' : 'settled'}:${user?.uid ?? 'anonymous'}`,
+      `${loading ? 'loading' : 'settled'}:${user?.uid ?? 'anonymous'}:${code}`,
     );
   }
 
@@ -97,6 +106,7 @@ async function renderProvider() {
 beforeEach(() => {
   vi.resetModules();
   firebaseAuth.onAuthStateChanged.mockClear();
+  firebaseAuth.getRedirectResult.mockReset().mockResolvedValue(null);
 });
 
 afterEach(() => {
@@ -125,5 +135,32 @@ describe('AuthProvider', () => {
 
     await waitFor(() => expect(probe).toHaveTextContent('settled:user-1'));
     expect(firebaseAuth.onAuthStateChanged).toHaveBeenCalledTimes(1);
+  });
+
+  it('surfaces a redirect sign-in that came back without a session', async () => {
+    stubEnvironment(CONFIGURED_ENV);
+    firebaseAuth.getRedirectResult.mockRejectedValueOnce({
+      code: 'auth/redirect-cancelled-by-user',
+    });
+
+    const probe = await renderProvider();
+
+    await waitFor(() =>
+      expect(probe).toHaveTextContent('auth/redirect-cancelled-by-user'),
+    );
+  });
+
+  it('counts a sign-in that completed by redirect', async () => {
+    stubEnvironment(CONFIGURED_ENV);
+    firebaseAuth.getRedirectResult.mockResolvedValueOnce({ user: { uid: 'user-2' } });
+    const { PostHogManager } = await import('@/lib/analytics/posthog');
+
+    await renderProvider();
+
+    await waitFor(() =>
+      expect(PostHogManager.track).toHaveBeenCalledWith('Sign In Completed', {
+        method: 'redirect',
+      }),
+    );
   });
 });

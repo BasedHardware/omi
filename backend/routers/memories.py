@@ -1,14 +1,25 @@
+from utils.generated_compute import require_generated_compute, generated_compute_configured
+import base64
+import hashlib
+import hmac
+import inspect
+import json
 import logging
+import time
 import uuid
-from typing import Any, Callable, Dict, List, Literal, Optional, cast
+from datetime import datetime
+from functools import wraps
+from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, cast
 
+from config import firestore_read_levers
 import database._client as db_client_module
-from database.legal_holds import DestructiveOperationInProgress
+from database.legal_holds import DestructiveGateTakeover, DestructiveOperationInProgress, LegalHoldAuthorityUnavailable
 from utils.executors import db_executor, llm_executor, postprocess_executor, run_blocking, submit_with_context
 from utils.other.account_gate_http import account_gate_busy_http_exception
 
 from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query, Request, Response
 from fastapi.responses import JSONResponse
+from fastapi.routing import APIRoute
 from pydantic import BaseModel, Field
 
 from database.memory_imports import ingest_memory_import_batch
@@ -17,13 +28,14 @@ from models.memories import MemoryDB, Memory, MemoryCategory
 from models.memory_imports import MemoryImportBatchRequest, MemoryImportBatchResponse
 from utils.apps import update_personas_async
 from utils.memory.memory_service import (
+    MEMORY_LIST_SCAN_BUDGET_DETAIL,
     MemoryBackingStoreUnavailable,
     MemoryPayload,
     MemoryService,
     fetch_memory_dict,
 )
-from utils.memory.canonical_memory_adapter import mint_direct_user_write_authority
 from utils.observability.fallback import record_fallback
+from utils.product_metrics import record_product_event
 from utils.feedback import record_memory_feedback
 from testing.parity_pack_v0.live_capture import SurfaceParityCapture
 from utils.memory.import_write_guard import (
@@ -31,9 +43,9 @@ from utils.memory.import_write_guard import (
     import_write_violation_for_guard,
     is_per_file_local_import_tags,
 )
-from utils.jit_rollout import JITDecisionStage, resolve_jit_rollout_sync
 from utils.memory.memory_api_contract import MemoryApiExposure
 from utils.memory.memory_api_response import memory_item_response, memory_list_response
+from utils.memory.universal_list_cursor import UniversalListCursorError, cursor_secret, cursor_ttl_seconds
 from utils.memory.memory_system import MemorySystem
 from utils.other.list_budget import (
     ListReadBudgetExhausted,
@@ -47,8 +59,74 @@ from utils.other import endpoints as auth
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+
+class MemoriesRoute(APIRoute):
+    """Log every handler-emitted 503, including cursor and mutation paths."""
+
+    def __init__(self, path: str, endpoint: Callable[..., Any], **kwargs: Any) -> None:
+        # include_router reconstructs APIRoutes with the already wrapped endpoint.
+        # Preserve one log per failure across nested router registration.
+        if getattr(endpoint, '_memories_503_logged', False):
+            super().__init__(path, endpoint, **kwargs)
+            return
+        signature = inspect.signature(endpoint)
+
+        def log_failure(exc: HTTPException, started: float, args: tuple[Any, ...], call_kwargs: dict[str, Any]) -> None:
+            if exc.status_code != 503:
+                return
+            uid = signature.bind_partial(*args, **call_kwargs).arguments.get('uid')
+            fields = {
+                'event': 'memories_503',
+                'endpoint': path,
+                'uid_hashed': hashlib.sha256(str(uid).encode()).hexdigest()[:16] if uid else 'unknown',
+                'exception_class': type(exc.__cause__ or exc).__name__,
+                'elapsed_ms': round((time.monotonic() - started) * 1000, 2),
+            }
+            logger.error('memories_503 %s', json.dumps(fields, sort_keys=True), extra=fields)
+
+        wrapped: Callable[..., Any]
+        if inspect.iscoroutinefunction(endpoint):
+
+            @wraps(endpoint)
+            async def async_wrapped(*args: Any, **call_kwargs: Any) -> Any:
+                started = time.monotonic()
+                try:
+                    return await endpoint(*args, **call_kwargs)
+                except HTTPException as exc:
+                    log_failure(exc, started, args, call_kwargs)
+                    raise
+
+            wrapped = async_wrapped
+        else:
+
+            @wraps(endpoint)
+            def sync_wrapped(*args: Any, **call_kwargs: Any) -> Any:
+                started = time.monotonic()
+                try:
+                    return endpoint(*args, **call_kwargs)
+                except HTTPException as exc:
+                    log_failure(exc, started, args, call_kwargs)
+                    raise
+
+            wrapped = sync_wrapped
+
+        setattr(wrapped, '_memories_503_logged', True)
+        super().__init__(path, wrapped, **kwargs)
+
+
+router = APIRouter(route_class=MemoriesRoute)
 _auth_module = cast(Any, auth)
+
+
+def _sanitize_memories_error(exc: Exception, fallback: str) -> str:
+    """Sanitize query parameter and temporal view error details while preserving debug logging."""
+    logger.warning("Memories query operation failed: %s: %s", type(exc).__name__, exc)
+    msg = str(exc).strip()
+    if msg.startswith("unsupported memory read view:"):
+        return "unsupported memory read view"
+    if msg == "device_scope must be one of: all, current, explicit":
+        return msg
+    return fallback
 
 
 class MemoryMutationResponse(BaseModel):
@@ -112,6 +190,75 @@ def _normalize_memory_list_cursor(cursor: Optional[str]) -> Optional[str]:
         return None
     stripped = cursor.strip()
     return stripped or None
+
+
+_LEDGER_HISTORY_CURSOR_PREFIX = 'umh'
+_LEDGER_HISTORY_CURSOR_VERSION = 1
+
+
+def _encode_ledger_history_cursor(uid: str, start_after: tuple[datetime, str]) -> Optional[str]:
+    """Sign a bounded canonical-history provider keyset for UI continuation."""
+    try:
+        secret = cursor_secret()
+    except UniversalListCursorError:
+        return None
+    updated_at, memory_id = start_after
+    payload = {
+        'v': _LEDGER_HISTORY_CURSOR_VERSION,
+        'uid': uid,
+        'updated_at': updated_at.isoformat(),
+        'memory_id': memory_id,
+        'expires_at': int(time.time()) + cursor_ttl_seconds(),
+    }
+    segment = (
+        base64.urlsafe_b64encode(json.dumps(payload, sort_keys=True, separators=(',', ':')).encode('utf-8'))
+        .decode('ascii')
+        .rstrip('=')
+    )
+    signature = (
+        base64.urlsafe_b64encode(hmac.new(secret, segment.encode('ascii'), hashlib.sha256).digest())
+        .decode('ascii')
+        .rstrip('=')
+    )
+    return f'{_LEDGER_HISTORY_CURSOR_PREFIX}.{segment}.{signature}'
+
+
+def _decode_ledger_history_cursor(cursor: str, uid: str) -> tuple[datetime, str]:
+    """Validate one owner-bound history provider keyset cursor."""
+    try:
+        secret = cursor_secret()
+    except UniversalListCursorError as exc:
+        raise HTTPException(status_code=400, detail='invalid_or_stale_cursor:missing_secret') from exc
+    parts = cursor.split('.')
+    if len(parts) != 3 or parts[0] != _LEDGER_HISTORY_CURSOR_PREFIX:
+        raise HTTPException(status_code=400, detail='invalid_or_stale_cursor:malformed_cursor')
+    _, segment, signature = parts
+    expected = (
+        base64.urlsafe_b64encode(hmac.new(secret, segment.encode('ascii'), hashlib.sha256).digest())
+        .decode('ascii')
+        .rstrip('=')
+    )
+    if not hmac.compare_digest(expected, signature):
+        raise HTTPException(status_code=400, detail='invalid_or_stale_cursor:invalid_signature')
+    try:
+        padded = segment + '=' * (-len(segment) % 4)
+        payload = json.loads(base64.urlsafe_b64decode(padded.encode('ascii')).decode('utf-8'))
+        updated_at = datetime.fromisoformat(payload['updated_at'])
+        memory_id = payload['memory_id']
+        if (
+            payload.get('v') != _LEDGER_HISTORY_CURSOR_VERSION
+            or payload.get('uid') != uid
+            or type(payload.get('expires_at')) is not int
+            or int(time.time()) > payload['expires_at']
+            or updated_at.tzinfo is None
+            or not isinstance(memory_id, str)
+            or not memory_id.strip()
+            or '/' in memory_id
+        ):
+            raise ValueError('invalid cursor claims')
+    except (KeyError, TypeError, ValueError, json.JSONDecodeError, UnicodeDecodeError) as exc:
+        raise HTTPException(status_code=400, detail='invalid_or_stale_cursor:malformed_cursor') from exc
+    return updated_at, memory_id
 
 
 class BatchMemoriesRequest(BaseModel):
@@ -237,7 +384,8 @@ def _resolve_get_memories_device_scope(
             x_device_id_hash=x_device_id_hash,
         )
     except DeviceScopeValidationError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        detail = _sanitize_memories_error(exc, "device_scope must be one of: all, current, explicit")
+        raise HTTPException(status_code=400, detail=detail) from exc
 
 
 def _validate_device_scope_request(device_scope: str, resolved_device_id: Optional[str]) -> None:
@@ -294,12 +442,15 @@ async def extract_memory_log(
     uid: str = Depends(
         cast(Callable[..., str], _auth_module.with_rate_limit(auth.get_current_user_uid, "memories:extract"))
     ),
+    http_request: Request = None,  # type: ignore[assignment]
 ):
     """Return-only memory-log extraction through the managed memories feature (OpenRouter Luna).
 
     Does not write Firestore. Desktop onboarding/import should call this instead of inventing
     memories via Anthropic Haiku chat completions, then persist via the normal memory write APIs.
     """
+    if generated_compute_configured():
+        await run_blocking(db_executor, require_generated_compute, uid, 'memories')
     # Deferred with the LLM helper: this router is covered by a module-isolation test
     # that stubs a minimal dependency graph, and utils.subscription pulls database.users
     # in at import time.
@@ -321,6 +472,9 @@ async def extract_memory_log(
     )
     if extraction is None:
         raise HTTPException(status_code=502, detail="memories_extract_failed")
+    created_count = len(extraction.memories)
+    if created_count:
+        record_product_event('memory_created', request=http_request, uid=uid, source='extract', count=created_count)
     return ExtractMemoryLogResponse(memories=list(extraction.memories), profile=extraction.profile or "")
 
 
@@ -377,13 +531,15 @@ async def create_memory(
             operation="create_memory",
             upsert_vector=False,
             require_canonical_promotion=True,
-            direct_user_authority=mint_direct_user_write_authority(),
         )
+    except HTTPException:
+        raise
     except Exception:
         logger.exception("MemoryService create_memory failed uid=%s", uid)
         raise HTTPException(status_code=503, detail="Service temporarily unavailable")
 
     _finish_memory_parity_capture(parity_capture, [created])
+    record_product_event('memory_created', request=request, uid=uid, source='client')
     return created
 
 
@@ -474,8 +630,9 @@ async def create_memories_batch(
             operation="batch_create_memory",
             upsert_vectors=False,
             require_canonical_promotion=True,
-            direct_user_authority=mint_direct_user_write_authority(),
         )
+    except HTTPException:
+        raise
     except Exception:
         logger.exception("MemoryService create_memories_batch failed uid=%s count=%s", uid, len(memory_dbs))
         raise HTTPException(status_code=503, detail="Service temporarily unavailable")
@@ -483,6 +640,14 @@ async def create_memories_batch(
     if has_public:
         submit_with_context(postprocess_executor, update_personas_async, uid)
     _finish_memory_parity_capture(parity_capture, server_memories)
+    if server_memories:
+        record_product_event(
+            'memory_created',
+            request=request_context,
+            uid=uid,
+            source='client',
+            count=len(server_memories),
+        )
     return BatchMemoriesResponse(memories=server_memories, created_count=len(server_memories))
 
 
@@ -496,6 +661,7 @@ async def create_memory_import_batch(
     uid: str = Depends(
         cast(Callable[..., str], _auth_module.with_rate_limit(auth.get_current_user_uid, "memory_imports:batch"))
     ),
+    http_request: Request = None,  # type: ignore[assignment]
 ):
     """
     Ingest imported source artifacts without creating product memories.
@@ -539,6 +705,9 @@ async def create_memory_import_batch(
         raise HTTPException(status_code=503, detail="Service temporarily unavailable")
     parity_capture.observe("inbound", {"type": "memory_import_result", **result.response.model_dump(mode="json")})
     parity_capture.persist()
+    imported = len(request.items)
+    if imported:
+        record_product_event('memory_created', request=http_request, uid=uid, source='import', count=imported)
     return result.response
 
 
@@ -555,6 +724,10 @@ def get_memories(
     ),
     device_scope: str = Query('all'),
     client_device_id: Optional[str] = Query(None),
+    # Released clients may still send these retired belief-view selectors.
+    # Accept them for wire compatibility while always serving the released view.
+    view: str = 'released',
+    as_of: Optional[datetime] = None,
     uid: str = Depends(auth.get_current_user_uid),
     x_app_platform: str = Header(None, alias='X-App-Platform'),
     x_device_id_hash: str = Header(None, alias='X-Device-Id-Hash'),
@@ -565,6 +738,7 @@ def get_memories(
     partial array with the ``X-Omi-List-Truncated: true`` header and no
     ``X-Omi-Memory-Next-Cursor`` instead of a bare middleware 504 (#11831).
     """
+
     scope_request = _resolve_get_memories_device_scope(
         device_scope,
         client_device_id,
@@ -583,6 +757,8 @@ def get_memories(
     # so neither leg can consume the whole HTTP_GET_TIMEOUT by itself (#11831).
     budget = list_read_budget_for_request(request, route='memories')
 
+    # X-Omi-Memory-* capability headers exist for pre-capability desktop clients;
+    # removal requires minimum supported desktop version 0.12.386+12386.
     response_headers = {
         _MEMORY_DEVICE_SCOPE_SUPPORTED_HEADER: 'true',
         _MEMORY_CANONICAL_LIFECYCLE_EXPOSED_HEADER: 'true',
@@ -605,6 +781,36 @@ def get_memories(
     # Cursor and legacy offset paging are mutually exclusive. Cursor mode owns
     # accounts beyond the bounded offset compatibility window.
     cursor = _normalize_memory_list_cursor(cursor)
+    if cursor is not None and firestore_read_levers.lever_enabled('memory_list_index_window', uid):
+        try:
+            page = MemoryService(db_client=db_client).read_page(
+                uid,
+                limit=bounded_limit,
+                cursor=cursor,
+                device_scope_request=scope_request,
+                include_pending_processing=True,
+                include_archive=include_archive,
+                request_budget=budget,
+            )
+        except HTTPException as exc:
+            if exc.status_code != 400 or not str(exc.detail).startswith('invalid_or_stale_cursor:'):
+                raise
+            record_fallback(
+                component='firestore_read',
+                from_mode='cursor_page',
+                to_mode='cursor_page' if bounded_offset == 0 else 'offset_read',
+                reason='other',
+                outcome='degraded',
+                log=logger,
+            )
+            cursor = None
+        else:
+            if bounded_offset != 0:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Memory cursor pagination cannot be combined with offset",
+                )
+            return _finalize(page.memories, truncated=page.truncated or budget.truncated, next_cursor=page.next_cursor)
     if cursor is not None and bounded_offset != 0:
         raise HTTPException(
             status_code=400,
@@ -637,13 +843,23 @@ def get_memories(
                 request_budget=budget,
             )
         except MemoryBackingStoreUnavailable as exc:
-            # First page must succeed whenever the legacy offset read can serve
-            # it. Catch the typed backing-store failure — not detail strings —
-            # so a renamed or newly added unavailable message still degrades
-            # instead of escaping as a hard 503. The cursor path, both keyset
-            # scans, and the scan-row budget all raise this type. Unrelated
-            # errors (4xx, other 503s) propagate. The fallback runs on the
-            # SAME request budget, never a fresh unbudgeted window (#11831).
+            if exc.detail == MEMORY_LIST_SCAN_BUDGET_DETAIL:
+                # The keyset walk already holds the honest prefix. Do not
+                # restart through the offset reader: that path used to stream
+                # the entire canonical collection and return an empty 200 when
+                # the request budget died (#11831).
+                logger.warning(
+                    "memories first-page keyset scan budget exhausted; not falling back to offset read stream=%s",
+                    exc.stream,
+                )
+                return _finalize([], truncated=True, next_cursor=None)
+            # Other backing-store failures (cursor secret, a historical index
+            # still building) may still use the offset reader. That reader
+            # walks the canonical keyset and the budgeted historical index —
+            # never the unbounded canonical collection stream. Catch the typed
+            # failure, not detail strings, so a renamed unavailable message
+            # still degrades. Unrelated errors propagate. The fallback runs on
+            # the SAME request budget, never a fresh unbudgeted window.
             record_fallback(
                 component='firestore_read',
                 from_mode='cursor_page',
@@ -664,15 +880,15 @@ def get_memories(
                 next_cursor=page.next_cursor,
             )
 
-    memories = MemoryService(db_client=db_client).read(
-        uid,
-        limit=bounded_limit,
-        offset=bounded_offset,
-        device_scope_request=scope_request,
-        include_pending_processing=True,
-        include_archive=include_archive,
-        budget=budget,
-    )
+    read_kwargs: Dict[str, Any] = {
+        "limit": bounded_limit,
+        "offset": bounded_offset,
+        "device_scope_request": scope_request,
+        "include_pending_processing": True,
+        "include_archive": include_archive,
+        "budget": budget,
+    }
+    memories = MemoryService(db_client=db_client).read(uid, **read_kwargs)
     return _finalize(memories, truncated=budget.truncated, next_cursor=None)
 
 
@@ -682,6 +898,7 @@ def get_ledger_history(
     request: Request = None,  # type: ignore[assignment]
     limit: int = 100,
     offset: int = 0,
+    cursor: Optional[str] = None,
     uid: str = Depends(auth.get_current_user_uid),
 ):
     """Return explicit owner-scoped rejected and closed ledger rows.
@@ -691,28 +908,30 @@ def get_ledger_history(
     canonical-only; it returns rows newest-first by ``updated_at`` then
     ``memory_id`` (``limit`` is capped at 500 and the compatibility
     ``offset + limit`` window at 5000).  The provider window is bounded to 500
-    rows plus one sentinel; an incomplete provider/budget window is marked with
+    rows plus one sentinel.  When available, the sentinel becomes an
+    owner-bound signed keyset cursor in ``X-Omi-Memory-Next-Cursor``; an
+    incomplete provider/budget window is also marked with
     ``X-Omi-List-Truncated: true``.  Tombstoned and hidden rows are never
     resurrected for history UI.
     """
 
-    # The mobile client calls this on every memories-tab load for every user.
-    # Outside the JIT rollout no ledger history can exist, so answer empty
-    # without paying the bounded 501-row provider scan for the whole fleet.
-    # Unknown/error rollout states also take this cheap path (fail closed).
-    rollout = resolve_jit_rollout_sync(uid, stage=JITDecisionStage.READ_ONLY)
-    if not rollout.permits_work:
-        return memory_list_response([], MemoryApiExposure.CANONICAL, headers={'Cache-Control': 'no-store'})
-
     db_client = getattr(db_client_module, 'db', None)
     budget = list_read_budget_for_request(request, route='memories-ledger-history')
+    history_start_after: Optional[tuple[datetime, str]] = None
+    if cursor:
+        history_start_after = _decode_ledger_history_cursor(cursor, uid)
     try:
-        page = MemoryService(db_client=db_client).read_ledger_history_page(
-            uid,
-            limit=limit,
-            offset=offset,
-            budget=budget,
-        )
+        history_kwargs: Dict[str, Any] = {
+            'limit': limit,
+            # Cursor pages are keyset pages.  The offset sent by newer clients
+            # is only a compatibility bookkeeping value and must not be
+            # applied a second time.
+            'offset': 0 if history_start_after is not None else offset,
+            'budget': budget,
+        }
+        if history_start_after is not None:
+            history_kwargs['start_after'] = history_start_after
+        page = MemoryService(db_client=db_client).read_ledger_history_page(uid, **history_kwargs)
     except HTTPException:
         raise
     except ListReadBudgetExhausted as exc:
@@ -722,6 +941,23 @@ def get_ledger_history(
         raise HTTPException(status_code=503, detail="Ledger history unavailable") from exc
 
     headers = {'Cache-Control': 'no-store'}
+    next_cursor = None
+    next_start_after_raw = getattr(page, 'next_start_after', None)
+    if isinstance(next_start_after_raw, tuple):
+        next_start_after_values = cast(Tuple[object, ...], next_start_after_raw)
+        if (
+            len(next_start_after_values) == 2
+            and isinstance(next_start_after_values[0], datetime)
+            and isinstance(next_start_after_values[1], str)
+        ):
+            next_start_after = (next_start_after_values[0], next_start_after_values[1])
+        else:
+            next_start_after = None
+        if page.truncated:
+            if next_start_after is not None:
+                next_cursor = _encode_ledger_history_cursor(uid, next_start_after)
+    if next_cursor:
+        headers[_MEMORY_NEXT_CURSOR_HEADER] = next_cursor
     if budget.truncated or page.truncated:
         headers[OMI_LIST_TRUNCATED_HEADER] = OMI_LIST_TRUNCATED_VALUE
     budget.observe('truncated' if budget.truncated or page.truncated else 'complete')
@@ -777,14 +1013,20 @@ def resolve_memory_review_item(
 ):
     if request.decision not in ('accept', 'reject', 'correct', 'timeout'):
         raise HTTPException(status_code=400, detail='Invalid review decision')
-    result = review_queue.resolve_review_conflict(
-        uid,
-        review_id,
-        request.decision,
-        correction=request.correction,
-        reason=request.reason,
-        current_veracity=request.current_veracity,
-    )
+    try:
+        result = review_queue.resolve_review_conflict(
+            uid,
+            review_id,
+            request.decision,
+            correction=request.correction,
+            reason=request.reason,
+            current_veracity=request.current_veracity,
+        )
+    except (DestructiveGateTakeover, DestructiveOperationInProgress, LegalHoldAuthorityUnavailable) as exc:
+        # A canonical reject/drop revalidates the destructive gate after its
+        # tombstone commit; a concurrent same-kind deletion that rotated the
+        # token must surface as the retryable account-gate response, not 500.
+        raise account_gate_busy_http_exception() from exc
     if result.get('status') == 'not_found':
         raise HTTPException(status_code=404, detail='Review item not found')
     return result
@@ -796,6 +1038,7 @@ def delete_memories_batch(
     uid: str = Depends(
         cast(Callable[..., str], _auth_module.with_rate_limit(auth.get_current_user_uid, "memories:delete_batch"))
     ),
+    http_request: Request = None,  # type: ignore[assignment]
 ):
     """Delete up to MEMORIES_BATCH_MAX memories in one request.
 
@@ -822,10 +1065,11 @@ def delete_memories_batch(
     except HTTPException:
         # Preserve service-owned 402/404/413 mappings and observability details.
         raise
-    except DestructiveOperationInProgress as exc:
+    except (DestructiveGateTakeover, DestructiveOperationInProgress, LegalHoldAuthorityUnavailable) as exc:
         raise account_gate_busy_http_exception() from exc
     except ValueError:
         raise HTTPException(status_code=404, detail='Memory not found')
+    record_product_event('memory_deleted', request=http_request, count=len(memory_ids))
     return {'status': 'ok'}
 
 
@@ -835,13 +1079,15 @@ def delete_memory(
     uid: str = Depends(
         cast(Callable[..., str], _auth_module.with_rate_limit(auth.get_current_user_uid, "memories:delete"))
     ),
+    http_request: Request = None,  # type: ignore[assignment]
 ):
     try:
         MemoryService(db_client=getattr(db_client_module, 'db', None)).delete(uid, memory_id)
-    except DestructiveOperationInProgress as exc:
+    except (DestructiveGateTakeover, DestructiveOperationInProgress, LegalHoldAuthorityUnavailable) as exc:
         raise account_gate_busy_http_exception() from exc
     except ValueError:
         raise HTTPException(status_code=404, detail='Memory not found')
+    record_product_event('memory_deleted', request=http_request)
     return {'status': 'ok'}
 
 
@@ -854,12 +1100,17 @@ def delete_memories(
     uid: str = Depends(
         cast(Callable[..., str], _auth_module.with_rate_limit(auth.get_current_user_uid, "memories:delete_all"))
     ),
+    http_request: Request = None,  # type: ignore[assignment]
 ):
     service = MemoryService(db_client=getattr(db_client_module, 'db', None))
-    if scope == 'default':
-        service.delete_default(uid)
-    else:
-        service.delete_all(uid)
+    try:
+        if scope == 'default':
+            service.delete_default(uid)
+        else:
+            service.delete_all(uid)
+    except (DestructiveGateTakeover, DestructiveOperationInProgress, LegalHoldAuthorityUnavailable) as exc:
+        raise account_gate_busy_http_exception() from exc
+    record_product_event('memory_deleted', request=http_request)
     return {'status': 'ok'}
 
 
@@ -870,6 +1121,7 @@ def review_memory(
     uid: str = Depends(
         cast(Callable[..., str], _auth_module.with_rate_limit(auth.get_current_user_uid, "memories:modify"))
     ),
+    http_request: Request = None,  # type: ignore[assignment]
 ):
     service = MemoryService(db_client=getattr(db_client_module, 'db', None))
     _validate_mutable_memory(uid, memory_id, db_client=getattr(db_client_module, 'db', None))
@@ -878,6 +1130,7 @@ def review_memory(
     # memory is a mutable flag with no timestamp, so the ledger row is what
     # gives the verdict a time and lands it in the daily report.
     record_memory_feedback(uid, memory_id, value)
+    record_product_event('memory_updated', request=http_request, op='review')
     return {'status': 'ok'}
 
 
@@ -923,6 +1176,7 @@ def edit_memory(
     uid: str = Depends(
         cast(Callable[..., str], _auth_module.with_rate_limit(auth.get_current_user_uid, "memories:modify"))
     ),
+    http_request: Request = None,  # type: ignore[assignment]
 ):
     mutation_value = request.value if request is not None else value
     if mutation_value is None:
@@ -936,7 +1190,9 @@ def edit_memory(
     except ValueError:
         raise HTTPException(status_code=404, detail='Memory not found')
     if updated.ledger_schema_version == 'knowledge_ledger.v1':
+        record_product_event('memory_updated', request=http_request, op='update')
         return {'status': 'ok', 'memory': updated}
+    record_product_event('memory_updated', request=http_request, op='update')
     return {'status': 'ok'}
 
 
@@ -952,6 +1208,7 @@ def update_memory_visibility(
     uid: str = Depends(
         cast(Callable[..., str], _auth_module.with_rate_limit(auth.get_current_user_uid, "memories:modify"))
     ),
+    http_request: Request = None,  # type: ignore[assignment]
 ):
     mutation_value = request.value if request is not None else value
     if mutation_value is None:
@@ -962,6 +1219,7 @@ def update_memory_visibility(
     _validate_mutable_memory(uid, memory_id, db_client=db_client)
     MemoryService(db_client=db_client).update_visibility(uid, memory_id, mutation_value)
     submit_with_context(postprocess_executor, update_personas_async, uid)
+    record_product_event('memory_updated', request=http_request, op='visibility')
     return {'status': 'ok'}
 
 
@@ -972,6 +1230,7 @@ def update_memory_read_status(
     uid: str = Depends(
         cast(Callable[..., str], _auth_module.with_rate_limit(auth.get_current_user_uid, "memories:modify"))
     ),
+    http_request: Request = None,  # type: ignore[assignment]
 ):
     """Persist durable insight/memory read and dismiss state for desktop clients."""
 
@@ -988,6 +1247,7 @@ def update_memory_read_status(
         )
     except ValueError:
         raise HTTPException(status_code=404, detail='Memory not found')
+    record_product_event('memory_updated', request=http_request, op='read')
     return _memory_response(memory)
 
 
@@ -996,10 +1256,12 @@ def update_memory_baseline(
     memory_id: str,
     value: bool,
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "memories:modify")),
+    http_request: Request = None,  # type: ignore[assignment]
 ):
     """Preserve the released baseline flag through universal memory authority."""
 
     db_client = getattr(db_client_module, 'db', None)
     _validate_mutable_memory(uid, memory_id, db_client=db_client)
     MemoryService(db_client=db_client).update_baseline(uid, memory_id, value)
+    record_product_event('memory_updated', request=http_request, op='baseline')
     return {'status': 'ok'}

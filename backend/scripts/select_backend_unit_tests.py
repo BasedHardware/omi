@@ -8,12 +8,18 @@ from typing import Any, Dict, List, Set, Tuple, cast
 import argparse
 import fnmatch
 import json
+import sys
 from pathlib import Path
 from pathlib import PurePosixPath
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 REPO_DIR = BACKEND_DIR.parent
 WORKFLOW_CONTRACTS_PATH = BACKEND_DIR / 'testing' / 'workflow_contracts.json'
+if str(BACKEND_DIR) not in sys.path:
+    sys.path.insert(0, str(BACKEND_DIR))
+
+from tests.support.firestore_serving_query_inventory import is_serving_query_inventory_path  # noqa: E402
+from tests.support.background_task_ratchet_scope import is_background_task_ratchet_path  # noqa: E402
 
 FULL_TEST_ROOTS = (
     BACKEND_DIR / 'tests' / 'unit',
@@ -103,13 +109,92 @@ MEMORY_POLICY_CORE_TESTS = (
 # intentional-exception check below — single source so the two lists cannot
 # drift apart and silently stop selecting the monitoring unit contracts.
 MONITORING_CONTRACT_SOURCES = (
+    'backend/charts/monitoring/prometheus-adapter/',
+    'backend/scripts/diff_prod_adapter.py',
+    'backend/charts/parakeet/',
+    'backend/charts/backend-listen/',
+    'backend/charts/pusher/',
+    'backend/charts/vad/',
+    'backend/charts/diarizer/',
+    'backend/charts/nllb-translation/',
+    'backend/charts/deepgram-self-hosted/nova-3/',
+    'backend/scripts/alert_backtest.py',
+    'backend/charts/monitoring/metric-inventory.prod.json',
     'backend/charts/monitoring/expected-targets.prod.yaml',
     'backend/charts/monitoring/kube-prometheus-stack/',
     'backend/charts/monitoring/alerts/',
+    'backend/charts/monitoring/notifications/',
     'backend/charts/monitoring/alert-rules.json',
+    'backend/charts/monitoring/live-alert-gate.json',
     'backend/charts/monitoring/prometheus-stackdriver-exporter/',
     'backend/charts/parakeet/templates/servicemonitor.yaml',
 )
+
+# Serving query contract checks are a cross-cutting guard, not an area-specific
+# selection. Keep this list complete even when a change also selects narrower
+# tests. The inventory predicate below is shared with the AST inventory's scope.
+FIRESTORE_INDEX_GUARD_TESTS = (
+    'tests/unit/test_firestore_query_shapes.py',
+    'tests/unit/test_firestore_outside_query_contract.py',
+    'tests/unit/test_firestore_caller_witnesses.py',
+    'tests/unit/test_firestore_runtime_witnesses.py',
+    'tests/unit/test_firestore_index_rules.py',
+    'tests/unit/test_firestore_query_contract.py',
+    'tests/unit/test_firestore_field_indexes.py',
+)
+
+FIRESTORE_INDEX_GUARD_SUPPORT_PREFIX = 'backend/tests/support/firestore_'
+FIRESTORE_INDEX_GUARD_SCHEMA_PATHS = frozenset(
+    {'firestore.indexes.json', 'backend/database/firestore_index_registry.py'}
+)
+
+# Background-task ratchet: un-awaited background work on the Cloud Tasks
+# handler request paths must survive revision draining (#22198). The scanned
+# module set is owned by the ratchet itself
+# (tests/support/background_task_ratchet_scope.py); selection uses that
+# module's cheap prefix superset over the same scope constants, so a change
+# to any module the scanner can reach — including transitive closure members
+# like services/users/account_deletion.py —
+# always runs the ratchet, and a new un-awaited site cannot slip past
+# changed-file CI and only fail a later --all run. The ratchet's own test
+# asserts the walk never escapes the selection prefixes.
+BACKGROUND_TASK_RATCHET_TESTS = (
+    'tests/unit/test_background_task_ratchet.py',
+    'tests/unit/test_revision_drain_harness.py',
+)
+
+# Shared with the canonical release manifest's named trigger. Do not copy the
+# inventory's directory exclusions into a second set of workflow path globs.
+FIRESTORE_INDEX_GUARD_CONTROL_PATHS = frozenset(
+    {
+        'backend/scripts/select_backend_unit_tests.py',
+        'backend/scripts/run_firestore_index_guard.py',
+        'backend/scripts/generate_firestore_indexes.py',
+        'backend/firestore-guard-requirements.txt',
+        'backend/openapi-requirements.txt',
+        'backend/.python-version',
+        'backend/pyproject.toml',
+        'backend/test.sh',
+        'backend/tests/conftest.py',
+        'backend/tests/unit/conftest.py',
+        'backend/tests/unit/memory_import_isolation.py',
+        'backend/testing/hermetic_network.py',
+    }
+)
+
+
+def is_firestore_index_guard_path(path: str) -> bool:
+    path = normalize_changed_path(path)
+    return (
+        path in FIRESTORE_INDEX_GUARD_SCHEMA_PATHS
+        or path in FIRESTORE_INDEX_GUARD_CONTROL_PATHS
+        or path.startswith(FIRESTORE_INDEX_GUARD_SUPPORT_PREFIX)
+        or path.startswith('backend/scripts/firestore_')
+        and path.endswith('.py')
+        or path.removeprefix('backend/') in FIRESTORE_INDEX_GUARD_TESTS
+        or is_serving_query_inventory_path(path)
+    )
+
 
 AREA_TESTS = (
     (
@@ -118,12 +203,13 @@ AREA_TESTS = (
             'backend/scripts/generate_plan_catalog.py',
             'backend/models/users.py',
             'backend/utils/subscription.py',
+            'backend/utils/subscription_state_machine.py',
             'backend/utils/overage.py',
             'backend/utils/fair_use.py',
             'backend/utils/sync/rate_limit.py',
             'backend/scripts/support/find_stripe_entitlement_mismatches.py',
             'backend/routers/payment.py',
-            'backend/routers/desktop_proactivity.py',
+            'backend/routers/retired_desktop_proactivity.py',
             'backend/database/phone_call_config.py',
         ),
         (),
@@ -201,11 +287,17 @@ AREA_TESTS = (
         ('tests/unit/test_parakeet_*.py',),
     ),
     (
+        ('backend/scripts/verify_pusher_live_alert_route.py',),
+        (),
+        ('tests/unit/test_verify_pusher_live_alert_route.py',),
+    ),
+    (
         MONITORING_CONTRACT_SOURCES,
         (),
         (
             'tests/unit/test_monitoring_*.py',
             'tests/unit/test_journey_observability.py',
+            'tests/unit/test_verify_pusher_live_alert_route.py',
         ),
     ),
     (
@@ -259,6 +351,11 @@ AREA_TESTS = (
         ('tests/unit/test_apps_*.py', 'tests/unit/test_app_*.py', 'tests/unit/test_create_persona_user_none.py'),
     ),
     (
+        ('backend/utils/social.py',),
+        (),
+        ('tests/unit/test_social_*.py',),
+    ),
+    (
         ('backend/routers/folders', 'backend/services/folders/', 'backend/utils/folders'),
         (),
         ('tests/unit/test_folder_*.py',),
@@ -297,6 +394,33 @@ AREA_TESTS = (
         ('backend/routers/rate', 'backend/services/rate', 'backend/utils/rate'),
         (),
         ('tests/unit/test_rate_*.py',),
+    ),
+    (
+        (
+            'backend/database/users.py',
+            'backend/database/csat.py',
+        ),
+        (),
+        (
+            'tests/unit/test_firestore_query_shapes.py',
+            'tests/unit/test_firestore_index_rules.py',
+            'tests/unit/test_firestore_shape_recorder.py',
+        ),
+    ),
+    (
+        # Cloud Tasks handler request paths: background work there must survive revision draining.
+        # Superseded by the shared ratchet-scope guard in tests_for_changed_paths
+        # (tests/support/background_task_ratchet_scope.py), which selects the
+        # ratchet for *every* module the scanner walks, not just these seeds.
+        (
+            'backend/tests/unit/fixtures/revision_drain.py',
+            'backend/tests/unit/fixtures/background_task_baseline.json',
+        ),
+        (),
+        (
+            'tests/unit/test_background_task_ratchet.py',
+            'tests/unit/test_revision_drain_harness.py',
+        ),
     ),
 )
 
@@ -359,6 +483,10 @@ def is_selectable_backend_path(path: str) -> bool:
         return False
     if path.endswith('.md'):
         return False
+    # Duration exemptions are not product sources. Treating this list as an
+    # unmapped backend path would select the full unit suite on every edit.
+    if path == 'backend/tests/fast_unit_duration_allowlist.txt':
+        return False
     if path.startswith('backend/docs/'):
         return False
     if path.startswith('backend/charts/'):
@@ -418,6 +546,25 @@ def tests_for_changed_paths(changed_paths: list[str], all_tests: list[str]) -> t
         return all_tests, 'no changed paths were provided'
 
     selected: set[str] = set()
+    # Cross-cutting cap guard: a new model endpoint must declare a funded gate.
+    # Keep this separate from AREA_TESTS so unknown sources retain full-suite fallback.
+    if any(
+        path.startswith(('backend/routers/', 'backend/utils/llm/'))
+        or path
+        in {
+            'backend/utils/generated_compute.py',
+            'backend/utils/funded_processing.py',
+            'backend/docs/llm/model_endpoint_inventory.yaml',
+        }
+        for path in changed_paths
+    ):
+        selected.update(
+            test for test in ('tests/unit/test_generated_compute_inventory_guardrails.py',) if test in all_tests
+        )
+    if any(is_firestore_index_guard_path(path) for path in changed_paths):
+        selected.update(test for test in FIRESTORE_INDEX_GUARD_TESTS if test in all_tests)
+    if any(is_background_task_ratchet_path(path) for path in changed_paths):
+        selected.update(test for test in BACKGROUND_TASK_RATCHET_TESTS if test in all_tests)
     backend_paths = [path for path in changed_paths if is_selectable_backend_path(path)]
     test_paths = [path for path in backend_paths if path.startswith('backend/tests/') and path.endswith('.py')]
 

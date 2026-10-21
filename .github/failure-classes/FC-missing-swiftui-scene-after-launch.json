@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "id": "FC-missing-swiftui-scene-after-launch",
+  "violated_contract": "A desktop launch must either present its primary SwiftUI scene or report a bounded, actionable failure. A one-shot window lookup in the application delegate can run before SwiftUI mounts the scene, leaving a healthy process with no window and the user stuck at the launching state after a profile reset.",
+  "canonical_prevention": "Treat the primary scene as eventually mounted: request it idempotently, retry observation for a finite window, and keep the retry cadence and stop condition in a deterministic policy covered by tests. Preserve explicitly headless relaunches as a separate branch so recovery never reopens a window the update policy intentionally suppresses.",
+  "canonical_prevention_artifact": [
+    "desktop/macos/Desktop/Sources/MainWindow/ShellWindowLaunchRecoveryPolicy.swift",
+    "desktop/macos/Desktop/Tests/ShellWindowLaunchRecoveryPolicyTests.swift"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "desktop/macos/Desktop/Sources/OmiApp.swift",
+    "desktop/macos/Desktop/Sources/MainWindow/AppDelegate+ShellWindowLaunch.swift",
+    "desktop/macos/Desktop/Sources/MainWindow/ShellWindowLaunchRecoveryPolicy.swift",
+    "desktop/macos/Desktop/Tests/ShellWindowLaunchRecoveryPolicyTests.swift"
+  ],
+  "status": "open"
+}

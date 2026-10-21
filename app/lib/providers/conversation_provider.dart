@@ -1,23 +1,44 @@
+import 'package:omi/services/on_device/on_device_transcription_controller.dart';
 import 'dart:async';
+
+import 'package:omi/backend/schema/gen/speaker_tag_prompts_wire.g.dart';
 
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/foundation.dart';
 
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/http/api/users.dart';
+import 'package:omi/backend/http/api_fallback.dart';
+import 'package:omi/backend/http/api_presentation.dart';
+import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/structured.dart';
-import 'package:omi/services/app_review_service.dart';
+import 'package:omi/services/capture/empty_recording_notice.dart';
 import 'package:omi/services/auth_service.dart';
+import 'package:omi/services/telemetry/client_telemetry.dart';
+import 'package:omi/services/siri_integration.dart';
 import 'package:omi/services/notifications/merge_notification_handler.dart';
+import 'package:omi/utils/conversations/capture_groups.dart';
 import 'package:omi/utils/logger.dart';
 
 typedef ConversationListFetcher = Future<({List<ServerConversation> items, bool ok})> Function();
 typedef ConversationPageFetcher = Future<({List<ServerConversation> items, bool ok, bool truncated})> Function();
 typedef ConversationLifecycleFetcher = Future<({ServerConversation? item, bool ok})> Function(String id);
-typedef DailySummariesChecker = Future<bool> Function();
+
+/// Returns null when the check could not be made, so the caller keeps the
+/// last known answer instead of reading a failure as "no recaps".
+typedef DailySummariesChecker = Future<bool?> Function();
 typedef ConversationSearchFetcher = Future<(List<ServerConversation>, int, int)> Function(
+  String query, {
+  int? page,
+  int? limit,
+  required bool includeDiscarded,
+  DateTime? startDate,
+  DateTime? endDate,
+  String? speakerId,
+});
+typedef ConversationSearchResultFetcher = Future<ConversationSearchResult> Function(
   String query, {
   int? page,
   int? limit,
@@ -58,10 +79,13 @@ class ConversationProvider extends ChangeNotifier {
 
   bool isLoadingConversations = false;
   bool showDiscardedConversations = false;
+  HomeEmptyExplanation homeEmptyExplanation = HomeEmptyExplanation.none;
   bool showShortConversations = false;
   int shortConversationThreshold = 0; // in seconds
   bool showStarredOnly = false; // filter to show only starred conversations
-  bool showDailySummaries = false; // filter to show daily summaries instead of conversations
+  /// Daily Recaps is its own pushed page (`DailyRecapsPage`); the list never enters a recap mode.
+  /// Kept (always false) only for home/page.dart's tab-tap reset until that call site is removed.
+  bool get showDailySummaries => false;
   bool hasDailySummaries = false; // whether user has any daily summaries
   DateTime? selectedStartDate;
   DateTime? selectedEndDate;
@@ -82,6 +106,10 @@ class ConversationProvider extends ChangeNotifier {
 
   List<ServerConversation> processingConversations = [];
 
+  /// Replacement processing telemetry. Production uses the process-wide client.
+  ClientTelemetry? clientTelemetry;
+  ClientTelemetry get _clientTelemetry => clientTelemetry ?? ClientTelemetry.instance;
+
   // Per-conversation websocket transition versions. Reconciliation snapshots
   // these before lifecycle probes so a completion/removal for row B cannot
   // suppress an unrelated newly discovered row A.
@@ -92,8 +120,6 @@ class ConversationProvider extends ChangeNotifier {
   bool isSelectionModeActive = false;
   Set<String> selectedConversationIds = {};
   StreamSubscription<MergeCompletedEvent>? _mergeCompletedSubscription;
-
-  final AppReviewService _appReviewService = AppReviewService();
 
   bool isFetchingConversations = false;
 
@@ -142,8 +168,17 @@ class ConversationProvider extends ChangeNotifier {
   final ConversationListFetcher? _conversationListFetcher;
   final ConversationLifecycleFetcher _conversationLifecycleFetcher;
   final DailySummariesChecker? _dailySummariesChecker;
-  final ConversationSearchFetcher _conversationSearchFetcher;
+  final ConversationSearchResultFetcher _conversationSearchResultFetcher;
   final bool Function() _isSignedIn;
+  final ConversationApi? _conversationApi;
+  ApiViewState<List<ServerConversation>> _listViewState = const ApiViewState(phase: ApiViewPhase.data);
+  final Map<String, ApiViewState<ServerConversation>> _typedDetailStates = {};
+  int _searchRequestGeneration = 0;
+
+  /// The latest search attempt, including an empty successful result or a
+  /// transport/parse failure. Consumers must inspect [outcome] before using
+  /// [items] so an error cannot be rendered as "no results".
+  ConversationSearchResult? lastSearchResult;
 
   @visibleForTesting
   ConversationDetailsFetcher? conversationDetailsFetcherOverride;
@@ -159,19 +194,93 @@ class ConversationProvider extends ChangeNotifier {
     ConversationLifecycleFetcher? conversationLifecycleFetcher,
     DailySummariesChecker? dailySummariesChecker,
     ConversationSearchFetcher? conversationSearchFetcher,
+    ConversationSearchResultFetcher? conversationSearchResultFetcher,
     bool Function()? isSignedIn,
+    ConversationApi? conversationApi,
   })  : _conversationListFetcher = conversationListFetcher,
-        _conversationLifecycleFetcher = conversationLifecycleFetcher ?? getConversationByIdResult,
+        _conversationLifecycleFetcher = conversationLifecycleFetcher ??
+            (conversationApi == null
+                ? getConversationByIdResult
+                : (id) => _legacyLifecycleFromTyped(conversationApi, id)),
         _dailySummariesChecker = dailySummariesChecker,
-        _conversationSearchFetcher = conversationSearchFetcher ?? searchConversationsServer,
-        _isSignedIn = isSignedIn ?? AuthService.instance.isSignedIn {
+        _conversationSearchResultFetcher = conversationSearchResultFetcher ??
+            (conversationSearchFetcher == null
+                ? searchConversationsServerResult
+                : (query, {page, limit, required includeDiscarded, startDate, endDate, speakerId}) async {
+                    final (items, currentPage, totalPages) = await conversationSearchFetcher(
+                      query,
+                      page: page,
+                      limit: limit,
+                      includeDiscarded: includeDiscarded,
+                      startDate: startDate,
+                      endDate: endDate,
+                      speakerId: speakerId,
+                    );
+                    return ConversationSearchResult(
+                      items: items,
+                      currentPage: currentPage,
+                      totalPages: totalPages,
+                      outcome: ConversationSearchResultOutcome.success,
+                    );
+                  }),
+        _isSignedIn = isSignedIn ?? AuthService.instance.isSignedIn,
+        _conversationApi = conversationApi {
     _setupMergeListener();
     _loadSettings();
+  }
+
+  static Future<({ServerConversation? item, bool ok})> _legacyLifecycleFromTyped(ConversationApi api, String id) async {
+    final result = await api.byId(id);
+    return switch (result) {
+      ApiSuccess(:final data) => (item: data, ok: true),
+      ApiFailure(:final problem)
+          when problem.kind == ApiProblemKind.paymentRequired ||
+              problem.kind == ApiProblemKind.unprocessable ||
+              problem.kind == ApiProblemKind.notFound =>
+        (item: null, ok: true),
+      _ => (item: null, ok: false),
+    };
+  }
+
+  ApiViewState<List<ServerConversation>> get apiViewState => _listViewState;
+
+  @visibleForTesting
+  bool get usesTypedConversationApi => _conversationApi != null;
+
+  ApiViewState<ServerConversation> typedDetailState(String id) =>
+      _typedDetailStates[id] ?? const ApiViewState(phase: ApiViewPhase.data);
+
+  Future<void> refreshTypedDetail(String id) async {
+    final api = _conversationApi;
+    if (api == null) return;
+    final result = await api.byId(id);
+    _typedDetailStates[id] = presentApiResult(result, isEmpty: (_) => false);
+    if (result
+        case ApiFailure(
+          :final problem,
+        ) when problem.kind == ApiProblemKind.paymentRequired || problem.kind == ApiProblemKind.unprocessable) {
+      processingConversations = processingConversations.where((conversation) => conversation.id != id).toList();
+    }
+    notifyListeners();
+  }
+
+  void _projectTypedList(ApiResult<List<ServerConversation>> result) {
+    _listViewState = presentApiResult(
+      result,
+      previous: conversations.isNotEmpty ? conversations : null,
+      isEmpty: (rows) => rows.isEmpty,
+      fallback: recordFallback,
+    );
   }
 
   void _loadSettings() {
     final prefs = SharedPreferencesUtil();
     showDiscardedConversations = prefs.showDiscardedMemories;
+    homeEmptyExplanation = switch (prefs.homeEmptyExplanation) {
+      'tooShort' => HomeEmptyExplanation.tooShort,
+      'discardedOnly' => HomeEmptyExplanation.discardedOnly,
+      _ => HomeEmptyExplanation.none,
+    };
     showShortConversations = prefs.showShortConversations;
     shortConversationThreshold = prefs.shortConversationThreshold;
   }
@@ -188,7 +297,9 @@ class ConversationProvider extends ChangeNotifier {
 
   void clearUserData() {
     _sessionGeneration++;
+    _searchRequestGeneration++;
     _conversationFetchRevision++;
+    _phoneOnlyConversations.clear();
     conversations = [];
     searchedConversations = [];
     groupedConversations = {};
@@ -200,7 +311,6 @@ class ConversationProvider extends ChangeNotifier {
     mergingConversationIds = {};
     selectedConversationIds = {};
     isSelectionModeActive = false;
-    showDailySummaries = false;
     hasDailySummaries = false;
     selectedStartDate = null;
     selectedEndDate = null;
@@ -209,16 +319,19 @@ class ConversationProvider extends ChangeNotifier {
     searchStartDate = null;
     searchEndDate = null;
     previousQuery = '';
+    lastSearchResult = null;
     totalSearchPages = 1;
     currentSearchPage = 1;
     isLoadingConversations = false;
     isFetchingConversations = false;
     conversationsLoadFailed = false;
+    _listViewState = const ApiViewState(phase: ApiViewPhase.data);
+    _typedDetailStates.clear();
     _initialFetchRetryTimer?.cancel();
     _initialFetchRetryTimer = null;
     _initialFetchRetryCount = 0;
     memoriesToDelete = {};
-    deleteTimestamps = {};
+    _cancelPendingDeleteTimers();
     _refreshDebounceTimer?.cancel();
     _refreshDebounceTimer = null;
     _lastRefreshTime = null;
@@ -234,18 +347,30 @@ class ConversationProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> searchConversations(String query, {bool showShimmer = false}) async {
-    if (!_isSignedIn()) return;
+  Future<ConversationSearchResult> searchConversations(String query, {bool showShimmer = false}) async {
+    final generation = _sessionGeneration;
+    final requestGeneration = ++_searchRequestGeneration;
+    if (!_isSignedIn()) {
+      const result = ConversationSearchResult.failure();
+      lastSearchResult = result;
+      return result;
+    }
     if (query.isEmpty && selectedSpeakerId == null) {
       previousQuery = "";
       currentSearchPage = 0;
       totalSearchPages = 0;
       searchedConversations = [];
       groupConversationsByDate();
-      return;
+      const result = ConversationSearchResult(
+        items: [],
+        currentPage: 0,
+        totalPages: 0,
+        outcome: ConversationSearchResultOutcome.success,
+      );
+      lastSearchResult = result;
+      return result;
     }
 
-    final generation = _sessionGeneration;
     if (showShimmer) {
       setLoadingConversations(true);
     } else {
@@ -253,19 +378,47 @@ class ConversationProvider extends ChangeNotifier {
     }
 
     previousQuery = query;
-    var (convos, current, total) = await _conversationSearchFetcher(
-      query,
-      includeDiscarded: showDiscardedConversations,
-      startDate: searchStartDate,
-      endDate: searchEndDate,
-      speakerId: selectedSpeakerId,
-    );
-    if (generation != _sessionGeneration || !_isSignedIn()) return;
+    late final ConversationSearchResult result;
+    try {
+      result = await _conversationSearchResultFetcher(
+        query,
+        includeDiscarded: showDiscardedConversations,
+        startDate: searchStartDate,
+        endDate: searchEndDate,
+        speakerId: selectedSpeakerId,
+      );
+    } catch (_) {
+      if (generation != _sessionGeneration || requestGeneration != _searchRequestGeneration || !_isSignedIn()) {
+        return const ConversationSearchResult.failure();
+      }
+      const failure = ConversationSearchResult.failure();
+      lastSearchResult = failure;
+      if (showShimmer) {
+        setLoadingConversations(false);
+      } else {
+        setIsFetchingConversations(false);
+      }
+      notifyListeners();
+      return failure;
+    }
+    if (generation != _sessionGeneration || requestGeneration != _searchRequestGeneration || !_isSignedIn()) {
+      return const ConversationSearchResult.failure();
+    }
+    lastSearchResult = result;
+    if (!result.isSuccess) {
+      if (showShimmer) {
+        setLoadingConversations(false);
+      } else {
+        setIsFetchingConversations(false);
+      }
+      notifyListeners();
+      return result;
+    }
     // Search results are ranked by the server, including transcript-match relevance.
     // Re-sorting by recency would bury older spoken-moment matches.
-    searchedConversations = convos;
-    currentSearchPage = current;
-    totalSearchPages = total;
+    searchedConversations = result.items;
+    currentSearchPage = result.currentPage;
+    totalSearchPages = result.totalPages;
     groupSearchConvosByDate();
 
     if (showShimmer) {
@@ -275,6 +428,7 @@ class ConversationProvider extends ChangeNotifier {
     }
 
     notifyListeners();
+    return result;
   }
 
   Future<void> setSpeakerFilter(String? speakerId) async {
@@ -288,19 +442,34 @@ class ConversationProvider extends ChangeNotifier {
       return;
     }
     final generation = _sessionGeneration;
+    final requestGeneration = _searchRequestGeneration;
     setLoadingConversations(true);
-    var (newConvos, current, total) = await _conversationSearchFetcher(
-      previousQuery,
-      page: currentSearchPage + 1,
-      includeDiscarded: showDiscardedConversations,
-      startDate: searchStartDate,
-      endDate: searchEndDate,
-      speakerId: selectedSpeakerId,
-    );
-    if (generation != _sessionGeneration || !_isSignedIn()) return;
-    searchedConversations.addAll(newConvos);
-    totalSearchPages = total;
-    currentSearchPage = current;
+    late final ConversationSearchResult result;
+    try {
+      result = await _conversationSearchResultFetcher(
+        previousQuery,
+        page: currentSearchPage + 1,
+        includeDiscarded: showDiscardedConversations,
+        startDate: searchStartDate,
+        endDate: searchEndDate,
+        speakerId: selectedSpeakerId,
+      );
+    } catch (_) {
+      if (generation == _sessionGeneration && requestGeneration == _searchRequestGeneration && _isSignedIn()) {
+        setLoadingConversations(false);
+      }
+      return;
+    }
+    if (generation != _sessionGeneration || requestGeneration != _searchRequestGeneration || !_isSignedIn()) {
+      return;
+    }
+    if (!result.isSuccess) {
+      setLoadingConversations(false);
+      return;
+    }
+    searchedConversations.addAll(result.items);
+    totalSearchPages = result.totalPages;
+    currentSearchPage = result.currentPage;
     groupSearchConvosByDate();
     setLoadingConversations(false);
     notifyListeners();
@@ -315,8 +484,11 @@ class ConversationProvider extends ChangeNotifier {
     return -1;
   }
 
-  void addProcessingConversation(ServerConversation conversation) {
+  void addProcessingConversation(ServerConversation conversation, {bool freshProcessingAttempt = false}) {
     _bumpProcessingStateRevision(conversation.id);
+    if (conversation.id != '0' && _isActiveProcessingStatus(conversation.status)) {
+      _clientTelemetry.noteProcessingVisible(conversation.id, freshAttempt: freshProcessingAttempt);
+    }
     final existingIndex = processingConversations.indexWhere((item) => item.id == conversation.id);
     if (existingIndex == -1) {
       processingConversations.add(conversation);
@@ -327,6 +499,24 @@ class ConversationProvider extends ChangeNotifier {
       processingConversations[existingIndex] = conversation;
     }
     notifyListeners();
+  }
+
+  /// Apply a list-row reprocess response: processing/merging rows leave the
+  /// completed list and join the processing skeleton; a titled (or otherwise
+  /// settled) result upserts in place.
+  void applyConversationReprocessResult(ServerConversation updated) {
+    if (_isActiveProcessingStatus(updated.status)) {
+      conversations.removeWhere((conversation) => conversation.id == updated.id);
+      searchedConversations.removeWhere((conversation) => conversation.id == updated.id);
+      if (hasActiveSearch) {
+        _groupSearchConvosByDateWithoutNotify();
+      } else {
+        _groupConversationsByDateWithoutNotify();
+      }
+      addProcessingConversation(updated);
+      return;
+    }
+    upsertConversation(updated);
   }
 
   void removeProcessingConversation(String conversationId) {
@@ -420,10 +610,6 @@ class ConversationProvider extends ChangeNotifier {
 
   void toggleStarredFilter() {
     showStarredOnly = !showStarredOnly;
-    // Clear daily summaries filter when toggling starred
-    if (showStarredOnly) {
-      showDailySummaries = false;
-    }
 
     // Clear and refetch conversations to get starred from server
     groupedConversations = {};
@@ -431,23 +617,17 @@ class ConversationProvider extends ChangeNotifier {
     fetchConversations();
   }
 
-  void toggleDailySummaries() {
-    showDailySummaries = !showDailySummaries;
-    // Clear other filters when showing daily summaries
-    if (showDailySummaries) {
-      showStarredOnly = false;
-      selectedFolderId = null;
-    }
-    notifyListeners();
-  }
+  /// No-op: see [showDailySummaries].
+  void toggleDailySummaries() {}
 
   /// Check if user has any daily summaries
   Future<bool> checkHasDailySummaries() async {
     if (!_isSignedIn()) return false;
     final generation = _sessionGeneration;
     final hasSummaries = await (_dailySummariesChecker?.call() ??
-        getDailySummaries(limit: 1, offset: 0).then((items) => items.isNotEmpty));
+        getDailySummaries(limit: 1, offset: 0).then((result) => result.ok ? result.items.isNotEmpty : null));
     if (generation != _sessionGeneration || !_isSignedIn()) return false;
+    if (hasSummaries == null) return true;
     hasDailySummaries = hasSummaries;
     notifyListeners();
     return true;
@@ -457,9 +637,6 @@ class ConversationProvider extends ChangeNotifier {
   Future<void> filterByFolder(String? folderId) async {
     if (selectedFolderId == folderId) return;
     selectedFolderId = folderId;
-
-    // Clear daily summaries filter when selecting a folder
-    showDailySummaries = false;
 
     // Clear search when applying folder filter
     previousQuery = "";
@@ -501,6 +678,7 @@ class ConversationProvider extends ChangeNotifier {
   // Force refresh bypassing debounce (for manual refresh, connection restored, etc.)
   Future forceRefreshConversations() async {
     _refreshDebounceTimer?.cancel();
+    _cancelInitialFetchRetry();
     _lastRefreshTime = DateTime.now();
     await _fetchNewConversations();
   }
@@ -522,6 +700,7 @@ class ConversationProvider extends ChangeNotifier {
       if (_conversationLoadingRevision == fetchRevision) setLoadingConversations(false);
       return;
     }
+    if (result.typed != null) _projectTypedList(result.typed!);
     if (!_isSignedIn()) {
       setLoadingConversations(false);
       return;
@@ -532,8 +711,11 @@ class ConversationProvider extends ChangeNotifier {
     // keep the existing list untouched; the next refresh trigger will retry.
     if (!result.ok) {
       setLoadingConversations(false);
+      if (result.typed != null) notifyListeners();
       return;
     }
+    _cancelInitialFetchRetry();
+    conversationsLoadFailed = false;
 
     final rawNewConversations = result.items;
     final newConversations = _filterPendingDeletes(rawNewConversations);
@@ -549,6 +731,7 @@ class ConversationProvider extends ChangeNotifier {
       pageConversationIds,
       processingRevisionsAtStart,
       processingRowsAtStart,
+      {for (final conversation in newConversations) conversation.id: conversation.status.name},
     );
     if (_conversationServerOffset == 0) {
       _conversationServerOffset = rawNewConversations.length;
@@ -626,6 +809,7 @@ class ConversationProvider extends ChangeNotifier {
       _cancelInitialFetchRetry();
       return false;
     }
+    if (result.typed != null) _projectTypedList(result.typed!);
     if (!_isSignedIn()) {
       setLoadingConversations(false);
       _cancelInitialFetchRetry();
@@ -677,6 +861,7 @@ class ConversationProvider extends ChangeNotifier {
       pageConversationIds,
       processingRevisionsAtStart,
       processingRowsAtStart,
+      {for (final conversation in fetchedConversations) conversation.id: conversation.status.name},
     );
     _conversationServerOffset = result.items.length;
     _conversationServerHasMore = !result.truncated && result.items.length >= _conversationPageSize;
@@ -726,7 +911,6 @@ class ConversationProvider extends ChangeNotifier {
     }
     conversations = completedById.values.toList()
       ..sort((a, b) => (b.startedAt ?? b.createdAt).compareTo(a.startedAt ?? a.createdAt));
-
     // Only use cache when no folder filter is applied
     if (conversations.isEmpty && selectedFolderId == null) {
       final activeProcessingIds = processingConversations
@@ -741,13 +925,36 @@ class ConversationProvider extends ChangeNotifier {
           .toList();
     } else if (selectedFolderId == null) {
       // Only cache when viewing all folders
-      SharedPreferencesUtil().cachedConversations = conversations;
+      unawaited(SharedPreferencesUtil().cacheConversations(conversations).catchError((Object e) {
+        Logger.debug('ConversationProvider: caching conversations failed: $e');
+      }));
     }
+    conversations = conversations.map(OnDeviceTranscriptionController.instance.displayConversation).toList();
+    for (final row in _phoneOnlyConversations.values) {
+      if (!conversations.any((c) => c.id == row.id) && _matchesActiveConversationFilters(row)) conversations.add(row);
+    }
+    if (conversations.isNotEmpty) clearEmptyRecordingExplanation();
     if (searchedConversations.isEmpty) {
       searchedConversations = conversations;
     }
     _groupConversationsByDateWithoutNotify();
-
+    // Only the unfiltered successful server page can prove absence. The UI may
+    // show cached rows after an empty server response; never use those as the
+    // authoritative keep-set for Spotlight.
+    final siriFetchIsUnfiltered = selectedFolderId == null &&
+        selectedStartDate == null &&
+        selectedEndDate == null &&
+        selectedSpeakerId == null &&
+        !showStarredOnly &&
+        !showDiscardedConversations;
+    if (siriFetchIsUnfiltered && !result.truncated) {
+      final coveredAfter = _conversationServerHasMore && result.items.isNotEmpty
+          ? result.items.map((row) => row.startedAt ?? row.createdAt).reduce((a, b) => a.isBefore(b) ? a : b)
+          : null;
+      SiriIntegration.current.queueReconcileConversations(completedById.values.toList(), coveredAfter: coveredAfter);
+    } else {
+      SiriIntegration.current.queueUpsertConversations(conversations);
+    }
     // Keep pagination blocked until lifecycle reconciliation and the final
     // list assignment are complete. [getMoreConversationsFromServer] uses
     // this loading state as its serialization guard.
@@ -795,6 +1002,7 @@ class ConversationProvider extends ChangeNotifier {
 
   List<ServerConversation> _filterOutConvos(List<ServerConversation> convos) {
     return convos.where((convo) {
+      if (memoriesToDelete.containsKey(convo.id)) return false;
       // Filter by discarded status
       // When showDiscardedConversations is true, show all conversations (including discarded)
       // When showDiscardedConversations is false, hide discarded conversations
@@ -858,48 +1066,57 @@ class ConversationProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Filter conversations by a date range (inclusive of both start and end day)
-  Future<void> filterConversationsByDateRange(DateTime start, DateTime end) async {
+  /// The one conversation date filter (docs/ux-contract.md; hub audit #23): it narrows the list and,
+  /// while a search is active, the search too, so the calendar button never switches what it filters.
+  /// Applying or clearing it keeps the current search. Inclusive of both the start and end day.
+  Future<void> filterConversationsByDateRange(DateTime? start, DateTime? end) async {
     selectedStartDate = start;
-    selectedEndDate = end;
-
-    // Clear search when applying date filter
-    selectedSpeakerId = null;
-    previousQuery = "";
-    currentSearchPage = 0;
-    totalSearchPages = 0;
-    searchedConversations = [];
-
+    selectedEndDate = start == null ? null : (end ?? start);
+    setSearchDateRange(selectedStartDate, selectedEndDate);
+    if (hasActiveSearch) {
+      await searchConversations(previousQuery, showShimmer: true);
+      return;
+    }
     groupedConversations = {};
     notifyListeners();
-
     await fetchConversations();
   }
 
-  /// Clear the date filter
-  Future<void> clearDateFilter() async {
-    selectedStartDate = null;
-    selectedEndDate = null;
-
-    // Clear search when clearing date filter
-    selectedSpeakerId = null;
-    previousQuery = "";
-    currentSearchPage = 0;
-    totalSearchPages = 0;
-    searchedConversations = [];
-
-    groupedConversations = {};
-    notifyListeners();
-
-    await fetchConversations();
-  }
+  /// Clears the date filter (list and search).
+  Future<void> clearDateFilter() => filterConversationsByDateRange(null, null);
 
   void _groupSearchConvosByDateWithoutNotify() {
-    groupedConversations = groupSearchResultsPreservingRank(_filterOutConvos(searchedConversations));
+    groupedConversations = groupSearchResultsPreservingRank(_visibleRows(searchedConversations));
   }
 
   void _groupConversationsByDateWithoutNotify() {
-    groupedConversations = _buildGroupedByDate(_filterOutConvos(conversations));
+    groupedConversations = _buildGroupedByDate(_visibleRows(conversations));
+  }
+
+  /// The rows the list shows: client-side filters, then one row per recorded
+  /// event ([CaptureGroupPresentation.collapse]). A row hidden behind its
+  /// event's row leaves the merge selection, so a merge never acts on a
+  /// conversation the user can no longer see.
+  List<ServerConversation> _visibleRows(List<ServerConversation> source) {
+    final filtered = _filterOutConvos(source);
+    final shown = CaptureGroupPresentation.collapse(filtered);
+    if (shown.length != filtered.length && selectedConversationIds.isNotEmpty) {
+      final shownIds = shown.map((conversation) => conversation.id).toSet();
+      selectedConversationIds.removeWhere((id) => !shownIds.contains(id));
+      if (selectedConversationIds.isEmpty) isSelectionModeActive = false;
+    }
+    return shown;
+  }
+
+  /// A loaded conversation by id, including a recording hidden behind its
+  /// event's row (the list keeps every server row; only the display collapses).
+  ServerConversation? loadedConversationById(String id) {
+    for (final source in [conversations, searchedConversations]) {
+      for (final conversation in source) {
+        if (conversation.id == id) return conversation;
+      }
+    }
+    return null;
   }
 
   /// Buckets conversations into day-keyed groups, sorted newest-first both
@@ -955,22 +1172,44 @@ class ConversationProvider extends ChangeNotifier {
     );
   }
 
-  Future<({List<ServerConversation> items, bool ok, bool truncated})> _getConversationsFromServer() async {
+  ({List<ServerConversation> items, bool ok, bool truncated, ApiResult<List<ServerConversation>>? typed})
+      _packTypedConversationList(ApiResult<List<ServerConversation>> typed) {
+    return switch (typed) {
+      ApiSuccess(:final data) => (items: data, ok: true, truncated: false, typed: typed),
+      ApiFailure() => (items: <ServerConversation>[], ok: false, truncated: false, typed: typed),
+    };
+  }
+
+  Future<({List<ServerConversation> items, bool ok, bool truncated, ApiResult<List<ServerConversation>>? typed})>
+      _getConversationsFromServer() async {
+    final typedApi = _conversationApi;
+    if (typedApi != null) {
+      final (startDate, endDate) = _getDateFilterRange();
+      final typed = await typedApi.list(
+        includeDiscarded: showDiscardedConversations,
+        startDate: startDate,
+        endDate: endDate,
+        folderId: selectedFolderId,
+        starred: showStarredOnly ? true : null,
+      );
+      return _packTypedConversationList(typed);
+    }
     final fetcher = _conversationListFetcher;
     if (fetcher != null) {
       final result = await fetcher();
-      return (items: result.items, ok: result.ok, truncated: false);
+      return (items: result.items, ok: result.ok, truncated: false, typed: null);
     }
 
     final (startDate, endDate) = _getDateFilterRange();
 
-    return await getConversationsResult(
+    final result = await getConversationsResult(
       includeDiscarded: showDiscardedConversations,
       startDate: startDate,
       endDate: endDate,
       folderId: selectedFolderId,
       starred: showStarredOnly ? true : null,
     );
+    return (items: result.items, ok: result.ok, truncated: result.truncated, typed: null);
   }
 
   bool _isActiveProcessingStatus(ConversationStatus status) {
@@ -1057,6 +1296,7 @@ class ConversationProvider extends ChangeNotifier {
     Set<String> pageConversationIds,
     Map<String, int> processingRevisionsAtStart,
     Map<String, ServerConversation> processingRowsAtStart,
+    Map<String, String> pageStatusById,
   ) {
     final localPlaceholder = processingConversations.where((conversation) => conversation.id == '0').toList();
     final reconciled = <ServerConversation>[];
@@ -1077,6 +1317,16 @@ class ConversationProvider extends ChangeNotifier {
       final current = result.item;
       if (current != null && _isActiveProcessingStatus(current.status) && _matchesActiveConversationFilters(current)) {
         reconciled.add(current);
+        continue;
+      }
+      if (processingIdsAtStart.contains(existing.id)) {
+        final pageStatus = pageStatusById[existing.id];
+        _clientTelemetry.noteProcessingRowLeft(
+          id: existing.id,
+          lifecycleOk: true,
+          lifecycleStatus: current?.status.name,
+          pageStatus: pageStatus,
+        );
       }
     }
 
@@ -1122,16 +1372,39 @@ class ConversationProvider extends ChangeNotifier {
     final (startDate, endDate) = _getDateFilterRange();
 
     final pageOffset = _conversationServerOffset;
-    final pageResult = conversationPageFetcherOverride != null
-        ? await conversationPageFetcherOverride!.call()
-        : await getConversationsResult(
-            offset: pageOffset,
-            includeDiscarded: showDiscardedConversations,
-            startDate: startDate,
-            endDate: endDate,
-            folderId: selectedFolderId,
-            starred: showStarredOnly ? true : null,
-          );
+    final typedApi = _conversationApi;
+    late final ({
+      List<ServerConversation> items,
+      bool ok,
+      bool truncated,
+      ApiResult<List<ServerConversation>>? typed
+    }) pageResult;
+    if (conversationPageFetcherOverride != null) {
+      final fetched = await conversationPageFetcherOverride!.call();
+      pageResult = (items: fetched.items, ok: fetched.ok, truncated: fetched.truncated, typed: null);
+    } else if (typedApi != null) {
+      pageResult = _packTypedConversationList(
+        await typedApi.list(
+          limit: _conversationPageSize,
+          offset: pageOffset,
+          includeDiscarded: showDiscardedConversations,
+          startDate: startDate,
+          endDate: endDate,
+          folderId: selectedFolderId,
+          starred: showStarredOnly ? true : null,
+        ),
+      );
+    } else {
+      final fetched = await getConversationsResult(
+        offset: pageOffset,
+        includeDiscarded: showDiscardedConversations,
+        startDate: startDate,
+        endDate: endDate,
+        folderId: selectedFolderId,
+        starred: showStarredOnly ? true : null,
+      );
+      pageResult = (items: fetched.items, ok: fetched.ok, truncated: fetched.truncated, typed: null);
+    }
     if (operationRevision != _conversationFetchRevision) {
       if (_conversationLoadingRevision == operationRevision) setLoadingConversations(false);
       return false;
@@ -1151,33 +1424,102 @@ class ConversationProvider extends ChangeNotifier {
     );
     conversations.sort((a, b) => (b.startedAt ?? b.createdAt).compareTo(a.startedAt ?? a.createdAt));
     _groupConversationsByDateWithoutNotify();
+    final siriFetchIsUnfiltered = selectedFolderId == null &&
+        selectedStartDate == null &&
+        selectedEndDate == null &&
+        selectedSpeakerId == null &&
+        !showStarredOnly &&
+        !showDiscardedConversations;
+    if (siriFetchIsUnfiltered && !pageResult.truncated) {
+      final coveredAfter = _conversationServerHasMore && newConversations.isNotEmpty
+          ? newConversations.map((row) => row.startedAt ?? row.createdAt).reduce((a, b) => a.isBefore(b) ? a : b)
+          : null;
+      final serverRows = conversations.where((row) => _conversationServerLoadedIds.contains(row.id)).toList();
+      SiriIntegration.current.queueReconcileConversations(serverRows, coveredAfter: coveredAfter);
+    } else {
+      SiriIntegration.current.queueUpsertConversations(newConversations);
+    }
     setLoadingConversations(false);
     notifyListeners();
     return true;
   }
 
   Future<void> addConversation(ServerConversation conversation) async {
-    // Check if this is the first conversation
-    bool wasEmpty = conversations.isEmpty;
-
     conversations.insert(0, conversation);
+    SiriIntegration.current.queueUpsertConversations([conversation]);
     _groupConversationsByDateWithoutNotify();
-
-    // Mark first conversation for app review
-    if (wasEmpty && await _appReviewService.isFirstConversation()) {
-      await _appReviewService.markFirstConversation();
-    }
 
     notifyListeners();
   }
 
+  /// Apply only the server-returned segment IDs; repeated speaker numbers carry no authority.
+  void applySpeakerPromptIdentities(GeneratedSpeakerTagPromptAnswerResponse result) {
+    final identities = {
+      for (final identity in result.segmentIdentities ?? <GeneratedSpeakerTagPromptSegmentIdentity>[])
+        identity.id: identity
+    };
+    final rows = [...conversations, ...searchedConversations, ...groupedConversations.values.expand((group) => group)];
+    for (final row in rows) {
+      if (row.id != result.conversationId) continue;
+      for (final segment in row.transcriptSegments) {
+        final identity = identities[segment.id];
+        if (identity == null) continue;
+        segment.isUser = identity.isUser;
+        segment.personId = identity.personId;
+        segment.speakerLabelSource = 'manual';
+      }
+    }
+    notifyListeners();
+  }
+
+  void showEmptyRecordingExplanation() {
+    if (conversations.any((conversation) => !conversation.discarded)) return;
+    _setHomeEmptyExplanation(HomeEmptyExplanation.tooShort);
+  }
+
+  /// Sets the discarded-only empty state whenever that is still true.
+  /// [DiscardedOnlyClaim.alreadyShown] still lets the caller emit once per capture.
+  DiscardedOnlyClaim claimDiscardedOnlyExplanation() {
+    if (showDiscardedConversations) return DiscardedOnlyClaim.notDiscardedOnly;
+    if (!onlyDiscardedConversations(conversations.map((conversation) => conversation.discarded))) {
+      return DiscardedOnlyClaim.notDiscardedOnly;
+    }
+    _setHomeEmptyExplanation(HomeEmptyExplanation.discardedOnly);
+    if (SharedPreferencesUtil().discardedOnlyExplained) return DiscardedOnlyClaim.alreadyShown;
+    SharedPreferencesUtil().discardedOnlyExplained = true;
+    return DiscardedOnlyClaim.shown;
+  }
+
+  void clearEmptyRecordingExplanation() {
+    if (homeEmptyExplanation == HomeEmptyExplanation.none) return;
+    homeEmptyExplanation = HomeEmptyExplanation.none;
+    SharedPreferencesUtil().homeEmptyExplanation = '';
+    notifyListeners();
+  }
+
+  void _setHomeEmptyExplanation(HomeEmptyExplanation next) {
+    final stored = switch (next) {
+      HomeEmptyExplanation.tooShort => 'tooShort',
+      HomeEmptyExplanation.discardedOnly => 'discardedOnly',
+      HomeEmptyExplanation.none => '',
+    };
+    final changed = homeEmptyExplanation != next;
+    homeEmptyExplanation = next;
+    SharedPreferencesUtil().homeEmptyExplanation = stored;
+    if (changed) notifyListeners();
+  }
+
+  final _phoneOnlyConversations = <String, ServerConversation>{};
   void upsertConversation(ServerConversation conversation) {
+    conversation = OnDeviceTranscriptionController.instance.displayConversation(conversation);
+    if (conversation.id.startsWith('ondevice-')) _phoneOnlyConversations[conversation.id] = conversation;
     int idx = conversations.indexWhere((m) => m.id == conversation.id);
     if (idx < 0) {
       addConversation(conversation);
     } else {
       updateConversation(conversation, idx);
     }
+    if (!conversation.discarded) clearEmptyRecordingExplanation();
   }
 
   void updateConversationInSortedList(ServerConversation conversation) {
@@ -1195,11 +1537,13 @@ class ConversationProvider extends ChangeNotifier {
         group[groupedIndex] = conversation;
       }
     }
+    SiriIntegration.current.queueUpsertConversations([conversation]);
     notifyListeners();
   }
 
   (int, DateTime) addConversationWithDateGrouped(ServerConversation conversation) {
     conversations.insert(0, conversation);
+    SiriIntegration.current.queueUpsertConversations([conversation]);
     conversations.sort((a, b) => (b.startedAt ?? b.createdAt).compareTo(a.startedAt ?? a.createdAt));
     int idx;
     var effectiveDate = conversation.startedAt ?? conversation.createdAt;
@@ -1244,58 +1588,105 @@ class ConversationProvider extends ChangeNotifier {
     } else {
       _groupConversationsByDateWithoutNotify();
     }
+    SiriIntegration.current.queueUpsertConversations([conversation]);
     notifyListeners();
   }
 
-  /////////////////////////////////////////////////////////////////
-  ////////// Delete Memory With Undo Functionality ///////////////
+  /// Replace a sync donor after the detail endpoint returns its bridged survivor.
+  /// Remove the donor from both list projections so the open page and list agree.
+  void replaceBridgedConversation(String donorId, ServerConversation survivor) {
+    conversations.removeWhere((conversation) => conversation.id == donorId);
+    final survivorIndex = conversations.indexWhere((conversation) => conversation.id == survivor.id);
+    if (survivorIndex == -1) {
+      conversations.add(survivor);
+    } else {
+      conversations[survivorIndex] = survivor;
+    }
+    conversations.sort((a, b) => (b.startedAt ?? b.createdAt).compareTo(a.startedAt ?? a.createdAt));
 
+    final searchedDonorIndex = searchedConversations.indexWhere((conversation) => conversation.id == donorId);
+    searchedConversations.removeWhere((conversation) => conversation.id == donorId);
+    final searchedSurvivorIndex = searchedConversations.indexWhere((conversation) => conversation.id == survivor.id);
+    if (searchedSurvivorIndex != -1) {
+      searchedConversations[searchedSurvivorIndex] = survivor;
+    } else if (searchedDonorIndex != -1) {
+      searchedConversations.insert(searchedDonorIndex.clamp(0, searchedConversations.length), survivor);
+    }
+    if (hasActiveSearch) {
+      _groupSearchConvosByDateWithoutNotify();
+    } else {
+      _groupConversationsByDateWithoutNotify();
+    }
+    notifyListeners();
+  }
+
+  ////////// Delete with Undo (docs/ux-contract.md §4, D5) ///////////////
+
+  /// Conversations removed in the UI whose server DELETE has not settled: first held for
+  /// [pendingDeleteWindow] so Undo can restore them, then kept as tombstones through the in-flight
+  /// request so a concurrent refresh cannot reinsert them.
   Map<String, ServerConversation> memoriesToDelete = {};
-  String? lastDeletedConversationId;
-  Map<String, DateTime> deleteTimestamps = {};
+  final Map<String, Timer> _pendingDeleteTimers = {};
 
-  // Hide conversations whose server-side DELETE is still pending (3s undo window
-  // or in-flight HTTP). Without this, a pull-to-refresh during that window
-  // re-surfaces the just-deleted conversation, which users read as "delete didn't work".
+  Future<void> _restoreSiriAfterOptimisticDelete(ServerConversation conversation) async {
+    final generation = _sessionGeneration;
+    if (generation == _sessionGeneration) {
+      SiriIntegration.current.queueUpsertConversations([conversation], restoreDeleted: true);
+    }
+  }
+
+  /// How long a deleted conversation stays restorable. Well past the 5 s Undo toast
+  /// (`OmiFeedbackTiming.undo`) so a toast that starts late behind other snack bars still gets its
+  /// full time; the toast commits early via [commitPendingDelete] when it closes, so the usual
+  /// delete still reaches the server about 5 s after the swipe.
+  static const pendingDeleteWindow = Duration(seconds: 10);
   List<ServerConversation> _filterPendingDeletes(List<ServerConversation> items) {
     if (memoriesToDelete.isEmpty) return items;
     return items.where((c) => !memoriesToDelete.containsKey(c.id)).toList();
   }
 
-  void deleteConversationLocally(ServerConversation conversation, DateTime date) {
-    if (lastDeletedConversationId != null &&
-        memoriesToDelete.containsKey(lastDeletedConversationId) &&
-        DateTime.now().difference(deleteTimestamps[lastDeletedConversationId]!) < const Duration(seconds: 3)) {
-      deleteConversationOnServer(lastDeletedConversationId!);
-    }
-
+  /// Hides [conversation] now and deletes it on the server after [pendingDeleteWindow], unless
+  /// [undoDeletedConversation] restores it first. The one delete path for list, bulk and detail.
+  Future<void> deleteConversationLocally(ServerConversation conversation, [DateTime? date]) async {
     memoriesToDelete[conversation.id] = conversation;
-    lastDeletedConversationId = conversation.id;
-    deleteTimestamps[conversation.id] = DateTime.now();
+    SiriIntegration.current.queueDelete('conversation', conversation.id);
+    _pendingDeleteTimers.remove(conversation.id)?.cancel();
+    _pendingDeleteTimers[conversation.id] = Timer(pendingDeleteWindow, () => commitPendingDelete(conversation.id));
     conversations.removeWhere((element) => element.id == conversation.id);
-    final group = groupedConversations[date];
-    if (group != null) {
+    for (final group in groupedConversations.values) {
       group.removeWhere((e) => e.id == conversation.id);
-      if (group.isEmpty) {
-        groupedConversations.remove(date);
-      }
     }
+    groupedConversations.removeWhere((_, group) => group.isEmpty);
     notifyListeners();
-    Future.delayed(const Duration(seconds: 3), () {
-      if (memoriesToDelete.containsKey(conversation.id) && lastDeletedConversationId == conversation.id) {
-        deleteConversationOnServer(conversation.id);
-      }
-    });
+  }
+
+  /// Whether [conversationId] was deleted in the UI and can still be restored.
+  bool isDeletePending(String conversationId) => _pendingDeleteTimers.containsKey(conversationId);
+
+  /// Sends a pending delete now (its Undo toast closed without Undo). No-op once sent or restored.
+  void commitPendingDelete(String conversationId) {
+    if (!isDeletePending(conversationId)) return;
+    deleteConversationOnServer(conversationId);
+  }
+
+  void _cancelPendingDeleteTimers() {
+    for (final timer in _pendingDeleteTimers.values) {
+      timer.cancel();
+    }
+    _pendingDeleteTimers.clear();
   }
 
   void deleteConversationOnServer(String conversationId) {
+    _pendingDeleteTimers.remove(conversationId)?.cancel();
     final generation = _sessionGeneration;
     final wasLoadedFromServer = _conversationServerLoadedIds.contains(conversationId);
-    final deleteFuture =
-        conversationDeleteFetcherOverride?.call(conversationId) ?? deleteConversationServer(conversationId);
+    final deleteFuture = conversationId.startsWith('ondevice-')
+        ? (OnDeviceTranscriptionController.instance.deleteLocalConversation?.call(conversationId) ??
+            Future.value(false))
+        : conversationDeleteFetcherOverride?.call(conversationId) ?? deleteConversationServer(conversationId);
     unawaited(
       deleteFuture.then(
-        (succeeded) {
+        (succeeded) async {
           // A DELETE can outlive sign-out/account switching. Its result belongs
           // to the session that started it; never let an old account mutate the
           // new provider's tombstones, cursor, revision, or loading state.
@@ -1316,20 +1707,26 @@ class ConversationProvider extends ChangeNotifier {
           // Keep the tombstone in place until the request settles so a concurrent
           // refresh cannot reinsert the server row before DELETE completes.
           if (succeeded) {
+            _phoneOnlyConversations.remove(conversationId);
             conversations.removeWhere((conversation) => conversation.id == conversationId);
             searchedConversations.removeWhere((conversation) => conversation.id == conversationId);
             for (final group in groupedConversations.values) {
               group.removeWhere((conversation) => conversation.id == conversationId);
             }
             groupedConversations.removeWhere((_, group) => group.isEmpty);
+          } else {
+            final deleted = memoriesToDelete[conversationId];
+            if (deleted != null) await _restoreDeletedConversation(deleted);
           }
           _clearDeleteTombstone(conversationId);
           notifyListeners();
         },
-        onError: (Object _, StackTrace __) {
-          // Match the prior behavior on a failed request: release the local
-          // tombstone, but do not rebase the server cursor.
+        onError: (Object _, StackTrace __) async {
+          // Same as a refused DELETE: the conversation still exists, so put its
+          // row back, but do not rebase the server cursor.
           if (generation != _sessionGeneration) return;
+          final deleted = memoriesToDelete[conversationId];
+          if (deleted != null) await _restoreDeletedConversation(deleted);
           _clearDeleteTombstone(conversationId);
           notifyListeners();
         },
@@ -1337,42 +1734,31 @@ class ConversationProvider extends ChangeNotifier {
     );
   }
 
-  void _clearDeleteTombstone(String conversationId) {
-    memoriesToDelete.remove(conversationId);
-    deleteTimestamps.remove(conversationId);
-    if (lastDeletedConversationId == conversationId) {
-      lastDeletedConversationId = null;
-    }
-  }
+  void _clearDeleteTombstone(String conversationId) => memoriesToDelete.remove(conversationId);
 
-  void undoDeletedConversation(ServerConversation conversation) {
+  /// Puts a row hidden by [deleteConversationLocally] back in the list and in Siri: on Undo, and when
+  /// the server refuses or fails the DELETE, since the conversation then still exists.
+  Future<void> _restoreDeletedConversation(ServerConversation conversation) async {
+    memoriesToDelete.remove(conversation.id);
     if (!conversations.any((e) => e.id == conversation.id)) {
       conversations.add(conversation);
       conversations.sort((a, b) => (b.startedAt ?? b.createdAt).compareTo(a.startedAt ?? a.createdAt));
-      _groupConversationsByDateWithoutNotify();
     }
-    memoriesToDelete.remove(conversation.id);
-    deleteTimestamps.remove(conversation.id);
-    if (lastDeletedConversationId == conversation.id) {
-      lastDeletedConversationId = null;
-    }
-    notifyListeners();
+    groupConversationsByDate();
+    await _restoreSiriAfterOptimisticDelete(conversation);
   }
 
-  /////////////////////////////////////////////////////////////////
-
-  void deleteConversation(ServerConversation conversation) {
-    conversations.removeWhere((element) => element.id == conversation.id);
-    searchedConversations.removeWhere((element) => element.id == conversation.id);
-    // Keep a tombstone through the in-flight DELETE so a concurrent list
-    // response cannot reinsert the just-removed row before confirmation.
-    memoriesToDelete[conversation.id] = conversation;
-    deleteConversationOnServer(conversation.id);
-    groupConversationsByDate();
+  /// Restores a conversation whose delete is still pending. Does nothing once the DELETE was sent.
+  Future<void> undoDeletedConversation(ServerConversation conversation) async {
+    final timer = _pendingDeleteTimers.remove(conversation.id);
+    if (timer == null) return;
+    timer.cancel();
+    await _restoreDeletedConversation(conversation);
   }
 
   @override
   void dispose() {
+    _cancelPendingDeleteTimers();
     _refreshDebounceTimer?.cancel();
     _initialFetchRetryTimer?.cancel();
     _mergeCompletedSubscription?.cancel();
@@ -1388,7 +1774,6 @@ class ConversationProvider extends ChangeNotifier {
   Map<ServerConversation, List<ActionItem>> get conversationsWithActiveActionItems {
     final Map<ServerConversation, List<ActionItem>> result = {};
     final List<ServerConversation> sourceList = conversations;
-
     for (final convo in sourceList) {
       if (convo.discarded && !showDiscardedConversations) continue;
 
@@ -1719,6 +2104,7 @@ class ConversationProvider extends ChangeNotifier {
 
   /// Handle merge completion from FCM notification
   Future<void> onMergeCompleted(String mergedConversationId, List<String> removedConversationIds) async {
+    final generation = _sessionGeneration;
     // Remove merging status for ALL involved conversations
     mergingConversationIds.remove(mergedConversationId);
     for (final id in removedConversationIds) {
@@ -1730,10 +2116,13 @@ class ConversationProvider extends ChangeNotifier {
     // Remove deleted conversations from local state
     for (final id in removedConversationIds) {
       conversations.removeWhere((c) => c.id == id);
+      SiriIntegration.current.queueDelete('conversation', id);
     }
 
     // Fetch updated merged conversation
-    final mergedConvo = await getConversationById(mergedConversationId);
+    ServerConversation? mergedConvo;
+    mergedConvo = (await _conversationLifecycleFetcher(mergedConversationId)).item;
+    if (generation != _sessionGeneration) return;
     if (mergedConvo != null) {
       final idx = conversations.indexWhere((c) => c.id == mergedConversationId);
       if (idx != -1) {
@@ -1743,8 +2132,8 @@ class ConversationProvider extends ChangeNotifier {
       }
       conversations.sort((a, b) => b.createdAt.compareTo(a.createdAt));
     }
-
     _groupConversationsByDateWithoutNotify();
     notifyListeners();
+    if (mergedConvo != null) SiriIntegration.current.queueUpsertConversations([mergedConvo]);
   }
 }

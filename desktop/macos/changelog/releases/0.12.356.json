@@ -1,0 +1,7 @@
+{
+  "version": "0.12.356",
+  "date": "2026-09-16",
+  "changes": [
+    "Explicit remember/save requests typed in chat now save the memory reliably; a runtime timestamp prefix on the request could previously make them be rejected as unauthorized."
+  ]
+}

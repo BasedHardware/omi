@@ -22,6 +22,28 @@ class MessageDetector:
         """Normalize text for comparison."""
         return text.lower().strip()
     
+    @staticmethod
+    def resolve_channel(channel_name: str, channel_map: dict) -> Tuple[Optional[str], Optional[str], list]:
+        """Map a spoken channel name to exactly one channel id.
+
+        An exact (case insensitive) name wins. Otherwise a fuzzy match is
+        accepted only when a single channel contains the spoken name or is
+        contained by it; "dev" in a workspace with #dev-ops and #frontend-dev
+        must not post to whichever came first. Returns (id, name, candidates):
+        id and name are None when nothing or several channels matched, and
+        candidates lists the fuzzy matches so the caller can say why.
+        """
+        spoken = channel_name.lstrip('#').strip().lower()
+        if not spoken:
+            return None, None, []
+        for name, channel_id in channel_map.items():
+            if name.lower() == spoken:
+                return channel_id, name, [name]
+        candidates = [name for name in channel_map if spoken in name.lower() or name.lower() in spoken]
+        if len(candidates) == 1:
+            return channel_map[candidates[0]], candidates[0], candidates
+        return None, None, candidates
+
     @classmethod
     def detect_trigger(cls, text: str) -> bool:
         """Check if text contains a Slack message trigger phrase."""
@@ -142,27 +164,19 @@ MESSAGE: Hello everyone, this is a test message"""
             # Remove # if present
             channel_name = channel_name.lstrip('#')
             
-            # Get channel ID from map (case insensitive)
-            channel_id = None
-            for name, id in channel_map.items():
-                if name.lower() == channel_name.lower():
-                    channel_id = id
-                    channel_name = name  # Use exact name from map
-                    break
+            channel_id, resolved_name, candidates = cls.resolve_channel(channel_name, channel_map)
             
             if not channel_id:
-                # Try fuzzy match
-                for name, id in channel_map.items():
-                    if channel_name.lower() in name.lower() or name.lower() in channel_name.lower():
-                        channel_id = id
-                        channel_name = name
-                        print(f"🔍 Fuzzy matched '{channel_name}' to '{name}'", flush=True)
-                        break
-            
-            if not channel_id:
-                print(f"⚠️  Channel '{channel_name}' not found in workspace", flush=True)
+                if candidates:
+                    print(f"⚠️  Channel '{channel_name}' is ambiguous, matches: {', '.join('#' + c for c in candidates)}", flush=True)
+                else:
+                    print(f"⚠️  Channel '{channel_name}' not found in workspace", flush=True)
                 return None, channel_name, message
             
+            if resolved_name.lower() != channel_name.lower():
+                print(f"🔍 Fuzzy matched '{channel_name}' to '{resolved_name}'", flush=True)
+            channel_name = resolved_name  # Use exact name from map
+
             print(f"✅ Extracted - Channel: #{channel_name}, Message: '{message}'", flush=True)
             return channel_id, channel_name, message
             

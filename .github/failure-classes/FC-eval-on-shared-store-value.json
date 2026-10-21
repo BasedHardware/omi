@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "id": "FC-eval-on-shared-store-value",
+  "violated_contract": "A value read back from a shared, externally-writable store (Redis, a queue, a cache) must be parsed with a data-only literal parser, never eval()/exec(), because eval() treats the stored bytes as Python source rather than as data. plugins/db.py's get_upsert_segment_to_transcript_plugin() wrote the transcript segment buffer with str(segments) and read it back with eval(segments): any value under plugin:{plugin_id}:session:{session_id}:transcript_segments that was not exactly that repr format -- a manual redis-cli edit, a sibling writer on the shared instance, corruption -- executed as code inside the plugin process, which holds the OpenAI and Redis credentials. A merely malformed value also crashed the /mentor webhook until the key's 5-minute TTL expired.",
+  "canonical_prevention": "Never pair str()/repr() serialization with eval() deserialization for a value that a process other than the writer can also produce or corrupt. Use ast.literal_eval() (or json.dumps/json.loads for new code) so only literal data -- not arbitrary expressions or calls -- can come back out, and treat a value that fails to parse or parses to the wrong shape as an empty/default result rather than propagating the exception. A regression test must store a call-expression payload (e.g. __import__('os').system(...)) under the key and assert it does not execute, not merely that literal round-trips still work.",
+  "canonical_prevention_artifact": [
+    "plugins/test_db_transcript_segments.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "plugins/db.py"
+  ],
+  "status": "open"
+}

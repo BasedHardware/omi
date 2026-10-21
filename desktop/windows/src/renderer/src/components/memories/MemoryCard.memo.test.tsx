@@ -5,7 +5,6 @@ import { render, cleanup, act } from '@testing-library/react'
 import type { Memory } from '../../hooks/useMemories'
 
 // Regression guard for the app-wide navigation-snappiness fix (perf/win-nav-snappy).
-//
 // The Memories page consumes useLocation (to gate the brain-map reveal), so it
 // re-renders on EVERY app navigation while it stays mounted-but-hidden. Its ~400
 // MemoryCards each mount a Radix Tooltip.Provider; before this fix they all
@@ -93,4 +92,5 @@ describe('MemoryCard memoization (nav-snappiness regression)', () => {
 
     expect(getByText('Conversation')).not.toBeNull()
   })
+
 })

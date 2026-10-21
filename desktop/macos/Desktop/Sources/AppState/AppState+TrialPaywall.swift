@@ -29,6 +29,26 @@ extension AppState {
     !APIKeyService.isByokActive && UserDefaults.standard.bool(forKey: .desktopIsPaywalled)
   }
 
+  /// Minimum time an admission-set paywall flag (`freemium_threshold_reached`
+  /// during a live listen session) must stand before the 60s `fetchTrialMetadata`
+  /// poll may clear it. The listen admission verdict and `getTrialMetadata` can
+  /// disagree (heartbeat/Firestore lag); letting the slower verdict immediately
+  /// unlatch the fresher one loops capture stop → re-arm → admission stop on
+  /// every refresh tick (SCA-526). Bounded so a genuinely reactivated plan still
+  /// self-heals without relaunch.
+  nonisolated static let paywallAdmissionClearDebounce: TimeInterval = 10 * 60
+
+  /// Whether a non-expired trial-metadata fetch may clear `isPaywalled` now.
+  /// Pure so it is unit-testable.
+  nonisolated static func mayClearPaywallFlag(
+    lastAdmissionStopAt: Date?,
+    now: Date,
+    debounce: TimeInterval = paywallAdmissionClearDebounce
+  ) -> Bool {
+    guard let lastAdmissionStopAt else { return true }
+    return now.timeIntervalSince(lastAdmissionStopAt) >= debounce
+  }
+
   /// Decision for the resume-on-paywall-clear hook in `fetchTrialMetadata()`.
   /// Pure so it is unit-testable: resume screen-analysis monitoring only when
   /// this fetch actually cleared the paywall (set → clear transition), the
@@ -90,7 +110,15 @@ extension AppState {
         } else if metadata.trialExpired && !self.isPaywalled {
           self.isPaywalled = true
         } else if !metadata.trialExpired && self.isPaywalled {
-          self.isPaywalled = false
+          if AppState.mayClearPaywallFlag(
+            lastAdmissionStopAt: self.lastPaywallAdmissionStopAt, now: Date())
+          {
+            self.isPaywalled = false
+          } else {
+            log(
+              "AppState: holding paywall flag — fresher than trial metadata (admission event inside debounce)"
+            )
+          }
         }
         // A mid-session `freemium_threshold_reached` event stops capture and
         // sets the sticky flag; nothing else observes the flag clearing, so

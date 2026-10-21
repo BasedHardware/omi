@@ -1,6 +1,7 @@
 """Thin adapter over canonical apply/read services for the universal MemoryService."""
 
 from __future__ import annotations
+from database.dream_dirty import after_write
 
 import copy
 import hashlib
@@ -8,16 +9,23 @@ import json
 import logging
 import secrets
 import time
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Callable, Collection, Dict, List, Optional, Sequence, Tuple, cast
+from typing import Any, Callable, Collection, Dict, Iterator, List, Optional, Sequence, Tuple, cast
 
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
+from config import firestore_read_levers
 from database._client import db as default_db_client
 from database import knowledge_graph as kg_db
-from database.firestore_index_registry import UNIVERSAL_CANONICAL_LIST_SCAN_QUERY
+from database.firestore_index_registry import (
+    UNIVERSAL_CANONICAL_LIST_SCAN_QUERY,
+    UNIVERSAL_CANONICAL_RELEASED_PROCESSED_QUERY,
+    UNIVERSAL_CANONICAL_RELEASED_PENDING_QUERY,
+)
 from database.review_queue import purge_stale_review_conflicts_for_memories
 from utils.client_device import DeviceScopeRequest
 from utils.memory.device_scope_filter import filter_items_by_device_scope
@@ -27,14 +35,8 @@ from utils.memory.canonical_lineage import (
     collapse_canonical_lineages,
 )
 from utils.memory.canonical_visibility_filter import filter_canonical_default_visible_items
-from utils.memory.belief_model import (
-    SUBJECT_SCOPE_ALIASES,
-    belief_model_enabled,
-    horizon_from_extraction,
-    public_belief_overlay,
-    public_belief_overlay_json,
-    subject_scope_from_extraction,
-)
+from utils.memory.decision_path_telemetry import classify_model_about
+from database.document_ids import document_id_from_seed
 from database.memory_collections import MemoryCollections
 from database.memory_apply_store import (
     CanonicalApplyWrite,
@@ -43,22 +45,32 @@ from database.memory_apply_store import (
     CanonicalReviewResolution,
     CanonicalReviewResolutionConflict,
     ConversationSourceReplacementConflict,
+    EvidenceIdentityConflict,
     apply_direct_user_long_term_patch_firestore,
     apply_long_term_patch_firestore,
-    read_trigger_feedback_replay_firestore,
     replace_conversation_source_firestore,
     tombstone_memory_items_firestore,
     privacy_deletion_receipt_id,
 )
 from database.legal_holds import (
+    assert_destructive_gate_still_ours,
+    DestructiveOperationInProgress,
     LegalHoldAuthorityUnavailable,
+    assert_account_deletion_permitted,
     current_destructive_operation_token,
     destructive_operation_gate,
 )
 from database.memory_vector_repair_outbox import build_vector_repair_purge_outbox_records
 from database.memory_vector_metadata import canonical_memory_provider_id
 from database.account_deletion_projection_fence import read_account_deletion_projection_fence
-from utils.other.list_budget import ListReadBudget, budgeted_document_get, budgeted_stream_list
+from utils.other.account_gate_http import account_gate_busy_http_exception
+from utils.other.list_budget import (
+    ListReadBudget,
+    ListReadBudgetExhausted,
+    budgeted_document_get,
+    budgeted_stream_list,
+    indexed_list_reads_enabled,
+)
 from models.memory_domain import (
     MemoryLayer as DomainMemoryLayer,
     MemoryProcessingState,
@@ -68,7 +80,9 @@ from models.memory_domain import (
 from models.memory_evidence import (
     ArtifactRef,
     ArtifactPreservationState,
+    EVIDENCE_IDENTITY_FIELDS,
     MemoryEvidence,
+    RedactionStatus,
     SourceState,
 )
 from models.memories import Evidence, MemoryDB, MemoryCategory, SubjectAttribution, decide_initial_memory_tier
@@ -84,7 +98,6 @@ from models.memory_apply import (
 from models.memory_contracts import DurablePatchDecision, LifecycleState, deterministic_contract_id
 from models.memory_operations import MemoryLedgerReopenReceipt, MemoryOperation, MemoryOperationType
 from models.memory_source_replacement import ConversationSourceReplacementReceipt
-from models.jit_trigger_feedback import JITTriggerFeedbackReceipt
 from models.product_memory import (
     LedgerWriteReason,
     MAX_MEMORY_ARGUMENTS_JSON_BYTES,
@@ -106,7 +119,6 @@ from utils.memory.required_promotion import (
     REQUIRED_PROMOTION_STATUS_PENDING,
 )
 from utils.memory.memory_system import ensure_canonical_apply_control_state
-from utils.memory.jit_trigger_contract import TriggerFeedback, TriggerFeedbackAction, apply_trigger_feedback
 from utils.retrieval.hybrid import rrf_rerank
 from utils.memory.canonical_vector_sync import delete_canonical_memory_vector
 from utils.memory.product_memory_read_service import (
@@ -119,13 +131,23 @@ from utils.memory.v3.account_generation_source import read_memory_v3_trusted_acc
 
 logger = logging.getLogger(__name__)
 
+
+def _usable_evidence(evidence: Any) -> bool:
+    """Hide source evidence that is inactive or has been redacted."""
+    return (
+        evidence.source_state == SourceState.active
+        and evidence.redaction_status == RedactionStatus.active
+        and evidence.encryption_or_redaction_status == RedactionStatus.active
+    )
+
+
 # Canonical item identity remains ``memory_id``. Shared external providers use
 # a user-scoped opaque projection id so one account can never overwrite another.
 
 _ALLOWED_MEMORY_VISIBILITIES = {"private", "public", "shared"}
 Payload = Dict[str, Any]
 SortKey = tuple[int, datetime | int]
-UserMutationPatchBuilder = Callable[[MemoryItem, datetime], Tuple[Payload, Payload]]
+UserMutationPatchBuilder = Callable[[MemoryItem, datetime], Optional[Tuple[Payload, Payload]]]
 _LEDGER_WRITE_AUTHORITY = object()
 _DIRECT_USER_LEDGER_WRITE_AUTHORITY = object()
 _DIRECT_USER_LEDGER_EVIDENCE_TYPES = {
@@ -138,7 +160,6 @@ _DIRECT_USER_LEDGER_EVIDENCE_TYPES = {
 
 def mint_direct_user_write_authority() -> object:
     """Mint the in-process capability held by authenticated user routes.
-
     The returned object carries no user data and is intentionally checked by
     identity.  Internal integration and extraction callers cannot opt into
     the direct-user ledger seam by setting a payload field.
@@ -201,7 +222,6 @@ class CanonicalMemoryNotFoundError(ValueError):
 
 class ConversationReplacementConflictError(RuntimeError):
     """Conversation source replacement exhausted its bounded conflict retries.
-
     Subclasses :class:`RuntimeError` so pre-existing callers keep their
     ``except RuntimeError`` contract. Callers that can retry the operation —
     cascade delete, merge — get a typed signal instead of an opaque 500
@@ -322,9 +342,7 @@ def memory_item_to_memorydb(item: MemoryItem) -> MemoryDB:
     conversation_id = None
     evidence_payload: List[Payload] = []
     promotion = item.promotion or {}
-    raw_submission = promotion.get("submission")
     raw_receipt = promotion.get("processing_receipt")
-    submission: Payload = cast(Payload, raw_submission) if isinstance(raw_submission, dict) else {}
     receipt: Payload = cast(Payload, raw_receipt) if isinstance(raw_receipt, dict) else {}
     for evidence in item.evidence:
         artifact_ref = evidence.artifact_refs[0].model_dump(mode="json") if evidence.artifact_refs else {}
@@ -333,15 +351,20 @@ def memory_item_to_memorydb(item: MemoryItem) -> MemoryDB:
                 "evidence_id": evidence.evidence_id,
                 "source_id": evidence.source_id,
                 "source_type": evidence.source_type,
-                "source_signal": "manual" if item.user_asserted else str(submission.get("source_surface") or "api"),
-                "extractor_id": receipt.get("processor_id") or "canonical_memory_adapter",
-                "extractor_version": receipt.get("processor_version") or "v1",
+                "source_signal": evidence.source_signal or ("manual" if item.user_asserted else "unknown"),
+                "extractor_id": evidence.extractor_id or receipt.get("processor_id") or "unknown",
+                "extractor_version": evidence.extractor_version or receipt.get("processor_version") or "unknown",
                 "artifact_ref": artifact_ref,
-                "capture_confidence": 0.5,
-                "independence_group": evidence.source_id or evidence.source_type,
+                "capture_confidence": evidence.capture_confidence if evidence.capture_confidence is not None else 0.5,
+                "independence_group": evidence.independence_group or evidence.lineage_id or "unknown",
                 "redaction_status": evidence.redaction_status.value,
-                "created_at": item.captured_at,
+                "created_at": evidence.captured_at or item.captured_at,
+                "captured_at": evidence.captured_at if _usable_evidence(evidence) else None,
                 "client_device_id": evidence.client_device_id,
+                "source_version": evidence.source_version,
+                "lineage_id": evidence.lineage_id,
+                "attribution": evidence.attribution,
+                "quote_refs": evidence.quote_refs,
             }
         )
         if evidence.source_type == "conversation" and evidence.source_id:
@@ -407,7 +430,6 @@ def memory_item_to_memorydb(item: MemoryItem) -> MemoryDB:
         arguments=_bounded_memory_arguments(item.arguments),
         intent_backed=item.intent_backed,
         write_reason=item.write_reason,
-        **public_belief_overlay(item, now=datetime.now(timezone.utc)),
     )
 
 
@@ -496,6 +518,7 @@ def read_canonical_memories(
     include_archive: bool = False,
     now: Optional[datetime] = None,
     budget: Optional[ListReadBudget] = None,
+    as_of: Optional[datetime] = None,
 ) -> List[MemoryDB]:
     """Read canonical items, optionally exposing explicit pending submissions.
 
@@ -513,7 +536,7 @@ def read_canonical_memories(
     device_scope = device_scope_request.device_scope if device_scope_request else "all"
     client_device_id = device_scope_request.client_device_id if device_scope_request else None
     items = fetch_authoritative_product_memory_items(uid=uid, db_client=client, budget=budget)
-    current_time = now or datetime.now(timezone.utc)
+    current_time = as_of or now or datetime.now(timezone.utc)
     archive_explicit = bool(include_archive)
     policy = MemoryAccessPolicy.for_omi_chat(archive_capability=archive_explicit)
     visible = filter_canonical_default_visible_items(items, policy=policy, now=current_time)
@@ -547,6 +570,7 @@ def read_canonical_memories(
         device_scope=device_scope if device_scope in ("current", "all", "explicit") else "all",
         client_device_id=client_device_id,
     )
+    visible = sorted(visible, key=lambda item: (-item.updated_at.timestamp(), item.memory_id))
     visible = _deduplicate_canonical_items(visible, lineage_context=items)
     paged = visible[offset : offset + limit]
     return [memory_item_to_memorydb(item) for item in paged]
@@ -823,10 +847,12 @@ def read_canonical_scan_page(
     include_archive: bool = False,
     now: Optional[datetime] = None,
     budget: Optional[ListReadBudget] = None,
+    as_of: Optional[datetime] = None,
+    item_filter: Optional[Callable[[MemoryItem], bool]] = None,
 ) -> Tuple[List[CanonicalScanSlot], bool]:
     """Read one bounded canonical raw scan page via Firestore keyset order.
 
-    Each slot corresponds to one raw ``memory_items`` document in newest-first
+    Each slot corresponds to one candidate ``memory_items`` document in newest-first
     ``updated_at DESC, __name__ ASC`` order. ``None`` memory means the row was
     filtered by access/device/pending/archive/lineage policy and must still
     advance the scan cursor. ``snapshot.id`` is the sole ``__name__`` authority;
@@ -838,28 +864,89 @@ def read_canonical_scan_page(
     bounded_limit = max(1, min(int(limit or 100), _CANONICAL_SCAN_PAGE_MAX))
     device_scope = device_scope_request.device_scope if device_scope_request else "all"
     client_device_id = device_scope_request.client_device_id if device_scope_request else None
-    current_time = now or datetime.now(timezone.utc)
+    current_time = as_of or now or datetime.now(timezone.utc)
     archive_explicit = bool(include_archive)
     policy = MemoryAccessPolicy.for_omi_chat(archive_capability=archive_explicit)
 
     items_ref = client.collection(MemoryCollections(uid=uid).memory_items)
-    query = UNIVERSAL_CANONICAL_LIST_SCAN_QUERY.build(
-        items_ref,
-        {},
-        field_filter_factory=FieldFilter,
-    )
-    query = query.order_by('updated_at', direction=firestore.Query.DESCENDING).order_by('__name__')
-    if start_after is not None:
-        cursor_time, cursor_memory_id = start_after
-        if not cursor_memory_id.strip():
-            raise ValueError('canonical scan cursor memory_id must not be blank')
-        query = query.start_after(
-            {
-                'updated_at': _coerce_scan_updated_at(cursor_time),
-                '__name__': items_ref.document(cursor_memory_id),
-            }
+    queries = []
+    if not archive_explicit and indexed_list_reads_enabled():
+        # Necessary conditions over fields required by MemoryItem. Keep the
+        # policy checks below authoritative. Expired *processed* Short-term is
+        # still visible, so expires_at must never be a query exclusion.
+        values: Dict[str, Any] = {
+            'status': 'active',
+            'source_state': 'active',
+            'source_states': ['active', 'missing'],
+            'processing_state': 'processed',
+            'tiers': ['short_term', 'long_term'],
+        }
+        if include_pending_processing:
+            # Usually empty: prove the pending branch first so a subsequent
+            # interrupted processed stream can retain its verified prefix.
+            queries.append(
+                UNIVERSAL_CANONICAL_RELEASED_PENDING_QUERY.build(
+                    items_ref,
+                    {**values, 'processing_state': 'pending', 'tier': 'short_term', 'required': True},
+                    field_filter_factory=FieldFilter,
+                )
+            )
+        queries.append(
+            UNIVERSAL_CANONICAL_RELEASED_PROCESSED_QUERY.build(
+                items_ref,
+                values,
+                field_filter_factory=FieldFilter,
+            )
         )
-    snapshots = budgeted_stream_list(query.limit(bounded_limit), budget)
+    else:
+        # Explicit Archive can admit pending Archive rows without required
+        # processing, so keep that rarer policy on the raw query.
+        queries.append(UNIVERSAL_CANONICAL_LIST_SCAN_QUERY.build(items_ref, {}, field_filter_factory=FieldFilter))
+
+    def snapshot_key(snapshot: Any) -> Tuple[int, int, str]:
+        stamp = (snapshot.to_dict() or {}).get('updated_at')
+        if not isinstance(stamp, datetime) or stamp.tzinfo is None or stamp.utcoffset() is None:
+            return (0, 0, snapshot.id)
+        # Firestore timestamps have nanosecond precision. Float timestamps can
+        # collapse adjacent revisions and reorder equal-microsecond rows by id.
+        delta = stamp - datetime(1970, 1, 1, tzinfo=timezone.utc)
+        seconds = delta.days * 86400 + delta.seconds
+        nanos = getattr(stamp, 'nanosecond', stamp.microsecond * 1000)
+        return (-seconds, -nanos, snapshot.id)
+
+    interrupted = False
+    snapshots: List[Any] = []
+    incomplete_boundaries: List[Optional[Tuple[int, int, str]]] = []
+    for query in queries:
+        query = query.order_by('updated_at', direction=firestore.Query.DESCENDING).order_by('__name__')
+        if start_after is not None:
+            cursor_time, cursor_memory_id = start_after
+            if not cursor_memory_id.strip():
+                raise ValueError('canonical scan cursor memory_id must not be blank')
+            query = query.start_after(
+                {
+                    'updated_at': _coerce_scan_updated_at(cursor_time),
+                    '__name__': items_ref.document(cursor_memory_id),
+                }
+            )
+        try:
+            branch = budgeted_stream_list(query.limit(bounded_limit), budget)
+        except ListReadBudgetExhausted as exc:
+            branch = getattr(exc, 'partial_snapshots', [])
+            interrupted = True
+            incomplete_boundaries.append(snapshot_key(branch[-1]) if branch else None)
+        snapshots.extend(branch)
+    if len(queries) > 1:
+        snapshots = list({snapshot.id: snapshot for snapshot in snapshots}.values())
+        snapshots.sort(key=snapshot_key)
+    # Only emit a newest-first prefix proven by *both* branch frontiers.
+    # An unread branch has no frontier, so a total outage cannot invent one.
+    if any(boundary is None for boundary in incomplete_boundaries):
+        snapshots = []
+    elif incomplete_boundaries:
+        boundary = min(value for value in incomplete_boundaries if value is not None)
+        snapshots = [snapshot for snapshot in snapshots if snapshot_key(snapshot) <= boundary]
+    snapshots = snapshots[:bounded_limit]
     slots: List[CanonicalScanSlot] = []
     for snapshot in snapshots:
         doc_id = getattr(snapshot, 'id', None)
@@ -885,6 +972,9 @@ def read_canonical_scan_page(
             # Fail closed: payload identity must match document __name__.
             slots.append((None, scan_cursor))
             continue
+        if item_filter is not None and not item_filter(item):
+            slots.append((None, scan_cursor))
+            continue
         if not _canonical_scan_item_visible(
             item,
             policy=policy,
@@ -896,22 +986,29 @@ def read_canonical_scan_page(
         ):
             slots.append((None, scan_cursor))
             continue
-        if _canonical_scan_lineage_suppressed(
-            item,
-            uid=uid,
-            db_client=client,
-            policy=policy,
-            now=current_time,
-            include_pending_processing=include_pending_processing,
-            include_archive=archive_explicit,
-            device_scope=device_scope,
-            client_device_id=client_device_id,
-            budget=budget,
-        ):
+        try:
+            suppressed = _canonical_scan_lineage_suppressed(
+                item,
+                uid=uid,
+                db_client=client,
+                policy=policy,
+                now=current_time,
+                include_pending_processing=include_pending_processing,
+                include_archive=archive_explicit,
+                device_scope=device_scope,
+                client_device_id=client_device_id,
+                budget=budget,
+            )
+        except ListReadBudgetExhausted:
+            # An unresolved alias cannot bypass lineage policy. Keep the
+            # earlier verified prefix and mark the stream incomplete.
+            interrupted = True
+            break
+        if suppressed:
             slots.append((None, scan_cursor))
             continue
         slots.append((memory_item_to_memorydb(item), scan_cursor))
-    exhausted = len(snapshots) < bounded_limit
+    exhausted = not interrupted and len(snapshots) < bounded_limit
     return slots, exhausted
 
 
@@ -925,8 +1022,12 @@ def search_canonical_memories(
     device_scope_request: Optional[DeviceScopeRequest] = None,
     item_filter: Optional[Callable[[MemoryItem], bool]] = None,
     ledger_kinds: Optional[Collection[str]] = None,
+    view: str = 'released',
+    as_of: Optional[datetime] = None,
 ) -> List[Dict[str, Any]]:
     """Hybrid search over default-visible Short-term and Long-term memories."""
+    assessment_now = datetime.now(timezone.utc)
+    temporal_clock = as_of or assessment_now
     client = db_client if db_client is not None else default_db_client
     device_scope = device_scope_request.device_scope if device_scope_request else "all"
     client_device_id = device_scope_request.client_device_id if device_scope_request else None
@@ -943,6 +1044,7 @@ def search_canonical_memories(
             offset=0,
             db_client=client,
             device_scope_request=device_scope_request,
+            as_of=as_of,
         )
         return [
             {
@@ -952,7 +1054,6 @@ def search_canonical_memories(
                 "date": memory.updated_at.isoformat(),
                 "visibility": memory.visibility,
                 "is_locked": memory.is_locked,
-                **public_belief_overlay_json(memory, now=datetime.now(timezone.utc)),
             }
             for memory in memories[:capped_limit]
         ]
@@ -995,14 +1096,13 @@ def search_canonical_memories(
     if not merged_ids:
         return []
 
-    now = datetime.now(timezone.utc)
     policy = MemoryAccessPolicy.for_omi_chat(archive_capability=False)
     hydration = _hydrate_bounded_ledger_search_items(
         uid,
         merged_ids,
         db_client=client,
         policy=policy,
-        now=now,
+        now=temporal_clock,
         device_scope=device_scope,
         client_device_id=client_device_id,
     )
@@ -1023,6 +1123,12 @@ def search_canonical_memories(
     for memory_id in candidate_ids:
         item = survivor_items_by_id.get(memory_id)
         if item is None or (item_filter is not None and not item_filter(item)):
+            continue
+        if (item.promotion or {}).get('user_review') is False:
+            continue
+        if ledger_kinds is not None and (
+            item.ledger_schema_version != 'knowledge_ledger.v1' or item.kind.value not in ledger_kinds
+        ):
             continue
         candidates.append(
             {
@@ -1060,7 +1166,6 @@ def search_canonical_memories(
                 "curation_weight": item.curation_weight,
                 "intent_backed": item.intent_backed,
                 "write_reason": item.write_reason.value if item.write_reason else None,
-                **public_belief_overlay_json(item, now=datetime.now(timezone.utc)),
             }
         )
     return results
@@ -1148,6 +1253,15 @@ def _legacy_evidence_to_memory(evidence_data: Dict[str, Any], *, conversation_id
         artifact_refs=artifact_refs,
         quote_refs=quote_refs,
         client_device_id=client_device_id,
+        lineage_id=evidence_data.get("lineage_id"),
+        content_hash=evidence_data.get("content_hash"),
+        captured_at=evidence_data.get("captured_at"),
+        source_signal=evidence_data.get("source_signal"),
+        extractor_id=evidence_data.get("extractor_id"),
+        extractor_version=evidence_data.get("extractor_version"),
+        capture_confidence=evidence_data.get("capture_confidence"),
+        independence_group=evidence_data.get("independence_group"),
+        attribution=evidence_data.get("attribution"),
     )
 
 
@@ -1199,6 +1313,41 @@ def _conversation_extracted_claim(data: Dict[str, Any]) -> bool:
     return False
 
 
+_SUBJECT_SCOPE_ALIASES = {"media_screen": MemorySubjectScope.third_party.value}
+_SUBJECT_SCOPE_VALUES = {scope.value for scope in MemorySubjectScope}
+
+
+def _subject_scope_from_payload(data: Dict[str, Any]) -> str:
+    """Keep source ownership attribution independent from the retired belief model."""
+    raw_scope = data.get("subject_scope")
+    scope = str(getattr(raw_scope, "value", raw_scope) or "").strip().lower()
+    scope = _SUBJECT_SCOPE_ALIASES.get(scope, scope)
+    if scope in _SUBJECT_SCOPE_VALUES:
+        return scope
+
+    if _user_asserted_from_payload(data):
+        return MemorySubjectScope.primary_user.value
+
+    raw_attribution = data.get("subject_attribution")
+    attribution = str(getattr(raw_attribution, "value", raw_attribution) or "").strip().lower()
+    if _conversation_extracted_claim(data):
+        about = data.get("about")
+        user_name = data.get("user_name")
+        speaker_label = data.get("speaker_label")
+        if (
+            classify_model_about(
+                about if isinstance(about, str) else None,
+                user_name=user_name if isinstance(user_name, str) else None,
+                speaker_label=speaker_label if isinstance(speaker_label, str) else None,
+            )
+            == "primary_user"
+        ):
+            return MemorySubjectScope.primary_user.value
+    if attribution == SubjectAttribution.user.value:
+        return MemorySubjectScope.primary_user.value
+    return MemorySubjectScope.third_party.value
+
+
 def _product_metadata_from_payload(data: Dict[str, Any]) -> Dict[str, Any]:
     metadata: Dict[str, Any] = {}
     category = data.get("category")
@@ -1226,8 +1375,34 @@ def _product_metadata_from_payload(data: Dict[str, Any]) -> Dict[str, Any]:
     subject_kind = str(raw_subject_kind or "").strip().lower()
     if subject_kind in {"user", "speaker", "person", "entity", "unknown"}:
         source_attribution["subject_kind"] = subject_kind
+    override = _attribution_override_from_payload(data)
+    if override:
+        # Audit/revert record for a capture-time re-attribution; the planner
+        # reads only the three subject fields above (canonical_consolidation).
+        source_attribution["override"] = override
     metadata["source_attribution"] = source_attribution
     return metadata
+
+
+_ATTRIBUTION_OVERRIDE_KEYS = (
+    "source",
+    "question_version",
+    "model",
+    "p_user",
+    "threshold",
+    "pipeline_subject_attribution",
+    "pipeline_subject_entity_id",
+    "pipeline_subject_kind",
+)
+
+
+def _attribution_override_from_payload(data: Dict[str, Any]) -> Dict[str, Any]:
+    """Read bounded legacy provenance for rows written before the owner-flip retirement."""
+    raw = data.get("attribution_override")
+    if not isinstance(raw, dict) or raw.get("source") != "jev":
+        return {}
+    override = cast(Dict[str, Any], raw)
+    return {key: override[key] for key in _ATTRIBUTION_OVERRIDE_KEYS if key in override}
 
 
 def _relationship_to_user_from_payload(data: Dict[str, Any]) -> str:
@@ -1288,13 +1463,15 @@ def _evidence_items_from_payload(data: Dict[str, Any]) -> List[MemoryEvidence]:
     return [_legacy_evidence_to_memory(evidence.model_dump(), conversation_id=conversation_id)]
 
 
-def _read_canonical_memory_item(uid: str, memory_id: str, *, db_client: Any) -> Optional[MemoryItem]:
+def _read_canonical_memory_item(
+    uid: str, memory_id: str, *, db_client: Any, include_inactive: bool = False
+) -> Optional[MemoryItem]:
     path = f"{MemoryCollections(uid=uid).memory_items}/{memory_id}"
     snapshot = db_client.document(path).get()
     if not getattr(snapshot, "exists", False):
         return None
     item = MemoryItem(**_snapshot_payload(snapshot))
-    if item.status != MemoryItemStatus.active:
+    if not include_inactive and item.status != MemoryItemStatus.active:
         return None
     if item.memory_id != memory_id:
         raise ValueError(f"canonical memory id mismatch: requested {memory_id}, found {item.memory_id}")
@@ -1303,10 +1480,12 @@ def _read_canonical_memory_item(uid: str, memory_id: str, *, db_client: Any) -> 
     return item
 
 
-def read_canonical_memory_item(uid: str, memory_id: str, *, db_client: Any = None) -> Optional[MemoryItem]:
-    """Read one active canonical memory item from the authoritative product store."""
+def read_canonical_memory_item(
+    uid: str, memory_id: str, *, db_client: Any = None, include_inactive: bool = False
+) -> Optional[MemoryItem]:
+    """Read an active owner item; Review may inspect inactive rows to classify exclusion."""
     client = db_client if db_client is not None else default_db_client
-    return _read_canonical_memory_item(uid, memory_id, db_client=client)
+    return _read_canonical_memory_item(uid, memory_id, db_client=client, include_inactive=include_inactive)
 
 
 def _canonical_extraction_apply_write(
@@ -1369,13 +1548,11 @@ def _canonical_extraction_apply_write(
         "initial_tier": _resolve_initial_tier_value(data),
         "visibility": _visibility_from_payload(data),
         "user_asserted": _user_asserted_from_payload(data),
+        "subject_scope": _subject_scope_from_payload(data),
     }
     for ledger_key in (
         "ledger_schema_version",
         "kind",
-        "subject_scope",
-        "half_life_days",
-        "belief_class",
         "slot",
         "body",
         "valid_from",
@@ -1387,34 +1564,10 @@ def _canonical_extraction_apply_write(
     ):
         if ledger_key in data and data[ledger_key] is not None:
             patch_payload[ledger_key] = data[ledger_key]
-    raw_scope = patch_payload.get("subject_scope")
-    if isinstance(raw_scope, str) and raw_scope in SUBJECT_SCOPE_ALIASES:
-        patch_payload["subject_scope"] = SUBJECT_SCOPE_ALIASES[raw_scope]
-    if belief_model_enabled():
-        if "valid_to" not in patch_payload and data.get("invalid_at") is not None:
-            patch_payload["valid_to"] = data["invalid_at"]
-        if "subject_scope" not in patch_payload:
-            if _conversation_extracted_claim(data):
-                attribution = data.get("subject_attribution")
-                attribution_value = getattr(attribution, "value", attribution)
-                user_name = data.get("user_name")
-                patch_payload["subject_scope"] = subject_scope_from_extraction(
-                    extracted_scope=data.get("subject_scope"),
-                    attribution=str(attribution_value or ""),
-                    about=data.get("about"),
-                    user_name=user_name if isinstance(user_name, str) else None,
-                )
-            else:
-                patch_payload["subject_scope"] = "primary_user"
-        if "belief_class" not in patch_payload:
-            resolved_class, resolved_half_life = horizon_from_extraction(
-                belief_class=data.get("belief_class"),
-                half_life_days_override=data.get("half_life_days"),
-                user_asserted=_user_asserted_from_payload(data),
-            )
-            patch_payload["belief_class"] = resolved_class
-            if resolved_half_life is not None:
-                patch_payload["half_life_days"] = resolved_half_life
+    if "valid_to" not in patch_payload and data.get("invalid_at") is not None:
+        patch_payload["valid_to"] = data["invalid_at"]
+    # Legacy belief-model fields may still exist on stored rows, but new writes
+    # follow the released memory contract and never create those fields.
     supersedes = [str(value).strip() for value in (data.get("supersedes") or []) if str(value).strip()]
     if supersedes:
         patch_payload["supersedes"] = sorted(set(supersedes))
@@ -1498,18 +1651,63 @@ def _existing_identical_add_row(
     if not getattr(snapshot, "exists", False):
         return None
     item = MemoryItem(**_snapshot_payload(snapshot))
-    if item.status != MemoryItemStatus.active:
-        return None
-    if (item.promotion or {}).get("user_review") is False:
-        # A rejected row remains active for audit/history, but it is not a
-        # successful retry target.  Reusing it would silently resurrect a
-        # user-rejected statement under the old content-derived identity.
-        return None
-    if (item.content or "").strip() != (data.get("content") or "").strip():
+    if not _is_live_identical_row(item, data.get("content")):
         return None
     return item
 
 
+def _is_live_identical_row(item: MemoryItem, content: Any) -> bool:
+    """Whether a resend of ``content`` is already satisfied by ``item``."""
+    if item.status != MemoryItemStatus.active:
+        return False
+    if (item.promotion or {}).get("user_review") is False:
+        # A rejected row remains active for audit/history, but it is not a
+        # successful retry target.  Reusing it would silently resurrect a
+        # user-rejected statement under the old content-derived identity.
+        return False
+    return (item.content or "").strip() == str(content or "").strip()
+
+
+_DUPLICATE_ADD_SNAPSHOT_RETRY_DELAYS: tuple[float, ...] = (0.05, 0.15, 0.3)
+
+
+def _resolve_duplicate_add_row(
+    uid: str,
+    *,
+    result: ApplyResult,
+    memory_id: str,
+    data: Dict[str, Any],
+    db_client: Any,
+) -> Optional[MemoryItem]:
+    """Resolve an add collision, retrying briefly while the row is not readable yet.
+
+    The apply transaction observed the colliding row inside its own snapshot, but
+    a concurrent identical submission can return ``invalid_patch`` while the
+    winning write is still landing for a plain read — the exact residue behind
+    the 2026-09-11 ``canonical write failed`` family on chat/extraction writes.
+    Re-read briefly before failing so an identical resubmission resolves to the
+    existing row instead of surfacing a 500. Definitive conflicts — a row that
+    is not active, user-rejected, or carrying different content — return None on
+    every re-read and stay fail-closed.
+    """
+    # Only the duplicate-add collision shape can ever be resolved by a re-read;
+    # any other failure (admission, inactive-source, payload mismatch,
+    # exhausted-head-retry) pays nothing here and fails immediately.
+    if result.status != ApplyStatus.invalid_patch or result.reason != _DUPLICATE_ADD_ROW_REASON:
+        return None
+    duplicate = _existing_identical_add_row(uid, result=result, memory_id=memory_id, data=data, db_client=db_client)
+    if duplicate is not None:
+        return duplicate
+    for delay in _DUPLICATE_ADD_SNAPSHOT_RETRY_DELAYS:
+        time.sleep(delay)
+        snapshot = db_client.document(f"{MemoryCollections(uid=uid).memory_items}/{memory_id}").get()
+        if not getattr(snapshot, "exists", False):
+            continue
+        return _existing_identical_add_row(uid, result=result, memory_id=memory_id, data=data, db_client=db_client)
+    return None
+
+
+@after_write('memory_items')
 def write_canonical_extraction_memory(
     uid: str,
     data: Dict[str, Any],
@@ -1549,23 +1747,26 @@ def write_canonical_extraction_memory(
         apply_patch = (
             apply_direct_user_long_term_patch_firestore if direct_user_authorized else apply_long_term_patch_firestore
         )
-        result = apply_patch(
-            uid=uid,
-            operation_id=write.operation.operation_id,
-            patch_payload=write.patch_payload,
-            proposed_operation=write.operation,
-            proposed_evidence=write.evidence,
-            review_resolution=review_resolution,
-            required_source_item=required_source_item,
-            ledger_reopen_receipt=ledger_reopen_receipt,
-            allow_ledger_migration=False,
-            db_client=client,
-        )
+        try:
+            result = apply_patch(
+                uid=uid,
+                operation_id=write.operation.operation_id,
+                patch_payload=write.patch_payload,
+                proposed_operation=write.operation,
+                proposed_evidence=write.evidence,
+                review_resolution=review_resolution,
+                required_source_item=required_source_item,
+                ledger_reopen_receipt=ledger_reopen_receipt,
+                allow_ledger_migration=False,
+                db_client=client,
+            )
+        except DestructiveOperationInProgress as exc:
+            raise account_gate_busy_http_exception() from exc
         if result.status != ApplyStatus.retryable_head_mismatch:
             break
     assert result is not None
     if result.status not in {ApplyStatus.committed, ApplyStatus.idempotent_skip}:
-        duplicate_row = _existing_identical_add_row(
+        duplicate_row = _resolve_duplicate_add_row(
             uid,
             result=result,
             memory_id=memory_id,
@@ -1605,24 +1806,56 @@ def write_canonical_extraction_memory(
             MemoryProcessingState(item.processing_state.value),
         )
 
-    if admit_neighbors and belief_model_enabled() and item is not None:
-        from utils.memory.belief_evidence import admit_claim_against_neighbors
-
-        try:
-            admit_claim_against_neighbors(
-                uid,
-                committed_id,
-                item.content or data.get("content") or "",
-                db_client=client,
-                new_user_asserted=bool(item.user_asserted),
-            )
-        except Exception:
-            logger.warning("belief evidence admission skipped memory_id=%s", committed_id, exc_info=False)
-
     return committed_id
 
 
 _EXTERNAL_EVIDENCE_REISSUE_LIMIT = 25
+_EXTERNAL_MEMORY_ID_REISSUE_LIMIT = 25
+_EXTERNAL_WRITE_CONFLICT_ATTEMPTS = 3
+
+
+def _is_content_derived_memory_id(memory_id: Any, content: Any) -> bool:
+    # Only an id derived from this exact text may move. A caller-supplied id
+    # reused for different text is a genuine conflict and keeps failing.
+    text = str(content or "")
+    return bool(memory_id) and memory_id in {document_id_from_seed(text), document_id_from_seed(text.strip())}
+
+
+def _available_external_memory_id(uid: str, memory_id: str, content: Any, *, db_client: Any) -> str:
+    """Return the row id an external create should write, given rows that already hold its identity.
+
+    External memory ids are derived from the submitted text, but a row keeps its
+    id when it is edited, superseded, or rejected. A resend of the original text
+    would then collide with a row that no longer holds it and fail the add on
+    every retry (#17296). The user does not have that text any more, so the
+    resend is a new memory and gets a fresh identity, as a re-add after delete
+    does. The reissued id is deterministic, so retrying the same resend still
+    lands on one row, and a row that does hold the text is reused.
+    """
+    collections = MemoryCollections(uid=uid)
+    candidate = memory_id
+    for attempt in range(1, _EXTERNAL_MEMORY_ID_REISSUE_LIMIT + 1):
+        snapshot = db_client.document(f"{collections.memory_items}/{candidate}").get()
+        if not getattr(snapshot, "exists", False):
+            return candidate
+        if _is_live_identical_row(MemoryItem(**_snapshot_payload(snapshot)), content):
+            return candidate
+        candidate = (
+            "mem_"
+            + deterministic_contract_id(
+                "canonical-external-memory-occupied-reissue",
+                {"uid": uid, "memory_id": memory_id, "attempt": attempt},
+            )[:32]
+        )
+    raise RuntimeError("canonical external write exhausted memory identity reissues")
+
+
+_EXTERNAL_EVIDENCE_SOURCE_IDENTITY_FIELDS = set(EVIDENCE_IDENTITY_FIELDS) - {"evidence_id"}
+
+
+def _external_evidence_source_identity(evidence: MemoryEvidence) -> Dict[str, Any]:
+    """Immutable identity fields that name the source an evidence id stands for."""
+    return evidence.model_dump(mode="json", include=_EXTERNAL_EVIDENCE_SOURCE_IDENTITY_FIELDS)
 
 
 def _reissued_external_evidence(
@@ -1631,7 +1864,7 @@ def _reissued_external_evidence(
     *,
     db_client: Any,
 ) -> List[MemoryEvidence]:
-    """Mint a fresh evidence identity when an external submission reuses a retired one.
+    """Mint a fresh evidence identity when an external submission reuses a taken one.
 
     External evidence ids are derived from the submitted content, and evidence
     source_state is monotonic per identity. Deleting a memory tombstones its
@@ -1647,6 +1880,7 @@ def _reissued_external_evidence(
         if item.conversation_id or item.source_type == "conversation":
             reissued.append(item)
             continue
+        proposed_identity = _external_evidence_source_identity(item)
         evidence_id = item.evidence_id
         for attempt in range(1, _EXTERNAL_EVIDENCE_REISSUE_LIMIT + 1):
             snapshot = db_client.document(f"{collections.memory_evidence}/{evidence_id}").get()
@@ -1654,12 +1888,17 @@ def _reissued_external_evidence(
                 break
             stored = _snapshot_payload(snapshot)
             if SourceState(stored.get("source_state") or SourceState.active.value) == SourceState.active:
-                break
+                if _external_evidence_source_identity(MemoryEvidence(**stored)) == proposed_identity:
+                    break
             evidence_id = (
                 "ev_"
                 + deterministic_contract_id(
                     "canonical-external-evidence-reissue",
-                    {"evidence_id": item.evidence_id, "attempt": attempt},
+                    {
+                        "evidence_id": item.evidence_id,
+                        "identity": proposed_identity,
+                        "attempt": attempt,
+                    },
                 )[:32]
             )
         else:
@@ -1686,8 +1925,6 @@ def write_canonical_external_memory(
         raise ValueError("knowledge ledger writes require the dedicated ledger authority")
     client = db_client if db_client is not None else default_db_client
     original_evidence = _evidence_items_from_payload(data)
-    reissued_evidence = _reissued_external_evidence(uid, original_evidence, db_client=client)
-    payload = dict(data)
     original_memory_id = str(data.get("id") or "").strip()
     was_privacy_deleted = False
     if original_memory_id:
@@ -1696,48 +1933,49 @@ def write_canonical_external_memory(
             f"{privacy_deletion_receipt_id(uid, original_memory_id)}"
         ).get()
         was_privacy_deleted = bool(getattr(receipt, "exists", False))
-    if was_privacy_deleted and not any(
+    has_conversation_evidence = any(
         item.conversation_id or item.source_type == "conversation" for item in original_evidence
-    ):
-        reissued_evidence = [
-            item.model_copy(update={"evidence_id": f"ev_{secrets.token_hex(16)}"}) for item in original_evidence
-        ]
-        payload["id"] = f"mem_{secrets.token_hex(16)}"
-    if [item.evidence_id for item in reissued_evidence] != [item.evidence_id for item in original_evidence]:
-        # A manually re-added fact is a new source artifact. Give the new row a
-        # fresh deterministic identity derived from its newly minted evidence;
-        # the deleted row and evidence remain immutable history.
-        if not was_privacy_deleted:
-            payload["id"] = (
-                "mem_"
-                + deterministic_contract_id(
-                    "canonical-external-memory-reissue",
-                    {
-                        "uid": uid,
-                        "original_memory_id": data.get("id"),
-                        "evidence_ids": [item.evidence_id for item in reissued_evidence],
-                    },
-                )[:32]
-            )
-    memory_id = write_canonical_extraction_memory(
-        uid,
-        payload,
-        db_client=client,
-        evidence_items=reissued_evidence,
-        review_resolution=review_resolution,
-        _direct_user_authority=_DIRECT_USER_LEDGER_WRITE_AUTHORITY,
-        admit_neighbors=False,
     )
-    if belief_model_enabled():
-        from utils.memory.belief_evidence import schedule_belief_admission
-
-        schedule_belief_admission(
-            uid,
-            memory_id,
-            str(payload.get("content") or ""),
-            db_client=client,
-            new_user_asserted=bool(payload.get("manually_added") or payload.get("user_asserted")),
-        )
+    is_content_derived = _is_content_derived_memory_id(original_memory_id, data.get("content"))
+    last_conflict: Optional[EvidenceIdentityConflict] = None
+    memory_id: Optional[str] = None
+    for _conflict_attempt in range(_EXTERNAL_WRITE_CONFLICT_ATTEMPTS):
+        if not was_privacy_deleted and is_content_derived:
+            snapshot = client.document(f"{MemoryCollections(uid=uid).memory_items}/{original_memory_id}").get()
+            if getattr(snapshot, "exists", False) and _is_live_identical_row(
+                MemoryItem(**_snapshot_payload(snapshot)), data.get("content")
+            ):
+                return original_memory_id
+        payload = dict(data)
+        reissued_evidence = _reissued_external_evidence(uid, original_evidence, db_client=client)
+        if was_privacy_deleted and not has_conversation_evidence:
+            reissued_evidence = [
+                item.model_copy(update={"evidence_id": f"ev_{secrets.token_hex(16)}"}) for item in original_evidence
+            ]
+            payload["id"] = f"mem_{secrets.token_hex(16)}"
+        if _is_content_derived_memory_id(payload.get("id"), payload.get("content")):
+            payload["id"] = _available_external_memory_id(
+                uid, str(payload["id"]), payload.get("content"), db_client=client
+            )
+        try:
+            memory_id = write_canonical_extraction_memory(
+                uid,
+                payload,
+                db_client=client,
+                evidence_items=reissued_evidence,
+                review_resolution=review_resolution,
+                _direct_user_authority=_DIRECT_USER_LEDGER_WRITE_AUTHORITY,
+                admit_neighbors=False,
+            )
+        except EvidenceIdentityConflict as exc:
+            if was_privacy_deleted or has_conversation_evidence or not is_content_derived:
+                raise
+            last_conflict = exc
+            continue
+        break
+    if memory_id is None:
+        assert last_conflict is not None
+        raise last_conflict
     return memory_id
 
 
@@ -2041,6 +2279,9 @@ def _conversation_replacement_digest(
                         "artifact_ref": evidence.get("artifact_ref") or {},
                         "client_device_id": evidence.get("client_device_id"),
                         "quote_refs": evidence.get("quote_refs") or [],
+                        "lineage_id": evidence.get("lineage_id"),
+                        "independence_group": evidence.get("independence_group"),
+                        "attribution": evidence.get("attribution"),
                     }
                 )
         semantic_items.append(
@@ -2089,6 +2330,7 @@ def replace_conversation_sourced_memories(
     db_client: Any = None,
     conflict_backoff_seconds: Sequence[float] = _REPLACEMENT_CONFLICT_BACKOFF_SECONDS,
     empty_set_intent: str = "retraction",
+    claim_destructive_gate: bool = True,
 ) -> Dict[str, Any]:
     """Atomically replace one conversation's complete canonical memory set.
 
@@ -2106,6 +2348,10 @@ def replace_conversation_sourced_memories(
     conversation already has rows and no deletion gate is held, the existing
     rows are kept and the call resolves as a no-op instead of failing —
     extraction variance is not permission to destroy knowledge.
+
+    ``claim_destructive_gate`` is True for account-scale privacy deletion.
+    Sync-bridge donor retraction passes False: it still retracts rows, but
+    fences against a live wipe instead of taking the exclusive account lock.
     """
     if empty_set_intent not in {"retraction", "extraction"}:
         raise ValueError(f"unknown empty_set_intent: {empty_set_intent!r}")
@@ -2165,6 +2411,15 @@ def replace_conversation_sourced_memories(
             # ``expected_reactivation_items`` derives from
             # ``terminal_source_ids``, itself derived from
             # ``expected_source_items``, so it is necessarily empty here too.
+            if not claim_destructive_gate:
+                return {
+                    "retracted_memory_ids": [],
+                    "committed_memory_ids": [],
+                    "reactivated_memory_ids": [],
+                    "vector_delete_ids": [],
+                    "tombstoned_evidence_ids": [],
+                    "source_generation": observed_control.source_generation,
+                }
             try:
                 current_destructive_operation_token(uid, kind="explicit_memory_deletion")
             except LegalHoldAuthorityUnavailable:
@@ -2280,11 +2535,16 @@ def replace_conversation_sourced_memories(
                 expected_reactivation_items=expected_reactivation_items,
                 writes=writes,
                 deletion_gate_token=(
-                    current_destructive_operation_token(uid, kind="explicit_memory_deletion") if not items else None
+                    current_destructive_operation_token(uid, kind="explicit_memory_deletion")
+                    if not items and claim_destructive_gate
+                    else None
                 ),
+                require_deletion_gate=bool(not items and claim_destructive_gate),
                 db_client=client,
             )
             break
+        except DestructiveOperationInProgress as exc:
+            raise account_gate_busy_http_exception() from exc
         except ConversationSourceReplacementConflict as exc:
             last_conflict = exc
             _backoff_before_replacement_retry(_attempt, conflict_backoff_seconds)
@@ -2301,11 +2561,8 @@ def replace_conversation_sourced_memories(
         db_client=client,
         reason="conversation_reprocess_retract",
         preserve_source_replacement_receipts=True,
+        revalidate_gate=bool(not items and claim_destructive_gate),
     )
-    if belief_model_enabled() and result.committed_memory_ids:
-        from utils.memory.belief_evidence import admit_committed_claims
-
-        admit_committed_claims(uid, result.committed_memory_ids, items, db_client=client)
     return {
         "retracted_memory_ids": result.retracted_memory_ids,
         "committed_memory_ids": result.committed_memory_ids,
@@ -2325,7 +2582,8 @@ def _apply_canonical_user_mutation(
     operation_type: MemoryOperationType = MemoryOperationType.user_mutation,
     allow_ledger_migration: bool = False,
     review_resolution: Optional[CanonicalReviewResolution] = None,
-    trigger_feedback_receipt: Optional[JITTriggerFeedbackReceipt] = None,
+    required_source_item: Optional[MemoryItem] = None,
+    automated: bool = False,
     db_client: Any,
 ) -> Tuple[MemoryItem, MemoryItem]:
     """Apply one ordinary user mutation through the canonical transaction boundary."""
@@ -2334,21 +2592,30 @@ def _apply_canonical_user_mutation(
         if item is None:
             raise ValueError(f"canonical memory not found: {memory_id}")
         control = _ensure_control_state(uid, db_client=db_client)
-        writer_class = MemoryWriterClass.ledger if allow_ledger_migration else MemoryWriterClass.user
+        writer_class = (
+            MemoryWriterClass.ledger
+            if allow_ledger_migration or (automated and item.ledger_schema_version == "knowledge_ledger.v1")
+            else MemoryWriterClass.compatibility if automated else MemoryWriterClass.user
+        )
         require_writer_admitted(
             control,
             writer_class,
             allow_ledger_migration=allow_ledger_migration,
         )
         now = max(datetime.now(timezone.utc), item.captured_at, item.updated_at)
-        logical_updates, patch_updates = build_patch(item, now)
+        built = build_patch(item, now)
+        if built is None:
+            return item, item
+        logical_updates, patch_updates = built
         logical_payload: Payload = {
             "decision": DurablePatchDecision.update.value,
             "target_memory_id": memory_id,
             "result_status": LifecycleState.active.value,
             **logical_updates,
         }
-        evidence_ids = [evidence.evidence_id for evidence in item.evidence]
+        evidence_ids = sorted(
+            set(patch_updates.get("evidence_ids") or [evidence.evidence_id for evidence in item.evidence])
+        )
         mutation_identity = build_patch_mutation_identity(
             {
                 **logical_payload,
@@ -2396,18 +2663,26 @@ def _apply_canonical_user_mutation(
         }
         patch_payload["mutation_metadata"] = mutation_identity
         apply_patch = (
-            apply_long_term_patch_firestore if allow_ledger_migration else apply_direct_user_long_term_patch_firestore
+            apply_long_term_patch_firestore
+            if allow_ledger_migration or automated
+            else apply_direct_user_long_term_patch_firestore
         )
-        result = apply_patch(
-            uid=uid,
-            operation_id=operation.operation_id,
-            patch_payload=patch_payload,
-            proposed_operation=operation,
-            review_resolution=review_resolution,
-            allow_ledger_migration=allow_ledger_migration,
-            trigger_feedback_receipt=trigger_feedback_receipt,
-            db_client=db_client,
+        source_fence: Dict[str, Any] = (
+            {"required_source_item": required_source_item} if required_source_item is not None else {}
         )
+        try:
+            result = apply_patch(
+                uid=uid,
+                operation_id=operation.operation_id,
+                patch_payload=patch_payload,
+                proposed_operation=operation,
+                review_resolution=review_resolution,
+                allow_ledger_migration=allow_ledger_migration,
+                db_client=db_client,
+                **source_fence,
+            )
+        except DestructiveOperationInProgress as exc:
+            raise account_gate_busy_http_exception() from exc
         if result.status in {ApplyStatus.committed, ApplyStatus.idempotent_skip}:
             updated = (
                 result.memory_items[0]
@@ -2426,132 +2701,6 @@ def _apply_canonical_user_mutation(
 
 
 apply_canonical_user_mutation = _apply_canonical_user_mutation
-
-
-@dataclass(frozen=True)
-class CanonicalTriggerFeedbackResult:
-    item: MemoryItem
-    applied: bool
-    receipt: JITTriggerFeedbackReceipt
-
-
-def apply_canonical_trigger_feedback(
-    uid: str,
-    memory_id: str,
-    *,
-    event_id: str,
-    expected_account_generation: int,
-    expected_item_revision: int,
-    feedback: Any,
-    db_client: Any = None,
-) -> CanonicalTriggerFeedbackResult:
-    """Persist explicit trigger feedback through the canonical head transaction.
-
-    The receipt contains only bounded identifiers, action, and timestamps. It
-    is written atomically with the item revision and canonical head so replay,
-    account deletion, and competing revisions cannot produce split authority.
-    """
-
-    client = db_client if db_client is not None else default_db_client
-    parsed_feedback = TriggerFeedback.model_validate(feedback)
-    normalized_uid = uid.strip()
-    normalized_memory_id = memory_id.strip()
-    normalized_event_id = event_id.strip()
-    if parsed_feedback.note is not None:
-        raise ValueError("durable trigger feedback must be content-free")
-    if parsed_feedback.action not in {
-        TriggerFeedbackAction.useful,
-        TriggerFeedbackAction.false_positive,
-        TriggerFeedbackAction.snooze,
-        TriggerFeedbackAction.disable,
-        TriggerFeedbackAction.missed_or_late,
-    }:
-        raise ValueError("unsupported durable trigger feedback action")
-    receipt_payload: Payload = {
-        "schema_version": "jit_trigger_feedback.v1",
-        "uid": normalized_uid,
-        "feedback_id": parsed_feedback.feedback_id,
-        "event_id": normalized_event_id,
-        "trigger_memory_id": normalized_memory_id,
-        "account_generation": expected_account_generation,
-        "expected_trigger_revision": expected_item_revision,
-        "action": parsed_feedback.action.value,
-        "recorded_at": parsed_feedback.recorded_at.isoformat(),
-        "snoozed_until": (
-            parsed_feedback.snoozed_until.isoformat() if parsed_feedback.snoozed_until is not None else None
-        ),
-    }
-    request_hash = hashlib.sha256(
-        json.dumps(receipt_payload, sort_keys=True, separators=(",", ":")).encode()
-    ).hexdigest()
-    proposed_receipt = JITTriggerFeedbackReceipt.model_validate({**receipt_payload, "request_hash": request_hash})
-    replay = read_trigger_feedback_replay_firestore(
-        normalized_uid,
-        feedback_id=parsed_feedback.feedback_id,
-        request_hash=request_hash,
-        db_client=client,
-    )
-    if replay is not None:
-        current, existing_receipt = replay
-        return CanonicalTriggerFeedbackResult(item=current, applied=False, receipt=existing_receipt)
-
-    initial = _read_canonical_memory_item(normalized_uid, normalized_memory_id, db_client=client)
-    if initial is None:
-        raise ValueError("feedback target is unavailable")
-    if (
-        initial.uid != normalized_uid
-        or initial.account_generation != expected_account_generation
-        or initial.item_revision != expected_item_revision
-        or initial.kind != MemoryKind.trigger
-        or initial.ledger_schema_version != _LEDGER_SCHEMA_VERSION
-    ):
-        raise ValueError("feedback target authority fence is stale")
-    preview = apply_trigger_feedback(initial, parsed_feedback)
-    if not preview.applied:
-        raise RuntimeError("trigger feedback state exists without its durable receipt")
-
-    def build_patch(item: MemoryItem, _now: datetime) -> Tuple[Payload, Payload]:
-        if (
-            item.account_generation != expected_account_generation
-            or item.item_revision != expected_item_revision
-            or item.kind != MemoryKind.trigger
-            or item.ledger_schema_version != _LEDGER_SCHEMA_VERSION
-        ):
-            raise ValueError("feedback target authority fence is stale")
-        updated = apply_trigger_feedback(item, parsed_feedback)
-        if not updated.applied:
-            raise RuntimeError("trigger feedback state exists without its durable receipt")
-        result_status = (
-            LifecycleState.hidden.value
-            if updated.item.status == MemoryItemStatus.hidden
-            else LifecycleState.active.value
-        )
-        return (
-            {"result_status": result_status},
-            {
-                "arguments": updated.item.arguments,
-                "curation_weight": updated.item.curation_weight,
-            },
-        )
-
-    _, updated = _apply_canonical_user_mutation(
-        normalized_uid,
-        normalized_memory_id,
-        mutation_kind=f"jit_trigger_feedback:{parsed_feedback.feedback_id}",
-        build_patch=build_patch,
-        operation_type=MemoryOperationType.ledger_mutation,
-        trigger_feedback_receipt=proposed_receipt,
-        db_client=client,
-    )
-    committed_snapshot = client.document(
-        f"{MemoryCollections(uid=normalized_uid).jit_trigger_feedback}/{parsed_feedback.feedback_id}"
-    ).get()
-    if not getattr(committed_snapshot, "exists", False):
-        raise RuntimeError("trigger feedback committed without its durable receipt")
-    committed_receipt = JITTriggerFeedbackReceipt.model_validate(committed_snapshot.to_dict() or {})
-    if committed_receipt.request_hash != request_hash:
-        raise RuntimeError("trigger feedback receipt changed after commit")
-    return CanonicalTriggerFeedbackResult(item=updated, applied=True, receipt=committed_receipt)
 
 
 def adapt_canonical_memory_to_knowledge_ledger(
@@ -2664,14 +2813,6 @@ def update_canonical_memory_content(uid: str, memory_id: str, content: str, *, d
                 "promotion_audit": promotion,
                 "expires_at": default_short_term_expiry(now),
                 "kg_extracted": False,
-                **(
-                    {
-                        "last_corroborated_at": now,
-                        "corroboration_count": int(item.corroboration_count or 0) + 1,
-                    }
-                    if belief_model_enabled()
-                    else {}
-                ),
             },
         )
 
@@ -2791,8 +2932,10 @@ def update_canonical_memory_visibility(
 def update_canonical_memory_review(uid: str, memory_id: str, value: bool, *, db_client: Any = None) -> MemoryItem:
     client = db_client if db_client is not None else default_db_client
 
-    def build_patch(item: MemoryItem, now: datetime) -> Tuple[Payload, Payload]:
+    def build_patch(item: MemoryItem, now: datetime) -> Optional[Tuple[Payload, Payload]]:
         promotion = dict(item.promotion or {})
+        if promotion.get("reviewed") is True and promotion.get("user_review") is value:
+            return None
         promotion["reviewed"] = True
         promotion["user_review"] = value
         if promotion.get("required") is True and item.processing_state == ProcessingState.pending:
@@ -2803,22 +2946,7 @@ def update_canonical_memory_review(uid: str, memory_id: str, value: bool, *, db_
         patch_updates: Payload = {"promotion_audit": promotion}
         if not value:
             patch_updates["kg_extracted"] = False
-        logical_updates: Payload = {}
-        if belief_model_enabled():
-            from utils.memory.belief_evidence import EvidenceEventJudgment, EvidenceEventKind, patch_for_evidence_event
-
-            event = EvidenceEventKind.restated if value else EvidenceEventKind.contradicted
-            patch = patch_for_evidence_event(
-                item,
-                EvidenceEventJudgment(event=event, target_memory_id=memory_id, rationale="explicit user review"),
-                pointer="user_review",
-                now=now,
-                new_is_as_authoritative=False if not value else True,
-            )
-            if patch is not None:
-                logical_updates, event_extra = patch
-                patch_updates.update(event_extra)
-        return logical_updates, patch_updates
+        return {}, patch_updates
 
     previous, updated = _apply_canonical_user_mutation(
         uid,
@@ -2904,6 +3032,7 @@ def resolve_canonical_memory_review(
                     purge_stale_review_conflicts_for_memories(
                         uid,
                         [memory_id],
+                        revalidate_gate=True,
                         reason=f"canonical_review_{decision}_replay",
                         db_client=client,
                         include_legacy_commits=True,
@@ -2921,6 +3050,7 @@ def resolve_canonical_memory_review(
             purge_stale_review_conflicts_for_memories(
                 uid,
                 [memory_id],
+                revalidate_gate=True,
                 reason=f"canonical_review_{decision}",
                 db_client=client,
                 include_legacy_commits=True,
@@ -2931,6 +3061,7 @@ def resolve_canonical_memory_review(
                 db_client=client,
                 reason=f"canonical_review_{decision}",
                 include_review_queue=False,
+                revalidate_gate=True,
             )
             resolved = tombstoned[0]
             return {
@@ -3133,6 +3264,7 @@ def _tombstone_memory_items_under_gate(
     last_conflict: Optional[CanonicalMemoryTombstoneConflict] = None
     planned_items = authoritative_items
     for _attempt in range(3):
+        assert_destructive_gate_still_ours(uid, "explicit_memory_deletion", firestore_client=db_client)
         observed_control = _read_replacement_control(uid, db_client=db_client)
         all_items = (
             planned_items
@@ -3175,6 +3307,7 @@ def _tombstone_memory_items_under_gate(
         ):
             last_conflict = CanonicalMemoryTombstoneConflict("memory control changed during privacy source scan")
             continue
+        assert_destructive_gate_still_ours(uid, "explicit_memory_deletion", firestore_client=db_client)
         try:
             result = tombstone_memory_items_firestore(
                 uid=uid,
@@ -3258,6 +3391,38 @@ def _run_immediate_privacy_cleanup(
         )
 
 
+@dataclass
+class _DeferredCanonicalPrivacyFinalization:
+    uid: str
+    db_client: Any
+    memory_ids: List[str]
+
+
+_DEFERRED_CANONICAL_PRIVACY_FINALIZATION: ContextVar[Optional[_DeferredCanonicalPrivacyFinalization]] = ContextVar(
+    "deferred_canonical_privacy_finalization", default=None
+)
+
+
+@contextmanager
+def defer_conversation_privacy_finalization(uid: str, *, db_client: Any) -> Iterator[List[str]]:
+    """Keep retry tombstones until MemoryService purges the complete task set.
+
+    Only provider-proven IDs are collected; no history read is cached. Bind
+    the scope to both the user and client so nested work cannot enlist a
+    different account or database in this task's finalization. The
+    caller must run the mandatory final projection purge after this scope and
+    before removing source-replacement receipts. On failure, both the durable
+    tombstones and receipts remain available to reconstruct cleanup on retry.
+    """
+    client = db_client if db_client is not None else default_db_client
+    pending = _DeferredCanonicalPrivacyFinalization(uid, client, [])
+    token = _DEFERRED_CANONICAL_PRIVACY_FINALIZATION.set(pending)
+    try:
+        yield pending.memory_ids
+    finally:
+        _DEFERRED_CANONICAL_PRIVACY_FINALIZATION.reset(token)
+
+
 def purge_canonical_memory_projections(
     uid: str,
     memory_ids: List[str],
@@ -3265,12 +3430,17 @@ def purge_canonical_memory_projections(
     db_client: Any,
     reason: str,
     include_review_queue: bool = True,
+    revalidate_gate: bool = False,
+    gate_kind: str = "explicit_memory_deletion",
     preserve_source_replacement_receipts: bool = False,
 ) -> None:
     """Fail closed until every content-bearing canonical projection is gone."""
 
+    coalesce = firestore_read_levers.lever_enabled('ledger_purge_coalesce', uid)
     unique_ids = list(dict.fromkeys(memory_id for memory_id in memory_ids if memory_id))
     for memory_id in unique_ids:
+        if revalidate_gate:
+            assert_destructive_gate_still_ours(uid, gate_kind, firestore_client=db_client)
         _run_immediate_privacy_cleanup(
             uid,
             memory_id,
@@ -3279,21 +3449,43 @@ def purge_canonical_memory_projections(
             include_review_queue=False,
             preserve_source_replacement_receipts=preserve_source_replacement_receipts,
         )
+    if revalidate_gate:
+        assert_destructive_gate_still_ours(uid, gate_kind, firestore_client=db_client)
     if include_review_queue and unique_ids:
         purge_stale_review_conflicts_for_memories(
             uid,
             unique_ids,
+            revalidate_gate=revalidate_gate,
+            gate_kind=gate_kind,
             reason=reason,
             db_client=db_client,
-            include_legacy_commits=True,
+            # Review/correction cleanup stays live. Only its redundant history
+            # walk is omitted; the mandatory finalizer performs a fresh purge.
+            include_legacy_commits=not coalesce,
             preserve_source_replacement_receipts=preserve_source_replacement_receipts,
         )
+    if revalidate_gate:
+        assert_destructive_gate_still_ours(uid, gate_kind, firestore_client=db_client)
     invalidate_kg_for_memory_retraction(uid, unique_ids, db_client=db_client)
     from database.memory_ledger import finalize_canonical_privacy_tombstones
 
+    if revalidate_gate:
+        assert_destructive_gate_still_ours(uid, gate_kind, firestore_client=db_client)
+    pending = _DEFERRED_CANONICAL_PRIVACY_FINALIZATION.get() if coalesce else None
+    if (
+        pending is not None
+        and pending.uid == uid
+        and pending.db_client is (db_client if db_client is not None else default_db_client)
+        and gate_kind == "explicit_memory_deletion"
+        and preserve_source_replacement_receipts
+    ):
+        pending.memory_ids[:] = list(dict.fromkeys(pending.memory_ids + unique_ids))
+        return
     finalize_canonical_privacy_tombstones(
         uid,
         unique_ids,
+        revalidate_gate=revalidate_gate,
+        gate_kind=gate_kind,
         firestore_client=db_client,
         preserve_source_replacement_receipts=preserve_source_replacement_receipts,
     )
@@ -3444,6 +3636,7 @@ def _retract_conversation_sourced_memories_under_gate(
     conversation_id: str,
     *,
     db_client: Any = None,
+    claim_destructive_gate: bool = True,
 ) -> Dict[str, Any]:
     """Atomically replace one conversation's complete source set with nothing.
 
@@ -3462,6 +3655,8 @@ def _retract_conversation_sourced_memories_under_gate(
     client = db_client if db_client is not None else default_db_client
     last_conflict: Optional[ConversationReplacementConflictError] = None
     for attempt in range(_RETRACT_CONFLICT_ATTEMPTS):
+        if claim_destructive_gate:
+            assert_destructive_gate_still_ours(uid, "explicit_memory_deletion", firestore_client=client)
         try:
             return replace_conversation_sourced_memories(
                 uid,
@@ -3469,6 +3664,7 @@ def _retract_conversation_sourced_memories_under_gate(
                 [],
                 db_client=client,
                 conflict_backoff_seconds=_IMMEDIATE_REPLACEMENT_RETRY_BACKOFF,
+                claim_destructive_gate=claim_destructive_gate,
             )
         except ConversationReplacementConflictError as exc:
             last_conflict = exc
@@ -3497,8 +3693,24 @@ def _retract_conversation_sourced_memories_under_gate(
     ) from last_conflict
 
 
-def retract_conversation_sourced_memories(uid: str, conversation_id: str, *, db_client: Any = None) -> Dict[str, Any]:
+def retract_conversation_sourced_memories(
+    uid: str,
+    conversation_id: str,
+    *,
+    db_client: Any = None,
+    claim_destructive_gate: bool = True,
+) -> Dict[str, Any]:
     client = db_client if db_client is not None else default_db_client
+    if not claim_destructive_gate:
+        # Sync-bridge derived cleanup: refuse under an active legal hold or
+        # account wipe, but do not take the exclusive per-account lock.
+        assert_account_deletion_permitted(uid, firestore_client=client)
+        return _retract_conversation_sourced_memories_under_gate(
+            uid,
+            conversation_id,
+            db_client=client,
+            claim_destructive_gate=False,
+        )
     with destructive_operation_gate(
         uid,
         kind="explicit_memory_deletion",
@@ -3537,6 +3749,7 @@ def _delete_canonical_memory_under_gate(uid: str, memory_id: str, *, db_client: 
         lineage_ids,
         db_client=client,
         reason="canonical_memory_delete",
+        revalidate_gate=True,
     )
     return lineage_ids
 
@@ -3584,6 +3797,7 @@ def _delete_canonical_memories_batch_under_gate(
         lineage_ids,
         db_client=client,
         reason="canonical_memory_delete_batch",
+        revalidate_gate=True,
     )
     return lineage_ids
 
@@ -3637,6 +3851,7 @@ def _delete_canonical_memories_matching(
             sorted(cleanup_ids),
             db_client=client,
             reason=reason,
+            revalidate_gate=True,
         )
 
 

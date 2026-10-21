@@ -148,3 +148,60 @@ def test_destination_deletion_fence_blocks_background_migration_before_any_copy(
         memories.migrate_memories("prevuid", "newuid", firestore_client=db)
     batch.set.assert_not_called()
     batch.commit.assert_not_called()
+
+
+class _PlainDoc:
+    """Cheaper than MagicMock for the bulk tests: thousands of docs must stay inside the fast-unit budget."""
+
+    def __init__(self, data):
+        self._data = data
+
+    def to_dict(self):
+        return self._data
+
+
+class _CappedBatch:
+    """Stand-in for a Firestore WriteBatch: commit() refuses more than 500 writes, as the server does."""
+
+    def __init__(self, committed):
+        self._writes = []
+        self._committed = committed
+
+    def set(self, ref, data):
+        self._writes.append(data)
+
+    def commit(self):
+        if len(self._writes) > 500:
+            raise ValueError("maximum 500 writes allowed per request")
+        self._committed.append(list(self._writes))
+        self._writes = []
+
+
+def _make_capped_db(source_dicts):
+    db = MagicMock()
+    memories_ref = db.collection.return_value.document.return_value.collection.return_value
+    memories_ref.stream.return_value = [_PlainDoc(d) for d in source_dicts]
+    committed = []
+    db.batch.side_effect = lambda: _CappedBatch(committed)
+    return db, committed
+
+
+def test_more_memories_than_one_batch_holds_are_all_migrated(enc):
+    src = [{"id": f"m{i}", "content": f"memory {i}", "data_protection_level": "standard"} for i in range(1201)]
+    db, committed = _make_capped_db(src)
+
+    count = memories.migrate_memories("prevuid", "newuid", firestore_client=db)
+
+    assert count == 1201
+    assert [len(chunk) for chunk in committed] == [500, 500, 201]
+    migrated = [memory["id"] for chunk in committed for memory in chunk]
+    assert migrated == [f"m{i}" for i in range(1201)]
+
+
+def test_an_exact_multiple_of_the_limit_does_not_commit_an_empty_batch(enc):
+    src = [{"id": f"m{i}", "content": "x", "data_protection_level": "standard"} for i in range(1000)]
+    db, committed = _make_capped_db(src)
+
+    memories.migrate_memories("prevuid", "newuid", firestore_client=db)
+
+    assert [len(chunk) for chunk in committed] == [500, 500]

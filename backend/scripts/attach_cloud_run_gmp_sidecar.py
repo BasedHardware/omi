@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import os
 from pathlib import Path
@@ -54,6 +53,16 @@ SIDECAR_IMAGE = (
 )
 SIDECAR_NAME = 'collector'
 CONFIG_VOLUME_NAME = 'cloud-run-gmp-config'
+CONFIG_ENV_NAME = 'OMI_GMP_RUN_MONITORING_CONFIG'
+CONFIG_ENV_COMMAND = (
+    'mkdir -p /etc/rungmp && '
+    'printf \'%s\' "${OMI_GMP_RUN_MONITORING_CONFIG:?RunMonitoring config missing}" '
+    '> /etc/rungmp/config.yaml && exec /run-gmp-entrypoint'
+)
+SYNC_SERVICES = frozenset({'backend-sync', 'backend-sync-backfill', 'backend-integration'})
+# Dev services.replace --dry-run accepts app=2 + collector=0.08 (total=2.08),
+# gen2 and cpu-throttling=false. 128Mi is the minimum accepted memory limit.
+SYNC_COLLECTOR_LIMITS = {'cpu': '0.08', 'memory': '128Mi'}
 
 ConfigDict = dict[str, Any]
 
@@ -100,93 +109,63 @@ def _project_number(project: str) -> str:
     return number
 
 
-def _latest_secret_version(*, project: str, secret: str) -> str:
-    result = _run(
-        [
-            'gcloud',
-            'secrets',
-            'versions',
-            'describe',
-            'latest',
-            f'--secret={secret}',
-            '--project',
-            project,
-            '--format=value(name)',
-        ],
-        capture_output=True,
+def require_config_secret(*, project: str, secret: str) -> None:
+    """Fail before deployment mutations; provisioning is outside this helper."""
+    _check(
+        _run(
+            ['gcloud', 'secrets', 'describe', secret, '--project', project, '--format=value(name)'],
+            capture_output=True,
+        ),
+        action=f'required existing GMP config secret {secret} (deployment never creates secrets)',
     )
-    resource = _check(result, action=f'reading the latest {secret} version').strip()
-    version = resource.rsplit('/', 1)[-1]
-    if not version.isdigit():
-        raise RuntimeError(f'latest {secret} version was not numeric')
-    return version
 
 
 def ensure_config_secret(*, project: str, secret: str, config_path: Path) -> str:
-    config_hash = hashlib.sha256(config_path.read_bytes()).hexdigest()[:63]
-    describe = _run(
-        ['gcloud', 'secrets', 'describe', secret, '--project', project, '--format=json'],
-        capture_output=True,
-    )
-    if describe.returncode != 0:
-        create = _run(
+    """Write and return this request's immutable version, never a shared latest.
+
+    Backend, sync and desktop deployments may add different configs concurrently.
+    A hash label followed by a latest lookup can pin another writer's payload.
+    Use the AddSecretVersion response itself; no mutable labels or aliases.
+    """
+    require_config_secret(project=project, secret=secret)
+    resource = _check(
+        _run(
             [
                 'gcloud',
                 'secrets',
-                'create',
+                'versions',
+                'add',
                 secret,
                 '--project',
                 project,
-                '--replication-policy=automatic',
                 f'--data-file={config_path}',
-                f'--labels=config-sha={config_hash}',
+                '--format=value(name)',
             ],
             capture_output=True,
-        )
-        if create.returncode == 0:
-            return _latest_secret_version(project=project, secret=secret)
-        # Backend and desktop deploy in separate concurrency groups and can
-        # both create this shared secret on the first rollout. Treat a
-        # concurrent successful create as success, but preserve the original
-        # create failure when the secret still cannot be read.
-        describe = _run(
-            ['gcloud', 'secrets', 'describe', secret, '--project', project, '--format=json'],
-            capture_output=True,
-        )
-        if describe.returncode != 0:
-            _check(create, action=f'creating {secret}')
+        ),
+        action=f'adding an immutable config version to {secret}',
+    ).strip()
+    match = re.fullmatch(r'projects/[^/]+/secrets/' + re.escape(secret) + r'/versions/([1-9][0-9]*)', resource)
+    if match is None:
+        raise RuntimeError(f'AddSecretVersion for {secret} did not return its numeric version resource')
+    return match.group(1)
 
-    metadata = json.loads(describe.stdout)
-    if metadata.get('labels', {}).get('config-sha') == config_hash:
-        return _latest_secret_version(project=project, secret=secret)
-    add_version = _run(
-        [
-            'gcloud',
-            'secrets',
-            'versions',
-            'add',
-            secret,
-            '--project',
-            project,
-            f'--data-file={config_path}',
-        ],
-        capture_output=True,
-    )
-    _check(add_version, action=f'adding a version to {secret}')
-    update = _run(
-        [
-            'gcloud',
-            'secrets',
-            'update',
-            secret,
-            '--project',
-            project,
-            f'--update-labels=config-sha={config_hash}',
-        ],
-        capture_output=True,
-    )
-    _check(update, action=f'labelling {secret}')
-    return _latest_secret_version(project=project, secret=secret)
+
+def read_run_monitoring_config(config_path: Path) -> str:
+    """Validate the non-sensitive revision-local config before remote mutations."""
+    content = config_path.read_text(encoding='utf-8')
+    if len(content.encode('utf-8')) > 32768:
+        raise ValueError('RunMonitoring config exceeds the Cloud Run environment variable limit')
+    config = yaml.safe_load(content)
+    if (
+        not isinstance(config, dict)
+        or config.get('apiVersion') != 'monitoring.googleapis.com/v1beta'
+        or config.get('kind') != 'RunMonitoring'
+        or not isinstance(config.get('spec'), dict)
+        or not config['spec'].get('endpoints')
+    ):
+        raise ValueError('expected a RunMonitoring config with scrape endpoints')
+    return content
 
 
 def _cloud_run_string(value: object) -> str:
@@ -239,7 +218,10 @@ def _ingress_literal_env(service: Mapping[str, Any], *, ingress_container_name: 
         None,
     )
     if ingress is None:
-        raise ValueError(f'Cloud Run service export had no ingress container named {ingress_container_name!r}')
+        candidates = [item for item in containers if isinstance(item, dict) and item.get('name') != SIDECAR_NAME]
+        if len(candidates) != 1:
+            raise ValueError(f'Cloud Run service export had no unambiguous ingress named {ingress_container_name!r}')
+        ingress = candidates[0]
     raw_env = ingress.get('env', [])
     if not isinstance(raw_env, list):
         raise ValueError('Cloud Run ingress env was not a list')
@@ -251,15 +233,14 @@ def _ingress_literal_env(service: Mapping[str, Any], *, ingress_container_name: 
             # Secret-backed reference, not a literal value -- must not be folded
             # into the literal-env map (and must not be coerced to '').
             continue
-        # Cloud Run's export omits the `value` key entirely for an env var whose
-        # literal value is the empty string -- it does not write `value: ''`.
-        # Reading a missing key as None here would make a legitimately empty
-        # literal look identical to a var that was never set at all, which is
-        # exactly the false-positive "<missing>" this check reported for
-        # OMI_PARITY_PACK_ALLOWED_PRINCIPALS. Absence of the key on a literal
-        # entry means empty string, not absence of the variable.
+        # Omitted value on a literal env entry means empty string in Cloud Run exports.
         actual[raw_entry['name']] = _cloud_run_string(raw_entry.get('value', ''))
     return actual
+
+
+_BACKFILL_SYNC_HANDLER_RE = re.compile(
+    r'https://backend-sync-backfill-[a-z0-9]+(?:-[a-z0-9]+)*\.[a-z0-9]+(?:-[a-z0-9]+)*\.run\.app/v2/sync-jobs/run'
+)
 
 
 def _validate_expected_literal_env(
@@ -273,6 +254,18 @@ def _validate_expected_literal_env(
     for name, expected_value in expected.items():
         actual_value = actual.get(name)
         if actual_value != expected_value:
+            # sync-backfill-lifecycle's ENV_OVERLAY replaces the cloned sync
+            # handler and audience with the backfill worker's own endpoint
+            # (also documented in utils/cloud_tasks.py). Rendered env state
+            # still carries backend-sync's URL. Accept only that named
+            # service's Cloud Run handler overlay, in both validation phases.
+            if (
+                service.get('metadata', {}).get('name') == 'backend-sync-backfill'
+                and name in {'SYNC_TASKS_HANDLER_URL', 'SYNC_TASKS_OIDC_AUDIENCE'}
+                and actual_value is not None
+                and _BACKFILL_SYNC_HANDLER_RE.fullmatch(actual_value)
+            ):
+                continue
             found = '<missing>' if actual_value is None else actual_value
             raise ValueError(
                 f'{phase} env {name} mismatch before GMP sidecar replace: '
@@ -370,6 +363,21 @@ def _merge_container_dependencies(existing: object, *, ingress_container_name: s
     return json.dumps(dependencies, separators=(',', ':'), sort_keys=True)
 
 
+def _drop_startup_probe_initial_delay(ingress: ConfigDict) -> None:
+    """Let the ingress startup probe run as soon as the container starts.
+
+    uvicorn binds its port only after ``import main`` and the startup hooks
+    finish, so an open TCP port already means the app is ready. A fixed
+    ``initialDelaySeconds`` only holds every new instance out of service for
+    longer. Production ``backend`` carried a hand-set 60 s delay that each
+    export/replace preserved, pinning its cold start at about 61 s while the app
+    was ready at about 48 s (p50, 2026-09-29/30).
+    """
+    probe = ingress.get('startupProbe')
+    if isinstance(probe, dict):
+        cast(ConfigDict, probe).pop('initialDelaySeconds', None)
+
+
 def patch_service(
     service: Mapping[str, Any],
     *,
@@ -380,6 +388,8 @@ def patch_service(
     ingress_container_name: str,
     config_secret: str,
     config_secret_version: str,
+    desktop_backend_liveness_probe: bool = False,
+    config_content: str | None = None,
 ) -> ConfigDict:
     patched = cast(ConfigDict, json.loads(json.dumps(service)))
     patched.pop('status', None)
@@ -410,11 +420,12 @@ def patch_service(
         template_annotations.get('run.googleapis.com/container-dependencies'),
         ingress_container_name=ingress_container_name,
     )
-    template_annotations[SECRET_ANNOTATION] = _merge_secret_annotation(
-        template_annotations.get(SECRET_ANNOTATION),
-        project_number=project_number,
-        secret=config_secret,
-    )
+    if config_content is None:
+        template_annotations[SECRET_ANNOTATION] = _merge_secret_annotation(
+            template_annotations.get(SECRET_ANNOTATION),
+            project_number=project_number,
+            secret=config_secret,
+        )
 
     template_spec = cast(ConfigDict, template['spec'])
     containers = cast(list[ConfigDict], template_spec['containers'])
@@ -425,6 +436,14 @@ def patch_service(
             raise ValueError(f'service export has no unambiguous ingress container named {ingress_container_name!r}')
         ingress = candidates[0]
         ingress['name'] = ingress_container_name
+    _drop_startup_probe_initial_delay(ingress)
+    if desktop_backend_liveness_probe:
+        ingress['livenessProbe'] = {
+            'httpGet': {'path': '/healthz/live', 'port': 8080},
+            'periodSeconds': 10,
+            'timeoutSeconds': 5,
+            'failureThreshold': 3,
+        }
     retained_containers = [
         container for container in containers if container is not ingress and container.get('name') != SIDECAR_NAME
     ]
@@ -435,7 +454,13 @@ def patch_service(
     collector: ConfigDict = {
         'image': SIDECAR_IMAGE,
         'name': SIDECAR_NAME,
-        'resources': {'limits': {'cpu': '1', 'memory': '512Mi'}},
+        'resources': {
+            'limits': (
+                dict(SYNC_COLLECTOR_LIMITS)
+                if metadata.get('name') in SYNC_SERVICES
+                else {'cpu': '1', 'memory': '512Mi'}
+            )
+        },
         'livenessProbe': {
             'httpGet': {'path': '/liveness', 'port': 13133},
             'timeoutSeconds': 30,
@@ -450,20 +475,294 @@ def patch_service(
         for volume in cast(list[ConfigDict], template_spec.get('volumes', []))
         if volume.get('name') != CONFIG_VOLUME_NAME
     ]
-    volumes.append(
-        {
-            'name': CONFIG_VOLUME_NAME,
-            'secret': {
-                'items': [{'key': config_secret_version, 'path': 'config.yaml'}],
-                'secretName': config_secret,
-            },
-        }
-    )
+    if config_content is None:
+        volumes.append(
+            {
+                'name': CONFIG_VOLUME_NAME,
+                'secret': {
+                    'items': [{'key': config_secret_version, 'path': 'config.yaml'}],
+                    'secretName': config_secret,
+                },
+            }
+        )
+    else:
+        collector.pop('volumeMounts')
+        collector['command'] = ['/bin/sh', '-c']
+        collector['args'] = [CONFIG_ENV_COMMAND]
+        collector['env'] = [{'name': CONFIG_ENV_NAME, 'value': config_content}]
+        retained_secret_names = {volume['secret']['secretName'] for volume in volumes if 'secret' in volume}
+        for container in template_spec['containers']:
+            for entry in container.get('env', []):
+                if 'valueFrom' in entry and 'secretKeyRef' in entry['valueFrom']:
+                    retained_secret_names.add(entry['valueFrom']['secretKeyRef']['name'])
+        for annotations in (metadata_annotations, template_annotations):
+            entries = _parse_secret_annotation(annotations.get(SECRET_ANNOTATION))
+            if entries is not None:
+                for name in (config_secret, 'cloud-run-gmp-sync-config'):
+                    if name not in retained_secret_names:
+                        entries.pop(name, None)
+                if entries:
+                    entries = {
+                        name: _normalize_secret_resource(resource, project_number=project_number)
+                        for name, resource in entries.items()
+                    }
+                    annotations[SECRET_ANNOTATION] = _render_secret_annotation(entries)
+                else:
+                    annotations.pop(SECRET_ANNOTATION, None)
     template_spec['volumes'] = volumes
     return patched
 
 
+JOB_DONE_VOLUME = 'gmp-job-lifecycle'
+JOB_DONE_FILE = '/var/run/gmp-job/done'
+JOB_COLLECTOR_COMMAND = (
+    'export K_SERVICE="${CLOUD_RUN_JOB:?Cloud Run job identity missing}"; '
+    '/run-gmp-entrypoint & collector=$!; '
+    'trap "kill -TERM $collector; wait $collector" TERM INT; '
+    'while [ ! -f /var/run/gmp-job/done ]; do '
+    'kill -0 "$collector" || { wait "$collector"; exit 1; }; sleep 1; done; '
+    'sleep 35; kill -TERM "$collector"; wait "$collector"'
+)
+
+
+def patch_job(
+    job: Mapping[str, Any], *, project_number: str, config_secret: str, config_secret_version: str
+) -> ConfigDict:
+    """Reuse the service patch for the Job's nested task template, without traffic."""
+    patched = cast(ConfigDict, json.loads(json.dumps(job)))
+    if patched.get('kind') != 'Job':
+        raise ValueError('expected a Cloud Run Job export')
+    execution_template = patched['spec']['template']
+    task_template = execution_template['spec']['template']
+    containers = task_template['spec']['containers']
+    applications = [c for c in containers if c.get('name') != SIDECAR_NAME]
+    if len(applications) != 1:
+        raise ValueError('job must have exactly one application container')
+    application_name = applications[0].get('name') or 'notifications-job'
+    # Jobs put annotations on the execution template, containers on the task.
+    # https://cloud.google.com/run/docs/reference/yaml/v1#cloud_run_job_yaml
+    synthetic = {
+        'spec': {'template': {'metadata': execution_template.get('metadata', {}), 'spec': task_template['spec']}}
+    }
+    rendered = patch_service(
+        synthetic,
+        project_number=project_number,
+        base_revision='job',
+        latest_created_revision='job',
+        final_revision='job',
+        ingress_container_name=application_name,
+        config_secret=config_secret,
+        config_secret_version=config_secret_version,
+    )['spec']['template']
+    rendered['metadata'].pop('name', None)
+    rendered['metadata']['annotations'].pop('run.googleapis.com/cpu-throttling', None)
+    rendered['metadata']['annotations'].pop('run.googleapis.com/execution-environment', None)
+    app, collector = rendered['spec']['containers']
+    env = [
+        e for e in app.get('env', []) if e['name'] not in ('PROMETHEUS_SIDECAR_PORT', 'PROMETHEUS_SIDECAR_DONE_FILE')
+    ]
+    app['env'] = [
+        *env,
+        {'name': 'PROMETHEUS_SIDECAR_PORT', 'value': '9090'},
+        {'name': 'PROMETHEUS_SIDECAR_DONE_FILE', 'value': JOB_DONE_FILE},
+    ]
+    # Job probes cannot reach the loopback metrics listener. Also remove any
+    # probe retained from an earlier attachment so it cannot terminate the task.
+    app.pop('startupProbe', None)
+    # Cloud Run rejects depends_on when the depended-upon container lacks a
+    # startup probe (run.googleapis.com/container-dependencies), and jobs
+    # cannot carry a reachable probe for this app (no serving port; TCP
+    # probes cannot reach the loopback listener). Drop the dependency on the
+    # job path: the collector's done-file handshake plus its 30s scrape loop
+    # already sequence it, and failed early scrapes are retried harmlessly.
+    rendered['metadata']['annotations'].pop('run.googleapis.com/container-dependencies', None)
+    app['volumeMounts'] = [m for m in app.get('volumeMounts', []) if m['name'] != JOB_DONE_VOLUME]
+    app['volumeMounts'].append({'name': JOB_DONE_VOLUME, 'mountPath': '/var/run/gmp-job'})
+    # GMP reads K_SERVICE for namespace; jobs provide CLOUD_RUN_JOB instead.
+    # Set K_SERVICE inside the process, not the deployed env (reserved on services).
+    # CLOUD_RUN_JOB is supplied by Cloud Run to every job container.
+    collector.pop('livenessProbe', None)
+    collector['command'] = ['/bin/sh', '-c']
+    collector['args'] = [JOB_COLLECTOR_COMMAND]
+    collector['volumeMounts'].append({'name': JOB_DONE_VOLUME, 'mountPath': '/var/run/gmp-job'})
+    rendered['spec']['volumes'] = [v for v in rendered['spec']['volumes'] if v['name'] != JOB_DONE_VOLUME]
+    rendered['spec']['volumes'].append({'name': JOB_DONE_VOLUME, 'emptyDir': {'medium': 'Memory', 'sizeLimit': '1Mi'}})
+    execution_template['metadata'] = rendered['metadata']
+    task_template['spec'] = rendered['spec']
+    patched.pop('status', None)
+    for field in ('creationTimestamp', 'generation', 'resourceVersion', 'selfLink', 'uid'):
+        patched['metadata'].pop(field, None)
+    return patched
+
+
+def detach_job(job: Mapping[str, Any]) -> ConfigDict:
+    """Restore a singleton task for an action deploy that cannot select a container."""
+    patched = cast(ConfigDict, json.loads(json.dumps(job)))
+    if patched.get('kind') != 'Job':
+        raise ValueError('expected a Cloud Run Job export')
+    execution = patched['spec']['template']
+    task = execution['spec']['template']['spec']
+    containers = task['containers']
+    applications = [c for c in containers if c.get('name') != SIDECAR_NAME]
+    collectors = [c for c in containers if c.get('name') == SIDECAR_NAME]
+    if len(applications) != 1 or len(collectors) > 1:
+        raise ValueError('job must have exactly one application container and at most one collector')
+    if not collectors:
+        return patched
+    app = applications[0]
+    app['env'] = [
+        e for e in app.get('env', []) if e['name'] not in ('PROMETHEUS_SIDECAR_PORT', 'PROMETHEUS_SIDECAR_DONE_FILE')
+    ]
+    app['volumeMounts'] = [
+        m for m in app.get('volumeMounts', []) if m['name'] not in (JOB_DONE_VOLUME, CONFIG_VOLUME_NAME)
+    ]
+    task['containers'] = applications
+    task['volumes'] = [v for v in task.get('volumes', []) if v['name'] not in (JOB_DONE_VOLUME, CONFIG_VOLUME_NAME)]
+    annotations = execution.get('metadata', {}).get('annotations', {})
+    dependency_key = 'run.googleapis.com/container-dependencies'
+    if dependency_key in annotations:
+        # Reuse the attach parser's shape validation before removing the collector.
+        dependencies = json.loads(
+            _merge_container_dependencies(annotations[dependency_key], ingress_container_name=app['name'])
+        )
+        dependencies.pop(SIDECAR_NAME)
+        dependencies = {name: [d for d in required if d != SIDECAR_NAME] for name, required in dependencies.items()}
+        dependencies = {name: required for name, required in dependencies.items() if required}
+        if dependencies:
+            annotations[dependency_key] = json.dumps(dependencies, separators=(',', ':'), sort_keys=True)
+        else:
+            annotations.pop(dependency_key)
+    # Keep unrelated annotations (including secret aliases) and all runtime bindings.
+    patched.pop('status', None)
+    for field in ('creationTimestamp', 'generation', 'resourceVersion', 'selfLink', 'uid'):
+        patched['metadata'].pop(field, None)
+    return patched
+
+
+def detach_job_sidecar(args: argparse.Namespace) -> None:
+    # List distinguishes absence from auth/network failures without interpreting stderr.
+    names = _check(
+        _run(
+            [
+                'gcloud',
+                'run',
+                'jobs',
+                'list',
+                '--project',
+                args.project,
+                '--region',
+                args.region,
+                f'--filter=metadata.name={args.service}',
+                '--format=value(metadata.name)',
+            ],
+            capture_output=True,
+        ),
+        action='checking job existence',
+    ).splitlines()
+    if args.service not in names:
+        if names:
+            raise ValueError('job existence query returned an unexpected name')
+        return
+    export = _check(
+        _run(
+            [
+                'gcloud',
+                'run',
+                'jobs',
+                'describe',
+                args.service,
+                '--project',
+                args.project,
+                '--region',
+                args.region,
+                '--format=export',
+            ],
+            capture_output=True,
+        ),
+        action='exporting job for detach',
+    )
+    job = yaml.load(export, Loader=GcloudExportLoader)
+    patched = detach_job(job)
+    if patched == job:
+        return
+    with tempfile.TemporaryDirectory(prefix='gmp-job-detach-') as directory:
+        target = Path(directory) / 'job.yaml'
+        target.write_text(yaml.safe_dump(patched, sort_keys=False), encoding='utf-8')
+        target.chmod(0o600)
+        _check(
+            _run(
+                [
+                    'gcloud',
+                    'run',
+                    'jobs',
+                    'replace',
+                    str(target),
+                    '--project',
+                    args.project,
+                    '--region',
+                    args.region,
+                    '--quiet',
+                ],
+                capture_output=True,
+            ),
+            action='detaching job sidecar',
+        )
+
+
+def attach_job_sidecar(args: argparse.Namespace) -> None:
+    export = _check(
+        _run(
+            [
+                'gcloud',
+                'run',
+                'jobs',
+                'describe',
+                args.service,
+                '--project',
+                args.project,
+                '--region',
+                args.region,
+                '--format=export',
+            ],
+            capture_output=True,
+        ),
+        action='exporting job',
+    )
+    job = yaml.load(export, Loader=GcloudExportLoader)
+    version = ensure_config_secret(project=args.project, secret=args.config_secret, config_path=args.config)
+    patched = patch_job(
+        job,
+        project_number=_project_number(args.project),
+        config_secret=args.config_secret,
+        config_secret_version=version,
+    )
+    # Exports include secret references and literal env: keep the temporary file private.
+    with tempfile.TemporaryDirectory(prefix='gmp-job-') as directory:
+        target = Path(directory) / 'job.yaml'
+        target.write_text(yaml.safe_dump(patched, sort_keys=False), encoding='utf-8')
+        target.chmod(0o600)
+        _check(
+            _run(
+                [
+                    'gcloud',
+                    'run',
+                    'jobs',
+                    'replace',
+                    str(target),
+                    '--project',
+                    args.project,
+                    '--region',
+                    args.region,
+                    '--quiet',
+                ],
+                capture_output=True,
+            ),
+            action='attaching job sidecar',
+        )
+
+
 def attach_sidecar(args: argparse.Namespace) -> None:
+    config_content = read_run_monitoring_config(args.config) if getattr(args, 'config_env', False) else None
     expected_env = _expected_literal_env(args.expected_env_state, service_name=args.service)
     export = _run(
         [
@@ -508,9 +807,11 @@ def attach_sidecar(args: argparse.Namespace) -> None:
         latest_created,
         action=f'reading the latest {args.service} revision',
     ).strip()
-    config_secret_version = ensure_config_secret(
-        project=args.project, secret=args.config_secret, config_path=args.config
-    )
+    config_secret_version = ''
+    if config_content is None:
+        config_secret_version = args.config_secret_version or ensure_config_secret(
+            project=args.project, secret=args.config_secret, config_path=args.config
+        )
     patched = patch_service(
         service,
         project_number=_project_number(args.project),
@@ -520,6 +821,8 @@ def attach_sidecar(args: argparse.Namespace) -> None:
         ingress_container_name=args.ingress_container,
         config_secret=args.config_secret,
         config_secret_version=config_secret_version,
+        desktop_backend_liveness_probe=args.desktop_backend_liveness_probe,
+        config_content=config_content,
     )
 
     path: Path | None = None
@@ -766,7 +1069,9 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument('--project', required=True)
     parser.add_argument('--region', default='us-central1')
-    parser.add_argument('--service', required=True)
+    parser.add_argument('--service')
+    parser.add_argument('--job', action='store_true', help='Attach to a Cloud Run Job, not a service revision.')
+    parser.add_argument('--detach', action='store_true', help='With --job, restore a singleton before deploying.')
     # Attach-only. Not argparse-required so --repair-secret-annotations can run
     # standalone; main() enforces them for the attach path instead.
     parser.add_argument('--base-revision')
@@ -774,8 +1079,24 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument('--ingress-container')
     parser.add_argument('--config', type=Path)
     parser.add_argument('--config-secret', default='cloud-run-gmp-config')
+    parser.add_argument('--config-secret-version', help='Numeric version prepared before revision mutation.')
+    parser.add_argument(
+        '--config-env',
+        action='store_true',
+        help='Deliver public RunMonitoring config in the collector env; no Secret Manager calls.',
+    )
+    parser.add_argument(
+        '--prepare-config',
+        action='store_true',
+        help='Validate --config-env config locally, otherwise prepare an existing-secret version; never mutate Cloud Run.',
+    )
     parser.add_argument('--expected-env-state', type=Path)
     parser.add_argument('--tag', default='')
+    parser.add_argument(
+        '--desktop-backend-liveness-probe',
+        action='store_true',
+        help='Set the desktop-backend ingress /healthz/live probe on the final service revision.',
+    )
     parser.add_argument(
         '--repair-secret-annotations',
         action='store_true',
@@ -791,6 +1112,43 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
+    if args.prepare_config:
+        if (
+            args.service
+            or args.job
+            or args.detach
+            or args.repair_secret_annotations
+            or args.dry_run
+            or args.config_secret_version
+            or args.config is None
+            or not args.config.is_file()
+        ):
+            raise SystemExit('--prepare-config requires an existing --config and no service/job mutation options')
+        if args.config_env:
+            read_run_monitoring_config(args.config)
+        else:
+            ensure_config_secret(project=args.project, secret=args.config_secret, config_path=args.config)
+        return 0
+    if args.config_env and (args.job or args.repair_secret_annotations or args.config_secret_version):
+        raise SystemExit('--config-env requires a service attachment without secret-version options')
+    if not args.service:
+        raise SystemExit('--service is required for service/job operations')
+    if args.config_secret_version is not None and not re.fullmatch(r'[1-9][0-9]*', args.config_secret_version):
+        raise SystemExit('--config-secret-version must be a positive numeric version, never an alias')
+    if args.desktop_backend_liveness_probe and (
+        args.job or args.repair_secret_annotations or args.service != 'desktop-backend'
+    ):
+        raise SystemExit('--desktop-backend-liveness-probe requires a desktop-backend service attachment')
+    if args.detach:
+        if not args.job or args.repair_secret_annotations or args.dry_run:
+            raise SystemExit('--detach is only supported with --job')
+        detach_job_sidecar(args)
+        return 0
+    if args.job:
+        if args.repair_secret_annotations or args.dry_run or args.config is None or not args.config.is_file():
+            raise SystemExit('--job requires an existing --config and cannot repair service annotations')
+        attach_job_sidecar(args)
+        return 0
     if args.repair_secret_annotations:
         return repair_secret_annotations(args)
     if args.dry_run:

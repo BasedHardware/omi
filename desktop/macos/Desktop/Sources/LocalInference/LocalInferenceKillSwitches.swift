@@ -19,6 +19,10 @@ struct LocalInferenceKillSwitches: Sendable, Equatable {
   static let serverURLDefaultsKey = "localInferenceServerURL"
   static let modelEnvironmentKey = "OMI_LOCAL_INFERENCE_MODEL"
   static let modelDefaultsKey = "localInferenceModel"
+  static let contextTokensEnvironmentKey = "OMI_LOCAL_INFERENCE_CONTEXT_TOKENS"
+  static let contextTokensDefaultsKey = "localInferenceContextTokens"
+  static let timeoutSecondsEnvironmentKey = "OMI_LOCAL_INFERENCE_TIMEOUT_SECONDS"
+  static let timeoutSecondsDefaultsKey = "localInferenceTimeoutSeconds"
 
   var isDisabled: Bool
   var forcedEngineRaw: String?
@@ -74,6 +78,47 @@ struct LocalInferenceKillSwitches: Sendable, Equatable {
     trimmed(environment[Self.modelEnvironmentKey])
       ?? trimmed(defaults.string(forKey: Self.modelDefaultsKey))
       ?? "local"
+  }
+
+  /// The window the loopback server was started with (`llama-server -c`).
+  ///
+  /// The chunker sizes map passes from this number, so it has to describe the
+  /// server rather than a constant: pinned at 8192, a 32K model is still
+  /// map-reduced at 8K and never runs the single pass it was chosen for. The
+  /// floor keeps a typo from producing a budget the chunker clamps to 64.
+  static let defaultLocalServerContextTokens = 8192
+  static let minimumLocalServerContextTokens = 2048
+
+  static func localServerContextTokens(
+    environment: [String: String] = ProcessInfo.processInfo.environment,
+    defaults: UserDefaults = .standard
+  ) -> Int {
+    let raw =
+      trimmed(environment[Self.contextTokensEnvironmentKey])
+      ?? trimmed(defaults.string(forKey: Self.contextTokensDefaultsKey))
+    guard let raw, let parsed = Int(raw), parsed >= minimumLocalServerContextTokens else {
+      return defaultLocalServerContextTokens
+    }
+    return parsed
+  }
+
+  /// Per-request timeout. A long prefill on a slow Mac is minutes before the
+  /// first generated token; at 60 s that surfaced as an engine failure, which
+  /// the ladder turns into the deterministic minimum — indistinguishable, in
+  /// the result, from a model that produced nothing.
+  static let defaultLocalServerTimeoutSeconds: TimeInterval = 300
+
+  static func localServerTimeoutSeconds(
+    environment: [String: String] = ProcessInfo.processInfo.environment,
+    defaults: UserDefaults = .standard
+  ) -> TimeInterval {
+    let raw =
+      trimmed(environment[Self.timeoutSecondsEnvironmentKey])
+      ?? trimmed(defaults.string(forKey: Self.timeoutSecondsDefaultsKey))
+    guard let raw, let parsed = TimeInterval(raw), parsed.isFinite, parsed > 0 else {
+      return defaultLocalServerTimeoutSeconds
+    }
+    return parsed
   }
 
   private static func trimmed(_ value: String?) -> String? {

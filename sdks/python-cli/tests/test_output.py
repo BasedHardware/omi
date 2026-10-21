@@ -62,6 +62,40 @@ def test_json_mode_serializes_datetime() -> None:
     assert parsed["created_at"].startswith("2026-04-26T12:00:00")
 
 
+@pytest.mark.parametrize(
+    "rows, expected",
+    [
+        (["alpha", "beta"], ["alpha", "beta"]),
+        ([17, 3.5], ["17", "3.5"]),
+        ([True, False, None], ["✓", "✗"]),
+    ],
+)
+def test_pretty_mode_renders_scalar_and_mixed_arrays(capsys, rows, expected) -> None:
+    Renderer(no_color=True).emit(rows)
+    output = capsys.readouterr().out
+    for token in expected:
+        assert token in output
+    first = expected[0]
+    second = expected[1]
+    assert output.index(first) < output.index(second)
+
+
+def test_pretty_mode_renders_mapping_row_inside_mixed_array(capsys) -> None:
+    Renderer(no_color=True).emit(["alpha", 17, {"k": 1}])
+    output = capsys.readouterr().out
+    assert "value" in output
+    assert "k" in output
+    assert "alpha" in output
+    assert "17" in output
+    assert "1" in output
+    assert output.index("alpha") < output.index("17")
+
+
+def test_json_mode_preserves_scalar_array_shape(capsys) -> None:
+    Renderer(json_mode=True).emit(["alpha", 17])
+    assert json.loads(capsys.readouterr().out) == ["alpha", 17]
+
+
 def test_pretty_mode_renders_table_for_list(capsys) -> None:
     renderer = Renderer(json_mode=False, no_color=True)
     renderer.emit([{"id": "m1", "content": "hello"}], columns=["id", "content"], title="memories")
@@ -107,8 +141,8 @@ def test_coalesce_rows_handles_dicts_and_models() -> None:
         def model_dump(self) -> dict:
             return {"x": 1}
 
-    rows = coalesce_rows([{"a": 1}, Fake()])
-    assert rows == [{"a": 1}, {"x": 1}]
+    rows = coalesce_rows([{"a": 1}, Fake(), "scalar", 9])
+    assert rows == [{"a": 1}, {"x": 1}, {"value": "scalar"}, {"value": 9}]
 
 
 def test_no_color_env_disables_color(monkeypatch, capsys) -> None:

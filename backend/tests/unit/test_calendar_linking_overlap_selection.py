@@ -87,6 +87,16 @@ def _event(
     }
 
 
+def _all_day_event(start_date: str, end_date: str, *, event_id: str) -> dict:
+    return {
+        'id': event_id,
+        'summary': 'Out of office',
+        'status': 'confirmed',
+        'start': {'date': start_date},
+        'end': {'date': end_date},
+    }
+
+
 class TestAttendanceExclusion:
     def test_cancelled_event_is_excluded(self):
         assert cl.event_attendance_excluded(
@@ -123,6 +133,30 @@ class TestSelectOverlappingCalendarEvent:
         assert (
             cl.select_overlapping_calendar_event([event], conversation_start, conversation_end, require_accepted=True)
             is event
+        )
+
+    def test_floating_time_event_without_a_utc_offset_does_not_crash(self):
+        """A floating-time or ICS-imported event has no UTC offset on dateTime.
+
+        Comparing its naive datetime against the timezone-aware conversation
+        bounds used to raise TypeError: can't compare offset-naive and
+        offset-aware datetimes instead of degrading to no-match.
+        """
+        conversation_start = WINDOW_START + timedelta(minutes=5)
+        conversation_end = conversation_start + timedelta(seconds=25)
+        floating_event = {
+            'id': 'evt-floating',
+            'summary': 'Floating Sync',
+            'status': 'confirmed',
+            'start': {'dateTime': (WINDOW_START + timedelta(minutes=-5)).replace(tzinfo=None).isoformat()},
+            'end': {'dateTime': (WINDOW_START + timedelta(minutes=25)).replace(tzinfo=None).isoformat()},
+        }
+
+        assert (
+            cl.select_overlapping_calendar_event(
+                [floating_event], conversation_start, conversation_end, require_accepted=True
+            )
+            is floating_event
         )
 
     def test_sub_threshold_overlap_is_rejected(self):
@@ -201,6 +235,28 @@ class TestSelectOverlappingCalendarEvent:
                 [shorter, longer], conversation_start, conversation_end, require_accepted=True
             )
             is longer
+        )
+
+    def test_all_day_event_does_not_keep_a_short_clip(self):
+        conversation_start = WINDOW_START + timedelta(minutes=5)
+        conversation_end = conversation_start + timedelta(seconds=25)
+        out_of_office = _all_day_event('2026-08-18', '2026-08-25', event_id='evt-ooo')
+
+        assert (
+            cl.select_overlapping_calendar_event(
+                [out_of_office], conversation_start, conversation_end, require_accepted=True
+            )
+            is None
+        )
+
+    def test_meeting_wins_over_an_all_day_event_listed_first(self):
+        conversation_start = WINDOW_START + timedelta(minutes=5)
+        conversation_end = conversation_start + timedelta(minutes=20)
+        birthday = _all_day_event('2026-08-18', '2026-08-19', event_id='evt-birthday')
+        meeting = _event(WINDOW_START, WINDOW_START + timedelta(minutes=30), event_id='evt-meeting')
+
+        assert (
+            cl.select_overlapping_calendar_event([birthday, meeting], conversation_start, conversation_end) is meeting
         )
 
 

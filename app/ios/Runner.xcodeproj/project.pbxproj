@@ -7,7 +7,12 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		A2047914A2047914A2047914 /* SafeFoundationSinks.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5F00001A5F00001A5F00001 /* SafeFoundationSinks.swift */; };
+		A2047913A2047913A2047913 /* WatchRecordingStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2047910A2047910A2047910 /* WatchRecordingStore.swift */; };
+		A2047912A2047912A2047912 /* WatchRecordingStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2047910A2047910A2047910 /* WatchRecordingStore.swift */; };
+		A2047911A2047911A2047911 /* WatchRecordingStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2047910A2047910A2047910 /* WatchRecordingStore.swift */; };
 		0162ECA35ABCBED5D21250E7 /* prodRelease.xcconfig in Resources */ = {isa = PBXBuildFile; fileRef = 35656BCB5CBAA7C0BB162EE0 /* prodRelease.xcconfig */; };
+		056C8F8B6E91AEA3B8868E99 /* SiriSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 037C2E4049E0EF06EF66231A /* SiriSession.swift */; };
 		0658C1BEFC86B56785C10A69 /* BatchAudioWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAADF00DF00DF00DF00DF0D1 /* BatchAudioWriter.swift */; };
 		085D4BEA7A8615DDB4A4E73C /* Custom.xcconfig in Resources */ = {isa = PBXBuildFile; fileRef = CF0FE6142D61FDC10072C10D /* Custom.xcconfig */; };
 		0D1B1F2689256C0895BECAE9 /* prodDebug.xcconfig in Resources */ = {isa = PBXBuildFile; fileRef = 08E3947A4217EF205E22BD44 /* prodDebug.xcconfig */; };
@@ -18,83 +23,120 @@
 		15BE32846414AB444D807D9B /* PigeonCommunicator.g.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42B17C7B2F69BC6600BFDA9D /* PigeonCommunicator.g.swift */; };
 		16935068EFFE77C62C493C3C /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = E7A9F5F37DDF9FA87AC8A5CD /* GoogleService-Info.plist */; };
 		18B5E977FCEDF03D5DDE4A21 /* AppleHealthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD12345678901234567890CE /* AppleHealthService.swift */; };
-		7A3F1C2E9B4D5E6F0A1B2C3E /* FlutterLaunchEngineGuard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A3F1C2E9B4D5E6F0A1B2C3D /* FlutterLaunchEngineGuard.swift */; };
+		1954F61FBABF92ACCFDBFFE4 /* SiriIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = E222EF675661E5A68C84D45B /* SiriIntents.swift */; };
 		19570D5AA4C5B2E3154671BE /* RayBanMetaHostApiImpl.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAADF00DF00DF00DF00DFC02 /* RayBanMetaHostApiImpl.swift */; };
 		1D93FD645488AAB7DBE4EF49 /* LimitlessProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAADF00DF00DF00DF00DF0D7 /* LimitlessProtocol.swift */; };
+		1E4FA985AB866DBCBB524FFB /* SiriEntities.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5D14DCA5CCF1F3CB05D36D2 /* SiriEntities.swift */; };
 		2233D9F0F73BEE78D735B79C /* devRelease.xcconfig in Resources */ = {isa = PBXBuildFile; fileRef = 79B00761CB247C7EC7C8983B /* devRelease.xcconfig */; };
 		2424617E08011B02F15737C3 /* SharedDefaults.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B0B70AE9FE08165F2A53E0B /* SharedDefaults.swift */; };
+		261E5A36C62DAF7938874E94 /* OmiCaptureIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = A832E7FCE2964D801A4EB21F /* OmiCaptureIntents.swift */; };
+		28226BBFBA254816D50D723C /* ParakeetBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = C760640FBCB3A75ED43A12E8 /* ParakeetBridge.swift */; };
 		29B635C199B3BDE0F2BE8EC5 /* devRelease.xcconfig in Resources */ = {isa = PBXBuildFile; fileRef = 79B00761CB247C7EC7C8983B /* devRelease.xcconfig */; };
+		2A0DF503EBD959F1F386CE33 /* SiriPigeon.g.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50BD5A208177AB3828AC0828 /* SiriPigeon.g.swift */; };
 		2AE34400DB52FFE4BE215840 /* PhoneMicInterruptionMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAADF00DF00DF00DF00DFD07 /* PhoneMicInterruptionMonitor.swift */; };
 		2B99FAF9526FEECCB4348D72 /* OmiPhoneCallsPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42BABFB72F2A81B100E78A3C /* OmiPhoneCallsPlugin.swift */; };
+		369B31A8217B2FEE8CEB4B22 /* OmiCaptureAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 39E21825B797F6BEAD08E6C3 /* OmiCaptureAttributes.swift */; };
 		36D27A357376AC5C2E2B2921 /* prodDebug.xcconfig in Resources */ = {isa = PBXBuildFile; fileRef = 08E3947A4217EF205E22BD44 /* prodDebug.xcconfig */; };
+		387657874D0C4CD5BAE2E8F1 /* OmiDeviceHealthStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 56F18562DF5D43B1890404F7 /* OmiDeviceHealthStore.swift */; };
 		3B3967161E833CAA004F5970 /* AppFrameworkInfo.plist in Resources */ = {isa = PBXBuildFile; fileRef = 3B3967151E833CAA004F5970 /* AppFrameworkInfo.plist */; };
 		3E200B606D3D02BFEF213BF1 /* MWDATCore in Frameworks */ = {isa = PBXBuildFile; productRef = F954EF7C37697F83E05F20D8 /* MWDATCore */; };
 		3FF07873AB8530FF5964C7E4 /* devDebug.xcconfig in Resources */ = {isa = PBXBuildFile; fileRef = 17DD34CA2CFE6F3845E13C99 /* devDebug.xcconfig */; };
+		4177FE2DA51D5720F8F5D01E /* OmiCaptureAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 39E21825B797F6BEAD08E6C3 /* OmiCaptureAttributes.swift */; };
 		4255287D2E7C4B8300FD5CFB /* RecorderHostApiImpl.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4255287C2E7C4B8300FD5CFB /* RecorderHostApiImpl.swift */; };
 		426B89AD2C46919D00E24442 /* Config in Resources */ = {isa = PBXBuildFile; fileRef = 426B89AC2C46919D00E24442 /* Config */; };
 		42A7BA3E2E788BD400138969 /* omiWatchApp.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = 42A7BA342E788BD300138969 /* omiWatchApp.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); platformFilter = iphoneos; }; };
 		42A7BA4C2E788F0100138969 /* WatchConnectivity.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 42A7BA4B2E788F0100138969 /* WatchConnectivity.framework */; };
 		42B17C622F69B9CF00BFDA9D /* OmiBleManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42B17C612F69B9CF00BFDA9D /* OmiBleManager.swift */; };
 		42B17C642F69B9E100BFDA9D /* BleHostApiImpl.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42B17C632F69B9E100BFDA9D /* BleHostApiImpl.swift */; };
-		E91B0002E91B0002E91B0002 /* OmiBleEnergyPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = E91B0001E91B0001E91B0001 /* OmiBleEnergyPolicy.swift */; };
 		42B17C7C2F69BC6600BFDA9D /* PigeonCommunicator.g.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42B17C7B2F69BC6600BFDA9D /* PigeonCommunicator.g.swift */; };
 		42BABFB82F2A81B100E78A3C /* OmiRecordingAudioDevice.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42BABFB62F2A81B100E78A3C /* OmiRecordingAudioDevice.swift */; };
 		42BABFB92F2A81B100E78A3C /* OmiPhoneCallsPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42BABFB72F2A81B100E78A3C /* OmiPhoneCallsPlugin.swift */; };
 		42BABFC12F2A81B100E78A3C /* OmiAudioLock.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42BABFC22F2A81B100E78A3C /* OmiAudioLock.swift */; };
-		42BABFD12F2A82AA00E78A3C /* OmiAudioEventCoalescer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42BABFD02F2A82AA00E78A3C /* OmiAudioEventCoalescer.swift */; };
 		42BABFC32F2A81B100E78A3C /* OmiCallError.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42BABFC42F2A81B100E78A3C /* OmiCallError.swift */; };
 		42BABFC52F2A81B100E78A3C /* OmiCallCoordinatorProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42BABFC62F2A81B100E78A3C /* OmiCallCoordinatorProtocol.swift */; };
 		42BABFC72F2A81B100E78A3C /* OmiCallCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42BABFC82F2A81B100E78A3C /* OmiCallCoordinator.swift */; };
 		42BABFC92F2A81B100E78A3C /* OmiProximitySensor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42BABFCA2F2A81B100E78A3C /* OmiProximitySensor.swift */; };
 		42BABFCB2F2A81B100E78A3C /* OmiDirectCallCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42BABFCC2F2A81B100E78A3C /* OmiDirectCallCoordinator.swift */; };
 		42BABFCD2F2A81B100E78A3C /* OmiRegionCheck.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42BABFCE2F2A81B100E78A3C /* OmiRegionCheck.swift */; };
+		42BABFD12F2A82AA00E78A3C /* OmiAudioEventCoalescer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42BABFD02F2A82AA00E78A3C /* OmiAudioEventCoalescer.swift */; };
+		431670FD4CC27AE9A43EB1EA /* SiriPigeon.g.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50BD5A208177AB3828AC0828 /* SiriPigeon.g.swift */; };
 		431C5CAEC909BB0043406A09 /* devLaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = EF770A936DE2AA63387FD198 /* devLaunchScreen.storyboard */; };
 		433B391DCC48F1EA64996624 /* PhoneMicConverterPipeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAADF00DF00DF00DF00DFD04 /* PhoneMicConverterPipeline.swift */; };
 		44E6D3550DDAC81C6ADF09ED /* AppFrameworkInfo.plist in Resources */ = {isa = PBXBuildFile; fileRef = 3B3967151E833CAA004F5970 /* AppFrameworkInfo.plist */; };
+		46952FC3097F824B13B04DB4 /* SiriIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = E222EF675661E5A68C84D45B /* SiriIntents.swift */; };
 		4C63D0133E38DE51BA55148C /* MWDATCamera in Frameworks */ = {isa = PBXBuildFile; productRef = E640392A2909606360520801 /* MWDATCamera */; };
 		4D351AE1E3C89CD45ADBC99C /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 6436409C27A31CD800820AF7 /* InfoPlist.strings */; };
 		515BEA34860AB5238B369C52 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FD1CF9000F007C117D /* Assets.xcassets */; };
+		51794E0351794E0351794E03 /* SyncTransferBackgroundLease.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51794E0151794E0151794E01 /* SyncTransferBackgroundLease.swift */; };
+		51794E0451794E0451794E04 /* SyncTransferBackgroundLease.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51794E0151794E0151794E01 /* SyncTransferBackgroundLease.swift */; };
 		51EC531CFC451A317C883EBA /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = E7A9F5F37DDF9FA87AC8A5CD /* GoogleService-Info.plist */; };
 		56428CF0D6B2EDA13E401907 /* devProfile.xcconfig in Resources */ = {isa = PBXBuildFile; fileRef = 556416C8748DD3DD2C06A9DB /* devProfile.xcconfig */; };
 		5A2653E6C23BCD2FF632A493 /* AppleRemindersService.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD12345678901234567890CD /* AppleRemindersService.swift */; };
 		5B5A7C09B854EF0BFB2C4D18 /* RecorderHostApiImpl.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4255287C2E7C4B8300FD5CFB /* RecorderHostApiImpl.swift */; };
+		5C1D4C59DAD0780D7B679D6D /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = B7E1D0A1B7E1D0A1B7E1D0A1 /* Localizable.xcstrings */; };
 		5FC8F848E2BD3FDF3AF27F37 /* RayBanMetaAudioCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAADF00DF00DF00DF00DFC01 /* RayBanMetaAudioCapture.swift */; };
 		6382AF22C65ED5A1AA482ECD /* PhoneMicHostApiImpl.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAADF00DF00DF00DF00DFD09 /* PhoneMicHostApiImpl.swift */; };
 		6436409A27A31CD800820AF7 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 6436409C27A31CD800820AF7 /* InfoPlist.strings */; };
 		648454527D23C31E3AF5A635 /* LimitlessFlashDrainEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAADF00DF00DF00DF00DF0D9 /* LimitlessFlashDrainEngine.swift */; };
+		69ED47586D3BAD8E9BD57BC5 /* OmiSceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C6263EDCD49BFDBF52353A6 /* OmiSceneDelegate.swift */; };
 		6BD6CBAE7D0C1392AC7DDEFE /* OmiProximitySensor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42BABFCA2F2A81B100E78A3C /* OmiProximitySensor.swift */; };
 		6CFA84F577BF1940716EAC98 /* PhoneMicCaptureEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAADF00DF00DF00DF00DFD03 /* PhoneMicCaptureEngine.swift */; };
+		6F05FE70A6EBD0F070295CEC /* SiriBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04725A34C6451C370260A182 /* SiriBridge.swift */; };
+		706F05FDF2E05DA66960E710 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = B7E1D0A1B7E1D0A1B7E1D0A1 /* Localizable.xcstrings */; };
 		715D47AFEB21D49E37F16F3B /* WatchConnectivity.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 42A7BA4B2E788F0100138969 /* WatchConnectivity.framework */; };
+		728AD3B9CE56CAD614E49BC8 /* OmiCaptureAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 39E21825B797F6BEAD08E6C3 /* OmiCaptureAttributes.swift */; };
 		7361ED343F303C57EF2931A2 /* OmiCallCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42BABFC82F2A81B100E78A3C /* OmiCallCoordinator.swift */; };
 		74858FAF1ED2DC5600515810 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74858FAE1ED2DC5600515810 /* AppDelegate.swift */; };
-		E1293501E1293501E1293501 /* SpeechDeadline.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1293503E1293503E1293503 /* SpeechDeadline.swift */; };
+		78A318202AECB46A00862997 /* FlutterGeneratedPluginSwiftPackage in Frameworks */ = {isa = PBXBuildFile; productRef = 78A3181F2AECB46A00862997 /* FlutterGeneratedPluginSwiftPackage */; };
+		7A3F1C2E9B4D5E6F0A1B2C3E /* FlutterLaunchEngineGuard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A3F1C2E9B4D5E6F0A1B2C3D /* FlutterLaunchEngineGuard.swift */; };
+		7A3F1C2E9B4D5E6F0A1B2C3F /* FlutterLaunchEngineGuard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A3F1C2E9B4D5E6F0A1B2C3D /* FlutterLaunchEngineGuard.swift */; };
+		7AA100000000000000000001 /* TtsMp3Decoder.c in Sources */ = {isa = PBXBuildFile; fileRef = 7AA100000000000000000003 /* TtsMp3Decoder.c */; };
+		7AA100000000000000000002 /* TtsMp3Decoder.c in Sources */ = {isa = PBXBuildFile; fileRef = 7AA100000000000000000003 /* TtsMp3Decoder.c */; };
+		7AA100000000000000000006 /* TtsPcmPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7AA100000000000000000008 /* TtsPcmPlayer.swift */; };
+		7AA100000000000000000007 /* TtsPcmPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7AA100000000000000000008 /* TtsPcmPlayer.swift */; };
 		7B703A24854FEB9BACB52CCA /* PhoneMicOpusShim.m in Sources */ = {isa = PBXBuildFile; fileRef = BAADF00DF00DF00DF00DFD0D /* PhoneMicOpusShim.m */; };
 		7BB46D8ED545353079641366 /* BatteryWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C2BF831EA0797124264B67C /* BatteryWidget.swift */; };
 		7C7857BB4A77A12B03F090B8 /* PhoneMicPigeon.g.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAADF00DF00DF00DF00DFD01 /* PhoneMicPigeon.g.swift */; };
 		7CB1B7DE57C0BCCDA9AB4B9E /* prodProfile.xcconfig in Resources */ = {isa = PBXBuildFile; fileRef = B52E83A1CC630E163A04DC50 /* prodProfile.xcconfig */; };
+		8003A15D092653E251FDD8E5 /* LiveActivityManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 643D3C8DFDC4F37DC79C2E11 /* LiveActivityManager.swift */; };
 		83D001C5192F68F4DD76AB23 /* PhoneMicBatchAudioWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAADF00DF00DF00DF00DFD0B /* PhoneMicBatchAudioWriter.swift */; };
 		873C99F3D85C142369688A1D /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74858FAE1ED2DC5600515810 /* AppDelegate.swift */; };
-		E1293502E1293502E1293502 /* SpeechDeadline.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1293503E1293503E1293503 /* SpeechDeadline.swift */; };
+		89220BD57775CE7DEA3EFCA6 /* SiriEntities.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5D14DCA5CCF1F3CB05D36D2 /* SiriEntities.swift */; };
+		89B0E769749CAFB907FD4B44 /* OnDeviceParakeet.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = E92325919D0DC3CE5C5D508B /* OnDeviceParakeet.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		8BD6DEAF00C1D7FBA1706D20 /* OmiCaptureIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = A832E7FCE2964D801A4EB21F /* OmiCaptureIntents.swift */; };
+		8F3D76EC32FD8D0885EA0C77 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 82DE8158621D83F62D86F7C4 /* Foundation.framework */; };
+		971A83B53D79AF7EE1BF4B95 /* SiriDebugProbe.swift in Sources */ = {isa = PBXBuildFile; fileRef = D289F7085D97C1A955A86231 /* SiriDebugProbe.swift */; };
 		97C146FC1CF9000F007C117D /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FA1CF9000F007C117D /* Main.storyboard */; };
 		97C146FE1CF9000F007C117D /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FD1CF9000F007C117D /* Assets.xcassets */; };
 		97C147011CF9000F007C117D /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FF1CF9000F007C117D /* LaunchScreen.storyboard */; };
+		98887352D51033DF9C804DCE /* SiriBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04725A34C6451C370260A182 /* SiriBridge.swift */; };
 		99ADCEC5933A6FA3EE3AAE5D /* OmiBleManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42B17C612F69B9CF00BFDA9D /* OmiBleManager.swift */; };
-		E91B0003E91B0003E91B0003 /* OmiBleEnergyPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = E91B0001E91B0001E91B0001 /* OmiBleEnergyPolicy.swift */; };
 		9A25BD940EC94B21766CB950 /* Pods_Runner.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 8E5BBFB39079A4743502BBEE /* Pods_Runner.framework */; };
 		9A26EFBA2ABCE6C441ADBE8E /* OmiCallCoordinatorProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42BABFC62F2A81B100E78A3C /* OmiCallCoordinatorProtocol.swift */; };
 		9A519AEFA12F139B0082101F /* Base.xcconfig in Resources */ = {isa = PBXBuildFile; fileRef = CF2F518C2EC08EA60025B331 /* Base.xcconfig */; };
+		9C1738D70A50495EA3AFADF5 /* OmiDeviceHealthStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 56F18562DF5D43B1890404F7 /* OmiDeviceHealthStore.swift */; };
 		9EF175369890F17FC6D78D03 /* PhoneMicEventEmitter.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAADF00DF00DF00DF00DFD08 /* PhoneMicEventEmitter.swift */; };
 		A014F817EA8AFCDD9EECCEF5 /* BatteryWidgetBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2901D39C61D71A9D821F20FE /* BatteryWidgetBundle.swift */; };
 		A0A492964674B881B8E56B3E /* BatteryWidget.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 90E45FFB3093C995950509B7 /* BatteryWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		A2047901A2047901A2047901 /* WatchAudioChunkRelay.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2047903A2047903A2047903 /* WatchAudioChunkRelay.swift */; };
+		A2047902A2047902A2047902 /* WatchAudioChunkRelay.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2047903A2047903A2047903 /* WatchAudioChunkRelay.swift */; };
 		A581C03A63F5564B06F0B80D /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FF1CF9000F007C117D /* LaunchScreen.storyboard */; };
+		A5F00002A5F00002A5F00002 /* SafeFoundationSinks.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5F00001A5F00001A5F00001 /* SafeFoundationSinks.swift */; };
+		A5F00003A5F00003A5F00003 /* SafeFoundationSinks.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5F00001A5F00001A5F00001 /* SafeFoundationSinks.swift */; };
+		A5F00004A5F00004A5F00004 /* SafeFoundationSinks.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5F00001A5F00001A5F00001 /* SafeFoundationSinks.swift */; };
+		A64BDCA35736F648E69CBF74 /* LiveActivityManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 643D3C8DFDC4F37DC79C2E11 /* LiveActivityManager.swift */; };
 		A99145F1E008BFA300A30BA0 /* BleHostApiImpl.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42B17C632F69B9E100BFDA9D /* BleHostApiImpl.swift */; };
 		AB12345678901234567890AB /* AppleRemindersService.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD12345678901234567890CD /* AppleRemindersService.swift */; };
 		AB12345678901234567890AC /* AppleHealthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD12345678901234567890CE /* AppleHealthService.swift */; };
-		7A3F1C2E9B4D5E6F0A1B2C3F /* FlutterLaunchEngineGuard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A3F1C2E9B4D5E6F0A1B2C3D /* FlutterLaunchEngineGuard.swift */; };
+		AFD5C0DF5AE115C934B37047 /* OmiCaptureLiveActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B1B260455B26BF846102B80 /* OmiCaptureLiveActivity.swift */; };
 		AFF50718E1B191240567E4A7 /* OmiRegionCheck.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42BABFCE2F2A81B100E78A3C /* OmiRegionCheck.swift */; };
 		B017E73914CFF7C22190E0C3 /* prodProfile.xcconfig in Resources */ = {isa = PBXBuildFile; fileRef = B52E83A1CC630E163A04DC50 /* prodProfile.xcconfig */; };
 		B07ABDD2736E2C87A59FB5E1 /* GeneratedPluginRegistrant.m in Sources */ = {isa = PBXBuildFile; fileRef = 1498D2331E8E89220040F4C2 /* GeneratedPluginRegistrant.m */; };
 		B13B18B781B8EFD4C7432C9F /* PhoneMicController.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAADF00DF00DF00DF00DFD02 /* PhoneMicController.swift */; };
+		B18CDB03AF83DDF556D15E77 /* OmiSceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C6263EDCD49BFDBF52353A6 /* OmiSceneDelegate.swift */; };
+		B4A52A3CDB5EA39D8D74DD31 /* SiriSnapshotStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B586798536A270D779BECE19 /* SiriSnapshotStore.swift */; };
+		B7883E81CA463D5714C4CF55 /* OnDeviceOverflowPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F972B4450EC1589187A56A5 /* OnDeviceOverflowPlugin.swift */; };
+		B7E1D0A2B7E1D0A2B7E1D0A2 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = B7E1D0A1B7E1D0A1B7E1D0A1 /* Localizable.xcstrings */; };
 		B94F29DDABCC004D34ADA4EA /* PhoneMicOpusEncoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAADF00DF00DF00DF00DFD0A /* PhoneMicOpusEncoder.swift */; };
 		BAADF00DF00DF00DF00DF0D2 /* BatchAudioWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAADF00DF00DF00DF00DF0D1 /* BatchAudioWriter.swift */; };
 		BAADF00DF00DF00DF00DF0D4 /* BaseBatchAudioWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAADF00DF00DF00DF00DF0D3 /* BaseBatchAudioWriter.swift */; };
@@ -115,9 +157,16 @@
 		BAADF00DF00DF00DF00DFD1A /* PhoneMicOpusEncoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAADF00DF00DF00DF00DFD0A /* PhoneMicOpusEncoder.swift */; };
 		BAADF00DF00DF00DF00DFD1B /* PhoneMicBatchAudioWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAADF00DF00DF00DF00DFD0B /* PhoneMicBatchAudioWriter.swift */; };
 		BAADF00DF00DF00DF00DFD1D /* PhoneMicOpusShim.m in Sources */ = {isa = PBXBuildFile; fileRef = BAADF00DF00DF00DF00DFD0D /* PhoneMicOpusShim.m */; };
+		BAADF00DF00DF00DF00DFD1F /* PhoneMicControllerSeams.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAADF00DF00DF00DF00DFD1E /* PhoneMicControllerSeams.swift */; };
 		BB125CDB70C0DB5AAFB15E9C /* BaseBatchAudioWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAADF00DF00DF00DF00DF0D3 /* BaseBatchAudioWriter.swift */; };
+		BDAE310219125E12BCD121BA /* SiriSnapshotStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B586798536A270D779BECE19 /* SiriSnapshotStore.swift */; };
 		BEC15258E40BD718849A70C0 /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FA1CF9000F007C117D /* Main.storyboard */; };
 		C6DD8F6A334A31116A75C4EE /* devDebug.xcconfig in Resources */ = {isa = PBXBuildFile; fileRef = 17DD34CA2CFE6F3845E13C99 /* devDebug.xcconfig */; };
+		CAD10002CAD10002CAD10002 /* OmiCaptureHealth.swift in Sources */ = {isa = PBXBuildFile; fileRef = CAD10001CAD10001CAD10001 /* OmiCaptureHealth.swift */; };
+		CAD10003CAD10003CAD10003 /* OmiCaptureHealth.swift in Sources */ = {isa = PBXBuildFile; fileRef = CAD10001CAD10001CAD10001 /* OmiCaptureHealth.swift */; };
+		CAD20002CAD20002CAD20002 /* OmiBleCaptureSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = CAD20001CAD20001CAD20001 /* OmiBleCaptureSession.swift */; };
+		CAD20003CAD20003CAD20003 /* OmiBleCaptureSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = CAD20001CAD20001CAD20001 /* OmiBleCaptureSession.swift */; };
+		CAFEF00DF00DF00DF00DF001 /* PhoneMicControllerSeams.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAADF00DF00DF00DF00DFD1E /* PhoneMicControllerSeams.swift */; };
 		CB6580ED5AD268A053F41EB7 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 585D7D8307721A4D6595AA27 /* Assets.xcassets */; };
 		CD15410D0ED1D611F4A1B596 /* LimitlessBatchAudioWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAADF00DF00DF00DF00DF0D5 /* LimitlessBatchAudioWriter.swift */; };
 		CE56DAB4D69CB113C7F955F9 /* OmiAudioLock.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42BABFC22F2A81B100E78A3C /* OmiAudioLock.swift */; };
@@ -126,14 +175,34 @@
 		CF0FE6152D61FDC10072C10D /* Custom.xcconfig in Resources */ = {isa = PBXBuildFile; fileRef = CF0FE6142D61FDC10072C10D /* Custom.xcconfig */; };
 		CF2F518D2EC08EA60025B331 /* Base.xcconfig in Resources */ = {isa = PBXBuildFile; fileRef = CF2F518C2EC08EA60025B331 /* Base.xcconfig */; };
 		D4DB62EA3B33E082C7D4E197 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 31D5B906D56C4FDBBCCFF403 /* Foundation.framework */; };
+		D71C4A0B2F0A11E700DE7001 /* DeviceToolsService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D71C4A0A2F0A11E700DE7000 /* DeviceToolsService.swift */; };
+		C4A7D0E1C4A7D0E1C4A7D0E1 /* ChatVideoSampler.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4A7D0E0C4A7D0E0C4A7D0E0 /* ChatVideoSampler.swift */; };
+		C4A7D0E2C4A7D0E2C4A7D0E2 /* ChatVideoSampler.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4A7D0E0C4A7D0E0C4A7D0E0 /* ChatVideoSampler.swift */; };
+		D71C4A0C2F0A11E700DE7002 /* DeviceToolsService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D71C4A0A2F0A11E700DE7000 /* DeviceToolsService.swift */; };
+		D988BCB88D5D696871753297 /* SiriSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 037C2E4049E0EF06EF66231A /* SiriSession.swift */; };
+		DAD10002DAD10002DAD10002 /* OmiBleConnectionPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAD10001DAD10001DAD10001 /* OmiBleConnectionPolicy.swift */; };
+		DAD10003DAD10003DAD10003 /* OmiBleConnectionPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAD10001DAD10001DAD10001 /* OmiBleConnectionPolicy.swift */; };
 		DD6F1E8CA4013B6A267D5DD2 /* prodLaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = ACE7BEFB9654B6DF5B9E1790 /* prodLaunchScreen.storyboard */; };
+		DE48ED224FF11175DA9FFC6A /* OmiHomeWidgets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9BFFBC8C660B65EEFE79C220 /* OmiHomeWidgets.swift */; };
 		DECE0A4513CE66136ABC42D2 /* Config in Resources */ = {isa = PBXBuildFile; fileRef = 426B89AC2C46919D00E24442 /* Config */; };
 		DF385A18EA9CC7E3C915F581 /* OmiDirectCallCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42BABFCC2F2A81B100E78A3C /* OmiDirectCallCoordinator.swift */; };
+		E1293501E1293501E1293501 /* SpeechDeadline.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1293503E1293503E1293503 /* SpeechDeadline.swift */; };
+		E1293502E1293502E1293502 /* SpeechDeadline.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1293503E1293503E1293503 /* SpeechDeadline.swift */; };
+		E3EBE5F3951B8B2945870160 /* OnDeviceOverflowPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F972B4450EC1589187A56A5 /* OnDeviceOverflowPlugin.swift */; };
 		E618F2CC17DA96A58C947757 /* prodRelease.xcconfig in Resources */ = {isa = PBXBuildFile; fileRef = 35656BCB5CBAA7C0BB162EE0 /* prodRelease.xcconfig */; };
+		E76D251E02DC0D96235B7674 /* FluidAudio in Frameworks */ = {isa = PBXBuildFile; productRef = 6223166F8A8178093600E4FC /* FluidAudio */; };
 		E7CED4E302E4E4F7E07BCE74 /* PhoneMicPermissionGate.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAADF00DF00DF00DF00DFD06 /* PhoneMicPermissionGate.swift */; };
+		E91B0002E91B0002E91B0002 /* OmiBleEnergyPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = E91B0001E91B0001E91B0001 /* OmiBleEnergyPolicy.swift */; };
+		E91B0003E91B0003E91B0003 /* OmiBleEnergyPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = E91B0001E91B0001E91B0001 /* OmiBleEnergyPolicy.swift */; };
+		E91C0002E91C0002E91C0002 /* OmiBlePairingPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = E91C0001E91C0001E91C0001 /* OmiBlePairingPolicy.swift */; };
+		E91C0003E91C0003E91C0003 /* OmiBlePairingPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = E91C0001E91C0001E91C0001 /* OmiBlePairingPolicy.swift */; };
+		E91D0002E91D0002E91D0002 /* OmiBleDiscoveryNaming.swift in Sources */ = {isa = PBXBuildFile; fileRef = E91D0001E91D0001E91D0001 /* OmiBleDiscoveryNaming.swift */; };
+		E91D0003E91D0003E91D0003 /* OmiBleDiscoveryNaming.swift in Sources */ = {isa = PBXBuildFile; fileRef = E91D0001E91D0001E91D0001 /* OmiBleDiscoveryNaming.swift */; };
+		ECDFF5DC9FC101351FF5730A /* OmiCaptureIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = A832E7FCE2964D801A4EB21F /* OmiCaptureIntents.swift */; };
+		F51480F9BEB79F68A8D7E013 /* SiriDebugProbe.swift in Sources */ = {isa = PBXBuildFile; fileRef = D289F7085D97C1A955A86231 /* SiriDebugProbe.swift */; };
+		F6E61A32FE6422652C437860 /* OnDeviceParakeet.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = E92325919D0DC3CE5C5D508B /* OnDeviceParakeet.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		F8D0037DFD95E0FA0591D087 /* PhoneMicSessionConfigurator.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAADF00DF00DF00DF00DFD05 /* PhoneMicSessionConfigurator.swift */; };
 		FAD7504969BE8B6F6D8D0BD1 /* devLaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = EF770A936DE2AA63387FD198 /* devLaunchScreen.storyboard */; };
-		78A318202AECB46A00862997 /* FlutterGeneratedPluginSwiftPackage in Frameworks */ = {isa = PBXBuildFile; productRef = 78A3181F2AECB46A00862997 /* FlutterGeneratedPluginSwiftPackage */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -150,6 +219,20 @@
 			proxyType = 1;
 			remoteGlobalIDString = 58BC30995C676AAADF2F0F6A;
 			remoteInfo = BatteryWidget;
+		};
+		E240497DAB24184852DC60F8 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 97C146E61CF9000F007C117D /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 506967ADB2ABD96BEACF9D4A;
+			remoteInfo = OnDeviceParakeet;
+		};
+		F2F04FBF7BDFB52E22398B44 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 97C146E61CF9000F007C117D /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 506967ADB2ABD96BEACF9D4A;
+			remoteInfo = OnDeviceParakeet;
 		};
 /* End PBXContainerItemProxy section */
 
@@ -176,12 +259,24 @@
 			name = "Embed Watch Content";
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		84317A1F9CC5D75F9718DFFF /* Embed Frameworks */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 10;
+			files = (
+				F6E61A32FE6422652C437860 /* OnDeviceParakeet.framework in Embed Frameworks */,
+			);
+			name = "Embed Frameworks";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		9705A1C41CF9048500538489 /* Embed Frameworks */ = {
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
 			dstPath = "";
 			dstSubfolderSpec = 10;
 			files = (
+				89B0E769749CAFB907FD4B44 /* OnDeviceParakeet.framework in Embed Frameworks */,
 			);
 			name = "Embed Frameworks";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -189,17 +284,23 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		A2047910A2047910A2047910 /* WatchRecordingStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchRecordingStore.swift; sourceTree = "<group>"; };
+		037C2E4049E0EF06EF66231A /* SiriSession.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SiriSession.swift; sourceTree = "<group>"; };
 		03BA73541F37D6361DCF18DC /* Pods-Runner.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.release.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.release.xcconfig"; sourceTree = "<group>"; };
+		04725A34C6451C370260A182 /* SiriBridge.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SiriBridge.swift; sourceTree = "<group>"; };
 		08E3947A4217EF205E22BD44 /* prodDebug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = prodDebug.xcconfig; path = Flutter/prodDebug.xcconfig; sourceTree = "<group>"; };
 		13B22B6FE8D66350C1840287 /* Pods-Runner.debug-prod.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.debug-prod.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.debug-prod.xcconfig"; sourceTree = "<group>"; };
 		1498D2321E8E86230040F4C2 /* GeneratedPluginRegistrant.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = GeneratedPluginRegistrant.h; sourceTree = "<group>"; };
 		1498D2331E8E89220040F4C2 /* GeneratedPluginRegistrant.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = GeneratedPluginRegistrant.m; sourceTree = "<group>"; };
 		17DD34CA2CFE6F3845E13C99 /* devDebug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = devDebug.xcconfig; path = Flutter/devDebug.xcconfig; sourceTree = "<group>"; };
 		17F3C6B9A0FC84C3169B810C /* raybanDatRelease.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = raybanDatRelease.xcconfig; path = Flutter/raybanDatRelease.xcconfig; sourceTree = "<group>"; };
+		1B1B260455B26BF846102B80 /* OmiCaptureLiveActivity.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = OmiCaptureLiveActivity.swift; sourceTree = "<group>"; };
+		1C6263EDCD49BFDBF52353A6 /* OmiSceneDelegate.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = OmiSceneDelegate.swift; sourceTree = "<group>"; };
 		2091CCAB9CE841AC3CA23A90 /* Pods-Runner.release-prod.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.release-prod.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.release-prod.xcconfig"; sourceTree = "<group>"; };
 		2901D39C61D71A9D821F20FE /* BatteryWidgetBundle.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = BatteryWidgetBundle.swift; sourceTree = "<group>"; };
 		31D5B906D56C4FDBBCCFF403 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
 		35656BCB5CBAA7C0BB162EE0 /* prodRelease.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = prodRelease.xcconfig; path = Flutter/prodRelease.xcconfig; sourceTree = "<group>"; };
+		39E21825B797F6BEAD08E6C3 /* OmiCaptureAttributes.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = OmiCaptureAttributes.swift; sourceTree = "<group>"; };
 		3B3967151E833CAA004F5970 /* AppFrameworkInfo.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = AppFrameworkInfo.plist; path = Flutter/AppFrameworkInfo.plist; sourceTree = "<group>"; };
 		42127D962C283C250005AB40 /* OneSignalCore.xcframework */ = {isa = PBXFileReference; expectedSignature = "AppleDeveloperProgram:J3J28YJX9L:OneSignal, Inc."; lastKnownFileType = wrapper.xcframework; name = OneSignalCore.xcframework; path = Pods/OneSignalXCFramework/iOS_SDK/OneSignalSDK/OneSignal_Core/OneSignalCore.xcframework; sourceTree = "<group>"; };
 		42127D9A2C283C310005AB40 /* OneSignalExtension.xcframework */ = {isa = PBXFileReference; expectedSignature = "AppleDeveloperProgram:J3J28YJX9L:OneSignal, Inc."; lastKnownFileType = wrapper.xcframework; name = OneSignalExtension.xcframework; path = Pods/OneSignalXCFramework/iOS_SDK/OneSignalSDK/OneSignal_Extension/OneSignalExtension.xcframework; sourceTree = "<group>"; };
@@ -212,20 +313,22 @@
 		42A7BA4B2E788F0100138969 /* WatchConnectivity.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WatchConnectivity.framework; path = System/Library/Frameworks/WatchConnectivity.framework; sourceTree = SDKROOT; };
 		42B17C612F69B9CF00BFDA9D /* OmiBleManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OmiBleManager.swift; sourceTree = "<group>"; };
 		42B17C632F69B9E100BFDA9D /* BleHostApiImpl.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BleHostApiImpl.swift; sourceTree = "<group>"; };
-		E91B0001E91B0001E91B0001 /* OmiBleEnergyPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OmiBleEnergyPolicy.swift; sourceTree = "<group>"; };
 		42B17C7B2F69BC6600BFDA9D /* PigeonCommunicator.g.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PigeonCommunicator.g.swift; sourceTree = "<group>"; };
 		42BABFB62F2A81B100E78A3C /* OmiRecordingAudioDevice.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OmiRecordingAudioDevice.swift; sourceTree = "<group>"; };
 		42BABFB72F2A81B100E78A3C /* OmiPhoneCallsPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OmiPhoneCallsPlugin.swift; sourceTree = "<group>"; };
 		42BABFC22F2A81B100E78A3C /* OmiAudioLock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OmiAudioLock.swift; sourceTree = "<group>"; };
-		42BABFD02F2A82AA00E78A3C /* OmiAudioEventCoalescer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OmiAudioEventCoalescer.swift; sourceTree = "<group>"; };
 		42BABFC42F2A81B100E78A3C /* OmiCallError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OmiCallError.swift; sourceTree = "<group>"; };
 		42BABFC62F2A81B100E78A3C /* OmiCallCoordinatorProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OmiCallCoordinatorProtocol.swift; sourceTree = "<group>"; };
 		42BABFC82F2A81B100E78A3C /* OmiCallCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OmiCallCoordinator.swift; sourceTree = "<group>"; };
 		42BABFCA2F2A81B100E78A3C /* OmiProximitySensor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OmiProximitySensor.swift; sourceTree = "<group>"; };
 		42BABFCC2F2A81B100E78A3C /* OmiDirectCallCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OmiDirectCallCoordinator.swift; sourceTree = "<group>"; };
 		42BABFCE2F2A81B100E78A3C /* OmiRegionCheck.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OmiRegionCheck.swift; sourceTree = "<group>"; };
+		42BABFD02F2A82AA00E78A3C /* OmiAudioEventCoalescer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OmiAudioEventCoalescer.swift; sourceTree = "<group>"; };
 		4B5B6E291EA70190D1771F2D /* Pods-Runner.release-dev.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.release-dev.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.release-dev.xcconfig"; sourceTree = "<group>"; };
+		50BD5A208177AB3828AC0828 /* SiriPigeon.g.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SiriPigeon.g.swift; sourceTree = "<group>"; };
+		51794E0151794E0151794E01 /* SyncTransferBackgroundLease.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncTransferBackgroundLease.swift; sourceTree = "<group>"; };
 		556416C8748DD3DD2C06A9DB /* devProfile.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = devProfile.xcconfig; path = Flutter/devProfile.xcconfig; sourceTree = "<group>"; };
+		56F18562DF5D43B1890404F7 /* OmiDeviceHealthStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OmiDeviceHealthStore.swift; sourceTree = "<group>"; };
 		585D7D8307721A4D6595AA27 /* Assets.xcassets */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		5F7FD4162BF1232500923839 /* Runner.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Runner.entitlements; sourceTree = "<group>"; };
 		5FCEB2FA2C27586C00B17EE8 /* RunnerDebug-prod.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "RunnerDebug-prod.entitlements"; sourceTree = "<group>"; };
@@ -234,13 +337,21 @@
 		5FCEB2FD2C2758BA00B17EE8 /* RunnerDebug-dev.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "RunnerDebug-dev.entitlements"; sourceTree = "<group>"; };
 		5FCEB2FE2C2758BD00B17EE8 /* RunnerProfile-dev.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "RunnerProfile-dev.entitlements"; sourceTree = "<group>"; };
 		5FCEB2FF2C2758C000B17EE8 /* RunnerRelease-dev.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "RunnerRelease-dev.entitlements"; sourceTree = "<group>"; };
+		643D3C8DFDC4F37DC79C2E11 /* LiveActivityManager.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LiveActivityManager.swift; sourceTree = "<group>"; };
+		6F972B4450EC1589187A56A5 /* OnDeviceOverflowPlugin.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = OnDeviceOverflowPlugin.swift; sourceTree = "<group>"; };
 		74858FAD1ED2DC5600515810 /* Runner-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "Runner-Bridging-Header.h"; sourceTree = "<group>"; };
 		74858FAE1ED2DC5600515810 /* AppDelegate.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
-		E1293503E1293503E1293503 /* SpeechDeadline.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = SpeechDeadline.swift; sourceTree = "<group>"; };
+		78E0A7A72DC9AD7400C4905E /* FlutterGeneratedPluginSwiftPackage */ = {isa = PBXFileReference; lastKnownFileType = wrapper; name = FlutterGeneratedPluginSwiftPackage; path = Flutter/ephemeral/Packages/FlutterGeneratedPluginSwiftPackage; sourceTree = "<group>"; };
 		79B00761CB247C7EC7C8983B /* devRelease.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = devRelease.xcconfig; path = Flutter/devRelease.xcconfig; sourceTree = "<group>"; };
+		7A3F1C2E9B4D5E6F0A1B2C3D /* FlutterLaunchEngineGuard.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = FlutterLaunchEngineGuard.swift; sourceTree = "<group>"; };
+		7AA100000000000000000003 /* TtsMp3Decoder.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = TtsMp3Decoder.c; sourceTree = "<group>"; };
+		7AA100000000000000000004 /* TtsMp3Decoder.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = TtsMp3Decoder.h; sourceTree = "<group>"; };
+		7AA100000000000000000005 /* minimp3.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = NativeVendor/minimp3.h; sourceTree = "<group>"; };
+		7AA100000000000000000008 /* TtsPcmPlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TtsPcmPlayer.swift; sourceTree = "<group>"; };
 		7AFA3C8E1D35360C0083082E /* Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = Release.xcconfig; path = Flutter/Release.xcconfig; sourceTree = "<group>"; };
 		7B0B70AE9FE08165F2A53E0B /* SharedDefaults.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SharedDefaults.swift; sourceTree = "<group>"; };
 		7B5E43DB4A6147C1D70FE34F /* Pods-RunnerRayBanDat.release-raybandat.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-RunnerRayBanDat.release-raybandat.xcconfig"; path = "Target Support Files/Pods-RunnerRayBanDat/Pods-RunnerRayBanDat.release-raybandat.xcconfig"; sourceTree = "<group>"; };
+		82DE8158621D83F62D86F7C4 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
 		8AF672E55033617EF994D1BD /* Runner.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Runner.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		8BEEC10DF812923588FD5224 /* raybanDatProfile.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = raybanDatProfile.xcconfig; path = Flutter/raybanDatProfile.xcconfig; sourceTree = "<group>"; };
 		8E5BBFB39079A4743502BBEE /* Pods_Runner.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_Runner.framework; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -253,13 +364,19 @@
 		97C146FD1CF9000F007C117D /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		97C147001CF9000F007C117D /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		97C147021CF9000F007C117D /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		9BFFBC8C660B65EEFE79C220 /* OmiHomeWidgets.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = OmiHomeWidgets.swift; sourceTree = "<group>"; };
 		9C2BF831EA0797124264B67C /* BatteryWidget.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = BatteryWidget.swift; sourceTree = "<group>"; };
 		9E3D54F7F2F961A21E817773 /* ja */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = ja; path = ja.lproj/InfoPlist.strings; sourceTree = "<group>"; };
 		A19E38726A3D1BBD89696C57 /* BatteryWidget.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = BatteryWidget.entitlements; sourceTree = "<group>"; };
+		A2047903A2047903A2047903 /* WatchAudioChunkRelay.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = WatchAudioChunkRelay.swift; sourceTree = "<group>"; };
+		A5F00001A5F00001A5F00001 /* SafeFoundationSinks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SafeFoundationSinks.swift; sourceTree = "<group>"; };
+		A832E7FCE2964D801A4EB21F /* OmiCaptureIntents.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = OmiCaptureIntents.swift; sourceTree = "<group>"; };
 		AC3A09D045C7DE0727BBD027 /* Pods-RunnerRayBanDat.profile-raybandat.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-RunnerRayBanDat.profile-raybandat.xcconfig"; path = "Target Support Files/Pods-RunnerRayBanDat/Pods-RunnerRayBanDat.profile-raybandat.xcconfig"; sourceTree = "<group>"; };
 		ACE7BEFB9654B6DF5B9E1790 /* prodLaunchScreen.storyboard */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = file.storyboard; name = prodLaunchScreen.storyboard; path = Runner/prodLaunchScreen.storyboard; sourceTree = "<group>"; };
 		B52E83A1CC630E163A04DC50 /* prodProfile.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = prodProfile.xcconfig; path = Flutter/prodProfile.xcconfig; sourceTree = "<group>"; };
+		B586798536A270D779BECE19 /* SiriSnapshotStore.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SiriSnapshotStore.swift; sourceTree = "<group>"; };
 		B5C446F7D9007B136D485BB2 /* Pods-RunnerRayBanDat.debug-raybandat.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-RunnerRayBanDat.debug-raybandat.xcconfig"; path = "Target Support Files/Pods-RunnerRayBanDat/Pods-RunnerRayBanDat.debug-raybandat.xcconfig"; sourceTree = "<group>"; };
+		B7E1D0A1B7E1D0A1B7E1D0A1 /* Localizable.xcstrings */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		BAADF00DF00DF00DF00DF0D1 /* BatchAudioWriter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BatchAudioWriter.swift; sourceTree = "<group>"; };
 		BAADF00DF00DF00DF00DF0D3 /* BaseBatchAudioWriter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BaseBatchAudioWriter.swift; sourceTree = "<group>"; };
 		BAADF00DF00DF00DF00DF0D5 /* LimitlessBatchAudioWriter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LimitlessBatchAudioWriter.swift; sourceTree = "<group>"; };
@@ -280,19 +397,32 @@
 		BAADF00DF00DF00DF00DFD0B /* PhoneMicBatchAudioWriter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhoneMicBatchAudioWriter.swift; sourceTree = "<group>"; };
 		BAADF00DF00DF00DF00DFD0C /* PhoneMicOpusShim.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = PhoneMicOpusShim.h; sourceTree = "<group>"; };
 		BAADF00DF00DF00DF00DFD0D /* PhoneMicOpusShim.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = PhoneMicOpusShim.m; sourceTree = "<group>"; };
+		BAADF00DF00DF00DF00DFD1E /* PhoneMicControllerSeams.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhoneMicControllerSeams.swift; sourceTree = "<group>"; };
+		C760640FBCB3A75ED43A12E8 /* ParakeetBridge.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ParakeetBridge.swift; sourceTree = "<group>"; };
 		C7894CA52D931C30BB891A25 /* raybanDatDebug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = raybanDatDebug.xcconfig; path = Flutter/raybanDatDebug.xcconfig; sourceTree = "<group>"; };
 		C84EE89ABD9CB9B1CFD8B8CB /* Pods-Runner.profile-dev.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.profile-dev.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.profile-dev.xcconfig"; sourceTree = "<group>"; };
+		CAD10001CAD10001CAD10001 /* OmiCaptureHealth.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OmiCaptureHealth.swift; sourceTree = "<group>"; };
+		CAD20001CAD20001CAD20001 /* OmiBleCaptureSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OmiBleCaptureSession.swift; sourceTree = "<group>"; };
 		CD12345678901234567890CD /* AppleRemindersService.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = AppleRemindersService.swift; sourceTree = "<group>"; };
 		CD12345678901234567890CE /* AppleHealthService.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = AppleHealthService.swift; sourceTree = "<group>"; };
-		7A3F1C2E9B4D5E6F0A1B2C3D /* FlutterLaunchEngineGuard.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = FlutterLaunchEngineGuard.swift; sourceTree = "<group>"; };
 		CF0FE6142D61FDC10072C10D /* Custom.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = Custom.xcconfig; path = Flutter/Custom.xcconfig; sourceTree = "<group>"; };
 		CF2F518C2EC08EA60025B331 /* Base.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = Base.xcconfig; path = Flutter/Base.xcconfig; sourceTree = "<group>"; };
+		D289F7085D97C1A955A86231 /* SiriDebugProbe.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SiriDebugProbe.swift; sourceTree = "<group>"; };
+		C4A7D0E0C4A7D0E0C4A7D0E0 /* ChatVideoSampler.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ChatVideoSampler.swift; sourceTree = "<group>"; };
+		D71C4A0A2F0A11E700DE7000 /* DeviceToolsService.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = DeviceToolsService.swift; sourceTree = "<group>"; };
+		DAD10001DAD10001DAD10001 /* OmiBleConnectionPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OmiBleConnectionPolicy.swift; sourceTree = "<group>"; };
+		E1293503E1293503E1293503 /* SpeechDeadline.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = SpeechDeadline.swift; sourceTree = "<group>"; };
 		E2100BFB54B13863400AB3AB /* Pods-Runner.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.debug.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.debug.xcconfig"; sourceTree = "<group>"; };
+		E222EF675661E5A68C84D45B /* SiriIntents.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SiriIntents.swift; sourceTree = "<group>"; };
 		E73ABF09644041AA35B97211 /* Pods-Runner.profile.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.profile.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.profile.xcconfig"; sourceTree = "<group>"; };
 		E7A9F5F37DDF9FA87AC8A5CD /* GoogleService-Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; name = "GoogleService-Info.plist"; path = "Runner/GoogleService-Info.plist"; sourceTree = "<group>"; };
+		E91B0001E91B0001E91B0001 /* OmiBleEnergyPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OmiBleEnergyPolicy.swift; sourceTree = "<group>"; };
+		E91C0001E91C0001E91C0001 /* OmiBlePairingPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OmiBlePairingPolicy.swift; sourceTree = "<group>"; };
+		E91D0001E91D0001E91D0001 /* OmiBleDiscoveryNaming.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OmiBleDiscoveryNaming.swift; sourceTree = "<group>"; };
+		E92325919D0DC3CE5C5D508B /* OnDeviceParakeet.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = OnDeviceParakeet.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		EDFF6508A941E8259906DDE2 /* Pods-Runner.debug-dev.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.debug-dev.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.debug-dev.xcconfig"; sourceTree = "<group>"; };
 		EF770A936DE2AA63387FD198 /* devLaunchScreen.storyboard */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = file.storyboard; name = devLaunchScreen.storyboard; path = Runner/devLaunchScreen.storyboard; sourceTree = "<group>"; };
-		78E0A7A72DC9AD7400C4905E /* FlutterGeneratedPluginSwiftPackage */ = {isa = PBXFileReference; lastKnownFileType = wrapper; name = FlutterGeneratedPluginSwiftPackage; path = Flutter/ephemeral/Packages/FlutterGeneratedPluginSwiftPackage; sourceTree = "<group>"; };
+		F5D14DCA5CCF1F3CB05D36D2 /* SiriEntities.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SiriEntities.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -310,6 +440,15 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		742AEDCC712DA46E080EECEA /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				8F3D76EC32FD8D0885EA0C77 /* Foundation.framework in Frameworks */,
+				E76D251E02DC0D96235B7674 /* FluidAudio in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -344,6 +483,16 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		0875F1D562BFF0E543689BD5 /* LiveActivity */ = {
+			isa = PBXGroup;
+			children = (
+				39E21825B797F6BEAD08E6C3 /* OmiCaptureAttributes.swift */,
+				A832E7FCE2964D801A4EB21F /* OmiCaptureIntents.swift */,
+			);
+			name = LiveActivity;
+			path = LiveActivity;
+			sourceTree = "<group>";
+		};
 		0C49E6672202A57A856CB534 /* BatteryWidget */ = {
 			isa = PBXGroup;
 			children = (
@@ -352,6 +501,9 @@
 				7B0B70AE9FE08165F2A53E0B /* SharedDefaults.swift */,
 				A19E38726A3D1BBD89696C57 /* BatteryWidget.entitlements */,
 				585D7D8307721A4D6595AA27 /* Assets.xcassets */,
+				1B1B260455B26BF846102B80 /* OmiCaptureLiveActivity.swift */,
+				9BFFBC8C660B65EEFE79C220 /* OmiHomeWidgets.swift */,
+				B7E1D0A1B7E1D0A1B7E1D0A1 /* Localizable.xcstrings */,
 			);
 			path = BatteryWidget;
 			sourceTree = "<group>";
@@ -371,6 +523,15 @@
 			name = Frameworks;
 			sourceTree = "<group>";
 		};
+		407DABA232BF4A9F3B36B206 /* LiveActivity */ = {
+			isa = PBXGroup;
+			children = (
+				643D3C8DFDC4F37DC79C2E11 /* LiveActivityManager.swift */,
+			);
+			name = LiveActivity;
+			path = LiveActivity;
+			sourceTree = "<group>";
+		};
 		42BABFC02F2A81B100E78A3C /* PhoneCalls */ = {
 			isa = PBXGroup;
 			children = (
@@ -386,6 +547,30 @@
 				42BABFCE2F2A81B100E78A3C /* OmiRegionCheck.swift */,
 			);
 			path = PhoneCalls;
+			sourceTree = "<group>";
+		};
+		54A3E14E101F49A2536F4645 /* OnDeviceParakeet */ = {
+			isa = PBXGroup;
+			children = (
+				C760640FBCB3A75ED43A12E8 /* ParakeetBridge.swift */,
+			);
+			name = OnDeviceParakeet;
+			path = OnDeviceParakeet;
+			sourceTree = "<group>";
+		};
+		5C18084533C28B26479F7275 /* SiriIntegration */ = {
+			isa = PBXGroup;
+			children = (
+				50BD5A208177AB3828AC0828 /* SiriPigeon.g.swift */,
+				037C2E4049E0EF06EF66231A /* SiriSession.swift */,
+				F5D14DCA5CCF1F3CB05D36D2 /* SiriEntities.swift */,
+				B586798536A270D779BECE19 /* SiriSnapshotStore.swift */,
+				04725A34C6451C370260A182 /* SiriBridge.swift */,
+				E222EF675661E5A68C84D45B /* SiriIntents.swift */,
+				D289F7085D97C1A955A86231 /* SiriDebugProbe.swift */,
+			);
+			name = SiriIntegration;
+			path = SiriIntegration;
 			sourceTree = "<group>";
 		};
 		68E21E60C4FBF7F520F1D656 /* Pods */ = {
@@ -411,6 +596,7 @@
 			isa = PBXGroup;
 			children = (
 				31D5B906D56C4FDBBCCFF403 /* Foundation.framework */,
+				82DE8158621D83F62D86F7C4 /* Foundation.framework */,
 			);
 			name = iOS;
 			sourceTree = "<group>";
@@ -452,6 +638,8 @@
 				EF770A936DE2AA63387FD198 /* devLaunchScreen.storyboard */,
 				E7A9F5F37DDF9FA87AC8A5CD /* GoogleService-Info.plist */,
 				0C49E6672202A57A856CB534 /* BatteryWidget */,
+				0875F1D562BFF0E543689BD5 /* LiveActivity */,
+				54A3E14E101F49A2536F4645 /* OnDeviceParakeet */,
 			);
 			sourceTree = "<group>";
 		};
@@ -462,6 +650,7 @@
 				42A7BA342E788BD300138969 /* omiWatchApp.app */,
 				90E45FFB3093C995950509B7 /* BatteryWidget.appex */,
 				8AF672E55033617EF994D1BD /* Runner.app */,
+				E92325919D0DC3CE5C5D508B /* OnDeviceParakeet.framework */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -491,12 +680,26 @@
 				1498D2321E8E86230040F4C2 /* GeneratedPluginRegistrant.h */,
 				1498D2331E8E89220040F4C2 /* GeneratedPluginRegistrant.m */,
 				74858FAE1ED2DC5600515810 /* AppDelegate.swift */,
+				A5F00001A5F00001A5F00001 /* SafeFoundationSinks.swift */,
+				51794E0151794E0151794E01 /* SyncTransferBackgroundLease.swift */,
+				7AA100000000000000000003 /* TtsMp3Decoder.c */,
+				7AA100000000000000000004 /* TtsMp3Decoder.h */,
+				7AA100000000000000000005 /* minimp3.h */,
+				7AA100000000000000000008 /* TtsPcmPlayer.swift */,
 				E1293503E1293503E1293503 /* SpeechDeadline.swift */,
+				A2047903A2047903A2047903 /* WatchAudioChunkRelay.swift */,
+				A2047910A2047910A2047910 /* WatchRecordingStore.swift */,
+				D71C4A0A2F0A11E700DE7000 /* DeviceToolsService.swift */,
+				C4A7D0E0C4A7D0E0C4A7D0E0 /* ChatVideoSampler.swift */,
 				CD12345678901234567890CD /* AppleRemindersService.swift */,
 				CD12345678901234567890CE /* AppleHealthService.swift */,
 				7A3F1C2E9B4D5E6F0A1B2C3D /* FlutterLaunchEngineGuard.swift */,
 				74858FAD1ED2DC5600515810 /* Runner-Bridging-Header.h */,
 				6436409C27A31CD800820AF7 /* InfoPlist.strings */,
+				407DABA232BF4A9F3B36B206 /* LiveActivity */,
+				5C18084533C28B26479F7275 /* SiriIntegration */,
+				1C6263EDCD49BFDBF52353A6 /* OmiSceneDelegate.swift */,
+				6F972B4450EC1589187A56A5 /* OnDeviceOverflowPlugin.swift */,
 			);
 			path = Runner;
 			sourceTree = "<group>";
@@ -505,6 +708,12 @@
 			isa = PBXGroup;
 			children = (
 				E91B0001E91B0001E91B0001 /* OmiBleEnergyPolicy.swift */,
+				56F18562DF5D43B1890404F7 /* OmiDeviceHealthStore.swift */,
+				DAD10001DAD10001DAD10001 /* OmiBleConnectionPolicy.swift */,
+				CAD20001CAD20001CAD20001 /* OmiBleCaptureSession.swift */,
+				CAD10001CAD10001CAD10001 /* OmiCaptureHealth.swift */,
+				E91C0001E91C0001E91C0001 /* OmiBlePairingPolicy.swift */,
+				E91D0001E91D0001E91D0001 /* OmiBleDiscoveryNaming.swift */,
 				42B17C612F69B9CF00BFDA9D /* OmiBleManager.swift */,
 				42B17C632F69B9E100BFDA9D /* BleHostApiImpl.swift */,
 			);
@@ -555,11 +764,22 @@
 				BAADF00DF00DF00DF00DFD0B /* PhoneMicBatchAudioWriter.swift */,
 				BAADF00DF00DF00DF00DFD0C /* PhoneMicOpusShim.h */,
 				BAADF00DF00DF00DF00DFD0D /* PhoneMicOpusShim.m */,
+				BAADF00DF00DF00DF00DFD1E /* PhoneMicControllerSeams.swift */,
 			);
 			path = PhoneMic;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
+
+/* Begin PBXHeadersBuildPhase section */
+		ECA28DEFE3A2A1E1430C49F5 /* Headers */ = {
+			isa = PBXHeadersBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXHeadersBuildPhase section */
 
 /* Begin PBXNativeTarget section */
 		3694FB15CC003101A7A13878 /* RunnerRayBanDat */ = {
@@ -571,11 +791,13 @@
 				A39438EBCDB909113855E505 /* Sources */,
 				C82A98EF678B6558928D2B66 /* Frameworks */,
 				86C81B2505549CDA309E429B /* Resources */,
+				84317A1F9CC5D75F9718DFFF /* Embed Frameworks */,
 				5E566183C4137FBADE4077BD /* Thin Binary */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				125ABDF68E94C9307FA4A098 /* PBXTargetDependency */,
 			);
 			name = RunnerRayBanDat;
 			packageProductDependencies = (
@@ -606,6 +828,27 @@
 			productReference = 42A7BA342E788BD300138969 /* omiWatchApp.app */;
 			productType = "com.apple.product-type.application";
 		};
+		506967ADB2ABD96BEACF9D4A /* OnDeviceParakeet */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 9DDF621C8C83D6A111082F99 /* Build configuration list for PBXNativeTarget "OnDeviceParakeet" */;
+			buildPhases = (
+				ECA28DEFE3A2A1E1430C49F5 /* Headers */,
+				4D2F51614D6F9014F06E4D2E /* Sources */,
+				742AEDCC712DA46E080EECEA /* Frameworks */,
+				D5B683EFA5B615698A3996BF /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = OnDeviceParakeet;
+			packageProductDependencies = (
+				6223166F8A8178093600E4FC /* FluidAudio */,
+			);
+			productName = OnDeviceParakeet;
+			productReference = E92325919D0DC3CE5C5D508B /* OnDeviceParakeet.framework */;
+			productType = "com.apple.product-type.framework";
+		};
 		58BC30995C676AAADF2F0F6A /* BatteryWidget */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = B7CDB3A5F465F0D4654188E3 /* Build configuration list for PBXNativeTarget "BatteryWidget" */;
@@ -624,9 +867,6 @@
 			productType = "com.apple.product-type.app-extension";
 		};
 		97C146ED1CF9000F007C117D /* Runner */ = {
-			packageProductDependencies = (
-				78A3181F2AECB46A00862997 /* FlutterGeneratedPluginSwiftPackage */,
-			);
 			isa = PBXNativeTarget;
 			buildConfigurationList = 97C147051CF9000F007C117D /* Build configuration list for PBXNativeTarget "Runner" */;
 			buildPhases = (
@@ -648,8 +888,12 @@
 			dependencies = (
 				468E5B26D379E32080A67B11 /* PBXTargetDependency */,
 				42A7BA3D2E788BD400138969 /* PBXTargetDependency */,
+				1B68AB4818069364EC004248 /* PBXTargetDependency */,
 			);
 			name = Runner;
+			packageProductDependencies = (
+				78A3181F2AECB46A00862997 /* FlutterGeneratedPluginSwiftPackage */,
+			);
 			productName = Runner;
 			productReference = 97C146EE1CF9000F007C117D /* Runner.app */;
 			productType = "com.apple.product-type.application";
@@ -683,8 +927,9 @@
 			);
 			mainGroup = 97C146E51CF9000F007C117D;
 			packageReferences = (
-				781AD8BC2B33823900A9FFBB /* XCLocalSwiftPackageReference "Flutter/ephemeral/Packages/FlutterGeneratedPluginSwiftPackage" */,
+				781AD8BC2B33823900A9FFBB /* XCLocalSwiftPackageReference "FlutterGeneratedPluginSwiftPackage" */,
 				8728540C6BEE8F267DB063FD /* XCRemoteSwiftPackageReference "meta-wearables-dat-ios" */,
+				0B6BC14B09BBD89D62C8B3B2 /* XCRemoteSwiftPackageReference "FluidAudio" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 97C146EF1CF9000F007C117D /* Products */;
@@ -695,6 +940,7 @@
 				42A7BA332E788BD300138969 /* omiWatchApp */,
 				58BC30995C676AAADF2F0F6A /* BatteryWidget */,
 				3694FB15CC003101A7A13878 /* RunnerRayBanDat */,
+				506967ADB2ABD96BEACF9D4A /* OnDeviceParakeet */,
 			);
 		};
 /* End PBXProject section */
@@ -728,6 +974,7 @@
 				DD6F1E8CA4013B6A267D5DD2 /* prodLaunchScreen.storyboard in Resources */,
 				431C5CAEC909BB0043406A09 /* devLaunchScreen.storyboard in Resources */,
 				51EC531CFC451A317C883EBA /* GoogleService-Info.plist in Resources */,
+				5C1D4C59DAD0780D7B679D6D /* Localizable.xcstrings in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -736,6 +983,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				CB6580ED5AD268A053F41EB7 /* Assets.xcassets in Resources */,
+				B7E1D0A2B7E1D0A2B7E1D0A2 /* Localizable.xcstrings in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -760,6 +1008,14 @@
 				CE7B938264FB7372447F8E21 /* prodLaunchScreen.storyboard in Resources */,
 				FAD7504969BE8B6F6D8D0BD1 /* devLaunchScreen.storyboard in Resources */,
 				16935068EFFE77C62C493C3C /* GoogleService-Info.plist in Resources */,
+				706F05FDF2E05DA66960E710 /* Localizable.xcstrings in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D5B683EFA5B615698A3996BF /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -935,6 +1191,16 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A2047914A2047914A2047914 /* SafeFoundationSinks.swift in Sources */,
+				A2047913A2047913A2047913 /* WatchRecordingStore.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		4D2F51614D6F9014F06E4D2E /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				28226BBFBA254816D50D723C /* ParakeetBridge.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -942,9 +1208,23 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A2047911A2047911A2047911 /* WatchRecordingStore.swift in Sources */,
 				74858FAF1ED2DC5600515810 /* AppDelegate.swift in Sources */,
+				A5F00002A5F00002A5F00002 /* SafeFoundationSinks.swift in Sources */,
+				51794E0351794E0351794E03 /* SyncTransferBackgroundLease.swift in Sources */,
+				7AA100000000000000000001 /* TtsMp3Decoder.c in Sources */,
+				7AA100000000000000000006 /* TtsPcmPlayer.swift in Sources */,
 				E1293501E1293501E1293501 /* SpeechDeadline.swift in Sources */,
+				A2047901A2047901A2047901 /* WatchAudioChunkRelay.swift in Sources */,
 				E91B0002E91B0002E91B0002 /* OmiBleEnergyPolicy.swift in Sources */,
+				387657874D0C4CD5BAE2E8F1 /* OmiDeviceHealthStore.swift in Sources */,
+				DAD10002DAD10002DAD10002 /* OmiBleConnectionPolicy.swift in Sources */,
+				CAD20002CAD20002CAD20002 /* OmiBleCaptureSession.swift in Sources */,
+				CAD10002CAD10002CAD10002 /* OmiCaptureHealth.swift in Sources */,
+				E91C0002E91C0002E91C0002 /* OmiBlePairingPolicy.swift in Sources */,
+				E91D0002E91D0002E91D0002 /* OmiBleDiscoveryNaming.swift in Sources */,
+				D71C4A0B2F0A11E700DE7001 /* DeviceToolsService.swift in Sources */,
+				C4A7D0E1C4A7D0E1C4A7D0E1 /* ChatVideoSampler.swift in Sources */,
 				42B17C622F69B9CF00BFDA9D /* OmiBleManager.swift in Sources */,
 				BAADF00DF00DF00DF00DF0D2 /* BatchAudioWriter.swift in Sources */,
 				BAADF00DF00DF00DF00DF0D4 /* BaseBatchAudioWriter.swift in Sources */,
@@ -969,6 +1249,7 @@
 				BAADF00DF00DF00DF00DFD1A /* PhoneMicOpusEncoder.swift in Sources */,
 				BAADF00DF00DF00DF00DFD1B /* PhoneMicBatchAudioWriter.swift in Sources */,
 				BAADF00DF00DF00DF00DFD1D /* PhoneMicOpusShim.m in Sources */,
+				BAADF00DF00DF00DF00DFD1F /* PhoneMicControllerSeams.swift in Sources */,
 				42BABFB82F2A81B100E78A3C /* OmiRecordingAudioDevice.swift in Sources */,
 				42BABFB92F2A81B100E78A3C /* OmiPhoneCallsPlugin.swift in Sources */,
 				42BABFD12F2A82AA00E78A3C /* OmiAudioEventCoalescer.swift in Sources */,
@@ -982,6 +1263,18 @@
 				1498D2341E8E89220040F4C2 /* GeneratedPluginRegistrant.m in Sources */,
 				4255287D2E7C4B8300FD5CFB /* RecorderHostApiImpl.swift in Sources */,
 				42B17C7C2F69BC6600BFDA9D /* PigeonCommunicator.g.swift in Sources */,
+				369B31A8217B2FEE8CEB4B22 /* OmiCaptureAttributes.swift in Sources */,
+				261E5A36C62DAF7938874E94 /* OmiCaptureIntents.swift in Sources */,
+				8003A15D092653E251FDD8E5 /* LiveActivityManager.swift in Sources */,
+				431670FD4CC27AE9A43EB1EA /* SiriPigeon.g.swift in Sources */,
+				D988BCB88D5D696871753297 /* SiriSession.swift in Sources */,
+				89220BD57775CE7DEA3EFCA6 /* SiriEntities.swift in Sources */,
+				BDAE310219125E12BCD121BA /* SiriSnapshotStore.swift in Sources */,
+				6F05FE70A6EBD0F070295CEC /* SiriBridge.swift in Sources */,
+				1954F61FBABF92ACCFDBFFE4 /* SiriIntents.swift in Sources */,
+				F51480F9BEB79F68A8D7E013 /* SiriDebugProbe.swift in Sources */,
+				B18CDB03AF83DDF556D15E77 /* OmiSceneDelegate.swift in Sources */,
+				B7883E81CA463D5714C4CF55 /* OnDeviceOverflowPlugin.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -989,9 +1282,23 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A2047912A2047912A2047912 /* WatchRecordingStore.swift in Sources */,
 				873C99F3D85C142369688A1D /* AppDelegate.swift in Sources */,
+				A5F00004A5F00004A5F00004 /* SafeFoundationSinks.swift in Sources */,
+				51794E0451794E0451794E04 /* SyncTransferBackgroundLease.swift in Sources */,
+				7AA100000000000000000002 /* TtsMp3Decoder.c in Sources */,
+				7AA100000000000000000007 /* TtsPcmPlayer.swift in Sources */,
 				E1293502E1293502E1293502 /* SpeechDeadline.swift in Sources */,
+				A2047902A2047902A2047902 /* WatchAudioChunkRelay.swift in Sources */,
 				E91B0003E91B0003E91B0003 /* OmiBleEnergyPolicy.swift in Sources */,
+				9C1738D70A50495EA3AFADF5 /* OmiDeviceHealthStore.swift in Sources */,
+				DAD10003DAD10003DAD10003 /* OmiBleConnectionPolicy.swift in Sources */,
+				CAD20003CAD20003CAD20003 /* OmiBleCaptureSession.swift in Sources */,
+				CAD10003CAD10003CAD10003 /* OmiCaptureHealth.swift in Sources */,
+				E91C0003E91C0003E91C0003 /* OmiBlePairingPolicy.swift in Sources */,
+				E91D0003E91D0003E91D0003 /* OmiBleDiscoveryNaming.swift in Sources */,
+				D71C4A0C2F0A11E700DE7002 /* DeviceToolsService.swift in Sources */,
+				C4A7D0E2C4A7D0E2C4A7D0E2 /* ChatVideoSampler.swift in Sources */,
 				99ADCEC5933A6FA3EE3AAE5D /* OmiBleManager.swift in Sources */,
 				0658C1BEFC86B56785C10A69 /* BatchAudioWriter.swift in Sources */,
 				BB125CDB70C0DB5AAFB15E9C /* BaseBatchAudioWriter.swift in Sources */,
@@ -1013,6 +1320,7 @@
 				2AE34400DB52FFE4BE215840 /* PhoneMicInterruptionMonitor.swift in Sources */,
 				9EF175369890F17FC6D78D03 /* PhoneMicEventEmitter.swift in Sources */,
 				6382AF22C65ED5A1AA482ECD /* PhoneMicHostApiImpl.swift in Sources */,
+				CAFEF00DF00DF00DF00DF001 /* PhoneMicControllerSeams.swift in Sources */,
 				B94F29DDABCC004D34ADA4EA /* PhoneMicOpusEncoder.swift in Sources */,
 				83D001C5192F68F4DD76AB23 /* PhoneMicBatchAudioWriter.swift in Sources */,
 				7B703A24854FEB9BACB52CCA /* PhoneMicOpusShim.m in Sources */,
@@ -1029,6 +1337,18 @@
 				B07ABDD2736E2C87A59FB5E1 /* GeneratedPluginRegistrant.m in Sources */,
 				5B5A7C09B854EF0BFB2C4D18 /* RecorderHostApiImpl.swift in Sources */,
 				15BE32846414AB444D807D9B /* PigeonCommunicator.g.swift in Sources */,
+				4177FE2DA51D5720F8F5D01E /* OmiCaptureAttributes.swift in Sources */,
+				8BD6DEAF00C1D7FBA1706D20 /* OmiCaptureIntents.swift in Sources */,
+				A64BDCA35736F648E69CBF74 /* LiveActivityManager.swift in Sources */,
+				2A0DF503EBD959F1F386CE33 /* SiriPigeon.g.swift in Sources */,
+				056C8F8B6E91AEA3B8868E99 /* SiriSession.swift in Sources */,
+				1E4FA985AB866DBCBB524FFB /* SiriEntities.swift in Sources */,
+				B4A52A3CDB5EA39D8D74DD31 /* SiriSnapshotStore.swift in Sources */,
+				98887352D51033DF9C804DCE /* SiriBridge.swift in Sources */,
+				46952FC3097F824B13B04DB4 /* SiriIntents.swift in Sources */,
+				971A83B53D79AF7EE1BF4B95 /* SiriDebugProbe.swift in Sources */,
+				69ED47586D3BAD8E9BD57BC5 /* OmiSceneDelegate.swift in Sources */,
+				E3EBE5F3951B8B2945870160 /* OnDeviceOverflowPlugin.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1037,14 +1357,31 @@
 			buildActionMask = 2147483647;
 			files = (
 				7BB46D8ED545353079641366 /* BatteryWidget.swift in Sources */,
+				A5F00003A5F00003A5F00003 /* SafeFoundationSinks.swift in Sources */,
 				A014F817EA8AFCDD9EECCEF5 /* BatteryWidgetBundle.swift in Sources */,
 				2424617E08011B02F15737C3 /* SharedDefaults.swift in Sources */,
+				728AD3B9CE56CAD614E49BC8 /* OmiCaptureAttributes.swift in Sources */,
+				ECDFF5DC9FC101351FF5730A /* OmiCaptureIntents.swift in Sources */,
+				AFD5C0DF5AE115C934B37047 /* OmiCaptureLiveActivity.swift in Sources */,
+				DE48ED224FF11175DA9FFC6A /* OmiHomeWidgets.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
+		125ABDF68E94C9307FA4A098 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = OnDeviceParakeet;
+			target = 506967ADB2ABD96BEACF9D4A /* OnDeviceParakeet */;
+			targetProxy = F2F04FBF7BDFB52E22398B44 /* PBXContainerItemProxy */;
+		};
+		1B68AB4818069364EC004248 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = OnDeviceParakeet;
+			target = 506967ADB2ABD96BEACF9D4A /* OnDeviceParakeet */;
+			targetProxy = E240497DAB24184852DC60F8 /* PBXContainerItemProxy */;
+		};
 		42A7BA3D2E788BD400138969 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			platformFilter = iphoneos;
@@ -1097,7 +1434,7 @@
 				CODE_SIGN_ENTITLEMENTS = "Runner/RunnerDebug-prod.entitlements";
 				DEVELOPMENT_TEAM = 9536L8KLMP;
 				INFOPLIST_KEY_CFBundleDisplayName = Omi;
-				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_IDENTIFIER)";
 				PRODUCT_NAME = Runner;
 				TARGETED_DEVICE_FAMILY = 1;
@@ -1116,7 +1453,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 9536L8KLMP;
 				INFOPLIST_KEY_CFBundleDisplayName = Omi;
-				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_IDENTIFIER)";
 				PRODUCT_NAME = Runner;
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -1134,7 +1471,7 @@
 				CODE_SIGN_ENTITLEMENTS = "Runner/RunnerRelease-prod.entitlements";
 				DEVELOPMENT_TEAM = 9536L8KLMP;
 				INFOPLIST_KEY_CFBundleDisplayName = Omi;
-				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_IDENTIFIER)";
 				PRODUCT_NAME = Runner;
 				TARGETED_DEVICE_FAMILY = 1;
@@ -1151,7 +1488,7 @@
 				CODE_SIGN_ENTITLEMENTS = "Runner/RunnerDebug-dev.entitlements";
 				DEVELOPMENT_TEAM = 9536L8KLMP;
 				INFOPLIST_KEY_CFBundleDisplayName = Omi;
-				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_IDENTIFIER)";
 				PRODUCT_NAME = Runner;
 				TARGETED_DEVICE_FAMILY = 1;
@@ -1168,7 +1505,7 @@
 				CODE_SIGN_ENTITLEMENTS = "Runner/RunnerProfile-dev.entitlements";
 				DEVELOPMENT_TEAM = 9536L8KLMP;
 				INFOPLIST_KEY_CFBundleDisplayName = Omi;
-				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_IDENTIFIER)";
 				PRODUCT_NAME = Runner;
 				TARGETED_DEVICE_FAMILY = 1;
@@ -1187,13 +1524,64 @@
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 9536L8KLMP;
 				INFOPLIST_KEY_CFBundleDisplayName = Omi;
-				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_IDENTIFIER)";
 				PRODUCT_NAME = Runner;
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				TARGETED_DEVICE_FAMILY = 1;
 			};
 			name = "Release-dev";
+		};
+		1069F902A9AEDF96F669DD01 /* Release-raybanDat */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEFINES_MODULE = YES;
+				DYLIB_COMPATIBILITY_VERSION = 1;
+				DYLIB_CURRENT_VERSION = 1;
+				DYLIB_INSTALL_NAME_BASE = "@rpath";
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_NAME = "$(TARGET_NAME:c99extidentifier)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
+				VERSIONING_SYSTEM = "apple-generic";
+				VERSION_INFO_PREFIX = "";
+			};
+			name = "Release-raybanDat";
+		};
+		1983123BF562CB5E581E77F9 /* Debug-raybanDat */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEFINES_MODULE = YES;
+				DYLIB_COMPATIBILITY_VERSION = 1;
+				DYLIB_CURRENT_VERSION = 1;
+				DYLIB_INSTALL_NAME_BASE = "@rpath";
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_NAME = "$(TARGET_NAME:c99extidentifier)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VERSIONING_SYSTEM = "apple-generic";
+				VERSION_INFO_PREFIX = "";
+			};
+			name = "Debug-raybanDat";
 		};
 		2489CD259F4A43CE54324CC2 /* Release-raybanDat */ = {
 			isa = XCBuildConfiguration;
@@ -1259,7 +1647,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				SDKROOT = iphoneos;
 				SUPPORTED_PLATFORMS = "iphonesimulator iphoneos";
@@ -1290,7 +1678,7 @@
 				);
 				INFOPLIST_FILE = Runner/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Omi;
-				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -1436,7 +1824,7 @@
 					"@executable_path/../../Frameworks",
 				);
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
-				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_IDENTIFIER).development.widget";
+				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_IDENTIFIER).widget";
 				PRODUCT_NAME = BatteryWidget;
 				SDKROOT = iphoneos;
 				SKIP_INSTALL = YES;
@@ -1446,6 +1834,37 @@
 				TARGETED_DEVICE_FAMILY = 1;
 			};
 			name = "Debug-dev";
+		};
+		40506B7D49964D3B227D29A9 /* Profile-dev */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGNING_ALLOWED = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEFINES_MODULE = YES;
+				DYLIB_COMPATIBILITY_VERSION = 1;
+				DYLIB_CURRENT_VERSION = 1;
+				DYLIB_INSTALL_NAME_BASE = "@rpath";
+				GENERATE_INFOPLIST_FILE = YES;
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.omi.on-device.parakeet";
+				PRODUCT_NAME = "$(TARGET_NAME:c99extidentifier)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
+				VERSIONING_SYSTEM = "apple-generic";
+				VERSION_INFO_PREFIX = "";
+			};
+			name = "Profile-dev";
 		};
 		424B8138E0C64AD78C3EF67F /* Profile-raybanDat */ = {
 			isa = XCBuildConfiguration;
@@ -1807,8 +2226,8 @@
 				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
 				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
 				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
-				CODE_SIGN_STYLE = Automatic;
 				CODE_SIGNING_ALLOWED = NO;
+				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 9536L8KLMP;
 				ENABLE_PREVIEWS = YES;
@@ -1863,7 +2282,6 @@
 				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
 				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
 				CODE_SIGN_STYLE = Automatic;
-				CODE_SIGNING_ALLOWED = NO;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 9536L8KLMP;
 				ENABLE_PREVIEWS = YES;
@@ -1917,7 +2335,6 @@
 				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
 				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
 				CODE_SIGN_STYLE = Automatic;
-				CODE_SIGNING_ALLOWED = NO;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 9536L8KLMP;
 				ENABLE_PREVIEWS = YES;
@@ -2054,6 +2471,66 @@
 			};
 			name = "Profile-raybanDat";
 		};
+		5EFF8B2BFD22BB469E07BFE7 /* Debug-dev */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGNING_ALLOWED = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEFINES_MODULE = YES;
+				DYLIB_COMPATIBILITY_VERSION = 1;
+				DYLIB_CURRENT_VERSION = 1;
+				DYLIB_INSTALL_NAME_BASE = "@rpath";
+				GENERATE_INFOPLIST_FILE = YES;
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.omi.on-device.parakeet";
+				PRODUCT_NAME = "$(TARGET_NAME:c99extidentifier)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VERSIONING_SYSTEM = "apple-generic";
+				VERSION_INFO_PREFIX = "";
+			};
+			name = "Debug-dev";
+		};
+		629EDF2C3A783C14F525E9BA /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGNING_ALLOWED = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEFINES_MODULE = YES;
+				DYLIB_COMPATIBILITY_VERSION = 1;
+				DYLIB_CURRENT_VERSION = 1;
+				DYLIB_INSTALL_NAME_BASE = "@rpath";
+				GENERATE_INFOPLIST_FILE = YES;
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.omi.on-device.parakeet";
+				PRODUCT_NAME = "$(TARGET_NAME:c99extidentifier)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VERSIONING_SYSTEM = "apple-generic";
+				VERSION_INFO_PREFIX = "";
+			};
+			name = Debug;
+		};
 		6603F5DD00A2EBB051A6061F /* Profile */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -2081,6 +2558,37 @@
 				VALIDATE_PRODUCT = YES;
 			};
 			name = Profile;
+		};
+		6C5EA7F896530F5ABDBE2D6F /* Profile-prod */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGNING_ALLOWED = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEFINES_MODULE = YES;
+				DYLIB_COMPATIBILITY_VERSION = 1;
+				DYLIB_CURRENT_VERSION = 1;
+				DYLIB_INSTALL_NAME_BASE = "@rpath";
+				GENERATE_INFOPLIST_FILE = YES;
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.omi.on-device.parakeet";
+				PRODUCT_NAME = "$(TARGET_NAME:c99extidentifier)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
+				VERSIONING_SYSTEM = "apple-generic";
+				VERSION_INFO_PREFIX = "";
+			};
+			name = "Profile-prod";
 		};
 		70741DA5D2AC42F2DBC488AA /* Debug-prod */ = {
 			isa = XCBuildConfiguration;
@@ -2139,7 +2647,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				INFOPLIST_FILE = Runner/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -2159,6 +2667,37 @@
 			};
 			name = "Debug-prod";
 		};
+		805029BB9E85917534342061 /* Release-dev */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGNING_ALLOWED = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEFINES_MODULE = YES;
+				DYLIB_COMPATIBILITY_VERSION = 1;
+				DYLIB_CURRENT_VERSION = 1;
+				DYLIB_INSTALL_NAME_BASE = "@rpath";
+				GENERATE_INFOPLIST_FILE = YES;
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.omi.on-device.parakeet";
+				PRODUCT_NAME = "$(TARGET_NAME:c99extidentifier)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
+				VERSIONING_SYSTEM = "apple-generic";
+				VERSION_INFO_PREFIX = "";
+			};
+			name = "Release-dev";
+		};
 		80B80B8193844076960AC42D /* Profile-dev */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -2176,7 +2715,7 @@
 					"@executable_path/../../Frameworks",
 				);
 				MTL_ENABLE_DEBUG_INFO = NO;
-				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_IDENTIFIER).development.widget";
+				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_IDENTIFIER).widget";
 				PRODUCT_NAME = BatteryWidget;
 				SDKROOT = iphoneos;
 				SKIP_INSTALL = YES;
@@ -2258,6 +2797,32 @@
 			};
 			name = "Release-raybanDat";
 		};
+		86771116AEBC6E085C8AFCA0 /* Profile-raybanDat */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEFINES_MODULE = YES;
+				DYLIB_COMPATIBILITY_VERSION = 1;
+				DYLIB_CURRENT_VERSION = 1;
+				DYLIB_INSTALL_NAME_BASE = "@rpath";
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_NAME = "$(TARGET_NAME:c99extidentifier)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
+				VERSIONING_SYSTEM = "apple-generic";
+				VERSION_INFO_PREFIX = "";
+			};
+			name = "Profile-raybanDat";
+		};
 		87AC190EF56E10A72B9307AD /* Release-prod */ = {
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 35656BCB5CBAA7C0BB162EE0 /* prodRelease.xcconfig */;
@@ -2308,7 +2873,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				INFOPLIST_FILE = Runner/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -2378,7 +2943,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = iphoneos;
@@ -2430,7 +2995,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
 				MTL_ENABLE_DEBUG_INFO = YES;
 				SDKROOT = iphoneos;
 				SUPPORTED_PLATFORMS = "iphonesimulator iphoneos";
@@ -2461,7 +3026,7 @@
 				);
 				INFOPLIST_FILE = Runner/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Omi;
-				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -2508,7 +3073,7 @@
 				);
 				INFOPLIST_FILE = Runner/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Omi;
-				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -2603,7 +3168,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				INFOPLIST_FILE = Runner/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -2651,6 +3216,36 @@
 				VALIDATE_PRODUCT = YES;
 			};
 			name = "Profile-prod";
+		};
+		CB1E5F30E72B1CC1EE8269E6 /* Debug-prod */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGNING_ALLOWED = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEFINES_MODULE = YES;
+				DYLIB_COMPATIBILITY_VERSION = 1;
+				DYLIB_CURRENT_VERSION = 1;
+				DYLIB_INSTALL_NAME_BASE = "@rpath";
+				GENERATE_INFOPLIST_FILE = YES;
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.omi.on-device.parakeet";
+				PRODUCT_NAME = "$(TARGET_NAME:c99extidentifier)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VERSIONING_SYSTEM = "apple-generic";
+				VERSION_INFO_PREFIX = "";
+			};
+			name = "Debug-prod";
 		};
 		D1183803B1196D13F4909685 /* Profile-dev */ = {
 			isa = XCBuildConfiguration;
@@ -2703,7 +3298,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				INFOPLIST_FILE = Runner/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -2722,6 +3317,68 @@
 				VALIDATE_PRODUCT = YES;
 			};
 			name = "Profile-dev";
+		};
+		D7D9312EC390FDB59FD052E3 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGNING_ALLOWED = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEFINES_MODULE = YES;
+				DYLIB_COMPATIBILITY_VERSION = 1;
+				DYLIB_CURRENT_VERSION = 1;
+				DYLIB_INSTALL_NAME_BASE = "@rpath";
+				GENERATE_INFOPLIST_FILE = YES;
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.omi.on-device.parakeet";
+				PRODUCT_NAME = "$(TARGET_NAME:c99extidentifier)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
+				VERSIONING_SYSTEM = "apple-generic";
+				VERSION_INFO_PREFIX = "";
+			};
+			name = Release;
+		};
+		DA67E419A21C8158345AE6CC /* Release-prod */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGNING_ALLOWED = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEFINES_MODULE = YES;
+				DYLIB_COMPATIBILITY_VERSION = 1;
+				DYLIB_CURRENT_VERSION = 1;
+				DYLIB_INSTALL_NAME_BASE = "@rpath";
+				GENERATE_INFOPLIST_FILE = YES;
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.omi.on-device.parakeet";
+				PRODUCT_NAME = "$(TARGET_NAME:c99extidentifier)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
+				VERSIONING_SYSTEM = "apple-generic";
+				VERSION_INFO_PREFIX = "";
+			};
+			name = "Release-prod";
 		};
 		DA7DA7DA7DA7DA7DA7DA7001 /* Debug */ = {
 			isa = XCBuildConfiguration;
@@ -2783,6 +3440,37 @@
 			};
 			name = Release;
 		};
+		DB8F34AFB8318FF25AE79F60 /* Profile */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGNING_ALLOWED = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEFINES_MODULE = YES;
+				DYLIB_COMPATIBILITY_VERSION = 1;
+				DYLIB_CURRENT_VERSION = 1;
+				DYLIB_INSTALL_NAME_BASE = "@rpath";
+				GENERATE_INFOPLIST_FILE = YES;
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.omi.on-device.parakeet";
+				PRODUCT_NAME = "$(TARGET_NAME:c99extidentifier)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
+				VERSIONING_SYSTEM = "apple-generic";
+				VERSION_INFO_PREFIX = "";
+			};
+			name = Profile;
+		};
 		E22FF20645C7AF0B6EE6EFF2 /* Release-dev */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -2800,7 +3488,7 @@
 					"@executable_path/../../Frameworks",
 				);
 				MTL_ENABLE_DEBUG_INFO = NO;
-				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_IDENTIFIER).development.widget";
+				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_IDENTIFIER).widget";
 				PRODUCT_NAME = BatteryWidget;
 				SDKROOT = iphoneos;
 				SKIP_INSTALL = YES;
@@ -2862,7 +3550,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				INFOPLIST_FILE = Runner/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -2995,7 +3683,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				INFOPLIST_FILE = Runner/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -3082,6 +3770,25 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = "Release-raybanDat";
 		};
+		9DDF621C8C83D6A111082F99 /* Build configuration list for PBXNativeTarget "OnDeviceParakeet" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				D7D9312EC390FDB59FD052E3 /* Release */,
+				629EDF2C3A783C14F525E9BA /* Debug */,
+				DB8F34AFB8318FF25AE79F60 /* Profile */,
+				CB1E5F30E72B1CC1EE8269E6 /* Debug-prod */,
+				6C5EA7F896530F5ABDBE2D6F /* Profile-prod */,
+				DA67E419A21C8158345AE6CC /* Release-prod */,
+				5EFF8B2BFD22BB469E07BFE7 /* Debug-dev */,
+				40506B7D49964D3B227D29A9 /* Profile-dev */,
+				805029BB9E85917534342061 /* Release-dev */,
+				1983123BF562CB5E581E77F9 /* Debug-raybanDat */,
+				86771116AEBC6E085C8AFCA0 /* Profile-raybanDat */,
+				1069F902A9AEDF96F669DD01 /* Release-raybanDat */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		B7CDB3A5F465F0D4654188E3 /* Build configuration list for PBXNativeTarget "BatteryWidget" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
@@ -3100,7 +3807,22 @@
 		};
 /* End XCConfigurationList section */
 
+/* Begin XCLocalSwiftPackageReference section */
+		781AD8BC2B33823900A9FFBB /* XCLocalSwiftPackageReference "FlutterGeneratedPluginSwiftPackage" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Flutter/ephemeral/Packages/FlutterGeneratedPluginSwiftPackage;
+		};
+/* End XCLocalSwiftPackageReference section */
+
 /* Begin XCRemoteSwiftPackageReference section */
+		0B6BC14B09BBD89D62C8B3B2 /* XCRemoteSwiftPackageReference "FluidAudio" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/FluidInference/FluidAudio.git";
+			requirement = {
+				kind = revision;
+				revision = 19600a485baa4998812e4654b70d2bab8f2c9949;
+			};
+		};
 		8728540C6BEE8F267DB063FD /* XCRemoteSwiftPackageReference "meta-wearables-dat-ios" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/facebook/meta-wearables-dat-ios";
@@ -3112,6 +3834,15 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		6223166F8A8178093600E4FC /* FluidAudio */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 0B6BC14B09BBD89D62C8B3B2 /* XCRemoteSwiftPackageReference "FluidAudio" */;
+			productName = FluidAudio;
+		};
+		78A3181F2AECB46A00862997 /* FlutterGeneratedPluginSwiftPackage */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = FlutterGeneratedPluginSwiftPackage;
+		};
 		E640392A2909606360520801 /* MWDATCamera */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 8728540C6BEE8F267DB063FD /* XCRemoteSwiftPackageReference "meta-wearables-dat-ios" */;
@@ -3122,17 +3853,7 @@
 			package = 8728540C6BEE8F267DB063FD /* XCRemoteSwiftPackageReference "meta-wearables-dat-ios" */;
 			productName = MWDATCore;
 		};
-		78A3181F2AECB46A00862997 /* FlutterGeneratedPluginSwiftPackage */ = {
-			isa = XCSwiftPackageProductDependency;
-			productName = FlutterGeneratedPluginSwiftPackage;
-		};
 /* End XCSwiftPackageProductDependency section */
-/* Begin XCLocalSwiftPackageReference section */
-		781AD8BC2B33823900A9FFBB /* XCLocalSwiftPackageReference "Flutter/ephemeral/Packages/FlutterGeneratedPluginSwiftPackage" */ = {
-			isa = XCLocalSwiftPackageReference;
-			relativePath = Flutter/ephemeral/Packages/FlutterGeneratedPluginSwiftPackage;
-		};
-/* End XCLocalSwiftPackageReference section */
 	};
 	rootObject = 97C146E61CF9000F007C117D /* Project object */;
 }

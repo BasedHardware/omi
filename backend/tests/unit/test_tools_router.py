@@ -107,12 +107,15 @@ _SYS_MODULE_NAMES = [
     "utils.conversations.render",
     "utils.conversations.factory",
     "utils.conversations.search",
+    "utils.conversations.mcp_transcript_search",
     "utils.conversations.transcript_chunks",
+    "utils.conversations.transcript_for_llm",
     "utils.retrieval",
     "utils.retrieval.tools",
     "utils.retrieval.tools.calendar_tools",
     "utils.retrieval.safety",
     "utils.retrieval.tool_services",
+    "utils.retrieval.memory_evidence",
     "utils.retrieval.tool_services.conversations",
     "utils.retrieval.tool_services.memories",
     "utils.retrieval.tool_services.action_items",
@@ -156,6 +159,8 @@ for mod_name in [
     if mod_name not in sys.modules:
         _stub_module(mod_name)
 
+sys.modules["database.auth"].get_user_name = MagicMock(return_value="Test User")
+
 # Stub database packages
 _stub_package("database")
 sys.modules["database._client"].db = MagicMock()
@@ -190,6 +195,7 @@ action_items_db.update_action_item = MagicMock(return_value=True)
 # Stub database.notifications
 notifications_db = _stub_module("database.notifications")
 notifications_db.get_user_time_zone = MagicMock(return_value="UTC")
+importlib.import_module("database").notifications = notifications_db
 
 # Stub notifications
 notif_mod = _stub_module("utils.notifications")
@@ -206,6 +212,8 @@ _stub_package("utils.retrieval.tools")
 _stub_package("utils.retrieval.tool_services")
 _stub_package("utils.other")
 _stub_package("utils.memory")
+transcript_for_llm_stub = _stub_module("utils.conversations.transcript_for_llm")
+transcript_for_llm_stub.owner_safe_transcript_segments = lambda segments, **_kwargs: (list(segments), "")
 
 memory_service_stub = _stub_module("utils.memory.memory_service")
 
@@ -304,10 +312,35 @@ def _merge_conversation_search_ids(keyword_ids, vector_ids):
 
 
 search_mod.merge_conversation_search_ids = MagicMock(side_effect=_merge_conversation_search_ids)
+transcript_search_mod = _stub_module("utils.conversations.mcp_transcript_search")
+
+
+class _ChatTranscriptSearch:
+    def __init__(self, rows, searched):
+        self.rows = rows
+        self.searched = searched
+
+    @property
+    def conversation_ids(self):
+        return list(dict.fromkeys(row['conversation_id'] for row in self.rows))
+
+
+transcript_search_mod.ChatTranscriptSearch = _ChatTranscriptSearch
+transcript_search_mod.chat_transcript_coverage_note = MagicMock(return_value="Transcript coverage is partial.")
+transcript_search_mod.chat_transcript_excerpts = MagicMock(return_value={})
+transcript_search_mod.merge_chat_conversation_ids = MagicMock(
+    side_effect=lambda keywords, transcripts, vectors, limit: list(dict.fromkeys(keywords + transcripts + vectors))[
+        : limit * 2
+    ]
+)
+transcript_search_mod.merge_summary_and_transcript_ids = MagicMock(
+    side_effect=lambda chunk_ids, summary_ids, limit: list(dict.fromkeys(chunk_ids + summary_ids))[:limit]
+)
+transcript_search_mod.search_chat_transcript_chunks = MagicMock(return_value=_ChatTranscriptSearch([], False))
 transcript_chunks_mod = _stub_module("utils.conversations.transcript_chunks")
 
 
-def _hydrate_chunk_texts(_uid, conversations):
+def _hydrate_chunk_texts(_uid, conversations, *, clock=None):
     return conversations
 
 
@@ -328,6 +361,12 @@ def reset_conversation_search_stubs():
     transcript_chunks_mod.hydrate_chunk_texts.side_effect = _hydrate_chunk_texts
     vector_db.search_transcript_chunks.reset_mock()
     vector_db.search_transcript_chunks.return_value = []
+    transcript_search_mod.search_chat_transcript_chunks.reset_mock()
+    transcript_search_mod.search_chat_transcript_chunks.return_value = _ChatTranscriptSearch([], False)
+    transcript_search_mod.chat_transcript_excerpts.reset_mock()
+    transcript_search_mod.chat_transcript_excerpts.side_effect = None
+    transcript_search_mod.chat_transcript_excerpts.return_value = {}
+    transcript_search_mod.merge_chat_conversation_ids.reset_mock()
 
 
 endpoints_mod = _stub_module("utils.other.endpoints")
@@ -403,6 +442,8 @@ memories_model_mod.MemoryDB = FakeMemoryDB
 sys.path.insert(0, str(BACKEND_DIR))
 
 # Now load the shared service modules
+_load_module_from_file("utils.model_text", BACKEND_DIR / "utils" / "model_text.py")
+_load_module_from_file("utils.user_clock", BACKEND_DIR / "utils" / "user_clock.py")
 retrieval_safety = _load_module_from_file(
     "utils.retrieval.safety",
     BACKEND_DIR / "utils" / "retrieval" / "safety.py",
@@ -410,6 +451,10 @@ retrieval_safety = _load_module_from_file(
 conversations_svc = _load_module_from_file(
     "utils.retrieval.tool_services.conversations",
     BACKEND_DIR / "utils" / "retrieval" / "tool_services" / "conversations.py",
+)
+memory_evidence = _load_module_from_file(
+    "utils.retrieval.memory_evidence",
+    BACKEND_DIR / "utils" / "retrieval" / "memory_evidence.py",
 )
 memories_svc = _load_module_from_file(
     "utils.retrieval.tool_services.memories",
@@ -431,6 +476,7 @@ rate_limit_config_mod = _load_module_from_file(
 # Restore sys.modules now that the modules under test are imported and bound to
 # their stubbed dependencies. Tests below patch those module objects directly.
 restore_sys_modules(_SYS_MODULES_SNAPSHOT)
+importlib.import_module("database").notifications = notifications_db
 del _SYS_MODULES_SNAPSHOT, _SYS_MODULE_NAMES
 
 
@@ -539,7 +585,8 @@ class TestGetConversationsText:
             end_date="2024-01-31T23:59:59Z",
         )
         assert "No conversations found" in result
-        assert "2024-01" in result
+        assert "Mon 1 Jan 2024" in result
+        assert "Wed 31 Jan 2024" in result
 
     def test_invalid_start_date(self):
         result = conversations_svc.get_conversations_text(uid="test-uid", start_date="bad-date")
@@ -635,6 +682,80 @@ class TestSearchConversationsText:
         conversations_db.get_conversations_by_id.reset_mock()
         conversations_db.get_conversations_by_id.return_value = []
 
+    def test_transcript_only_hit_adds_verbatim_evidence_and_source_preview(self):
+        transcript_search_mod.search_chat_transcript_chunks.return_value = _ChatTranscriptSearch(
+            [{'conversation_id': 'spoken-only', 'chunk_index': 0}], True
+        )
+        transcript_search_mod.chat_transcript_excerpts.return_value = {'spoken-only': 'User: The invoice was $47.'}
+        conversations_db.get_conversations_by_id.return_value = [
+            {
+                'id': 'spoken-only',
+                'transcript_segments': [{'text': 'The invoice was $47.'}],
+                'structured': types.SimpleNamespace(title='Billing', overview='Generic summary'),
+                'created_at': datetime(2026, 8, 18, tzinfo=timezone.utc),
+            }
+        ]
+        embeddings = MagicMock()
+        embeddings.embed_query.return_value = [0.5]
+        sources = []
+        with patch.object(vector_db, 'index', object(), create=True), patch.object(
+            vector_db, 'embeddings', embeddings, create=True
+        ):
+            result = conversations_svc.search_conversations_text(
+                uid='test-uid', query='invoice amount', source_sink=sources
+            )
+        conversations_db.get_conversations_by_id.assert_called_once_with(
+            'test-uid', ['spoken-only'], include_discarded=True
+        )
+        assert embeddings.embed_query.call_count == 1
+        assert vector_db.query_vectors.call_args.kwargs['query_vector'] == [0.5]
+        assert transcript_search_mod.search_chat_transcript_chunks.call_args.kwargs['query_vector'] == [0.5]
+        assert 'The invoice was $47' in result
+        assert sources[0]['source_id'] == 'spoken-only'
+        assert sources[0]['preview'] == 'User: The invoice was $47.'
+
+    def test_stale_transcript_hit_outside_date_filter_is_not_rendered(self):
+        transcript_search_mod.search_chat_transcript_chunks.return_value = _ChatTranscriptSearch(
+            [{'conversation_id': 'stale', 'chunk_index': 0}], True
+        )
+        conversations_db.get_conversations_by_id.return_value = [{'id': 'stale', 'transcript_segments': []}]
+        search_mod.conversation_matches_date_range.return_value = False
+        embeddings = MagicMock()
+        embeddings.embed_query.return_value = [0.5]
+        with patch.object(vector_db, 'index', object(), create=True), patch.object(
+            vector_db, 'embeddings', embeddings, create=True
+        ):
+            result = conversations_svc.search_conversations_text(uid='test-uid', query='invoice')
+        assert 'No conversations found' in result
+        transcript_search_mod.chat_transcript_excerpts.assert_not_called()
+
+    def test_exact_reference_miss_does_not_claim_transcript_index_unavailable(self):
+        conversation_id = 'e8c05000-52f0-4a95-951c-ccd715523429'
+        search_mod.parse_exact_conversation_reference.return_value = conversation_id
+        result = conversations_svc.search_conversations_text(uid='test-uid', query=conversation_id)
+        assert 'No conversations found' in result
+        assert 'Transcript text was not searched' not in result
+        assert 'Transcript coverage is partial' not in result
+
+    def test_unrenderable_hit_does_not_leak_transcript_excerpt(self):
+        transcript_search_mod.search_chat_transcript_chunks.return_value = _ChatTranscriptSearch(
+            [{'conversation_id': 'broken', 'chunk_index': 0}], True
+        )
+        transcript_search_mod.chat_transcript_excerpts.side_effect = lambda rows, _search: (
+            {'broken': 'Secret excerpt'} if rows else {}
+        )
+        conversations_db.get_conversations_by_id.return_value = [{'id': 'broken', 'transcript_segments': []}]
+        embeddings = MagicMock()
+        embeddings.embed_query.return_value = [0.5]
+        with patch.object(
+            conversations_svc, 'deserialize_conversation', side_effect=ValueError('invalid')
+        ), patch.object(vector_db, 'index', object(), create=True), patch.object(
+            vector_db, 'embeddings', embeddings, create=True
+        ):
+            result = conversations_svc.search_conversations_text(uid='test-uid', query='invoice')
+        assert 'Secret excerpt' not in result
+        assert transcript_search_mod.chat_transcript_excerpts.call_args.args[0] == []
+
     def test_no_results(self):
         result = conversations_svc.search_conversations_text(uid="test-uid", query="test query")
         assert "No conversations found" in result
@@ -650,7 +771,7 @@ class TestSearchConversationsText:
             {'id': 'conv-1', 'transcript_segments': []},
         ]
         result = conversations_svc.search_conversations_text(uid="test-uid", query="test query")
-        assert "Found" in result
+        assert "1 nearest conversations" in result
         assert "1 conversations formatted" in result
 
     def test_exact_reference_bypasses_keyword_and_vector_search(self):
@@ -668,7 +789,9 @@ class TestSearchConversationsText:
         assert "1 conversations formatted" in result
         search_mod.keyword_search_conversation_ids.assert_not_called()
         vector_db.query_vectors.assert_not_called()
-        conversations_db.get_conversations_by_id.assert_called_once_with("test-uid", [conversation_id])
+        conversations_db.get_conversations_by_id.assert_called_once_with(
+            "test-uid", [conversation_id], include_discarded=True
+        )
 
     def test_exact_reference_respects_date_filter(self):
         conversation_id = "e8c05000-52f0-4a95-951c-ccd715523429"
@@ -719,7 +842,7 @@ class TestGetMemoriesText:
             {'id': 'mem-2', 'content': 'locked', 'is_locked': True, 'created_at': datetime.now(timezone.utc)},
         ]
         result = memories_svc.get_memories_text(uid="test-uid")
-        assert "1 total" in result
+        assert "1 shown" in result
 
     def test_limit_cap(self):
         memories_svc.get_memories_text(uid="test-uid", limit=99999)
@@ -991,6 +1114,31 @@ class TestRouterEndpoints:
         body = resp.json()
         assert body["tool_name"] == "search_conversations"
 
+    def test_search_conversations_endpoint_returns_transcript_only_source(self):
+        transcript_search_mod.search_chat_transcript_chunks.return_value = _ChatTranscriptSearch(
+            [{'conversation_id': 'spoken-only', 'chunk_index': 0}], True
+        )
+        transcript_search_mod.chat_transcript_excerpts.return_value = {'spoken-only': 'User: The invoice was $47.'}
+        conversations_db.get_conversations_by_id.return_value = [
+            {
+                'id': 'spoken-only',
+                'transcript_segments': [{'text': 'The invoice was $47.'}],
+                'structured': types.SimpleNamespace(title='Billing', overview='Generic summary'),
+                'created_at': datetime(2026, 8, 18, tzinfo=timezone.utc),
+            }
+        ]
+        embeddings = MagicMock()
+        embeddings.embed_query.return_value = [0.5]
+        with patch.object(vector_db, 'index', object(), create=True), patch.object(
+            vector_db, 'embeddings', embeddings, create=True
+        ):
+            resp = self.client.post('/v1/tools/conversations/search', json={'query': 'invoice amount'})
+        assert resp.status_code == 200
+        body = resp.json()
+        assert 'The invoice was $47.' in body['result_text']
+        assert body['sources'][0]['source_id'] == 'spoken-only'
+        assert body['sources'][0]['preview'] == 'User: The invoice was $47.'
+
     def test_get_memories_endpoint(self):
         resp = self.client.get("/v1/tools/memories")
         assert resp.status_code == 200
@@ -1127,7 +1275,7 @@ class TestRouterEndpoints:
         vector_db.search_transcript_chunks.return_value = [
             {'conversation_id': 'conv-a', 'chunk_index': 0, 'created_at': 1722500000, 'score': 0.9},
         ]
-        transcript_chunks_mod.hydrate_chunk_texts.side_effect = lambda _uid, rows: [
+        transcript_chunks_mod.hydrate_chunk_texts.side_effect = lambda _uid, rows, *, clock=None: [
             {
                 **r,
                 'text': '[Conversation on 01 Aug 2024, 08:53]\nUser: the beta shipped',
@@ -1171,7 +1319,9 @@ class TestSearchConversationChunksSources:
         return router_mod.ToolResponse.model_validate(result)
 
     def _hydrate_with(self, **fields):
-        transcript_chunks_mod.hydrate_chunk_texts.side_effect = lambda _uid, rows: [{**r, **fields} for r in rows]
+        transcript_chunks_mod.hydrate_chunk_texts.side_effect = lambda _uid, rows, *, clock=None: [
+            {**r, **fields} for r in rows
+        ]
 
     def test_sources_carry_parent_conversation_id_and_dedupe_by_conversation(self):
         vector_db.search_transcript_chunks.return_value = [
@@ -1330,7 +1480,7 @@ class TestSearchMemoriesLockedFiltering:
         result = memories_svc.search_memories_text(uid="test-uid", query="test")
         assert "visible" in result
         assert "locked" not in result
-        assert "1 memories" in result
+        assert "1 shown" in result
 
     def test_search_memories_all_locked_returns_empty(self):
         """All locked memories in search returns 'no memories' message."""
@@ -1376,19 +1526,19 @@ class TestErrorHandling:
         vector_db.query_vectors.side_effect = None
 
     def test_get_memories_db_error(self):
-        """DB failure in get_memories returns error text."""
+        """DB failures return a generic message without internal details."""
         memories_db.get_memories.side_effect = Exception("Firestore down")
         result = memories_svc.get_memories_text(uid="test-uid")
-        assert "Error" in result
-        assert "Firestore down" in result
+        assert result == "Error retrieving memories. Please try again."
+        assert "Firestore down" not in result
         memories_db.get_memories.side_effect = None
 
     def test_search_memories_vector_error(self):
-        """Vector DB failure in search_memories returns error text."""
+        """Vector DB failures do not expose internal exception details."""
         vector_db.find_similar_memories.side_effect = Exception("Vector timeout")
         result = memories_svc.search_memories_text(uid="test-uid", query="test")
-        assert "Error" in result
-        assert "Vector timeout" in result
+        assert result == "Error searching memories. Please try again."
+        assert "Vector timeout" not in result
         vector_db.find_similar_memories.side_effect = None
 
     def test_get_action_items_db_error(self):

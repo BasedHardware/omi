@@ -1,7 +1,16 @@
 import { useEffect, useState } from 'react'
 import { omiApi } from '../lib/apiClient'
-import { fetchAllMemoriesPaged } from '../lib/memoriesBulk'
-import { cache, hydrateFromDisk, publish, subscribers } from '../lib/memoriesCache'
+import {
+  canonicalLifecycleFromResponse,
+  fetchAllMemoriesPaged,
+  type MemoriesResponse
+} from '../lib/memoriesBulk'
+import {
+  cache,
+  hydrateFromDisk,
+  publish,
+  subscribers,
+} from '../lib/memoriesCache'
 import { getCacheUid } from '../lib/persistentCache'
 import {
   parseKnowledgeLedgerMemory,
@@ -11,22 +20,20 @@ import {
 /** Memory is the legacy adapter plus optional knowledge_ledger.v1 fields. */
 export type Memory = KnowledgeLedgerMemory
 
-// Axios lowercases response header keys.
-const CANONICAL_LIFECYCLE_HEADER = 'x-omi-memory-canonical-lifecycle-exposed'
-
 // Optional extra fields for a created memory. `tags` carries provenance (e.g.
 // 'omi-app-index'); `category` is sent best-effort — the server may ignore or
 // reassign it, so UI coloring must not depend on it.
 export type CreateMemoryExtra = { category?: string; tags?: string[] }
 
 // Fetch EVERY memory for the page via the shared pager (server page cap 500).
-// Read canonical-lifecycle capability header off the first response; sort
+// Read the existing device-scope capability (paired with lifecycle); sort
 // newest-first because the server does not guarantee created_at order.
 async function fetchMemories(): Promise<Memory[]> {
-  const list = await fetchAllMemoriesPaged((r) => {
-    const header = r.headers?.[CANONICAL_LIFECYCLE_HEADER]
-    if (typeof header === 'string') cache.canonicalLifecycleExposed = header === 'true'
-  })
+  const onResponse = (r: MemoriesResponse): void => {
+    const lifecycleExposed = canonicalLifecycleFromResponse(r)
+    if (lifecycleExposed !== null) cache.canonicalLifecycleExposed = lifecycleExposed
+  }
+  const list = await fetchAllMemoriesPaged(onResponse)
   return list
     .map(parseKnowledgeLedgerMemory)
     .filter((memory): memory is Memory => memory !== null)
@@ -63,11 +70,8 @@ export function useMemories(): {
   memories: Memory[]
   loading: boolean
   error: string | null
-  // True only when the server advertises canonical memory tiering for this
-  // account. Gates the tier/device filters so they never render against a
-  // backend that would return nothing (prod runs MEMORY_MODE=off). Read at
-  // render time — every change to it lands alongside a list publish, which
-  // forces the re-render that surfaces the new value.
+  // True when the existing device-scope capability establishes lifecycle.
+  // Gates the layer filter, including for empty accounts.
   canonicalLifecycleExposed: boolean
   createMemory: (content: string, extra?: CreateMemoryExtra) => Promise<void>
   editMemory: (id: string, content: string) => Promise<void>
@@ -171,7 +175,9 @@ export function useMemories(): {
   const deleteMemory = async (id: string): Promise<void> => {
     const originUid = getCacheUid()
     const prev = cache.list ?? []
-    publish(prev.filter((m) => m.id !== id))
+    publish(
+      prev.filter((m) => m.id !== id),
+      )
     try {
       await omiApi.delete(`/v3/memories/${id}`)
     } catch (e) {

@@ -34,7 +34,8 @@ enum MemoryHubDestination: Int, CaseIterable, Identifiable {
     case .memories: return "brain.head.profile"
     case .conversations: return "text.bubble"
     case .brainMap: return "point.3.connected.trianglepath.dotted"
-    case .activity: return "clock.arrow.circlepath"
+    // Activity and Rewind used to share `clock.arrow.circlepath`; that glyph belongs to Rewind.
+    case .activity: return "calendar.day.timeline.leading"
     case .rewind: return "clock.arrow.circlepath"
     }
   }
@@ -53,6 +54,17 @@ enum MemoryHubDestination: Int, CaseIterable, Identifiable {
     default:
       return nil
     }
+  }
+
+  /// Resolves an automation `navigate` name into the hub page it must show.
+  /// `ChatFirstRoute.automationVisibilityDestination(named:)` owns the shell
+  /// route — both Conversations and Memories land on the one `.memories`
+  /// route — so the bridge must also select the hub page or the persisted
+  /// default (`memories`) wins and a named Conversations target opens
+  /// Memories instead.
+  static func destination(forAutomationTarget target: String) -> MemoryHubDestination? {
+    guard let item = SidebarNavItem.automationDestination(named: target) else { return nil }
+    return destination(for: item)
   }
 
   static func apply(

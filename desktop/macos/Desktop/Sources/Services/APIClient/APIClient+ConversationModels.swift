@@ -144,17 +144,95 @@ struct CaptureConversationAudio: Codable, Equatable {
   }
 }
 
+/// Conversations from different capture surfaces (desktop, pendant, phone) that
+/// recorded one event. Server-authored only after the captures are shown to
+/// share speech; `id` is the event identity and survives a change of primary.
+struct ServerCaptureGroup: Codable, Equatable {
+  struct Member: Codable, Equatable {
+    let id: String
+    let source: ConversationSource
+    let startedAt: Date?
+    let finishedAt: Date?
+  }
+
+  let id: String
+  let primaryId: String
+  let revision: Int
+  let members: [Member]
+
+  init(id: String, primaryId: String, revision: Int, members: [Member]) {
+    self.id = id
+    self.primaryId = primaryId
+    self.revision = revision
+    self.members = members
+  }
+
+  init(_ wire: OmiAPI.CaptureGroup) {
+    let formatter = ISO8601DateFormatter()
+    formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    let fallback = ISO8601DateFormatter()
+    let date = { (raw: String?) in raw.flatMap { formatter.date(from: $0) ?? fallback.date(from: $0) } }
+    id = wire.id
+    primaryId = wire.primaryId
+    revision = wire.revision ?? 1
+    members = (wire.members ?? []).map {
+      Member(
+        id: $0.id, source: $0.source.flatMap(ConversationSource.init(rawValue:)) ?? .unknown,
+        startedAt: date($0.startedAt), finishedAt: date($0.finishedAt))
+    }
+  }
+}
+
+/// One list row per capture group, built only from rows the client has loaded.
+///
+/// Every member stays in the loaded list (paging offsets count server rows), so
+/// a member whose group has no other loaded member is shown as itself: grouping
+/// can hide a duplicate, never a conversation.
+enum CaptureGroupPresentation {
+  static func collapse(_ conversations: [ServerConversation]) -> [ServerConversation] {
+    let representatives = representativeIds(conversations)
+    return conversations.filter { conversation in
+      guard let group = conversation.captureGroup, let representative = representatives[group.id] else {
+        return true
+      }
+      return representative == conversation.id
+    }
+  }
+
+  /// Group id → the member shown for it, for groups with at least two loaded members.
+  private static func representativeIds(_ conversations: [ServerConversation]) -> [String: String] {
+    var loaded: [String: [ServerConversation]] = [:]
+    for conversation in conversations {
+      if let groupId = conversation.captureGroup?.id {
+        loaded[groupId, default: []].append(conversation)
+      }
+    }
+    var result: [String: String] = [:]
+    for (groupId, members) in loaded where members.count > 1 {
+      let primary = members.first { $0.id == $0.captureGroup?.primaryId }
+      result[groupId] = (primary ?? members[0]).id
+    }
+    return result
+  }
+}
+
 struct ServerConversation: Codable, Identifiable, Equatable {
   static func == (lhs: ServerConversation, rhs: ServerConversation) -> Bool {
     lhs.id == rhs.id && lhs.createdAt == rhs.createdAt && lhs.updatedAt == rhs.updatedAt
       && lhs.startedAt == rhs.startedAt
       && lhs.finishedAt == rhs.finishedAt && lhs.structured == rhs.structured
       && lhs.status == rhs.status && lhs.discarded == rhs.discarded && lhs.deleted == rhs.deleted
-      && lhs.isLocked == rhs.isLocked && lhs.starred == rhs.starred && lhs.folderId == rhs.folderId
+      && lhs.isLocked == rhs.isLocked && lhs.visibility == rhs.visibility
+      && lhs.starred == rhs.starred && lhs.folderId == rhs.folderId
       && lhs.source == rhs.source
       && lhs.audioFiles == rhs.audioFiles
       && lhs.conversationAudio == rhs.conversationAudio
       && lhs.transcriptSegmentsIncluded == rhs.transcriptSegmentsIncluded
+      && lhs.localSummary == rhs.localSummary
+      && lhs.captureGroup == rhs.captureGroup
+      && lhs.audioTimelineVersion == rhs.audioTimelineVersion
+      && lhs.createdFromSegments == rhs.createdFromSegments
+      && lhs.meetingIdentity == rhs.meetingIdentity
   }
 
   let id: String
@@ -165,6 +243,8 @@ struct ServerConversation: Codable, Identifiable, Equatable {
   let finishedAt: Date?
 
   var structured: Structured
+  /// Attribution for the selected display-only on-device summary.
+  var localSummary: ConversationLocalSummary?
   var transcriptSegments: [TranscriptSegment]
   var transcriptSegmentsIncluded: Bool
   let geolocation: Geolocation?
@@ -179,17 +259,26 @@ struct ServerConversation: Codable, Identifiable, Equatable {
   /// bounded adapter.
   let audioFiles: [CaptureAudioFile]
   let conversationAudio: CaptureConversationAudio?
+  /// Provenance needed to decide whether transcript offsets have a stable wall-clock origin.
+  let audioTimelineVersion: Int?
+  /// Desktop `/from-segments` conversations anchor offsets to the client session start.
+  let createdFromSegments: Bool
+  /// Only explicit calendar identity can qualify a conversation as prior-meeting evidence.
+  let meetingIdentity: ConversationMeetingIdentity?
 
   let status: ConversationStatus
   let discarded: Bool
   let deleted: Bool
   let isLocked: Bool
+  let visibility: String
   var starred: Bool
   let folderId: String?
   let inputDeviceName: String?
   // Lazy processing: true while only the raw transcript is stored (no LLM summary yet);
   // cleared once enriched on first open (get_conversation_by_id).
   let deferred: Bool
+  /// Cross-surface event membership; nil for a conversation captured by one surface.
+  var captureGroup: ServerCaptureGroup?
 
   enum CodingKeys: String, CodingKey {
     case id
@@ -198,6 +287,7 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     case startedAt = "started_at"
     case finishedAt = "finished_at"
     case structured
+    case localSummary = "local_summary"
     case transcriptSegments = "transcript_segments"
     case geolocation
     case photos
@@ -208,6 +298,7 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     case discarded
     case deleted
     case isLocked = "is_locked"
+    case visibility
     case starred
     case folderId = "folder_id"
     case inputDeviceName = "input_device_name"
@@ -219,15 +310,25 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     // The domain model adapts wire string-dates into Date via the APIClient
     // decoder's ISO8601 strategy, preserves tolerant defaults, and tracks
     // whether transcript_segments was present in the response.
-    let wire = try OmiAPI.Conversation(from: decoder)
+    let wire = try ConversationProjectionRendering.decodeWire(from: decoder)
     let container = try decoder.container(keyedBy: CodingKeys.self)
 
     id = wire.id
     createdAt = try Self.parseDate(wire.createdAt, decoder: decoder)
     updatedAt = try container.decodeIfPresent(Date.self, forKey: .updatedAt)
-    startedAt = try Self.parseOptionalDate(wire.startedAt, decoder: decoder)
-    finishedAt = try Self.parseOptionalDate(wire.finishedAt, decoder: decoder)
-    structured = Structured(wire.structured)
+    // Microsecond precision: `started_at` is the origin of the screenshot selection fingerprint
+    // the server stamps, and a formatter that stops at milliseconds disagrees with it.
+    startedAt = try Self.parseOptionalDate(wire.startedAt, decoder: decoder).map {
+      Self.restoringMicroseconds(of: wire.startedAt, to: $0)
+    }
+    finishedAt = try Self.parseOptionalDate(wire.finishedAt, decoder: decoder).map {
+      Self.restoringMicroseconds(of: wire.finishedAt, to: $0)
+    }
+    let rendered = ConversationProjectionRendering.resolve(
+      wire, transcriptIncluded: container.contains(.transcriptSegments))
+    structured = rendered.structured
+    localSummary =
+      try rendered.localSummary ?? container.decodeIfPresent(ConversationLocalSummary.self, forKey: .localSummary)
     // container.contains distinguishes `"transcript_segments": null` (present,
     // empty) from the key being absent (omitted). wire.transcriptSegments is
     // nil for both, so we must check the container directly.
@@ -240,14 +341,24 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     language = wire.language
     audioFiles = (wire.audioFiles ?? []).map(CaptureAudioFile.init)
     conversationAudio = wire.conversationAudio.map(CaptureConversationAudio.init)
+    audioTimelineVersion = wire.audioTimeline?.version
+    createdFromSegments =
+      (wire.externalData?["from_segments_client_session_id"]?.value as? String)?.isEmpty == false
+    meetingIdentity =
+      ConversationMeetingIdentity(calendarContext: wire.externalData?["calendar_meeting_context"]?.value)
+      ?? wire.calendarEvent.map(ConversationMeetingIdentity.init)
     status = wire.status.map { ConversationStatus(rawValue: $0.rawValue) ?? .completed } ?? .completed
     discarded = wire.discarded ?? false
     deleted = false  // backend REST Conversation schema does not expose deleted
     isLocked = wire.isLocked ?? false
+    // Visibility is optional on older payloads. A malformed Siri-only field
+    // must not reject the entire app conversation page.
+    visibility = (try? container.decode(String.self, forKey: .visibility)) ?? "private"
     starred = wire.starred ?? false
     folderId = wire.folderId
     inputDeviceName = wire.clientDeviceId
     deferred = wire.deferred ?? false
+    captureGroup = wire.captureGroup.map(ServerCaptureGroup.init)
   }
 
   // Date helpers shared with Event/Structured adapters.
@@ -272,6 +383,18 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     return try parseDate(s, decoder: decoder)
   }
 
+  /// `ISO8601DateFormatter` keeps three fractional digits. Re-apply the wire's sub-millisecond
+  /// digits (up to microseconds, which is all Firestore and Python carry) to the parsed instant.
+  static func restoringMicroseconds(of wire: String?, to parsed: Date) -> Date {
+    guard let wire,
+      let range = wire.range(of: #"(?<=T\d{2}:\d{2}:\d{2}\.)\d{4,}"#, options: .regularExpression)
+    else { return parsed }
+    let digits = String(wire[range].prefix(6)).padding(toLength: 6, withPad: "0", startingAt: 0)
+    guard let microseconds = Int64(digits) else { return parsed }
+    let wholeSeconds = parsed.timeIntervalSince1970.rounded(.down)
+    return Date(timeIntervalSince1970: wholeSeconds + Double(microseconds) / 1_000_000)
+  }
+
   /// Memberwise initializer for creating from local storage
   init(
     id: String,
@@ -289,14 +412,20 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     language: String?,
     audioFiles: [CaptureAudioFile] = [],
     conversationAudio: CaptureConversationAudio? = nil,
+    audioTimelineVersion: Int? = nil,
+    createdFromSegments: Bool = false,
+    meetingIdentity: ConversationMeetingIdentity? = nil,
     status: ConversationStatus,
     discarded: Bool,
     deleted: Bool,
     isLocked: Bool,
+    visibility: String = "private",
     starred: Bool,
     folderId: String?,
     inputDeviceName: String?,
-    deferred: Bool = false
+    deferred: Bool = false,
+    localSummary: ConversationLocalSummary? = nil,
+    captureGroup: ServerCaptureGroup? = nil
   ) {
     self.id = id
     self.createdAt = createdAt
@@ -304,6 +433,7 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     self.startedAt = startedAt
     self.finishedAt = finishedAt
     self.structured = structured
+    self.localSummary = localSummary
     self.transcriptSegments = transcriptSegments
     self.transcriptSegmentsIncluded = transcriptSegmentsIncluded
     self.geolocation = geolocation
@@ -313,14 +443,19 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     self.language = language
     self.audioFiles = audioFiles
     self.conversationAudio = conversationAudio
+    self.audioTimelineVersion = audioTimelineVersion
+    self.createdFromSegments = createdFromSegments
+    self.meetingIdentity = meetingIdentity
     self.status = status
     self.discarded = discarded
     self.deleted = deleted
     self.isLocked = isLocked
+    self.visibility = visibility
     self.starred = starred
     self.folderId = folderId
     self.inputDeviceName = inputDeviceName
     self.deferred = deferred
+    self.captureGroup = captureGroup
   }
 
   /// Returns the title from structured data, or a fallback.
@@ -357,8 +492,13 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     case .failed:
       return .failed
     case .completed:
-      if !structured.title.isEmpty {
-        return .titled(structured.title)
+      // Display-only citation repair (`[s01234]`, `Speaker_00` in legacy titles); rename
+      // edits `structured.title`. A title that is only debris reads as untitled.
+      let title = ConversationSummarySelection.presentableTitle(
+        structured.title, segments: transcriptSegments
+      ).trimmingCharacters(in: .whitespacesAndNewlines)
+      if !title.isEmpty {
+        return .titled(title)
       }
       // Heuristic: a "real" conversation has at least one transcript segment
       // long enough to plausibly have content (≥ 5 words). Below that, it's
@@ -394,7 +534,10 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     switch displayState {
     case .titled(let title): return title
     case .processing, .awaitingFirstOpen: return provisionalTitle
-    case .locked: return "Locked"
+    // Matches the badge's waiting copy; rows/header that show the badge skip
+    // the title text so the pill is not duplicated beside itself. Plain-string
+    // callers (Spine tiles, link lists, accessibility) still get honest copy.
+    case .locked: return "Saved and waiting"
     case .failed: return "Failed to process"
     case .untitledRecoverable, .untitledEmpty: return "Untitled"
     }
@@ -455,23 +598,15 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     return span
   }
 
-  /// Formatted duration string (e.g., "5m 30s")
+  /// Formatted duration string ("8s", "5m 30s", "1h 5m").
   var formattedDuration: String {
-    let duration = durationInSeconds
-    let minutes = duration / 60
-    let seconds = duration % 60
-    if minutes > 0 {
-      return "\(minutes)m \(seconds)s"
-    }
-    return "\(seconds)s"
+    OmiDateFormat.duration(Double(durationInSeconds))
   }
 
-  /// Full transcript as a single string
+  /// Full transcript as a single string, speakers unnamed ("You", "Speaker N"). Surfaces that know
+  /// the user's people use `SpeakerLabelFormatter(people:).transcript(_:)` instead.
   var transcript: String {
-    transcriptSegments.map { segment in
-      let speaker = segment.isUser ? "You" : "Speaker \(segment.speakerId)"
-      return "\(speaker): \(segment.text)"
-    }.joined(separator: "\n\n")
+    SpeakerLabelFormatter(names: [:]).transcript(transcriptSegments)
   }
 
   var transcriptPresenceState: TranscriptPresenceState {
@@ -492,13 +627,9 @@ struct ServerConversation: Codable, Identifiable, Equatable {
   }
 }
 
-/// One headed block of the conversation's written summary.
-///
-/// The backend moved the substance of a summary out of `overview` and into these when the notes
-/// pipeline landed: `overview` became a single short compatibility paragraph, and the headed
-/// detail — what was discussed, the friction, the follow-ups — lives here. The generated wire DTO
-/// has carried them since; this domain model did not, so every desktop surface was rendering the
-/// compatibility paragraph and calling it the summary.
+/// One headed block of the conversation's written summary. The overview may be a compatibility
+/// projection of these sections or an explicit legacy/user-edited body; the selection policy owns
+/// which representation is displayed.
 struct SummarySection: Codable, Equatable, Identifiable {
   var id: String { heading }
   let heading: String
@@ -525,8 +656,7 @@ struct Structured: Codable, Equatable {
   let category: String
   let actionItems: [ActionItem]
   let events: [Event]
-  /// The headed blocks the backend writes the real summary into. Empty for captures processed
-  /// before the notes pipeline, which is why every reader must fall back to `overview`.
+  /// Headed summary blocks. Older captures may omit them; the selection policy then uses overview.
   let sections: [SummarySection]
 
   init(from decoder: Decoder) throws {
@@ -789,6 +919,7 @@ struct TranscriptSegment: Codable, Identifiable {
   let id: String
   let backendId: String?
   let text: String
+  let originalText: String?
   let speaker: String?
   let isUser: Bool
   let personId: String?
@@ -807,6 +938,7 @@ struct TranscriptSegment: Codable, Identifiable {
 
   enum CodingKeys: String, CodingKey {
     case id, text, speaker
+    case originalText = "original_text"
     case isUser = "is_user"
     case personId = "person_id"
     case start, end, translations
@@ -818,6 +950,7 @@ struct TranscriptSegment: Codable, Identifiable {
     id = decodedId ?? UUID().uuidString
     backendId = decodedId
     text = try container.decodeIfPresent(String.self, forKey: .text) ?? ""
+    originalText = try container.decodeIfPresent(String.self, forKey: .originalText)
     speaker = try container.decodeIfPresent(String.self, forKey: .speaker)
     isUser = try container.decodeIfPresent(Bool.self, forKey: .isUser) ?? false
     personId = try container.decodeIfPresent(String.self, forKey: .personId)
@@ -835,6 +968,7 @@ struct TranscriptSegment: Codable, Identifiable {
     self.id = decodedId ?? UUID().uuidString
     self.backendId = decodedId
     self.text = wire.text
+    self.originalText = wire.originalText
     self.speaker = wire.speaker
     self.isUser = wire.isUser
     self.personId = wire.personId
@@ -848,6 +982,7 @@ struct TranscriptSegment: Codable, Identifiable {
     id: String,
     backendId: String? = nil,
     text: String,
+    originalText: String? = nil,
     speaker: String?,
     isUser: Bool,
     personId: String?,
@@ -858,6 +993,7 @@ struct TranscriptSegment: Codable, Identifiable {
     self.id = id
     self.backendId = backendId
     self.text = text
+    self.originalText = originalText
     self.speaker = speaker
     self.isUser = isUser
     self.personId = personId

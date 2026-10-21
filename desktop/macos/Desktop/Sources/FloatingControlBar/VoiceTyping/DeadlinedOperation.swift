@@ -6,8 +6,8 @@ import Foundation
 /// A task group races the operation against a sleeper, but the group scope
 /// waits for its cancelled child before returning — and an HTTP call stuck in
 /// a token refresh, or a decoder in the middle of a buffer, is not at a
-/// suspension point that honours cancellation. The dictation caps (12 s for the
-/// backend recognizer, 6 s for the polisher) are promises to a user watching an
+/// suspension point that honours cancellation. The dictation caps (12 s for
+/// either recognizer, 6 s for the polisher) are promises to a user watching an
 /// empty caret, so the deadline is enforced here at the boundary: the work is
 /// cancelled and abandoned, and its late result, if any, is dropped.
 ///

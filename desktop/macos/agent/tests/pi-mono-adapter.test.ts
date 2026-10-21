@@ -35,7 +35,7 @@ vi.mock("child_process", async () => {
 
 function createAdapter(configOverrides: Partial<HarnessConfig> & { onRestart?: (reason: string) => void } = {}) {
   const config: HarnessConfig = {
-    authToken: "test-token",
+
     ...configOverrides,
   };
   const adapter = new PiMonoAdapter(config);
@@ -667,6 +667,26 @@ describe("PiMonoAdapter prompt correlation", () => {
     );
   });
 
+  it.each(["authentication", "provider_setup_needed"])("preserves HTTP boundary classification %s for a bare 401", async failureCode => {
+    const { adapter } = createAdapter();
+    seedSessions(adapter, "session-1");
+    const prompt = adapter.sendPrompt("session-1", [{ type: "text", text: "hello" }], [], "act", () => {}, async () => "");
+    (adapter as any).handleEvent(JSON.stringify({ type: "omi_provider_status", status: 401, failureCode }));
+    (adapter as any).handleTurnEnd(makeErrorTurnEndEvent("HTTP 401 status code (no body)"));
+    await expect(prompt).rejects.toMatchObject({ failure: {
+      failureCode, provider: "omi", technicalMessage: "HTTP 401 status code (no body)", retryable: false,
+    } });
+  });
+
+  it("ignores provider status from a superseded request", async () => {
+    const { adapter } = createAdapter();
+    seedSessions(adapter, "session-1");
+    const prompt = adapter.sendPrompt("session-1", [{ type: "text", text: "hello" }], [], "act", () => {}, async () => "");
+    (adapter as any).handleEvent(JSON.stringify({ type: "omi_provider_status", requestId: "old-request", status: 401, failureCode: "authentication" }));
+    (adapter as any).handleTurnEnd(makeErrorTurnEndEvent("HTTP 401 status code (no body)"));
+    await expect(prompt).rejects.not.toHaveProperty("failure");
+  });
+
   it("normalizes bare provider HTTP status errors before surfacing them", async () => {
     const { adapter, events } = createAdapter();
     seedSessions(adapter, "session-1");
@@ -823,68 +843,6 @@ describe("PiMonoAdapter prompt correlation", () => {
     expect((adapter as any).activePromptGeneration).toBe(0);
   });
 
-  it("marks an aborted JIT turn unknown while preserving observed receipt ids", async () => {
-    const { adapter } = createAdapter();
-    seedSessions(adapter, "session-1");
-    const executionID = "jit-abort-execution";
-    const prompt = adapter.sendPrompt(
-      "session-1",
-      [{ type: "text", text: "abort a metered turn" }],
-      [],
-      "act",
-      () => {},
-      async () => "",
-      undefined,
-      {
-        capabilityRef: "cap-jit-abort",
-        requestId: "request-jit-abort",
-        builtInToolPolicy: "read_only",
-        jitBudget: {
-          contractVersion: "jit-cloud-qa-v1",
-          executionID,
-          maxProviderAttempts: 3,
-          maxOutputTokensPerAttempt: 2048,
-          maxNormalizedInputTokensPerAttempt: 32768,
-          maxEstimatedSpendMicroUSD: 50000,
-        },
-      },
-    );
-    writeFileSync((adapter as any).jitReceiptFilePath, JSON.stringify({
-      schema_version: "jit-gateway-receipt-v1",
-      run_id: executionID,
-      contract_version: "jit-cloud-qa-v1",
-      attempts: [{
-        attempt_id: "provider-attempt-aborted",
-        normalized_uncached_input_tokens: 3,
-        cached_input_tokens: 0,
-        cache_write_tokens: 0,
-        output_tokens: 2,
-        cost_status: "estimated",
-        estimated_cost_micro_usd: 5,
-      }],
-      aggregate: {
-        attempt_count: 1,
-        normalized_uncached_input_tokens: 3,
-        cached_input_tokens: 0,
-        cache_write_tokens: 0,
-        output_tokens: 2,
-        estimated_cost_micro_usd: 5,
-        cost_status: "estimated",
-      },
-    }));
-
-    adapter.abort("session-1");
-
-    await expect(prompt).resolves.toMatchObject({
-      inputTokens: 3,
-      outputTokens: 2,
-      jitCostStatus: "unknown",
-      jitEstimatedCostUsd: null,
-      jitProviderAttempts: 1,
-      jitReceiptAttemptIDs: ["provider-attempt-aborted"],
-    });
-  });
-
   it("drops stray turn_end events when no prompt is in flight", () => {
     const { adapter, events } = createAdapter();
 
@@ -952,75 +910,11 @@ describe("PiMonoAdapter restart lifecycle", () => {
 
   it("runs disposal bookkeeping even when stop fails", async () => {
     const onDisposed = vi.fn();
-    const adapter = new PiMonoAdapter({ authToken: "test-token", onDisposed });
+    const adapter = new PiMonoAdapter({ onDisposed });
     vi.spyOn(adapter, "stop").mockRejectedValueOnce(new Error("stop failed"));
 
     await expect(adapter.dispose()).rejects.toThrow("stop failed");
     expect(onDisposed).toHaveBeenCalledOnce();
-  });
-});
-
-describe("PiMonoAdapter source-level invariants", () => {
-  const piMonoSrc = readFileSync(
-    fileURLToPath(new URL("../src/adapters/pi-mono.ts", import.meta.url)),
-    "utf8"
-  );
-
-  it("passes the raw authToken as OMI_API_KEY (no `Bearer ` prefix)", () => {
-    expect(piMonoSrc).toMatch(/env\.OMI_API_KEY\s*=\s*this\.config\.authToken\s*;?/);
-    expect(piMonoSrc).not.toMatch(/env\.OMI_API_KEY\s*=\s*`Bearer \$\{/);
-  });
-
-  it("always scrubs ANTHROPIC_API_KEY from the child env", () => {
-    expect(piMonoSrc).toMatch(/delete\s+env\.ANTHROPIC_API_KEY\s*;?/);
-  });
-
-  it("preserves the explicit per-turn JIT gate in the adapter projection", () => {
-    expect(toolProjectionFromMetadata({
-      surfaceKind: "main_chat",
-      jitKnowledgeToolsEnabled: true,
-    }).jitKnowledgeToolsEnabled).toBe(true);
-    expect(toolProjectionFromMetadata({
-      surfaceKind: "main_chat",
-      jitKnowledgeToolsEnabled: "true",
-    }).jitKnowledgeToolsEnabled).toBe(false);
-    expect(toolProjectionFromMetadata({
-      surfaceKind: "main_chat",
-    }).jitKnowledgeToolsEnabled).toBe(false);
-  });
-
-  it("derives the bounded proactive projection only from a valid JIT budget", () => {
-    const budget = {
-      contractVersion: "jit-cloud-qa-v1",
-      executionID: "execution-1",
-      maxProviderAttempts: 3,
-      maxOutputTokensPerAttempt: 2048,
-      maxNormalizedInputTokensPerAttempt: 32768,
-      maxEstimatedSpendMicroUSD: 50000,
-    };
-    expect(toolProjectionFromMetadata({ jitBudget: budget }).jitProactivity).toBe(true);
-    expect(toolProjectionFromMetadata({ jitBudget: { ...budget, maxProviderAttempts: 0 } }).jitProactivity).toBe(false);
-    expect(toolProjectionFromMetadata({ jitBudget: budget, jitKnowledgeToolsEnabled: false }).jitKnowledgeToolsEnabled).toBe(false);
-  });
-
-  it("keeps the real failed JIT save attempt as an exact regression fixture", () => {
-    const fixture = JSON.parse(readFileSync(
-      fileURLToPath(new URL("./fixtures/jit-knowledge-tool-gate-regression.json", import.meta.url)),
-      "utf8",
-    )) as {
-      prompt: string;
-      attemptedTool: { name: string; input: { content: string }; resultCode: string };
-      expected: { surfaceKind: string; jitKnowledgeToolsEnabled: boolean; toolName: string };
-    };
-    expect(fixture.prompt).toBe(
-      "Please remember that I am running the synthetic JIT acceptance test marker JIT-QA-20260905-1808. Also create a standing trigger to notify me whenever that exact marker appears in a new conversation.",
-    );
-    expect(fixture.attemptedTool).toEqual({
-      name: "create_memory",
-      input: { content: "The user is running the synthetic JIT acceptance test marker JIT-QA-20260905-1808." },
-      resultCode: "memory_save_not_authorized",
-    });
-    expect(toolProjectionFromMetadata(fixture.expected).jitKnowledgeToolsEnabled).toBe(true);
   });
 });
 
@@ -1033,7 +927,7 @@ describe("PiMonoAdapter spawn args (behavioral)", () => {
 
   it("keeps user extensions enabled while loading the Omi extension", async () => {
     const config: HarnessConfig = {
-      authToken: "test-token",
+
     };
     const adapter = new PiMonoAdapter(config, "/fake/pi", "/fake/ext.ts");
     await adapter.start();
@@ -1052,7 +946,7 @@ describe("PiMonoAdapter spawn args (behavioral)", () => {
 
   it("includes required base flags: --mode rpc, -e, --provider, --model", async () => {
     const config: HarnessConfig = {
-      authToken: "test-token",
+
     };
     const adapter = new PiMonoAdapter(config, "/fake/pi", "/fake/ext.ts");
     await adapter.start();
@@ -1068,29 +962,62 @@ describe("PiMonoAdapter spawn args (behavioral)", () => {
     await adapter.stop();
   });
 
-  it("scrubs OMI_API_KEY into the subprocess env from authToken", async () => {
+  it("starts Pi in the kernel-admitted working directory", async () => {
+    const adapter = new PiMonoAdapter({ }, "/fake/pi", "/fake/ext.ts");
+
+    await adapter.createSession({ cwd: "/tmp/omi-admitted-artifacts" });
+
+    const [, , options] = vi.mocked(spawn).mock.calls[0] as [
+      string,
+      string[],
+      { cwd?: string },
+    ];
+    expect(options.cwd).toBe("/tmp/omi-admitted-artifacts");
+    await adapter.stop();
+  });
+
+  it("restarts a pinned Pi worker before rebinding it to another admitted directory", async () => {
+    const adapter = new PiMonoAdapter({ }, "/fake/pi", "/fake/ext.ts");
+
+    await adapter.createSession({ cwd: "/tmp/omi-admitted-a" });
+    await adapter.createSession({ cwd: "/tmp/omi-admitted-b" });
+
+    expect(spawn).toHaveBeenCalledTimes(2);
+    const [, , secondOptions] = vi.mocked(spawn).mock.calls[1] as [
+      string,
+      string[],
+      { cwd?: string },
+    ];
+    expect(secondOptions.cwd).toBe("/tmp/omi-admitted-b");
+    await adapter.stop();
+  });
+
+  it("never gives credentials to the subprocess environment", async () => {
+    const keys = ["OMI_API_KEY", "OMI_AUTH_TOKEN", "OMI_BYOK_OPENAI"];
+    for (const key of keys) vi.stubEnv(key, "inert-test-only");
     const config: HarnessConfig = {
-      authToken: "firebase-id-token-xyz",
+
     };
     const adapter = new PiMonoAdapter(config, "/fake/pi", "/fake/ext.ts");
     await adapter.start();
 
     const [, , options] = vi.mocked(spawn).mock.calls[0] as [string, string[], { env: Record<string, string> }];
-    // Raw token, not "Bearer <token>"
-    expect(options.env.OMI_API_KEY).toBe("firebase-id-token-xyz");
+    expect(options.env.OMI_API_KEY).toBeUndefined();
+    expect(options.env.OMI_AUTH_TOKEN).toBeUndefined();
+    expect(Object.keys(options.env).some(key => key.startsWith("OMI_BYOK_"))).toBe(false);
     // Upstream secret must be scrubbed
     expect(options.env.ANTHROPIC_API_KEY).toBeUndefined();
 
     await adapter.stop();
+    vi.unstubAllEnvs();
   });
 
   it("projects chat-first tools into the child env only for an enabled main Chat", async () => {
-    const adapter = new PiMonoAdapter({ authToken: "test-token" }, "/fake/pi", "/fake/ext.ts");
+    const adapter = new PiMonoAdapter({ }, "/fake/pi", "/fake/ext.ts");
     await adapter.setToolProjection({
       surfaceKind: "main_chat",
       chatFirstUi: true,
       controlGeneration: 7,
-      jitKnowledgeToolsEnabled: true,
     });
     await adapter.start();
 
@@ -1098,17 +1025,13 @@ describe("PiMonoAdapter spawn args (behavioral)", () => {
     expect(options.env.OMI_SURFACE_KIND).toBe("main_chat");
     expect(options.env.OMI_CHAT_FIRST_UI).toBe("true");
     expect(options.env.OMI_CHAT_FIRST_CONTROL_GENERATION).toBe("7");
-    expect(options.env.OMI_JIT_KNOWLEDGE_TOOLS_ENABLED).toBe("true");
     vi.mocked(spawn).mockClear();
     await adapter.setToolProjection({
       surfaceKind: "main_chat",
       chatFirstUi: false,
       controlGeneration: null,
-      jitKnowledgeToolsEnabled: false,
     });
     expect(spawn).not.toHaveBeenCalled();
-    const previousJitGate = process.env.OMI_JIT_KNOWLEDGE_TOOLS_ENABLED;
-    process.env.OMI_JIT_KNOWLEDGE_TOOLS_ENABLED = "true";
     await adapter.start();
     const [, , legacyMainChatOptions] = vi.mocked(spawn).mock.calls[0] as [
       string,
@@ -1118,9 +1041,6 @@ describe("PiMonoAdapter spawn args (behavioral)", () => {
     expect(legacyMainChatOptions.env.OMI_SURFACE_KIND).toBe("main_chat");
     expect(legacyMainChatOptions.env.OMI_CHAT_FIRST_UI).toBeUndefined();
     expect(legacyMainChatOptions.env.OMI_CHAT_FIRST_CONTROL_GENERATION).toBeUndefined();
-    expect(legacyMainChatOptions.env.OMI_JIT_KNOWLEDGE_TOOLS_ENABLED).toBeUndefined();
-    if (previousJitGate === undefined) delete process.env.OMI_JIT_KNOWLEDGE_TOOLS_ENABLED;
-    else process.env.OMI_JIT_KNOWLEDGE_TOOLS_ENABLED = previousJitGate;
     await adapter.stop();
 
     vi.mocked(spawn).mockClear();
@@ -1248,6 +1168,35 @@ describe("tool_use event filtering", () => {
 });
 
 describe("PiMonoAdapter served-model attribution", () => {
+  it("returns response-observed provider and model identities from a runtime attempt", async () => {
+    const { adapter } = createAdapter();
+    seedSessions(adapter, "session-1");
+    const runtime = new PiMonoRuntimeAdapter(adapter);
+    const execution = runtime.executeAttempt(
+      makeAttemptContext(),
+      () => {},
+      new AbortController().signal,
+    );
+
+    (adapter as any).handleEvent(JSON.stringify({
+      type: "message_end",
+      message: {
+        role: "assistant",
+        content: [{ type: "text", text: "done" }],
+        model: "omi-sonnet",
+        responseModel: "gpt-6-luna",
+        provider: "openai-codex",
+      },
+    }));
+    (adapter as any).handleTurnEnd(makeTurnEndEvent("done"));
+
+    await expect(execution).resolves.toMatchObject({
+      terminalStatus: "succeeded",
+      providerTargets: ["openai-codex"],
+      modelsUsed: ["gpt-6-luna"],
+    });
+  });
+
   it("reports the response-observed model once per prompt, preferring responseModel", async () => {
     const { adapter, events } = createAdapter();
     seedSessions(adapter, "session-1");
@@ -1271,7 +1220,7 @@ describe("PiMonoAdapter served-model attribution", () => {
           role: "assistant",
           content: [{ type: "text", text: "…" }],
           model: "omi-sonnet",
-          responseModel: "gpt-5.6-luna",
+          responseModel: "gpt-6-luna",
         },
       }));
     }
@@ -1282,7 +1231,7 @@ describe("PiMonoAdapter served-model attribution", () => {
     const modelEvents = events.filter((e: any) => e.type === "model_used");
     expect(modelEvents).toEqual([{
       type: "model_used",
-      model: "gpt-5.6-luna",
+      model: "gpt-6-luna",
       requestedModel: "omi-sonnet",
       provider: undefined,
     }]);
@@ -1321,7 +1270,7 @@ describe("PiMonoAdapter served-model attribution", () => {
     );
     const turnEnd2 = makeTurnEndEvent("a2");
     (turnEnd2.message as any).model = "omi-sonnet";
-    (turnEnd2.message as any).responseModel = "gpt-5.6-luna";
+    (turnEnd2.message as any).responseModel = "gpt-6-luna";
     (adapter as any).handleTurnEnd(turnEnd2);
     await second;
 
@@ -1335,13 +1284,13 @@ describe("PiMonoAdapter served-model attribution", () => {
     );
     const turnEnd3 = makeTurnEndEvent("a3");
     (turnEnd3.message as any).model = "omi-sonnet";
-    (turnEnd3.message as any).responseModel = "gpt-5.6-luna";
+    (turnEnd3.message as any).responseModel = "gpt-6-luna";
     (adapter as any).handleTurnEnd(turnEnd3);
     await third;
 
     const modelEvents = events.filter((e: any) => e.type === "model_used");
     expect(modelEvents).toHaveLength(2);
-    expect(modelEvents.every((e: any) => e.model === "gpt-5.6-luna")).toBe(true);
+    expect(modelEvents.every((e: any) => e.model === "gpt-6-luna")).toBe(true);
   });
 });
 

@@ -23,47 +23,6 @@ final class ServerMemoryV17DecodingTests: XCTestCase {
     return decoder
   }()
 
-  func testSharedJITRuntimeMatrixKeepsMixedVersionTextAndOnlyV1Authority() throws {
-    let testFile = URL(fileURLWithPath: #filePath)
-    let repositoryRoot =
-      testFile
-      .deletingLastPathComponent()
-      .deletingLastPathComponent()
-      .deletingLastPathComponent()
-      .deletingLastPathComponent()
-      .deletingLastPathComponent()
-    let fixtureURL =
-      repositoryRoot
-      .appendingPathComponent("contracts/parity/jit_runtime_contract_matrix.json")
-    let fixture = try JSONSerialization.jsonObject(with: Data(contentsOf: fixtureURL)) as? [String: Any]
-    let rows = try XCTUnwrap(fixture?["memory_rows"] as? [[String: Any]])
-    let chatRecords = try XCTUnwrap(fixture?["chat_records"] as? [String: [String: Any]])
-    let expected = try XCTUnwrap(fixture?["expected"] as? [String: Any])
-    let data = try JSONSerialization.data(withJSONObject: rows)
-    let memories = try decoder.decode([ServerMemory].self, from: data)
-
-    XCTAssertEqual(memories.map(\.id), expected["memory_ids"] as? [String])
-    XCTAssertEqual(
-      Dictionary(uniqueKeysWithValues: memories.map { ($0.id, $0.content) }),
-      expected["readable_text_by_id"] as? [String: String]
-    )
-    XCTAssertEqual(
-      memories.filter { MemoryLedgerMetadata.isSupportedVersion($0.ledgerMetadata) }.map(\.id),
-      expected["authoritative_ledger_ids"] as? [String]
-    )
-
-    let chatMessages = try chatRecords.values.map { record in
-      try decoder.decode(ChatMessageDB.self, from: JSONSerialization.data(withJSONObject: record))
-    }
-    XCTAssertEqual(
-      Dictionary(uniqueKeysWithValues: chatMessages.map { ($0.id, $0.text) }),
-      expected["readable_chat_text_by_id"] as? [String: String]
-    )
-    let futureMessage = try XCTUnwrap(chatMessages.first { $0.id == "future-message" })
-    XCTAssertNil(futureMessage.metadata)
-    XCTAssertNil(futureMessage.contentBlocksJSON)
-  }
-
   func testDecodesV17TierAndMemoryIdAlias() throws {
     let json = Data(
       """
@@ -128,16 +87,51 @@ final class ServerMemoryV17DecodingTests: XCTestCase {
     XCTAssertTrue(memory.tier.isDefaultAccessible)
     // Legacy records carry no tier from the backend, so the badge is suppressed.
     XCTAssertFalse(memory.tierIsExplicit)
+    XCTAssertTrue(SiriIndexScope.memory(MemoryRecord.from(memory), now: Date()))
   }
 
-  func testUnknownPresentTierFailsClosed() {
+  func testNullAndActiveTiersStayIndexableWhileArchiveAndUnknownAreExcluded() throws {
+    let base: [String: Any] = [
+      "id": "legacy-1", "content": "Legacy memory", "category": "interesting",
+      "created_at": "2026-06-21T10:00:00Z", "updated_at": "2026-06-21T10:05:00Z",
+    ]
+    let cases: [(String, Any?, Bool)] = [
+      ("absent", nil, true), ("null", NSNull(), true),
+      ("short_term", "short_term", true), ("long_term", "long_term", true),
+      ("archive", "archive", false),
+    ]
+    for (name, tier, expected) in cases {
+      var payload = base
+      if name != "absent" { payload["memory_tier"] = tier }
+      let data = try JSONSerialization.data(withJSONObject: payload)
+      let row = try decoder.decode(ServerMemory.self, from: data)
+      XCTAssertEqual(SiriIndexScope.memory(MemoryRecord.from(row), now: Date()), expected, name)
+    }
+    var unknown = base
+    unknown["memory_tier"] = "future_tier"
+    XCTAssertThrowsError(try decoder.decode(ServerMemory.self, from: JSONSerialization.data(withJSONObject: unknown)))
+  }
+
+  func testUnknownLegacyTierAliasesAreIgnoredLikeBackendExtras() throws {
+    let payload: [String: Any] = [
+      "id": "legacy-extra", "content": "Legacy memory", "category": "interesting",
+      "created_at": "2026-06-21T10:00:00Z", "updated_at": "2026-06-21T10:05:00Z",
+      "layer": "future_tier", "tier": "future_tier",
+    ]
+    let memory = try decoder.decode(ServerMemory.self, from: JSONSerialization.data(withJSONObject: payload))
+    XCTAssertEqual(memory.tier, .longTerm)
+    XCTAssertFalse(memory.tierIsExplicit)
+    XCTAssertTrue(SiriIndexScope.memory(MemoryRecord.from(memory), now: Date()))
+  }
+
+  func testUnknownCanonicalMemoryTierFailsClosed() {
     let json = Data(
       """
       {
         "id": "mem-future",
         "content": "Future tier",
         "category": "system",
-        "tier": "future_archive",
+        "memory_tier": "future_archive",
         "created_at": "2026-06-21T10:00:00Z",
         "updated_at": "2026-06-21T10:05:00Z"
       }

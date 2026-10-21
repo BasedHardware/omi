@@ -105,6 +105,14 @@ function copyString(target: JsonRecord, raw: JsonRecord, key: string): void {
   if (value !== undefined) target[key] = value;
 }
 
+function copyNullableString(target: JsonRecord, raw: JsonRecord, key: string): void {
+  if (raw[key] === null) {
+    target[key] = null;
+    return;
+  }
+  copyString(target, raw, key);
+}
+
 function copyBoolean(target: JsonRecord, raw: JsonRecord, key: string): void {
   if (typeof raw[key] === 'boolean') target[key] = raw[key];
 }

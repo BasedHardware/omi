@@ -40,7 +40,7 @@ beforeEach(() => {
 })
 
 // Fakes GET /v3/memories pagination: hard page cap 500, no first-page expansion.
-function fakeBackend(total: number, header?: string) {
+function fakeBackend(total: number, deviceScopeHeader?: string, lifecycleHeader?: string) {
   return async (
     _path: string,
     config: { params: { limit: number; offset: number } }
@@ -55,7 +55,14 @@ function fakeBackend(total: number, header?: string) {
     ) as Partial<Memory>[]
     return {
       data,
-      ...(header ? { headers: { 'x-omi-memory-canonical-lifecycle-exposed': header } } : {})
+      headers: {
+        ...(deviceScopeHeader
+          ? { 'x-omi-memory-device-scope-supported': deviceScopeHeader }
+          : {}),
+        ...(lifecycleHeader
+          ? { 'x-omi-memory-canonical-lifecycle-exposed': lifecycleHeader }
+          : {})
+      }
     }
   }
 }
@@ -132,7 +139,7 @@ describe('useMemories — edit/visibility query-param contract (C9)', () => {
   })
 })
 
-describe('useMemories — pagination, capability header, delete', () => {
+describe('useMemories — pagination and delete', () => {
   it('keeps legacy/v1/future text rows readable while evidence stays optional and inert', async () => {
     omiApiGet.mockResolvedValue({
       data: [
@@ -145,6 +152,12 @@ describe('useMemories — pagination, capability header, delete', () => {
           subject_scope: 'primary_user',
           slot: 'home_city',
           body: 'wrong-kind-body',
+          currency: 0.82,
+          currency_band: 'current',
+          as_of: '2026-08-22T00:00:00Z',
+          belief_class: 'preference',
+          half_life_days: 180,
+          belief_computed_at: '2026-08-23T00:00:00Z',
           trigger_condition: { wrong: true },
           intent_backed: 'true',
           curation_weight: '3',
@@ -191,6 +204,9 @@ describe('useMemories — pagination, capability header, delete', () => {
     expect(result.current.memories[0]).not.toHaveProperty('kind')
     expect(result.current.memories[1]).toMatchObject({ kind: 'fact', status: 'active' })
     expect(result.current.memories[1]).toMatchObject({ slot: 'home_city' })
+    for (const field of ['currency', 'currency_band', 'as_of', 'belief_class', 'half_life_days', 'belief_computed_at']) {
+      expect(result.current.memories[1]).not.toHaveProperty(field)
+    }
     expect(result.current.memories[1].evidence).toEqual([
       { evidence_id: 'current-evidence', independence_group: 'current-group' }
     ])
@@ -234,21 +250,43 @@ describe('useMemories — pagination, capability header, delete', () => {
     })
   })
 
-  it('sets canonicalLifecycleExposed from the response header', async () => {
-    omiApiGet.mockImplementation(fakeBackend(2, 'true'))
+  it('establishes canonical lifecycle from an empty list with device-scope support', async () => {
+    omiApiGet.mockImplementation(fakeBackend(0, 'true'))
+    const { result } = renderHook(() => useMemories())
+    await act(async () => {
+      await result.current.refresh()
+    })
+    expect(result.current.canonicalLifecycleExposed).toBe(true)
+    expect(result.current.memories).toEqual([])
+  })
+
+  it('ignores the retired lifecycle header on a successful list', async () => {
+    omiApiGet.mockImplementation(fakeBackend(2, 'true', 'false'))
     const { result } = renderHook(() => useMemories())
     await act(async () => {
       await result.current.refresh()
     })
     expect(result.current.canonicalLifecycleExposed).toBe(true)
 
-    // A subsequent fetch that reports the flag off must flip it back — the tier
-    // filters must not linger visible against a backend that stopped exposing them.
-    omiApiGet.mockImplementation(fakeBackend(2, 'false'))
+    omiApiGet.mockImplementation(fakeBackend(2, 'false', 'true'))
     await act(async () => {
       await result.current.refresh()
     })
     expect(result.current.canonicalLifecycleExposed).toBe(false)
+
+    // As with the retired signal, an absent capability on a later response
+    // leaves the established in-session value alone.
+    omiApiGet.mockImplementation(fakeBackend(2, 'true'))
+    await act(async () => {
+      await result.current.refresh()
+    })
+    expect(result.current.canonicalLifecycleExposed).toBe(true)
+
+    omiApiGet.mockImplementation(fakeBackend(2))
+    await act(async () => {
+      await result.current.refresh()
+    })
+    expect(result.current.canonicalLifecycleExposed).toBe(true)
   })
 
   it('deleteMemory drops the row optimistically and reverts on failure', async () => {
@@ -274,4 +312,5 @@ describe('useMemories — pagination, capability header, delete', () => {
     // The failed delete is walked back — the row is still present.
     expect(result.current.memories.some((m) => m.id === 'm0')).toBe(true)
   })
+
 })
