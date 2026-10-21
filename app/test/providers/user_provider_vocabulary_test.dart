@@ -60,6 +60,47 @@ void main() {
       expect(fetches, 2);
     });
 
+    test('a batch add saves each distinct word once and ignores blanks', () async {
+      Map<String, dynamic>? serverPrefs = {
+        'vocabulary': ['alpha'],
+      };
+      final saved = <List<String>>[];
+      final provider = UserProvider(
+        transcriptionPreferencesFetcher: () async => serverPrefs,
+        vocabularySetter: (vocabulary) async {
+          saved.add(vocabulary);
+          return true;
+        },
+      );
+      addTearDown(provider.dispose);
+
+      // "omi, omi" typed in one add, plus a blank entry and a word already saved.
+      expect(await provider.addVocabularyWords(['omi', 'omi', '', 'alpha']), isTrue);
+
+      expect(saved, [
+        ['alpha', 'omi'],
+      ]);
+      expect(provider.transcriptionVocabulary, ['alpha', 'omi']);
+    });
+
+    test('a batch that only repeats existing or blank words saves nothing', () async {
+      Map<String, dynamic>? serverPrefs = {
+        'vocabulary': ['alpha'],
+      };
+      final saved = <List<String>>[];
+      final provider = UserProvider(
+        transcriptionPreferencesFetcher: () async => serverPrefs,
+        vocabularySetter: (vocabulary) async {
+          saved.add(vocabulary);
+          return true;
+        },
+      );
+      addTearDown(provider.dispose);
+
+      expect(await provider.addVocabularyWords(['alpha', '  ']), isFalse);
+      expect(saved, isEmpty);
+    });
+
     test('does not save a removal while the saved list cannot be loaded', () async {
       final saved = <List<String>>[];
       final provider = UserProvider(
