@@ -24,7 +24,15 @@ permissions:
   issues: read
 
 concurrency:
-  group: backend-hermetic-e2e-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || format('run-{0}', github.run_id) }}-${{ inputs.nightly_main_sha != '' && format('nightly-{0}', github.run_id) || 'normal' }}
+  # PRs cancel their own older runs. Main pushes share one ref-keyed group
+  # with cancel-in-progress false: the running gauntlet finishes and only the
+  # newest pending main SHA runs next, so a burst of merges no longer queues
+  # a full superseded suite for every intermediate SHA. The daily cron,
+  # manual dispatches and merge-queue attempts keep per-run groups: sharing
+  # the push group would let a cron evict the newest pending push run (or a
+  # push evict the day's gauntlet), and a cancelled push check fails
+  # scripts/pre_push_ci_verified.py for that SHA.
+  group: backend-hermetic-e2e-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || (github.event_name == 'push' && github.ref) || format('run-{0}', github.run_id) }}-${{ inputs.nightly_main_sha != '' && format('nightly-{0}', github.run_id) || 'normal' }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:

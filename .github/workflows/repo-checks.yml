@@ -26,8 +26,11 @@ concurrency:
   # cancel an in-flight code run it shares no work with, and cancelled jobs render
   # as red "fail" checks on the PR — flaky red with no code cause. Key the group by
   # lane so newer-cancels-older still holds within each lane, but never across them.
+  # Within a lane, only PR runs cancel in progress: a newer main push replaces the
+  # pending code run instead of cancelling the running one, so the newest main SHA
+  # still gets a complete deterministic-check run.
   group: repo-checks-${{ github.event.pull_request.number || github.ref }}-${{ github.event_name == 'pull_request' && contains(fromJSON('["edited", "labeled", "unlabeled"]'), github.event.action) && 'metadata' || 'code' }}-${{ inputs.nightly_main_sha != '' && format('nightly-{0}', github.run_id) || 'normal' }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   # Abort a stalled git HTTP transfer instead of hanging. Hosted-runner fetches

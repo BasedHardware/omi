@@ -24,7 +24,14 @@ permissions:
   issues: read
 
 concurrency:
-  group: mobile-app-checks-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || format('run-{0}', github.run_id) }}-${{ inputs.nightly_main_sha != '' && format('nightly-{0}', github.run_id) || 'normal' }}
+  # PRs cancel their own older runs. Main pushes key on the exact SHA with
+  # cancel-in-progress false, matching desktop-swift-ci: mobile release
+  # admission (verify_mobile_release_admission.py) requires a first-attempt
+  # push-event Mobile Release Eligibility success on the exact release SHA,
+  # and a pending push run replaced by a newer event leaves a cancelled check
+  # that no rerun can re-mint (attempt 2 does not count). The daily cron and
+  # manual dispatches keep per-run groups so they can never evict a push run.
+  group: mobile-app-checks-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || (github.event_name == 'push' && github.sha) || format('run-{0}', github.run_id) }}-${{ inputs.nightly_main_sha != '' && format('nightly-{0}', github.run_id) || 'normal' }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:

@@ -331,18 +331,28 @@ def test_backend_unit_ci_runner_stays_in_ci_while_pre_push_keeps_its_budget():
 
 def test_expensive_pr_contracts_cancel_only_superseded_pull_request_runs():
     repo = BACKEND_DIR.parent
-    workflows = {
-        "backend-unit-tests.yml": "backend-unit-tests-",
-        "openapi-contract.yml": "openapi-contract-",
-    }
-
-    for filename, group_prefix in workflows.items():
-        workflow = (repo / ".github/workflows" / filename).read_text(encoding="utf-8")
-        assert "concurrency:" in workflow
-        assert f"group: {group_prefix}${{{{ github.event_name == 'pull_request'" in workflow
-        assert "format('pr-{0}', github.event.pull_request.number)" in workflow
-        assert "format('run-{0}', github.run_id)" in workflow
-        assert "cancel-in-progress: true" in workflow
+    # backend-unit-tests (2026-10-21 runner economy, named by David): PR runs
+    # still cancel that PR's older run, but main pushes share one ref-keyed
+    # group with cancel-in-progress false — the running suite finishes and
+    # only the newest pending main SHA runs next, so a merge burst no longer
+    # queues a full superseded suite per intermediate SHA. Manual dispatches
+    # keep per-run groups so they can never evict a pending push run.
+    backend_unit_tests = (repo / ".github/workflows/backend-unit-tests.yml").read_text(encoding="utf-8")
+    assert "concurrency:" in backend_unit_tests
+    assert "group: backend-unit-tests-${{ github.event_name == 'pull_request'" in backend_unit_tests
+    assert "format('pr-{0}', github.event.pull_request.number)" in backend_unit_tests
+    assert (
+        "|| (github.event_name == 'push' && github.ref) || format('run-{0}', github.run_id) }}-" in backend_unit_tests
+    )
+    assert "cancel-in-progress: ${{ github.event_name == 'pull_request' }}" in backend_unit_tests
+    # openapi-contract keeps per-run main isolation: its runs are cheap and
+    # path-filtered, and its pending-run accounting is not release evidence.
+    openapi_contract = (repo / ".github/workflows/openapi-contract.yml").read_text(encoding="utf-8")
+    assert "concurrency:" in openapi_contract
+    assert "group: openapi-contract-${{ github.event_name == 'pull_request'" in openapi_contract
+    assert "format('pr-{0}', github.event.pull_request.number)" in openapi_contract
+    assert "format('run-{0}', github.run_id)" in openapi_contract
+    assert "cancel-in-progress: true" in openapi_contract
 
 
 def test_backend_unit_suite_is_sharded_with_a_literal_gate_and_budget():
