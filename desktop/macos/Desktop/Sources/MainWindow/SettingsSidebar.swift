@@ -338,7 +338,7 @@ struct SettingsSearchItem: Identifiable {
       keywords: ["startup", "login", "boot"], section: .advanced, icon: "slider.horizontal.3",
       settingId: "advanced.preferences.launchatlogin"),
     SettingsSearchItem(
-      name: "Report an Issue", subtitle: "Send app logs and report a problem",
+      name: "Report an Issue", subtitle: "Save a redacted report on this Mac to share manually",
       keywords: ["bug", "feedback", "logs", "report", "issue"], section: .advanced,
       icon: "wrench.and.screwdriver", settingId: "advanced.troubleshooting.reportissue"),
     SettingsSearchItem(
