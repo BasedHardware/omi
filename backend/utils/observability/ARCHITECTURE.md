@@ -16,6 +16,7 @@ This package records bounded operational signals and owns their presentation/exp
 | `speaker_tag_prompts.py` | Speaker prompt telemetry |
 | `subscription_events.py` | Bounded billing/subscription events |
 | `api_keys.py` | API-key observability |
+| `held_content.py` | Held-content ramp counters, choice latency, and the redrive fleet snapshot |
 | `langsmith.py` | Trace integration |
 | `langsmith_prompts.py` | Cached prompt retrieval and rendering |
 

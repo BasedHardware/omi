@@ -1388,6 +1388,15 @@ def test_sync_scrape_retains_exporter_and_direct_sentinel_consumers():
         'omi_summary_debt_sample_timestamp_seconds',
         'omi_live_session_transcript_outcome_total',
         'omi_firestore_documents_per_operation_bucket',
+        # Cost lever G1: Parakeet pool request time by caller.
+        'omi_parakeet_request_seconds_bucket',
+        'omi_parakeet_request_seconds_sum',
+        'omi_parakeet_request_seconds_count',
+        # Firestore reads loop: caller/origin attribution and the singleton_loops lease gate.
+        'omi_firestore_billed_reads_by_caller_total',
+        'omi_firestore_billed_reads_by_origin_total',
+        'omi_firestore_caller_label_overflow_total',
+        'omi_fsr_leader_lease_total',
     ):
         assert kept(name), name
     for component in ('sync', 'summary_delivery', 'storage'):

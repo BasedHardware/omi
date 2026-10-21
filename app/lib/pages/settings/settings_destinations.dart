@@ -23,6 +23,7 @@ import 'package:omi/pages/settings/developer.dart';
 import 'package:omi/pages/settings/device_settings.dart';
 import 'package:omi/pages/settings/import_history_page.dart';
 import 'package:omi/pages/settings/integrations_page.dart';
+import 'package:omi/pages/settings/task_integrations_page.dart';
 import 'package:omi/pages/settings/language_settings_page.dart';
 import 'package:omi/pages/settings/notifications_settings_page.dart';
 import 'package:omi/pages/settings/people.dart';
@@ -74,6 +75,8 @@ Future<void> openSettingsDestination(BuildContext context, SettingsDestination d
       await routeToPage(context, const DeviceSettings());
     case SettingsDestination.integrations:
       await routeToPage(context, const IntegrationsPage());
+    case SettingsDestination.taskIntegrations:
+      await routeToPage(context, const TaskIntegrationsPage());
     case SettingsDestination.permissions:
       PlatformManager.instance.analytics.permissionsSettingsOpened();
       await routeToPage(context, const PermissionsPage());

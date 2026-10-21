@@ -132,6 +132,7 @@ from utils.retrieval.tools.google_utils import refresh_google_token
 from utils.conversations.location import resolve_geolocation
 from utils.conversations.transcript_hash import transcript_sha256_for_binding
 from utils.observability.fallback import record_fallback
+from utils.conversations import paid_lock_recovery
 import logging
 
 logger = logging.getLogger(__name__)
@@ -2078,20 +2079,29 @@ async def _browse_speaker_conversations(
     budget = await run_blocking(
         db_executor, conversation_scan_db.conversation_scan_budget, request, route='speaker-browse'
     )
-    # One bounded snapshot-cursor pass (never offset): invisible rows advance the cursor (#19908).
-    browse_results = await run_blocking(
-        db_executor,
-        lambda: browse_conversations_by_speaker(
-            conversation_scan_db.speaker_browse_scan(
-                uid, include_discarded=include_discarded, start_date=start_dt, end_date=end_dt, budget=budget
+    # Admit recoverable matches before the helper drops locked rows, but persist
+    # only this response page, not skipped pages or the scan's lookahead.
+    recovery = paid_lock_recovery.PaidLockRecovery(uid)
+    try:
+        browse_results = await run_blocking(
+            db_executor,
+            lambda: browse_conversations_by_speaker(
+                conversation_scan_db.speaker_browse_scan(
+                    uid, include_discarded=include_discarded, start_date=start_dt, end_date=end_dt, budget=budget
+                ),
+                search_request.speaker_id,
+                page=browse_page,
+                per_page=browse_per_page,
+                include_discarded=include_discarded,
+                budget=budget,
+                can_recover_locked=recovery.can_recover,
             ),
-            search_request.speaker_id,
-            page=browse_page,
-            per_page=browse_per_page,
-            include_discarded=include_discarded,
-            budget=budget,
-        ),
-    )
+        )
+        await run_blocking(db_executor, recovery.heal, browse_results['items'])
+    except paid_lock_recovery.RecoveryUnavailable as error:
+        raise HTTPException(
+            status_code=503, detail="Saved conversation access could not be restored. Please retry."
+        ) from error
     redact_conversations_for_list(browse_results['items'])
     finish_list_budget(response, budget)
     return browse_results

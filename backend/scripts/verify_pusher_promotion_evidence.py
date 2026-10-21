@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 from datetime import datetime, timezone
+import functools
 import hashlib
 import json
 import re
@@ -24,6 +25,14 @@ SHA_RE = re.compile(r"^[a-f0-9]{40}$")
 SCHEMA_VERSION = 2
 RECEIPT_SCHEMA_VERSION = 1
 ROOT = Path(__file__).resolve().parents[2]
+# The composed runtime env registry carries every service's flags, so hashing
+# its bytes made any unrelated flag ruling invalidate every dev qualification.
+# The contract binds only the Pusher projection of it (see
+# pusher_runtime_env_projection); the YAML sources compose into this file and
+# CI keeps it in sync with them.
+RUNTIME_ENV_MANIFEST = ROOT / "backend/deploy/runtime_env.yaml"
+RUNTIME_ENV_ENVIRONMENTS = ("dev", "prod")
+RUNTIME_ENV_SCALAR_KEYS = ("gcp_project", "compute_project", "data_plane_project", "runtime_gcp_project", "region")
 CONTRACT_FILES = (
     ROOT / "backend/scripts/pusher_release_receipt.py",
     ROOT / "backend/scripts/pusher_semantic_probe.py",
@@ -33,10 +42,6 @@ CONTRACT_FILES = (
     ROOT / "backend/scripts/runtime_env_validation/manifest.py",
     ROOT / "backend/scripts/validate-backend-runtime-env.py",
     ROOT / "backend/config/memory_rollout.py",
-    ROOT / "backend/deploy/runtime_env/_base.yaml",
-    ROOT / "backend/deploy/runtime_env/dev.overlay.yaml",
-    ROOT / "backend/deploy/runtime_env/prod.overlay.yaml",
-    ROOT / "backend/deploy/runtime_env.yaml",
     ROOT / "backend/scripts/verify_pusher_promotion_evidence.py",
     ROOT / "backend/testing/release_fixtures/transcription-release-probe.json",
     ROOT / "backend/testing/release_fixtures/transcription-release-probe.wav",
@@ -64,9 +69,50 @@ def canonical_sha256(value: Any) -> str:
     return "sha256:" + hashlib.sha256(payload).hexdigest()
 
 
-def contract_fingerprint() -> str:
+def pusher_runtime_env_projection(manifest_path: Path = RUNTIME_ENV_MANIFEST) -> dict[str, Any]:
+    """Return the slice of the composed runtime env that Pusher deploys with.
+
+    That is the Pusher service block plus the shared backend ConfigMap, which
+    the prod job writes before Helm and the Pusher pod envFroms wholesale.
+    """
+
+    import yaml  # Lazy: the workflow installs PyYAML before it runs this verifier.
+
+    loader = getattr(yaml, "CSafeLoader", yaml.SafeLoader)
+    manifest = yaml.load(manifest_path.read_text(encoding="utf-8"), Loader=loader)  # noqa: S506 - safe loader
+    environments = manifest.get("environments") if isinstance(manifest, dict) else None
+    if not isinstance(environments, dict):
+        raise EvidenceError(f"{manifest_path}: missing environments mapping")
+    projection: dict[str, Any] = {"schema_version": manifest.get("schema_version")}
+    for name in RUNTIME_ENV_ENVIRONMENTS:
+        environment = environments.get(name)
+        gke = environment.get("gke") if isinstance(environment, dict) else None
+        if not isinstance(gke, dict) or not isinstance(gke.get("pusher"), dict):
+            raise EvidenceError(f"{manifest_path}: environments.{name}.gke.pusher is missing")
+        if not isinstance(gke.get("config_map"), dict):
+            raise EvidenceError(f"{manifest_path}: environments.{name}.gke.config_map is missing")
+        projection[name] = {
+            "pusher": gke["pusher"],
+            "config_map": gke["config_map"],
+            **{key: environment.get(key) for key in RUNTIME_ENV_SCALAR_KEYS},
+        }
+    return projection
+
+
+@functools.lru_cache(maxsize=4)
+def _pusher_runtime_env_sha256(manifest_path: Path) -> str:
+    # Cached as an immutable digest: the registry is large and validate() runs per phase.
+    return canonical_sha256(pusher_runtime_env_projection(manifest_path))
+
+
+def contract_fingerprint(manifest_path: Path = RUNTIME_ENV_MANIFEST) -> str:
     return canonical_sha256(
-        {str(path.relative_to(ROOT)): hashlib.sha256(path.read_bytes()).hexdigest() for path in CONTRACT_FILES}
+        {
+            "files": {
+                str(path.relative_to(ROOT)): hashlib.sha256(path.read_bytes()).hexdigest() for path in CONTRACT_FILES
+            },
+            "pusher_runtime_env": _pusher_runtime_env_sha256(manifest_path),
+        }
     )
 
 
@@ -607,7 +653,11 @@ def validate(
         ):
             errors.append("deployment receipt does not prove a fully ready live candidate identity")
     if evidence.get("contract_sha256") != contract_fingerprint():
-        errors.append("qualification evidence contract does not match the current promotion contract")
+        errors.append(
+            "qualification evidence contract does not match the current promotion contract; "
+            "a promotion script, workflow, or the Pusher runtime env changed since the dev qualification, "
+            "so select a dev qualification run from the current main"
+        )
     errors.extend(
         _validate_semantic_probe(
             evidence.get("semantic_probe"),

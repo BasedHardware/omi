@@ -25,7 +25,7 @@ environments:
           REPEAT_WORK_REVISION_ENABLED: {value: 'false', category: rollout}
           REPEAT_WORK_LLM_VERSION: {value: 2026-10-16-v1, category: rollout}
           SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
-          FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":5,"ledger_purge_coalesce":5,"people_scan_dedupe":0,"queue_age_sample_budget":5,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":0,"subscription_cache":100,"usage_month_cache":5}',
+          FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":100,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"people_scan_dedupe":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":25,"subscription_cache":100,"usage_month_cache":100}',
             category: rollout}
           FSR_QUEUE_AGE_PUBLISHER: {value: '1', category: rollout}
           FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -73,7 +73,6 @@ environments:
           AUDIO_ARCHIVE_UID_ALLOWLIST: {category: rollout, value: vi7SA9ckQCe4ccobWNxlbdcNdC23}
           BUCKET_AUDIO_DERIVED: {value: '', category: rollout}
           AUDIO_MERGE_WORKER_URL: {value: '', category: rollout}
-          AUDIO_TIMELINE_SPANS: {category: rollout, value: 'false'}
           LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
           LIVE_CAPTURE_WINDOW_STRICT_PROJECTION: {value: 'false', category: rollout}
           LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
@@ -81,7 +80,6 @@ environments:
           LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {category: rollout, value: 'false'}
           SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {category: rollout, value: 'false'}
           SONIOX_WIRE_LEDGER: {category: rollout, value: 'false'}
-          CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'true', category: rollout}
           ACTION_ITEM_REFRESH_PRESERVE_ENABLED: {value: 'true', category: rollout}
           CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
             value: 'true'
@@ -89,8 +87,6 @@ environments:
           SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
             value: 'true'
             category: ops_kill
-          SYNC_ASSIGNMENT_RECOVERY_ENABLED: {value: 'true', category: rollout}
-          LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED: {value: 'true', category: rollout}
           CAPTURE_GROUP_CONTAINMENT_MODE: {value: shadow, category: rollout}
           TRANSLATION_DEMAND_GATE_ENABLED: {value: 'true', category: rollout}
           TRANSLATION_ONOPEN_ENABLED: {value: 'true', category: rollout}
@@ -356,7 +352,7 @@ environments:
           REPEAT_WORK_REVISION_ENABLED: {value: 'false', category: rollout}
           REPEAT_WORK_LLM_VERSION: {value: 2026-10-16-v1, category: rollout}
           SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
-          FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":5,"ledger_purge_coalesce":5,"people_scan_dedupe":0,"queue_age_sample_budget":5,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":0,"subscription_cache":100,"usage_month_cache":5}',
+          FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":100,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"people_scan_dedupe":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":25,"subscription_cache":100,"usage_month_cache":100}',
             category: rollout}
           FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
           FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -379,7 +375,6 @@ environments:
           AUDIO_ARCHIVE_UID_ALLOWLIST: {category: rollout, value: vi7SA9ckQCe4ccobWNxlbdcNdC23}
           BUCKET_AUDIO_DERIVED: {value: '', category: rollout}
           AUDIO_MERGE_WORKER_URL: {value: '', category: rollout}
-          AUDIO_TIMELINE_SPANS: {category: rollout, value: 'false'}
           LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
           LIVE_CAPTURE_WINDOW_STRICT_PROJECTION: {value: 'false', category: rollout}
           LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
@@ -387,12 +382,10 @@ environments:
           LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {category: rollout, value: 'false'}
           SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {category: rollout, value: 'false'}
           SONIOX_WIRE_LEDGER: {category: rollout, value: 'false'}
-          CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'true', category: rollout}
           ACTION_ITEM_REFRESH_PRESERVE_ENABLED: {value: 'true', category: rollout}
           CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
             value: 'true'
             category: ops_kill
-          LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED: {value: 'true', category: rollout}
           CAPTURE_GROUP_CONTAINMENT_MODE: {value: shadow, category: rollout}
           CLIENT_SUMMARIES_AT_CAP_ENABLED: {value: 'true', category: rollout}
           LLM_GATEWAY_ACCOUNTING_ENABLED: {value: 'true', category: rollout}
@@ -658,7 +651,7 @@ environments:
         LLM_GATEWAY_ACCOUNTING_ENABLED: {value: 'true', category: rollout}
         FIRESTORE_READ_LEDGER:
           value: '1'
-        FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":5,"ledger_purge_coalesce":5,"people_scan_dedupe":0,"queue_age_sample_budget":5,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":0,"subscription_cache":100,"usage_month_cache":5}',
+        FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":100,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"people_scan_dedupe":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":25,"subscription_cache":100,"usage_month_cache":100}',
           category: rollout}
         FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
         FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -806,7 +799,7 @@ environments:
               category: service_discovery
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":5,"ledger_purge_coalesce":5,"people_scan_dedupe":0,"queue_age_sample_budget":5,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":0,"subscription_cache":100,"usage_month_cache":5}',
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":100,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"people_scan_dedupe":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":25,"subscription_cache":100,"usage_month_cache":100}',
               category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -823,7 +816,6 @@ environments:
             OMI_VERTEX_RESERVATION_PROJECT:
               value: based-hardware-dev
               category: runtime_identity
-            AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_STRICT_PROJECTION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
@@ -831,7 +823,6 @@ environments:
             LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'false', category: rollout}
             SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'false', category: rollout}
             SONIOX_WIRE_LEDGER: {value: 'false', category: rollout}
-            CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'true', category: rollout}
             ACTION_ITEM_REFRESH_PRESERVE_ENABLED: {value: 'true', category: rollout}
             CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
               value: 'true'
@@ -840,9 +831,7 @@ environments:
             SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
               value: 'true'
               category: ops_kill
-            SYNC_ASSIGNMENT_RECOVERY_ENABLED: {value: 'true', category: rollout}
             SYNC_LINEAGE_LIVE_DEDUPE_ENABLED: {value: 'true', category: rollout}
-            SYNC_LINEAGE_S1_REQUIRED: {value: 'true', category: rollout}
             TRANSLATION_DEMAND_GATE_ENABLED: {value: 'true', category: rollout}
             TRANSLATION_ONOPEN_ENABLED: {value: 'true', category: rollout}
             TRANSLATION_CACHE_TTL: {value: '86400', category: rollout}
@@ -1070,7 +1059,7 @@ environments:
               category: service_discovery
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":5,"ledger_purge_coalesce":5,"people_scan_dedupe":0,"queue_age_sample_budget":5,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":0,"subscription_cache":100,"usage_month_cache":5}',
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":100,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"people_scan_dedupe":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":25,"subscription_cache":100,"usage_month_cache":100}',
               category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -1086,7 +1075,6 @@ environments:
               value: backend-sync
             TRANSLATION_CACHE_TTL: {value: '86400', category: rollout}
             TRANSLATION_NEGATIVE_CACHE_TTL: {value: '21600', category: rollout}
-            AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_STRICT_PROJECTION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
@@ -1094,7 +1082,6 @@ environments:
             LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'false', category: rollout}
             SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'false', category: rollout}
             SONIOX_WIRE_LEDGER: {value: 'false', category: rollout}
-            CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'true', category: rollout}
             ACTION_ITEM_REFRESH_PRESERVE_ENABLED: {value: 'true', category: rollout}
             CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
               value: 'true'
@@ -1103,9 +1090,7 @@ environments:
             SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
               value: 'true'
               category: ops_kill
-            SYNC_ASSIGNMENT_RECOVERY_ENABLED: {value: 'true', category: rollout}
             SYNC_LINEAGE_LIVE_DEDUPE_ENABLED: {value: 'true', category: rollout}
-            SYNC_LINEAGE_S1_REQUIRED: {value: 'true', category: rollout}
             SYNC_SAFETY_WAL_DEDUPE_ENABLED: {value: 'true', category: rollout}
             SYNC_WAL_AUDIO_COVERAGE_ENABLED: {value: 'true', category: rollout}
             CLIENT_SUMMARIES_AT_CAP_ENABLED: {value: 'true', category: rollout}
@@ -1350,7 +1335,7 @@ environments:
               category: service_discovery
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":5,"ledger_purge_coalesce":5,"people_scan_dedupe":0,"queue_age_sample_budget":5,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":0,"subscription_cache":100,"usage_month_cache":5}',
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":100,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"people_scan_dedupe":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":25,"subscription_cache":100,"usage_month_cache":100}',
               category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -1366,7 +1351,6 @@ environments:
               value: backend-sync-backfill
             TRANSLATION_CACHE_TTL: {value: '86400', category: rollout}
             TRANSLATION_NEGATIVE_CACHE_TTL: {value: '21600', category: rollout}
-            AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_STRICT_PROJECTION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
@@ -1374,7 +1358,6 @@ environments:
             LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'false', category: rollout}
             SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'false', category: rollout}
             SONIOX_WIRE_LEDGER: {value: 'false', category: rollout}
-            CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'true', category: rollout}
             ACTION_ITEM_REFRESH_PRESERVE_ENABLED: {value: 'true', category: rollout}
             CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
               value: 'true'
@@ -1383,9 +1366,7 @@ environments:
             SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
               value: 'true'
               category: ops_kill
-            SYNC_ASSIGNMENT_RECOVERY_ENABLED: {value: 'true', category: rollout}
             SYNC_LINEAGE_LIVE_DEDUPE_ENABLED: {value: 'true', category: rollout}
-            SYNC_LINEAGE_S1_REQUIRED: {value: 'true', category: rollout}
             SYNC_SAFETY_WAL_DEDUPE_ENABLED: {value: 'true', category: rollout}
             SYNC_WAL_AUDIO_COVERAGE_ENABLED: {value: 'true', category: rollout}
             CLIENT_SUMMARIES_AT_CAP_ENABLED: {value: 'true', category: rollout}
@@ -1617,7 +1598,7 @@ environments:
               category: service_discovery
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":5,"ledger_purge_coalesce":5,"people_scan_dedupe":0,"queue_age_sample_budget":5,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":0,"subscription_cache":100,"usage_month_cache":5}',
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":100,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"people_scan_dedupe":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":25,"subscription_cache":100,"usage_month_cache":100}',
               category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -1633,7 +1614,6 @@ environments:
               value: backend-integration
             TRANSLATION_CACHE_TTL: {value: '86400', category: rollout}
             TRANSLATION_NEGATIVE_CACHE_TTL: {value: '21600', category: rollout}
-            AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_STRICT_PROJECTION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
@@ -1641,7 +1621,6 @@ environments:
             LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'false', category: rollout}
             SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'false', category: rollout}
             SONIOX_WIRE_LEDGER: {value: 'false', category: rollout}
-            CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'true', category: rollout}
             ACTION_ITEM_REFRESH_PRESERVE_ENABLED: {value: 'true', category: rollout}
             CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
               value: 'true'
@@ -1650,9 +1629,7 @@ environments:
             SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
               value: 'true'
               category: ops_kill
-            SYNC_ASSIGNMENT_RECOVERY_ENABLED: {value: 'true', category: rollout}
             SYNC_LINEAGE_LIVE_DEDUPE_ENABLED: {value: 'true', category: rollout}
-            SYNC_LINEAGE_S1_REQUIRED: {value: 'true', category: rollout}
             SYNC_SAFETY_WAL_DEDUPE_ENABLED: {value: 'true', category: rollout}
             SYNC_WAL_AUDIO_COVERAGE_ENABLED: {value: 'true', category: rollout}
             CLIENT_SUMMARIES_AT_CAP_ENABLED: {value: 'true', category: rollout}
@@ -1790,7 +1767,7 @@ environments:
           env:
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":5,"ledger_purge_coalesce":5,"people_scan_dedupe":0,"queue_age_sample_budget":5,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":0,"subscription_cache":100,"usage_month_cache":5}',
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":100,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"people_scan_dedupe":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":25,"subscription_cache":100,"usage_month_cache":100}',
               category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -1856,7 +1833,7 @@ environments:
               secret: REDIS_DB_PASSWORD
               version: latest
           env:
-            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":5,"ledger_purge_coalesce":5,"people_scan_dedupe":0,"queue_age_sample_budget":5,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":0,"subscription_cache":100,"usage_month_cache":5}',
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":100,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"people_scan_dedupe":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":25,"subscription_cache":100,"usage_month_cache":100}',
               category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -1932,7 +1909,7 @@ environments:
           env:
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":5,"ledger_purge_coalesce":5,"people_scan_dedupe":0,"queue_age_sample_budget":5,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":0,"subscription_cache":100,"usage_month_cache":5}',
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":100,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"people_scan_dedupe":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":25,"subscription_cache":100,"usage_month_cache":100}',
               category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -1997,7 +1974,7 @@ environments:
           env:
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":5,"ledger_purge_coalesce":5,"people_scan_dedupe":0,"queue_age_sample_budget":5,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":0,"subscription_cache":100,"usage_month_cache":5}',
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":100,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"people_scan_dedupe":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":25,"subscription_cache":100,"usage_month_cache":100}',
               category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -2053,7 +2030,7 @@ environments:
           env:
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":5,"ledger_purge_coalesce":5,"people_scan_dedupe":0,"queue_age_sample_budget":5,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":0,"subscription_cache":100,"usage_month_cache":5}',
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":100,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"people_scan_dedupe":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":25,"subscription_cache":100,"usage_month_cache":100}',
               category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -2140,7 +2117,7 @@ environments:
           REPEAT_WORK_REVISION_ENABLED: {value: 'false', category: rollout}
           REPEAT_WORK_LLM_VERSION: {value: 2026-10-16-v1, category: rollout}
           SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
-          FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":5,"ledger_purge_coalesce":5,"people_scan_dedupe":0,"queue_age_sample_budget":5,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":0,"subscription_cache":100,"usage_month_cache":5}',
+          FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":100,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"people_scan_dedupe":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":25,"subscription_cache":100,"usage_month_cache":100}',
             category: rollout}
           FSR_QUEUE_AGE_PUBLISHER: {value: '1', category: rollout}
           FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -2188,7 +2165,6 @@ environments:
           AUDIO_ARCHIVE_UID_ALLOWLIST: {category: rollout, value: ''}
           BUCKET_AUDIO_DERIVED: {value: '', category: rollout}
           AUDIO_MERGE_WORKER_URL: {value: '', category: rollout}
-          AUDIO_TIMELINE_SPANS: {category: rollout, value: 'true'}
           LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
           LIVE_CAPTURE_WINDOW_STRICT_PROJECTION: {value: 'false', category: rollout}
           LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
@@ -2196,7 +2172,6 @@ environments:
           LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {category: rollout, value: 'true'}
           SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {category: rollout, value: 'true'}
           SONIOX_WIRE_LEDGER: {category: rollout, value: 'true'}
-          CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'true', category: rollout}
           ACTION_ITEM_REFRESH_PRESERVE_ENABLED: {value: 'true', category: rollout}
           CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
             value: 'true'
@@ -2204,8 +2179,6 @@ environments:
           SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
             value: 'true'
             category: ops_kill
-          SYNC_ASSIGNMENT_RECOVERY_ENABLED: {value: 'true', category: rollout}
-          LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED: {value: 'true', category: rollout}
           CAPTURE_GROUP_CONTAINMENT_MODE: {value: shadow, category: rollout}
           TRANSLATION_DEMAND_GATE_ENABLED: {value: 'true', category: rollout}
           TRANSLATION_ONOPEN_ENABLED: {value: 'true', category: rollout}
@@ -2550,7 +2523,7 @@ environments:
           REPEAT_WORK_REVISION_ENABLED: {value: 'false', category: rollout}
           REPEAT_WORK_LLM_VERSION: {value: 2026-10-16-v1, category: rollout}
           SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
-          FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":5,"ledger_purge_coalesce":5,"people_scan_dedupe":0,"queue_age_sample_budget":5,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":0,"subscription_cache":100,"usage_month_cache":5}',
+          FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":100,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"people_scan_dedupe":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":25,"subscription_cache":100,"usage_month_cache":100}',
             category: rollout}
           FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
           FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -2573,7 +2546,6 @@ environments:
           AUDIO_ARCHIVE_UID_ALLOWLIST: {category: rollout, value: ''}
           BUCKET_AUDIO_DERIVED: {value: '', category: rollout}
           AUDIO_MERGE_WORKER_URL: {value: '', category: rollout}
-          AUDIO_TIMELINE_SPANS: {category: rollout, value: 'true'}
           LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
           LIVE_CAPTURE_WINDOW_STRICT_PROJECTION: {value: 'false', category: rollout}
           LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
@@ -2581,12 +2553,10 @@ environments:
           LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {category: rollout, value: 'true'}
           SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {category: rollout, value: 'true'}
           SONIOX_WIRE_LEDGER: {category: rollout, value: 'true'}
-          CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'true', category: rollout}
           ACTION_ITEM_REFRESH_PRESERVE_ENABLED: {value: 'true', category: rollout}
           CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
             value: 'true'
             category: ops_kill
-          LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED: {value: 'true', category: rollout}
           CAPTURE_GROUP_CONTAINMENT_MODE: {value: shadow, category: rollout}
           CLIENT_SUMMARIES_AT_CAP_ENABLED: {value: 'true', category: rollout}
           LLM_GATEWAY_ACCOUNTING_ENABLED: {value: 'true', category: rollout}
@@ -2794,7 +2764,7 @@ environments:
         LLM_GATEWAY_ACCOUNTING_ENABLED: {value: 'true', category: rollout}
         FIRESTORE_READ_LEDGER:
           value: '1'
-        FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":5,"ledger_purge_coalesce":5,"people_scan_dedupe":0,"queue_age_sample_budget":5,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":0,"subscription_cache":100,"usage_month_cache":5}',
+        FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":100,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"people_scan_dedupe":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":25,"subscription_cache":100,"usage_month_cache":100}',
           category: rollout}
         FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
         FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -2972,7 +2942,7 @@ environments:
               category: service_discovery
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":5,"ledger_purge_coalesce":5,"people_scan_dedupe":0,"queue_age_sample_budget":5,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":0,"subscription_cache":100,"usage_month_cache":5}',
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":100,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"people_scan_dedupe":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":25,"subscription_cache":100,"usage_month_cache":100}',
               category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -2989,7 +2959,6 @@ environments:
             OMI_VERTEX_RESERVATION_PROJECT:
               value: based-hardware
               category: runtime_identity
-            AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_STRICT_PROJECTION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
@@ -2997,7 +2966,6 @@ environments:
             LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'false', category: rollout}
             SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'false', category: rollout}
             SONIOX_WIRE_LEDGER: {value: 'false', category: rollout}
-            CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'true', category: rollout}
             ACTION_ITEM_REFRESH_PRESERVE_ENABLED: {value: 'true', category: rollout}
             CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
               value: 'true'
@@ -3006,9 +2974,7 @@ environments:
             SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
               value: 'true'
               category: ops_kill
-            SYNC_ASSIGNMENT_RECOVERY_ENABLED: {value: 'true', category: rollout}
             SYNC_LINEAGE_LIVE_DEDUPE_ENABLED: {value: 'true', category: rollout}
-            SYNC_LINEAGE_S1_REQUIRED: {value: 'true', category: rollout}
             TRANSLATION_DEMAND_GATE_ENABLED: {value: 'true', category: rollout}
             TRANSLATION_ONOPEN_ENABLED: {value: 'true', category: rollout}
             TRANSLATION_CACHE_TTL: {value: '86400', category: rollout}
@@ -3325,7 +3291,7 @@ environments:
               category: service_discovery
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":5,"ledger_purge_coalesce":5,"people_scan_dedupe":0,"queue_age_sample_budget":5,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":0,"subscription_cache":100,"usage_month_cache":5}',
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":100,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"people_scan_dedupe":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":25,"subscription_cache":100,"usage_month_cache":100}',
               category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -3341,7 +3307,6 @@ environments:
               value: backend-sync
             TRANSLATION_CACHE_TTL: {value: '86400', category: rollout}
             TRANSLATION_NEGATIVE_CACHE_TTL: {value: '21600', category: rollout}
-            AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_STRICT_PROJECTION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
@@ -3349,7 +3314,6 @@ environments:
             LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'false', category: rollout}
             SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'false', category: rollout}
             SONIOX_WIRE_LEDGER: {value: 'false', category: rollout}
-            CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'true', category: rollout}
             ACTION_ITEM_REFRESH_PRESERVE_ENABLED: {value: 'true', category: rollout}
             CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
               value: 'true'
@@ -3358,9 +3322,7 @@ environments:
             SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
               value: 'true'
               category: ops_kill
-            SYNC_ASSIGNMENT_RECOVERY_ENABLED: {value: 'true', category: rollout}
             SYNC_LINEAGE_LIVE_DEDUPE_ENABLED: {value: 'true', category: rollout}
-            SYNC_LINEAGE_S1_REQUIRED: {value: 'true', category: rollout}
             SYNC_SAFETY_WAL_DEDUPE_ENABLED: {value: 'true', category: rollout}
             SYNC_WAL_AUDIO_COVERAGE_ENABLED: {value: 'true', category: rollout}
             CLIENT_SUMMARIES_AT_CAP_ENABLED: {value: 'true', category: rollout}
@@ -3687,7 +3649,7 @@ environments:
               category: service_discovery
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":5,"ledger_purge_coalesce":5,"people_scan_dedupe":0,"queue_age_sample_budget":5,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":0,"subscription_cache":100,"usage_month_cache":5}',
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":100,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"people_scan_dedupe":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":25,"subscription_cache":100,"usage_month_cache":100}',
               category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -3703,7 +3665,6 @@ environments:
               value: backend-sync-backfill
             TRANSLATION_CACHE_TTL: {value: '86400', category: rollout}
             TRANSLATION_NEGATIVE_CACHE_TTL: {value: '21600', category: rollout}
-            AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_STRICT_PROJECTION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
@@ -3711,7 +3672,6 @@ environments:
             LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'false', category: rollout}
             SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'false', category: rollout}
             SONIOX_WIRE_LEDGER: {value: 'false', category: rollout}
-            CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'true', category: rollout}
             ACTION_ITEM_REFRESH_PRESERVE_ENABLED: {value: 'true', category: rollout}
             CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
               value: 'true'
@@ -3720,9 +3680,7 @@ environments:
             SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
               value: 'true'
               category: ops_kill
-            SYNC_ASSIGNMENT_RECOVERY_ENABLED: {value: 'true', category: rollout}
             SYNC_LINEAGE_LIVE_DEDUPE_ENABLED: {value: 'true', category: rollout}
-            SYNC_LINEAGE_S1_REQUIRED: {value: 'true', category: rollout}
             SYNC_SAFETY_WAL_DEDUPE_ENABLED: {value: 'true', category: rollout}
             SYNC_WAL_AUDIO_COVERAGE_ENABLED: {value: 'true', category: rollout}
             CLIENT_SUMMARIES_AT_CAP_ENABLED: {value: 'true', category: rollout}
@@ -4031,7 +3989,7 @@ environments:
               category: service_discovery
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":5,"ledger_purge_coalesce":5,"people_scan_dedupe":0,"queue_age_sample_budget":5,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":0,"subscription_cache":100,"usage_month_cache":5}',
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":100,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"people_scan_dedupe":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":25,"subscription_cache":100,"usage_month_cache":100}',
               category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -4047,7 +4005,6 @@ environments:
               value: backend-integration
             TRANSLATION_CACHE_TTL: {value: '86400', category: rollout}
             TRANSLATION_NEGATIVE_CACHE_TTL: {value: '21600', category: rollout}
-            AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_STRICT_PROJECTION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
@@ -4055,7 +4012,6 @@ environments:
             LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'false', category: rollout}
             SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'false', category: rollout}
             SONIOX_WIRE_LEDGER: {value: 'false', category: rollout}
-            CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'true', category: rollout}
             ACTION_ITEM_REFRESH_PRESERVE_ENABLED: {value: 'true', category: rollout}
             CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
               value: 'true'
@@ -4064,9 +4020,7 @@ environments:
             SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
               value: 'true'
               category: ops_kill
-            SYNC_ASSIGNMENT_RECOVERY_ENABLED: {value: 'true', category: rollout}
             SYNC_LINEAGE_LIVE_DEDUPE_ENABLED: {value: 'true', category: rollout}
-            SYNC_LINEAGE_S1_REQUIRED: {value: 'true', category: rollout}
             SYNC_SAFETY_WAL_DEDUPE_ENABLED: {value: 'true', category: rollout}
             SYNC_WAL_AUDIO_COVERAGE_ENABLED: {value: 'true', category: rollout}
             CLIENT_SUMMARIES_AT_CAP_ENABLED: {value: 'true', category: rollout}
@@ -4234,7 +4188,7 @@ environments:
           env:
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":5,"ledger_purge_coalesce":5,"people_scan_dedupe":0,"queue_age_sample_budget":5,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":0,"subscription_cache":100,"usage_month_cache":5}',
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":100,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"people_scan_dedupe":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":25,"subscription_cache":100,"usage_month_cache":100}',
               category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -4295,7 +4249,7 @@ environments:
               secret: REDIS_DB_PASSWORD
               version: latest
           env:
-            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":5,"ledger_purge_coalesce":5,"people_scan_dedupe":0,"queue_age_sample_budget":5,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":0,"subscription_cache":100,"usage_month_cache":5}',
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":100,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"people_scan_dedupe":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":25,"subscription_cache":100,"usage_month_cache":100}',
               category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -4369,7 +4323,7 @@ environments:
           env:
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":5,"ledger_purge_coalesce":5,"people_scan_dedupe":0,"queue_age_sample_budget":5,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":0,"subscription_cache":100,"usage_month_cache":5}',
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":100,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"people_scan_dedupe":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":25,"subscription_cache":100,"usage_month_cache":100}',
               category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -4434,7 +4388,7 @@ environments:
           env:
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":5,"ledger_purge_coalesce":5,"people_scan_dedupe":0,"queue_age_sample_budget":5,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":0,"subscription_cache":100,"usage_month_cache":5}',
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":100,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"people_scan_dedupe":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":25,"subscription_cache":100,"usage_month_cache":100}',
               category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -4489,7 +4443,7 @@ environments:
           env:
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":5,"ledger_purge_coalesce":5,"people_scan_dedupe":0,"queue_age_sample_budget":5,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":0,"subscription_cache":100,"usage_month_cache":5}',
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":100,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"people_scan_dedupe":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":25,"subscription_cache":100,"usage_month_cache":100}',
               category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}

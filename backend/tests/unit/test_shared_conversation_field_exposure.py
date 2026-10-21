@@ -264,7 +264,9 @@ def test_rich_meeting_fields_share_without_emails_or_insights():
         emoji='📝',
         meeting_type='one_on_one',
         participants=[
-            Participant(name='Ash Kalb', email='ash@fulcra.com', organization='Fulcra', source='roster'),
+            Participant(
+                name='Ash Kalb', email='ash@fulcra.com', organization='Fulcra', source='roster', evidence='Zoom tile'
+            ),
             Participant(name=None, email='plus-one@fulcra.com', source='roster'),
             Participant(name='Boardy', is_ai_agent=True, source='roster'),
         ],

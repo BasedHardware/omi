@@ -19,6 +19,17 @@ concurrency:
   group: backend-hermetic-e2e-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || format('run-{0}', github.run_id) }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+env:
+  # Abort a stalled git HTTP transfer instead of hanging. Hosted-runner fetches
+  # from github.com intermittently stop receiving data for 7-10 minutes before
+  # the connection resets (Backend Hermetic E2E run 39435458398 spent 498 s in
+  # "Checkout code" and hit its 10-minute cap). With these set, git aborts any
+  # transfer that stays under 1 KB/s for 60 s, and actions/checkout retries the
+  # fetch (its built-in 3 attempts); a healthy depth-1 fetch takes ~20 s.
+  # Applies to every git network call in the workflow, including script steps.
+  GIT_HTTP_LOW_SPEED_LIMIT: "1000"
+  GIT_HTTP_LOW_SPEED_TIME: "60"
+
 jobs:
   scope:
     name: Detect Hermetic Backend Scope
@@ -40,6 +51,7 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
+        timeout-minutes: 5
         with:
           fetch-depth: 0
           filter: blob:none
@@ -114,13 +126,19 @@ jobs:
   hermetic-e2e:
     name: Hermetic Backend E2E
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    # 10 minutes for setup + tests, plus the 5-minute checkout backstop below,
+    # so a slow-but-recovering checkout no longer eats the test budget.
+    timeout-minutes: 15
     needs: scope
     if: needs.scope.outputs.applies == 'true' && needs.scope.outputs.full_ci == 'true'
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
+        # Healthy checkout is ~25 s. The workflow-level GIT_HTTP_LOW_SPEED_*
+        # env aborts a stalled fetch after 60 s so checkout's own retry runs;
+        # this caps the worst case (3 stalled attempts plus backoff).
+        timeout-minutes: 5
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -169,6 +187,7 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
+        timeout-minutes: 5
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -260,6 +279,7 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
+        timeout-minutes: 5
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -341,6 +361,7 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
+        timeout-minutes: 5
 
       - name: Set up Python
         uses: actions/setup-python@v6

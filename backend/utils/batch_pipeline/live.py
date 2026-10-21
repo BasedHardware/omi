@@ -209,7 +209,11 @@ async def admit_recording(store, pending, *, now=None):
     client = await run_blocking(storage_executor, create_storage_client)
     bucket = os.getenv('BUCKET_BATCH_PIPELINE', '').strip()
     artifacts = create_artifact_store(store, client, bucket, os.getenv('ENCRYPTION_SECRET', '').encode())
-    chunks = await run_blocking(storage_executor, list_audio_chunks, uid, conversation_id, max_count=4096)
+    # A failed raw-archive listing raises (drain retries in 60 s) rather than
+    # admitting a recording whose later packs are silently missing.
+    chunks = await run_blocking(
+        storage_executor, list_audio_chunks, uid, conversation_id, max_count=4096, require_archive=True
+    )
     if not chunks:
         raise ValueError('retained capture not durable yet')
     seed = WorkItem(

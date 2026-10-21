@@ -28,6 +28,13 @@ PREFIX_VIOLATIONS = Counter(
     'Append-only request prefix changed between harness turns',
     ['reason'],
 )
+# Cached share of input per shaped feature: cached / (cached + uncached). Turns
+# that report no usage (streamed chat) are not counted.
+INPUT_TOKENS = Counter(
+    'omi_shaped_agent_input_tokens_total',
+    'Input tokens reported by shaped-agent turns, split by provider cache reads',
+    ['feature', 'kind'],
+)
 FLAG = 'OMI_SHAPED_AGENT_MODE'
 COHORT_UID = 'vi7SA9ckQCe4ccobWNxlbdcNdC23'
 SHARED_CONTRACT = (
@@ -62,6 +69,8 @@ class Mount:
     cache_breakpoint: bool = True
     cache_initial_evidence: bool = True
     stable_context: tuple[Any, ...] = ()
+    # Low-cardinality label for harness metrics; never user or request data.
+    feature: str = 'unlabeled'
 
     def prefix(self) -> str:
         return '\n\n'.join(part for part in (SHARED_CONTRACT, self.instructions, *self.skills) if part)
@@ -191,6 +200,10 @@ async def run_loop(
             if type(budget_charge) is not int or budget_charge < 0:
                 raise ValueError('Invalid price-weighted token usage')
             budget_used += budget_charge
+            if turn.prompt_tokens > 0:
+                cached = min(turn.cached_tokens or 0, turn.prompt_tokens)
+                INPUT_TOKENS.labels(feature=mount.feature, kind='cached').inc(cached)
+                INPUT_TOKENS.labels(feature=mount.feature, kind='uncached').inc(turn.prompt_tokens - cached)
             if observe_turn is not None:
                 await observe_turn(turn)
             if budget.tokens is not None and budget_used > budget.tokens:

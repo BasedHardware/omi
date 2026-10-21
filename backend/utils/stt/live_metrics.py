@@ -97,6 +97,16 @@ SESSION_LOCAL_EXCLUSION_RELEASES = Counter(
     'Providers re-admitted to a session after a successor was adopted; they had left only for replay overflow',
     ['provider'],
 )
+SAME_TARGET_RETRIES = Counter(
+    'omi_stt_same_target_retries_total',
+    'One jittered same-target retry after a connection-level failure (path=connect|death)',
+    ['provider', 'path', 'outcome'],
+)
+COST_ESCAPE_VOTES = Counter(
+    'omi_stt_cost_routing_escape_votes_total',
+    'Trial votes admitted from outside the re-entry cohort because no stage-100 target served the user',
+    ['target'],
+)
 WINDOW_REPLAY_CUT_REQUESTS = Counter(
     'omi_stt_window_replay_cut_requests_total', 'Coalesced requests to cut a held TDT tail under capture-ring pressure'
 )
@@ -271,7 +281,7 @@ COST_ALL_DEGRADED = Counter(
 )
 COST_IGNORED_DEATHS = Counter(
     'omi_stt_cost_routing_ignored_deaths_total',
-    'Claimed socket deaths excluded by client departure or owner teardown',
+    'Claimed socket deaths excluded by client departure, owner teardown or pod drain',
     ['target', 'reason', 'boundary'],
 )
 COST_OBSERVATIONS = Counter(

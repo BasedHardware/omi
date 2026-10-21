@@ -44,6 +44,9 @@ from utils.stt.live_cost_health import CostHealthUnavailable
 from utils.stt.live_gate import GateState
 from utils.stt.connect_backoff import ConnectLease, connect_backoff
 from utils.stt.live_metrics import CONNECT_BACKOFF, COST_DECISION, COST_FAIL_OPEN, COST_NO_PERMITTED_TARGET
+from utils.stt.live_metrics import SAME_TARGET_RETRIES
+from utils.stt.live_retry import RETRY_JITTER_SECONDS, retry_jitter_seconds, same_target_retry_allowed
+from utils.stt.pod_drain import is_draining
 from utils.stt.provider_resilience import (
     EXPECTED_REJECTIONS,
     ProviderCircuitBreaker,
@@ -82,6 +85,14 @@ def _note_connect_result(*, failed_provider: str | None) -> None:
             _recent_connect_failures.clear()
         else:
             _recent_connect_failures.append((time.monotonic(), failed_provider))
+
+
+def _safe_cost_stage(identity: str, language: str | None) -> int:
+    """Gate stage for a static/shadow route; unknown state never blocks a retry."""
+    try:
+        return health.cost_stage(identity, bounded_language(language))
+    except Exception:
+        return 100
 
 
 def failure_reason(error: BaseException) -> str:
@@ -272,6 +283,8 @@ async def connect_configured_chain(
         fallback.sort(key=lambda route: (conservative_stage(route) < 100, -conservative_stage(route)))
         return fallback, True
 
+    routing_decision: dict = {}
+    gate_states: dict[str, GateState] = {}
     if mode != 'off' and routing_uid and not _routing_static:
         try:
             canary = routing_on(routing_uid)
@@ -286,7 +299,9 @@ async def connect_configured_chain(
                 routing_languages,
                 routing_models,
                 last_resorts,
+                decision=routing_decision,
             )
+            gate_states = routing_decision.get('states') or {}
             if canary:
                 active = True
                 # An override endpoint does not replace the configured family
@@ -304,6 +319,15 @@ async def connect_configured_chain(
                     if any(s == service and (t is None or t.endpoint is None) for s, t in routes):
                         continue
                     target, _ = route_target(service)
+                    if (
+                        routing_decision.get('exclude_benched')
+                        and routes
+                        and gate_states.get(target.id, GateState()).stage == 0
+                    ):
+                        # The escape keeps a benched family out while a
+                        # stage>0 route can serve; it must not return as tail.
+                        COST_DECISION.labels(target=target.id, reason='benched_skip').inc()
+                        continue
                     routes.append((service, target if targets and target in targets else None))
         except CostHealthUnavailable as error:
             COST_FAIL_OPEN.labels(reason='cache_unavailable').inc()
@@ -740,6 +764,10 @@ async def connect_configured_chain(
         if active and backup(service, target):
             target_id = target.id if target is not None else DEFAULT_IDS.get(service.value, service.value)
             COST_DECISION.labels(target=target_id, reason='failover').inc()
+        # A dial spending a same-target retry slot: its failure is the same blip
+        # the dead leg already voted for, so it must not vote again.
+        is_retry_dial = getattr(recovery, 'is_retry_dial', None)
+        retry_dial = bool(is_retry_dial(attempt_identity(service, target))) if callable(is_retry_dial) else False
         try:
             if recovery is not None and dial_budget is not None and dial_budget <= 0:
                 on_close()
@@ -751,6 +779,15 @@ async def connect_configured_chain(
                 backoff_lease.finish()
                 note_skip(service, 'recovery_budget')
                 return None
+            take_jitter = getattr(recovery, 'take_retry_jitter', None)
+            jitter = take_jitter(attempt_identity(service, target)) if callable(take_jitter) else 0.0
+            if isinstance(jitter, (int, float)) and jitter > 0:
+                # A same-target retry after a transport death: spread the
+                # redial so a fleet-wide drop does not reconnect in lockstep.
+                slept = min(float(jitter), (dial_budget or RETRY_JITTER_SECONDS[1]) / 4)
+                await asyncio.sleep(slept)
+                if dial_budget is not None:
+                    dial_budget = max(0.001, dial_budget - slept)
             token = connecting_target.set(target)
             try:
                 if dial_budget is not None:
@@ -884,6 +921,8 @@ async def connect_configured_chain(
                 health.record_session,
             )
             rejected_outcome.claim(reason, connect=True)
+            if retry_dial:
+                rejected_outcome.evidence = False
             if socket is not None and rejected_outcome.connection_cause is None:
                 rejected_outcome.connection_cause = getattr(socket, 'connection_cause', None)
             if socket is not None:
@@ -969,6 +1008,65 @@ async def connect_configured_chain(
         record_managed_leg_handoff(socket)
         return socket, service
 
+    retried: set[str] = set()
+
+    async def _same_target_retry(
+        service: STTService, connect: Connect, target, identity: str
+    ) -> tuple[STTSocket, STTService] | None:
+        """One jittered redial of the route that just failed at connect."""
+        outcome = prior_outcome
+        if outcome is None or identity in retried:
+            return None
+        stage = gate_states[identity].stage if identity in gate_states else _safe_cost_stage(identity, routing_language)
+        circuit = target_circuit(target, _circuit_for_primary(service))
+        if not same_target_retry_allowed(
+            outcome.reason,
+            text_seen=False,
+            stage=stage,
+            circuit_open=circuit.state == 'open',
+            already_retried=False,
+            family=service.value,
+        ):
+            return None
+        if is_draining():
+            return None  # our own restart: let the client reconnect elsewhere
+        retried.add(identity)
+        episode = current_recovery.get() if recovery_on else None
+        dial_identity = attempt_identity(service, target)
+        delay = retry_jitter_seconds()
+        if episode is not None:
+            remaining = episode.remaining()
+            if remaining is not None:
+                delay = min(delay, max(0.0, remaining / 4))
+        await asyncio.sleep(delay)
+        if is_draining():
+            return None  # SIGTERM arrived during the jitter
+        if not circuit.allow_request(max_probes=probes):
+            SAME_TARGET_RETRIES.labels(provider=service.value, path='connect', outcome='refused').inc()
+            return None
+        # The redial is admitted; only now take this identity's own retry slot
+        # (never the Soniox rescue re-entry).
+        if (
+            episode is not None
+            and not episode.can_attempt(dial_identity)
+            and not episode.grant_transient_retry(dial_identity)
+        ):
+            _, release = circuit.deferred_result_callbacks()
+            release()
+            SAME_TARGET_RETRIES.labels(provider=service.value, path='connect', outcome='refused').inc()
+            return None
+        failed_targets.discard(identity)
+        failed.discard(provider_for_service(service) or service.value)
+        before = prior_outcome
+        result = await attempt(service, connect, target)
+        if result is None and prior_outcome is not None and prior_outcome is not before:
+            # The first failure already voted; one blip is one health vote.
+            prior_outcome.evidence = False
+        SAME_TARGET_RETRIES.labels(
+            provider=service.value, path='connect', outcome='served' if result is not None else 'failed'
+        ).inc()
+        return result
+
     recovery = current_recovery.get() if recovery_on else None
     for service, target in routes:
         connect = callbacks.get(service)
@@ -1025,9 +1123,14 @@ async def connect_configured_chain(
                     outcome='degraded',
                 )
             continue
+        dialed_before = prior_outcome
         result = await attempt(service, connect, target)
         if result is not None:
             return result
+        if prior_outcome is not None and prior_outcome is not dialed_before and identity is not None:
+            result = await _same_target_retry(service, connect, target, identity)
+            if result is not None:
+                return result
 
     # Capacity is advisory when it would suppress every usable route. Dial only
     # one least-recently-refused candidate; retain account/local circuit gates.

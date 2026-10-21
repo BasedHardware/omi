@@ -264,7 +264,7 @@ def visible_text_fields(structured: Structured) -> list[tuple[Any, str]]:
     for event in structured.events:
         fields.extend(((event, 'title'), (event, 'description')))
     for participant in structured.participants:
-        for attribute in ('name', 'email', 'organization', 'role'):
+        for attribute in ('name', 'email', 'organization', 'role', 'evidence'):
             if getattr(participant, attribute, None) is not None:
                 fields.append((participant, attribute))
     for insight in structured.insights:

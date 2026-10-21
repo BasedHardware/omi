@@ -195,4 +195,40 @@ void main() {
     expect(failed, PaywallCheckoutOutcome.failed);
     expect(messages, [l10n.anErrorOccurredTryAgain]);
   });
+
+  testWidgets('a checkout 409 reports the existing subscription, never resubscribe', (tester) async {
+    const existing =
+        'You already have a subscription. Manage your existing subscription instead of starting a new checkout.';
+    final usage = _Usage()..sessionResult = {'error': true, 'status_code': 409, 'detail': existing};
+    addTearDown(usage.dispose);
+    final messages = <String>[];
+    late BuildContext pageContext;
+    await tester.pumpWidget(
+      ChangeNotifierProvider<UsageProvider>.value(
+        value: usage,
+        child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: const [Locale('en')],
+          home: Scaffold(body: Builder(builder: (context) {
+            pageContext = context;
+            return const SizedBox.shrink();
+          })),
+        ),
+      ),
+    );
+    final l10n = AppLocalizations.of(pageContext);
+
+    final outcome = await PaywallCheckout.start(
+      pageContext,
+      priceId: 'price_plus_m',
+      plan: 'plus',
+      interval: 'month',
+      source: 'outline_paywall',
+      surface: messages.add,
+    );
+
+    expect(outcome, PaywallCheckoutOutcome.failed);
+    expect(messages, [existing]);
+    expect(messages, isNot(contains(l10n.resubscribeFirstToChangePlans)));
+  });
 }

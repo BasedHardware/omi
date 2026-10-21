@@ -530,10 +530,10 @@ class _PlansSheetState extends State<PlansSheet> {
           promotionCode: promoCode.isNotEmpty ? promoCode : null,
         );
         if (result != null && result['error'] == true) {
-          final detail = isPendingCancelConflict(result['status_code'])
+          final detail = isUpgradePendingCancelConflict(result['status_code'])
               ? l10n.resubscribeFirstToChangePlans
               : result['detail'] as String? ?? l10n.invalidPromotionCode;
-          if (promoCode.isNotEmpty && !isPendingCancelConflict(result['status_code'])) {
+          if (promoCode.isNotEmpty && !isUpgradePendingCancelConflict(result['status_code'])) {
             setState(() => _promoCodeError = detail);
           } else {
             _surfacePurchaseError(detail);
@@ -559,11 +559,8 @@ class _PlansSheetState extends State<PlansSheet> {
         );
         if (!mounted) return;
         if (sessionData != null && sessionData['error'] == true) {
-          _surfacePurchaseError(
-            isPendingCancelConflict(sessionData['status_code'])
-                ? l10n.resubscribeFirstToChangePlans
-                : sessionData['detail'] as String? ?? l10n.couldNotProcessSubscription,
-          );
+          // Checkout's 409 is an existing subscription, not a pending cancellation.
+          _surfacePurchaseError(sessionData['detail'] as String? ?? l10n.couldNotProcessSubscription);
         } else if (sessionData != null) {
           // Check if this was a reactivation
           if (sessionData.containsKey('status') && sessionData['status'] == 'reactivated') {

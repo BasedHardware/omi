@@ -16,7 +16,11 @@ from config.stt_provider_policy import normalized_stt_language, PARAKEET_SUPPORT
 from database.batch_pipeline_intake import admit, cache_completed
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from database.batch_pipeline_store import FirestoreStore
-from database.sync_ledger import is_valid_completed_sync_content_result
+from database.sync_ledger import (
+    BATCH_PARTIAL_STATUS,
+    is_valid_completed_sync_content_result,
+    is_valid_partial_sync_content_result,
+)
 from utils.batch_pipeline.artifacts import ArtifactStore
 from utils.batch_pipeline.artifact_policy import create_artifact_store
 from utils.batch_pipeline.audio import with_context
@@ -98,10 +102,9 @@ def _held_status(jobs: list[dict]) -> tuple[str, str | None] | None:
 
 def _deleted_conversation_status(ledger: dict, intake: dict, job_id: str) -> dict | None:
     result = ledger.get('result')
-    if (
-        ledger.get('status') != 'completed'
-        or not isinstance(result, dict)
-        or not is_valid_completed_sync_content_result(result)
+    if not isinstance(result, dict) or not (
+        (ledger.get('status') == 'completed' and is_valid_completed_sync_content_result(result))
+        or (ledger.get('status') == BATCH_PARTIAL_STATUS and is_valid_partial_sync_content_result(result))
     ):
         return None
     total = result['total_segments']
@@ -167,6 +170,25 @@ def durable_status(store, uid: str, job_id: str) -> dict | None:
         if not completed:
             for job in jobs:
                 Scheduler.redrive_in_transaction(tx, job, time.time())
+        if ledger.get('status') == BATCH_PARTIAL_STATUS and is_valid_partial_sync_content_result(result):
+            # Terminal for the phone: projected siblings are published, the held
+            # units' audio stays server-side, and a later recovery upgrades the
+            # ledger. Released apps ACK `completed`.
+            held_count, total = result['held_segments'], result['total_segments']
+            return {
+                'job_id': job_id,
+                'status': 'completed',
+                'lane': intake['lane'],
+                'total_files': intake['total_files'],
+                'total_segments': total,
+                'processed_segments': total - held_count,
+                'successful_segments': total - held_count,
+                'failed_segments': held_count,
+                'errors': [],
+                'result': result,
+                'reason_code': HELD_REASON_CODE,
+                'poll_after_ms': 0,
+            }
         recovering = any(
             job.get('state') == 'quarantined' and job.get('recovery_state') in {'held', 'prepared', 'running'}
             for job in jobs

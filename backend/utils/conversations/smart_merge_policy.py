@@ -37,6 +37,7 @@ from config.conversation_smart_merge import (
 )
 from utils.conversations.smart_merge_state import Fragment
 from utils.conversations.wake_word import find_wake_word_matches
+from utils.sync.clock_run import SYNC_CLOCK_RUN_FIELD
 from utils.stt.speaker_identity import ConversationSpeakerIdAllocator
 
 SMART_MERGE_FIELD = 'smart_merge'
@@ -107,9 +108,17 @@ def refresh_owed(row: Mapping[str, Any]) -> bool:
     return refreshed_revision(row) < revision(row)
 
 
-def partition(row: Mapping[str, Any]) -> tuple[Any, Any, bool]:
-    """Unknown device is its own partition, never a wildcard (same rule as sync)."""
-    return (row.get('source'), row.get('client_device_id'), bool(row.get('is_locked')))
+def partition(row: Mapping[str, Any]) -> tuple[Any, Any, bool, Any]:
+    """Unknown device is its own partition, never a wildcard (same rule as sync).
+
+    So is an estimated-clock run: its recorded gap to any other row is fiction.
+    """
+    return (
+        row.get('source'),
+        row.get('client_device_id'),
+        bool(row.get('is_locked')),
+        row.get(SYNC_CLOCK_RUN_FIELD),
+    )
 
 
 def user_managed(row: Mapping[str, Any]) -> bool:

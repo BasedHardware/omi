@@ -28,6 +28,7 @@ from utils.stt.live_metrics import soniox_idle_metrics
 from utils.observability.routing_cohort import current_routing_cohort
 from utils.stt.connect_metrics import CONNECT_FAILURE, CONNECT_SUCCESS, record_stt_provider_connect
 from utils.stt.live_reason import normalize_live_stt_reason
+from utils.stt.provider_stream_end import US_TIMEOUT, begin_stream_close, note_stream_close_intent
 
 IDLE_DRAIN_SECONDS = 2.0
 _sleep = asyncio.sleep  # Seam for deterministic watchdog tests.
@@ -164,6 +165,7 @@ class IdleSonioxSocket(STTSocket):
         # alive while the paid transport finishes its last committed text.
         self._close_trigger = trigger
         self._transport._planned_close = True
+        note_stream_close_intent(self._transport, US_TIMEOUT)
         self._idle_since = now
         self._close_task = create_named_task(self._close_idle(), name='soniox_idle_close')
 
@@ -430,6 +432,7 @@ class IdleSonioxSocket(STTSocket):
             self._transport.finish()
 
     async def drain_and_close(self) -> None:
+        begin_stream_close(self._transport)  # The drain or idle close below records it after closing.
         self.finish()
         if self._watchdog is not None:
             await asyncio.gather(self._watchdog, return_exceptions=True)

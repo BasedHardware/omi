@@ -51,8 +51,6 @@ overlay:
           value: '100'
         AUDIO_ARCHIVE_UID_ALLOWLIST:
           value: ''
-        AUDIO_TIMELINE_SPANS:
-          value: 'true'
         LIVE_CAPTURE_WINDOW_MERGE_UNION:
           value: 'true'
         LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS:
@@ -223,8 +221,6 @@ overlay:
           value: '100'
         AUDIO_ARCHIVE_UID_ALLOWLIST:
           value: ''
-        AUDIO_TIMELINE_SPANS:
-          value: 'true'
         LIVE_CAPTURE_WINDOW_MERGE_UNION:
           value: 'true'
         LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS:
@@ -708,9 +704,6 @@ overlay:
           REPEAT_WORK_REVISION_ENABLED:
             value: 'false'
             category: rollout
-          SYNC_ASSIGNMENT_RECOVERY_ENABLED:
-            value: 'true'
-            category: rollout
           SYNC_DURABLE_STATUS_RECONCILIATION:
             value: 'true'
             category: rollout
@@ -999,9 +992,6 @@ overlay:
             category: rollout
           REPEAT_WORK_REVISION_ENABLED:
             value: 'false'
-            category: rollout
-          SYNC_ASSIGNMENT_RECOVERY_ENABLED:
-            value: 'true'
             category: rollout
           SYNC_BACKFILL_ENABLED:
             value: 'true'
@@ -1309,9 +1299,6 @@ overlay:
           REPEAT_WORK_REVISION_ENABLED:
             value: 'false'
             category: rollout
-          SYNC_ASSIGNMENT_RECOVERY_ENABLED:
-            value: 'true'
-            category: rollout
           SYNC_BACKFILL_ENABLED:
             value: 'true'
             category: rollout
@@ -1561,9 +1548,6 @@ overlay:
             value: 'false'
             category: rollout
           SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED:
-            value: 'true'
-            category: rollout
-          SYNC_ASSIGNMENT_RECOVERY_ENABLED:
             value: 'true'
             category: rollout
           BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED:

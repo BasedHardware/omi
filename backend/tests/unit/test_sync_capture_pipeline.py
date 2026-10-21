@@ -448,9 +448,8 @@ def test_bridge_finishes_once_at_process_segment_completion(pipeline, monkeypatc
     finish.assert_called_once_with('u', conversations(store)[0]['id'], audio_source_id=None)
 
 
-@pytest.mark.parametrize('flag', ['true', 'off'])
-def test_locked_segments_merge_and_an_identical_locked_retry_is_not_a_conflict(pipeline, monkeypatch, flag):
-    monkeypatch.setenv('SYNC_ASSIGNMENT_RECOVERY_ENABLED', flag)
+def test_locked_segments_merge_and_an_identical_locked_retry_is_not_a_conflict(pipeline, monkeypatch):
+
     module, store = pipeline
     response = {'new_memories': set(), 'updated_memories': set()}
     errors = []
@@ -469,7 +468,6 @@ def test_locked_segments_merge_and_an_identical_locked_retry_is_not_a_conflict(p
 
 @pytest.mark.parametrize('condition', ['anchor_deleted', 'lineage_deleted', 'user_managed', 'provenance', 'cycle'])
 def test_assignment_outcomes_through_process_segment(pipeline, condition, monkeypatch):
-    monkeypatch.setenv('SYNC_ASSIGNMENT_RECOVERY_ENABLED', 'off')
 
     module, store = pipeline
     cid = chunk_identity('u', 'omi', None, False, 1000)
@@ -487,7 +485,11 @@ def test_assignment_outcomes_through_process_segment(pipeline, condition, monkey
         row.update(deleted=True, sync_merged_into=cid)
     else:
         row = chunk('live', 1000, device='another-device')
-        cid = target = 'live'
+        cid = 'live'
+        target = 'donor'
+        store.rows[('users', 'u', 'conversations', 'donor')] = dict(
+            row, id='donor', deleted=True, sync_merged_into='live', smart_merge={'role': 'donor'}
+        )
     store.rows[('users', 'u', 'conversations', cid)] = row
     before = deepcopy(store.rows)
     response = {'new_memories': set(), 'updated_memories': set()}
@@ -688,3 +690,73 @@ def test_finalize_internal_failure_is_retryable_and_has_no_provider_label(pipeli
     assert outcome['retryable'] is True
     assert outcome['provider'] == 'unknown' and outcome['model'] == 'unknown'
     assert outcome['phase'] == 'finalize' and not outcome.get('provider_invalid_input')
+
+
+@pytest.mark.parametrize('phase', ['provider_select', 'provider_call', 'parse'])
+@pytest.mark.parametrize(
+    'error_type,code,retryable',
+    [
+        (ValueError, 'stt_invalid_input', False),
+        (httpx.ReadTimeout, 'stt_timeout', True),
+        (RuntimeError, 'stt_upstream_error', True),
+    ],
+)
+def test_segment_failure_phase_preserves_retry_labels_and_turnstile(
+    pipeline, monkeypatch, caplog, phase, error_type, code, retryable
+):
+    module, store = pipeline
+    error = error_type('private-provider-body-and-transcript')
+    module.get_prerecorded_service = MagicMock(return_value=('deepgram', None, 'nova-3'))
+    seam = {'provider_select': 'get_prerecorded_service', 'provider_call': 'prerecorded', 'parse': 'postprocess_words'}[
+        phase
+    ]
+    monkeypatch.setattr(module, seam, MagicMock(side_effect=error))
+    response = {'new_memories': set(), 'updated_memories': set()}
+    errors, outcome = [], {}
+    turnstile = MagicMock()
+    assert (
+        module.process_segment(
+            '1700000000.wav',
+            'u',
+            response,
+            threading.Lock(),
+            errors,
+            deferred_outcome=outcome,
+            turnstile=turnstile,
+        )
+        is False
+    )
+    assert errors == [code]
+    assert outcome['retryable'] is retryable
+    assert outcome['phase'] == phase
+    assert outcome['provider'] == ('unknown' if phase == 'provider_select' else 'deepgram')
+    assert outcome['model'] == ('unknown' if phase == 'provider_select' else 'nova-3')
+    assert bool(outcome.get('provider_invalid_input')) is (error_type is ValueError and phase != 'provider_select')
+    assert 'repeat_failure_fingerprint' not in outcome
+    assert not store.rows and not response['new_memories'] and not response['updated_memories']
+    turnstile.complete.assert_called_once_with('1700000000.wav')
+    assert 'private-provider-body-and-transcript' not in caplog.text
+
+
+def test_destructive_fence_still_propagates_without_recording_a_provider_failure(pipeline):
+    class DestructiveOperationInProgress(RuntimeError):
+        pass
+
+    module, store = pipeline
+    error = DestructiveOperationInProgress('private-account-fence')
+    module.prerecorded = MagicMock(side_effect=error)
+    errors, outcome = [], {}
+    turnstile = MagicMock()
+    with pytest.raises(DestructiveOperationInProgress) as caught:
+        module.process_segment(
+            '1700000000.wav',
+            'u',
+            {'new_memories': set(), 'updated_memories': set()},
+            threading.Lock(),
+            errors,
+            deferred_outcome=outcome,
+            turnstile=turnstile,
+        )
+    assert caught.value is error
+    assert not errors and not outcome and not store.rows
+    turnstile.complete.assert_called_once_with('1700000000.wav')

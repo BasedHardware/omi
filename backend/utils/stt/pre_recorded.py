@@ -39,6 +39,7 @@ from utils.log_sanitizer import sanitize_provider_error
 from utils.observability.fallback import record_fallback
 from utils.other.endpoints import timeit
 from utils.stt.outcomes import TranscriptionFailure
+from utils.stt.parakeet_request_metrics import observe_parakeet_request
 from utils.stt.brand_terms import normalize_brand_terms
 from utils.stt.speaker_clustering import select_speaker_cluster
 from utils.stt.speaker_embedding import compare_embeddings, extract_embedding_from_bytes
@@ -853,13 +854,15 @@ def parakeet_prerecorded_from_bytes(
             data = {}
 
         with httpx.Client(timeout=_verification_timeout(_PARAKEET_TIMEOUT)) as client:
-            response = observe_sync_call('parakeet', client.post, url, files=files, data=data if data else None)
+            with observe_parakeet_request('v2' if use_v2 else 'v1'):
+                response = observe_sync_call('parakeet', client.post, url, files=files, data=data if data else None)
             if response.status_code == 404 and use_v2:
                 url = api_url.rstrip('/') + '/v1/transcribe'
                 client.timeout = _verification_timeout(_PARAKEET_TIMEOUT)
-                response = observe_sync_call(
-                    'parakeet', client.post, url, files={'file': ('audio.wav', BytesIO(audio_bytes), 'audio/wav')}
-                )
+                with observe_parakeet_request('v1'):
+                    response = observe_sync_call(
+                        'parakeet', client.post, url, files={'file': ('audio.wav', BytesIO(audio_bytes), 'audio/wav')}
+                    )
                 use_v2 = False
         response.raise_for_status()
         payload: Any = response.json()

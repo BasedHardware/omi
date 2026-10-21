@@ -47,6 +47,9 @@ for entitlement healing.
   passes the pinned type check, and the checkout-first HTTP regressions plus the
   20-file billing selection pass under `test.sh`; local fixture-backed curl checks
   preserve all four admission outcomes.
+- [x] Clients tell the two 409s apart: checkout's 409 (existing subscription) shows
+  that reason on Flutter, macOS, web and Windows; only the upgrade route's 409 means
+  a pending cancellation ("Resubscribe first").
 - [ ] Review and merge the separate protection PR after checks pass.
 - [ ] Separately authorize deployment and verify the serving backend revision.
 - [ ] Verify the affected customer's Stripe/entitlement state before closing #21869.

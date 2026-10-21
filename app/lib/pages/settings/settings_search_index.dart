@@ -19,6 +19,7 @@ enum SettingsDestination {
   offlineSync,
   device,
   integrations,
+  taskIntegrations,
   permissions,
   memories,
   goals,
@@ -200,6 +201,8 @@ final List<SettingsSearchEntry> settingsSearchEntries = [
 
   // Integrations (opens the Integrations page directly)
   SettingsSearchEntry('integrations', (l) => l.integrations, SettingsDestination.integrations, _drawer),
+  SettingsSearchEntry('taskIntegrations', (l) => l.taskIntegrations, SettingsDestination.taskIntegrations,
+      'lib/pages/settings/integrations_page.dart'),
 
   // Data & Privacy group
   SettingsSearchEntry('dataProtection', (l) => l.dataProtection, SettingsDestination.dataPrivacy, _groups),

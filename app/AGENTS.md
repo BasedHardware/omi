@@ -14,7 +14,7 @@ UI rules: [docs/ux-contract.md](docs/ux-contract.md).
 `pubspec.yaml` (`1.0.543+992`) is the local placeholder. Store binaries ignore it: Codemagic sets `BUILD_NAME` from the latest store version and `BUILD_NUMBER` to max(store)+1 (pubspec seeds only with no store history). Analytics/Crashlytics `build_number` is `OMI_BUILD_NUMBER`. Authoritative: stores = Codemagic; local/dev = pubspec; analytics = `OMI_BUILD_NUMBER`.
 
 ### Release
-Daily train (`scripts/mobile_daily_train.py`, 14:00 UTC): newest TestFlight build → App Review (MANUAL release), newest Play build → production draft; a human releases. `--dry-run` = plan only. Contract: `.github/agent-docs/mobile-release-process.md`.
+Daily GREEN gate (operator Mac, 13:15 UTC) → train: iOS `AFTER_APPROVAL` + phased rollout (100% after 12h); Android staged 1%→10%→50%→100%. `mobile-rollout-advance`: every 4h needs a ≤26h-old GREEN receipt. See `.github/agent-docs/mobile-release-process.md`.
 
 ### Generated Files (never edit)
 envied, json_serializable, pigeon (`lib/pigeon_interfaces.dart` → `lib/gen/` + iOS/Android stubs), and flutter_gen: `flutter pub run build_runner build`. ARB → `flutter gen-l10n` (`lib/l10n/app_localizations*.dart`). Never edit `*.g.dart` / `*.gen.dart`.

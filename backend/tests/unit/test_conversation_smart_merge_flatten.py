@@ -1073,7 +1073,7 @@ def test_flatten_cleanup_copies_donor_and_ancestor_audio_once(world, monkeypatch
     monkeypatch.setattr(
         merge_conversations,
         'list_audio_chunks',
-        lambda uid, cid: [
+        lambda uid, cid, **kwargs: [
             {'path': path % uid, 'timestamp': float(path.rsplit('/', 1)[-1].removesuffix('.bin'))}
             for path in chunk_map.get(cid, ())
         ],

@@ -24,6 +24,7 @@ from models.conversation import Conversation
 from models.conversation_photo import ConversationPhoto
 from models.structured import ActionItem, Event, Structured
 from models.structured_extraction import (
+    AgentNotesSubmission,
     RichStructuredExtraction,
     StructuredExtraction,
 )
@@ -65,6 +66,11 @@ from utils.llm.meeting_notes_validation import (
     validate_structured_source_segment_ids,
 )
 from utils.llm.notes_observability import current_run, observe_notes
+
+try:
+    from utils.llm.notes_agent_serving import agentic_notes_payload as _serve_agentic_notes
+except ImportError:  # pragma: no cover - file-loading harnesses exec this module with stubbed packages
+    _serve_agentic_notes = None
 from utils.llm.shaped_agent import Budget, Mount, Turn, route_for_uid, run_loop
 from utils.llm.shaped_notes_transport import isolated_notes_model
 from utils.llm.model_config import FOREGROUND_REQUEST_TIMEOUT_SECONDS
@@ -375,6 +381,13 @@ def _parse_notes_model_output(parser: PydanticOutputParser, content: str) -> Any
         return parser.parse(repaired)
 
 
+def agentic_notes_payload(**kwargs: Any) -> Optional[dict[str, Any]]:
+    """Agentic notes seam; None keeps the one-shot path."""
+    if _serve_agentic_notes is None:
+        return None
+    return _serve_agentic_notes(**kwargs)
+
+
 def notes_mount() -> Mount:
     return Mount(
         instructions=_conversation_notes_static_instructions('') + """
@@ -396,11 +409,13 @@ def get_conversation_notes(
 ) -> Structured:
     if route_for_uid(uid) != 'new':
         raise RuntimeError('Shaped notes disabled; restore the previous image for legacy serving')
-    return _get_shaped_conversation_notes(prefix, **kwargs)
+    return _get_shaped_conversation_notes(prefix, uid=uid, **kwargs)
 
 
 @observe_notes
-def _get_shaped_conversation_notes(prefix: ConversationPromptPrefix, **kwargs: Any) -> Structured:
+def _get_shaped_conversation_notes(
+    prefix: ConversationPromptPrefix, *, uid: Optional[str] = None, **kwargs: Any
+) -> Structured:
     frames = kwargs.get('screen_frames') or ()
     # Never reuse the old prefix metadata: it may already have bound a roster.
     context = prefix.shaped_context or ('FULL TRANSCRIPT\n' + prefix.context.split('FULL TRANSCRIPT\n', 1)[-1])
@@ -439,6 +454,15 @@ def _get_shaped_conversation_notes(prefix: ConversationPromptPrefix, **kwargs: A
     # carries a cache breakpoint; parser-based extraction needs no provider
     # cache hint to work on any lane.
     model = get_llm('conv_structure', request_timeout=CONVERSATION_STRUCTURE_TIMEOUT_SECONDS)
+    # Long or meeting-like conversations get the agentic writer; it returns None
+    # (one-shot below, unchanged) when ineligible, disabled, or on any failure.
+    agent_payload = agentic_notes_payload(
+        uid=uid, prefix=prefix, model=model, capture_evidence=context, words=words, frames=frames, kwargs=kwargs
+    )
+    if agent_payload is not None:
+        return _finish_shaped_notes(
+            AgentNotesSubmission.model_validate(agent_payload).to_structured(), prefix, rich_mode, kwargs['tz']
+        )
     extraction_parser = PydanticOutputParser(pydantic_object=StructuredExtraction)
     format_instructions = extraction_parser.get_format_instructions()
     static_instructions = mount.instructions + '\n\n' + format_instructions
@@ -473,13 +497,19 @@ def _get_shaped_conversation_notes(prefix: ConversationPromptPrefix, **kwargs: A
 
     result = asyncio.run(invoke())
     structured = StructuredExtraction.model_validate(result.value).to_structured()
+    return _finish_shaped_notes(structured, prefix, rich_mode, kwargs['tz'])
+
+
+def _finish_shaped_notes(
+    structured: Structured, prefix: ConversationPromptPrefix, rich_mode: bool, tz: Optional[str]
+) -> Structured:
     # A one-turn mount cannot buy the legacy presentation revision call.
     enforce_static_conversation_note_presentation(
         structured, prefix.transcript_segment_ids, title_people=() if rich_mode else prefix.title_people
     )
     now = datetime.now(timezone.utc)
     try:
-        user_tz = ZoneInfo(kwargs['tz']) if kwargs['tz'] else timezone.utc
+        user_tz = ZoneInfo(tz) if tz else timezone.utc
     except Exception:
         user_tz = timezone.utc
     for item in structured.action_items:
