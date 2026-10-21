@@ -563,6 +563,10 @@ class PrePushCiPredictionTests(unittest.TestCase):
         for workflow, triggers in reaching.items():
             self.assertTrue(triggers, f"{workflow}: no triggers parsed out of its `on:` block")
             for trigger in triggers:
+                # Reusable workflows inherit the caller's event_name; GitHub
+                # never forwards the declaration 'workflow_call' to --event.
+                if trigger == "workflow_call":
+                    continue
                 with self.subTest(workflow=workflow, trigger=trigger):
                     self.assertIn(trigger, ACCEPTED_EVENTS, f"{workflow} declares {trigger}, which --event rejects")
 

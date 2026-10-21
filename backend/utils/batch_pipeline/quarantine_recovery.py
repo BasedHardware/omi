@@ -196,6 +196,11 @@ def record_accepted(owner_id, provider, seconds):
         )
 
 
+def second_provider_eligible(job, empty):
+    speech = sum(span['end'] - span['start'] for span in empty.spans)
+    return second_multilingual_enabled() and padded_long_speech(job) and speech >= LONG_SPEECH_HANDOFF_SECONDS
+
+
 class QuarantineRecovery:
     def __init__(self, store, artifacts, *, stt=transcribe, second_stt=second_transcribe, clock=time.time):
         self.store, self.artifacts, self.stt, self.clock = store, artifacts, stt, clock
@@ -213,8 +218,7 @@ class QuarantineRecovery:
         return refreshed if refreshed is not None else (job, policy)
 
     def _second_eligible(self, job, empty):
-        speech = sum(span['end'] - span['start'] for span in empty.spans)
-        return second_multilingual_enabled() and padded_long_speech(job) and speech >= LONG_SPEECH_HANDOFF_SECONDS
+        return second_provider_eligible(job, empty)
 
     def _second_multilingual(self, item, owner_id, audio, empty, policy):
         """At most one Deepgram call inside the running intent; None leaves the unit held."""

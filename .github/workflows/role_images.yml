@@ -9,6 +9,14 @@ name: Role Images
 # build on the public python:3.11-slim base (PRs carry no GCP credential); the
 # gcp_backend.yml build-only train builds on the private base and publishes.
 on:
+  # Nightly calls run these same jobs against one immutable main snapshot.
+  workflow_call:
+    inputs:
+      nightly_main_sha:
+        description: Main SHA pinned by the unfiltered nightly caller
+        type: string
+        required: false
+        default: ''
   pull_request:
     paths:
       - "backend/Dockerfile.roles"
@@ -33,7 +41,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: role-images-${{ github.event.pull_request.number || github.ref }}
+  group: role-images-${{ github.event.pull_request.number || github.ref }}-${{ inputs.nightly_main_sha != '' && format('nightly-{0}', github.run_id) || 'normal' }}
   cancel-in-progress: true
 
 env:
@@ -52,6 +60,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
+          ref: ${{ inputs.nightly_main_sha || github.sha }}
           persist-credentials: false
       - name: Free runner disk for five image builds
         run: rm -rf /opt/hostedtoolcache
@@ -61,7 +70,7 @@ jobs:
           BASELINE: ${{ github.event_name == 'push' && '--baseline' || '' }}
         run: >-
           python3 backend/scripts/role_images.py build
-          --sha "$GITHUB_SHA" --base "$PUBLIC_PYTHON_BASE" --manifest "$MANIFEST" $BASELINE
+          --sha "${{ inputs.nightly_main_sha || github.sha }}" --base "$PUBLIC_PYTHON_BASE" --manifest "$MANIFEST" $BASELINE
           --images backend-api,backend-workers,backend-realtime,backend-gateway,backend-pusher
       - name: Dependency probe per role image
         run: python3 backend/scripts/role_images.py verify --manifest "$MANIFEST"
@@ -81,9 +90,10 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
+          ref: ${{ inputs.nightly_main_sha || github.sha }}
           persist-credentials: false
       - name: Build backend/edge/Dockerfile
-        run: python3 backend/scripts/role_images.py build --sha "$GITHUB_SHA" --images listen-edge --manifest "$MANIFEST"
+        run: python3 backend/scripts/role_images.py build --sha "${{ inputs.nightly_main_sha || github.sha }}" --images listen-edge --manifest "$MANIFEST"
       - name: Health, identity and drain probe
         run: python3 backend/scripts/role_images.py verify --manifest "$MANIFEST"
       - name: Measure size

@@ -148,8 +148,12 @@ class Scheduler:
 
     @staticmethod
     def enqueue_in_transaction(tx: Transaction, item: WorkItem, now: float, *, policy=None) -> bool:
+        if item.shadow:
+            raise ValueError('shadow jobs may only use idle offers')
         previous = tx.get('jobs', item.segment_id)
-        immutable = {**asdict(item), 'priority': int(item.priority)}
+        # Live jobs are never shadow; keep their documents free of the field.
+        immutable = {key: value for key, value in asdict(item).items() if key != 'shadow'}
+        immutable['priority'] = int(item.priority)
         if previous.get('state') == 'record_pending' and (
             previous.get('owner_id') != item.owner_id
             or previous.get('conversation_id') != item.conversation_id

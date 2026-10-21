@@ -1379,6 +1379,14 @@ def test_sync_scrape_retains_exporter_and_direct_sentinel_consumers():
     for name in (
         'omi_batch_pipeline_events_total',
         'omi_batch_pipeline_oldest_age_seconds',
+        # Shadow admission/CPU recovery outcomes must survive the same filter
+        # as the GPU metrics; otherwise gate readouts lose paid/failed units.
+        'omi_batch_shadow_outcome_total',
+        'omi_batch_shadow_speech_seconds_total',
+        'omi_batch_shadow_speech_loss_seconds_total',
+        'omi_batch_shadow_gpu_seconds_total',
+        'omi_batch_shadow_paid_calls_total',
+        'omi_batch_shadow_paid_audio_seconds_total',
         'omi_accept_to_summary_seconds_bucket',
         'omi_accept_to_summary_seconds_count',
         'omi_accept_to_summary_seconds_sum',

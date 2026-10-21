@@ -1,6 +1,14 @@
 name: OpenTofu Foundation Validation
 
 on:
+  # Nightly calls run these same jobs against one immutable main snapshot.
+  workflow_call:
+    inputs:
+      nightly_main_sha:
+        description: Main SHA pinned by the unfiltered nightly caller
+        type: string
+        required: false
+        default: ''
   push:
     branches: [main]
     paths:
@@ -20,7 +28,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: opentofu-foundation-validate-${{ github.event.pull_request.number || github.ref }}
+  group: opentofu-foundation-validate-${{ github.event.pull_request.number || github.ref }}-${{ inputs.nightly_main_sha != '' && format('nightly-{0}', github.run_id) || 'normal' }}
   cancel-in-progress: true
 
 env:
@@ -36,6 +44,8 @@ jobs:
       TF_IN_AUTOMATION: "true"
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.nightly_main_sha || github.sha }}
 
       - uses: opentofu/setup-opentofu@v2
         with:
