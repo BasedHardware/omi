@@ -36,6 +36,7 @@ from utils.memory.memory_system import (
     ensure_canonical_apply_control_state,
     resolve_memory_system as resolve_memory_system,  # compatibility export; user policy is not a UID gate
 )
+from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
 
@@ -391,17 +392,30 @@ def delete_atom_keyword_doc(uid: str, memory_id: str, *, db_client: Any = None) 
     """Remove one keyword doc and report whether the desired absence was confirmed."""
     if not uid or not memory_id:
         return False
-    if not typesense_configured():
-        # No shared Typesense env means this deployment never writes the keyword
-        # projection, so the desired absence is trivially confirmed. Privacy
-        # deletion must not fail closed on a projection the deployment never
-        # provisions (FC-privacy-delete-fails-on-unprovisioned-derived-store;
+    if not os.getenv("TYPESENSE_HOST") and not os.getenv("TYPESENSE_API_KEY"):
+        # Neither Typesense binding is present, so the deployment is durably
+        # unprovisioned for the keyword projection (the Cloud Run ``backend``
+        # service and the desktop backend deploy without either binding) and
+        # never writes it: the desired absence is trivially confirmed, and
+        # privacy deletion must not fail closed on a projection the deployment
+        # never provisions (FC-privacy-delete-fails-on-unprovisioned-derived-store;
         # the vector-store sibling gained the same classification in #15097).
-        # A configured client that raises still fails closed below.
+        # A partial binding (exactly one var) must NOT take this path: sibling
+        # services (backend-sync, memory-maintenance-job) hold both bindings
+        # against the same cluster, so absence stays unconfirmed and the client
+        # call below fails closed.
         logger.warning(
-            "Typesense not configured, nothing to purge for atom keyword delete uid=%s memory_id=%s",
+            "Typesense unconfigured, nothing to purge for atom keyword delete uid=%s memory_id=%s",
             uid,
             memory_id,
+        )
+        record_fallback(
+            component="other",
+            from_mode="atom_keyword_delete",
+            to_mode="confirmed_absence",
+            reason="unconfigured",
+            outcome="recovered",
+            log=logger,
         )
         return True
     try:

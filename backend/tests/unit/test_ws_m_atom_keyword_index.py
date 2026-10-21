@@ -9,7 +9,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import ANY, MagicMock, patch
 
 import pytest
 
@@ -1019,18 +1019,46 @@ class TestPurgeAndRebuild:
 
     def test_delete_confirms_absence_when_typesense_unconfigured(self, monkeypatch):
         # FC-privacy-delete-fails-on-unprovisioned-derived-store: a deployment
-        # without the shared Typesense env never writes the keyword projection,
+        # without either Typesense binding never writes the keyword projection,
         # so the privacy delete must confirm the desired absence without
         # constructing a client (an unconfigured client raising used to fail
-        # every explicit memory delete closed).
+        # every explicit memory delete closed). The fail-open must be visible
+        # to the shared fallback metric, not only the warning log.
+        fallback = MagicMock()
         monkeypatch.delenv("TYPESENSE_HOST", raising=False)
         monkeypatch.delenv("TYPESENSE_API_KEY", raising=False)
+        monkeypatch.setattr("utils.memory.atom_keyword_index.record_fallback", fallback)
         monkeypatch.setattr(
             "utils.memory.atom_keyword_index._typesense_client",
             MagicMock(side_effect=AssertionError("client must not be constructed")),
         )
 
         assert delete_atom_keyword_doc(CANONICAL_UID, "mem-unconfigured-typesense") is True
+        fallback.assert_called_once_with(
+            component="other",
+            from_mode="atom_keyword_delete",
+            to_mode="confirmed_absence",
+            reason="unconfigured",
+            outcome="recovered",
+            log=ANY,
+        )
+
+    @pytest.mark.parametrize("bound", ["TYPESENSE_HOST", "TYPESENSE_API_KEY"])
+    def test_delete_fails_closed_when_typesense_partially_bound(self, monkeypatch, bound):
+        # A partial binding does not prove the projection absent: sibling
+        # services (backend-sync, memory-maintenance-job) hold both bindings
+        # against the same cluster, so the delete must still contact Typesense,
+        # and a client that cannot authenticate fails closed instead of
+        # confirming an absence it cannot observe.
+        unbound = "TYPESENSE_API_KEY" if bound == "TYPESENSE_HOST" else "TYPESENSE_HOST"
+        monkeypatch.setenv(bound, "partially-bound-value")
+        monkeypatch.delenv(unbound, raising=False)
+        monkeypatch.setattr(
+            "utils.memory.atom_keyword_index._typesense_client",
+            MagicMock(side_effect=RuntimeError("typesense unreachable")),
+        )
+
+        assert delete_atom_keyword_doc(CANONICAL_UID, "mem-partial-typesense") is False
 
     def test_strict_keyword_purge_raises_on_typesense_failure(self, monkeypatch):
         monkeypatch.setattr(
