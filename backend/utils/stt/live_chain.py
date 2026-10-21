@@ -683,7 +683,8 @@ async def connect_configured_chain(
                 circuit.record_account_failure(
                     float(
                         listen_value('account_circuit_cooldown_seconds', 'STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS', '1800')
-                    )
+                    ),
+                    error_class=reason,
                 )
                 health.quarantine(service.value, 'account', circuit.account_cooldown_seconds_remaining)
                 if active and target is not None:
@@ -703,7 +704,7 @@ async def connect_configured_chain(
                     if identity is not None and identity in capacity_targets:
                         note_capacity_full(capacity_targets[identity].id)
             else:
-                circuit.record_failure()
+                circuit.record_failure(error_class=reason)
                 if circuit.state == 'open':
                     health.quarantine(
                         service.value,
@@ -946,7 +947,8 @@ async def connect_configured_chain(
                 circuit.record_account_failure(
                     float(
                         listen_value('account_circuit_cooldown_seconds', 'STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS', '1800')
-                    )
+                    ),
+                    error_class=reason,
                 )
                 health.quarantine(service.value, 'account', circuit.account_cooldown_seconds_remaining)
                 if active and target is not None:
@@ -968,7 +970,7 @@ async def connect_configured_chain(
                     if identity is not None and identity in capacity_targets:
                         note_capacity_full(capacity_targets[identity].id)
             else:
-                circuit.record_failure()
+                circuit.record_failure(error_class=reason)
                 if circuit.state == 'open':
                     health.quarantine(
                         service.value,
