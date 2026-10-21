@@ -4106,7 +4106,6 @@
     "paywallTrialBilledYearly": "يتم الفوترة سنويًا",
     "paywallTrialSaveAmount": "وفر {amount}",
     "paywallTrialCta": "ابدأ مقابل {price}",
-    "paywallTrialSecondary": "استمر بالخطة المجانية",
     "paywallTrialCancelNote": "يمكنك الإلغاء في أي وقت. لا توجد رسوم أو غرامات.",
     "paywallTrialStarted": "بدأت تجربتك المجانية لـ Omi Pro لمدة {days} يومًا.",
     "paywallCancelAnytime": "يمكنك الإلغاء في أي وقت.",

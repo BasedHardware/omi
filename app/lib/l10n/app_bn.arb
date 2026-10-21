@@ -11529,7 +11529,6 @@
     "paywallTrialBilledYearly": "বার্ষিক বিল করা হয়",
     "paywallTrialSaveAmount": "{amount} সাশ্রয় করুন",
     "paywallTrialCta": "{price} দিয়ে শুরু করুন",
-    "paywallTrialSecondary": "বিনামূল্যে প্ল্যান নিয়ে চালিয়ে যান",
     "paywallTrialCancelNote": "যেকোনো সময় বাতিল করুন। কোনো ফি নেই, কোনো জরিমানা নেই।",
     "paywallTrialStarted": "আপনার Omi Pro-এর {days}-দিনের ফ্রি ট্রায়াল শুরু হয়েছে।",
     "paywallCancelAnytime": "যেকোনো সময় বাতিল করুন।",

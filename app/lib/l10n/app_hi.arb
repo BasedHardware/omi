@@ -4106,7 +4106,6 @@
     "paywallTrialBilledYearly": "वार्षिक बिलिंग",
     "paywallTrialSaveAmount": "{amount} बचाएं",
     "paywallTrialCta": "{price} में शुरू करें",
-    "paywallTrialSecondary": "मुफ़्त प्लान के साथ जारी रखें",
     "paywallTrialCancelNote": "कभी भी रद्द करें। कोई शुल्क नहीं, कोई जुर्माना नहीं।",
     "paywallTrialStarted": "आपका Omi Pro का {days}-दिन का मुफ़्त परीक्षण शुरू हो गया है।",
     "paywallCancelAnytime": "कभी भी रद्द करें।",

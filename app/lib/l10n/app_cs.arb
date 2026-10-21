@@ -4106,7 +4106,6 @@
     "paywallTrialBilledYearly": "Účtováno ročně",
     "paywallTrialSaveAmount": "Ušetřete {amount}",
     "paywallTrialCta": "Začněte za {price}",
-    "paywallTrialSecondary": "Pokračovat s bezplatným plánem",
     "paywallTrialCancelNote": "Zrušte kdykoli. Žádné poplatky, žádné sankce.",
     "paywallTrialStarted": "Vaše {days}denní bezplatná zkušební verze Omi Pro byla spuštěna.",
     "paywallCancelAnytime": "Zrušte kdykoli.",

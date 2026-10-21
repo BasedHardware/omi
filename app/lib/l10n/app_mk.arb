@@ -11529,7 +11529,6 @@
     "paywallTrialBilledYearly": "Се наплаќа годишно",
     "paywallTrialSaveAmount": "Заштедете {amount}",
     "paywallTrialCta": "Започнете за {price}",
-    "paywallTrialSecondary": "Продолжете со бесплатниот план",
     "paywallTrialCancelNote": "Откажете во секое време. Без надоместоци, без казни.",
     "paywallTrialStarted": "Вашиот {days}-дневен бесплатен пробен период на Omi Pro започна.",
     "paywallCancelAnytime": "Откажете во секое време.",

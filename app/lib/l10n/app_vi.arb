@@ -4106,7 +4106,6 @@
     "paywallTrialBilledYearly": "Thanh toán hàng năm",
     "paywallTrialSaveAmount": "Tiết kiệm {amount}",
     "paywallTrialCta": "Bắt đầu với {price}",
-    "paywallTrialSecondary": "Tiếp tục với gói miễn phí",
     "paywallTrialCancelNote": "Hủy bất cứ lúc nào. Không phí, không phạt.",
     "paywallTrialStarted": "Bản dùng thử miễn phí {days} ngày của Omi Pro của bạn đã bắt đầu.",
     "paywallCancelAnytime": "Hủy bất cứ lúc nào.",
