@@ -70,8 +70,13 @@ REDACTED_HASH = 'redacted'
 _NOT_FOUND_SENTINEL = object()
 # Case-insensitive: env keys are conventionally uppercase, but lowercase and
 # mixed-case names (api_key, dbPassword) are equally credentials whose digests
-# must not be published.
-_SENSITIVE_KEY_RE = re.compile(r'(UID|ALLOWLIST|SECRET|TOKEN|PASSWORD|CREDENTIAL|API_KEY|PRIVATE)', re.IGNORECASE)
+# must not be published. ``_KEY`` (not just ``API_KEY``) covers credential-like
+# bindings declared as secrets in the manifest (ADMIN_KEY, FAL_KEY), and the
+# explicit ``OAUTH`` alternative covers credential-bearing blobs such as
+# MCP_OAUTH_CLIENTS_JSON that no ``_KEY`` suffix would catch.
+_SENSITIVE_KEY_RE = re.compile(
+    r'(UID|ALLOWLIST|SECRET|TOKEN|PASSWORD|CREDENTIAL|API_KEY|PRIVATE|OAUTH|_KEY)', re.IGNORECASE
+)
 
 # Keys intentionally set outside backend/deploy/runtime_env.yaml (for example,
 # per-revision provenance markers, sidecar ports attached post-deploy, or
@@ -517,6 +522,18 @@ def expected_cloud_run_env(
             raise ValueError(
                 f'Rendered state {rendered_state_path} entry for service {service_name!r} '
                 'has a malformed env entry (every entry must be a mapping with a non-empty name)'
+            )
+        if rendered_state_path is not None and not all(
+            ('value' in entry) != isinstance(entry.get('valueFrom'), Mapping) for entry in rendered_env
+        ):
+            # The renderer emits exactly one of ``value`` or
+            # ``valueFrom.secretKeyRef`` per entry; an entry with neither (or
+            # with both) is not renderer output. Accepting a value-less entry
+            # would hash it as an empty literal, so a corrupted state matching
+            # an empty serving value could report OK.
+            raise ValueError(
+                f'Rendered state {rendered_state_path} entry for service {service_name!r} '
+                'has a malformed env entry (each must carry exactly one of value or valueFrom)'
             )
         if rendered_service:
             # The rendered state is the exact deploy contract. The renderer

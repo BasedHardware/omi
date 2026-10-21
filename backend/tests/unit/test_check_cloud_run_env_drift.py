@@ -2236,6 +2236,82 @@ def test_sensitive_key_detection_is_case_insensitive(checker) -> None:
     assert fp_one == fp_two  # redacted fingerprint cannot encode the raw value
 
 
+def test_sensitive_key_detection_covers_manifest_secret_names(checker) -> None:
+    # Thread: after the case-insensitive fix, declared secrets bound in the
+    # manifest as *_KEY (ADMIN_KEY, FAL_KEY) or as credential blobs
+    # (MCP_OAUTH_CLIENTS_JSON) still published their value hashes when a
+    # mismatch or fingerprint rendered them; if accidentally deployed as
+    # literals their digests must be redacted like every other credential.
+    for name in ('ADMIN_KEY', 'FAL_KEY', 'MCP_OAUTH_CLIENTS_JSON'):
+        assert checker.display_hash(name, 'abcdef123456') == 'redacted', name
+    # Key-shaped names with no credential meaning stay publishable.
+    assert checker.display_hash('BATCH_PIPELINE_WORKER', 'abcdef123456') == 'abcdef123456'
+    assert checker.display_hash('STT_SERVICE_MODELS', 'abcdef123456') == 'abcdef123456'
+    assert checker.display_hash('REDIS_DB_HOST', 'abcdef123456') == 'abcdef123456'
+
+
+def test_rendered_state_rejects_entries_without_value_source(checker, tmp_path: Path) -> None:
+    # Thread: after the name validation, an entry such as {"name": "X"} was
+    # still accepted and hashed as an empty literal, so a corrupted state
+    # matching an empty serving value reported OK. The renderer always emits
+    # exactly one of value or valueFrom.secretKeyRef; anything else is an
+    # operational input error.
+    manifest = {
+        'schema_version': 2,
+        'environments': {
+            'prod': {
+                'compute_project': 'based-hardware',
+                'region': 'us-central1',
+                'cloud_run': {
+                    'services': {
+                        'backend': {
+                            'env': {
+                                'ALWAYS_THERE': {'value': 'a'},
+                                'EMPTY_LOOKING': {'env_var': 'EMPTY_LOOKING_FOR_TEST', 'provisional': True},
+                            }
+                        }
+                    }
+                },
+            }
+        },
+    }
+    path = tmp_path / 'm.yaml'
+    path.write_text(yaml.safe_dump(manifest), encoding='utf-8')
+    # Neither value nor valueFrom.
+    no_source = tmp_path / 'no_source.json'
+    no_source.write_text(
+        json.dumps(
+            {'services': {'backend': {'env': [{'name': 'ALWAYS_THERE', 'value': 'a'}, {'name': 'EMPTY_LOOKING'}]}}}
+        ),
+        encoding='utf-8',
+    )
+    with pytest.raises(ValueError, match='exactly one of value or valueFrom'):
+        checker.expected_cloud_run_env(env='prod', manifest_path=path, rendered_state_path=no_source)
+    # Both value and valueFrom is equally not renderer output.
+    both = tmp_path / 'both.json'
+    both.write_text(
+        json.dumps(
+            {
+                'services': {
+                    'backend': {
+                        'env': [
+                            {'name': 'ALWAYS_THERE', 'value': 'a'},
+                            {
+                                'name': 'EMPTY_LOOKING',
+                                'value': 'x',
+                                'valueFrom': {'secretKeyRef': {'name': 's', 'key': 'k'}},
+                            },
+                        ]
+                    }
+                }
+            }
+        ),
+        encoding='utf-8',
+    )
+    with pytest.raises(ValueError, match='exactly one of value or valueFrom'):
+        checker.expected_cloud_run_env(env='prod', manifest_path=path, rendered_state_path=both)
+
+
 def test_gke_unresolved_expected_envfrom_keys_are_not_live_only_drift(checker) -> None:
     # Thread: when the chart references an external ConfigMap the repository
     # cannot enumerate and the offline snapshot carries that ConfigMap's data,
