@@ -20,6 +20,7 @@ import shutil
 import signal
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 # A healthy download + extract takes ~22 s. Two full attempts must still fit
@@ -37,14 +38,32 @@ def ndk_is_installed(ndk_dir: Path, version: str) -> bool:
     return f"Pkg.Revision = {version}" in properties
 
 
+def wait_for_group_exit(pgid: int, timeout: float = 10.0) -> None:
+    """Block until every member of a SIGKILLed process group is gone.
+
+    ``Popen.wait`` reaps only the wrapper; a worker still draining out of the
+    run queue keeps the group alive, and the retry's purge must not race a
+    dying writer. Signal 0 probes existence; zombies count until reaped, so
+    the wait is bounded rather than open-ended.
+    """
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        try:
+            os.killpg(pgid, 0)
+        except ProcessLookupError:
+            return
+        time.sleep(0.1)
+
+
 def run_sdkmanager(sdkmanager: Path, android_home: Path, version: str, timeout: float) -> bool:
     # --sdk_root keeps sdkmanager writing under the same root this script
     # verifies and purges, whatever ANDROID_HOME the wrapper would derive.
     command = [str(sdkmanager), f"--sdk_root={android_home}", f"ndk;{version}"]
     print(f"+ {' '.join(command)}", flush=True)
     # The cmdline-tools sdkmanager is a shell wrapper around a Java child it
-    # does not exec. A timeout must kill the whole process group, or the
-    # extractor keeps writing into the tree the retry is about to purge.
+    # does not exec. A timeout must kill the whole process group, and the
+    # purge below must wait for that group to empty, or the extractor keeps
+    # writing into the tree the retry is about to purge.
     process = subprocess.Popen(command, start_new_session=True)
     try:
         process.wait(timeout=timeout)
@@ -55,6 +74,7 @@ def run_sdkmanager(sdkmanager: Path, android_home: Path, version: str, timeout: 
         except ProcessLookupError:
             pass
         process.wait()
+        wait_for_group_exit(process.pid)
         return False
     return process.returncode == 0
 

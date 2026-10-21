@@ -61,8 +61,9 @@ FAKE_SDKMANAGER = """\
 
 # Variant whose first invocation hangs past the per-attempt timeout. Like the
 # real cmdline-tools wrapper it does NOT exec its worker: the hang lives in a
-# background child whose pid is recorded, so the test can prove the installer
-# killed the whole process group, not just the wrapper.
+# background child whose pid is recorded, and the retry invocation records
+# whether that worker still exists, so the test can prove the installer killed
+# the whole process group and waited for it before purging and retrying.
 FAKE_HANGING_SDKMANAGER = """\
     #!/bin/sh
     root="$ANDROID_HOME"
@@ -82,6 +83,13 @@ FAKE_HANGING_SDKMANAGER = """\
       echo $! > "$root/.fake-child-pid"
       wait
       exit 1
+    fi
+    if [ -f "$root/.fake-child-pid" ]; then
+      if kill -0 "$(cat "$root/.fake-child-pid")" 2>/dev/null; then
+        echo alive > "$root/.fake-child-at-retry"
+      else
+        echo gone > "$root/.fake-child-at-retry"
+      fi
     fi
     ndk_dir="$root/ndk/$ver"
     mkdir -p "$ndk_dir"
@@ -204,6 +212,12 @@ class InstallAndroidNdkTests(unittest.TestCase):
             pid_is_gone(child_pid),
             f"sdkmanager's non-exec'd worker {child_pid} survived the timeout; it would keep "
             "writing into the tree the retry purges",
+        )
+        self.assertEqual(
+            "gone",
+            (self.android_home / ".fake-child-at-retry").read_text().strip(),
+            "the retry started while the killed worker still existed; the purge must wait "
+            "for the whole process group to exit first",
         )
 
     def test_missing_android_home_is_a_usage_error(self) -> None:
