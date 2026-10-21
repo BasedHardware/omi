@@ -673,10 +673,11 @@ async def test_coordinator_lineage_off_passes_no_binding_kwarg(coordinator, monk
     assert captured[chunks[0]['id']] == (None, False)
 
 
+@pytest.mark.parametrize('status', ['in_progress', 'completed'])
 @pytest.mark.parametrize('growth', [300, 300.001, 400])
 @pytest.mark.parametrize('binding', ['stamp_fallback', 'bound', None])
-def test_stamp_gap_threshold_preserves_proven_targets_and_routes_unproven_speech(growth, binding):
-    row = live_row()
+def test_stamp_gap_threshold_preserves_proven_targets_and_routes_unproven_speech(growth, binding, status):
+    row = live_row(status=status)
     store = seeded_store([row])
     # Real gap: incoming speech ends growth seconds after the live row.
     incoming = _stamp_incoming(NEW[:1], skew=60 + growth, binding=binding)
@@ -745,3 +746,21 @@ def test_stamp_gap_guard_is_independent_of_lexical_dedupe_switch(monkeypatch, de
     assigned, _, survivors = intake(store, incoming, target_id=LIVE_ID)
     assert assigned['id'] != LIVE_ID and len(survivors) == 1
     assert store.rows[('users', 'u', 'conversations', LIVE_ID)] == before
+
+
+def test_clock_mismatch_rejects_target_before_stamp_gap_guard(caplog):
+    from utils.sync.clock_run import SYNC_CLOCK_RUN_FIELD
+
+    row = live_row(**{SYNC_CLOCK_RUN_FIELD: 'run-a'})
+    incoming = _stamp_incoming(NEW[:1], skew=500)
+    incoming[SYNC_CLOCK_RUN_FIELD] = 'run-b'
+    assert assignment.capture_mismatch(row, incoming) == 'clock'
+    store = seeded_store([row])
+    before = deepcopy(store.rows[('users', 'u', 'conversations', LIVE_ID)])
+    with caplog.at_level(logging.INFO):
+        assigned, created, survivors = intake(store, incoming, target_id=LIVE_ID)
+    assert created and len(survivors) == 1 and assigned['id'] != LIVE_ID
+    assert store.rows[('users', 'u', 'conversations', LIVE_ID)] == before
+    assert 'outcome=temporal_recovery mismatch=clock' in caplog.text
+    assert '_sync_lineage_stamp_gap_refused' not in assigned
+    assert 'stamp_gap_refused' not in caplog.text
