@@ -30,7 +30,6 @@ LOG_MODULE_REGISTER(sd_card, CONFIG_LOG_DEFAULT_LEVEL);
 #define RAW_BATCH_HEADER_BYTES 32U
 #define RAW_PACKETS_PER_BATCH ((RAW_BATCH_BYTES - RAW_BATCH_HEADER_BYTES) / RAW_AUDIO_PACKET_BYTES)
 #define RAW_FLUSH_INTERVAL_MS 1000
-#define RAW_MIN_VALID_UTC_TIME 1700000000U
 
 #define RAW_META_MAGIC 0x4F4D4952U
 #define RAW_BATCH_MAGIC 0x4F4D4942U
@@ -191,7 +190,7 @@ static uint8_t writing_error_counter;
 
 static uint32_t write_drop_packets;
 static uint32_t write_drop_bytes;
-static uint32_t rtc_unsynced_drop_packets;
+static uint32_t rtc_untrusted_packets;
 static int64_t last_write_blocked_log_ms;
 
 static char compat_current_name[MAX_FILENAME_LEN];
@@ -224,6 +223,10 @@ static void format_timestamp_name(uint32_t timestamp, char *buf, size_t buf_size
         return;
     }
 
+    /* Legacy filenames have no trust bit: zero means no usable device time. */
+    if (timestamp & RTC_TIMESTAMP_UPTIME_FLAG) {
+        timestamp = 0;
+    }
     snprintk(buf, buf_size, "%08X.txt", timestamp);
 }
 
@@ -669,14 +672,14 @@ static int advance_read_seq_internal(uint64_t new_read_seq, bool sync_requested)
     return 0;
 }
 
-static void record_rtc_unsynced_drop(void)
+static void record_rtc_untrusted_packet(void)
 {
-    if (rtc_unsynced_drop_packets < UINT32_MAX) {
-        rtc_unsynced_drop_packets++;
+    if (rtc_untrusted_packets < UINT32_MAX) {
+        rtc_untrusted_packets++;
     }
 
-    if ((rtc_unsynced_drop_packets & (rtc_unsynced_drop_packets - 1U)) == 0U) {
-        LOG_WRN("offline audio discarded: clock has never been synced (dropped=%u packets)", rtc_unsynced_drop_packets);
+    if ((rtc_untrusted_packets & (rtc_untrusted_packets - 1U)) == 0U) {
+        LOG_WRN("offline audio retained with untrusted time (stored=%u packets)", rtc_untrusted_packets);
     }
 }
 
@@ -691,15 +694,11 @@ static void process_write_data_req(const sd_req_t *req)
         return;
     }
 
-    if (!rtc_is_valid()) {
-        record_rtc_unsynced_drop();
-        return;
-    }
-
-    uint32_t timestamp = get_utc_time();
-    if (timestamp == 0U || timestamp < RAW_MIN_VALID_UTC_TIME) {
-        record_rtc_unsynced_drop();
-        return;
+    /* Clock state must never discard audio (INV-CAP-1). Untrusted clocks
+     * use the existing wire-compatible bit-31 uptime timestamp. */
+    uint32_t timestamp = rtc_get_record_timestamp();
+    if (timestamp & RTC_TIMESTAMP_UPTIME_FLAG) {
+        record_rtc_untrusted_packet();
     }
 
     if (!current_batch_loaded) {
@@ -996,9 +995,10 @@ void sd_worker_thread(void)
             break;
 
         case REQ_TIME_SYNCED:
-            if (rtc_unsynced_drop_packets > 0U) {
-                LOG_WRN("clock synced after %u offline audio packets were discarded", rtc_unsynced_drop_packets);
-                rtc_unsynced_drop_packets = 0U;
+            if (rtc_untrusted_packets > 0U) {
+                LOG_WRN("clock synced after %u offline audio packets were retained with untrusted time",
+                        rtc_untrusted_packets);
+                rtc_untrusted_packets = 0U;
             }
             break;
 
@@ -1223,17 +1223,17 @@ void sd_notify_time_synced(uint32_t utc_time)
     sd_req_t req = {0};
     int ret;
 
-    if (utc_time < RAW_MIN_VALID_UTC_TIME) {
+    if (utc_time < RTC_MIN_VALID_EPOCH) {
         return;
     }
 
     /* Callers run on the BLE RX thread (transport.c) and the system workqueue
-     * (rtc.c); never block them for a best-effort log summary. Matches the
+     * (rtc.c); never block them for a best-effort storage summary. Matches the
      * K_NO_WAIT pattern of sd_notify_ble_state below. */
     req.type = REQ_TIME_SYNCED;
     ret = k_msgq_put(&sd_prio_msgq, &req, K_NO_WAIT);
     if (ret != 0) {
-        LOG_WRN("failed to queue RTC sync drop summary: %d", ret);
+        LOG_WRN("failed to queue RTC sync storage summary: %d", ret);
     }
 }
 
