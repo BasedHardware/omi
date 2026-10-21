@@ -8,11 +8,13 @@ import json
 import logging
 import time
 from dataclasses import asdict
+from pathlib import Path
 from unittest.mock import AsyncMock
 
 import fakeredis.aioredis
 import httpx
 import pytest
+import yaml
 
 from config import vertex_reservations as vr
 from llm_gateway.gateway.accounting import AttemptTrace
@@ -25,7 +27,25 @@ from llm_gateway.gateway.resolver import resolve_chat_completion_route
 from llm_gateway.gateway.schemas import FailureClass
 from llm_gateway.routers.openai_compatible import _prepared_streaming_iterator, _stream_with_terminal_metrics
 from utils.llm import vertex_pt_routing as ptr
-from utils.llm.vertex_reservation_state import ReservationState
+from utils.llm.vertex_reservation_state import ReservationState, discovery_models, effective_states
+
+
+def test_prod_gateway_retirement_pin_preserves_dream_target_discovery():
+    backend = Path(__file__).resolve().parents[2]
+    chart = yaml.load(
+        (backend / 'charts/llm-gateway/prod_omi_llm_gateway_values.yaml').read_text(), Loader=yaml.CSafeLoader
+    )
+    manifest = yaml.load((backend / 'deploy/runtime_env.yaml').read_text(), Loader=yaml.CSafeLoader)
+    override = next(entry['value'] for entry in chart['env'] if entry['name'] == vr.STATE_OVERRIDE_ENV)
+    assert manifest['environments']['prod']['llm_gateway']['env'][vr.STATE_OVERRIDE_ENV]['value'] == override
+    assert json.loads(override) == {ptr.PT_MODEL_CURRENT: 'inactive'}
+    env = {vr.STATE_OVERRIDE_ENV: override}
+    observed = {ptr.PT_MODEL_CURRENT: vr.State.ACTIVE, ptr.PT_MODEL_TARGET: vr.State.ACTIVE}
+    assert effective_states(observed, env) == {
+        ptr.PT_MODEL_CURRENT: vr.State.INACTIVE,
+        ptr.PT_MODEL_TARGET: vr.State.ACTIVE,
+    }
+    assert discovery_models(env) == frozenset({ptr.PT_MODEL_TARGET})
 
 
 @pytest.mark.asyncio
