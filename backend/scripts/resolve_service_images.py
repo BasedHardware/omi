@@ -114,7 +114,11 @@ def resolve(
     outputs["llm_gateway"] = gateway or f"gcr.io/{project}/llm-gateway:{short_sha}"
     outputs["llm_gateway_repository"] = gateway.split("@")[0] if gateway else ""
     outputs["llm_gateway_digest"] = gateway.split("@")[1] if gateway else ""
-    outputs["release_vector_args"] = " ".join(f"--service-image {s}={r}" for s, r in sorted(pairs.items()))
+    # The release vector covers the Cloud Run four and listen; the gateway step checks
+    # its own Deployment image against the digest after rollout.
+    outputs["release_vector_args"] = " ".join(
+        f"--service-image {s}={r}" for s, r in sorted(pairs.items()) if s != "llm-gateway"
+    )
     outputs["opted_in"] = " ".join(sorted(pairs))
     return outputs
 

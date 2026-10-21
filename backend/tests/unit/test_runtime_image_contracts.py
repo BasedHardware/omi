@@ -103,6 +103,18 @@ def test_registered_runtime_image_workflows_smoke_their_declared_dockerfile(cont
     assert contracts_module.workflow_contract_errors(contracts_module.load_contracts()) == []
 
 
+def test_a_commented_smoke_marker_does_not_satisfy_the_workflow_contract(contracts_module, monkeypatch):
+    contract = next(c for c in contracts_module.load_contracts() if c.name == 'backend-api')
+    commented = 'steps:\n  # runtime_image_contracts.py smoke\n  - name: build backend/Dockerfile.roles\n'
+    monkeypatch.setattr(contracts_module, '_workflow_contract_text', lambda _: commented)
+    assert contracts_module.workflow_contract_errors([contract]) == [
+        'backend-api: .github/workflows/gcp_backend.yml does not smoke its registered runtime image'
+    ]
+    real = commented + '    run: python3 backend/scripts/role_images.py verify --manifest m\n'
+    monkeypatch.setattr(contracts_module, '_workflow_contract_text', lambda _: real)
+    assert contracts_module.workflow_contract_errors([contract]) == []
+
+
 def test_memory_maintenance_import_smoke_supplies_its_required_nonproduction_config(contracts_module):
     memory_maintenance_job = _contract(contracts_module, 'memory-maintenance-job')
 

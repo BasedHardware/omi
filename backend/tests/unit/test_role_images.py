@@ -81,7 +81,7 @@ def test_build_stamps_the_sha_and_overrides_only_the_python_base():
 
 
 def test_tags_are_registry_short_sha_or_local():
-    assert role_images.image_tag('backend-api', SHA, 'gcr.io/p/') == 'gcr.io/p/backend-api:aaaaaaa'
+    assert role_images.image_tag('backend-api', SHA, 'gcr.io/p/') == 'gcr.io/p/backend-api:aaaaaaaaaaaa'
     assert role_images.image_tag('backend-api', SHA, None) == 'omi-role-backend-api:aaaaaaaaaaaa'
 
 
@@ -103,7 +103,7 @@ def test_build_rejects_short_sha_unknown_images_and_failed_builds(tmp_path):
 def test_baseline_is_measured_but_never_tagged_for_the_registry(tmp_path):
     manifest = _build(tmp_path, '--registry', 'gcr.io/p', '--images', 'backend-api', '--baseline')
     assert [(e['name'], e['kind'], e['tag']) for e in manifest['images']] == [
-        ('backend-api', 'python', 'gcr.io/p/backend-api:aaaaaaa'),
+        ('backend-api', 'python', 'gcr.io/p/backend-api:aaaaaaaaaaaa'),
         ('backend', 'baseline', 'omi-role-backend:aaaaaaaaaaaa'),
     ]
 
@@ -143,17 +143,21 @@ def _edge_entry():
     return {'name': 'listen-edge', 'kind': 'native', 'tag': 'edge:x'}
 
 
+EDGE_SHA = '0123456789abcdef0123456789abcdef01234567'
+
+
 def test_native_probe_checks_health_identity_and_clean_drain():
     seen = []
 
     def http_get(url):
         seen.append(url)
         if url.endswith('/metrics'):
-            return 200, f'omi_edge_build_info{{release_sha="{SHA}"}} 1\n'
+            # The edge bounds release_sha to 12 hex chars (sanitize_release_sha).
+            return 200, 'omi_edge_build_info{release_sha="0123456789ab"} 1\n'
         return 200, 'ok'
 
     runner = _edge_runner()
-    result = role_images.probe_native(_edge_entry(), SHA, run=runner, http_get=http_get, sleep=lambda _: None)
+    result = role_images.probe_native(_edge_entry(), EDGE_SHA, run=runner, http_get=http_get, sleep=lambda _: None)
     assert result['ok'] is True
     assert seen[:2] == ['http://127.0.0.1:49153/healthz', 'http://127.0.0.1:49153/readyz']
     assert ['docker', 'stop', '--time', '30', 'cid'] in runner.commands
@@ -167,8 +171,17 @@ def test_native_probe_fails_on_wrong_identity_or_unclean_drain():
     with pytest.raises(role_images.RoleImageError, match='does not export'):
         role_images.probe_native(_edge_entry(), SHA, run=_edge_runner(), http_get=wrong_identity, sleep=lambda _: None)
 
+    def full_sha_label(url):
+        # A full 40-char label is not what the binary exports; do not accept it as identity.
+        return (200, f'omi_edge_build_info{{release_sha="{EDGE_SHA}"}} 1\n') if url.endswith('/metrics') else (200, '')
+
+    with pytest.raises(role_images.RoleImageError, match='does not export'):
+        role_images.probe_native(
+            _edge_entry(), EDGE_SHA, run=_edge_runner(), http_get=full_sha_label, sleep=lambda _: None
+        )
+
     def healthy(url):
-        return (200, f'omi_edge_build_info{{release_sha="{SHA}"}} 1') if url.endswith('/metrics') else (200, '')
+        return (200, f'omi_edge_build_info{{release_sha="{SHA[:12]}"}} 1') if url.endswith('/metrics') else (200, '')
 
     runner = _edge_runner(exit_code='137')
     with pytest.raises(role_images.RoleImageError, match='SIGTERM drain'):
@@ -207,7 +220,12 @@ def _published_manifest():
         'sha': SHA,
         'registry': 'gcr.io/p',
         'images': [
-            {'name': 'backend-api', 'kind': 'python', 'tag': 'gcr.io/p/backend-api:aaaaaaa', 'probe': {'ok': True}},
+            {
+                'name': 'backend-api',
+                'kind': 'python',
+                'tag': 'gcr.io/p/backend-api:aaaaaaaaaaaa',
+                'probe': {'ok': True},
+            },
             {'name': 'backend', 'kind': 'baseline', 'tag': 'omi-role-backend:aaaaaaaaaaaa'},
         ],
     }

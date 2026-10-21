@@ -3,6 +3,7 @@
 import pytest
 
 from scripts import resolve_service_images as resolver
+from scripts import verify_backend_release_vector as verifier
 
 PROJECT = 'based-hardware-dev'
 SHA = 'a' * 40
@@ -85,10 +86,24 @@ def test_opt_in_moves_only_the_named_services_onto_their_role_digests():
     assert outputs['llm_gateway_repository'] == f'gcr.io/{PROJECT}/backend-gateway'
     assert outputs['llm_gateway_digest'] == DIGEST
     assert outputs['opted_in'] == 'backend backend-listen backend-sync llm-gateway'
+    # The gateway is checked by its own deploy step, not the Cloud Run/listen release vector.
     assert outputs['release_vector_args'] == (
         f'--service-image backend={api} --service-image backend-listen={listen} '
-        f'--service-image backend-sync={workers} --service-image llm-gateway={gateway}'
+        f'--service-image backend-sync={workers}'
     )
+    # Every arg the action appends must be one the release-vector verifier accepts.
+    pairs = dict(arg.split('=', 1) for arg in outputs['release_vector_args'].split() if arg != '--service-image')
+    expectation = verifier.build_expectation(
+        commit_sha=SHA,
+        deploy_run_id='1',
+        deploy_run_attempt='1',
+        project=PROJECT,
+        region='us-central1',
+        environment='dev',
+        service_images=pairs,
+    )
+    assert expectation.image_for('backend') == api
+    assert expectation.image_for('backend-integration') == f'gcr.io/{PROJECT}/backend:aaaaaaa'
 
 
 @pytest.mark.parametrize(

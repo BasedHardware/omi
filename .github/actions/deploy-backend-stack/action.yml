@@ -458,6 +458,18 @@ runs:
           backend/charts/backend-listen/${{ inputs.runtime_env }}_omi_backend_listen_values.yaml \
           backend/charts/llm-gateway/${{ inputs.runtime_env }}_omi_llm_gateway_values.yaml
         IMAGE_TAG="${{ steps.image-tag.outputs.short_sha }}" "$DEPLOY_CONTROL_SCRIPTS/deploy-llm-gateway.sh"
+        if [[ -n "$IMAGE_DIGEST" ]]; then
+          # Role-image opt-in: the gateway is outside the release vector, so prove the
+          # rolled-out Deployment runs exactly the requested digest.
+          expected="${IMAGE_REPOSITORY}@${IMAGE_DIGEST}"
+          actual="$(kubectl -n "${ENVIRONMENT}-omi-backend" get deployment "${ENVIRONMENT}-omi-llm-gateway" \
+            -o jsonpath='{.spec.template.spec.containers[0].image}')"
+          if [[ "$actual" != "$expected" ]]; then
+            echo "ERROR: llm-gateway template image is '$actual', not the opted-in $expected" >&2
+            exit 1
+          fi
+          echo "llm-gateway runs role image $expected"
+        fi
 
     - name: Verify combined LLM gateway serving data plane
       id: combined-gateway-serving

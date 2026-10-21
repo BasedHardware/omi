@@ -107,8 +107,10 @@ def role_image_entries(registry: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def image_tag(name: str, sha: str, registry: str | None) -> str:
+    # 12 hex chars: a fixed 7-char slice can collide, which publish would refuse.
+    # Deploys consume digests, so the tag is only a human-readable handle.
     if registry:
-        return f"{registry.rstrip('/')}/{name}:{sha[:7]}"
+        return f"{registry.rstrip('/')}/{name}:{sha[:12]}"
     return f"omi-role-{name}:{sha[:12]}"
 
 
@@ -215,7 +217,8 @@ def probe_native(
                 f"{entry['name']}: /healthz and /readyz not 200 within {NATIVE_READY_TIMEOUT_SECONDS}s"
             )
         status, metrics = http_get(base + "/metrics")
-        identity = f'omi_edge_build_info{{release_sha="{sha}"}} 1'
+        # The edge bounds the label to 12 hex chars (sanitize_release_sha in backend/edge/src/metrics.rs).
+        identity = f'omi_edge_build_info{{release_sha="{sha[:12].lower()}"}} 1'
         if status != 200 or identity not in metrics:
             raise RoleImageError(f"{entry['name']}: /metrics does not export {identity}")
         stopped = run(["docker", "stop", "--time", "30", container], capture_output=True, text=True)
