@@ -331,7 +331,7 @@ def test_wall_clock_forces_submit():
     assert isinstance(model.choices[1], dict) and result.stop == 'forced_submit'
 
 
-def test_first_bad_submission_is_returned_once_then_repaired():
+def test_bad_submission_is_returned_once_per_failure_class_then_repaired():
     bad = submission(
         sections=[
             {'heading': 'Discussion', 'body_markdown': 'A prose paragraph about pricing.'},
@@ -347,7 +347,9 @@ def test_first_bad_submission_is_returned_once_then_repaired():
 
     model = TwiceBad()
     result = run_agent(model, policy.NotesAgentBudget(max_turns=5, max_tool_calls=6), words=2000)
-    assert len(result.rejections) == 1 and 'Action items' in result.rejections[0]
+    # Format goes back first, alone; then the length (content) check gets its own send-back.
+    assert len(result.rejections) == 2 and 'Action items' in result.rejections[0]
+    assert 'at least' not in result.rejections[0] and 'at least 480' in result.rejections[1]
     assert [s['heading'] for s in result.submission['sections']] == ['Discussion']
     assert 'action_section_dropped' in result.repairs
 

@@ -7,8 +7,10 @@ gateway lane through :func:`langchain_complete`.
 Budget: :func:`utils.llm.notes_agent_policy.plan_notes_agent` sets turns, tool
 calls, an estimated-cost cap and a wall-clock point after which the next turn
 must submit. Over-budget lookups are answered with "submit now" and the next
-turn is forced to ``submit_notes``. A first submission that breaks the format is
-returned once with the problems; anything later is repaired and accepted.
+turn is forced to ``submit_notes``. Submissions are normalized from the schema's
+declared aliases, then checked; the harness send-back budget returns a submission
+once per failure class (format, content, evidence) and anything later is repaired
+and accepted.
 """
 
 from __future__ import annotations
@@ -26,8 +28,19 @@ from pydantic import ValidationError
 from models.structured_extraction import AgentNotesSubmission
 from utils.llm.notes_agent_policy import NotesAgentBudget, estimate_cost_usd
 from utils.llm.notes_agent_prompt import INSTRUCTIONS, SUBMIT, TOOL_SCHEMAS, screenshot_message
-from utils.llm.notes_agent_validation import check_notes, normalize_submission, repair_notes
-from utils.llm.shaped_agent import Budget, LoopStop, Mount, Turn, run_loop
+from utils.llm.notes_agent_validation import FORMAT, check_notes, repair_notes
+from utils.llm.shaped_agent import (
+    Budget,
+    LoopStop,
+    Mount,
+    Problem,
+    SendBackBudget,
+    Turn,
+    normalize_output,
+    run_loop,
+    validate_output,
+)
+from utils.model_text import ContextWindow
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +48,9 @@ FEATURE = 'conversation_notes_agent'
 MAX_COMPLETION_TOKENS = 6000
 MAX_ARGUMENT_BYTES = 65536
 REJECTION_HEADROOM_SECONDS = 30.0
+EVIDENCE = 'evidence'
+# One send-back per failure class: a format slip cannot spend the evidence retry.
+SEND_BACKS = {FORMAT: 1, 'content': 1, EVIDENCE: 1}
 
 RUNS = PromCounter('omi_notes_agent_runs_total', 'Agentic notes runs by how they ended', ['stop'])
 DECISIONS = PromCounter('omi_notes_agent_decisions_total', 'Agentic notes eligibility decisions', ['reason'])
@@ -102,7 +118,9 @@ class NotesAgentResult:
         return self.cached_tokens / self.prompt_tokens if self.prompt_tokens else 0.0
 
 
-def notes_agent_mount(budget: NotesAgentBudget, owner: Mapping[str, Any]) -> Mount:
+def notes_agent_mount(
+    budget: NotesAgentBudget, owner: Mapping[str, Any], context_window: Optional[ContextWindow] = None
+) -> Mount:
     # The run_loop tool cap carries slack: the real lookup cap is enforced per call
     # below, so a submit_notes that shares a turn with lookups is never discarded.
     return Mount(
@@ -111,6 +129,7 @@ def notes_agent_mount(budget: NotesAgentBudget, owner: Mapping[str, Any]) -> Mou
         stable_context=(owner,),
         cache_breakpoint=False,
         feature=FEATURE,
+        context_window=context_window,
         budget=Budget(
             turns=budget.max_turns,
             tool_calls=budget.max_tool_calls + 4 * budget.max_turns,
@@ -138,7 +157,8 @@ async def run_notes_agent(
     clock: Callable[[], float] = time.monotonic,
 ) -> NotesAgentResult:
     started = clock()
-    mount = notes_agent_mount(budget, owner)
+    mount = notes_agent_mount(budget, owner, getattr(toolbox, 'window', None))
+    send_backs = SendBackBudget(SEND_BACKS)
     result = NotesAgentResult(submission=None, stop='no_submission')
     state: dict[str, Any] = {'last_turn_cost': 0.0, 'force': False}
 
@@ -211,22 +231,27 @@ async def run_notes_agent(
                 responses.append(_tool_reply(call, {'error': 'arguments were not a JSON object; retry'}))
                 continue
             if name == SUBMIT:
-                arguments = normalize_submission(arguments)
-                verdict, payload = _review_submission(
+                arguments = normalize_output(AgentNotesSubmission, arguments)
+                sent_back, payload = _review_submission(
                     arguments,
                     transcript_words=transcript_words,
                     lookups_missing=max(0, budget.min_tool_calls - result.tool_calls),
                     naming_leads=naming_leads,
-                    # One rejection, and only while a further turn still fits the budget.
-                    may_reject=not result.rejections
-                    and result.turns < budget.max_turns
+                    send_backs=send_backs,
+                    # Only while a further turn still fits the budget.
+                    may_reject=result.turns < budget.max_turns
                     and clock() - started < budget.deadline_seconds - REJECTION_HEADROOM_SECONDS,
                 )
                 if payload is None:
+                    verdict = ' '.join(problem.message for problem in sent_back)
                     result.rejections.append(verdict)
                     REPAIRS.labels(kind='rejected').inc()
+                    for kind in dict.fromkeys(problem.kind for problem in sent_back):
+                        REPAIRS.labels(kind='rejected_' + kind).inc()
                     # A note sent back to investigate keeps its lookups; a format fix resubmits next turn.
-                    state['force'] = result.tool_calls >= budget.min_tool_calls and 'No other speaker' not in verdict
+                    state['force'] = result.tool_calls >= budget.min_tool_calls and not any(
+                        problem.kind == EVIDENCE for problem in sent_back
+                    )
                     responses.append(_tool_reply(call, {'status': 'rejected', 'fix': verdict}))
                     continue
                 accepted = payload
@@ -274,20 +299,27 @@ def _review_submission(
     transcript_words: int,
     lookups_missing: int,
     may_reject: bool,
+    send_backs: SendBackBudget,
     naming_leads: Sequence[str] = (),
-) -> tuple[str, Optional[dict[str, Any]]]:
+) -> tuple[list[Problem], Optional[dict[str, Any]]]:
+    """``(problems sent back, None)`` or ``([], accepted payload)``."""
     try:
-        AgentNotesSubmission.model_validate(arguments)
+        validate_output(AgentNotesSubmission, arguments)
     except ValidationError as error:
         fields = sorted({'.'.join(map(str, row['loc'])) for row in error.errors(include_input=False)})[:6]
-        return 'Schema problems at: ' + ', '.join(fields), None
+        problem = Problem(FORMAT, 'Schema problems at: ' + ', '.join(fields))
+        # An invalid payload cannot be accepted; past the format budget it is returned uncharged.
+        return send_backs.review([problem], may_send_back=may_reject) or [problem], None
     check = check_notes(arguments, transcript_words=transcript_words)
     if lookups_missing:
-        check.problems.insert(
+        check.findings.insert(
             0,
-            f'Investigate before submitting: make at least {lookups_missing} more lookups to verify the people, '
-            'unnamed speakers and uncertain names (search_people, view_screenshot, get_screen_activity, get_calendar, '
-            'search_memories, search_past_meetings), then resubmit the complete notes.',
+            Problem(
+                EVIDENCE,
+                f'Investigate before submitting: make at least {lookups_missing} more lookups to verify the people, '
+                'unnamed speakers and uncertain names (search_people, view_screenshot, get_screen_activity, '
+                'get_calendar, search_memories, search_past_meetings), then resubmit the complete notes.',
+            ),
         )
     named = [
         person
@@ -295,17 +327,19 @@ def _review_submission(
         if isinstance(person, dict) and str(person.get('name') or '').strip() and not person.get('is_ai_agent')
     ]
     if naming_leads and not named:
-        check.problems.append(
+        check.add(
+            EVIDENCE,
             'No other speaker is named, but the evidence names possible participants: '
             + ', '.join(naming_leads)
             + '. Check them against the transcript; name the one who spoke in participants (with speaker key and '
-            'evidence), the title and the notes, or keep the role description only if none of them fits.'
+            'evidence), the title and the notes, or keep the role description only if none of them fits.',
         )
-    if check.problems and may_reject:
-        return ' '.join(check.problems), None
-    if check.problems:
+    sent_back = send_backs.review(check.findings, may_send_back=may_reject)
+    if sent_back:
+        return sent_back, None
+    if check.findings:
         REPAIRS.labels(kind='accepted_with_problems').inc()
-    return '', arguments
+    return [], arguments
 
 
 def _final_repairs(
