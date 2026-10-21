@@ -86,9 +86,10 @@ SHADOW_PARITY_TOTAL = Counter(
 )
 
 
-class ConvergenceOutcome(StrEnum):
+class ShadowConvergenceOutcome(StrEnum):
     """``omi_jobstore_shadow_convergence_total{outcome}``: what became of a non-matching read (lead ruling a2d720)."""
 
+    UNKNOWN = 'unknown'
     CONVERGED = 'converged'  # Postgres equalled Firestore's current state within the window: mirror lag
     DIVERGED = 'diverged'  # still different after the window: a real divergence
     DROPPED = 'dropped'  # tracker queue full: unknown, gated as diverged (fail closed)
@@ -117,8 +118,10 @@ def _table_label(table: str) -> str:
     return table if table in MIRRORED_TABLES else 'other'
 
 
-def _converge_count(table: str, outcome: ConvergenceOutcome) -> None:
-    SHADOW_CONVERGENCE_TOTAL.labels(table=_table_label(table), outcome=ConvergenceOutcome(outcome).value).inc()
+def _converge_count(table: str, outcome: ShadowConvergenceOutcome) -> None:
+    SHADOW_CONVERGENCE_TOTAL.labels(
+        table=_table_label(table), outcome=reason_label(ReasonFamily.PARITY, outcome, ShadowConvergenceOutcome)
+    ).inc()
 
 
 def _count(table: str, op: str, outcome: ShadowParityOutcome, n: int = 1) -> None:
@@ -450,7 +453,7 @@ class DualStore:
             with self._pending_cv:
                 for table, key in entries:
                     if len(self._pending) >= CONVERGENCE_QUEUE_LIMIT:
-                        _converge_count(table, ConvergenceOutcome.DROPPED)
+                        _converge_count(table, ShadowConvergenceOutcome.DROPPED)
                         continue
                     started = time.monotonic()
                     self._pending_seq += 1
@@ -491,7 +494,7 @@ class DualStore:
                     shadow_doc = self.shadow.read_doc(conn, table, key)
             primary_doc = read_current(self.primary, [(table, key)]).get((table, key), {})
         except Exception as exc:
-            _converge_count(table, ConvergenceOutcome.ERROR)
+            _converge_count(table, ShadowConvergenceOutcome.ERROR)
             logger.warning(
                 'event=jobstore_shadow op=converge outcome=error error=%s error_class=%s table=%s',
                 type(exc).__name__,
@@ -500,12 +503,12 @@ class DualStore:
             )
             return
         if compare(primary_doc, shadow_doc) is ShadowParityOutcome.MATCH:
-            _converge_count(table, ConvergenceOutcome.CONVERGED)
+            _converge_count(table, ShadowConvergenceOutcome.CONVERGED)
             SHADOW_CONVERGENCE_SECONDS.labels(table=_table_label(table)).observe(time.monotonic() - started)
             return
         step += 1
         if step >= len(self.convergence_delays):
-            _converge_count(table, ConvergenceOutcome.DIVERGED)
+            _converge_count(table, ShadowConvergenceOutcome.DIVERGED)
             namespace = getattr(self.shadow, 'namespace', '?')
             logger.warning(
                 'event=jobstore_shadow op=converge outcome=diverged namespace=%s table=%s key=%s fields=%s',
