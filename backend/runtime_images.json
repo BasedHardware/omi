@@ -179,13 +179,23 @@
       ]
     }
   },
+  "native_images": {
+    "listen-edge": {
+      "role": "realtime",
+      "dockerfile": "backend/edge/Dockerfile",
+      "build_context": ".",
+      "probe": "http",
+      "logging": "Rust tracing-subscriber JSON on stdout (backend/edge/src/main.rs); outside the Python logging guard."
+    }
+  },
   "images": [
     {
       "name": "backend-api",
       "dockerfile": "backend/Dockerfile.roles",
       "target": "api",
-      "build_only": true,
-      "deployment_workflows": [],
+      "deployment_workflows": [
+        ".github/workflows/gcp_backend.yml"
+      ],
       "build_context": ".",
       "source_root": "backend",
       "workdir": "/app",
@@ -203,8 +213,9 @@
       "name": "backend-workers",
       "dockerfile": "backend/Dockerfile.roles",
       "target": "workers",
-      "build_only": true,
-      "deployment_workflows": [],
+      "deployment_workflows": [
+        ".github/workflows/gcp_backend.yml"
+      ],
       "build_context": ".",
       "source_root": "backend",
       "workdir": "/app",
@@ -223,8 +234,9 @@
       "name": "backend-realtime",
       "dockerfile": "backend/Dockerfile.roles",
       "target": "realtime",
-      "build_only": true,
-      "deployment_workflows": [],
+      "deployment_workflows": [
+        ".github/workflows/gcp_backend.yml"
+      ],
       "build_context": ".",
       "source_root": "backend",
       "workdir": "/app",
@@ -242,8 +254,9 @@
       "name": "backend-gateway",
       "dockerfile": "backend/Dockerfile.roles",
       "target": "gateway",
-      "build_only": true,
-      "deployment_workflows": [],
+      "deployment_workflows": [
+        ".github/workflows/gcp_backend.yml"
+      ],
       "build_context": ".",
       "source_root": "backend",
       "workdir": "/app",
@@ -261,8 +274,9 @@
       "name": "backend-pusher",
       "dockerfile": "backend/Dockerfile.roles",
       "target": "pusher",
-      "build_only": true,
-      "deployment_workflows": [],
+      "deployment_workflows": [
+        ".github/workflows/gcp_backend.yml"
+      ],
       "build_context": ".",
       "source_root": "backend",
       "workdir": "/app",
