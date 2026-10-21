@@ -2,7 +2,6 @@ import 'dart:async';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
@@ -199,29 +198,31 @@ class _ConversationListItemState extends State<ConversationListItem> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       provider.onConversationTap(widget.conversation.id);
-      unawaited(
-        SchedulerBinding.instance.scheduleTask<void>(() {
-          if (!mounted) return;
-          if (searchQuery.isNotEmpty) {
-            ProductTelemetry.instance.value(
-              ProductValue.searchResultOpened,
-              surface: ProductSurface.conversations,
-              objectId: RecordReference.fromId(widget.conversation.id),
-            );
-            PlatformManager.instance.analytics.conversationOpenedFromSearch(
-              conversation: widget.conversation,
-              searchQuery: searchQuery,
-              conversationIndexInResults: widget.conversationIdx,
-            );
-          } else {
-            PlatformManager.instance.analytics.conversationListItemClickedWithTimeDifference(
-              conversation: widget.conversation,
-              conversationIndex: widget.conversationIdx,
-              hoursSinceConversation: hoursSinceConversation,
-            );
-          }
-        }, Priority.idle),
-      );
+      // Off the navigation frame, but never SchedulerBinding.scheduleTask(Priority.idle): while
+      // any ticker runs (Home's live dot, a processing bar) the scheduler skips an idle task and
+      // re-arms a zero-delay timer every event-loop turn, spinning the UI isolate until the
+      // animation stops.
+      Timer.run(() {
+        if (!mounted) return;
+        if (searchQuery.isNotEmpty) {
+          ProductTelemetry.instance.value(
+            ProductValue.searchResultOpened,
+            surface: ProductSurface.conversations,
+            objectId: RecordReference.fromId(widget.conversation.id),
+          );
+          PlatformManager.instance.analytics.conversationOpenedFromSearch(
+            conversation: widget.conversation,
+            searchQuery: searchQuery,
+            conversationIndexInResults: widget.conversationIdx,
+          );
+        } else {
+          PlatformManager.instance.analytics.conversationListItemClickedWithTimeDifference(
+            conversation: widget.conversation,
+            conversationIndex: widget.conversationIdx,
+            hoursSinceConversation: hoursSinceConversation,
+          );
+        }
+      });
     });
 
     final seek = searchMomentSeekFromSnippets(snippets: widget.conversation.matchSnippets, searchQuery: searchQuery);
