@@ -19,6 +19,7 @@ from config.sync_telemetry import (
     bounded_exception_class,
 )
 from database._client import is_document_size_limit_error
+from utils.stt.outcomes import TranscriptionFailure
 from utils.sync.assignment_errors import SyncAssignmentConflict, sync_assignment_conflict_strikes
 
 INTERNAL_PHASES = frozenset({'persistence', 'finalize'})
@@ -39,9 +40,24 @@ _ERROR_CODES = {
 SYNC_INTERNAL_ERROR_CODES = frozenset(_ERROR_CODES.values()) | {'sync_finalize_failed', 'sync_persistence_failed'}
 
 
+def _provider_typed(failure: object) -> bool:
+    # A typed STT failure (ProviderUnavailable included) is a vendor outcome even
+    # when the coordinator re-raises it from the persistence loop.
+    if bounded_exception_class(failure) == 'TranscriptionFailure':
+        return True
+    current = failure if isinstance(failure, BaseException) else None
+    seen: set[int] = set()
+    while current is not None and id(current) not in seen:
+        if isinstance(current, TranscriptionFailure):
+            return True
+        seen.add(id(current))
+        current = current.__cause__ or current.__context__
+    return False
+
+
 def sync_failure_reason(phase: object, failure_class: object) -> SyncFailureReason:
     """Internal cause for a persistence/finalize failure, ``none`` for every other phase."""
-    if phase not in INTERNAL_PHASES:
+    if phase not in INTERNAL_PHASES or _provider_typed(failure_class):
         return SyncFailureReason.NONE
     reason = _CLASS_REASONS.get(bounded_exception_class(failure_class))
     if reason is not None:

@@ -742,7 +742,10 @@ def _copy_bridge_chunk(uid: str, bucket: Any, source_blob: Any, new_path: str, c
         _copy_chunk_with_backoff(uid, bucket, source_blob, new_path, if_generation_match=generation)
     except google_exceptions.PreconditionFailed:
         winner = bucket.get_blob(new_path)
-        if winner is None or not _same_object(winner, chunk):
+        # Archive packs list no checksum; their capture-named object of the same size
+        # is the same pack another bridge copied a moment ago.
+        unverifiable = not chunk.get('crc32c') and getattr(winner, 'size', None) == chunk.get('size')
+        if winner is None or not (_same_object(winner, chunk) or unverifiable):
             raise
         OMI_SYNC_BRIDGE_AUDIO_COPY_TOTAL.labels(outcome='raced').inc()
 

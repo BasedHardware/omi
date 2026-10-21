@@ -181,6 +181,29 @@ def test_concurrent_writer_with_different_bytes_still_fails(install, monkeypatch
         merge.copy_sync_bridge_audio(UID, 'donor', 'target')
 
 
+def test_unchecksummed_pack_raced_by_a_same_size_copy_is_not_a_failure(install, monkeypatch):
+    bucket = _Bucket()
+    install(bucket)
+    racer = _dest('chunks/u1/donor/100.0.bin')
+    real_list = bucket.list_blobs
+    monkeypatch.setattr(
+        merge,
+        'list_audio_chunks',
+        lambda uid, cid, **kwargs: [{'path': 'chunks/u1/donor/100.0.bin', 'crc32c': None, 'size': 10}],
+    )
+
+    def list_then_race(prefix=''):
+        listed = real_list(prefix)
+        bucket.objects[racer] = SimpleNamespace(crc32c='crc-a', size=10, generation=55)
+        return listed
+
+    monkeypatch.setattr(bucket, 'list_blobs', list_then_race)
+
+    merge.copy_sync_bridge_audio(UID, 'donor', 'target')
+
+    assert bucket.objects[racer].generation == 55
+
+
 def test_unknown_source_checksum_is_copied_not_skipped(install, monkeypatch):
     dest = _dest('chunks/u1/donor/100.0.bin')
     bucket = _Bucket({dest: SimpleNamespace(crc32c=None, size=10, generation=3)})

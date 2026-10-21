@@ -19,6 +19,7 @@ from database import sync_ledger
 from database.firestore_transaction_retry import FirestoreContentionExhausted
 from utils.batch_pipeline.live_projection import replace_record
 from utils.observability.transcription import record_sync_transcription_outcome
+from utils.stt.outcomes import TranscriptionFailure
 from utils.sync.assignment_errors import (
     SYNC_ASSIGNMENT_CONFLICT_AWAITING_WRITER,
     SYNC_ASSIGNMENT_CONFLICT_STRUCTURAL,
@@ -46,12 +47,30 @@ from utils.sync.failure_reason import (
         ('finalize', RuntimeError('boom'), SyncFailureReason.FINALIZE_ERROR),
         ('provider_call', TooManyRequests('vendor 429'), SyncFailureReason.NONE),
         (None, FirestoreContentionExhausted('busy'), SyncFailureReason.NONE),
+        (
+            'persistence',
+            TranscriptionFailure(TranscriptionOutcome.UPSTREAM_ERROR, provider='parakeet'),
+            SyncFailureReason.NONE,
+        ),
     ],
 )
 def test_internal_cause_is_classified_by_phase_and_bounded_class(phase, error, reason):
     assert sync_failure_reason(phase, error) is reason
     # Deferred labels replay only the bounded class token, never the exception object.
     assert sync_failure_reason(phase, type(error).__name__) is reason
+
+
+def test_provider_failure_reraised_from_the_persistence_loop_stays_a_vendor_failure():
+    # minimal_redrive.ProviderUnavailable is a TranscriptionFailure that the coordinator
+    # re-raises while job_phase is still 'persistence'.
+    class ProviderUnavailable(TranscriptionFailure):
+        def __init__(self):
+            super().__init__(TranscriptionOutcome.UPSTREAM_ERROR, provider='parakeet', retryable=True)
+
+    assert sync_failure_reason('persistence', ProviderUnavailable()) is SyncFailureReason.NONE
+    wrapped = RuntimeError('job failed')
+    wrapped.__cause__ = ProviderUnavailable()
+    assert sync_failure_reason('finalize', wrapped) is SyncFailureReason.NONE
 
 
 def test_rate_limit_and_contention_get_their_own_job_error_codes():
