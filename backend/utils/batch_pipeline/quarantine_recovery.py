@@ -325,7 +325,7 @@ class QuarantineRecovery:
                 )
                 result_outcome(payload)
                 if payload.get('outcome') != 'silence':
-                    record_accepted(owner_id, 'modulate' if multilingual else 'unknown', item.duration_seconds)
+                    metered(record_accepted, owner_id, 'modulate' if multilingual else 'unknown', item.duration_seconds)
             except BatchPrivacyBlocked:
                 raise
             except Exception as error:

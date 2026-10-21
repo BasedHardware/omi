@@ -151,6 +151,37 @@ def test_metering_failure_never_changes_the_disposition(setup, monkeypatch, lega
     assert row(client)['result']['outcome'] == 'no_recoverable_speech'
 
 
+def test_success_metering_failure_keeps_the_first_transcript(setup, monkeypatch, legacy_dependencies):
+    client, binding, _, alternate, second, recovery = second_setup(setup, monkeypatch, legacy_dependencies)
+    alternate.return_value = (WORDS, 'vi')
+    monkeypatch.setattr(module, 'record_accepted', Mock(side_effect=RuntimeError('PRIVATE_SENTINEL')))
+    assert recovery.recover('bad', binding.owner_id) == 'recovered'
+    assert row(client)['result']['outcome'] == 'success'
+    second.assert_not_called()
+
+
+# Privacy cancels the intent; anything else raised by the provider is a provider failure.
+@pytest.mark.parametrize(
+    'raised,result', [('privacy', 'cancelled'), ('projection', 'failed_held'), ('allowance', 'failed_held')]
+)
+def test_second_provider_fences_never_settle_terminal_empty(setup, monkeypatch, legacy_dependencies, raised, result):
+    from database.batch_pipeline_privacy import BatchPrivacyBlocked
+    from database.batch_pipeline_projection_protocol import ProjectionBlocked
+
+    error = {'privacy': BatchPrivacyBlocked, 'projection': ProjectionBlocked}.get(raised)
+    deepgram = Mock(side_effect=error('synthetic')) if error else None
+    client, binding, artifacts, _, second, recovery = second_setup(
+        setup, monkeypatch, legacy_dependencies, deepgram=deepgram
+    )
+    if raised == 'allowance':
+        monkeypatch.setattr(module, 'sync_allowed', Mock(side_effect=[True, RuntimeError('PRIVATE_SENTINEL')]))
+    assert recovery.recover('bad', binding.owner_id) == result
+    assert not row(client).get('result')
+    artifacts.persist_recovery_result.assert_not_called()
+    if raised == 'allowance':
+        second.assert_not_called()
+
+
 @pytest.mark.parametrize('change', ['first_only', 'missing_second', 'second_not_empty'])
 def test_two_provider_evidence_rejects_fabrication(change):
     payload = terminal_empty_payload(5, [{'start': 0, 'end': 5}], TWO_PROVIDER_EMPTY_EVIDENCE)
