@@ -56,6 +56,10 @@ STAGING_DIFF_ALLOWLIST: tuple[str, ...] = (
     'JOBSTORE_*',
     # Enrichment queue route: staging at M2 (plan C3), prod stays sync_handler until M3.
     'ENRICHMENT_ROUTE',
+    # Code defaults point at mail.omi.me; the staging fence requires an explicit non-prod sender
+    # (staging has no RESEND_API_KEY, so email is no-send). MCP_AUTHORIZATION_SERVER_URL is *_URL.
+    'LIFECYCLE_EMAIL_FROM_ADDRESS',
+    'SHARE_EMAIL_FROM_ADDRESS',
 )
 # Cloud Run flags that may differ: network placement and replica counts.
 STAGING_FLAG_ALLOWLIST: tuple[str, ...] = (
