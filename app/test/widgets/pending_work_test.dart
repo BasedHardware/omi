@@ -5,20 +5,17 @@ import 'package:provider/provider.dart';
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/pending_work.dart';
-import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/models/sync_state.dart';
 import 'package:omi/pages/activity/activity_bell_button.dart';
 import 'package:omi/pages/activity/activity_seen.dart';
 import 'package:omi/pages/activity/needs_attention_section.dart';
-import 'package:omi/pages/conversations/widgets/home_pending_row.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/services/pending_work/pending_work_store.dart';
 import 'package:omi/services/wals/wal.dart';
 
-/// Home's one row also stands for conversations still processing and for server work; failures
-/// live behind the bell, which lights in the warning color.
+/// Failures stay behind the bell; catch-up work alone never lights its dot.
 
 class _IdleSync extends ChangeNotifier implements SyncProvider {
   @override
@@ -83,56 +80,7 @@ Widget _app(Widget child, {ConversationProvider? conversations, SyncProvider? sy
       ),
     );
 
-ServerConversation _processing(String id) {
-  final now = DateTime.now();
-  return ServerConversation(
-    id: id,
-    createdAt: now,
-    startedAt: now,
-    structured: Structured('', ''),
-    status: ConversationStatus.processing,
-  );
-}
-
 void main() {
-  group('HomePendingRow', () {
-    testWidgets('a processing conversation shows the one calm row', (tester) async {
-      final store = await _store();
-      await tester.pumpWidget(
-          _app(HomePendingRow(pendingWork: store), conversations: _conversations(processing: [_processing('a')])));
-      expect(find.byKey(const Key('home_pending_row')), findsOneWidget);
-      expect(find.text('Conversations on the way'), findsOneWidget);
-      expect(find.text('Processing'), findsOneWidget);
-      expect(find.textContaining('taking longer'), findsNothing);
-    });
-
-    testWidgets('server work the phone did not start also shows the row', (tester) async {
-      final store = await _store(pending: const [
-        PendingWorkItem(id: 'sync:j', kind: 'sync_job', state: 'transcribing', conversationIds: []),
-      ]);
-      await tester.pumpWidget(_app(HomePendingRow(pendingWork: store)));
-      expect(find.byKey(const Key('home_pending_row')), findsOneWidget);
-    });
-
-    testWidgets('On the Way lists the server work the row stands for', (tester) async {
-      final store = await _store(pending: const [
-        PendingWorkItem(id: 'conv:a', kind: 'conversation', state: 'summarizing', conversationIds: ['a']),
-      ]);
-      await tester.pumpWidget(_app(HomePendingRow(pendingWork: store)));
-      await tester.tap(find.byKey(const Key('home_pending_row')));
-      await tester.pumpAndSettle();
-
-      expect(find.text('All recordings are synced'), findsNothing);
-      expect(find.text('Processing'), findsOneWidget);
-    });
-
-    testWidgets('nothing pending: no row', (tester) async {
-      final store = await _store();
-      await tester.pumpWidget(_app(HomePendingRow(pendingWork: store)));
-      expect(find.byKey(const Key('home_pending_row')), findsNothing);
-    });
-  });
-
   group('Needs attention', () {
     testWidgets('lists failed conversations with Try Again and Retry all', (tester) async {
       final retried = <String>[];
@@ -166,6 +114,17 @@ void main() {
   });
 
   group('bell', () {
+    testWidgets('catch-up alone never lights either bell dot', (tester) async {
+      final store = await _store(pending: const [
+        PendingWorkItem(id: 'sync:j', kind: 'sync_job', state: 'transcribing', conversationIds: ['a', 'b']),
+      ]);
+      var stored = DateTime.now().millisecondsSinceEpoch;
+      final seen = ActivitySeen(read: () => stored, write: (v) => stored = v, owner: () => 'u');
+      await tester.pumpWidget(_app(ActivityBellButton(seen: seen, pendingWork: store)));
+      expect(find.byKey(const ValueKey('home_activity_attention_dot')), findsNothing);
+      expect(find.byKey(const ValueKey('home_activity_dot')), findsNothing);
+    });
+
     testWidgets('unseen attention lights the warning dot; no recap needed', (tester) async {
       final store = await _store(attention: [_item('x')]);
       var stored = DateTime.now().millisecondsSinceEpoch;

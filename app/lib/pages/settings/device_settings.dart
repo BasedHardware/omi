@@ -10,6 +10,9 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/gen/pigeon_communicator.g.dart';
 import 'package:omi/pages/conversations/auto_sync_page.dart';
+import 'package:omi/pages/conversations/on_the_way_page.dart';
+import 'package:omi/pages/settings/device/device_catching_up_card.dart';
+import 'package:omi/services/pending_work/pending_work_store.dart';
 import 'package:omi/pages/conversations/sync_page.dart';
 import 'package:omi/pages/home/firmware_update.dart';
 import 'package:omi/pages/home/omiglass_ota_update.dart';
@@ -22,7 +25,6 @@ import 'package:omi/pages/episodes/live_episode_page.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/episode_provider.dart';
-import 'package:omi/utils/sync/offline_sync_amounts.dart';
 import 'package:omi/pages/settings/device/device_page_header.dart';
 import 'package:omi/pages/settings/device_diagnostics.dart';
 import 'package:omi/pages/settings/transcription_settings_page.dart';
@@ -49,7 +51,10 @@ import 'package:omi/utils/platform/platform_service.dart';
 /// the home-screen quick action, and (through the `ConnectedDevice` alias in
 /// `pages/home/device.dart`) the header battery pill.
 class DeviceSettings extends StatefulWidget {
-  const DeviceSettings({super.key});
+  const DeviceSettings({super.key, this.pendingWork});
+
+  /// Defaults to the same shared server view used by Home and the bell.
+  final PendingWorkStore? pendingWork;
 
   @override
   State<DeviceSettings> createState() => _DeviceSettingsState();
@@ -68,6 +73,8 @@ class _DeviceSettingsState extends State<DeviceSettings> {
   static const Duration _findDeviceRequestTimeout = Duration(seconds: 30);
 
   CaptureProvider? _captureProvider;
+
+  PendingWorkStore get _pendingWork => widget.pendingWork ?? PendingWorkStore.instance;
 
   double _dimRatio = 100.0;
   bool _isDimRatioLoaded = false;
@@ -92,6 +99,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
+      unawaited(_pendingWork.refresh());
       // Register for streaming metrics right away, so an early unmount cannot race the
       // async device-info fetch below and leak the listener.
       _captureProvider = _maybeProvider<CaptureProvider>(context, listen: false);
@@ -660,16 +668,10 @@ extension _DeviceLiveSections on _DeviceSettingsState {
     return Builder(builder: (context) {
       // One WAL pass per sync notification, shared by Stats and Right now.
       // Capture/episode updates subscribe below this builder and never rescan it.
-      final sync = context.select<SyncProvider?, ({bool syncing, int onDevice, int waiting, int moved})>((s) {
-        if (s == null) return (syncing: false, onDevice: 0, waiting: 0, moved: 0);
-        final amounts = SyncPipelineAmounts.of(s.allWals);
-        return (
-          syncing: s.isSyncing,
-          onDevice: amounts.onDeviceSeconds,
-          waiting: amounts.onDeviceSeconds + amounts.onPhoneSeconds + amounts.processingSeconds,
-          moved: amounts.onPhoneSeconds + amounts.processingSeconds,
-        );
-      });
+      final sync = context.select<SyncProvider?, (DeviceCatchUpLocal, bool)>((s) => (
+            deviceCatchUpLocal(s?.allWals ?? const []),
+            s?.syncState.isProcessing ?? false,
+          ));
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -679,14 +681,17 @@ extension _DeviceLiveSections on _DeviceSettingsState {
                       batteryLevel: batteryLevel,
                       isCharging: isCharging,
                       heardTodaySeconds: _heardTodaySeconds(context),
-                      onDeviceSeconds: sync.onDevice,
+                      onDeviceSeconds: sync.$1.onDeviceSeconds,
                     )),
             gap,
           ],
-          Builder(builder: (context) {
-            final rightNow = _rightNow(context, syncing: sync.syncing, waiting: sync.waiting, moved: sync.moved);
-            return rightNow.hasContent ? Column(children: [rightNow, gap]) : const SizedBox.shrink();
-          }),
+          ListenableBuilder(
+            listenable: _pendingWork,
+            builder: (context, _) {
+              final rightNow = _rightNow(context, local: sync.$1, serverProcessing: sync.$2);
+              return rightNow.hasContent ? Column(children: [rightNow, gap]) : const SizedBox.shrink();
+            },
+          ),
         ],
       );
     });
@@ -703,7 +708,8 @@ extension _DeviceLiveSections on _DeviceSettingsState {
   }
 
   DeviceRightNowGroup _rightNow(BuildContext context,
-      {required bool syncing, required int waiting, required int moved}) {
+      {required DeviceCatchUpLocal local, required bool serverProcessing}) {
+    final conversations = context.watch<ConversationProvider?>();
     final capture = context.read<CaptureProvider?>();
     // Only the visible source and running length depend on capture, not its
     // transcript text, socket state, or BLE/network rate samples.
@@ -722,7 +728,14 @@ extension _DeviceLiveSections on _DeviceSettingsState {
       onOpenLive: capture == null
           ? null
           : () => routeToPage(context, LiveEpisodePage(topConversationId: capture.topConversationId)),
-      catchingUp: syncing && waiting > 0 ? (doneSeconds: moved, totalSeconds: waiting) : null,
+      catchingUp: DeviceCatchUpSummary.from(
+        local: local,
+        serverProcessing: serverProcessing,
+        pending: _pendingWork.pending,
+        conversations: conversations?.conversations ?? const [],
+        processing: conversations?.processingConversations ?? const [],
+      ),
+      onOpenCatchingUp: () => routeToPage(context, OnTheWayPage(pendingWork: _pendingWork)),
     );
   }
 
