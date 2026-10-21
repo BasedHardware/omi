@@ -416,7 +416,7 @@ async def accept_upload(
             # keeps the in-flight owner's ACK (h, invariant 4); the client retries.
             from utils.sync import final_pass_rehome
 
-            rehome = await run_blocking(db_executor, final_pass_rehome.rehome_final_pass_owner, uid, conversation_id)
+            rehome = await run_blocking(db_executor, final_pass_rehome.upload_rehome, mode, uid, conversation_id)
             if not final_pass_rehome.rehomes_to_batch(rehome):
                 return legacy_dark.fence_response(
                     legacy_dark.FenceDecision(

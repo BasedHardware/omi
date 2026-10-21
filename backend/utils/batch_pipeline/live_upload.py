@@ -105,14 +105,13 @@ async def _legacy_final_pass_route(uid, conversation_id, store, legacy_mode) -> 
     legacy job for the uid, a lost CAS) keeps the LEGACY route: the router's fence
     answers the shipped in-progress ACK and the client retries.
     """
-    from utils.sync import final_pass_rehome, legacy_dark
+    from utils.sync import final_pass_rehome
 
     if not conversation_id:
         return RecordUploadRoute.LEGACY
-    if await _legacy_mode(legacy_mode) is legacy_dark.LegacySyncMode.ON:
-        return RecordUploadRoute.LEGACY
+    mode = await _legacy_mode(legacy_mode)
     outcome = await run_blocking(
-        db_executor, final_pass_rehome.rehome_final_pass_owner, uid, conversation_id, firestore_client=store.client
+        db_executor, final_pass_rehome.upload_rehome, mode, uid, conversation_id, firestore_client=store.client
     )
     return RecordUploadRoute.BATCH if final_pass_rehome.rehomes_to_batch(outcome) else RecordUploadRoute.LEGACY
 

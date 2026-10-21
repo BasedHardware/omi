@@ -18,13 +18,16 @@ Dry run by default: counts only, never a uid or conversation id.
     .venv/bin/python -m scripts.legacy_dark.final_pass_rehome --env prod --apply --output <receipt.json>
 
 The live-job lease has no Redis from an operator shell, so it is read from the
-uid's ``sync_content_ledger``: an ACTIVE legacy processing claim or a
-retryable legacy row holds the uid (conservative; the upload path re-homes the
-held ones later, from the exact Redis pending index). Needs the
+uid's ``sync_content_ledger`` fresh for every conversation (the sweep runs at
+``on`` beside live legacy admission): an ACTIVE legacy processing claim, a
+retryable legacy row, or any ledger row created in the last QUIET_SECONDS
+holds the uid (conservative; the upload path re-homes the held ones later,
+from the exact Redis pending index). Needs the
 ``conversations.record_lane_owner`` collection-group field index
 (``scripts/reconcile_firestore_indexes.py``).
 
-Exit codes: 0 CLEAR (nothing eligible or held remains), 1 REMAINING,
+Exit codes: 0 CLEAR (nothing eligible or held remains, whole stock scanned),
+1 REMAINING or PARTIAL (a --limit run never clears),
 2 usage, credential, tier or index error.
 """
 
@@ -35,7 +38,7 @@ import json
 import os
 import sys
 from collections import Counter
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Optional
 
 from utils.sync import legacy_dark
@@ -45,17 +48,23 @@ LEDGER_COLLECTION = 'sync_content_ledger'
 LEDGER_LIVE_STATUSES = ('processing', 'retryable')
 BATCH_PROTOCOLS = ('batch_v1', 'stt_cap_hold_v1')
 CONVERSATION_PATH_DEPTH = 4  # users/{uid}/conversations/{id}
+# A uid with any ledger row this recent may have a legacy job starting right now.
+QUIET_SECONDS = 600
 
 
-def ledger_live_jobs(client: Any, *, now: Optional[datetime] = None) -> Callable[[str], Optional[int]]:
-    """A per-uid probe over the ledger, cached per uid; None on any read error (held)."""
+def ledger_live_jobs(
+    client: Any, *, now: Optional[datetime] = None, quiet_seconds: int = QUIET_SECONDS
+) -> Callable[[str], Optional[int]]:
+    """A per-uid probe over the ledger, read fresh on every call; None on any read error (held).
+
+    The sweep runs at ``on`` beside live legacy admission, so nothing is cached:
+    a uid holds while it has an ACTIVE legacy processing claim, a retryable legacy
+    row, or any ledger row created inside the quiet window.
+    """
     from google.cloud.firestore_v1.base_query import FieldFilter
 
-    cache: dict[str, Optional[int]] = {}
-
     def probe(uid: str) -> Optional[int]:
-        if uid in cache:
-            return cache[uid]
+        moment = now or datetime.now(timezone.utc)
         try:
             ledger = client.collection('users').document(uid).collection(LEDGER_COLLECTION)
             live = 0
@@ -64,13 +73,15 @@ def ledger_live_jobs(client: Any, *, now: Optional[datetime] = None) -> Callable
                     row = snapshot.to_dict() or {}
                     if row.get('dispatch_protocol') in BATCH_PROTOCOLS:
                         continue
-                    ownership = legacy_dark.classify_ledger_row(row, now=now)
+                    ownership = legacy_dark.classify_ledger_row(row, now=moment)
                     if status == 'retryable' or ownership is legacy_dark.LegacyOwnership.ACTIVE:
                         live += 1
-            cache[uid] = live
+            since = moment - timedelta(seconds=quiet_seconds)
+            recent = ledger.where(filter=FieldFilter('created_at', '>=', since)).limit(1)
+            live += sum(1 for _ in recent.stream())
+            return live
         except Exception:
-            cache[uid] = None
-        return cache[uid]
+            return None
 
     return probe
 
@@ -111,12 +122,16 @@ def sweep(
         outcome = rehome_final_pass_owner(uid, conversation_id, firestore_client=client, live_jobs=probe, apply=apply)
         counts[outcome.value] += 1
     remaining = counts[RehomeOutcome.HELD.value] + counts[RehomeOutcome.ELIGIBLE.value]
+    # A capped scan says nothing about the rows it never reached: never CLEAR.
+    truncated = bool(limit) and scanned >= limit
+    verdict = 'PARTIAL' if truncated else ('CLEAR' if remaining == 0 else 'REMAINING')
     return {
         'apply': apply,
         'scanned': scanned,
+        'truncated': truncated,
         'counts': dict(sorted(counts.items())),
         'remaining_stranded': remaining,
-        'verdict': 'CLEAR' if remaining == 0 else 'REMAINING',
+        'verdict': verdict,
     }
 
 
@@ -140,7 +155,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         project, database, _location = ENVIRONMENTS[args.env]
         client = firestore.Client(project=project, database=database)
         now = datetime.now(timezone.utc)
-        result = sweep(client, apply=args.apply, limit=args.limit, now=now)
+        result = sweep(client, apply=args.apply, limit=args.limit)
     except Exception as error:
         print(f'sweep failed: {type(error).__name__}', file=sys.stderr)
         return 2

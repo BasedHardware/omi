@@ -179,6 +179,30 @@ def legacy_admission_allowed(mode: Optional[LegacySyncMode] = None) -> bool:
     return (mode or current_mode()) is LegacySyncMode.ON
 
 
+def mode_age_seconds(now: Optional[datetime] = None) -> Optional[float]:
+    """Seconds since the served ramp document was last written; None when that is unknown.
+
+    A request that read ``on`` just before a flip keeps serving it for the rest
+    of that request (the mode is read once, from a 30s cache), so a caller that
+    must not race such a request waits this long after the write.
+    """
+    try:
+        from utils.rollout import runtime_percent
+
+        written = getattr(runtime_percent.ramp_snapshot(), 'updated_at', None)
+    except Exception:
+        return None
+    if not isinstance(written, str) or not written:
+        return None
+    try:
+        parsed = datetime.fromisoformat(written.replace('Z', '+00:00'))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return ((now or datetime.now(timezone.utc)) - parsed).total_seconds()
+
+
 def sequencer_registration_allowed(mode: Optional[LegacySyncMode] = None) -> bool:
     """New sequencer owners and the pre-sequencer migration branch exist only in ``on``."""
     return (mode or current_mode()) is LegacySyncMode.ON

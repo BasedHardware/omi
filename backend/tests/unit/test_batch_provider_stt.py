@@ -925,30 +925,30 @@ async def test_stranded_final_pass_owner_is_rehomed_then_admitted(dark_intake, m
     """No live legacy job: the owner moves to batch_sync_v1 and this upload is admitted to batch,
     instead of the in-progress ACK that held the phone's audio for good."""
     from utils.sync import final_pass_rehome
+    from utils.sync.legacy_dark import LegacySyncMode
 
     _final_pass_target(dark_intake, monkeypatch)
     rehomed = []
     monkeypatch.setattr(
         final_pass_rehome,
-        'rehome_final_pass_owner',
-        lambda uid, cid, **kwargs: rehomed.append((uid, cid)) or final_pass_rehome.RehomeOutcome(outcome),
+        'upload_rehome',
+        lambda mode, uid, cid, **kwargs: rehomed.append((mode, uid, cid)) or final_pass_rehome.RehomeOutcome(outcome),
     )
     response = await dark_intake.intake.accept_upload(**{**UPLOAD, 'conversation_id': 'record'})
     assert response.status_code == 202
-    assert rehomed == [(OWNER, 'record')]
+    assert rehomed == [(LegacySyncMode.DRAINING, OWNER, 'record')]
     assert len(dark_intake.calls) == 1
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('outcome', ['held', 'not_applicable'])
 async def test_final_pass_owner_held_by_a_live_legacy_job_keeps_the_ack(dark_intake, monkeypatch, outcome):
-    """A live legacy job for the uid (or a lost CAS): the in-flight owner's ACK, no batch unit."""
+    """A live legacy job for the uid, the flip grace or a lost CAS: the in-flight owner's ACK,
+    no batch unit."""
     from utils.sync import final_pass_rehome
 
     _final_pass_target(dark_intake, monkeypatch)
-    monkeypatch.setattr(
-        final_pass_rehome, 'rehome_final_pass_owner', lambda *a, **k: final_pass_rehome.RehomeOutcome(outcome)
-    )
+    monkeypatch.setattr(final_pass_rehome, 'upload_rehome', lambda *a, **k: final_pass_rehome.RehomeOutcome(outcome))
     response = await dark_intake.intake.accept_upload(**{**UPLOAD, 'conversation_id': 'record'})
     assert response.status_code == 409
     assert json.loads(response.body) == {
@@ -967,6 +967,6 @@ async def test_final_pass_owner_keeps_the_legacy_receipt_at_on(dark_intake, monk
 
     _final_pass_target(dark_intake, monkeypatch)
     dark_intake.mode['value'] = LegacySyncMode.ON
-    monkeypatch.setattr(final_pass_rehome, 'rehome_final_pass_owner', lambda *a, **k: pytest.fail('re-home ran at on'))
+    monkeypatch.setattr(final_pass_rehome, 'upload_rehome', lambda *a, **k: pytest.fail('re-home ran at on'))
     assert await dark_intake.intake.accept_upload(**{**UPLOAD, 'conversation_id': 'record'}) is None
     assert dark_intake.calls == []

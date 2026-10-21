@@ -8,7 +8,7 @@ owner to ``batch_sync_v1`` with the revision-fenced CAS and the upload is
 admitted to batch intake instead.
 """
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -154,11 +154,37 @@ def test_upload_rehome_is_inert_at_legacy_sync_on():
 
 
 @pytest.mark.parametrize('mode', [LegacySyncMode.DRAINING, LegacySyncMode.DARK])
-def test_upload_rehome_runs_the_helper_outside_on(monkeypatch, mode):
+def test_upload_rehome_runs_the_helper_outside_on_after_the_flip_grace(monkeypatch, mode):
     client = _client()
     monkeypatch.setattr(conversations_db, 'claim_record_lane_owner', _cas(client))
     monkeypatch.setattr(final_pass_rehome, 'live_legacy_jobs', lambda uid: 0)
+    monkeypatch.setattr(legacy_dark, 'mode_age_seconds', lambda now=None: final_pass_rehome.FLIP_GRACE_SECONDS)
     assert upload_rehome(mode, UID, CID, firestore_client=client) is RehomeOutcome.REHOMED
+
+
+@pytest.mark.parametrize('age', [0, 299.0, None])
+def test_upload_rehome_holds_inside_the_flip_grace_without_any_read(monkeypatch, age):
+    """Review P1: a request that read ``on`` just before the flip can still create a legacy job
+    after it, invisible to the probe until created. No re-home until every such request is over;
+    an unknown ramp age holds too."""
+    monkeypatch.setattr(legacy_dark, 'mode_age_seconds', lambda now=None: age)
+    outcome = upload_rehome(LegacySyncMode.DRAINING, UID, CID, firestore_client=forbidden)
+    assert outcome is RehomeOutcome.HELD
+    assert upload_rehome(LegacySyncMode.DARK, UID, CID, firestore_client=forbidden, mode_age=age) is RehomeOutcome.HELD
+
+
+def test_mode_age_reads_the_ramp_write_time_and_fails_closed(monkeypatch):
+    from utils.rollout import runtime_percent
+
+    now = datetime(2026, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+    monkeypatch.setattr(runtime_percent, 'ramp_snapshot', lambda: SimpleNamespace(updated_at='2026-01-01T11:50:00Z'))
+    assert legacy_dark.mode_age_seconds(now) == 600.0
+    monkeypatch.setattr(runtime_percent, 'ramp_snapshot', lambda: SimpleNamespace(updated_at=None))
+    assert legacy_dark.mode_age_seconds(now) is None
+    monkeypatch.setattr(runtime_percent, 'ramp_snapshot', lambda: SimpleNamespace(updated_at='not-a-time'))
+    assert legacy_dark.mode_age_seconds(now) is None
+    monkeypatch.setattr(runtime_percent, 'ramp_snapshot', Mock(side_effect=RuntimeError('cold')))
+    assert legacy_dark.mode_age_seconds(now) is None
 
 
 def test_live_legacy_jobs_reads_the_pending_index_and_fails_closed(monkeypatch):
@@ -196,6 +222,7 @@ async def test_dark_upload_for_a_stranded_final_pass_owner_no_longer_loops(monke
     claim = _cas(client)
     monkeypatch.setattr(conversations_db, 'claim_record_lane_owner', claim)
     monkeypatch.setattr(final_pass_rehome, 'live_legacy_jobs', lambda uid: 0)
+    monkeypatch.setattr(legacy_dark, 'mode_age_seconds', lambda now=None: final_pass_rehome.FLIP_GRACE_SECONDS)
     monkeypatch.setattr(live_upload, 'FirestoreStore', lambda *_: SimpleNamespace(client=client))
     assert await _route(None, legacy_mode=mode) is RecordUploadRoute.BATCH
     assert client.rows[PATH]['record_lane_owner'] == 'batch_sync_v1'
@@ -206,7 +233,7 @@ async def test_dark_upload_for_a_stranded_final_pass_owner_no_longer_loops(monke
 @pytest.mark.parametrize('outcome', [RehomeOutcome.HELD, RehomeOutcome.NOT_APPLICABLE])
 async def test_a_held_rehome_keeps_the_legacy_route_so_the_fence_acks(monkeypatch, outcome):
     monkeypatch.setattr(live_upload, 'FirestoreStore', lambda *_: SimpleNamespace(client=object()))
-    monkeypatch.setattr(final_pass_rehome, 'rehome_final_pass_owner', lambda *a, **k: outcome)
+    monkeypatch.setattr(final_pass_rehome, 'upload_rehome', lambda *a, **k: outcome)
     loaded = {'record_lane_owner': 'legacy_final_pass_v1'}
     assert await _route(loaded, legacy_mode=LegacySyncMode.DARK) is RecordUploadRoute.LEGACY
 
@@ -214,6 +241,7 @@ async def test_a_held_rehome_keeps_the_legacy_route_so_the_fence_acks(monkeypatc
 async def test_the_route_is_unchanged_at_legacy_sync_on(monkeypatch):
     monkeypatch.setattr(live_upload, 'FirestoreStore', lambda *_: SimpleNamespace(client=object()))
     monkeypatch.setattr(final_pass_rehome, 'rehome_final_pass_owner', forbidden)
+    monkeypatch.setattr(legacy_dark, 'mode_age_seconds', forbidden)
     loaded = {'record_lane_owner': 'legacy_final_pass_v1'}
     assert await _route(loaded, legacy_mode=LegacySyncMode.ON) is RecordUploadRoute.LEGACY
 
@@ -222,9 +250,13 @@ async def test_the_route_reads_the_mode_off_the_loop_when_the_caller_has_none(mo
     """Batch intake's record_router call passes no mode: read it as the router does."""
     monkeypatch.setattr(live_upload, 'FirestoreStore', lambda *_: SimpleNamespace(client=object()))
     monkeypatch.setattr(legacy_dark, 'current_mode', lambda: LegacySyncMode.DARK)
-    monkeypatch.setattr(final_pass_rehome, 'rehome_final_pass_owner', lambda *a, **k: RehomeOutcome.REHOMED)
+    seen = []
+    monkeypatch.setattr(
+        final_pass_rehome, 'upload_rehome', lambda mode, *a, **k: seen.append(mode) or RehomeOutcome.REHOMED
+    )
     loaded = {'record_lane_owner': 'legacy_final_pass_v1'}
     assert await _route(loaded) is RecordUploadRoute.BATCH
+    assert seen == [LegacySyncMode.DARK]
 
 
 # --- no new legacy final-pass owner outside on (M3 re-review scope add) ----------------------------
@@ -299,8 +331,17 @@ class _Query:
         self._rows = rows
 
     def where(self, *, filter):
-        field, value = filter.field_path, filter.value
-        return _Query([row for row in self._rows if row['data'].get(field) == value])
+        field, op, value = filter.field_path, filter.op_string, filter.value
+
+        def matches(row):
+            stored = row['data'].get(field)
+            if op == '==':
+                return stored == value
+            if op == '>=':
+                return stored is not None and stored >= value
+            raise AssertionError(f'unsupported filter {op}')
+
+        return _Query([row for row in self._rows if matches(row)])
 
     def limit(self, count):
         return _Query(self._rows[:count])
@@ -391,24 +432,43 @@ def test_sweep_dry_run_never_writes_and_counts_eligible_as_remaining(monkeypatch
     result = sweep_module.sweep(client, apply=False, probe=lambda uid: 0, limit=5)
     assert applied == [False]
     assert result['counts'] == {'eligible': 1} and result['verdict'] == 'REMAINING'
+    assert result['truncated'] is False
 
 
-def test_ledger_probe_counts_active_and_retryable_legacy_rows_once_per_uid():
-    """The operator shell has no Redis: an ACTIVE legacy processing claim or a retryable legacy
-    row holds the uid; batch and cap-hold rows, stale claims and completions do not."""
+def test_a_capped_sweep_is_partial_never_clear(monkeypatch):
+    """Review P2: ``--apply --limit 1`` over 20 owners re-homed one and said CLEAR."""
+    from scripts.legacy_dark import final_pass_rehome as sweep_module
+
+    client = _SweepClient([_conversation('u1', 'a'), _conversation('u1', 'b')], {})
+    monkeypatch.setattr(sweep_module, 'rehome_final_pass_owner', lambda *a, **k: RehomeOutcome.REHOMED)
+    result = sweep_module.sweep(client, apply=True, probe=lambda uid: 0, limit=1)
+    assert result['scanned'] == 1 and result['counts'] == {'rehomed': 1}
+    assert result['truncated'] is True and result['verdict'] == 'PARTIAL'
+
+
+def test_ledger_probe_counts_active_retryable_and_recent_legacy_rows_fresh_each_call():
+    """The operator shell has no Redis: an ACTIVE legacy processing claim, a retryable legacy
+    row, or any row created inside the quiet window holds the uid; batch and cap-hold rows,
+    stale claims and completions do not. Review P1: nothing is cached, the sweep runs beside
+    live legacy admission."""
     from scripts.legacy_dark import final_pass_rehome as sweep_module
 
     now = datetime(2026, 1, 10, tzinfo=timezone.utc)
-    fresh = {'status': 'processing', 'job_id': 'legacy-1', 'updated_at': now}
-    stale = {'status': 'processing', 'job_id': 'legacy-2', 'updated_at': datetime(2025, 1, 1, tzinfo=timezone.utc)}
+    old = datetime(2025, 1, 1, tzinfo=timezone.utc)
+    fresh = {'status': 'processing', 'job_id': 'legacy-1', 'updated_at': now, 'created_at': old}
+    stale = {'status': 'processing', 'job_id': 'legacy-2', 'updated_at': old, 'created_at': old}
     batch = {'status': 'processing', 'job_id': 'bp_1', 'dispatch_protocol': 'batch_v1', 'updated_at': now}
     held = {'status': 'held', 'job_id': 'hold', 'dispatch_protocol': 'stt_cap_hold_v1'}
-    retryable = {'status': 'retryable', 'job_id': 'legacy-3'}
-    client = _SweepClient([], {'u1': [fresh, stale, batch, held, retryable], 'u2': [stale, batch]})
+    retryable = {'status': 'retryable', 'job_id': 'legacy-3', 'created_at': old}
+    just_admitted = {'status': 'completed', 'job_id': 'legacy-4', 'created_at': now - timedelta(seconds=30)}
+    ledgers = {'u1': [fresh, stale, batch, held, retryable], 'u2': [stale, batch], 'u3': [just_admitted]}
+    client = _SweepClient([], ledgers)
     probe = sweep_module.ledger_live_jobs(client, now=now)
     assert probe('u1') == 2
     assert probe('u2') == 0
-    assert probe('u1') == 2  # cached: one ledger read per uid
+    assert probe('u3') == 1
+    ledgers['u2'].append(dict(fresh))  # a job started while the sweep was running
+    assert probe('u2') == 1
 
 
 def test_ledger_probe_fails_closed_on_a_read_error():

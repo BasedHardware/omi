@@ -33,6 +33,9 @@ logger = logging.getLogger(__name__)
 LEGACY_FINAL_PASS_OWNER = 'legacy_final_pass_v1'
 BATCH_SYNC_OWNER = 'batch_sync_v1'
 BATCH_OWNERS = frozenset({'batch_live_v1', BATCH_SYNC_OWNER})
+# The mode is read once per request from a 30s cache; no upload request lives
+# anywhere near this long between that read and its legacy job creation.
+FLIP_GRACE_SECONDS = 300
 
 
 class RehomeOutcome(StrEnum):
@@ -135,9 +138,25 @@ def rehome_final_pass_owner(
 
 
 def upload_rehome(
-    mode: legacy_dark.LegacySyncMode, uid: str, conversation_id: str, *, firestore_client: Any = None
+    mode: legacy_dark.LegacySyncMode,
+    uid: str,
+    conversation_id: str,
+    *,
+    firestore_client: Any = None,
+    mode_age: Optional[float] = None,
 ) -> RehomeOutcome:
-    """The upload-time re-home: only once legacy sync can no longer serve the conversation."""
+    """The upload-time re-home: only once legacy sync can no longer serve the conversation.
+
+    Held for ``FLIP_GRACE_SECONDS`` after the ramp document was last written (an
+    unknown age holds): a request that read ``on`` just before the flip can still
+    create a legacy job for this uid after it, and its job is only visible to the
+    live-job probe once created. Every such request has finished well inside the
+    grace, so from then on the probe sees every boundary job before any re-home.
+    """
     if mode is legacy_dark.LegacySyncMode.ON:
         return RehomeOutcome.NOT_APPLICABLE
+    age = mode_age if mode_age is not None else legacy_dark.mode_age_seconds()
+    if age is None or age < FLIP_GRACE_SECONDS:
+        logger.info('event=legacy_dark action=final_pass_rehome outcome=held reason=flip_grace')
+        return RehomeOutcome.HELD
     return rehome_final_pass_owner(uid, conversation_id, firestore_client=firestore_client)
