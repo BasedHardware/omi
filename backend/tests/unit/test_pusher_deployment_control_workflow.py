@@ -251,9 +251,11 @@ def test_prod_pusher_requires_successful_dev_attestation_and_never_rebuilds() ->
     assert "pusher-prod-canary-evidence" in MANUAL
     assert "gcloud container images add-tag --quiet" in MANUAL
     assert selection < promotion < helm
+    # Plan B B3: development may skip the build for an admitted backend-pusher
+    # digest; production still never builds.
     assert (
-        "if: env.SERVICE == 'llm-gateway' || github.event.inputs.environment != 'prod'"
-        in MANUAL[build - 100 : build + 300]
+        "if: env.SERVICE == 'llm-gateway' || (github.event.inputs.environment != 'prod' "
+        "&& github.event.inputs.pusher_role_image_digest == '')" in MANUAL[build - 100 : build + 300]
     )
     assert 'image.tag=${IMAGE_TAG}' not in MANUAL[helm - 300 : helm + 500]
 

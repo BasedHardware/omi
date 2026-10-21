@@ -55,7 +55,10 @@ def admit(
     inspect: Inspector = inspect_image_config,
 ) -> dict[str, str]:
     spec = service_spec(service, registry)
-    repository = f"gcr.io/{project}/{spec['image']}"
+    image, role = spec.get("image"), spec.get("role")
+    if not isinstance(image, str) or not image or not isinstance(role, str) or not role:
+        raise ServiceImageError(f"{service}: runtime_images.json does not map the service to a role image and role")
+    repository = f"gcr.io/{project}/{image}"
     if not DIGEST_PATTERN.fullmatch(digest):
         raise ServiceImageError(f"{service}: {digest!r} is not sha256:<64 lowercase hex>")
     reference = f"{repository}@{digest}"
@@ -65,8 +68,8 @@ def admit(
         raise ServiceImageError(
             f"{service}: {reference} is labelled revision {revision!r}, not the admitted {admitted_sha}"
         )
-    if f"OMI_ROLE={spec['role']}" not in (config.get("Env") or []):
-        raise ServiceImageError(f"{service}: {reference} does not carry OMI_ROLE={spec['role']}")
+    if f"OMI_ROLE={role}" not in (config.get("Env") or []):
+        raise ServiceImageError(f"{service}: {reference} does not carry OMI_ROLE={role}")
     return {"repository": repository, "digest": digest, "reference": reference}
 
 

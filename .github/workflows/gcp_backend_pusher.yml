@@ -188,6 +188,10 @@ jobs:
           # the evidence names, and the promotion keeps that repository name.
           DEV_PUSHER_REPOSITORIES="gcr.io/based-hardware-dev/pusher,gcr.io/based-hardware-dev/backend-pusher"
           DEV_PUSHER_REPOSITORY="$(jq -r '.image_repository // empty' "${EVIDENCE_FILES[0]}")"
+          if [[ -z "$DEV_PUSHER_REPOSITORY" ]]; then
+            echo "Development qualification names no image_repository." >&2
+            exit 1
+          fi
           case ",$DEV_PUSHER_REPOSITORIES," in
             *",$DEV_PUSHER_REPOSITORY,"*) ;;
             *)
@@ -364,19 +368,21 @@ jobs:
         # for the live-capacity gate, Helm deploy and receipts below, and fails
         # the run on a stale or foreign digest.
         if: env.SERVICE == 'pusher' && github.event.inputs.environment != 'prod' && github.event.inputs.pusher_role_image_digest != ''
+        env:
+          ROLE_IMAGE_DIGEST_INPUT: ${{ github.event.inputs.pusher_role_image_digest }}
         run: |
           set -euo pipefail
           python3 backend/scripts/admit_role_image.py \
             --service pusher \
-            --digest "${{ github.event.inputs.pusher_role_image_digest }}" \
+            --digest "$ROLE_IMAGE_DIGEST_INPUT" \
             --project "${{ vars.GCP_PROJECT_ID }}" \
             --admitted-sha "$CHECKED_OUT_SHA" \
             --prefix PUSHER_IMAGE \
             --github-env "$GITHUB_ENV"
 
+      # Plan B B3: a development Pusher on a role-image digest deploys the
+      # published backend-pusher image instead of building one.
       - name: Build and Push Docker image
-        # Plan B B3: a development Pusher on a role-image digest deploys the
-        # published backend-pusher image instead of building one.
         if: env.SERVICE == 'llm-gateway' || (github.event.inputs.environment != 'prod' && github.event.inputs.pusher_role_image_digest == '')
         run: |
           if [[ "${{ env.SERVICE }}" == "llm-gateway" ]]; then

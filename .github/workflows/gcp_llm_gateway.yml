@@ -230,11 +230,12 @@ jobs:
         if: github.event.inputs.gateway_image_digest != ''
         env:
           ADMITTED_SHA: ${{ env.CHECKED_OUT_SHA }}
+          ROLE_IMAGE_DIGEST_INPUT: ${{ github.event.inputs.gateway_image_digest }}
         run: |
           set -euo pipefail
           python3 backend/scripts/admit_role_image.py \
             --service llm-gateway \
-            --digest "${{ github.event.inputs.gateway_image_digest }}" \
+            --digest "$ROLE_IMAGE_DIGEST_INPUT" \
             --project "${{ vars.GCP_PROJECT_ID }}" \
             --admitted-sha "$ADMITTED_SHA" \
             --github-env "$GITHUB_ENV"

@@ -81,6 +81,15 @@ def test_an_undeclared_service_fails_before_any_inspect():
         admit('backend-nope')
 
 
+@pytest.mark.parametrize('incomplete', [{'role': 'gateway'}, {'image': 'backend-gateway'}, {'image': '', 'role': 'x'}])
+def test_a_service_without_a_role_image_mapping_fails_before_any_inspect(incomplete):
+    registry = {'services': {'llm-gateway': incomplete}}
+    with pytest.raises(resolver.ServiceImageError, match='does not map the service to a role image and role'):
+        admission.admit(
+            'llm-gateway', DIGEST, project=PROJECT, admitted_sha=SHA, registry=registry, inspect=inspector({})
+        )
+
+
 def test_revision_and_role_must_match_the_admitted_release():
     reference = f'gcr.io/{PROJECT}/backend-gateway@{DIGEST}'
     with pytest.raises(resolver.ServiceImageError, match='labelled revision'):
@@ -163,6 +172,10 @@ def test_gateway_workflow_admits_a_blank_by_default_role_digest():
     assert admit_step['if'] == "github.event.inputs.gateway_image_digest != ''"
     assert '--service llm-gateway' in admit_step['run']
     assert '--github-env "$GITHUB_ENV"' in admit_step['run']
+    # The input reaches the shell through env, never by inline interpolation.
+    assert admit_step['env']['ROLE_IMAGE_DIGEST_INPUT'] == '${{ github.event.inputs.gateway_image_digest }}'
+    assert '--digest "$ROLE_IMAGE_DIGEST_INPUT"' in admit_step['run']
+    assert '${{ github.event.inputs.gateway_image_digest }}' not in admit_step['run']
 
     build = steps['Build and Push Docker image']
     assert build['if'] == "github.event.inputs.gateway_image_digest == ''"
@@ -188,6 +201,9 @@ def test_pusher_workflow_admits_a_blank_by_default_role_digest_in_development_on
         "&& github.event.inputs.pusher_role_image_digest != ''"
     )
     assert '--service pusher' in admit_step['run'] and '--prefix PUSHER_IMAGE' in admit_step['run']
+    assert admit_step['env']['ROLE_IMAGE_DIGEST_INPUT'] == '${{ github.event.inputs.pusher_role_image_digest }}'
+    assert '--digest "$ROLE_IMAGE_DIGEST_INPUT"' in admit_step['run']
+    assert '${{ github.event.inputs.pusher_role_image_digest }}' not in admit_step['run']
 
     build = steps['Build and Push Docker image']
     assert build['if'] == (
@@ -202,6 +218,9 @@ def test_pusher_workflow_admits_a_blank_by_default_role_digest_in_development_on
 
     select = steps['Select development-qualified Pusher digest for production']['run']
     assert 'gcr.io/based-hardware-dev/pusher,gcr.io/based-hardware-dev/backend-pusher' in select
+    # An evidence file without image_repository must fail here, not slip through the case match.
+    assert 'if [[ -z "$DEV_PUSHER_REPOSITORY" ]]' in select
+    assert select.index('-z "$DEV_PUSHER_REPOSITORY"') < select.index('case ",$DEV_PUSHER_REPOSITORIES,"')
     assert '--expected-repository "$DEV_PUSHER_REPOSITORIES"' in select
     promote = steps['Promote qualified Pusher digest into the production registry']['run']
     assert '${PUSHER_DEV_IMAGE_REPOSITORY##*/}' in promote
