@@ -2895,6 +2895,25 @@ workflows:
       - dist/*.dmg
       - dist/*.zip
 
+  # Manual/API only. No build, upload, iOS action, or rollout advancement.
+  android-rollout-brake:
+    name: Android Production Rollout Brake
+    instance_type: mac_mini_m2
+    max_build_duration: 10
+    environment:
+      groups:
+        - google_play
+      vars:
+        BRAKE_ACTION: "unset"
+        BRAKE_VERSION_CODE: "0"
+        CONFIRM: "not-confirmed"
+    working_directory: app
+    scripts:
+      - name: Read or brake the explicitly selected production rollout
+        script: |
+          set -euo pipefail
+          python3 scripts/mobile_rollout_brake.py
+
   mobile-store-promote:
     name: Promote Existing Mobile Builds to Store Review
     instance_type: mac_mini_m2
