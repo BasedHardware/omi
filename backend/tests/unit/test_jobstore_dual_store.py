@@ -629,3 +629,17 @@ class TestParityDiagnostics:
             got = dual_store.read_current(primary, [('jobs', 'a'), ('jobs', 'b')])
         assert got == {('jobs', 'a'): {'s': 1}, ('jobs', 'b'): {}}
         assert client.calls == [['batch_pipeline_dev_jobs/a', 'batch_pipeline_dev_jobs/b']]
+
+
+def test_mirror_and_refresh_reread_the_primary_lock_free(monkeypatch):
+    """The copy's primary read is read_current (a get_all on Firestore), never a read-write transaction."""
+    primary, shadow = SimStore(CustomerData()), FakeShadow()
+    store = DualStore(primary, shadow, inline=True)
+    reads = []
+    real = dual_store.read_current
+    monkeypatch.setattr(dual_store, 'read_current', lambda p, keys: (reads.append(list(keys)), real(p, keys))[1])
+    store.run(lambda tx: tx.put('queues', 'q', {'n': 1}))
+    primary.rows[('owners', 'o')] = {'v': 1}
+    store.refresh([('owners', 'o')])
+    assert reads == [[('queues', 'q')], [('owners', 'o')]]
+    assert shadow.rows == {('queues', 'q'): {'n': 1}, ('owners', 'o'): {'v': 1}}

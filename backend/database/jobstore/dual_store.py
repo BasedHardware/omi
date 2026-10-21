@@ -321,6 +321,11 @@ class DualStore:
         transaction advisory lock, then re-read from the primary and copied. Firestore reads are strongly
         consistent, so whichever mirror takes a key's lock later also reads a state at least as new, and the
         last copy applied is the current one. ``keys`` is sorted, so the lock order cannot deadlock.
+
+        The re-read is ``read_current``: one lock-free ``get_all``, never a read-write transaction. A
+        transactional read takes Firestore locks that contend with the pipeline's own writers while the
+        Postgres locks are held, and the SDK does not retry an ``Aborted`` raised on a transaction's read
+        path (staging 10-20: every ``op=refresh outcome=error`` was ``Aborted``).
         """
         for table, key in keys:
             conn.execute(
@@ -328,10 +333,7 @@ class DualStore:
             )
         phase = phase if phase is not None else ['']
         phase[0] = 'primary_read'
-        if reader is not None:
-            docs = reader(self.primary, keys)
-        else:
-            docs = self.primary.run(lambda tx: {address: tx.get(*address) for address in keys})
+        docs = (reader or read_current)(self.primary, keys)
         phase[0] = 'postgres_write'
         for (table, key), doc in docs.items():
             if doc:

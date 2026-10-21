@@ -238,4 +238,11 @@ class ProjectionSession:
             self.prepare(transaction)
             return self.persist(transaction, superseded=superseded)
 
-        return self.store.run(commit, policy=self.policy)
+        try:
+            return self.store.run(commit, policy=self.policy)
+        finally:
+            # A2 shadow: persist() wrote the owner watermark and erased predecessors outside Store.run.
+            # A strict no-op unless shadow mode; re-copies current state; never raises.
+            mirror = getattr(self.store, 'mirror_assignment', None)
+            if mirror is not None:
+                mirror(self)

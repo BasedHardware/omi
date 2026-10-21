@@ -3,6 +3,7 @@
 from typing import Any
 from google.cloud import firestore
 from database.batch_pipeline_privacy import BatchPrivacyBlocked, assert_batch_write_allowed
+from database.batch_pipeline_shadow_hook import mirror_refresh
 
 # A provider-STT unit (C8) has no lease to revoke; its fenced release also clears merge_pending so
 # OrderedMerge stops holding the owner's later captures behind it (no purge follows every fence).
@@ -39,4 +40,7 @@ def quarantine_fenced(client: Any, namespace: str, segment_id: str, now: float) 
             return True
         return False
 
-    return revoke(client.transaction())
+    revoked = revoke(client.transaction())
+    if revoked:
+        mirror_refresh(namespace, [('jobs', segment_id)])  # A2 shadow: no-op unless shadow mode
+    return revoked
