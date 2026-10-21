@@ -1056,14 +1056,17 @@ def _late_request(folder_id=None, calendar_context=None):
 
 
 def _calendar_context(title='Standup'):
-    context = {
-        'calendar_event_id': 'event-1',
-        'title': title,
-        'participants': [],
-        'start_time': None,
-        'duration_minutes': 30,
-    }
-    return SimpleNamespace(to_context=lambda: SimpleNamespace(model_dump=lambda mode='json': context))
+    from models.calendar_context import CalendarMeetingContext
+
+    context = CalendarMeetingContext(
+        calendar_event_id='event-1',
+        title=title,
+        participants=[],
+        start_time=NOW,
+        duration_minutes=30,
+        calendar_source='developer_api',
+    )
+    return SimpleNamespace(to_context=lambda: context)
 
 
 def test_idempotent_hit_binds_folder_the_retry_carries(monkeypatch):
