@@ -20,6 +20,7 @@ from config.batch_pipeline import (
 from config.policy import resolve_batch_policy
 from database.conversations import claim_record_lane_owner
 from database.batch_pipeline_store import FirestoreStore
+from database.batch_ramp import ramp_admission_policy
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from database.sync_ledger import LEDGER_RETENTION_DAYS
 from utils.batch_pipeline.contracts import WorkItem
@@ -101,6 +102,7 @@ async def registered_record_response(
     recording_session_id=None,
     loaded_conversation=None,
     policy=None,
+    incoming_audio_seconds=0,
 ) -> JSONResponse | RecordUploadRoute | None:
     policy = policy or resolve_batch_policy(uid)
     if not conversation_id and not recording_session_id:
@@ -127,8 +129,23 @@ async def registered_record_response(
     else:
         conversation_id, snapshot = await run_blocking(db_executor, target_snapshot)
         if snapshot is None or conversation_id is None:
+            policy = await run_blocking(
+                db_executor,
+                ramp_admission_policy,
+                uid,
+                policy,
+                incoming_audio_seconds=incoming_audio_seconds,
+            )
             return _pending() if policy.live_record_enabled else None
         row = snapshot.to_dict() or {}
+    if not row.get('record_lane_owner'):
+        policy = await run_blocking(
+            db_executor,
+            ramp_admission_policy,
+            uid,
+            policy,
+            incoming_audio_seconds=incoming_audio_seconds,
+        )
     if row.get('record_lane_owner') != OWNER:
         if row.get('record_lane_owner') == 'legacy_final_pass_v1':
             return RecordUploadRoute.LEGACY

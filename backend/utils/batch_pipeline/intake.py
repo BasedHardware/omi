@@ -14,6 +14,8 @@ from config.policy import BatchUnitPolicy, resolve_batch_policy
 from config.batch_pipeline_providers import provider_config
 from config.stt_provider_policy import normalized_stt_language, PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL
 from database.batch_pipeline_intake import admit, cache_completed
+from database.batch_ramp import ramp_admission_policy
+from config.policy.ramp import audio_span
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from database.batch_pipeline_store import FirestoreStore
 from database.sync_ledger import (
@@ -285,6 +287,7 @@ async def accept_upload(
     intake_context: dict | None = None,
     record_router=None,
     policy: BatchUnitPolicy | None = None,
+    existing_batch_owner: bool = False,
 ) -> JSONResponse | None:
     """None preserves a prior legacy receipt; batch outcomes never fall through."""
     policy = policy or resolve_batch_policy(uid)
@@ -335,6 +338,15 @@ async def accept_upload(
             # Existing legacy ownership includes capped/retryable/missing-Redis
             # recovery. Its original claimant remains the sole authority.
             return None
+        if not existing_batch_owner:
+            # Only a new dispatcher decision reads load and emits exclusions.
+            policy = await run_blocking(
+                db_executor,
+                ramp_admission_policy,
+                uid,
+                policy,
+                incoming_audio_seconds=audio_span(intake_context or {}) or 0,
+            )
         if not policy.batch_enabled:
             # The owner-load filter applies only after durable dispatch
             # ownership checks. Accepted batch receipts above always drain.
