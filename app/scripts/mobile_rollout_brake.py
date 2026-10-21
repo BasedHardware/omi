@@ -27,10 +27,13 @@ PLAY_NOTES_LIMIT = 500
 
 
 def github_json(path: str) -> object:
-    request = urllib.request.Request(
-        f"https://api.github.com/repos/BasedHardware/omi/{path}",
-        headers={"Accept": "application/vnd.github+json", "User-Agent": "omi-android-rollout-brake"},
-    )
+    headers = {"Accept": "application/vnd.github+json", "User-Agent": "omi-android-rollout-brake"}
+    # Codemagic's shared runners exhaust GitHub's anonymous rate limit; the
+    # read-only mobile_release_admission token lifts it.
+    token = os.environ.get("GITHUB_TOKEN", "").strip()
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    request = urllib.request.Request(f"https://api.github.com/repos/BasedHardware/omi/{path}", headers=headers)
     with urllib.request.urlopen(request, timeout=30) as response:
         return json.load(response)
 

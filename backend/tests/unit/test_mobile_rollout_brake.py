@@ -1,6 +1,7 @@
 """Fake Play edit lifecycle tests; no network or credentials."""
 
 import copy
+import io
 from pathlib import Path
 import sys
 import unittest
@@ -381,6 +382,27 @@ class BrakeTests(unittest.TestCase):
                 )
         with self.assertRaises(brake.BrakeError):
             brake.require_quiesced_writers(lambda path: (_ for _ in ()).throw(OSError("offline")))
+
+    def test_github_reads_use_token_only_when_present(self):
+        seen = []
+
+        class Response:
+            def __enter__(self):
+                return io.BytesIO(b"{}")
+
+            def __exit__(self, *exc):
+                return False
+
+        def urlopen(request, timeout):
+            seen.append(request.get_header("Authorization"))
+            return Response()
+
+        with patch.object(brake.urllib.request, "urlopen", urlopen):
+            with patch.dict(brake.os.environ, {"GITHUB_TOKEN": "t0ken"}):
+                brake.github_json("actions/workflows/x.yml")
+            with patch.dict(brake.os.environ, {"GITHUB_TOKEN": ""}):
+                brake.github_json("actions/workflows/x.yml")
+        self.assertEqual(seen, ["Bearer t0ken", None])
 
     def test_unquiesced_writer_never_opens_edit(self):
         with patch.object(brake.promote, "play_edit") as factory:
