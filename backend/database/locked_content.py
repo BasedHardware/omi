@@ -81,6 +81,9 @@ def unlock_query_rows(
         if reference is None:
             # A projection row without a document reference cannot be updated; skip it
             # rather than raising AttributeError halfway through a committed batch run.
+            # Log it: a skipped row is a locked document we did not unlock, and the
+            # caller only ever sees the returned count.
+            logger.warning('locked-content row skipped reason=missing_reference')
             continue
         batch.update(reference, fields)
         count += 1
