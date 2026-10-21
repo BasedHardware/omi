@@ -63,4 +63,28 @@ void main() {
     final many = List.filled(5000, '[Q3]').join(' ');
     expect(presentableNoteTitle('$many [s01234]', const []), many);
   });
+
+  test('Home title repair stays bounded with a long transcript on every row', () {
+    // The 1433 watchdog sampled regexp canonicalization in repairPass while
+    // Home built a conversation title. Thirty ordinary mounted-row rebuilds
+    // must not compile 45,000 absent-ID Unicode boundary expressions.
+    final ids = List.generate(1500, (i) => '00000000-0000-4000-8000-${i.toString().padLeft(12, '0')}');
+    presentableNoteTitle('Warmup', const []);
+    final clock = Stopwatch()..start();
+    for (var i = 0; i < 30; i++) {
+      final title = 'Planning the next conversation $i';
+      expect(presentableNoteTitle(title, ids), title);
+    }
+    clock.stop();
+    // A coarse watchdog-class budget, with ample host/CI headroom. This is
+    // not a phone frame-time assertion; the old path takes seconds per batch.
+    expect(clock.elapsed, lessThan(const Duration(seconds: 3)));
+  });
+
+  test('literal prefilter preserves Unicode boundaries and overlapping IDs', () {
+    final ids = ['a.b', 'a.b-long', 's01234'];
+    expect(repairNoteCitations('Keep aXb; a.b-long; a.b.', ids).text, 'Keep aXb;;.');
+    expect(repairNoteCitations('字s01234 s01234字 𐐀s01234 s01234𐐀', ids).text, '字s01234 s01234字 𐐀s01234 s01234𐐀');
+    expect(repairNoteCitations('Speaker_١٢ plan [s01234]', ids).text, 'plan');
+  });
 }
