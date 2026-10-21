@@ -116,9 +116,6 @@ def resolve_language(language, audio: bytes, *, before_probe=None, **audio_optio
         bounded = 'und'
     try:
         DETECTIONS.labels(bounded, 'parakeet' if decision.parakeet_safe else 'multilingual').inc()
-        from utils.batch_pipeline.language_metrics import record_route
-
-        record_route('prerecorded', decision.language, 'parakeet' if decision.parakeet_safe else 'multilingual')
         if not decision.parakeet_safe:
             from utils.observability.fallback import record_fallback
 
@@ -128,6 +125,15 @@ def resolve_language(language, audio: bytes, *, before_probe=None, **audio_optio
     except Exception:
         pass
     return decision
+
+
+def select_decision(language, decision, selector):
+    resolved = decision.language if decision.parakeet_safe else language
+    selected = selector(resolved)
+    from utils.batch_pipeline.language_metrics import record_route
+
+    record_route('prerecorded', decision.language, 'parakeet' if selected[0] == 'parakeet' else 'multilingual')
+    return selected
 
 
 def resolve_file(language, path, *, selector, before_probe=None):
@@ -140,7 +146,7 @@ def resolve_file(language, path, *, selector, before_probe=None):
         decision = resolve_language(language, body, before_probe=before_probe)
     except Exception:
         decision = LanguageDecision('und', 0.0, 'unavailable')
-    return selector(decision.language if decision.parakeet_safe else language)
+    return select_decision(language, decision, selector)
 
 
 def probe_wav_from_reader(source):
@@ -168,4 +174,4 @@ def resolve_url(language, url, *, selector):
         decision = resolve_language(language, b''.join(chunks))
     except Exception:
         decision = LanguageDecision('und', 0.0, 'unavailable')
-    return selector(decision.language if decision.parakeet_safe else language)
+    return select_decision(language, decision, selector)

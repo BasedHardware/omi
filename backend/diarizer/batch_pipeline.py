@@ -16,7 +16,7 @@ from typing import Any, Callable, Mapping, Sequence
 import numpy as np
 
 from config.batch_pipeline_gpu_skip import diarize_speech_only_enabled, short_speech_single_enabled
-from config.prerecorded_language import requires_multilingual
+from config.prerecorded_language import language_class
 from config.stt_cap_dispatch import execution_admission_enabled as cap_dispatch_enabled
 from utils.batch_pipeline.worker_silence import inspect_worker_silence
 from diarizer.batch_pipeline_context import LeftContextIndex, capture_stream, starts_in_speech
@@ -701,7 +701,9 @@ class PipelineWorker:
                     except Exception:
                         state['stt_language'] = None
                     if self.config.words == 'parakeet':
-                        blocked = requires_multilingual(state['stt_language'])
+                        # A new-admission rollback cannot revoke the quality
+                        # boundary for audio already in this worker's custody.
+                        blocked = language_class(state['stt_language']) != 'supported'
                         if not item.shadow:
                             record_route(
                                 'worker',

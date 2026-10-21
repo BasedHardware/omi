@@ -1161,13 +1161,14 @@ def prerecorded_from_bytes(
     keywords: Optional[Sequence[str]] = None,
 ) -> Union[List[Dict[str, Any]], Tuple[List[Dict[str, Any]], str]]:
     """Route pre-recorded bytes transcription through STT_PRERECORDED_MODEL."""
-    from utils.stt.batch_language import resolve_language
+    from utils.stt.batch_language import resolve_language, select_decision
 
     decision = resolve_language(language, audio_bytes, sample_rate=sample_rate, channels=channels, encoding=encoding)
     resolved = decision.language if decision.parakeet_safe else language
     if not language_guard_enabled() or language_class(language) != 'unknown':
         resolved = language
-    provider = get_prerecorded_provider(resolved)
+    selected = select_decision(language, decision, get_prerecorded_service)
+    provider = get_prerecorded_provider(resolved, selected_service=selected)
     return provider.transcribe_bytes(
         audio_bytes,
         sample_rate=sample_rate,

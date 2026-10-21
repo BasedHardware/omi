@@ -7,7 +7,8 @@ audio: synthetic Thai, Arabic, Hindi, Japanese, Korean and Chinese speech was
 rendered as Latin phonetics, and Vietnamese lost diacritics and words.
 
 `STT_PRERECORDED_LANGUAGE_GUARD_ENABLED` defaults on. Only `false` restores the
-old routing. This is a prerecorded/batch quality switch; it does not alter live
+ordinary prerecorded routing and disables new probes. The worker's frozen-language
+barrier remains active for admitted audio across rollback. This switch does not alter live
 streaming provider policy.
 
 - Prerecorded `None`, blank, `und`, `unknown` and `multi` run an independent
@@ -60,7 +61,9 @@ logs emit the same decision as `event=batch_language_route`, with an existing
 opaque segment ID for an in-memory cohort join. Shadow work emits no serving
 route log. No transcript, language string or user ID is logged by this signal.
 `omi_batch_pipeline_language_detection_total{detected_language,decision}` counts detected
-ISO codes through a closed policy vocabulary (other/und otherwise), and
+ISO codes through a closed policy vocabulary (other/und otherwise); its
+`parakeet` decision means eligible, while the route counter records the provider
+selected after configured ordering. The
 `omi_batch_pipeline_language_probe_audio_seconds_total{outcome}` counts sent samples.
 The published language-only rate is $0.01/sample-hour; multilingual batch STT
 is $0.03/audio-hour ([provider pricing](https://platform.modulate.ai/pricing)).

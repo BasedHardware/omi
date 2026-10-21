@@ -117,6 +117,36 @@ def test_file_selector_accounts_for_the_provider_that_will_actually_run(monkeypa
     assert lid.resolve_file('multi', tmp_path / 'missing', selector=stt.get_prerecorded_service)[0] == 'modulate'
 
 
+def test_route_metric_records_provider_ordering_after_supported_detection(monkeypatch, tmp_path):
+    from utils.batch_pipeline.language_metrics import ROUTES
+
+    detector(monkeypatch, 'en')
+    monkeypatch.setenv('STT_PRERECORDED_MODEL', 'modulate-velma-2,parakeet')
+    path = tmp_path / 'synthetic.wav'
+    path.write_bytes(wav())
+    actual = ROUTES.labels('prerecorded', 'supported', 'multilingual')._value
+    cheap = ROUTES.labels('prerecorded', 'supported', 'parakeet')._value
+    before, cheap_before = actual.get(), cheap.get()
+    assert lid.resolve_file('multi', path, selector=stt.get_prerecorded_service)[0] == 'modulate'
+    assert actual.get() == before + 1
+    assert cheap.get() == cheap_before
+
+
+def test_worker_language_proof_stays_required_after_rollback(monkeypatch):
+    from diarizer.batch_pipeline_models import stt_language
+
+    monkeypatch.setenv('STT_PRERECORDED_LANGUAGE_GUARD_ENABLED', 'false')
+    assert stt_language({'stt_language': 'en'}) is None
+    assert (
+        stt_language({'stt_language': 'en', 'stt_language_evidence': 'audio_lid', 'stt_language_confidence': 0.5})
+        is None
+    )
+    assert (
+        stt_language({'stt_language': 'en', 'stt_language_evidence': 'audio_lid', 'stt_language_confidence': 0.99})
+        == 'en'
+    )
+
+
 def test_old_primary_language_hint_cannot_impersonate_audio_detection():
     from diarizer.batch_pipeline_models import stt_language
 
@@ -184,7 +214,7 @@ async def test_cpu_intake_freezes_detection_proof_instead_of_primary_setting(mon
         conversation_id=None,
         client_device_id=None,
         client_platform='ios',
-        policy=SimpleNamespace(live_record_enabled=False),
+        policy=SimpleNamespace(batch_enabled=True, live_record_enabled=False),
     )
     assert response.status_code == 503
     assert captured[0]['stt_language'] == frozen

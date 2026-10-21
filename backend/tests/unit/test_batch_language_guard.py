@@ -91,7 +91,7 @@ def test_language_metadata_failure_is_unknown():
     assert not provider.calls and not saved
 
 
-def test_only_explicit_kill_value_restores_unsafe_route(monkeypatch, caplog):
+def test_kill_value_restores_new_call_selection_but_cannot_revoke_worker_custody(monkeypatch, caplog):
     caplog.set_level(logging.INFO)
     for value in ['true', 'off', '0', 'typo', '']:
         monkeypatch.setenv('STT_PRERECORDED_LANGUAGE_GUARD_ENABLED', value)
@@ -99,9 +99,9 @@ def test_only_explicit_kill_value_restores_unsafe_route(monkeypatch, caplog):
     monkeypatch.setenv('STT_PRERECORDED_LANGUAGE_GUARD_ENABLED', 'false')
     assert stt.get_prerecorded_service('multi')[0] == 'parakeet'
     worker, provider, saved, *_ = setup_worker(language_of=lambda _: 'multi')
-    assert worker.process_batch([item()])[0].outcome == 'success'
-    assert provider.calls and saved
-    assert 'language_class=unknown route=parakeet' in caplog.text
+    assert worker.process_batch([item()]) == [ValidationFailureWork('a', 'vad_windows', 'unsupported_language')]
+    assert not provider.calls and not saved
+    assert 'language_class=unknown route=blocked' in caplog.text
 
 
 def test_unavailable_multilingual_provider_never_falls_back_to_unsafe_parakeet(monkeypatch):
@@ -109,6 +109,29 @@ def test_unavailable_multilingual_provider_never_falls_back_to_unsafe_parakeet(m
     with pytest.raises(TranscriptionFailure) as raised:
         stt.get_prerecorded_service('multi')
     assert raised.value.outcome == TranscriptionOutcome.CONFIG_ERROR
+
+
+@pytest.mark.parametrize('proof', [None, 'declared', 'audio_lid'])
+def test_gauntlet_worker_uses_real_frozen_language_adapter(monkeypatch, proof):
+    from testing.sync_cloud_tasks_stack import batch_providers
+    from utils.batch_pipeline.audio import audio_unit, with_context
+
+    events = Mock()
+    monkeypatch.setattr(batch_providers, 'write_event', events)
+    body = audio_unit(100, b'\x01\x00' * 32000).wav
+    context = {'stt_language': 'en'}
+    if proof:
+        context.update(stt_language_evidence=proof, stt_language_confidence=0.99)
+    artifacts = SimpleNamespace(
+        fetch_audio=lambda _: with_context(body, context), persist_result=Mock(return_value='r')
+    )
+    result = batch_providers.ModeRoutingWorker(artifacts).process_batch([item()])
+    calls = [call for call in events.call_args_list if call.args[1]['event'] == 'words_started']
+    if proof:
+        assert result[0].outcome == 'success' and len(calls) == 1
+    else:
+        assert result == [ValidationFailureWork('a', 'vad_windows', 'unsupported_language')]
+        assert not calls and not artifacts.persist_result.called
 
 
 @pytest.mark.asyncio
@@ -143,7 +166,7 @@ async def test_new_batch_intake_routes_by_effective_sync_language(monkeypatch, l
         conversation_id=None,
         client_device_id=None,
         client_platform='ios',
-        policy=SimpleNamespace(live_record_enabled=False),
+        policy=SimpleNamespace(batch_enabled=True, live_record_enabled=False),
     )
     assert (result is None) == escapes
     assert staged.call_count == (0 if escapes else 1)
