@@ -1215,7 +1215,7 @@
       "runs_on": "ubuntu-latest"
     },
     "gcp_backend_listen_helm.yml/deploy-neg-coverage-exporter": {
-      "budget_p50_minutes": 10,
+      "budget_p50_minutes": 11,
       "display_name": "Deploy NEG coverage exporter",
       "expected_runs_class": "non-pr-or-unsampled",
       "expected_runs_per_day": 0,
@@ -1224,7 +1224,7 @@
       "matrix_size": 1,
       "needs": "helm-upgrade",
       "owner": "Omi backend maintainers",
-      "rationale": "Production-only follow-up after a successful listen rollout; the resolver emits its image-tag output only for explicit deploys, while kept-tag and rollback paths leave it empty. Budget covers WIF setup and the exporter Helm rollout capped at five minutes, with no PR-run cost.",
+      "rationale": "Production-only follow-up after a successful listen rollout; the resolver emits its image-tag output only for explicit deploys, while kept-tag and rollback paths leave it empty. Budget covers WIF setup and the exporter Helm rollout capped at five minutes, with no PR-run cost. 2026-10-22 plan D D2 adds the listen_edge_image_digest dispatch input; this job is unchanged and stays manual-only with no PR runs, and the one-minute bump records the trigger change",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1233,7 +1233,7 @@
       "runs_on": "ubuntu-latest"
     },
     "gcp_backend_listen_helm.yml/helm-upgrade": {
-      "budget_p50_minutes": 5,
+      "budget_p50_minutes": 15,
       "display_name": "helm-upgrade",
       "expected_runs_class": "non-pr-or-unsampled",
       "expected_runs_per_day": 0,
@@ -1242,7 +1242,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder. 2026-10-22 plan D D2 adds the listen_edge_image_digest dispatch input: when set, the job also admits the digest (one image-config read) and helm-upgrades backend/charts/listen-edge with a 600-second rollout wait after the listen rollout; manual-only, no PR runs, 15-minute placeholder p50",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -4312,7 +4312,7 @@
     "gcp_backend_listen_helm.yml": {
       "name": "Upgrade Backend Listen Helm Chart",
       "owner": "CI maintainers",
-      "rationale": "Initial workflow inventory",
+      "rationale": "Initial workflow inventory. 2026-10-22 plan D D2 (lane p41-d2): listen_edge_image_digest dispatch input (blank by default) rolls backend/charts/listen-edge by admitted digest after the listen rollout; no new event trigger, no PR runs",
       "triggers": {
         "push": {
           "branches": [
@@ -4382,6 +4382,12 @@
               "default": "",
               "description": "Short-SHA image to deploy (blank keeps the running image). Prod requires an ancestor of main.",
               "required": "false"
+            },
+            "listen_edge_image_digest": {
+              "default": "",
+              "description": "Plan D D2: listen-edge image to roll, gcr.io/<project>/listen-edge@sha256:<digest> from the build-only train summary; must be labelled with the checked-out SHA (blank leaves the listen-edge release untouched)",
+              "required": "false",
+              "type": "string"
             },
             "mode": {
               "default": "deploy",
