@@ -1798,7 +1798,7 @@ def test_gke_helm_render_accepts_deployed_override_args(checker, tmp_path: Path,
         render='helm',
         gke_state=gke_state,
         runner=runner,
-        helm_args=('--set-string', 'env[0].value=override'),
+        helm_args_for={'pusher': ('--set-string', 'env[0].value=override')},
     )
     assert result.error is None, result.error
     # The override tokens reached the render invocation.
@@ -1831,6 +1831,8 @@ def test_gke_helm_render_accepts_deployed_override_args(checker, tmp_path: Path,
             # Values that start with "-" need the --opt=value form.
             '--gke-helm-arg=-f',
             f'--gke-helm-arg={tmp_path / "private-values.yaml"}',
+            '--gke-helm-arg-workload',
+            'pusher',
             '--gke-helm-arg-file',
             str(argv_file),
             '--gke-state',
@@ -1838,9 +1840,53 @@ def test_gke_helm_render_accepts_deployed_override_args(checker, tmp_path: Path,
         ]
     )
     assert rc == 0
+    # Only this workload's tokens reach its render; the argv-file tokens ride
+    # along because the workload scope matches.
     assert captured['helm_args'] == [
         '-f',
         str(tmp_path / 'private-values.yaml'),
         '--set-string',
         'env[0].value=override',
     ]
+
+    # Scoping: the same invocation scoped to another workload forwards nothing
+    # to this workload's render (the argv encodes backend-listen env indices).
+    rc = checker.main(
+        [
+            '--no-cloud-run',
+            '--gke-workload',
+            'pusher',
+            '--gke-render',
+            'helm',
+            '--gke-helm-arg=--set-string',
+            '--gke-helm-arg',
+            'env[80].value=listen-only',
+            '--gke-helm-arg-workload',
+            'backend-listen',
+            '--gke-state',
+            str(state_file),
+        ]
+    )
+    assert rc == 0
+    assert captured['helm_args'] == []
+
+
+def test_gke_helm_failure_never_discloses_override_values(checker) -> None:
+    # Thread: a failing `helm template` used to surface CalledProcessError's
+    # default str(), which embeds the full argv — including literal
+    # --set-string values — into the markdown/JSON/summary reports. The
+    # re-raised error must carry no literal override value.
+    secret = 'super-secret-override-value'
+
+    def runner(argv, **_kwargs):
+        raise subprocess.CalledProcessError(
+            1,
+            argv,
+            output='',
+            stderr=f'Error: UPGRADE FAILED: parse error at {secret} near "env[0]"',
+        )
+
+    with pytest.raises(ValueError) as excinfo:
+        checker.expected_gke_env_from_helm('pusher', env='prod', runner=runner, helm_args=(f'env[0].value={secret}',))
+    assert secret not in str(excinfo.value)
+    assert '<redacted>' in str(excinfo.value)

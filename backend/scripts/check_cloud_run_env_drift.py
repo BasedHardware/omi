@@ -553,6 +553,22 @@ def expected_gke_env_from_values(workload: str, *, env: str, root: Path = ROOT) 
     return expected
 
 
+def _redact_helm_override_values(text: str, helm_args: Sequence[str]) -> str:
+    """Replace literal override values (from ``--set*/NAME=value`` tokens) in text.
+
+    ``helm`` failure output can echo the offending token; the checker's contract
+    is that values never reach a report, so every literal value is replaced
+    before any stderr is stored on an error result.
+    """
+    for token in helm_args:
+        if token.startswith('-') or '=' not in token:
+            continue
+        value = token.split('=', 1)[1]
+        if value:
+            text = text.replace(value, '<redacted>')
+    return text
+
+
 def expected_gke_env_from_helm(
     workload: str,
     *,
@@ -572,23 +588,30 @@ def expected_gke_env_from_helm(
     """
     spec = GKE_WORKLOADS[workload]
     deployment = spec.deployment.format(env=env)
-    result = runner(
-        [
-            'helm',
-            'template',
-            deployment,
-            str(root / spec.chart),
-            '-f',
-            str(root / spec.values_file.format(env=env)),
-            *helm_args,
-            '--namespace',
-            f'{env}-omi-backend',
-            *(arg for pin in spec.helm_image_args for arg in ('--set-string', pin)),
-        ],
-        check=True,
-        text=True,
-        capture_output=True,
-    )
+    try:
+        result = runner(
+            [
+                'helm',
+                'template',
+                deployment,
+                str(root / spec.chart),
+                '-f',
+                str(root / spec.values_file.format(env=env)),
+                *helm_args,
+                '--namespace',
+                f'{env}-omi-backend',
+                *(arg for pin in spec.helm_image_args for arg in ('--set-string', pin)),
+            ],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+    except subprocess.CalledProcessError as exc:
+        # CalledProcessError's default str() embeds the full argv, which can
+        # carry literal override values; re-raise with a redacted message so no
+        # report (markdown, JSON, summary file) can disclose them.
+        stderr = _redact_helm_override_values((exc.stderr or '')[-500:], helm_args)
+        raise ValueError(f'helm template for {workload} failed (exit {exc.returncode}): {stderr}') from None
     for document in yaml.safe_load_all(result.stdout):
         if isinstance(document, dict) and document.get('kind') == 'Deployment':
             if (document.get('metadata') or {}).get('name') != deployment:
@@ -1150,7 +1173,7 @@ def inspect_gke_drift(
     runner: Any = subprocess.run,
     root: Path = ROOT,
     manifest_path: Path = DEFAULT_MANIFEST,
-    helm_args: Sequence[str] = (),
+    helm_args_for: Mapping[str, Sequence[str]] | None = None,
 ) -> tuple[ServiceEnvDrift, ...]:
     cm_name, cm_entries = manifest_config_map(env, manifest_path)
     envfrom_expected = _expected_envfrom_entries(cm_entries) if cm_name else {}
@@ -1160,6 +1183,9 @@ def inspect_gke_drift(
     for workload in workloads:
         if workload not in GKE_WORKLOADS:
             raise ValueError(f'Unknown GKE workload {workload!r}; known: {", ".join(GKE_WORKLOADS)}')
+        # Override arguments are workload-scoped: an argv generated from one
+        # chart's env indices must not be applied to a different chart.
+        workload_helm_args = (helm_args_for or {}).get(workload, ())
         expected: ExpectedEnv | None = None
         expected_refs: tuple[str, ...] = ()
         expected_unresolved: tuple[str, ...] = ()
@@ -1171,7 +1197,7 @@ def inspect_gke_drift(
                 expected_refs = expected_gke_envfrom_refs(workload, env=env, root=root)
             elif render == 'helm':
                 expected, expected_refs = expected_gke_env_from_helm(
-                    workload, env=env, root=root, runner=runner, helm_args=helm_args
+                    workload, env=env, root=root, runner=runner, helm_args=workload_helm_args
                 )
             else:
                 expected = expected_gke_env_from_values(workload, env=env, root=root)
@@ -1431,6 +1457,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         'listen_helm_env_overrides.py --output-argv-file in the deploy workflow).',
     )
     parser.add_argument(
+        '--gke-helm-arg-workload',
+        choices=(*GKE_WORKLOADS, 'all'),
+        default='backend-listen',
+        help='Workload the --gke-helm-arg / --gke-helm-arg-file tokens apply to. Override '
+        'arguments encode one chart env-index list (the argv file is generated from '
+        'backend-listen values), so applying them to another chart can rewrite a '
+        'different variable or fail the render; pass "all" only for chart-agnostic '
+        'arguments such as -f flags valid for every workload.',
+    )
+    parser.add_argument(
         '--gke-state',
         type=Path,
         help='Offline GKE JSON fixture: {workload: {deployment, replicasets}} plus optional '
@@ -1467,6 +1503,15 @@ def main(argv: Sequence[str] | None = None) -> int:
             gke_helm_args.extend(
                 line for line in args.gke_helm_arg_file.read_text(encoding='utf-8').splitlines() if line.strip()
             )
+        # Override tokens are scoped to one workload: they encode that chart's
+        # env indices, and a blind forward to every chart could rewrite a
+        # different variable (or fail the render) on the other workloads.
+        gke_helm_args_for: dict[str, Sequence[str]] = {'*': ()}
+        if gke_helm_args:
+            gke_helm_args_for = {
+                workload: (gke_helm_args if args.gke_helm_arg_workload in (workload, 'all') else ())
+                for workload in GKE_WORKLOADS
+            }
         # Offline fixture loads belong inside the handled section: a missing or
         # malformed --cloud-run-state / --gke-state is an operational (exit 2)
         # failure, not drift, and must not escape as an uncaught exception.
@@ -1502,7 +1547,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 gke_state=gke_state,
                 allowlist_map=allowlist_map,
                 manifest_path=args.manifest,
-                helm_args=gke_helm_args,
+                helm_args_for=gke_helm_args_for,
             )
     except Exception as exc:
         # Expected-state render failures (unreadable/malformed manifest or rendered
