@@ -375,7 +375,17 @@ def _exchange_firebase_token_for_dev_key(api_base: str, id_token: str) -> str:
     # A 2xx that is not JSON, or is JSON of another shape, is the same failure
     # to the caller as a missing field, so report it the same way instead of
     # raising ValueError/AttributeError past this function's error contract.
-    data = _parse_json_object(resp, "Developer key creation")
+    try:
+        data = _parse_json_object(resp, "Developer key creation")
+    except AuthError as exc:
+        # An unusable body is reported exactly like a missing `key` field: the
+        # caller cannot mint a key either way, and the established contract for
+        # this endpoint is the "missing the API key" AuthError. Keep the parse
+        # detail so the underlying shape problem is still visible.
+        raise AuthError(
+            message="Key-mint response was missing the API key",
+            detail=f"Developer key creation: {exc.detail}",
+        ) from exc
     raw_key = data.get("key")
     if not isinstance(raw_key, str) or not raw_key.strip():
         raise AuthError(

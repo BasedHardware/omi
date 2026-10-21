@@ -312,6 +312,9 @@ def test_dev_key_exchange_rejects_a_200_body_that_is_not_a_json_object(monkeypat
         oauth._exchange_firebase_token_for_dev_key(FAKE_API_BASE, "fb_id_tok")
 
     assert info.value.exit_code == EXIT_AUTH
+    # An unusable mint body is reported exactly like a missing `key` field,
+    # so the caller sees one stable message for "no usable key here".
+    assert "missing the api key" in str(info.value).lower()
 
 
 # ---------------------------------------------------------------------------
