@@ -5,6 +5,7 @@ Provides chat tools for currency conversion, latest reference rates, and
 supported-currency lookup through the public Frankfurter API.
 """
 
+import json
 from contextlib import asynccontextmanager
 from decimal import Decimal, InvalidOperation
 from typing import Any, Optional
@@ -161,6 +162,23 @@ async def _request_json(path: str, params: dict[str, Any] | None = None) -> Any:
     return payload
 
 
+def _upstream_error_message(exc: Exception, action: str) -> str:
+    """Map upstream transport failures to fixed, code-controlled messages.
+
+    Transport exceptions can embed host-internal details (errno strings, DNS
+    resolver output, proxy addresses), so the exception text is never
+    interpolated into chat tool responses. Only the HTTP status is inspected.
+    """
+    status = getattr(getattr(exc, "response", None), "status_code", None)
+    if status == 429:
+        return f"{action} failed: the Frankfurter API is rate limiting requests. Please try again later."
+    if isinstance(status, int) and status >= 500:
+        return f"{action} failed: the Frankfurter API is temporarily unavailable. Please try again later."
+    if isinstance(status, int):
+        return f"{action} failed: the Frankfurter API rejected the request (HTTP {status})."
+    return f"{action} failed: the Frankfurter API could not be reached. Please try again later."
+
+
 async def _validate_identity_currency(code: str) -> None:
     currencies = await _request_json("/currencies")
     if not isinstance(currencies, dict) or not currencies:
@@ -306,10 +324,18 @@ async def convert_currency(request: ConvertCurrencyRequest) -> ChatToolResponse:
         if len(lines) == 1:
             return ChatToolResponse(error="no rates returned for the requested currencies")
         return ChatToolResponse(result="\n".join(lines))
-    except (httpx.HTTPError, ValueError) as exc:
+    except json.JSONDecodeError:
+        return ChatToolResponse(
+            error="Currency conversion failed: the Frankfurter API returned an invalid response.")
+    except ValueError as exc:
+        # ValueError messages in this app are fixed, code-controlled strings
+        # (input validation helpers and 'unsupported currency'); they never
+        # embed transport details — pinned by test_error_handling.py.
         return ChatToolResponse(error=f"currency conversion failed: {exc}")
-    except Exception as exc:
-        return ChatToolResponse(error=f"currency conversion failed: {exc}")
+    except httpx.HTTPError as exc:
+        return ChatToolResponse(error=_upstream_error_message(exc, "Currency conversion"))
+    except Exception:
+        return ChatToolResponse(error="Currency conversion failed. Please try again later.")
 
 
 @app.post("/tools/get_latest_rates", response_model=ChatToolResponse)
@@ -359,10 +385,16 @@ async def get_latest_rates(request: LatestRatesRequest) -> ChatToolResponse:
         if len(lines) == 1:
             return ChatToolResponse(error="no rates returned")
         return ChatToolResponse(result="\n".join(lines))
-    except (httpx.HTTPError, ValueError) as exc:
+    except json.JSONDecodeError:
+        return ChatToolResponse(
+            error="Latest rates request failed: the Frankfurter API returned an invalid response.")
+    except ValueError as exc:
+        # Fixed, code-controlled validation messages only (see convert_currency).
         return ChatToolResponse(error=f"latest rates request failed: {exc}")
-    except Exception as exc:
-        return ChatToolResponse(error=f"latest rates request failed: {exc}")
+    except httpx.HTTPError as exc:
+        return ChatToolResponse(error=_upstream_error_message(exc, "Latest rates request"))
+    except Exception:
+        return ChatToolResponse(error="Latest rates request failed. Please try again later.")
 
 
 @app.post("/tools/list_supported_currencies", response_model=ChatToolResponse)
@@ -375,7 +407,13 @@ async def list_supported_currencies() -> ChatToolResponse:
         for code, name in sorted(currencies.items()):
             lines.append(f"- {code}: {name}")
         return ChatToolResponse(result="\n".join(lines))
-    except (httpx.HTTPError, ValueError) as exc:
+    except json.JSONDecodeError:
+        return ChatToolResponse(
+            error="Currency list request failed: the Frankfurter API returned an invalid response.")
+    except ValueError as exc:
+        # Fixed, code-controlled validation messages only (see convert_currency).
         return ChatToolResponse(error=f"currency list request failed: {exc}")
-    except Exception as exc:
-        return ChatToolResponse(error=f"currency list request failed: {exc}")
+    except httpx.HTTPError as exc:
+        return ChatToolResponse(error=_upstream_error_message(exc, "Currency list request"))
+    except Exception:
+        return ChatToolResponse(error="Currency list request failed. Please try again later.")
