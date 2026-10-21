@@ -378,8 +378,9 @@ def claim(uid: str, ref: Any, now: float) -> dict[str, Any] | None:
         row = snapshot.to_dict() if snapshot.exists else None
         if (
             not row
-            or row.get('state') in {'completed', 'retained', 'purged', 'staging', 'sealing'}
+            or row.get('state') in {'completed', 'retained', 'purged', 'staging', 'sealing', 'superseded'}
             or row.get('lease_until', 0) > now
+            or row.get('next_attempt_at', 0) > now
         ):
             return None
         token = uuid4().hex
@@ -515,7 +516,11 @@ def release(uid: str, ref: Any, token: str) -> None:
                 {
                     'lease_until': 0,
                     'lease_token': '',
-                    'next_attempt_at': RETAINED_NEXT_ATTEMPT_AT if row.get('state') == 'retained' else time.time(),
+                    'next_attempt_at': (
+                        RETAINED_NEXT_ATTEMPT_AT
+                        if row.get('state') == 'retained'
+                        else max(row.get('next_attempt_at', 0), time.time())
+                    ),
                 },
             )
 

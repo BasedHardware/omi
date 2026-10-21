@@ -2411,6 +2411,60 @@ export interface EntitySummary {
   type: "person" | "organization" | "project";
 }
 
+export interface Episode {
+  bullets?: Array<string>;
+  close_reason?: "user" | "gap" | "idle" | "hard_cap" | "source_change" | "calendar_boundary" | "moved_on" | null;
+  closed_at?: string | null;
+  conversation_ids?: Array<string>;
+  id: string;
+  last_activity_at: string;
+  moments?: Array<EpisodeMoment>;
+  people?: Array<string>;
+  provisional_items?: Array<EpisodeProvisionalItem>;
+  sources?: Array<string>;
+  started_at: string;
+  state_updated_at?: string | null;
+  status: "live" | "closed";
+  title?: string;
+}
+
+export interface EpisodeLiveResponse {
+  enabled: boolean;
+  episode?: Episode | null;
+}
+
+export interface EpisodeLookupResponse {
+  enabled: boolean;
+  episode?: Episode | null;
+}
+
+export interface EpisodeMoment {
+  conversation_id: string;
+  end_offset?: number;
+  ended_at: string;
+  heading?: string;
+  id: string;
+  start_offset?: number;
+  started_at: string;
+}
+
+export interface EpisodeProvisionalItem {
+  action_item_id?: string | null;
+  conversation_id?: string | null;
+  created_at: string;
+  due_at?: string | null;
+  explicit?: boolean;
+  id: string;
+  kind?: "task" | "reminder";
+  segment_offset?: number | null;
+  status?: "provisional" | "kept" | "dropped" | "dismissed";
+  text: string;
+}
+
+export interface EpisodeWrapUpRequest {
+  conversation_id?: string | null;
+}
+
 export interface ErrorResponse {
   detail: string | Array<unknown> | Record<string, unknown>;
 }
@@ -6449,6 +6503,12 @@ export interface OmiApiSchemas {
   "EntityPage": EntityPage;
   "EntityRef": EntityRef;
   "EntitySummary": EntitySummary;
+  "Episode": Episode;
+  "EpisodeLiveResponse": EpisodeLiveResponse;
+  "EpisodeLookupResponse": EpisodeLookupResponse;
+  "EpisodeMoment": EpisodeMoment;
+  "EpisodeProvisionalItem": EpisodeProvisionalItem;
+  "EpisodeWrapUpRequest": EpisodeWrapUpRequest;
   "ErrorResponse": ErrorResponse;
   "EvaluationRequest": EvaluationRequest;
   "Event": Event;
@@ -8875,6 +8935,47 @@ export interface OmiApiPaths {
         "200": EntityPage;
         "401": void;
         "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/episodes/by-conversation/{conversation_id}": {
+    get: {
+      operationId: "get_episode_for_conversation_v1_episodes_by_conversation__conversation_id__get";
+      responses: {
+        "200": EpisodeLookupResponse;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/episodes/live": {
+    get: {
+      operationId: "get_live_episode_v1_episodes_live_get";
+      responses: {
+        "200": EpisodeLiveResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/episodes/{episode_id}/items/{item_id}/dismiss": {
+    post: {
+      operationId: "dismiss_episode_item_v1_episodes__episode_id__items__item_id__dismiss_post";
+      responses: {
+        "200": Episode;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/episodes/{episode_id}/wrap-up": {
+    post: {
+      operationId: "wrap_up_episode_v1_episodes__episode_id__wrap_up_post";
+      responses: {
+        "200": Episode;
+        "401": void;
         "422": HTTPValidationError;
       };
     };
@@ -15898,6 +15999,84 @@ export async function get_entity_page_v1_entities__entity_id__page_get(path: { e
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function get_episode_for_conversation_v1_episodes_by_conversation__conversation_id__get(path: { conversation_id: string }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<EpisodeLookupResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/episodes/by-conversation/${path.conversation_id}`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function get_live_episode_v1_episodes_live_get(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<EpisodeLiveResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/episodes/live`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function dismiss_episode_item_v1_episodes__episode_id__items__item_id__dismiss_post(path: { episode_id: string, item_id: string }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<Episode> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/episodes/${path.episode_id}/items/${path.item_id}/dismiss`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function wrap_up_episode_v1_episodes__episode_id__wrap_up_post(path: { episode_id: string }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: EpisodeWrapUpRequest | null, init?: OmiApiClientInit): Promise<Episode> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/episodes/${path.episode_id}/wrap-up`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function get_public_case_status_v1_fair_use_case__case_ref__status_get(path: { case_ref: string }, init?: OmiApiClientInit): Promise<PublicFairUseCaseStatusResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/fair-use/case/${path.case_ref}/status`;
@@ -22446,4 +22625,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 517 client methods generated.
+// Total: 521 client methods generated.

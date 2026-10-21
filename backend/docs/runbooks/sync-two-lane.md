@@ -205,13 +205,21 @@ The 45-day content ledger counts only same-content classified failures:
 `sync_invalid_audio` after decode finds no usable audio (whole job), or a
 classified persistence failure with the same bounded fingerprint on each
 attempt. Classified persistence failures are the data-shape exception classes
-(for example, `persistence:ValueError`), the `provenance_mismatch` and
-`redirect_cycle` assignment conflicts, and the recognized Firestore
-document-size marker. One classified segment failure is enough for the batch to
+(for example, `persistence:ValueError`), named assignment conflicts, and the
+recognized Firestore document-size marker. Every `SyncAssignmentConflict` raise
+site names its reason (`failure_subtype`). Structural reasons
+(`provenance_mismatch`, `redirect_cycle`, `redirect_chain_too_long`,
+`donor_tombstone_no_redirect`, `ancestry_flatten_rejected`,
+`corrected_speech_changed`, `record_target_retired`,
+`record_route_owner_changed`, `record_privacy_changed`) strike on every lane.
+Reasons that wait on another writer (`live_target_not_persisted`,
+`lineage_ownership_ambiguous`, `record_target_missing`,
+`record_finalize_pending`) strike only on backfill, whose capture is hours old.
+One classified segment failure is enough for the batch to
 earn the strike, even beside successful siblings; differing fingerprints in one
 batch share `persistence:mixed`. Unknown exceptions, provider invalid-input
-verdicts, other assignment conflicts, and unknown Firestore `InvalidArgument`
-do not count. Three consecutive matching failures within 24 hours
+verdicts, the unlabeled `other` conflict, finalize-phase conflicts, and unknown
+Firestore `InvalidArgument` do not count. Three consecutive matching failures within 24 hours
 pause that content for 24 hours, then it is admitted again automatically;
 there is no permanent pause. A different or unclassified failure resets
 the streak; an expired window starts at one.
@@ -257,6 +265,33 @@ a `donor`, or a `conversation` rejected a second time after the backstop retry.
 stepped past. When the only id the chunk can create a conversation under is its own
 existing or redirected anchor, there is no safe home: fences hold, but the write
 can fail again after the backstop, so `size_rollover_unavailable` is not a recovery.
+
+### Internal failures are not `upstream_error`
+
+A persistence or finalize failure never reached an STT vendor. Sync segment and
+job metrics and logs record it as `outcome=internal_error` with a bounded
+`failure_reason` (`storage_rate_limited`, `quota_exhausted`,
+`firestore_contention`, `assignment_conflict`, `persistence_error`,
+`finalize_error`), counted in
+`omi_sync_internal_failures_total{kind,lane,failure_reason}`. A job is internal
+only when no segment error came from a provider. The job `errors` codes are
+`sync_storage_rate_limited` (GCS 429) and `sync_firestore_contention`
+(exhausted assignment contention); other internal causes keep
+`sync_persistence_failed`/`sync_finalize_failed`. Vendor dashboards read
+`outcome=upstream_error` alone.
+
+Sync bridges copy donor audio idempotently: one destination listing per bridge,
+skip an object with the same crc32c and size, create or replace only under a
+generation precondition, and back off a GCS 429 with jitter (four attempts).
+`omi_sync_bridge_audio_copy_total{outcome=copied|skipped|rate_limited|raced}`
+shows the split; `raced` is a concurrent bridge that already wrote the same
+bytes.
+
+Fresh jobs take a per-(uid, candidate conversation) Redis turn around
+persistence and finalize, so concurrent fresh jobs for one conversation stop
+contending (`omi_sync_fresh_conversation_turn_total{outcome}`). `timeout` and
+`unavailable` proceed unserialized; the assignment transaction stays
+authoritative. Kill switch: `SYNC_FRESH_CONVERSATION_TURN=off`.
 
 ## Run ownership and recovery
 

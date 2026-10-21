@@ -9,7 +9,7 @@ from google.cloud import firestore
 from database import sync_ledger, sync_jobs
 from database.firestore_transaction_retry import FirestoreContentionExhausted
 from routers.sync import _terminal_repeat_failure_kwargs
-from utils.sync.assignment_errors import SyncAssignmentConflict
+from utils.sync.assignment_errors import SyncAssignmentConflict, SyncAssignmentConflictReason
 from utils.sync.pipeline import _persistence_failure_fingerprint, _whole_job_persistence_fingerprint
 
 
@@ -234,6 +234,21 @@ def test_only_known_data_shape_persistence_errors_receive_fingerprints():
     assert _persistence_failure_fingerprint(wrapped_shape, 'persistence') is None
     assert _persistence_failure_fingerprint(ServiceUnavailable('unavailable'), 'persistence') is None
     assert _persistence_failure_fingerprint(TimeoutError('timeout'), 'persistence') is None
+
+
+def test_named_assignment_conflicts_strike_instead_of_retrying_paid_work_forever():
+    # 10-15..10-20: backfill SyncAssignmentConflict(subtype=other) grew to ~7k jobs/day with no
+    # strike, re-running segment STT on every retry. Each raise site now names its reason.
+    owner_changed = SyncAssignmentConflict('owner', subtype=SyncAssignmentConflictReason.RECORD_ROUTE_OWNER_CHANGED)
+    for lane in ('fresh', 'backfill'):
+        assert _persistence_failure_fingerprint(owner_changed, 'persistence', lane) == (
+            'persistence:record_route_owner_changed'
+        )
+    live_pending = SyncAssignmentConflict('live', subtype=SyncAssignmentConflictReason.LIVE_TARGET_NOT_PERSISTED)
+    # Fresh content may still see listen persist its row; hours-old backfill content will not.
+    assert _persistence_failure_fingerprint(live_pending, 'persistence', 'fresh') is None
+    fingerprint = _persistence_failure_fingerprint(live_pending, 'persistence', 'backfill')
+    assert sync_ledger._validated_failure_fingerprint('persistent_persistence', fingerprint) == fingerprint
 
 
 def test_one_classified_segment_failure_gives_a_partial_or_mixed_batch_a_strike():

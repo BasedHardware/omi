@@ -23,6 +23,10 @@ BYOK_QUOTA_ERROR_DETAIL = {
 # Anthropic's stable wording for an exhausted prepaid balance; direct-lane BYOK
 # raises it as a plain 400, so the provider's own text is the only classifier.
 _ANTHROPIC_CREDIT_EXHAUSTED_MARKER = 'credit balance is too low'
+# OpenRouter's stable spellings for a credit balance that cannot cover the
+# request; direct-lane BYOK raises it as a plain 402, once in the message and
+# once as the ``limit_source`` metadata value. Either identifies the account state.
+_OPENROUTER_CREDIT_EXHAUSTED_MARKERS = ('requires more credits', 'openrouter_credits')
 GENERIC_CONVERSATION_PROCESSING_ERROR_DETAIL = 'Error processing conversation, please try again later'
 
 logger = logging.getLogger(__name__)
@@ -87,8 +91,9 @@ def is_byok_quota_error(error: BaseException) -> bool:
     The gateway answers that account state with its ``byok_quota`` credential
     failure class (HTTP 429, in ``_THROTTLED_FAILURE_CLASSES``), while direct
     Anthropic BYOK raises the SDK's ``BadRequestError`` for an exhausted
-    prepaid balance. Both are account state only the user can fix; every other
-    request shape keeps the generic response.
+    prepaid balance and direct OpenRouter BYOK answers 402 when the account's
+    credits cannot cover the request. All are account state only the user can
+    fix; every other request shape keeps the generic response.
     """
     if (
         _string_value(getattr(error, 'code', None)) == GATEWAY_CREDENTIAL_FAILURE_CODE
@@ -108,6 +113,9 @@ def is_byok_quota_error(error: BaseException) -> bool:
             _string_value(gateway_error.get('code')) == GATEWAY_CREDENTIAL_FAILURE_CODE
             and _string_value(gateway_error.get('failure_class')) == BYOK_QUOTA_FAILURE_CLASS
         )
+    if status_code == 402:
+        text = _bounded_error_text(error)
+        return any(marker in text for marker in _OPENROUTER_CREDIT_EXHAUSTED_MARKERS)
     if status_code != 400:
         return False
     return _ANTHROPIC_CREDIT_EXHAUSTED_MARKER in _bounded_error_text(error)

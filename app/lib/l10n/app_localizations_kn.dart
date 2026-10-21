@@ -14431,4 +14431,105 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get activityAttentionLinkStalledSubtitle => 'Omi ನಲ್ಲಿ ರೆಕಾರ್ಡಿಂಗ್ ಮುಂದುವರಿದಿದೆ';
+
+  @override
+  String get episodeNow => 'ಈಗ';
+
+  @override
+  String episodeLiveFor(String duration) {
+    return 'ಲೈವ್ · $duration';
+  }
+
+  @override
+  String episodeMomentsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ಕ್ಷಣಗಳು',
+      one: '1 ಕ್ಷಣ',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get episodeMoments => 'ಕ್ಷಣಗಳು';
+
+  @override
+  String get episodeSoFar => 'ಇಲ್ಲಿಯವರೆಗೆ';
+
+  @override
+  String get episodeUpdatedJustNow => 'ಈಗಷ್ಟೇ ನವೀಕರಿಸಲಾಗಿದೆ · ಮುಗಿದಾಗ ಪೂರ್ಣ ಟಿಪ್ಪಣಿಗಳು';
+
+  @override
+  String episodeUpdatedMinutesAgo(int minutes) {
+    return '$minutes ನಿಮಿಷ ಹಿಂದೆ ನವೀಕರಿಸಲಾಗಿದೆ · ಮುಗಿದಾಗ ಪೂರ್ಣ ಟಿಪ್ಪಣಿಗಳು';
+  }
+
+  @override
+  String get episodeNotesSoon => 'ಮಾತಿನ ಮೊದಲ ಕೆಲವು ನಿಮಿಷಗಳ ನಂತರ ಟಿಪ್ಪಣಿಗಳು ಕಾಣಿಸುತ್ತವೆ.';
+
+  @override
+  String get episodeOpenAll => 'ಎಲ್ಲವನ್ನೂ ತೆರೆಯಿರಿ';
+
+  @override
+  String get episodeWrapUpNow => 'ಈಗ ಮುಗಿಸಿ';
+
+  @override
+  String get episodeWrapsUpHint => 'ನೀವು ಮುಂದೆ ಸಾಗಿದಾಗ Omi ಇದನ್ನು ಮುಗಿಸುತ್ತದೆ';
+
+  @override
+  String episodeTaskCaptured(String text) {
+    return 'ಕಾರ್ಯ ಗುರುತಿಸಲಾಗಿದೆ: $text';
+  }
+
+  @override
+  String episodeReminderCaptured(String text) {
+    return 'ಜ್ಞಾಪನೆ ಗುರುತಿಸಲಾಗಿದೆ: $text';
+  }
+
+  @override
+  String episodeTaskSaved(String text) {
+    return 'ಕಾರ್ಯ ಉಳಿಸಲಾಗಿದೆ: $text';
+  }
+
+  @override
+  String episodeAddingFromOmi(String duration) {
+    return 'ನಿಮ್ಮ Omi ಇಂದ $duration ಸೇರಿಸಲಾಗುತ್ತಿದೆ';
+  }
+
+  @override
+  String get episodeListeningNow => 'ಈಗ ಕೇಳುತ್ತಿದೆ';
+
+  @override
+  String get deviceHeardToday => 'ಇಂದು ಕೇಳಿದ್ದು';
+
+  @override
+  String get deviceToSync => 'ಸಿಂಕ್ ಬಾಕಿ';
+
+  @override
+  String get deviceRightNow => 'ಈ ಕ್ಷಣ';
+
+  @override
+  String deviceLiveEpisode(String duration) {
+    return 'ಲೈವ್ ಸಂಚಿಕೆ · $duration';
+  }
+
+  @override
+  String get deviceCatchingUp => 'ಬಾಕಿ ಹಿಡಿಯುತ್ತಿದೆ';
+
+  @override
+  String deviceCatchingUpProgress(int done, int total) {
+    return '$done/$total ನಿಮಿಷ';
+  }
+
+  @override
+  String get deviceRecently => 'ಇತ್ತೀಚೆಗೆ';
+
+  @override
+  String deviceDisconnectedFor(String duration) {
+    return '$duration ಸಂಪರ್ಕ ಕಡಿತ';
+  }
+
+  @override
+  String get deviceControls => 'ನಿಯಂತ್ರಣಗಳು';
 }

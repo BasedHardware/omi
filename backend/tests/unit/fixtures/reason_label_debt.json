@@ -25,6 +25,22 @@
       "why": "pre-existing; unreviewed"
     },
     {
+      "path": "database/memory_source_index.py",
+      "function": "retraction_historical_ids",
+      "label": "outcome",
+      "shape": "name",
+      "count": 1,
+      "why": "main episodes/memory-source/held-content observability via sync 15 (2026-10-21); owner lane 14 to bound"
+    },
+    {
+      "path": "database/memory_source_index.py",
+      "function": "store",
+      "label": "outcome",
+      "shape": "name",
+      "count": 1,
+      "why": "main episodes/memory-source/held-content observability via sync 15 (2026-10-21); owner lane 14 to bound"
+    },
+    {
       "path": "database/messaging.py",
       "function": "_queue_event",
       "label": "reason",
@@ -345,6 +361,46 @@
       "why": "pre-existing; unreviewed"
     },
     {
+      "path": "utils/episodes/metrics.py",
+      "function": "record_boundary",
+      "label": "outcome",
+      "shape": "call:_label",
+      "count": 1,
+      "why": "main episodes/memory-source/held-content observability via sync 15 (2026-10-21); owner lane 14 to bound"
+    },
+    {
+      "path": "utils/episodes/metrics.py",
+      "function": "record_episode_closed",
+      "label": "reason",
+      "shape": "call:_label",
+      "count": 1,
+      "why": "main episodes/memory-source/held-content observability via sync 15 (2026-10-21); owner lane 14 to bound"
+    },
+    {
+      "path": "utils/episodes/metrics.py",
+      "function": "record_moment_update",
+      "label": "outcome",
+      "shape": "name",
+      "count": 2,
+      "why": "main episodes/memory-source/held-content observability via sync 15 (2026-10-21); owner lane 14 to bound"
+    },
+    {
+      "path": "utils/episodes/metrics.py",
+      "function": "record_provisional_outcomes",
+      "label": "outcome",
+      "shape": "call:_label",
+      "count": 1,
+      "why": "main episodes/memory-source/held-content observability via sync 15 (2026-10-21); owner lane 14 to bound"
+    },
+    {
+      "path": "utils/episodes/metrics.py",
+      "function": "record_wrapup_latency",
+      "label": "reason",
+      "shape": "call:_label",
+      "count": 1,
+      "why": "main episodes/memory-source/held-content observability via sync 15 (2026-10-21); owner lane 14 to bound"
+    },
+    {
       "path": "utils/external_list_reads.py",
       "function": "_Entry.event",
       "label": "outcome",
@@ -605,7 +661,7 @@
       "function": "<module>",
       "label": "outcome",
       "shape": "name",
-      "count": 2,
+      "count": 5,
       "why": "main held-content observability via sync 14 (2026-10-20); owner lane 14 to bound"
     },
     {
@@ -615,6 +671,14 @@
       "shape": "name",
       "count": 1,
       "why": "main held-content observability via sync 14 (2026-10-20); owner lane 14 to bound"
+    },
+    {
+      "path": "utils/observability/held_content.py",
+      "function": "record_pacing",
+      "label": "outcome",
+      "shape": "name",
+      "count": 2,
+      "why": "main episodes/memory-source/held-content observability via sync 15 (2026-10-21); owner lane 14 to bound"
     },
     {
       "path": "utils/observability/journeys.py",

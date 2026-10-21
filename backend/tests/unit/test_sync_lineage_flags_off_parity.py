@@ -1,4 +1,4 @@
-"""Two sync switches OFF match frozen main at persisted and intake boundaries."""
+"""Dedupe/coverage OFF retain baseline behavior except the always-on stamp-gap guard."""
 
 import hashlib
 import json
@@ -155,6 +155,9 @@ def off(monkeypatch, request):
         monkeypatch.setenv(flag, request.param)
 
     monkeypatch.setenv('SYNC_LINEAGE_RESOLVE_ENABLED', 'true')
+    # The fresh conversation turn is a throughput guard outside lineage parity; this
+    # hermetic run has no Redis, so leaving it on would add its 'unavailable' log line.
+    monkeypatch.setenv('SYNC_FRESH_CONVERSATION_TURN', 'off')
     monkeypatch.setenv('SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST', '')  # Explicit legacy global policy.
 
 
@@ -170,7 +173,7 @@ def frozen(monkeypatch):
 
 
 @pytest.mark.parametrize('kind', ['mixed40', 'mixed1200', 'all_repeat', 'same_range', 'new_row', 'pinned'])
-def test_assignment_payload_result_and_survivors_are_byte_identical_to_main(frozen, kind):
+def test_assignment_matches_frozen_main_or_unstamped_gap_routing(frozen, kind):
     old, _ = frozen
     row = helpers.live_row()
     if kind == 'pinned':
@@ -191,7 +194,15 @@ def test_assignment_payload_result_and_survivors_are_byte_identical_to_main(froz
         candidate = deepcopy(incoming)
         if module is old:
             candidate.pop('_sync_lineage_binding')
-        result = _intake(module, store, candidate, target_id=None if kind == 'new_row' else row['id'])
+        # The stamp-gap guard is deliberately independent of these two switches.
+        # Preserve the long-gap case: its new result must equal frozen main's
+        # ordinary unstamped routing, with the live row completely unchanged.
+        target = None if kind == 'new_row' or (module is old and kind == 'mixed1200') else row['id']
+        result = _intake(module, store, candidate, target_id=target)
+        if kind == 'mixed1200':
+            assert store.rows[('users', 'u', 'conversations', row['id'])] == row
+            if module is assignment:
+                assert result[0].pop('_sync_lineage_stamp_gap_refused') is True
         outputs.append(_bytes({'result': result, 'rows': _rows(store)}))
     assert outputs[0] == outputs[1]
 

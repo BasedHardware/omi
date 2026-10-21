@@ -3,8 +3,8 @@ import json
 import logging
 import os
 
+from omi_logging import configure_logging
 from utils.env_loader import firebase_admin_options, load_backend_env
-from utils.logging_config import configure_split_stream_logging
 from utils.firebase_admin_runtime import (
     firebase_verify_only_credential,
     install_firebase_auth_mutation_guard,
@@ -15,8 +15,11 @@ from config.chat_first_e2e_fixture import is_chat_first_e2e_harness_runtime
 load_backend_env()  # No-op if no env files exist (production); stage + local overrides otherwise
 install_google_adc_guard()
 
-# INFO/DEBUG to stdout, WARNING+ to stderr, so GKE does not store routine lines as ERROR.
-configure_split_stream_logging(level=logging.INFO)
+# Text keeps the INFO-to-stdout / WARNING+-to-stderr split (so GKE does not store
+# routine lines as ERROR) and the textPayload that log metrics match, until each
+# service's consumers are admitted for JSON (docs/runbooks/structured-logging-rollout.md);
+# OMI_LOG_FORMAT=json opts a service in.
+configure_logging(os.getenv('K_SERVICE') or 'backend', default_format='text')
 logger = logging.getLogger(__name__)
 
 import firebase_admin

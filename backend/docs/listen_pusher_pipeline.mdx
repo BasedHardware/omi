@@ -25,6 +25,15 @@ The [dispatch contract](stt-cap-dispatch.md) also documents sync holds, recovery
 BYOK funding, additive metrics and the per-client activation decision.
 Sync recovery fences a provider-bound `dispatched` receipt before paid STT or
 ingestion, and atomically checkpoints ingest proof alongside the conversation.
+Before every new recovery provider intent (including retries), an always-on,
+shared Redis Lua token bucket admits both audio seconds and one intent. Defaults
+are 60 audio-hours/hour and 12k intents/hour with at most one minute of burst
+credit. Pacing denial or Redis failure checkpoints `next_attempt_at` on the hold
+without creating an attempt or metered charge; release preserves that deadline.
+The durable sweep rotates owners in one-candidate rounds, newest-first inside
+each user's consent/cutoff. Sealing, cleanup and cached-result settlement remain
+independent. See [recovery pacing](stt-cap-dispatch.md#shared-recovery-pacing)
+for settings, telemetry and operational limits.
 Known non-calls clear the intent. After 30 minutes, ambiguous work reconciles
 from that proof or gets one second dispatch; a second ambiguity retains the audio
 as failed reconciliation. Successful siblings finalize independently. Flagged
@@ -662,6 +671,17 @@ mentor lane was deleted after v2 reached 100%. Any other env value invokes
 neither path. The shared bounded flag cache, failure diagnostics and rollback
 latency are defined in the
 [proactivity v2 contract](proactivity_v2/CONTRACT.md#enablement-prerequisites).
+
+Live episodes (`utils/episodes/live.py`, kill switch `EPISODES_ENABLED`) see the
+same realtime batches after the paywall check and before mentor admission. They
+buffer final segments per user in process and, when a moment ends (a pause of
+45 seconds, 600 words, or a move to another conversation), schedule one tracked
+background update. That update makes one gpt-5-nano call over the compact episode
+state plus only that moment's text. It never blocks the fan-out, writes no
+conversation, task or memory, and is restarted from durable state by finalization
+(`finalize_persisted_conversation` calls `utils/episodes/service.on_conversation_finalized`
+after `complete_finalization_fanout`, bounded and fail-open). See
+`backend/utils/episodes/ARCHITECTURE.md`.
 
 Provider speaker labels are connection-local. Before a live segment enters a
 conversation, listen stamps the actual `stt_provider` and an opaque
@@ -6128,6 +6148,13 @@ intent remains processing after a budget stop; a pre-cutoff unsealed source keep
 that choice open until sealing preserves its original creation/listing times. Only existing
 same-month user/upgrade consent may process audio. Existing UID/hold/text leases,
 cutoffs, reserved estimates, abuse and allowance checks still own admission.
+`STT_CAP_RECOVERY_COHORT`, when present, additionally intersects effective dispatch
+membership for consent/upgrade, API enqueue, redrive owner visits, worker entry,
+manifest recovery and every provider attempt. It shares dispatch's `uid:`, `pct:N`
+and `all` grammar; unset leaves existing scope unchanged and malformed (including
+empty) denies recovery. It never changes listen-side hold admission or staging
+seal/cleanup. The private probe identity is supplied through the private-values
+path, never committed; see [recovery-only probe narrowing](stt-cap-dispatch.md#recovery-only-probe-narrowing).
 Process death cannot erase the choice or require a client wakeup. The fixed
 60-second memory wakeup and processing self-respawn are retired.
 

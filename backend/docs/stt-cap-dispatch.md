@@ -89,6 +89,73 @@ it never finishes to waiting-choice solely because excluded rows remain.
 Custody sealing/cleanup stays active during rollback because it is
 owed persistence, not permission to dispatch STT.
 
+### Shared recovery pacing
+
+Every new provider intent in `utils/sync/cap_hold_recovery.py` spends a shared
+audio-second token budget and an intent token, including the second persisted
+application attempt. Cached provider results and settlement spend no tokens.
+`held_single_attempt` continues to suppress adapter-local retries on recovery.
+The intent ceiling conservatively counts pieces/retries, so a multi-piece hold
+spends more than one token. Denials create no provider receipt or metered charge;
+the worker retains its existing chosen-allowance reservation for the same item.
+
+Plain env config, read per intent (no new rollout flag):
+
+| Setting | Default | Meaning |
+| --- | --- | --- |
+| `CAP_HOLD_RECOVERY_AUDIO_HOURS_PER_HOUR` | `60` | 60 audio seconds per wall second |
+| `CAP_HOLD_RECOVERY_HOLDS_PER_HOUR` | `12000` | Maximum sustained provider intents/hour |
+
+Both must be finite and positive. Invalid/zero config refuses new work. Apply
+identical values and the same `REDIS_DB_*` endpoint to every API/sync recovery
+host before activation; different settings sharing a bucket are unsupported.
+No deployment/activation is performed by this change.
+
+The repo already uses Redis Lua for cross-pod rate limiting (`redis_db`), rather
+than a hot Firestore counter. Recovery uses one atomic script/key
+`rl:cap-hold-recovery:v1:global` and a dedicated lazy client with two-second
+connect/read timeouts, with no fail-open fallback. Redis's clock owns refill.
+Both dimensions must fit before either is spent. Capacity is one minute of
+refill (default 3,600 audio seconds and 200 intents); a token bucket bounds
+traffic over interval T by rate*T plus that burst, rather than enforcing a
+calendar-hour window. Missing/evicted state starts **empty**. The fixed key has
+no TTL and cannot grow with users. Ambiguous Redis replies or failed intent
+writes may waste tokens; never refund uncertain capacity.
+
+On capacity denial, the fenced hold checkpoint writes `next_attempt_at` from
+the larger deficit/refill interval and retains `pacing_deferred_since`. Redis
+unavailability, invalid config/cost or a piece exceeding the burst envelope
+refuses and defers for 60 seconds. Release preserves the deadline; claim will
+not take the hold early. Normal VAD pieces cap at 300 seconds by default.
+Oversized legacy frozen pieces need operator diagnosis/replanning; they stay
+held, without silently overriding the rate or issuing a paid call.
+
+The sweep's existing persisted owner cursor advances before awaited work,
+including past blocked owners. Five selected owners now take one newest-first
+candidate each per round, up to 100 candidates/owner and 900 seconds total,
+instead of letting a fast owner consume 100 before peers get another turn.
+Deferred owners stop for that sweep; other owners proceed. A hold's pieces
+remain one fenced application unit, so rotation is by candidate, not equal
+audio shares. Request-triggered wakes keep their existing UID leases/cooldown.
+Sealing and cleanup run before recovery and never acquire pacing tokens.
+
+Metrics use only `outcome=granted|deferred|refused`:
+`omi_held_recovery_pacing_intents_total` counts decisions and
+`omi_held_recovery_pacing_audio_seconds_total` counts requested audio tokens by
+decision. Only `granted` represents spent tokens. The histogram
+`omi_held_recovery_pacing_deferred_age_seconds` samples time since the first
+durable pacing deferral on each subsequent deferral. It measures observed
+deferred backlog age, not a fleet maximum or an unvisited population; use it
+with the existing authoritative fleet pending/oldest-age gauges. No user,
+hold, provider or free-form reason labels are emitted.
+
+Pacing is shipped on whenever recovery admission is active. Rollback is the
+existing execution-admission kill switch/cohort rollback; do not bypass this
+limiter to recover throughput. Deployment acceptance still requires API/sync
+activation, explicit-consent/restart and unsupported-language checks, and
+measured recovery throughput under ordinary peak live load before widening
+the STT cap to 100%.
+
 ### Controlled expansion and rollback
 
 Both dev and prod runtime manifests bind enforcement `false`, cohort `''`, lanes
@@ -527,3 +594,48 @@ Local migration verification (loopback Firestore only):
 firebase emulators:exec --only firestore --project demo-held-audio \
   'backend/.venv/bin/python backend/scripts/held_audio_summary_emulator_test.py'
 ```
+
+
+## Recovery-only probe narrowing
+
+`STT_CAP_RECOVERY_COHORT` optionally intersects **effective** dispatch membership
+(including the runtime `rollout_cohorts/stt-cap-dispatch` resolver), enforcement
+and original execution lane. It uses the same `uid:`, `pct:N`, and sole `all`
+token grammar. It cannot admit an owner outside dispatch scope. **Absent** means
+no extra restriction; empty, whitespace or malformed values deny all recovery,
+with one process-local warning that contains neither tokens nor owner identity.
+Listen-side hold admission and backlog display stay unchanged.
+
+The intersection gates manual/upgrade consent creation, the backlog process API,
+redrive owner visits, worker entry, direct recovery wakes, selected manifests and
+each new provider dispatch (including sync pipeline retries). Excluded owners'
+persisted consent and holds are preserved. Staging seal/cleanup and fleet metrics
+continue independently of recovery membership. The one-hot gauge
+`omi_stt_cap_recovery_cohort_narrowed{state="unset|set|malformed"}` reports only
+configuration state; it does not prove which private owner is configured.
+
+For qualification, the deploy lead sets `uid:<test>` through the **private-values
+path**, never a committed manifest, on every API/sync recovery executor. Verify
+all serving revisions and scheduler targets carry the restriction **before**
+activating recovery. Staging is data-isolated (`FIRESTORE_DATABASE_ID=staging`
+in `based-hardware-dev`, in-cluster Redis, and the data-plane fence in
+`database/_client.py`), so on staging the restriction is defence in depth; in
+prod it is the guard that keeps other consented owners asleep. Keep the
+shared dispatch document and listen configuration unchanged, and verify the
+test account is already in the effective dispatch cohort. First qualify staging
+(`backend-staging`, `backend-sync-staging`), then one separately authorized prod
+receipt. Record running release SHA, fresh `state="set"` metric, held-to-published
+receipt, exactly-once usage/replay, source cleanup and normal-load error/backlog
+metrics. Use only the agent-owned test account; no other owners' data reads or
+consent changes. A stale qualification driver that insists the shared dispatch
+cohort itself is probe-only must be updated to attest this intersection before
+execution; do not alter the shared document to satisfy it.
+
+Owner: dazheng / subscription rollout lead. Ramp: staging probe, single prod
+receipt, then **remove the variable** to reach the full existing dispatch cohort
+by **2026-10-23**, after clean capture-integrity/reconciliation, no backlog stalls
+or sync 5xx regression, and reviewed receipts. Emptying it is a fail-closed stop,
+not widening. A missed deadline is a blocker; no automatic expansion. Widening
+can resume other owners' already-consented holds. To stop new recovery, set the narrowing to `pct:0` on every API/sync executor
+while keeping custody redrive on and listen admission unchanged; accepted provider
+calls can still finish.

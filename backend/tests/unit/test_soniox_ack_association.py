@@ -33,9 +33,11 @@ async def barrier(raw, wire):
 
 
 def gate_values(mode):
+    # Read the labeled child directly: REGISTRY.get_sample_value() walks every metric family
+    # in the process per call, which dominated this file's CPU time under load.
+    controls = soniox_wire_metrics.finalize_gate_metrics().controls
     return {
-        outcome: REGISTRY.get_sample_value('omi_soniox_wire_ledger_controls_total', {'mode': mode, 'outcome': outcome})
-        or 0
+        outcome: controls.labels(mode=mode, outcome=outcome)._value.get()
         for outcome in ('sent', 'verified', 'mismatch', 'unverified')
     }
 

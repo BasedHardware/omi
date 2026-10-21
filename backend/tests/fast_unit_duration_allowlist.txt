@@ -491,3 +491,5 @@ tests/unit/test_cap_hold_durability.py::test_scheduler_http_endpoint_awaits_work
 # First test in its file (pays the module import) and evaluates 4000 cohort decisions across three policies;
 # measured 1.03-1.06s CPU on CI shard 2 (PR #22920, three runs), at the 1.0s guard.
 tests/unit/test_batch_live_preview.py::test_all_three_cohorts_share_batch_bucket_and_summary_survives_admission_rollback
+# First import of utils.other.raw_audio/pydub happens in the call phase after main sync 15 (1.2-1.4s CPU on m5; whole file 0.47s on integration before the merge). Owner lane 1 (flakes); remove once that import moves to module scope or the guard measures per-file imports.
+tests/unit/test_summary_delivery.py::test_empty_model_output_retains_debt_and_prior_good_output

@@ -1,10 +1,10 @@
 {
   "caps": {
     "internal_time_to_signal_minutes": 49,
-    "pr_linux_minutes_per_day": 13620,
+    "pr_linux_minutes_per_day": 13660,
     "pr_macos_minutes_per_day": 1600
   },
-  "caps_rationale": "#21237 six-shard rebalance follows run 38168319908: 1727 files, four shard contract walls 710/472/772/651s, and only 17s of Dream file spans on the failing shard. The 720-second per-shard regression budget stays unchanged. Forecast 8 minutes per runner over six runners versus the prior 9 over four adds 1428 Linux minutes/day at the existing 119 runs/day, yielding 13506.2 Linux minutes/day before fork Dart coverage. The 2026-10-13 contributor audit adds four fork Dart PR runs/day at the retained 17-minute p50 (+68), yielding 13574.2 Linux minutes/day. Set the Linux cap to 13620 to cover that forecast. The conservative matrix-multiplied dependency-path forecast and cap remain 49 minutes; actual shards execute in parallel. The macOS cap remains 1600 minutes/day. Nightly Dart is outside the PR cap. Re-seed from terminal executions in the next weekly audit.",
+  "caps_rationale": "#21237 six-shard rebalance follows run 38168319908: 1727 files, four shard contract walls 710/472/772/651s, and only 17s of Dream file spans on the failing shard. The 720-second per-shard regression budget stays unchanged. Forecast 8 minutes per runner over six runners versus the prior 9 over four adds 1428 Linux minutes/day at the existing 119 runs/day, yielding 13506.2 Linux minutes/day before fork Dart coverage. The 2026-10-13 contributor audit adds four fork Dart PR runs/day at the retained 17-minute p50 (+68), yielding 13574.2 Linux minutes/day. Set the Linux cap to 13620 to cover that forecast. The conservative matrix-multiplied dependency-path forecast and cap remain 49 minutes; actual shards execute in parallel. The macOS cap remains 1600 minutes/day. Nightly Dart is outside the PR cap. Re-seed from terminal executions in the next weekly audit. 2026-10-21 plan B B2 (named by David) adds role_images.yml: about one path-filtered PR run a day of the roles (25 min) and edge (12 min) jobs, +37 Linux minutes/day (13637.4 forecast); Linux cap 13660.",
   "jobs": {
     "backend-checks.yml/changes": {
       "budget_p50_minutes": 2,
@@ -1012,7 +1012,7 @@
       "runs_on": "ubuntu-latest"
     },
     "gcp_backend.yml/build-image": {
-      "budget_p50_minutes": 5,
+      "budget_p50_minutes": 6,
       "display_name": "build-image",
       "expected_runs_class": "non-pr",
       "expected_runs_per_day": 1,
@@ -1025,7 +1025,29 @@
         "record_break_glass"
       ],
       "owner": "CI maintainers",
-      "rationale": "2026-10-20 build-only mode: manual dispatch only, outside the PR budget. Builds and pushes backend:<sha7> without deploying so listen-only fixes skip the backend train; estimate one per day, 5-minute placeholder p50.",
+      "rationale": "2026-10-20 build-only mode: manual dispatch only, outside the PR budget. Builds and pushes backend:<sha7> without deploying so listen-only fixes skip the backend train; estimate one per day, 5-minute placeholder p50.. 2026-10-21 plan B B2 adds the service_images dispatch input (role-image opt-in, blank by default); the job stays manual-only with no PR runs, and the one-minute bump records the trigger change",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "gcp_backend.yml/build-role-images": {
+      "budget_p50_minutes": 40,
+      "display_name": "build-role-images",
+      "expected_runs_class": "non-pr",
+      "expected_runs_per_day": 1,
+      "if": "always() && !cancelled() && github.ref == 'refs/heads/main' && github.event.inputs.mode == 'build-only' && needs.validate-production-boundary.result == 'success' && needs.firestore_readiness.result == 'success' && (needs.record_break_glass.result == 'success' || needs.record_break_glass.result == 'skipped')",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [
+        "validate-production-boundary",
+        "firestore_readiness",
+        "record_break_glass"
+      ],
+      "owner": "Backend platform (plan B role images)",
+      "rationale": "2026-10-21 plan B B2 release train: runs only on a manual gcp_backend.yml mode=build-only dispatch from main (no PR runs); builds, probes and publishes the role images plus listen-edge and a fat-image baseline on the private base; 40-minute p50 budget; forecast at build-image's manual rate because every build-only dispatch runs both jobs",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1034,7 +1056,7 @@
       "runs_on": "ubuntu-latest"
     },
     "gcp_backend.yml/deploy": {
-      "budget_p50_minutes": 5,
+      "budget_p50_minutes": 6,
       "display_name": "deploy",
       "expected_runs_class": "non-pr-or-unsampled",
       "expected_runs_per_day": 1.1,
@@ -1047,7 +1069,7 @@
         "record_break_glass"
       ],
       "owner": "CI maintainers",
-      "rationale": "2026-10-20 build-only mode: manual dispatch only, outside the PR budget. Deploy job itself is unchanged; estimate one manual backend train per day. B5 (2026-10-19) adds the break_glass_lock dispatch input.",
+      "rationale": "2026-10-20 build-only mode: manual dispatch only, outside the PR budget. Deploy job itself is unchanged; estimate one manual backend train per day.. 2026-10-21 plan B B2 adds the service_images dispatch input (role-image opt-in, blank by default); the job stays manual-only with no PR runs, and the one-minute bump records the trigger change. B5 (2026-10-19) adds the break_glass_lock dispatch input.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1056,7 +1078,7 @@
       "runs_on": "ubuntu-latest"
     },
     "gcp_backend.yml/firestore_readiness": {
-      "budget_p50_minutes": 5,
+      "budget_p50_minutes": 6,
       "display_name": "firestore_readiness",
       "expected_runs_class": "non-pr-or-unsampled",
       "expected_runs_per_day": 1.1,
@@ -1065,7 +1087,7 @@
       "matrix_size": 1,
       "needs": "validate-production-boundary",
       "owner": "CI maintainers",
-      "rationale": "2026-10-20 build-only mode: manual dispatch only, outside the PR budget. Shared Release Eligibility admission for deploy and build-only; estimate one per day across both. B5 (2026-10-19) adds the break_glass_lock dispatch input.",
+      "rationale": "2026-10-20 build-only mode: manual dispatch only, outside the PR budget. Shared Release Eligibility admission for deploy and build-only; estimate one per day across both.. 2026-10-21 plan B B2 adds the service_images dispatch input (role-image opt-in, blank by default); the job stays manual-only with no PR runs, and the one-minute bump records the trigger change. B5 (2026-10-19) adds the break_glass_lock dispatch input.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1074,7 +1096,7 @@
       "runs_on": "ubuntu-latest"
     },
     "gcp_backend.yml/record_break_glass": {
-      "budget_p50_minutes": 5,
+      "budget_p50_minutes": 6,
       "display_name": "record_break_glass",
       "expected_runs_class": "non-pr-or-unsampled",
       "expected_runs_per_day": 0.1,
@@ -1083,7 +1105,7 @@
       "matrix_size": 1,
       "needs": "firestore_readiness",
       "owner": "CI maintainers",
-      "rationale": "2026-10-20 build-only mode: manual dispatch only, outside the PR budget. Audit job runs only on a break-glass dispatch of either mode; estimate one per ten days. B5 (2026-10-19) adds the break_glass_lock dispatch input.",
+      "rationale": "2026-10-20 build-only mode: manual dispatch only, outside the PR budget. Audit job runs only on a break-glass dispatch of either mode; estimate one per ten days.. 2026-10-21 plan B B2 adds the service_images dispatch input (role-image opt-in, blank by default); the job stays manual-only with no PR runs, and the one-minute bump records the trigger change. B5 (2026-10-19) adds the break_glass_lock dispatch input.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1092,7 +1114,7 @@
       "runs_on": "ubuntu-latest"
     },
     "gcp_backend.yml/repair-traffic": {
-      "budget_p50_minutes": 5,
+      "budget_p50_minutes": 6,
       "display_name": "repair-traffic",
       "expected_runs_class": "non-pr-or-unsampled",
       "expected_runs_per_day": 0.1,
@@ -1101,7 +1123,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "2026-10-20 build-only mode: manual dispatch only, outside the PR budget. Traffic repair is unchanged and rare; estimate one per ten days. B5 (2026-10-19) adds the break_glass_lock dispatch input.",
+      "rationale": "2026-10-20 build-only mode: manual dispatch only, outside the PR budget. Traffic repair is unchanged and rare; estimate one per ten days.. 2026-10-21 plan B B2 adds the service_images dispatch input (role-image opt-in, blank by default); the job stays manual-only with no PR runs, and the one-minute bump records the trigger change. B5 (2026-10-19) adds the break_glass_lock dispatch input.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1110,7 +1132,7 @@
       "runs_on": "ubuntu-latest"
     },
     "gcp_backend.yml/validate-production-boundary": {
-      "budget_p50_minutes": 5,
+      "budget_p50_minutes": 6,
       "display_name": "validate-production-boundary",
       "expected_runs_class": "non-pr-or-unsampled",
       "expected_runs_per_day": 1.1,
@@ -1119,7 +1141,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "2026-10-20 build-only mode: manual dispatch only, outside the PR budget. Runs for deploy and build-only dispatches; estimate one per day across both. B5 (2026-10-19) adds the break_glass_lock dispatch input.",
+      "rationale": "2026-10-20 build-only mode: manual dispatch only, outside the PR budget. Runs for deploy and build-only dispatches; estimate one per day across both.. 2026-10-21 plan B B2 adds the service_images dispatch input (role-image opt-in, blank by default); the job stays manual-only with no PR runs, and the one-minute bump records the trigger change. B5 (2026-10-19) adds the break_glass_lock dispatch input.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1236,7 +1258,7 @@
       "runs_on": "ubuntu-latest"
     },
     "gcp_backend_pusher_auto_deploy.yml/deploy": {
-      "budget_p50_minutes": 5,
+      "budget_p50_minutes": 6,
       "display_name": "deploy",
       "expected_runs_class": "non-pr-or-unsampled",
       "expected_runs_per_day": 0,
@@ -1245,7 +1267,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder. 2026-10-21 plan B B2: pusher/Dockerfile now copies backend/omi_logging.py, so that file joins the qualification trigger closure; main-push only, the one-minute bump records the trigger change",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -2415,6 +2437,42 @@
       },
       "runs_on": "ubuntu-latest"
     },
+    "role_images.yml/edge": {
+      "budget_p50_minutes": 12,
+      "display_name": "listen-edge image",
+      "expected_runs_class": "unsampled-pr-sentinel",
+      "expected_runs_per_day": 1,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "Backend platform (plan B role images)",
+      "rationale": "2026-10-21 plan B B2 / plan D D2: release build of the listen-edge Rust image (cargo build --release, thin LTO) plus an HTTP health, identity and drain probe; same path filter as the roles job, about one PR run a day; 12-minute p50 budget",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "role_images.yml/roles": {
+      "budget_p50_minutes": 25,
+      "display_name": "python role images",
+      "expected_runs_class": "unsampled-pr-sentinel",
+      "expected_runs_per_day": 1,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "Backend platform (plan B role images)",
+      "rationale": "2026-10-21 plan B B2, workflow change named by David 2026-10-21: builds the five backend/Dockerfile.roles targets sequentially on one runner (the four app targets share every layer, so this is about two cold builds: the runtime venv and the pusher venv), runs the offline dependency probe and a timed cold-start import per image. PR runs only when an image-definition input changes (Dockerfile.roles, locks, registry, contract scripts), about one a day; estimate 15-20 min cold, 25-minute p50 budget",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
     "runtime_image_contracts.yml/image-smoke": {
       "budget_p50_minutes": 5,
       "display_name": "image-smoke",
@@ -3570,7 +3628,7 @@
     "gcp_backend.yml": {
       "name": "Deploy Backend to Cloud RUN",
       "owner": "CI maintainers",
-      "rationale": "Manual-only backend deploy workflow. 2026-10-20 adds mode=build-only (image build and push, no deploy) alongside deploy and repair-traffic-only; no automatic trigger. B5 (2026-10-19) adds the break_glass_lock dispatch input.",
+      "rationale": "Manual-only backend deploy workflow. 2026-10-20 adds mode=build-only (image build and push, no deploy) alongside deploy and repair-traffic-only; no automatic trigger.. 2026-10-21 plan B B2 (named by David 2026-10-21): service_images input for mode=deploy role-image opt-in, and build-only also publishes the role images (build-role-images job). B5 (2026-10-19) adds the break_glass_lock dispatch input.",
       "triggers": {
         "workflow_dispatch": {
           "inputs": {
@@ -3635,6 +3693,11 @@
             "release_version": {
               "default": "",
               "description": "Release version (optional)",
+              "required": "false"
+            },
+            "service_images": {
+              "default": "",
+              "description": "mode=deploy only: service=<role image>@sha256 pairs from a build-only run of this release_sha (blank = every service keeps its current image)",
               "required": "false"
             },
             "skip_eligibility_proof": {
@@ -3842,7 +3905,7 @@
     "gcp_backend_pusher_auto_deploy.yml": {
       "name": "Auto Deploy Backend Pusher to GKE (Development)",
       "owner": "CI maintainers",
-      "rationale": "Initial workflow inventory",
+      "rationale": "Initial workflow inventory. 2026-10-21 plan B B2: backend/omi_logging.py added to the pusher source-closure paths",
       "triggers": {
         "push": {
           "branches": [
@@ -3857,6 +3920,7 @@
             "backend/testing/parity_pack_v0/**",
             "backend/utils/**",
             "backend/pusher/**",
+            "backend/omi_logging.py",
             "backend/charts/pusher/**",
             ".dockerignore",
             "backend/scripts/verify_pusher_source_closure.py",
@@ -5039,6 +5103,38 @@
             }
           }
         }
+      }
+    },
+    "role_images.yml": {
+      "name": "Role Images",
+      "owner": "Backend platform (plan B role images)",
+      "rationale": "2026-10-21 plan B B2, named by David 2026-10-21: build-and-probe every role image on PRs that change an image-definition input and on every backend merge to main; never authenticates or pushes",
+      "triggers": {
+        "pull_request": {
+          "paths": [
+            "backend/Dockerfile.roles",
+            "backend/pylock.runtime.toml",
+            "backend/pusher/pylock.toml",
+            "backend/runtime_images.json",
+            "backend/scripts/runtime_image_contracts.py",
+            "backend/scripts/role_images.py",
+            "backend/edge/**",
+            "backend/utils/stt/assets/silero_vad.onnx",
+            ".dockerignore",
+            ".github/workflows/role_images.yml"
+          ]
+        },
+        "push": {
+          "branches": [
+            "main"
+          ],
+          "paths": [
+            "backend/**",
+            ".dockerignore",
+            ".github/workflows/role_images.yml"
+          ]
+        },
+        "workflow_dispatch": ""
       }
     },
     "runtime_image_contracts.yml": {

@@ -21,6 +21,7 @@ CAPTURE_KINDS = ('lost', 'byte_mismatch', 'frame_mismatch', 'ack_without_authori
 CHOICE_OUTCOMES = ('ok', 'stale_period_409', 'no_capability', 'intent_only')
 RECOVERY_RESULTS = ('attempt', 'completed')
 ERASURE_OUTCOMES = ('failure', 'post_delete_publication')
+PUBLICATION_RETRY_OUTCOMES = ('retried_ok', 'exhausted', 'staged_unverified', 'source_orphaned')
 CHOICE_METHODS = ('get', 'put')
 
 CAPTURE = Counter(
@@ -62,6 +63,14 @@ UNDATED_PENDING = Gauge(
     'omi_held_content_fleet_snapshot_timestamp_seconds is newest; do not sum() or max() this gauge',
 )
 RECOVERY = Counter('omi_held_content_recovery', 'Held recovery attempts and completions', ['result'])
+PACING_OUTCOMES = ('granted', 'deferred', 'refused')
+PACING = Counter('omi_held_recovery_pacing_intents', 'Recovery intent budget decisions', ['outcome'])
+PACING_AUDIO = Counter('omi_held_recovery_pacing_audio_seconds', 'Audio tokens requested by decision', ['outcome'])
+PACING_AGE = Histogram(
+    'omi_held_recovery_pacing_deferred_age_seconds',
+    'Age since first durable pacing deferral, sampled when a held item is deferred again; not a fleet maximum',
+    buckets=(0, 60, 300, 1800, 3600, 21600, 86400, 604800, 2592000),
+)
 BACKLOG = Gauge(
     'omi_held_content_backlog_items',
     'Processing-backlog items in the redrive fleet snapshot. Read the replica whose '
@@ -73,6 +82,15 @@ FLEET_SNAPSHOT_TIMESTAMP = Gauge(
     'Select sibling gauges from the replica where this equals the max',
 )
 ERASURE = Counter('omi_held_content_erasure', 'Held erasure failures and post-delete publication', ['outcome'])
+PUBLICATION_RETRY = Counter(
+    'omi_held_content_publication_retry',
+    'Live cap publication attempts that retried a transient Firestore transaction. '
+    'retried_ok committed on a later fresh transaction; exhausted spent the bounded budget; '
+    'staged_unverified means the staging write landed and a later read failed; '
+    'source_orphaned means the flush failed closed after uploading a fragment no row names. '
+    'Labels are a closed set and never identify a person',
+    ['outcome'],
+)
 COHORT_SOURCE = Gauge('omi_held_content_cohort_source', 'Active held-content cohort source', ['source'])
 COHORT_PERCENT = Gauge('omi_held_content_cohort_percent', 'Active held-content cohort percent; 0 denies by percent')
 COHORT_REFRESH_FAILURES = Counter(
@@ -89,8 +107,13 @@ for _method in CHOICE_METHODS:
     CHOICE_LATENCY.labels(method=_method)
 for _result in RECOVERY_RESULTS:
     RECOVERY.labels(result=_result)
+for _outcome in PACING_OUTCOMES:
+    PACING.labels(outcome=_outcome)
+    PACING_AUDIO.labels(outcome=_outcome)
 for _outcome in ERASURE_OUTCOMES:
     ERASURE.labels(outcome=_outcome)
+for _outcome in PUBLICATION_RETRY_OUTCOMES:
+    PUBLICATION_RETRY.labels(outcome=_outcome)
 for _source in ('doc', 'env', 'none'):
     COHORT_SOURCE.labels(source=_source)
 for _reason in ('read', 'schedule'):
@@ -133,9 +156,26 @@ def record_recovery(result: str) -> None:
         _inc(RECOVERY, result=result)
 
 
+def record_pacing(outcome: str, seconds: float, deferred_age: float = 0) -> None:
+    if outcome not in PACING_OUTCOMES:
+        return
+    try:
+        PACING.labels(outcome=outcome).inc()
+        PACING_AUDIO.labels(outcome=outcome).inc(seconds)
+        if outcome != 'granted':
+            PACING_AGE.observe(max(0, deferred_age))
+    except Exception:
+        logger.warning('event=held_content_metric outcome=dropped')
+
+
 def record_erasure(outcome: str) -> None:
     if outcome in ERASURE_OUTCOMES:
         _inc(ERASURE, outcome=outcome)
+
+
+def record_publication_retry(outcome: str) -> None:
+    if outcome in PUBLICATION_RETRY_OUTCOMES:
+        _inc(PUBLICATION_RETRY, outcome=outcome)
 
 
 def _gauge_number(value, *, whole: bool) -> float:

@@ -4,8 +4,10 @@
 #   docker build -f backend/Dockerfile.roles --target api \
 #     --build-arg OMI_RELEASE_SHA="$(git rev-parse HEAD)" .
 #
-# Build-only until B2 moves a service's deploy onto its role target. Today every
-# service still ships backend/Dockerfile or backend/pusher/Dockerfile; the
+# B2: .github/workflows/role_images.yml builds and probes every target; the
+# gcp_backend.yml build-only train publishes them. Services still ship
+# backend/Dockerfile or backend/pusher/Dockerfile until a deploy opts in through
+# service_images (backend/docs/runbooks/role-image-cutover.md). The
 # role -> image -> service map lives in backend/runtime_images.json ("roles").
 #
 # Layer sharing: api, workers, realtime and gateway all build FROM `app`, so
@@ -123,6 +125,7 @@ COPY backend/services/ ./services/
 COPY backend/testing/parity_pack_v0/ ./testing/parity_pack_v0/
 COPY backend/utils/ ./utils/
 COPY backend/pusher/ ./pusher/
+COPY backend/omi_logging.py ./omi_logging.py
 
 EXPOSE 8080
 USER omi
