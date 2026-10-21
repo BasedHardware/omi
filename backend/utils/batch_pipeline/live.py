@@ -16,6 +16,7 @@ import time
 
 from config.policy import resolve_batch_policy
 from database.batch_pipeline_policy import load_job_policy
+from database.batch_ramp import ramp_admission_policy
 from config.batch_pipeline import Priority, RecordOwnerContention, record_capture_eligible
 from database.conversations import claim_record_lane_owner
 from database.batch_pipeline_intake import admit
@@ -45,9 +46,12 @@ def reserve_recording(uid: str, conversation: dict) -> str | None:
     owner = conversation.get('record_lane_owner')
     if owner:
         return owner
+    policy = resolve_batch_policy(uid)
     if conversation.get('status') not in {'in_progress', 'processing'} or not record_capture_eligible(
-        uid, conversation
+        uid, conversation, policy=policy
     ):
+        return None
+    if not ramp_admission_policy(uid, policy).live_record_enabled:
         return None
     revision = claim_record_lane_owner(uid, conversation['id'], OWNER, conversation.get('updated_at'))
     if revision is None:

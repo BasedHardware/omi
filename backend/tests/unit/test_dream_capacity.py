@@ -83,6 +83,35 @@ async def test_backend_discovery_publishes_shared_evidence_without_gateway(monke
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize('override', [{OLD: 'inactive'}, {OLD: 'inactive', NEW: 'inactive'}])
+async def test_dream_admission_uses_raw_evidence_despite_desktop_override(monkeypatch, override):
+    monkeypatch.setenv('OMI_VERTEX_RESERVATION_STATES', json.dumps(override))
+    monkeypatch.delenv('OMI_VERTEX_PT_MODEL', raising=False)
+    redis = fakeredis.aioredis.FakeRedis(decode_responses=True)
+    state = ReservationState(redis)
+    monkeypatch.setattr(dream_capacity, 'reservation_state', state)
+    seconds, micros = await redis.time()
+    now = seconds + micros / 1_000_000
+    await redis.set(
+        state.key(),
+        json.dumps(
+            {
+                'evidence': {NEW: {'success_at': now - 1}},
+                'leases': {OLD: now + 600, NEW: now + 600},
+            }
+        ),
+    )
+    try:
+        # available_model passes apply_overrides=False, including when an
+        # operator explicitly overrides the target as well as retired 2.5.
+        assert await dream_capacity.available_model() == NEW
+        assert not state._probe_tasks
+    finally:
+        await state.aclose()
+        await redis.aclose()
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     'status,failure,lane,cools',
     [

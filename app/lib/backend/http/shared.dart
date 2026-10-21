@@ -13,6 +13,7 @@ import 'package:omi/backend/http/http_pool_manager.dart';
 import 'package:omi/backend/http/streaming_error.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/env/env.dart';
+import 'package:omi/utils/app_channel.dart';
 import 'package:omi/utils/jwt_expiry.dart';
 import 'package:omi/services/account_cutover/account_cutover_runtime.dart';
 import 'package:omi/services/auth/auth_token_result.dart';
@@ -189,6 +190,7 @@ Future<Map<String, String>> buildHeaders({
     'X-App-Version': PlatformManager.instance.appVersion,
     'X-Omi-Plan-Identity': '1',
     'X-App-Build': PlatformManager.instance.appBuild,
+    appChannelHeader: currentAppChannel().wire,
     ...fromHeaders,
   };
 

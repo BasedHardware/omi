@@ -5,6 +5,10 @@ data_plane_project: based-hardware
 overlay:
   llm_gateway:
     env:
+      # Retirement is an operator decision; expiring evidence can revive old ACTIVE state.
+      OMI_VERTEX_RESERVATION_STATES:
+        value: '{"gemini-2.5-flash":"inactive"}'
+        category: ops_kill
       PROACTIVITY_REDIS_HOST:
         config_map:
           name: prod-omi-backend-config

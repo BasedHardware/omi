@@ -11,13 +11,6 @@ from utils.episodes import incremental, live
 from utils.episodes import service  # noqa: F401 -- warms live's deferred import outside the timed call
 from utils.episodes.live import MomentTracker
 
-
-@pytest.fixture(autouse=True)
-def _episodes_cohort_admits_everyone(monkeypatch):
-    # The code default is 0% (allowlist only); these tests exercise admitted users.
-    monkeypatch.setenv('EPISODES_PERCENT', '100')
-
-
 NOW = datetime(2026, 10, 20, 17, 0, tzinfo=timezone.utc)
 
 
@@ -151,7 +144,7 @@ def test_tracker_evicts_stale_buffers():
 def test_on_realtime_segments_schedules_a_background_update(monkeypatch):
     scheduled = []
     monkeypatch.delenv(config.EPISODES_ENABLED_ENV, raising=False)
-    monkeypatch.setenv(config.EPISODES_PERCENT_ENV, "100")
+    monkeypatch.delenv(config.EPISODES_PERCENT_ENV, raising=False)
     tracker = MomentTracker()
     monkeypatch.setattr(live, 'tracker', tracker)
 

@@ -171,7 +171,7 @@ async def test_intake_freezes_the_resolved_stt_language(monkeypatch, user_langua
 
     monkeypatch.setattr(intake, 'decode_units', decode_units)
     monkeypatch.setattr(intake, 'artifacts_for', lambda store_: SimpleNamespace(stage_audio=stage_audio))
-    policy = SimpleNamespace(live_record_enabled=False)
+    policy = SimpleNamespace(batch_enabled=True, live_record_enabled=False)
     try:
         await intake.accept_upload(
             uid='synthetic-owner',

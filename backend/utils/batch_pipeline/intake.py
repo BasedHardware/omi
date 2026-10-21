@@ -337,6 +337,10 @@ async def accept_upload(
             # Existing legacy ownership includes capped/retryable/missing-Redis
             # recovery. Its original claimant remains the sole authority.
             return None
+        if not policy.batch_enabled:
+            # The owner-load filter applies only after durable dispatch
+            # ownership checks. Accepted batch receipts above always drain.
+            return None
         if byok_enabled:
             return JSONResponse(
                 status_code=503,

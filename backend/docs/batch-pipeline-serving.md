@@ -1,10 +1,47 @@
 # Batch intake and serving operations
 
-All switches default off. Declaring settings or deploying an empty chart does
+Global batch admission defaults off; quality and isolation kill switches can
+ship on. Declaring settings or deploying an empty chart does
 not select an upload; the lead explicitly enables the global admission flag and
 allowlist/percentage after qualification. Agent A does not deploy or apply indexes.
 
 ## Host settings and rollback
+
+### Partial-ramp owner isolation
+
+`BATCH_PIPELINE_RAMP_EXCLUDE_HEAVY_OWNERS` ships on; only `off` disables
+it. At a new sync upload or recording reservation with `0 < percent < 100`,
+`config/policy/ramp.py` excludes an owner with more than 30 open items or
+more than 21,600 seconds of waiting audio. Explicit canaries follow the same
+rule. Open items are recent (six-hour) unfinished, non-quarantined batch units
+plus waiting `sync_backfill_pending` jobs and the sequencer's active legacy
+payload, deduplicated by job ID across the dispatch transition. Audio includes their known durations
+and the incoming upload's declared span. This catches both run 24's one 20-hour
+upload and run 25's 42 open units before they enter a typical-user ramp.
+Missing or invalid incoming WAL bounds are unknown audio, never zero. New
+desktop uploads without declared bounds therefore stay on legacy during a
+partial ramp. Existing batch receipt/record owners continue draining.
+
+The database reader selects metadata only, at most 512 rows per query source
+plus one active-owner metadata document. A
+saturated read, unknown waiting duration or read error keeps new work on legacy
+and emits `omi_batch_ramp_heavy_owner_excluded_total{reason}`; fixed reasons are
+`open_backlog`, `recording_hours`, `load_unavailable`. The counter counts decisions,
+not distinct owners. It has no account label. Existing batch content receipts
+and native recording owners keep their original dispatcher and continue draining;
+the exclusion must never start a legacy twin. Full rollout (`percent=100`) and
+percent-zero explicit qualification retain their existing semantics.
+
+Excluded owners continue receiving the legacy pipeline, with its existing
+sequencer, capacity and recovery gates. The lead runs their drain as a separate
+heavy-owner qualification window: report the excluded count/reasons, open count
+and audio volume; keep the existing hard cap of 60; wait for backlog to fall;
+then run the unchanged fleet gate with the retained accepted-work census and
+by-reason failure checks. No automatic widening or new redrive is granted here.
+Before a 100% step, attach that heavy-owner gate receipt separately from the
+typical-cohort receipt. Roll back new-admission isolation with `=off`; accepted
+work retains its saved policy. The workspace preflight vendors the pure source
+and verifies its bytes against the serving release before applying exclusion.
 
 On the selected always-CPU backend host, `BATCH_PIPELINE_SERVING_ENABLED=true` starts a supervised
 20-second reconciliation loop. It recovers leases/retries, drains ordered log
