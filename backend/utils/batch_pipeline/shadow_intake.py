@@ -44,6 +44,12 @@ def copy_paths(paths):
         raise
 
 
+def repository_for_stage():
+    # Client construction may resolve credentials/transports. Keep it on the
+    # same bounded database executor as the following admission transaction.
+    return ShadowStore(FirestoreStore(f'batch_pipeline_{current_stage()}'))
+
+
 async def offer_upload(
     *, uid, content_id, paths, lane, age, conversation_id, source, device_id, byok, policy, should_lock=False
 ):
@@ -53,8 +59,7 @@ async def offer_upload(
     try:
         if content_id is None:
             content_id = await run_blocking(sync_executor, compute_sync_content_id, uid, paths)
-        store = FirestoreStore(f'batch_pipeline_{current_stage()}')
-        repository = ShadowStore(store)
+        repository = await run_blocking(db_executor, repository_for_stage)
         class_name = ('fresh', 'recent', 'deep')[int(priority_for(lane, age))]
         reserving = start_background_task(
             run_blocking(db_executor, repository.reserve, uid, content_id + ':0', class_name),
