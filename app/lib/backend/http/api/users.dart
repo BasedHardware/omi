@@ -585,6 +585,20 @@ Future<bool> setPreferredSummarizationAppServer(String appId) async {
   return data.status == 'ok';
 }
 
+/// Clears the server preferred summary template, so automatic processing uses Omi's own summary.
+Future<bool> clearPreferredSummarizationAppServer() async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/users/preferences/app',
+    headers: {},
+    method: 'DELETE',
+    body: '',
+  );
+  if (response == null) return false;
+  if (response.statusCode != 200) return false;
+  final data = wire.GeneratedUserStatusResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+  return data.status == 'ok';
+}
+
 Future<String?> getUsageDeviceTimeZone() async {
   try {
     return (await FlutterTimezone.getLocalTimezone()).identifier;

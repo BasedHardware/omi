@@ -1140,7 +1140,10 @@ def coordinator():
         sync_v2_harness.TestAsyncCoordinatorBehavioral._cleanup(stubs['saved_modules'])
 
 
-def _drive(module, stubs, chunks, monkeypatch, *, stamp, s1_claims=None):
+_DEFAULT_S1_CLAIMS = object()
+
+
+def _drive(module, stubs, chunks, monkeypatch, *, stamp, s1_claims=_DEFAULT_S1_CLAIMS):
     pipeline = stubs['pipeline']
     paths = {f"/tmp/job-lineage/seg_{chunk['started_at'].timestamp():.0f}.wav": chunk for chunk in chunks}
     wav_path = '/tmp/job-lineage/w.wav'
@@ -1182,6 +1185,18 @@ def _drive(module, stubs, chunks, monkeypatch, *, stamp, s1_claims=None):
         '_candidate_rows',
         lambda *_args, **_kwargs: candidates,
     )
+    if s1_claims is _DEFAULT_S1_CLAIMS:
+        s1_claims = {
+            'f.opus': {
+                'capture_root': '12345678-1234-4234-8234-123456789abc',
+                'clock_epoch': 0,
+                'source_frame_start': 0,
+                'frame_count': 100,
+                'rate_hz': 16000,
+                'channel': 'mono',
+                'codec': 'opus',
+            }
+        }
     if s1_claims:
         mapping = {'claim': next(iter(s1_claims.values())), 'offsets': [0, 16000], 'incomplete': False}
 
@@ -1204,7 +1219,7 @@ def _drive(module, stubs, chunks, monkeypatch, *, stamp, s1_claims=None):
 async def test_coordinator_forwards_each_segment_its_generation(coordinator, monkeypatch, flag):
     module, stubs = coordinator
     monkeypatch.setenv(sync_lineage.SYNC_LINEAGE_RESOLVE_ENV, flag)
-    monkeypatch.setenv('SYNC_LINEAGE_S1_REQUIRED', 'off')
+
     chunks = upload_straddling_next_two()
     captured, kwargs = _drive(module, stubs, chunks, monkeypatch, stamp=gen_id(L))
     await module._run_full_pipeline_background_async(
@@ -1217,7 +1232,7 @@ async def test_coordinator_forwards_each_segment_its_generation(coordinator, mon
 @pytest.mark.asyncio
 async def test_coordinator_lineage_exception_keeps_stamp_and_processes_siblings(coordinator, monkeypatch, caplog):
     module, stubs = coordinator
-    monkeypatch.setenv('SYNC_LINEAGE_S1_REQUIRED', 'off')
+
     chunks = upload_straddling_next_two()
     captured, kwargs = _drive(module, stubs, chunks, monkeypatch, stamp='STAMP')
 
@@ -1243,7 +1258,7 @@ async def test_coordinator_lineage_exception_keeps_stamp_and_processes_siblings(
 async def test_retry_after_append_before_enrichment_reprocesses_the_landed_row(coordinator, monkeypatch, flag):
     module, stubs = coordinator
     monkeypatch.setenv(sync_lineage.SYNC_LINEAGE_RESOLVE_ENV, flag)
-    monkeypatch.setenv('SYNC_LINEAGE_S1_REQUIRED', 'off')
+
     chunks = upload_straddling_next_two()[:1]
     captured, kwargs = _drive(module, stubs, chunks, monkeypatch, stamp=gen_id(L))
     pipeline = stubs['pipeline']

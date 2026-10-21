@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -46,6 +48,23 @@ void main() {
     final after = await _fetch(PlanType.unlimited);
 
     expect(after.isEnabled, isFalse);
+    expect(after.sendRawAudioToOmi, isTrue);
+    expect(SharedPreferencesUtil().paywallOnDeviceSttConfigId, isEmpty);
+  });
+
+  test('a paid plan releases an on-device pin saved before parser fields joined the identity', () async {
+    final config = FreemiumTranscriptionService().createOnDeviceSttConfig();
+    await SharedPreferencesUtil().saveCustomSttConfig(config);
+    final legacyInput = config.toJson()
+      ..remove('provider')
+      ..remove('audio_field_name')
+      ..remove('schema');
+    final hash = jsonEncode(legacyInput).hashCode.abs().toRadixString(16).padLeft(8, '0').substring(0, 8);
+    SharedPreferencesUtil().paywallOnDeviceSttConfigId = '${config.provider.name}:$hash';
+
+    final after = await _fetch(PlanType.unlimited);
+
+    expect(after.provider, SttProvider.omi);
     expect(after.sendRawAudioToOmi, isTrue);
     expect(SharedPreferencesUtil().paywallOnDeviceSttConfigId, isEmpty);
   });

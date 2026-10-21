@@ -5,6 +5,7 @@ separate from the Redis client projection, and can repair a lost Redis reply.
 """
 
 from datetime import datetime, timezone
+import logging
 from typing import Any
 
 from google.cloud import firestore
@@ -15,6 +16,9 @@ from database.fsr_read_cache import writing
 from database.batch_pipeline_store import FirestoreStore
 from database.batch_pipeline_privacy import assert_batch_write_allowed
 from database.sync_ledger import (
+    BATCH_PARTIAL_STATUS,
+    batch_projection_ledger_owner_matches,
+    complete_batch_partial_in_transaction,
     sync_content_ledger_ref,
     is_valid_completed_sync_content_result,
 )
@@ -27,6 +31,8 @@ from database.batch_pipeline_projection_protocol import (
     normalized_binding,
 )
 from database.batch_pipeline_projection_session import ProjectionSession as ProjectionSession
+
+logger = logging.getLogger(__name__)
 
 
 class ProjectionStore:
@@ -223,8 +229,14 @@ class ProjectionStore:
 
         return self.run(commit, policy=policy)
 
-    def prepare_accounting(self, binding: ProjectionBinding, now: float) -> dict | None:
-        """Resolve usage attribution outside the retryable completion transaction."""
+    def prepare_accounting(self, binding: ProjectionBinding, now: float, *, held: bool = False) -> dict | None:
+        """Resolve usage attribution outside the retryable completion transaction.
+
+        ``held`` accounts a partial: quarantined siblings without a receipt are
+        skipped (their eligibility is rechecked in the partial transaction). A
+        partial ledger already charged its projected speech, so only the
+        difference is charged again.
+        """
         import math
 
         seconds = 0.0
@@ -235,6 +247,10 @@ class ProjectionStore:
                 continue
             receipt = entry.get('projection') or {}
             if receipt.get('state') != 'ready':
+                # Only a unit nothing automatic will change; an open intent or a
+                # recoverable unit means this upload is not a partial yet.
+                if held and not entry and held_without_recovery(self.ref('jobs', sid).get().to_dict() or {}):
+                    continue
                 return None
             value = receipt.get('speech_seconds')
             if not isinstance(value, (int, float)) or not math.isfinite(value) or value < 0:
@@ -243,18 +259,35 @@ class ProjectionStore:
             job = self.ref('jobs', sid).get().to_dict() or {}
             if job.get('priority') == 0:
                 source = 'sync_fresh'
+        ledger = sync_content_ledger_ref(self.client, binding.owner_id, binding.content_id).get().to_dict() or {}
+        if held and not batch_projection_ledger_owner_matches(
+            ledger, binding.job_id, binding.run_token, binding.run_epoch
+        ):
+            # Charge nothing for a partial that cannot commit.
+            return None
+        charged = ledger.get('usage_committed_seconds', 0.0) if ledger.get('status') == BATCH_PARTIAL_STATUS else 0.0
+        steps, step_times = charge_chain(ledger) if ledger.get('status') == BATCH_PARTIAL_STATUS else ([0.0], [])
         if binding.native_record:
-            return {'seconds': seconds, 'source': 'realtime', 'updates': {}, 'hour': '', 'completed': True}
+            return {
+                'seconds': seconds,
+                'source': 'realtime',
+                'updates': {},
+                'hour': '',
+                'completed': True,
+                'charged': charged,
+                'steps': steps,
+                'step_times': step_times,
+            }
         stamp = datetime.fromtimestamp(now, timezone.utc)
         updates = {}
-        ledger = sync_content_ledger_ref(self.client, binding.owner_id, binding.content_id).get().to_dict() or {}
-        if int(seconds) > 0 and ledger.get('status') != 'completed':
+        if int(seconds) - int(charged) > 0 and ledger.get('status') != 'completed':
             from database.llm_usage import resolve_usage_plan_id
             from database.hourly_usage_updates import prepare_hourly_usage_updates
 
+            delta = int(seconds) - int(charged)
             updates = prepare_hourly_usage_updates(
                 stamp,
-                {'transcription_seconds': int(seconds), 'speech_seconds': int(seconds)},
+                {'transcription_seconds': delta, 'speech_seconds': delta},
                 resolve_usage_plan_id(binding.owner_id, firestore_client=self.client),
                 usage_metadata={'funding': 'omi', 'provider': 'parakeet', 'source': 'sync_v2'},
             )
@@ -264,6 +297,9 @@ class ProjectionStore:
             'updates': updates,
             'hour': f'{stamp.year}-{stamp.month:02d}-{stamp.day:02d}-{stamp.hour:02d}',
             'completed': ledger.get('status') == 'completed',
+            'charged': charged,
+            'steps': steps,
+            'step_times': step_times,
         }
 
     def complete(
@@ -301,35 +337,7 @@ class ProjectionStore:
                     return None, False, 0
                 parts = entry.get('projection_parts')
                 receipts.extend(parts.values() if parts else [receipt])
-            # Earlier receipt IDs can have become bridge donors. Follow the
-            # same server redirects, retaining only visible canonical IDs.
-            mapped = []
-            for receipt in receipts:
-                cid = receipt.get('conversation_id')
-                original_id = cid
-                seen = set()
-                while cid:
-                    if cid in seen or len(seen) >= 128:
-                        raise ProjectionBlocked('projection redirect cycle or bound exceeded')
-                    seen.add(cid)
-                    row = (
-                        self.client.collection('users')
-                        .document(binding.owner_id)
-                        .collection('conversations')
-                        .document(cid)
-                        .get(transaction=transaction)
-                        .to_dict()
-                        or {}
-                    )
-                    if not row or (row.get('deleted') and not row.get('sync_merged_into')):
-                        raise ProjectionBlocked('projected conversation deleted')
-                    if not row.get('sync_merged_into'):
-                        break
-                    cid = row['sync_merged_into']
-                if cid:
-                    mapped.append((cid, receipt['created'] and cid == original_id))
-            new = sorted({cid for cid, created in mapped if created})
-            updated = sorted({cid for cid, created in mapped if not created})
+            new, updated = self._visible(transaction, binding, receipts)
             superseded_count = sum(receipt.get('disposition') == 'superseded' for receipt in receipts)
             # Re-read canonical deletion fences before publishing any visible IDs.
             session.guard(transaction, (*new, *updated))
@@ -364,18 +372,7 @@ class ProjectionStore:
             )
             if seconds != accounting['seconds']:
                 raise ProjectionBlocked('speech accounting changed during completion')
-            if session.ledger.get('usage_committed_at') is None:
-                if accounting['updates']:
-                    usage_ref = (
-                        self.client.collection('users')
-                        .document(binding.owner_id)
-                        .collection('hourly_usage')
-                        .document(accounting['hour'])
-                    )
-                    transaction.set(usage_ref, accounting['updates'], merge=True)
-                transaction.update(
-                    session.ledger_ref, {'usage_committed_at': datetime.fromtimestamp(now, timezone.utc)}
-                )
+            self._commit_usage(transaction, session.ledger_ref, session.ledger, binding, accounting, seconds, now)
             from database.sync_ledger import complete_batch_projection_in_transaction
 
             complete_batch_projection_in_transaction(
@@ -401,3 +398,224 @@ class ProjectionStore:
         if changed:
             record_correctness('projection_completed', seconds=seconds)
         return result
+
+    def _visible(self, transaction, binding: ProjectionBinding, receipts) -> tuple[list[str], list[str]]:
+        """Earlier receipt IDs can have become bridge donors. Follow the same
+        server redirects, retaining only visible canonical IDs."""
+        mapped = []
+        for receipt in receipts:
+            cid = receipt.get('conversation_id')
+            original_id = cid
+            seen = set()
+            while cid:
+                if cid in seen or len(seen) >= 128:
+                    raise ProjectionBlocked('projection redirect cycle or bound exceeded')
+                seen.add(cid)
+                row = (
+                    self.client.collection('users')
+                    .document(binding.owner_id)
+                    .collection('conversations')
+                    .document(cid)
+                    .get(transaction=transaction)
+                    .to_dict()
+                    or {}
+                )
+                if not row or (row.get('deleted') and not row.get('sync_merged_into')):
+                    raise ProjectionBlocked('projected conversation deleted')
+                if not row.get('sync_merged_into'):
+                    break
+                cid = row['sync_merged_into']
+            if cid:
+                mapped.append((cid, receipt['created'] and cid == original_id))
+        new = sorted({cid for cid, created in mapped if created})
+        updated = sorted({cid for cid, created in mapped if not created})
+        return new, updated
+
+    def _commit_usage(self, transaction, ledger_ref, ledger, binding, accounting, seconds, now) -> None:
+        """Charge projected speech once; a partial's later completion charges only the rest."""
+        partial = ledger.get('status') == BATCH_PARTIAL_STATUS
+        charged = ledger.get('usage_committed_seconds', 0.0) if partial else 0.0
+        if charged != accounting.get('charged', 0.0):
+            raise ProjectionBlocked('usage accounting changed during completion')
+        if ledger.get('usage_committed_at') is not None and not partial:
+            return
+        if accounting['updates']:
+            usage_ref = (
+                self.client.collection('users')
+                .document(binding.owner_id)
+                .collection('hourly_usage')
+                .document(accounting['hour'])
+            )
+            transaction.set(usage_ref, accounting['updates'], merge=True)
+        # Every charge boundary and when it committed, so fair use can re-issue
+        # each recent step's once-key: a write lost after any earlier commit
+        # still lands on a later attempt while that key is live.
+        steps, times = extend_chain(*(charge_chain(ledger) if partial else ([0.0], [])), seconds, now)
+        transaction.update(
+            ledger_ref,
+            {
+                'usage_committed_at': datetime.fromtimestamp(now, timezone.utc),
+                'usage_committed_seconds': seconds,
+                'usage_steps': steps,
+                'usage_step_times': times,
+            },
+        )
+
+    def complete_partial(
+        self, binding: ProjectionBinding, now: float, accounting: dict
+    ) -> tuple[dict, list[float]] | None:
+        """Terminal partial once every unprojected unit is held with no recovery path left.
+
+        Projected siblings are published under the completion's redirect and
+        privacy fences; held units keep their state, intents and retained audio,
+        so a reviewed redrive can still recover them and the ordinary completion
+        then upgrades the row. Usage covers projected speech only. Returns the
+        result and the durable charge step (previous, committed seconds), the
+        same on a replay, or None while any sibling can still change or nothing
+        is held.
+        """
+
+        @firestore.transactional
+        def commit(transaction):
+            ledger_ref = sync_content_ledger_ref(self.client, binding.owner_id, binding.content_id)
+            ledger = ledger_ref.get(transaction=transaction).to_dict() or {}
+            if ledger.get('status') == 'completed':
+                return None, False
+            if (
+                ledger.get('dispatch_protocol') != 'batch_v1'
+                or ledger.get('batch_pipeline')
+                != {
+                    'protocol_version': 1,
+                    'namespace': self.store.namespace,
+                    'segment_ids': list(binding.segment_ids),
+                }
+                or not batch_projection_ledger_owner_matches(
+                    ledger, binding.job_id, binding.run_token, binding.run_epoch
+                )
+            ):
+                raise ProjectionBlocked('content ledger owner lost')
+            receipts, seconds, held = [], 0.0, 0
+            erased_count = terminal_empty_count = 0
+            for sibling in binding.segment_ids:
+                job = self.ref('jobs', sibling).get(transaction=transaction).to_dict() or {}
+                entry = self.ref('results', sibling).get(transaction=transaction).to_dict() or {}
+                if entry.get('projection_state') == 'erased':
+                    if entry.get('owner_key') != owner_key(binding.owner_id) or entry.get('segment_id') != sibling:
+                        raise ProjectionBlocked('erased sibling owner mismatch')
+                    receipts.append({'state': 'ready', 'conversation_id': None, 'created': False})
+                    erased_count += 1
+                    continue
+                if not job.get('projection_binding') or normalized_binding(job['projection_binding']) != binding:
+                    raise ProjectionBlocked('sibling binding mismatch')
+                if not entry and held_without_recovery(job):
+                    held += 1
+                    continue
+                receipt = entry.get('projection') or {}
+                if receipt.get('state') != 'ready':
+                    return None, False
+                if entry.get('result', {}).get('outcome') == 'no_recoverable_speech':
+                    terminal_empty_count += 1
+                seconds += receipt.get('speech_seconds', 0.0)
+                parts = entry.get('projection_parts')
+                receipts.extend(parts.values() if parts else [receipt])
+            if not held:
+                return None, False
+            new, updated = self._visible(transaction, binding, receipts)
+            # Re-read canonical deletion fences before publishing any visible IDs.
+            assert_batch_write_allowed(
+                self.client,
+                transaction,
+                binding.owner_id,
+                conversation_ids=(*new, *updated),
+                expected_generation=binding.privacy_generation,
+            )
+            result = {
+                'new_memories': new,
+                'updated_memories': updated,
+                'failed_segments': held,
+                'held_segments': held,
+                'total_segments': len(receipts) + held,
+                'errors': [],
+                'outcome': 'partial',
+            }
+            if terminal_empty_count:
+                result['no_recoverable_speech_segments'] = terminal_empty_count
+            superseded_count = sum(receipt.get('disposition') == 'superseded' for receipt in receipts)
+            if superseded_count:
+                result['superseded_segments'] = superseded_count
+            if ledger.get('status') == BATCH_PARTIAL_STATUS and ledger.get('result') == result:
+                return (result, charge_chain(ledger)), False
+            if seconds != accounting['seconds']:
+                raise ProjectionBlocked('speech accounting changed during completion')
+            chain = charge_chain(ledger) if ledger.get('status') == BATCH_PARTIAL_STATUS else ([0.0], [])
+            self._commit_usage(transaction, ledger_ref, ledger, binding, accounting, seconds, now)
+            complete_batch_partial_in_transaction(
+                transaction,
+                ledger_ref,
+                ledger,
+                binding.job_id,
+                result,
+                datetime.fromtimestamp(now, timezone.utc),
+                run_token=binding.run_token,
+                run_epoch=binding.run_epoch,
+            )
+            return (result, extend_chain(*chain, seconds, now)), True
+
+        with writing('usage_month_cache', binding.owner_id):
+            outcome, changed = self.run(commit)
+        if changed:
+            logger.info('event=batch_held_partial outcome=completed held=%d', outcome[0]['held_segments'])
+        return outcome
+
+
+def charge_chain(ledger: dict) -> tuple[list[float], list[float | None]]:
+    """A partial ledger's charge boundaries (from 0.0) and each step's commit time.
+
+    A step without a recorded time (an unknown age) is never re-issued: its
+    fair-use once-key may already have expired.
+    """
+    steps = ledger.get('usage_steps')
+    if not (isinstance(steps, list) and steps and steps[0] == 0.0):
+        committed = ledger.get('usage_committed_seconds', 0.0)
+        steps = [0.0, committed] if committed else [0.0]
+    times = ledger.get('usage_step_times')
+    if not (isinstance(times, list) and len(times) == len(steps) - 1):
+        times = [None] * (len(steps) - 1)
+    return list(steps), list(times)
+
+
+def extend_chain(steps, times, seconds: float, now: float) -> tuple[list[float], list[float | None]]:
+    if seconds > steps[-1]:
+        return [*steps, seconds], [*times, now]
+    return list(steps), list(times)
+
+
+# A reviewed operator intent that is not settled can still change its unit.
+OPERATOR_INTENTS = ('speech_redrive', 'terminal_disposition', 'silence_disposition')
+
+
+def held_without_recovery(job: dict) -> bool:
+    """A quarantined unit that nothing automatic will change.
+
+    Its one paid recovery settled without words (``failed_held``), or its
+    recorded recovery policy is off and no paid call was ever authorized. Either
+    way its encrypted audio stays server-side for a reviewed operator redrive.
+    """
+    from config.policy import RecoveryPolicy
+
+    if job.get('state') != 'quarantined' or job.get('result'):
+        return False
+    if any(
+        isinstance(job.get(key), dict) and job[key].get('state') not in {'completed', 'failed_held'}
+        for key in OPERATOR_INTENTS
+    ):
+        return False
+    if job.get('recovery_state') == 'failed_held':
+        return True
+    raw = (job.get('policy_parts') or {}).get('recovery')
+    return (
+        job.get('recovery_state') == 'held'
+        and not job.get('recovery')
+        and isinstance(raw, dict)
+        and not RecoveryPolicy.from_dict(raw).recovery_enabled
+    )

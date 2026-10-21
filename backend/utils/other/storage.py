@@ -1033,9 +1033,10 @@ def list_audio_chunks(
     deadline: Optional[float] = None,
     max_count: Optional[int] = None,
     source_identity: bool = False,
+    require_archive: bool = False,
 ) -> List[Dict[str, Any]]:
     """
-    List all audio chunks for a conversation.
+    List all audio chunks for a conversation. ``require_archive``: a failed raw-archive listing raises.
 
     Returns:
         List of dicts with chunk info: {'timestamp': float, 'path': str, 'size': int}
@@ -1110,6 +1111,8 @@ def list_audio_chunks(
                 if not any(pack['timestamp'] <= item['timestamp'] < pack['raw_end'] for item in chunks):
                     chunks.append(pack)
         except Exception:
+            if require_archive:
+                raise
             logger.warning('raw archive listing failed; retaining legacy chunks', exc_info=True)
     return sorted(chunks, key=lambda x: x['timestamp'])
 

@@ -1135,16 +1135,12 @@ def test_soniox_budget_exhaustion_alert_pages_from_a_close_in_five_minutes():
         assert nodes["C"]["expression"] == "$A > 0", export_name
 
 
-def test_soniox_runway_and_modulate_fallback_alerts_name_the_operator_lever():
+def test_modulate_fallback_alert_names_the_operator_lever():
     for export_name, rules in _all_rule_exports().items():
-        for percent in (70, 90):
-            rule = rules[f"omi-soniox-runway-{percent}"]
-            assert "top up Soniox" in rule["annotations"]["summary"], export_name
-            assert f"$B >= 0.{percent}" in rule["data"][2]["model"]["expression"], export_name
-            assert rule["notification_settings"]["receiver"] == "Omi - Services Alerting (Telegram)"
-            assert (REPO / rule["annotations"]["runbook"]).is_file(), export_name
         incident = rules["omi-modulate-failing-soniox"]
         assert "Modulate failing" in incident["annotations"]["summary"], export_name
+        assert "Soniox availability" in incident["annotations"]["summary"], export_name
+        assert "Soniox runway" not in incident["annotations"]["summary"], export_name
         assert "traffic on Soniox" in incident["annotations"]["summary"], export_name
         assert incident["notification_settings"]["receiver"] == "Omi - Services Alerting (Telegram)"
 
@@ -1882,3 +1878,23 @@ def test_chat_journey_rules_require_a_failure_floor_before_firing():
             nodes = {node["refId"]: node["model"] for node in rules[uid]["data"]}
             assert nodes["E"]["expr"] == failures, f"{export_name}:{uid}"
             assert nodes["C"]["expression"] == gate, f"{export_name}:{uid}"
+
+
+def test_live_stt_session_exhaustion_and_availability_escape_alerts():
+    # 2026-10-20: a listen roll benched Soniox; with no target at stage 100 the
+    # router's availability escape served benched Modulate and session
+    # exhaustion ran 6-11% for over an hour with no alert.
+    for export_name, rules in _all_rule_exports().items():
+        ratio = {node["refId"]: node["model"] for node in rules["omi-stt-chain-exhausted-ratio"]["data"]}
+        assert "omi_stt_chain_exhausted_total" in ratio["B"]["expr"], export_name
+        assert ratio["C"]["expression"] == "$A >= 600 && $B > 0.08", export_name
+        assert "[60m]" in ratio["B"]["expr"], export_name
+        assert rules["omi-stt-chain-exhausted-ratio"]["for"] == "20m", export_name
+        escape = rules["omi-stt-no-full-stage-target"]
+        expr = escape["data"][0]["model"]["expr"]
+        assert "min by (target)" in expr and "== 100" in expr, export_name
+        # NaN is a pristine GateState (stage 100) and must count as full.
+        assert "!=" in expr, export_name
+        assert escape["data"][1]["model"]["expression"] == "$A == 0", export_name
+        assert escape["for"] == "10m", export_name
+        assert escape["noDataState"] == "OK", export_name

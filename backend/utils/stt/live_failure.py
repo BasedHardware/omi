@@ -11,6 +11,7 @@ from starlette.websockets import WebSocketState
 from models.message_event import MessageServiceStatusEvent
 from utils.metrics import OMI_LIVE_STT_MISALIGNED_FRAMES_TOTAL
 from utils.metrics import OMI_LISTEN_STT_UNAVAILABLE_TOTAL
+from utils.observability.listen_close import note_ws_close
 from utils.observability.transcription import record_live_stt_failure, record_live_stt_pre_audio_failure
 from utils.stt.outcomes import (
     TranscriptionFailure,
@@ -112,8 +113,19 @@ _CIRCUIT_OPENING_REASONS = frozenset(
 _SERVE_FAILURE_REASONS = frozenset({'connection_lost', 'send_failed'})
 
 
+# Why a selection origin never served when it was not dialed. These are chain
+# decisions, not provider evidence, so they stay out of the live reason
+# vocabulary; normalizing them there would relabel a skipped route as an
+# untyped connection_lost death.
+SELECTION_SKIP_REASONS = frozenset(
+    {'circuit_open', 'last_resort', 'session_excluded', 'recovery_budget', 'policy', 'unconfigured'}
+)
+
+
 def fallback_metric_reason(reason: str | None) -> str:
     """Keep established account labels while sharing bounded source causes."""
+    if reason in SELECTION_SKIP_REASONS:
+        return reason
     if reason == PROVIDER_BUDGET_EXHAUSTED:
         return 'quota'
     if reason == PROVIDER_AUTH_REJECTED:
@@ -148,7 +160,12 @@ class PendingLiveFailover:
         capacity_subtype: str | None = None,
         source_outcome: LiveLegOutcome | None = None,
     ) -> None:
-        self.component, self.reason = component, normalize_live_stt_reason(reason)
+        self.component = component
+        self.reason = (
+            reason
+            if component == 'stt_selection' and reason in SELECTION_SKIP_REASONS
+            else normalize_live_stt_reason(reason)
+        )
         self.capacity_subtype = capacity_subtype
         self.replay_lag_diagnostics: ReplayLagDiagnostics | None = None
         self.first_text_diagnostics: FirstTextDeadlineDiagnostics | None = None
@@ -337,6 +354,7 @@ async def terminate_live_stt_backoff(
         logger.warning('Unable to deliver terminal live STT status error_type=%s', type(error).__name__)
     try:
         await websocket.close(code=LIVE_STT_FAILURE_CLOSE_CODE, reason=LIVE_STT_FAILURE_CLOSE_REASON)
+        note_ws_close(session, 'server', LIVE_STT_FAILURE_CLOSE_CODE)
     except Exception as error:
         logger.info('Unable to close client after terminal live STT backoff error_type=%s', type(error).__name__)
     return sent
@@ -556,6 +574,7 @@ async def terminate_live_stt_session(
             code=LIVE_STT_FAILURE_CLOSE_CODE,
             reason=LIVE_STT_FAILURE_CLOSE_REASON,
         )
+        note_ws_close(session, 'server', LIVE_STT_FAILURE_CLOSE_CODE)
     except Exception as error:
         logger.info(
             'Unable to close client after terminal live STT failure error_type=%s',

@@ -130,6 +130,54 @@ class GeneratedMessageConversation {
   }
 }
 
+class GeneratedChatFileVideo {
+  final double durationSeconds;
+  final List<double>? frameTimes;
+  final int stripCellHeight;
+  final int stripCellWidth;
+  final int stripColumns;
+  final String stripFileId;
+  final List<double>? stripTimes;
+  final String transcript;
+
+  const GeneratedChatFileVideo({
+    required this.durationSeconds,
+    this.frameTimes,
+    this.stripCellHeight = 0,
+    this.stripCellWidth = 0,
+    this.stripColumns = 0,
+    this.stripFileId = "",
+    this.stripTimes,
+    this.transcript = "",
+  });
+
+  factory GeneratedChatFileVideo.fromJson(Map<String, dynamic> json) {
+    return GeneratedChatFileVideo(
+      durationSeconds: _required(_readFieldValue<double>(_readField(json, const ["duration_seconds"]), "duration_seconds", _readDouble, requiredField: true, nullable: false), "duration_seconds"),
+      frameTimes: _readFieldValue<List<double>>(_readField(json, const ["frame_times"]), "frame_times", _readDoubleList, requiredField: false, nullable: true),
+      stripCellHeight: _required(_readFieldValue<int>(_readField(json, const ["strip_cell_height"]), "strip_cell_height", _readInt, requiredField: false, nullable: false, defaultValue: 0), "strip_cell_height"),
+      stripCellWidth: _required(_readFieldValue<int>(_readField(json, const ["strip_cell_width"]), "strip_cell_width", _readInt, requiredField: false, nullable: false, defaultValue: 0), "strip_cell_width"),
+      stripColumns: _required(_readFieldValue<int>(_readField(json, const ["strip_columns"]), "strip_columns", _readInt, requiredField: false, nullable: false, defaultValue: 0), "strip_columns"),
+      stripFileId: _required(_readFieldValue<String>(_readField(json, const ["strip_file_id"]), "strip_file_id", _readString, requiredField: false, nullable: false, defaultValue: ""), "strip_file_id"),
+      stripTimes: _readFieldValue<List<double>>(_readField(json, const ["strip_times"]), "strip_times", _readDoubleList, requiredField: false, nullable: true),
+      transcript: _required(_readFieldValue<String>(_readField(json, const ["transcript"]), "transcript", _readString, requiredField: false, nullable: false, defaultValue: ""), "transcript"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'duration_seconds': durationSeconds,
+      'frame_times': frameTimes,
+      'strip_cell_height': stripCellHeight,
+      'strip_cell_width': stripCellWidth,
+      'strip_columns': stripColumns,
+      'strip_file_id': stripFileId,
+      'strip_times': stripTimes,
+      'transcript': transcript,
+    };
+  }
+}
+
 class GeneratedFileChat {
   final DateTime createdAt;
   final String id;
@@ -138,6 +186,7 @@ class GeneratedFileChat {
   final String openaiFileId;
   final String? thumbName;
   final String? thumbnail;
+  final GeneratedChatFileVideo? video;
 
   const GeneratedFileChat({
     required this.createdAt,
@@ -147,6 +196,7 @@ class GeneratedFileChat {
     required this.openaiFileId,
     this.thumbName = "",
     this.thumbnail = "",
+    this.video,
   });
 
   factory GeneratedFileChat.fromJson(Map<String, dynamic> json) {
@@ -158,6 +208,7 @@ class GeneratedFileChat {
       openaiFileId: _required(_readFieldValue<String>(_readField(json, const ["openai_file_id"]), "openai_file_id", _readString, requiredField: true, nullable: false), "openai_file_id"),
       thumbName: _readFieldValue<String>(_readField(json, const ["thumb_name"]), "thumb_name", _readString, requiredField: false, nullable: true, defaultValue: ""),
       thumbnail: _readFieldValue<String>(_readField(json, const ["thumbnail"]), "thumbnail", _readString, requiredField: false, nullable: true, defaultValue: ""),
+      video: _readFieldValue<GeneratedChatFileVideo>(_readField(json, const ["video"]), "video", (value) => _readObject(value, GeneratedChatFileVideo.fromJson), requiredField: false, nullable: true),
     );
   }
 
@@ -170,6 +221,7 @@ class GeneratedFileChat {
       'openai_file_id': openaiFileId,
       'thumb_name': thumbName,
       'thumbnail': thumbnail,
+      'video': video?.toJson(),
     };
   }
 }

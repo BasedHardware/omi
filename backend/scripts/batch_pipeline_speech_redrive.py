@@ -28,10 +28,11 @@ from google.cloud.firestore_v1.base_query import FieldFilter
 from database.batch_pipeline_quarantine_recovery import RecoveryStore
 from database.batch_pipeline_speech_redrive import SpeechRedriveStore
 from database.batch_pipeline_store import FirestoreStore
+from database.sync_ledger import batch_ledger_owes_held_units
 from utils.batch_pipeline.artifact_policy import create_artifact_store
 from utils.batch_pipeline.artifacts import ProtectionContext
 from utils.batch_pipeline.contracts import WorkItem
-from utils.batch_pipeline.recovery_disposition import inspect_audio
+from utils.batch_pipeline.recovery_disposition import inspect_audio, STAGES, REASONS
 from utils.batch_pipeline.speech_redrive import redrive_one
 from utils.executors import storage_executor
 
@@ -53,6 +54,14 @@ def paid_digest(census_digest, speech_count, paid_epoch):
             separators=(',', ':'),
         ).encode()
     ).hexdigest()
+
+
+def epoch1_failure(job):
+    """Closed stage/reason of the spent recovery. Selection pays any failed_held
+    speech unit, not only empty ASR, so the approver must see the mix."""
+    failure = (job.get('recovery') or {}).get('failure') or {}
+    stage, reason = failure.get('stage'), failure.get('reason')
+    return f'{stage}/{reason}' if stage in STAGES and reason in REASONS else 'unrecorded'
 
 
 def checked_job(store, sid, uid, key):
@@ -79,7 +88,7 @@ def checked_job(store, sid, uid, key):
             return job
         require(SpeechRedriveStore.terminal(job, result, time.time()), 'not_failed_held')
         ledger = tx.get('content', f'{uid}/{binding.content_id}')
-        require(ledger.get('status') != 'completed' and ledger.get('usage_committed_at') is None, 'completed_ledger')
+        require(batch_ledger_owes_held_units(ledger), 'completed_ledger')
         return job
 
     return held.readonly_run(store, check)
@@ -111,6 +120,9 @@ def main():
     parser.add_argument('--apply', action='store_true')
     parser.add_argument('--approve-plan-sha256')
     parser.add_argument('--apply-limit', type=int, default=1, help='Fixed speech prefix, replay is idempotent')
+    parser.add_argument(
+        '--server-flags-file', help='Serving role env JSON for units with no stored policy; absent refuses them'
+    )
     args = parser.parse_args()
     logging.disable(logging.CRITICAL)
     require(not os.getenv('FIRESTORE_EMULATOR_HOST'), 'explicit_cloud_only')
@@ -131,6 +143,7 @@ def main():
     offset = cutoff_time.utcoffset()
     require(offset is not None and offset.total_seconds() == 0, 'utc_cutoff_required')
     cutoff = cutoff_time.timestamp()
+    server_flags = held.load_server_flags(args.server_flags_file)
     secret = os.getenv('ENCRYPTION_SECRET', '').encode()
     bucket = os.getenv('BUCKET_BATCH_PIPELINE', '')
     require(len(secret) >= 32 and bool(bucket), 'secure_runtime_material_required')
@@ -172,6 +185,7 @@ def main():
     )
     require(len(docs) <= 1000, 'owner_read_budget')
     selected = []
+    failures = {}
     for doc in docs:
         job = doc.to_dict() or {}
         if 0 < job.get('quarantined_at', 0) <= cutoff and (
@@ -181,6 +195,7 @@ def main():
             or job.get('speech_redrive')
         ):
             selected.append((doc.id, held.fingerprint(job)))
+            failures[doc.id] = epoch1_failure(job)
     require(len(selected) == args.expect_count, 'cohort_count_changed')
 
     units = []
@@ -203,7 +218,10 @@ def main():
         'owner_count': 1,
         'units': len(units),
         'strict_vad': dict(counts),
+        # Not in the digest: the approved census is unchanged by this report.
+        'speech_epoch1_failures': dict(Counter(failures[sid] for sid, _, decision in units if decision == 'speech')),
         'paid_epoch': args.paid_epoch,
+        'unpinned_policy': 'server_flags' if server_flags else 'refuse',
         'source_census_sha256': census,
         'plan_sha256': digest,
         'maximum_additional_paid_calls': counts['speech'],
@@ -219,7 +237,7 @@ def main():
         # from the canary; it never silently selects one extra unattempted unit.
         for sid, key, _decision in [u for u in units if u[2] == 'speech'][: args.apply_limit]:
             job = checked_job(read_store, sid, uid, key)
-            outcomes[redrive_one(store, artifacts, sid, uid, digest, job['recovery'])] += 1
+            outcomes[redrive_one(store, artifacts, sid, uid, digest, job['recovery'], server_flags=server_flags)] += 1
         output['outcomes'] = dict(outcomes)
         del output['paid_stt_calls'], output['firestore_writes']
     print(json.dumps(output, indent=2, sort_keys=True))

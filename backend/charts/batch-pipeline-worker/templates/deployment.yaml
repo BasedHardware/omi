@@ -19,7 +19,9 @@ metadata:
   name: {{ .Release.Name }}
 spec:
   # L4 scale-from-zero, image pull and joint model startup exceeded 600s in dev.
-  progressDeadlineSeconds: 1800
+  # Recreate also waits for old pods to drain (terminationGracePeriodSeconds 1500)
+  # before new ones start, so the deadline covers drain plus startup.
+  progressDeadlineSeconds: 2400
   {{- if not .Values.autoscaling.enabled }}
   replicas: {{ .Values.replicaCount }}
   {{- end }}

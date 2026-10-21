@@ -44,6 +44,14 @@ from utils.http_client import get_stt_client, get_stt_semaphore
 from utils.log_sanitizer import sanitize_provider_error
 from utils.stt.committed_words import remember_provider_word
 from utils.stt.failure_diagnostics import connection_loss_cause
+from utils.stt.provider_stream_end import (
+    US_TIMEOUT,
+    VENDOR,
+    DETACHED_STREAM_END,
+    ProviderStreamEnd,
+    log_connect_rejection,
+    observe_connect_seconds,
+)
 from utils.stt.safe_socket import SafeDeepgramSocket  # noqa: F401 — re-exported for backward compat
 from config import live_stt_state
 from config.live_stt_registry import DEFAULT_IDS, Target
@@ -1444,6 +1452,7 @@ def modulate_death_reason(err: Any) -> Optional[str]:
 
 class SafeModulateSocket(STTSocket):
     max_replay_rate = 1.0  # Real-time ceiling; see replay_delivery and the replay runbook.
+    stream_end: ProviderStreamEnd = DETACHED_STREAM_END  # Replaced in __init__.
     replay_limits = ReplayLimits()
 
     def __init__(
@@ -1457,6 +1466,7 @@ class SafeModulateSocket(STTSocket):
     ) -> None:
         self._demand_wire = create_wire_meter('modulate', sample_rate)
         self._ws: Any = ws
+        self.stream_end = ProviderStreamEnd('modulate', ws)
         self._stream_transcript: Callable[[List[Dict[str, Any]]], None] = stream_transcript
         self._loop: asyncio.AbstractEventLoop = loop
         self._preseconds: int = preseconds
@@ -1633,12 +1643,25 @@ class SafeModulateSocket(STTSocket):
             if self._closed:
                 return
             self._closed = True
+        self.stream_end.record(unless_closing=True)  # Only when no owner will close this transport.
         try:
             self._loop.call_soon_threadsafe(lambda: self._send_queue.put_nowait(b''))
         except (RuntimeError, Exception):
             pass
 
     async def drain_and_close(self) -> None:
+        self.stream_end.begin_close()
+        self._done_timed_out = False
+        cancelled = False
+        try:
+            await self._drain_and_close()
+        except asyncio.CancelledError:
+            cancelled = True  # The abort that follows closes the transport and records first.
+            raise
+        finally:
+            self.stream_end.record_after_drain(cancelled=cancelled, closer=US_TIMEOUT if self._done_timed_out else None)
+
+    async def _drain_and_close(self) -> None:
         try:
             await asyncio.sleep(0)
             _EOS_SENTINEL = b'__EOS__'
@@ -1654,6 +1677,7 @@ class SafeModulateSocket(STTSocket):
                 await asyncio.wait_for(self._done_event.wait(), timeout=60)
             except (asyncio.TimeoutError, asyncio.CancelledError):
                 logger.warning('Modulate drain timed out waiting for done message')
+                self._done_timed_out = True
                 if self._prev_partial_text:
                     self._flush_partial()
         except Exception:
@@ -1673,6 +1697,7 @@ class SafeModulateSocket(STTSocket):
                 self._wire_header_written = True
                 data = data[len(header) :]
             telemetry_call(self, '_demand_wire', 'written', data)
+            self.stream_end.note_audio_sent()
         except Exception:
             pass
 
@@ -1733,6 +1758,7 @@ class SafeModulateSocket(STTSocket):
             self._mark_dead('live audio delivery expired', typed_reason='capacity_full')
         except websockets.exceptions.ConnectionClosed as e:
             self._mark_dead(f'ws send closed: {e}', cause=connection_loss_cause(e))
+            self.stream_end.record(self._ws, error=e)
         except Exception as e:
             self._mark_dead(f'ws send error: {e}', cause=connection_loss_cause(e))
 
@@ -1754,6 +1780,8 @@ class SafeModulateSocket(STTSocket):
                     err = msg.get('error', msg.get('message', 'unknown error'))
                     typed = modulate_death_reason(err)
                     record_stt_stream_close(provider=STTService.modulate.value, reason=typed)
+                    self.stream_end.note_frame(msg)
+                    self.stream_end.note_vendor_error(typed)
                     if typed in {MODULATE_DEATH_SERVE_ERROR, PROVIDER_BUDGET_EXHAUSTED}:
                         # The provider accepted the stream and then failed to
                         # serve it: a provider fault, and the outage signal an
@@ -1761,17 +1789,19 @@ class SafeModulateSocket(STTSocket):
                         # 2026-08-31: ×11/30m "Internal server error", ×5/30m
                         # "Unable to complete the request").
                         logger.error(
-                            'Modulate streaming error: reason=%s %s',
+                            'Modulate streaming error: reason=%s %s request_id=%s',
                             typed,
                             sanitize_provider_error(err, code=msg.get('error_code') or msg.get('code')),
+                            self.stream_end.request_id or 'none',
                         )
                     else:
                         # Client/session-caused frames (e.g. invalid audio we
                         # sent) are the protocol answering, not an outage.
                         logger.warning(
-                            'Modulate stream closed: reason=%s %s',
+                            'Modulate stream closed: reason=%s %s request_id=%s',
                             typed,
                             sanitize_provider_error(err, code=msg.get('error_code') or msg.get('code')),
+                            self.stream_end.request_id or 'none',
                         )
                     if self._prev_partial_text:
                         self._flush_partial()
@@ -1799,8 +1829,10 @@ class SafeModulateSocket(STTSocket):
             # for another client audio frame (#10028).
             if not self._closed and not self._done_event.is_set():
                 self._mark_dead('modulate ws closed cleanly without terminal frame', cause='clean_eof')
+                self.stream_end.record(self._ws, closer=VENDOR, reason='clean_eof')
         except websockets.exceptions.ConnectionClosed as e:
             self._mark_dead(f'ws recv closed: {e}', cause=connection_loss_cause(e))
+            self.stream_end.record(self._ws, error=e)
         except Exception as e:
             self._mark_dead(f'ws recv error: {e}', cause=connection_loss_cause(e))
 
@@ -1821,6 +1853,7 @@ class SafeModulateSocket(STTSocket):
         text = msg.get('text', '').strip()
         if not text:
             return
+        self.stream_end.note_text()
         start_ms = msg.get('start_ms', 0)
         self._prev_partial_text = text
         self._prev_partial_start_ms = start_ms
@@ -1860,6 +1893,7 @@ class SafeModulateSocket(STTSocket):
             return
 
         self._observe_served()
+        self.stream_end.note_text()
         self._prev_partial_text = ''
         self._prev_partial_word_count = 0
 
@@ -1917,7 +1951,13 @@ async def process_audio_modulate(
     uri = f'wss://modulate-developer-apis.com/api/velma-2-stt-streaming?{urllib.parse.urlencode(params)}'
 
     logger.info(f'Connecting to Modulate Velma-2 streaming sample_rate={sample_rate} language={language}')
-    ws = await websockets.connect(uri, ping_timeout=10, ping_interval=10)
+    started = time.monotonic()
+    try:
+        ws = await websockets.connect(uri, ping_timeout=10, ping_interval=10)
+    except Exception as error:
+        log_connect_rejection('modulate', error)
+        raise
+    observe_connect_seconds('modulate', time.monotonic() - started)
     loop = asyncio.get_running_loop()
     sock = SafeModulateSocket(ws, stream_transcript, loop, preseconds=preseconds, sample_rate=sample_rate)
     logger.info('Modulate Velma-2 streaming connection established')

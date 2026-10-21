@@ -14,7 +14,6 @@ from typing import TYPE_CHECKING, Any, Callable, NamedTuple, Optional, TypeVar
 from config.conversation_smart_merge import smart_merge_flatten_enabled
 from config.sync_live_dedupe import sync_live_dedupe_active_for
 from config.sync_safety_wal import sync_safety_wal_enabled
-from config.sync_assignment_recovery import sync_assignment_recovery_enabled
 from database._client import firestore_document_kind, firestore_error_document_path, is_document_size_limit_error
 from utils.firestore_document_size import FIRESTORE_MAX_DOCUMENT_BYTES, estimate_firestore_document_bytes
 from utils.observability.fallback import record_fallback
@@ -202,8 +201,13 @@ def assign_in_transaction(
     invalidate: Callable[[dict], None],
     full_ids: frozenset[str] = frozenset(),
     live_candidate_ids: tuple[str, ...] = (),
+    absorbed: list[str] | None = None,
 ) -> tuple[dict, bool, list[dict]]:
     """Production transaction body; injected codecs preserve encryption in adapters.
+
+    ``absorbed`` (optional, filled in place) receives the conversations this
+    plan newly turns into redirect donors, unlike the cumulative
+    ``sync_merged_from`` lineage.
 
     The user-level index document is read AND written by every intake, including
     the empty-index case. Concurrent jobs cannot both commit an absent target.
@@ -214,6 +218,8 @@ def assign_in_transaction(
     write is estimated above ``SYNC_CONVERSATION_BYTE_BUDGET`` are left
     untouched: the chunk's new speech goes to another conversation instead.
     """
+    if absorbed is not None:
+        absorbed.clear()
     incoming = deepcopy(incoming)
     lineage_binding = incoming.pop('_sync_lineage_binding', None)
     require_live_target = incoming.pop('_batch_require_live_target', False)
@@ -225,6 +231,16 @@ def assign_in_transaction(
         if cid not in read:
             read[cid] = collection.document(cid).get(transaction=transaction).to_dict()
         return read[cid]
+
+    tombstones: dict[str, bool] = {}
+
+    def tombstoned(cid: str) -> bool:
+        # Read only before creating a row, inside the same transaction.
+        if cid not in tombstones:
+            tombstones[cid] = (
+                user_ref.collection('deleted_conversations').document(cid).get(transaction=transaction).exists
+            )
+        return tombstones[cid]
 
     # Read the incoming key too: retries and deleted canonical anchors must never
     # overwrite a tombstone. Redirects are server-authored, not user deletions.
@@ -313,14 +329,11 @@ def assign_in_transaction(
         if mismatch != 'none':
             if redirected:
                 raise SyncAssignmentConflict('sync target provenance mismatch', subtype='provenance_mismatch')
-            recover = sync_assignment_recovery_enabled()
             logger.warning(
                 'event=sync_assignment_target outcome=%s mismatch=%s',
-                'temporal_recovery' if recover else 'rejected',
+                'temporal_recovery',
                 mismatch,
             )
-            if not recover:
-                raise SyncAssignmentConflict('sync target provenance mismatch', subtype='provenance_mismatch')
             record_fallback(
                 component='sync_dispatch',
                 from_mode='explicit_target',
@@ -333,6 +346,9 @@ def assign_in_transaction(
     else:
         # Missing/tombstoned explicit targets fall back to temporal assignment.
         # The independent retry-lineage check above still fences user deletion.
+        # A hard-deleted target leaves no row; its tombstone is the user's word.
+        if target_id and target is None and tombstoned(target_id):
+            raise SyncAssignmentSuperseded('sync target was deleted')
         target_id, target = None, None
     stamp_fallback_live = bool(
         lineage_binding == 'stamp_fallback'
@@ -409,6 +425,11 @@ def assign_in_transaction(
         )
         current = matched.get(canonical)
         created = current is None
+        if created and tombstoned(canonical):
+            # User deletion hard-deletes the row, so `own` cannot fence it. A
+            # re-upload segmented like the original reproduces the deleted
+            # conversation's deterministic ID; never recreate it.
+            raise SyncAssignmentSuperseded('sync anchor was deleted')
         records = [decode(raw) for _, raw in sorted(matched.items())]
         result = deepcopy(next((row for row in records if row['id'] == canonical), records[0] if records else incoming))
         try:
@@ -745,6 +766,8 @@ def assign_in_transaction(
     for ancestor_id, patch in chosen.ancestor_updates.items():
         transaction.update(collection.document(ancestor_id), patch)
     index.write(result, set(matched) | {canonical})
+    if absorbed is not None:
+        absorbed[:] = sorted(cid for cid in matched if cid != canonical)
     if live_stats is not None:
         # Transient telemetry only: the encoded plan already committed above.
         appended = bounded_span_seconds(survivors)

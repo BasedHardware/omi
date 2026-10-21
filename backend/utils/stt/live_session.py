@@ -17,6 +17,7 @@ from utils.observability.transcription import record_live_stt_audio_seconds
 from utils.observability.routing_cohort import current_routing_cohort
 from utils.stt_cap_dispatch import CapSocket, session_admission, suppress_socket_audio, set_cap_capture
 from utils.stt import streaming as st
+from utils.stt.edge_shadow import attach_tap as attach_edge_tap
 from utils.dream_vocabulary import keyterms
 from utils.stt.live_failure import PendingLiveFailover, settle_terminal_socket
 from utils.stt.live_outcome import LiveLegOutcome, record_managed_leg_handoff
@@ -35,7 +36,11 @@ from utils.stt.live_chain import connect_configured_chain
 from config.audio_timeline import soniox_wire_ledger_enabled
 from utils.stt.soniox_wire_ledger import capture_spans
 from utils.stt.soniox_capture_axis import disable_socket_diagnostics, enabled as capture_axis_diagnostics_enabled
-from config.live_stt_replay import ReplayLimits, nonwindow_replay_settle_enabled
+from config.live_stt_replay import (
+    ReplayLimits,
+    nonwindow_emitted_text_accounting_enabled,
+    nonwindow_replay_settle_enabled,
+)
 from config.audio_timeline import live_capture_window_translator_sends_enabled
 from config.live_stt_recovery import session_recovery_enabled
 from utils.stt.recovery_state import current_recovery
@@ -228,6 +233,7 @@ class LiveChainSession:
                 record_fallback(
                     component='vad', from_mode='gated', to_mode='direct', reason='config_incomplete', outcome='degraded'
                 )
+            attach_edge_tap(gate, self.receiver)
             passthrough = service == st.STTService.modulate
             if epoch is not None:
                 epoch.set_validation_callback(
@@ -338,7 +344,6 @@ class LiveChainSession:
                         sample_rate,
                         language,
                         profile=host.language_profile,
-                        keywords=keywords,
                         idle_budget=getattr(self.receiver, 'soniox_idle_budget', None),
                     )
                 elif service == st.STTService.modulate:
@@ -616,6 +621,9 @@ class LiveLegSocket(STTSocket):
         # Non-window legs: quiet capture settled at the replay horizon because
         # the provider answered it with nothing (see window_replay_settle_through).
         self._settled_capture_sample = 0
+        # Soniox legs: tracked speech sends older than the settle grace when
+        # the provider last emitted final text (see _account_aged_sends).
+        self._text_accounted_sample = 0
         self._settling = False
         self._pending_capture_sample: int | None = None
         self._speech_capture_end = 0
@@ -714,7 +722,27 @@ class LiveLegSocket(STTSocket):
         )
 
     def _replay_accounted_sample(self) -> int:
-        return max(self._emitted_capture_sample, self._settled_capture_sample)
+        return max(self._emitted_capture_sample, self._settled_capture_sample, self._text_accounted_sample)
+
+    def _account_aged_sends(self) -> None:
+        """Account tracked speech sent at least the settle grace before final text.
+
+        Soniox finalizes tokens in stream order within seconds, so final text
+        now proves every send older than the grace was transcribed or answered
+        empty, even when the translator could not place the text on the capture
+        axis (prod 2026-10-20 overflow lines: median 224 text segments but 11
+        placed, last text 2.9 s earlier, ~85 s of speech still unaccounted).
+        Ring retention and the settle's no-pending-output rule are unchanged;
+        only the unresolved-speech boundary advances.
+        """
+        if self.service != st.STTService.soniox or not nonwindow_emitted_text_accounting_enabled():
+            return
+        notes = self._replay_capture_notes
+        cutoff = _replay_clock() - NONWINDOW_SETTLE_GRACE_SECONDS
+        while notes and notes[0][2] <= cutoff:
+            notes.popleft()
+        bound = min((int(note[0]) for note in notes), default=self._speech_capture_end)
+        self._text_accounted_sample = max(self._text_accounted_sample, min(bound, self._speech_capture_end))
 
     def window_replay_settle_through(self, floor: int) -> bool:
         """Settle a non-window leg's quiet replay span once it ages past the ring.
@@ -875,6 +903,8 @@ class LiveLegSocket(STTSocket):
                     if isinstance(end, int):
                         self._placed_text_segments = min(1000000, self._placed_text_segments + 1)
                         self._emitted_capture_sample = max(self._emitted_capture_sample, end)
+            if any(str(segment.get('text') or '').strip() for segment in segments):
+                self._account_aged_sends()
             if not self.has_untranscribed_speech():
                 self._pending_capture_sample = None
                 self._settling = False

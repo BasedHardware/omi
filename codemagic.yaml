@@ -39,14 +39,9 @@ workflows:
     scripts:
       - name: Verify dispatcher source pin
         script: |
-          set -euo pipefail
-          if [[ -n "${OMI_RELEASE_SOURCE_SHA:-}" ]]; then
-            CHECKED_OUT_SHA="$(git rev-parse HEAD)"
-            [[ "$CHECKED_OUT_SHA" == "$OMI_RELEASE_SOURCE_SHA" ]] || {
-              echo "dispatcher source pin does not match checked-out HEAD" >&2
-              exit 1
-            }
-          fi
+          # Checks out the dispatcher's evaluated commit when main moved past it
+          # after dispatch; fails closed on anything else.
+          bash scripts/checkout_release_source_pin.sh
 
       - name: Installing Opus
         script: |
@@ -147,7 +142,6 @@ workflows:
             --build-number=$BUILD_NUMBER \
             --flavor prod \
             --export-options-plist=$HOME/export_options.plist \
-            --dart-define=CAPTURE_EVIDENCE_V1_DARK_WRITE=true \
             $PROVENANCE_ARGS
 
     artifacts:
@@ -226,14 +220,9 @@ workflows:
     scripts:
       - name: Verify dispatcher source pin
         script: |
-          set -euo pipefail
-          if [[ -n "${OMI_RELEASE_SOURCE_SHA:-}" ]]; then
-            CHECKED_OUT_SHA="$(git rev-parse HEAD)"
-            [[ "$CHECKED_OUT_SHA" == "$OMI_RELEASE_SOURCE_SHA" ]] || {
-              echo "dispatcher source pin does not match checked-out HEAD" >&2
-              exit 1
-            }
-          fi
+          # Checks out the dispatcher's evaluated commit when main moved past it
+          # after dispatch; fails closed on anything else.
+          bash scripts/checkout_release_source_pin.sh
 
       - name: Installing Android SDK
         script: |
@@ -354,7 +343,6 @@ workflows:
             --build-name=$BUILD_NAME \
             --build-number=$BUILD_NUMBER \
             --flavor prod \
-            --dart-define=CAPTURE_EVIDENCE_V1_DARK_WRITE=true \
             $PROVENANCE_ARGS
 
     artifacts:
@@ -514,7 +502,6 @@ workflows:
             --build-number=$BUILD_NUMBER \
             --flavor prod \
             --export-options-plist=$HOME/export_options.plist \
-            --dart-define=CAPTURE_EVIDENCE_V1_DARK_WRITE=true \
             $PROVENANCE_ARGS
 
     artifacts:
@@ -917,7 +904,6 @@ workflows:
             --build-name=$BUILD_NAME \
             --build-number=$BUILD_NUMBER \
             --flavor prod \
-            --dart-define=CAPTURE_EVIDENCE_V1_DARK_WRITE=true \
             $PROVENANCE_ARGS
 
 

@@ -37,6 +37,27 @@ describe('NoteSections', () => {
     expect(onOpenSource).toHaveBeenCalledTimes(2);
   });
 
+  it('turns an inline citation the repair removes into the section source control', () => {
+    const onOpenSource = vi.fn();
+    render(
+      <NoteSections
+        sections={[
+          {
+            heading: 'Decisions',
+            body_markdown: 'Approved. [s1]',
+            source_segment_ids: [],
+          },
+        ]}
+        transcriptSegments={[{ id: 's1', start: 42 }]}
+        onOpenSource={onOpenSource}
+      />,
+    );
+    expect(screen.getByText('Approved.')).toBeTruthy();
+    expect(screen.queryByText(/\[s1\]/)).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Show Decisions in transcript' }));
+    expect(onOpenSource).toHaveBeenCalledExactlyOnceWith('s1');
+  });
+
   it('is reachable by keyboard and labels a heading-less section generically', async () => {
     const user = userEvent.setup();
     const onOpenSource = vi.fn();
@@ -119,7 +140,9 @@ describe('NoteSections', () => {
         ]}
       />,
     );
-    expect(screen.queryByRole('button')).toBeNull();
+    // The inline citation the repair removed is the legacy section's only source.
+    fireEvent.click(screen.getByRole('button', { name: 'Show Legacy in transcript' }));
+    expect(onOpenSource).toHaveBeenLastCalledWith('s2');
     expect(screen.getByText('Approved.')).toBeInTheDocument();
   });
 

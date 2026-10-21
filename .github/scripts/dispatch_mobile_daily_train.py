@@ -30,7 +30,15 @@ def _validate_pin(name: str, value: str) -> str:
     raise DispatchError(f"{name} must be X.Y.Z/build, none, or empty (got {value!r})")
 
 
-def build_payload(app_id: str, *, dry_run: bool, branch: str = "main", pin_ios: str = "", pin_android: str = "") -> dict[str, Any]:
+def build_payload(
+    app_id: str,
+    *,
+    dry_run: bool,
+    branch: str = "main",
+    pin_ios: str = "",
+    pin_android: str = "",
+    capture_health_override: str = "",
+) -> dict[str, Any]:
     """Codemagic drops the whole variables object on an empty string, so every value is non-empty."""
     if not app_id:
         raise DispatchError("Codemagic app id is required")
@@ -39,6 +47,9 @@ def build_payload(app_id: str, *, dry_run: bool, branch: str = "main", pin_ios: 
         variables["TRAIN_PIN_IOS"] = _validate_pin("pin_ios", pin_ios)
     if pin_android:
         variables["TRAIN_PIN_ANDROID"] = _validate_pin("pin_android", pin_android)
+    if capture_health_override.strip():
+        # One-shot: lets this run's rollout hops past a capture-health HOLD.
+        variables["TRAIN_CAPTURE_HEALTH_OVERRIDE"] = capture_health_override.strip()
     return {
         "appId": app_id,
         "workflowId": WORKFLOW_ID,
@@ -48,9 +59,22 @@ def build_payload(app_id: str, *, dry_run: bool, branch: str = "main", pin_ios: 
 
 
 def dispatch(
-    app_id: str, token: str, *, dry_run: bool, pin_ios: str = "", pin_android: str = ""
+    app_id: str,
+    token: str,
+    *,
+    dry_run: bool,
+    pin_ios: str = "",
+    pin_android: str = "",
+    capture_health_override: str = "",
 ) -> str:
-    response = _api_post(BUILDS_API, token, build_payload(app_id, dry_run=dry_run, pin_ios=pin_ios, pin_android=pin_android))
+    payload = build_payload(
+        app_id,
+        dry_run=dry_run,
+        pin_ios=pin_ios,
+        pin_android=pin_android,
+        capture_health_override=capture_health_override,
+    )
+    response = _api_post(BUILDS_API, token, payload)
     build_id = response.get("buildId")
     if not isinstance(build_id, str) or not build_id:
         raise DispatchError(f"Codemagic did not return a buildId: {response}")
@@ -71,6 +95,11 @@ def main(argv: list[str] | None = None) -> int:
         default="",
         help="audited Android candidate (X.Y.Z/build, or none for an audited no-candidate) from the operator release gate; fails the train closed on drift",
     )
+    parser.add_argument(
+        "--capture-health-override",
+        default="",
+        help="reason to advance rollouts past a capture-health HOLD for this run only (empty = no override)",
+    )
     args = parser.parse_args(argv)
     token = os.environ.get("CODEMAGIC_API_TOKEN", "")
     if not token:
@@ -83,6 +112,7 @@ def main(argv: list[str] | None = None) -> int:
             dry_run=args.dry_run == "true",
             pin_ios=args.pin_ios,
             pin_android=args.pin_android,
+            capture_health_override=args.capture_health_override,
         )
     except DispatchError as error:
         print(f"dispatch failed: {error}", file=sys.stderr)

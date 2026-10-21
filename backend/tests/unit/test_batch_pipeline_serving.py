@@ -269,6 +269,25 @@ def test_historical_dead_redrive_is_authenticated_stage_bound_and_idempotent(api
     assert TestClient(app).post(path, json={'stage': 'dev', 'segment_id': 'synthetic'}).status_code == 403
 
 
+def test_held_partial_scan_runs_on_a_slow_cadence_behind_its_kill_switch(monkeypatch):
+    projector = Mock()
+    service = Serving(MemoryStore(), projector=projector)
+    service.reconcile()
+    service.reconcile()
+    projector.sweep_held.assert_called_once()
+    service.held_partial_due = 0.0
+    monkeypatch.setenv('BATCH_PIPELINE_HELD_PARTIAL_ENABLED', 'false')
+    service.reconcile()
+    projector.sweep_held.assert_called_once()
+    monkeypatch.delenv('BATCH_PIPELINE_HELD_PARTIAL_ENABLED')
+    projector.sweep_held.side_effect = TimeoutError('synthetic held scan failure')
+    service.reconcile()
+    # A failed scan never stops lease recovery or the projection sweep.
+    assert projector.sweep_held.call_count == 2 and projector.sweep.call_count == 4
+    # Projectors without the scan (the pipeline simulator's model) are skipped.
+    Serving(MemoryStore(), projector=SimpleNamespace(sweep=lambda: None)).reconcile()
+
+
 def test_recovery_is_scheduled_inside_service_but_metrics_reconcile_does_not_dispatch():
     from unittest.mock import Mock
 
@@ -530,6 +549,61 @@ def test_periodic_maintenance_runs_on_one_serving_instance_per_lease():
     follower.reconcile(recover_quarantine=True)
     follower.recovery.sweep.assert_called_once()
     follower.cleanup.assert_called_once()
+
+
+def test_recovery_dispatch_tick_runs_only_recovery_on_the_maintenance_leader():
+    from utils.batch_pipeline.leader import SERVING_MAINTENANCE, LeaderLease
+
+    store = MemoryStore()
+    leader, follower = (
+        Serving(
+            store,
+            projector=Mock(),
+            cleanup=Mock(),
+            recovery=Mock(),
+            leader=LeaderLease(store, SERVING_MAINTENANCE, ttl_seconds=60),
+        )
+        for _ in range(2)
+    )
+    leader.recovery.sweep.return_value = {'queued': 1}
+    assert leader.dispatch_recovery() == {'queued': 1}
+    assert follower.dispatch_recovery() is None
+    follower.recovery.sweep.assert_not_called()
+    for instance in (leader, follower):
+        instance.cleanup.assert_not_called()
+        instance.projector.sweep.assert_not_called()
+    assert Serving(store).dispatch_recovery() is None  # No recovery configured.
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('interval,dispatches', [('1', True), ('off', False)])
+async def test_serving_runtime_dispatches_recovery_beside_the_serving_pass(monkeypatch, interval, dispatches):
+    from utils.batch_pipeline import serving
+
+    monkeypatch.setenv('BATCH_PIPELINE_SERVING_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_DISPATCH_INTERVAL_SECONDS', interval)
+    passes = asyncio.Event()
+
+    async def reconcile_async(**kwargs):
+        passes.set()
+
+    service = SimpleNamespace(store=Mock(), reconcile_async=reconcile_async, dispatch_recovery=Mock())
+
+    async def drain_recordings(store):
+        return None
+
+    monkeypatch.setattr(serving, 'current_stage', lambda: 'prod')
+    monkeypatch.setattr(serving, 'serving_for_stage', lambda stage: service)
+    monkeypatch.setattr(serving, 'drain_recordings', drain_recordings)
+    runtime = serving.start_serving_from_env()
+    await asyncio.wait_for(passes.wait(), timeout=5)
+    for _ in range(50):
+        if service.dispatch_recovery.called or not dispatches:
+            break
+        await asyncio.sleep(0.01)
+    await serving.stop_serving(runtime)
+    assert service.dispatch_recovery.called is dispatches
+    assert runtime[1].done()
 
 
 def test_serving_maintenance_fails_open_when_lease_store_errors():

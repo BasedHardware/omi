@@ -342,3 +342,30 @@ def test_timeout_flag_invalid_value_rejected(config_path, cli_runner, bad_val) -
     result = cli_runner.invoke(app, ["--timeout", bad_val, "memory", "list"])
     assert result.exit_code == 2
     assert "Invalid value for '--timeout'" in result.output or "smaller than the minimum" in result.output
+
+
+def test_timeout_flag_reaches_local_client(config_path, cli_runner, monkeypatch) -> None:
+    """--timeout must bound local Desktop API calls too, not only cloud requests."""
+    import httpx
+
+    from omi_cli.local_client import LocalOmiClient
+
+    captured_timeouts = []
+    original_init = LocalOmiClient.__init__
+
+    def mock_init(self, *args, **kwargs):
+        captured_timeouts.append(kwargs.get("timeout"))
+        original_init(self, *args, **kwargs)
+
+    monkeypatch.setattr(LocalOmiClient, "__init__", mock_init)
+    monkeypatch.setattr(LocalOmiClient, "list_tools", lambda self: {"tools": []})
+    monkeypatch.setenv("OMI_LOCAL_API_URL", "http://127.0.0.1:48231")
+    monkeypatch.setenv("OMI_LOCAL_TOKEN", "local-token")
+
+    result = cli_runner.invoke(app, ["--timeout", "5.5", "--json", "local", "tools"])
+    assert result.exit_code == 0, result.output
+    assert len(captured_timeouts) == 1
+    t = captured_timeouts[0]
+    assert isinstance(t, httpx.Timeout)
+    assert t.read == 5.5
+    assert t.connect == 5.5

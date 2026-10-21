@@ -1297,7 +1297,7 @@ class MemoriesViewModel: ObservableObject {
   /// schedules a bounded in-launch retry (see
   /// `MemoriesViewModel+ReconcileRetry.swift`) that re-enters this function, so
   /// every guard — latch, fresh cursor, owner fencing — runs again per attempt.
-  /// Only an exhausted, owner-aborted, or failed run leaves the latch unset.
+  /// Only a complete run latches; an exhausted run is held until next launch.
   func reconcileCacheIfNeeded() async {
     let userId = UserDefaults.standard.string(forKey: "auth_userId") ?? "unknown"
 

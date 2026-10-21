@@ -36,6 +36,12 @@ def previous_stage():
         capture_output=True,
         text=True,
     ).stdout
+    # Historical comparison source predates DEC-PRD-004. Pin its consumer ON
+    # locally so the baseline stays comparable without restoring a runtime flag.
+    source = source.replace(
+        'from config.audio_timeline import live_speaker_span_resolution_enabled',
+        'def live_speaker_span_resolution_enabled(): return True',
+    )
     module = types.ModuleType('capture_resolution_pre_r4')
     with pytest.MonkeyPatch.context() as patch:
         patch.setitem(sys.modules, module.__name__, module)
@@ -125,7 +131,7 @@ def test_randomized_base_embedding_is_byte_identical(
     env, verified_audio, base_stage, monkeypatch, scope, seed, scores_enabled
 ):
     monkeypatch.setenv('SPEAKER_MATCH_SCORES_ENABLED', str(scores_enabled).lower())
-    monkeypatch.setenv('LIVE_SPEAKER_SPAN_RESOLUTION', 'true')
+
     rng = random.Random(seed)
     extents = []
     start = 0.0
@@ -169,7 +175,7 @@ def test_base_resolved_identity_survives_legacy_evidence_refresh_and_cache_miss(
     env, verified_audio, base_stage, monkeypatch, scope, extents, scores_enabled
 ):
     monkeypatch.setenv('SPEAKER_MATCH_SCORES_ENABLED', str(scores_enabled).lower())
-    monkeypatch.setenv('LIVE_SPEAKER_SPAN_RESOLUTION', 'true')
+
     conversation = _scoped_input(scope, extents[-1][1])
     session = verified_audio(conversation, extents)
     for index, chunk in enumerate(session.chunks):
@@ -213,7 +219,7 @@ def test_base_resolved_identity_survives_legacy_evidence_refresh_and_cache_miss(
 
 @pytest.mark.parametrize('scope', ['sync', 'v2', 'live'])
 def test_two_short_chunks_are_strictly_additive(env, verified_audio, base_stage, monkeypatch, scope):
-    monkeypatch.setenv('LIVE_SPEAKER_SPAN_RESOLUTION', 'true')
+
     conversation = _scoped_input(scope, 1.2)
     session = verified_audio(conversation, [(0, 0.6), (0.6, 1.2)])
     _voices(session)

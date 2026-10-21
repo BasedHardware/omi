@@ -311,6 +311,36 @@ final offlineProcessingScenarios = <AuditScenario>[
     },
   ),
   AuditScenario(
+    id: 'on-the-way-refused-server-job',
+    title: 'On the Way: a server sync job next to a refused recording',
+    page: 'lib/pages/conversations/on_the_way_page.dart (OnTheWayPage)',
+    state: 'Nothing uploading on the phone, one recording the server refused, and a sync job the '
+        'server is transcribing',
+    run: (a) async {
+      final sync = _SyncAuditProvider(wals: [_wal(_at(2, 9, 0), 5, WalStatus.outsideRecoveryWindow)]);
+      final store = PendingWorkStore(
+        loadPending: () async => const ApiSuccess(PendingWorkSnapshot(enabled: true, attentionUnseenCount: 0, items: [
+          PendingWorkItem(id: 'sync:j', kind: 'sync_job', state: 'transcribing', conversationIds: []),
+        ])),
+        loadAttention: () async => const ApiSuccess(AttentionItemsPage.disabled),
+      );
+      await a.tester.runAsync(store.refresh);
+      final previous = PendingWorkStore.instance;
+      PendingWorkStore.instance = store;
+      try {
+        await a.pump(
+          OnTheWayPage(syncProvider: sync, multiFileSync: true),
+          scaffold: false,
+          providers: [ChangeNotifierProvider<SyncProvider>.value(value: sync)],
+        );
+        expect(find.text('On the Way'), findsOneWidget);
+        await a.shot('Open the pending row while a refused recording waits');
+      } finally {
+        PendingWorkStore.instance = previous;
+      }
+    },
+  ),
+  AuditScenario(
     id: 'activity',
     title: 'Activity',
     page: 'lib/pages/activity/activity_page.dart (ActivityPage)',
