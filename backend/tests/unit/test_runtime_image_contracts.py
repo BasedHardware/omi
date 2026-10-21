@@ -573,8 +573,9 @@ def test_cpu_role_images_build_from_one_dockerfile_and_share_layers(contracts_mo
     dockerfile = BACKEND_DIR.parent / ROLE_DOCKERFILE
     for name, target in CPU_ROLE_TARGETS.items():
         contract = contracts[name]
-        assert (contract.dockerfile, contract.target, contract.build_only) == (dockerfile, target, True)
-        assert contract.deployment_workflows == ()
+        # B2: the gcp_backend.yml build-only train publishes every role image (not deployed until opt-in).
+        assert (contract.dockerfile, contract.target, contract.build_only) == (dockerfile, target, False)
+        assert contract.deployment_workflows == (BACKEND_DIR.parent / '.github/workflows/gcp_backend.yml',)
         assert contract.dependency_probe_smoke and contract.pull_request_smoke
 
     # api/workers/realtime/gateway differ from `app` only in metadata (ENV/CMD/ARG/LABEL),
@@ -865,7 +866,7 @@ def test_smoke_of_a_multi_target_dockerfile_requires_its_target(contracts_module
 def test_build_only_entries_are_validated(contracts_module, tmp_path, override, expected):
     def mutate(payload):
         entry = next(image for image in payload['images'] if image['name'] == 'backend-api')
-        entry.update(override)
+        entry.update({'build_only': True, 'deployment_workflows': [], **override})
 
     with pytest.raises(contracts_module.ContractError, match=re.escape(expected)):
         contracts_module.load_contracts(_registry_variant(tmp_path, mutate))
