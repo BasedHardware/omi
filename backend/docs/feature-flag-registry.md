@@ -1,4 +1,4 @@
-<!-- feature-flag-registry as-of: 2026-10-20 -->
+<!-- feature-flag-registry as-of: 2026-10-21 -->
 
 # Feature-flag authority registry
 
@@ -109,7 +109,7 @@ entries are exempt: they are queued for removal, not running.
 
 ## Overdue for a decision
 
-None as of 2026-10-20.
+None as of 2026-10-21.
 
 ## Flags
 
@@ -402,6 +402,7 @@ and an explicit empty literal renders as `''`.
 | `SCREEN_TASK_STOP` | Stop screen-task gate and flagged extraction admission; default false; clients poll every 30 seconds with a 55-second lease | backend | env | inverted | — | — | — | — | keep | keep | — | dazheng |
 | `SONIOX_IDLE_CLOSE_SECONDS` | Default on at 45 s; close paid Soniox transports after continuous active-VAD silence or 60 s with no client frames; 0 or off is the kill switch | backend | env | open | — | — | — | — | keep | keep | — | backend |
 | `STT_NO_TEXT_RESCUE_ENABLED` | Default-off bounded paid rescue and cheap failback for silent window episodes; requires recovery enabled | backend | env | closed | — | — | true (backend-listen (chart), gke/backend-listen) | — | keep | keep | — | backend |
+| `STT_PRERECORDED_LANGUAGE_GUARD_ENABLED` | Default on unless false; unknown/multilingual audio needs independent >=0.8-confidence supported-language detection to use Parakeet; unsupported or uncertain speech uses Modulate, with custody retained for pre-admitted units | backend | env | closed | — | — | — | — | keep | keep | — | dazheng |
 | `SYNC_BACKFILL_ENABLED` | Emergency stop for accepting sync backfill | backend | env | open | true | true | true | — | keep | keep | — | unowned |
 | `SYNC_BACKFILL_OWNER_CONCURRENCY_ENABLED` | Default on; bounded read-only downloads for future backfill jobs; off restores ordinary downloads and serial execution remains unchanged | backend | env | closed | {value: 'on', category: ops_kill} | {value: 'on', category: ops_kill} | {value: 'on', category: ops_kill} | — | keep | keep | — | dazheng |
 | `SYNC_BACKFILL_ROUTING_ENABLED` | Route eligible sync work to backfill lane | backend | env | closed | — | — | true | — | keep | keep | — | unowned |
@@ -709,6 +710,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `STT_PAID_SPILLOVER_DEEPGRAM_PER_MINUTE` — Deepgram fleet paid router promotion cap per UTC minute; default 30; zero refuses promotions (fail: closed)
 - `STT_PAID_SPILLOVER_MODULATE_PER_MINUTE` — Modulate fleet paid router promotion cap per UTC minute; default 30; zero refuses promotions (fail: closed)
 - `STT_PAID_SPILLOVER_SONIOX_PER_MINUTE` — Soniox fleet paid router promotion cap per UTC minute; default 30; zero refuses promotions (fail: closed)
+- `STT_PRERECORDED_LANGUAGE_GUARD_ENABLED` — Default on unless false; unknown/multilingual audio needs independent >=0.8-confidence supported-language detection to use Parakeet; unsupported or uncertain speech uses Modulate, with custody retained for pre-admitted units (fail: closed)
 - `SYNC_BACKFILL_ORDER_UID_ALLOWLIST` — Comma-separated UID cohort for newest backfill ordering; empty by default and newest master policy required (fail: closed)
 - `SYNC_CLOCK_RUN_PARTITION_ENABLED` — Default-on estimated-clock run partition: offline sync audio whose recording time the app estimated merges only within its own contiguous recording run; false ignores the filename run token and restores plain temporal merging (fail: open)
 - `SYNC_DISPATCH_MODE` — Select sync dispatch lane (fail: closed)

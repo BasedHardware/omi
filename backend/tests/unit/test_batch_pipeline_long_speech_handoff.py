@@ -24,6 +24,9 @@ from tests.unit.test_batch_pipeline_scheduler import MemoryStore
 
 @pytest.fixture(autouse=True)
 def _recovery_route(monkeypatch):
+    # Rollback coverage of the older empty-only recovery; the default-on guard
+    # and nonempty wrong-script outputs are covered in test_batch_language_guard.
+    monkeypatch.setenv('STT_PRERECORDED_LANGUAGE_GUARD_ENABLED', 'false')
     monkeypatch.setenv('BATCH_PIPELINE_EMPTY_ASR_RECOVERY_ENABLED', 'true')
     monkeypatch.setenv('BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED', 'true')
     monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'false')
@@ -155,6 +158,7 @@ async def test_intake_freezes_the_resolved_stt_language(monkeypatch, user_langua
 
     def authorize(store_, seed, snapshots):
         snapshots['user'] = {'language': user_language} if user_language else {}
+        snapshots['user']['transcription_preferences'] = {'single_language_mode': True}
         return ProtectionContext('standard', 0)
 
     def stage_audio(work, body):

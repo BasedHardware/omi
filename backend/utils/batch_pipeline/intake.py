@@ -12,6 +12,7 @@ from fastapi.responses import JSONResponse
 from config.batch_pipeline import priority_for
 from config.policy import BatchUnitPolicy, resolve_batch_policy
 from config.batch_pipeline_providers import provider_config
+from config.prerecorded_language import language_guard_enabled, language_class
 from config.stt_provider_policy import normalized_stt_language, PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL
 from database.batch_pipeline_intake import admit, cache_completed
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
@@ -26,6 +27,7 @@ from utils.batch_pipeline.artifact_policy import create_artifact_store
 from utils.batch_pipeline.audio import with_context
 from utils.batch_pipeline.capture_decode import decode_units
 from utils.batch_pipeline.contracts import ProjectionBinding, WorkItem
+from utils.batch_pipeline.language_metrics import record_route
 from utils.batch_pipeline.retention import batch_artifact_authorize
 from utils.batch_pipeline.scheduler import Scheduler, owner_key
 from utils.executors import db_executor, run_blocking, storage_executor, sync_executor
@@ -378,6 +380,17 @@ async def accept_upload(
         if target.get('record_lane_owner') == 'legacy_final_pass_v1':
             return None
         language = normalized_stt_language(target.get('language') or user.get('language'))
+        # Match legacy sync's effective input: a primary app language is not a
+        # promise that the audio is monolingual. Do this only before new custody;
+        # previous batch receipts above always stay owned by their original lane.
+        prefs = user.get('transcription_preferences') or {}
+        input_language = normalized_stt_language(user.get('language')) if prefs.get('single_language_mode') else 'multi'
+        if language_guard_enabled() and language_class(input_language) == 'unsupported':
+            record_route('intake', input_language, 'multilingual')
+            record_fallback(
+                component='stt_selection', from_mode='batch', to_mode='modulate', reason='other', outcome='recovered'
+            )
+            return None
         if policy.live_record_enabled and language not in (
             PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL['nvidia/parakeet-tdt-0.6b-v3'] - {'multi'}
         ):
@@ -406,6 +419,26 @@ async def accept_upload(
         while unit := await run_blocking(sync_executor, _next_unit, iterator):
             if len(items) >= 128:
                 raise ValueError('capture bundle exceeds bounded conversation-unit limit')
+            from utils.stt.batch_language import resolve_language
+            from config.stt_cap_dispatch import execution_admission_enabled
+            from utils.stt_cap_dispatch import sync_allowed
+
+            # Classification runs on the CPU intake host, never under the GPU
+            # lock or with vendor credentials on a worker. Cap refusal does not
+            # license a probe; the worker retains uncertain speech for recovery.
+            language_decision = await run_blocking(
+                sync_executor,
+                resolve_language,
+                input_language,
+                unit.wav,
+                before_probe=lambda: not execution_admission_enabled(uid, 'batch')
+                or sync_allowed(uid, unit.duration_seconds, 'modulate', lane='batch'),
+            )
+            frozen_language = (
+                language_decision.language
+                if language_decision.parakeet_safe or language_class(language_decision.language) == 'unsupported'
+                else 'und' if language_guard_enabled() else input_language
+            )
             item = replace(
                 seed,
                 segment_id=hashlib.sha256(f'{content_id}:{len(items)}'.encode()).hexdigest(),
@@ -434,7 +467,9 @@ async def accept_upload(
                     'conversation_id': conversation_id,
                     # Resolved conversation/user STT language ('' when unknown).
                     # The worker skips a Parakeet-only retry for other languages.
-                    'stt_language': language,
+                    'stt_language': frozen_language,
+                    'stt_language_evidence': language_decision.evidence,
+                    'stt_language_confidence': language_decision.confidence,
                 },
             )
             uri = await run_blocking(storage_executor, artifacts.stage_audio, item, frozen)

@@ -26,6 +26,7 @@ from diarizer.batch_pipeline_startup import ChainMemoryProbe, load_worker, synch
 from utils.batch_pipeline.artifact_policy import create_artifact_store
 from utils.batch_pipeline.capacity import PoolCapacity
 from utils.batch_pipeline.metrics import QueueMetrics
+from utils.batch_pipeline.language_metrics import ROUTES as LANGUAGE_ROUTES
 from utils.batch_pipeline.correctness_metrics import TRANSITIONS, DURATION, LABELS
 from utils.batch_pipeline.errors import FatalGpuError
 from utils.batch_pipeline.leader import PUMP_RECOVERY, LeaderLease
@@ -95,6 +96,7 @@ class SynchronizedWorker:
 
 
 def health_server(state: RuntimeState, registry: CollectorRegistry, port: int) -> ThreadingHTTPServer:
+    registry.register(LANGUAGE_ROUTES)
     for collector in SHADOW_COLLECTORS:
         registry.register(collector)
     if cap_dispatch_enabled():

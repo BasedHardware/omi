@@ -1469,11 +1469,11 @@ class TestPrerecordedServiceRouting(unittest.TestCase):
         self.assertEqual(model, 'parakeet')
 
     @patch('utils.stt.pre_recorded.get_prerecorded_models', new=lambda: ('dg-nova-3',))
-    def test_multi_language_falls_through_to_parakeet_capability(self):
+    def test_multi_language_without_audio_proof_uses_safe_multilingual_selection(self):
         from utils.stt.pre_recorded import PrerecordedSTTService, get_prerecorded_service
 
         svc, lang, model = get_prerecorded_service('multi')
-        self.assertEqual(svc, PrerecordedSTTService.PARAKEET)
+        self.assertEqual(svc, PrerecordedSTTService.MODULATE)
         self.assertEqual(lang, 'multi')
 
 
