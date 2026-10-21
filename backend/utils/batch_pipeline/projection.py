@@ -21,10 +21,12 @@ from config.batch_pipeline import (
     owner_drain_enabled,
     projection_index_deferred_enabled,
     projection_pending_page_enabled,
+    projection_predecessor_replay_enabled,
     projection_prefetch_depth,
     sweep_owner_chain_enabled,
 )
 from database.batch_pipeline_projection import ProjectionBlocked, ProjectionReplay, ProjectionStore
+from database.batch_pipeline_projection_protocol import ProjectionPredecessorPending
 from database.batch_pipeline_projection_protocol import normalized_binding
 from database.batch_pipeline_quarantine_recovery import held_candidates
 from database.batch_pipeline_store import PROJECTION_ASSIGNMENT_STATES, PROJECTION_FINISH_STATES, FirestoreStore
@@ -1177,6 +1179,7 @@ class Projector:
         for segment_id in discovery.next(limit=size):
             if segment_id in chained:
                 continue
+            binding = None
             try:
                 job, entry, binding = self.store.read(segment_id)
                 if drain and (binding.owner_id in self.draining or binding.owner_id in handed):
@@ -1194,6 +1197,39 @@ class Projector:
                     result = self._project_read(segment_id, job, entry, binding)
                 counts['completed' if result is not None else 'waiting'] += 1
                 touched.add(segment_id)
+            except ProjectionPredecessorPending:
+                counts['blocked'] += 1
+                # Discovery may have paged past the unprojected head. Rebuild it
+                # from the watermark rather than waiting for the cursor to wrap.
+                # The walk still runs every transactional assignment fence.
+                if (
+                    binding is not None
+                    and chain
+                    and projection_predecessor_replay_enabled()
+                    and binding.owner_id not in walked
+                ):
+                    walked.add(binding.owner_id)
+                    if drain:
+                        handed.add(binding.owner_id)
+                        self.request_drain(binding.owner_id)
+                    else:
+                        if chain_deadline is None:
+                            chain_deadline = time.monotonic() + OWNER_CHAIN_SECONDS
+                        budget = max(0.0, chain_deadline - time.monotonic())
+                        try:
+                            followups, advanced = self._walk_owner(
+                                binding.owner_id, recovered=None, limit=OWNER_CHAIN_LIMIT, budget_seconds=budget
+                            )
+                            if followups:
+                                self.has_async_followups = True
+                                self.owe_followups(followups)
+                            chained.update(advanced)
+                        except Exception as error:
+                            logger.error(
+                                'event=batch_projection action=sweep_chain outcome=error exception_type=%s',
+                                error_type(error),
+                            )
+                continue
             except (ProjectionBlocked, BatchPrivacyBlocked):
                 counts['blocked'] += 1
                 continue
