@@ -393,9 +393,11 @@ Future<void> _drainAndUnmount(WidgetTester tester) async {
 }
 
 /// Five ticks may rebuild the page shell once (the 30-second episode poll or the midnight rollover
-/// can land in the window), never once per tick, and never a conversation row.
+/// can land in the window), never once per tick, and never a conversation row. A shell rebuild
+/// also rebuilds the clock's element, so only the shell bound, not the clock count, guards the
+/// per-tick amplification.
 void _expectTickStaysInLeaf(Map<String, int> rebuilds, {required String when}) {
-  expect(rebuilds['LiveEpisodeClock'], 5, reason: '$when: the clock must tick each second');
+  expect(rebuilds['LiveEpisodeClock'] ?? 0, greaterThanOrEqualTo(5), reason: '$when: the clock must tick each second');
   expect(rebuilds['ConversationListItem'], isNull, reason: '$when: a tick must not rebuild a conversation row');
   for (final shell in ['ConversationsPage', 'ConversationCaptureWidget']) {
     expect(rebuilds[shell] ?? 0, lessThanOrEqualTo(1), reason: '$when: a tick must not rebuild $shell');
