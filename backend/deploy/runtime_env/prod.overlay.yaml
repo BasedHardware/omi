@@ -90,6 +90,15 @@ overlay:
         DREAM_AGENT_ENABLED:
           value: 'true'
           category: rollout
+        DREAM_AGENT_ELIGIBILITY:
+          value: paid
+          category: rollout
+        DREAM_AGENT_PAID_PERCENT:
+          value: '5'
+          category: rollout
+        DREAM_ON_DEMAND_ENABLED:
+          value: 'false'
+          category: rollout
         DREAM_AGENT_UID_ALLOWLIST:
           value: vi7SA9ckQCe4ccobWNxlbdcNdC23
         POSTHOG_PRODUCT_CAPTURE_TOKEN:
@@ -275,6 +284,15 @@ overlay:
           category: rollout
         DREAM_AGENT_ENABLED:
           value: 'true'
+          category: rollout
+        DREAM_AGENT_ELIGIBILITY:
+          value: paid
+          category: rollout
+        DREAM_AGENT_PAID_PERCENT:
+          value: '5'
+          category: rollout
+        DREAM_ON_DEMAND_ENABLED:
+          value: 'false'
           category: rollout
         DREAM_AGENT_UID_ALLOWLIST:
           value: vi7SA9ckQCe4ccobWNxlbdcNdC23
@@ -525,8 +543,17 @@ overlay:
           DREAM_AGENT_ENABLED:
             value: 'true'
             category: rollout
+          DREAM_AGENT_ELIGIBILITY:
+            value: paid
+            category: rollout
+          DREAM_AGENT_PAID_PERCENT:
+            value: '5'
+            category: rollout
+          DREAM_ON_DEMAND_ENABLED:
+            value: 'false'
+            category: rollout
           DREAM_AGENT_PASSES_PER_DAY:
-            value: '6'
+            value: '48'
             category: rollout
           DREAM_AGENT_HUNT_INTERVAL_HOURS:
             value: '2'
@@ -824,11 +851,20 @@ overlay:
           DREAM_AGENT_ENABLED:
             value: 'true'
             category: rollout
+          DREAM_AGENT_ELIGIBILITY:
+            value: paid
+            category: rollout
+          DREAM_AGENT_PAID_PERCENT:
+            value: '5'
+            category: rollout
+          DREAM_ON_DEMAND_ENABLED:
+            value: 'false'
+            category: rollout
           REVIEW_SURFACE_MODE:
             value: 'on'
             category: rollout
           DREAM_AGENT_PASSES_PER_DAY:
-            value: '6'
+            value: '48'
             category: rollout
           DREAM_AGENT_HUNT_INTERVAL_HOURS:
             value: '2'
@@ -1158,6 +1194,18 @@ overlay:
           DREAM_AGENT_ENABLED:
             value: 'true'
             category: rollout
+          DREAM_AGENT_ELIGIBILITY:
+            value: paid
+            category: rollout
+          DREAM_AGENT_PAID_PERCENT:
+            value: '5'
+            category: rollout
+          DREAM_ON_DEMAND_ENABLED:
+            value: 'false'
+            category: rollout
+          DREAM_AGENT_PASSES_PER_DAY:
+            value: '48'
+            category: rollout
           MENTOR_PIPELINE:
             value: cohort
             category: rollout
@@ -1425,6 +1473,15 @@ overlay:
             category: rollout
           DREAM_AGENT_ENABLED:
             value: 'true'
+            category: rollout
+          DREAM_AGENT_ELIGIBILITY:
+            value: paid
+            category: rollout
+          DREAM_AGENT_PAID_PERCENT:
+            value: '5'
+            category: rollout
+          DREAM_ON_DEMAND_ENABLED:
+            value: 'false'
             category: rollout
           MENTOR_PIPELINE:
             value: cohort

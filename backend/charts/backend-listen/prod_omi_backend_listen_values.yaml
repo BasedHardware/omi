@@ -341,11 +341,13 @@ env:
   - name: DREAM_AGENT_ENABLED
     value: 'true'
   - name: DREAM_AGENT_ELIGIBILITY
-    value: 'allowlist'
+    value: 'paid'
+  - name: DREAM_AGENT_PAID_PERCENT
+    value: '5'
   - name: DREAM_AGENT_UID_ALLOWLIST
     value: 'vi7SA9ckQCe4ccobWNxlbdcNdC23'
   - name: DREAM_ON_DEMAND_ENABLED
-    value: 'true'
+    value: 'false'
   - name: REVIEW_SURFACE_MODE
     value: "on"
   - name: LISTEN_FINALIZATION_BYOK_ABANDONMENT_ENABLED
