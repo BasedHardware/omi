@@ -208,6 +208,20 @@ if ci_prediction_selected "windows-kgworker-native-closure"; then
   ci_prediction_note_deferred "Windows packaged build and real asar worker proof"
 fi
 
+# Runs first: a missing local prerequisite (unresolved app dependencies, no
+# backend/.venv, a SwiftPM .build whose recorded artifacts are gone) otherwise
+# surfaces only when its phase runs, minutes in, one push attempt per problem.
+check_worktree_env() {
+  if [ "${PRE_PUSH_SKIP_ENV_DOCTOR:-}" = "1" ]; then
+    echo "Skipping worktree env doctor because PRE_PUSH_SKIP_ENV_DOCTOR=1."
+    return
+  fi
+
+  "$PYTHON_BIN" scripts/worktree_env_doctor.py \
+    --changed-files "$CHANGED_FILES_LIST" \
+    --selection "$CI_PREDICTION_SELECTION"
+}
+
 check_pr_preflight() {
   local has_supplied_pr_body=0
 
@@ -838,6 +852,7 @@ check_gauntlet_evidence_if_needed() {
   desktop/macos/scripts/check-gauntlet-evidence-at-head.sh warn
 }
 
+run_step check_worktree_env
 run_step check_pr_preflight
 run_step "$PYTHON_BIN" .github/scripts/check-desktop-prod-promotion-policy.py
 run_step "$PYTHON_BIN" .github/scripts/check-deployment-concurrency.py --self-test
