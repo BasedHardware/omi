@@ -18,9 +18,8 @@ from utils.metrics import OMI_FALLBACK_TOTAL
 from utils.observability.demand_cohort import record_metric
 from utils.observability.demand_cohort import DEMAND_COHORTS, FAILURE_DETAIL, current_demand
 from utils.observability.routing_cohort import current_routing_cohort
-from utils.observability.reasons import FallbackReason, reason_values
+from utils.observability.reasons import FallbackReason, LiveSttReason, reason_values
 from utils.stt.failure_diagnostics import CONNECTION_LOSS_CAUSES
-from utils.stt.live_reason import LIVE_STT_FAILURE_REASONS
 
 logger = logging.getLogger(__name__)
 
@@ -362,7 +361,12 @@ def initialize_live_stt_exhausted_children() -> None:
     per emitter).
     """
     providers = ('parakeet', 'modulate', 'soniox', 'deepgram')
-    reasons = LIVE_STT_FAILURE_REASONS | {'auth', 'quota', 'last_resort', 'config_incomplete'}
+    # Built from the enum, not utils.stt.live_reason: live_reason imports utils.observability.reasons,
+    # whose package import loads this module (and runs this at import), so importing it here cycles
+    # when live_reason loads first (#23074's provider_resilience does). Same set as
+    # live_reason.LIVE_STT_FAILURE_REASONS.
+    live_failures = reason_values(LiveSttReason) - {'text', 'no_text'}
+    reasons = live_failures | {'auth', 'quota', 'last_resort', 'config_incomplete'}
     for reason in sorted(reasons):
         for provider in providers:
             for replacement in providers:

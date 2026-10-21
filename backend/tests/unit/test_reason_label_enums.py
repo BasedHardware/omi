@@ -464,7 +464,8 @@ def test_reason_label_counts_unknown_without_raising():
 
 def test_migrated_constants_are_unchanged_and_misses_are_counted():
 
-    assert len(LIVE_STT_REASONS) == 33 and LIVE_STT_REASONS == LIVE_STT_FAILURE_REASONS | {'text', 'no_text'}
+    # 33 + main's three local delivery deaths split out of capacity_full (#23074, P34).
+    assert len(LIVE_STT_REASONS) == 36 and LIVE_STT_REASONS == LIVE_STT_FAILURE_REASONS | {'text', 'no_text'}
     assert 'unknown' not in LIVE_STT_REASONS and {'cancelled', 'replay_ring_overflow'} <= LIVE_STT_FAILURE_REASONS
 
     def count(family: str) -> float:
