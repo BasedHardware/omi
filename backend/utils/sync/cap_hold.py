@@ -94,7 +94,7 @@ def upload_held_audio(
     metadata: dict,
     *,
     immutable: bool = False,
-    stored_size_limit: int | None = None,
+    live_size_limit: int | None = None,
     rpc_timeout: float = 10.0,
 ) -> dict:
     codec = metadata.get('audio_codec')
@@ -110,6 +110,12 @@ def upload_held_audio(
                     encrypted.write(encrypt_audio_chunk(chunk, uid))
             encrypted_size = encrypted.tell()
             encrypted.seek(0)
+            if live_size_limit is not None:
+                if not immutable or codec != 'ogg_opus' or not 32 < encrypted_size <= live_size_limit + 32:
+                    raise ValueError('invalid immutable live source')
+                # Opaque provenance survives re-encoding and encryption randomness.
+                capture = hashlib.sha256(json.dumps(metadata, sort_keys=True).encode()).hexdigest()
+                blob.metadata = {'omi_live_capture': capture, 'omi_live_bytes': str(encrypted_size - 32)}
             try:
                 blob.upload_from_file(
                     encrypted,
@@ -124,11 +130,20 @@ def upload_held_audio(
                 # preserve the first authenticated object across upload retries.
                 if codec == 'ogg_opus':
                     blob.reload(timeout=rpc_timeout, retry=None)  # Retry-only generation provenance.
-                    if stored_size_limit is not None and not 32 < blob.size <= stored_size_limit + 32:
-                        # An ambiguous retry accepts only this capture's own stored
-                        # generation: a length outside the encoder's bound means the
-                        # object at this identity is not the upload being retried.
-                        raise RuntimeError('stored held source length mismatch')
+                    if live_size_limit is not None:
+                        stored_metadata = blob.metadata or {}
+                        try:
+                            stored_bytes = int(stored_metadata.get('omi_live_bytes', '0'))
+                        except (TypeError, ValueError):
+                            raise ValueError('invalid stored live source size') from None
+                        if (
+                            stored_metadata.get('omi_live_capture') != capture
+                            or not 0 < stored_bytes <= live_size_limit
+                            or blob.size != stored_bytes + 32
+                            or not blob.generation
+                        ):
+                            raise ValueError('stored live source provenance mismatch')
+                        encrypted_size = blob.size
         encoded_metadata = encrypt(json.dumps(metadata), uid)
         fields = {'audio_path': blob_path, 'metadata': encoded_metadata}
         if codec == 'ogg_opus':
@@ -138,6 +153,10 @@ def upload_held_audio(
                 source_frames=metadata['source_frames'],
                 audio_generation=blob.generation,
             )
+        if live_size_limit is not None:
+            if not blob.generation:
+                raise ValueError('immutable live source generation unavailable')
+            fields['audio_size'] = encrypted_size
         if len(encoded_metadata.encode()) > 512 * 1024:
             metadata_digest = hashlib.sha256(encoded_metadata.encode()).hexdigest()
             metadata_path = f'chunks/{uid}/cap-held/{identity}.{metadata_digest}.metadata.enc'

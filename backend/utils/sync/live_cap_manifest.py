@@ -4,21 +4,14 @@ import logging
 import time
 from typing import Any
 
-from google.api_core.exceptions import AlreadyExists, NotFound, PreconditionFailed
+from google.api_core.exceptions import AlreadyExists
 from google.cloud import firestore
 from database._client import get_data_plane_firestore_client as get_firestore_client
 from database._client import is_retryable_firestore_transaction_error, run_transactional
 from database.legal_holds import external_write_fence
 from utils.observability.held_content import record_erasure
-from utils.sync import cap_hold, live_cap_codec
-from utils.sync.live_cap_publication import (
-    LIVE_PUBLICATION_DEADLINE_SECONDS,
-    UNRECOVERED,
-    Publication,
-    commit_publication,
-    new_publication_budget,
-    retry_transient_leaf,
-)
+from utils.sync import cap_hold
+from utils.sync.live_cap_publication import UNRECOVERED, Publication, commit_publication
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +26,6 @@ def _publish(uid: str, path: str, source: Publication, metadata: dict, seconds: 
     client = get_firestore_client()
     ref = cap_hold.holds(uid).document(identity)
     total = cap_hold.summary_ref(uid)
-    budget = new_publication_budget(LIVE_PUBLICATION_DEADLINE_SECONDS)
 
     @firestore.transactional
     def commit(tx: Any) -> None:
@@ -41,11 +33,11 @@ def _publish(uid: str, path: str, source: Publication, metadata: dict, seconds: 
         # The publication lock covers one attempt. Retry backoff runs after this
         # returns, so a sleep cannot stall another session's source.
         with source.lock:
-            # Hold both account authorities through upload AND manifest commit.
-            # A destructive writer either precedes this read (we refuse) or waits /
-            # conflicts with it. Nested GCS gates reuse this exact transaction scope.
+            # The live upload checks both account authorities independently;
+            # these reads still fence its receipt commit against destructive work.
+            # Synchronous recovery callers upload inside this same scope.
             with external_write_fence(uid, firestore_client=client, transaction=tx):
-                existing = ref.get(transaction=tx, timeout=budget.attempt_timeout(), retry=None)
+                existing = ref.get(transaction=tx)
                 prior = existing.to_dict() if existing.exists else None
                 if prior and prior.get('state') == 'purged':
                     record_erasure('post_delete_publication')
@@ -61,16 +53,7 @@ def _publish(uid: str, path: str, source: Publication, metadata: dict, seconds: 
                     return
                 attempted = True
                 source.put_started = True
-                source.fields = {}  # A later failed put must not inherit a deleted generation.
-                fields = cap_hold.upload_held_audio(
-                    uid,
-                    path,
-                    identity,
-                    metadata,
-                    immutable=True,
-                    stored_size_limit=live_cap_codec.MAX_OBJECT_BYTES,
-                    rpc_timeout=budget.attempt_timeout(),
-                )
+                fields = source.fields or cap_hold.upload_held_audio(uid, path, identity, metadata, immutable=True)
                 source.fields = dict(fields)
                 body = cap_hold.hold_manifest(fields, seconds, time.time(), int(metadata['timestamp']))
                 tx.create(ref, {**body, 'live_custody_version': 4, 'usage_applied': True})
@@ -94,7 +77,7 @@ def _publish(uid: str, path: str, source: Publication, metadata: dict, seconds: 
         @firestore.transactional
         def commit_recovery(tx: Any) -> bool:
             with external_write_fence(uid, firestore_client=client, transaction=tx):
-                existing = ref.get(transaction=tx, timeout=budget.leaf_timeout(), retry=None)
+                existing = ref.get(transaction=tx)
                 row = existing.to_dict() if existing.exists else None
                 if row and row.get('state') == 'purged':
                     record_erasure('post_delete_publication')
@@ -115,13 +98,11 @@ def _publish(uid: str, path: str, source: Publication, metadata: dict, seconds: 
                 return True
 
         try:
-            # One-shot by design; its reads and commit still carry the budget's
-            # confirmation slice, floored for a deadline the retries just spent.
-            return bool(run_transactional(client, commit_recovery, attempts=1, commit_timeout=budget.leaf_timeout))
+            return bool(run_transactional(client, commit_recovery, attempts=1))
         except AlreadyExists:
             return False
 
-    def recover(error: BaseException, budget: Any) -> Any:
+    def recover(error: BaseException) -> Any:
         if isinstance(error, AlreadyExists):
             # The create lost to a receipt that already exists. That receipt was
             # counted by the transaction that created it; at most its marker is
@@ -130,9 +111,7 @@ def _publish(uid: str, path: str, source: Publication, metadata: dict, seconds: 
                 return None
             return UNRECOVERED
         with source.lock:
-            # A transport fault on a custody-deciding read must not turn a
-            # committed receipt into a 1011; these leaves re-read idempotently.
-            snapshot = retry_transient_leaf(budget, ref.get)
+            snapshot = ref.get()
             row = snapshot.to_dict() if snapshot.exists else None
             if row and row.get('usage_applied'):
                 return None
@@ -152,24 +131,9 @@ def _publish(uid: str, path: str, source: Publication, metadata: dict, seconds: 
                     type(error).__name__,
                 )
                 return None
-            # Exceptional path only: an upload may have succeeded before an aborted
-            # commit or a deletion marker won. Never delete a committed source on a
-            # lost reply, nor a replacement generation. Retain failures for retry.
-            if source.put_started and not retry_transient_leaf(budget, ref.get).exists:
-                fields = source.fields
-                blob = cap_hold.get_private_cloud_sync_bucket().blob(
-                    fields.get('audio_path') or f'chunks/{uid}/cap-held/{identity}.opus.enc'
-                )
-                try:
-                    generation = fields.get('audio_generation')
-                    if not generation:
-                        retry_transient_leaf(budget, blob.reload)  # Ambiguous reply; Class B only.
-                        generation = blob.generation
-                    if not generation:
-                        raise RuntimeError('held source generation unavailable for cleanup')
-                    retry_transient_leaf(budget, blob.delete, if_generation_match=generation)
-                except (NotFound, PreconditionFailed):
-                    pass
+            # A missing receipt cannot fence an earlier commit that is still in
+            # flight. Keep the identity and generation even on a permanent error;
+            # unreferenced storage is preferable to a receipt naming deleted audio.
         return UNRECOVERED
 
-    commit_publication(client, commit, recover=recover, budget=budget)
+    commit_publication(client, commit, recover=recover)

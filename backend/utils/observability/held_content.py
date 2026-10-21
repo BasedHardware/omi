@@ -86,8 +86,8 @@ ERASURE = Counter('omi_held_content_erasure', 'Held erasure failures and post-de
 PUBLICATION_RETRY = Counter(
     'omi_held_content_publication_retry',
     'Live cap publication attempts that retried a transient failure, as a Firestore '
-    'transaction restart or a bounded recovery-leaf retry. '
-    'retried_ok committed on a later fresh transaction; '
+    'transaction restart or an immutable GCS upload retry. '
+    'retried_ok completed a later upload or fresh transaction; '
     'exhausted spent the bounded budget; '
     'staged_unverified means the staging write landed and a later read failed; '
     'source_orphaned means the flush failed closed after uploading a fragment no row names. '

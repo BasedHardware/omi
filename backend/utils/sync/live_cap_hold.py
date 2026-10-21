@@ -23,7 +23,7 @@ from database._client import get_firestore_client, run_transactional
 from database.legal_holds import external_write_fence
 from utils.executors import db_executor, storage_executor, run_blocking
 from utils.observability.held_content import record_capture
-from utils.sync import cap_hold, live_cap_manifest, live_cap_capacity, live_cap_codec, live_cap_staging
+from utils.sync import cap_hold, live_cap_manifest, live_cap_capacity, live_cap_codec, live_cap_staging, live_cap_upload
 from utils.sync.live_cap_publication import Publication
 
 logger = logging.getLogger(__name__)
@@ -40,7 +40,7 @@ def fragments_enabled() -> bool:
     return os.getenv('CAP_HOLD_LIVE_FRAGMENT_ENABLED', 'true').lower() == 'true'
 
 
-def _publish_audio(
+def _upload_audio(
     uid: str,
     data: bytes,
     rate: int,
@@ -49,7 +49,7 @@ def _publish_audio(
     source: Publication,
     metadata: dict,
     duration: float,
-) -> None:
+) -> dict:
     """One executor leaf owns scratch until the actual upload has completed.
 
     Cancelling the async waiter cannot run a finally that unlinks a file still
@@ -60,10 +60,28 @@ def _publish_audio(
         live_cap_codec.encode(
             path, data, rate, **({'max_bytes': live_cap_staging.MAX_FRAGMENT_BYTES} if group is not None else {})
         )
-        if group is None:
-            live_cap_manifest.publish(uid, path, source, metadata, duration)
-        else:
-            live_cap_staging.append(uid, path, group, source, metadata, duration)
+        return cap_hold.upload_held_audio(
+            uid,
+            path,
+            source.identity,
+            metadata,
+            immutable=True,
+            live_size_limit=(
+                live_cap_staging.MAX_FRAGMENT_BYTES if group is not None else live_cap_codec.MAX_OBJECT_BYTES
+            ),
+            rpc_timeout=live_cap_upload.UPLOAD_SOCKET_SECONDS,
+        )
+
+
+async def _publish_audio(uid, data, rate, start, group, source, metadata, duration) -> None:
+    await live_cap_upload.prepare(
+        source, lambda: _upload_audio(uid, data, rate, start, group, source, metadata, duration)
+    )
+    # Only the coordinator can advance to commit. A late upload cannot do so.
+    if group is None:
+        await run_blocking(storage_executor, live_cap_manifest.publish, uid, '', source, metadata, duration)
+    else:
+        await run_blocking(storage_executor, live_cap_staging.append, uid, '', group, source, metadata, duration)
 
 
 def reserve(
@@ -329,9 +347,7 @@ class LiveHeldAudio:
                         self._group = Publication(self.host.request.uid)
                         self._group_key = key
                     try:
-                        await run_blocking(
-                            storage_executor,
-                            _publish_audio,
+                        await _publish_audio(
                             self.host.request.uid,
                             data,
                             rate,
@@ -352,9 +368,7 @@ class LiveHeldAudio:
                             raise RuntimeError('live held audio lacks reserved capacity')
                         self._group = Publication(self.host.request.uid)
                         self._group_key = key
-                        await run_blocking(
-                            storage_executor,
-                            _publish_audio,
+                        await _publish_audio(
                             self.host.request.uid,
                             data,
                             rate,
@@ -372,9 +386,7 @@ class LiveHeldAudio:
                     self._group_seconds += duration
                     self._group_end = start + duration
                 else:
-                    await run_blocking(
-                        storage_executor,
-                        _publish_audio,
+                    await _publish_audio(
                         self.host.request.uid,
                         data,
                         rate,

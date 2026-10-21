@@ -6129,6 +6129,17 @@ Listen owns denied PCM before provider replay. Its sink accepts at most 15 secon
 of volatile PCM, persists short encrypted fragments and composes each continuous
 minute into one immutable held source. It freezes staging before composition;
 expired staging and post-publication fragment cleanup resume from server sweeps.
+Live immutable uploads use generation-zero puts and one transport retry, each
+with a 1.5-second socket inactivity timeout and a 4-second async wait deadline
+(including encoding, executor queueing and 412 verification). The upload wait
+therefore returns within 8 seconds plus event-loop scheduling. A late worker
+owns only upload/scratch; only the coordinator can proceed to the unchanged
+Firestore transaction. A 412 is adopted only after generation, bounded size and
+opaque capture metadata verification. Unknown outcomes retain their identity,
+futures and any known generation; recovery never deletes an uncertain source.
+The 8-second bound covers uploading one fragment, not an entire flush: summary
+initialization, capacity, receipt transactions, recovery, sealing, queue draining
+and lock waits retain their existing budgets.
 Pusher receives admitted audio/transcripts and has no duplicate cap-held PCM sink.
 Both lifespans await the lightweight sink registry before background drain/HTTP
 teardown; socket close flushes tails. GKE grace is 120 seconds with a 15-second
