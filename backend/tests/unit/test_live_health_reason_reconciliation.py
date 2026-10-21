@@ -303,7 +303,9 @@ async def test_never_refreshed_snapshot_is_distinct_from_stale_and_idle_refreshe
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('cause', ['first_text_deadline', 'empty_streak', 'capacity_full', 'replay_ring_overflow'])
+@pytest.mark.parametrize(
+    'cause', ['first_text_deadline', 'empty_streak', 'capacity_full', 'replay_ring_overflow', 'replay_send_stalled']
+)
 async def test_real_window_publishes_cause_before_latch_and_next_send_is_censored(cause):
     class ObservedWindow(WindowedParakeetSocket):
         def __setattr__(self, name, value):

@@ -25,7 +25,9 @@ logger = logging.getLogger(__name__)
 # funnel reports, plus 'untyped' for trips whose caller could not name a cause.
 _CIRCUIT_TRIP_PROVIDERS: Final = ('deepgram', 'modulate', 'parakeet', 'soniox')
 _CIRCUIT_TRIP_CLASSES: Final = (
+    'auth',
     'capacity_full',
+    'config_incomplete',
     'connection_lost',
     'modulate_serve_error',
     'provider_429',

@@ -259,9 +259,8 @@ class SafeSonioxSocket(STTSocket):
         else:
             self._send_queue = asyncio.Queue(maxsize=2000)
         self._writer_pace: RecoveryWriterPace | None = None
-        # Death diagnostics only (local delivery deaths): when the oldest packet
-        # still queued was enqueued, and when the last wire write completed.
-        self._queued_at: float | None = None
+        # Death diagnostics only (local delivery deaths): when the last wire
+        # write completed. Queue age comes from the queue itself.
         self._last_write_at: float | None = None
         # A response can end in the middle of a word. Downstream joins distinct
         # segments with spaces, so retain the last word until its boundary is known.
@@ -342,21 +341,21 @@ class SafeSonioxSocket(STTSocket):
             queue_packets = queue.qsize() + getattr(queue, 'inflight', 0)
         except Exception:
             queue_packets = -1
-        queued_at = self._queued_at
+        age = getattr(queue, 'oldest_queued_age', None)
+        try:
+            queue_age = age(now) if callable(age) else -1.0
+        except Exception:
+            queue_age = -1.0
         last_write_at = self._last_write_at
         logger.warning(
             'Soniox local delivery death subtype=%s queue_packets=%d queue_age_seconds=%.3f '
             'since_last_send_seconds=%.3f session_age_seconds=%.3f',
             subtype,
             queue_packets,
-            now - queued_at if queued_at is not None else -1.0,
+            queue_age,
             now - last_write_at if last_write_at is not None else -1.0,
             now - self._opened_at,
         )
-
-    def _note_enqueued(self) -> None:
-        if self._queued_at is None:
-            self._queued_at = time.monotonic()
 
     def send(self, data: bytes) -> bool:
         with self._lock:
@@ -386,7 +385,6 @@ class SafeSonioxSocket(STTSocket):
                 spans = () if had_odd_byte or len(data) % 2 else capture_spans.get()
                 aligned = observed_audio(aligned, self._wire_epoch, spans)
             self._send_queue.put_nowait(aligned)
-            self._note_enqueued()
             self._diagnostic(lambda diagnostic: setattr(diagnostic, 'queued', diagnostic.queued + len(aligned) // 2))
         except asyncio.QueueFull:
             self._mark_dead('send queue full', typed_reason=LOCAL_DELIVERY_SEND_QUEUE_FULL)
@@ -417,7 +415,6 @@ class SafeSonioxSocket(STTSocket):
                 return
             try:
                 self._send_queue.put_nowait(json.dumps({'type': 'finalize'}))
-                self._note_enqueued()
             except asyncio.QueueFull:
                 self._mark_dead('send queue full', typed_reason=LOCAL_DELIVERY_SEND_QUEUE_FULL)
 
@@ -446,7 +443,6 @@ class SafeSonioxSocket(STTSocket):
             finally:
                 try:
                     self._send_queue.put_nowait(b'')
-                    self._note_enqueued()
                 except asyncio.QueueFull:
                     self._mark_dead('send queue full', typed_reason=LOCAL_DELIVERY_SEND_QUEUE_FULL)
 
@@ -606,8 +602,6 @@ class SafeSonioxSocket(STTSocket):
         try:
             while not self._closed and not self._dead:
                 telemetry_call(self, '_connected_meter', 'flush')
-                if self._send_queue.qsize() == 0 and getattr(self._send_queue, 'inflight', 0) == 0:
-                    self._queued_at = None
                 try:
                     data = await asyncio.wait_for(self._send_queue.get(), timeout=SONIOX_KEEPALIVE_SECONDS)
                 except asyncio.TimeoutError:

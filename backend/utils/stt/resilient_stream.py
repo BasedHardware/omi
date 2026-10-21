@@ -539,14 +539,14 @@ async def replay_chunks(
         if not expired and await_writes and not await await_frozen_writes(socket, end):
             expired = True
         if expired:
+            # The replay prefix did not deliver within its wall budget on any
+            # successor: the socket's own local bound, never vendor capacity.
             fail = getattr(socket, 'fail', None)
             if callable(fail):
-                fail('capacity_full')
+                fail(LOCAL_DELIVERY_REPLAY_SEND_STALLED)
             else:
                 mark = getattr(socket, '_mark_dead', None)
                 if callable(mark):
-                    # The replay prefix did not deliver within its wall budget;
-                    # the socket's own local bound, not vendor capacity.
                     mark('replay wall budget exhausted', typed_reason=LOCAL_DELIVERY_REPLAY_SEND_STALLED)
             return position
         if soniox is not None:

@@ -78,6 +78,7 @@ from utils.stt.live_failure import (
     terminate_live_stt_session,
     terminate_live_stt_backoff,
 )
+from utils.stt.live_reason import LOCAL_DELIVERY_SEND_QUEUE_FULL
 from utils.stt.live_chain import LiveChainExhausted, ProviderChainUnavailable
 from utils.stt.live_recovery import release_session_local_exclusions, select_live_replacement
 from config.live_stt_recovery import current_recovery_enabled, session_recovery_enabled
@@ -2001,11 +2002,14 @@ class ListenReceiver(ReplayFilterMixin):
                             self._recover_ingested_audio(), name='stt_replay_recovery'
                         )
                     if self.recovery.exhausted and not self.recovery.client_has_left():
+                        # Not accepted means the live tail hit its own bound (or
+                        # the tail's connection already died with its own typed
+                        # cause); neither is destination capacity.
                         await terminate_live_stt_session(
                             request.websocket,
                             self.host.state,
                             failure=live_stt_upstream_failure(self._serving_provider()),
-                            reason='capacity_full',
+                            reason=live_stt_terminal_reason(delivery, LOCAL_DELIVERY_SEND_QUEUE_FULL),
                             platform=self._telemetry_platform(),
                         )
                     return

@@ -123,6 +123,8 @@ def test_trip_counter_zero_children_exist_from_import():
         ('parakeet', 'selection', 'connection_lost'),
         ('parakeet', 'selection', 'send_failed'),
         ('parakeet', 'selection', 'untyped'),
+        ('parakeet', 'selection', 'config_incomplete'),
+        ('deepgram', 'selection', 'auth'),
         ('soniox', 'selection', 'capacity_full'),
         ('parakeet', 'account', 'quota'),
     ):

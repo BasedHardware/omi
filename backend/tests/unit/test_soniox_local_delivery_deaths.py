@@ -13,10 +13,12 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
+import time
+from types import SimpleNamespace
 
 from config.live_stt_replay import ReplayLimits
 from utils.observability import fallback as fallback_mod
-from utils.stt import soniox
+from utils.stt import resilient_stream, soniox
 from utils.stt.connect_metrics import ERROR_CLASS_CAPABILITY, connect_error_class
 from utils.stt.live_failure import PendingLiveFailover
 from utils.stt.live_reason import (
@@ -231,3 +233,47 @@ def test_local_delivery_death_keeps_its_reason_on_omi_fallback_total(monkeypatch
     assert labels['from_mode'] == 'soniox' and labels['to_mode'] == 'parakeet'
     assert labels['outcome'] == 'exhausted'
     assert amount == 1.0
+
+
+def test_queue_age_is_the_oldest_still_queued_packet_not_the_session():
+    """A session that stays one packet ahead never empties the queue; the age
+    must still be the oldest *queued* packet's wait, not time since the first."""
+
+    async def main() -> tuple[float, float]:
+        queue: AudioSendQueue = AudioSendQueue(maxsize=8)
+        queue.put_nowait(b'\x01\x00')
+        await asyncio.sleep(0.05)
+        queue.put_nowait(b'\x02\x00')
+        await queue.get()  # the first packet goes to the wire; the second is now the oldest queued
+        return queue.oldest_queued_age(time.monotonic()), queue.oldest_queued_age(time.monotonic() + 10)
+
+    age, later = asyncio.run(main())
+    assert 0.0 <= age < 0.05
+    assert later > 9.9
+    assert AudioSendQueue(maxsize=1).oldest_queued_age(time.monotonic()) == -1.0
+
+
+def test_window_successor_replay_wall_expiry_is_replay_send_stalled():
+    """``replay_chunks`` on a successor that implements ``fail`` (the Parakeet
+    window) must latch the same local token as the socket-level wall path."""
+    failed: list[str] = []
+    window = SimpleNamespace(
+        fail=lambda reason, **kw: failed.append(reason),
+        is_connection_dead=False,
+        replay_limits=ReplayLimits(),
+        max_replay_rate=1.0,
+    )
+    ring = resilient_stream.ResilientAudio(16000, ring_seconds=10, strict_replay=True)
+
+    async def main():
+        return await resilient_stream.replay_chunks(
+            window,
+            ((0, b'\x01\x00' * 160),),
+            source=ring,
+            provider='soniox',
+            soniox=None,
+            deadline=resilient_stream.clock() - 1.0,  # the prefix wall has already passed
+        )
+
+    assert asyncio.run(main()) == 0
+    assert failed == [LOCAL_DELIVERY_REPLAY_SEND_STALLED]
