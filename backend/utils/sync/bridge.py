@@ -16,6 +16,7 @@ from typing import Callable, NotRequired, TypedDict
 from config.conversation_smart_merge import smart_merge_flatten_chain_repair_enabled, smart_merge_flatten_enabled
 from config import merge_ancestry
 from config.sync_finalize import sync_finalize_target_recovery_enabled
+from utils.conversations.smart_merge_policy import user_managed as _policy_user_managed
 from database.action_item_refresh import RefreshConversationUnavailable
 from database import conversations as conversations_db
 from database.legal_holds import (
@@ -109,15 +110,16 @@ def _bridge_source_defect(
         return 'redirect_elsewhere'
     if not smart_merge_flatten_chain_repair_enabled():
         return 'chain'
-    # Same hop shape the flatten planner accepts: a plain sync tombstone. A hop
-    # that is not discarded, has no revision, or carries smart-merge state stays
-    # a conflict, so finalize never cleans up a row the planner would refuse.
-    if not merge_ancestry.plain_chain_hop(source):
+    # Same hop shape the flatten planner accepts: a plain sync tombstone that is
+    # not user-managed. A hop that is not discarded, has no revision, carries
+    # smart-merge state, or is starred or otherwise user-managed stays a
+    # conflict, so finalize never cleans up a row the planner would refuse.
+    if not merge_ancestry.plain_chain_hop(source) or _policy_user_managed(source):
         return 'chain_broken'
     members = set(lineage)
     for _ in range(len(members)):
         hop = load(target)
-        if not hop or not merge_ancestry.plain_chain_hop(hop):
+        if not hop or not merge_ancestry.plain_chain_hop(hop) or _policy_user_managed(hop):
             return 'chain_broken'
         target = hop['sync_merged_into']
         if target == survivor_id:

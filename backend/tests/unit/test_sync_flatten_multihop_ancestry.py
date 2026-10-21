@@ -196,6 +196,8 @@ def test_bridge_chain_kinds(monkeypatch):
         {'discarded': False},
         {'sync_content_revision': 0},
         {'smart_merge': {'role': 'donor', 'survivor_id': 'h'}},
+        {'starred': True},
+        {'has_photos': True},
     ],
 )
 @pytest.mark.parametrize('where', ['source', 'hop'])
