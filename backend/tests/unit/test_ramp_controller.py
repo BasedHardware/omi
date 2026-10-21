@@ -126,6 +126,8 @@ def test_off_ladder_value_moves_to_next_step_without_skipping():
         'first_summary_completion_outlier',
         'quarantine_projection_p95_unknown',
         'recovery_spend_over_0_005_per_worn_hour',
+        'unsafe_parakeet_language_route',
+        'language_route_unknown',
         'parity_fail',
         'parity_row_3',
     ],
@@ -273,6 +275,19 @@ def test_parity_composition():
 def test_gate_verdict_tokens_roll_back(token, action):
     # M1 review L06-2: a verdict token missing from the closed lists HOLDs as "gate unavailable".
     assert rc.classify_fail(token)[0] is action
+
+
+@pytest.mark.parametrize(
+    'token',
+    ['unsafe_parakeet_language_route', 'language_route_unknown'],
+)
+def test_language_route_verdicts_roll_back_one_not_hold(token):
+    # P26 fleet-gate tokens: wrong-language Parakeet routing is a cohort verdict, and missing route evidence
+    # fails closed like recovery_spend_unknown — neither may strand a failing cohort as "gate unavailable".
+    assert rc.classify_fail(token) == (rc.Action.ROLLBACK_ONE, rc.RampReason.GATE_FAIL)
+    assert not rc.gate_unavailable(verdict('FAIL', token, percent=25.0))
+    d = decide(snap(25.0), verdict('FAIL', token, percent=25.0))
+    assert (d.action, d.to_percent) == (rc.Action.ROLLBACK_ONE, 10.0)
 
 
 def test_every_scorer_fail_token_is_a_classified_verdict():
@@ -604,7 +619,7 @@ def test_controller_reads_with_the_operator_budget(tmp_path, monkeypatch):
 # ---------------------------------------------------------------------------
 
 # Every `GATE_FAIL <token>` that fleet_gate.sh's verdict() can print (workspace infra/rollout/fleet_gate.sh,
-# pinned at omi-workspace 900e3d48). The workspace's infra/rollout/test_controller_contract.py pins the same list
+# pinned at omi-workspace 3172987). The workspace's infra/rollout/test_controller_contract.py pins the same list
 # against the gate source, so a new gate verdict fails there until it is classified here.
 FLEET_GATE_VERDICT_FAIL_TOKENS = frozenset(
     {
@@ -627,6 +642,8 @@ FLEET_GATE_VERDICT_FAIL_TOKENS = frozenset(
         'first_summary_dispatch_contract',
         'first_summary_completion_outlier',
         'http_5xx_regression',
+        'unsafe_parakeet_language_route',
+        'language_route_unknown',
         'timeout_incomplete',
     }
 )
