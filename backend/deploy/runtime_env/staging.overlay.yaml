@@ -72,6 +72,11 @@ cloud_run:
     # utils/other/storage.py defaults this to the PROD private-cloud-sync bucket when unset (P13b,
     # 2026-10-21 bridge 403); the fence now requires it in staging.
     BUCKET_PRIVATE_CLOUD_SYNC: based-hardware-dev-staging-sync
+    # Code defaults point at production (api.omi.me, mail.omi.me); the fence requires these in staging.
+    # Staging has no RESEND_API_KEY, so email is no-send; the senders only keep the default out.
+    MCP_AUTHORIZATION_SERVER_URL: '{run_url:backend}'
+    LIFECYCLE_EMAIL_FROM_ADDRESS: staging-no-send@based-hardware-dev.invalid
+    SHARE_EMAIL_FROM_ADDRESS: staging-no-send@based-hardware-dev.invalid
     BUCKET_BATCH_PIPELINE: based-hardware-dev-staging-batch
     BUCKET_SCREEN_FRAMES: based-hardware-dev-staging-batch
     BATCH_PIPELINE_API_URL: '{run_url:backend-sync}'

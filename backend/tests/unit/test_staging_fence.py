@@ -28,6 +28,9 @@ def _clean_env() -> dict[str, str]:
         'BUCKET_TEMPORAL_SYNC_LOCAL': 'based-hardware-dev-staging-sync',
         'BUCKET_BATCH_PIPELINE': 'based-hardware-dev-staging-batch',
         'BUCKET_PRIVATE_CLOUD_SYNC': 'based-hardware-dev-staging-sync',
+        'MCP_AUTHORIZATION_SERVER_URL': 'https://backend-staging-dt5lrfkkoa-uc.a.run.app',
+        'LIFECYCLE_EMAIL_FROM_ADDRESS': 'staging-no-send@based-hardware-dev.invalid',
+        'SHARE_EMAIL_FROM_ADDRESS': 'staging-no-send@based-hardware-dev.invalid',
         'SYNC_TASKS_QUEUE': 'staging-sync-jobs',
         'BATCH_PIPELINE_API_URL': 'https://backend-sync-staging-dt5lrfkkoa-uc.a.run.app',
     }
@@ -315,3 +318,18 @@ def test_prod_private_cloud_sync_bucket_is_refused():
     env = _clean_env()
     env['BUCKET_PRIVATE_CLOUD_SYNC'] = 'omi-private-cloud-sync'
     assert ('prod_hash', 'BUCKET_PRIVATE_CLOUD_SYNC') in staging_violations(env)
+
+
+@pytest.mark.parametrize(
+    'name', ['MCP_AUTHORIZATION_SERVER_URL', 'LIFECYCLE_EMAIL_FROM_ADDRESS', 'SHARE_EMAIL_FROM_ADDRESS']
+)
+def test_unset_omi_me_defaults_are_refused(name):
+    env = _clean_env()
+    del env[name]
+    assert ('prod_default', name) in staging_violations(env)
+
+
+def test_mcp_authorization_server_on_api_omi_me_is_refused():
+    env = _clean_env()
+    env['MCP_AUTHORIZATION_SERVER_URL'] = 'https://api.omi.me'
+    assert ('prod_reference', 'MCP_AUTHORIZATION_SERVER_URL') in staging_violations(env)

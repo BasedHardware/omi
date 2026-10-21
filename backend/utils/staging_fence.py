@@ -85,7 +85,12 @@ _OPTIONAL_PROJECT_ENV = ('OMI_FIRESTORE_DATA_PLANE_PROJECT', 'GCLOUD_PROJECT', '
 _KEY_CREDENTIAL_ENV = ('SERVICE_ACCOUNT_JSON', 'FIREBASE_AUTH_CREDENTIALS_PATH')
 # Keys whose in-code default is a production resource: an unset key is a prod reference the
 # value scan cannot see (2026-10-21: BUCKET_PRIVATE_CLOUD_SYNC fell back to the prod bucket).
-_REQUIRED_EXPLICIT_ENV = ('BUCKET_PRIVATE_CLOUD_SYNC',)
+_REQUIRED_EXPLICIT_ENV = (
+    'BUCKET_PRIVATE_CLOUD_SYNC',  # prod private-cloud-sync bucket
+    'MCP_AUTHORIZATION_SERVER_URL',  # https://api.omi.me
+    'LIFECYCLE_EMAIL_FROM_ADDRESS',  # mail.omi.me sender
+    'SHARE_EMAIL_FROM_ADDRESS',  # mail.omi.me sender
+)
 
 
 class StagingFenceError(RuntimeError):
