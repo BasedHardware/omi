@@ -1587,7 +1587,7 @@ environments:
               value: ''
               category: service_auth
             BATCH_PIPELINE_WORKER_SERVICE_ACCOUNT:
-              value: ''
+              value: batch-pipeline-worker@based-hardware-dev.iam.gserviceaccount.com
               category: service_auth
             BUCKET_BATCH_PIPELINE:
               category: service_discovery
@@ -3994,7 +3994,7 @@ environments:
               value: ''
               category: service_auth
             BATCH_PIPELINE_WORKER_SERVICE_ACCOUNT:
-              value: ''
+              value: batch-pipeline-worker@based-hardware.iam.gserviceaccount.com
               category: service_auth
             BUCKET_BATCH_PIPELINE:
               category: service_discovery

@@ -551,6 +551,13 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
         payload,
         flags=re.DOTALL,
     )
+    payload = re.sub(
+        r'("backend-integration":\s*\{.*?"name": "BATCH_PIPELINE_WORKER_SERVICE_ACCOUNT", "value": )""',
+        r'\1"batch-pipeline-worker@based-hardware-dev.iam.gserviceaccount.com"',
+        payload,
+        count=1,
+        flags=re.DOTALL,
+    )
     return with_firestore_read_runtime_env(payload)
 
 

@@ -2001,7 +2001,7 @@ environment_shared:
             value: ''
             category: service_auth
           BATCH_PIPELINE_WORKER_SERVICE_ACCOUNT:
-            value: ''
+            value: 'batch-pipeline-worker@{compute_project}.iam.gserviceaccount.com'
             category: service_auth
           BUCKET_BATCH_PIPELINE:
             category: service_discovery
