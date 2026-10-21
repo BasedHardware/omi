@@ -108,7 +108,7 @@ def _write_provenance(uid: str, preference: str, config: RunnableConfig) -> Ledg
     configurable = cfg.get('configurable') if isinstance(cfg, dict) else None
     configurable = configurable if isinstance(configurable, dict) else {}
     source_id = str(configurable.get('chat_session_id') or configurable.get('thread_id') or 'direct-agent-tool').strip()
-    normalized_preference = ' '.join(preference.split())
+    normalized_preference = ' '.join(str(preference or '').split())
     action_id = (
         "agent-preference:"
         + deterministic_contract_id(
@@ -176,7 +176,7 @@ def _save_compatibility_preference(uid: str, preference: str, *, user_stated: bo
 def save_user_preference_tool(
     preference: str,
     slot: str = "",
-    replace_memory_id: str = "",
+    replace_memory_id: Optional[str] = "",
     user_stated: bool = False,
     config: RunnableConfig = None,
 ) -> str:  # type: ignore[reportAssignmentType]  # langchain injects at runtime; None default for direct calls
@@ -209,13 +209,21 @@ def save_user_preference_tool(
     if not uid:
         return "Error: Could not determine user ID"
 
+    # Reject blank / non-string payloads before touching any store: an empty
+    # preference would otherwise be written to Firestore and the ledger as a
+    # meaningless memory item.
+    if not preference or not isinstance(preference, str) or not preference.strip():
+        return "Error: Preference content cannot be empty"
+
     try:
         firestore_client = get_data_plane_firestore_client()
     except Exception as e:
         logger.error("Failed to resolve preference storage error_type=%s", type(e).__name__)
         return "Error saving preference"
 
-    replacement = replace_memory_id.strip()
+    # LangChain supplies ``None`` for optional arguments the model omits, so
+    # normalize before stripping instead of raising AttributeError.
+    replacement = str(replace_memory_id or '').strip()
     if replacement:
         try:
             prior = read_canonical_memory_item(uid, replacement, db_client=firestore_client)
