@@ -311,6 +311,9 @@ void main() {
       ...movedOffSheet,
       ...wasOnProfile,
       SettingsDestination.creatorPayouts,
+      // New child of Integrations. task_delivery_test.dart verifies its localized
+      // search destination and opens the real TaskIntegrationsPage with zero tasks.
+      SettingsDestination.taskIntegrations,
       // New in this change: the group pages themselves.
       SettingsDestination.deviceGroup,
       SettingsDestination.recordingGroup,
