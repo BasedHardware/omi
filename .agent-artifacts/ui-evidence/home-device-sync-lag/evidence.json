@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-android-home-still-before.png",
+      "platform": "mobile-android",
+      "description": "Home before: synthetic host widget render with Reduce Motion, not a physical device capture",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-android-home-still-after.png",
+      "platform": "mobile-android",
+      "description": "Home after: synthetic host widget render with Reduce Motion, not a physical device capture",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-mobile-android-device-still-before.png",
+      "platform": "mobile-android",
+      "description": "Device before: synthetic host widget render with Reduce Motion, not a physical device capture",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "004-mobile-android-device-still-after.png",
+      "platform": "mobile-android",
+      "description": "Device after: synthetic host widget render with Reduce Motion, not a physical device capture",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}
