@@ -21,6 +21,7 @@ from config.summary_guarantee import repair_enabled as summary_repair_enabled
 from services import summary_debt_repair
 from config.policy import resolve_batch_policy
 from config.policy.ramp import audio_span
+from database.batch_ramp import ramp_admission_policy
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from utils.batch_pipeline.intake import (
     accept_upload as accept_batch_upload,
@@ -1188,7 +1189,19 @@ async def sync_local_files_v2(
 
         content_id = await run_blocking(sync_executor, compute_sync_content_id, uid, paths)
 
-        batch_policy = resolve_batch_policy(uid)
+        candidate_policy = resolve_batch_policy(uid)
+        batch_policy = await run_blocking(
+            db_executor,
+            ramp_admission_policy,
+            uid,
+            candidate_policy,
+            content_id=content_id,
+            conversation_id=conversation_id if isinstance(conversation_id, str) else None,
+            incoming_audio_seconds=audio_span(
+                {'audio_start_seconds': audio_start_seconds, 'audio_end_seconds': audio_end_seconds}
+            )
+            or 0,
+        )
         record_response = await registered_record_response(
             uid=uid,
             conversation_id=conversation_id if isinstance(conversation_id, str) else None,
@@ -1200,10 +1213,6 @@ async def sync_local_files_v2(
             recording_session_id=recording_session_id,
             policy=batch_policy,
             loaded_conversation=record_snapshot if record_snapshot.get('record_lane_owner') else None,
-            incoming_audio_seconds=audio_span(
-                {'audio_start_seconds': audio_start_seconds, 'audio_end_seconds': audio_end_seconds}
-            )
-            or 0,
         )
         if isinstance(record_response, JSONResponse):
             return record_response
@@ -1211,10 +1220,10 @@ async def sync_local_files_v2(
         if record_response is RecordUploadRoute.BATCH:
             # This conversation already has a durable batch-sync owner. New
             # owner-load narrowing cannot transfer its later WAL to legacy.
-            batch_policy = replace(batch_policy, batch_enabled=True)
+            batch_policy = replace(candidate_policy, batch_enabled=True)
 
         if record_response is RecordUploadRoute.BATCH or (
-            record_response is not RecordUploadRoute.LEGACY and batch_policy.batch_enabled
+            record_response is not RecordUploadRoute.LEGACY and candidate_policy.batch_enabled
         ):
             # Route ownership is durable before any acceptance; neither errors
             # nor rollback may start a legacy twin or release this batch claim.
@@ -1245,7 +1254,6 @@ async def sync_local_files_v2(
                 },
                 record_router=registered_record_response,
                 policy=batch_policy,
-                existing_batch_owner=record_response is RecordUploadRoute.BATCH,
             )
             if batch_response is not None:
                 return batch_response

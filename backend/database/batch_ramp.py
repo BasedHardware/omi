@@ -19,11 +19,11 @@ EXCLUDED = Counter(
 
 
 def read_owner_load(uid, *, firestore_client=None, now=None, incoming_audio_seconds=0, stage=None):
-    client = firestore_client if firestore_client is not None else get_data_plane_firestore_client()
-    now = time.time() if now is None else now
     stage = current_stage() if stage is None else stage
     if stage not in {'prod', 'dev'}:
         raise ValueError('ramp owner-load reads require an explicit prod/dev data-plane namespace')
+    client = firestore_client if firestore_client is not None else get_data_plane_firestore_client()
+    now = time.time() if now is None else now
     jobs = list(
         client.collection(f'batch_pipeline_{stage}_jobs')
         .where('owner_id', '==', uid)
@@ -47,7 +47,9 @@ def read_owner_load(uid, *, firestore_client=None, now=None, incoming_audio_seco
     )
 
 
-def ramp_admission_policy(uid, policy, *, incoming_audio_seconds=0, firestore_client=None):
+def ramp_admission_policy(
+    uid, policy, *, incoming_audio_seconds=0, firestore_client=None, content_id=None, conversation_id=None
+):
     """Filter only a new admission. Callers must honour prior durable owners first.
 
     Outside a partial ramp or with the kill switch off this does no reads.
@@ -57,7 +59,24 @@ def ramp_admission_policy(uid, policy, *, incoming_audio_seconds=0, firestore_cl
     if not policy.batch_enabled or not exclusion_enabled(policy.batch_percent):
         return policy
     try:
-        load = read_owner_load(uid, firestore_client=firestore_client, incoming_audio_seconds=incoming_audio_seconds)
+        client = firestore_client
+        if content_id or conversation_id:
+            stage = current_stage()
+            if stage not in {'prod', 'dev'}:
+                raise ValueError('ramp ownership reads require an explicit prod/dev namespace')
+            client = client if client is not None else get_data_plane_firestore_client()
+            user = client.collection('users').document(uid)
+            ledger = 'sync_content_ledger' if stage == 'prod' else f'sync_content_ledger_{stage}'
+            if (
+                content_id
+                and user.collection(ledger).document(content_id).get(field_paths=['dispatch_protocol']).exists
+            ):
+                return policy
+            if conversation_id:
+                row = user.collection('conversations').document(conversation_id).get(field_paths=['record_lane_owner'])
+                if (row.to_dict() or {}).get('record_lane_owner'):
+                    return policy
+        load = read_owner_load(uid, firestore_client=client, incoming_audio_seconds=incoming_audio_seconds)
     except Exception:  # bounded admission narrowing; never log account data/errors
         load = None
     reason = exclusion_reason(load)

@@ -9,7 +9,7 @@ from config.policy.batch import BatchUnitPolicy
 from config.policy import ramp
 from database import batch_ramp
 from utils.batch_pipeline import intake
-from utils.batch_pipeline import live_upload
+from types import SimpleNamespace
 from tests.unit.test_batch_pipeline_scheduler import MemoryStore
 
 
@@ -115,8 +115,6 @@ async def test_excluded_new_upload_uses_legacy_without_artifacts_but_prior_batch
     monkeypatch.setattr(intake, 'current_stage', lambda: 'dev')
     artifacts = Mock(side_effect=AssertionError('excluded upload must not stage batch artifacts'))
     monkeypatch.setattr(intake, 'artifacts_for', artifacts)
-    filter_policy = Mock(return_value=replace(policy(), batch_enabled=False, live_record_enabled=False))
-    monkeypatch.setattr(intake, 'ramp_admission_policy', filter_policy)
     arguments = dict(
         uid='synthetic-owner',
         job_id='new',
@@ -129,68 +127,34 @@ async def test_excluded_new_upload_uses_legacy_without_artifacts_but_prior_batch
         conversation_id=None,
         client_device_id=None,
         client_platform='ios',
-        policy=policy(),
+        policy=replace(policy(), batch_enabled=False, live_record_enabled=False),
     )
     assert await intake.accept_upload(**arguments) is None
     assert not store.rows
     artifacts.assert_not_called()
-    assert filter_policy.call_count == 1
     store.rows['content', 'synthetic-owner/content'] = {'dispatch_protocol': 'batch_v1', 'job_id': 'bp_prior'}
     # Prior custody cannot be translated to None/legacy even if its status read
     # finds a privacy/persistence problem (the existing intake fence returns 409).
     response = await intake.accept_upload(**arguments)
     assert response is not None and response.status_code == 409
-    assert filter_policy.call_count == 1
 
 
-@pytest.mark.asyncio
-async def test_existing_conversation_batch_owner_bypasses_new_admission_filter(monkeypatch):
-    store = MemoryStore()
-    monkeypatch.setattr(intake, 'FirestoreStore', lambda *args: store)
-    monkeypatch.setattr(intake, 'current_stage', lambda: 'dev')
-    filter_policy = Mock(side_effect=AssertionError('existing owner must not be reclassified'))
-    monkeypatch.setattr(intake, 'ramp_admission_policy', filter_policy)
-    monkeypatch.setattr(
-        intake, 'batch_artifact_authorize', Mock(side_effect=RuntimeError('synthetic unavailable proof'))
-    )
-    response = await intake.accept_upload(
-        uid='synthetic-owner',
-        job_id='new',
-        content_id='content',
-        paths=['retained.bin'],
-        lane='backfill',
-        recording_age_seconds=60,
-        source='omi',
-        should_lock=False,
-        conversation_id='conversation',
-        client_device_id=None,
-        client_platform='ios',
-        policy=policy(),
-        existing_batch_owner=True,
-    )
-    assert response is not None and response.status_code == 503
-    filter_policy.assert_not_called()
-
-
-@pytest.mark.asyncio
-async def test_registered_record_only_filters_unowned_capture(monkeypatch):
-    monkeypatch.setattr(live_upload, 'FirestoreStore', lambda *args: Mock())
-    monkeypatch.setattr(live_upload, 'current_stage', lambda: 'dev')
-    filter_policy = Mock(return_value=replace(policy(), batch_enabled=False, live_record_enabled=False))
-    monkeypatch.setattr(live_upload, 'ramp_admission_policy', filter_policy)
-    arguments = dict(
-        uid='synthetic-owner',
-        conversation_id='conversation',
-        content_id='content',
-        paths=[],
-        source='omi',
-        client_device_id=None,
-        policy=policy(),
-    )
-    assert await live_upload.registered_record_response(**arguments, loaded_conversation={}) is None
-    assert filter_policy.call_count == 1
-    route = await live_upload.registered_record_response(
-        **arguments, loaded_conversation={'record_lane_owner': 'batch_sync_v1'}
-    )
-    assert route is live_upload.RecordUploadRoute.BATCH
-    assert filter_policy.call_count == 1
+@pytest.mark.parametrize('existing', ['content', 'conversation'])
+def test_existing_dispatch_does_not_scan_load_or_emit_exclusion(monkeypatch, existing):
+    monkeypatch.setattr(batch_ramp, 'current_stage', lambda: 'dev')
+    client = Mock()
+    ref = client.collection.return_value.document.return_value.collection.return_value.document.return_value
+    ref.get.return_value = SimpleNamespace(exists=True, to_dict=lambda: {'record_lane_owner': 'batch_sync_v1'})
+    original = policy()
+    with patch.object(
+        batch_ramp, 'read_owner_load', side_effect=AssertionError('existing custody must not rescan')
+    ) as read:
+        result = batch_ramp.ramp_admission_policy(
+            'synthetic-owner',
+            original,
+            firestore_client=client,
+            content_id='content' if existing == 'content' else None,
+            conversation_id='conversation' if existing == 'conversation' else None,
+        )
+    assert result is original
+    read.assert_not_called()

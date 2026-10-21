@@ -13,7 +13,7 @@ def entries():
             covered_by=('database.batch_ramp.read_owner_load',),
             reason='admission wrapper delegates both metadata queries to the owner-load reader',
             expect_observed=False,
-            body_digest='704204df3097a95a63a4294d06bf7181fc4d217e91da187443533b81a8a636fe',
+            body_digest='a38e14b709b0706dcaee669bf1168fabefc7eee24eb3fb03ff1385b4246b7764',
         ),
         DriverEntry(
             'database.batch_ramp.read_owner_load',

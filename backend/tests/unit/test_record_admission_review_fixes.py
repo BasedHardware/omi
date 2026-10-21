@@ -269,7 +269,7 @@ async def test_desktop_record_origin_uses_the_escape_language(
         conversation_id='record',
         client_device_id='mac-1',
         client_platform='macos',
-        policy=SimpleNamespace(live_record_enabled=live_record),
+        policy=SimpleNamespace(batch_enabled=True, live_record_enabled=live_record),
     )
     if expected is None:
         assert outcome is None and not bindings
