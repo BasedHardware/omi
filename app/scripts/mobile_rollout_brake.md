@@ -1,6 +1,6 @@
 # Android production rollout brake
 
-Manually dispatch Codemagic workflow `android-rollout-brake` with `BRAKE_ACTION=status|halt|resume`
+Manually dispatch Codemagic workflow `android-rollout-brake` with `BRAKE_ACTION=status|halt|resume|stage`
 and `BRAKE_VERSION_CODE=<exact code>`. Mutations also require `CONFIRM=brake`.
 Read status first, perform the authorized action once, then read status again. Keep each
 Codemagic build ID and its `BRAKE_RESULT` line. A failed or uncertain mutation requires
@@ -22,7 +22,18 @@ one another, so a new writer can still make the operation fail closed. Keep the 
 disabled until the separate final status is verified; do not restore them without the
 release owner's approval. The brake never re-enables them itself.
 
-Only a status change is permitted. Country-targeted mutations are explicitly unsupported:
+`BRAKE_ACTION=stage` replaces a halted release with a fixed build. It takes
+`BRAKE_VERSION_CODE=<new code>`, `BRAKE_SUPERSEDES_VERSION_CODE=<halted code>`,
+`BRAKE_USER_FRACTION=<0..1>`, a one-line `BRAKE_NOTES_LINE` and `CONFIRM=brake`. It refuses unless production holds
+the superseded code as `halted` beside completed releases only, the new code sits alone
+on internal or alpha under one newer marketing version, and the fraction does not exceed
+the halted one. It writes one `inProgress` release named with the train's gate receipt
+(`1.0.569 (gate YYYY-MM-DD-HHMM)`) so the ladder can advance it later. Notes copy the
+halted release's What's New and append `BRAKE_NOTES_LINE` to en-US and to every locale
+holding the identical English text; real translations stay unchanged. Completed releases
+stay untouched. Read status of the halted code first and of the new code afterwards.
+
+Halt and resume change status only. Country-targeted mutations are explicitly unsupported:
 Play allows `countryTargeting` only on `inProgress` releases, and stripping it would change
 more than status. Use an approved Play Console procedure for those releases. A brake
 commit uses `ERROR_IF_IN_REVIEW` to refuse cancellation/resubmission of existing reviews.

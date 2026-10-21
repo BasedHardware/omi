@@ -2906,6 +2906,9 @@ workflows:
       vars:
         BRAKE_ACTION: "unset"
         BRAKE_VERSION_CODE: "0"
+        BRAKE_USER_FRACTION: "unset"
+        BRAKE_SUPERSEDES_VERSION_CODE: "0"
+        BRAKE_NOTES_LINE: ""
         CONFIRM: "not-confirmed"
     working_directory: app
     scripts:

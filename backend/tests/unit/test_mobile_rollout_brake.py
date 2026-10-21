@@ -11,6 +11,8 @@ SCRIPTS = Path(__file__).resolve().parents[3] / "app" / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 import mobile_rollout_brake as brake
 
+FIX = "Fixed pendant audio loss when the device reconnects."
+
 
 class Request:
     def __init__(self, fn):
@@ -37,6 +39,13 @@ class FakePlay:
         self.fraction_mismatch = False
         self.cleanup_error = False
         self.commit_request = None
+        self.sources = {
+            "internal": {
+                "track": "internal",
+                "releases": [{"versionCodes": ["1477"], "status": "completed", "name": "1.0.569"}],
+            },
+            "alpha": {"track": "alpha", "releases": []},
+        }
 
     def edits(self):
         return self
@@ -46,7 +55,8 @@ class FakePlay:
 
     def get(self, **kw):
         self.calls.append(("get", kw))
-        return Request(lambda: copy.deepcopy(self.live))
+        source = self.live if kw["track"] == "production" else self.sources[kw["track"]]
+        return Request(lambda: copy.deepcopy(source))
 
     def update(self, **kw):
         self.calls.append(("update", kw))
@@ -184,6 +194,136 @@ class BrakeTests(unittest.TestCase):
             self.run_action(play)
         self.assertEqual(play.live, before)
         self.assertEqual([name for name, _ in play.calls], ["get", "delete"])
+
+    def halted_play(self):
+        play = FakePlay("halted")
+        play.live["releases"][1]["releaseNotes"] = [
+            {"language": "en-US", "text": "Faster sync.\n"},
+            {"language": "de-DE", "text": "Schneller."},
+            {"language": "fr-FR", "text": "Faster sync.\n"},
+        ]
+        return play
+
+    def stage(self, play, code="1477", fraction="0.01", supersedes="1471", confirm="brake"):
+        return brake.run_brake(
+            "stage",
+            code,
+            confirm,
+            user_fraction=fraction,
+            supersedes=supersedes,
+            notes_line=f"  {FIX}  ",
+            edit_factory=lambda: (play, "original"),
+            quiescence_check=lambda: None,
+        )
+
+    def test_stage_replaces_only_halted_release_at_requested_fraction(self):
+        play = self.halted_play()
+        completed = copy.deepcopy(play.live["releases"][0])
+        result = self.stage(play)
+        self.assertTrue(result.startswith("BRAKE_RESULT action=stage versionCode=1477 status_before=absent"))
+        self.assertIn("userFraction=0.01 supersedes=1471 superseded_status=halted superseded_userFraction=0.1", result)
+        self.assertEqual(play.live["releases"][0], completed)
+        staged = play.live["releases"][1]
+        self.assertEqual(staged["versionCodes"], ["1477"])
+        self.assertEqual(staged["status"], "inProgress")
+        self.assertEqual(staged["userFraction"], 0.01)
+        self.assertRegex(staged["name"], r"^1\.0\.569 \(gate \d{4}-\d{2}-\d{2}-\d{4}\)$")
+        self.assertIsNotNone(brake.train._gate_receipt_dt(staged["name"]))
+        self.assertEqual(
+            staged["releaseNotes"],
+            [
+                {"language": "en-US", "text": f"Faster sync.\n{FIX}"},
+                {"language": "de-DE", "text": "Schneller."},
+                {"language": "fr-FR", "text": f"Faster sync.\n{FIX}"},
+            ],
+        )
+        self.assertEqual(len(play.live["releases"]), 2)
+        names = [name for name, _ in play.calls]
+        self.assertEqual(names, ["get", "get", "get", "update", "commit", "insert", "get", "delete"])
+        self.assertEqual(
+            parse_qs(urlsplit(play.commit_request.uri).query)["changesInReviewBehavior"], ["ERROR_IF_IN_REVIEW"]
+        )
+        self.assertEqual([args["track"] for name, args in play.calls if name == "update"], ["production"])
+
+    def test_stage_refuses_unless_superseded_release_is_halted(self):
+        for status in ["inProgress", "completed", "draft"]:
+            play = self.halted_play()
+            play.live["releases"][1]["status"] = status
+            with self.assertRaisesRegex(brake.BrakeError, "halted"):
+                self.stage(play)
+            self.assertNotIn("update", [name for name, _ in play.calls])
+
+    def test_stage_refuses_unexpected_production_or_source_state(self):
+        cases = {
+            "extra draft": lambda p: p.live["releases"].append(
+                {"versionCodes": ["1480"], "status": "draft", "name": "1.0.570"}
+            ),
+            "already staged": lambda p: p.live["releases"][0].update(versionCodes=["1477"]),
+            "missing source": lambda p: p.sources["internal"].update(releases=[]),
+            "multi-code source": lambda p: p.sources["internal"]["releases"][0].update(versionCodes=["1477", "1478"]),
+            "older source": lambda p: p.sources["internal"]["releases"][0].update(name="1.0.568"),
+            "conflicting versions": lambda p: p.sources["alpha"].update(
+                releases=[{"versionCodes": ["1477"], "status": "completed", "name": "1.0.570"}]
+            ),
+            "country targeted": lambda p: p.live["releases"][1].update(countryTargeting={"countries": ["US"]}),
+            "no en-US notes": lambda p: p.live["releases"][1].update(releaseNotes=[{"language": "de-DE", "text": "x"}]),
+            "notes too long": lambda p: p.live["releases"][1].update(
+                releaseNotes=[{"language": "en-US", "text": "x" * 480}]
+            ),
+        }
+        for label, mutate in cases.items():
+            with self.subTest(label):
+                play = self.halted_play()
+                mutate(play)
+                with self.assertRaises((brake.BrakeError, brake.promote.PromotionError)):
+                    self.stage(play)
+                self.assertNotIn("update", [name for name, _ in play.calls])
+                self.assertEqual(play.calls[-1][0], "delete")
+
+    def test_stage_fraction_above_halted_fraction_refuses(self):
+        play = self.halted_play()
+        with self.assertRaisesRegex(brake.BrakeError, "must not exceed"):
+            self.stage(play, fraction="0.2")
+        self.assertNotIn("update", [name for name, _ in play.calls])
+
+    def test_stage_bad_inputs_fail_before_authentication(self):
+        for fraction, supersedes, confirm, line in [
+            ("", "1471", "brake", FIX),
+            ("0", "1471", "brake", FIX),
+            ("1", "1471", "brake", FIX),
+            ("nan", "1471", "brake", FIX),
+            ("0.01", "", "brake", FIX),
+            ("0.01", "1477", "brake", FIX),
+            ("0.01", "1471", "", FIX),
+            ("0.01", "1471", "brake", " "),
+            ("0.01", "1471", "brake", "two\nlines"),
+        ]:
+            with self.subTest(fraction=fraction, supersedes=supersedes, confirm=confirm, line=line):
+                with patch.object(brake.promote, "play_edit") as factory:
+                    with self.assertRaises(brake.BrakeError):
+                        brake.run_brake(
+                            "stage", "1477", confirm, user_fraction=fraction, supersedes=supersedes, notes_line=line
+                        )
+                    factory.assert_not_called()
+
+    def test_stage_update_or_readback_mismatch_fails_closed(self):
+        play = self.halted_play()
+        play.update_mismatch = True
+        with self.assertRaises(brake.BrakeError):
+            self.stage(play)
+        self.assertNotIn("commit", [name for name, _ in play.calls])
+        play = self.halted_play()
+        play.mismatch = True
+        with self.assertRaisesRegex(brake.BrakeError, "readback mismatch"):
+            self.stage(play)
+
+    def test_status_reads_staged_release_after_stage(self):
+        play = self.halted_play()
+        self.stage(play)
+        self.assertEqual(
+            self.run_action(play, "status", code="1477", confirm=""),
+            "BRAKE_RESULT action=status versionCode=1477 status_before=inProgress status_after=inProgress userFraction=0.01",
+        )
 
     def test_quiescence_checks_both_workflows_and_their_runs(self):
         paths = []
