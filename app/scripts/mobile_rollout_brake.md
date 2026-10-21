@@ -24,14 +24,17 @@ release owner's approval. The brake never re-enables them itself.
 
 `BRAKE_ACTION=stage` replaces a halted release with a fixed build. It takes
 `BRAKE_VERSION_CODE=<new code>`, `BRAKE_SUPERSEDES_VERSION_CODE=<halted code>`,
-`BRAKE_USER_FRACTION=<0..1>`, a one-line `BRAKE_NOTES_LINE` and `CONFIRM=brake`. It refuses unless production holds
+`BRAKE_USER_FRACTION=<0..1>`, a one-line `BRAKE_NOTES_LINE` (default sentinel `"unset"` is
+rejected as missing), optional `BRAKE_REPLACE_LAST=true|false`, and `CONFIRM=brake`. It refuses unless production holds
 the superseded code as `halted` beside completed releases only, the new code sits alone
 on internal or alpha under one newer marketing version, and the fraction does not exceed
 the halted one. It writes one `inProgress` release named with the train's gate receipt
 (`1.0.569 (gate YYYY-MM-DD-HHMM)`) so the ladder can advance it later. Notes copy the
 halted release's What's New and append `BRAKE_NOTES_LINE` (replacing the last line when
-appending would pass Play's 500-character limit) to en-US and to every locale
-holding the identical English text; real translations stay unchanged. Completed releases
+appending would pass Play's 500-character limit; `"; "`-joined notes require explicit
+`BRAKE_REPLACE_LAST=true` so a semicolon inside an entry cannot silently drop part of that
+entry) to en-US and to every locale holding the identical English text; real translations
+stay unchanged, and `BRAKE_RESULT` logs `en_us_before` and `en_us_after`. Completed releases
 stay untouched. Read status of the halted code first and of the new code afterwards.
 
 Halt and resume change status only. Country-targeted mutations are explicitly unsupported:
