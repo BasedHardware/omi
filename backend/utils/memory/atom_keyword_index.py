@@ -391,6 +391,19 @@ def delete_atom_keyword_doc(uid: str, memory_id: str, *, db_client: Any = None) 
     """Remove one keyword doc and report whether the desired absence was confirmed."""
     if not uid or not memory_id:
         return False
+    if not typesense_configured():
+        # No shared Typesense env means this deployment never writes the keyword
+        # projection, so the desired absence is trivially confirmed. Privacy
+        # deletion must not fail closed on a projection the deployment never
+        # provisions (FC-privacy-delete-fails-on-unprovisioned-derived-store;
+        # the vector-store sibling gained the same classification in #15097).
+        # A configured client that raises still fails closed below.
+        logger.warning(
+            "Typesense not configured, nothing to purge for atom keyword delete uid=%s memory_id=%s",
+            uid,
+            memory_id,
+        )
+        return True
     try:
         _typesense_client().collections[memories_collection_name()].documents.delete(
             {"filter_by": _provider_identity_delete_filter(uid, memory_id)}

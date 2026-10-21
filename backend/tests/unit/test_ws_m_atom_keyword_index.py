@@ -1017,6 +1017,21 @@ class TestPurgeAndRebuild:
         assert delete_atom_keyword_doc(CANONICAL_UID, "mem-already-absent") is True
         documents.delete.assert_called_once()
 
+    def test_delete_confirms_absence_when_typesense_unconfigured(self, monkeypatch):
+        # FC-privacy-delete-fails-on-unprovisioned-derived-store: a deployment
+        # without the shared Typesense env never writes the keyword projection,
+        # so the privacy delete must confirm the desired absence without
+        # constructing a client (an unconfigured client raising used to fail
+        # every explicit memory delete closed).
+        monkeypatch.delenv("TYPESENSE_HOST", raising=False)
+        monkeypatch.delenv("TYPESENSE_API_KEY", raising=False)
+        monkeypatch.setattr(
+            "utils.memory.atom_keyword_index._typesense_client",
+            MagicMock(side_effect=AssertionError("client must not be constructed")),
+        )
+
+        assert delete_atom_keyword_doc(CANONICAL_UID, "mem-unconfigured-typesense") is True
+
     def test_strict_keyword_purge_raises_on_typesense_failure(self, monkeypatch):
         monkeypatch.setattr(
             "utils.memory.atom_keyword_index._typesense_client",
