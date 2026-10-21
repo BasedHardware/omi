@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import contextvars
 import threading
+import time
+from unittest.mock import Mock
 from contextlib import contextmanager
 from datetime import datetime, timezone
 
@@ -725,6 +727,41 @@ class TestConvergence:
         store.run(lambda tx: tx.get('jobs', 'j'))
         assert store.drain(5) and store.drain_convergence(5)
         assert self.converged('jobs', 'diverged') == before + 1
+
+    def test_a_torn_pair_never_counts_as_converged(self):
+        """Grok #22965 B1: Postgres changes between the two reads of one observation; the last step diverges."""
+        primary, shadow = SimStore(CustomerData()), FakeShadow()
+        store = DualStore(primary, shadow, inline=True)
+        primary.rows[('queues', 'q')] = {'n': 1}
+        reads = iter([{'n': 1}, {'n': 9}])  # matches Firestore on the first read only
+        shadow.read_doc = lambda conn, table, key: next(reads)  # type: ignore[method-assign]
+        before = self.converged('queues', 'converged'), self.converged('queues', 'diverged')
+        store._check_convergence((0.0, 1, 'queues', 'q', time.monotonic(), len(store.convergence_delays) - 1))
+        assert (self.converged('queues', 'converged'), self.converged('queues', 'diverged')) == (
+            before[0],
+            before[1] + 1,
+        )
+
+    def test_a_late_observation_never_counts_as_converged(self):
+        """Grok #22965 B1: a check that runs after the window (tracker backlog) is a divergence, even if equal."""
+        primary, shadow = SimStore(CustomerData()), FakeShadow()
+        store = DualStore(primary, shadow, inline=True)
+        primary.rows[('queues', 'q')] = {'n': 1}
+        shadow.rows[('queues', 'q')] = {'n': 1}
+        before = self.converged('queues', 'converged'), self.converged('queues', 'diverged')
+        store._check_convergence((0.0, 1, 'queues', 'q', time.monotonic() - 30.0, 0))
+        assert (self.converged('queues', 'converged'), self.converged('queues', 'diverged')) == (
+            before[0],
+            before[1] + 1,
+        )
+
+    def test_an_unexpected_failure_counts_error_and_keeps_the_tracker(self, monkeypatch):
+        primary, shadow = SimStore(CustomerData()), FakeShadow()
+        store = DualStore(primary, shadow, inline=True)
+        monkeypatch.setattr(dual_store, 'compare', Mock(side_effect=RecursionError('deep')))
+        before = self.converged('queues', 'error')
+        store._check_convergence((0.0, 1, 'queues', 'q', time.monotonic(), 0))  # never raises
+        assert self.converged('queues', 'error') == before + 1
 
     def test_a_full_tracker_drops_and_counts(self, monkeypatch):
         monkeypatch.setattr(dual_store, 'CONVERGENCE_QUEUE_LIMIT', 0)

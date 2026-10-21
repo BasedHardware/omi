@@ -485,14 +485,49 @@ class DualStore:
                     self._in_flight -= 1
                     self._pending_cv.notify_all()
 
+    def _read_shadow(self, table: str, key: str) -> dict:
+        with self.shadow.pool.connection(timeout=self.budget_s) as conn:
+            with conn.transaction():
+                conn.execute(f'SET LOCAL statement_timeout = {int(self.budget_s * 1000)}')
+                return self.shadow.read_doc(conn, table, key)
+
     def _check_convergence(self, item: tuple[float, int, str, str, float, int]) -> None:
+        """One observation. ``converged`` needs a STABLE pair inside the window (Grok #22965 B1).
+
+        Postgres is read, then the primary (lock-free), then Postgres again: a mirror committing between the
+        reads (a torn pair) cannot count. And the observation must finish within the last re-check offset
+        plus one ``budget_s`` of slop, so a late check after a backlog cannot turn a stuck row into lag.
+        Anything else re-schedules, and the last step counts ``diverged``. Never raises; any failure counts
+        ``error`` (fail closed).
+        """
         _, seq, table, key, started, step = item
         try:
-            with self.shadow.pool.connection(timeout=self.budget_s) as conn:
-                with conn.transaction():
-                    conn.execute(f'SET LOCAL statement_timeout = {int(self.budget_s * 1000)}')
-                    shadow_doc = self.shadow.read_doc(conn, table, key)
+            shadow_before = self._read_shadow(table, key)
             primary_doc = read_current(self.primary, [(table, key)]).get((table, key), {})
+            shadow_after = self._read_shadow(table, key)
+            elapsed = time.monotonic() - started
+            in_window = elapsed <= self.convergence_delays[-1] + self.budget_s
+            stable = compare(shadow_before, shadow_after) is ShadowParityOutcome.MATCH
+            if in_window and stable and compare(primary_doc, shadow_after) is ShadowParityOutcome.MATCH:
+                _converge_count(table, ShadowConvergenceOutcome.CONVERGED)
+                SHADOW_CONVERGENCE_SECONDS.labels(table=_table_label(table)).observe(elapsed)
+                return
+            step += 1
+            if step >= len(self.convergence_delays) or not in_window:
+                _converge_count(table, ShadowConvergenceOutcome.DIVERGED)
+                namespace = getattr(self.shadow, 'namespace', '?')
+                logger.warning(
+                    'event=jobstore_shadow op=converge outcome=diverged namespace=%s table=%s key=%s fields=%s late=%s',
+                    namespace,
+                    table,
+                    key_hash(namespace, table, key),
+                    differing_fields(primary_doc, shadow_after),
+                    not in_window,
+                )
+                return
+            with self._pending_cv:
+                heapq.heappush(self._pending, (started + self.convergence_delays[step], seq, table, key, started, step))
+                self._pending_cv.notify()
         except Exception as exc:
             _converge_count(table, ShadowConvergenceOutcome.ERROR)
             logger.warning(
@@ -501,26 +536,6 @@ class DualStore:
                 _error_class(exc),
                 table,
             )
-            return
-        if compare(primary_doc, shadow_doc) is ShadowParityOutcome.MATCH:
-            _converge_count(table, ShadowConvergenceOutcome.CONVERGED)
-            SHADOW_CONVERGENCE_SECONDS.labels(table=_table_label(table)).observe(time.monotonic() - started)
-            return
-        step += 1
-        if step >= len(self.convergence_delays):
-            _converge_count(table, ShadowConvergenceOutcome.DIVERGED)
-            namespace = getattr(self.shadow, 'namespace', '?')
-            logger.warning(
-                'event=jobstore_shadow op=converge outcome=diverged namespace=%s table=%s key=%s fields=%s',
-                namespace,
-                table,
-                key_hash(namespace, table, key),
-                differing_fields(primary_doc, shadow_doc),
-            )
-            return
-        with self._pending_cv:
-            heapq.heappush(self._pending, (started + self.convergence_delays[step], seq, table, key, started, step))
-            self._pending_cv.notify()
 
     def drain_convergence(self, timeout: float = 15.0) -> bool:
         """Wait until every tracked read has converged or diverged (tests). True when drained."""
