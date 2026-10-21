@@ -86,3 +86,30 @@ def test_incomplete_upload_set_is_still_refused_at_projection(monkeypatch, caplo
         )
     assert 'reason=count_mismatch stage=batch_projection claim_count_bucket=1 file_count_bucket=2_5' in caplog.text
     assert filenames[0] not in caplog.text and 'missing.bin' not in caplog.text
+
+
+def test_http_valid_short_uuid_header_survives_canonical_expansion(monkeypatch):
+    monkeypatch.setenv('SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST', '')
+    monkeypatch.delenv('SYNC_LINEAGE_RESOLVE_ENABLED', raising=False)
+    header, _ = upload(15)
+    payload = json.loads(header)
+    for claim in payload['files']:
+        claim['capture_root'] = claim['capture_root'].replace('-', '')
+        claim['name'] = 'x' * 7 + claim['name']
+    names = [claim['name'] for claim in payload['files']]
+    wire = json.dumps(payload, separators=(',', ':'))
+    assert len(wire.encode()) == 4041
+    claims = recording_lineage.parse_s1_upload_claims(wire, names)
+    assert len(claims) == 15
+    canonical = json.dumps(
+        {'version': 1, 'files': [dict(claim, name=name) for name, claim in claims.items()]}, separators=(',', ':')
+    )
+    assert len(canonical.encode()) == 4101
+    assert recording_lineage.lineage_resolution_requested(
+        'synthetic-owner',
+        'synthetic-recording',
+        1000,
+        1010,
+        capture_evidence_claims=claims,
+        filenames=names,
+    )

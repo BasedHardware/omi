@@ -32,7 +32,6 @@ fails the sync job by itself.
 
 from __future__ import annotations
 
-import json
 import logging
 import math
 import uuid
@@ -46,7 +45,7 @@ from config.sync_lineage import (
 )
 from config.sync_live_dedupe import sync_live_dedupe_active_for, sync_live_dedupe_enabled
 from config.sync_telemetry import bounded_correlation_ref, bounded_exception_class
-from utils.capture_evidence import parse_sync_file_claims
+from utils.capture_evidence import parse_sync_file_claims, validate_sync_file_claims
 from utils.metrics import OMI_SYNC_LINEAGE_RESOLVE_TOTAL
 from utils.observability.fallback import record_fallback
 from utils.sync.lineage_diagnostics import classify_generation_row, probe_token
@@ -146,11 +145,9 @@ def _s1_claims_complete(capture_evidence_claims: Optional[Mapping], filenames: S
     ):
         return False
     try:
-        payload = json.dumps(
-            {'version': 1, 'files': [dict(claim, name=name) for name, claim in capture_evidence_claims.items()]},
-            separators=(',', ':'),
+        parsed = validate_sync_file_claims(
+            [dict(claim, name=name) for name, claim in capture_evidence_claims.items()], filenames
         )
-        parsed = parse_sync_file_claims(payload, filenames)
     except Exception:
         return False
     return len(parsed) == len(filenames) == len(capture_evidence_claims)
@@ -188,22 +185,12 @@ def _s1_refusal_reason(capture_evidence_claims: object, filenames: Sequence[str]
                     return 'parse_failed'
             except Exception:
                 return 'parse_failed'
-        try:
-            claim_items = [dict(claim, name=name) for name, claim in capture_evidence_claims.items()]
-        except Exception:
-            return 'parse_failed'
         if not filenames or len(capture_evidence_claims) > 20 or len(filenames) > 20:
             return 'count_mismatch'
         if len(capture_evidence_claims) != len(filenames) or len(set(filenames)) != len(filenames):
             return 'count_mismatch'
         if set(capture_evidence_claims.keys()) != set(filenames):
             return 'filename_mismatch'
-        try:
-            payload = json.dumps({'version': 1, 'files': claim_items}, separators=(',', ':'))
-            if len(payload.encode('utf-8')) > 4096:
-                return 'parse_failed'
-        except Exception:
-            return 'parse_failed'
         return 'parse_failed'
     except Exception:
         return 'parse_failed'

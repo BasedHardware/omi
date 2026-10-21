@@ -123,12 +123,15 @@ def test_refusal_reasons_emit_once_and_stay_bounded(monkeypatch, caplog, claims,
     assert 'job_ref=none' in lines[0]
 
 
-def test_oversize_serialized_claim_set_is_parse_failed(monkeypatch, caplog):
+def test_http_wire_budget_still_refuses_oversized_header(monkeypatch, caplog):
+    import json
+
     names = [f"{'a' * 240}{i:03d}.bin" for i in range(20)]
-    claims = {name: _claim() for name in names}
-    requested, outcomes, lines = _request(monkeypatch, caplog, claims, names)
-    assert requested is False
-    assert outcomes == ['s1_refused'] and 'reason=parse_failed' in lines[0]
+    wire = json.dumps({'version': 1, 'files': [dict(_claim(), name=name) for name in names]}, separators=(',', ':'))
+    assert len(wire.encode()) > 4096
+    with caplog.at_level(logging.INFO, logger=recording_lineage.__name__):
+        assert recording_lineage.parse_s1_upload_claims(wire, names) == {}
+    assert 'outcome=s1_refused reason=parse_failed stage=http_boundary' in caplog.text
 
 
 def test_valid_claims_pass_silently(monkeypatch, caplog):
