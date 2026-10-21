@@ -44,11 +44,16 @@ DeviceCatchUpLocal deviceCatchUpLocal(List<Wal> wals) {
   for (final w in wals) {
     final uploadedRow = w.status == WalStatus.uploaded;
     final pendingRow = !uploadedRow && SyncPendingWork.isPendingWal(w) && !hidden.contains(w.id);
-    if (!uploadedRow && !pendingRow) continue;
+    final syncedRow = w.status == WalStatus.synced;
+    if (!uploadedRow && !pendingRow && !syncedRow) continue;
+    final seconds = w.seconds > 0 ? w.seconds : 0;
+    // A synced piece of a still-visible source is moved audio inside the
+    // source's total; a synced recording that is nobody's piece is done and
+    // listed nowhere.
+    final source = !walIsOnDevice(w) ? SyncPendingWork.sourceOfPiece(w, sources) : null;
+    if (syncedRow && source == null) continue;
     hasPending = true;
     if (w.conversationId case final id? when id.isNotEmpty) ids.add(id);
-    final seconds = w.seconds > 0 ? w.seconds : 0;
-    final source = uploadedRow || !walIsOnDevice(w) ? SyncPendingWork.sourceOfPiece(w, sources) : null;
     if (source != null) {
       // A piece of a visible source: moved audio inside the source's own total.
       copiedBySource[source.id] = (copiedBySource[source.id] ?? 0) + seconds;

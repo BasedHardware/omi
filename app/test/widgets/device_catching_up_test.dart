@@ -262,6 +262,31 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
+  testWidgets('a synced drain chunk keeps its progress instead of rewinding', (tester) async {
+    final chunk = _wal(minutes: 15, status: WalStatus.synced)
+      ..storage = WalStorage.disk
+      ..originalStorage = WalStorage.sdcard;
+    final source = _wal(minutes: 20);
+    await pump(tester, _Sync(wals: [chunk, source]));
+    expect(find.text('Catching up'), findsOneWidget);
+    expect(find.text('15 of 20 min'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('a fully synced chunk drain hides its lagging source', (tester) async {
+    final first = _wal(minutes: 2, status: WalStatus.synced)
+      ..storage = WalStorage.disk
+      ..originalStorage = WalStorage.sdcard;
+    final second = _wal(minutes: 1, status: WalStatus.synced)
+      ..storage = WalStorage.disk
+      ..originalStorage = WalStorage.sdcard
+      ..timerStart += 120;
+    final source = _wal(minutes: 3);
+    await pump(tester, _Sync(wals: [first, second, source]));
+    expect(find.text('Catching up'), findsNothing);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('retry-exhausted audio does not count toward the progress total', (tester) async {
     final failed = _wal(minutes: 180)
       ..retryCount = 99

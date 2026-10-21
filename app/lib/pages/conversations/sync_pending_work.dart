@@ -47,21 +47,43 @@ abstract final class SyncPendingWork {
   /// source only once its pieces cover the whole recording — whether they are
   /// still transcribing (`uploaded`) or already done (`synced`) — because a
   /// first chunk of a longer file leaves real audio on the device that On the
-  /// Way and the device card must still show.
+  /// Way and the device card must still show. Chunks after the first carry a
+  /// later start and so a different id, which is why coverage follows the
+  /// source's recording span, not just the id.
   static Set<String> hiddenDeviceTwinIds(List<Wal> wals) {
-    final phoneCopySeconds = <String, int>{};
-    for (final w in wals) {
-      if (walIsOnDevice(w)) continue;
-      if (w.status == WalStatus.uploaded || w.status == WalStatus.synced) {
-        phoneCopySeconds[w.id] = (phoneCopySeconds[w.id] ?? 0) + (w.seconds > 0 ? w.seconds : 0);
-      }
-    }
-    if (phoneCopySeconds.isEmpty) return const {};
-    final hidden = <String>{};
+    final candidates = <Wal>[];
+    var minStart = -1, maxEnd = 0;
     for (final w in wals) {
       if (w.status != WalStatus.miss || !walIsOnDevice(w)) continue;
+      candidates.add(w);
+      final end = w.timerStart + (w.seconds > 0 ? w.seconds : 0);
+      if (minStart < 0 || w.timerStart < minStart) minStart = w.timerStart;
+      if (end > maxEnd) maxEnd = end;
+    }
+    if (candidates.isEmpty) return const {};
+    final coveredSeconds = <String, int>{};
+    for (final w in wals) {
+      if (walIsOnDevice(w)) continue;
+      if (w.status != WalStatus.uploaded && w.status != WalStatus.synced) continue;
+      // Old synced history predates any current backlog; one window check keeps
+      // this pass linear for large inventories.
+      if (w.timerStart < minStart || w.timerStart > maxEnd) continue;
       final seconds = w.seconds > 0 ? w.seconds : 0;
-      if ((phoneCopySeconds[w.id] ?? 0) >= seconds) hidden.add(w.id);
+      final drainPiece = w.originalStorage != null && w.originalStorage != WalStorage.disk;
+      for (final src in candidates) {
+        if (src.device != w.device) continue;
+        if (w.id != src.id && !drainPiece) continue;
+        final end = src.timerStart + (src.seconds > 0 ? src.seconds : 0);
+        if (w.timerStart >= src.timerStart && w.timerStart <= end) {
+          coveredSeconds[src.id] = (coveredSeconds[src.id] ?? 0) + seconds;
+        }
+      }
+    }
+    if (coveredSeconds.isEmpty) return const {};
+    final hidden = <String>{};
+    for (final src in candidates) {
+      final seconds = src.seconds > 0 ? src.seconds : 0;
+      if ((coveredSeconds[src.id] ?? 0) >= seconds) hidden.add(src.id);
     }
     return hidden;
   }
