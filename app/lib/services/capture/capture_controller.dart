@@ -55,6 +55,7 @@ import 'package:omi/services/capture/capture_continuity_monitor.dart';
 import 'package:omi/services/capture/empty_recording_notice.dart';
 import 'package:omi/services/capture/optimistic_processing.dart';
 import 'package:omi/services/capture/speaker_suggestions.dart';
+import 'package:omi/services/capture/manual_live_labels.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/voice_playback/omi_voice_playback_service.dart';
 import 'package:omi/utils/analytics/registry/events.g.dart';
@@ -3595,7 +3596,7 @@ class CaptureController extends ChangeNotifier
       suggestionsBySegmentId.clear();
       _manualSpeakerDefaults.clear();
     } else if (nextConversation != null) {
-      _retainManualLiveLabels(nextConversation.transcriptSegments);
+      retainManualLiveLabels(segments, nextConversation.transcriptSegments, _manualSpeakerDefaults);
     }
     _conversation = nextConversation;
     if (_conversation != null) {
@@ -4128,7 +4129,7 @@ class CaptureController extends ChangeNotifier
       Logger.debug("Received ${translatedSegments.length} translated segments");
 
       // Update the segments with the translated ones
-      _retainManualLiveLabels(translatedSegments);
+      retainManualLiveLabels(segments, translatedSegments, _manualSpeakerDefaults);
       var remainSegments = TranscriptSegment.updateSegments(segments, translatedSegments);
       if (remainSegments.isNotEmpty) {
         Logger.debug("Adding ${remainSegments.length} new translated segments");
@@ -4252,28 +4253,6 @@ class CaptureController extends ChangeNotifier
     }
   }
 
-  /// The live stream can revise an existing line after a manual tag. Retain the
-  /// tag before merging, including individual-line choices, not only appended lines.
-  void _retainManualLiveLabels(List<TranscriptSegment> incoming) {
-    final manualById = {
-      for (final line in segments)
-        if (line.speakerLabelSource == 'manual') line.id: line
-    };
-    for (final line in incoming) {
-      final previous = manualById[line.id];
-      final assigned = _manualSpeakerDefaults[line.speakerId];
-      if (previous != null) {
-        line.isUser = previous.isUser;
-        line.personId = previous.personId;
-        line.speakerLabelSource = 'manual';
-      } else if (assigned != null && line.speakerLabelSource != 'manual') {
-        line.isUser = assigned == 'user';
-        line.personId = line.isUser ? null : assigned;
-        line.speakerLabelSource = 'manual';
-      }
-    }
-  }
-
   @override
   void onSegmentReceived(List<TranscriptSegment> newSegments) {
     // Forward to interactive device onboarding if active on transcription step
@@ -4307,7 +4286,7 @@ class CaptureController extends ChangeNotifier
       }
     }
 
-    _retainManualLiveLabels(newSegments);
+    retainManualLiveLabels(segments, newSegments, _manualSpeakerDefaults);
     final remainSegments = TranscriptSegment.updateSegments(segments, newSegments);
     segments.addAll(remainSegments);
 

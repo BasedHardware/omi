@@ -488,6 +488,8 @@ void main() {
     provider.applyInProgressConversation(ServerConversation.fromJson({
       'id': 'manual-conversation',
       'created_at': '2026-09-21T00:00:00Z',
+      'started_at': null,
+      'finished_at': null,
       'structured': {},
       'transcript_segments': [_segment('c', 'server refresh').toJson()],
     }));
@@ -495,6 +497,8 @@ void main() {
     provider.applyInProgressConversation(ServerConversation.fromJson({
       'id': 'next-conversation',
       'created_at': '2026-09-21T00:00:00Z',
+      'started_at': null,
+      'finished_at': null,
       'structured': {},
       'transcript_segments': [_segment('different-scope', 'another voice').toJson()],
     }));

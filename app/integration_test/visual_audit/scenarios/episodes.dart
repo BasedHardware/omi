@@ -54,8 +54,8 @@ final episodeScenarios = <AuditScenario>[
         fetchLive: () async => ApiSuccess(EpisodeRead(enabled: true, episode: episode)),
       )..debugSetLive(episode);
       final capture = _EpisodeCapture();
-      a.tester.addTearDown(episodes.dispose);
-      a.tester.addTearDown(capture.dispose);
+      addTearDown(episodes.dispose);
+      addTearDown(capture.dispose);
       await a.pump(const LiveEpisodePage(initialTab: LiveEpisodeTab.transcript),
           providers: [
             ChangeNotifierProvider<EpisodeProvider>.value(value: episodes),
