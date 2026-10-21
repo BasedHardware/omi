@@ -90,15 +90,6 @@ overlay:
         DREAM_AGENT_ENABLED:
           value: 'true'
           category: rollout
-        DREAM_AGENT_ELIGIBILITY:
-          value: paid
-          category: rollout
-        DREAM_AGENT_PAID_PERCENT:
-          value: '5'
-          category: rollout
-        DREAM_ON_DEMAND_ENABLED:
-          value: 'false'
-          category: rollout
         DREAM_AGENT_UID_ALLOWLIST:
           value: vi7SA9ckQCe4ccobWNxlbdcNdC23
         POSTHOG_PRODUCT_CAPTURE_TOKEN:
@@ -284,15 +275,6 @@ overlay:
           category: rollout
         DREAM_AGENT_ENABLED:
           value: 'true'
-          category: rollout
-        DREAM_AGENT_ELIGIBILITY:
-          value: paid
-          category: rollout
-        DREAM_AGENT_PAID_PERCENT:
-          value: '5'
-          category: rollout
-        DREAM_ON_DEMAND_ENABLED:
-          value: 'false'
           category: rollout
         DREAM_AGENT_UID_ALLOWLIST:
           value: vi7SA9ckQCe4ccobWNxlbdcNdC23
