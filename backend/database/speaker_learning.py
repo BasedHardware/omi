@@ -17,6 +17,12 @@ from ._client import get_firestore_client, run_transactional
 
 _MAX_IDENTIFIER_LENGTH = 128
 _MAX_LABEL_LENGTH = 64
+# Segments the Firestore client itself rejects or treats as structural. '' and
+# '.', '..' are the usual path-navigation tokens; '__reserved__' is the prefix
+# reserved for client-generated document ids. ``'..' in token`` below already
+# covers the traversal spellings, so this set is the belt to that braces: it
+# keeps the guard aligned with the client's own rules instead of relying on a
+# substring test to catch every reserved spelling.
 _RESERVED_SEGMENTS = frozenset({'', '.', '..', '__reserved__'})
 _LEARNING_STATES = frozenset({'learned', 'disabled'})
 
