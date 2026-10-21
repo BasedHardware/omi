@@ -104,6 +104,7 @@ def test_release_never_frees_a_turn_another_job_now_holds(redis):
 
 def test_backfill_and_kill_switch_do_not_touch_redis(redis, monkeypatch):
     assert conversation_turn.acquire('u', 'c1', 'backfill') is None
+    assert conversation_turn.acquire('u', None, 'fresh') is None  # new conversation: no uid-wide key
     monkeypatch.setenv('SYNC_FRESH_CONVERSATION_TURN', 'off')
     assert conversation_turn.acquire('u', 'c1', 'fresh') is None
     assert redis.calls == 0

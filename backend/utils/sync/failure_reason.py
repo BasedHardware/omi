@@ -22,7 +22,9 @@ from database._client import is_document_size_limit_error
 from utils.stt.outcomes import TranscriptionFailure
 from utils.sync.assignment_errors import SyncAssignmentConflict, sync_assignment_conflict_strikes
 
-INTERNAL_PHASES = frozenset({'persistence', 'finalize'})
+# Job phases with no STT vendor call. Segment classification only ever sees
+# persistence and finalize; postprocess and usage are whole-job coordinator phases.
+INTERNAL_PHASES = frozenset({'persistence', 'finalize', 'postprocess', 'usage'})
 
 _CLASS_REASONS = {
     # GCS JSON API 429; Firestore/gRPC throttling is its ResourceExhausted subclass.
@@ -62,12 +64,12 @@ def sync_failure_reason(phase: object, failure_class: object) -> SyncFailureReas
     reason = _CLASS_REASONS.get(bounded_exception_class(failure_class))
     if reason is not None:
         return reason
-    return SyncFailureReason.FINALIZE_ERROR if phase == 'finalize' else SyncFailureReason.PERSISTENCE_ERROR
+    return SyncFailureReason.PERSISTENCE_ERROR if phase == 'persistence' else SyncFailureReason.FINALIZE_ERROR
 
 
 def sync_failure_error_code(reason: SyncFailureReason, phase: str) -> str:
     """Client-visible job error code; unchanged for the generic internal causes."""
-    return _ERROR_CODES.get(reason) or ('sync_finalize_failed' if phase == 'finalize' else 'sync_persistence_failed')
+    return _ERROR_CODES.get(reason) or ('sync_persistence_failed' if phase == 'persistence' else 'sync_finalize_failed')
 
 
 def job_failure_reason(errors: list[str], phase: object, failure_class: object) -> SyncFailureReason:
@@ -75,6 +77,21 @@ def job_failure_reason(errors: list[str], phase: object, failure_class: object) 
     if not errors or not set(errors) <= SYNC_INTERNAL_ERROR_CODES:
         return SyncFailureReason.NONE
     return sync_failure_reason(phase, failure_class)
+
+
+def stamped_failure_kwargs(error: BaseException) -> dict:
+    """Final-attempt finalize kwargs from the cause the pipeline stamped before a task-mode re-raise.
+
+    The Cloud Tasks handler only sees the exception; without the stamp its final
+    attempt would publish an internal failure as ``upstream_error`` again.
+    """
+    stamped = getattr(error, 'sync_failure_reason', None)
+    phase = getattr(error, 'sync_failure_phase', None)
+    return {
+        'failure_phase': phase if isinstance(phase, str) else None,
+        'failure_class': bounded_exception_class(error),
+        'failure_reason': stamped if isinstance(stamped, SyncFailureReason) else SyncFailureReason.NONE,
+    }
 
 
 def outcome_label(outcome_value: str, reason: SyncFailureReason) -> str:

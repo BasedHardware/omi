@@ -31,6 +31,7 @@ from utils.sync.failure_reason import (
     job_failure_reason,
     outcome_label,
     persistence_failure_fingerprint,
+    stamped_failure_kwargs,
     sync_failure_error_code,
     sync_failure_reason,
 )
@@ -197,7 +198,7 @@ def _record(**overrides):
     [
         (_record(record_lane_owner='legacy'), 'record_route_owner_changed'),
         (_record(deleted=True), 'record_target_retired'),
-        (_record(discarded=True, status='processing'), 'record_target_retired'),
+        (_record(discarded=True, status='processing'), 'record_target_discarded'),
         (_record(status='processing'), 'record_finalize_pending'),
         (_record(uses_custom_stt=True), 'record_privacy_changed'),
     ],
@@ -206,3 +207,22 @@ def test_record_projection_conflicts_name_their_reason(row, reason):
     with pytest.raises(SyncAssignmentConflict) as exc_info:
         replace_record(row, {'transcript_segments': []}, {'start': 0.0, 'end': 1.0})
     assert exc_info.value.subtype == reason
+
+
+def test_task_mode_reraise_carries_the_internal_cause_to_the_final_attempt():
+    error = FirestoreContentionExhausted('busy')
+    setattr(error, 'sync_failure_reason', SyncFailureReason.FIRESTORE_CONTENTION)
+    setattr(error, 'sync_failure_phase', 'persistence')
+    assert stamped_failure_kwargs(error) == {
+        'failure_phase': 'persistence',
+        'failure_class': 'FirestoreContentionExhausted',
+        'failure_reason': SyncFailureReason.FIRESTORE_CONTENTION,
+    }
+    unstamped = stamped_failure_kwargs(RuntimeError('provider'))
+    assert unstamped['failure_reason'] is SyncFailureReason.NONE and unstamped['failure_phase'] is None
+
+
+@pytest.mark.parametrize('phase', ['postprocess', 'usage'])
+def test_whole_job_coordinator_phases_are_internal(phase):
+    assert sync_failure_reason(phase, ServiceUnavailable('firestore')) is SyncFailureReason.FINALIZE_ERROR
+    assert sync_failure_error_code(SyncFailureReason.FINALIZE_ERROR, phase) == 'sync_finalize_failed'

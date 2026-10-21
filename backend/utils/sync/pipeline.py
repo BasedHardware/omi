@@ -795,6 +795,7 @@ async def _finalize_sync_job_failure(
     failure_subtype: str | None = None,
     failure_key: str | None = None,
     failure_fingerprint: str | None = None,
+    failure_reason: SyncFailureReason = SyncFailureReason.NONE,
 ) -> None:
     """Offload the atomic failure publication boundary to the DB executor."""
     finalized = await run_blocking(
@@ -817,6 +818,7 @@ async def _finalize_sync_job_failure(
         failure_subtype=failure_subtype,
         failure_key=failure_key,
         failure_fingerprint=failure_fingerprint,
+        failure_reason=failure_reason,
     )
     if finalized is None:
         # The epoch-fenced path lost its lease; the compatibility path saw an
@@ -844,6 +846,7 @@ def finalize_sync_job_failure_now(
     failure_subtype: str | None = None,
     failure_key: str | None = None,
     failure_fingerprint: str | None = None,
+    failure_reason: SyncFailureReason = SyncFailureReason.NONE,
 ) -> Optional[Dict]:
     """Publish one truthful failure and then make its retry claim available.
 
@@ -851,6 +854,10 @@ def finalize_sync_job_failure_now(
     reaper. A run-token owner fences the Redis terminal transition first; only
     that winning owner may release the durable retry claim afterward.
     """
+    if failure_reason is not SyncFailureReason.NONE and error_code == 'stt_upstream_error':
+        # A task-mode failure reaches here through sync_failure_from_exception; keep its
+        # internal cause instead of publishing a vendor error code.
+        error_code = sync_failure_error_code(failure_reason, failure_phase or 'finalize')
     if run_lock_token is None:
         finalized = mark_job_failed(
             job_id,
@@ -889,8 +896,8 @@ def finalize_sync_job_failure_now(
         delete_sync_job_run_lock_epoch(job_id)
     logger.error(
         'event=sync_transcription_job outcome=%s status=failed provider=%s model=%s lane=%s reason_code=%s '
-        'job_ref=%s attempt_ref=%s failure_phase=%s failure_class=%s failure_subtype=%s',
-        outcome.value,
+        'job_ref=%s attempt_ref=%s failure_phase=%s failure_class=%s failure_subtype=%s failure_reason=%s',
+        outcome_label(outcome.value, failure_reason),
         bounded_provider(provider),
         _bounded_sync_model(model),
         _bounded_sync_lane(lane),
@@ -900,8 +907,11 @@ def finalize_sync_job_failure_now(
         _bounded_sync_phase(failure_phase),
         bounded_exception_class(failure_class),
         bounded_sync_assignment_subtype(failure_subtype),
+        SyncFailureReason(failure_reason).value,
     )
-    _record_sync_job_outcome(outcome, provider=provider, model=model, lane=lane, job_id=job_id)
+    _record_sync_job_outcome(
+        outcome, provider=provider, model=model, lane=lane, job_id=job_id, failure_reason=failure_reason
+    )
     return finalized
 
 
@@ -1441,7 +1451,8 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
         'content_id': cap_content_id,
         'job_id': job_id,
     }
-    conversation_id = conversation_turn = None
+    conversation_id = None
+    conversation_turns: list[conversation_turn_lease.ConversationTurn | None] = []
     provider = 'unknown'
     model = 'unknown'
     phase = 'provider_select'
@@ -1695,7 +1706,7 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
         if lineage_binding is not None and target_conversation_id:
             incoming['_sync_lineage_binding'] = lineage_binding
         phase = 'persistence'
-        conversation_turn = conversation_turn_lease.acquire(uid, candidate_id, sync_lane)
+        conversation_turns.append(conversation_turn_lease.acquire(uid, candidate_id, sync_lane))
         from utils.conversations.lifecycle import ingest_sync_conversation
 
         assigned, created, survivors = ingest_sync_conversation(
@@ -1709,6 +1720,9 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
                 else {}
             ),
         )
+        if assigned['id'] != candidate_id:
+            # Assignment redirected; hold the conversation the bridge will finalize into too.
+            conversation_turns.append(conversation_turn_lease.acquire(uid, assigned['id'], sync_lane))
         if sync_safety_wal_enabled() and assigned.get('sync_live_target'):
             removed = len(transcript_segments) - len(survivors)
             SEGMENTS_DEDUPED.labels(reason='live_overlap').inc(removed)
@@ -1856,7 +1870,8 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
         )
         return False
     finally:
-        conversation_turn_lease.release(conversation_turn)
+        for turn in conversation_turns:
+            conversation_turn_lease.release(turn)
         if turnstile:
             turnstile.complete(path)
 
@@ -3464,6 +3479,9 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                     failure_reason=job_reason,
                 )
             if task_mode:
+                # The handler reclassifies from the exception; carry the internal cause along.
+                setattr(e, 'sync_failure_reason', job_reason)
+                setattr(e, 'sync_failure_phase', job_phase)
                 # Let the handler decide: queued-reset + Cloud Tasks retry, or
                 # final-attempt consume. Marking failed here would be terminal.
                 raise
@@ -3482,6 +3500,7 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                     failure_phase=job_phase,
                     failure_class=failure_class,
                     failure_subtype=failure_subtype,
+                    failure_reason=job_reason,
                 )
             except SyncJobRunLeaseLost:
                 preserve_retry_material = True

@@ -18,6 +18,7 @@ class SyncAssignmentConflictReason(StrEnum):
     LINEAGE_OWNERSHIP_AMBIGUOUS = 'lineage_ownership_ambiguous'
     RECORD_TARGET_MISSING = 'record_target_missing'
     RECORD_TARGET_RETIRED = 'record_target_retired'
+    RECORD_TARGET_DISCARDED = 'record_target_discarded'
     RECORD_FINALIZE_PENDING = 'record_finalize_pending'
     RECORD_ROUTE_OWNER_CHANGED = 'record_route_owner_changed'
     RECORD_PRIVACY_CHANGED = 'record_privacy_changed'
@@ -41,15 +42,17 @@ SYNC_ASSIGNMENT_CONFLICT_STRUCTURAL = frozenset(
     }
 )
 
-# These wait on another writer (listen persisting its row, a record finishing,
-# a lineage binding settling). A fresh retry keeps waiting; backfill content is
-# hours old, so a writer that still has not landed is treated as structural.
+# These wait on another writer (listen persisting its row, a record finishing or
+# being restored from discard, a lineage binding settling). A fresh retry keeps
+# waiting; backfill content is hours old, so a writer that still has not landed
+# is treated as structural.
 SYNC_ASSIGNMENT_CONFLICT_AWAITING_WRITER = frozenset(
     {
         SyncAssignmentConflictReason.LIVE_TARGET_NOT_PERSISTED.value,
         SyncAssignmentConflictReason.LINEAGE_OWNERSHIP_AMBIGUOUS.value,
         SyncAssignmentConflictReason.RECORD_TARGET_MISSING.value,
         SyncAssignmentConflictReason.RECORD_FINALIZE_PENDING.value,
+        SyncAssignmentConflictReason.RECORD_TARGET_DISCARDED.value,
     }
 )
 

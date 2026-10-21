@@ -181,6 +181,33 @@ def test_concurrent_writer_with_different_bytes_still_fails(install, monkeypatch
         merge.copy_sync_bridge_audio(UID, 'donor', 'target')
 
 
+def test_derived_listing_checksum_never_certifies_the_private_copy(install, monkeypatch):
+    # list_audio_chunks keeps the BUCKET_AUDIO_DERIVED entry for a path in both buckets,
+    # but copy_blob reads the private object. Compare against what is actually copied.
+    source = 'chunks/u1/donor/100.0.bin'
+    dest = _dest(source)
+    bucket = _Bucket(
+        {
+            source: SimpleNamespace(crc32c='crc-a', size=10, generation=1),
+            dest: SimpleNamespace(crc32c='derived-crc', size=10, generation=9),
+        }
+    )
+    install(bucket)
+    monkeypatch.setattr(
+        merge,
+        'list_audio_chunks',
+        lambda uid, cid, **kwargs: [{'path': source, 'crc32c': 'derived-crc', 'size': 10, 'bucket': 'derived'}],
+    )
+
+    merge.copy_sync_bridge_audio(UID, 'donor', 'target')
+
+    assert bucket.copies == [(dest, 9)]
+    assert bucket.objects[dest].crc32c == 'crc-a'
+    # A second bridge now sees the private bytes in place and skips.
+    merge.copy_sync_bridge_audio(UID, 'donor', 'target')
+    assert len(bucket.copies) == 1
+
+
 def test_unchecksummed_pack_raced_by_a_same_size_copy_is_not_a_failure(install, monkeypatch):
     bucket = _Bucket()
     install(bucket)
@@ -240,5 +267,8 @@ def test_user_merge_copy_keeps_its_unconditional_shape_but_backs_off(monkeypatch
     monkeypatch.setattr(merge.time, 'sleep', lambda seconds: None)
     monkeypatch.setattr(merge, 'list_audio_chunks', lambda uid, cid, **kwargs: [{'path': f'chunks/u1/{cid}/1.bin'}])
 
+    copied, limited = _copies('copied'), _copies('rate_limited')
     assert merge._copy_audio_chunks_for_merge(UID, [{'id': 'a'}], 'merged') == ['audio']
     assert calls == ['chunks/u1/merged/1.bin']
+    # User merges are not sync bridges and stay out of the bridge copy metric.
+    assert (_copies('copied'), _copies('rate_limited')) == (copied, limited)

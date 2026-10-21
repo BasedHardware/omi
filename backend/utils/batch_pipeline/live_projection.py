@@ -17,8 +17,11 @@ from utils.sync.assignment_errors import SyncAssignmentConflictReason as Reason
 def replace_record(current: dict, incoming: dict, span: dict) -> tuple[dict, list[dict]]:
     if current.get('record_lane_owner') not in {'batch_live_v1', 'batch_sync_v1'}:
         raise SyncAssignmentConflict('record route owner changed', subtype=Reason.RECORD_ROUTE_OWNER_CHANGED)
-    if current.get('deleted') or current.get('discarded'):
+    if current.get('deleted'):
         raise SyncAssignmentConflict('record target retired', subtype=Reason.RECORD_TARGET_RETIRED)
+    if current.get('discarded'):
+        # Recoverable: the user can restore a discarded record without a status change.
+        raise SyncAssignmentConflict('record target discarded', subtype=Reason.RECORD_TARGET_DISCARDED)
     if current.get('status') != 'completed':
         raise SyncAssignmentConflict('record finalize still pending', subtype=Reason.RECORD_FINALIZE_PENDING)
     if current.get('uses_custom_stt') or current.get('data_protection_level', 'enhanced') not in {

@@ -677,7 +677,8 @@ def _copy_audio_chunks_for_merge(
             if existing is None:
                 _copy_chunk_with_backoff(uid, bucket, source_blob, new_path)
             else:
-                _copy_bridge_chunk(uid, bucket, source_blob, new_path, chunk, existing.get(new_path))
+                identity = _copied_source_identity(bucket, chunk)
+                _copy_bridge_chunk(uid, bucket, source_blob, new_path, identity, existing.get(new_path))
 
     # Create AudioFile records from copied chunks
     if has_chunks:
@@ -704,6 +705,7 @@ def _copy_chunk_with_backoff(
     new_path: str,
     *,
     if_generation_match: Optional[int] = None,
+    bridge: bool = False,
 ) -> None:
     """Copy one object, retrying only GCS 429 with bounded equal-jitter backoff."""
     for attempt in range(1, _COPY_RATE_LIMIT_ATTEMPTS + 1):
@@ -716,36 +718,54 @@ def _copy_chunk_with_backoff(
                     # retry 429 for up to two minutes, unbounded and uncounted.
                     bucket.copy_blob(source_blob, bucket, new_path, if_generation_match=if_generation_match, retry=None)
         except google_exceptions.TooManyRequests:
-            OMI_SYNC_BRIDGE_AUDIO_COPY_TOTAL.labels(outcome='rate_limited').inc()
+            if bridge:
+                OMI_SYNC_BRIDGE_AUDIO_COPY_TOTAL.labels(outcome='rate_limited').inc()
             if attempt >= _COPY_RATE_LIMIT_ATTEMPTS:
                 raise
             high = _COPY_RATE_LIMIT_BASE_SECONDS * (2 ** (attempt - 1))
             time.sleep(high / 2 + random.random() * high / 2)
             continue
-        OMI_SYNC_BRIDGE_AUDIO_COPY_TOTAL.labels(outcome='copied').inc()
+        if bridge:
+            OMI_SYNC_BRIDGE_AUDIO_COPY_TOTAL.labels(outcome='copied').inc()
         return
 
 
-def _same_object(blob: Any, chunk: Dict) -> bool:
-    crc32c = chunk.get('crc32c')
-    return bool(crc32c) and getattr(blob, 'crc32c', None) == crc32c and getattr(blob, 'size', None) == chunk.get('size')
+def _copied_source_identity(bucket: Any, chunk: Dict) -> Dict:
+    """Checksum and size of the object copy_blob actually reads: private bucket, chunk path.
+
+    A chunk listed from BUCKET_AUDIO_DERIVED carries that bucket's checksum, not the
+    private object's, so stat the private source instead of trusting the listing.
+    """
+    if not chunk.get('bucket'):
+        return {'crc32c': chunk.get('crc32c'), 'size': chunk.get('size')}
+    source = bucket.get_blob(chunk['path'])
+    return {} if source is None else {'crc32c': source.crc32c, 'size': source.size}
 
 
-def _copy_bridge_chunk(uid: str, bucket: Any, source_blob: Any, new_path: str, chunk: Dict, current: Any) -> None:
+def _same_object(blob: Any, identity: Dict) -> bool:
+    crc32c = identity.get('crc32c')
+    return (
+        bool(crc32c) and getattr(blob, 'crc32c', None) == crc32c and getattr(blob, 'size', None) == identity.get('size')
+    )
+
+
+def _copy_bridge_chunk(uid: str, bucket: Any, source_blob: Any, new_path: str, identity: Dict, current: Any) -> None:
     """Idempotent bridge copy: skip identical bytes, never overwrite a concurrent writer."""
-    if current is not None and _same_object(current, chunk):
+    if current is not None and _same_object(current, identity):
         OMI_SYNC_BRIDGE_AUDIO_COPY_TOTAL.labels(outcome='skipped').inc()
         return
     try:
         # Generation 0 means "create only"; otherwise replace exactly the version listed.
+        # A GCS listing always carries a generation; None (test doubles only) keeps
+        # the pre-idempotency unconditional copy.
         generation = getattr(current, 'generation', None) if current is not None else 0
-        _copy_chunk_with_backoff(uid, bucket, source_blob, new_path, if_generation_match=generation)
+        _copy_chunk_with_backoff(uid, bucket, source_blob, new_path, if_generation_match=generation, bridge=True)
     except google_exceptions.PreconditionFailed:
         winner = bucket.get_blob(new_path)
         # Archive packs list no checksum; their capture-named object of the same size
         # is the same pack another bridge copied a moment ago.
-        unverifiable = not chunk.get('crc32c') and getattr(winner, 'size', None) == chunk.get('size')
-        if winner is None or not (_same_object(winner, chunk) or unverifiable):
+        unverifiable = not identity.get('crc32c') and getattr(winner, 'size', None) == identity.get('size')
+        if winner is None or not (_same_object(winner, identity) or unverifiable):
             raise
         OMI_SYNC_BRIDGE_AUDIO_COPY_TOTAL.labels(outcome='raced').inc()
 

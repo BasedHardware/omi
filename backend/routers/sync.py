@@ -198,6 +198,7 @@ from utils.sync.backfill import (
 )
 from utils.batch_pipeline.live_upload import RecordUploadRoute, registered_record_response
 from utils.sync.content_id import compute_sync_content_id
+from utils.sync.failure_reason import stamped_failure_kwargs
 from utils.sync.capture_manifest import (
     claim_conversation_manifest,
     issue_capture_manifest,
@@ -3301,6 +3302,7 @@ async def _run_sync_job_attempt(request: Request, task_retry_count: int, attempt
                     model=sync_model,
                     lane=sync_lane,
                     run_lock_token=lock_token if ledger_fence_active else None,
+                    **stamped_failure_kwargs(e),  # internal cause, not upstream_error
                 )
                 await _delete_staged_blobs_async(blob_paths)
                 if sync_lane == SyncLane.BACKFILL.value:

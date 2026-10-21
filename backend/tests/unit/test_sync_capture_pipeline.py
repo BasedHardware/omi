@@ -593,6 +593,26 @@ def test_internal_persistence_failure_names_its_cause_inside_the_fresh_turn(
     assert 'upstream_error' not in segment
 
 
+def test_redirected_assignment_also_holds_the_finalize_target_turn(pipeline, monkeypatch):
+    module, _store = pipeline
+    turns = []
+    lease = SimpleNamespace(
+        acquire=lambda uid, conversation_id, lane: turns.append(('acquire', conversation_id)) or conversation_id,
+        release=lambda turn: turns.append(('release', turn)),
+    )
+    monkeypatch.setattr(module, 'conversation_turn_lease', lease)
+    module.ingest_test_seam.ingest_sync_conversation = MagicMock(return_value=({'id': 'survivor'}, False, []))
+    monkeypatch.setattr(module, 'complete_sync_intake', MagicMock(side_effect=TooManyRequests('per-object rate')))
+    module.get_prerecorded_service = lambda language: ('deepgram', None, 'nova-3')
+    errors = []
+    response = {'new_memories': set(), 'updated_memories': set()}
+    assert module.process_segment('1000.wav', 'u', response, threading.Lock(), errors) is False
+    acquired = [conversation_id for kind, conversation_id in turns if kind == 'acquire']
+    assert acquired[-1] == 'survivor' and len(acquired) == 2
+    assert sorted((turn for kind, turn in turns if kind == 'release'), key=str) == sorted(acquired, key=str)
+    assert errors == ['sync_storage_rate_limited']
+
+
 @pytest.mark.parametrize('legacy_failure', [False, True])
 def test_sync_budget_refusal_retains_legacy_and_logs_only_uid_hash(pipeline, monkeypatch, caplog, legacy_failure):
     import hashlib

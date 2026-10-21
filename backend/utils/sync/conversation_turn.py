@@ -69,8 +69,12 @@ def acquire(
     sleep: Callable[[float], None] = time.sleep,
     clock: Callable[[], float] = time.monotonic,
 ) -> ConversationTurn | None:
-    """Wait for this conversation's fresh turn; ``None`` means proceed unserialized."""
-    if lane != 'fresh' or not enabled():
+    """Wait for this conversation's fresh turn; ``None`` means proceed unserialized.
+
+    A new conversation (no candidate yet) takes no turn: a uid-wide key would
+    serialize every new capture for the user.
+    """
+    if lane != 'fresh' or not conversation_id or not enabled():
         return None
     token = uuid.uuid4().hex
     deadline = clock() + wait_seconds
