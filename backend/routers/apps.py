@@ -2168,26 +2168,42 @@ async def mcp_oauth_callback(code: str, state: str):
     # Auto-enable the app for the user
     await run_blocking(db_executor, enable_app, uid, app_id)
 
-    tool_count = len(tools)
-    tool_names = ', '.join(escape(t.name) for t in tools)
+    app_name = escape(app_data.get('name') or 'Your app')
 
     return HTMLResponse(f"""
-    <html>
-    <head><meta name="viewport" content="width=device-width,initial-scale=1">
+    <!doctype html>
+    <html lang="en">
+    <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="color-scheme" content="dark">
+    <title>Connected to Omi</title>
     <style>
-        body {{ font-family: -apple-system, system-ui, sans-serif; background: #111; color: #fff;
-               display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; }}
-        .card {{ background: #1a1a1a; border-radius: 16px; padding: 40px; text-align: center; max-width: 400px; }}
-        h1 {{ color: #4ade80; margin-bottom: 8px; }}
-        p {{ color: #aaa; }}
-        .count {{ font-size: 2em; font-weight: bold; color: #fff; }}
+        * {{ box-sizing: border-box; }}
+        body {{ font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+               background: #0b0b0b; color: #fff; display: flex; align-items: center;
+               justify-content: center; min-height: 100vh; min-height: 100svh; margin: 0; padding: 24px; }}
+        .card {{ background: #171717; border: 1px solid #303030; border-radius: 24px;
+                 padding: 32px 24px; text-align: center; width: 100%; max-width: 400px; }}
+        .check {{ display: grid; place-items: center; width: 56px; height: 56px;
+                  margin: 0 auto 24px; border-radius: 50%; background: #fff; color: #111; }}
+        h1 {{ font-size: 26px; line-height: 1.25; letter-spacing: -0.5px; margin: 0 0 12px; }}
+        p {{ color: #b5b5b5; font-size: 16px; line-height: 1.6; margin: 0; }}
+        strong {{ color: #fff; font-weight: 500; overflow-wrap: anywhere; }}
+        .next-step {{ color: #eee; border-top: 1px solid #303030;
+                      padding-top: 24px; margin-top: 24px; font-size: 15px; }}
     </style></head>
-    <body><div class="card">
-        <h1>Connected!</h1>
-        <p class="count">{tool_count} tools</p>
-        <p>{tool_names}</p>
-        <p style="margin-top:24px;color:#666;">You can close this window and return to the app.</p>
-    </div></body></html>
+    <body><main class="card" aria-labelledby="connection-title">
+        <div class="check" aria-hidden="true">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="m5 12 4 4 10-10" />
+            </svg>
+        </div>
+        <h1 id="connection-title">You're connected</h1>
+        <p><strong>{app_name}</strong> is now connected to Omi.</p>
+        <p class="next-step">Close this window to continue in Omi.</p>
+    </main></body></html>
     """)
 
 
