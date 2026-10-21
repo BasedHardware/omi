@@ -13,6 +13,14 @@ name: Desktop Windows CI
 # formatting warnings remain non-blocking (formatting is not enforced here).
 
 on:
+  # Nightly calls run these same jobs against one immutable main snapshot.
+  workflow_call:
+    inputs:
+      nightly_main_sha:
+        description: Main SHA pinned by the unfiltered nightly caller
+        type: string
+        required: false
+        default: ''
   push:
     branches: [main]
     paths:
@@ -46,6 +54,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.nightly_main_sha || github.sha }}
       # The app is pnpm-managed (pnpm-lock.yaml, lockfileVersion 9).
       - uses: pnpm/action-setup@v6
         with:
@@ -74,6 +84,8 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.nightly_main_sha || github.sha }}
       - uses: pnpm/action-setup@v6
         with:
           version: 10
@@ -126,6 +138,8 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.nightly_main_sha || github.sha }}
       - uses: pnpm/action-setup@v6
         with:
           version: 10

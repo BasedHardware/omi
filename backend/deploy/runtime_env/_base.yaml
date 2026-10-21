@@ -902,6 +902,8 @@ environment_shared:
           REPEAT_WORK_LLM_VERSION: {value: '2026-10-16-v1', category: rollout}
           SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
           VAD_CACHE_TTL_SECONDS: {value: '86400', category: rollout}
+          BATCH_PIPELINE_SHADOW_PERCENT: {value: '0', category: rollout}
+          BATCH_PIPELINE_SHADOW_PAID_RECOVERY_PER_HOUR: {value: '200', category: ops_kill}
           BATCH_PIPELINE_ENABLED:
             value: 'false'
             category: rollout
@@ -1270,6 +1272,8 @@ environment_shared:
           REPEAT_WORK_LLM_VERSION: {value: '2026-10-16-v1', category: rollout}
           SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
           VAD_CACHE_TTL_SECONDS: {value: '86400', category: rollout}
+          BATCH_PIPELINE_SHADOW_PERCENT: {value: '0', category: rollout}
+          BATCH_PIPELINE_SHADOW_PAID_RECOVERY_PER_HOUR: {value: '200', category: ops_kill}
           BATCH_PIPELINE_ENABLED:
             value: 'false'
             category: rollout
@@ -1626,6 +1630,8 @@ environment_shared:
           REPEAT_WORK_LLM_VERSION: {value: '2026-10-16-v1', category: rollout}
           SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
           VAD_CACHE_TTL_SECONDS: {value: '86400', category: rollout}
+          BATCH_PIPELINE_SHADOW_PERCENT: {value: '0', category: rollout}
+          BATCH_PIPELINE_SHADOW_PAID_RECOVERY_PER_HOUR: {value: '200', category: ops_kill}
           BATCH_PIPELINE_ENABLED:
             value: 'false'
             category: rollout
@@ -1973,6 +1979,8 @@ environment_shared:
           REPEAT_WORK_REVISION_ENABLED: {value: 'false', category: rollout}
           REPEAT_WORK_LLM_VERSION: {value: '2026-10-16-v1', category: rollout}
           SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
+          BATCH_PIPELINE_SHADOW_PERCENT: {value: '0', category: rollout}
+          BATCH_PIPELINE_SHADOW_PAID_RECOVERY_PER_HOUR: {value: '200', category: ops_kill}
           BATCH_PIPELINE_ENABLED:
             value: 'false'
             category: rollout
@@ -1993,7 +2001,7 @@ environment_shared:
             value: ''
             category: service_auth
           BATCH_PIPELINE_WORKER_SERVICE_ACCOUNT:
-            value: ''
+            value: 'batch-pipeline-worker@{compute_project}.iam.gserviceaccount.com'
             category: service_auth
           BUCKET_BATCH_PIPELINE:
             category: service_discovery

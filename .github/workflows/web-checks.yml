@@ -1,13 +1,21 @@
 name: Web Checks
 
 on:
+  # Nightly calls run these same jobs against one immutable main snapshot.
+  workflow_call:
+    inputs:
+      nightly_main_sha:
+        description: Main SHA pinned by the unfiltered nightly caller
+        type: string
+        required: false
+        default: ''
   push:
     branches: main
   pull_request:
     branches: main
 
 concurrency:
-  group: web-checks-${{ github.event.pull_request.number || github.ref }}
+  group: web-checks-${{ github.event.pull_request.number || github.ref }}-${{ inputs.nightly_main_sha != '' && format('nightly-{0}', github.run_id) || 'normal' }}
   cancel-in-progress: true
 
 env:
@@ -22,16 +30,17 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     outputs:
-      has_admin: ${{ steps.changes.outputs.has_admin }}
-      has_frontend: ${{ steps.changes.outputs.has_frontend }}
-      has_personas: ${{ steps.changes.outputs.has_personas }}
-      has_web_app: ${{ steps.changes.outputs.has_web_app }}
-      has_web_build: ${{ steps.changes.outputs.has_web_build }}
-      has_web_lint: ${{ steps.changes.outputs.has_web_lint }}
+      has_admin: ${{ inputs.nightly_main_sha != '' && 'true' || (steps.changes.outputs.has_admin) }}
+      has_frontend: ${{ inputs.nightly_main_sha != '' && 'true' || (steps.changes.outputs.has_frontend) }}
+      has_personas: ${{ inputs.nightly_main_sha != '' && 'true' || (steps.changes.outputs.has_personas) }}
+      has_web_app: ${{ inputs.nightly_main_sha != '' && 'true' || (steps.changes.outputs.has_web_app) }}
+      has_web_build: ${{ inputs.nightly_main_sha != '' && 'true' || (steps.changes.outputs.has_web_build) }}
+      has_web_lint: ${{ inputs.nightly_main_sha != '' && 'true' || (steps.changes.outputs.has_web_lint) }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
         with:
+          ref: ${{ inputs.nightly_main_sha || github.sha }}
           # detect-changes diffs against the merge base, so it needs history;
           # blob:none skips file contents, which is what made the unfiltered
           # clone of this ~1.25GB repo take minutes.
@@ -52,6 +61,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v7
         with:
+          ref: ${{ inputs.nightly_main_sha || github.sha }}
           # Lint/test only reads the worktree; no git history is consulted.
           fetch-depth: 1
 
@@ -94,6 +104,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v7
         with:
+          ref: ${{ inputs.nightly_main_sha || github.sha }}
           # Builds only read the worktree; no git history is consulted.
           fetch-depth: 1
 

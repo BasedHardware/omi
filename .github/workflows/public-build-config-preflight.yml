@@ -1,6 +1,14 @@
 name: Public Build Configuration Preflight
 
 on:
+  # Nightly calls run these same jobs against one immutable main snapshot.
+  workflow_call:
+    inputs:
+      nightly_main_sha:
+        description: Main SHA pinned by the unfiltered nightly caller
+        type: string
+        required: false
+        default: ''
   pull_request:
     branches: ["main"]
     paths:
@@ -51,6 +59,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.nightly_main_sha || github.sha }}
 
       - name: Verify reviewed public build configuration
         env:
@@ -58,4 +68,5 @@ jobs:
         run: |
           python3 .github/scripts/preflight_public_build_config.py \
             --all \
-            --environment "${{ matrix.environment }}"
+            --environment "${{ matrix.environment }}" \
+            --ref "${{ inputs.nightly_main_sha || github.sha }}"

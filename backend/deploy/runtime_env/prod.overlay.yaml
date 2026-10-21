@@ -675,7 +675,7 @@ overlay:
             value: 'false'
             category: rollout
           BATCH_PIPELINE_SPEECH_EMPTY_MULTILINGUAL_ENABLED:
-            value: 'false'
+            value: 'true'
             category: rollout
           BATCH_PIPELINE_UNIT_SECONDS:
             value: '3600'
@@ -729,7 +729,7 @@ overlay:
             version: latest
         env:
           FIRST_SUMMARY_DEADLINE_PERCENT: {value: '100', category: rollout}
-          SUMMARY_DEBT_REPAIR_ENABLED: {value: 'true', category: rollout}
+          SUMMARY_DEBT_REPAIR_ENABLED: {value: 'false', category: rollout}
           # Explicit shared-speech rollback; GKE hosts remain off.
           CAPTURE_SHARED_SPEECH_MODE:
             value: 'off'
@@ -958,7 +958,7 @@ overlay:
             value: 'false'
             category: rollout
           BATCH_PIPELINE_SPEECH_EMPTY_MULTILINGUAL_ENABLED:
-            value: 'false'
+            value: 'true'
             category: rollout
           BATCH_PIPELINE_UNIT_SECONDS:
             value: '3600'
@@ -1264,7 +1264,7 @@ overlay:
             value: 'false'
             category: rollout
           BATCH_PIPELINE_SPEECH_EMPTY_MULTILINGUAL_ENABLED:
-            value: 'false'
+            value: 'true'
             category: rollout
           BATCH_PIPELINE_UNIT_SECONDS:
             value: '3600'
@@ -1503,7 +1503,7 @@ overlay:
             value: 'true'
             category: rollout
           BATCH_PIPELINE_RECOVERY_ALL_ADMITTED:
-            value: 'false'
+            value: 'true'
             category: rollout
           BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED:
             value: 'true'

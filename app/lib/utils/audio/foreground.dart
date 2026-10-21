@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:geolocator/geolocator.dart';
 
+import 'package:omi/utils/audio/background_location_cadence.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/notification_channel_strings.dart';
 
@@ -13,6 +14,7 @@ void _startForegroundCallback() {
 
 class _ForegroundFirstTaskHandler extends TaskHandler {
   DateTime? _locationUpdatedAt;
+  final _locationCadence = BackgroundLocationCadence();
 
   static const Duration _lastKnownMaxAge = Duration(minutes: 5);
 
@@ -24,7 +26,7 @@ class _ForegroundFirstTaskHandler extends TaskHandler {
   @override
   Future<void> onStart(DateTime timestamp, TaskStarter taskStarter) async {
     Logger.debug("Starting foreground task");
-    _locationInBackground();
+    await _locationCadence.onStart(refreshLocation: _locationInBackground);
   }
 
   Future _locationInBackground() async {
@@ -89,8 +91,14 @@ class _ForegroundFirstTaskHandler extends TaskHandler {
     Logger.debug("Foreground repeat event triggered");
     // The main isolate owns WAL state. A fresh headless capture engine must
     // never be booted for this opportunistic recovery pass.
-    FlutterForegroundTask.sendDataToMain({'recordingSyncWake': true});
-    await _locationInBackground();
+    final now = DateTime.now();
+    await _locationCadence.onRepeat(
+      now: now,
+      sendSyncWake: () {
+        FlutterForegroundTask.sendDataToMain({'recordingSyncWake': true});
+      },
+      refreshLocation: _locationInBackground,
+    );
   }
 
   @override
