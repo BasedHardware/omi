@@ -63,7 +63,16 @@ def resolve_context(
         ambiguous_binding_pending,
     )
 
-    filenames = [os.path.basename(path) for path in context.get('raw_capture_paths') or []]
+    # These are the authenticated upload names frozen by accept_batch_upload,
+    # not optional consent-dependent (and potentially digest-named) archives.
+    # Only pre-deploy contexts lacking the field retain the old archive check.
+    filenames = (
+        context.get('filenames') or []
+        if 'filenames' in context
+        else [os.path.basename(path) for path in context.get('raw_capture_paths') or []]
+    )
+    if not isinstance(filenames, list) or any(not isinstance(name, str) for name in filenames):
+        raise ProjectionBlocked('invalid intake upload filenames')
     requested = lineage_resolution_requested(
         item.owner_id,
         origin,
@@ -72,6 +81,7 @@ def resolve_context(
         job_id=binding.job_id,
         capture_evidence_claims=context.get('capture_evidence_claims'),
         filenames=filenames,
+        stage='batch_projection',
     )
     reason = None
     if requested:

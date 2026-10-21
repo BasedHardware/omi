@@ -37,6 +37,7 @@ from utils.batch_pipeline.recovery_disposition import result_outcome
 from database.batch_pipeline_projection_claim import projection_claim
 from utils.batch_pipeline.scheduler import owner_key
 from utils.sync.assignment_errors import SyncAssignmentSuperseded
+from utils.sync.intake_completion import log_sync_lineage_stamp_gap_refused
 
 if TYPE_CHECKING:
     from utils.batch_pipeline.projection_prefetch import Prefetched
@@ -763,6 +764,8 @@ class Projector:
                     )
                     receipt = receipt_box[0]
                     record_labels(assigned[2])
+                    if assigned[0].pop('_sync_lineage_stamp_gap_refused', False):
+                        log_sync_lineage_stamp_gap_refused()
             except ProjectionReplay as replay:
                 receipt = replay.receipt
             except SyncAssignmentSuperseded:
