@@ -350,7 +350,8 @@ def test_pre_shadow_normal_job_duplicates_keep_their_immutable_identity():
     queue = Scheduler(store)
     work = WorkItem('normal-segment', 'synthetic', 1, 'encrypted:normal', 30, 2)
     assert queue.enqueue(work, 1)
-    store.rows['jobs', work.segment_id].pop('shadow')  # Persisted before this rollout.
+    # Live documents stay identical to those persisted before this rollout.
+    assert 'shadow' not in store.rows['jobs', work.segment_id]
     before = deepcopy(store.rows)
     assert queue.enqueue(work, 2) is False
     assert store.rows == before
