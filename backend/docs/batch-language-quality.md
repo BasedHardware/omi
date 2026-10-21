@@ -53,15 +53,15 @@ redrive also retains its explicitly selected Parakeet contract; it requires its
 separate audio-language qualification. This guard governs ordinary provider
 selection and new Parakeet worker calls, not historical transcript repair.
 
-The `omi_batch_language_route_total` counter has static `surface`
+The `omi_batch_pipeline_language_route_total` counter has static `surface`
 (`prerecorded`, `intake`, `worker`), `language_class` (`supported`, `unknown`,
 `unsupported`) and `route` (`parakeet`, `multilingual`, `blocked`) labels. Worker
 logs emit the same decision as `event=batch_language_route`, with an existing
 opaque segment ID for an in-memory cohort join. Shadow work emits no serving
 route log. No transcript, language string or user ID is logged by this signal.
-`omi_batch_language_detection_total{detected_language,decision}` counts detected
+`omi_batch_pipeline_language_detection_total{detected_language,decision}` counts detected
 ISO codes through a closed policy vocabulary (other/und otherwise), and
-`omi_batch_language_probe_audio_seconds_total{outcome}` counts sent samples.
+`omi_batch_pipeline_language_probe_audio_seconds_total{outcome}` counts sent samples.
 The published language-only rate is $0.01/sample-hour; multilingual batch STT
 is $0.03/audio-hour ([provider pricing](https://platform.modulate.ai/pricing)).
 These are list estimates, not invoice measurements or guaranteed GPU savings.

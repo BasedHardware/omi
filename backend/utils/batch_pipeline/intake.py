@@ -431,8 +431,8 @@ async def accept_upload(
                 resolve_language,
                 input_language,
                 unit.wav,
-                before_probe=lambda: not execution_admission_enabled(uid, 'batch')
-                or sync_allowed(uid, unit.duration_seconds, 'modulate', lane='batch'),
+                before_probe=lambda duration=unit.duration_seconds: not execution_admission_enabled(uid, 'batch')
+                or sync_allowed(uid, duration, 'modulate', lane='batch'),
             )
             frozen_language = (
                 language_decision.language

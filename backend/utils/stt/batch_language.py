@@ -21,9 +21,11 @@ MAX_DOWNLOAD_BYTES = 2 * 1024 * 1024
 MIN_CONFIDENCE = 0.8
 LID_URL = 'https://platform.modulate.ai/api/velma-2-language-detection-batch'
 DETECTIONS = Counter(
-    'omi_batch_language_detection_total', 'Independent audio LID routing', ['detected_language', 'decision']
+    'omi_batch_pipeline_language_detection_total', 'Independent audio LID routing', ['detected_language', 'decision']
 )
-PROBE_SECONDS = Counter('omi_batch_language_probe_audio_seconds_total', 'Bounded paid audio LID samples', ['outcome'])
+PROBE_SECONDS = Counter(
+    'omi_batch_pipeline_language_probe_audio_seconds_total', 'Bounded paid audio LID samples', ['outcome']
+)
 
 
 @dataclass(frozen=True)

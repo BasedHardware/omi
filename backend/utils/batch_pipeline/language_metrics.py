@@ -8,7 +8,7 @@ from config.prerecorded_language import language_class
 
 logger = logging.getLogger(__name__)
 ROUTES = Counter(
-    'omi_batch_language_route_total',
+    'omi_batch_pipeline_language_route_total',
     'Batch speech routing by declared language capability, never transcript content',
     ['surface', 'language_class', 'route'],
 )

@@ -131,6 +131,19 @@ def test_old_primary_language_hint_cannot_impersonate_audio_detection():
     )
 
 
+def test_language_metrics_survive_the_actual_sync_export_allowlist():
+    import re
+    from pathlib import Path
+    import yaml
+    from utils.batch_pipeline.language_metrics import ROUTES
+
+    source = Path(__file__).parents[3] / 'backend/deploy/cloud_run_gmp_sync.yaml'
+    relabeling = yaml.safe_load(source.read_text())['spec']['endpoints'][0]['metricRelabeling']
+    keep = next(rule['regex'] for rule in relabeling if rule['action'] == 'keep')
+    for collector in (ROUTES, lid.DETECTIONS, lid.PROBE_SECONDS):
+        assert re.fullmatch(keep, collector._name + '_total')
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize('code,confidence,frozen', [('en', 0.99, 'en'), ('vi', 0.99, 'vi'), ('en', 0.5, 'und')])
 async def test_cpu_intake_freezes_detection_proof_instead_of_primary_setting(monkeypatch, code, confidence, frozen):
