@@ -388,7 +388,19 @@ def bulk_move_conversations_to_folder(
     user_ref = db.collection('users').document(uid)
     conversations_ref = user_ref.collection('conversations')
 
-    conv_refs = [conversations_ref.document(conv_id) for conv_id in conversation_ids]
+    seen_ids: Set[str] = set()
+    unique_ids: List[str] = []
+    for cid in conversation_ids:
+        if isinstance(cid, str):
+            clean = cid.strip()
+            if clean and clean not in seen_ids:
+                seen_ids.add(clean)
+                unique_ids.append(clean)
+
+    if not unique_ids:
+        return 0
+
+    conv_refs = [conversations_ref.document(conv_id) for conv_id in unique_ids]
     conv_docs = db.get_all(conv_refs)
 
     affected_folders: Set[str] = set()
