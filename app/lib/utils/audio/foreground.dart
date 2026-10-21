@@ -1,10 +1,23 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:geolocator/geolocator.dart';
 
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/notification_channel_strings.dart';
+
+/// The service repeats every 5 minutes for the WAL sync wake. Location only
+/// keeps the backend's 30-minute geolocation cache warm (a fallback for
+/// conversations without their own snapshot), so a fix and its upload run at
+/// most this often instead of on every repeat.
+const Duration backgroundLocationRefreshInterval = Duration(minutes: 15);
+
+@visibleForTesting
+bool backgroundLocationRefreshDue(DateTime? lastAttempt, DateTime now) =>
+    lastAttempt == null ||
+    now.isBefore(lastAttempt) ||
+    !now.isBefore(lastAttempt.add(backgroundLocationRefreshInterval));
 
 @pragma('vm:entry-point')
 void _startForegroundCallback() {
@@ -13,6 +26,7 @@ void _startForegroundCallback() {
 
 class _ForegroundFirstTaskHandler extends TaskHandler {
   DateTime? _locationUpdatedAt;
+  DateTime? _locationAttemptAt;
 
   static const Duration _lastKnownMaxAge = Duration(minutes: 5);
 
@@ -24,6 +38,7 @@ class _ForegroundFirstTaskHandler extends TaskHandler {
   @override
   Future<void> onStart(DateTime timestamp, TaskStarter taskStarter) async {
     Logger.debug("Starting foreground task");
+    _locationAttemptAt = DateTime.now();
     _locationInBackground();
   }
 
@@ -90,6 +105,9 @@ class _ForegroundFirstTaskHandler extends TaskHandler {
     // The main isolate owns WAL state. A fresh headless capture engine must
     // never be booted for this opportunistic recovery pass.
     FlutterForegroundTask.sendDataToMain({'recordingSyncWake': true});
+    final now = DateTime.now();
+    if (!backgroundLocationRefreshDue(_locationAttemptAt, now)) return;
+    _locationAttemptAt = now;
     await _locationInBackground();
   }
 
