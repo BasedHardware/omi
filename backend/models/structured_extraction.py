@@ -399,3 +399,59 @@ class RichStructuredExtraction(StructuredExtraction):
         if self.insights:
             structured.insights = [insight.to_insight() for insight in self.insights]
         return structured
+
+
+AgentEvidenceKind = Literal['transcript', 'calendar', 'screen', 'people', 'memory', 'past_meeting']
+
+
+class AgentNotesParticipant(BaseModel):
+    """A participant the notes agent identified, with the evidence that names them."""
+
+    name: str = Field(description='Display name, spelled as the strongest evidence spells it')
+    speaker: Optional[str] = Field(default=None, description='Transcript speaker key this person maps to, if any')
+    organization: Optional[str] = Field(default=None, description='Organization when evidenced')
+    is_ai_agent: bool = Field(default=False, description='True for AI notetakers and assistants, never people')
+    evidence_kind: Optional[AgentEvidenceKind] = Field(default=None, description='Strongest evidence source')
+    evidence: str = Field(description='One short line naming the evidence')
+
+    @field_validator('evidence', mode='before')
+    @classmethod
+    def clip_evidence(cls, value: Any) -> Any:
+        return value.strip()[:300] if isinstance(value, str) else value
+
+    @field_validator('evidence_kind', mode='before')
+    @classmethod
+    def drop_unknown_kind(cls, value: Any) -> Any:
+        if value is None or value in AgentEvidenceKind.__args__:
+            return value
+        normalized = value.strip().lower() if isinstance(value, str) else None
+        return normalized if normalized in AgentEvidenceKind.__args__ else None
+
+    def to_participant(self) -> Participant:
+        return Participant(
+            name=self.name,
+            organization=self.organization,
+            is_ai_agent=self.is_ai_agent,
+            source='transcript' if self.evidence_kind in (None, 'transcript') else 'roster',
+            evidence=self.evidence,
+        )
+
+
+class AgentNotesSubmission(StructuredExtraction):
+    """The terminal ``submit_notes`` payload: a StructuredExtraction plus evidenced participants.
+
+    A subclass, so the one-shot notes parser schema (and its prompt bytes) stays unchanged.
+    """
+
+    participants: List[AgentNotesParticipant] = Field(default_factory=list)
+
+    @model_validator(mode='before')
+    @classmethod
+    def keep_usable_participants(cls, data: Any) -> Any:
+        return _keep_usable_content(data, {'participants': AgentNotesParticipant})
+
+    def to_structured(self) -> Structured:
+        structured = super().to_structured()
+        if self.participants:
+            structured.participants = [participant.to_participant() for participant in self.participants]
+        return structured

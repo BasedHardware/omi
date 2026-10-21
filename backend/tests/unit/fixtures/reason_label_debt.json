@@ -409,6 +409,14 @@
       "why": "pre-existing; unreviewed"
     },
     {
+      "path": "utils/llm/notes_agent.py",
+      "function": "record_decision",
+      "label": "reason",
+      "shape": "name",
+      "count": 1,
+      "why": "main STT/notes observability via sync 15 (2026-10-21); owner lane 14 to bound"
+    },
+    {
       "path": "utils/mcp_server/oauth.py",
       "function": "mcp_token.record_outcome",
       "label": "outcome",
@@ -1001,6 +1009,14 @@
       "why": "pre-existing; unreviewed"
     },
     {
+      "path": "utils/stt/edge_shadow.py",
+      "function": "EdgeShadowMirror._finish",
+      "label": "outcome",
+      "shape": "name",
+      "count": 1,
+      "why": "main STT/notes observability via sync 15 (2026-10-21); owner lane 14 to bound"
+    },
+    {
       "path": "utils/stt/legacy_replay.py",
       "function": "reconnect_live_stt_socket",
       "label": "reason",
@@ -1015,6 +1031,14 @@
       "shape": "name",
       "count": 1,
       "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/stt/live_chain.py",
+      "function": "connect_configured_chain._same_target_retry",
+      "label": "provider",
+      "shape": "attribute",
+      "count": 3,
+      "why": "main STT/notes observability via sync 15 (2026-10-21); owner lane 14 to bound"
     },
     {
       "path": "utils/stt/live_cost_health.py",
@@ -1098,6 +1122,14 @@
     },
     {
       "path": "utils/stt/live_recovery.py",
+      "function": "allow_same_target_retry",
+      "label": "provider",
+      "shape": "name",
+      "count": 2,
+      "why": "main STT/notes observability via sync 15 (2026-10-21); owner lane 14 to bound"
+    },
+    {
+      "path": "utils/stt/live_recovery.py",
       "function": "release_session_local_exclusions",
       "label": "provider",
       "shape": "name",
@@ -1175,6 +1207,30 @@
       "shape": "attribute",
       "count": 2,
       "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/stt/provider_stream_end.py",
+      "function": "<module>",
+      "label": "provider",
+      "shape": "name",
+      "count": 3,
+      "why": "main STT/notes observability via sync 15 (2026-10-21); owner lane 14 to bound"
+    },
+    {
+      "path": "utils/stt/provider_stream_end.py",
+      "function": "ProviderStreamEnd.note_text",
+      "label": "provider",
+      "shape": "attribute",
+      "count": 1,
+      "why": "main STT/notes observability via sync 15 (2026-10-21); owner lane 14 to bound"
+    },
+    {
+      "path": "utils/stt/provider_stream_end.py",
+      "function": "ProviderStreamEnd.record",
+      "label": "provider",
+      "shape": "attribute",
+      "count": 1,
+      "why": "main STT/notes observability via sync 15 (2026-10-21); owner lane 14 to bound"
     },
     {
       "path": "utils/stt/resilient_stream.py",

@@ -1,4 +1,0 @@
-{
-  "change": "The capture card timer no longer freezes or jumps after pausing and resuming a recording",
-  "platforms": ["ios", "android"]
-}

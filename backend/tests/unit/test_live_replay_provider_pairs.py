@@ -685,3 +685,27 @@ async def test_adopted_live_tail_drains_before_eos_after_client_departure(monkey
         await asyncio.gather(task, return_exceptions=True)
         actual.stt_socket.finish()
         await stop(raws)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('with_ring', [False, True])
+@pytest.mark.parametrize('enabled', [True, False])
+async def test_serving_soniox_pre_text_transport_death_redials_soniox_once(monkeypatch, enabled, with_ring):
+    # 2026-10-20: a Soniox blip on the serving leg fell to a 40%-failing
+    # Modulate or exhausted. One jittered same-target retry comes first.
+    monkeypatch.setenv('LISTEN_STT_SAME_TARGET_RETRY_ENABLED', 'true' if enabled else 'false')
+    monkeypatch.setattr('utils.stt.live_recovery.retry_jitter_seconds', lambda: 0.0)
+    actual, _, raws, legs, _ = await setup_receiver(monkeypatch, ['soniox', 'modulate-velma-2'], source='soniox')
+    if not with_ring:
+        actual._window_replay_audio = None
+    try:
+        actual.stt_socket.raw._mark_dead('synthetic provider death', typed_reason='connection_lost')
+        async with asyncio.timeout(10):
+            assert await actual._failover_stt_socket()
+        successor = SafeSonioxSocket if enabled else SafeModulateSocket
+        assert [type(raw) for raw in raws] == [SafeSonioxSocket, successor]
+    finally:
+        actual.stt_socket.finish()
+        for leg in legs:
+            leg.finish()
+        await stop(raws)

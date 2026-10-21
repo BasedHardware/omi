@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import os
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Callable, Optional
 
 import typer
 from rich.markup import escape
@@ -29,6 +30,14 @@ def _ctx(typer_ctx: typer.Context) -> "AppContext":
     if obj is None:  # pragma: no cover
         raise RuntimeError("AppContext not initialized")
     return obj  # type: ignore[no-any-return]
+
+
+def _probe(check: Callable[[], bool]) -> bool:
+    """A best-effort ``Path.is_*`` that never turns a read error into a new one."""
+    try:
+        return bool(check())
+    except OSError:
+        return False
 
 
 _LIST_COLUMNS = ["id", "title", "category", "started_at", "source"]
@@ -208,8 +217,24 @@ def from_segments(
             detail="Provide the path to a JSON file containing transcript_segments.",
         ) from exc
     except FileNotFoundError as exc:
+        # Windows reports a path under a regular file as not found (POSIX: ENOTDIR).
+        # Win32 collapses `..` before the filesystem sees it (except for \\?\ and
+        # \\.\ paths), so walk the path the OS actually resolved.
+        raw = str(segments_file)
+        resolved = segments_file if raw.startswith(("\\\\?\\", "\\\\.\\")) else Path(os.path.normpath(raw))
+        blocker = next((parent for parent in resolved.parents if _probe(parent.is_file)), None)
+        if blocker is not None:
+            raise UsageError(
+                message=f"Cannot read file {segments_file}", detail=f"Not a directory: {blocker}"
+            ) from exc
         raise UsageError(message=f"File not found: {segments_file}") from exc
     except OSError as exc:
+        # Windows opens a directory as PermissionError, not IsADirectoryError.
+        if _probe(segments_file.is_dir):
+            raise UsageError(
+                message=f"Expected a file, but found a directory: {segments_file}",
+                detail="Provide the path to a JSON file containing transcript_segments.",
+            ) from exc
         raise UsageError(message=f"Cannot read file {segments_file}", detail=str(exc)) from exc
 
     try:

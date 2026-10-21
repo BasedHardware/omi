@@ -4382,6 +4382,7 @@ public enum OmiAPI {
 
   public struct Participant: Codable {
     public let email: String?
+    public let evidence: String?
     public let isAiAgent: Bool?
     public let name: String?
     public let organization: String?
@@ -4390,6 +4391,7 @@ public enum OmiAPI {
 
     private enum CodingKeys: String, CodingKey {
       case email
+      case evidence
       case isAiAgent = "is_ai_agent"
       case name
       case organization
@@ -4400,6 +4402,7 @@ public enum OmiAPI {
     public init(from decoder: Decoder) throws {
       let c = try decoder.container(keyedBy: CodingKeys.self)
       email = try c.decodeIfPresent(String.self, forKey: .email)
+      evidence = try c.decodeIfPresent(String.self, forKey: .evidence)
       isAiAgent = try c.decodeIfPresent(Bool.self, forKey: .isAiAgent)
       name = try c.decodeIfPresent(String.self, forKey: .name)
       organization = try c.decodeIfPresent(String.self, forKey: .organization)
@@ -4407,8 +4410,9 @@ public enum OmiAPI {
       source = try c.decode(String.self, forKey: .source)
     }
 
-    public init(email: String? = nil, isAiAgent: Bool? = nil, name: String? = nil, organization: String? = nil, role: String? = nil, source: String) {
+    public init(email: String? = nil, evidence: String? = nil, isAiAgent: Bool? = nil, name: String? = nil, organization: String? = nil, role: String? = nil, source: String) {
       self.email = email
+      self.evidence = evidence
       self.isAiAgent = isAiAgent
       self.name = name
       self.organization = organization

@@ -269,6 +269,25 @@ def test_historical_dead_redrive_is_authenticated_stage_bound_and_idempotent(api
     assert TestClient(app).post(path, json={'stage': 'dev', 'segment_id': 'synthetic'}).status_code == 403
 
 
+def test_held_partial_scan_runs_on_a_slow_cadence_behind_its_kill_switch(monkeypatch):
+    projector = Mock()
+    service = Serving(MemoryStore(), projector=projector)
+    service.reconcile()
+    service.reconcile()
+    projector.sweep_held.assert_called_once()
+    service.held_partial_due = 0.0
+    monkeypatch.setenv('BATCH_PIPELINE_HELD_PARTIAL_ENABLED', 'false')
+    service.reconcile()
+    projector.sweep_held.assert_called_once()
+    monkeypatch.delenv('BATCH_PIPELINE_HELD_PARTIAL_ENABLED')
+    projector.sweep_held.side_effect = TimeoutError('synthetic held scan failure')
+    service.reconcile()
+    # A failed scan never stops lease recovery or the projection sweep.
+    assert projector.sweep_held.call_count == 2 and projector.sweep.call_count == 4
+    # Projectors without the scan (the pipeline simulator's model) are skipped.
+    Serving(MemoryStore(), projector=SimpleNamespace(sweep=lambda: None)).reconcile()
+
+
 def test_recovery_is_scheduled_inside_service_but_metrics_reconcile_does_not_dispatch():
     from unittest.mock import Mock
 

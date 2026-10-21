@@ -53,6 +53,11 @@ def entries():
             neutrals={'limit': (10, 'bounded page size')},
         ),
         DriverEntry(
+            'database.batch_pipeline_quarantine_recovery.held_candidates',
+            domains={'namespace': namespaces, 'after_id': [None, 'held-09']},
+            neutrals={'limit': (32, 'bounded page size')},
+        ),
+        DriverEntry(
             'database.batch_pipeline_store.projection_page',
             domains={
                 'namespace': namespaces,

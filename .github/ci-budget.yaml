@@ -42,8 +42,26 @@
       },
       "runs_on": "ubuntu-latest"
     },
+    "backend-edge.yml/edge": {
+      "budget_p50_minutes": 5,
+      "display_name": "edge",
+      "expected_runs_class": "unsampled-pr-sentinel",
+      "expected_runs_per_day": 1,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "Backend realtime (plan D listen-edge)",
+      "rationale": "2026-10-21 D1 listen-edge crate, named by David 2026-10-20: path-filtered to backend/edge/**, about one PR run per day during D1-D5; cold build+clippy+test measured 85s locally (expect 2-3 min on ubuntu-latest), cached runs well under that; 5-minute p50 budget",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
     "backend-emulator-proofs.yml/emulator-proofs": {
-      "budget_p50_minutes": 3,
+      "budget_p50_minutes": 4,
       "display_name": "Backend emulator proofs",
       "expected_runs_class": "sampled-pr-day",
       "expected_runs_per_day": 18,
@@ -52,7 +70,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up",
+      "rationale": "Retain the existing standard Linux runner and 18 expected daily runs; allow one extra p50 minute above the prior three for 26 summary recovery/expiry checks (11 seconds locally) and their test imports.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1963,13 +1981,13 @@
       "budget_p50_minutes": 5,
       "display_name": "dispatch",
       "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 1,
+      "expected_runs_per_day": 2,
       "if": null,
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Register the daily mobile train workflow that landed on main without an inventory row. 2026-10-14: optional pin_ios/pin_android dispatch inputs carry the gate's audited candidate identifiers; dispatch-only, no extra runs.",
+      "rationale": "Register the daily mobile train workflow that landed on main without an inventory row. 2026-10-14: optional pin_ios/pin_android dispatch inputs carry the gate's audited candidate identifiers; dispatch-only, no extra runs. 2026-10-20: optional capture_health_override input lets one run's rollout hops past a capture-health HOLD; allow one extra manual dispatch a day.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1999,13 +2017,13 @@
       "budget_p50_minutes": 5,
       "display_name": "dispatch",
       "expected_runs_class": "non-pr",
-      "expected_runs_per_day": 6,
+      "expected_runs_per_day": 7,
       "if": null,
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "4-hourly intraday rollout advance (cron 0 1,5,9,13,17,21 UTC = 6 dispatches/day, seconds each): python POST to the Codemagic builds API for the mobile-rollout-advance workflow. Advances only already-released rollouts; never builds or submits.",
+      "rationale": "4-hourly intraday rollout advance (cron 0 1,5,9,13,17,21 UTC = 6 dispatches/day, seconds each): python POST to the Codemagic builds API for the mobile-rollout-advance workflow. Advances only already-released rollouts; never builds or submits. 2026-10-20: a manual workflow_dispatch with capture_health_override (one-shot reason to advance past a capture-health HOLD) adds at most about one run a day.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -2630,10 +2648,32 @@
         }
       }
     },
+    "backend-edge.yml": {
+      "name": "Backend Edge (Rust)",
+      "owner": "Backend realtime (plan D listen-edge)",
+      "rationale": "2026-10-21 D1: build, clippy and test for the listen-edge Rust crate only on backend/edge/** changes; workflow change named by David 2026-10-20",
+      "triggers": {
+        "pull_request": {
+          "paths": [
+            "backend/edge/**",
+            ".github/workflows/backend-edge.yml"
+          ]
+        },
+        "push": {
+          "branches": [
+            "main"
+          ],
+          "paths": [
+            "backend/edge/**",
+            ".github/workflows/backend-edge.yml"
+          ]
+        }
+      }
+    },
     "backend-emulator-proofs.yml": {
       "name": "Backend Emulator Proofs",
       "owner": "CI maintainers",
-      "rationale": "Initial workflow inventory",
+      "rationale": "Run canonical-memory and task recovery proofs when their production owners, runner or direct emulator tests change; the two task-test paths close the unexecuted recovery/expiry guard gap.",
       "triggers": {
         "pull_request": {
           "paths": [
@@ -2645,6 +2685,8 @@
             "backend/models/product_memory.py",
             "backend/scripts/*_emulator_test.py",
             "backend/scripts/run-emulator-proofs.sh",
+            "backend/tests/integration/test_summary_task_promotion_emulator.py",
+            "backend/tests/integration/test_candidate_accept_expiry_emulator.py",
             "backend/pylock.toml",
             "firebase.json",
             "firestore.rules",
@@ -2664,6 +2706,8 @@
             "backend/models/product_memory.py",
             "backend/scripts/*_emulator_test.py",
             "backend/scripts/run-emulator-proofs.sh",
+            "backend/tests/integration/test_summary_task_promotion_emulator.py",
+            "backend/tests/integration/test_candidate_accept_expiry_emulator.py",
             "backend/pylock.toml",
             "firebase.json",
             "firestore.rules",
@@ -4625,10 +4669,15 @@
     "mobile_daily_train.yml": {
       "name": "Mobile daily train",
       "owner": "CI maintainers",
-      "rationale": "Daily mobile train dispatch is owned by the operator-side release gate (audits candidates against the live baseline, dispatches only on a green verdict; see .github/agent-docs/mobile-release-process.md). The fixed 14:00 UTC schedule was removed 2026-10-14 so an ungated train can no longer fire on a bad candidate; manual workflow_dispatch (dry_run) remains. 2026-10-14: optional pin_ios/pin_android dispatch inputs carry the gate's audited candidate identifiers; they add no runs (same single gated dispatch per day).",
+      "rationale": "Daily mobile train dispatch is owned by the operator-side release gate (audits candidates against the live baseline, dispatches only on a green verdict; see .github/agent-docs/mobile-release-process.md). The fixed 14:00 UTC schedule was removed 2026-10-14 so an ungated train can no longer fire on a bad candidate; manual workflow_dispatch (dry_run) remains. 2026-10-14: optional pin_ios/pin_android dispatch inputs carry the gate's audited candidate identifiers; they add no runs (same single gated dispatch per day). 2026-10-20: optional capture_health_override input lets one run's rollout hops past a capture-health HOLD (rare manual dispatch).",
       "triggers": {
         "workflow_dispatch": {
           "inputs": {
+            "capture_health_override": {
+              "default": "",
+              "description": "Reason to let THIS run's rollout hops past a capture-health HOLD (mobile_capture_health.py); empty = no override",
+              "type": "string"
+            },
             "dry_run": {
               "default": "false",
               "description": "Read store state and print the plan without submitting or drafting",
@@ -4672,13 +4721,22 @@
     "mobile_rollout_watch.yml": {
       "name": "Mobile rollout watch",
       "owner": "CI maintainers",
-      "rationale": "Intraday half of the self-driving mobile release lane (see .github/agent-docs/mobile-release-process.md): every 4h dispatches the Codemagic mobile-rollout-advance workflow, which moves only ALREADY-RELEASED rollouts along the agreed 12h exposure profile (iOS phased jump to 100% after its 12h observation window, Android staged ladder hop 1->10->50->100% per 4h window). Dispatch-only ubuntu runner (~seconds), no build; 2026-10-17, operator-approved posture.",
+      "rationale": "Intraday half of the self-driving mobile release lane (see .github/agent-docs/mobile-release-process.md): every 4h dispatches the Codemagic mobile-rollout-advance workflow, which moves only ALREADY-RELEASED rollouts along the agreed 12h exposure profile (iOS phased jump to 100% after its 12h observation window, Android staged ladder hop 1->10->50->100% per 4h window). Dispatch-only ubuntu runner (~seconds), no build; 2026-10-17, operator-approved posture. 2026-10-20: manual workflow_dispatch with a capture_health_override input for a one-shot advance past a capture-health HOLD.",
       "triggers": {
         "schedule": [
           {
             "cron": "0 1,5,9,13,17,21 * * *"
           }
-        ]
+        ],
+        "workflow_dispatch": {
+          "inputs": {
+            "capture_health_override": {
+              "default": "",
+              "description": "Reason to advance past a capture-health HOLD for this run only; empty = no override",
+              "type": "string"
+            }
+          }
+        }
       }
     },
     "onboarding_figma_sync.yml": {

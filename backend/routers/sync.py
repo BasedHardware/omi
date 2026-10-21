@@ -149,7 +149,6 @@ from utils.subscription import (
 )
 from utils.sync import playback as sync_playback
 from utils.sync.input_limits import BackfillInputLimitExceeded, BackfillStoragePressure, validate_backfill_uploads
-from config.capture_evidence import capture_evidence_dark_write_enabled
 from config.rollout_cohorts import warm_rollout_cohorts
 from utils.capture_evidence import parse_sync_file_claims
 from utils.sync.files import (
@@ -1020,9 +1019,7 @@ async def sync_local_files_v2(
     geolocation = geolocation_from_private_header(x_omi_conversation_geolocation)
 
     filenames = [f.filename or '' for f in files]
-    capture_claims = (
-        parse_sync_file_claims(x_omi_capture_evidence, filenames) if capture_evidence_dark_write_enabled() else {}
-    )
+    capture_claims = parse_sync_file_claims(x_omi_capture_evidence, filenames)
     manifest_claims = verify_capture_manifest(
         x_omi_sync_capture_manifest,
         uid,

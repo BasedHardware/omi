@@ -350,7 +350,7 @@ class SourcePositionMap:
 
 def parse_sync_file_claims(value: str | None, filenames: Iterable[str]) -> dict[str, dict]:
     """Validate a bounded, versioned upload header; absent/invalid claims abstain."""
-    if not value or len(value.encode()) > MAX_ENVELOPE_BYTES:
+    if not isinstance(value, str) or not value or len(value.encode()) > MAX_ENVELOPE_BYTES:
         return {}
     try:
         parsed = json.loads(value)

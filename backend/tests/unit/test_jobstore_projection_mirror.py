@@ -113,7 +113,7 @@ class Client:
     def collection(self, name):
         return SimpleNamespace(document=lambda key: Ref(self.docs.get((name, key))))
 
-    def transaction(self):
+    def transaction(self, **options):  # max_attempts=1 from main's retried retention transaction (sync 15)
         return SimpleNamespace(update=Mock())
 
 

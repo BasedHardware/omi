@@ -996,6 +996,14 @@ OMI_VAD_GATE_SESSIONS_TOTAL = Counter(
     ['mode'],
 )
 
+# D2 edge shadow mirrors (utils/stt/edge_shadow.py). outcome: completed,
+# queue_full, connect_failed, send_failed, edge_closed.
+OMI_LISTEN_EDGE_SHADOW_SESSIONS_TOTAL = Counter(
+    'omi_listen_edge_shadow_sessions_total',
+    'Listen sessions mirrored to listen-edge by how the mirror ended',
+    ['outcome'],
+)
+
 OMI_LIVE_STT_TERMINAL_TOTAL = Counter(
     'omi_live_stt_terminal_total',
     'Terminal live-STT outcomes for accepted attempts by bounded labels',

@@ -1,0 +1,4 @@
+{
+  "kind": "none",
+  "reason": "Capture-continuity telemetry and a debug/TestFlight-only banner; no store-build behavior change"
+}

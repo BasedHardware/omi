@@ -25,6 +25,7 @@ ROOT_MODULES = (
     'routers/users.py',
     'routers/conversation_finalization.py',
 )
+EXTRA_MODULES = ('utils/stt/soniox_usage.py',)
 WHOLE_PACKAGES = ('utils/batch_pipeline', 'utils/sync')
 FOLLOWED_PREFIXES = ('utils.', 'routers.', 'services.')
 
@@ -58,7 +59,7 @@ def _imported_names(node: ast.AST) -> set[str]:
 def scoped_modules() -> list[Path]:
     """Modules the background-task ratchet scans (see module docstring)."""
     seen: set[Path] = set()
-    stack = [BACKEND_DIR / root for root in ROOT_MODULES]
+    stack = [BACKEND_DIR / root for root in (*ROOT_MODULES, *EXTRA_MODULES)]
     for package in WHOLE_PACKAGES:
         stack.extend(sorted((BACKEND_DIR / package).glob('*.py')))
     while stack:

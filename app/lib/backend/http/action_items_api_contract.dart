@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:omi/backend/http/api/action_items.dart';
+import 'package:omi/backend/http/api/task_suggestions.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -17,6 +18,7 @@ ActionItemsProvider createProductionActionItemsProvider({ApiSend? send}) {
   final baseUrl = Env.apiBaseUrl ?? 'http://127.0.0.1:8000/';
   return ActionItemsProvider(
     actionItemsApi: ActionItemsApi(baseUrl: baseUrl, send: send),
+    taskSuggestionsApi: TaskSuggestionsApi(baseUrl: baseUrl, send: send),
   );
 }
 

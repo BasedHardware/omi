@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "id": "FC-stale-list-overwrites-acknowledged-task",
+  "violated_contract": "A list request begun before a canonical task acceptance or create receipt must not erase the acknowledged task when its older snapshot arrives later.",
+  "canonical_prevention": "Fence list projections by the shared owner's task write revision, resolve accepted task IDs through canonical point reads, and retry failed hydration without repeating task acceptance. Keep resolved suggestion identities suppressed until the account session ends.",
+  "canonical_prevention_artifact": ["app/test/providers/task_delivery_test.dart", "app/test/providers/task_projection_ownership_test.dart"],
+  "evidence_prs": [],
+  "scope_hints": ["app/lib/providers/action_items_provider.dart", "app/lib/providers/task_suggestions_controller.dart"],
+  "status": "open"
+}

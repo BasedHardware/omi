@@ -2,6 +2,27 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.516",
+      "date": "2026-10-20",
+      "changes": [
+        "Fixed custom vocabulary saves looking failed and reverting when the confirmation read failed, even though the account had already stored the change"
+      ]
+    },
+    {
+      "version": "0.12.515",
+      "date": "2026-10-20",
+      "changes": [
+        "Reduced false meeting detections from browser dictation, parked Meet tabs, voice notes, and brief microphone activity"
+      ]
+    },
+    {
+      "version": "0.12.514",
+      "date": "2026-10-20",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
       "version": "0.12.513",
       "date": "2026-10-20",
       "changes": [

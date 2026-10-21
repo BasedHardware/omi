@@ -25,8 +25,6 @@ SNAPSHOT = Path(__file__).parent / 'fixtures' / 'sync_lineage_main_parity.json'
 FLAGS = (
     'SYNC_LINEAGE_LIVE_DEDUPE_ENABLED',
     'SYNC_WAL_AUDIO_COVERAGE_ENABLED',
-    'SYNC_LINEAGE_S1_REQUIRED',
-    'LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED',
 )
 
 
@@ -43,6 +41,11 @@ def _load(name, source, monkeypatch, namespace=None):
     if namespace is not None:
         module.__dict__.update(namespace)
     monkeypatch.setitem(sys.modules, name, module)
+    # The immutable snapshot predates graduation. Pin its removed recovery
+    # switch to the shipped ON behavior without restoring a production API.
+    source = source.replace('from config.sync_assignment_recovery import sync_assignment_recovery_enabled\n', '')
+    module.sync_assignment_recovery_enabled = lambda: True
+    module.capture_evidence_dark_write_enabled = lambda: True
     exec(compile(source, name, 'exec', flags=0x1000000), module.__dict__)
     return module
 
@@ -150,7 +153,7 @@ def _drive(module, patch, store, texts, assignment_module, capture_enabled):
 def off(monkeypatch, request):
     for flag in FLAGS:
         monkeypatch.setenv(flag, request.param)
-    monkeypatch.setenv('CAPTURE_EVIDENCE_V1_DARK_WRITE', 'false')
+
     monkeypatch.setenv('SYNC_LINEAGE_RESOLVE_ENABLED', 'true')
     monkeypatch.setenv('SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST', '')  # Explicit legacy global policy.
 
@@ -262,12 +265,12 @@ def test_resolver_read_calls_results_and_logs_match_main(frozen, monkeypatch, ca
     assert result[0] == result[1]
 
 
-@pytest.mark.parametrize('capture_enabled', [False, True])
+@pytest.mark.parametrize('capture_enabled', [True])
 @pytest.mark.parametrize('texts', [helpers.NEW, [helpers.reworded(text) for text in helpers.LIVE]])
 def test_process_segment_saved_rows_results_finish_and_log_bytes_match_main(
     frozen, monkeypatch, caplog, texts, capture_enabled
 ):
-    monkeypatch.setenv('CAPTURE_EVIDENCE_V1_DARK_WRITE', 'true' if capture_enabled else 'false')
+
     from utils import capture_evidence, metrics
     from utils.sync import pipeline
 
@@ -308,12 +311,11 @@ def test_process_segment_saved_rows_results_finish_and_log_bytes_match_main(
     assert outputs[0] == outputs[1]
 
 
-@pytest.mark.parametrize('capture_enabled', [False, True])
+@pytest.mark.parametrize('capture_enabled', [True])
 @pytest.mark.asyncio
 async def test_audio_consumer_off_preserves_inputs_without_lookup_or_log(monkeypatch, caplog, capture_enabled):
     from utils.sync import wal_audio_coverage as coverage
 
-    monkeypatch.setenv('CAPTURE_EVIDENCE_V1_DARK_WRITE', 'true' if capture_enabled else 'false')
     paths = ['synthetic.wav']
     maps = {'synthetic.wav': {'claim': {}, 'offsets': [0, 160]}} if capture_enabled else {}
     monkeypatch.setattr(coverage, 'build_sync_source_frame_maps', lambda *args: maps)
