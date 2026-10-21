@@ -2550,10 +2550,22 @@ def delete_conversation_endpoint(
 
     # Lazy: keep developer routes off the merge/memory import graph so stubbed
     # ``utils.memory.*`` tests can load this module without a complete retraction_scope.
-    from utils.conversations.merge_conversations import delete_conversation_with_sync_sources
+    from services.conversation_frame_evidence import delete_conversation_and_frame_evidence
+    from utils.other.storage import delete_owner_prompt_embedding_cache
+    from utils.screen_frames.store import delete_conversation_screen_frames
 
     conversation_tombstones.record_deletion(uid, conversation_id)
-    delete_conversation_with_sync_sources(uid, conversation_id)
+    # Prompt vectors are derived evidence even when primary audio is retained.
+    delete_owner_prompt_embedding_cache(uid, conversation_id)
+    # Must run before delete_conversation_and_frame_evidence purges the parent doc
+    # below: Firestore does not cascade subcollection deletes, and the GCS objects
+    # have no other cleanup path once the parent doc is gone.
+    delete_conversation_screen_frames(uid, conversation_id)
+    # Deletes the conversation doc itself (and any sync-merge sources) as its
+    # default deleter, alongside photo/frame-request GCS evidence.
+    delete_conversation_and_frame_evidence(uid, conversation_id)
+    vector_db.delete_vector(uid, conversation_id)
+    vector_db.delete_transcript_chunk_vectors(uid, conversation_id)
     return {"success": True}
 
 
