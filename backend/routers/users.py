@@ -2729,12 +2729,12 @@ def put_custom_instructions_endpoint(
     request: UpdateCustomInstructionsRequest,
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    """Create or update the user's account-wide custom instructions."""
+    """Replace the user's account-wide custom instructions, defaulting omitted fields."""
     return users_db.update_custom_instructions(
         uid,
-        enabled=request.enabled,
-        about_me=request.about_me,
-        response_style=request.response_style,
+        enabled=request.enabled if request.enabled is not None else True,
+        about_me=request.about_me if request.about_me is not None else '',
+        response_style=request.response_style if request.response_style is not None else '',
     )
 
 

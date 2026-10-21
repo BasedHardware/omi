@@ -481,12 +481,13 @@ def get_custom_instructions_section(
         if not callable(getter):
             return ""
         try:
-            custom_instructions = getter(uid)
+            loaded_instructions = getter(uid)
+            if not isinstance(loaded_instructions, dict):
+                return ""
+            custom_instructions = loaded_instructions
         except Exception as e:
             logger.warning("Failed to load custom instructions for uid=%s: %s", uid, e)
             return ""
-    if not isinstance(custom_instructions, dict):
-        return ""
     if enabled_override is None and not bool(custom_instructions.get("enabled", True)):
         return ""
     about_me = str(custom_instructions.get("about_me") or custom_instructions.get("about_user") or "").strip()

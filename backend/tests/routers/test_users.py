@@ -1331,6 +1331,12 @@ def test_custom_instructions_http_crud(monkeypatch):
         assert toggled.json()['about_me'] == 'Founder based in SF'
         assert toggled.json()['enabled'] is False
 
+        replaced = client.put('/v1/users/custom-instructions', json={'about_me': 'Replacement'})
+        assert replaced.status_code == 200
+        assert replaced.json()['about_me'] == 'Replacement'
+        assert replaced.json()['response_style'] == ''
+        assert replaced.json()['enabled'] is True
+
         cleared = client.delete('/v1/users/custom-instructions')
         assert cleared.status_code == 200
         assert cleared.json() == {
@@ -1382,3 +1388,11 @@ def test_stored_custom_instructions_reaches_rendered_agentic_prompt(monkeypatch)
     assert '<user_custom_instructions>' in section
     assert 'distributed systems engineer' in section
     assert 'Bullet points only, no apologies.' in section
+
+
+@pytest.mark.parametrize('stored', [None, [], 'invalid'])
+def test_custom_instructions_invalid_storage_response_is_ignored(monkeypatch, stored):
+    from utils.llm.chat import get_custom_instructions_section
+
+    monkeypatch.setattr(users_router.users_db, 'get_custom_instructions', lambda _uid: stored)
+    assert get_custom_instructions_section('uid-invalid-storage') == ''

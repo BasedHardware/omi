@@ -630,8 +630,6 @@ def _run_chat_turn(uid, surface, session, message, reply_sink, *, principal, opt
         try:
             stream_kwargs: dict[str, Any] = {}
             if data.custom_instructions_enabled is not None:
-                if chat_session is not None:
-                    chat_session.custom_instructions_enabled = data.custom_instructions_enabled
                 stream_kwargs['custom_instructions_enabled'] = data.custom_instructions_enabled
             async for chunk in execute_chat_stream(
                 uid,
