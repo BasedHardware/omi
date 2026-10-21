@@ -687,7 +687,7 @@ def assign_in_transaction(
                 no_op['sync_live_target'] = True
             no_op['_sync_lineage_repeat_only'] = True
             no_op['_sync_lineage_stamp_gap_refused'] = True
-            if live_stats is not None and live_stats['sync_retry']:
+            if no_op['id'] == target_id and live_stats is not None and live_stats['sync_retry']:
                 no_op['_sync_lineage_completion_pending'] = True
             return no_op, False, []
         refused_id = target_id
