@@ -75,7 +75,7 @@ The close reasons are `user`, `gap`, `idle`, `hard_cap`, `source_change`,
 
 `config/episodes.py`:
 - `EPISODES_ENABLED` defaults on and is the kill switch.
-- `EPISODES_PERCENT` (default 100) and `EPISODES_UID_ALLOWLIST` are for the ramp.
+- `EPISODES_PERCENT` (default 0, so only the allowlist is admitted until a ramp step sets it) and `EPISODES_UID_ALLOWLIST` are for the ramp.
 
 Off makes `/v1/episodes/*` report `enabled: false`. Apps keep today's
 per-conversation UI, and no episode read, write or model call happens anywhere.
