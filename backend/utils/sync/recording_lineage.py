@@ -248,6 +248,11 @@ def parse_s1_upload_claims(value: Optional[str], filenames: Sequence[str]) -> di
     return claims
 
 
+def emit_s1_mapping_refusal(mapped_count: int, wav_count: int) -> None:
+    """Coordinator refused incomplete decoded position maps for surviving WAVs."""
+    emit_s1_refusal('count_mismatch', stage='coordinator', claim_count=mapped_count, file_count=wav_count)
+
+
 def lineage_resolution_requested(
     uid: Optional[str],
     recording_session_id: Optional[str],
