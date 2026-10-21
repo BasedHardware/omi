@@ -23588,6 +23588,18 @@
             "description": "Participant's email address",
             "title": "Email"
           },
+          "evidence": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Short evidence that identifies this participant; agentic notes only",
+            "title": "Evidence"
+          },
           "is_ai_agent": {
             "default": false,
             "description": "True for AI notetakers and assistants, never people",

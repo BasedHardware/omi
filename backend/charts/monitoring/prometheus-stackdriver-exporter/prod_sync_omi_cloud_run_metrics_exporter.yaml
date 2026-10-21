@@ -18,6 +18,8 @@ fullnameOverride: "prod-omi-cloud-run-sync-metrics-exporter"
 #   omi_conversation_summary_vector_upserts  Core Features
 #   omi_firestore_documents_per_operation    Firestore read-amplification alert
 #   omi_capture_finalization_*          resilience alert, Core Features
+#   omi_held_content_*                  held-content ramp gates (#22840 runbook)
+#   omi_stt_cap_recovery_reconciliation_total  cap-hold recovery outcomes
 #   omi_queue_oldest_ready_*            resilience queue-age alert
 # A trailing slash pins one family (types are prometheus.googleapis.com/<name>/<kind>).
 # Measured with these prefixes: 43 types, ~6.1k series per collection.
@@ -34,6 +36,8 @@ stackdriver:
       - 'prometheus.googleapis.com/omi_conversation_summary_vector_upserts_total/'
       - 'prometheus.googleapis.com/omi_firestore_documents_per_operation/'
       - 'prometheus.googleapis.com/omi_capture_finalization_'
+      - 'prometheus.googleapis.com/omi_held_content_'
+      - 'prometheus.googleapis.com/omi_stt_cap_recovery_reconciliation_total/'
       - 'prometheus.googleapis.com/omi_queue_oldest_ready_'
     filters:
       - 'prometheus.googleapis.com/omi_:resource.labels.cluster="__run__" AND resource.labels.namespace=one_of("backend-sync","backend-sync-backfill","backend-integration")'

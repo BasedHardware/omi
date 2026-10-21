@@ -28,8 +28,12 @@ extension AppState {
       mode: mode,
       onInitialStateObserved: { [weak self] in
         Task { @MainActor in
-          guard let self, let active = self.meetingDetector?.isMeetingActive else { return }
-          await self.handleMeetingObservation(active: active)
+          guard let self, let detector = self.meetingDetector else { return }
+          if let active = MeetingConversationBoundaryPolicy.initialObservation(
+            captureActive: detector.isMeetingActive, meetingConfirmed: detector.isMeetingConfirmed)
+          {
+            await self.handleMeetingObservation(active: active)
+          }
           await self.reconcileCapture()
         }
       },
@@ -39,11 +43,23 @@ extension AppState {
         Task { @MainActor in await self?.handleMeetingObservation(active: true) }
       },
       onChange: { [weak self] active in
-        Self.noteMeetingContext(active: active)
         Task { @MainActor in
-          await self?.handleMeetingObservation(active: active)
-          await self?.reconcileCapture()
+          guard let self else { return }
+          // Finalize and flush meeting tails before closing the capture gate, as before.
+          if !active { await self.handleMeetingObservation(active: false) }
+          await self.reconcileCapture()
         }
+      },
+      onConfirmedChange: { [weak self] active in
+        Self.noteMeetingContext(active: active)
+        // Off shares the capture edge above so shutdown waits for boundary finalization.
+        if active {
+          Task { @MainActor in await self?.handleMeetingObservation(active: true) }
+        }
+      },
+      onNoteTakingNoticeReady: { [weak self] in
+        guard let self, self.isTranscribing, self.currentConversationRole == .meeting else { return }
+        MeetingNoteTakingNotice.present()
       }
     )
     meetingDetector = detector
@@ -141,7 +157,7 @@ extension AppState {
     if MeetingConversationBoundaryPolicy.shouldAnnounceNoteTaking(
       committedRole: currentConversationRole, rotationSucceeded: rotationSucceeded)
     {
-      MeetingNoteTakingNotice.present()
+      meetingDetector?.requestNoteTakingNotice()
     }
 
     if let pending = pendingMeetingState {

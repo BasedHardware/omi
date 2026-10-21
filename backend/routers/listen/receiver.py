@@ -123,6 +123,7 @@ from utils.stt.resilient_stream import (
 )
 from utils.stt.language_policy import observe_live_segments, record_live_connection
 from utils.stt.provider_resilience import fallback_socket_is_serving
+from utils.stt.provider_stream_end import US_FAILOVER, US_TIMEOUT, note_stream_close_intent, session_teardown_closer
 from utils.stt.socket import release_live_stt_socket, track_live_stt_socket
 from utils.stt.streaming import (
     STTService,
@@ -139,6 +140,7 @@ from utils.stt.streaming import (
 from routers.listen.stt_callbacks import attach_legacy_capture_window, build_stt_callbacks
 from utils.stt.speaker_identity import SpeakerProviderEpoch
 from utils.stt.vad_gate import GatedSTTSocket, VADStreamingGate, VAD_GATE_MODE, is_gate_enabled
+from utils.stt import edge_shadow
 from utils.transcribe_decisions import (
     TARGET_SAMPLE_RATE,
     custom_stt_clock_origin,
@@ -318,6 +320,7 @@ class ListenReceiver(ReplayFilterMixin):
         self.aac_decoder: Any = None
         self.lc3_decoder: Any = None
         self.vad_gate: Any = None
+        self.edge_shadow: Optional[edge_shadow.EdgeShadowMirror] = None  # D2; edge_shadow.session_mirror
         self.image_chunks: OrderedDict[str, Dict[str, Any]] = OrderedDict()
         self.last_image_chunk_cleanup = 0.0
         self.decode_failure_streak = 0
@@ -896,6 +899,11 @@ class ListenReceiver(ReplayFilterMixin):
         if callable(start_transcription):
             start_transcription()
 
+    def edge_shadow_tap(self) -> Any:
+        """A tap for a newly built VAD gate when the session is mirrored (D2), else None."""
+        mirror = edge_shadow.session_mirror(self)
+        return mirror.tap() if mirror is not None else None
+
     def initialize_decoders(self) -> None:
         request = self.host.request
         if self.host.is_multi_channel:
@@ -1161,6 +1169,7 @@ class ListenReceiver(ReplayFilterMixin):
             ring.close()
         sockets = self.stt_sockets_multi if self.host.is_multi_channel else [self.stt_socket]
         for socket in sockets:
+            note_stream_close_intent(socket, session_teardown_closer(self.host))
             target = socket._conn if isinstance(socket, GatedSTTSocket) else socket  # type: ignore[reportPrivateUsage]
             if target is None:
                 release_live_stt_socket(socket)
@@ -1318,6 +1327,7 @@ class ListenReceiver(ReplayFilterMixin):
                     )
                 except Exception:
                     logger.exception('VAD gate initialization failed; continuing without it')
+                edge_shadow.attach_tap(self.vad_gate, self)
 
             parakeet_callback, modulate_callback, epoch = self._build_stt_callbacks()
             raw = await self._create_stt_socket(
@@ -1585,6 +1595,7 @@ class ListenReceiver(ReplayFilterMixin):
         outcome = getattr(raw, 'leg_outcome', None)
         if outcome is not None:
             outcome.claim(live_stt_terminal_reason(raw, 'connection_lost'))
+        note_stream_close_intent(raw, US_FAILOVER)
         try:
             await abort_replay_socket(raw)
         except asyncio.CancelledError:
@@ -1592,6 +1603,7 @@ class ListenReceiver(ReplayFilterMixin):
                 outcome.settle()
             raise
         if previous is not None:
+            note_stream_close_intent(previous, US_FAILOVER)
             try:
                 await abort_replay_socket(previous)
             finally:
@@ -1667,6 +1679,7 @@ class ListenReceiver(ReplayFilterMixin):
                 self._stt_failed_providers.add(provider_for_service(timed_out) or timed_out.value)
                 if raw is not None:
                     retire_window_replay_socket(self, raw)
+                    note_stream_close_intent(raw, US_TIMEOUT)
                     await abort_replay_socket(raw)
                 self.host.stt_service, self.host.stt_language, self.host.stt_model = previous_selection
                 hop.note_failure(None, continuing=True)
@@ -1753,6 +1766,7 @@ class ListenReceiver(ReplayFilterMixin):
             if window_ring is not None and callable(retire):
                 retire()
             if previous is not None:
+                note_stream_close_intent(previous, US_FAILOVER)
                 try:
                     await abort_replay_socket(previous)
                 except Exception:
@@ -2381,6 +2395,7 @@ class ListenReceiver(ReplayFilterMixin):
             else None
         )
         frame_timer = FrameTimer(request.codec, multi_channel=self.host.is_multi_channel)
+        shadow = edge_shadow.session_mirror(self)
         try:
             while self.host.state.active:
                 frame_timer.stop()
@@ -2458,6 +2473,8 @@ class ListenReceiver(ReplayFilterMixin):
                         # (opcode-101 start) is v2-only: with the flag off the
                         # wire must stay byte-identical to the legacy session.
                         start_sample, end_sample, _ = self.capture_timeline.accept(decoded, now, time.monotonic())
+                        if shadow is not None:  # D2 edge shadow copy, fire-and-forget
+                            shadow.frame(start_sample, end_sample - start_sample, data)
                         if not self.host.use_custom_stt and self.recovery_enabled:
                             self._live_birth.note(start_sample, end_sample)
                         source_map = self.host.state.source_position_map
@@ -2514,6 +2531,8 @@ class ListenReceiver(ReplayFilterMixin):
             self.host.state.close_code = 1011
         finally:
             frame_timer.stop()
+            if shadow is not None:
+                shadow.close()
             self.client_closing = True
             self._receiving = False
             for socket in self.stt_sockets_multi if self.host.is_multi_channel else [self.stt_socket]:
@@ -2734,6 +2753,7 @@ class ListenReceiver(ReplayFilterMixin):
             ring.close()
         for socket in self.stt_sockets_multi if self.host.is_multi_channel else [self.stt_socket]:
             if socket:
+                note_stream_close_intent(socket, session_teardown_closer(self.host))
                 try:
                     socket.finish()
                 except Exception:

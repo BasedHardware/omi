@@ -1084,19 +1084,40 @@ def _two_workers(stack: BatchStack) -> None:
         # and the stale holder's result is fenced by its token. The emulator's
         # collection-wide transaction lock stalls heartbeats on slow runners,
         # so a re-lease is legitimate here. The cross-replica invariants are:
-        # every compute ran under its own lease (computes <= leases issued),
-        # and each segment committed exactly once to the result log.
+        # every compute ran under its own lease grant (computes <= grants),
+        # and each segment committed exactly once to the result log. Grants
+        # come from the replicas' own lease evidence, not the job's attempt
+        # field: attempt is a retry budget that a pre-compute refund lowers.
         recomputed: set[str] = set()
+        attempt_gaps = 0
         for segment in segments:
             job = stack.doc('jobs', segment)
-            leases = int(job.get('attempt') or 0)
-            computes = stack.words_calls(segment)
+            attempt = int(job.get('attempt') or 0)
+            grants = sum(e.get('event') == 'lease_granted' and e.get('segment_id') == segment for e in events)
+            refunds = sum(
+                e.get('event') == 'lease_refunded' and e.get('segment_id') == segment and e.get('refunded')
+                for e in events
+            )
+            computes = sum(
+                e.get('event') == 'words_started' and segment in (e.get('segment_ids') or []) for e in events
+            )
             computed = sum(e['segment_id'] == segment for e in results)
-            if computes < 1 or computed < 1 or computes > leases or computed > leases:
+            counts = (
+                f'segment={segment[:8]} grants={grants} refunds={refunds} attempt={attempt} '
+                f'computes={computes} results={computed} state={job.get("state")} failure={job.get("failure")}'
+            )
+            if computes < 1 or computed < 1:
+                raise StackFailure(f'a two-replica segment has no compute evidence ({counts})')
+            if computes > grants or computed > grants:
                 _record_job_event(
                     {'event': 'batch_two_workers_overcompute', 'units': _unit_states(stack, [*burst, *solos])}
                 )
-                raise StackFailure('a segment was computed more often than it was leased across replicas')
+                raise StackFailure(f'a segment was computed more often than it was leased across replicas ({counts})')
+            if attempt != grants - refunds:
+                # Visible, not fatal: the retry budget drifted from the grants
+                # observed. Compute and publication are still bounded above.
+                attempt_gaps += 1
+                print(f'two-replica attempt drift: {counts}', flush=True)
             if computes > 1:
                 recomputed.add(segment)
             if job.get('state') != 'committed':
@@ -1151,6 +1172,7 @@ def _two_workers(stack: BatchStack) -> None:
                 'segments': len(segments),
                 'replicas': len(workers),
                 'recomputed_after_lease_loss': len(recomputed),
+                'attempt_drift': attempt_gaps,
                 'per_replica': {
                     'primary': sum(e.get('worker_name') == stack.worker_name for e in starts),
                     'peer': sum(e.get('worker_name') == peer for e in starts),

@@ -11,7 +11,7 @@ from config.batch_pipeline import recovery_owners
 from config.policy import resolve_batch_policy, resolve_stage_policy
 from database.batch_pipeline_privacy import privacy_owner_key
 from database.batch_pipeline_projection import ProjectionStore
-from database.batch_pipeline_projection_protocol import ProjectionReplay
+from database.batch_pipeline_projection_protocol import ProjectionBlocked, ProjectionReplay
 from database.batch_pipeline_store import FirestoreStore
 from tests.unit.fixtures.cap_rollout import full_cap_dispatch_rollout  # noqa: F401
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
@@ -1218,3 +1218,319 @@ def test_dispatch_refreshes_disabled_snapshot_before_enqueue(setup, monkeypatch)
     outcome = recovery.dispatch('bad', binding.owner_id)
     assert outcome != 'disabled'
     assert row(client)['policy_parts']['recovery']['recovery_enabled'] is True
+
+
+PARTIAL_ACCOUNTING = {
+    'seconds': 3,
+    'source': 'sync_fresh',
+    'updates': {},
+    'hour': 'synthetic-hour',
+    'completed': False,
+    'charged': 0.0,
+}
+
+
+def ledger_row(client, binding):
+    return client.rows[('users', binding.owner_id, 'sync_content_ledger', binding.content_id)]
+
+
+def test_terminally_held_upload_completes_partial_once_without_touching_held_unit(setup):
+    client, store, binding, artifacts, stt, _ = setup
+    row(client)['recovery_state'] = 'failed_held'
+    jobs_before = deepcopy({key: value for key, value in client.rows.items() if key[0].endswith('_jobs')})
+    good_before = deepcopy(row(client, 'results', 'good'))
+    projection = ProjectionStore(store)
+    result, step = projection.complete_partial(binding, 101, PARTIAL_ACCOUNTING)
+    assert result == {
+        'new_memories': [],
+        'updated_memories': [],
+        'failed_segments': 1,
+        'held_segments': 1,
+        'total_segments': 2,
+        'errors': [],
+        'outcome': 'partial',
+    }
+    ledger = ledger_row(client, binding)
+    assert ledger['status'] == 'partial' and ledger['result'] == result
+    assert ledger['usage_committed_seconds'] == 3 and ledger['job_id'] == binding.job_id
+    assert step == ([0.0, 3], [101]) and ledger['usage_steps'] == [0.0, 3] and ledger['usage_step_times'] == [101]
+    # Paid-once and ordered-head: no provider call, no job/intent/merge write,
+    # the parked sibling keeps its receipt, and the held audio is not touched.
+    assert {key: value for key, value in client.rows.items() if key[0].endswith('_jobs')} == jobs_before
+    assert row(client, 'results', 'good') == good_before
+    assert ('batch_pipeline_prod_results', 'bad') not in client.rows
+    stt.assert_not_called()
+    artifacts.fetch_audio.assert_not_called()
+    # Idempotent: a replay reads the same partial and writes nothing.
+    writes = sum(len(tx.updates) for tx in client.transactions)
+    assert projection.complete_partial(binding, 102, PARTIAL_ACCOUNTING) == (result, step)
+    assert sum(len(tx.updates) for tx in client.transactions) == writes
+    assert ledger_row(client, binding)['updated_at'] == ledger['updated_at']
+
+
+@pytest.mark.parametrize('change', ['prepared', 'running', 'enabled_held', 'operator_intent', 'not_ready', 'none'])
+def test_partial_waits_while_anything_can_still_change(setup, change):
+    client, store, binding, _, stt, _ = setup
+    job = row(client)
+    job['recovery_state'] = 'failed_held'
+    if change in {'prepared', 'running'}:
+        job['recovery_state'] = change
+    elif change == 'enabled_held':
+        job['recovery_state'] = 'held'
+        job['policy_parts'] = {'recovery': resolve_stage_policy(binding.owner_id, 'recovery').to_dict()}
+        assert job['policy_parts']['recovery']['recovery_enabled'] is True
+    elif change == 'operator_intent':
+        job['speech_redrive'] = {'state': 'prepared', 'token': 'reviewed'}
+    elif change == 'not_ready':
+        row(client, 'results', 'good')['projection']['state'] = 'persisted'
+    else:
+        job.update(state='committed', recovery_state='recovered')
+    before = deepcopy(client.rows)
+    assert ProjectionStore(store).complete_partial(binding, 101, PARTIAL_ACCOUNTING) is None
+    assert client.rows == before
+    stt.assert_not_called()
+
+
+def test_partial_refuses_a_completed_or_foreign_ledger(setup):
+    client, store, binding, _, _, _ = setup
+    row(client)['recovery_state'] = 'failed_held'
+    ledger_row(client, binding)['job_id'] = 'bp_replacement'
+    with pytest.raises(ProjectionBlocked, match='ledger owner'):
+        ProjectionStore(store).complete_partial(binding, 101, PARTIAL_ACCOUNTING)
+    ledger_row(client, binding).update(job_id=binding.job_id, status='completed')
+    before = deepcopy(client.rows)
+    assert ProjectionStore(store).complete_partial(binding, 101, PARTIAL_ACCOUNTING) is None
+    assert client.rows == before
+
+
+def test_partial_status_answers_completed_with_held_span(setup):
+    from utils.batch_pipeline.intake import durable_status
+
+    client, store, binding, _, _, _ = setup
+    row(client)['recovery_state'] = 'failed_held'
+    client.rows[('batch_pipeline_prod_intakes', binding.job_id)] = {
+        'owner_id': binding.owner_id,
+        'content_id': binding.content_id,
+        'segment_ids': list(binding.segment_ids),
+        'lane': 'backfill',
+        'total_files': 1,
+    }
+    result, _ = ProjectionStore(store).complete_partial(binding, 101, PARTIAL_ACCOUNTING)
+    status = durable_status(store, binding.owner_id, binding.job_id)
+    assert status['status'] == 'completed' and status['reason_code'] == 'batch_unit_held'
+    assert status['failed_segments'] == 1 and status['successful_segments'] == 1
+    assert status['result'] == result and status['poll_after_ms'] == 0 and status['errors'] == []
+
+
+def test_recovery_disabled_unit_completes_partial_then_upgrades_after_recovery(setup, monkeypatch):
+    client, store, binding, _, stt, recovery = setup
+    _freeze_disabled_snapshot(monkeypatch, recovery, binding)
+    projection = ProjectionStore(store)
+    partial, _ = projection.complete_partial(binding, 101, PARTIAL_ACCOUNTING)
+    assert partial['held_segments'] == 1 and ledger_row(client, binding)['status'] == 'partial'
+    # Recovery turns on later: the partial ledger still belongs to the batch job,
+    # so the one paid recovery runs and the ordinary completion upgrades it.
+    monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_ALL_ADMITTED', 'true')
+    assert recovery.recover('bad', binding.owner_id) == 'recovered'
+    assert stt.call_count == 1
+    result = row(client)['result']
+    row(client)['state'] = 'committed'
+    client.rows[('batch_pipeline_prod_results', 'bad')] = {
+        'protocol_version': 1,
+        'segment_id': 'bad',
+        'owner_key': owner_key(binding.owner_id),
+        'capture_at': 1,
+        'previous_segment_id': 'good',
+        'late_capture': True,
+        'result': result,
+        'projection_state': 'pending',
+    }
+    binding = projection.read('bad')[2]
+    session = projection.session('bad', binding, 102)
+
+    def assign(transaction):
+        session.prepare(transaction)
+        session.speech_seconds = 2
+        session.persist(transaction)
+
+    projection.run(assign)
+    projection.ready('bad', binding, 103)
+    stale = {**PARTIAL_ACCOUNTING, 'seconds': 5.0}
+    with pytest.raises(ProjectionBlocked, match='usage accounting changed'):
+        projection.complete('bad', binding, 104, stale)
+    upgraded = projection.complete('bad', binding, 104, {**stale, 'charged': 3})
+    ledger = ledger_row(client, binding)
+    assert ledger['status'] == 'completed' and ledger['result'] == upgraded
+    assert upgraded['failed_segments'] == 0 and upgraded['total_segments'] == 2
+    assert ledger['usage_committed_seconds'] == 5.0 and ledger['usage_steps'] == [0.0, 3, 5.0]
+    assert ledger['usage_step_times'] == [101, 104]
+    # A held span already settled as partial is never re-partialed after completion.
+    assert projection.complete_partial(binding, 105, PARTIAL_ACCOUNTING) is None
+    assert stt.call_count == 1
+
+
+def test_partial_accounting_charges_only_the_remainder(setup, monkeypatch):
+    from database import hourly_usage_updates, llm_usage
+
+    client, store, binding, _, _, _ = setup
+    row(client)['recovery_state'] = 'failed_held'
+    charged = []
+    monkeypatch.setattr(llm_usage, 'resolve_usage_plan_id', lambda *args, **kwargs: 'synthetic-plan')
+    monkeypatch.setattr(
+        hourly_usage_updates,
+        'prepare_hourly_usage_updates',
+        lambda stamp, counts, *args, **kwargs: charged.append(counts) or {'synthetic': counts},
+    )
+    projection = ProjectionStore(store)
+    assert projection.prepare_accounting(binding, 100) is None
+    accounting = projection.prepare_accounting(binding, 100, held=True)
+    assert accounting['seconds'] == 3 and accounting['charged'] == 0.0
+    assert charged == [{'transcription_seconds': 3, 'speech_seconds': 3}]
+    ledger_row(client, binding).update(status='partial', usage_committed_seconds=3)
+    row(client, 'results', 'good')['projection']['speech_seconds'] = 8
+    again = projection.prepare_accounting(binding, 100, held=True)
+    assert again['charged'] == 3 and charged[-1] == {'transcription_seconds': 5, 'speech_seconds': 5}
+
+
+def test_held_sweep_completes_each_upload_once_and_contains_failures(setup, monkeypatch):
+    from utils import fair_use
+    from utils.batch_pipeline.projection import Projector
+
+    client, store, binding, artifacts, stt, _ = setup
+    row(client)['recovery_state'] = 'failed_held'
+    # The first fair-use write fails after the partial committed (Redis outage).
+    monkeypatch.setattr(fair_use, 'record_speech_ms', Mock(side_effect=[RuntimeError('synthetic redis'), None]))
+    projector = Projector(store, artifacts.load_result, clock=lambda: 101)
+    real_accounting = projector.store.prepare_accounting
+
+    def accounting(target, now, *, held=False):
+        assert held
+        if target.content_id != binding.content_id:
+            return real_accounting(target, now, held=held)
+        return dict(PARTIAL_ACCOUNTING)
+
+    projector.store.prepare_accounting = accounting
+    foreign = {'projection_binding': {**row(client)['projection_binding'], 'content_id': 'foreign'}}
+    page = [('bad', row(client)), ('bad-sibling', deepcopy(row(client))), ('foreign', foreign), ('broken', {})]
+    monkeypatch.setattr(
+        'utils.batch_pipeline.projection.held_candidates', lambda client, ns, limit, after_id=None: page[:limit]
+    )
+    # Same upload once; a foreign ledger is never charged; a malformed row is contained.
+    assert projector.sweep_held(limit=4) == {'partial': 0, 'waiting': 1, 'error': 2}
+    assert ledger_row(client, binding)['status'] == 'partial'
+    assert projector.held_after == 'broken'
+    writes = sum(len(tx.updates) for tx in client.transactions)
+    assert projector.sweep_held(limit=5) == {'partial': 1, 'waiting': 1, 'error': 1}
+    # A short page wraps the cursor; the replay wrote nothing new and re-issued
+    # the same durable fair-use step, so the lost charge lands exactly once.
+    assert projector.held_after is None
+    assert sum(len(tx.updates) for tx in client.transactions) == writes
+    keys = [(call.args[1], call.kwargs['idempotency_key']) for call in fair_use.record_speech_ms.call_args_list]
+    assert keys == [(3000, 'content'), (3000, 'content')]
+    stt.assert_not_called()
+
+
+@pytest.mark.parametrize('change', ['speech_redrive', 'recovery_enabled'])
+def test_unfinished_held_unit_is_never_accounted_or_charged(setup, monkeypatch, change):
+    from utils import fair_use
+    from utils.batch_pipeline.projection import Projector
+
+    client, store, binding, artifacts, _, _ = setup
+    job = row(client)
+    if change == 'speech_redrive':
+        job.update(recovery_state='failed_held', speech_redrive={'state': 'running', 'token': 'reviewed'})
+    else:
+        job['policy_parts'] = {'recovery': resolve_stage_policy(binding.owner_id, 'recovery').to_dict()}
+    monkeypatch.setattr(fair_use, 'record_speech_ms', Mock())
+    projector = Projector(store, artifacts.load_result, clock=lambda: 101)
+    before = deepcopy(client.rows)
+    assert projector.store.prepare_accounting(binding, 101, held=True) is None
+    assert projector.complete_held(binding) is None
+    fair_use.record_speech_ms.assert_not_called()
+    assert client.rows == before
+
+
+def test_fair_use_charge_after_partial_uses_a_distinct_once_key(monkeypatch):
+    from utils import fair_use
+    from utils.batch_pipeline.projection import record_speech
+
+    calls = []
+    monkeypatch.setattr(fair_use, 'record_speech_ms', lambda *args, **kwargs: calls.append((args, kwargs)))
+    binding = ProjectionBinding('synthetic-owner', 'bp_upload', 'content', ('bad', 'good'))
+    record_speech(binding, {'seconds': 3, 'source': 'sync_fresh', 'completed': False}, 100)
+    calls.clear()
+    # After a partial at 3 s (stored steps [0, 3]) the upgrade re-issues the base
+    # step under its own key, then the remainder: a base lost to a Redis failure
+    # after the partial commit still lands, and one that landed is a SET NX no-op.
+    record_speech(
+        binding, {'seconds': 5, 'source': 'sync_fresh', 'completed': False, 'steps': [0.0, 3], 'step_times': [90]}, 100
+    )
+    assert [(args[1], kwargs['idempotency_key']) for args, kwargs in calls] == [
+        (3000, 'content'),
+        (2000, 'content:3000'),
+    ]
+    calls.clear()
+    record_speech(
+        binding, {'seconds': 5, 'source': 'sync_fresh', 'completed': True, 'steps': [0.0, 3], 'step_times': [90]}, 100
+    )
+    assert calls == []
+
+
+def test_expired_or_unknown_age_step_is_never_readmitted(monkeypatch):
+    from utils import fair_use
+    from utils.batch_pipeline.projection import record_speech_steps, reissue_window_seconds
+
+    calls = []
+    monkeypatch.setattr(fair_use, 'record_speech_ms', lambda *args, **kwargs: calls.append(kwargs['idempotency_key']))
+    binding = ProjectionBinding('synthetic-owner', 'bp_upload', 'content', ('bad', 'good'))
+    now = 10 * 86400.0
+    window = reissue_window_seconds()
+    assert 0 < window < fair_use.FAIR_USE_REDIS_RETENTION_SECONDS
+    # A unit held past the once-key TTL: its old step stays out, the fresh one lands.
+    record_speech_steps(binding, 'sync_fresh', [0.0, 3, 5], [now - window - 1, now], now)
+    assert calls == ['content:3000']
+    calls.clear()
+    # A legacy partial without commit times: never re-issued.
+    record_speech_steps(binding, 'sync_fresh', [0.0, 3], [None], now)
+    assert calls == []
+
+
+def test_lost_base_charge_lands_after_a_newer_partial_step(setup, monkeypatch):
+    from utils import fair_use
+    from utils.batch_pipeline.projection import Projector
+
+    client, store, binding, artifacts, _, _ = setup
+    row(client)['recovery_state'] = 'failed_held'
+    landed = {}
+
+    def once(uid, ms, source, idempotency_key, raise_on_error):
+        if fail[0]:
+            fail[0] = False
+            raise RuntimeError('synthetic redis')
+        landed.setdefault(idempotency_key, ms)
+
+    fail = [True]
+    monkeypatch.setattr(fair_use, 'record_speech_ms', once)
+    projector = Projector(store, artifacts.load_result, clock=lambda: 101)
+    projector.store.prepare_accounting = lambda target, now, held=False: {
+        **PARTIAL_ACCOUNTING,
+        'charged': 0.0,
+        'steps': [0.0],
+    }
+    with pytest.raises(RuntimeError):
+        projector.complete_held(binding)
+    # The partial committed (0 -> 3) but its fair-use write was lost. A newer
+    # step (3 -> 5) commits next: both keys land, base included.
+    assert ledger_row(client, binding)['usage_steps'] == [0.0, 3]
+    # Stand in for an earlier partial over a wider held span, so this pass rewrites it.
+    ledger_row(client, binding)['result'] = {**ledger_row(client, binding)['result'], 'superseded_segments': 1}
+    row(client, 'results', 'good')['projection']['speech_seconds'] = 5
+    projector.store.prepare_accounting = lambda target, now, held=False: {
+        **PARTIAL_ACCOUNTING,
+        'seconds': 5,
+        'charged': 3,
+        'steps': [0.0, 3],
+    }
+    assert projector.complete_held(binding) is not None
+    assert ledger_row(client, binding)['usage_steps'] == [0.0, 3, 5]
+    assert landed == {'content': 3000, 'content:3000': 2000}

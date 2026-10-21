@@ -8,6 +8,7 @@ import os
 import time
 
 from config.batch_pipeline import (
+    held_partial_enabled,
     owner_chain_projection_enabled,
     recovered_merge_release_enabled,
     recovery_dispatch_interval_seconds,
@@ -16,7 +17,7 @@ from database.batch_pipeline_store import FirestoreStore
 from database.batch_pipeline_staging import reap
 from utils.batch_pipeline.intake import artifacts_for
 from utils.batch_pipeline.live import drain_recordings
-from utils.batch_pipeline.projection import Projector
+from utils.batch_pipeline.projection import Projector, error_type
 from utils.executors import run_blocking, start_background_task, sync_executor
 from utils.batch_pipeline.contracts import PoolCapacity, WorkResult
 from utils.batch_pipeline.leader import SERVING_MAINTENANCE, LeaderLease
@@ -26,6 +27,8 @@ from utils.batch_pipeline.scheduler import Scheduler
 from utils.batch_pipeline.retention import cleanup_completed_artifacts
 from utils.sync.stage import current_stage
 from utils.sync import reprocess
+
+HELD_PARTIAL_INTERVAL_SECONDS = 300
 
 
 class Serving:
@@ -51,6 +54,9 @@ class Serving:
         # Optional single-owner lease for periodic maintenance (see reconcile).
         self.leader = leader
         self.merge = OrderedMerge(store, metrics=metrics)
+        # Held units change only on a recovery or operator settle: scan them
+        # at a slow cadence, not every maintenance pass.
+        self.held_partial_due = 0.0
 
     def queue(self, pool='batch'):
         return Scheduler(self.store, metrics=self.metrics, pool=pool)
@@ -117,7 +123,7 @@ class Serving:
                 priority = self.projector.project_owner(owner_id, recovered=recovered)
             except Exception as error:
                 logging.getLogger(__name__).error(
-                    'event=batch_projection action=owner_chain outcome=retry exception_type=%s', type(error).__name__
+                    'event=batch_projection action=owner_chain outcome=retry exception_type=%s', error_type(error)
                 )
         # Projection and the local gauges stay per instance: projection is
         # throughput (ordered and fenced in its own transactions) and every
@@ -157,6 +163,15 @@ class Serving:
             self.enrichment_sweep()
         if recover_quarantine and self.recovery:
             self.recovery.sweep()
+        sweep_held = getattr(self.projector, 'sweep_held', None)
+        if sweep_held is not None and time.monotonic() >= self.held_partial_due and held_partial_enabled():
+            self.held_partial_due = time.monotonic() + HELD_PARTIAL_INTERVAL_SECONDS
+            try:
+                sweep_held()
+            except Exception as error:
+                logging.getLogger(__name__).error(
+                    'event=batch_held_partial action=sweep outcome=retry exception_type=%s', type(error).__name__
+                )
         self.queue().recover(time.time())
         owners = set()
         for segment in self.store.due('result_ready', time.time(), 100):

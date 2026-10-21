@@ -42,8 +42,26 @@
       },
       "runs_on": "ubuntu-latest"
     },
+    "backend-edge.yml/edge": {
+      "budget_p50_minutes": 5,
+      "display_name": "edge",
+      "expected_runs_class": "unsampled-pr-sentinel",
+      "expected_runs_per_day": 1,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "Backend realtime (plan D listen-edge)",
+      "rationale": "2026-10-21 D1 listen-edge crate, named by David 2026-10-20: path-filtered to backend/edge/**, about one PR run per day during D1-D5; cold build+clippy+test measured 85s locally (expect 2-3 min on ubuntu-latest), cached runs well under that; 5-minute p50 budget",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
     "backend-emulator-proofs.yml/emulator-proofs": {
-      "budget_p50_minutes": 3,
+      "budget_p50_minutes": 4,
       "display_name": "Backend emulator proofs",
       "expected_runs_class": "sampled-pr-day",
       "expected_runs_per_day": 18,
@@ -52,7 +70,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up",
+      "rationale": "Retain the existing standard Linux runner and 18 expected daily runs; allow one extra p50 minute above the prior three for 26 summary recovery/expiry checks (11 seconds locally) and their test imports.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -2612,10 +2630,32 @@
         }
       }
     },
+    "backend-edge.yml": {
+      "name": "Backend Edge (Rust)",
+      "owner": "Backend realtime (plan D listen-edge)",
+      "rationale": "2026-10-21 D1: build, clippy and test for the listen-edge Rust crate only on backend/edge/** changes; workflow change named by David 2026-10-20",
+      "triggers": {
+        "pull_request": {
+          "paths": [
+            "backend/edge/**",
+            ".github/workflows/backend-edge.yml"
+          ]
+        },
+        "push": {
+          "branches": [
+            "main"
+          ],
+          "paths": [
+            "backend/edge/**",
+            ".github/workflows/backend-edge.yml"
+          ]
+        }
+      }
+    },
     "backend-emulator-proofs.yml": {
       "name": "Backend Emulator Proofs",
       "owner": "CI maintainers",
-      "rationale": "Initial workflow inventory",
+      "rationale": "Run canonical-memory and task recovery proofs when their production owners, runner or direct emulator tests change; the two task-test paths close the unexecuted recovery/expiry guard gap.",
       "triggers": {
         "pull_request": {
           "paths": [
@@ -2627,6 +2667,8 @@
             "backend/models/product_memory.py",
             "backend/scripts/*_emulator_test.py",
             "backend/scripts/run-emulator-proofs.sh",
+            "backend/tests/integration/test_summary_task_promotion_emulator.py",
+            "backend/tests/integration/test_candidate_accept_expiry_emulator.py",
             "backend/pylock.toml",
             "firebase.json",
             "firestore.rules",
@@ -2646,6 +2688,8 @@
             "backend/models/product_memory.py",
             "backend/scripts/*_emulator_test.py",
             "backend/scripts/run-emulator-proofs.sh",
+            "backend/tests/integration/test_summary_task_promotion_emulator.py",
+            "backend/tests/integration/test_candidate_accept_expiry_emulator.py",
             "backend/pylock.toml",
             "firebase.json",
             "firestore.rules",

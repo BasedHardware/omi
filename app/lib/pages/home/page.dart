@@ -387,6 +387,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
         captureProvider.onAppResumed();
         // Pick up any batch recordings the native layer wrote while backgrounded/closed.
         Provider.of<LocalRecordingsProvider>(context, listen: false).refresh();
+        if (context.read<HomeProvider>().selectedIndex == HomeProvider.tasksTab) {
+          unawaited(context.read<ActionItemsProvider>().forceRefreshActionItems());
+        }
       }
       // Sync Apple Reminders on foreground resume
       if (mounted && PlatformService.isApple) {
@@ -831,6 +834,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                           HomeTabSwitcher(
                             trailing: onHome ? null : _buildTasksActions(context),
                             onTabTap: (index, isRepeat) {
+                              if (index == HomeProvider.tasksTab) {
+                                unawaited(context.read<ActionItemsProvider>().forceRefreshActionItems());
+                              }
                               if (isRepeat) {
                                 _scrollToTop(index);
                               } else {
@@ -937,7 +943,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
           mainAxisSize: MainAxisSize.min,
           children: [
             HeaderCircleButton(
-              semanticLabel: context.l10n.exportButton,
+              semanticLabel: context.l10n.taskIntegrations,
               icon: FaIcon(FontAwesomeIcons.arrowUpFromBracket, size: 16, color: OmiColors.textSecondary),
               onTap: () {
                 OmiHaptics.selection();

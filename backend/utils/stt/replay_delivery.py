@@ -14,6 +14,7 @@ from config.live_stt_replay import ReplayLimits, DEFAULT_REPLAY_LIMITS
 from utils.stt.live_metrics import REPLAY_SKIPPED
 from utils.stt.live_reason import normalize_live_stt_reason
 from utils.stt.send_queue import audio_send_deadline
+from utils.stt.provider_stream_end import begin_stream_close, record_stream_end
 from utils.stt.socket import release_live_stt_socket
 
 REPLAY_WALL_BUDGET = 25.0
@@ -331,7 +332,16 @@ async def abort_replay_socket(socket: Any, timeout: float = 2.0) -> None:
     """Close a rejected replay leg, including its adapter's tasks and transport.
     ``timeout`` is one total wall bound shared by the task wait and the
     transport close; a spent budget still cancels and attempts an immediate
-    abort rather than awaiting a dead provider."""
+    abort rather than awaiting a dead provider. The provider stream end is
+    recorded after the transport close, when its close frames exist."""
+    begin_stream_close(socket)
+    try:
+        await _abort_replay_socket(socket, timeout)
+    finally:
+        record_stream_end(socket)
+
+
+async def _abort_replay_socket(socket: Any, timeout: float) -> None:
     deadline = clock() + max(0.0, timeout)
     try:
         socket.finish()
@@ -826,6 +836,7 @@ class ReplayTailSocket:
         # Accepted tail remains owed after client departure. Drain it before
         # EOS; only cancellation/death/deadline cuts the tail, and finish meters it.
         self._draining = True
+        begin_stream_close(self.connection)  # The provider drain or abort below records it after closing.
         shutdown_deadline = getattr(getattr(self.host, 'receiver', None), 'shutdown_deadline', None)
         try:
             if self._task is not None and not self._task.done() and not self.is_connection_dead:

@@ -189,6 +189,8 @@ CLOUD_RUN_SYNC_EXPORTER_PREFIXES = [
     'prometheus.googleapis.com/omi_conversation_summary_vector_upserts_total/',
     'prometheus.googleapis.com/omi_firestore_documents_per_operation/',
     'prometheus.googleapis.com/omi_capture_finalization_',
+    'prometheus.googleapis.com/omi_held_content_',
+    'prometheus.googleapis.com/omi_stt_cap_recovery_reconciliation_total/',
     'prometheus.googleapis.com/omi_queue_oldest_ready_',
 ]
 

@@ -34,6 +34,13 @@ concurrency:
 
 permissions:
   contents: read
+  actions: read
+
+env:
+  # Abort a git HTTP transfer that stays under 1 KB/s for 60 s, so actions/checkout
+  # retries instead of hanging 7-10 min until the TCP reset (#22890).
+  GIT_HTTP_LOW_SPEED_LIMIT: "1000"
+  GIT_HTTP_LOW_SPEED_TIME: "60"
 
 jobs:
   dispatch:
@@ -45,6 +52,7 @@ jobs:
 
       - name: Start the Codemagic rollout advance
         env:
+          GH_TOKEN: ${{ github.token }}
           CODEMAGIC_API_TOKEN: ${{ secrets.CODEMAGIC_API_TOKEN }}
           CAPTURE_HEALTH_OVERRIDE: ${{ inputs.capture_health_override }}
           CODEMAGIC_APP_ID: ${{ vars.CODEMAGIC_APP_ID || '66c95e6ec76853c447b8bcbb' }}

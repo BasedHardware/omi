@@ -649,8 +649,9 @@ def _copy_audio_chunks_for_merge(
         # source conversation's original audio chunks (step 9) after this returns, so a swallowed
         # failure — while has_chunks may already be True from an earlier source — would let that
         # deletion destroy audio that was never copied anywhere. Raising instead aborts the merge
-        # into _handle_merge_failure, which runs before any source is deleted.
-        chunks = list_audio_chunks(uid, conv_id)
+        # into _handle_merge_failure, which runs before any source is deleted. For the same reason a
+        # failed raw-archive listing raises rather than returning only the legacy chunks.
+        chunks = list_audio_chunks(uid, conv_id, require_archive=True)
         for chunk in chunks:
             has_chunks = True
 

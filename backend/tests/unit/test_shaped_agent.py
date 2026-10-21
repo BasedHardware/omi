@@ -87,7 +87,8 @@ def test_notes_routing_calls_only_shaped_entrypoint(monkeypatch, mode, uid):
 
     monkeypatch.setattr(notes, '_get_shaped_conversation_notes', write)
     assert notes.get_conversation_notes(prefix, uid=uid, language_code='en') is result
-    assert calls == [(prefix, {'language_code': 'en'})]
+    # The owner uid reaches the writer so the agentic notes tools can be bound to that owner.
+    assert calls == [(prefix, {'uid': uid, 'language_code': 'en'})]
 
 
 @pytest.mark.parametrize('route', ['off', 'cohort', 'on'])
