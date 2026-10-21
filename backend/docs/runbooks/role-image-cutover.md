@@ -97,13 +97,30 @@ inputs are the default everywhere and deploy exactly what ships today.
 3. `messaging-maintenance-job`: switch the admitted image to the
    `backend-workers` digest (prod registry, `gcr.io/based-hardware`):
 
+   First admit the digest with the same tool the standalone deploys use — it
+   derives the repository from `runtime_images.json`, proves the image is
+   labelled with the release SHA you are admitting and carries the workers
+   `OMI_ROLE`, so a digest from another commit or a misbuilt image fails before
+   the job is touched (needs registry read access, e.g. `gcloud auth login` or
+   an ADC identity with `storage.objects.list` on the GCR bucket):
+
+   ```
+   python3 backend/scripts/admit_role_image.py \
+     --service messaging-maintenance \
+     --digest sha256:<64 hex> \
+     --project based-hardware \
+     --admitted-sha <the release SHA this digest was built from>
+   ```
+
+   Then reconcile the job:
+
    ```
    python3 backend/scripts/messaging_operations.py job --check --image gcr.io/based-hardware/backend-workers@sha256:<64 hex>
    python3 backend/scripts/messaging_operations.py job --validate --image gcr.io/based-hardware/backend-workers@sha256:<64 hex>
    python3 backend/scripts/messaging_operations.py job --apply --image gcr.io/based-hardware/backend-workers@sha256:<64 hex>
    ```
 
-   `desired_job` admits exactly `gcr.io/based-hardware/backend@sha256:…`
+   `desired_job` still admits exactly `gcr.io/based-hardware/backend@sha256:…`
    (today) or `gcr.io/based-hardware/backend-workers@sha256:…`; any other
    repository, registry or tag fails before gcloud authentication. The job's
    entrypoint `utils.messaging.maintenance` is one of the `backend-workers`

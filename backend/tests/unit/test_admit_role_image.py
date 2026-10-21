@@ -193,7 +193,13 @@ def test_pusher_workflow_admits_a_blank_by_default_role_digest_in_development_on
     inputs, steps = _workflow('gcp_backend_pusher.yml')
     assert inputs['pusher_role_image_digest']['default'] == ''
     assert inputs['pusher_role_image_digest']['required'] is False
-    assert 'pusher_role_image_digest' in steps['Validate Environment Input']['run']
+    validate_step = steps['Validate Environment Input']
+    # The free-text input reaches this step through env, never inline interpolation.
+    assert (
+        validate_step['env']['PUSHER_ROLE_IMAGE_DIGEST_INPUT'] == '${{ github.event.inputs.pusher_role_image_digest }}'
+    )
+    assert '${{ github.event.inputs.pusher_role_image_digest }}' not in validate_step['run']
+    assert '-n "$PUSHER_ROLE_IMAGE_DIGEST_INPUT"' in validate_step['run']
 
     admit_step = steps['Admit role-image digest opt-in']
     assert admit_step['if'] == (

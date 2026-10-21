@@ -447,11 +447,17 @@ def _verify_qualified_source_closure(
     qualified_sha: str,
     checked_out_sha: str,
     checkout_repository: Path,
+    image_repository: Any = "",
 ) -> list[str]:
     closure_script = ROOT / "backend/scripts/verify_pusher_source_closure.py"
+    command = [sys.executable, str(closure_script)]
+    # Plan B B3: a qualification naming the backend-pusher role image compares
+    # that image's closure (Dockerfile.roles pusher target), not the fat one.
+    if isinstance(image_repository, str) and image_repository:
+        command += ["--image-repository", image_repository]
     try:
         closure = subprocess.run(
-            [sys.executable, str(closure_script)],
+            command,
             capture_output=True,
             text=True,
             check=False,
@@ -709,7 +715,14 @@ def validate(
         and SHA_RE.fullmatch(expected_canary_source_sha)
         and source_sha != expected_canary_source_sha
     ):
-        errors.extend(_verify_qualified_source_closure(source_sha, expected_canary_source_sha, checkout_repository))
+        errors.extend(
+            _verify_qualified_source_closure(
+                source_sha,
+                expected_canary_source_sha,
+                checkout_repository,
+                image_repository=evidence.get("image_repository"),
+            )
+        )
     return errors
 
 

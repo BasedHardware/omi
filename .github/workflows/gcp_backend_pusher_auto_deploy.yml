@@ -17,6 +17,9 @@ on:
       - 'backend/pusher/**'
       - 'backend/omi_logging.py'
       - 'backend/charts/pusher/**'
+      # Plan B B3: a qualification may deploy the backend-pusher role image, so
+      # its image definition (Dockerfile.roles) also invalidates the bake.
+      - 'backend/Dockerfile.roles'
       - '.dockerignore'
       - 'backend/scripts/verify_pusher_source_closure.py'
       - 'backend/scripts/verify_pusher_live_deployment_gate.py'

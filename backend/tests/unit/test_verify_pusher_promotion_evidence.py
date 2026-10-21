@@ -417,6 +417,37 @@ def test_receipt_must_name_the_repository_the_evidence_qualified(
     assert not any("admitted development Pusher registry" in error for error in errors)
 
 
+def test_backend_pusher_qualification_closure_fires_on_role_dockerfile_drift(
+    verifier: SimpleNamespace,
+    tmp_path: Path,
+) -> None:
+    """Plan B B3 review: a moved production main that changes backend/Dockerfile.roles
+    must invalidate a backend-pusher qualification, not only the fat closure."""
+    repo, dev_sha, prod_sha = _promotion_repo(tmp_path, closure_change=False)
+    (repo / "backend" / "Dockerfile.roles").write_text("FROM base AS pusher\n", encoding="utf-8")
+    _git(repo, "add", ".")
+    dev_sha = _commit_all(repo, "qualified with role dockerfile")
+    (repo / "backend" / "Dockerfile.roles").write_text("FROM base AS pusher\nRUN true\n", encoding="utf-8")
+    prod_sha = _commit_all(repo, "moved main mutates the role dockerfile")
+
+    receipt = _deployment_receipt(dev_sha)
+    receipt["image"] = {"repository": ROLE_REPOSITORY, "digest": DIGEST}
+    evidence = _evidence(verifier, receipt)
+    evidence["image_repository"] = ROLE_REPOSITORY
+
+    errors = validate(
+        verifier,
+        evidence,
+        receipt,
+        _run(dev_sha),
+        prod_source_sha=prod_sha,
+        expected_canary_source_sha=prod_sha,
+        checkout_repository=repo,
+        expected_repository=(REPOSITORY, ROLE_REPOSITORY),
+    )
+    assert any("Pusher image source or chart changed" in error for error in errors)
+
+
 def test_accepts_writer_emitted_live_segment_window(
     verifier: SimpleNamespace,
     semantic_probe: SimpleNamespace,

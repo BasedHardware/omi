@@ -94,6 +94,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Validate Environment Input
+        # Plan B B3 review: the free-text role-image digest reaches this step
+        # through env, never inline ${{ }} interpolation (script injection).
+        env:
+          PUSHER_ROLE_IMAGE_DIGEST_INPUT: ${{ github.event.inputs.pusher_role_image_digest }}
         run: |
           if [[ "${{ github.event.inputs.environment }}" != "development" && "${{ github.event.inputs.environment }}" != "prod" ]]; then
             echo "Invalid environment: ${{ github.event.inputs.environment }}. Must be 'development' or 'prod'."
@@ -107,7 +111,7 @@ jobs:
             echo "LLM Gateway deploys are dev-only until the prod launch checklist is explicitly completed."
             exit 1
           fi
-          if [[ -n "${{ github.event.inputs.pusher_role_image_digest }}" && ( "${{ env.SERVICE }}" != "pusher" || "${{ github.event.inputs.environment }}" != "development" ) ]]; then
+          if [[ -n "$PUSHER_ROLE_IMAGE_DIGEST_INPUT" && ( "${{ env.SERVICE }}" != "pusher" || "${{ github.event.inputs.environment }}" != "development" ) ]]; then
             echo "pusher_role_image_digest applies only to a development Pusher deploy; production ships a dev-qualified digest via pusher_image_digest."
             exit 1
           fi
@@ -219,7 +223,11 @@ jobs:
           # utils,pusher}/, so a change to any of those after qualification would
           # silently ship a stale digest. Derive the paths from the Dockerfile
           # itself so this never drifts from what the image actually baked in.
-          mapfile -t PUSHER_SOURCE_PATHS < <(python3 backend/scripts/verify_pusher_source_closure.py)
+          # Plan B B3 review: a backend-pusher qualification compares the role
+          # image's closure instead — the pusher target of Dockerfile.roles plus
+          # the role Dockerfile and its venv lock — selected by the repository
+          # the evidence names.
+          mapfile -t PUSHER_SOURCE_PATHS < <(python3 backend/scripts/verify_pusher_source_closure.py --image-repository "$DEV_PUSHER_REPOSITORY")
           if ! git diff --quiet "$QUALIFIED_SOURCE_SHA" "$CHECKED_OUT_SHA" -- "${PUSHER_SOURCE_PATHS[@]}"; then
             echo "Current main changed Pusher image source or chart since the selected dev qualification; run a new dev bake." >&2
             git diff --stat "$QUALIFIED_SOURCE_SHA" "$CHECKED_OUT_SHA" -- "${PUSHER_SOURCE_PATHS[@]}" >&2 || true
