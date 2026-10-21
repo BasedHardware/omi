@@ -20,7 +20,7 @@ from utils.observability.demand_cohort import DEMAND_COHORTS, FAILURE_DETAIL, cu
 from utils.observability.routing_cohort import current_routing_cohort
 from utils.observability.reasons import FallbackReason, reason_values
 from utils.stt.failure_diagnostics import CONNECTION_LOSS_CAUSES
-from utils.stt.live_reason import LIVE_STT_FAILURE_REASONS, LIVE_STT_REASONS
+from utils.stt.live_reason import LIVE_STT_FAILURE_REASONS
 
 logger = logging.getLogger(__name__)
 
