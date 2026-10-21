@@ -36,6 +36,11 @@ STAGING_ENV = {
     'OMI_CUSTOMER_DATA_PROJECT': 'based-hardware-dev',
     'FIRESTORE_DATABASE_ID': 'staging',
     'FIREBASE_AUTH_PROJECT_ID': 'based-hardware-dev',
+    # Code default is the prod bucket; the staging fence requires an explicit staging value.
+    'BUCKET_PRIVATE_CLOUD_SYNC': 'based-hardware-dev-staging-sync',
+    'MCP_AUTHORIZATION_SERVER_URL': 'https://staging.invalid',  # worker serves no MCP; fence-required
+    'LIFECYCLE_EMAIL_FROM_ADDRESS': 'staging-no-send@based-hardware-dev.invalid',
+    'SHARE_EMAIL_FROM_ADDRESS': 'staging-no-send@based-hardware-dev.invalid',
 }
 _NAME = re.compile(r'[A-Z][A-Z0-9_]*')
 PROBE_MOUNT = '/asrctx-probe'

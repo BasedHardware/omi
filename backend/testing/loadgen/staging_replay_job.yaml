@@ -49,6 +49,10 @@ spec:
             - {name: OMI_DEPLOYMENT, value: staging}
             - {name: OMI_ENV_STAGE, value: prod}
             - {name: FIRESTORE_DATABASE_ID, value: staging}
+            - {name: BUCKET_PRIVATE_CLOUD_SYNC, value: based-hardware-dev-staging-sync}  # code default is the prod bucket; fence-required
+            - {name: MCP_AUTHORIZATION_SERVER_URL, value: 'https://staging.invalid'}  # replay serves no MCP; fence-required
+            - {name: LIFECYCLE_EMAIL_FROM_ADDRESS, value: staging-no-send@based-hardware-dev.invalid}
+            - {name: SHARE_EMAIL_FROM_ADDRESS, value: staging-no-send@based-hardware-dev.invalid}
             - {name: GOOGLE_CLOUD_PROJECT, value: based-hardware-dev}
             # Required by the staging fence (utils/staging_fence.py) before --seed-capture touches Firestore;
             # same values as deploy/runtime_env/staging.overlay.yaml env_all.
