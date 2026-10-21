@@ -81,7 +81,12 @@ class _Sync extends ChangeNotifier implements SyncProvider {
   @override
   bool get isSyncing => active;
   @override
-  List<Wal> get allWals => wals;
+  List<Wal> get allWals {
+    inventoryReads++;
+    return wals;
+  }
+
+  int inventoryReads = 0;
   final wals = <Wal>[];
   @override
   int get missingWalsInSeconds => 0;
@@ -209,6 +214,7 @@ void main() {
       };
       addTearDown(() => debugOnRebuildDirtyWidget = previous);
       await _screenshot(tester, 'device-syncing-$syncing');
+      sync.inventoryReads = 0;
       final uiMs = <double>[];
       for (var frame = 0; frame < 60; frame++) {
         // A repeatable stress rate; production metrics are 0.2 Hz, sync callbacks can burst.
@@ -222,6 +228,11 @@ void main() {
       debugPrint('DEVICE syncing=$syncing frames=60 providerTicks=10 pageBuilds=${builds['DeviceSettings'] ?? 0}');
       expect(builds['DeviceSettings'] ?? 0, 0,
           reason: 'Metrics/progress with unchanged visible values must stay local.');
+      expect(sync.inventoryReads, 10, reason: 'Stats and Right now must share one inventory pass per sync update.');
+      sync.inventoryReads = 0;
+      capture.tick();
+      await tester.pump();
+      expect(sync.inventoryReads, 0, reason: 'Capture metrics must not rescan recording history.');
       await tester.pumpWidget(const SizedBox.shrink());
     });
   }

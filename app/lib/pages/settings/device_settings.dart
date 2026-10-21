@@ -610,24 +610,11 @@ class _DeviceSettingsState extends State<DeviceSettings> {
             paused: connected != null && deviceStreaming && devicePaused,
           ),
           const SizedBox(height: OmiSpacing.xl),
-          if (connected != null) ...[
-            Builder(builder: (context) {
-              final onDeviceSeconds = context.select<SyncProvider?, int>(
-                (s) => s == null ? 0 : SyncPipelineAmounts.of(s.allWals).onDeviceSeconds,
-              );
-              return DeviceStatsRow(
-                batteryLevel: provider.batteryLevel,
-                isCharging: provider.isCharging,
-                heardTodaySeconds: _heardTodaySeconds(context),
-                onDeviceSeconds: onDeviceSeconds,
-              );
-            }),
-            gap,
-          ],
-          Builder(builder: (context) {
-            final rightNow = _rightNow(context);
-            return rightNow.hasContent ? Column(children: [rightNow, gap]) : const SizedBox.shrink();
-          }),
+          _liveSections(
+            connected: connected != null,
+            batteryLevel: provider.batteryLevel,
+            isCharging: provider.isCharging,
+          ),
           DeviceRecentlyGroup(load: provider.disconnectHistory),
           if (deviceStreaming && canPause) ...[
             DeviceControlsGroup(paused: devicePaused, onToggle: () => _togglePause(capture)),
@@ -668,16 +655,55 @@ class _DeviceSettingsState extends State<DeviceSettings> {
 }
 
 extension _DeviceLiveSections on _DeviceSettingsState {
-  /// Speech heard today, by the conversation list's own length rule.
-  int _heardTodaySeconds(BuildContext context) {
-    final today = DateUtils.dateOnly(DateTime.now());
-    return context.select<ConversationProvider?, int>((conversations) =>
-        (conversations?.groupedConversations[today] ?? const <ServerConversation>[])
-            .where((c) => !c.discarded)
-            .fold<int>(0, (sum, c) => sum + c.getDurationInSeconds()));
+  Widget _liveSections({required bool connected, required int batteryLevel, required bool isCharging}) {
+    const gap = SizedBox(height: OmiSpacing.xxl);
+    return Builder(builder: (context) {
+      // One WAL pass per sync notification, shared by Stats and Right now.
+      // Capture/episode updates subscribe below this builder and never rescan it.
+      final sync = context.select<SyncProvider?, ({bool syncing, int onDevice, int waiting, int moved})>((s) {
+        if (s == null) return (syncing: false, onDevice: 0, waiting: 0, moved: 0);
+        final amounts = SyncPipelineAmounts.of(s.allWals);
+        return (
+          syncing: s.isSyncing,
+          onDevice: amounts.onDeviceSeconds,
+          waiting: amounts.onDeviceSeconds + amounts.onPhoneSeconds + amounts.processingSeconds,
+          moved: amounts.onPhoneSeconds + amounts.processingSeconds,
+        );
+      });
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (connected) ...[
+            Builder(
+                builder: (context) => DeviceStatsRow(
+                      batteryLevel: batteryLevel,
+                      isCharging: isCharging,
+                      heardTodaySeconds: _heardTodaySeconds(context),
+                      onDeviceSeconds: sync.onDevice,
+                    )),
+            gap,
+          ],
+          Builder(builder: (context) {
+            final rightNow = _rightNow(context, syncing: sync.syncing, waiting: sync.waiting, moved: sync.moved);
+            return rightNow.hasContent ? Column(children: [rightNow, gap]) : const SizedBox.shrink();
+          }),
+        ],
+      );
+    });
   }
 
-  DeviceRightNowGroup _rightNow(BuildContext context) {
+  /// Speech heard today, by the conversation list's own length rule.
+  int _heardTodaySeconds(BuildContext context) {
+    return context.select<ConversationProvider?, int>((conversations) {
+      final today = DateUtils.dateOnly(DateTime.now());
+      return (conversations?.groupedConversations[today] ?? const <ServerConversation>[])
+          .where((c) => !c.discarded)
+          .fold<int>(0, (sum, c) => sum + c.getDurationInSeconds());
+    });
+  }
+
+  DeviceRightNowGroup _rightNow(BuildContext context,
+      {required bool syncing, required int waiting, required int moved}) {
     final capture = context.read<CaptureProvider?>();
     // Only the visible source and running length depend on capture, not its
     // transcript text, socket state, or BLE/network rate samples.
@@ -687,15 +713,6 @@ extension _DeviceLiveSections on _DeviceSettingsState {
     final deviceStreaming = source != null && source != 'phone';
     final episodes = _maybeProvider<EpisodeProvider>(context);
     final live = episodes != null && episodes.enabled && deviceStreaming ? episodes.live : null;
-    final (syncing, waiting, moved) = context.select<SyncProvider?, (bool, int, int)>((sync) {
-      if (sync == null) return (false, 0, 0);
-      final amounts = SyncPipelineAmounts.of(sync.allWals);
-      return (
-        sync.isSyncing,
-        amounts.onDeviceSeconds + amounts.onPhoneSeconds + amounts.processingSeconds,
-        amounts.onPhoneSeconds + amounts.processingSeconds,
-      );
-    });
     final l10n = context.l10n;
     return DeviceRightNowGroup(
       liveTitle: live == null ? null : (live.title.isEmpty ? l10n.episodeListeningNow : live.title),
