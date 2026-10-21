@@ -19,6 +19,7 @@ import 'package:omi/pages/episodes/episode_moments_section.dart';
 import 'package:omi/pages/episodes/live_episode_page.dart';
 import 'package:omi/pages/episodes/live_episode_row.dart';
 import 'package:omi/pages/settings/device/device_live_sections.dart';
+import 'package:omi/pages/settings/device/device_catching_up_card.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
@@ -472,10 +473,10 @@ void main() {
         liveTitle: 'Lunch plans with Maya',
         liveLength: '24m',
         onOpenLive: () => opened++,
-        catchingUp: (doneSeconds: 240, totalSeconds: 720),
+        catchingUp: const DeviceCatchUpSummary(status: 'Waiting to sync'),
       )));
       expect(find.text('Live episode · 24m'), findsOneWidget);
-      expect(find.text('4 of 12 min'), findsOneWidget);
+      expect(find.text('Waiting to sync'), findsOneWidget);
       await tester.tap(find.byKey(const Key('device_right_now_live')));
       expect(opened, 1);
     });
