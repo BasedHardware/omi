@@ -63,6 +63,7 @@ class RecordingTransferDrainResult {
 typedef RecordingTransferPass = Future<void> Function();
 typedef RecordingTransferDrain = Future<RecordingTransferDrainResult> Function();
 typedef RecordingTransferCooldownScheduler = void Function(Duration delay, void Function() callback);
+typedef RecordingTransferTimeoutScheduler = void Function(Duration delay, void Function() callback);
 typedef RecordingTransferKeepAlive = Future<void> Function();
 
 /// The single owner for recording recovery.
@@ -85,6 +86,7 @@ class RecordingTransferCoordinator {
     bool initiallyConnected = true,
     DateTime Function()? clock,
     RecordingTransferCooldownScheduler? scheduleCooldown,
+    RecordingTransferTimeoutScheduler? scheduleTimeout,
     RecordingTransferKeepAlive? onTransferStarted,
     RecordingTransferKeepAlive? onTransferFinished,
     RecordingTransferPass? onConnectivityRestored,
@@ -102,6 +104,7 @@ class RecordingTransferCoordinator {
         _autoUploadEnabled = autoUploadEnabled,
         _clock = clock ?? DateTime.now,
         _scheduleCooldown = scheduleCooldown,
+        _scheduleTimeout = scheduleTimeout,
         _onTransferStarted = onTransferStarted,
         _onTransferFinished = onTransferFinished,
         _onConnectivityRestored = onConnectivityRestored,
@@ -160,6 +163,7 @@ class RecordingTransferCoordinator {
   bool Function() _autoUploadEnabled;
   final DateTime Function() _clock;
   RecordingTransferCooldownScheduler? _scheduleCooldown;
+  RecordingTransferTimeoutScheduler? _scheduleTimeout;
   RecordingTransferKeepAlive? _onTransferStarted;
   RecordingTransferKeepAlive? _onTransferFinished;
   RecordingTransferPass? _onConnectivityRestored;
@@ -408,7 +412,7 @@ class RecordingTransferCoordinator {
     // fence or `_inFlight` (which every later wake joins) past it.
     final generation = ++_passGeneration;
     Future<void>? running;
-    Future<void> body() => (running = _runPassBody(trigger, generation)).timeout(limit);
+    Future<void> body() => _limitedPass(limit, running = _runPassBody(trigger, generation));
     try {
       if (fenced) {
         await SyncWakeScope.run(body);
@@ -430,6 +434,18 @@ class RecordingTransferCoordinator {
       }
       _scheduleRetry('pass exceeded its time limit');
     }
+  }
+
+  /// Races [work] against [limit]. Tests inject [_scheduleTimeout] so the limit
+  /// fires at a chosen point instead of on the host's wall clock.
+  Future<void> _limitedPass(Duration limit, Future<void> work) {
+    final scheduler = _scheduleTimeout;
+    if (scheduler == null) return work.timeout(limit);
+    final expired = Completer<void>();
+    scheduler(limit, () {
+      if (!expired.isCompleted) expired.completeError(TimeoutException('pass time limit', limit));
+    });
+    return Future.any<void>([work, expired.future]);
   }
 
   Future<void> _holdAbandonedPass(Future<void> abandoned) async {

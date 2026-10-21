@@ -11,7 +11,7 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/l10n/app_localizations.dart';
-import 'package:omi/pages/conversation_capturing/page.dart';
+import 'package:omi/pages/episodes/live_episode_page.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/device_provider.dart';
@@ -159,16 +159,16 @@ Future<CaptureProvider> _pumpHomeWithCapturingPage(
   unawaited(
     Navigator.of(
       tester.element(find.text('home')),
-    ).push(omiPageRoute(builder: (_) => const ConversationCapturingPage())),
+    ).push(omiPageRoute(builder: (_) => const LiveEpisodePage())),
   );
   await tester.pumpAndSettle();
-  expect(find.byType(ConversationCapturingPage), findsOneWidget);
+  expect(find.byType(LiveEpisodePage), findsOneWidget);
   return capture;
 }
 
 /// Taps Finish, as the page's button does; the returned future ends when the page is done with it.
 Future<void> _finishFromPage(WidgetTester tester, CaptureProvider capture) {
-  final dynamic state = tester.state(find.byType(ConversationCapturingPage));
+  final dynamic state = tester.state(find.byType(LiveEpisodePage));
   return state.debugStopConversation(capture) as Future<void>;
 }
 
@@ -190,10 +190,10 @@ void main() {
     await tester.pump();
 
     // The swipe back: the route is popped at once, then animates out for about half a second.
-    Navigator.of(tester.element(find.byType(ConversationCapturingPage))).pop();
+    Navigator.of(tester.element(find.byType(LiveEpisodePage))).pop();
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
-    expect(find.byType(ConversationCapturingPage), findsOneWidget, reason: 'still mounted, mid-transition');
+    expect(find.byType(LiveEpisodePage), findsOneWidget, reason: 'still mounted, mid-transition');
 
     finish.complete();
     await finishing;
@@ -201,7 +201,7 @@ void main() {
 
     // Home is still the navigator's route, and the finish still moved it to the conversations tab.
     expect(find.text('home'), findsOneWidget);
-    expect(find.byType(ConversationCapturingPage), findsNothing);
+    expect(find.byType(LiveEpisodePage), findsNothing);
     expect(home.selectedIndex, HomeProvider.homeTab);
   }, variant: ios);
 
@@ -213,7 +213,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('home'), findsOneWidget);
-    expect(find.byType(ConversationCapturingPage), findsNothing);
+    expect(find.byType(LiveEpisodePage), findsNothing);
     expect(home.selectedIndex, HomeProvider.homeTab);
   }, variant: ios);
 
@@ -225,7 +225,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('home'), findsOneWidget);
-    expect(find.byType(ConversationCapturingPage), findsNothing);
+    expect(find.byType(LiveEpisodePage), findsNothing);
     expect(home.selectedIndex, HomeProvider.tasksTab);
   }, variant: ios);
 }

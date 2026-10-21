@@ -14160,4 +14160,105 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get activityAttentionLinkStalledSubtitle => 'Omi 仍在录音';
+
+  @override
+  String get episodeNow => '现在';
+
+  @override
+  String episodeLiveFor(String duration) {
+    return '直播中 · $duration';
+  }
+
+  @override
+  String episodeMomentsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 个片段',
+      one: '1 个片段',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get episodeMoments => '片段';
+
+  @override
+  String get episodeSoFar => '目前为止';
+
+  @override
+  String get episodeUpdatedJustNow => '刚刚更新 · 结束后生成完整笔记';
+
+  @override
+  String episodeUpdatedMinutesAgo(int minutes) {
+    return '$minutes 分钟前更新 · 结束后生成完整笔记';
+  }
+
+  @override
+  String get episodeNotesSoon => '交谈几分钟后会显示笔记。';
+
+  @override
+  String get episodeOpenAll => '全部打开';
+
+  @override
+  String get episodeWrapUpNow => '立即结束';
+
+  @override
+  String get episodeWrapsUpHint => '你转去做别的事时，Omi 会自动结束';
+
+  @override
+  String episodeTaskCaptured(String text) {
+    return '发现任务：$text';
+  }
+
+  @override
+  String episodeReminderCaptured(String text) {
+    return '发现提醒：$text';
+  }
+
+  @override
+  String episodeTaskSaved(String text) {
+    return '任务已保存：$text';
+  }
+
+  @override
+  String episodeAddingFromOmi(String duration) {
+    return '正在从 Omi 添加 $duration';
+  }
+
+  @override
+  String get episodeListeningNow => '正在聆听';
+
+  @override
+  String get deviceHeardToday => '今日收听';
+
+  @override
+  String get deviceToSync => '待同步';
+
+  @override
+  String get deviceRightNow => '当前';
+
+  @override
+  String deviceLiveEpisode(String duration) {
+    return '直播片段 · $duration';
+  }
+
+  @override
+  String get deviceCatchingUp => '正在补齐';
+
+  @override
+  String deviceCatchingUpProgress(int done, int total) {
+    return '$done/$total 分钟';
+  }
+
+  @override
+  String get deviceRecently => '最近';
+
+  @override
+  String deviceDisconnectedFor(String duration) {
+    return '断开连接 $duration';
+  }
+
+  @override
+  String get deviceControls => '控制';
 }

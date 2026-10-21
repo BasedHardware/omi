@@ -36,7 +36,6 @@ final class MeetingMemoryBriefRenderingTests: XCTestCase {
       .frame(width: size.width, height: size.height))
     host.appearance = InkGlass.appearance
     host.frame = NSRect(origin: .zero, size: size)
-    host.layoutSubtreeIfNeeded()
 
     let bitmap = try XCTUnwrap(host.bitmapImageRepForCachingDisplay(in: host.bounds))
     host.cacheDisplay(in: host.bounds, to: bitmap)
@@ -47,21 +46,36 @@ final class MeetingMemoryBriefRenderingTests: XCTestCase {
     XCTAssertGreaterThan(background.redComponent, 0.9)
     XCTAssertGreaterThan(background.greenComponent, 0.9)
     XCTAssertGreaterThan(background.blueComponent, 0.9)
-    var inkSamples = 0
-    for x in stride(from: 40, to: bitmap.pixelsWide - 40, by: 8) {
-      for y in stride(from: 40, to: bitmap.pixelsHigh - 40, by: 8) {
-        if let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB),
-          (color.redComponent + color.greenComponent + color.blueComponent) / 3 < 0.3
-        {
-          inkSamples += 1
-        }
-      }
-    }
-    XCTAssertGreaterThan(inkSamples, 25, "The brief card should contain visible text, not an empty backdrop")
+    let inkPixels = inkPixelCount(in: bitmap)
+    let inset = 40 * bitmap.pixelsWide / 680
+    let regionPixels = (bitmap.pixelsWide - 2 * inset) * (bitmap.pixelsHigh - 2 * inset)
+    // Text covers a small, roughly scale-invariant fraction of the card; 0.05% is far below
+    // the ~0.2% measured at 2x and clears the same text rendered at 1x.
+    XCTAssertGreaterThan(
+      inkPixels * 2000, regionPixels,
+      "The brief card should contain visible text, not an empty backdrop (ink \(inkPixels) of \(regionPixels) px)")
 
     if let path = ProcessInfo.processInfo.environment["OMI_MEETING_BRIEF_SNAPSHOT_PATH"] {
       let png = try XCTUnwrap(bitmap.representation(using: .png, properties: [:]))
       try png.write(to: URL(fileURLWithPath: path), options: .atomic)
     }
+  }
+
+  /// Counts every dark device pixel inside the card's inset region. Sampling each pixel
+  /// rather than a fixed grid makes the count independent of how thin glyph strokes
+  /// align with the sample points, and of the backing scale factor.
+  private func inkPixelCount(in bitmap: NSBitmapImageRep) -> Int {
+    let inset = 40 * bitmap.pixelsWide / 680
+    var inkPixels = 0
+    for x in inset..<(bitmap.pixelsWide - inset) {
+      for y in inset..<(bitmap.pixelsHigh - inset) {
+        if let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB),
+          (color.redComponent + color.greenComponent + color.blueComponent) / 3 < 0.3
+        {
+          inkPixels += 1
+        }
+      }
+    }
+    return inkPixels
   }
 }

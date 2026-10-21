@@ -31,7 +31,7 @@ import 'package:omi/services/siri_integration.dart';
 import 'package:omi/providers/message_provider.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/home_provider.dart';
-import 'package:omi/pages/conversation_capturing/page.dart';
+import 'package:omi/pages/episodes/live_episode_page.dart';
 import 'package:omi/ui/feedback/omi_feedback.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
@@ -174,7 +174,7 @@ Future<bool> openHomeDeepLink(
       context.read<HomeProvider>().setIndex(HomeProvider.homeTab);
       // A card for a recording that has since ended leaves Home on screen.
       if (capture.activeRecordingId == null || capture.activeRecordingId != link.query['recording']) return false;
-      unawaited(routeToPage(context, const ConversationCapturingPage()));
+      unawaited(routeToPage(context, const LiveEpisodePage(initialTab: LiveEpisodeTab.transcript)));
     case 'conversations':
       context.read<HomeProvider>().setIndex(HomeProvider.homeTab);
     case 'action-items':

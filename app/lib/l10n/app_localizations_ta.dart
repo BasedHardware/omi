@@ -14482,4 +14482,105 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get activityAttentionLinkStalledSubtitle => 'Omi-இல் பதிவு தொடர்கிறது';
+
+  @override
+  String get episodeNow => 'இப்போது';
+
+  @override
+  String episodeLiveFor(String duration) {
+    return 'நேரலை · $duration';
+  }
+
+  @override
+  String episodeMomentsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count தருணங்கள்',
+      one: '1 தருணம்',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get episodeMoments => 'தருணங்கள்';
+
+  @override
+  String get episodeSoFar => 'இதுவரை';
+
+  @override
+  String get episodeUpdatedJustNow => 'இப்போது புதுப்பிக்கப்பட்டது · முடிவில் முழு குறிப்புகள்';
+
+  @override
+  String episodeUpdatedMinutesAgo(int minutes) {
+    return '$minutes நிமி. முன் புதுப்பிக்கப்பட்டது · முடிவில் முழு குறிப்புகள்';
+  }
+
+  @override
+  String get episodeNotesSoon => 'பேச்சின் முதல் சில நிமிடங்களுக்குப் பிறகு குறிப்புகள் தோன்றும்.';
+
+  @override
+  String get episodeOpenAll => 'அனைத்தையும் திற';
+
+  @override
+  String get episodeWrapUpNow => 'இப்போதே முடி';
+
+  @override
+  String get episodeWrapsUpHint => 'நீங்கள் அடுத்ததற்குச் செல்லும்போது Omi இதை முடிக்கும்';
+
+  @override
+  String episodeTaskCaptured(String text) {
+    return 'பணி கண்டறியப்பட்டது: $text';
+  }
+
+  @override
+  String episodeReminderCaptured(String text) {
+    return 'நினைவூட்டல் கண்டறியப்பட்டது: $text';
+  }
+
+  @override
+  String episodeTaskSaved(String text) {
+    return 'பணி சேமிக்கப்பட்டது: $text';
+  }
+
+  @override
+  String episodeAddingFromOmi(String duration) {
+    return 'உங்கள் Omi-இலிருந்து $duration சேர்க்கப்படுகிறது';
+  }
+
+  @override
+  String get episodeListeningNow => 'இப்போது கேட்கிறது';
+
+  @override
+  String get deviceHeardToday => 'இன்று கேட்டது';
+
+  @override
+  String get deviceToSync => 'ஒத்திசைக்க வேண்டியது';
+
+  @override
+  String get deviceRightNow => 'இந்த நேரத்தில்';
+
+  @override
+  String deviceLiveEpisode(String duration) {
+    return 'நேரலை அத்தியாயம் · $duration';
+  }
+
+  @override
+  String get deviceCatchingUp => 'பின்தங்கியதைச் சேர்க்கிறது';
+
+  @override
+  String deviceCatchingUpProgress(int done, int total) {
+    return '$done/$total நிமி.';
+  }
+
+  @override
+  String get deviceRecently => 'சமீபத்தில்';
+
+  @override
+  String deviceDisconnectedFor(String duration) {
+    return '$duration இணைப்பு துண்டிக்கப்பட்டது';
+  }
+
+  @override
+  String get deviceControls => 'கட்டுப்பாடுகள்';
 }

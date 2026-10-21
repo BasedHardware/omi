@@ -79,6 +79,7 @@ import database.conversations as conversations_db
 from utils.conversations.render import conversation_to_dict, redact_conversation_for_integration, serialize_datetimes
 from utils.log_sanitizer import sanitize
 from utils.mentor_notifications import process_mentor_notification
+from utils.episodes.live import on_realtime_segments
 from utils.journey_metrics_contract import ClientKind, bounded_client_kind, resolve_client_kind
 from utils.observability.fallback import record_fallback
 from utils.observability.journeys import ClientJourneyAttempt
@@ -961,6 +962,10 @@ async def _async_trigger_realtime_integrations(
     # Reactivates automatically when the user upgrades or activates BYOK.
     if await run_blocking(db_executor, is_trial_paywalled, uid, source):
         return {}
+
+    # Live episode moments (utils/episodes/live.py): buffers in process and
+    # schedules its own fail-open background update; never blocks this fan-out.
+    await on_realtime_segments(uid, segments, conversation_id, source)
 
     # The mentor lane is v2-only: the legacy mentor pipeline was deleted once
     # v2 reached 100%. Shared buffering/admission still gates it, and any

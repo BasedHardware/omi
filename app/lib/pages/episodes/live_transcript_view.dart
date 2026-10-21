@@ -1,163 +1,79 @@
-import 'package:omi/utils/other/temp.dart';
-import 'package:omi/ui/components/local_stt_recovery_notice.dart';
-import 'package:omi/pages/settings/transcription_settings_page.dart';
-import 'dart:async';
-
-import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import 'package:provider/provider.dart';
-import 'package:omi/widgets/speaker_label.dart';
 
+import 'package:omi/backend/http/api/speaker_labels.dart';
+import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/backend/schema/episode.dart';
 import 'package:omi/backend/schema/message_event.dart';
 import 'package:omi/backend/schema/person.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
-import 'package:omi/pages/held_audio/held_audio_views.dart';
 import 'package:omi/pages/capture/widgets/widgets.dart';
+import 'package:omi/pages/conversation_capturing/capture_recovery_status.dart';
+import 'package:omi/pages/conversation_capturing/widgets/speaker_suggestion_chip.dart';
 import 'package:omi/pages/conversation_detail/widgets/name_speaker_sheet.dart';
+import 'package:omi/pages/held_audio/held_audio_views.dart';
+import 'package:omi/pages/settings/transcription_settings_page.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/device_provider.dart';
-import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/people_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
-import 'package:omi/utils/enums.dart';
-import 'package:omi/utils/constants.dart';
-import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/services/wals/wal.dart';
+import 'package:omi/ui/components/local_stt_recovery_notice.dart';
+import 'package:omi/ui/ui.dart';
+import 'package:omi/utils/constants.dart';
+import 'package:omi/utils/enums.dart';
+import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/conversation_photo_image.dart';
 import 'package:omi/widgets/media_viewer_page.dart';
-import 'package:omi/widgets/transcript.dart';
-import 'package:omi/services/sockets/listen_client_state.dart';
-import 'package:omi/ui/ui.dart';
-import 'package:omi/pages/conversations/widgets/live_capture_card.dart';
-import 'package:omi/widgets/capture_sources.dart';
 import 'package:omi/widgets/photos_grid.dart';
-
-import 'package:omi/pages/conversations/capture_state_labels.dart';
-
-import 'capture_recovery_status.dart';
-import 'package:omi/backend/http/api/speaker_labels.dart';
-import 'package:omi/backend/http/api_result.dart';
+import 'package:omi/widgets/speaker_label.dart';
 import 'package:omi/widgets/speaker_label_badge.dart';
-import 'widgets/speaker_suggestion_chip.dart';
+import 'package:omi/widgets/transcript.dart';
 
-/// Switch the home IndexedStack to Home (the conversation list) *before* popping the capturing
-/// route so the user lands there with no flash of the previous page.
-void switchHomeToConversationsTab(BuildContext context) {
-  context.read<HomeProvider>().setIndex(HomeProvider.homeTab);
-}
+/// The live transcript: the capture's recovery and upload banners, then every line as it arrives,
+/// photos in the timeline, speaker naming and Omi's speaker suggestions.
+///
+/// With an [episode] (the episodes overlay is on), it also draws the episode's moment dividers
+/// with their short headings and, under the line they were heard in, the tasks and reminders Omi
+/// captured, each with Undo ([onDismissItem]). Without one it is exactly today's live transcript.
+class LiveTranscriptView extends StatefulWidget {
+  const LiveTranscriptView({
+    super.key,
+    this.topConversationId,
+    this.rejectSpeaker,
+    this.episode,
+    this.onDismissItem,
+    this.jumpToLatestBottom = 84,
+  });
 
-class ConversationCapturingPage extends StatefulWidget {
   final String? topConversationId;
-
   final SpeakerRejectionCall? rejectSpeaker;
+  final Episode? episode;
+  final ValueChanged<EpisodeItem>? onDismissItem;
 
-  const ConversationCapturingPage({super.key, this.topConversationId, this.rejectSpeaker});
+  /// Distance of the jump-to-latest button from the bottom safe area.
+  final double jumpToLatestBottom;
 
   @override
-  State<ConversationCapturingPage> createState() => _ConversationCapturingPageState();
+  State<LiveTranscriptView> createState() => _LiveTranscriptViewState();
 }
 
-class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
+class _LiveTranscriptViewState extends State<LiveTranscriptView> {
   final TranscriptScrollStateStore _transcriptScrollStateStore = TranscriptScrollStateStore();
-
-  final scaffoldKey = GlobalKey<ScaffoldState>();
-  bool _mutePending = false;
   bool _rejectingSuggestion = false;
 
-  @override
-  void initState() {
-    super.initState();
-    ListenClientState.instance.capturePageOpened();
-  }
-
-  TranscriptScrollState _scrollStateFor(String sessionId) {
-    return _transcriptScrollStateStore.forSession(sessionId);
-  }
-
-  Future<void> _toggleMute(CaptureProvider provider) async {
-    if (_mutePending) return;
-    setState(() => _mutePending = true);
-    try {
-      HapticFeedback.mediumImpact();
-      final phone = provider.liveCaptureSource == 'phone';
-      if (provider.isPaused) {
-        await provider.resumeCapture();
-        if (phone && !provider.isPaused) PlatformManager.instance.analytics.phoneMicRecordingStarted();
-      } else {
-        await provider.pauseCapture();
-        if (phone) PlatformManager.instance.analytics.phoneMicRecordingStopped();
-      }
-    } catch (_) {
-      if (mounted) OmiFeedback.error(context, context.l10n.somethingWentWrong);
-    } finally {
-      if (mounted) setState(() => _mutePending = false);
-    }
-  }
-
-  @override
-  void dispose() {
-    ListenClientState.instance.capturePageClosed();
-    super.dispose();
-  }
-
-  @visibleForTesting
-  Future<void> debugStopConversation(CaptureProvider provider) => _stopConversation(provider);
-
-  /// Finish: the one stop. No confirmation: Finish is explicit, and it processes the conversation
-  /// (a phone recording stops first; a pendant it paused resumes afterwards).
-  Future<void> _stopConversation(CaptureProvider provider) async {
-    final hadContent = provider.segments.isNotEmpty || provider.photos.isNotEmpty;
-    if (hadContent) {
-      await provider.finishCapture();
-      if (!mounted) return;
-      switchHomeToConversationsTab(context);
-    } else {
-      final source = provider.liveCaptureSource;
-      if (source == null || source == ConversationSource.phone.name) {
-        await provider.stopStreamRecording();
-      } else if (LiveCaptureCard.canPause(provider.recordingDevice, source: source) && !provider.isPaused) {
-        await provider.pauseCapture();
-      }
-    }
-    if (!mounted) return;
-    // A swipe back during the finish has already popped this route; it only stays mounted while it
-    // animates out, and a pop then would take Home with it and leave the navigator empty.
-    final route = ModalRoute.of(context);
-    if (route != null && route.isCurrent) Navigator.of(context).pop();
-  }
-
-  /// The live page's state, resolved exactly as the Home capture card resolves it
-  /// (`captureInterruption` + `liveCaptureDisplayState`): the OS holding the mic, a mute or a call
-  /// is Paused, capture recovering on its own (a dropped socket, a mic stall) is Reconnecting, a
-  /// terminal transcription failure or offline buffering is named as such, otherwise Listening.
-  CaptureDisplayState _displayState(CaptureProvider provider, {required bool capturingPhotos}) {
-    if (provider.localSttFailure != null) return CaptureDisplayState.recording;
-    final interruption = captureInterruption(
-      interrupted: provider.recordingState == RecordingState.interrupted,
-      readerPaused: provider.isPaused,
-      osHoldsMic: provider.isCallActive,
-    );
-    return liveCaptureDisplayState(
-      audioInterrupted: interruption == CaptureInterruption.micTaken,
-      reconnecting: interruption == CaptureInterruption.recovering,
-      paused: provider.isPaused || provider.isCallActive,
-      transcriptionUnavailable: provider.terminalTranscriptionFailure != null || provider.localSttFailure != null,
-      bufferingFor: provider.customSttBufferingDuration,
-      capturingPhotos: capturingPhotos,
-    );
-  }
+  TranscriptScrollState _scrollStateFor(String sessionId) => _transcriptScrollStateStore.forSession(sessionId);
 
   @override
   Widget build(BuildContext context) {
     return Consumer2<CaptureProvider, DeviceProvider>(
       builder: (context, provider, deviceProvider, child) {
-        final effectivelyMuted = provider.isPaused || provider.isCallActive;
         final connectivity = context.watch<ConnectivityProvider>();
         final usage = context.watch<UsageProvider>();
         final photoChannelActive = _photoChannelActive(deviceProvider.connectedDevice);
@@ -165,106 +81,65 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
         final transcriptSessionId =
             provider.activeCaptureSessionId ?? widget.topConversationId ?? 'pending-live-capture';
         final transcriptScrollState = _scrollStateFor(transcriptSessionId);
-        return Scaffold(
-          key: scaffoldKey,
-          backgroundColor: OmiColors.surface0,
-          appBar: CaptureWedgeAppBar(
-            showStatus: effectivelyMuted || provider.pendantCaptureVerified,
-            state: _displayState(provider, capturingPhotos: provider.photos.isNotEmpty),
-            bufferingFor: provider.customSttBufferingDuration,
-            sourceLabel: switch (provider.liveCaptureSource) {
-              null => null,
-              'phone' => context.l10n.captureSourcePhoneMic,
-              final source => CaptureSources.label(context, source),
-            },
-          ),
-          body: Column(
-            children: [
-              const CaptureRecoveryStatus(),
-              const HeldAudioLiveBanner(),
-              if (provider.localSttFailure case final failure?)
-                LocalSttRecoveryNotice(
-                    failure: failure,
-                    onRetry: provider.retryLocalTranscription,
-                    onSetup: () => routeToPage(context, const TranscriptionSettingsPage())),
-              _buildUnsyncedWalIndicator(provider),
-              Expanded(
-                child: provider.segments.isEmpty && provider.photos.isEmpty
-                    ? Center(
-                        child: Padding(
-                          padding: const EdgeInsets.fromLTRB(OmiSpacing.xxl, 50, OmiSpacing.xxl, 0),
-                          child: Text(
-                            textAlign: TextAlign.center,
-                            style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
-                            _liveCaptureEmptyStateText(
-                              provider,
-                              connectivity: connectivity,
-                              usage: usage,
-                              photoChannelActive: photoChannelActive,
-                              transcriptionInterrupted: transcriptionInterrupted,
-                            ),
-                          ),
-                        ),
-                      )
-                    : provider.photos.isNotEmpty
-                        ? _buildChronologicalTimeline(
+        final decorated = widget.episode != null;
+        return Column(
+          children: [
+            const CaptureRecoveryStatus(),
+            const HeldAudioLiveBanner(),
+            if (provider.localSttFailure case final failure?)
+              LocalSttRecoveryNotice(
+                  failure: failure,
+                  onRetry: provider.retryLocalTranscription,
+                  onSetup: () => routeToPage(context, const TranscriptionSettingsPage())),
+            _buildUnsyncedWalIndicator(provider),
+            Expanded(
+              child: provider.segments.isEmpty && provider.photos.isEmpty
+                  ? Center(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(OmiSpacing.xxl, 50, OmiSpacing.xxl, 0),
+                        child: Text(
+                          textAlign: TextAlign.center,
+                          style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
+                          _liveCaptureEmptyStateText(
                             provider,
-                            transcriptSessionId,
-                            transcriptScrollState,
-                            widget.topConversationId ?? provider.topConversationId,
-                          )
-                        : getTranscriptWidget(
-                            false,
-                            provider.segments,
-                            provider.photos,
-                            deviceProvider.connectedDevice,
-                            bottomMargin: 0,
-                            taggingSegmentIds: provider.taggingSegmentIds,
-                            transcriptKey: ValueKey('live-transcript-$transcriptSessionId'),
-                            followLatest: true,
-                            scrollState: transcriptScrollState,
-                            jumpToLatestButtonBottom: MediaQuery.paddingOf(context).bottom + 84,
-                            contentVersion: provider.segmentsPhotosVersion,
-                            editSegment: (segmentId, speakerId) => _nameSpeaker(segmentId, speakerId, provider),
+                            connectivity: connectivity,
+                            usage: usage,
+                            photoChannelActive: photoChannelActive,
+                            transcriptionInterrupted: transcriptionInterrupted,
                           ),
-              ),
-            ],
-          ),
-          floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
-          // Pause/Resume (a pause glyph: mics belong to Ask Omi) and Finish, the one stop.
-          floatingActionButton:
-              (provider.liveCaptureSource != null || provider.segments.isNotEmpty || provider.photos.isNotEmpty)
-                  ? Row(
-                      mainAxisSize: MainAxisSize.min,
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        if (provider.liveCaptureSource != null &&
-                            LiveCaptureCard.canPause(provider.recordingDevice, source: provider.liveCaptureSource)) ...[
-                          OmiIconButton.filled(
-                            key: const Key('capture_pause_button'),
-                            icon: Icon(effectivelyMuted ? Icons.play_arrow_rounded : Icons.pause_rounded, size: 26),
-                            label: effectivelyMuted ? context.l10n.resume : context.l10n.pause,
-                            diameter: 52,
-                            fillColor: OmiColors.surface3,
-                            onPressed: _mutePending || provider.isCallActive ? null : () => _toggleMute(provider),
-                          ),
-                          const SizedBox(width: OmiSpacing.sm),
-                        ],
-                        OmiButton(
-                          key: const Key('process_now_button'),
-                          label: context.l10n.finish,
-                          leading: const Icon(Icons.check_rounded),
-                          onPressed: () => _stopConversation(provider),
                         ),
-                      ],
+                      ),
                     )
-                  : null,
+                  : provider.photos.isNotEmpty || decorated
+                      ? _buildChronologicalTimeline(
+                          provider,
+                          transcriptSessionId,
+                          transcriptScrollState,
+                          widget.topConversationId ?? provider.topConversationId,
+                        )
+                      : getTranscriptWidget(
+                          false,
+                          provider.segments,
+                          provider.photos,
+                          deviceProvider.connectedDevice,
+                          bottomMargin: 0,
+                          taggingSegmentIds: provider.taggingSegmentIds,
+                          transcriptKey: ValueKey('live-transcript-$transcriptSessionId'),
+                          followLatest: true,
+                          scrollState: transcriptScrollState,
+                          jumpToLatestButtonBottom: MediaQuery.paddingOf(context).bottom + widget.jumpToLatestBottom,
+                          contentVersion: provider.segmentsPhotosVersion,
+                          editSegment: (segmentId, speakerId) => _nameSpeaker(segmentId, speakerId, provider),
+                        ),
+            ),
+          ],
         );
       },
     );
   }
 
-  /// Builds a chronological timeline interleaving photo groups and transcript segments.
+  /// Builds a chronological timeline interleaving photo groups and transcript segments, with the
+  /// episode's moment dividers and captured items when there is an episode.
   Widget _buildChronologicalTimeline(
     CaptureProvider provider,
     String sessionId,
@@ -275,6 +150,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
     final segments = provider.segments;
     final people = context.watch<PeopleProvider?>()?.people ?? SharedPreferencesUtil().cachedPeople;
     final names = SpeakerNames.forSegments(segments, people: people, l10n: context.l10n);
+    final decorations = LiveTranscriptDecorations.of(widget.episode, conversationId, segments);
 
     // Group consecutive photos taken within 30 seconds of each other
     final List<List<ConversationPhoto>> photoGroups = [];
@@ -309,12 +185,26 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
       bottomMargin: 0,
       followLatest: true,
       scrollState: scrollState,
-      jumpToLatestButtonBottom: MediaQuery.paddingOf(context).bottom + 84,
-      contentVersion: provider.segmentsPhotosVersion,
-      layoutIdentity: 'photo-timeline',
+      jumpToLatestButtonBottom: MediaQuery.paddingOf(context).bottom + widget.jumpToLatestBottom,
+      contentVersion: provider.segmentsPhotosVersion ^ decorations.signature,
+      layoutIdentity: widget.episode == null ? 'photo-timeline' : 'episode-timeline',
       leadingItems: leadingItems,
       leadingItemIds: photoGroups.map((group) => group.first.id).toList(),
-      segmentBuilder: (context, segment, index) => _buildTranscriptTimelineItem(segment, provider, people, names),
+      segmentBuilder: (context, segment, index) {
+        final line = _buildTranscriptTimelineItem(segment, provider, people, names);
+        final divider = decorations.dividerBefore[segment.id];
+        final items = decorations.itemsAfter[segment.id] ?? const <EpisodeItem>[];
+        if (divider == null && items.isEmpty) return line;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (divider != null) EpisodeMomentDivider(moment: divider),
+            line,
+            for (final item in items) EpisodeCapturedItemCard(item: item, onUndo: widget.onDismissItem),
+          ],
+        );
+      },
     );
   }
 
@@ -524,7 +414,9 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
         );
         if (!mounted ||
             provider.activeCaptureSessionId != sessionId ||
-            (widget.topConversationId ?? provider.topConversationId) != conversationId) return;
+            (widget.topConversationId ?? provider.topConversationId) != conversationId) {
+          return;
+        }
         if (result is! ApiSuccess<ServerConversation>) {
           OmiFeedback.error(context, context.l10n.speakerTagPromptAnswerFailed);
           return;
@@ -788,4 +680,128 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
       state == WalSyncDisplayState.outsideRecoveryWindow ||
       state == WalSyncDisplayState.unsupportedAudio ||
       state == WalSyncDisplayState.uploadRejected;
+}
+
+/// Where the episode's moments and captured items sit in the live conversation's transcript.
+class LiveTranscriptDecorations {
+  const LiveTranscriptDecorations({required this.dividerBefore, required this.itemsAfter, required this.signature});
+
+  /// A moment's divider goes above the first line it covers.
+  final Map<String, EpisodeMoment> dividerBefore;
+
+  /// A captured item goes under the line it was heard in.
+  final Map<String, List<EpisodeItem>> itemsAfter;
+
+  /// Changes whenever the decorations do, so the transcript list repaints them.
+  final int signature;
+
+  static const empty = LiveTranscriptDecorations(dividerBefore: {}, itemsAfter: {}, signature: 0);
+
+  static LiveTranscriptDecorations of(Episode? episode, String? conversationId, List<TranscriptSegment> segments) {
+    if (episode == null || conversationId == null || segments.isEmpty) return empty;
+    final dividers = <String, EpisodeMoment>{};
+    final moments = [
+      for (final m in episode.moments)
+        if (m.conversationId == conversationId && m.heading.isNotEmpty) m,
+    ]..sort((a, b) => a.startOffset.compareTo(b.startOffset));
+    for (final moment in moments) {
+      final first = segments.where((s) => s.end > moment.startOffset).firstOrNull;
+      if (first != null) dividers.putIfAbsent(first.id, () => moment);
+    }
+    final items = <String, List<EpisodeItem>>{};
+    for (final item in episode.items) {
+      final offset = item.segmentOffset;
+      if (!item.visible || item.conversationId != conversationId || offset == null) {
+        continue;
+      }
+      final line = segments.lastWhere((s) => s.start <= offset, orElse: () => segments.last);
+      items.putIfAbsent(line.id, () => []).add(item);
+    }
+    return LiveTranscriptDecorations(
+      dividerBefore: dividers,
+      itemsAfter: items,
+      signature: Object.hash(Object.hashAll(dividers.keys), Object.hashAll(episode.items.map((i) => (i.id, i.status)))),
+    );
+  }
+}
+
+/// "10:51 · Git support idea" between hairlines: where a moment of the episode begins.
+class EpisodeMomentDivider extends StatelessWidget {
+  const EpisodeMomentDivider({super.key, required this.moment});
+
+  final EpisodeMoment moment;
+
+  @override
+  Widget build(BuildContext context) {
+    final label = '${OmiDateFormat.of(context).time(moment.startedAt)} · ${moment.heading}';
+    final line = Expanded(child: Container(height: 1, color: OmiColors.surface2));
+    return Semantics(
+      header: true,
+      label: label,
+      excludeSemantics: true,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.md, OmiSpacing.md, OmiSpacing.xs),
+        child: Row(
+          children: [
+            line,
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.sm),
+              child: Text(label, style: OmiType.footnote.copyWith(color: OmiColors.textTertiary)),
+            ),
+            line,
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// A task or reminder Omi heard, under the line it was heard in. Provisional items carry Undo;
+/// once the conversation's processing saved it, it says so.
+class EpisodeCapturedItemCard extends StatelessWidget {
+  const EpisodeCapturedItemCard({super.key, required this.item, this.onUndo});
+
+  final EpisodeItem item;
+  final ValueChanged<EpisodeItem>? onUndo;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final saved = item.status == EpisodeItemStatus.kept;
+    final text = saved
+        ? l10n.episodeTaskSaved(item.text)
+        : item.isReminder
+            ? l10n.episodeReminderCaptured(item.text)
+            : l10n.episodeTaskCaptured(item.text);
+    return Padding(
+      key: ValueKey('episode_item_${item.id}'),
+      padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.xxs, OmiSpacing.md, OmiSpacing.xxs),
+      child: Container(
+        constraints: const BoxConstraints(minHeight: 44),
+        padding: const EdgeInsetsDirectional.fromSTEB(OmiSpacing.sm, OmiSpacing.xxs, OmiSpacing.xxs, OmiSpacing.xxs),
+        decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.mdAll),
+        child: Row(
+          children: [
+            Icon(
+              saved ? Icons.check_circle_rounded : (item.isReminder ? Icons.alarm_rounded : Icons.check_circle_outline),
+              size: 18,
+              color: saved ? OmiColors.textPrimary : OmiColors.textSecondary,
+            ),
+            const SizedBox(width: OmiSpacing.xs),
+            Expanded(child: Text(text, style: OmiType.footnote)),
+            if (!saved && onUndo != null)
+              OmiButton.tertiary(
+                key: ValueKey('episode_item_undo_${item.id}'),
+                label: l10n.undo,
+                size: OmiButtonSize.compact,
+                onPressed: () {
+                  OmiHaptics.light();
+                  onUndo!(item);
+                },
+              ),
+          ],
+        ),
+      ),
+    );
+  }
 }
