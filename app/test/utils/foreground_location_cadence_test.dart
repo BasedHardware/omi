@@ -32,10 +32,46 @@ void main() {
   test('the WAL sync wake is sent on every repeat, before the location gate', () {
     final source = File('lib/utils/audio/foreground.dart').readAsStringSync();
     final repeat = source.substring(source.indexOf('void onRepeatEvent'), source.indexOf('Future<void> onDestroy'));
-    expect(repeat, contains('runBackgroundRepeat'));
+    expect(repeat, contains('_locationCadence.onRepeat'));
+    expect(repeat, isNot(contains('lastAttempt:')));
+    expect(repeat, isNot(contains('runBackgroundRepeat')));
     expect(repeat, isNot(contains('_locationInBackground(')));
     expect(repeat, contains("sendDataToMain({'recordingSyncWake': true})"));
     expect(source, contains('ForegroundTaskEventAction.repeat(60 * 1000 * 5)'));
+  });
+
+  test('the stored cadence skips a 5-minute repeat and refreshes at 15', () async {
+    final cadence = BackgroundLocationCadence();
+    var wakes = 0;
+    var refreshes = 0;
+    Future<void> refresh() async {
+      refreshes++;
+    }
+
+    await cadence.onRepeat(
+      now: t0,
+      sendSyncWake: () => wakes++,
+      refreshLocation: refresh,
+    );
+    expect(cadence.attemptAt, t0);
+    expect(refreshes, 1);
+
+    await cadence.onRepeat(
+      now: t0.add(const Duration(minutes: 5)),
+      sendSyncWake: () => wakes++,
+      refreshLocation: refresh,
+    );
+    expect(wakes, 2);
+    expect(refreshes, 1);
+    expect(cadence.attemptAt, t0);
+
+    await cadence.onRepeat(
+      now: t0.add(backgroundLocationRefreshInterval),
+      sendSyncWake: () => wakes++,
+      refreshLocation: refresh,
+    );
+    expect(refreshes, 2);
+    expect(cadence.attemptAt, t0.add(backgroundLocationRefreshInterval));
   });
 
   test('a 5-minute repeat sends the wake and does not refresh location', () async {

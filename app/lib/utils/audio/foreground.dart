@@ -37,6 +37,31 @@ Future<void> runBackgroundRepeat({
   await refreshLocation();
 }
 
+/// Owns the attempt stamp the production repeat handler passes in.
+/// A caller that passes null instead of [attemptAt] refreshes every repeat.
+@visibleForTesting
+class BackgroundLocationCadence {
+  DateTime? attemptAt;
+
+  void recordStart(DateTime now) {
+    attemptAt = now;
+  }
+
+  Future<void> onRepeat({
+    required DateTime now,
+    required void Function() sendSyncWake,
+    required Future<void> Function() refreshLocation,
+  }) {
+    return runBackgroundRepeat(
+      lastAttempt: attemptAt,
+      now: now,
+      sendSyncWake: sendSyncWake,
+      recordAttempt: (stamp) => attemptAt = stamp,
+      refreshLocation: refreshLocation,
+    );
+  }
+}
+
 @pragma('vm:entry-point')
 void _startForegroundCallback() {
   FlutterForegroundTask.setTaskHandler(_ForegroundFirstTaskHandler());
@@ -44,7 +69,7 @@ void _startForegroundCallback() {
 
 class _ForegroundFirstTaskHandler extends TaskHandler {
   DateTime? _locationUpdatedAt;
-  DateTime? _locationAttemptAt;
+  final _locationCadence = BackgroundLocationCadence();
 
   static const Duration _lastKnownMaxAge = Duration(minutes: 5);
 
@@ -56,7 +81,7 @@ class _ForegroundFirstTaskHandler extends TaskHandler {
   @override
   Future<void> onStart(DateTime timestamp, TaskStarter taskStarter) async {
     Logger.debug("Starting foreground task");
-    _locationAttemptAt = DateTime.now();
+    _locationCadence.recordStart(DateTime.now());
     _locationInBackground();
   }
 
@@ -123,13 +148,11 @@ class _ForegroundFirstTaskHandler extends TaskHandler {
     // The main isolate owns WAL state. A fresh headless capture engine must
     // never be booted for this opportunistic recovery pass.
     final now = DateTime.now();
-    await runBackgroundRepeat(
-      lastAttempt: _locationAttemptAt,
+    await _locationCadence.onRepeat(
       now: now,
       sendSyncWake: () {
         FlutterForegroundTask.sendDataToMain({'recordingSyncWake': true});
       },
-      recordAttempt: (attemptAt) => _locationAttemptAt = attemptAt,
       refreshLocation: _locationInBackground,
     );
   }
