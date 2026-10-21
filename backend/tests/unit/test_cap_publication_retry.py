@@ -46,7 +46,13 @@ from routers.listen.contracts import ListenSessionState
 from routers.listen.receiver import ListenReceiver, mark_listen_internal_error
 from utils.observability import held_content as held_metrics
 from utils.sync import cap_hold, cap_hold_redrive, live_cap_manifest, live_cap_staging
-from utils.sync.live_cap_publication import Publication
+from utils.sync.live_cap_publication import (
+    LIVE_PUBLICATION_DEADLINE_SECONDS,
+    RECOVERY_PUBLICATION_DEADLINE_SECONDS,
+    Publication,
+    PublicationBudget,
+    retry_transient_leaf,
+)
 from utils.sync.live_cap_staging import late_hold_identity
 
 EXPIRED = '400 The referenced transaction has expired or is no longer valid.'
@@ -87,17 +93,40 @@ def test_failure_reason_classifies_commit_deadline_and_unavailable():
     [
         (requests.exceptions.ReadTimeout('read timed out'), 'transport_timeout'),
         (requests.exceptions.ConnectTimeout('connect timed out'), 'transport_timeout'),
-        (RetryError('retry deadline exceeded', cause=DeadlineExceeded('d')), 'transport_timeout'),
+        # A wrapper is labeled by the fault it wraps, mirroring the
+        # google-cloud-storage retry predicate.
+        (RetryError('retry deadline exceeded', cause=DeadlineExceeded('d')), 'deadline_exceeded'),
+        (RetryError('retry deadline exceeded', cause=requests.exceptions.ReadTimeout('t')), 'transport_timeout'),
+        (
+            AuthTransportError(requests.exceptions.ConnectionError('connection dropped')),
+            'transport_connection',
+        ),
         (requests.exceptions.ConnectionError('connection aborted'), 'transport_connection'),
         (requests.exceptions.ChunkedEncodingError('truncated body'), 'transport_connection'),
         (urllib3.exceptions.ProtocolError('connection reset'), 'transport_connection'),
         (ConnectionResetError('peer reset'), 'transport_connection'),
-        (AuthTransportError('token endpoint unreachable'), 'transport_connection'),
     ],
 )
 def test_transport_faults_are_retryable_by_the_transient_path(error, reason):
     assert firestore_failure_reason(error) == reason
     assert is_retryable_firestore_transaction_error(error)
+
+
+def test_wrapper_faults_wrapping_permanent_errors_stay_non_retryable():
+    """A RetryError or TransportError is only as transient as its inner fault."""
+    wrapped_permanent = RetryError('retry deadline exceeded', cause=NotFound('404'))
+    assert firestore_failure_reason(wrapped_permanent) == 'other'
+    assert not is_retryable_firestore_transaction_error(wrapped_permanent)
+    bare_wrapper = AuthTransportError('token endpoint unreachable')
+    assert not is_retryable_firestore_transaction_error(bare_wrapper)
+    denied_wrapper = AuthTransportError(PermissionError('token endpoint refused'))
+    assert not is_retryable_firestore_transaction_error(denied_wrapper)
+    assert not is_retryable_firestore_transaction_error(RetryError('retry deadline exceeded', cause=None))
+    # A wrapper around a retryable fault keeps the inner, accurate label.
+    assert (
+        firestore_failure_reason(RetryError('retry deadline exceeded', cause=requests.exceptions.ConnectTimeout('t')))
+        == 'transport_timeout'
+    )
 
 
 def test_non_transport_timeouts_and_plain_errors_stay_non_retryable():
@@ -262,7 +291,8 @@ class _Doc:
     def collection(self, name: str) -> '_Collection':
         return _Collection(self.client, f'{self.key}/{name}')
 
-    def get(self, transaction=None, timeout=None):
+    def get(self, transaction=None, timeout=None, retry=None):
+        self.client.read_kwargs.append({'transactional': transaction is not None, 'timeout': timeout, 'retry': retry})
         # The real client raises this before a read reaches the server once the
         # transaction has queued writes (get_transaction_id), so a transactional
         # body must finish its reads first.
@@ -295,7 +325,7 @@ class _Doc:
     def set(self, payload, merge: bool = False, timeout=None) -> None:
         self.client.write(self.key, copy.deepcopy(payload), merge=merge, create=False, plain=True)
 
-    def create(self, payload) -> None:
+    def create(self, payload, timeout=None, retry=None) -> None:
         if self.client.conflict_create == self.key:
             self.client.conflict_create = None
             if self.client.conflict_row is not None:
@@ -305,7 +335,7 @@ class _Doc:
             raise AlreadyExists('exists')
         self.client.write(self.key, copy.deepcopy(payload), merge=False, create=True, plain=True)
 
-    def update(self, payload, option=None, timeout=None) -> None:
+    def update(self, payload, option=None, timeout=None, retry=None) -> None:
         self.client.last_update_option = option
         if self.client.reject_precondition == self.key:
             self.client.precondition_rejections += 1
@@ -342,6 +372,7 @@ class _Client:
         self.actions = list(actions or [])
         self.read_errors = list(read_errors or [])
         self.plain_read_errors: list[BaseException] = []
+        self.read_kwargs: list[dict] = []
         self.docs: dict[str, dict] = {}
         self.versions: dict[str, int] = {}
         self.transactions: list[_Transaction] = []
@@ -1322,11 +1353,11 @@ def test_retry_that_lost_a_fragment_composes_only_its_claimed_set(store, monkeyp
     drops: list[tuple[str, int]] = []
     original_drop = live_cap_staging._drop_unpublished_targets
 
-    def tracked_drop(bucket, uid, identity, part_ids, claimed_ids):
+    def tracked_drop(bucket, uid, identity, part_ids, claimed_ids, **kwargs):
         # The stale-wider-composite deletion runs outside the seal transaction;
         # by the time it starts, this row's own commit is already applied.
         drops.append((store.docs[identity]['state'], store.applied))
-        return original_drop(bucket, uid, identity, part_ids, claimed_ids)
+        return original_drop(bucket, uid, identity, part_ids, claimed_ids, **kwargs)
 
     monkeypatch.setattr(live_cap_staging, '_drop_unpublished_targets', tracked_drop)
     # Freeze commits; every seal commit then retires its transaction id after
@@ -1593,7 +1624,7 @@ def test_transport_fault_in_post_commit_cleanup_keeps_the_seal(store, monkeypatc
     fragment_id = Publication(UID).identity
     _plant_fragment_row(store, group, fragment_id)
 
-    def failing_cleanup(_uid, _ref):
+    def failing_cleanup(_uid, _ref, **_kwargs):
         raise requests.exceptions.ReadTimeout('claim read timed out')
 
     monkeypatch.setattr(live_cap_staging, 'cleanup', failing_cleanup)
@@ -1702,6 +1733,225 @@ def test_publication_retry_labels_are_a_closed_set():
     held_metrics.record_publication_retry('bogus', 'timeout')  # Unknown outcomes are dropped.
     held_metrics.record_publication_retry('exhausted')  # The default cause is 'other'.
     assert _counter('retried_ok') == before + 1
+
+
+class _FakeClock:
+    """Monotonic clock the budget reads; RPC fakes advance it by the timeout they were given."""
+
+    def __init__(self, now: float = 1000.0) -> None:
+        self.start = now
+        self.now = now
+
+    def __call__(self) -> float:
+        return self.now
+
+    def advance(self, seconds: float) -> None:
+        self.now += seconds
+
+    @property
+    def elapsed(self) -> float:
+        return self.now - self.start
+
+
+def _fake_clock_budgets(monkeypatch, clock: _FakeClock, *modules) -> list[float]:
+    """Route every publication budget the modules build through the fake clock."""
+    made: list[float] = []
+
+    def factory(seconds: float) -> PublicationBudget:
+        made.append(seconds)
+        return PublicationBudget(seconds, clock=clock)
+
+    for module in modules:
+        monkeypatch.setattr(module, 'new_publication_budget', factory)
+    return made
+
+
+def _clock_sleep(monkeypatch, clock: _FakeClock) -> list[float]:
+    """Backoff that spends fake time instead of real time."""
+    slept: list[float] = []
+
+    def sleep(delay: float) -> None:
+        slept.append(delay)
+        clock.advance(delay)
+
+    monkeypatch.setattr('utils.sync.live_cap_publication.retry_sleep', sleep)
+    return slept
+
+
+def test_run_transactional_stops_restarting_once_the_budget_is_spent():
+    clock = _FakeClock()
+    budget = PublicationBudget(LIVE_PUBLICATION_DEADLINE_SECONDS, clock=clock)
+    calls: list[int] = []
+
+    def operation(_tx):
+        calls.append(1)
+        clock.advance(11.0)  # One attempt that spent nearly the whole deadline.
+        raise requests.exceptions.ReadTimeout('rpc timed out')
+
+    outcome: dict[str, str] = {}
+    client = SimpleNamespace(transaction=lambda: object())
+    with pytest.raises(requests.exceptions.ReadTimeout):
+        run_transactional(client, operation, transient=True, sleep=lambda _d: None, outcome=outcome, budget=budget)
+    assert calls == [1]  # Attempts remained; under 2s of deadline did not.
+    assert outcome == {'status': 'exhausted', 'reason': 'transport_timeout'}
+
+
+def test_transactional_commit_carries_the_remaining_deadline():
+    """The SDK's ``_commit`` takes no timeout; the live path binds ``retry=None`` and what is left."""
+    clock = _FakeClock()
+    budget = PublicationBudget(LIVE_PUBLICATION_DEADLINE_SECONDS, clock=clock)
+    commits: list[dict] = []
+
+    class _Gapic:
+        def commit(self, request=None, metadata=None, retry='default', timeout='default'):
+            commits.append({'request': request, 'metadata': metadata, 'retry': retry, 'timeout': timeout})
+            return SimpleNamespace(write_results=['written'], commit_time='t1')
+
+    sdk_client = SimpleNamespace(
+        _firestore_api=_Gapic(), _database_string='projects/p/databases/(default)', _rpc_metadata=[('k', 'v')]
+    )
+    tx = SimpleNamespace(
+        _client=sdk_client, _write_pbs=['write-pb'], _id=b'txn', in_progress=True, write_results=None, commit_time=None
+    )
+    tx._clean_up = lambda: setattr(tx, 'in_progress', False)
+
+    def operation(transaction):
+        clock.advance(4.5)  # The body's reads and upload spent part of the deadline.
+        transaction._commit()  # What @firestore.transactional does once the body returns.
+        return 'ok'
+
+    client = SimpleNamespace(transaction=lambda: tx)
+    assert run_transactional(client, operation, transient=True, sleep=lambda _d: None, budget=budget) == 'ok'
+    assert commits == [
+        {
+            'request': {'database': 'projects/p/databases/(default)', 'writes': ['write-pb'], 'transaction': b'txn'},
+            'metadata': [('k', 'v')],
+            'retry': None,
+            'timeout': pytest.approx(LIVE_PUBLICATION_DEADLINE_SECONDS - 4.5),
+        }
+    ]
+    assert tx.write_results == ['written'] and tx.commit_time == 't1' and not tx.in_progress
+    with pytest.raises(ValueError):
+        tx._commit()  # The SDK's own not-in-progress guard is kept.
+    # A transaction without the SDK's private commit surface keeps its own commit.
+    plain = SimpleNamespace()
+    run_transactional(SimpleNamespace(transaction=lambda: plain), lambda _t: 'ok', transient=True, budget=budget)
+    assert not hasattr(plain, '_commit')
+
+
+def test_persistent_upload_timeouts_stop_at_the_deadline(store, tmp_path, monkeypatch):
+    """Every attempt and backoff of one live publication ends inside the 12s deadline, then today's fallback."""
+    clock = _FakeClock()
+    made = _fake_clock_budgets(monkeypatch, clock, live_cap_manifest)
+    slept = _clock_sleep(monkeypatch, clock)
+    path = tmp_path / 'minute.opus'
+    path.write_bytes(b'opus')
+    source = Publication(UID)
+    timeouts: list[float] = []
+
+    def upload(*args, **kwargs):
+        timeouts.append(kwargs['rpc_timeout'])
+        clock.advance(kwargs['rpc_timeout'])  # The reply never comes: the upload spends its whole timeout.
+        raise requests.exceptions.ReadTimeout('GCS upload reply timed out')
+
+    monkeypatch.setattr(cap_hold, 'upload_held_audio', upload)
+    before_exhausted = _counter('exhausted')
+    before_timeout = _cause_counter('exhausted', 'timeout')
+    state = SimpleNamespace(close_code=None)
+    try:
+        live_cap_manifest.publish(UID, str(path), source, _METADATA, 60)
+    except Exception as error:
+        mark_listen_internal_error(state)
+        assert isinstance(error, requests.exceptions.ReadTimeout)
+    assert made == [LIVE_PUBLICATION_DEADLINE_SECONDS]
+    assert state.close_code == 1011  # Nothing could be confirmed: today's fallback.
+    assert clock.elapsed <= LIVE_PUBLICATION_DEADLINE_SECONDS + 1e-6
+    assert timeouts[0] == 10.0  # A fresh deadline grants the full per-RPC ceiling.
+    assert len(timeouts) == 2 and timeouts[1] < 2.0  # The restart got only what the deadline had left.
+    assert len(slept) == 1  # A third attempt would have started with under 2s: not started.
+    assert _counter('exhausted') == before_exhausted + 1
+    assert _cause_counter('exhausted', 'timeout') == before_timeout + 1
+    assert store.deletes == []  # Never delete an object whose state is unknown.
+    assert source.identity not in store.docs
+
+
+def test_attempt_timeouts_shrink_as_the_deadline_drains(store, tmp_path, monkeypatch):
+    """Each read, upload, and commit gets min(10s, what is left), never a fresh 10s per attempt."""
+    clock = _FakeClock()
+    _fake_clock_budgets(monkeypatch, clock, live_cap_manifest)
+    slept = _clock_sleep(monkeypatch, clock)
+    path = tmp_path / 'minute.opus'
+    path.write_bytes(b'opus')
+    source = Publication(UID)
+    timeouts: list[float] = []
+
+    def upload(*args, **kwargs):
+        timeouts.append(kwargs['rpc_timeout'])
+        # The first reply dies after 3s; the second never comes.
+        clock.advance(3.0 if len(timeouts) == 1 else kwargs['rpc_timeout'])
+        raise requests.exceptions.ReadTimeout('GCS upload reply timed out')
+
+    monkeypatch.setattr(cap_hold, 'upload_held_audio', upload)
+    with pytest.raises(requests.exceptions.ReadTimeout):
+        live_cap_manifest.publish(UID, str(path), source, _METADATA, 60)
+    assert timeouts[0] == 10.0
+    assert timeouts[1] == pytest.approx(LIVE_PUBLICATION_DEADLINE_SECONDS - 3.0 - slept[0])
+    assert timeouts[1] < timeouts[0]
+    assert clock.elapsed == pytest.approx(LIVE_PUBLICATION_DEADLINE_SECONDS)
+    # Transactional reads carried the same shrinking budget, with the client's own retry off.
+    transactional = [read for read in store.read_kwargs if read['transactional']]
+    assert [read['timeout'] for read in transactional[:2]] == [10.0, pytest.approx(timeouts[1])]
+    assert all(read['retry'] is None for read in store.read_kwargs)
+    # The fallback's custody reads ran after the deadline on the floored confirmation slice.
+    leaves = [read for read in store.read_kwargs if not read['transactional']]
+    assert leaves and all(read['timeout'] == 2.0 for read in leaves)
+
+
+def test_recovery_leaf_reads_carry_an_explicit_timeout():
+    clock = _FakeClock()
+    budget = PublicationBudget(LIVE_PUBLICATION_DEADLINE_SECONDS, clock=clock)
+    clock.advance(LIVE_PUBLICATION_DEADLINE_SECONDS - 5.0)  # 5s left.
+    calls: list[dict] = []
+
+    def read(**kwargs):
+        calls.append(kwargs)
+        if len(calls) == 1:
+            raise requests.exceptions.ReadTimeout('get timed out')
+        return 'row'
+
+    before = _cause_counter('retried_ok', 'timeout')
+    assert retry_transient_leaf(budget, read) == 'row'
+    assert calls == [{'timeout': 5.0, 'retry': None}] * 2
+    assert _cause_counter('retried_ok', 'timeout') == before + 1
+    assert retry_transient_leaf(budget, lambda **kwargs: kwargs, timeout=1.0) == {'timeout': 1.0, 'retry': None}
+
+
+def test_spent_deadline_leaves_get_one_confirmation_slice_and_stop():
+    """'Staged hand-off if confirmable' needs one readable row, even after the retries spent the deadline."""
+    clock = _FakeClock()
+    budget = PublicationBudget(LIVE_PUBLICATION_DEADLINE_SECONDS, clock=clock)
+    clock.advance(LIVE_PUBLICATION_DEADLINE_SECONDS + 1.0)
+    calls: list[dict] = []
+
+    def read(**kwargs):
+        calls.append(kwargs)
+        raise requests.exceptions.ReadTimeout('get timed out')
+
+    before = _cause_counter('exhausted', 'timeout')
+    with pytest.raises(requests.exceptions.ReadTimeout):
+        retry_transient_leaf(budget, read)
+    assert calls == [{'timeout': 2.0, 'retry': None}]  # One floored read, no retry past the deadline.
+    assert _cause_counter('exhausted', 'timeout') == before + 1
+    assert budget.leaf_kwargs() == {'timeout': 2.0, 'retry': None}
+    assert budget.attempt_timeout() == 0.1 and not budget.allows_attempt()
+
+
+def test_seal_uses_the_recovery_deadline_only_for_the_sweep(store, monkeypatch):
+    made = _fake_clock_budgets(monkeypatch, _FakeClock(), live_cap_staging)
+    assert live_cap_staging.seal(UID, Publication(UID).identity) is False  # No row: freeze declines.
+    assert live_cap_staging.seal(UID, Publication(UID).identity, expired_only=True) is False
+    assert made == [LIVE_PUBLICATION_DEADLINE_SECONDS, RECOVERY_PUBLICATION_DEADLINE_SECONDS]
+    assert RECOVERY_PUBLICATION_DEADLINE_SECONDS > LIVE_PUBLICATION_DEADLINE_SECONDS
 
 
 async def test_receive_data_close_code_follows_staging(delays, store, tmp_path):

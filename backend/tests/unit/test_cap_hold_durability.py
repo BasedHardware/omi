@@ -172,7 +172,9 @@ def test_retry_observing_purged_receipt_counts_post_delete_publication(monkeypat
             writes.append(('set', sorted(payload)))
 
     receipt = {'state': 'purged'}
-    ref = SimpleNamespace(get=lambda transaction=None: SimpleNamespace(exists=True, to_dict=lambda: dict(receipt)))
+    ref = SimpleNamespace(
+        get=lambda transaction=None, **_kwargs: SimpleNamespace(exists=True, to_dict=lambda: dict(receipt))
+    )
     monkeypatch.setattr(manifest.firestore, 'transactional', lambda fn: fn)
     monkeypatch.setattr(manifest, 'get_firestore_client', lambda: SimpleNamespace(transaction=Tx))
     monkeypatch.setattr(manifest, 'external_write_fence', lambda *args, **kwargs: nullcontext())
