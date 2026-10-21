@@ -75,11 +75,14 @@ struct FeedbackView: View {
   var body: some View {
     VStack(alignment: .leading, spacing: OmiSpacing.lg) {
       if showSuccess {
-        // Success state
+        // Result state
         VStack(spacing: OmiSpacing.md) {
-          Image(systemName: "checkmark.circle.fill")
-            .scaledFont(size: 48)
-            .foregroundColor(Ink.listeningGreen)
+          Image(
+            systemName: savedReportPath == nil
+              ? "exclamationmark.triangle.fill" : "checkmark.circle.fill"
+          )
+          .scaledFont(size: 48)
+          .foregroundColor(savedReportPath == nil ? Ink.errorRed : Ink.listeningGreen)
 
           Text(savedReportPath == nil ? "Report not saved" : "Report saved on this Mac")
             .inkStyle(.firstTitle, color: Ink.primary)
@@ -93,14 +96,32 @@ struct FeedbackView: View {
             .inkStyle(.prose, color: Ink.secondary)
             .textSelection(.enabled)
           } else {
-            Text("The report could not be written to disk. Try \"Save Diagnostics…\" instead.")
-              .inkStyle(.prose, color: Ink.secondary)
+            // The form state below still holds the entered note: send the user
+            // back to it rather than dead-ending them behind a Close button.
+            Text(
+              "The report could not be written to disk. Your note is still in the form — go back, copy it somewhere safe, and use \"Save Diagnostics…\" to capture what you can."
+            )
+            .inkStyle(.prose, color: Ink.secondary)
           }
 
-          Button("Close") {
-            onDismiss()
+          HStack {
+            if savedReportPath == nil {
+              Button("Back to Report") {
+                showSuccess = false
+                isSubmitting = false
+              }
+              .keyboardShortcut(.defaultAction)
+
+              Button("Close") {
+                onDismiss()
+              }
+            } else {
+              Button("Close") {
+                onDismiss()
+              }
+              .keyboardShortcut(.defaultAction)
+            }
           }
-          .keyboardShortcut(.defaultAction)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
       } else {
@@ -147,7 +168,7 @@ struct FeedbackView: View {
 
           Spacer()
 
-          Button("Send Report") {
+          Button("Save Report") {
             submitFeedback()
           }
           .keyboardShortcut(.defaultAction)
@@ -177,8 +198,10 @@ struct FeedbackView: View {
   /// durable, shareable copy on their own machine. Best-effort: returns nil
   /// when the write fails, and flags a note-only file when the diagnostics
   /// bundle could not be generated or read.
+  /// Not main-actor-isolated: submit runs this off the main thread (it reads
+  /// and redacts up to 512 KB of log data and writes the file twice).
   @discardableResult
-  private static func persistLocalReport(
+  nonisolated private static func persistLocalReport(
     title: String,
     note: String,
     name: String,
@@ -247,25 +270,34 @@ struct FeedbackView: View {
     // machine only: the note plus the bounded, redacted diagnostics bundle.
     // Nothing is transmitted anywhere; support shares the file manually.
     let reportTitle = feedbackReportTitle(for: message)
-    let savedReportURL = Self.persistLocalReport(
-      title: reportTitle,
-      note: message,
-      name: name,
-      email: email)
-    if let savedReportURL {
-      log(
-        "User report saved locally: \(savedReportURL.url.path) diagnostics=\(savedReportURL.diagnosticsIncluded)"
-      )
-    } else {
-      logError("User report could not be saved locally")
-    }
+    let contactName = name
+    let contactEmail = email
+    // Building the report reads and redacts up to 512 KB of log data and
+    // writes the file twice — keep that off the main thread exactly like
+    // `saveDiagnosticsLocally()` does, and publish the result back on main.
+    Task {
+      let savedReportURL = await Task.detached(priority: .userInitiated) {
+        let report = Self.persistLocalReport(
+          title: reportTitle,
+          note: message,
+          name: contactName,
+          email: contactEmail)
+        if let savedReportURL = report {
+          log(
+            "User report saved locally: \(savedReportURL.url.path) diagnostics=\(savedReportURL.diagnosticsIncluded)"
+          )
+        } else {
+          logError("User report could not be saved locally")
+        }
+        return report
+      }.value
 
-    // Show success
-    OmiMotion.withGated {
-      savedReportPath = savedReportURL?.url.path
-      savedReportIncludesDiagnostics = savedReportURL?.diagnosticsIncluded ?? false
-      showSuccess = true
-      isSubmitting = false
+      OmiMotion.withGated {
+        savedReportPath = savedReportURL?.url.path
+        savedReportIncludesDiagnostics = savedReportURL?.diagnosticsIncluded ?? false
+        showSuccess = true
+        isSubmitting = false
+      }
     }
   }
 
