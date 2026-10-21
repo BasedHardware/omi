@@ -134,21 +134,26 @@ def search_files_tool(
     Returns:
         Answer based on the file contents
     """
+    if not isinstance(question, str) or not question.strip():
+        return "Error: Question cannot be empty."
+    question = question.strip()
+
     # Get config from parameter or context variable (like other tools do)
     cfg: Optional[Dict[str, Any]] = cast(Optional[Dict[str, Any]], config)
     if cfg is None:
         cfg = _agent_config()
         if cfg:
-            logger.info(f"🔧 search_files_tool - got config from context variable")
+            logger.info("🔧 search_files_tool - got config from context variable")
 
     if cfg is None:
-        logger.info(f"❌ search_files_tool - config is None")
+        logger.info("❌ search_files_tool - config is None")
         return "Error: Configuration not available"
 
     try:
-        configurable: Any = cfg.get('configurable')
-        uid = configurable.get('user_id')
-        chat_session_id = configurable.get('chat_session_id')
+        raw_configurable = cfg.get('configurable') if isinstance(cfg, dict) else None
+        configurable = raw_configurable if isinstance(raw_configurable, dict) else {}
+        uid = configurable.get('user_id') or (cfg.get('user_id') if isinstance(cfg, dict) else None)
+        chat_session_id = configurable.get('chat_session_id') or (cfg.get('chat_session_id') if isinstance(cfg, dict) else None)
     except (KeyError, TypeError, AttributeError) as e:
         logger.error("❌ search_files_tool - error accessing config: %s", type(e).__name__)
         return "Error: Configuration error"
@@ -165,12 +170,19 @@ def search_files_tool(
 
         chat_session = ChatSession(**session_data)
 
+        # Normalize file_ids
+        normalized_file_ids: Optional[List[str]] = None
+        if isinstance(file_ids, str):
+            normalized_file_ids = [file_ids]
+        elif file_ids is not None:
+            normalized_file_ids = [str(fid) for fid in file_ids if fid is not None]
+
         # Determine which files to search
-        if file_ids and len(file_ids) > 0:
+        if normalized_file_ids and len(normalized_file_ids) > 0:
             # Use specified files
             # Validate that these files belong to the session
             session_file_ids = set(chat_session.file_ids or [])
-            file_ids_to_search = [fid for fid in file_ids if fid in session_file_ids]
+            file_ids_to_search = [fid for fid in normalized_file_ids if fid in session_file_ids]
 
             if not file_ids_to_search:
                 return "The specified files are not available in this chat session."
@@ -185,9 +197,20 @@ def search_files_tool(
         fc_tool = FileChatTool(uid, chat_session_id)
         video_window = None
         if start_seconds is not None or end_seconds is not None:
-            start = max(0.0, float(start_seconds if start_seconds is not None else max(0.0, (end_seconds or 0) - 5)))
-            end = max(start, float(end_seconds if end_seconds is not None else start + 5))
-            video_window = (start, end)
+            try:
+                s_val = float(start_seconds) if start_seconds is not None else None
+            except (TypeError, ValueError):
+                s_val = None
+            try:
+                e_val = float(end_seconds) if end_seconds is not None else None
+            except (TypeError, ValueError):
+                e_val = None
+
+            if s_val is not None or e_val is not None:
+                start = max(0.0, float(s_val if s_val is not None else max(0.0, (e_val or 0.0) - 5.0)))
+                end = max(start, float(e_val if e_val is not None else start + 5.0))
+                video_window = (start, end)
+
         answer = fc_tool.process_chat_with_file(question, file_ids_to_search, video_window)
 
         return answer
