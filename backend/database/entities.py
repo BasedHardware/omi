@@ -301,9 +301,9 @@ def reassign_fact_subject(uid: str, fact_id: str, old: Optional[str], new: Optio
 
     # Moving ``updated_at`` on a live legacy row reorders the retraction scan,
     # so the write holds the historical source index fence.
-    from database.memories import historical_source_index_fence
+    from database.memory_source_index import fence
 
-    with historical_source_index_fence(clean_uid, kg_db.db):
+    with fence(clean_uid, kg_db.db):
         return memory_ledger.append_commit(
             clean_uid,
             None,

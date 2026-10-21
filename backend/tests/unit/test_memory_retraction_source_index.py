@@ -8,10 +8,11 @@ from google.api_core.exceptions import AlreadyExists, FailedPrecondition
 from google.cloud.firestore_v1.transforms import Increment
 
 from database import memories
+from database import memory_source_index as msi
 from utils.memory import memory_service as service_mod
 
 UID = 'index-owner'
-INDEX_PATH = ('users', UID, 'memory_state', memories.HISTORICAL_SOURCE_INDEX_DOC)
+INDEX_PATH = ('users', UID, 'memory_state', msi.DOC)
 
 
 class _Snapshot:
@@ -123,7 +124,7 @@ class _History:
 
 @pytest.fixture
 def world(monkeypatch):
-    monkeypatch.delenv(memories.HISTORICAL_SOURCE_INDEX_ENV, raising=False)
+    monkeypatch.delenv(msi.ENV, raising=False)
     db = _Db()
     for row_id in ('legacy-1', 'legacy-2', 'legacy-3'):
         db.docs[('users', UID, 'memories', row_id)] = {'id': row_id}
@@ -140,11 +141,17 @@ def world(monkeypatch):
 
 
 def _ids(world, conversation_id):
-    return world.service._historical_conversation_memory_ids(UID, conversation_id)
+    return msi.retraction_historical_ids(
+        UID,
+        conversation_id,
+        scan=lambda: world.history.all_live(UID),
+        fresh_pages=memories.historical_scan_memo_suspended,
+        firestore_client=world.db,
+    )
 
 
 def _events(event, outcome):
-    return memories.HISTORICAL_SOURCE_INDEX_EVENTS.labels(event=event, outcome=outcome)._value.get()
+    return msi.EVENTS.labels(event=event, outcome=outcome)._value.get()
 
 
 def test_first_retraction_scans_and_indexes_then_fresh_donors_skip_the_scan(world):
@@ -232,9 +239,9 @@ def test_failed_pre_write_bump_aborts_the_write(world):
 
 def test_write_during_the_scan_prevents_storing_a_stale_index(world):
     _ids(world, 'donor-1')
-    memories._bump_historical_source_index(UID, world.db, 0)  # stale existing index
+    msi.bump(UID, world.db, 0)  # stale existing index
     raced = _events('build', 'raced')
-    world.history.during_scan = lambda: memories._bump_historical_source_index(UID, world.db, 0)
+    world.history.during_scan = lambda: msi.bump(UID, world.db, 0)
 
     assert _ids(world, 'donor-2') == []
     assert _events('build', 'raced') - raced == 1
@@ -245,7 +252,7 @@ def test_write_during_the_scan_prevents_storing_a_stale_index(world):
 
 def test_first_build_loses_to_a_writer_that_created_the_document(world):
     raced = _events('build', 'raced')
-    world.history.during_scan = lambda: memories._bump_historical_source_index(UID, world.db, 0)
+    world.history.during_scan = lambda: msi.bump(UID, world.db, 0)
 
     assert _ids(world, 'donor-1') == []
     assert _events('build', 'raced') - raced == 1
@@ -253,7 +260,7 @@ def test_first_build_loses_to_a_writer_that_created_the_document(world):
 
 
 def test_kill_switch_scans_every_time_without_touching_the_index(world, monkeypatch):
-    monkeypatch.setenv(memories.HISTORICAL_SOURCE_INDEX_ENV, 'off')
+    monkeypatch.setenv(msi.ENV, 'off')
     for donor in ('donor-1', 'donor-2'):
         assert _ids(world, donor) == []
     assert world.history.scans == 2
@@ -265,13 +272,13 @@ def test_unreadable_index_falls_back_to_the_scan(world, monkeypatch):
     def broken(*_args, **_kwargs):
         raise RuntimeError('index unavailable')
 
-    monkeypatch.setattr(memories, 'read_historical_source_index', broken)
+    monkeypatch.setattr(msi, 'read', broken)
     assert _ids(world, 'conv-old') == ['legacy-1']
     assert world.history.scans == 1
 
 
 def test_oversized_index_is_not_stored(world, monkeypatch):
-    monkeypatch.setattr(memories, '_HISTORICAL_SOURCE_INDEX_MAX_KEYS', 1)
+    monkeypatch.setattr(msi, 'MAX_KEYS', 1)
     _ids(world, 'donor-1')
     assert INDEX_PATH not in world.db.docs
     _ids(world, 'donor-2')
@@ -280,7 +287,7 @@ def test_oversized_index_is_not_stored(world, monkeypatch):
 
 def test_scan_during_an_in_flight_writer_is_never_stored(world):
     writer_active = _events('build', 'writer_active')
-    memories._bump_historical_source_index(UID, world.db, 1)  # a writer claimed and is mid-write
+    msi.bump(UID, world.db, 1)  # a writer claimed and is mid-write
 
     assert _ids(world, 'donor-1') == []
     assert _events('build', 'writer_active') - writer_active == 1
@@ -313,7 +320,7 @@ def test_subject_reassignment_holds_the_fence(monkeypatch):
 
     bumps = []
     monkeypatch.setattr(entities.kg_db, 'db', MagicMock())
-    monkeypatch.setattr(memories, '_bump_historical_source_index', lambda uid, _client, writers: bumps.append(writers))
+    monkeypatch.setattr(msi, 'bump', lambda uid, _client, writers: bumps.append(writers))
     monkeypatch.setattr(entities.memory_ledger, 'append_commit', lambda *a, **k: bumps.append('commit') or 'ok')
 
     assert entities.reassign_fact_subject(UID, 'fact-1', None, 'person:p1') == 'ok'
@@ -335,7 +342,7 @@ def test_account_wipe_drops_a_late_index_document(monkeypatch):
     )
     client = SimpleNamespace(collection=lambda name: SimpleNamespace(document=lambda uid: user_ref))
     user_data_deletion.purge_user_subtree(UID, client, lambda *a, **k: None)
-    assert ('memory_state', memories.HISTORICAL_SOURCE_INDEX_DOC) in deleted
+    assert ('memory_state', msi.DOC) in deleted
 
 
 def test_scan_inside_a_memo_scope_reads_fresh_pages(world, monkeypatch):

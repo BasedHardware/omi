@@ -9,7 +9,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from database import memories
+from database import memories, memory_source_index
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from utils.other.list_budget import ListReadBudget, ListReadBudgetExhausted
 
@@ -127,9 +127,7 @@ def db(monkeypatch):
     database = _Db()
     # Source-index epoch bumps are their own document; record them apart from row writes.
     database.index_bumps = []
-    monkeypatch.setattr(
-        memories, '_bump_historical_source_index', lambda uid, _client, _writers: database.index_bumps.append(uid)
-    )
+    monkeypatch.setattr(memory_source_index, 'bump', lambda uid, _client, _writers: database.index_bumps.append(uid))
     return database
 
 
