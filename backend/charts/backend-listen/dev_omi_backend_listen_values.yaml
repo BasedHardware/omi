@@ -623,6 +623,18 @@ env:
         key: TWILIO_API_KEY_SECRET
   - name: VAD_GATE_MODE
     value: "active"
+  # D2 edge shadow (plan D): mirror a static uid-hash cohort's raw frames to
+  # listen-edge for decode+VAD agreement. The URL alone mirrors nothing: the
+  # mirror needs EDGE_SHADOW_PERCENT > 0, which stays 0 until the lead ramps
+  # it per the EDGE_SHADOW_PERCENT registry row (declared in the prod values
+  # only; the registry checker allows one ramp declaration)
+  # (backend/docs/runbooks/edge-shadow-rollout.md).
+  - name: EDGE_SHADOW_URL
+    value: "ws://dev-omi-listen-edge.dev-omi-backend.svc.cluster.local:8080/v1/shadow"
+  # EDGE_SHADOW_TOKEN (sent as x-edge-shadow-token; must match listen-edge's)
+  # is a secret: never committed here, set only through privateEnv
+  # (LISTEN_PRIVATE_VALUES_YAML), which adds the entry at rollout. Unset,
+  # listen sends no token.
   # Audio-timeline v2: one capture coordinate for segments and stored audio.
   # Admits new eligible recordings only (single-channel, server STT);
   # existing v1 sessions and resumed v1 conversations are unaffected.
