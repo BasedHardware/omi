@@ -6137,6 +6137,13 @@ intent remains processing after a budget stop; a pre-cutoff unsealed source keep
 that choice open until sealing preserves its original creation/listing times. Only existing
 same-month user/upgrade consent may process audio. Existing UID/hold/text leases,
 cutoffs, reserved estimates, abuse and allowance checks still own admission.
+`STT_CAP_RECOVERY_COHORT`, when present, additionally intersects effective dispatch
+membership for consent/upgrade, API enqueue, redrive owner visits, worker entry,
+manifest recovery and every provider attempt. It shares dispatch's `uid:`, `pct:N`
+and `all` grammar; unset leaves existing scope unchanged and malformed (including
+empty) denies recovery. It never changes listen-side hold admission or staging
+seal/cleanup. The private probe identity is supplied through the private-values
+path, never committed; see [recovery-only probe narrowing](stt-cap-dispatch.md#recovery-only-probe-narrowing).
 Process death cannot erase the choice or require a client wakeup. The fixed
 60-second memory wakeup and processing self-respawn are retired.
 

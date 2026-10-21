@@ -11,7 +11,7 @@ import time
 from typing import Any, Awaitable, Callable
 from google.api_core.exceptions import NotFound
 
-from config.stt_cap_dispatch import execution_admission_enabled as enabled, any_execution_admission_enabled, hold_lane
+from config.stt_cap_dispatch import recovery_admission_enabled as enabled, any_recovery_admission_enabled, hold_lane
 from database import users as users_db
 from database import sync_cap_holds, sync_cap_recovery, cap_recovery_pacing
 from utils.analytics import record_usage
@@ -117,7 +117,7 @@ def _new_dispatch_allowed(uid: str, lane: str) -> bool:
 
 
 async def _recover_row(uid: str, snapshot: Any, row: dict[str, Any]) -> bool:
-    if not any_execution_admission_enabled(uid):
+    if not any_recovery_admission_enabled(uid):
         return False
     if row.get('finalized'):
         return True
@@ -421,7 +421,7 @@ def _settle_and_erase(uid: str, snapshot: Any, row: dict) -> None:
 
 
 async def selected_for_recovery(uid: str, row: dict) -> bool:
-    if not any_execution_admission_enabled(uid):
+    if not any_recovery_admission_enabled(uid):
         return False
     meta = await run_blocking(storage_executor, cap_hold.metadata, uid, row)
     lane = hold_lane(meta)
@@ -453,5 +453,5 @@ async def recover_selected(uid: str, snapshot: Any) -> bool:
 async def recover(uid: str) -> None:
     # Legacy request/reset/resume hooks may wake an approved run, but never
     # create consent. Worker is imported lazily to avoid pipeline import cycles.
-    if any_execution_admission_enabled(uid) and _backlog_runner is not None:
+    if any_recovery_admission_enabled(uid) and _backlog_runner is not None:
         await _backlog_runner(uid)
