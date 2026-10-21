@@ -18,7 +18,10 @@ from models.time_zone_admission import is_schedulable_time_zone
 from google.cloud.firestore_v1.base_query import FieldFilter
 from google.cloud import firestore
 from google.cloud.firestore import DELETE_FIELD
-from config.daily_summary_depth import VALID_DAILY_SUMMARY_DEPTHS, normalize_daily_summary_depth
+from config.daily_summary_depth import (
+    VALID_DAILY_SUMMARY_DEPTHS,
+    normalize_daily_summary_depth,
+)
 from ._client import db, get_firestore_client
 from .cache import get_memory_cache
 from .firestore_index_registry import DAILY_SUMMARY_RECIPIENTS_QUERY
@@ -42,72 +45,89 @@ def save_token(uid: str, data: Dict[str, Any], *, firestore_client: Any = None) 
     Also maintains time_zone in main user document for backward compatibility
     Migrates legacy fcm_token to subcollection
     """
-    device_key = data.get('device_key', 'unknown_default')
-    token = data.get('fcm_token')
-    time_zone = data.get('time_zone')
+    device_key = data.get("device_key", "unknown_default")
+    token = data.get("fcm_token")
+    time_zone = data.get("time_zone")
 
-    client = firestore_client if firestore_client is not None else get_firestore_client()
-    user_ref = client.collection('users').document(uid)
+    client = (
+        firestore_client if firestore_client is not None else get_firestore_client()
+    )
+    user_ref = client.collection("users").document(uid)
 
     # Step 1: Migrate legacy token if exists
     user_doc = user_ref.get()
     user_data: Dict[str, Any] = {}
     if getattr(user_doc, "exists", False):
         user_data = _typed_doc(user_doc)
-        legacy_token = user_data.get('fcm_token')
+        legacy_token = user_data.get("fcm_token")
 
         if legacy_token:
             # Check if legacy token already exists in subcollection
             existing_tokens: List[object] = [
-                t for t in (_typed_doc(d).get('token') for d in user_ref.collection('fcm_tokens').stream())
+                t
+                for t in (
+                    _typed_doc(d).get("token")
+                    for d in user_ref.collection("fcm_tokens").stream()
+                )
             ]
 
             if legacy_token not in existing_tokens:
                 # Migrate to unknown_default
-                user_ref.collection('fcm_tokens').document('unknown_default').set(
+                user_ref.collection("fcm_tokens").document("unknown_default").set(
                     {
-                        'token': legacy_token,
-                        'time_zone': user_data.get('time_zone'),
-                        'created_at': firestore.SERVER_TIMESTAMP,
+                        "token": legacy_token,
+                        "time_zone": user_data.get("time_zone"),
+                        "created_at": firestore.SERVER_TIMESTAMP,
                     },
                     merge=True,
                 )
 
             # Remove legacy field
-            user_ref.update({'fcm_token': DELETE_FIELD})
+            user_ref.update({"fcm_token": DELETE_FIELD})
 
     # Step 2: If new token has proper device_key, replace unknown_default
-    if device_key != 'unknown_default':
-        unknown_ref = user_ref.collection('fcm_tokens').document('unknown_default')
+    if device_key != "unknown_default":
+        unknown_ref = user_ref.collection("fcm_tokens").document("unknown_default")
         unknown_doc = unknown_ref.get()
         if getattr(unknown_doc, "exists", False):
-            unknown_token = _typed_doc(unknown_doc).get('token')
+            unknown_token = _typed_doc(unknown_doc).get("token")
             # Only delete if it's the same token being migrated to proper device_key
             if unknown_token == token:
                 unknown_ref.delete()
 
     # Step 3: Save new token to subcollection
-    user_ref.collection('fcm_tokens').document(device_key).set(
-        {'token': token, 'time_zone': time_zone, 'created_at': firestore.SERVER_TIMESTAMP}, merge=True
+    user_ref.collection("fcm_tokens").document(device_key).set(
+        {
+            "token": token,
+            "time_zone": time_zone,
+            "created_at": firestore.SERVER_TIMESTAMP,
+        },
+        merge=True,
     )
 
     # Migration's earlier snapshot must not decide which schedule fields are
     # absent: another client can opt out while its token is being registered.
     schedulable_tz = time_zone if is_schedulable_time_zone(time_zone) else None
-    _update_summary_schedule(uid, {'time_zone': schedulable_tz} if schedulable_tz else {}, firestore_client=client)
+    _update_summary_schedule(
+        uid,
+        {"time_zone": schedulable_tz} if schedulable_tz else {},
+        firestore_client=client,
+    )
 
 
 def get_user_time_zone(uid: str) -> Optional[str]:
     """Get timezone from main user document"""
-    user_ref = db.collection('users').document(uid).get()
+    user_ref = db.collection("users").document(uid).get()
     if getattr(user_ref, "exists", False):
         user_data = _typed_doc(user_ref)
-        tz = user_data.get('time_zone')
+        tz = user_data.get("time_zone")
         return str(tz) if tz is not None else None
     return None
 
 
-def set_user_time_zone(uid: str, time_zone: str, *, firestore_client: Any = None) -> None:
+def set_user_time_zone(
+    uid: str, time_zone: str, *, firestore_client: Any = None
+) -> None:
     """Persist the client timezone and atomically fill absent schedule fields.
 
     Tokenless clients need the same defaults as token registration to match the
@@ -115,7 +135,9 @@ def set_user_time_zone(uid: str, time_zone: str, *, firestore_client: Any = None
     """
     schedulable_tz = time_zone if is_schedulable_time_zone(time_zone) else None
     _update_summary_schedule(
-        uid, {'time_zone': schedulable_tz} if schedulable_tz else {}, firestore_client=firestore_client
+        uid,
+        {"time_zone": schedulable_tz} if schedulable_tz else {},
+        firestore_client=firestore_client,
     )
 
 
@@ -148,7 +170,9 @@ def sync_user_time_zone_from_client(uid: str, request_tz: Optional[str]) -> str:
     return request_tz
 
 
-def set_user_time_zone_if_missing(uid: str, time_zone: str, *, firestore_client: Any = None) -> bool:
+def set_user_time_zone_if_missing(
+    uid: str, time_zone: str, *, firestore_client: Any = None
+) -> bool:
     """Write ``time_zone`` on the user document only when it has none. Returns True when it wrote.
 
     ``save_token`` above is otherwise the only writer, and it runs from the mobile app's FCM
@@ -160,7 +184,10 @@ def set_user_time_zone_if_missing(uid: str, time_zone: str, *, firestore_client:
     if not is_schedulable_time_zone(time_zone):
         return False
     return _update_summary_schedule(
-        uid, {'time_zone': time_zone}, only_if_timezone_missing=True, firestore_client=firestore_client
+        uid,
+        {"time_zone": time_zone},
+        only_if_timezone_missing=True,
+        firestore_client=firestore_client,
     )
 
 
@@ -175,17 +202,23 @@ DEFAULT_DAILY_SUMMARY_ENABLED = True
 
 def get_daily_summary_depth(uid: str, *, firestore_client: Any = None) -> str:
     """Read the account's recap depth, including the brief default for older users."""
-    client = firestore_client if firestore_client is not None else get_firestore_client()
-    snapshot = client.collection('users').document(uid).get()
+    client = (
+        firestore_client if firestore_client is not None else get_firestore_client()
+    )
+    snapshot = client.collection("users").document(uid).get()
     data = _typed_doc(snapshot) if snapshot.exists else {}
-    return normalize_daily_summary_depth(data.get('daily_summary_depth'))
+    return normalize_daily_summary_depth(data.get("daily_summary_depth"))
 
 
-def set_daily_summary_depth(uid: str, depth: str, *, firestore_client: Any = None) -> bool:
+def set_daily_summary_depth(
+    uid: str, depth: str, *, firestore_client: Any = None
+) -> bool:
     """Persist a validated depth without changing notification schedule fields."""
     if depth not in VALID_DAILY_SUMMARY_DEPTHS:
-        raise ValueError('Invalid daily summary depth')
-    return _update_summary_schedule(uid, {'daily_summary_depth': depth}, firestore_client=firestore_client)
+        raise ValueError("Invalid daily summary depth")
+    return _update_summary_schedule(
+        uid, {"daily_summary_depth": depth}, firestore_client=firestore_client
+    )
 
 
 def daily_summary_schedule_defaults(user_data: Mapping[str, Any]) -> Dict[str, Any]:
@@ -195,29 +228,37 @@ def daily_summary_schedule_defaults(user_data: Mapping[str, Any]) -> Dict[str, A
     included. Empty dict when both fields are already on the document.
     """
     patch: Dict[str, Any] = {}
-    if not isinstance(user_data.get('daily_summary_enabled'), bool):
-        patch['daily_summary_enabled'] = DEFAULT_DAILY_SUMMARY_ENABLED
-    if not isinstance(h := user_data.get('daily_summary_hour_local'), (int, float)) or isinstance(h, bool):
-        patch['daily_summary_hour_local'] = DEFAULT_DAILY_SUMMARY_HOUR_LOCAL
+    if not isinstance(user_data.get("daily_summary_enabled"), bool):
+        patch["daily_summary_enabled"] = DEFAULT_DAILY_SUMMARY_ENABLED
+    if not isinstance(
+        h := user_data.get("daily_summary_hour_local"), (int, float)
+    ) or isinstance(h, bool):
+        patch["daily_summary_hour_local"] = DEFAULT_DAILY_SUMMARY_HOUR_LOCAL
     return patch
 
 
 def _update_summary_schedule(
-    uid: str, patch: Dict[str, Any], *, only_if_timezone_missing: bool = False, firestore_client: Any = None
+    uid: str,
+    patch: Dict[str, Any],
+    *,
+    only_if_timezone_missing: bool = False,
+    firestore_client: Any = None,
 ) -> bool:
     """Fill absent defaults from the same snapshot whose write is committed.
 
     Explicit fields remain authoritative; implicit defaults and desktop timezone
     seeding must never overwrite a concurrent client choice.
     """
-    client = firestore_client if firestore_client is not None else get_firestore_client()
-    user_ref = client.collection('users').document(uid)
+    client = (
+        firestore_client if firestore_client is not None else get_firestore_client()
+    )
+    user_ref = client.collection("users").document(uid)
 
     @firestore.transactional
     def update(transaction):
         snapshot = user_ref.get(transaction=transaction)
         current = _typed_doc(snapshot) if snapshot.exists else {}
-        if only_if_timezone_missing and current.get('time_zone'):
+        if only_if_timezone_missing and current.get("time_zone"):
             return False
         payload = {**daily_summary_schedule_defaults(current), **patch}
         if not payload:
@@ -229,21 +270,29 @@ def _update_summary_schedule(
         return True
 
     return bool(
-        run_with_transaction_contention_retry(client.transaction, update, operation_name='notification_schedule_update')
+        run_with_transaction_contention_retry(
+            client.transaction, update, operation_name="notification_schedule_update"
+        )
     )
 
 
 def get_daily_summary_hour_local(uid: str) -> int | None:
     """Get user's preferred daily summary hour in local time. Returns None if not set."""
-    user_ref = db.collection('users').document(uid).get()
+    user_ref = db.collection("users").document(uid).get()
     if getattr(user_ref, "exists", False):
         user_data = _typed_doc(user_ref)
-        value = user_data.get('daily_summary_hour_local')
-        return int(value) if isinstance(value, (int, float)) and not isinstance(value, bool) else None
+        value = user_data.get("daily_summary_hour_local")
+        return (
+            int(value)
+            if isinstance(value, (int, float)) and not isinstance(value, bool)
+            else None
+        )
     return None
 
 
-def set_daily_summary_hour_local(uid: str, hour_local: int, *, firestore_client: Any = None) -> bool:
+def set_daily_summary_hour_local(
+    uid: str, hour_local: int, *, firestore_client: Any = None
+) -> bool:
     """
     Set user's preferred daily summary hour in local time.
 
@@ -257,21 +306,31 @@ def set_daily_summary_hour_local(uid: str, hour_local: int, *, firestore_client:
     if not (0 <= hour_local <= 23):
         raise ValueError(f"Invalid hour: {hour_local}. Must be 0-23.")
 
-    return _update_summary_schedule(uid, {'daily_summary_hour_local': hour_local}, firestore_client=firestore_client)
+    return _update_summary_schedule(
+        uid, {"daily_summary_hour_local": hour_local}, firestore_client=firestore_client
+    )
 
 
 def get_daily_summary_enabled(uid: str) -> bool:
     """Check if daily summary is enabled for user. Enabled by default."""
-    user_ref = db.collection('users').document(uid).get()
+    user_ref = db.collection("users").document(uid).get()
     if getattr(user_ref, "exists", False):
         user_data = _typed_doc(user_ref)
-        return DEFAULT_DAILY_SUMMARY_ENABLED if (val := user_data.get('daily_summary_enabled')) is None else bool(val)
+        return (
+            DEFAULT_DAILY_SUMMARY_ENABLED
+            if (val := user_data.get("daily_summary_enabled")) is None
+            else bool(val)
+        )
     return True
 
 
-def set_daily_summary_enabled(uid: str, enabled: bool, *, firestore_client: Any = None) -> bool:
+def set_daily_summary_enabled(
+    uid: str, enabled: bool, *, firestore_client: Any = None
+) -> bool:
     """Enable or disable daily summary for user."""
-    return _update_summary_schedule(uid, {'daily_summary_enabled': enabled}, firestore_client=firestore_client)
+    return _update_summary_schedule(
+        uid, {"daily_summary_enabled": enabled}, firestore_client=firestore_client
+    )
 
 
 # **************************************
@@ -298,11 +357,21 @@ def get_mentor_notification_frequency(uid: str) -> int:
     cache = get_memory_cache()
 
     def fetch() -> int:
-        doc = db.collection('users').document(uid).get(field_paths=['mentor_notification_frequency'])
+        doc = (
+            db.collection("users")
+            .document(uid)
+            .get(field_paths=["mentor_notification_frequency"])
+        )
         if getattr(doc, "exists", False):
             data = _typed_doc(doc)
-            value = data.get('mentor_notification_frequency', DEFAULT_MENTOR_NOTIFICATION_FREQUENCY)
-            return int(value) if isinstance(value, (int, float)) else DEFAULT_MENTOR_NOTIFICATION_FREQUENCY
+            value = data.get(
+                "mentor_notification_frequency", DEFAULT_MENTOR_NOTIFICATION_FREQUENCY
+            )
+            return (
+                int(value)
+                if isinstance(value, (int, float))
+                else DEFAULT_MENTOR_NOTIFICATION_FREQUENCY
+            )
         return DEFAULT_MENTOR_NOTIFICATION_FREQUENCY
 
     return cache.get_or_fetch(f"mentor_frequency:{uid}", fetch, ttl=30)
@@ -325,14 +394,16 @@ def set_mentor_notification_frequency(uid: str, frequency: int) -> bool:
     if not (0 <= frequency <= 5):
         raise ValueError(f"Invalid frequency: {frequency}. Must be 0-5.")
 
-    user_ref = db.collection('users').document(uid)
-    user_ref.set({'mentor_notification_frequency': frequency}, merge=True)
+    user_ref = db.collection("users").document(uid)
+    user_ref.set({"mentor_notification_frequency": frequency}, merge=True)
     # Invalidate local cache so this instance sees the update immediately
     get_memory_cache().delete(f"mentor_frequency:{uid}")
     return True
 
 
-def get_all_tokens(uid: str, *, legacy_token: Optional[str] = None, user_document_loaded: bool = False) -> list[str]:
+def get_all_tokens(
+    uid: str, *, legacy_token: Optional[str] = None, user_document_loaded: bool = False
+) -> list[str]:
     """Get device and legacy tokens; reuse a selected owner document when supplied.
 
     ``user_document_loaded`` distinguishes an absent legacy field from an unread
@@ -341,19 +412,19 @@ def get_all_tokens(uid: str, *, legacy_token: Optional[str] = None, user_documen
     tokens: List[str] = []
 
     # Get tokens from new subcollection
-    token_docs = db.collection('users').document(uid).collection('fcm_tokens').stream()
+    token_docs = db.collection("users").document(uid).collection("fcm_tokens").stream()
     for doc in token_docs:
         token_data = _typed_doc(doc)
-        token_value = token_data.get('token')
+        token_value = token_data.get("token")
         if token_value:
             tokens.append(str(token_value))
 
     # Get legacy token from main user document (backward compatibility)
     if not user_document_loaded:
-        user_ref = db.collection('users').document(uid).get()
+        user_ref = db.collection("users").document(uid).get()
         if getattr(user_ref, "exists", False):
             user_data = _typed_doc(user_ref)
-            legacy_value = user_data.get('fcm_token')
+            legacy_value = user_data.get("fcm_token")
             legacy_token = str(legacy_value) if legacy_value else None
     if legacy_token and legacy_token not in tokens:
         tokens.append(legacy_token)
@@ -364,28 +435,67 @@ def get_all_tokens(uid: str, *, legacy_token: Optional[str] = None, user_documen
 def remove_invalid_token(token: str) -> None:
     """Remove invalid token using collection group query (rare operation)"""
     # Query across ALL users' fcm_tokens subcollections
-    query = db.collection_group('fcm_tokens').where(filter=FieldFilter('token', '==', token)).limit(1)
+    query = (
+        db.collection_group("fcm_tokens")
+        .where(filter=FieldFilter("token", "==", token))
+        .limit(1)
+    )
 
     for doc in query.stream():
         doc.reference.delete()
         return
 
 
-def remove_bulk_tokens(tokens: list[str]) -> None:
+def chunked_filter_in(
+    collection_ref: Any, field: str, values: Any, op: str = "in"
+) -> list[Any]:
+    """Execute Firestore queries across chunked filters of <= 30 items.
+
+    Firestore restricts 'in' and 'array_contains_any' query filters to arrays with
+    at most 30 elements.
+    - Deterministically strips None values and deduplicates values preserving order.
+    - Returns [] immediately if clean_vals is empty.
+    - Deduplicates streamed documents across chunks using doc.id (while preserving order).
+    """
+    if not values:
+        return []
+    clean_vals = [v for v in dict.fromkeys(values) if v is not None]
+    if not clean_vals:
+        return []
+    seen_ids = set()
+    results = []
+    for i in range(0, len(clean_vals), 30):
+        chunk = clean_vals[i : i + 30]
+        query = collection_ref.where(filter=FieldFilter(field, op, chunk))
+        for doc in query.stream():
+            if doc.id not in seen_ids:
+                seen_ids.add(doc.id)
+                results.append(doc)
+    return results
+
+
+def remove_bulk_tokens(tokens: list[str], *, firestore_client: Any = None) -> None:
     """Remove multiple invalid tokens efficiently using IN queries and batch deletes"""
     if not tokens:
         return
 
+    client = (
+        firestore_client if firestore_client is not None else get_firestore_client()
+    )
     # Firestore IN queries support up to 30 items
     chunk_size = 30
-    token_chunks = [tokens[i : i + chunk_size] for i in range(0, len(tokens), chunk_size)]
+    token_chunks = [
+        tokens[i : i + chunk_size] for i in range(0, len(tokens), chunk_size)
+    ]
 
     for chunk in token_chunks:
         # Query for all tokens in this chunk at once
-        query = db.collection_group('fcm_tokens').where(filter=FieldFilter('token', 'in', chunk))
+        query = client.collection_group("fcm_tokens").where(
+            filter=FieldFilter("token", "in", chunk)
+        )
 
         # Batch delete for efficiency
-        batch = db.batch()
+        batch = client.batch()
         count = 0
 
         for doc in query.stream():
@@ -395,7 +505,7 @@ def remove_bulk_tokens(tokens: list[str]) -> None:
             # Firestore batch limit is 500 operations
             if count >= 500:
                 batch.commit()
-                batch = db.batch()
+                batch = client.batch()
                 count = 0
 
         # Commit remaining deletes
@@ -403,12 +513,60 @@ def remove_bulk_tokens(tokens: list[str]) -> None:
             batch.commit()
 
 
-def get_users_token_in_timezones(timezones: list[str]) -> List[str]:
-    return _get_users_in_timezones(timezones, 'fcm_token')
+def get_tokens_for_users(
+    uids: list[str], *, firestore_client: Any = None
+) -> Dict[str, List[str]]:
+    """Retrieve all device and legacy tokens for a list of user IDs in chunks of <= 30.
+
+    Firestore restricts 'in' query filters to at most 30 elements.
+    Queries exceeding 30 elements raise 400 InvalidArgument.
+    """
+    if not uids:
+        return {}
+
+    client = (
+        firestore_client if firestore_client is not None else get_firestore_client()
+    )
+    result: Dict[str, List[str]] = {uid: [] for uid in uids}
+    chunk_size = 30
+    for i in range(0, len(uids), chunk_size):
+        chunk = uids[i : i + chunk_size]
+        query = client.collection("users").where(
+            filter=FieldFilter("__name__", "in", chunk)
+        )
+        for doc in query.stream():
+            uid = str(doc.id)
+            user_data = _typed_doc(doc)
+            tokens: List[str] = []
+            for token_doc in (
+                client.collection("users")
+                .document(uid)
+                .collection("fcm_tokens")
+                .stream()
+            ):
+                token_data = _typed_doc(token_doc)
+                token_val = token_data.get("token")
+                if token_val:
+                    tokens.append(str(token_val))
+            legacy_val = user_data.get("fcm_token")
+            if legacy_val and str(legacy_val) not in tokens:
+                tokens.append(str(legacy_val))
+            result[uid] = tokens
+    return result
 
 
-def get_users_id_in_timezones(timezones: list[str]) -> List[Union[str, Tuple[str, List[str], Any]]]:
-    return _get_users_in_timezones(timezones, 'id')
+def get_users_token_in_timezones(
+    timezones: list[str], *, firestore_client: Any = None
+) -> List[str]:
+    return _get_users_in_timezones(
+        timezones, "fcm_token", firestore_client=firestore_client
+    )
+
+
+def get_users_id_in_timezones(
+    timezones: list[str], *, firestore_client: Any = None
+) -> List[Union[str, Tuple[str, List[str], Any]]]:
+    return _get_users_in_timezones(timezones, "id", firestore_client=firestore_client)
 
 
 def get_users_for_daily_summary_indexed(
@@ -425,7 +583,9 @@ def get_users_for_daily_summary_indexed(
     if not timezones:
         return []
 
-    client = firestore_client if firestore_client is not None else get_firestore_client()
+    client = (
+        firestore_client if firestore_client is not None else get_firestore_client()
+    )
     users: List[Tuple[str, DeferredTokens, Any]] = []
     query_count = 0
     complete = False
@@ -433,18 +593,22 @@ def get_users_for_daily_summary_indexed(
         for offset in range(0, len(timezones), 30):
             query_count += 1
             query = DAILY_SUMMARY_RECIPIENTS_QUERY.build(
-                client.collection('users'),
-                {'enabled': True, 'hour_local': target_local_hour, 'time_zones': timezones[offset : offset + 30]},
+                client.collection("users"),
+                {
+                    "enabled": True,
+                    "hour_local": target_local_hour,
+                    "time_zones": timezones[offset : offset + 30],
+                },
                 field_filter_factory=FieldFilter,
             )
             for user_doc in query.stream():
                 user_data = _typed_doc(user_doc)
-                legacy_value = user_data.get('fcm_token')
+                legacy_value = user_data.get("fcm_token")
                 users.append(
                     (
                         str(user_doc.id),
                         DeferredTokens(str(legacy_value) if legacy_value else None),
-                        user_data.get('time_zone'),
+                        user_data.get("time_zone"),
                     )
                 )
         complete = True
@@ -453,15 +617,23 @@ def get_users_for_daily_summary_indexed(
         # Returned-document reads, not all billed Firestore operations: empty
         # queries and generation reads are accounted separately by the platform.
         logger.info(
-            'daily_summary_recipient_reads user_docs_read=%d token_docs_read=0 queries=%d complete=%s',
+            "daily_summary_recipient_reads user_docs_read=%d token_docs_read=0 queries=%d complete=%s",
             len(users),
             query_count,
             complete,
         )
 
 
-def _get_users_in_timezones(timezones: list[str], filter: str) -> List[Any]:
+def _get_users_in_timezones(
+    timezones: list[str], filter: str, *, firestore_client: Any = None
+) -> List[Any]:
     """Query main user documents by timezone, then get tokens from subcollection and legacy field"""
+    if not timezones:
+        return []
+
+    client = (
+        firestore_client if firestore_client is not None else get_firestore_client()
+    )
     users: List[Any] = []
 
     # 'Where in' query only supports 30 or fewer items in list so we split in chunks
@@ -471,7 +643,9 @@ def _get_users_in_timezones(timezones: list[str], filter: str) -> List[Any]:
         chunk_users: List[Any] = []
         try:
             # Query main user documents by time_zone
-            query = db.collection('users').where(filter=FieldFilter('time_zone', 'in', chunk))
+            query = client.collection("users").where(
+                filter=FieldFilter("time_zone", "in", chunk)
+            )
 
             for user_doc in query.stream():
                 uid = str(user_doc.id)
@@ -479,15 +653,20 @@ def _get_users_in_timezones(timezones: list[str], filter: str) -> List[Any]:
 
                 # Collect tokens from subcollection
                 tokens: List[str] = []
-                token_docs = db.collection('users').document(uid).collection('fcm_tokens').stream()
+                token_docs = (
+                    client.collection("users")
+                    .document(uid)
+                    .collection("fcm_tokens")
+                    .stream()
+                )
                 for token_doc in token_docs:
                     token_data = _typed_doc(token_doc)
-                    token_value = token_data.get('token')
+                    token_value = token_data.get("token")
                     if token_value:
                         tokens.append(str(token_value))
 
                 # Add legacy token if exists and not already in list
-                legacy_token = user_data.get('fcm_token')
+                legacy_token = user_data.get("fcm_token")
                 if legacy_token and legacy_token not in tokens:
                     tokens.append(str(legacy_token))
 
@@ -495,16 +674,17 @@ def _get_users_in_timezones(timezones: list[str], filter: str) -> List[Any]:
                 if not tokens:
                     continue
 
-                if filter == 'fcm_token':
+                if filter == "fcm_token":
                     # Return flat list of tokens
                     chunk_users.extend(tokens)
                 else:
                     # Return list of (uid, [tokens], time_zone) tuples
-                    time_zone = user_data.get('time_zone')
+                    time_zone = user_data.get("time_zone")
                     chunk_users.append((uid, tokens, time_zone))
 
         except Exception as e:
             logger.error(f"Error querying chunk {chunk}: {e}")
+            raise
         users.extend(chunk_users)
 
     return users
