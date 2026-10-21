@@ -1300,6 +1300,53 @@ async def test_queued_live_frame_never_writes_past_capture_age_deadline(monkeypa
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('kind', [SafeSonioxSocket, SafeModulateSocket])
+async def test_unpaced_tail_write_blocked_through_residence_deadline_is_local_not_provider_death(
+    monkeypatch, virtual_clock, kind
+):
+    """An initial paid leg has no writer pace, so a blocked ``ws.send`` never
+    raises AudioDeliveryExpired. When the frame is inside the last 2s of its 28s
+    residence, the tail's write bound IS the residence deadline; the stall
+    surfaces through ``await_frozen_writes`` with the vendor socket open. That
+    is the tail's own bound (delivery_expired): it must never read as the
+    default connection_lost, which votes on the provider circuit and counts as
+    provider failure (review of #23074; lead ruling 603b95)."""
+
+    monkeypatch.setattr(st, 'clock', lambda: virtual_clock.now)
+    monkeypatch.setattr(soniox_module, 'clock', lambda: virtual_clock.now)
+    transport = Transport()
+    transport.timer = virtual_clock
+    raw = kind(transport, lambda _: None, asyncio.get_running_loop())
+    live_send_compat(raw)
+    birth = BirthLedger()
+    delivery = ReplayTailSocket(
+        raw,
+        ReplayPacer(SAMPLE_RATE, 'soniox' if kind is SafeSonioxSocket else 'modulate', raw),
+        deque(),
+        tail_host(),
+        birth=birth,
+    )
+    try:
+        assert birth.note(0, 1600) == 0.0
+        virtual_clock.now = 27.5
+        transport.gate.clear()
+        assert delivery.send(b'\x01\x00' * 1600, 0)
+        delivery.start_tail()
+        await until(lambda: raw._send_queue.inflight == 1)
+        asyncio.create_task(virtual_clock.sleep(1.0))
+        await until(lambda: delivery.is_connection_dead)
+        assert not raw.is_connection_dead  # the vendor socket never closed
+        assert delivery.typed_death_reason == 'delivery_expired'
+        assert delivery.normalized_death_reason == 'delivery_expired'
+        assert live_stt_terminal_reason(delivery, 'send_failed') == 'delivery_expired'
+        assert provider_observation('failover', 'delivery_expired') is None
+    finally:
+        transport.gate.set()
+        await abort_replay_socket(delivery)
+        assert transport.closed
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('kind', [SafeSonioxSocket, SafeModulateSocket])
 async def test_expired_tail_packet_retires_once_and_fresh_suffix_continues(virtual_clock, kind):
     """A tail packet whose residence bound passes before admission is retired
     through the metered cut exactly once; a younger packet still ships."""

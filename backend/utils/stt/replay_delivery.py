@@ -744,10 +744,15 @@ class ReplayTailSocket:
                         if not self._debit_pending_write():
                             entry.start = position
                         self._dead = True
-                        if clock() < packet_deadline and not self.connection.is_connection_dead:
-                            # The write was still inside its deadline when it
-                            # failed to confirm: the tail's bound, not the
-                            # destination's capacity.
+                        if not self.connection.is_connection_dead:
+                            # The write did not confirm while the vendor socket
+                            # stayed open — whether the frame was still inside
+                            # its residence or had just reached that deadline
+                            # (an unpaced initial leg's blocked send surfaces
+                            # here, never as AudioDeliveryExpired). The tail's
+                            # own bound: it must not fall to connection_lost,
+                            # which votes on the provider circuit and counts as
+                            # provider failure (lead ruling 603b95).
                             self._local_reason = LOCAL_DELIVERY_EXPIRED
                         return
                     self._pending_write = None
