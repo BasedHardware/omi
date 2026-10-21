@@ -99,3 +99,8 @@ def from_env() -> ComputeClient:
         os.getenv('BATCH_PIPELINE_WORKER_AUDIENCE', '').strip(),
         os.getenv('OMI_ENV_STAGE', '').strip().lower(),
     )
+
+
+def shadow_from_env() -> ComputeClient:
+    base = os.getenv('BATCH_PIPELINE_SHADOW_RECOVERY_API_URL', '').strip()
+    return ComputeClient(base, base, os.getenv('OMI_ENV_STAGE', '').strip().lower())

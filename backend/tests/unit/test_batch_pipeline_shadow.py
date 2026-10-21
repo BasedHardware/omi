@@ -3,6 +3,7 @@
 from dataclasses import replace
 from types import SimpleNamespace
 from unittest.mock import Mock
+from datetime import datetime, timezone
 
 import pytest
 
@@ -12,7 +13,7 @@ from database import batch_pipeline_store as storage
 from database.batch_pipeline_shadow import ShadowStore, identity
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from utils.batch_pipeline.artifacts import ArtifactStore
-from utils.batch_pipeline.contracts import WorkItem
+from utils.batch_pipeline.contracts import WorkItem, RecoveryWork
 from utils.batch_pipeline.projection import Projector, ProjectionBlocked
 from utils.batch_pipeline.scheduler import Scheduler
 from utils.batch_pipeline.shadow_recovery import recover
@@ -23,6 +24,7 @@ from utils.batch_pipeline.recovery_disposition import MultilingualEmpty
 def repository(monkeypatch):
     monkeypatch.setenv('BATCH_PIPELINE_SHADOW_PERCENT', '100')
     monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    monkeypatch.setenv('BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED', 'false')
     monkeypatch.setattr(storage, 'assert_batch_write_allowed', lambda *args, **kwargs: 0)
     store = storage.FirestoreStore('batch_pipeline_dev', firestore_client=StrictFirestore())
     return ShadowStore(store, clock=lambda: 7200, busy=lambda: False)
@@ -37,6 +39,7 @@ def running(repository, name='one', *, duration=300):
     )
     assert repository.ready(reservation, item, '')
     assert repository.take('worker-' + name) == item
+    assert repository.handoff(item.segment_id, RecoveryWork(item.segment_id, padded_retry='skipped_long_speech'))
     return item
 
 
@@ -135,6 +138,11 @@ def test_cap_default_invalid_and_zero(monkeypatch):
         assert config.paid_recovery_limit() == 0
 
 
+def test_uncertain_spend_reservation_denies_provider_permission(repository, monkeypatch):
+    monkeypatch.setattr(repository.store, 'run', Mock(side_effect=RuntimeError('synthetic lost commit reply')))
+    assert repository.paid('sh_uncertain', 'modulate') is False
+
+
 def test_full_second_provider_recovery_writes_only_hashed_shadow_outcome(repository, monkeypatch):
     monkeypatch.setenv('BATCH_PIPELINE_SECOND_MULTILINGUAL_ENABLED', 'true')
     item = running(repository)
@@ -195,6 +203,113 @@ def test_cap_records_paid_skipped_without_provider_call(repository, monkeypatch)
     assert row(repository, item.segment_id)['speech_loss_seconds'] == 19
 
 
+def test_second_provider_requires_same_long_speech_handoff_as_live(repository):
+    item = running(repository)
+    repository.store.run(
+        lambda tx: tx.put(
+            'shadow_jobs',
+            item.segment_id,
+            {
+                **tx.get('shadow_jobs', item.segment_id),
+                'language': 'en',
+                'worker_empty_evidence': {'padded_retry': 'empty', 'version': 1},
+            },
+        )
+    )
+    spans = [{'start': 0.0, 'end': 300.0}]
+    first = Mock(side_effect=MultilingualEmpty(300, spans))
+    second = Mock()
+    assert (
+        recover(
+            repository,
+            SimpleNamespace(fetch_audio=lambda _: b'audio'),
+            item.segment_id,
+            stt=first,
+            second_stt=second,
+            inspect=lambda *a: (b'', 300, spans),
+        )
+        == 'failed_held'
+    )
+    second.assert_not_called()
+
+
+def test_shadow_terminal_empty_follows_pinned_recovery_policy(repository, monkeypatch):
+    monkeypatch.setenv('BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED', 'true')
+    item = running(repository)
+    spans = [{'start': 0.0, 'end': 300.0}]
+    empty = Mock(side_effect=MultilingualEmpty(300, spans))
+    assert (
+        recover(
+            repository,
+            SimpleNamespace(fetch_audio=lambda _: b'audio'),
+            item.segment_id,
+            stt=empty,
+            second_stt=empty,
+            inspect=lambda *a: (b'', 300, spans),
+        )
+        == 'empty'
+    )
+
+
+@pytest.mark.parametrize('failed_provider', ['modulate', 'deepgram'])
+def test_provider_failures_keep_the_live_failed_held_disposition(repository, failed_provider):
+    item = running(repository)
+    spans = [{'start': 0.0, 'end': 300.0}]
+    first = Mock(
+        side_effect=(
+            RuntimeError('synthetic provider failure')
+            if failed_provider == 'modulate'
+            else MultilingualEmpty(300, spans)
+        )
+    )
+    second = Mock(side_effect=RuntimeError('synthetic provider failure'))
+    assert (
+        recover(
+            repository,
+            SimpleNamespace(fetch_audio=lambda _: b'audio'),
+            item.segment_id,
+            stt=first,
+            second_stt=second,
+            inspect=lambda *a: (b'', 300, spans),
+        )
+        == 'failed_held'
+    )
+    assert second.call_count == (failed_provider == 'deepgram')
+
+
+def test_active_recovery_reap_uses_its_start_time_and_transport_cannot_settle_it(repository, monkeypatch):
+    from database import batch_pipeline_shadow as module
+
+    item = running(repository)
+    repository.clock = lambda: 11000
+    repository.start_recovery(item.segment_id)
+    monkeypatch.setattr(module, 'stale_jobs', lambda *args: [SimpleNamespace(id=item.segment_id)])
+    repository.reap()
+    repository.recovery_transport_failed(item.segment_id)
+    assert row(repository, item.segment_id)['state'] == 'recovering'
+
+
+def test_shadow_artifact_cleanup_removes_raw_owner_receipt(repository, monkeypatch):
+    from utils.batch_pipeline import retention
+
+    reference = Mock()
+    artifact = SimpleNamespace(
+        reference=reference,
+        to_dict=lambda: {
+            'owner_id': 'synthetic-owner',
+            'conversation_ids': ['synthetic-conversation'],
+            'shadow': True,
+            'uri': 'synthetic:audio',
+        },
+    )
+    monkeypatch.setattr(retention.queries, 'due_artifacts', lambda *args: [artifact])
+    delete = Mock()
+    assert retention.cleanup_completed_artifacts(repository.store, datetime.now(timezone.utc), delete_uri=delete) == 1
+    delete.assert_called_once_with('synthetic-owner', 'synthetic:audio')
+    reference.delete.assert_called_once()
+    reference.update.assert_not_called()
+
+
 def test_artifact_sink_cannot_persist_shadow_transcript(repository):
     item = running(repository)
     from utils.batch_pipeline.artifact_policy import shadow_result
@@ -219,7 +334,7 @@ def test_artifact_sink_cannot_persist_shadow_transcript(repository):
 
 def test_projection_and_normal_scheduler_refuse_shadow_before_any_side_effect():
     projector = object.__new__(Projector)
-    for method in (projector._persist_read, projector._project_read, projector._assign):
+    for method in (projector._persist_read, projector._project_read, projector._assign, projector._finish):
         with pytest.raises(ProjectionBlocked, match='shadow'):
             method('segment', {'shadow': True}, {}, None)
     item = WorkItem('segment', 'synthetic', 1, 'encrypted:shadow', 30, 2, shadow=True)

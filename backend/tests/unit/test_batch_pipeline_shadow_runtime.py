@@ -1,6 +1,9 @@
 """Exercise the real GPU coordinator, idle priority, and private HTTP boundary."""
 
 import asyncio
+import threading
+import io
+import json
 from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
@@ -19,6 +22,8 @@ from utils.batch_pipeline.shadow_worker import ShadowRunner
 from routers import batch_pipeline as router
 from utils.batch_pipeline import intake, shadow_recovery
 from utils.batch_pipeline import retention, shadow_intake
+from utils.batch_pipeline import compute_client
+from utils import cloud_tasks
 from utils.batch_pipeline.artifact_policy import create_artifact_store
 from tests.unit.test_batch_pipeline_artifacts import ObjectClient
 from tests.unit.test_batch_pipeline_audio import pcm
@@ -84,12 +89,75 @@ async def test_live_claim_during_take_drops_before_gpu_dispatch(repository):
     assert row(repository, work.segment_id)['outcome'] == 'dropped'
 
 
+async def test_missing_gpu_result_never_starts_paid_recovery(repository):
+    work = running(repository)
+    repository.take = lambda _: work
+    recovery = Mock()
+    runner = ShadowRunner(repository, recovery)
+    pump = SimpleNamespace(_gpu=asyncio.Lock(), _normal_flights=0, worker=Mock(process_batch=Mock(return_value=[])))
+    assert await runner.run_once(pump) == 1
+    recovery.assert_not_called()
+    assert row(repository, work.segment_id)['outcome'] == 'error'
+
+
+async def test_busy_probe_failure_settles_taken_work_immediately(repository):
+    work = running(repository)
+    repository.take = lambda _: work
+    repository.busy = Mock(side_effect=TimeoutError('synthetic probe timeout'))
+    runner = ShadowRunner(repository, Mock())
+    pump = SimpleNamespace(_gpu=asyncio.Lock(), _normal_flights=0, worker=Mock())
+    assert await runner.run_once(pump) == 0
+    pump.worker.process_batch.assert_not_called()
+    assert row(repository, work.segment_id)['outcome'] == 'dropped'
+
+
+async def test_late_take_reply_is_dropped_without_leaving_raw_owner(repository):
+    work = running(repository)
+    runner = ShadowRunner(repository, Mock())
+    runner.worker_id = 'worker-late'
+    repository.offer(runner.worker_id)
+    reservation = repository.reserve(work.owner_id, 'late-take', 'deep')
+    work = replace(work, segment_id=reservation[0])
+    assert repository.ready(reservation, work, '')
+    take, release = repository.take, threading.Event()
+
+    def delayed(worker):
+        result = take(worker)
+        release.wait(3)
+        return result
+
+    repository.take = delayed
+    pump = SimpleNamespace(_gpu=asyncio.Lock(), _normal_flights=0, worker=Mock())
+    try:
+        assert await runner.run_once(pump) == 0
+        assert row(repository, work.segment_id)['state'] == 'running'
+    finally:
+        release.set()
+    for _ in range(100):
+        if row(repository, work.segment_id).get('state') == 'settled':
+            break
+        await asyncio.sleep(0.01)
+    assert row(repository, work.segment_id)['outcome'] == 'dropped'
+    assert 'item' not in row(repository, work.segment_id)
+    pump.worker.process_batch.assert_not_called()
+
+
 def test_empty_gpu_worker_hands_off_to_shadow_recovery(monkeypatch):
     monkeypatch.setenv('BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED', 'true')
     worker, _, _, _, _, _ = setup_worker(recover_words=lambda *args: [])
     worker.words.transcribe_batch = lambda samples: [[] for _ in samples]
     result = worker.process_batch([replace(item(), shadow=True)])
     assert len(result) == 1 and isinstance(result[0], RecoveryWork)
+
+
+def test_shadow_empty_asr_cannot_increment_live_fallback_metrics(monkeypatch):
+    monkeypatch.setenv('BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED', 'true')
+    fallback = Mock()
+    monkeypatch.setattr(batch_pipeline, 'record_fallback', fallback)
+    worker, _, _, _, _, _ = setup_worker(recover_words=lambda *args: [])
+    worker.words.transcribe_batch = lambda samples: [[] for _ in samples]
+    worker.process_batch([replace(item(), shadow=True)])
+    fallback.assert_not_called()
 
 
 async def test_disabled_upload_and_byok_have_no_io(monkeypatch):
@@ -151,6 +219,31 @@ def test_private_http_recovery_writes_only_shadow_state(repository, monkeypatch)
     assert 'private transcript' not in repr(repository.store.client.rows)
 
 
+def test_shadow_client_uses_existing_recovery_role_and_oidc_audience(monkeypatch):
+    monkeypatch.setenv('BATCH_PIPELINE_SHADOW_RECOVERY_API_URL', 'https://recovery.invalid')
+    monkeypatch.setenv('BATCH_PIPELINE_API_URL', 'https://admission.invalid')
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    token = Mock(return_value='synthetic-token')
+    monkeypatch.setattr(compute_client, 'fetch_id_token', token)
+    client = compute_client.shadow_from_env()
+    client._send = Mock(return_value=io.BytesIO(b'{"status":"failed_held"}'))
+    assert client.shadow_recover('sh_unit') == {'status': 'failed_held'}
+    request = client._send.call_args.args[0]
+    assert request.full_url == 'https://recovery.invalid/v2/batch-pipeline/shadow-recover'
+    assert json.loads(request.data) == {'stage': 'dev', 'segment_id': 'sh_unit'}
+    assert token.call_args.args[1] == 'https://recovery.invalid'
+
+
+def test_shadow_endpoint_uses_recovery_audience_with_gpu_principal(monkeypatch):
+    monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_TASK_AUDIENCE', 'https://recovery.invalid')
+    monkeypatch.setenv('BATCH_PIPELINE_WORKER_SERVICE_ACCOUNT', 'synthetic-worker@example.invalid')
+    verify = Mock(return_value=1)
+    monkeypatch.setattr(cloud_tasks, 'verify_configured_cloud_tasks_oidc', verify)
+    assert router.verify_worker(SimpleNamespace(url=SimpleNamespace(path='/v2/batch-pipeline/shadow-recover'))) == 1
+    assert verify.call_args.kwargs['audience'] == 'https://recovery.invalid'
+    assert verify.call_args.kwargs['invoker_sa'] == 'synthetic-worker@example.invalid'
+
+
 async def test_real_decode_encrypted_staging_preserves_legacy_files(repository, monkeypatch, tmp_path):
     original = Path(pcm(tmp_path, 1750000100, samples=16000))
     original_bytes = original.read_bytes()
@@ -192,3 +285,48 @@ async def test_real_decode_encrypted_staging_preserves_legacy_files(repository, 
         assert path[0].startswith('batch_pipeline_dev_shadow_') or (
             path[0] == 'batch_pipeline_dev_artifacts' and record['shadow'] and record['cleanup_after']
         )
+
+
+async def test_v1_shaped_offer_computes_identity_before_legacy_decode(repository, monkeypatch, tmp_path):
+    from utils.executors import start_background_task
+    from utils.sync.content_id import compute_sync_content_id
+    from database.batch_pipeline_shadow import identity
+
+    original = Path(pcm(tmp_path, 1750000100, samples=16000))
+    content = compute_sync_content_id('synthetic-owner', [str(original)])
+
+    def privacy(*args, **kwargs):
+        if kwargs.get('snapshots') is not None:
+            kwargs['snapshots'].update(user={'language': ''})
+        return 0
+
+    tasks = []
+
+    def track(coro, *, name):
+        task = start_background_task(coro, name=name)
+        tasks.append(task)
+        return task
+
+    monkeypatch.setattr(retention, 'assert_batch_write_allowed', privacy)
+    artifacts = create_artifact_store(repository.store, ObjectClient(), 'synthetic-bucket', b's' * 32)
+    monkeypatch.setattr(shadow_intake, 'artifacts_for', lambda _: artifacts)
+    monkeypatch.setattr(shadow_intake, 'FirestoreStore', lambda _: repository.store)
+    monkeypatch.setattr(shadow_intake, 'ShadowStore', lambda _: repository)
+    monkeypatch.setattr(shadow_intake, 'selected', lambda *args: True)
+    monkeypatch.setattr(shadow_intake, 'start_background_task', track)
+    repository.offer('worker-v1')
+    await shadow_intake.offer_upload(
+        uid='synthetic-owner',
+        content_id=None,
+        paths=[str(original)],
+        lane='fresh',
+        age=0,
+        conversation_id=None,
+        source='omi',
+        device_id='synthetic-device',
+        byok=False,
+        policy=SimpleNamespace(batch_enabled=False),
+    )
+    await asyncio.gather(*tasks)
+    assert row(repository, identity('synthetic-owner', content + ':0'))['state'] == 'ready'
+    assert original.exists()  # Only shadow's private copy was decoded/cleaned.

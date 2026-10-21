@@ -45,6 +45,14 @@ def hosts(config):
     }
 
 
+def test_shadow_controls_ship_off_and_capped_on_every_cloud_run_host(manifest):
+    for config in manifest.values():
+        for service in SERVICES:
+            env = config['cloud_run']['services'][service]['env']
+            assert env['BATCH_PIPELINE_SHADOW_PERCENT']['value'] == '0'
+            assert env['BATCH_PIPELINE_SHADOW_PAID_RECOVERY_PER_HOUR']['value'] == '200'
+
+
 def test_batch_pipeline_admission_is_configured_without_uid_allowlists(manifest, listen_chart_envs):
     for stage, config in manifest.items():
         for env in hosts(config).values():

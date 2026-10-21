@@ -184,11 +184,11 @@ async def run_process(store: Any, artifacts: Any, registry: CollectorRegistry, s
         # Startup models off the event loop. Readiness remains closed until the
         # entire BF16 ASR / FP32 segmentation chain and graph policy are ready.
         worker = await asyncio.to_thread(load_worker, artifacts)
-        from utils.batch_pipeline.compute_client import from_env
+        from utils.batch_pipeline.compute_client import shadow_from_env
 
         # Lazy client creation keeps a dark rollout independent of API config.
         def shadow_recover(segment):
-            return from_env().shadow_recover(segment)
+            return shadow_from_env().shadow_recover(segment)
 
         metrics = QueueMetrics(
             registry,

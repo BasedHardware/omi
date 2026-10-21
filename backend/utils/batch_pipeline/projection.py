@@ -554,6 +554,8 @@ class Projector:
         return candidate is not None, candidate
 
     def _finish(self, segment_id, job, entry, binding):
+        if job.get('shadow'):
+            raise ProjectionBlocked('shadow publication forbidden')
         policy = ProjectionPolicy.from_dict(job['policy_parts']['projection'])
         item = WorkItem(**{key: job[key] for key in WorkItem.__dataclass_fields__ if key in job})
         entry = self.store.ref('results', segment_id).get().to_dict() or {}

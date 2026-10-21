@@ -266,7 +266,7 @@ def cleanup_completed_artifacts(
         delete_uri(data['owner_id'], data['uri'])
         # Deletion races must never recreate a purged metadata document.
         try:
-            if data.get('erasure_requested'):
+            if data.get('erasure_requested') or data.get('shadow'):
                 artifact.reference.delete()
                 cleaned += 1
                 continue

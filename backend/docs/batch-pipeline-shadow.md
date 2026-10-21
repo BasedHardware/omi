@@ -3,9 +3,14 @@
 Shadow is shipped off. `BATCH_PIPELINE_SHADOW_PERCENT=0` is the kill switch;
 `BATCH_PIPELINE_SHADOW_PAID_RECOVERY_PER_HOUR=200` caps the combined number of
 Modulate and Deepgram unit calls per UTC hour, fleet-wide. Invalid values deny
-admission/spend. Set the same values on backend-sync, backend-sync-backfill,
-and batch-pipeline-worker. No new service, queue, GPU pool, node or HPA signal
+admission/spend. Set the same values on all four Cloud Run backend hosts and
+batch-pipeline-worker. No new service, queue, GPU pool, node or HPA signal
 is introduced. The lead owns deployment and the first 10% activation.
+Worker-only `BATCH_PIPELINE_SHADOW_RECOVERY_API_URL` targets the existing
+record-recovery CPU role (`backend-integration`) and is also its OIDC audience.
+Both chart profiles copy that role's declared recovery task audience. The
+endpoint authenticates the existing GPU worker principal. Blank fails closed;
+the pre-compute admission API's role-local policy is never used for recovery.
 
 ## Admission and isolation
 
@@ -14,7 +19,9 @@ The salted, stable owner hash selects the configured percentage, subject to
 An explicit cohort denial excludes the owner. Neither an explicit membership
 nor a percentage bypasses zero. Current batch admission and the separate
 `batch-pipeline` cohort exclude the owner, and the upload hook runs only after
-legacy successfully claims new content. Native record uploads, duplicates,
+legacy successfully claims new v2 content. The deprecated v1 inline legacy
+route offers its raw files before decode through the same isolated intake.
+Native record uploads, duplicates,
 completed receipts and BYOK do not create a shadow twin.
 
 An idle GPU worker offers one rendezvous for six seconds. At most four offers
@@ -42,8 +49,11 @@ Transcript/result payloads are discarded in memory and never uploaded.
 `batch_pipeline_{stage}_shadow_jobs` and `_shadow_slots` hold only short-lived
 control metadata; terminal job records replace that metadata with hashed-owner
 outcomes. Account/conversation deletion includes shadow jobs and their normal
-artifact outboxes. Stale jobs are settled by the worker after an hour; raw
-control metadata additionally expires after two hours. Terminal outcomes expire
+artifact outboxes. Shadow artifact receipts are deleted with their objects,
+including raw owner/conversation metadata; the ordinary 45-day receipt rule
+does not apply. Stale jobs are settled by the worker after an hour; active
+recovery uses its own start time, never the upload age. Raw control metadata
+additionally expires after two hours (renewed at recovery start). Terminal outcomes expire
 after seven days. The lead must apply the added shadow job/spend TTL declarations
 in `deploy/batch-pipeline/retention.json` through the existing TTL operator tool.
 
@@ -51,11 +61,14 @@ in `deploy/batch-pipeline/retention.json` through the existing TTL operator tool
 
 The private OIDC `/v2/batch-pipeline/shadow-recover` endpoint uses the record
 lane's strict original-audio VAD and provider/response validators. Speech gets
-one Modulate call; a valid empty response for long speech can get one Deepgram
-call under the existing second-provider switch. Each call independently needs
+one Modulate call; a valid empty response with the live lane's exact
+`skipped_long_speech` worker evidence can get one Deepgram call under the existing
+second-provider switch and speech threshold. Terminal empty disposition uses
+the pinned recovery policy. Missing/untyped GPU results record `error` without
+calling a paid provider. Each call independently needs
 an atomic hourly reservation and a fresh privacy check. Duplicate deliveries,
 provider errors, lost responses and hour rollover cannot repeat a reserved
-provider call. Exhaustion records `paid_skipped` (`shadow_paid_skipped` in the
+provider call. Exhaustion or unavailable/ambiguous spend authority records `paid_skipped` (`shadow_paid_skipped` in the
 gate's terminology). It never writes a recovery transcript or bills a user.
 Recovery runs outside the GPU lock and pump lanes, with at most one outstanding
 shadow recovery per worker, so paid-provider latency cannot occupy every GPU lane.
@@ -75,7 +88,8 @@ across those targets; do not add owner IDs or hashes as Prometheus labels.
 | `omi_batch_shadow_paid_audio_seconds_total` | Same provider labels; reserved input duration, includes silence in provider input |
 
 `recovered` means a nonempty GPU or recovery transcript; `empty` means VAD
-silence. `failed_held` means speech but exhausted valid-empty recovery.
+silence or the live policy's qualified terminal-empty disposition.
+`failed_held` means speech but exhausted valid-empty recovery.
 `error` includes provider/validation/infrastructure faults. Dropped/undecoded
 units have unknown speech, not measured zero-speech evidence. Metrics and logs
 are best effort after transaction commit; terminal shadow job records are the

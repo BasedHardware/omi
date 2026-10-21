@@ -20,6 +20,7 @@ from utils.batch_pipeline.intake import artifacts_for, _next_unit
 from utils.batch_pipeline.retention import batch_artifact_authorize
 from utils.executors import db_executor, storage_executor, sync_executor, run_blocking, start_background_task
 from utils.sync.stage import current_stage
+from utils.sync.content_id import compute_sync_content_id
 
 logger = logging.getLogger(__name__)
 
@@ -50,12 +51,20 @@ async def offer_upload(
         return
     repository, reservation, directory = None, None, None
     try:
+        if content_id is None:
+            content_id = await run_blocking(sync_executor, compute_sync_content_id, uid, paths)
         store = FirestoreStore(f'batch_pipeline_{current_stage()}')
         repository = ShadowStore(store)
         class_name = ('fresh', 'recent', 'deep')[int(priority_for(lane, age))]
-        reservation = await asyncio.wait_for(
-            run_blocking(db_executor, repository.reserve, uid, content_id + ':0', class_name), timeout=1
+        reserving = start_background_task(
+            run_blocking(db_executor, repository.reserve, uid, content_id + ':0', class_name),
+            name='batch_shadow_reserve',
         )
+        try:
+            reservation = await asyncio.wait_for(asyncio.shield(reserving), timeout=1)
+        except asyncio.TimeoutError:
+            start_background_task(drop_late_reservation(repository, reserving), name='batch_shadow_late_reserve')
+            return
         if reservation is None:
             return
         # Legacy retains its paths and cleanup ownership. Only these copies
@@ -89,6 +98,15 @@ async def offer_upload(
             except OSError:
                 pass
         logger.info('event=batch_shadow_intake outcome=error exception_type=%s', type(error).__name__)
+
+
+async def drop_late_reservation(repository, task):
+    try:
+        reservation = await task
+        if reservation is not None:
+            await run_blocking(db_executor, repository.finish, reservation[0], 'dropped')
+    except Exception:
+        pass
 
 
 async def stage_upload(

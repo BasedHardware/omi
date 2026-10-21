@@ -6,7 +6,7 @@ import os
 import time
 
 from config.batch_pipeline_shadow import shadow_percent
-from utils.batch_pipeline.contracts import WorkResult, HeldWork
+from utils.batch_pipeline.contracts import WorkResult, HeldWork, RecoveryWork, ValidationFailureWork
 from utils.batch_pipeline.shadow_metrics import GPU
 from utils.executors import db_executor, sync_executor, run_blocking, start_background_task
 
@@ -41,11 +41,22 @@ class ShadowRunner:
 
     async def _run_idle(self, pump):
         # Admission IO must not hold the ordinary GPU lock.
-        item = await asyncio.wait_for(run_blocking(db_executor, self.repository.take, self.worker_id), timeout=1)
+        taking = start_background_task(
+            run_blocking(db_executor, self.repository.take, self.worker_id), name='batch_shadow_take'
+        )
+        try:
+            item = await asyncio.wait_for(asyncio.shield(taking), timeout=1)
+        except asyncio.TimeoutError:
+            start_background_task(self._late_take(taking), name='batch_shadow_late_take')
+            return 0
         if item is None:
             await asyncio.wait_for(run_blocking(db_executor, self.repository.offer, self.worker_id), timeout=1)
             return 0
-        busy = await asyncio.wait_for(run_blocking(db_executor, self.repository.busy), timeout=1)
+        try:
+            busy = await asyncio.wait_for(run_blocking(db_executor, self.repository.busy), timeout=1)
+        except Exception:
+            await run_blocking(db_executor, self.repository.finish, item.segment_id, 'dropped')
+            return 0
         if pump._gpu.locked() or pump._normal_flights or not shadow_percent() or busy:
             await run_blocking(db_executor, self.repository.finish, item.segment_id, 'dropped')
             return 0
@@ -67,21 +78,41 @@ class ShadowRunner:
             GPU.inc(time.monotonic() - started)
         # Result payloads already terminated at the shadow sink. Nothing enters
         # _publish_flight, OrderedMerge, projection, enrichment or usage.
-        if results and isinstance(results[0], WorkResult):
+        if (
+            not isinstance(results, (list, tuple))
+            or len(results) != 1
+            or getattr(results[0], 'segment_id', None) != item.segment_id
+        ):
+            await run_blocking(db_executor, self.repository.finish, item.segment_id, 'error')
             return 1
-        if results and isinstance(results[0], HeldWork):
+        if isinstance(results[0], WorkResult):
+            return 1
+        if isinstance(results[0], HeldWork):
             await run_blocking(db_executor, self.repository.finish, item.segment_id, 'dropped')
-        else:
+        elif isinstance(results[0], (RecoveryWork, ValidationFailureWork)):
             # At-most-once recovery is a CPU backend RPC, never imports the
             # legacy/provider dependency graph into the GPU image.
-            self._recovering = True
-            start_background_task(self._recover(item.segment_id), name='batch_shadow_recovery')
+            if await run_blocking(db_executor, self.repository.handoff, item.segment_id, results[0]):
+                self._recovering = True
+                start_background_task(self._recover(item.segment_id), name='batch_shadow_recovery')
+        else:
+            await run_blocking(db_executor, self.repository.finish, item.segment_id, 'error')
         return 1
+
+    async def _late_take(self, task):
+        try:
+            item = await task
+            if item is not None:
+                await run_blocking(db_executor, self.repository.finish, item.segment_id, 'dropped')
+        except Exception:
+            pass
 
     async def _recover(self, segment):
         try:
-            await run_blocking(sync_executor, self.recovery, segment)
+            receipt = await run_blocking(sync_executor, self.recovery, segment)
+            if isinstance(receipt, dict) and receipt.get('status') == 'held':
+                await run_blocking(db_executor, self.repository.recovery_transport_failed, segment)
         except Exception:
-            await run_blocking(db_executor, self.repository.finish, segment, 'error')
+            await run_blocking(db_executor, self.repository.recovery_transport_failed, segment)
         finally:
             self._recovering = False

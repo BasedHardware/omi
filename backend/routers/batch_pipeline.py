@@ -54,6 +54,10 @@ def verify_worker(request: Request) -> int:
     if request.url.path == '/v2/batch-pipeline/recover-quarantine':
         audience = os.getenv('BATCH_PIPELINE_RECOVERY_TASK_AUDIENCE', '').strip()
         invoker = os.getenv('SYNC_TASKS_INVOKER_SA', '').strip()
+    elif request.url.path == '/v2/batch-pipeline/shadow-recover':
+        # Same CPU role/policy as paid record recovery, with the GPU worker's
+        # existing service principal rather than the Cloud Tasks invoker.
+        audience = os.getenv('BATCH_PIPELINE_RECOVERY_TASK_AUDIENCE', '').strip()
     return verify_configured_cloud_tasks_oidc(
         request,
         audience=audience,

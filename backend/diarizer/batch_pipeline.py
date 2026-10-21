@@ -991,6 +991,7 @@ class PipelineWorker:
             wait_futures([entry[2] for entry in pending_persist])
             pending_persist.clear()
         results[:] = [result for result in results if result is not None]
+        shadow_ids = {item.segment_id for item in items if item.shadow}
         # Emit only strings/integers after every item exception handler has exited.
         # Handler error printers must not inherit the private worker exception.
         for (
@@ -1005,6 +1006,8 @@ class PipelineWorker:
             speech,
             recovery_outcome,
         ) in recovery_records:
+            if segment_id in shadow_ids:
+                continue
             try:
                 record_fallback(
                     component='stt_selection',
@@ -1038,6 +1041,8 @@ class PipelineWorker:
             except Exception:
                 pass  # Metrics/logging cannot invalidate a completed inference.
         for segment_id in silence_records:
+            if segment_id in shadow_ids:
+                continue
             try:
                 record_fallback(
                     component='stt_selection', from_mode='batch', to_mode='none', reason='other', outcome='recovered'
@@ -1047,6 +1052,9 @@ class PipelineWorker:
                 pass  # Observability cannot invalidate a persisted result.
         for error_class, failure_stage, segment_id, reason, samples, spans, clips, asr_words, owned in failure_records:
             try:
+                if segment_id in shadow_ids:
+                    logger.info('event=batch_shadow_worker_failure stage=%s reason=%s', failure_stage, reason)
+                    continue
                 logger.error(
                     'event=batch_worker_failed error_class=%s stage=%s segment_id=%s reason=%s '
                     'samples=%d vad_spans=%d windows=%d asr_words=%d owned_words=%d',

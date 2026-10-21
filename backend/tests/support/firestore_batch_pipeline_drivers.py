@@ -8,6 +8,26 @@ from tests.support.firestore_query_drivers import DriverEntry, CoveredByEntry
 def entries():
     namespaces = ['batch_pipeline_prod', 'batch_pipeline_dev']
     return (
+        DriverEntry('database.batch_pipeline_shadow.pool_busy', domains={'namespace': namespaces}),
+        DriverEntry(
+            'database.batch_pipeline_shadow.stale_jobs',
+            domains={'namespace': namespaces},
+            neutrals={'before': (7200.0, 'cutoff operand only; single-field bounded query')},
+        ),
+        CoveredByEntry(
+            'database.batch_pipeline_shadow.ShadowStore._busy',
+            covered_by=('database.batch_pipeline_shadow.pool_busy',),
+            reason='thin adapter forwards the owning client and stage-qualified namespace unchanged',
+            expect_observed=False,
+            body_digest='e99b9715c5f7ecba1df66a5a117248961e5eabcd4a0607b042a15b602f5e4e2c',
+        ),
+        CoveredByEntry(
+            'database.batch_pipeline_shadow.ShadowStore.reap',
+            covered_by=('database.batch_pipeline_shadow.stale_jobs',),
+            reason='bounded orchestration delegates its only query to stale_jobs; finish uses document transactions',
+            expect_observed=False,
+            body_digest='02f361085857c5f60d91ab037ae614cee9cbf067d75a182bc7acf44367558ed1',
+        ),
         CoveredByEntry(
             'database.batch_pipeline_store.FirestoreTransaction.ready_predecessor',
             covered_by=('database.batch_pipeline_store.ready_predecessor',),

@@ -7,19 +7,38 @@ ledger, owner ring, user quota, projection receipt or legacy lock is mutated.
 from dataclasses import asdict
 from datetime import datetime, timedelta, timezone
 import hashlib
+import logging
 import time
 
 from config.batch_pipeline_shadow import paid_recovery_limit, shadow_percent
-from utils.batch_pipeline.contracts import WorkItem
+from config.policy import resolve_stage_policy
+from database.batch_pipeline_privacy import BatchPrivacyBlocked
+from utils.batch_pipeline.contracts import WorkItem, RecoveryWork, ValidationFailureWork
 from utils.batch_pipeline.shadow_metrics import OUTCOMES, PAID, PAID_AUDIO, record
 
 MAX_OFFERS = 4
 OFFER_SECONDS = 6
 STAGING_SECONDS = 120
+logger = logging.getLogger(__name__)
 
 
 def identity(uid, content_id):
     return 'sh_' + hashlib.sha256(f'{uid}\0{content_id}'.encode()).hexdigest()
+
+
+def pool_busy(client, namespace):
+    return bool(
+        list(
+            client.collection(f'{namespace}_jobs')
+            .where('state', 'in', ['ready', 'leased', 'retry', 'record_pending'])
+            .limit(1)
+            .stream()
+        )
+    )
+
+
+def stale_jobs(client, namespace, before):
+    return list(client.collection(f'{namespace}_shadow_jobs').where('created_at', '<=', before).limit(100).stream())
 
 
 class ShadowStore:
@@ -30,18 +49,11 @@ class ShadowStore:
     def _busy(self):
         # Single-field index, no new production index or scan. Any admitted
         # ordinary GPU work wins, including a flight prefetched by another lane.
-        return bool(
-            list(
-                self.store.client.collection(f'{self.store.namespace}_jobs')
-                .where('state', 'in', ['ready', 'leased', 'retry', 'record_pending'])
-                .limit(1)
-                .stream()
-            )
-        )
+        return pool_busy(self.store.client, self.store.namespace)
 
     def _finish(self, tx, segment, outcome, *, speech=0.0, vad='unknown'):
         job = tx.get('shadow_jobs', segment)
-        if not job or job.get('state') == 'settled':
+        if job.get('shadow') is not True or job.get('state') == 'settled':
             return None
         row = {
             'shadow': True,
@@ -158,7 +170,13 @@ class ShadowStore:
 
         def publish(tx):
             slot, job = tx.get('shadow_slots', index), tx.get('shadow_jobs', segment)
-            if slot.get('segment') != segment or slot.get('state') != 'staging' or slot.get('until', 0) <= now:
+            if (
+                slot.get('segment') != segment
+                or slot.get('state') != 'staging'
+                or slot.get('until', 0) <= now
+                or job.get('shadow') is not True
+                or job.get('state') != 'staging'
+            ):
                 return False
             if (
                 not item.shadow
@@ -194,6 +212,8 @@ class ShadowStore:
             if job.get('state') != 'ready' or job.get('shadow') is not True:
                 return None
             item = WorkItem(**job['item'])
+            if not item.shadow or item.segment_id != segment:
+                raise ValueError('shadow identity required')
             tx.check_privacy(
                 item.owner_id, (item.conversation_id,) if item.conversation_id else (), item.privacy_generation
             )
@@ -213,7 +233,12 @@ class ShadowStore:
         def reserve(tx):
             job, budget = tx.get('shadow_jobs', segment), tx.get('shadow_spend', hour)
             calls = job.get('paid', [])
-            if job.get('state') != 'recovering' or provider in calls or budget.get('units', 0) >= limit:
+            if (
+                job.get('shadow') is not True
+                or job.get('state') != 'recovering'
+                or provider in calls
+                or budget.get('units', 0) >= limit
+            ):
                 return None
             item = WorkItem(**job['item'])
             tx.check_privacy(
@@ -230,35 +255,84 @@ class ShadowStore:
             )
             return job['item']['duration_seconds']
 
-        seconds = self.store.run(reserve)
+        try:
+            seconds = self.store.run(reserve)
+        except BatchPrivacyBlocked:
+            raise
+        except Exception as error:
+            # A contention timeout or lost commit reply is never permission to
+            # call a provider. A possibly committed reservation stays consumed.
+            logger.info('event=batch_shadow_paid outcome=unavailable exception_type=%s', type(error).__name__)
+            return False
         if seconds is not None:
             PAID.labels(provider).inc()
             PAID_AUDIO.labels(provider).inc(seconds)
         return seconds is not None
 
+    def handoff(self, segment, evidence):
+        if not isinstance(evidence, (RecoveryWork, ValidationFailureWork)) or evidence.segment_id != segment:
+            raise ValueError('typed worker recovery evidence required')
+
+        def prepare(tx):
+            job = tx.get('shadow_jobs', segment)
+            if job.get('shadow') is not True or job.get('state') != 'running':
+                return False
+            evidence_fields = {}
+            if isinstance(evidence, RecoveryWork) and evidence.padded_retry:
+                evidence_fields['worker_empty_evidence'] = {'padded_retry': evidence.padded_retry, 'version': 1}
+            tx.put('shadow_jobs', segment, {**job, **evidence_fields, 'state': 'recovery_ready'})
+            return True
+
+        return self.store.run(prepare)
+
     def start_recovery(self, segment):
         def start(tx):
             job = tx.get('shadow_jobs', segment)
-            if not shadow_percent() or job.get('shadow') is not True or job.get('state') != 'running':
+            if not shadow_percent() or job.get('shadow') is not True or job.get('state') != 'recovery_ready':
                 return None
             item = WorkItem(**job['item'])
             tx.check_privacy(
                 item.owner_id, (item.conversation_id,) if item.conversation_id else (), item.privacy_generation
             )
-            tx.put('shadow_jobs', segment, {**job, 'state': 'recovering'})
-            return job
+            policy = resolve_stage_policy(item.owner_id, 'recovery')
+            updated = {
+                **job,
+                'state': 'recovering',
+                'recovery_started_at': self.clock(),
+                'recovery_policy': policy.to_dict(),
+                'expires_at': datetime.fromtimestamp(self.clock(), timezone.utc) + timedelta(hours=2),
+            }
+            tx.put('shadow_jobs', segment, updated)
+            return updated
 
         return self.store.run(start)
+
+    def recovery_transport_failed(self, segment):
+        def settle(tx):
+            job = tx.get('shadow_jobs', segment)
+            if job.get('state') in {'recovering', 'settled'}:
+                return None  # An active backend request owns settlement.
+            return self._finish(tx, segment, 'error' if shadow_percent() else 'dropped')
+
+        row = self.store.run(settle)
+        if row:
+            record(row)
 
     def reap(self):
         # Bounded, single-field query. Crashed processes cannot leave sensitive
         # rendezvous metadata or uncounted pending work indefinitely.
         cutoff = self.clock() - 3600
-        rows = (
-            self.store.client.collection(f'{self.store.namespace}_shadow_jobs')
-            .where('created_at', '<=', cutoff)
-            .limit(100)
-            .stream()
-        )
+        rows = stale_jobs(self.store.client, self.store.namespace, cutoff)
         for row in rows:
-            self.finish(row.id, 'error')
+
+            def reap_one(tx):
+                job = tx.get('shadow_jobs', row.id)
+                # A slow active provider owns its separate bounded recovery
+                # window. Never erase its intent based on upload creation time.
+                if job.get('state') == 'recovering' and job.get('recovery_started_at', 0) > cutoff:
+                    return None
+                return self._finish(tx, row.id, 'error')
+
+            settled = self.store.run(reap_one)
+            if settled:
+                record(settled)
