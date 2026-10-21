@@ -117,6 +117,13 @@ int transport_bulk_tx_acquire(k_timeout_t timeout)
 
 void transport_bulk_tx_release(void) {}
 
+bool bt_gatt_is_subscribed(struct bt_conn *conn, const struct bt_gatt_attr *attr, uint16_t value)
+{
+    (void) attr;
+    (void) value;
+    return conn && conn->subscribed;
+}
+
 int bt_gatt_notify_cb(struct bt_conn *conn, struct bt_gatt_notify_params *params)
 {
     if (params->func) {
