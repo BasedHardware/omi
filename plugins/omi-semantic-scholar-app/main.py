@@ -265,10 +265,14 @@ async def search_papers(req: SearchPapersRequest) -> ChatToolResponse:
         return ChatToolResponse(result="\n\n".join(lines))
     except httpx.HTTPStatusError as exc:
         return ChatToolResponse(error=f"Semantic Scholar API error: {exc.response.status_code}")
-    except httpx.HTTPError as exc:
-        return ChatToolResponse(error=f"Semantic Scholar request failed: {exc}")
-    except Exception as exc:
-        return ChatToolResponse(error=f"Unexpected error: {exc}")
+    except httpx.HTTPError:
+        # Transport failures (DNS, sockets, timeouts) can embed host-internal
+        # details; return a fixed message so nothing reflects into chat tools.
+        return ChatToolResponse(
+            error="Semantic Scholar request failed: the API could not be reached. Please try again later.")
+    except Exception:
+        # Unexpected errors may carry internal details; never interpolate them.
+        return ChatToolResponse(error="Semantic Scholar request failed unexpectedly. Please try again later.")
 
 
 @app.post("/tools/get_semantic_scholar_paper", response_model=ChatToolResponse)
@@ -306,10 +310,13 @@ async def get_paper(req: GetPaperRequest) -> ChatToolResponse:
         if code == 404:
             return ChatToolResponse(error="Paper not found.")
         return ChatToolResponse(error=f"Semantic Scholar API error: {code}")
-    except httpx.HTTPError as exc:
-        return ChatToolResponse(error=f"Semantic Scholar request failed: {exc}")
-    except Exception as exc:
-        return ChatToolResponse(error=f"Unexpected error: {exc}")
+    except httpx.HTTPError:
+        # Transport failures are reported with a fixed message; see search_papers.
+        return ChatToolResponse(
+            error="Semantic Scholar request failed: the API could not be reached. Please try again later.")
+    except Exception:
+        # Unexpected errors may carry internal details; never interpolate them.
+        return ChatToolResponse(error="Semantic Scholar request failed unexpectedly. Please try again later.")
 
 
 @app.post("/tools/get_semantic_scholar_author_papers", response_model=ChatToolResponse)
@@ -348,10 +355,13 @@ async def get_author_papers(req: GetAuthorPapersRequest) -> ChatToolResponse:
         if code == 404:
             return ChatToolResponse(error="Author not found.")
         return ChatToolResponse(error=f"Semantic Scholar API error: {code}")
-    except httpx.HTTPError as exc:
-        return ChatToolResponse(error=f"Semantic Scholar request failed: {exc}")
-    except Exception as exc:
-        return ChatToolResponse(error=f"Unexpected error: {exc}")
+    except httpx.HTTPError:
+        # Transport failures are reported with a fixed message; see search_papers.
+        return ChatToolResponse(
+            error="Semantic Scholar request failed: the API could not be reached. Please try again later.")
+    except Exception:
+        # Unexpected errors may carry internal details; never interpolate them.
+        return ChatToolResponse(error="Semantic Scholar request failed unexpectedly. Please try again later.")
 
 
 @app.get("/")
