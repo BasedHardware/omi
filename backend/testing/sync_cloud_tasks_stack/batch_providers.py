@@ -138,7 +138,7 @@ class ModeRoutingWorker:
     def process_batch(self, items: list[Any], **kwargs: Any) -> list[Any]:
         from config.batch_pipeline_providers import provider_config
         from diarizer.batch_pipeline import PipelineWorker
-        from diarizer.batch_pipeline_models import decode_pcm16_wav
+        from diarizer.batch_pipeline_models import StagedAudio
 
         groups: dict[tuple[str, float], list[Any]] = {}
         for item in items:
@@ -159,14 +159,17 @@ class ModeRoutingWorker:
         config = provider_config()
         for (mode, latency_ms), group in groups.items():
             provider = FakeWordsProvider(mode, latency_ms, [item.segment_id for item in group])
+            staged = StagedAudio(self.artifacts.fetch_audio)
             worker = PipelineWorker(
-                decode=lambda item: decode_pcm16_wav(self.artifacts.fetch_audio(item)),
+                decode=staged.decode,
                 vad=fake_vad,
                 words_providers={config.words: provider},
                 recover_words=provider.recover_empty,
                 diarizers={config.diarizer: fake_diarizer},
                 persist=self.artifacts.persist_result,
                 config=config,
+                stream_of=staged.stream,
+                language_of=staged.language,
             )
             group_results = list(worker.process_batch(group, **kwargs))
             for result in group_results:

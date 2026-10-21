@@ -196,6 +196,19 @@ def stt_language(context):
     if not isinstance(context, dict) or 'stt_language' not in context:
         return None
     value = context['stt_language']
+    from config.prerecorded_language import language_class
+
+    if language_class(value) == 'supported':
+        # Older intake copied the app's primary language even in multilingual
+        # mode. Such a hint is not proof that this audio is supported.
+        evidence, confidence = context.get('stt_language_evidence'), context.get('stt_language_confidence')
+        if (
+            evidence not in ('declared', 'audio_lid')
+            or isinstance(confidence, bool)
+            or not isinstance(confidence, (int, float))
+            or not 0.8 <= confidence <= 1
+        ):
+            return None
     return value if isinstance(value, str) else None
 
 

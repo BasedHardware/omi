@@ -16,6 +16,7 @@ from typing import Any, Callable, Mapping, Sequence
 import numpy as np
 
 from config.batch_pipeline_gpu_skip import diarize_speech_only_enabled, short_speech_single_enabled
+from config.prerecorded_language import language_class
 from config.stt_cap_dispatch import execution_admission_enabled as cap_dispatch_enabled
 from utils.batch_pipeline.worker_silence import inspect_worker_silence
 from diarizer.batch_pipeline_context import LeftContextIndex, capture_stream, starts_in_speech
@@ -44,6 +45,7 @@ from utils.batch_pipeline.diarization_gate import (
 )
 from utils.batch_pipeline.gpu_skip_metrics import record_compacted_unassigned, record_decision
 from utils.batch_pipeline.errors import FatalGpuError
+from utils.batch_pipeline.language_metrics import record_route
 from utils.observability.fallback import record_fallback
 
 SAMPLE_RATE = 16000
@@ -56,6 +58,7 @@ logger = logging.getLogger(__name__)
 
 
 class ValidationReason(Enum):
+    UNSUPPORTED_LANGUAGE = 'unsupported_language'
     WORD_SHAPE = 'word_shape'
     WORD_CLOCK = 'word_clock'
     WORD_SEQUENCE = 'word_sequence'
@@ -576,7 +579,9 @@ class PipelineWorker:
                             reason=reason,
                         )
                     )
-                elif isinstance(exc, BatchValidationError) and worker_validation_disposition_enabled():
+                elif isinstance(exc, BatchValidationError) and (
+                    reason == 'unsupported_language' or worker_validation_disposition_enabled()
+                ):
                     # Repeating the same validated GPU failure cannot establish
                     # silence or corrupt audio. End this chain now and retain
                     # custody for the independent privacy-fenced recovery path.
@@ -694,7 +699,24 @@ class PipelineWorker:
                     try:
                         state['stt_language'] = self.language_of(item)
                     except Exception:
-                        state['stt_language'] = None  # Unrecorded: the padded retry runs as before.
+                        state['stt_language'] = None
+                    if self.config.words == 'parakeet':
+                        # A new-admission rollback cannot revoke the quality
+                        # boundary for audio already in this worker's custody.
+                        blocked = language_class(state['stt_language']) != 'supported'
+                        if not item.shadow:
+                            record_route(
+                                'worker',
+                                state['stt_language'],
+                                'blocked' if blocked else 'parakeet',
+                                segment_id=item.segment_id,
+                            )
+                        if blocked and clips:
+                            # Never ask a fixed-language recognizer to guess an
+                            # unknown language, even if it would return words.
+                            # Keep encrypted audio for independent recovery; this
+                            # is not evidence of an empty recognizer response.
+                            raise BatchValidationError(ValidationReason.UNSUPPORTED_LANGUAGE)
                     if not clips:
                         self.counts['silence'] += 1
                         continue

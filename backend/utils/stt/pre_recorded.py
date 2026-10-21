@@ -24,6 +24,7 @@ from config.prerecorded_stt import (
     get_prerecorded_models,
     require_provider_environment,
 )
+from config.prerecorded_language import language_class, language_guard_enabled
 from config.stt_provider_policy import (
     MODULATE_PROVIDER,
     PARAKEET_PROVIDER,
@@ -130,7 +131,14 @@ def get_prerecorded_service(language: Optional[str] = 'en') -> Tuple[str, Option
     the serving fallback. A language no capability map claims falls through to Velma
     rather than failing selection.
     """
-    base_lang = normalized_stt_language(language) or 'en'
+    from config.prerecorded_language import requires_multilingual
+
+    base_lang = normalized_stt_language(language.strip() if isinstance(language, str) else None)
+    if requires_multilingual(language) and base_lang in {'', 'und', 'multi', 'unknown'}:
+        if provider_is_enabled(MODULATE_PROVIDER, STTServingSurface.PRERECORDED):
+            return PrerecordedSTTService.MODULATE, 'multi', 'velma-2'
+        raise TranscriptionFailure(TranscriptionOutcome.CONFIG_ERROR, retryable=False)
+    base_lang = base_lang or 'en'
 
     def select(models: Sequence[str]) -> Optional[Tuple[str, Optional[str], str]]:
         for m in models:
@@ -1120,6 +1128,10 @@ def prerecorded(
     selected_service: Optional[Tuple[str, Optional[str], str]] = None,
 ) -> Union[List[Dict[str, Any]], Tuple[List[Dict[str, Any]], str]]:
     """Route pre-recorded URL transcription through STT_PRERECORDED_MODEL."""
+    if selected_service is None and language_guard_enabled() and language_class(language) == 'unknown':
+        from utils.stt.batch_language import resolve_url
+
+        selected_service = resolve_url(language, audio_url, selector=get_prerecorded_service)
     provider = (
         get_prerecorded_provider(language, selected_service=selected_service)
         if selected_service is not None
@@ -1149,7 +1161,14 @@ def prerecorded_from_bytes(
     keywords: Optional[Sequence[str]] = None,
 ) -> Union[List[Dict[str, Any]], Tuple[List[Dict[str, Any]], str]]:
     """Route pre-recorded bytes transcription through STT_PRERECORDED_MODEL."""
-    provider = get_prerecorded_provider(language)
+    from utils.stt.batch_language import resolve_language, select_decision
+
+    decision = resolve_language(language, audio_bytes, sample_rate=sample_rate, channels=channels, encoding=encoding)
+    resolved = decision.language if decision.parakeet_safe else language
+    if not language_guard_enabled() or language_class(language) != 'unknown':
+        resolved = language
+    selected = select_decision(language, decision, get_prerecorded_service)
+    provider = get_prerecorded_provider(resolved, selected_service=selected)
     return provider.transcribe_bytes(
         audio_bytes,
         sample_rate=sample_rate,
