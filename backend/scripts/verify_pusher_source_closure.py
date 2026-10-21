@@ -111,9 +111,12 @@ def closure_paths(image_repository: str = "") -> list[str]:
         }
     else:
         image_sources = set(final_stage_copy_sources(FAT_DOCKERFILE))
+    # Both images build from the repository root, so .dockerignore decides what
+    # enters the build context; a change there can alter image contents without
+    # touching any copied path (Codex round 2).
     # The Helm chart is a deployment input separate from the Docker image,
     # but a chart change also invalidates a dev qualification.
-    return sorted(image_sources | {"backend/charts/pusher"})
+    return sorted(image_sources | {".dockerignore", "backend/charts/pusher"})
 
 
 def main() -> int:

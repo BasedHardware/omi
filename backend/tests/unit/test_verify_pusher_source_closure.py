@@ -58,6 +58,8 @@ def test_source_closure_cli_output_includes_chart_dir() -> None:
     )
     paths = set(result.stdout.splitlines())
     assert "backend/charts/pusher" in paths
+    # .dockerignore shapes the build context for both images (Codex round 2).
+    assert ".dockerignore" in paths
     # Must cover all Dockerfile COPY source dirs.
     for expected in [
         "backend/config/",
@@ -89,6 +91,7 @@ def test_role_image_closure_covers_the_role_dockerfile_and_its_lock() -> None:
     assert "backend/Dockerfile.roles" in paths
     assert "backend/pusher/pylock.toml" in paths
     assert "backend/charts/pusher" in paths
+    assert ".dockerignore" in paths
     # The pusher target's COPY closure (same copied source dirs as the fat image).
     for expected in [
         "backend/config/",
