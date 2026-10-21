@@ -76,10 +76,12 @@ EXPECTED_TOOL_ORDER = [
     "dismiss_person",
     "get_screen_activity",
     "get_daily_summaries",
+    "process_recent_conversations",
 ]
 
 # Representative handler results exercising every success output schema.
 FAKE_SUCCESS = {
+    "process_recent_conversations": {"status": "processing", "ready": False, "promoted": 1, "has_more": False},
     "get_user_profile": {
         "profile_text": "p",
         "generated_at": "2026-06-11T10:30:00+00:00",
@@ -297,16 +299,25 @@ class TestVersionNegotiation:
 
 
 class TestStateless2026:
-    def test_tools_list_2026_via_header(self):
+    def test_tools_list_2026_via_header(self, monkeypatch):
+        monkeypatch.setenv("DEMAND_PROCESSING_ENABLED", "false")
         auth = _full_auth()
         request = mcp_transport.McpRequestContext(auth_context=auth, header_version=PROTOCOL_VERSION_2026)
         response = mcp_transport.handle_mcp_message(auth, _msg("tools/list"), request)
         result = response["result"]
         assert result["resultType"] == "complete"
         assert result["_meta"][META_SERVER_INFO] == SERVER_INFO
-        assert len(result["tools"]) == len(TOOL_SPECS)
+        assert len(result["tools"]) == len(TOOL_SPECS) - 1
+        assert "process_recent_conversations" not in {tool["name"] for tool in result["tools"]}
         assert result["ttlMs"] == TOOLS_LIST_TTL_MS == 3_600_000
         assert result["cacheScope"] == TOOLS_LIST_CACHE_SCOPE == "private"
+
+    def test_demand_tool_is_advertised_only_with_its_opt_in(self, monkeypatch):
+        monkeypatch.setenv("DEMAND_PROCESSING_ENABLED", "true")
+        monkeypatch.setenv("DEMAND_PROCESSING_TOOL_ENABLED", "true")
+        auth = _full_auth()
+        result = mcp_transport.handle_mcp_message(auth, _msg("tools/list"))["result"]
+        assert [tool["name"] for tool in result["tools"]] == EXPECTED_TOOL_ORDER
 
     def test_stateless_2026_via_meta_wins(self):
         auth = _full_auth()
@@ -798,6 +809,44 @@ class TestUnknownsAndScope:
             "search_conversations",
             "get_daily_summaries",
         }
+
+
+class TestDailyCapAdmission:
+    def test_redis_outage_is_http_503_with_retry_after(self, client, authed):
+        outage = HTTPException(status_code=503, detail="usage_unavailable", headers={"Retry-After": "30"})
+        with (
+            patch.object(mcp_transport, "enforce_daily_cap", side_effect=outage),
+            patch.object(mcp_transport, "execute_tool") as execute,
+        ):
+            response = _post(client, "/v1/mcp", _tool_call("get_memories"))
+        assert response.status_code == 503
+        assert response.headers["Retry-After"] == "30"
+        assert response.json()["detail"] == "usage_unavailable"
+        execute.assert_not_called()
+
+    def test_reached_daily_cap_stays_a_tool_result(self, client, authed):
+        detail = {
+            "error": "mcp_daily_cap",
+            "trigger": "mcp_daily_cap",
+            "allowed": False,
+            "used": 5,
+            "limit": 5,
+            "reset_at": 4102444800,
+            "state": "cap",
+            "upgrade_plan": "plus",
+        }
+        capped = HTTPException(status_code=429, detail=detail, headers={"Retry-After": "60"})
+        with (
+            patch.object(mcp_transport, "enforce_daily_cap", side_effect=capped),
+            patch.object(mcp_transport, "execute_tool") as execute,
+        ):
+            response = _post(client, "/v1/mcp", _tool_call("get_memories"))
+        assert response.status_code == 200
+        result = response.json()["result"]
+        assert result["isError"] is True
+        assert result["structuredContent"]["error"]["code"] == "mcp_daily_cap"
+        assert result["_meta"]["omi_usage"] == detail
+        execute.assert_not_called()
 
 
 class TestToolResultContract:

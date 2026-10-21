@@ -31,6 +31,16 @@ const _speaker = ReviewItem(
   ),
 );
 
+const _samePerson = ReviewItem(
+  itemId: 'same_person:ab',
+  kind: ReviewItemKind.samePerson,
+  samePerson: SamePersonItem(
+    left: EntitySummary(entityId: 'person:a', type: EntityType.person, name: 'Sam'),
+    right: EntitySummary(entityId: 'person:b', type: EntityType.person, name: 'Samuel'),
+    reason: 'Same voice',
+  ),
+);
+
 const _proposal = ReviewItem(
   itemId: 'agent_proposal:p',
   kind: ReviewItemKind.agentProposal,
@@ -107,6 +117,30 @@ void main() {
     expect(provider.items, isEmpty);
   });
 
+  for (final item in [_speaker, _samePerson, _proposal]) {
+    testWidgets('a 409 uses neutral copy for ${item.kind.name}', (tester) async {
+      final provider = ReviewProvider(
+        isEligible: () => true,
+        reportChannel: (_, {appBuild}) async => const ApiSuccess<void>(null),
+        loadItems: () async => ApiSuccess(ReviewItemsResponse(items: [item], remainingToday: 3)),
+        sendAnswer: (_, __) async => const ApiFailure(ApiProblem(ApiProblemKind.rejected, statusCode: 409)),
+      );
+      await provider.load();
+      await tester.pumpWidget(_host(provider, ReviewQuestionCard(item: item)));
+      final label = switch (item.kind) {
+        ReviewItemKind.speaker => 'Béla',
+        ReviewItemKind.samePerson => 'Yes',
+        _ => 'Apply',
+      };
+      await tester.tap(find.text(label));
+      await tester.pumpAndSettle();
+      expect(find.text('This question is out of date, so nothing changed.'), findsOneWidget);
+      expect(provider.lastAnswerConflict, isTrue);
+      expect(provider.items, isEmpty);
+      expect(provider.remainingToday, 3);
+    });
+  }
+
   testWidgets('the suggestion sheet shows the current and suggested values and the reason', (tester) async {
     final sent = <(String, Map<String, dynamic>)>[];
     final provider = await _provider([_memoryProposal], sent);
@@ -150,9 +184,10 @@ void main() {
 
     final empty = await _provider(const [], []);
     await tester.pumpWidget(_host(empty, const ReviewEntryCard(fallback: Text('old card'))));
+    // Caught up: nothing on Home; Recent Changes lives in Activity behind the bell.
     expect(find.text('old card'), findsNothing);
-    expect(find.byKey(const Key('review_entry_card')), findsOneWidget);
-    expect(find.text('Recent Changes'), findsOneWidget);
+    expect(find.byKey(const Key('review_entry_card')), findsNothing);
+    expect(find.text('Recent Changes'), findsNothing);
 
     final some = await _provider([_task], []);
     await tester.pumpWidget(_host(some, const ReviewEntryCard(fallback: Text('old card'))));

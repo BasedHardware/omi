@@ -36,7 +36,7 @@ _BACKEND = Path(__file__).resolve().parents[2]
 def merge():
     """Load a fresh merge_conversations against stubbed database/models/memory chains."""
     database_pkg = ModuleType("database")
-    database_pkg.__path__ = []  # type: ignore[attr-defined]
+    database_pkg.__path__ = [str(_BACKEND / 'database')]  # type: ignore[attr-defined]
 
     client_stub = ModuleType("database._client")
     client_stub.db = MagicMock(name="db")
@@ -55,6 +55,7 @@ def merge():
 
     vector_db_stub = ModuleType("database.vector_db")
     vector_db_stub.delete_vector = MagicMock()
+    vector_db_stub.delete_action_item_vectors_batch = MagicMock()
 
     redis_db_stub = ModuleType("database.redis_db")
     users_stub = ModuleType("database.users")

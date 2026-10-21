@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
@@ -19,6 +20,9 @@ test(
       const path = new URL(`../${name}`, import.meta.url);
       return [path, readFileSync(path)];
     });
+    // Reusing a warmed Next dev cache can omit proxy response headers. Each
+    // run owns its output, including when a developer has a live .next cache.
+    const distDir = `.next/share-http-${process.pid}-${randomUUID()}`;
     let shared = true;
     const backend = createServer((req, res) => {
       res.setHeader('Content-Type', 'application/json');
@@ -56,6 +60,10 @@ test(
         cwd: app,
         env: {
           ...process.env,
+          OMI_SHARE_HTTP_DIST_DIR: distDir,
+          // Keep isolated dev-server discovery independent of native watcher event delivery.
+          // The first-response HTTP assertions remain strict.
+          WATCHPACK_POLLING: '100',
           NEXT_PUBLIC_FIREBASE_API_KEY: 'synthetic-test-key',
           NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: 'synthetic.invalid',
           NEXT_PUBLIC_FIREBASE_PROJECT_ID: 'synthetic-share',
@@ -109,8 +117,10 @@ test(
       assert.equal(html.status, 200, logs);
       assert.match(html.headers.get('content-type'), /text\/html/);
       assert.match(html.headers.get('vary'), /accept/i);
-      assert.match(html.headers.get('link'), /synthetic-share.md.*rel="alternate"/);
+      assert.match(html.headers.get('link'), /synthetic-share.md.*rel="alternate"/, `headers=${JSON.stringify(Object.fromEntries(html.headers))}\n${logs}`);
       const document = await html.text();
+      assert.match(document, /View transcript source 1 of 2/);
+      assert.match(document, /View transcript source 2 of 2/);
       for (const fact of [
         'Synthetic planning meeting',
         '1:30 PM UTC',
@@ -206,6 +216,7 @@ test(
       }
       await new Promise((resolve) => backend.close(resolve));
       for (const [path, original] of generatedFiles) writeFileSync(path, original);
+      rmSync(new URL(`../${distDir}`, import.meta.url), { recursive: true, force: true });
     }
   },
 );

@@ -43,6 +43,28 @@ void main() {
     expect(await listFor('user-a'), [recording]);
   });
 
+  test('Watch backups are listed only for the receipt owner, even before their first scan', () async {
+    const session = '0123456789abcdef0123456789abcdef';
+    const watchName = 'audio_omibatchwatch${session}s0_pcm16_16000_1_fs160_1720000000.bin';
+    await File('${dir.path}/$watchName').writeAsBytes([0x40, 1, 0, 0, ...List.filled(320, 0)]);
+    await Directory('${dir.path}/.watch-receipts').create();
+    await File('${dir.path}/.watch-receipts/$watchName').writeAsString(jsonEncode({
+      'metadata': {'version': 1, 'sessionID': session, 'segment': 0, 'startedAt': 1720000000, 'ownerUID': 'user-a'},
+      'digest': List.filled(64, 'a').join(),
+    }));
+
+    expect(await listFor('user-b'), [recording]);
+    expect(await listFor('user-a'), [watchName]);
+    expect(File('${dir.path}/$watchName').existsSync(), isTrue);
+  });
+
+  test('Watch files awaiting a committed native receipt are never adopted', () async {
+    const watchName = 'audio_omibatchwatch0123456789abcdef0123456789abcdefs0_pcm16_16000_1_fs160_1720000000.bin';
+    await File('${dir.path}/$watchName').writeAsBytes([0x40, 1, 0, 0, ...List.filled(320, 0)]);
+    expect(await listFor('user-a'), [recording]);
+    expect(File('${dir.path}/$watchName').existsSync(), isTrue);
+  });
+
   test('corrupt ownership metadata is not treated as unowned recordings', () async {
     expect(await listFor('user-a'), [recording]);
     final owners = File('${dir.path}/omibatch_owners.json');

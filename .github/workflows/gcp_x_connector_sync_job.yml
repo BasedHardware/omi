@@ -24,6 +24,10 @@ on:
         type: boolean
 
 env:
+  # Abort a git HTTP transfer that stays under 1 KB/s for 60 s, so actions/checkout
+  # retries instead of hanging 7-10 min until the TCP reset (#22890).
+  GIT_HTTP_LOW_SPEED_LIMIT: "1000"
+  GIT_HTTP_LOW_SPEED_TIME: "60"
   SERVICE: x-connector-sync-job
   SCHEDULER_JOB: x-connector-sync-6h
   REGION: us-central1
@@ -206,6 +210,8 @@ jobs:
           image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.image-tag.outputs.short_sha }}
           flags: ${{ steps.runtime-env.outputs.cloud_run_flags }} ${{ steps.runtime-env.outputs.x_connector_sync_job_flags }}
           env_vars: ${{ steps.runtime-env.outputs.x_connector_sync_job_env_vars }}
+          # Removing a credential from the manifest must remove its live binding.
+          secrets_update_strategy: overwrite
           secrets: ${{ steps.runtime-env.outputs.x_connector_sync_job_secrets }}
 
       - name: Validate 6h Scheduler trigger

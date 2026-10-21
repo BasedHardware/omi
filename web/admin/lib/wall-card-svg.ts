@@ -141,7 +141,10 @@ export function wallCardSvg(metric: Metric, view: CardView): string {
   if (small) {
     svg += text("macOS — · Mobile — · Other —", 14, 70, 9);
     svg += text(
-      metric.value == null ? view.missingReason : view.footnote,
+      metric.value == null
+        ? view.missingReason.slice(0, 43) +
+            (view.missingReason.length > 43 ? "…" : "")
+        : view.footnote,
       14,
       89,
       9.2
@@ -149,7 +152,7 @@ export function wallCardSvg(metric: Metric, view: CardView): string {
   } else {
     const deltaY = h >= 200 ? 105 : h >= 170 ? 89 : 77;
     svg += text(
-      metric.value == null ? view.missingReason : view.deltaText,
+      metric.value == null ? "Awaiting source" : view.deltaText,
       14,
       deltaY,
       10,
@@ -157,11 +160,16 @@ export function wallCardSvg(metric: Metric, view: CardView): string {
       500
     );
     const labelY = h >= 200 ? 126 : h >= 170 ? 107 : 94;
-    ["macOS", "Mobile", "Other"].forEach((p, i) => {
-      svg += text(p, 14 + i * 80, labelY, 8.8);
+    const labels =
+      view.splitValues.length === 4
+        ? ["macOS", "Mobile", "Other", "MCP-only"]
+        : ["macOS", "Mobile", "Other"];
+    const spacing = view.splitValues.length === 4 ? 58 : 80;
+    labels.forEach((p, i) => {
+      svg += text(p, 14 + i * spacing, labelY, 8.8);
       svg += text(
         view.splitValues[i],
-        14 + i * 80,
+        14 + i * spacing,
         labelY + 14,
         11.2,
         "#c2cedd",
@@ -169,13 +177,30 @@ export function wallCardSvg(metric: Metric, view: CardView): string {
       );
     });
     const top = h >= 200 ? 154 : h >= 170 ? 131 : 114,
-      height = h >= 200 ? 28 : h >= 170 ? 18 : 12;
+      height = h >= 200 ? 24 : h >= 170 ? 14 : 8;
     const points = metric.trend.map((p, i) => ({ index: i, value: p.value }));
     const finite = points.filter(
       (p): p is { index: number; value: number } =>
         p.value != null && Number.isFinite(p.value)
     );
-    if (finite.length >= 2) {
+    if (metric.value == null) {
+      // Missing-value reasons use the trend area; full detail stays in diagnostics.
+      const words = view.missingReason.split(/\s+/);
+      const lines: string[] = [""];
+      for (const word of words) {
+        const i = lines.length - 1;
+        if ((lines[i] + " " + word).trim().length > 38) lines.push(word);
+        else lines[i] = (lines[i] + " " + word).trim();
+      }
+      lines.slice(0, 2).forEach((line, i) => {
+        svg += text(
+          line + (i === 1 && lines.length > 2 ? "…" : ""),
+          14,
+          h - 23 + i * 12,
+          8.6
+        );
+      });
+    } else if (finite.length >= 2) {
       const min = Math.min(...finite.map((p) => p.value)),
         max = Math.max(...finite.map((p) => p.value)),
         span = max - min || 1;
@@ -196,7 +221,7 @@ export function wallCardSvg(metric: Metric, view: CardView): string {
         (height / h) * 100
       }%" viewBox="0 0 232 ${height}" preserveAspectRatio="none"><path vector-effect="non-scaling-stroke" d="${path.trim()}" fill="none" stroke="${accent}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
     } else svg += text("Trend not available yet", 14, top + height - 1, 8.8);
-    svg += text(view.footnote, 14, h - 11, 8.6);
+    if (metric.value != null) svg += text(view.footnote, 14, h - 8, 8.6);
   }
   if (view.fixture)
     svg += text("FIXTURE", 246, valueY + 18, 8.8, "#9eabc0", 600, "end");

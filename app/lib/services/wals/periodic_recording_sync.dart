@@ -27,8 +27,9 @@ class PeriodicRecordingSync {
           await coordinator.waitUntilIdle();
           return !_disposed;
         case 'expire':
-          coordinator.cancelPeriodicWake();
-          cancel();
+          // Stop only this window's own drain. A transfer the user or another
+          // wake started is not the window's to cancel.
+          if (coordinator.cancelPeriodicWake()) cancel();
           return null;
         default:
           throw MissingPluginException();

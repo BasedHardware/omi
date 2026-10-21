@@ -2,10 +2,17 @@
 
 from typing import Any, Callable
 
+from config.live_stt_replay import session_local_exclusion_release_enabled
+
 from config.stt_provider_policy import provider_for_service
 from utils.stt import streaming as st
 from utils.stt.live_rollout import window_selection_kwargs
 from utils.stt.live_failure import MAX_STT_FAILOVERS, live_stt_terminal_reason, note_typed_provider_death
+from utils.stt import live_health
+from utils.stt.live_health import bounded_language
+from utils.stt.live_metrics import SAME_TARGET_RETRIES, SESSION_LOCAL_EXCLUSION_RELEASES
+from utils.stt.live_retry import retry_jitter_seconds, same_target_retry_allowed
+from utils.stt.pod_drain import is_draining
 from utils.stt.live_router import note_failed_route
 from utils.stt.recovery_state import RecoveryState
 from utils.stt.recovery_state import MAX_RECOVERY_TARGETS
@@ -21,6 +28,56 @@ def _router_active(managed: bool, receiver: Any) -> bool:
         return routing_on(receiver.host.request.uid)
     except ValueError:
         return False
+
+
+# Deaths that are evidence about this session's replay bookkeeping, not about
+# the provider: the leg was serving and transcribing when the ring overflowed.
+SESSION_LOCAL_DEATHS = frozenset({'replay_ring_overflow'})
+
+
+def note_session_local_exclusion(receiver: Any, dead_provider: str | None, reason: str) -> None:
+    """Remember an exclusion that only a session-local death justified.
+
+    The replacement must still differ from the leg that just overflowed, so the
+    exclusion stands for this selection. Any later provider-evidence death of
+    the same family keeps it excluded.
+    """
+    if not dead_provider:
+        return
+    held = getattr(receiver, '_stt_session_local_exclusions', None)
+    if not isinstance(held, dict):
+        held = receiver._stt_session_local_exclusions = {}
+    if reason in SESSION_LOCAL_DEATHS and session_local_exclusion_release_enabled():
+        held[dead_provider] = getattr(receiver.stt_socket, 'routing_target', None)
+    else:
+        held.pop(dead_provider, None)
+
+
+def release_session_local_exclusions(receiver: Any, serving_family: str) -> None:
+    """Re-admit families excluded only by replay overflow once a successor serves.
+
+    Without this, a healthy Soniox leg that overflowed its replay ring stayed
+    excluded for the whole session, so the successor's next ordinary death
+    found no candidate and exhausted (prod 2026-10-20: about 40 per 10 min,
+    logged as selection soniox->unavailable). The recovery controller's dial
+    ledger still bounds re-dials within an unproven episode.
+    """
+    held = getattr(receiver, '_stt_session_local_exclusions', None)
+    if not isinstance(held, dict) or not held or not session_local_exclusion_release_enabled():
+        return
+    for family, target in list(held.items()):
+        if family == serving_family:
+            continue
+        del held[family]
+        released = family in receiver._stt_failed_providers
+        receiver._stt_failed_providers.discard(family)
+        if isinstance(target, str) and target in receiver._stt_failed_targets:
+            receiver._stt_failed_targets.discard(target)
+            released = True
+        if receiver._stt_failed_reasons.get(family) in SESSION_LOCAL_DEATHS:
+            receiver._stt_failed_reasons.pop(family, None)
+        if released:
+            SESSION_LOCAL_EXCLUSION_RELEASES.labels(provider=family).inc()
 
 
 def allow_healthy_soniox_rescue(receiver: Any, *, managed: bool) -> None:
@@ -41,6 +98,67 @@ def allow_healthy_soniox_rescue(receiver: Any, *, managed: bool) -> None:
     receiver._stt_failed_providers.remove('soniox')
 
 
+def allow_same_target_retry(receiver: Any, dead_provider: str | None, reason: str, *, managed: bool) -> bool:
+    """Re-admit the leg that just died once, when it died at the transport
+    before its first text and its target is neither benched nor circuit-open.
+
+    The retry is one per family per session (shared with the Soniox rescue),
+    takes the controller's per-identity retry slot (never the rescue
+    re-entry), and is dialed after a short jitter (see _attempt_dial).
+    """
+    if not managed or not dead_provider or is_draining():
+        return False
+    if getattr(receiver, '_pending_live_failover', None) is not None:
+        # An unproven successor died: the recovery walk owns it; the retry
+        # is for the serving primary only.
+        return False
+    retries = getattr(receiver, '_stt_same_target_retries', None)
+    if not isinstance(retries, set):
+        retries = receiver._stt_same_target_retries = set()
+    socket = receiver.stt_socket
+    outcome = getattr(socket, 'leg_outcome', None)
+    probe = getattr(outcome, 'text_seen', None)
+    try:
+        text_seen = bool(probe()) if callable(probe) else None
+    except Exception:
+        text_seen = None
+    identity = getattr(socket, 'routing_target', None)
+    identity = identity if isinstance(identity, str) else dead_provider
+    try:
+        stage = live_health.health.cost_stage(identity, bounded_language(receiver.host.language))
+    except Exception:
+        stage = 100
+    try:
+        circuit_open = st._circuit_for_primary(st.STTService(dead_provider)).state == 'open'  # type: ignore[reportPrivateUsage] # shared circuit owner
+    except Exception:
+        circuit_open = True
+    excluded = dead_provider in receiver._stt_failed_providers or identity in receiver._stt_failed_targets
+    if not excluded or not same_target_retry_allowed(
+        reason,
+        text_seen=text_seen,
+        stage=stage,
+        circuit_open=circuit_open,
+        # One repeat per family per session, shared with the Soniox rescue.
+        already_retried=dead_provider in retries or dead_provider in getattr(receiver, '_stt_rescue_retries', ()),
+        family=dead_provider,
+    ):
+        return False
+    recovery = getattr(receiver, 'recovery', None)
+    if recovery is not None and not recovery.grant_transient_retry(identity):
+        SAME_TARGET_RETRIES.labels(provider=dead_provider, path='death', outcome='refused').inc()
+        return False
+    retries.add(dead_provider)
+    rescues = getattr(receiver, '_stt_rescue_retries', None)
+    if isinstance(rescues, set):
+        rescues.add(dead_provider)
+    receiver._stt_failed_providers.discard(dead_provider)
+    receiver._stt_failed_targets.discard(identity)
+    if recovery is not None:
+        recovery.note_retry_jitter(identity, retry_jitter_seconds())
+    SAME_TARGET_RETRIES.labels(provider=dead_provider, path='death', outcome='granted').inc()
+    return True
+
+
 def _select_live_replacement_legacy(
     receiver: Any,
     dead_provider: str | None,
@@ -53,6 +171,7 @@ def _select_live_replacement_legacy(
     receiver._stt_rebuild_attempts += 1
     if dead_provider:
         receiver._stt_failed_reasons[dead_provider] = live_stt_terminal_reason(receiver.stt_socket, 'connection_lost')
+        note_session_local_exclusion(receiver, dead_provider, receiver._stt_failed_reasons[dead_provider])
     router_active = _router_active(managed, receiver)
     cap = MAX_RECOVERY_TARGETS if router_active else (3 if managed else MAX_STT_FAILOVERS)
     if max(failures, receiver._stt_rebuild_attempts) > cap:
@@ -60,6 +179,9 @@ def _select_live_replacement_legacy(
         return None, None, None
     note_typed_provider_death(receiver.stt_socket, dead_provider)
     allow_healthy_soniox_rescue(receiver, managed=managed)
+    allow_same_target_retry(
+        receiver, dead_provider, receiver._stt_failed_reasons.get(dead_provider, ''), managed=managed
+    )
     service, language, model = select(
         receiver.host.language,
         multi_lang_enabled=receiver.host.multi_lang_enabled,
@@ -110,8 +232,12 @@ def select_live_replacement(
     receiver._stt_rebuild_attempts += 1
     if dead_provider:
         receiver._stt_failed_reasons[dead_provider] = live_stt_terminal_reason(receiver.stt_socket, 'connection_lost')
+        note_session_local_exclusion(receiver, dead_provider, receiver._stt_failed_reasons[dead_provider])
     note_typed_provider_death(receiver.stt_socket, dead_provider)
     allow_healthy_soniox_rescue(receiver, managed=managed)
+    allow_same_target_retry(
+        receiver, dead_provider, receiver._stt_failed_reasons.get(dead_provider, ''), managed=managed
+    )
     service, language, model = select(
         receiver.host.language,
         multi_lang_enabled=receiver.host.multi_lang_enabled,

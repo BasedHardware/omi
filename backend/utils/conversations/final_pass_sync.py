@@ -1,6 +1,7 @@
 """Sync/WAL adapter for the shared triage, diarizer and assignment seam."""
 
 import io
+import logging
 import time
 import math
 import os
@@ -16,6 +17,8 @@ from utils.observability.fallback import record_fallback
 from utils.stt.conversation_speakers import resolve_conversation_speakers
 from utils.stt.speaker_embedding import extract_embedding_from_bytes, speaker_embedding_configured
 from utils.stt.sync_speaker_evidence import collect_speaker_audio
+
+logger = logging.getLogger(__name__)
 
 # Cloud Run runs one Python worker per instance. Refuse rather than queue;
 # the shared hourly reservation additionally bounds a horizontally scaled fleet.
@@ -121,7 +124,8 @@ def _run_sync_final_pass(uid, audio, words, segments, cache, *, scope, owner_res
             segment.start = round(round(segment.start, 2) - first_word, 2)
             segment.end = round(round(segment.end, 2) - first_word, 2)
         return passed, outcome
-    except Exception:
+    except Exception as exc:
+        logger.warning('Sync final pass failed exception_type=%s', type(exc).__name__)
         OUTCOMES.labels(outcome='failed:sync_audio').inc()
         record_fallback(
             component='stt_selection',

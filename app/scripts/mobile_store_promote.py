@@ -94,8 +94,52 @@ def cli_json(*args: str) -> object:
     try:
         result = subprocess.run(command, capture_output=True, text=True, check=True, timeout=60)
         return json.loads(result.stdout)
-    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError, ValueError) as exc:
+    except subprocess.CalledProcessError as exc:
+        raise PromotionError(f"App Store Connect lookup failed: {' '.join(args[:3])}\n{(exc.stderr or '')[-2000:]}") from exc
+    except (subprocess.TimeoutExpired, OSError, ValueError) as exc:
         raise PromotionError("App Store Connect build lookup failed") from exc
+
+
+def _resources(payload: object) -> list[dict]:
+    if isinstance(payload, dict):
+        payload = payload.get("data", payload)
+    if isinstance(payload, dict):
+        payload = [payload]
+    return [r for r in payload if isinstance(r, dict)] if isinstance(payload, list) else []
+
+
+def _resource_attrs(resource: dict) -> dict:
+    attrs = resource.get("attributes", resource)
+    return attrs if isinstance(attrs, dict) else {}
+
+
+def ios_live_locales() -> list[str]:
+    """Every locale of the live App Store version.
+
+    Apple rejects a submission whose new version lacks What's New for any locale the app
+    ships in; a bare --whats-new covers only the primary one (seen live 2026-10-16:
+    1.0.564 was refused). The daily train has always passed these; manual promotion must too.
+    """
+    live = _resources(cli_json("apps", "app-store-versions", APP_ID, "--platform", "IOS", "--state", "READY_FOR_SALE"))
+    newest = None
+    for resource in live:
+        version = _resource_attrs(resource).get("versionString")
+        # Old live versions can be loose ("1.0"); like the train, only strict X.Y.Z can be newest.
+        if isinstance(version, str) and VERSION_RE.fullmatch(version) and resource.get("id"):
+            if newest is None or version_parts(version) > version_parts(newest[0]):
+                newest = (version, str(resource["id"]))
+    if newest is None:
+        raise PromotionError("App Store Connect reports no live iOS version to copy locales from")
+    locales = sorted(
+        {
+            locale
+            for resource in _resources(cli_json("app-store-versions", "localizations", newest[1]))
+            if isinstance(locale := _resource_attrs(resource).get("locale"), str) and locale
+        }
+    )
+    if not locales:
+        raise PromotionError(f"live iOS version {newest[0]} has no localizations")
+    return locales
 
 
 def select_ios_build(payload: object, version: str, build_number: str) -> IOSBuild:
@@ -203,7 +247,10 @@ def submit_ios(
     command.append(build.id)
     try:
         subprocess.run(command, capture_output=True, text=True, check=True, timeout=600)
-    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError) as exc:
+    except subprocess.CalledProcessError as exc:
+        detail = (exc.stderr or exc.stdout or "")[-2000:]
+        raise PromotionError(f"App Store Connect rejected the selected build for review\n{detail}") from exc
+    except (subprocess.TimeoutExpired, OSError) as exc:
         raise PromotionError("App Store Connect rejected the selected build for review") from exc
     finally:
         if localizations_file is not None:
@@ -375,7 +422,13 @@ def submit_android(
         ).execute()
         client.edits().commit(packageName=PACKAGE_NAME, editId=edit_id).execute()
     except Exception as exc:
-        raise PromotionError("Google Play rejected exact-code promotion to production") from exc
+        # Surface Play's own API message (error code + field-level detail) inside
+        # the train log; a bare "rejected" line cost a 2026-10-19 1%->10% ladder
+        # hop its root cause — the train only printed this static string.
+        detail = f": {exc}" if str(exc).strip() else ""
+        raise PromotionError(
+            f"Google Play rejected exact-code promotion to production{detail}"
+        ) from exc
 
 
 def main() -> int:
@@ -406,7 +459,7 @@ def main() -> int:
         ios_build = prepare_ios(args.version, args.ios_build) if ios else None
         android_target = prepare_android(args.version, args.android_build) if android else None
         if ios_build:
-            submit_ios(ios_build, ios_notes)
+            submit_ios(ios_build, ios_notes, locales=ios_live_locales())
         if android_target:
             submit_android(*android_target, args.version, args.android_build, android_notes)
     except PromotionError as exc:

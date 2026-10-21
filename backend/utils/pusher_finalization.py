@@ -210,6 +210,9 @@ async def process_conversation_task(
             final_attempt=_finalization_attempt_decision(attempt_count, reason='finalization_preflight').terminal,
         )
 
+        if disposition == ConversationFinalizationDisposition.deferred:
+            await send_result({'conversation_id': conversation_id, 'error': 'job_queued', 'terminal': False})
+            return
         if disposition == ConversationFinalizationDisposition.fenced:
             completed = await run_blocking(
                 db_executor,

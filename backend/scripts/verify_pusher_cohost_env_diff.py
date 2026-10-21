@@ -36,13 +36,8 @@ ENVIRONMENTS = ("dev", "prod")
 
 REQUIRED_IDENTICAL_LITERALS = (
     "MEMORY_ENABLED",
-    "CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED",
-    "CONVERSATION_OCR_CONTEXT_ENABLED",
-    "MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED",
     "MEETING_NOTES_EVIDENCE_WAIT_SECONDS",
-    "BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED",
-    "FREE_TIER_LOCAL_PROCESSING",
-    "FREE_TIER_EMERGENCY_STOP",
+    "CLIENT_SUMMARIES_AT_CAP_ENABLED",
     # Both process_conversation hosts must read the same managed-spend ledger
     # switch; a listen-only value would leave pusher-hosted direct-provider
     # spend invisible to llm_gateway_attempts (free-tier program, Move 1).
@@ -56,13 +51,8 @@ _TRANSLATION_LISTEN_ONLY = frozenset(
     {
         # Visibility belongs to authenticated listen sockets and opt-in detail
         # reads; pusher hosts neither transport and must not admit this spend.
-        'TRANSLATION_DEMAND_SHADOW_ENABLED',
         'TRANSLATION_DEMAND_GATE_ENABLED',
-        'TRANSLATION_DEMAND_LEASE_V1_ENABLED',
-        'TRANSLATION_ONDEMAND_GEMINI_ENABLED',
         'TRANSLATION_ONOPEN_ENABLED',
-        'TRANSLATION_ONDEMAND_COHORT_PERCENT',
-        'TRANSLATION_ONDEMAND_UID_ALLOWLIST',
         'TRANSLATION_ONDEMAND_MAX_SEGMENTS',
         'TRANSLATION_ONDEMAND_MAX_CHARS',
         'TRANSLATION_ONDEMAND_DEADLINE_SECONDS',
@@ -70,6 +60,10 @@ _TRANSLATION_LISTEN_ONLY = frozenset(
         'TRANSLATION_ONDEMAND_UID_DAILY_CHARS',
         'TRANSLATION_ONDEMAND_GLOBAL_DAILY_CHARS',
         'TRANSLATION_ONDEMAND_MAX_CATCHUP_PAGES',
+        # Translation cache TTLs belong to backend-listen and Cloud Run API
+        # callers; pusher has no TranslationService/cache callsite.
+        'TRANSLATION_CACHE_TTL',
+        'TRANSLATION_NEGATIVE_CACHE_TTL',
     }
 )
 # The API domain and the Review routes run on backend-listen. Pusher's
@@ -83,6 +77,38 @@ _DEMAND_LISTEN_ONLY = frozenset(
         'STT_LIVE_DEMAND_PERCENT',
         'STT_LIVE_DEMAND_UID_ALLOWLIST',
         'STT_LIVE_DEMAND_MIN_DWELL_SECONDS',
+    }
+)
+# main.py owns sync intake, recovery RPC and serving startup. pusher.main mounts
+# none of those surfaces and never starts the dedicated GPU process.
+_BATCH_PIPELINE_LISTEN_ONLY = frozenset(
+    {
+        'BATCH_PIPELINE_ENABLED',
+        'BATCH_PIPELINE_UID_ALLOWLIST',
+        'BATCH_PIPELINE_PERCENT',
+        'BATCH_PIPELINE_SERVING_ENABLED',
+        'BATCH_PIPELINE_API_URL',
+        'BATCH_PIPELINE_WORKER_ENABLED',
+        'BATCH_PIPELINE_WORKER_AUDIENCE',
+        'BATCH_PIPELINE_WORKER_SERVICE_ACCOUNT',
+        'BATCH_PIPELINE_UNIT_SECONDS',
+        'BATCH_PIPELINE_SHARED_LIVE_ENABLED',
+        'BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED',
+        'BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED',
+        'BATCH_PIPELINE_RECOVERY_ALL_ADMITTED',
+        'BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED',
+        'BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED',
+        # Only main.py's batch worker RPC and serving loop schedule merge heads
+        # and projection follow-ups; pusher mounts neither surface.
+        'BATCH_PIPELINE_HEAD_PRIORITY_ENABLED',
+        'BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED',
+        'BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED',
+        'BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED',
+        'BATCH_PIPELINE_SPEECH_EMPTY_MULTILINGUAL_ENABLED',
+        'BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED',
+        'BATCH_PIPELINE_RECOVERY_MODE',
+        'BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST',
+        'BUCKET_BATCH_PIPELINE',
     }
 )
 LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
@@ -102,9 +128,6 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "PARAKEET_WINDOW_POST_TIMEOUT_SECONDS",
             "SONIOX_CIRCUIT_COOLDOWN_SECONDS",
             "SONIOX_CIRCUIT_FAILURE_THRESHOLD",
-            "SONIOX_ESTIMATED_USD_PER_HOUR",
-            "SONIOX_MONTHLY_CEILING_USD",
-            "SONIOX_CONTEXT_TERMS",
             "STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS",
             "STT_CIRCUIT_HALF_OPEN_PROBES",
             "STT_SHED_CONNECT_FAILURES",
@@ -121,7 +144,7 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "STT_ROUTING_DISRUPTION_GATE",
             "STT_ROUTING_REDIS_TIMEOUT_SECONDS",
             # Sync HTTP intake is mounted by main.py; pusher mounts no sync router.
-            "SYNC_ASSIGNMENT_RECOVERY_ENABLED",
+            "SYNC_FINALIZE_TARGET_RECOVERY_ENABLED",
             "ACCOUNT_CUTOVER_ENFORCEMENT",
             "DEEPGRAM_SELF_HOSTED_ENABLED",
             "DESKTOP_UPDATE_POINTERS_MODE",
@@ -183,7 +206,8 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
     )
     | _TRANSLATION_LISTEN_ONLY
     | _REVIEW_SURFACE_LISTEN_ONLY
-    | _DEMAND_LISTEN_ONLY,
+    | _DEMAND_LISTEN_ONLY
+    | _BATCH_PIPELINE_LISTEN_ONLY,
     "prod": frozenset(
         {
             # Only listen's runtime reads these to advertise mobile control-channel
@@ -205,12 +229,11 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "PARAKEET_WINDOW_MAX_CONTEXT_SECONDS",
             "PARAKEET_WINDOW_PACE_SECONDS",
             "PARAKEET_WINDOW_POST_TIMEOUT_SECONDS",
+            # Pusher runs keyless on Workload Identity; listen still mounts the nik-164 key until
+            # its own cut-over (credential hygiene D4 phase 2), which removes this entry.
+            "SERVICE_ACCOUNT_JSON",
             "SONIOX_CIRCUIT_COOLDOWN_SECONDS",
             "SONIOX_CIRCUIT_FAILURE_THRESHOLD",
-            "SONIOX_ESTIMATED_USD_PER_HOUR",
-            "SONIOX_MONTHLY_CEILING_USD",
-            "SONIOX_CONTEXT_TERMS",
-            "SONIOX_IDLE_CLOSE_SECONDS",
             "STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS",
             "STT_CIRCUIT_HALF_OPEN_PROBES",
             "STT_SHED_CONNECT_FAILURES",
@@ -231,7 +254,7 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "STT_ROUTING_DISRUPTION_GATE",
             "STT_ROUTING_REDIS_TIMEOUT_SECONDS",
             # Sync HTTP intake is mounted by main.py; pusher mounts no sync router.
-            "SYNC_ASSIGNMENT_RECOVERY_ENABLED",
+            "SYNC_FINALIZE_TARGET_RECOVERY_ENABLED",
             "ACCOUNT_CUTOVER_ENFORCEMENT",
             "ACCOUNT_DELETION_DISPATCH_MODE",
             "ACCOUNT_DELETION_TASKS_QUEUE",
@@ -291,7 +314,8 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
     )
     | _TRANSLATION_LISTEN_ONLY
     | _REVIEW_SURFACE_LISTEN_ONLY
-    | _DEMAND_LISTEN_ONLY,
+    | _DEMAND_LISTEN_ONLY
+    | (_BATCH_PIPELINE_LISTEN_ONLY - {'BATCH_PIPELINE_UID_ALLOWLIST'}),
 }
 
 # Pusher owns the process-local shadow worker; sync/backfill also runs the
@@ -330,6 +354,10 @@ PUSHER_ONLY_ALLOWED: dict[str, frozenset[str]] = {
     | frozenset(PROD_FINAL_PASS_SHADOW_VALUES),
 }
 
+# Queue-age publishing is active only on backend-listen. Pusher may omit the
+# setting or carry the explicit disabled value used by the shared runtime env.
+LISTEN_ONLY_ZERO_OR_ABSENT = frozenset({"FSR_QUEUE_AGE_PUBLISHER"})
+
 # Shared keys whose *literal* values are allowed to differ. Name-only diffs
 # belong in the only-allowed sets above, not here.
 SHARED_VALUE_DIFF_ALLOWED: dict[str, frozenset[str]] = {
@@ -344,11 +372,14 @@ SHARED_VALUE_DIFF_ALLOWED: dict[str, frozenset[str]] = {
             "TRANSCRIPTION_SHADOW_ENABLED",
             "TRANSCRIPTION_SHADOW_UID_ALLOWLIST",
             "TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS",
+            # Backend-listen publishes queue age; pusher stays explicitly disabled.
+            "FSR_QUEUE_AGE_PUBLISHER",
         }
     ),
     # The 1% windowed-TDT canary is listen-only. Pusher retains its streaming
     # and prerecorded policy while allocated listen sessions may lead with TDT.
-    "prod": frozenset({"BUCKET_SPEECH_PROFILES", "DD_SERVICE", "STT_SERVICE_MODELS"}),
+    # Backend-listen also owns the queue-age publisher; pusher remains disabled.
+    "prod": frozenset({"BUCKET_SPEECH_PROFILES", "DD_SERVICE", "STT_SERVICE_MODELS", "FSR_QUEUE_AGE_PUBLISHER"}),
 }
 
 DEV_SHADOW_VALUES = {
@@ -482,6 +513,14 @@ def validate_preflight(root: Path = ROOT) -> list[str]:
                 f"listen={sorted(listen_from)} — co-hosts must share the same bulk source"
             )
 
+        publisher = "FSR_QUEUE_AGE_PUBLISHER"
+        pusher_publisher = pusher_env.get(publisher)
+        listen_publisher = listen_env.get(publisher)
+        if listen_publisher is None or listen_publisher.value != "1":
+            errors.append(f"[{env}] {publisher} must be '1' on backend-listen")
+        if pusher_publisher is not None and pusher_publisher.value != "0":
+            errors.append(f"[{env}] {publisher} must be '0' or absent on pusher")
+
         for flag in REQUIRED_IDENTICAL_LITERALS:
             pusher_entry = pusher_env.get(flag)
             listen_entry = listen_env.get(flag)
@@ -505,7 +544,7 @@ def validate_preflight(root: Path = ROOT) -> list[str]:
         pusher_only = set(pusher_env) - set(listen_env)
         allowed_listen = LISTEN_ONLY_ALLOWED[env]
         allowed_pusher = PUSHER_ONLY_ALLOWED[env]
-        unexplained_listen = sorted(listen_only - allowed_listen)
+        unexplained_listen = sorted(listen_only - allowed_listen - LISTEN_ONLY_ZERO_OR_ABSENT)
         unexplained_pusher = sorted(pusher_only - allowed_pusher)
         stale_listen = sorted(allowed_listen - listen_only)
         stale_pusher = sorted(allowed_pusher - pusher_only)
@@ -567,7 +606,7 @@ def validate_preflight(root: Path = ROOT) -> list[str]:
                     f"[{env}] unexplained literal value diff for shared env {name}: "
                     f"pusher={pusher_value!r} listen={listen_value!r}"
                 )
-        for name in sorted(allowed_value_diff - shared):
+        for name in sorted(allowed_value_diff - shared - LISTEN_ONLY_ZERO_OR_ABSENT):
             errors.append(f"[{env}] SHARED_VALUE_DIFF_ALLOWED entry {name} is not shared; remove it")
     return errors
 

@@ -261,7 +261,8 @@ async def test_fresh_write_rotation_keeps_capture_fields(world, monkeypatch):
     )
     host = SimpleNamespace(
         request=SimpleNamespace(uid='u'),
-        state=SimpleNamespace(speaker_map_dirty=False, current_conversation_id='c'),
+        state=SimpleNamespace(speaker_map_dirty=False, current_conversation_id='c', source_position_map=None),
+        is_multi_channel=False,
         persistence=SimpleNamespace(call=persist),
         speakers=SimpleNamespace(segment_assignments={}, speaker_to_person={}, segment_identity_status={}),
     )

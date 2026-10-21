@@ -14,8 +14,6 @@ import 'package:omi/services/wals/wal.dart';
 import '../../support/capture/capture_replay_world.dart';
 import '../../support/capture/scripted_device_connection.dart';
 
-const _darkWrite = bool.fromEnvironment('CAPTURE_EVIDENCE_V1_DARK_WRITE');
-
 void main() {
   late Directory tempDir;
   late CaptureReplayWorld world;
@@ -69,7 +67,7 @@ void main() {
     world.emitNativeState(PhoneMicCaptureState.running);
   }
 
-  group('dark-write enabled', skip: _darkWrite ? null : 'requires CAPTURE_EVIDENCE_V1_DARK_WRITE=true', () {
+  group('capture evidence', () {
     test('one capture session keeps one root with strictly increasing ordinals', () async {
       await startRunning();
       await captureSeconds(2, frameCursor: 0);
@@ -466,32 +464,6 @@ void main() {
         final parsed = jsonDecode(attempt.captureEvidence!);
         expect((parsed['files'] as List).map((f) => f['capture_root']).toSet(), {root});
       }
-    });
-  });
-
-  group('dark-write disabled', skip: _darkWrite ? 'CAPTURE_EVIDENCE_V1_DARK_WRITE is on' : null, () {
-    test('no evidence control records, binary audio unchanged, no WAL fields, no header', () async {
-      await startRunning();
-      final sent = await captureSeconds(1, frameCursor: 0);
-
-      expect(world.socket!.sentBinary, hasLength(100));
-      expect(world.socket!.sentBinary, sent);
-      expect(evidenceRecords(), isEmpty);
-      expect(world.socket!.sentText.where((t) => t.contains('capture_evidence')), isEmpty);
-
-      world.setConnected(false);
-      world.socket!.emitClose();
-      await world.settle();
-      await captureSeconds(1, frameCursor: 10000);
-      await world.wal.syncs.phone.finalizeCurrentSession();
-      final wal = (await world.wal.syncs.phone.getAllWals()).single;
-      expect(wal.captureRoot, isNull);
-      expect(wal.sourceFrameStart, isNull);
-      expect(wal.sourceClockEpoch, isNull);
-      expect(wal.toJson().containsKey('capture_root'), isFalse);
-
-      final walPath = await Wal.getFilePath(wal.filePath);
-      expect(captureEvidenceUploadHeader([wal], [File(walPath!)]), isNull);
     });
   });
 }

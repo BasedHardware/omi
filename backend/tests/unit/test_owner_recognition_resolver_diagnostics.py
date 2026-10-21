@@ -65,7 +65,7 @@ def test_unavailable_resolver_refusal_is_attributable_with_zero_comparisons(env,
 @pytest.mark.parametrize('case', ['all_short', 'partial', 'embedding_failed', 'no_owner_print'])
 def test_duration_failure_coverage_and_owner_roster_remain_separate(env, monkeypatch, case):
     _, diarizer = env
-    monkeypatch.setenv('LIVE_SPEAKER_SPAN_RESOLUTION', 'false')
+
     plan = [0, 0, 0]
     _install_audio(monkeypatch, plan)
     conversation = _conversation(plan, seconds=0.5 if case == 'all_short' else 4.0)

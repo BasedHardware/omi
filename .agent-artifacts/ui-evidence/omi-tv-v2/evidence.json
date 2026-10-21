@@ -4,14 +4,14 @@
     {
       "file": "001-web-direction-a-laptop.png",
       "platform": "web",
-      "description": "1440px Direction A revision 1, complete native Canvas cards; recorded read-only aggregates, labeled synthetic Stripe fixture",
+      "description": "1440px production-fix revision 1: disjoint MCP-only activity split and missing-marker reason; recovered live read-only aggregates and explicitly labeled synthetic Stripe fixture; text/chart bounds checked",
       "captured_by": "agent",
       "source": "playwright-e2e"
     },
     {
       "file": "002-web-direction-a-tv.png",
       "platform": "web",
-      "description": "1920px Direction A revision 1, complete native Canvas cards; recorded read-only aggregates, labeled synthetic Stripe fixture",
+      "description": "1920px production-fix revision 1: disjoint MCP-only activity split and missing-marker reason; recovered live read-only aggregates and explicitly labeled synthetic Stripe fixture; text/chart bounds checked",
       "captured_by": "agent",
       "source": "playwright-e2e"
     }

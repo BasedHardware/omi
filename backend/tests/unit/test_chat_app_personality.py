@@ -284,9 +284,7 @@ async def test_agentic_stream_runner_sees_overlay_history_tools_and_scope(capabi
 
     with patch.object(agentic, "get_user_timezone", lambda _uid: "UTC"), patch.object(
         agentic, "get_mobile_city", AsyncMock(return_value=None)
-    ), patch.object(agentic, "_resolve_jit_conversation_retrieval", AsyncMock(return_value=False)), patch.object(
-        agentic, "load_app_tools", lambda _uid: []
-    ), patch.object(
+    ), patch.object(agentic, "load_app_tools", lambda _uid: []), patch.object(
         agentic, "get_current_datetime_block", lambda _uid, tz=None, location=None: "<dt/>"
     ), patch.object(
         agentic, "_run_openai_agent_stream", runner

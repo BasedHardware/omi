@@ -56,6 +56,10 @@ concurrency:
   cancel-in-progress: false
 
 env:
+  # Abort a git HTTP transfer that stays under 1 KB/s for 60 s, so actions/checkout
+  # retries instead of hanging 7-10 min until the TCP reset (#22890).
+  GIT_HTTP_LOW_SPEED_LIMIT: "1000"
+  GIT_HTTP_LOW_SPEED_TIME: "60"
   SERVICE: ${{ github.event.inputs.service || 'pusher' }}
   REGION: us-central1
 
@@ -138,6 +142,8 @@ jobs:
             echo "Production Pusher requires a numeric successful development qualification run ID." >&2
             exit 1
           fi
+          # The promotion contract fingerprint reads the Pusher slice of runtime_env.yaml.
+          python3 -m pip install -q pyyaml
           QUALIFICATION_DIR="$RUNNER_TEMP/pusher-dev-qualification-$QUALIFICATION_RUN_ID"
           mkdir -p "$QUALIFICATION_DIR"
           gh api "repos/$GITHUB_REPOSITORY/actions/runs/$QUALIFICATION_RUN_ID" > "$QUALIFICATION_DIR/run.json"
@@ -291,7 +297,7 @@ jobs:
         env:
           # Dest: repo MONITOR_GRAFANA_TOKEN → monitor.omiapi.com
           # Prod: environment MONITOR_GRAFANA_TOKEN → monitor.omi.me
-          # Do not use GRAFANA_TOKEN; that belongs to the TV Cloud Run Grafana.
+          # Use only the environment-specific monitor token above.
           MONITOR_GRAFANA_TOKEN: ${{ secrets.MONITOR_GRAFANA_TOKEN }}
         run: |
           set -euo pipefail
@@ -419,8 +425,13 @@ jobs:
       - name: Create isolated proposed production Pusher ConfigMap
         if: env.SERVICE == 'pusher' && github.event.inputs.environment == 'prod'
         env:
+          LADDER_V1_PLUS_MONTH_PRICE_ID: ${{ vars.LADDER_V1_PLUS_MONTH_PRICE_ID }}
+          LADDER_V1_PLUS_YEAR_PRICE_ID: ${{ vars.LADDER_V1_PLUS_YEAR_PRICE_ID }}
+          LADDER_V1_PRO_MONTH_PRICE_ID: ${{ vars.LADDER_V1_PRO_MONTH_PRICE_ID }}
+          LADDER_V1_PRO_YEAR_PRICE_ID: ${{ vars.LADDER_V1_PRO_YEAR_PRICE_ID }}
+          LADDER_V1_ARCHITECT_MONTH_PRICE_ID: ${{ vars.LADDER_V1_ARCHITECT_MONTH_PRICE_ID }}
+          LADDER_V1_ARCHITECT_YEAR_PRICE_ID: ${{ vars.LADDER_V1_ARCHITECT_YEAR_PRICE_ID }}
           ACCOUNT_DELETION_HANDLER_URL: ${{ steps.pusher-runtime-targets.outputs.account_deletion_handler_url }}
-          FREE_TIER_LOCAL_PROCESSING_COHORT: ${{ vars.DEV_FREE_TIER_LOCAL_PROCESSING_COHORT }}
           CONVERSATION_SUMMARIZED_APP_IDS: ${{ vars.CONVERSATION_SUMMARIZED_APP_IDS }}
           ENVIRONMENT: ${{ vars.ENV }}
           GOOGLE_CLIENT_ID: ${{ vars.GOOGLE_CLIENT_ID }}
@@ -466,6 +477,8 @@ jobs:
           helm -n prod-omi-backend upgrade --install "$PUSHER_CANARY" ./backend/charts/pusher \
             -f ./backend/charts/pusher/prod_omi_pusher_values.yaml \
             --set-string "fullnameOverride=$PUSHER_CANARY" \
+            --set serviceAccount.create=false \
+            --set-string serviceAccount.name=prod-omi-pusher \
             --set autoscaling.enabled=false \
             --set replicaCount=1 \
             --set ingress.enabled=false \
@@ -604,8 +617,13 @@ jobs:
       - name: Apply non-secret pusher runtime config
         if: env.SERVICE == 'pusher'
         env:
+          LADDER_V1_PLUS_MONTH_PRICE_ID: ${{ vars.LADDER_V1_PLUS_MONTH_PRICE_ID }}
+          LADDER_V1_PLUS_YEAR_PRICE_ID: ${{ vars.LADDER_V1_PLUS_YEAR_PRICE_ID }}
+          LADDER_V1_PRO_MONTH_PRICE_ID: ${{ vars.LADDER_V1_PRO_MONTH_PRICE_ID }}
+          LADDER_V1_PRO_YEAR_PRICE_ID: ${{ vars.LADDER_V1_PRO_YEAR_PRICE_ID }}
+          LADDER_V1_ARCHITECT_MONTH_PRICE_ID: ${{ vars.LADDER_V1_ARCHITECT_MONTH_PRICE_ID }}
+          LADDER_V1_ARCHITECT_YEAR_PRICE_ID: ${{ vars.LADDER_V1_ARCHITECT_YEAR_PRICE_ID }}
           ACCOUNT_DELETION_HANDLER_URL: ${{ steps.pusher-runtime-targets.outputs.account_deletion_handler_url }}
-          FREE_TIER_LOCAL_PROCESSING_COHORT: ${{ vars.DEV_FREE_TIER_LOCAL_PROCESSING_COHORT }}
           CONVERSATION_SUMMARIZED_APP_IDS: ${{ vars.CONVERSATION_SUMMARIZED_APP_IDS }}
           ENVIRONMENT: ${{ vars.ENV }}
           GOOGLE_CLIENT_ID: ${{ vars.GOOGLE_CLIENT_ID }}

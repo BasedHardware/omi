@@ -397,6 +397,46 @@ void main() {
   // Existing tests (preserved verbatim from the original file)          //
   // ------------------------------------------------------------------ //
 
+  test('held audio event reaches capture state and never changes WAL custody', () async {
+    final provider = CaptureProvider(
+      externalActions: MockCaptureExternalActions(),
+      inProgressConversationLoader: () async {},
+      conversationLocationCapture: _CountingConversationLocationCapture(),
+    );
+    provider.onMessageEventReceived(MessageEvent.fromJson({
+      'type': 'stt_cap_live_held',
+      'session_id': 'connection-1',
+      'held_seconds': 125,
+      'paused': true,
+    }));
+    await Future<void>.delayed(Duration.zero);
+    expect(provider.liveHeldAudio.heldSeconds, 125);
+    expect(provider.liveHeldAudio.paused, isTrue);
+    provider.onMessageEventReceived(MessageEvent.fromJson({
+      'type': 'stt_cap_live_held',
+      'session_id': 'connection-1',
+      'held_seconds': 125,
+      'paused': false,
+    }));
+    await Future<void>.delayed(Duration.zero);
+    expect(provider.liveHeldAudio.paused, isFalse);
+    expect(provider.liveHeldAudio.heldSeconds, 125);
+    provider.onConnected();
+    await Future<void>.delayed(Duration.zero);
+    expect(provider.liveHeldAudio.sessionId, isNull);
+    expect(provider.liveHeldAudio.heldSeconds, 0);
+    provider.onMessageEventReceived(MessageEvent.fromJson({
+      'type': 'stt_cap_live_held',
+      'session_id': 'connection-2',
+      'held_seconds': 3,
+      'paused': true,
+    }));
+    await Future<void>.delayed(Duration.zero);
+    expect(provider.liveHeldAudio.sessionId, 'connection-2');
+    expect(provider.liveHeldAudio.heldSeconds, 3);
+    provider.dispose();
+  });
+
   test('manual save requires acknowledgment and respects selected scope', () async {
     final actions = MockCaptureExternalActions();
     final conversation = ServerConversation.fromJson({

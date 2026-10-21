@@ -2,13 +2,15 @@
 
 import asyncio
 from copy import deepcopy
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 import json
 from types import SimpleNamespace
+from unittest.mock import Mock
 
 import pytest
 
 from database import conversations, review_changes, review_store, review_transcript_changes
+from database.legal_holds import DestructiveOperationInProgress
 from models.agent_tools import VerificationBatch
 from models.review import AgentProposalItem
 from tests.unit.test_dream_cleanup_edits import store, records, edit, UID
@@ -274,6 +276,110 @@ def test_apply_and_undo_rebuild_chunk_vectors_from_the_current_projection(store,
     assert 'Qorbi plans' in indexed[0][0]['text']
     assert 'Qorby plans' in indexed[1][0]['text']
     assert deleted == ['one', 'one']
+
+
+def test_held_gate_blocks_transcript_vector_delete_before_provider_io(store, monkeypatch):
+    from database import vector_db
+    from utils.review_projection import sync_transcript_chunks
+
+    setup(store, monkeypatch)
+    provider = Mock()
+    monkeypatch.setattr(vector_db, 'index', provider)
+    monkeypatch.setattr(vector_db, 'default_db_client', store)
+    store.rows[('legal_hold_deletion_gates', UID)] = {
+        'schema_version': 'legal_hold_deletion_gate.v1',
+        'uid': UID,
+        'kind': 'explicit_memory_deletion',
+        'token': 'synthetic-gate',
+        'state': 'running',
+        'started_at': datetime.now(timezone.utc),
+    }
+    with pytest.raises(DestructiveOperationInProgress):
+        sync_transcript_chunks(UID, 'one', firestore_client=store)
+    assert provider.mock_calls == []
+
+
+def test_committed_transcript_gate_retry_finishes_vector_projection(store, monkeypatch):
+    from database import vector_db
+
+    seen, _ = setup(store, monkeypatch)
+    source = {'conversations/one': seen()}
+    fences = tools.proposal_fences(UID, {'records': source})
+    started_at = datetime.now(timezone.utc)
+    operation = correction()
+    provider = Mock()
+    provider.list.return_value = [['synthetic-old-chunk']]
+    monkeypatch.setattr(vector_db, 'index', provider)
+    monkeypatch.setattr(vector_db, 'default_db_client', store)
+    embed = Mock(return_value=[[0.1]])
+    monkeypatch.setattr(vector_db, 'embeddings', SimpleNamespace(embed_documents=embed))
+    upsert = vector_db.upsert_transcript_chunk_vectors
+    attempts = []
+
+    def contend_once(*args, **kwargs):
+        attempts.append(None)
+        if len(attempts) == 1:
+            raise DestructiveOperationInProgress('external data write blocked by destructive operation')
+        return upsert(*args, **kwargs)
+
+    monkeypatch.setattr(vector_db, 'upsert_transcript_chunk_vectors', contend_once)
+    with pytest.raises(DestructiveOperationInProgress):
+        tools.apply_verified_edit(UID, operation, source, expected_records=fences, authority='dream')
+    assert provider.delete.call_count == 1 and provider.upsert.call_count == 0
+    assert seen()['transcript_segments'][0]['text'].startswith('Qorbi')
+    assert (
+        tools.apply_verified_edit(
+            UID,
+            operation,
+            source,
+            expected_records=fences,
+            authority='dream',
+            gate_retry=True,
+            run_started_at=started_at,
+        )
+        == 'applied'
+    )
+    assert provider.delete.call_count == 2 and provider.upsert.call_count == 1
+    assert 'Qorbi plans' in embed.call_args.args[0][0]
+    assert len([key for key in store.rows if key[2:3] == ('review_changes',)]) == 1
+
+
+def test_committed_transcript_gate_retry_keeps_applied_when_repair_fails(store, monkeypatch):
+    from database import vector_db
+
+    seen, _ = setup(store, monkeypatch)
+    source = {'conversations/one': seen()}
+    fences = tools.proposal_fences(UID, {'records': source})
+    started_at = datetime.now(timezone.utc)
+    operation = correction()
+    provider = Mock()
+    provider.list.return_value = [['synthetic-old-chunk']]
+    monkeypatch.setattr(vector_db, 'index', provider)
+    monkeypatch.setattr(vector_db, 'default_db_client', store)
+    attempts = []
+
+    def contend_then_fail(*args, **kwargs):
+        attempts.append(None)
+        if len(attempts) == 1:
+            raise DestructiveOperationInProgress('external data write blocked by destructive operation')
+        raise TimeoutError('synthetic embedding timeout')
+
+    monkeypatch.setattr(vector_db, 'upsert_transcript_chunk_vectors', contend_then_fail)
+    with pytest.raises(DestructiveOperationInProgress):
+        tools.apply_verified_edit(UID, operation, source, expected_records=fences, authority='dream')
+    assert (
+        tools.apply_verified_edit(
+            UID,
+            operation,
+            source,
+            expected_records=fences,
+            authority='dream',
+            gate_retry=True,
+            run_started_at=started_at,
+        )
+        == 'applied'
+    )
+    assert len(attempts) == 2
 
 
 def test_shared_session_uses_one_memory_ref_spelling_for_legacy_seed_aliases():

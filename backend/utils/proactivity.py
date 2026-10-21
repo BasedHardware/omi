@@ -1,6 +1,7 @@
 """Server-only composition boundary for v2 producers and delivery."""
 
 from __future__ import annotations
+from utils.generated_compute import generated_compute_allowed
 
 import json
 import logging
@@ -12,7 +13,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from config.proactivity_v2 import ProactivityDenied, daily_cap, active_plan, producer_for, utc_now
 from database import proactivity as ledger
 from database import proactivity_redis, redis_db
-from utils import proactivity_flags
+from utils import proactivity_flags, ladder_v1
 from models.proactivity import ProactivityFeedItem, ProactivityTarget
 from utils.executors import db_executor, run_blocking
 from utils.notification_dispatch import NotificationIntent, NotificationKind, dispatch_notification_async
@@ -22,9 +23,14 @@ logger = logging.getLogger(__name__)
 
 
 def _admit(uid: str, producer: str) -> None:
+    if not generated_compute_allowed(uid, 'proactive_notification', allow_byok=False):
+        raise ProactivityDenied('usage_budget_exhausted')
     producer_for(producer)
     if not proactivity_flags.enabled(uid):
         raise ProactivityDenied('disabled')
+    if ladder_v1.feature_allowed(uid, 'proactive_agent') is False:
+        raise ProactivityDenied('pro_required')
+    ladder_v1.enforce_budget(uid)
     client = ledger.client_or_default()
     user, _ = ledger.read_owner(client, uid)
     if producer == 'conversation_mentor_v2':

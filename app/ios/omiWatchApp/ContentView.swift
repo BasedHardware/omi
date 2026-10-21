@@ -8,10 +8,12 @@ struct WatchRecorderView<Recorder: WatchRecorderControlling>: View {
     var body: some View {
         GeometryReader { geometry in
             ZStack {
+                let hasRecoveryStatus = viewModel.pendingRecoverySegments > 0 || viewModel.recoveryError != nil
                 // Black background
                 Color.black
                     .ignoresSafeArea()
                 
+                ScrollView {
                 VStack(spacing: 0) {
                     Spacer()
                     
@@ -40,14 +42,14 @@ struct WatchRecorderView<Recorder: WatchRecorderControlling>: View {
                             // Main button circle (white background)
                             Circle()
                                 .fill(Color.white)
-                                .frame(width: 80, height: 80)
+                                .frame(width: hasRecoveryStatus ? 60 : 80, height: hasRecoveryStatus ? 60 : 80)
                                 .scaleEffect(isPressed ? 1.05 : 1.0)
                                 .animation(.easeInOut(duration: 0.15), value: isPressed)
                             
                             Image("OmiLogo")
                                 .resizable()
                                 .aspectRatio(contentMode: .fit)
-                                .frame(width: 40, height: 40)
+                                .frame(width: hasRecoveryStatus ? 30 : 40, height: hasRecoveryStatus ? 30 : 40)
                                 .scaleEffect(isPressed ? 1.05 : 1.0)
                                 .animation(.easeInOut(duration: 0.15), value: isPressed)
                         }
@@ -81,11 +83,27 @@ struct WatchRecorderView<Recorder: WatchRecorderControlling>: View {
                     }
                     .foregroundColor(.white)
 
+                    if let error = viewModel.recoveryError {
+                        Text(error).font(.footnote).multilineTextAlignment(.center)
+                    }
+                    if viewModel.pendingRecoverySegments > 0 {
+                        if viewModel.recoveryError == nil {
+                            Text("watch.recovery.pending").font(.footnote).multilineTextAlignment(.center)
+                        }
+                        Button("watch.recovery.retry") { viewModel.retryRecoveryTransfers() }
+                            .buttonStyle(.bordered)
+                            .font(.footnote)
+                    }
+
                     Spacer()
-                        .frame(height: 20)
+                        .frame(height: hasRecoveryStatus ? 0 : 20)
+                }
+                .padding(.horizontal, 12)
+                .frame(minHeight: geometry.size.height)
                 }
             }
         }
+        .onAppear { viewModel.retryRecoveryTransfers() }
         .task(id: viewModel.recordingStartedAt) {
             await presentationController.update(
                 isRecording: viewModel.isRecording,

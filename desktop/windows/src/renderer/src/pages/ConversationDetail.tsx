@@ -27,6 +27,11 @@ import type {
 } from '../lib/omiApi.generated'
 import type { ChatMessage, ConversationFolder } from '../../../shared/types'
 import { Markdown } from '../components/Markdown'
+import {
+  noteTranscriptIDs,
+  presentableNoteText,
+  presentableNoteTitle
+} from '@omi/note-shared/note-sources.mjs'
 import { Spinner } from '../components/ui/Spinner'
 import { ModalShell } from '../components/conversations/ModalShell'
 import { MoveToFolderMenu } from '../components/conversations/MoveToFolderMenu'
@@ -380,9 +385,6 @@ function ConversationDetailView({ conversationId }: { conversationId: string }):
     try {
       if (isLocal) await window.omi.deleteLocalConversation(id)
       else await deleteCloudConversation(id)
-      // Cloud deletion has no local DB callback; remove any permanent JIT
-      // evidence pin only after the server confirms the conversation is gone.
-      await window.omi.deleteJitConversationKeyframe(id)
       invalidateConversationsCache()
       toast('Conversation deleted', { tone: 'info' })
       navigate('/conversations')
@@ -585,7 +587,11 @@ function ConversationDetailView({ conversationId }: { conversationId: string }):
 
   const structured = conv.structured ?? {}
   const title = structured.title || 'Conversation'
-  const overview = structured.overview?.trim() ?? ''
+  // Read-time citation repair (contracts/note_citation_contract.json), as on macOS and web:
+  // legacy notes can carry `[s01234]` / `Speaker_00` debris. Display only; rename edits `title`.
+  const transcriptIDs = noteTranscriptIDs(segments)
+  const displayTitle = presentableNoteTitle(structured.title, transcriptIDs) || 'Conversation'
+  const overview = presentableNoteText(structured.overview?.trim(), transcriptIDs)
   const actionItems = structured.action_items ?? []
   const insights = (conv.apps_results ?? []).filter((r) => r.content?.trim())
   const enriching = isEnriching(conv)
@@ -621,7 +627,7 @@ function ConversationDetailView({ conversationId }: { conversationId: string }):
                   </span>
                 )}
                 <h1 className="truncate font-display text-xl font-bold tracking-tight text-white">
-                  {title}
+                  {displayTitle}
                 </h1>
                 <button
                   onClick={() => setRenaming(true)}
@@ -783,7 +789,7 @@ function ConversationDetailView({ conversationId }: { conversationId: string }):
                           a.completed ? 'text-text-quaternary line-through' : 'text-text-secondary'
                         }`}
                       >
-                        {a.description}
+                        {presentableNoteText(a.description, transcriptIDs)}
                       </span>
                     </li>
                   ))}
@@ -849,7 +855,7 @@ function ConversationDetailView({ conversationId }: { conversationId: string }):
             Delete conversation?
           </h2>
           <p className="mt-2 text-sm text-text-tertiary">
-            “{title}” will be permanently deleted. This cannot be undone.
+            “{displayTitle}” will be permanently deleted. This cannot be undone.
           </p>
           <div className="mt-5 flex justify-end gap-2">
             <button

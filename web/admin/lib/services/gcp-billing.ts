@@ -26,6 +26,8 @@ export interface GcpDailyCost {
   netUsd: number;
   grossUsd: number;
   llmNetUsd: number; // Vertex/Gemini portion of netUsd
+  /** Net USD by GCP service for this day (one-time incident detection). */
+  services?: Record<string, number>;
 }
 
 export interface GcpServiceCost {
@@ -116,6 +118,9 @@ export async function fetchGcpBilling(
         llmNetUsd: 0,
       };
       entry.netUsd += row.net_usd;
+      entry.services = entry.services ?? {};
+      entry.services[row.service] =
+        (entry.services[row.service] ?? 0) + row.net_usd;
       entry.grossUsd += row.gross_usd;
       const llm = isLlmService(row.service);
       if (llm) entry.llmNetUsd += row.net_usd;

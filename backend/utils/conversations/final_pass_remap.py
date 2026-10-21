@@ -1,6 +1,7 @@
 """Fail-closed speaker-only promotion; stored text and annotations are immutable."""
 
 from copy import deepcopy
+from typing import Any
 
 from utils.conversations.segment_remap import plan_segment_remap
 from utils.manual_speaker_assignments import (
@@ -21,7 +22,7 @@ SPEAKER_FIELDS = (
 )
 
 
-def remap_final_record(old, new, receipt, structured, *, clock_offset):
+def remap_final_record(old, new, receipt, structured, *, clock_offset, protect_legacy_owner=True) -> dict[str, Any]:
     plan = plan_segment_remap(old, new, offset_seconds=clock_offset)
     if not plan.safe:
         raise ValueError('unsafe final record remap')
@@ -46,7 +47,7 @@ def remap_final_record(old, new, receipt, structured, *, clock_offset):
         # Bare legacy owner edits have no reliable provenance. Conservatively
         # protect either direction of an is_user disagreement, including False.
         protected = (
-            source.get('is_user', False) != candidate.get('is_user', False)
+            (protect_legacy_owner and source.get('is_user', False) != candidate.get('is_user', False))
             or source.get('speaker_label_source') in {'manual', 'carried'}
             or (not source.get('speaker_match_source') and source.get('person_id'))
         )

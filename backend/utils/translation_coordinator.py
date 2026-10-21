@@ -33,7 +33,6 @@ from utils.translation_core.metrics import get_translation_metrics
 from config.translation import (
     resolve_ondemand_config,
     resolve_translation_profile,
-    translation_profile_gate_enabled,
     viewed_translation_profile,
 )
 from utils.translation_core.planner import TranslationMode
@@ -197,9 +196,9 @@ class TranslationCoordinator:
 
     def _admission(self) -> DemandPolicy:
         config = resolve_ondemand_config()
-        if self.realtime_interpreter or not config.gate_enabled or not config.admits(self.uid) or self.demand is None:
+        if self.realtime_interpreter or not config.gate_enabled or self.demand is None:
             return DemandPolicy.legacy_unknown
-        return self.demand.snapshot(lease_v1_enabled=config.lease_v1_enabled).policy
+        return self.demand.snapshot().policy
 
     def result_context(self, segment_id: str, conversation_id: str) -> tuple[str, str, object | None] | None:
         return self._result_context.get((conversation_id, segment_id))
@@ -277,11 +276,7 @@ class TranslationCoordinator:
         state.latest_text = text
         state.last_update_at = now
 
-        foreign_clause = (
-            expected_foreign_language(new_text, self.target_language, self.expected_languages)
-            if translation_profile_gate_enabled()
-            else None
-        )
+        foreign_clause = expected_foreign_language(new_text, self.target_language, self.expected_languages)
         skip_mono = (
             self.language_state.observe_detection(foreign_clause, 1.0, speaker_id=segment.speaker_id)
             if foreign_clause
@@ -333,7 +328,7 @@ class TranslationCoordinator:
         text_hash = hashlib.md5(text.encode()).hexdigest()
         cached = (
             None
-            if self._admission() == DemandPolicy.viewed and resolve_ondemand_config().gemini_enabled
+            if self._admission() == DemandPolicy.viewed
             else await run_blocking(
                 db_executor,
                 self.translation_service.get_cached_translation,
@@ -408,7 +403,7 @@ class TranslationCoordinator:
         state.committed_text = text
         text_hash = hashlib.md5(text.encode()).hexdigest()
         config = resolve_ondemand_config()
-        if self._admission() == DemandPolicy.viewed and config.gemini_enabled:
+        if self._admission() == DemandPolicy.viewed:
             await run_blocking(
                 db_executor,
                 self.translation_service.set_negative_cache,
@@ -505,7 +500,7 @@ class TranslationCoordinator:
         if admission in {DemandPolicy.hidden, DemandPolicy.lease_expired, DemandPolicy.closed}:
             return
         config = resolve_ondemand_config()
-        viewed = admission == DemandPolicy.viewed and config.gemini_enabled
+        viewed = admission == DemandPolicy.viewed
         if viewed and not config.spend_configured:
             self._decision_metrics.decision(self.target_language, 'defer', 'budget_denied')
             return
@@ -558,9 +553,8 @@ class TranslationCoordinator:
             current_config = resolve_ondemand_config()
             if (
                 not current_config.gate_enabled
-                or not current_config.admits(self.uid)
                 or self.demand is None
-                or self.demand.snapshot(lease_v1_enabled=current_config.lease_v1_enabled).policy != DemandPolicy.viewed
+                or self.demand.snapshot().policy != DemandPolicy.viewed
             ):
                 await run_blocking(db_executor, release_translation, reservation, 0)
                 self._decision_metrics.decision(self.target_language, 'defer', 'no_demand')

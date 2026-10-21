@@ -40,11 +40,9 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Mapping, Optional, Sequence
 
-from config.capture_evidence import capture_evidence_dark_write_enabled
 from config.sync_lineage import (
     sync_lineage_resolve_enabled,
     sync_lineage_resolve_uid_allowed,
-    sync_lineage_s1_required,
 )
 from config.sync_live_dedupe import sync_live_dedupe_active_for, sync_live_dedupe_enabled
 from config.sync_telemetry import bounded_correlation_ref, bounded_exception_class
@@ -123,8 +121,7 @@ class LineagePlan:
 def _s1_claims_complete(capture_evidence_claims: Optional[Mapping], filenames: Sequence[str]) -> bool:
     """Complete validated S1 metadata for the exact uploaded basename set."""
     if (
-        not capture_evidence_dark_write_enabled()
-        or not isinstance(capture_evidence_claims, Mapping)
+        not isinstance(capture_evidence_claims, Mapping)
         or not capture_evidence_claims
         or not filenames
         or len(capture_evidence_claims) > 20
@@ -149,8 +146,6 @@ def _s1_refusal_reason(capture_evidence_claims: object, filenames: Sequence[str]
     ``no_claims`` rather than the original parse failure.
     """
     try:
-        if not capture_evidence_dark_write_enabled():
-            return 'not_admitted'
         if capture_evidence_claims is None:
             return 'no_claims'
         if not isinstance(capture_evidence_claims, Mapping):
@@ -236,7 +231,7 @@ def lineage_resolution_requested(
             diagnostics=sync_live_dedupe_active_for(uid),
         )
         return False
-    if sync_lineage_s1_required() and not _s1_claims_complete(capture_evidence_claims, filenames):
+    if not _s1_claims_complete(capture_evidence_claims, filenames):
         emit_s1_refusal(_s1_refusal_reason(capture_evidence_claims, filenames))
         return False
     return True
@@ -688,10 +683,7 @@ def resolve_segment_targets(
     lineage_module: list = []
     safe_overlap = sync_live_dedupe_active_for(uid)
     want_capture_evidence = bool(
-        safe_overlap
-        and capture_evidence_dark_write_enabled()
-        and segment_source_maps
-        and any(mapping is not None for mapping in segment_source_maps.values())
+        (safe_overlap and segment_source_maps and any(mapping is not None for mapping in segment_source_maps.values()))
     )
     try:
         try:

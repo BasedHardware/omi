@@ -27,6 +27,7 @@ import 'package:omi/services/wals/sync_rate_limiter.dart';
 import 'package:omi/services/wals/sync_job_poller.dart';
 import 'package:omi/services/wals/sync_job_policy.dart';
 import 'package:omi/services/wals/sync_upload_batch.dart';
+import 'package:omi/services/on_device/on_device_transcription_controller.dart';
 import 'package:omi/services/wals/sync_upload_gate.dart';
 import 'package:omi/services/wals/wal_evidence_runs.dart';
 import 'package:omi/utils/debug_log_manager.dart';
@@ -48,8 +49,6 @@ const _liveCaptureMaxAgeSeconds = 6 * 60 * 60;
 const int maxRetainedCaptureWalCount = 720;
 
 const int minFreeDiskReserveBytes = 512 * 1024 * 1024;
-
-const _captureEvidenceV1DarkWrite = bool.fromEnvironment('CAPTURE_EVIDENCE_V1_DARK_WRITE');
 
 class WalRetentionRisk {
   const WalRetentionRisk({
@@ -178,6 +177,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
 
   int _framesPerSecond = 100;
   BleAudioCodec _codec = BleAudioCodec.opus;
+  BleAudioCodec get currentCodec => _codec;
   String? _deviceId;
   String? _deviceModel;
   Geolocation? _sessionGeolocation;
@@ -323,8 +323,10 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   Timer Function(Duration, void Function(Timer)) get _periodic => _periodicOverride ?? Timer.periodic;
 
   final SyncJobPoller? _jobPollerOverride;
-  late final SyncJobPoller _jobPoller =
-      _jobPollerOverride ?? (_jobStatusFetcherOverride == null ? SyncJobPoller.instance : SyncJobPoller(clock: _now));
+  late final SyncJobPoller _jobPoller = _jobPollerOverride ??
+      (_jobStatusFetcherOverride == null
+          ? (SyncJobPoller.instance..persistMissingWith(PreferencesSyncJobMissingStore()))
+          : SyncJobPoller(clock: _now));
   Future<SyncJobFetch> _jobStatusFetcher(String jobId) =>
       _jobPoller.fetch(jobId, _jobStatusFetcherOverride ?? fetchSyncJobStatus);
   Future<SyncLocalFilesResponse>? _reconcileInFlight;
@@ -514,6 +516,16 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     }
   }
 
+  /// Headless transcription loads custody without starting cloud-audio timers or migrations.
+  Future<void> loadForOnDeviceWorker() async {
+    final generation = _sessionGeneration;
+    await WalFileManager.init();
+    final loaded = await WalFileManager.loadWals();
+    if (!_isCurrent(generation)) return;
+    _admitLoadedWals(loaded);
+    if (!_walReady.isCompleted) _walReady.complete();
+  }
+
   Future<void> _initializeWals() async {
     final generation = _sessionGeneration;
     await WalFileManager.init();
@@ -653,7 +665,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     var timerStart = timerEnd - (high - low) ~/ _framesPerSecond;
     var chunkFrameCount = high - low;
 
-    if (partitionsEvidenceRuns(_captureEvidenceV1DarkWrite, _codec, evidenceFrames)) {
+    if (partitionsEvidenceRuns(true, _codec, evidenceFrames)) {
       _storeSelectedRuns(
         evidenceFrames,
         _frameSynced.sublist(low, high),
@@ -899,7 +911,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
         final evidence = stableCaptureEvidence(frames);
         final live = _liveEvidenceFor(frames);
 
-        if (partitionsEvidenceRuns(_captureEvidenceV1DarkWrite, _codec, frames)) {
+        if (partitionsEvidenceRuns(true, _codec, frames)) {
           _storeSelectedRuns(
             frames,
             synced,
@@ -970,6 +982,9 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
       final wal = wals[i];
 
       if (wal.storage == WalStorage.mem) {
+        // A policy edge may share a partially filled chunk with previously sent
+        // frames. Conservatively retain the whole chunk; never upload its local tail.
+        // Custody was latched when these frames were captured.
         final fileName = await _uniqueStorageFileName(wal);
         String? filePath = await Wal.getFilePath(fileName);
         if (filePath == null) {
@@ -1548,7 +1563,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     }
 
     if (shouldStored) {
-      if (partitionsEvidenceRuns(_captureEvidenceV1DarkWrite, _codec, evidenceFrames)) {
+      if (partitionsEvidenceRuns(true, _codec, evidenceFrames)) {
         _storeSelectedRuns(
           evidenceFrames,
           _frameSynced.sublist(0, high),
@@ -1748,6 +1763,16 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     return unsyncedCount ~/ _framesPerSecond;
   }
 
+  /// Commit result before publishing it; stale-account work cannot rewrite the index.
+  Future<bool> persistOnDeviceConversation(Wal wal, Map<String, dynamic> conversation, int generation) async {
+    if (!_isCurrent(generation) || !_wals.contains(wal) || !wal.onDeviceOnly) return false;
+    wal.onDeviceConversation = conversation;
+    wal.conversationId = conversation['id'] as String?;
+    await _saveWalsToFile(generation);
+    _notifyUpdated(generation);
+    return true;
+  }
+
   @override
   Future<List<Wal>> getAllWals() async {
     return List.from(_wals);
@@ -1803,7 +1828,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
 
   @override
   WalFrame onFrameCaptured(WalFrame frame, {String? captureRoot}) {
-    if (LocalSttCustody.keepsPhoneAudio) {
+    if (LocalSttCustody.keepsPhoneAudio || OnDeviceTranscriptionController.instance.shouldKeepAudioLocal) {
       _pendingPhoneOnly = true;
       for (final wal in _wals.where((w) => w.storage == WalStorage.mem)) {
         wal.onDeviceOnly = true;
@@ -2496,9 +2521,47 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     });
   }
 
+  /// A row read before an await may have changed by the time the pass writes
+  /// it: an upload may have claimed it under a new job, retention may have
+  /// released it, or another path may have finished it. Only a row this sync
+  /// still owns, still `uploaded` under the same job handle (blank = none),
+  /// may be moved.
+  bool _stillUploadedUnder(Wal wal, String? jobId) =>
+      wal.status == WalStatus.uploaded &&
+      (wal.jobId?.trim() ?? '') == (jobId?.trim() ?? '') &&
+      _wals.any((w) => identical(w, wal));
+
   Future<SyncLocalFilesResponse> _reconcileUploadedWals() async {
     final generation = _sessionGeneration;
     final resp = SyncLocalFilesResponse(newConversationIds: [], updatedConversationIds: []);
+
+    bool changed = false;
+    final nowSecs = _now().millisecondsSinceEpoch ~/ 1000;
+    // A restored uploaded row with no job handle cannot ever be polled.
+    // Retained audio re-enters the normal deduplicated upload path; missing
+    // audio remains visible as unavailable. Neither is a successful sync.
+    // Iterate a snapshot: a recording admitted during a file check must not
+    // break the pass, and each row is re-read after the check before it moves.
+    final orphans = _wals.where((w) => _stillUploadedUnder(w, null)).toList();
+    for (final w in orphans) {
+      final exists = await _localFileExists(w);
+      if (!_isCurrent(generation)) return resp;
+      if (!_stillUploadedUnder(w, null)) continue;
+      changed = true;
+      if (exists) {
+        w.status = WalStatus.miss;
+        w.jobId = null;
+        w.lastRetryAt = nowSecs;
+      } else {
+        w.markCorrupted();
+      }
+      DebugLogManager.logEvent('reconcile_revert', {
+        'walId': w.id,
+        'outcome': 'missing_job_id',
+        'fileExists': exists,
+        'newStatus': w.status.name,
+      });
+    }
 
     final byJob = <String, List<Wal>>{};
     for (final w in _wals) {
@@ -2506,13 +2569,12 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
         byJob.putIfAbsent(w.jobId!, () => []).add(w);
       }
     }
-    if (byJob.isEmpty) return resp;
-
-    bool changed = false;
-    final nowSecs = _now().millisecondsSinceEpoch ~/ 1000;
     // Serial requests let a 429 stop this pass before another request escapes.
     const maxConcurrent = 1;
-    final entries = _jobPoller.ordered(byJob.keys).map((id) => MapEntry(id, byJob[id]!)).toList();
+    // Fresh uploads and old handles alternate; a dead backlog cannot starve them.
+    final uploadedAt = {for (final e in byJob.entries) e.key: e.value.map((w) => w.uploadedAt).reduce(max)};
+    final entries =
+        _jobPoller.ordered(byJob.keys, uploadedAtSeconds: uploadedAt).map((id) => MapEntry(id, byJob[id]!)).toList();
 
     for (var i = 0; i < entries.length; i += maxConcurrent) {
       final slice = entries.sublist(i, min(i + maxConcurrent, entries.length));
@@ -2544,10 +2606,12 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
           case SyncJobFetchOutcome.notFound:
             // Job expired or unknown. Recover from the retained local file.
             for (final w in members) {
-              changed = true;
               final hadJob = w.jobId;
-              w.jobId = null;
               final fileExists = await _localFileExists(w);
+              if (!_isCurrent(generation)) return resp;
+              if (!_stillUploadedUnder(w, jobId)) continue;
+              changed = true;
+              w.jobId = null;
               if (fileExists) {
                 w.status = WalStatus.miss; // re-upload next sync (dedup-safe)
                 // Expiry is not an audio failure. Recovery is already paced by
@@ -2604,6 +2668,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
                 // Completion telemetry must not change WAL acknowledgement.
               }
               for (final w in members) {
+                if (!_stillUploadedUnder(w, jobId)) continue;
                 if ((s.result?.newConversationIds.length ?? 0) == 0 &&
                     (s.result?.updatedConversationIds.length ?? 0) == 0) {
                   DebugLogManager.logEvent('reconcile_completed_empty', {
@@ -2646,6 +2711,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
               // out-of-window rejection already does. The file stays on disk.
               final permanentInput = !capacityLimited && syncJobFailureIsPermanent(s);
               for (final w in members) {
+                if (!_stillUploadedUnder(w, jobId)) continue;
                 changed = true;
                 final hadJob = w.jobId;
                 if (permanentInput) {

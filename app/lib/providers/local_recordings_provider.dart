@@ -1,3 +1,4 @@
+import 'package:omi/services/on_device/on_device_transcription_controller.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -11,6 +12,7 @@ import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/services/bridges/ble_bridge.dart';
 import 'package:omi/services/connectivity_service.dart';
 import 'package:omi/services/capture/native_batch_geolocation.dart';
+import 'package:omi/services/capture/watch_recording_receipt.dart';
 import 'package:omi/services/telemetry/client_telemetry.dart';
 import 'package:omi/services/wals.dart';
 import 'package:omi/services/wals/sync_job_poller.dart';
@@ -177,11 +179,19 @@ class LocalRecordingsProvider extends ChangeNotifier {
         // the same audio_*.bin naming.
         if (!name.startsWith('audio_$batchRecordingDevice') || !name.endsWith('.bin')) continue;
         onDisk.add(name);
-        if (uid.isNotEmpty && !owners.containsKey(name)) {
+        if (name.startsWith('audio_omibatchwatch')) {
+          final owner = await watchRecordingOwner(dir, name);
+          if (owner == null) continue;
+          if (owners[name] != owner) {
+            owners[name] = owner;
+            ownersChanged = true;
+          }
+        } else if (uid.isNotEmpty && !owners.containsKey(name)) {
           owners[name] = uid;
           ownersChanged = true;
         }
         if (owners[name] != uid) continue;
+        if (OnDeviceTranscriptionController.instance.completedRecordingNames.contains(name)) continue;
         final size = await entity.length();
         seen.add(name);
         final rec = LocalRecording.fromFile(
@@ -277,6 +287,10 @@ class LocalRecordingsProvider extends ChangeNotifier {
   Future<LocalUploadOutcome> upload(LocalRecording rec) => _uploadFile(rec, auto: false);
 
   Future<LocalUploadOutcome> _uploadFile(LocalRecording rec, {required bool auto}) async {
+    if (rec.fileName.startsWith('audio_omibatchoverflow_')) {
+      await OnDeviceTranscriptionController.instance.transcribeNow();
+      return LocalUploadOutcome.busy;
+    }
     if (_isUploading || rec.isBusy) return LocalUploadOutcome.busy;
     _isUploading = true;
     _uploadingName = rec.fileName;

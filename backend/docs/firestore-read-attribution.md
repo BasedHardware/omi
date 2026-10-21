@@ -141,12 +141,10 @@ entrypoints do that before they read:
 |---|---|---|
 | backend, backend-listen, backend-sync, backend-sync-backfill | `backend/main.py` | imports `routers`, which import `database` |
 | backend-integration | `backend/main.py` | imports the same database-backed router process and is included in the required ledger service set |
-| llm_gateway | `backend/llm_gateway/main.py` | Legacy JIT proactivity reservation reads retired; the gateway still records provider accounting through its retained accounting boundary |
+| llm_gateway | `backend/llm_gateway/main.py` | Gateway still records provider accounting through its retained accounting boundary |
 | desktop-backend | `backend/desktop_backend.py` | imports `routers` |
 | pusher | `backend/pusher/main.py` | imports `routers.pusher`, which imports `database.users` |
 | memory-maintenance-job | `backend/modal/memory_maintenance_job.py` | maintenance cron imports `database._client` |
-| daily-memory-sweep-job | `backend/modal/daily_memory_sweep_job.py` | imports `database._client` |
-| knowledge-ledger-drain-job | `backend/modal/knowledge_ledger_drain_job.py` | drain module imports `database._client` |
 | day3-reengagement-email-job | `backend/modal/day3_reengagement_email_job.py` | imports `database._client` |
 | frame-request-retention-job | `backend/modal/frame_request_retention_job.py` | retention service imports `database._client` |
 | notifications-job | `backend/modal/job.py` | `utils/other/jobs.py` imports `utils/x_connector.py`, which imports `database._client` |
@@ -181,3 +179,174 @@ workflow does not enable DATA_READ. Turning that audit log on requires
 | personas web client | `web/personas-open-source/src/lib/firebase.ts` and the `getDocs` / `getDoc` calls under `web/personas-open-source/src/app/` | `plugins_data` and `users` | same. This tree has no `.onSnapshot(` / `.on_snapshot(` call |
 
 Mobile clients in this repo do not use `cloud_firestore`.
+
+## Origin attribution (always on)
+
+`omi_firestore_billed_reads_by_origin_total{origin,collection,kind}` records the
+same amount at the same `_record` boundary as `omi_firestore_billed_reads_total`.
+Do not add the two counters. No lever controls origin accounting. It performs no
+additional Firestore/Redis calls and cannot change a read's result or exception.
+The new work per read is bounded dictionary/set lookups and one counter increment;
+collection-group aliases are precomputed rather than scanning the allowlist.
+
+`FirestoreTierMiddleware` binds the live ASGI scope for HTTP and WebSocket
+requests. Recording lazily reads `scope['route'].path` after Starlette has routed
+it: `http:/v1/users/{uid}` or `ws:/v4/listen`. It never labels `scope['path']`.
+Before a route is known, the label is `http:unmatched` or `ws:unmatched`. A context
+without a request or named task/job is `unset`. Auth/executor copies preserve the
+ContextVar through the existing `run_blocking`/`submit_with_context` helpers.
+Bare new threads and raw executor submissions require explicit context copying.
+
+```python
+from database.firestore_read_origin import read_origin
+
+with read_origin('job:daily_summary'):
+    run_daily_summary()
+
+@read_origin('job:memory_maintenance')
+async def maintain():
+    await run_maintenance()
+```
+
+Use source-code constants, never uid/job/session IDs, payload fields or raw URLs.
+The context manager also decorates synchronous functions; async decorators cover
+the entire awaited invocation. `start_background_task(coro, name='worker')`
+automatically sets `task:worker` in the created task's context, leaving its actual
+name, coroutine, cancellation and completion callback unchanged. Existing dynamic
+task names are normalized to registered families (for example
+`sync_pipeline:<job_id>` → `task:sync_pipeline`,
+`fair_use_classifier:<uid>:<session_id>` → `task:fair_use_classifier`,
+`x_initial_sync_<uid>` → `task:x_initial_sync`). Extend the fixed family registry
+when introducing another dynamic task-name format.
+
+Names register only on observation. At most 400 distinct route/job/task origins
+are retained per process, plus `unset`, unmatched and `overflow` buckets.
+`omi_firestore_origin_label_overflow_total` increments for observations rejected
+by the cap. There is no origin × collection × kind pre-initialization. The first
+read creates its series. The collection allowlist includes account cutover,
+client devices, prompt/usage state, durable queues, daily summaries, dreams,
+finalization, sync backfill/content/dead-letter collections and fixed batch
+pipeline namespaces; document IDs are removed before matching.
+
+With the existing `FIRESTORE_READ_LEDGER=1`, schema-2 cumulative snapshots also
+carry `reads_by_origin`. It uses the same accumulator boundary and project scope
+as the old kind/tier fields and resets with them at UTC day rollover. All old
+fields and reconciliation semantics remain intact; the existing reducer ignores
+this additional field.
+
+After every relevant replica has upgraded, check both counter parity and the
+named fraction in the same production scrape scope:
+
+```promql
+# Must remain 1 (no double counting or lost origin observations).
+sum(increase(omi_firestore_billed_reads_by_origin_total[1h]))
+/ sum(increase(omi_firestore_billed_reads_total[1h]))
+
+# Conditional attribution among probe-observed backend reads; target >= .90.
+sum(increase(omi_firestore_billed_reads_by_origin_total{origin!~"unset|overflow|http:unmatched|ws:unmatched"}[1h]))
+/ sum(increase(omi_firestore_billed_reads_by_origin_total[1h]))
+
+# Rank origins and collections; compare identical windows before/after a lever.
+topk(30, sum by (origin, collection) (increase(omi_firestore_billed_reads_by_origin_total[1h])))
+
+sum(increase(omi_firestore_origin_label_overflow_total[1h]))
+```
+
+At least two scrapes of a newly created series are needed for `increase()`; its
+first observation is not a precreated zero. These checks alone do not establish
+that 90% of **billed fleet reads** are named: reconcile coverage against Cloud
+Monitoring/billing as above, add the separately logged admin reads, and account
+for uninstrumented services and index-entry residuals. No production coverage
+claim is justified by unit tests.
+
+## Admin server reads
+
+`web/admin/lib/firebase/admin.ts:getDb()` returns a cached Firestore facade.
+It counts document/query/collection-group `get`, `getAll`, transaction reads,
+query streams, empty-query floors, offsets and `count()` batches (ceil(count/1000),
+minimum 1). Writes use the original SDK objects. SDK internal funnels are not
+wrapped, preventing duplicate counting. Snapshot accessors remain synchronous;
+returned snapshot refs and query builders retain instrumentation. Arbitrary
+sum/avg aggregates retain the one-read minimum estimate. Reads through the default
+`admin` export or other SDK instances bypass this facade; callers should use
+`getDb()`.
+
+The installed Next 16 runtime's work and request AsyncLocalStorage stores supply
+the router-owned template and request identity. One `after()` callback per request
+emits one structured `firestore_read_ledger` JSON line, including the precompute
+request at `http:/api/internal/precompute`. No route edits are necessary. These
+Next internal store imports must be checked when upgrading Next. Non-Next scripts
+can use the explicit sync/async boundary:
+
+```typescript
+import { withFirestoreReadLedger } from '@/lib/firebase/read-counter';
+await withFirestoreReadLedger('job:stats_precompute', () => runPrecompute());
+```
+
+Each admin request/run has its own epoch and `seq=1`, with schema 2,
+`service=web-admin`, UTC `day`, `lookup`, `not_found`, `query`, `origin`,
+`reads_by_origin` and `reads_by_collection`. Final rows may be summed after
+deduplicating `(service,epoch,day,seq)`; they are not backend process-cumulative
+snapshots. The ledger excludes known non-`based-hardware` projects and marks
+unknown SDK project identity with `unscoped=1`, matching Python's conservative
+scope rule. The bounded in-process counter snapshot is exported by
+`firestoreReadCounts()` (origin × reviewed collection name × kind, plus origin
+overflow). Admin collection labels use the final collection name, so collection
+group and nested reads can be compared without document IDs.
+
+The Python reconcile tool's shipped-service allowlist currently excludes
+`web-admin`; an integrator must explicitly add it before counting these rows in
+that tool. Keep Cloud Run logs enabled. A request killed before its `after()`
+callback loses that request's ledger; in-process counters are still updated.
+Standalone code outside Next must provide an explicit run boundary to emit a row.
+Neither implementation adds a fallback database read to recover missing context.
+
+### Integrator entrypoint wiring
+
+Import `read_origin` from `database.firestore_read_origin`. Put each decorator
+immediately above the function and below any router decorator. Already launched
+named tasks receive `task:` labels automatically; these optional `job:` overrides
+make the durable origin independent of the launcher. Do not apply a decorator
+and an overlapping context for the same entrypoint.
+
+| Entrypoint | Exact line |
+|---|---|
+| `main.py:_periodic_deletion_wipe_reconcile` | `@read_origin('job:periodic_deletion_wipe_reconcile')` |
+| `main.py:_periodic_listen_finalization_reconcile` | `@read_origin('job:periodic_listen_finalization_reconcile')` |
+| `main.py:_drain_pending_deletion_wipes` | `@read_origin('job:startup_deletion_wipe_reconcile')` |
+| `main.py:_drain_listen_finalization_jobs` | `@read_origin('job:startup_listen_finalization_reconcile')` |
+| `main.py:_drain_stale_processing_conversations` | `@read_origin('job:startup_stale_processing_reconcile')` |
+| `main.py:_drain_stale_in_progress_conversations` | `@read_origin('job:startup_stale_in_progress_reconcile')` |
+| `main.py:_drain_abandoned_byok_finalization_jobs` | `@read_origin('job:startup_byok_abandonment_reconcile')` |
+| S2's `main.py:_run_fsr_loop` (alternative fine-grained override around its existing body; loop names are S2's fixed registry) | `with read_origin(f'job:{loop_name}'):` |
+| `modal/job.py:main` (notifications + daily summaries) | `@read_origin('job:notifications')` |
+| `modal/x_connector_sync_job.py:main` | `@read_origin('job:x_connector_sync')` |
+| `modal/memory_maintenance_job.py:main` | `@read_origin('job:memory_maintenance')` |
+| `modal/frame_request_retention_job.py:main` | `@read_origin('job:frame_request_retention')` |
+| `modal/day3_reengagement_email_job.py:main` | `@read_origin('job:day3_reengagement_email')` |
+| `modal/conversation_selfheal_job.py:main` | `@read_origin('job:conversation_selfheal')` |
+| `routers/sync.py:sweep_sync_backfill_sequencer` (`/v2/sync-backfill-sequencer/sweep`) | `@read_origin('job:sync_backfill_sequencer')` |
+| `routers/dream_sweep.py:canary_dream_agent` (`/v2/dream-agent/canary`) | `@read_origin('job:dream_agent_canary')` |
+| `routers/dream_sweep.py:sweep_dream_agent` (`/v2/dream-agent/sweep`) | `@read_origin('job:dream_agent_sweep')` |
+| `routers/candidate_integration_sweep.py:sweep_candidate_integrations` (`/v2/candidate-integrations/sweep`) | `@read_origin('job:candidate_integration_sweep')` |
+| `routers/feedback_admin.py:generate_yesterdays_feedback_report` (nightly target) | `@read_origin('job:feedback_report_yesterday')` |
+| `routers/feedback_admin.py:generate_feedback_report` (scheduled/manual dated backfill) | `@read_origin('job:feedback_report_generate')` |
+
+Cron HTTP routes already receive their route-template origins without these
+optional job decorators. `main.py` also launches live-STT refresh,
+executor health and proactive dispatch with constant names; those receive
+`task:live_stt_fleet_health`, `task:executor_health` and
+`task:proactive_message_dispatcher` automatically. S2's new startup queue publisher
+receives `task:startup_durable_queue_age_publish` automatically.
+
+The other ASGI entrypoints need the same middleware: add
+`from database.firestore_tier_context import FirestoreTierMiddleware`, then
+`app.add_middleware(FirestoreTierMiddleware)` in `pusher/main.py` after app
+construction, in `desktop_backend.py:_build_app`, and in `llm_gateway/main.py`
+after app construction. Without those additions their unscoped reads remain
+`unset`; `main.py` already installs the middleware. The Scheduler inventory also
+contains `/v1/webhooks/sentry/poll`, whose handler is absent from this checkout;
+no verified function exists here to decorate. Finops' scheduled job uses BigQuery,
+GCS and provider APIs in a standalone image, so importing the backend origin
+module into it is unnecessary. `modal/main.py` is the VAD service, not a Firestore
+job.

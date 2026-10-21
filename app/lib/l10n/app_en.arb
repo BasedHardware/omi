@@ -2028,14 +2028,6 @@
     "@memoryHistory": {
         "description": "Filter option for retained memory history"
     },
-    "memoryAllowUse": "Allow Use",
-    "@memoryAllowUse": {
-        "description": "Button that clears suppression so this memory may be used"
-    },
-    "memoryDontUse": "Don't Use",
-    "@memoryDontUse": {
-        "description": "Button that suppresses this memory from future use"
-    },
     "undo": "Undo",
     "@undo": {
         "description": "Undo button text"
@@ -5114,6 +5106,30 @@
             }
         }
     },
+    "yourPlanEndsOn": "Your {plan} plan ends {date}.",
+    "@yourPlanEndsOn": {
+        "description": "Pending cancellation shown beside the current plan",
+        "placeholders": {
+            "plan": {
+                "type": "String",
+                "example": "Plus"
+            },
+            "date": {
+                "type": "String",
+                "example": "Nov 3, 2026"
+            }
+        }
+    },
+    "resubscribeNowNoChargeUntil": "Resubscribe now to keep your plan. No charge until {date}.",
+    "@resubscribeNowNoChargeUntil": {
+        "description": "Reassurance under a pending cancellation that resubscribing is not charged until the end date",
+        "placeholders": {
+            "date": {
+                "type": "String",
+                "example": "Nov 3, 2026"
+            }
+        }
+    },
     "planSetToCancelOn": "Your plan is set to cancel on {date}.\nResubscribe now to keep your benefits - no charge until {date}.",
     "@planSetToCancelOn": {
         "description": "Message when plan is set to cancel",
@@ -5127,6 +5143,20 @@
     "annualPlanStartsAutomatically": "Your annual plan will start automatically when your monthly plan ends.",
     "@annualPlanStartsAutomatically": {
         "description": "Info that annual plan starts automatically"
+    },
+    "yourPlanWillRenewOn": "Your {plan} plan will renew on {date}.",
+    "@yourPlanWillRenewOn": {
+        "description": "Confirmation after resubscribing a plan that was set to cancel",
+        "placeholders": {
+            "plan": {
+                "type": "String",
+                "example": "Plus"
+            },
+            "date": {
+                "type": "String",
+                "example": "Nov 3, 2026"
+            }
+        }
     },
     "planRenewsOn": "Your plan renews on {date}.",
     "@planRenewsOn": {
@@ -5173,6 +5203,10 @@
     "continueText": "Continue",
     "@continueText": {
         "description": "Continue button text"
+    },
+    "resubscribeFirstToChangePlans": "Resubscribe first to change plans.",
+    "@resubscribeFirstToChangePlans": {
+        "description": "Why another price is refused while cancellation is pending"
     },
     "resubscribe": "Resubscribe",
     "@resubscribe": {
@@ -6014,10 +6048,6 @@
     "content": "Content",
     "@content": {
         "description": "Tab label for content"
-    },
-    "noContentToDisplay": "No content to display",
-    "@noContentToDisplay": {
-        "description": "Message when there is no content available"
     },
     "noSummary": "No summary",
     "@noSummary": {
@@ -11067,6 +11097,19 @@
     "@deviceOnboardingIntroDuration": {
         "description": "Onboarding intro screen estimated duration hint"
     },
+    "quoteJumpToTime": "Jump to {duration}",
+    "@quoteJumpToTime": {
+        "description": "Accessibility label for a supporting transcript timestamp; duration uses localized time units",
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
+    },
+    "quoteShowSources": "Show sources",
+    "@quoteShowSources": {
+        "description": "Accessibility label and tooltip for the control beside a summary section heading that lists the transcript moments supporting it"
+    },
     "jumpToLatestMessage": "Jump to latest message",
     "@jumpToLatestMessage": {
         "description": "Accessibility label and tooltip for the jump-to-latest button in chat"
@@ -11674,10 +11717,6 @@
     "speechToTextUnavailableDesc": "Speech-to-text isn't available right now. Check your internet connection and your device's speech recognition settings, then try again.",
     "@speechToTextUnavailableDesc": {
         "description": "Error dialog body when neither the server transcriber nor on-device speech recognition is available for the speech profile recording"
-    },
-    "processingTakingLonger": "Still working — this is taking longer than usual.",
-    "@processingTakingLonger": {
-        "description": "Shown on the homepage processing card after ~2 minutes with a Retry action (#5481)."
     },
     "speechProfileEnrollmentPrompt": "So Omi knows which voice is yours — talk for about 5 seconds about anything.",
     "@speechProfileEnrollmentPrompt": {
@@ -13130,9 +13169,9 @@
     "@openCall": {
         "description": "Accessibility hint on the live card during a call; tapping opens the call screen."
     },
-    "captureRecoveryBanner": "Omi isn't sending audio — tap to reconnect",
-    "@captureRecoveryBanner": {
-        "description": "Reconnect banner shown after automatic BLE recovery has not restored pendant audio; tapping opens device settings"
+    "captureRecoveryBannerTitle": "Omi isn't sending audio",
+    "@captureRecoveryBannerTitle": {
+        "description": "Capture banner title: the pendant's audio stopped reaching the app; the Reconnect button sits below"
     },
     "phoneRecordingBlockedByPendantBatch": "Stop Transcribe Later on your pendant before recording with your phone.",
     "captureNotTranscribing": "Not transcribing",
@@ -13142,6 +13181,26 @@
     "captureAudioSavedTranscribesLater": "Audio saved, transcribes later",
     "@captureAudioSavedTranscribesLater": {
         "description": "Home live capture card, line 2 after the timer (e.g. \"0:14 · Audio saved, transcribes later\"): recording continues on the phone and will be transcribed later."
+    },
+    "captureBannerTryReconnect": "Try reconnect",
+    "@captureBannerTryReconnect": {
+        "description": "Banner button that retries the capture recovery in place (BLE/link episodes)"
+    },
+    "captureBannerRetrySync": "Retry sync",
+    "@captureBannerRetrySync": {
+        "description": "Banner button that retries the pending transfer (phone-storage episodes)"
+    },
+    "captureWedgeBleExplanation": "The Bluetooth link to your Omi stalled, so audio isn't reaching the app. Omi keeps recording on the device and will sync once the link recovers. Retrying reconnects the link; if it keeps failing, check your device in Settings > Device.",
+    "@captureWedgeBleExplanation": {
+        "description": "Details sheet body for a BLE-health capture recovery episode: what stalled, that audio is safe, and what retry does."
+    },
+    "captureIngressNeedsReconnect": "Audio isn't reaching the app — reconnect your Omi",
+    "@captureIngressNeedsReconnect": {
+        "description": "Capture recovery banner title for an ingress_recovery_failed episode: automatic recovery is exhausted, so the reader must manually reconnect the device. Not a retry affordance and not an in-progress claim."
+    },
+    "captureIngressNeedsReconnectExplanation": "The app stopped receiving audio from your Omi and could not restore the connection automatically. Disconnect and reconnect the device — from device settings, or by powering it off and on. Any audio saved on the device will sync later.",
+    "@captureIngressNeedsReconnectExplanation": {
+        "description": "Details sheet body for an ingress_recovery_failed capture episode: automatic recovery is exhausted; the manual fix is disconnect/reconnect. Sync-later wording is scoped to audio actually saved on the device."
     },
     "captureStillRecording": "Still recording",
     "@captureStillRecording": {
@@ -14881,6 +14940,73 @@
     "@reviewNoChangesBody": {
         "description": "Empty state body"
     },
+    "reviewChangesSectionTerms": "Names and terms",
+    "@reviewChangesSectionTerms": {
+        "description": "Recent changes section: spelling fixes to names and terms"
+    },
+    "reviewChangesSectionTitles": "Titles and summaries",
+    "@reviewChangesSectionTitles": {
+        "description": "Recent changes section: conversation titles and summaries"
+    },
+    "reviewChangesSectionOther": "Other changes",
+    "@reviewChangesSectionOther": {
+        "description": "Recent changes section: changes that fit no other section"
+    },
+    "reviewChangeConversationCount": "{count, plural, =1{1 conversation} other{{count} conversations}}",
+    "@reviewChangeConversationCount": {
+        "description": "How many conversations one change touched",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "reviewChangePlaceCount": "{count, plural, =1{1 place} other{{count} places}}",
+    "@reviewChangePlaceCount": {
+        "description": "How many places in transcripts one change touched",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "reviewChangeShowAll": "Show all {count}",
+    "@reviewChangeShowAll": {
+        "description": "Button opening every place a change landed",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "reviewChangeUndoAll": "Undo all",
+    "@reviewChangeUndoAll": {
+        "description": "Button undoing every instance of one change"
+    },
+    "reviewChangeSeeEvidence": "See evidence",
+    "@reviewChangeSeeEvidence": {
+        "description": "Button showing the conversation evidence behind a change"
+    },
+    "reviewChangeViewConversation": "View conversation",
+    "@reviewChangeViewConversation": {
+        "description": "Button opening the conversation a change came from"
+    },
+    "reviewChangeViewTask": "View task",
+    "@reviewChangeViewTask": {
+        "description": "Button opening the tasks list from a task change"
+    },
+    "reviewChangesUndoPartial": "Couldn’t undo {failed} of {total}. Try again.",
+    "@reviewChangesUndoPartial": {
+        "description": "Undo all finished with some failures",
+        "placeholders": {
+            "failed": {
+                "type": "int"
+            },
+            "total": {
+                "type": "int"
+            }
+        }
+    },
     "reviewShowMore": "Show More",
     "@reviewShowMore": {
         "description": "Button (Title Case)"
@@ -15744,6 +15870,10 @@
     "@reviewProposalSuggested": {
         "description": "Label above the value Dream suggests, shown under the current value"
     },
+    "reviewQuestionOutOfDate": "This question is out of date, so nothing changed.",
+    "@reviewQuestionOutOfDate": {
+        "description": "Neutral feedback when a Review answer conflicts with current data."
+    },
     "reviewProposalConflict": "This changed since Dream suggested it, so nothing was applied.",
     "@reviewProposalConflict": {
         "description": "Error after Apply: the item changed after Dream suggested the change, so nothing was applied"
@@ -15802,6 +15932,22 @@
     "firstCaptureOmi": "I Have an Omi",
     "firstCapturePhone": "This Phone",
     "firstCaptureWatch": "Apple Watch",
+    "firstCaptureConnectTitle": "Connect your Omi",
+    "@firstCaptureConnectTitle": {
+        "description": "Onboarding device step title"
+    },
+    "firstCaptureConnectDescription": "Pair your Omi and it captures your conversations hands-free, all day.",
+    "@firstCaptureConnectDescription": {
+        "description": "Onboarding device step description"
+    },
+    "firstCaptureConnect": "Connect my Omi",
+    "@firstCaptureConnect": {
+        "description": "Onboarding device step primary button"
+    },
+    "firstCaptureNoDevice": "I don't have an Omi yet",
+    "@firstCaptureNoDevice": {
+        "description": "Onboarding device step secondary button, opens the store"
+    },
     "firstCaptureSkip": "Skip for Now",
     "firstCapturePrompt": "Tell Omi what you're working on today, or what's on your mind. Talk for about 30 seconds.",
     "firstCaptureKeepGoing": "Keep going… 30 seconds is ideal.",
@@ -15837,6 +15983,160 @@
     "paywallOutlineHeadline": "Never miss a word again.",
     "@paywallOutlineHeadline": {
         "description": "Headline of the Outline paywall variant (mobile paywall A/B test)"
+    },
+    "paywallTrialBrand": "Omi Pro",
+    "@paywallTrialBrand": {
+        "description": "Paywall header: plan name"
+    },
+    "paywallTrialHeadline": "Here's how your free trial works.",
+    "@paywallTrialHeadline": {
+        "description": "Paywall headline"
+    },
+    "paywallTrialSlideSummariesTitle": "Unlimited summaries, kept forever",
+    "@paywallTrialSlideSummariesTitle": {
+        "description": "Paywall carousel caption"
+    },
+    "paywallTrialSlideSummariesBody": "Every conversation becomes a clean summary with next steps, so nothing slips.",
+    "@paywallTrialSlideSummariesBody": {
+        "description": "Paywall carousel card body"
+    },
+    "paywallTrialSlideTranscriptionTitle": "Best-in-class transcription",
+    "@paywallTrialSlideTranscriptionTitle": {
+        "description": "Paywall carousel caption"
+    },
+    "paywallTrialChipDetails": "Catches more details",
+    "@paywallTrialChipDetails": {
+        "description": "Paywall chip"
+    },
+    "paywallTrialChipSpeakers": "Tells speakers apart",
+    "@paywallTrialChipSpeakers": {
+        "description": "Paywall chip"
+    },
+    "paywallTrialChipNoise": "Works in noisy rooms",
+    "@paywallTrialChipNoise": {
+        "description": "Paywall chip"
+    },
+    "paywallTrialChipAccents": "Handles accents",
+    "@paywallTrialChipAccents": {
+        "description": "Paywall chip"
+    },
+    "paywallTrialChipJargon": "Knows your jargon and names",
+    "@paywallTrialChipJargon": {
+        "description": "Paywall chip"
+    },
+    "paywallTrialSlideSpeakersTitle": "Speaker names, detected automatically",
+    "@paywallTrialSlideSpeakersTitle": {
+        "description": "Paywall carousel caption"
+    },
+    "paywallTrialSlideAskTitle": "Unlimited questions, across every conversation",
+    "@paywallTrialSlideAskTitle": {
+        "description": "Paywall carousel caption"
+    },
+    "paywallTrialBubbleFollowUp": "Draft a follow-up email from this meeting.",
+    "@paywallTrialBubbleFollowUp": {
+        "description": "Paywall example question"
+    },
+    "paywallTrialBubbleConflicts": "Any conflicts with what John said on Tuesday?",
+    "@paywallTrialBubbleConflicts": {
+        "description": "Paywall example question"
+    },
+    "paywallTrialBubbleBlockers": "Find anything that could slow us down.",
+    "@paywallTrialBubbleBlockers": {
+        "description": "Paywall example question"
+    },
+    "paywallTrialSlideAppsTitle": "Works with your favorite apps",
+    "@paywallTrialSlideAppsTitle": {
+        "description": "Paywall carousel caption"
+    },
+    "paywallTrialTodayTitle": "Today",
+    "@paywallTrialTodayTitle": {
+        "description": "Paywall timeline row title"
+    },
+    "paywallTrialTodayBody": "Everything in Pro is unlocked.",
+    "@paywallTrialTodayBody": {
+        "description": "Paywall timeline row body"
+    },
+    "paywallTrialFreeDaysTitle": "+ {days} days free",
+    "@paywallTrialFreeDaysTitle": {
+        "description": "Paywall timeline row title",
+        "placeholders": {
+            "days": {
+                "type": "int"
+            }
+        }
+    },
+    "paywallTrialFreeDaysBody": "{days} days of Omi Pro, on us.",
+    "@paywallTrialFreeDaysBody": {
+        "description": "Paywall timeline row body",
+        "placeholders": {
+            "days": {
+                "type": "int"
+            }
+        }
+    },
+    "paywallTrialInDaysTitle": "In {days} days",
+    "@paywallTrialInDaysTitle": {
+        "description": "Paywall timeline row title",
+        "placeholders": {
+            "days": {
+                "type": "int"
+            }
+        }
+    },
+    "paywallTrialEndsBody": "Trial ends. You'll be charged unless you cancel.",
+    "@paywallTrialEndsBody": {
+        "description": "Paywall timeline row body"
+    },
+    "paywallTrialFeatureModels": "The latest AI models",
+    "@paywallTrialFeatureModels": {
+        "description": "Paywall feature row"
+    },
+    "paywallTrialFeatureAsk": "Unlimited Ask Omi",
+    "@paywallTrialFeatureAsk": {
+        "description": "Paywall feature row"
+    },
+    "paywallTrialBilledMonthly": "Billed monthly",
+    "@paywallTrialBilledMonthly": {
+        "description": "Paywall plan card footnote"
+    },
+    "paywallTrialBilledYearly": "Billed yearly",
+    "@paywallTrialBilledYearly": {
+        "description": "Paywall plan card footnote"
+    },
+    "paywallTrialSaveAmount": "Save {amount}",
+    "@paywallTrialSaveAmount": {
+        "description": "Paywall plan card saving; amount is a formatted price",
+        "placeholders": {
+            "amount": {
+                "type": "String"
+            }
+        }
+    },
+    "paywallTrialCta": "Start for {price}",
+    "@paywallTrialCta": {
+        "description": "Paywall primary button; price is a formatted zero price like $0.00",
+        "placeholders": {
+            "price": {
+                "type": "String"
+            }
+        }
+    },
+    "paywallTrialSecondary": "Continue with the free plan",
+    "@paywallTrialSecondary": {
+        "description": "Paywall secondary button"
+    },
+    "paywallTrialCancelNote": "Cancel anytime. No fees, no penalties.",
+    "@paywallTrialCancelNote": {
+        "description": "Paywall footnote"
+    },
+    "paywallTrialStarted": "Your {days}-day free trial of Omi Pro has started.",
+    "@paywallTrialStarted": {
+        "description": "Toast after a trial checkout completes; days is the trial length",
+        "placeholders": {
+            "days": {
+                "type": "int"
+            }
+        }
     },
     "paywallCancelAnytime": "Cancel anytime.",
     "@paywallCancelAnytime": {
@@ -16132,5 +16432,1085 @@
     "onboardingPermissionTapToFix": "Tap to fix",
     "@onboardingPermissionTapToFix": {
         "description": "Onboarding permissions: shown on a denied permission card; tapping opens Settings"
+    },
+    "homePendingTitle": "Conversations on the way",
+    "@homePendingTitle": {
+        "description": "Home row title while recordings are still turning into conversations"
+    },
+    "homePendingCatchingUp": "Catching up on earlier audio",
+    "@homePendingCatchingUp": {
+        "description": "Home row title when a long backlog of recordings is still being processed"
+    },
+    "onTheWayTitle": "On the Way",
+    "@onTheWayTitle": {
+        "description": "Title of the page listing recordings not yet turned into conversations"
+    },
+    "onTheWayAlmostReady": "Almost ready",
+    "@onTheWayAlmostReady": {
+        "description": "Section header: recordings being transcribed or summarized"
+    },
+    "onTheWayRecordingCount": "{count, plural, =1{1 recording} other{{count} recordings}}",
+    "@onTheWayRecordingCount": {
+        "description": "On the Way: how many recordings, in the summary line and a day header (e.g. '11 recordings')",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "onTheWaySummary": "{totals} on the way",
+    "@onTheWaySummary": {
+        "description": "On the Way summary line at the top. totals is the recording count and total length, e.g. '45 recordings · 8h 54m'",
+        "placeholders": {
+            "totals": {
+                "type": "String",
+                "example": "45 recordings · 8h 54m"
+            }
+        }
+    },
+    "onTheWayUploadingCount": "{count} uploading",
+    "@onTheWayUploadingCount": {
+        "description": "On the Way summary and day header: how many recordings are still syncing to Omi",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "onTheWayAlmostReadyCount": "{count} almost ready",
+    "@onTheWayAlmostReadyCount": {
+        "description": "On the Way summary and day header: how many recordings are being turned into conversations",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "onTheWayNeedsAttentionCount": "{count, plural, =1{1 needs attention} other{{count} need attention}}",
+    "@onTheWayNeedsAttentionCount": {
+        "description": "On the Way summary and day header, in warning colour: how many recordings Omi refused or could not sync",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "activityEmpty": "No activity yet",
+    "@activityEmpty": {
+        "description": "Empty state of the Activity page"
+    },
+    "activityNewSemantics": "Activity, new items",
+    "@activityNewSemantics": {
+        "description": "Screen reader label for the Activity bell when it has new items"
+    },
+    "activityLoadFailed": "Couldn't load all of your activity",
+    "@activityLoadFailed": {
+        "description": "Activity page: one or more sources failed to load"
+    },
+    "activityNewItem": "New",
+    "@activityNewItem": {
+        "description": "Screen reader suffix for an Activity row added since the last visit"
+    },
+    "activityNeedsAttention": "Needs attention",
+    "@activityNeedsAttention": {
+        "description": "Activity section header for work that could not finish and needs the user"
+    },
+    "activityRetryAll": "Retry all",
+    "@activityRetryAll": {
+        "description": "Button in Activity's Needs attention section that retries every failed item once"
+    },
+    "activityAttentionStorageUnknownTitle": "Can't check storage",
+    "@activityAttentionStorageUnknownTitle": {
+        "description": "Activity capture attention row title when the free-space probe itself failed (reason disk_space_unknown); the disk may not actually be full."
+    },
+    "activityAttentionStorageSubtitle": "Recordings paused",
+    "@activityAttentionStorageSubtitle": {
+        "description": "Needs attention row subtitle under the storage title: new recordings cannot be saved"
+    },
+    "activityAttentionUploadStalledTitle": "Upload stalled",
+    "@activityAttentionUploadStalledTitle": {
+        "description": "Needs attention row title: uploads made no progress long enough to need attention"
+    },
+    "activityAttentionUploadRecordings": "{count, plural, =1{1 recording waiting} other{{count} recordings waiting}}",
+    "@activityAttentionUploadRecordings": {
+        "description": "Needs attention row subtitle: how many recordings are waiting to upload",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "attentionSummaryFailed": "Couldn't summarize this conversation",
+    "@attentionSummaryFailed": {
+        "description": "Needs attention row: the server gave up summarizing a conversation"
+    },
+    "activityAttentionSemantics": "Activity, needs attention",
+    "@activityAttentionSemantics": {
+        "description": "Bell accessibility label when its warning dot is lit for attention items"
+    },
+    "connectAgentHeadline": "Use your Omi memory in ChatGPT and your AI agents",
+    "@connectAgentHeadline": {
+        "description": "Headline at the top of the Connect an Agent screen"
+    },
+    "connectAgentIntro": "Connect once. Then ask them about your conversations, memories, and tasks.",
+    "@connectAgentIntro": {
+        "description": "Intro under the Connect an Agent headline"
+    },
+    "connectAgentOneTap": "One Tap",
+    "@connectAgentOneTap": {
+        "description": "Section header for apps that connect with one tap (ChatGPT)"
+    },
+    "connectAgentComputerAgents": "Agents With Their Own Computer",
+    "@connectAgentComputerAgents": {
+        "description": "Section header for AI agents that run on their own computer (Grok Bot, Muse, Instinct)"
+    },
+    "connectAgentComputerAgentsSubtitle": "Copy one prompt. Omi makes a key just for that agent and sends it securely.",
+    "@connectAgentComputerAgentsSubtitle": {
+        "description": "Explains how agents with their own computer are connected"
+    },
+    "connectAgentOtherAgent": "Other Agent",
+    "@connectAgentOtherAgent": {
+        "description": "Row for any other AI agent not listed by name"
+    },
+    "connectAgentKeyActive": "Key active",
+    "@connectAgentKeyActive": {
+        "description": "Status under an agent that holds an Omi key"
+    },
+    "connectAgentLastUsed": "Last used {time}",
+    "@connectAgentLastUsed": {
+        "description": "When an agent last used its Omi key; time is a localized timestamp",
+        "placeholders": {
+            "time": {
+                "type": "String"
+            }
+        }
+    },
+    "connectAgentDevelopers": "MCP and API keys for developers",
+    "@connectAgentDevelopers": {
+        "description": "Link at the bottom of Connect an Agent that opens the web developer page"
+    },
+    "connectAgentLoadFailed": "Couldn't load your connections.",
+    "@connectAgentLoadFailed": {
+        "description": "Error when connected apps and keys fail to load"
+    },
+    "connectAgentActionFailed": "Something went wrong. Try again.",
+    "@connectAgentActionFailed": {
+        "description": "Error when connecting, disconnecting or revoking fails"
+    },
+    "connectChatGptTitle": "Connect ChatGPT",
+    "@connectChatGptTitle": {
+        "description": "Title of the sheet that connects ChatGPT to Omi"
+    },
+    "connectChatGptSubtitle": "Takes about 30 seconds. You approve it inside ChatGPT, and it works on your phone and computer.",
+    "@connectChatGptSubtitle": {
+        "description": "Subtitle of the Connect ChatGPT sheet"
+    },
+    "connectChatGptStepOpen": "We open Omi in ChatGPT",
+    "@connectChatGptStepOpen": {
+        "description": "Step 1 title in the Connect ChatGPT sheet"
+    },
+    "connectChatGptStepOpenBody": "ChatGPT opens straight to the Omi app page.",
+    "@connectChatGptStepOpenBody": {
+        "description": "Step 1 detail in the Connect ChatGPT sheet"
+    },
+    "connectChatGptStepApprove": "Tap Connect, then sign in to Omi",
+    "@connectChatGptStepApprove": {
+        "description": "Step 2 title in the Connect ChatGPT sheet"
+    },
+    "connectChatGptStepApproveBody": "Use the same account you use here.",
+    "@connectChatGptStepApproveBody": {
+        "description": "Step 2 detail in the Connect ChatGPT sheet"
+    },
+    "connectChatGptStepReturn": "Come back to Omi",
+    "@connectChatGptStepReturn": {
+        "description": "Step 3 title in the Connect ChatGPT sheet"
+    },
+    "connectChatGptStepReturnBody": "We check the connection automatically.",
+    "@connectChatGptStepReturnBody": {
+        "description": "Step 3 detail in the Connect ChatGPT sheet"
+    },
+    "openChatGpt": "Open ChatGPT",
+    "@openChatGpt": {
+        "description": "Button that opens ChatGPT"
+    },
+    "chatGptConnectedEverywhere": "Connected on phone and computer",
+    "@chatGptConnectedEverywhere": {
+        "description": "Status on the ChatGPT page once connected"
+    },
+    "tryAskingChatGpt": "Try Asking ChatGPT",
+    "@tryAskingChatGpt": {
+        "description": "Section header above example questions to ask ChatGPT"
+    },
+    "tryAskingChatGptFooter": "Tap one to open ChatGPT with it filled in.",
+    "@tryAskingChatGptFooter": {
+        "description": "Footer under the example questions"
+    },
+    "chatGptExampleMeetings": "What did I agree to in yesterday's meetings?",
+    "@chatGptExampleMeetings": {
+        "description": "Example question a person can ask ChatGPT about their Omi data"
+    },
+    "chatGptExampleTasks": "Turn my open Omi tasks into a plan for this week.",
+    "@chatGptExampleTasks": {
+        "description": "Example question a person can ask ChatGPT about their Omi data"
+    },
+    "chatGptExampleGoals": "What does Omi know about my goals?",
+    "@chatGptExampleGoals": {
+        "description": "Example question a person can ask ChatGPT about their Omi data"
+    },
+    "disconnectChatGpt": "Disconnect ChatGPT",
+    "@disconnectChatGpt": {
+        "description": "Destructive button that removes ChatGPT's access to Omi"
+    },
+    "disconnectChatGptQuestion": "Disconnect ChatGPT?",
+    "@disconnectChatGptQuestion": {
+        "description": "Confirm dialog title before removing ChatGPT's access"
+    },
+    "disconnectChatGptMessage": "ChatGPT will no longer be able to read your Omi memories, conversations, or tasks.",
+    "@disconnectChatGptMessage": {
+        "description": "Confirm dialog message before removing ChatGPT's access"
+    },
+    "connectAgentNamed": "Connect {name}",
+    "@connectAgentNamed": {
+        "description": "Sheet title for connecting a named AI agent; name is a product name such as Muse",
+        "placeholders": {
+            "name": {
+                "type": "String"
+            }
+        }
+    },
+    "connectAgentPromptSubtitle": "Paste one prompt. {name} sets up Omi on its own computer.",
+    "@connectAgentPromptSubtitle": {
+        "description": "Subtitle of the sheet that connects an AI agent; name is the agent's product name",
+        "placeholders": {
+            "name": {
+                "type": "String"
+            }
+        }
+    },
+    "connectAgentGenericPromptSubtitle": "Paste one prompt. Your agent sets up Omi on its own computer.",
+    "@connectAgentGenericPromptSubtitle": {
+        "description": "Subtitle of the sheet that connects an unnamed AI agent"
+    },
+    "connectAgentKeyCreated": "Key “{name}” created",
+    "@connectAgentKeyCreated": {
+        "description": "Notice that an Omi key was created for an agent; name is the key's name",
+        "placeholders": {
+            "name": {
+                "type": "String"
+            }
+        }
+    },
+    "connectAgentKeyCreatedBody": "The prompt has a one-time link, not the key itself. It opens once and expires in 1 hour. Revoke the key here anytime.",
+    "@connectAgentKeyCreatedBody": {
+        "description": "Explains the one-time secure link in the prompt"
+    },
+    "connectAgentPreparing": "Making a key and a secure link…",
+    "@connectAgentPreparing": {
+        "description": "Shown while the app creates a key and a one-time link"
+    },
+    "connectAgentPrepareFailed": "Couldn't make the key. Check your connection and try again.",
+    "@connectAgentPrepareFailed": {
+        "description": "Error when the key or the one-time link cannot be created"
+    },
+    "copyPrompt": "Copy Prompt",
+    "@copyPrompt": {
+        "description": "Button that copies the setup prompt for an AI agent"
+    },
+    "connectAgentNewLink": "Link Expired? Make a New One",
+    "@connectAgentNewLink": {
+        "description": "Button that creates a fresh key and one-time link"
+    },
+    "connectAgentActiveTitle": "{name} Is Connected",
+    "@connectAgentActiveTitle": {
+        "description": "Sheet title for an agent that holds an Omi key; name is the agent's product name",
+        "placeholders": {
+            "name": {
+                "type": "String"
+            }
+        }
+    },
+    "connectAgentActiveBody": "{name} holds an Omi key. Revoke it to cut off access. You can connect again anytime.",
+    "@connectAgentActiveBody": {
+        "description": "Explains an agent's active key and how to remove it",
+        "placeholders": {
+            "name": {
+                "type": "String"
+            }
+        }
+    },
+    "revokeAgentKeyQuestion": "Revoke {name}'s Key?",
+    "@revokeAgentKeyQuestion": {
+        "description": "Confirm dialog title before deleting an agent's Omi key",
+        "placeholders": {
+            "name": {
+                "type": "String"
+            }
+        }
+    },
+    "revokeAgentKeyMessage": "{name} loses access to your Omi memory right away.",
+    "@revokeAgentKeyMessage": {
+        "description": "Confirm dialog message before deleting an agent's Omi key",
+        "placeholders": {
+            "name": {
+                "type": "String"
+            }
+        }
+    },
+    "askAboutConversation": "Ask About This Conversation",
+    "@askAboutConversation": {
+        "description": "Menu item and sheet title for asking ChatGPT about a conversation"
+    },
+    "askAboutConversationSubtitle": "Opens ChatGPT with your question ready. It looks the conversation up through Omi, so you don't paste the transcript.",
+    "@askAboutConversationSubtitle": {
+        "description": "Explains the ask-about-this-conversation sheet"
+    },
+    "askYourQuestion": "Your question",
+    "@askYourQuestion": {
+        "description": "Label of the question field in the ask sheet"
+    },
+    "askSuggestFollowUp": "Draft a follow-up email from this conversation.",
+    "@askSuggestFollowUp": {
+        "description": "Suggested question about a conversation"
+    },
+    "askSuggestCommitments": "What did I commit to in this conversation?",
+    "@askSuggestCommitments": {
+        "description": "Suggested question about a conversation"
+    },
+    "askSuggestDoc": "Turn this conversation into a short doc.",
+    "@askSuggestDoc": {
+        "description": "Suggested question about a conversation"
+    },
+    "askInChatGpt": "Ask ChatGPT",
+    "@askInChatGpt": {
+        "description": "Button that opens ChatGPT with the question"
+    },
+    "copyForAnyApp": "Copy for Any App",
+    "@copyForAnyApp": {
+        "description": "Button that copies the question so it can be pasted into any AI app"
+    },
+    "askConnectChatGptFirst": "Connect ChatGPT once to ask it about your conversations.",
+    "@askConnectChatGptFirst": {
+        "description": "Shown in the ask sheet when ChatGPT is not connected yet"
+    },
+    "reconnect": "Reconnect",
+    "@reconnect": {
+        "description": "Button that connects an app (ChatGPT) again so it gets the access it is missing"
+    },
+    "chatGptNeedsReconnect": "Needs more access. Reconnect to fix.",
+    "@chatGptNeedsReconnect": {
+        "description": "Status under ChatGPT when it is connected but was approved without access to some Omi data"
+    },
+    "connectAgentWaiting": "Waiting for the agent to use its key",
+    "@connectAgentWaiting": {
+        "description": "Status under an AI agent whose Omi key was made but has not been used yet (the prompt was not pasted or not run)"
+    },
+    "connectAgentWaitingTitle": "{name} Hasn't Connected Yet",
+    "@connectAgentWaitingTitle": {
+        "description": "Sheet title for an agent whose Omi key has never been used; name is the agent's product name such as Muse",
+        "placeholders": {
+            "name": {
+                "type": "String"
+            }
+        }
+    },
+    "summaryNotSummarizedYet": "Not summarized yet",
+    "@summaryNotSummarizedYet": {
+        "description": "Title of the card shown on a conversation that has no summary yet."
+    },
+    "summaryEmptyStateBody": "Omi can turn this conversation into an overview, key points and action items.",
+    "@summaryEmptyStateBody": {
+        "description": "Body of the card shown on a conversation that has no summary yet. Omi is the product name; keep it untranslated."
+    },
+    "summaryWithOmi": "Summarize with Omi",
+    "@summaryWithOmi": {
+        "description": "Button that summarizes the conversation with Omi's built-in summary. Omi is the product name."
+    },
+    "summaryWithTemplate": "Summarize with {name}",
+    "@summaryWithTemplate": {
+        "description": "Button that summarizes the conversation with the named summary template.",
+        "placeholders": {
+            "name": {
+                "type": "String"
+            }
+        }
+    },
+    "summaryUseDifferentTemplate": "Use a Different Template",
+    "@summaryUseDifferentTemplate": {
+        "description": "Button that opens the list of summary templates to pick another one."
+    },
+    "summaryFromTheTranscript": "From the transcript",
+    "@summaryFromTheTranscript": {
+        "description": "Small section header above a quoted excerpt of the conversation transcript."
+    },
+    "summaryReadFullTranscript": "Read Full Transcript",
+    "@summaryReadFullTranscript": {
+        "description": "Link that switches to the full transcript tab."
+    },
+    "summarySheetTitle": "Summarize with",
+    "@summarySheetTitle": {
+        "description": "Title of the sheet that lists the ways (Omi, templates) to summarize a conversation; the rows below complete the phrase."
+    },
+    "summaryOmiTemplateSubtitle": "Overview, key points and action items",
+    "@summaryOmiTemplateSubtitle": {
+        "description": "Subtitle of the built-in Omi summary row, describing what it produces."
+    },
+    "summaryYourTemplates": "Your templates",
+    "@summaryYourTemplates": {
+        "description": "Section header for the summary templates the user has added."
+    },
+    "summarySuggestedTemplates": "Suggested for this conversation",
+    "@summarySuggestedTemplates": {
+        "description": "Section header for summary templates suggested for this conversation."
+    },
+    "summaryBrowseTemplates": "Browse Templates",
+    "@summaryBrowseTemplates": {
+        "description": "Row that opens the catalog of summary templates."
+    },
+    "summaryCreateYourOwn": "Create Your Own",
+    "@summaryCreateYourOwn": {
+        "description": "Row that opens the editor to create a custom summary template."
+    },
+    "summaryUseForNewConversations": "Make this my default",
+    "@summaryUseForNewConversations": {
+        "description": "Checkbox label in the summary template sheet: remember the chosen template (or Omi) as the default this device offers first."
+    },
+    "summaryTemplatesLoadFailed": "Couldn't load your templates. Omi still works.",
+    "@summaryTemplatesLoadFailed": {
+        "description": "Inline message when the user's summary templates could not be loaded; the built-in Omi summary still works."
+    },
+    "summaryNoTemplatesYet": "You haven't added any templates yet. Browse a few or make your own.",
+    "@summaryNoTemplatesYet": {
+        "description": "Inline message when the user has no summary templates."
+    },
+    "summarySummarizingWith": "Summarizing with {name}…",
+    "@summarySummarizingWith": {
+        "description": "Progress label while the conversation is being summarized with Omi or the named template. Keep the single ellipsis character.",
+        "placeholders": {
+            "name": {
+                "type": "String"
+            }
+        }
+    },
+    "summaryTemplateFailedTitle": "{name} couldn't finish",
+    "@summaryTemplateFailedTitle": {
+        "description": "Heading when the named summary template failed to produce a summary.",
+        "placeholders": {
+            "name": {
+                "type": "String"
+            }
+        }
+    },
+    "summaryTemplateFailedBody": "The template didn't return a summary for this conversation.",
+    "@summaryTemplateFailedBody": {
+        "description": "Body when a summary template failed to produce a summary."
+    },
+    "summaryWithOmiInstead": "Summarize with Omi Instead",
+    "@summaryWithOmiInstead": {
+        "description": "Button that falls back to Omi's built-in summary after a template failed. Omi is the product name."
+    },
+    "summaryBusyTitle": "Still processing",
+    "@summaryBusyTitle": {
+        "description": "Heading when the conversation is already being processed and a new summary cannot start."
+    },
+    "summaryBusyBody": "Omi is already working on this conversation. The summary will appear here when it finishes.",
+    "@summaryBusyBody": {
+        "description": "Body when the conversation is already being processed. Omi is the product name."
+    },
+    "summaryCheckAgain": "Check Again",
+    "@summaryCheckAgain": {
+        "description": "Button that re-reads the conversation to see if processing finished."
+    },
+    "summaryLimitTitle": "Summary limit reached",
+    "@summaryLimitTitle": {
+        "description": "Heading when the user has regenerated too many summaries recently."
+    },
+    "summaryLimitBody": "You've regenerated several summaries in the last hour. Try again later.",
+    "@summaryLimitBody": {
+        "description": "Body when the user hit the hourly limit on regenerating summaries."
+    },
+    "summaryFailedTitle": "Couldn't summarize",
+    "@summaryFailedTitle": {
+        "description": "Heading when summarizing the conversation failed for an unknown reason."
+    },
+    "summaryFailedBody": "Something went wrong while summarizing this conversation.",
+    "@summaryFailedBody": {
+        "description": "Body when summarizing the conversation failed for an unknown reason."
+    },
+    "noContentToDisplay": "No content to display",
+    "@noContentToDisplay": {
+        "description": "Message when there is no content available"
+    },
+    "processingTakingLonger": "Still working — this is taking longer than usual.",
+    "@processingTakingLonger": {
+        "description": "Shown on the homepage processing card after ~2 minutes with a Retry action (#5481)."
+    },
+    "onDeviceAtCapTitle": "You've reached this month's limit",
+    "@onDeviceAtCapTitle": {
+        "description": "Title of the sheet shown when this month's usage limit is reached"
+    },
+    "onDeviceAtCapBody": "Omi is still recording. Choose how the rest of this month gets transcribed.",
+    "@onDeviceAtCapBody": {
+        "description": "Body of the live-hours-used sheet"
+    },
+    "onDeviceLiveHoursReturn": "Your usage resets {date}.",
+    "@onDeviceLiveHoursReturn": {
+        "description": "Sentence saying when monthly usage resets; date is a formatted date like 'Nov 1'",
+        "placeholders": {
+            "date": {
+                "type": "String"
+            }
+        }
+    },
+    "onDeviceTranscribeOnPhone": "Transcribe on this phone",
+    "@onDeviceTranscribeOnPhone": {
+        "description": "Option and setting: turn recordings into text on the phone itself instead of in the cloud"
+    },
+    "onDeviceIncluded": "Included",
+    "@onDeviceIncluded": {
+        "description": "Small badge: this option costs nothing extra"
+    },
+    "onDeviceOptionChargingBody": "Runs while your phone charges.",
+    "@onDeviceOptionChargingBody": {
+        "description": "Explains the on-phone transcription option that runs while the phone charges"
+    },
+    "onDeviceUpgradeBody": "Upgrade to Pro for speaker separation and higher accuracy",
+    "@onDeviceUpgradeBody": {
+        "description": "Explains what upgrading the plan gives"
+    },
+    "onDeviceAtCapFooter": "Nothing is lost either way. You can change this in Settings › Transcription.",
+    "@onDeviceAtCapFooter": {
+        "description": "Footer under the usage-limit sheet; 'Settings › Transcription' is a menu path"
+    },
+    "onDeviceStepOf": "Step {step} of {total}",
+    "@onDeviceStepOf": {
+        "description": "Progress label in a two-step setup",
+        "placeholders": {
+            "step": {
+                "type": "int"
+            },
+            "total": {
+                "type": "int"
+            }
+        }
+    },
+    "onDeviceSetupBody": "Omi downloads a speech model once. After that, your recordings are turned into text right here, without counting toward your usage.",
+    "@onDeviceSetupBody": {
+        "description": "Explains the one-time speech model download and that on-phone transcription does not count toward usage"
+    },
+    "onDeviceSpeechModel": "Speech model",
+    "@onDeviceSpeechModel": {
+        "description": "Label for the downloadable on-device speech recognition model"
+    },
+    "onDeviceMegabytes": "{size} MB",
+    "@onDeviceMegabytes": {
+        "description": "A file size in megabytes",
+        "placeholders": {
+            "size": {
+                "type": "String"
+            }
+        }
+    },
+    "onDeviceDownloadingWifi": "Downloading on Wi-Fi · {percent}%",
+    "@onDeviceDownloadingWifi": {
+        "description": "Model download progress on Wi-Fi",
+        "placeholders": {
+            "percent": {
+                "type": "int"
+            }
+        }
+    },
+    "onDeviceDownloadingPercent": "Downloading · {percent}%",
+    "@onDeviceDownloadingPercent": {
+        "description": "Model download progress",
+        "placeholders": {
+            "percent": {
+                "type": "int"
+            }
+        }
+    },
+    "onDeviceTimeLeft": "About {time} left",
+    "@onDeviceTimeLeft": {
+        "description": "Estimated time remaining for a download; time is a short duration like '4m'",
+        "placeholders": {
+            "time": {
+                "type": "String"
+            }
+        }
+    },
+    "onDeviceWaitingForWifi": "Waiting for Wi-Fi",
+    "@onDeviceWaitingForWifi": {
+        "description": "Download status: paused until the phone joins Wi-Fi"
+    },
+    "onDeviceDownloadFailed": "Download didn't finish",
+    "@onDeviceDownloadFailed": {
+        "description": "Download status after a failure"
+    },
+    "onDeviceModelNotDownloaded": "Not downloaded",
+    "@onDeviceModelNotDownloaded": {
+        "description": "Status of a speech model that is not on the phone"
+    },
+    "onDeviceModelInstalled": "Installed · {size}",
+    "@onDeviceModelInstalled": {
+        "description": "Status of a speech model on the phone with its size",
+        "placeholders": {
+            "size": {
+                "type": "String"
+            }
+        }
+    },
+    "onDeviceModelUnsupported": "Not available on this phone yet",
+    "@onDeviceModelUnsupported": {
+        "description": "Status when this phone cannot run the speech model"
+    },
+    "onDeviceSetupKeepRecording": "Keep recording while it downloads. Nothing waits on this.",
+    "@onDeviceSetupKeepRecording": {
+        "description": "Reassurance during model download"
+    },
+    "onDeviceSetupAudioStays": "Audio stays on your phone until it's transcribed.",
+    "@onDeviceSetupAudioStays": {
+        "description": "Privacy note during setup"
+    },
+    "onDeviceWifiOnly": "Download on Wi-Fi only",
+    "@onDeviceWifiOnly": {
+        "description": "Setting: only download the model on Wi-Fi"
+    },
+    "onDeviceDownloadModel": "Download Speech Model",
+    "@onDeviceDownloadModel": {
+        "description": "Button that downloads the speech model"
+    },
+    "onDeviceScheduleTitle": "When to Transcribe",
+    "@onDeviceScheduleTitle": {
+        "description": "Screen title: choose when recordings are transcribed on the phone"
+    },
+    "onDeviceScheduleHeadline": "When should Omi transcribe?",
+    "@onDeviceScheduleHeadline": {
+        "description": "Heading of the schedule screen"
+    },
+    "onDeviceScheduleBody": "You can change this anytime.",
+    "@onDeviceScheduleBody": {
+        "description": "Short note that the transcription schedule can be changed anytime"
+    },
+    "onDeviceScheduleCharging": "While charging",
+    "@onDeviceScheduleCharging": {
+        "description": "Schedule option: transcribe only when the phone is charging"
+    },
+    "onDeviceScheduleChargingBody": "Transcripts appear after you plug in, usually overnight.",
+    "@onDeviceScheduleChargingBody": {
+        "description": "Explains the while-charging option"
+    },
+    "onDeviceBatteryAlmostNone": "Battery: almost none",
+    "@onDeviceBatteryAlmostNone": {
+        "description": "Battery cost of the while-charging option"
+    },
+    "onDeviceScheduleHours": "Every few hours",
+    "@onDeviceScheduleHours": {
+        "description": "Schedule option: transcribe in bursts every few hours"
+    },
+    "onDeviceScheduleHoursBody": "Catches up in short bursts on battery, so transcripts are rarely more than a few hours behind.",
+    "@onDeviceScheduleHoursBody": {
+        "description": "Explains the every-few-hours option"
+    },
+    "onDeviceBatteryPerDay": "Battery: about {percent}% a day",
+    "@onDeviceBatteryPerDay": {
+        "description": "Battery cost per day",
+        "placeholders": {
+            "percent": {
+                "type": "int"
+            }
+        }
+    },
+    "onDeviceScheduleLive": "As you talk",
+    "@onDeviceScheduleLive": {
+        "description": "Schedule option: transcribe continuously while recording"
+    },
+    "onDeviceScheduleLiveBody": "Transcribes regularly while Omi is open.",
+    "@onDeviceScheduleLiveBody": {
+        "description": "Explains the as-you-talk option"
+    },
+    "onDeviceBatteryPerHour": "Battery: about {percent}% an hour of conversation",
+    "@onDeviceBatteryPerHour": {
+        "description": "Battery cost per hour of recorded conversation",
+        "placeholders": {
+            "percent": {
+                "type": "int"
+            }
+        }
+    },
+    "onDeviceQueueWaiting": "{duration} waiting to transcribe",
+    "@onDeviceQueueWaiting": {
+        "description": "Amount of recorded audio not yet transcribed; duration is a short duration like '3h 20m'",
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
+    },
+    "onDeviceQueueChargingBody": "They'll be ready after you plug in your phone. Recording continues as normal.",
+    "@onDeviceQueueChargingBody": {
+        "description": "Banner text: waiting recordings get transcribed when the phone charges"
+    },
+    "onDeviceQueueHoursBody": "Omi catches up every few hours. Recording continues as normal.",
+    "@onDeviceQueueHoursBody": {
+        "description": "Banner text for the every-few-hours schedule"
+    },
+    "onDeviceQueueLowBatteryBody": "Waiting for a charger because the battery is low. Recording continues as normal.",
+    "@onDeviceQueueLowBatteryBody": {
+        "description": "Banner text when the phone battery is too low"
+    },
+    "onDeviceTranscribeNow": "Transcribe Now",
+    "@onDeviceTranscribeNow": {
+        "description": "Button: transcribe waiting recordings right away"
+    },
+    "onDeviceUsesBattery": "Uses battery",
+    "@onDeviceUsesBattery": {
+        "description": "Hint next to the Transcribe Now button"
+    },
+    "onDeviceTranscribing": "Transcribing…",
+    "@onDeviceTranscribing": {
+        "description": "Status while the phone is transcribing"
+    },
+    "onDeviceWaitingForCharger": "Waiting for charger",
+    "@onDeviceWaitingForCharger": {
+        "description": "Status chip on a recording waiting for the phone to charge"
+    },
+    "onDeviceWaitingToTranscribe": "Waiting to transcribe",
+    "@onDeviceWaitingToTranscribe": {
+        "description": "Status chip / setting row for recordings not yet transcribed"
+    },
+    "onDeviceWaitingForSetup": "Saved, waiting for setup",
+    "@onDeviceWaitingForSetup": {
+        "description": "Status chip: recording saved, speech model not downloaded yet"
+    },
+    "onDeviceTranscribedOnIphone": "Transcribed on this iPhone",
+    "@onDeviceTranscribedOnIphone": {
+        "description": "Provenance label: the transcript was made on the iPhone"
+    },
+    "onDeviceTranscribedOnPhone": "Transcribed on this phone",
+    "@onDeviceTranscribedOnPhone": {
+        "description": "Provenance label: the transcript was made on the phone"
+    },
+    "onDeviceTranscribedSummarizedOnIphone": "Transcribed and summarized on this iPhone",
+    "@onDeviceTranscribedSummarizedOnIphone": {
+        "description": "Provenance label: transcript and summary were made on the iPhone"
+    },
+    "onDeviceSummarizedByCloud": "Summarized by Omi Cloud",
+    "@onDeviceSummarizedByCloud": {
+        "description": "Provenance label: the summary was written by Omi's cloud service"
+    },
+    "onDeviceWhyPhoneTitle": "Why this was done on your phone",
+    "@onDeviceWhyPhoneTitle": {
+        "description": "Heading of an explanation box"
+    },
+    "onDeviceWhyLiveHoursUsed": "You reached this month's limit, so Omi transcribed this on your phone.",
+    "@onDeviceWhyLiveHoursUsed": {
+        "description": "Why a conversation was transcribed on the phone after the usage limit was reached"
+    },
+    "onDeviceWhySavingLiveHours": "You chose to transcribe on this phone to save your usage.",
+    "@onDeviceWhySavingLiveHours": {
+        "description": "Why a conversation was transcribed on the phone to save usage"
+    },
+    "onDeviceWhySummaryOnPhone": "The summary was written on this iPhone too.",
+    "@onDeviceWhySummaryOnPhone": {
+        "description": "Explanation: summary made on the iPhone"
+    },
+    "onDeviceWhyNoSummary": "You keep everything on this phone, so there's no summary.",
+    "@onDeviceWhyNoSummary": {
+        "description": "Explanation: no summary because the user keeps everything local"
+    },
+    "onDeviceWhyCloudTitle": "Why Omi Cloud wrote this summary",
+    "@onDeviceWhyCloudTitle": {
+        "description": "Heading of an explanation box"
+    },
+    "onDeviceWhyCloudIphone": "This iPhone can't summarize on its own (that needs an iPhone 15 Pro or later). The transcript was made on your phone, and only its text was sent to Omi to summarize. It doesn't count toward your usage.",
+    "@onDeviceWhyCloudIphone": {
+        "description": "Why a summary used the cloud on an iPhone that cannot summarize on device; it does not count toward usage"
+    },
+    "onDeviceWhyCloudPhone": "This phone can't summarize on its own. The transcript was made on your phone, and only its text was sent to Omi to summarize. It doesn't count toward your usage.",
+    "@onDeviceWhyCloudPhone": {
+        "description": "Why a summary used the cloud on a phone that cannot summarize on device; it does not count toward usage"
+    },
+    "onDeviceRedoWithCloud": "Redo with Omi Cloud",
+    "@onDeviceRedoWithCloud": {
+        "description": "Button: transcribe and summarize this conversation again in Omi's cloud"
+    },
+    "onDeviceRedoHint": "Upgrade to Pro for speaker separation and higher accuracy",
+    "@onDeviceRedoHint": {
+        "description": "Hint under the Redo with Omi Cloud button"
+    },
+    "onDeviceKeepEverything": "Keep everything on this phone",
+    "@onDeviceKeepEverything": {
+        "description": "Setting: never send anything to the cloud"
+    },
+    "onDeviceKeepEverythingSubtitle": "Transcripts only, no summaries",
+    "@onDeviceKeepEverythingSubtitle": {
+        "description": "Subtitle of the keep-everything setting"
+    },
+    "onDeviceAfterLiveHours": "When you reach your limit",
+    "@onDeviceAfterLiveHours": {
+        "description": "Settings section header for what happens when the usage limit is reached"
+    },
+    "onDeviceWhen": "When",
+    "@onDeviceWhen": {
+        "description": "Settings row: when transcription runs"
+    },
+    "onDeviceSummaries": "Summaries",
+    "@onDeviceSummaries": {
+        "description": "Settings row: where summaries are made"
+    },
+    "onDeviceSummariesOnIphone": "On this iPhone",
+    "@onDeviceSummariesOnIphone": {
+        "description": "Value: summaries are made on the iPhone"
+    },
+    "onDeviceSummariesCloud": "By Omi Cloud",
+    "@onDeviceSummariesCloud": {
+        "description": "Value: summaries are made by Omi's cloud"
+    },
+    "onDeviceSaveLiveHours": "Always transcribe on this phone",
+    "@onDeviceSaveLiveHours": {
+        "description": "Setting title: always transcribe on this phone"
+    },
+    "onDeviceSaveLiveHoursSubtitle": "Saves your usage. No speaker labels.",
+    "@onDeviceSaveLiveHoursSubtitle": {
+        "description": "Explains that on-phone transcription saves usage and has no speaker labels"
+    },
+    "onDeviceOnThisPhone": "On this phone",
+    "@onDeviceOnThisPhone": {
+        "description": "Settings section header about storage on the phone"
+    },
+    "onDeviceAudioWaiting": "Audio waiting on phone",
+    "@onDeviceAudioWaiting": {
+        "description": "Settings row: storage used by recordings not yet transcribed"
+    },
+    "onDeviceRemoveModel": "Remove Speech Model",
+    "@onDeviceRemoveModel": {
+        "description": "Destructive action that deletes the downloaded speech model"
+    },
+    "onDeviceRemoveModelTitle": "Remove Speech Model?",
+    "@onDeviceRemoveModelTitle": {
+        "description": "Confirmation dialog title"
+    },
+    "onDeviceRemoveModelMessage": "Recordings will wait on this phone until you download it again or your usage resets.",
+    "@onDeviceRemoveModelMessage": {
+        "description": "Warning that recordings wait until the model is downloaded again or usage resets"
+    },
+    "onDeviceRemove": "Remove",
+    "@onDeviceRemove": {
+        "description": "Confirm button that removes the speech model"
+    },
+    "onDeviceFinishSetupTitle": "Finish setup to see your transcripts",
+    "@onDeviceFinishSetupTitle": {
+        "description": "Banner title when recordings are waiting for the speech model"
+    },
+    "onDeviceFinishSetupBody": "You've reached this month's limit. Omi is still recording and saving audio on your phone. Download the speech model and it will catch up.",
+    "@onDeviceFinishSetupBody": {
+        "description": "Explains recordings are waiting because the usage limit was reached"
+    },
+    "onDeviceDownloadSize": "{size} download",
+    "@onDeviceDownloadSize": {
+        "description": "Download size, e.g. '600 MB download'",
+        "placeholders": {
+            "size": {
+                "type": "String"
+            }
+        }
+    },
+    "onDeviceUnsupportedBody": "This phone can't run the speech model yet. Audio stays saved until your usage resets or you upgrade.",
+    "@onDeviceUnsupportedBody": {
+        "description": "Explains audio stays saved until usage resets or the plan is upgraded"
+    },
+    "onDeviceEntrySubtitle": "When you reach your limit, transcribe on this phone",
+    "@onDeviceEntrySubtitle": {
+        "description": "Settings subtitle: transcribe on this phone when the usage limit is reached"
+    },
+    "onDeviceMeterLineShort": "{percent}% used · {reset}",
+    "@onDeviceMeterLineShort": {
+        "description": "On-device usage meter without an hours estimate, for non-English devices",
+        "placeholders": {
+            "percent": {
+                "type": "int"
+            },
+            "reset": {
+                "type": "String"
+            }
+        }
+    },
+    "onDeviceMeterLineHours": "{percent}% used · about {hours} hours of recording left · {reset}",
+    "@onDeviceMeterLineHours": {
+        "description": "On-device usage meter when hours remain, for non-English devices",
+        "placeholders": {
+            "percent": {
+                "type": "int"
+            },
+            "hours": {
+                "type": "int"
+            },
+            "reset": {
+                "type": "String"
+            }
+        }
+    },
+    "onDeviceGetMoreUsage": "Get more usage",
+    "@onDeviceGetMoreUsage": {
+        "description": "Settings row that opens the plans sheet for more usage"
+    },
+    "onDeviceGettingSpeechReady": "Getting speech ready · {percent}%",
+    "@onDeviceGettingSpeechReady": {
+        "description": "Settings row while the system installs speech assets",
+        "placeholders": {
+            "percent": {
+                "type": "int"
+            }
+        }
+    },
+    "heldAudioSavedBody": "You've reached this month's limit. Your recordings are saved and will be transcribed after your limit resets on {date}.",
+    "@heldAudioSavedBody": {
+        "description": "Body of the home card when recordings are saved and waiting for cloud transcription. date is a formatted date.",
+        "placeholders": {
+            "date": {
+                "type": "String"
+            }
+        }
+    },
+    "heldAudioPhoneChosenBody": "New recordings will transcribe on this phone. Waiting recordings will be transcribed after your limit resets on {date}.",
+    "@heldAudioPhoneChosenBody": {
+        "description": "Body after the user chooses on-phone transcription. date is when recordings already waiting will be transcribed.",
+        "placeholders": {
+            "date": {
+                "type": "String"
+            }
+        }
+    },
+    "heldAudioRecordingTitle": "Recording, {time}",
+    "@heldAudioRecordingTitle": {
+        "description": "Title of one held recording in the conversations list. time is a formatted clock time.",
+        "placeholders": {
+            "time": {
+                "type": "String"
+            }
+        }
+    },
+    "heldAudioRecordingSubtitle": "{duration} · Waiting to transcribe",
+    "@heldAudioRecordingSubtitle": {
+        "description": "Subtitle of one held recording. duration is a compact length such as 4m.",
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
+    },
+    "heldAudioLiveTitle": "Cloud transcription paused",
+    "@heldAudioLiveTitle": {
+        "description": "Title of the banner shown while a live recording continues after the monthly limit."
+    },
+    "heldAudioLiveBody": "You've reached this month's limit. Omi keeps recording.",
+    "@heldAudioLiveBody": {
+        "description": "Body of the live-recording banner after the monthly limit."
+    },
+    "heldAudioRecordedSinceLimit": "{minutes} min recorded since the limit",
+    "@heldAudioRecordedSinceLimit": {
+        "description": "Placeholder line in the live transcript. minutes is a whole number of minutes recorded since the limit.",
+        "placeholders": {
+            "minutes": {
+                "type": "int"
+            }
+        }
+    },
+    "heldAudioTranscribesOn": "Transcribes after your limit resets on {date}",
+    "@heldAudioTranscribesOn": {
+        "description": "Second line of the live transcript placeholder. date is a formatted date.",
+        "placeholders": {
+            "date": {
+                "type": "String"
+            }
+        }
+    },
+    "heldAudioWaiting": "{duration} waiting",
+    "@heldAudioWaiting": {
+        "description": "Settings usage row title. duration is a compact length of audio waiting to be transcribed.",
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
+    },
+    "heldAudioWaitingOn": "Transcribed after your limit resets on {date}",
+    "@heldAudioWaitingOn": {
+        "description": "Settings usage row subtitle. date is when waiting audio is transcribed automatically.",
+        "placeholders": {
+            "date": {
+                "type": "String"
+            }
+        }
+    },
+    "heldAudioCardTitle": "{duration} waiting to transcribe",
+    "@heldAudioCardTitle": {
+        "description": "Title of the held-audio card. duration is a compact length such as 2m 30s, already including its unit.",
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
+    },
+    "heldAudioAndMore": "{count, plural, =1{and 1 more} other{and {count} more}}",
+    "@heldAudioAndMore": {
+        "description": "How many held recordings are past the newest page",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "heldAudioRecovering": "Transcribing your waiting recordings",
+    "processingPaused": "Processing paused. You've reached this month's limit.",
+    "processingStored": "Your recordings and transcripts are saved. Waiting recordings stay waiting until you choose to process them.",
+    "processingWaiting": "{duration} waiting · Process now uses about {percent}% of this month",
+    "@processingWaiting": {
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            },
+            "percent": {
+                "type": "String"
+            }
+        }
+    },
+    "processingEstimate": "About {hours} hours of processing · {percent}% of this month's allowance.",
+    "@processingEstimate": {
+        "placeholders": {
+            "hours": {
+                "type": "String"
+            },
+            "percent": {
+                "type": "String"
+            }
+        }
+    },
+    "processingNewestFirst": "We'll process the newest recordings first, up to what fits. The rest will stay waiting.",
+    "processingAction": "Process waiting recordings",
+    "processingProgress": "Processing your waiting recordings…",
+    "processingDeferred": "Waiting for processing",
+    "processingCount": "{count, plural, =1{1 conversation waiting} other{{count} conversations waiting}}",
+    "@processingCount": {
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "playbackPartialAudioSaved": "{saved} of {total} audio saved",
+    "@playbackPartialAudioSaved": {
+        "description": "Conversation player label replacing remaining time when the stored audio covers much less than the conversation, e.g. \"0:03 of 5:49 audio saved\"",
+        "placeholders": {
+            "saved": {
+                "type": "String"
+            },
+            "total": {
+                "type": "String"
+            }
+        }
+    },
+    "activityAttentionLinkStalledSubtitle": "Still recording on your Omi",
+    "@activityAttentionLinkStalledSubtitle": {
+        "description": "Activity > Needs attention row subtitle when the Omi pendant's audio link stalled; the pendant keeps recording to its own storage"
     }
 }

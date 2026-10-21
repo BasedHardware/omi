@@ -32,7 +32,7 @@ def finish_lease():
         'reservation_usd': 0.24,
         'budget_charge_usd': 0.24,
         'admission_refunded': False,
-        'max_usd_per_token': Caps().max_usd_per_token,
+        'max_usd_per_token': 0.00001,
         'spend_scope': 'user',
         'dirty_dropped': 0,
         'dirty_dropped_reported': 0,
@@ -160,9 +160,9 @@ registry_extension = SimpleNamespace(
         'database.dream_scheduler.discover': CoveredByEntry(
             'database.dream_scheduler.discover',
             covered_by=('database.dream_scheduler.candidate_page',),
-            reason='Discovery streams only through candidate_page; its get_all calls read explicit document refs and its transaction only initializes due rows and a cursor. SDK queue races are exercised in test_dream_queue_emulator.',
+            reason='Discovery streams only through candidate_page (allowlist mode reads listed user documents by explicit ref instead); its get_all calls read explicit document refs and its transaction only initializes due rows and a cursor. SDK queue races are exercised in test_dream_queue_emulator.',
             expect_observed=False,
-            body_digest='c0e27c29293523fa0ddf6095c56b0502810590259e28ce80c43e0ac4bc826789',
+            body_digest='925cc08b93ece7ff9e68c75a87aaf0437b80575a4794325b5153dfa30d875d16',
         )
     },
     SKIPS={},

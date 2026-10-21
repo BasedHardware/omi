@@ -39,6 +39,7 @@ from utils.log_sanitizer import sanitize_provider_error
 from utils.observability.fallback import record_fallback
 from utils.other.endpoints import timeit
 from utils.stt.outcomes import TranscriptionFailure
+from utils.stt.parakeet_request_metrics import observe_parakeet_request
 from utils.stt.brand_terms import normalize_brand_terms
 from utils.stt.speaker_clustering import select_speaker_cluster
 from utils.stt.speaker_embedding import compare_embeddings, extract_embedding_from_bytes
@@ -46,6 +47,18 @@ from utils.stt.speaker_embedding import compare_embeddings, extract_embedding_fr
 _DG_TIMEOUT = httpx.Timeout(connect=10.0, read=120.0, write=30.0, pool=10.0)
 _MODULATE_TIMEOUT = httpx.Timeout(connect=10.0, read=300.0, write=30.0, pool=10.0)
 _verification_deadline: ContextVar[Optional[float]] = ContextVar('verification_stt_deadline', default=None)
+
+_held_single_attempt: ContextVar[bool] = ContextVar('held_stt_single_attempt', default=False)
+
+
+@contextmanager
+def held_single_attempt():
+    """The durable held-piece coordinator alone owns paid dispatch retries."""
+    token = _held_single_attempt.set(True)
+    try:
+        yield
+    finally:
+        _held_single_attempt.reset(token)
 
 
 @contextmanager
@@ -402,7 +415,7 @@ def deepgram_prerecorded(
 
     except Exception as e:
         logger.error('Deepgram prerecorded error exception_type=%s attempt=%s', type(e).__name__, attempts + 1)
-        if attempts < 1:
+        if attempts < 1 and not _held_single_attempt.get():
             return deepgram_prerecorded(
                 audio_url,
                 speakers_count,
@@ -537,7 +550,7 @@ def deepgram_prerecorded_from_bytes(
             type(e).__name__,
             attempts + 1,
         )
-        if attempts < 1 and _verification_deadline.get() is None:
+        if attempts < 1 and _verification_deadline.get() is None and not _held_single_attempt.get():
             return deepgram_prerecorded_from_bytes(
                 audio_bytes,
                 sample_rate,
@@ -627,7 +640,7 @@ def modulate_prerecorded_from_bytes(
 
     except Exception as e:
         logger.error('Modulate prerecorded error exception_type=%s attempt=%s', type(e).__name__, attempts + 1)
-        if attempts < 2 and _verification_deadline.get() is None:
+        if attempts < 2 and _verification_deadline.get() is None and not _held_single_attempt.get():
             return modulate_prerecorded_from_bytes(
                 audio_bytes, sample_rate, diarize, attempts + 1, return_language, language
             )
@@ -660,7 +673,7 @@ def modulate_prerecorded(
             type(e).__name__,
             attempts + 1,
         )
-        if attempts < 1:
+        if attempts < 1 and not _held_single_attempt.get():
             return modulate_prerecorded(audio_url, speakers_count, attempts + 1, return_language, diarize, language)
         raise RuntimeError(f'Modulate transcription (url) failed after {attempts + 1} attempts') from e
 
@@ -841,13 +854,15 @@ def parakeet_prerecorded_from_bytes(
             data = {}
 
         with httpx.Client(timeout=_verification_timeout(_PARAKEET_TIMEOUT)) as client:
-            response = observe_sync_call('parakeet', client.post, url, files=files, data=data if data else None)
+            with observe_parakeet_request('v2' if use_v2 else 'v1'):
+                response = observe_sync_call('parakeet', client.post, url, files=files, data=data if data else None)
             if response.status_code == 404 and use_v2:
                 url = api_url.rstrip('/') + '/v1/transcribe'
                 client.timeout = _verification_timeout(_PARAKEET_TIMEOUT)
-                response = observe_sync_call(
-                    'parakeet', client.post, url, files={'file': ('audio.wav', BytesIO(audio_bytes), 'audio/wav')}
-                )
+                with observe_parakeet_request('v1'):
+                    response = observe_sync_call(
+                        'parakeet', client.post, url, files={'file': ('audio.wav', BytesIO(audio_bytes), 'audio/wav')}
+                    )
                 use_v2 = False
         response.raise_for_status()
         payload: Any = response.json()
@@ -905,7 +920,7 @@ def parakeet_prerecorded_from_bytes(
 
     except Exception as e:
         logger.error('Parakeet prerecorded error exception_type=%s attempt=%s', type(e).__name__, attempts + 1)
-        if attempts < 1 and _verification_deadline.get() is None:
+        if attempts < 1 and _verification_deadline.get() is None and not _held_single_attempt.get():
             return parakeet_prerecorded_from_bytes(
                 original_audio_bytes, sample_rate, diarize, attempts + 1, encoding, channels, language, return_language
             )
@@ -952,7 +967,7 @@ def parakeet_prerecorded(
             type(e).__name__,
             attempts + 1,
         )
-        if attempts < 1:
+        if attempts < 1 and not _held_single_attempt.get():
             return parakeet_prerecorded(audio_url, speakers_count, attempts + 1, return_language, diarize, language)
         raise RuntimeError(f'Parakeet transcription (url) failed after {attempts + 1} attempts') from e
 
@@ -1068,7 +1083,9 @@ class ParakeetPrerecordedProvider(PrerecordedSTTProvider):
         )
 
 
-def get_prerecorded_provider(language: Optional[str] = 'en') -> PrerecordedSTTProvider:
+def get_prerecorded_provider(
+    language: Optional[str] = 'en', *, selected_service: Optional[Tuple[str, Optional[str], str]] = None
+) -> PrerecordedSTTProvider:
     """Construct exactly the language-aware provider selected for telemetry."""
     # Offline harness sessions swap the provider for a deterministic stub
     # (selection/telemetry still resolve normally above them). Imported lazily:
@@ -1077,7 +1094,7 @@ def get_prerecorded_provider(language: Optional[str] = 'en') -> PrerecordedSTTPr
 
     if prerecorded_stub_enabled():
         return PrerecordedStubProvider()
-    service, _provider_language, model = get_prerecorded_service(language)
+    service, _provider_language, model = selected_service or get_prerecorded_service(language)
     if service == PrerecordedSTTService.MODULATE:
         return ModulatePrerecordedProvider()
     if service == PrerecordedSTTService.PARAKEET:
@@ -1099,9 +1116,15 @@ def prerecorded(
     language: Optional[str] = None,
     model: str = "nova-3",
     keywords: Optional[Sequence[str]] = None,
+    *,
+    selected_service: Optional[Tuple[str, Optional[str], str]] = None,
 ) -> Union[List[Dict[str, Any]], Tuple[List[Dict[str, Any]], str]]:
     """Route pre-recorded URL transcription through STT_PRERECORDED_MODEL."""
-    provider = get_prerecorded_provider(language)
+    provider = (
+        get_prerecorded_provider(language, selected_service=selected_service)
+        if selected_service is not None
+        else get_prerecorded_provider(language)
+    )
     return provider.transcribe_url(
         audio_url,
         speakers_count=speakers_count,
@@ -1258,13 +1281,18 @@ def _merge_segments(
     return segments
 
 
+def _capitalize_first(text: str) -> str:
+    """Capitalize only the first character; providers already return cased names, acronyms and "I"."""
+    return text[:1].capitalize() + text[1:]
+
+
 def _segments_as_objects(segments: List[Dict[str, Any]]) -> List[TranscriptSegment]:
     if not segments:
         return []
     starts_at = segments[0]['start']
     return [
         TranscriptSegment(
-            text=normalize_brand_terms(str(segment['text']).strip().capitalize()),
+            text=normalize_brand_terms(_capitalize_first(str(segment['text']).strip())),
             speaker=segment['speaker'],
             is_user=segment['is_user'],
             person_id=None,

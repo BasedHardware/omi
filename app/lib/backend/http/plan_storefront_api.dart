@@ -19,7 +19,7 @@ class PlanStorefrontApi {
         request: ApiRequest(
           url: '${baseUrl}v2/payments/plans?${Uri(queryParameters: {
                 'source': source,
-                'trigger': trigger,
+                if (trigger.isNotEmpty) 'trigger': trigger,
                 'locale': locale,
               }).query}',
           method: 'GET',

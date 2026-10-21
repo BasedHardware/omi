@@ -2,15 +2,17 @@
 
 from __future__ import annotations
 
+from config.policy.listen import routing_mode_raw
+
 import json
 import hashlib
 import logging
 from dataclasses import replace
 from abc import ABC, abstractmethod
 from typing import Any, Callable, ContextManager
-import os
 
 from config import live_stt_state
+from config.live_stt_resilience import escape_trial_votes_enabled
 from config.live_stt_registry import DEFAULT_TARGETS, Target, registry, assigned
 from utils.stt.live_gate import GateState, begin_trial, transition
 from utils.stt.live_metrics import (
@@ -25,10 +27,13 @@ from utils.stt.live_metrics import (
     COST_SETTLEMENTS,
     COST_VOTES,
     COST_ALL_DEGRADED,
-    FLEET_HEALTH_WRITE_DROPPED,
+    COST_ESCAPE_VOTES,
     MANAGED_LEGS_OPENED,
     MANAGED_LEGS_SETTLED,
     MANAGED_LEGS_OPEN,
+    record_fleet_health_write_dropped,
+    record_fleet_health_write_written,
+    safe_counter_increment,
 )
 from utils.stt.live_signal import provider_observation
 from utils.stt.live_reason import LIVE_STT_REASONS, normalize_live_stt_reason
@@ -46,6 +51,27 @@ class CostHealthUnavailable(RuntimeError):
 
 class _IdentityChanged(RuntimeError):
     """An awaited write observed a different environment identity than queued."""
+
+
+class _RedisCallFailed(RuntimeError):
+    """A Redis operation itself failed, as distinct from post-commit bookkeeping."""
+
+
+class _CostStateContention(RuntimeError):
+    """The bounded CAS loop lost all retries without a Redis call failure."""
+
+
+def trial_minimum_share(uid: str, entry: Target) -> int:
+    """Smallest trial stage whose re-entry cohort holds this user (100: none).
+
+    A vote is dropped while ``0 < stage < minimum_share``; 0 admits it at
+    every trial stage (used while the escape serves the user).
+    """
+    if not assigned(uid, entry.id, entry.ramp()):
+        return 100
+    if assigned(uid, 'stt-reentry:' + entry.id, 5):
+        return 5
+    return 25 if assigned(uid, 'stt-reentry:' + entry.id, 25) else 100
 
 
 COST_CACHE_CAP = 4096
@@ -80,7 +106,7 @@ class CostHealthMixin(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def schedule(self, coroutine: Any) -> None:
+    def schedule(self, coroutine: Any, *, write_path: str, kind: str) -> None:
         raise NotImplementedError
 
     @abstractmethod
@@ -121,7 +147,7 @@ class CostHealthMixin(ABC):
                 failed = provider_observation('text' if reason == 'text' else 'failover', reason)
                 outcome = 'censored' if failed is None else 'provider_failure' if failed else 'success'
                 COST_OBSERVATIONS.labels(target=target.id, outcome=outcome, reason=reason)
-                for boundary in ('client_gone', 'owner_teardown'):
+                for boundary in ('client_gone', 'owner_teardown', 'pod_draining'):
                     COST_IGNORED_DEATHS.labels(target=target.id, reason=reason, boundary=boundary)
                 for path in ('close', 'failover', 'connect'):
                     COST_SETTLEMENTS.labels(target=target.id, outcome=outcome, reason=reason, path=path)
@@ -137,7 +163,10 @@ class CostHealthMixin(ABC):
         return self._clock() + self._cost_server_offset
 
     async def _server_now(self, expected_identity: str | None = None) -> float:
-        seconds, micros = await self._redis().time()
+        try:
+            seconds, micros = await self._redis().time()
+        except Exception as exc:
+            raise _RedisCallFailed('Redis TIME failed') from exc
         now = float(seconds) + float(micros) / 1_000_000
         identity = self._check_identity()
         if expected_identity is not None and identity != expected_identity:
@@ -242,6 +271,45 @@ class CostHealthMixin(ABC):
                 raise CostHealthUnavailable('unread language cost state; restore configured order', states=result)
         return result
 
+    def _effective_stages(self, uid: str, language: str) -> dict[str, int]:
+        """Gate stage of every registry target that could serve this user.
+
+        Mirrors ``live_router.select``'s escape test without capacity: a target
+        counts when it is capable of the language and the user is inside its
+        config ramp. Uses the same conservative global/language view.
+        """
+        try:
+            targets = registry()
+        except (ValueError, TypeError):
+            return {}
+        try:
+            # A malformed ramp (e.g. strict window percent) proves nothing:
+            # keep the cohort-only rule rather than guess an escape.
+            servable = [
+                target for target in targets if target.capable(language) and assigned(uid, target.id, target.ramp())
+            ]
+        except (ValueError, TypeError):
+            return {}
+        now = self._clock()
+        stages: dict[str, int] = {}
+        with self._lock:
+            for target in servable:
+                stage = 100
+                for lang in ('all', language):
+                    key = (target.id, lang)
+                    stage = min(stage, self._cost_view(key, self._cost_is_fresh(key, now)).stage)
+                stages[target.id] = stage
+        return stages
+
+    def cost_stage(self, target: str, language: str) -> int:
+        """Conservative (global/language minimum) gate stage; no side effects."""
+        now = self._clock()
+        with self._lock:
+            return min(
+                self._cost_view((target, lang), self._cost_is_fresh((target, lang), now)).stage
+                for lang in ('all', language)
+            )
+
     def prefer_recovery(self, target: str, language: str) -> None:
         self._check_identity()
         with self._lock:
@@ -257,7 +325,7 @@ class CostHealthMixin(ABC):
         uid: str | None = None,
         reason: str | None = None,
     ) -> bool:
-        if not uid or os.getenv('STT_ROUTING_MODE', 'off') == 'off':
+        if not uid or routing_mode_raw() == 'off':
             return False
         identity = self._check_identity()
         witness = hashlib.sha256(('stt-evidence:' + uid).encode()).hexdigest()[:16]
@@ -279,14 +347,20 @@ class CostHealthMixin(ABC):
         ).inc()
         if failed is None:
             return True
-        minimum_share = (
-            5
-            if assigned(uid, 'stt-reentry:' + target, 5)
-            else 25 if assigned(uid, 'stt-reentry:' + target, 25) else 100
-        )
-        if not assigned(uid, target, entry.ramp()):
-            minimum_share = 100
+        minimum_share = trial_minimum_share(uid, entry)
         now = self._clock()
+        if minimum_share > 0 and escape_trial_votes_enabled() and assigned(uid, target, entry.ramp()):
+            stages = self._effective_stages(uid, language)
+            if stages and all(stage < 100 for stage in stages.values()):
+                # No stage-100 target serves this user: the escape routed
+                # them here regardless of the re-entry cohort, so their
+                # outcome is real trial evidence. Dropping it starved
+                # promotion for hours (2026-10-20: 240 dropped vs 4 counted).
+                if 0 < stages.get(target, 100) < minimum_share:
+                    safe_counter_increment(
+                        COST_ESCAPE_VOTES, metric_name='omi_stt_cost_routing_escape_votes_total', target=target
+                    )
+                minimum_share = 0
         with self._lock:
             for lang in ('all', language):
                 key = (target, lang)
@@ -311,7 +385,9 @@ class CostHealthMixin(ABC):
         self.schedule(
             self._write_cost_result(
                 target, language, failed, generations, witness, minimum_share, expected_identity=identity
-            )
+            ),
+            write_path='cost_routing_result',
+            kind='result',
         )
         return True
 
@@ -332,7 +408,11 @@ class CostHealthMixin(ABC):
         with self._lock:
             self._cost_local[(target, 'all')] = update(self._cost_local.get((target, 'all'), GateState()))
             self._cost_unreconciled.add((target, 'all'))
-        self.schedule(self._write_cost_quarantine(target, update, expected_identity=identity))
+        self.schedule(
+            self._write_cost_quarantine(target, update, expected_identity=identity),
+            write_path='cost_bench',
+            kind='bench',
+        )
 
     async def _write_cost_quarantine(
         self,
@@ -341,20 +421,50 @@ class CostHealthMixin(ABC):
         *,
         expected_identity: str | None = None,
     ) -> None:
+        write_committed = False
+        write_dropped = False
+
+        def record_commit() -> None:
+            nonlocal write_committed
+            if not write_committed:
+                write_committed = True
+                record_fleet_health_write_written(write_path='cost_bench', kind='bench')
+
+        def record_drop(reason: str) -> None:
+            nonlocal write_dropped
+            if write_committed and reason != 'identity_changed_after_commit':
+                return
+            if not write_dropped:
+                write_dropped = True
+                record_fleet_health_write_dropped(write_path='cost_bench', kind='bench', reason=reason)
+
         async def write():
             identity = self._check_identity()
             if expected_identity is not None and identity != expected_identity:
                 raise _IdentityChanged('live STT state identity changed')
             await self._server_now(identity)
-            await self._cost_update((target, 'all'), update, expected_identity=identity)
+            await self._cost_update(
+                (target, 'all'),
+                update,
+                expected_identity=identity,
+                on_commit=record_commit,
+                on_identity_changed=record_drop,
+            )
 
         try:
             await self._bounded(write())
         except _IdentityChanged:
+            record_drop('identity_changed_after_commit' if write_committed else 'identity_changed')
             return
-        except Exception:
+        except (_RedisCallFailed, TimeoutError):
             self._redis_retry_at = self._clock() + 10
-            FLEET_HEALTH_WRITE_DROPPED.labels(kind='bench').inc()
+            if not write_committed:
+                record_drop('redis_error')
+            logger.debug('STT cost-bench Redis write failed', exc_info=True)
+        except Exception:
+            if not write_committed:
+                record_drop('redis_error')
+            logger.debug('STT cost-bench write bookkeeping failed', exc_info=True)
 
     def cost_generations(self, target: str, language: str) -> dict[str, int]:
         self._check_identity()
@@ -406,6 +516,8 @@ class CostHealthMixin(ABC):
         failed: bool | None = None,
         *,
         expected_identity: str | None = None,
+        on_commit: Callable[[], None] | None = None,
+        on_identity_changed: Callable[[str], None] | None = None,
     ) -> GateState:
         identity = self._check_identity()
         if expected_identity is not None and identity != expected_identity:
@@ -415,7 +527,10 @@ class CostHealthMixin(ABC):
             raise RuntimeError('cost state target not in registry')
         redis_key = live_stt_state.cost_key(target, key[1])
         for _ in range(5):
-            raw = await self._redis().get(redis_key)
+            try:
+                raw = await self._redis().get(redis_key)
+            except Exception as exc:
+                raise _RedisCallFailed('Redis GET failed') from exc
             if self._check_identity() != identity:
                 raise _IdentityChanged('live STT state identity changed')
             old = GateState.decode(json.loads(raw)) if raw else GateState()
@@ -430,15 +545,42 @@ class CostHealthMixin(ABC):
             # Healthy fairness data expires after three idle windows. Benches
             # and recovery trials have no healthy_users and must not expire
             # into a fresh stage-100 state (especially unprobed expensive legs).
-            if await self._redis().eval(CAS, 1, redis_key, raw or '', encoded, 900 if new.stage == 100 else 0):
-                if self._check_identity() != identity:
+            try:
+                committed = await self._redis().eval(
+                    CAS, 1, redis_key, raw or '', encoded, 900 if new.stage == 100 else 0
+                )
+            except Exception as exc:
+                raise _RedisCallFailed('Redis cost-state CAS failed') from exc
+            if committed:
+                if on_commit is not None:
+                    try:
+                        on_commit()
+                    except Exception:
+                        logger.debug('Cost-state commit metric callback failed', exc_info=True)
+                try:
+                    identity_changed = self._check_identity() != identity
+                except Exception:
+                    logger.debug('Cost-state post-commit identity check failed', exc_info=True)
                     return new
-                with self._lock:
-                    self._cost_cached[key] = new
-                    self._cost_fresh[key] = self._clock()
-                self._cost_event(key[0], key[1], old, new, failed)
+                if identity_changed:
+                    if on_identity_changed is not None:
+                        try:
+                            on_identity_changed('identity_changed_after_commit')
+                        except Exception:
+                            logger.debug('Cost-state post-commit identity metric callback failed', exc_info=True)
+                    return new
+                try:
+                    with self._lock:
+                        self._cost_cached[key] = new
+                        self._cost_fresh[key] = self._clock()
+                except Exception:
+                    logger.debug('Cost-state post-commit cache update failed', exc_info=True)
+                try:
+                    self._cost_event(key[0], key[1], old, new, failed)
+                except Exception:
+                    logger.debug('Cost-state post-commit metric update failed', exc_info=True)
                 return new
-        raise RuntimeError('cost state contention')
+        raise _CostStateContention('cost state contention')
 
     async def _write_cost_result(
         self,
@@ -451,6 +593,23 @@ class CostHealthMixin(ABC):
         *,
         expected_identity: str | None = None,
     ) -> None:
+        write_committed = False
+        write_dropped = False
+
+        def record_commit() -> None:
+            nonlocal write_committed
+            if not write_committed:
+                write_committed = True
+                record_fleet_health_write_written(write_path='cost_routing_result', kind='result')
+
+        def record_drop(reason: str) -> None:
+            nonlocal write_dropped
+            if write_committed and reason != 'identity_changed_after_commit':
+                return
+            if not write_dropped:
+                write_dropped = True
+                record_fleet_health_write_dropped(write_path='cost_routing_result', kind='result', reason=reason)
+
         async def write():
             identity = self._check_identity()
             if expected_identity is not None and identity != expected_identity:
@@ -482,10 +641,28 @@ class CostHealthMixin(ABC):
                     return updated
 
                 key = (target, lang)
-                written = await self._cost_update(key, update, failed, expected_identity=identity)
-                COST_VOTES.labels(target=target, scope='global' if lang == 'all' else 'language', result=result).inc()
+                written = await self._cost_update(
+                    key,
+                    update,
+                    failed,
+                    expected_identity=identity,
+                    on_commit=record_commit,
+                    on_identity_changed=record_drop,
+                )
+                if write_committed and write_dropped:
+                    return
+                # The counter records the logical write once, after the first successful CAS.
+                # Repeated scope updates belong to the same scheduled write.
+                safe_counter_increment(
+                    COST_VOTES,
+                    metric_name='omi_stt_cost_routing_votes_total',
+                    target=target,
+                    scope='global' if lang == 'all' else 'language',
+                    result=result,
+                )
                 with self._lock:
                     if self._identity != identity:
+                        record_drop('identity_changed_after_commit' if write_committed else 'identity_changed')
                         return
                     local = self._cost_local.get(key, GateState())
                     if key not in self._cost_unreconciled and (
@@ -498,23 +675,35 @@ class CostHealthMixin(ABC):
                             self._cost_local.pop(evicted)
                             self._cost_unreconciled.discard(evicted)
 
+        if self._clock() < self._redis_retry_at:
+            record_drop('redis_backoff')
+            return
+
         try:
-            if self._clock() < self._redis_retry_at:
-                raise RuntimeError('Redis backoff')
             await self._bounded(write())
         except _IdentityChanged:
+            record_drop('identity_changed_after_commit' if write_committed else 'identity_changed')
             return
-        except Exception:
+        except (_RedisCallFailed, TimeoutError):
             with self._lock:
                 for lang in ('all', language):
                     key = (target, lang)
                     local = self._cost_local.get(key, GateState())
                     if local.stage == 0:
                         if key not in self._cost_unreconciled:
-                            self._cost_event(target, lang, GateState(), local, local=True)
+                            try:
+                                self._cost_event(target, lang, GateState(), local, local=True)
+                            except Exception:
+                                logger.debug('Cost-routing failure metric update failed', exc_info=True)
                         self._cost_unreconciled.add(key)
-            FLEET_HEALTH_WRITE_DROPPED.labels(kind='result').inc()
+            if not write_committed:
+                record_drop('redis_error')
             self._redis_retry_at = self._clock() + 10
+            logger.debug('STT cost-routing Redis write failed', exc_info=True)
+        except Exception:
+            if not write_committed:
+                record_drop('redis_error')
+            logger.debug('STT cost-routing write bookkeeping failed', exc_info=True)
 
     async def refresh_cost_once(self) -> None:
         identity = self._check_identity()

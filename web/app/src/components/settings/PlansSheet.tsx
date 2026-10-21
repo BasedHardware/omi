@@ -23,6 +23,13 @@ import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { TranscriptionUsageMeter } from './TranscriptionUsageMeter';
 import { DEFAULT_PLAN_FEATURES } from '@/lib/planFeatures';
 import {
+  RESUBSCRIBE_FIRST,
+  isPendingCancelConflict,
+  renewalDateSeconds,
+  yourPlanEndsOn,
+  yourPlanWillRenewOn,
+} from '@/lib/cancelPending';
+import {
   trackPaywallOpened,
   trackUpgradePlanSelected,
   trackUpgradeSucceeded,
@@ -50,6 +57,7 @@ export function PlansSheet({
   const [error, setError] = useState<string | null>(null);
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [isCanceling, setIsCanceling] = useState(false);
+  const [renewalConfirmation, setRenewalConfirmation] = useState<string | null>(null);
   const paywallWasOpen = useRef(false);
 
   const planIdentity = subscription
@@ -136,6 +144,14 @@ export function PlansSheet({
     }
   };
 
+  const formatDate = (timestamp: number) => {
+    return new Date(timestamp * 1000).toLocaleDateString('en-US', {
+      month: 'long',
+      day: 'numeric',
+      year: 'numeric',
+    });
+  };
+
   const handleSubscribe = async () => {
     if (isUnknownPlan || !selectedPriceId) return;
 
@@ -143,22 +159,26 @@ export function PlansSheet({
     setError(null);
 
     try {
-      // Find if selected plan is the currently active one
       const selectedOption = pricingOptions.find((p) => p.id === selectedPriceId);
       const isCurrentPlan = selectedOption?.is_active;
+      const priceId =
+        isCanceling_ && subscription?.current_price_id
+          ? subscription.current_price_id
+          : selectedPriceId;
+      const option = pricingOptions.find((p) => p.id === priceId) ?? selectedOption;
 
       if (isCanceling_ && selectedPriceId !== subscription?.current_price_id) {
-        setError('Plan changes are available after your current subscription ends.');
+        setError(RESUBSCRIBE_FIRST);
         return;
       }
 
-      const tier = selectedOption?.plan_id ?? 'unknown';
-      const interval = selectedOption?.interval ?? selectedOption?.title ?? 'unknown';
+      const tier = option?.plan_id ?? 'unknown';
+      const interval = option?.interval ?? option?.title ?? 'unknown';
       trackUpgradePlanSelected(tier, interval, 'web_plans');
 
       // If already subscribed and selecting a different plan, use upgrade endpoint
       if (isPaid && !isCanceling_ && !isCurrentPlan) {
-        const result = await upgradeSubscription(selectedPriceId);
+        const result = await upgradeSubscription(priceId);
         if (result?.status === 'success' || result?.scheduled_start) {
           trackUpgradeSucceeded(tier, interval);
           onSubscriptionUpdate();
@@ -168,7 +188,7 @@ export function PlansSheet({
         }
       } else {
         // New subscription or reactivation
-        const result = await createCheckoutSession(selectedPriceId);
+        const result = await createCheckoutSession(priceId);
         if (result?.url) {
           // Stripe Checkout opens in a new tab. The parent page never sees the
           // cancel URL Stripe returns to, so Upgrade Cancelled is not emitted
@@ -182,16 +202,28 @@ export function PlansSheet({
           };
           window.addEventListener('focus', handleFocus);
         } else if (result?.status === 'reactivated') {
-          // Subscription was reactivated
+          const seconds = renewalDateSeconds(
+            result.next_billing_date,
+            subscription?.current_period_end,
+          );
+          const message =
+            seconds == null
+              ? 'Your plan will renew.'
+              : yourPlanWillRenewOn(currentPlanName, formatDate(seconds));
+          setRenewalConfirmation(message);
+          setError(null);
           trackUpgradeSucceeded(tier, interval);
           onSubscriptionUpdate();
-          onOpenChange(false);
         } else {
           setError('Failed to create checkout session');
         }
       }
     } catch (err) {
-      setError('An error occurred. Please try again.');
+      setError(
+        isPendingCancelConflict(err)
+          ? RESUBSCRIBE_FIRST
+          : 'An error occurred. Please try again.',
+      );
     } finally {
       setIsLoading(false);
     }
@@ -229,14 +261,6 @@ export function PlansSheet({
     } finally {
       setIsCanceling(false);
     }
-  };
-
-  const formatDate = (timestamp: number) => {
-    return new Date(timestamp * 1000).toLocaleDateString('en-US', {
-      month: 'long',
-      day: 'numeric',
-      year: 'numeric',
-    });
   };
 
   // Sort pricing options: monthly first, then annual
@@ -302,15 +326,18 @@ export function PlansSheet({
                             ? currentPlanName
                             : 'Choose Your Plan'}
                         </Dialog.Title>
-                        {isPaid && subscription?.current_period_end && (
+                        {renewalConfirmation ? (
+                          <p className="text-xs text-green-400">{renewalConfirmation}</p>
+                        ) : isPaid && subscription?.current_period_end ? (
                           <p className="text-xs text-text-quaternary">
                             {isCanceling_
-                              ? `Cancels on ${formatDate(
-                                  subscription.current_period_end,
-                                )}`
+                              ? yourPlanEndsOn(
+                                  currentPlanName,
+                                  formatDate(subscription.current_period_end),
+                                )
                               : `Renews ${formatDate(subscription.current_period_end)}`}
                           </p>
-                        )}
+                        ) : null}
                       </div>
                     </div>
                   </div>
@@ -346,15 +373,11 @@ export function PlansSheet({
                               <button
                                 key={option.id}
                                 onClick={() => setSelectedPriceId(option.id)}
-                                disabled={isCanceling_ && !isCurrent}
                                 className={cn(
                                   'relative rounded-xl border-2 p-4 text-left transition-all',
                                   isSelected
                                     ? 'border-white/25 bg-white/[0.08]'
                                     : 'border-bg-tertiary bg-bg-tertiary/50 hover:border-bg-quaternary',
-                                  isCanceling_ &&
-                                    !isCurrent &&
-                                    'cursor-not-allowed opacity-50',
                                 )}
                               >
                                 {isAnnual && (
@@ -386,12 +409,12 @@ export function PlansSheet({
                           })}
                         </div>
 
-                        {isCanceling_ && subscription?.current_period_end && (
-                          <p className="text-sm text-text-tertiary">
-                            You can reactivate your current plan now. Plan changes are
-                            available after {formatDate(subscription.current_period_end)}.
-                          </p>
-                        )}
+                        {isCanceling_ &&
+                          selectedPriceId !== subscription?.current_price_id && (
+                            <p className="text-sm text-text-tertiary">
+                              {RESUBSCRIBE_FIRST}
+                            </p>
+                          )}
 
                         <TranscriptionUsageMeter subscription={subscription} />
 
@@ -441,7 +464,7 @@ export function PlansSheet({
                               Processing...
                             </span>
                           ) : isCanceling_ ? (
-                            'Reactivate Subscription'
+                            'Resubscribe'
                           ) : isPaid ? (
                             selectedOption?.is_active ? (
                               'Current Plan'

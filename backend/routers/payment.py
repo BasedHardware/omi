@@ -1,3 +1,5 @@
+from config.plan_catalog import configured_ladder_prices, validate_ladder_price
+from database.fsr_read_cache import fresh_reader, fresh_reads
 import os
 from datetime import datetime, timezone
 
@@ -28,6 +30,7 @@ from utils.subscription_state_machine import (
 )
 from utils.billing_flags import webhook_ledger_enabled
 from utils.stripe_webhook_ledger import dispatch_with_ledger, RetryableBillingSkip
+from config.stt_cap_dispatch import any_execution_admission_enabled as funded_processing_enabled
 from utils.fair_use import clear_fair_use_on_upgrade
 from utils.notifications import send_notification, send_subscription_paid_personalized_notification
 from models.users import PlanType, Subscription, SubscriptionStatus, PlanLimits
@@ -95,6 +98,9 @@ def _stripe_client_error_detail(e: stripe.error.StripeError, fallback: str) -> s
 class CreateCheckoutRequest(BaseModel):
     price_id: str = Field(..., min_length=1, max_length=255)
     promotion_code: Optional[str] = None
+    # A free trial of this many days before the first charge. Honored only for a first-time
+    # subscriber (no Stripe customer yet), so nobody chains trials by cancelling and re-subscribing.
+    trial_days: Optional[int] = Field(None, ge=1, le=30)
 
 
 class UpgradeSubscriptionRequest(BaseModel):
@@ -300,29 +306,31 @@ def _build_subscription_from_stripe_object(
 
 
 def _update_subscription_from_session(uid: str, session: stripe.checkout.Session) -> bool:
-    customer_id = session.get('customer')
-    subscription_id = session.get('subscription')
+    with fresh_reads():
+        customer_id = session.get('customer')
+        subscription_id = session.get('subscription')
 
-    try:
-        if customer_id:
-            users_db.set_stripe_customer_id(uid, customer_id)
+        try:
+            if customer_id:
+                users_db.set_stripe_customer_id(uid, customer_id)
 
-        if subscription_id:
-            stripe_sub = stripe.Subscription.retrieve(subscription_id)
-            if stripe_sub:
-                new_subscription = _build_subscription_from_stripe_object(stripe_sub.to_dict())
-                if new_subscription is None:
-                    return False
-                users_db.update_user_subscription(uid, new_subscription.model_dump())
-                logger.info(f"Subscription for user {uid} updated from session {session.id}.")
-    except FirestoreNotFound:
-        logger.warning(
-            f"Stripe webhook: user {uid} not found in Firestore, " f"skipping checkout session subscription update"
-        )
+            if subscription_id:
+                stripe_sub = stripe.Subscription.retrieve(subscription_id)
+                if stripe_sub:
+                    new_subscription = _build_subscription_from_stripe_object(stripe_sub.to_dict())
+                    if new_subscription is None:
+                        return False
+                    users_db.update_user_subscription(uid, new_subscription.model_dump())
+                    logger.info(f"Subscription for user {uid} updated from session {session.id}.")
+        except FirestoreNotFound:
+            logger.warning(
+                f"Stripe webhook: user {uid} not found in Firestore, " f"skipping checkout session subscription update"
+            )
 
-    return True
+        return True
 
 
+@fresh_reader
 def _try_reactivate_subscription(uid: str, target_price_id: str) -> dict | None:
     """
     Attempts to reactivate a canceled subscription if possible.
@@ -607,6 +615,11 @@ def _validate_price_id(price_id: str) -> None:
         raise HTTPException(status_code=400, detail="price_id is required")
     if not is_purchasable_price_id(price_id):
         raise HTTPException(status_code=400, detail="Unknown price_id")
+    if price_id in configured_ladder_prices():
+        try:
+            validate_ladder_price(price_id, stripe.Price.retrieve(price_id).to_dict_recursive())
+        except Exception as error:
+            raise HTTPException(status_code=503, detail='Ladder price unavailable') from error
 
 
 @router.post(
@@ -614,6 +627,7 @@ def _validate_price_id(price_id: str) -> None:
     response_model=PaymentCheckoutSessionResponse,
     response_model_exclude_none=True,
 )
+@fresh_reader
 def create_checkout_session_endpoint(request: CreateCheckoutRequest, uid: str = Depends(auth.get_current_user_uid)):
     _validate_price_id(request.price_id)
     # Check if user can make a new payment
@@ -637,6 +651,11 @@ def create_checkout_session_endpoint(request: CreateCheckoutRequest, uid: str = 
     # Normal checkout flow for new subscriptions (Scenario B or first-time subscribers)
     idempotency_key = str(uuid.uuid4())
     existing_customer_id = users_db.get_stripe_customer_id(uid)
+    # A trial is only for a first-time subscriber. A client that asked for one on behalf of a former
+    # subscriber promised something this checkout cannot give, so refuse rather than charge at once.
+    if request.trial_days and existing_customer_id:
+        raise HTTPException(status_code=400, detail="trial_unavailable")
+    trial_period_days = request.trial_days or None
     try:
         session = stripe_utils.create_subscription_checkout_session(
             uid,
@@ -644,6 +663,7 @@ def create_checkout_session_endpoint(request: CreateCheckoutRequest, uid: str = 
             idempotency_key,
             customer_id=existing_customer_id,
             promotion_code_id=resolved_checkout_promo_id,
+            trial_period_days=trial_period_days,
         )
     except stripe.error.InvalidRequestError as e:
         detail = str(e.user_message) if hasattr(e, 'user_message') and e.user_message else str(e)
@@ -694,6 +714,7 @@ def _unlock_paid_content(uid: str) -> None:
 
 
 @router.post('/v1/payments/upgrade-subscription', response_model=PaymentUpgradeSubscriptionResponse)
+@fresh_reader
 def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str = Depends(auth.get_current_user_uid)):
     """Upgrade or change a user's subscription plan.
 
@@ -783,6 +804,16 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
                     memories_db.unlock_all_memories(uid)
                     action_items_db.unlock_all_action_items(uid)
                     clear_fair_use_on_upgrade(uid)
+                    if funded_processing_enabled(uid):
+                        from utils.processing_backlog import allowance_increased
+                        from utils.processing_backlog_worker import upgrade
+
+                        if allowance_increased(current_subscription, new_subscription):
+                            upgrade(
+                                uid,
+                                f'plan-change:{new_subscription.stripe_subscription_id}:{request.price_id}:{new_subscription.current_period_start}',
+                                intent_at=time.time(),
+                            )
 
             logger.info(f"Immediate plan change for user {uid}: {current_plan.value} -> {target_plan.value}")
 
@@ -856,6 +887,7 @@ class CancelSubscriptionRequest(BaseModel):
 
 
 @router.delete('/v1/payments/subscription', response_model=PaymentStatusMessageResponse)
+@fresh_reader
 def cancel_subscription_endpoint(
     request: CancelSubscriptionRequest = CancelSubscriptionRequest(),
     uid: str = Depends(auth.get_current_user_uid),
@@ -946,6 +978,7 @@ async def stripe_webhook(
     return await dispatch_with_ledger(event, lambda: _handle_stripe_event(event, background_tasks), run_db)
 
 
+@fresh_reader
 async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | None = None):
     if event['type'] == 'checkout.session.completed':
         session = event['data']['object']
@@ -1044,6 +1077,12 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
                 await run_blocking(db_executor, memories_db.unlock_all_memories, uid)
                 await run_blocking(db_executor, action_items_db.unlock_all_action_items, uid)
                 await run_blocking(db_executor, clear_fair_use_on_upgrade, uid)
+                if funded_processing_enabled(uid):
+                    from utils.processing_backlog import allowance_increased
+                    from utils.processing_backlog_worker import upgrade_async
+
+                    if allowance_increased(existing_subscription, subscription):
+                        await upgrade_async(uid, f'checkout:{session.get("id")}', intent_at=event.get("created"))
             if persisted is False and webhook_ledger_enabled():
                 return RetryableBillingSkip(status='success')
             subscription_id = session.get('subscription')
@@ -1252,6 +1291,14 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
                     await run_blocking(db_executor, clear_trial_paywall_cache, uid)
                     if 'clear_fair_use' in decision.effects:
                         await run_blocking(db_executor, clear_fair_use_on_upgrade, uid)
+                    if funded_processing_enabled(uid) and not adopted_active_paid:
+                        from utils.processing_backlog import allowance_increased
+                        from utils.processing_backlog_worker import upgrade_async
+
+                        if allowance_increased(current_subscription, new_subscription):
+                            await upgrade_async(
+                                uid, f'subscription-upgrade:{event.get("id")}', intent_at=event.get("created")
+                            )
                     logger.info(f"Subscription for user {uid} updated from webhook event: {event['type']}.")
                 except FirestoreNotFound:
                     logger.warning(
@@ -1399,10 +1446,6 @@ async def stripe_connect_webhook(request: Request, stripe_signature: str = Heade
             uid = (account.get('metadata') or {}).get('uid')
             if uid and await run_blocking(db_executor, get_default_payment_method, uid) is None:
                 await run_blocking(db_executor, set_default_payment_method, uid, 'stripe')
-
-    # TODO: handle this event to link transfers?
-    # if event['type'] == 'transfer.created':
-    #     transfer = event['data']['object']
 
     return {"status": "success"}
 
