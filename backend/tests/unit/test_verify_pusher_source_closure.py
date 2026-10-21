@@ -39,6 +39,8 @@ def test_source_closure_includes_all_dockerfile_copy_dirs() -> None:
             "backend/testing/parity_pack_v0/",
             "backend/utils/",
             "backend/pusher/",
+            # Shared structured-logging setup pusher/main.py imports (plan B B2).
+            "backend/omi_logging.py",
         ]
     )
 
