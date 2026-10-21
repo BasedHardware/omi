@@ -177,6 +177,17 @@ from utils.product_telemetry import emit_product_event
 
 logger = logging.getLogger(__name__)
 
+
+def mark_listen_internal_error(state: Any) -> None:
+    """Close the listen socket when a turn raised after audio was not staged.
+
+    A staged publication returns. The receive loop does not call this, and the
+    socket stays up so the redrive can seal. A staging write that did not land
+    still raises, and both listen failure sites close with 1011 through here.
+    """
+    state.close_code = 1011
+
+
 # Cadence for the frame-independent provider-death monitor (#10028). Short enough
 # to terminate a zombie "Listening" session promptly, far below ws_receive_timeout.
 STT_DEATH_POLL_INTERVAL_SECONDS = 1.0
@@ -2528,7 +2539,7 @@ class ListenReceiver(ReplayFilterMixin):
             note_ws_close(self.host.state, 'client', error.code)
         except Exception as error:
             logger.error('Listen receive failure type=%s', type(error).__name__)
-            self.host.state.close_code = 1011
+            mark_listen_internal_error(self.host.state)
         finally:
             frame_timer.stop()
             if shadow is not None:
@@ -2566,7 +2577,7 @@ class ListenReceiver(ReplayFilterMixin):
                         self.host.state.active = False
                         raise  # Custody remains supervised and keeps the PCM alive.
                     except Exception as error:
-                        self.host.state.close_code = 1011
+                        mark_listen_internal_error(self.host.state)
                         logger.error(
                             'event=stt_cap_live_held outcome=persist_failed exception_type=%s', type(error).__name__
                         )

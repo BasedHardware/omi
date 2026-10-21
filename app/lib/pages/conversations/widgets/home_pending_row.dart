@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';
 
+import 'package:omi/backend/schema/pending_work.dart';
 import 'package:omi/pages/conversations/on_the_way_page.dart';
 import 'package:omi/pages/conversations/sync_pending_work.dart';
 import 'package:omi/pages/conversations/widgets/date_list_item.dart';
@@ -29,6 +30,7 @@ class HomePendingRow extends StatelessWidget {
     this.showTodayHeader = false,
     this.multiFileSync,
     this.pendingWork,
+    this.representedConversationIds = const {},
   });
 
   /// Injectable for tests and the visual audit; defaults to the app provider.
@@ -43,11 +45,25 @@ class HomePendingRow extends StatelessWidget {
   /// Injectable for tests; defaults to [PendingWorkStore.instance].
   final PendingWorkStore? pendingWork;
 
+  /// Conversations whose own row already shows their pending work ("adding 12m from your Omi").
+  final Set<String> representedConversationIds;
+
+  /// The server's pending work no visible row stands for.
+  static List<PendingWorkItem> unrepresented(List<PendingWorkItem> pending, Set<String> represented) => [
+        for (final item in pending)
+          if (item.conversationIds.isEmpty || !item.conversationIds.every(represented.contains)) item
+      ];
+
   /// Whether Home has anything on its way, by the same rule the row uses to draw itself.
-  static bool hasWork(SyncProvider sync, PendingWorkStore store, ConversationProvider? conversations) =>
+  static bool hasWork(
+    SyncProvider sync,
+    PendingWorkStore store,
+    ConversationProvider? conversations, {
+    Set<String> represented = const {},
+  }) =>
       SyncPendingWork.shouldShow(sync) ||
       (conversations?.processingConversations.isNotEmpty ?? false) ||
-      store.pending.isNotEmpty;
+      unrepresented(store.pending, represented).isNotEmpty;
 
   @override
   Widget build(BuildContext context) {
@@ -58,7 +74,9 @@ class HomePendingRow extends StatelessWidget {
       builder: (context, _) => Consumer<SyncProvider>(
         builder: (context, sync, child) {
           final p = syncProvider ?? sync;
-          if (!hasWork(p, store, conversations)) return const SizedBox.shrink();
+          if (!hasWork(p, store, conversations, represented: representedConversationIds)) {
+            return const SizedBox.shrink();
+          }
           final l = context.l10n;
           final title = SyncPendingWork.isLargeBacklog(p) ? l.homePendingCatchingUp : l.homePendingTitle;
           // Recordings say where they are; with none, what is left is conversations being processed.

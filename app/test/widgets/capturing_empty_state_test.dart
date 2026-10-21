@@ -19,7 +19,7 @@ import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/message_event.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/models/subscription.dart';
-import 'package:omi/pages/conversation_capturing/page.dart';
+import 'package:omi/pages/episodes/live_episode_page.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/device_provider.dart';
@@ -112,7 +112,7 @@ Future<void> _pumpCapturingPage(
   WidgetTester tester, {
   required CaptureProvider capture,
   required ConnectivityProvider connectivity,
-  ConversationCapturingPage page = const ConversationCapturingPage(),
+  LiveEpisodePage page = const LiveEpisodePage(),
   List<Person> people = const [],
   UsageProvider? usage,
 }) async {
@@ -263,7 +263,7 @@ void main() {
       capture: capture,
       connectivity: _StubConnectivityProvider(true),
       people: [Person(id: 'maya', name: 'Maya', createdAt: DateTime(2026), updatedAt: DateTime(2026))],
-      page: ConversationCapturingPage(
+      page: LiveEpisodePage(
           topConversationId: 'live', rejectSpeaker: (_, __, ___, {personId, segmentIds}) => receipt.future),
     );
     await tester.tap(find.byKey(const Key('speaker_suggestion_chip')));

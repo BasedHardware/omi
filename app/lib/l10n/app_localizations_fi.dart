@@ -14389,4 +14389,105 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get activityAttentionLinkStalledSubtitle => 'Omi tallentaa edelleen';
+
+  @override
+  String get episodeNow => 'Nyt';
+
+  @override
+  String episodeLiveFor(String duration) {
+    return 'Live · $duration';
+  }
+
+  @override
+  String episodeMomentsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count hetkeä',
+      one: '1 hetki',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get episodeMoments => 'Hetket';
+
+  @override
+  String get episodeSoFar => 'Tähän mennessä';
+
+  @override
+  String get episodeUpdatedJustNow => 'Päivitetty juuri · täydet muistiinpanot lopuksi';
+
+  @override
+  String episodeUpdatedMinutesAgo(int minutes) {
+    return 'Päivitetty $minutes min sitten · täydet muistiinpanot lopuksi';
+  }
+
+  @override
+  String get episodeNotesSoon => 'Muistiinpanot näkyvät ensimmäisten puheminuuttien jälkeen.';
+
+  @override
+  String get episodeOpenAll => 'Avaa kaikki';
+
+  @override
+  String get episodeWrapUpNow => 'Päätä nyt';
+
+  @override
+  String get episodeWrapsUpHint => 'Omi päättää tämän, kun siirryt eteenpäin';
+
+  @override
+  String episodeTaskCaptured(String text) {
+    return 'Tehtävä havaittu: $text';
+  }
+
+  @override
+  String episodeReminderCaptured(String text) {
+    return 'Muistutus havaittu: $text';
+  }
+
+  @override
+  String episodeTaskSaved(String text) {
+    return 'Tehtävä tallennettu: $text';
+  }
+
+  @override
+  String episodeAddingFromOmi(String duration) {
+    return 'lisätään $duration Omistasi';
+  }
+
+  @override
+  String get episodeListeningNow => 'Kuuntelee nyt';
+
+  @override
+  String get deviceHeardToday => 'Kuultu tänään';
+
+  @override
+  String get deviceToSync => 'synkronoitavana';
+
+  @override
+  String get deviceRightNow => 'Juuri nyt';
+
+  @override
+  String deviceLiveEpisode(String duration) {
+    return 'Live-jakso · $duration';
+  }
+
+  @override
+  String get deviceCatchingUp => 'Kirii kiinni';
+
+  @override
+  String deviceCatchingUpProgress(int done, int total) {
+    return '$done/$total min';
+  }
+
+  @override
+  String get deviceRecently => 'Äskettäin';
+
+  @override
+  String deviceDisconnectedFor(String duration) {
+    return 'Yhteys katkesi $duration ajaksi';
+  }
+
+  @override
+  String get deviceControls => 'Säätimet';
 }

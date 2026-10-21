@@ -52,6 +52,8 @@ def harness(monkeypatch):
     calls = []
     row = {'id': 'n', 'status': 'completed', 'source': 'omi', 'discarded': False, **_BOUND}
     monkeypatch.setenv('BATCH_PIPELINE_LIVE_ADMISSION_ENABLED', 'false')
+    # The live-episode hook runs after fanout completion; its own tests cover it.
+    monkeypatch.setenv('EPISODES_ENABLED', 'off')
 
     async def fake_run_blocking(_executor, function, *args, **kwargs):
         if function is finalizer.conversations_db.get_conversation:

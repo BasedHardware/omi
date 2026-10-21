@@ -14374,4 +14374,105 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get activityAttentionLinkStalledSubtitle => 'Omi optager stadig';
+
+  @override
+  String get episodeNow => 'Nu';
+
+  @override
+  String episodeLiveFor(String duration) {
+    return 'Live · $duration';
+  }
+
+  @override
+  String episodeMomentsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count øjeblikke',
+      one: '1 øjeblik',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get episodeMoments => 'Øjeblikke';
+
+  @override
+  String get episodeSoFar => 'Indtil videre';
+
+  @override
+  String get episodeUpdatedJustNow => 'Opdateret lige nu · fulde noter når det slutter';
+
+  @override
+  String episodeUpdatedMinutesAgo(int minutes) {
+    return 'Opdateret for $minutes min. siden · fulde noter når det slutter';
+  }
+
+  @override
+  String get episodeNotesSoon => 'Noterne vises efter de første minutters snak.';
+
+  @override
+  String get episodeOpenAll => 'Åbn alle';
+
+  @override
+  String get episodeWrapUpNow => 'Afslut nu';
+
+  @override
+  String get episodeWrapsUpHint => 'Omi afslutter dette, når du går videre';
+
+  @override
+  String episodeTaskCaptured(String text) {
+    return 'Opgave fanget: $text';
+  }
+
+  @override
+  String episodeReminderCaptured(String text) {
+    return 'Påmindelse fanget: $text';
+  }
+
+  @override
+  String episodeTaskSaved(String text) {
+    return 'Opgave gemt: $text';
+  }
+
+  @override
+  String episodeAddingFromOmi(String duration) {
+    return 'tilføjer $duration fra din Omi';
+  }
+
+  @override
+  String get episodeListeningNow => 'Lytter nu';
+
+  @override
+  String get deviceHeardToday => 'Hørt i dag';
+
+  @override
+  String get deviceToSync => 'mangler synk';
+
+  @override
+  String get deviceRightNow => 'Lige nu';
+
+  @override
+  String deviceLiveEpisode(String duration) {
+    return 'Live-episode · $duration';
+  }
+
+  @override
+  String get deviceCatchingUp => 'Indhenter';
+
+  @override
+  String deviceCatchingUpProgress(int done, int total) {
+    return '$done af $total min';
+  }
+
+  @override
+  String get deviceRecently => 'For nylig';
+
+  @override
+  String deviceDisconnectedFor(String duration) {
+    return 'Afbrudt i $duration';
+  }
+
+  @override
+  String get deviceControls => 'Betjening';
 }
