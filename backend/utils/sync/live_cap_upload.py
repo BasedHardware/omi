@@ -4,7 +4,7 @@ import asyncio
 from concurrent.futures import Future
 from typing import Callable
 
-from config.storage_transport import UploadWaitTimeout, transport_cause
+from config.gcs_transport import UploadWaitTimeout, transport_cause
 
 from utils.executors import storage_executor, submit_with_context
 from utils.observability.held_content import record_publication_retry
@@ -40,6 +40,10 @@ async def prepare(source: Publication, upload: Callable[[], dict]) -> None:
         raise last_error
     if len(source.upload_attempts) == UPLOAD_ATTEMPTS:
         raise last_error or UploadWaitTimeout('immutable live upload outcome unknown')
+    if source.upload_attempts and last_error is None:
+        # A cancelled waiter is not a transport failure. Preserve its pending
+        # upload; a later flush may adopt its result, but cannot duplicate it.
+        raise UploadWaitTimeout('immutable live upload outcome unknown')
     while len(source.upload_attempts) < UPLOAD_ATTEMPTS:
         source.put_started = True
         future: Future[dict] = submit_with_context(storage_executor, upload)

@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import copy
 from contextlib import nullcontext
+from concurrent.futures import Future
 from pathlib import Path
 from unittest.mock import Mock
 from threading import Barrier, Event, Lock, RLock, Thread
@@ -1582,3 +1583,16 @@ def test_retry_causes_are_a_closed_metric_set():
     held_metrics.record_publication_retry('retried_ok', 'unbounded-error-message')
     assert _counter('retried_ok') == before
     assert set(held_metrics.PUBLICATION_RETRY_CAUSES) == {'throttle', 'timeout', 'connection', 'other'}
+
+
+async def test_cancelled_waiter_does_not_retry_an_upload_with_unknown_outcome():
+    source = Publication(UID)
+    previous = Future()
+    source.upload_attempts.append(previous)
+    upload = Mock()
+    with pytest.raises(requests.exceptions.ReadTimeout, match='outcome unknown'):
+        await live_cap_upload.prepare(source, upload)
+    upload.assert_not_called()
+    previous.set_result({'audio_generation': 7, 'audio_size': 36})
+    await live_cap_upload.prepare(source, upload)
+    assert source.fields['audio_generation'] == 7 and len(source.upload_attempts) == 1
