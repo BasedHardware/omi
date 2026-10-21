@@ -10,6 +10,9 @@ import 'package:omi/utils/l10n_extensions.dart';
 /// copies on tap. The name and hardware rows are hidden while their value is unknown (a
 /// disconnected device reports none of them); firmware and device id still say "Unknown".
 ///
+/// With [onRenameDevice] the name row shows the name the reader gave the device and opens the
+/// rename sheet instead of copying.
+///
 /// For Ray-Ban Meta glasses the firmware row is replaced by microphone and camera readiness
 /// ([rayBanCameraStatus] resolves to 'granted', 'unavailable' or another permission state).
 class DeviceInfoGroups extends StatelessWidget {
@@ -18,11 +21,13 @@ class DeviceInfoGroups extends StatelessWidget {
     required this.pairedDevice,
     required this.isDeviceConnected,
     this.rayBanCameraStatus,
+    this.onRenameDevice,
   });
 
   final BtDevice? pairedDevice;
   final bool isDeviceConnected;
   final Future<String>? rayBanCameraStatus;
+  final VoidCallback? onRenameDevice;
 
   static String _truncate(String value) {
     if (value.length > 12) return '${value.substring(0, 5)}•••${value.substring(value.length - 4)}';
@@ -77,7 +82,16 @@ class DeviceInfoGroups extends StatelessWidget {
         OmiSettingsGroup(
           header: l10n.deviceInfoSection,
           children: [
-            if (_known(device?.name))
+            if (onRenameDevice != null)
+              OmiSettingsRow(
+                key: const Key('device_name_row'),
+                leading: const FaIcon(FontAwesomeIcons.microchip),
+                title: l10n.deviceName,
+                value: _known(device?.displayName) ? device?.displayName : l10n.unknown,
+                showChevron: true,
+                onTap: onRenameDevice,
+              )
+            else if (_known(device?.name))
               _copyRow(context, icon: FontAwesomeIcons.microchip, title: l10n.deviceName, value: device?.name),
             if (isRayBan) ...[
               OmiSettingsRow(
