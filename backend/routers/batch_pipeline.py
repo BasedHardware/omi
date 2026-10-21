@@ -194,6 +194,18 @@ async def redrive_dead(body: RedriveRequest):
     return {'accepted': accepted}
 
 
+@router.post('/shadow-recover', include_in_schema=False)
+async def shadow_recover(body: RedriveRequest):
+    from database.batch_pipeline_shadow import ShadowStore
+    from utils.batch_pipeline.intake import artifacts_for
+    from utils.batch_pipeline.shadow_recovery import recover
+
+    store = body.service().store
+    artifacts = await run_blocking(sync_executor, artifacts_for, store)
+    outcome = await run_blocking(sync_executor, recover, ShadowStore(store), artifacts, body.segment_id)
+    return {'status': outcome}
+
+
 @router.post('/gpu-idle', include_in_schema=False)
 async def gpu_idle(body: IdleRequest):
     accepted = await run_blocking(db_executor, body.service().queue().acknowledge_gpu_idle, body.gpu_id, body.token)
