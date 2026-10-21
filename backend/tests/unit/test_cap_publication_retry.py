@@ -9,7 +9,7 @@ from __future__ import annotations
 import asyncio
 import copy
 from contextlib import nullcontext
-from threading import RLock
+from threading import Barrier, Lock, RLock, Thread
 from types import SimpleNamespace
 
 import pytest
@@ -126,7 +126,16 @@ class _Transaction:
         self.ops: list[tuple] = []
 
     def _clean_up(self) -> None:
-        return None
+        self.ops = []
+
+    def _wait_for_peer_seal(self) -> None:
+        barrier = self.client.seal_commit_barrier
+        if barrier is None or self.client.seal_commit_barrier_passed:
+            return
+        if not any(op[0] == 'create' and 'stt_cap_fragment_claims' in op[1] for op in self.ops):
+            return
+        barrier.wait(timeout=5)
+        self.client.seal_commit_barrier_passed = True
 
     def _begin(self, retry_id=None) -> None:
         return None
@@ -144,6 +153,7 @@ class _Transaction:
         self.ops.append(('update', ref.key, copy.deepcopy(payload)))
 
     def _commit(self) -> None:
+        self._wait_for_peer_seal()
         action = self.client.actions.pop(0) if self.client.actions else 'ok'
         if action == 'expire':
             raise InvalidArgument(EXPIRED)
@@ -157,11 +167,12 @@ class _Transaction:
         self._apply()
 
     def _apply(self) -> None:
-        for op in self.ops:
-            kind, key, payload = op[0], op[1], op[2]
-            merge = kind == 'update' or (kind == 'set' and op[3])
-            self.client.write(key, payload, merge=merge, create=kind == 'create')
-        self.client.applied += 1
+        with self.client.lock:
+            for op in self.ops:
+                kind, key, payload = op[0], op[1], op[2]
+                merge = kind == 'update' or (kind == 'set' and op[3])
+                self.client.write(key, payload, merge=merge, create=kind == 'create', locked=True)
+            self.client.applied += 1
 
 
 class _Doc:
@@ -170,7 +181,13 @@ class _Doc:
         self.key = key
         self.path = key
 
+    def collection(self, name: str) -> '_Collection':
+        return _Collection(self.client, f'{self.key}/{name}')
+
     def get(self, transaction=None, timeout=None):
+        if self.key in self.client.fail_get_keys:
+            self.client.fail_get_keys.discard(self.key)
+            raise ResourceExhausted('429 Quota exceeded.')
         if self.client.read_errors:
             raise self.client.read_errors.pop(0)
         if self.client.fail_next_get:
@@ -226,6 +243,15 @@ class _Doc:
         self.client.write(self.key, copy.deepcopy(payload), merge=True, create=False, plain=True)
 
 
+class _Collection:
+    def __init__(self, client: '_Client', prefix: str):
+        self.client = client
+        self.prefix = prefix
+
+    def document(self, identity: str) -> _Doc:
+        return _Doc(self.client, f'{self.prefix}/{identity}')
+
+
 class _Client:
     def __init__(self, actions: list[str] | None = None, read_errors: list | None = None):
         self.actions = list(actions or [])
@@ -248,15 +274,33 @@ class _Client:
         self.conflict_create: str | None = None
         self.conflict_row: dict | None = None
         self.fail_next_get = False
+        self.fail_get_keys: set[str] = set()
         self.last_update_option = None
+        self.lock = Lock()
+        self.seal_commit_barrier: Barrier | None = None
+        self.seal_commit_barrier_passed = False
+
+    def collection(self, name: str) -> _Collection:
+        return _Collection(self, name)
 
     def transaction(self) -> _Transaction:
         txn = _Transaction(self)
         self.transactions.append(txn)
         return txn
 
-    def write(self, key: str, payload: dict, *, merge: bool, create: bool, plain: bool = False) -> None:
+    def write(
+        self, key: str, payload: dict, *, merge: bool, create: bool, plain: bool = False, locked: bool = False
+    ) -> None:
+        if locked:
+            self._write(key, payload, merge=merge, create=create, plain=plain)
+            return
+        with self.lock:
+            self._write(key, payload, merge=merge, create=create, plain=plain)
+
+    def _write(self, key: str, payload: dict, *, merge: bool, create: bool, plain: bool) -> None:
         if create and key in self.docs:
+            if 'stt_cap_fragment_claims' in key:
+                raise Aborted('fragment claim lost')
             raise AlreadyExists('exists')
         current = dict(self.docs.get(key) or {})
         applied = {}
@@ -942,6 +986,153 @@ def test_lost_create_race_without_the_fragment_opens_a_late_row(delays, store, t
     assert [part['id'] for part in row['stage_parts']] == [fragment.identity]
     assert row['writer_until'] == 0
     _seal_late(monkeypatch, store, fragment)
+
+
+def _plant_fragment_row(store, identity: str, fragment_id: str) -> str:
+    source = f'chunks/{UID}/cap-held/{fragment_id}.opus.enc'
+    store.bucket.put(source, FRAGMENT_PAYLOAD, generation=1)
+    store.docs[identity] = {
+        'state': 'staging',
+        'stage_parts': [
+            {
+                'id': fragment_id,
+                'audio_path': source,
+                'audio_generation': 1,
+                'bytes': len(FRAGMENT_PAYLOAD) - 32,
+                'frames': 16000,
+            }
+        ],
+        'seconds': 1.0,
+        'writer_until': 0,
+        'metadata': 'encrypted',
+        'sample_rate': 16000,
+        'started_at': 1_700_000_000,
+        'created_at': 1.0,
+        'listed_at': 1_700_000_000,
+        'live_custody_version': 4,
+    }
+    return source
+
+
+def _assert_one_claim(store, fragment_id: str, winner: str, loser: str) -> None:
+    claim = f'users/{UID}/stt_cap_fragment_claims/{fragment_id}'
+    assert [key for key in store.docs if 'stt_cap_fragment_claims' in key] == [claim]
+    assert store.docs[claim]['hold_id'] == winner
+    assert store.docs[winner]['state'] == 'held'
+    assert store.docs[loser]['state'] == 'superseded'
+    assert store.docs[loser]['seconds'] == 0
+    assert store.docs['summary']['count'] == 1
+    assert store.docs['summary']['seconds'] == 1
+    assert store.increments.count(('summary', 'count', 1.0)) == 1
+    assert store.increments.count(('summary', 'seconds', 1.0)) == 1
+    audio = store.docs[winner]['audio_path']
+    assert store.bucket.blob(audio).download_as_bytes() == FRAGMENT_PAYLOAD
+    source = f'chunks/{UID}/cap-held/{fragment_id}.opus.enc'
+    with pytest.raises(NotFound):
+        store.bucket.blob(source).download_as_bytes()
+    assert store.bucket.blob(audio).download_as_bytes() == FRAGMENT_PAYLOAD
+    other = store.bucket.objects.get(f'chunks/{UID}/cap-held/{loser}.opus.enc')
+    assert other is None or not other.alive
+
+
+@pytest.mark.parametrize('first', ['group', 'late'])
+def test_duplicate_rows_compose_and_count_the_fragment_once(store, first):
+    group = Publication(UID).identity
+    fragment_id = Publication(UID).identity
+    late = late_hold_identity(fragment_id)
+    _plant_fragment_row(store, group, fragment_id)
+    store.docs[late] = copy.deepcopy(store.docs[group])
+    order = [group, late] if first == 'group' else [late, group]
+    assert live_cap_staging.seal(UID, order[0]) is True
+    assert live_cap_staging.seal(UID, order[1]) is True
+    _assert_one_claim(store, fragment_id, order[0], order[1])
+
+
+def test_create_race_with_the_fragment_and_a_failed_read_counts_once(delays, store, tmp_path):
+    path = tmp_path / 'fragment.opus'
+    path.write_bytes(b'opus')
+    group = Publication(UID)
+    fragment = Publication(UID)
+    source = f'chunks/{UID}/cap-held/{fragment.identity}.opus.enc'
+    store.conflict_create = group.identity
+    store.conflict_row = {
+        'state': 'staging',
+        'stage_parts': [
+            {
+                'id': fragment.identity,
+                'audio_path': source,
+                'audio_generation': 1,
+                'bytes': 4,
+                'frames': 16000,
+            }
+        ],
+        'seconds': 1.0,
+        'writer_until': 0,
+        'metadata': 'encrypted',
+        'sample_rate': 16000,
+        'started_at': 1_700_000_000,
+        'created_at': 1.0,
+        'listed_at': 1_700_000_000,
+        'live_custody_version': 4,
+    }
+    store.actions = ['throttle', 'throttle', 'throttle']
+    before = _counter('staged_unverified')
+    live_cap_staging.append(UID, str(path), group, fragment, _METADATA, 1.0)
+    late = late_hold_identity(fragment.identity)
+    assert _counter('staged_unverified') == before + 1
+    assert late in store.docs
+    assert [part['id'] for part in store.docs[group.identity]['stage_parts']] == [fragment.identity]
+    assert [part['id'] for part in store.docs[late]['stage_parts']] == [fragment.identity]
+    assert live_cap_staging.seal(UID, group.identity) is True
+    assert live_cap_staging.seal(UID, late) is True
+    _assert_one_claim(store, fragment.identity, group.identity, late)
+
+
+def test_unconfirmed_late_create_keeps_the_source_and_fails(delays, store, tmp_path):
+    path = tmp_path / 'fragment.opus'
+    path.write_bytes(b'opus')
+    group = Publication(UID)
+    fragment = Publication(UID)
+    store.docs[group.identity] = _empty_staging_row()
+    store.versions[group.identity] = 1
+    store.reject_precondition = group.identity
+    late = late_hold_identity(fragment.identity)
+    store.docs[late] = {'state': 'staging', 'stage_parts': [], 'seconds': 0, 'writer_until': 0}
+    store.fail_get_keys.add(late)
+    store.actions = ['throttle', 'throttle', 'throttle']
+    source = f'chunks/{UID}/cap-held/{fragment.identity}.opus.enc'
+    with pytest.raises(ResourceExhausted):
+        live_cap_staging.append(UID, str(path), group, fragment, _METADATA, 1.0)
+    assert source not in store.deletes
+    assert store.bucket.blob(source).download_as_bytes() == FRAGMENT_PAYLOAD
+    assert [part['id'] for part in store.docs[group.identity]['stage_parts']] == []
+
+
+def test_concurrent_seals_claim_the_fragment_once(store):
+    group = Publication(UID).identity
+    fragment_id = Publication(UID).identity
+    late = late_hold_identity(fragment_id)
+    _plant_fragment_row(store, group, fragment_id)
+    store.docs[late] = copy.deepcopy(store.docs[group])
+    store.seal_commit_barrier = Barrier(2)
+    errors: list[BaseException] = []
+
+    def _run(identity: str) -> None:
+        try:
+            assert live_cap_staging.seal(UID, identity) is True
+        except BaseException as error:
+            errors.append(error)
+
+    threads = [Thread(target=_run, args=(identity,)) for identity in (group, late)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=10)
+    assert errors == []
+    assert all(not thread.is_alive() for thread in threads)
+    winner = store.docs[f'users/{UID}/stt_cap_fragment_claims/{fragment_id}']['hold_id']
+    loser = late if winner == group else group
+    _assert_one_claim(store, fragment_id, winner, loser)
 
 
 async def test_receive_data_close_code_follows_staging(delays, store, tmp_path):

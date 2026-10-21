@@ -248,6 +248,8 @@ def append(uid: str, path: str, group: Publication, fragment: Publication, metad
         reporting the uncommitted merge. That row's id is not the fragment
         id, so seal writes a different object from the part. Returning the
         confirmed row keeps the socket up. An unconfirmed fragment still fails.
+        The uploaded object stays: only the seal that claimed the fragment
+        deletes it.
         """
         part = updates['stage_parts'][-1]
         if part.get('id') != fragment.identity:
@@ -286,34 +288,96 @@ def append(uid: str, path: str, group: Publication, fragment: Publication, metad
                         type(error).__name__,
                     )
                     return staged
-            blob = cap_hold.get_private_cloud_sync_bucket().blob(
-                fields.get('audio_path') or f'chunks/{uid}/cap-held/{fragment.identity}.opus.enc'
-            )
-            try:
-                generation = fields.get('audio_generation')
-                if not generation:
-                    blob.reload(timeout=10, retry=None)
-                    generation = blob.generation
-                blob.delete(if_generation_match=generation, timeout=10, retry=None)
-            except (NotFound, PreconditionFailed):
-                pass
+            # Custody is unknown whenever no read showed this fragment. The
+            # object stays for a later seal. Deleting it here can remove the
+            # source a row we failed to read still names.
             return UNRECOVERED
 
     return commit_publication(client, commit, recover=recover)
+
+
+# One document per fragment. Creating it is the claim: a second seal cannot
+# create the same id, so it cannot compose or count that fragment again.
+_FRAGMENT_CLAIMS = 'stt_cap_fragment_claims'
+
+
+def _fragment_claim_ref(uid: str, fragment_id: str) -> Any:
+    return get_firestore_client().collection('users').document(uid).collection(_FRAGMENT_CLAIMS).document(fragment_id)
+
+
+def _hold_identity(ref: Any) -> str:
+    path = getattr(ref, 'path', None) or getattr(ref, 'key', '')
+    return str(path).rsplit('/', 1)[-1]
+
+
+def _counted_seconds(row: dict, parts: list[dict], claimed: list[dict]) -> float:
+    """Use the row total when this seal owns every fragment.
+
+    A partial overlap has no per-fragment total stored on the row. Frames and
+    sample rate are already on the part, and they are what the row total was
+    built from.
+    """
+    if {part['id'] for part in claimed} == {part['id'] for part in parts}:
+        return float(row.get('seconds') or 0)
+    rate = float(row.get('sample_rate') or 0)
+    if rate <= 0:
+        return 0.0
+    return sum(float(part.get('frames') or 0) / rate for part in claimed)
+
+
+def _drop_unpublished_target(bucket: Any, uid: str, identity: str) -> None:
+    """Remove a compose this attempt published before losing the claim.
+
+    This is the seal destination for this row, never the fragment source.
+    """
+    target = bucket.blob(f'chunks/{uid}/cap-held/{identity}.opus.enc')
+    try:
+        target.reload(timeout=10, retry=None)
+    except NotFound:
+        return
+    try:
+        target.delete(if_generation_match=target.generation, timeout=10, retry=None)
+    except (NotFound, PreconditionFailed):
+        pass
 
 
 def cleanup(uid: str, ref: Any) -> None:
     row = ref.get(timeout=10).to_dict() or {}
     if not row.get('staging_cleanup') or row.get('state') in {'staging', 'sealing'}:
         return
+    identity = _hold_identity(ref)
+    # Rows sealed before claims existed have no list. Those deletes are the
+    # previous behavior. A present list, even empty, deletes nothing this row
+    # did not claim.
+    claimed_ids = row.get('claimed_fragment_ids')
+    legacy = claimed_ids is None
+    claimed = set(claimed_ids or [])
     bucket = cap_hold.get_private_cloud_sync_bucket()
+    unresolved = False
     for part in row.get('stage_parts') or []:
+        if not legacy and part.get('id') not in claimed:
+            continue
+        if not legacy:
+            try:
+                claim = _fragment_claim_ref(uid, part['id']).get(timeout=10).to_dict() or {}
+            except Exception as error:
+                logger.warning(
+                    'event=stt_cap_live_held outcome=cleanup_claim_unreadable exception_type=%s',
+                    type(error).__name__,
+                )
+                unresolved = True
+                continue
+            if claim.get('hold_id') != identity:
+                continue
         if not part['audio_path'].startswith(f'chunks/{uid}/cap-held/'):
             raise ValueError('live staging cleanup owner mismatch')
         try:
             bucket.blob(part['audio_path']).delete(if_generation_match=part['audio_generation'], timeout=10, retry=None)
         except (NotFound, PreconditionFailed):
             pass
+    if unresolved:
+        # Leave the flag set so the cleanup sweep can try this row again.
+        return
     # A purged tombstone may have replaced the row while cleanup ran. Never
     # resurrect it or erase newer authority fields with a full document set.
     try:
@@ -356,11 +420,48 @@ def seal(uid: str, identity: str, *, expired_only: bool = False) -> bool:
             parts = row['stage_parts']
             if not 0 < len(parts) <= MAX_FRAGMENTS:
                 raise ValueError('invalid live staging part count')
+            # Claim before compose. A fragment another row already claimed is
+            # not composed and not counted. The create is the lock: Firestore
+            # retries this transaction if the other seal commits first.
+            claimed: list[dict] = []
+            seen: set[str] = set()
+            for part in parts:
+                fragment_id = part.get('id')
+                if not fragment_id or fragment_id in seen:
+                    continue
+                seen.add(fragment_id)
+                claim_ref = _fragment_claim_ref(uid, fragment_id)
+                holder = (claim_ref.get(transaction=tx).to_dict() or {}).get('hold_id')
+                if holder and holder != identity:
+                    continue
+                if not holder:
+                    tx.create(claim_ref, {'hold_id': identity, 'fragment_id': fragment_id})
+                claimed.append(part)
+            if not claimed:
+                # This attempt may already have composed, then lost the claim
+                # commit and retried. Drop that unpublished destination. The
+                # fragment source belongs to the row that won the claim.
+                _drop_unpublished_target(bucket, uid, identity)
+                tx.set(
+                    ref,
+                    {
+                        'state': 'superseded',
+                        'seconds': 0,
+                        'stage_parts': parts,
+                        'claimed_fragment_ids': [],
+                        'staging_cleanup': False,
+                        'live_custody_version': 4,
+                        'created_at': row.get('created_at', time.time()),
+                        'started_at': row.get('started_at'),
+                        'listed_at': row.get('listed_at', row.get('started_at')),
+                    },
+                )
+                return True
             # Composition copies authenticated encryption frames verbatim. The
             # reader decodes each independent Opus clock before joining PCM.
             target = bucket.blob(f'chunks/{uid}/cap-held/{identity}.opus.enc')
             sources = []
-            for part in parts:
+            for part in claimed:
                 if not part['audio_path'].startswith(f'chunks/{uid}/cap-held/'):
                     raise ValueError('live staging compose owner mismatch')
                 source = bucket.blob(part['audio_path'], generation=int(part['audio_generation']))
@@ -371,7 +472,8 @@ def seal(uid: str, identity: str, *, expired_only: bool = False) -> bool:
                 except PreconditionFailed:
                     target.reload(timeout=10, retry=None)
             metadata = cap_hold.metadata(uid, row)
-            metadata['source_frames'] = sum(part['frames'] for part in parts)
+            metadata['source_frames'] = sum(part['frames'] for part in claimed)
+            counted = _counted_seconds(row, parts, claimed)
             body = cap_hold.hold_manifest(
                 {
                     'audio_path': target.name,
@@ -380,17 +482,26 @@ def seal(uid: str, identity: str, *, expired_only: bool = False) -> bool:
                     'sample_rate': row['sample_rate'],
                     'source_frames': metadata['source_frames'],
                     'metadata': encrypt(json.dumps(metadata), uid),
-                    'opus_fragments': [{'bytes': part['bytes'], 'frames': part['frames']} for part in parts],
+                    'opus_fragments': [{'bytes': part['bytes'], 'frames': part['frames']} for part in claimed],
                 },
-                row['seconds'],
+                counted,
                 row['created_at'],
                 int(row['started_at']),
             )
-            tx.set(ref, {**body, 'live_custody_version': 4, 'stage_parts': parts, 'staging_cleanup': True})
+            tx.set(
+                ref,
+                {
+                    **body,
+                    'live_custody_version': 4,
+                    'stage_parts': parts,
+                    'claimed_fragment_ids': [part['id'] for part in claimed],
+                    'staging_cleanup': True,
+                },
+            )
             tx.set(
                 cap_hold.summary_ref(uid),
                 {
-                    'seconds': firestore.Increment(row['seconds']),
+                    'seconds': firestore.Increment(counted),
                     'count': firestore.Increment(1),
                 },
                 merge=True,
