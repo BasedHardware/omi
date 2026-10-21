@@ -4,7 +4,7 @@
   "changes": [
     "Keeps pendant audio that arrives while recording restarts after a Bluetooth reconnect",
     "Smoother scrolling and conversation opening, with fixes for freezes and crashes",
-    "Catching up now appears on the Device page, keeping Home clearer",
-    "The live recording timer updates more smoothly"
+    "Catch-up details now appear on the Device page, keeping Home clearer",
+    "The timer on the live page updates every second"
   ]
 }
