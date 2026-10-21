@@ -20,6 +20,7 @@ inside the stub window — importing a sibling test module's fixture set left
 real modules behind that later files could not re-import cleanly.
 """
 
+import importlib
 import os
 from pathlib import Path
 from types import ModuleType
@@ -51,6 +52,11 @@ def _build_pipeline_fakes() -> dict:
     ``database``/``models`` get package markers with dead paths so their real
     ``__init__``s never run (same trick as the transcription-prefs fakes).
     """
+    # Pure metric owners must outlive per-test stub windows. Otherwise import
+    # cleanup removes their modules while Prometheus retains their collectors,
+    # and the next isolated segment fails before reaching its provider.
+    importlib.import_module('utils.stt.batch_language')
+    importlib.import_module('utils.batch_pipeline.language_metrics')
     fakes: dict = {}
 
     for parent in ('database', 'models'):
