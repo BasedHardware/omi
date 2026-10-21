@@ -1890,3 +1890,141 @@ def test_gke_helm_failure_never_discloses_override_values(checker) -> None:
         checker.expected_gke_env_from_helm('pusher', env='prod', runner=runner, helm_args=(f'env[0].value={secret}',))
     assert secret not in str(excinfo.value)
     assert '<redacted>' in str(excinfo.value)
+
+
+def test_gke_template_optional_envfrom_missing_configmap_is_not_an_error(checker) -> None:
+    # Thread: the Deployment-template path used to resolve envFrom sources
+    # without their optionality, so an optional ConfigMap absent from the
+    # cluster turned into a workload-wide fetch ERROR (strict exit 2) although
+    # K8s legally runs the workload without it. The template read must treat a
+    # missing optional map as an empty contribution, like the ReplicaSet loop.
+    deployment = 'prod-omi-pusher'
+    serving_env = [{'name': 'X', 'value': 'x'}]
+    optional_envfrom = [{'configMapRef': {'name': 'fixture-gone-config', 'optional': True}}]
+
+    def runner(argv, **_kwargs):
+        if argv[0] == 'helm':
+            rendered = yaml.safe_dump_all(
+                [
+                    {
+                        'kind': 'Deployment',
+                        'metadata': {'name': deployment},
+                        'spec': {
+                            'template': {
+                                'spec': {
+                                    'containers': [
+                                        {
+                                            'name': 'pusher',
+                                            'env': serving_env,
+                                            'envFrom': optional_envfrom,
+                                        }
+                                    ]
+                                }
+                            }
+                        },
+                    }
+                ]
+            )
+            return subprocess.CompletedProcess(argv, 0, stdout=rendered, stderr='')
+        if 'replicasets' in argv:
+            return subprocess.CompletedProcess(
+                argv,
+                0,
+                stdout=json.dumps(
+                    {
+                        'items': [
+                            _replicaset(
+                                f'{deployment}-a', deployment, 2, serving_env, 'pusher', envfrom=optional_envfrom
+                            )
+                        ]
+                    }
+                ),
+                stderr='',
+            )
+        if 'configmap' in argv:
+            raise subprocess.CalledProcessError(
+                1, argv, output='', stderr='Error from server (NotFound): configmaps "fixture-gone-config" not found'
+            )
+        return subprocess.CompletedProcess(
+            argv,
+            0,
+            stdout=json.dumps(
+                {
+                    'spec': {
+                        'template': {
+                            'spec': {
+                                'containers': [{'name': 'pusher', 'env': serving_env, 'envFrom': optional_envfrom}]
+                            }
+                        }
+                    }
+                }
+            ),
+            stderr='',
+        )
+
+    (result,) = checker.inspect_gke_drift(
+        env='prod', workloads=('pusher',), render='helm', kube_context='gke_ctx', runner=runner
+    )
+    assert result.error is None, result.error
+    assert result.envfrom_unproven == ('fixture-gone-config?optional',)
+    assert result.status == 'INVENTORY'  # optional ref unproven, not a fetch error
+
+
+def test_gke_template_envfrom_identity_compared_when_template_drops_sources(checker) -> None:
+    # Thread: the identity comparison used to be skipped when the template had
+    # no envFrom sources at all, so a template that dropped the reference while
+    # a serving ReplicaSet still bulk-loads an empty (or fully shadowed)
+    # ConfigMap read as "Template = serving: yes". The comparison must hold
+    # unconditionally: an empty identity list vs a referencing ReplicaSet is
+    # divergence the next rollout would apply.
+    cm_name, _cm_data = _prod_configmap_fixture(checker)
+    empty_cm_data: dict[str, str] = {}  # zero keys: contributes nothing to the fingerprint
+    deployment = 'prod-omi-pusher'
+    serving_env = [{'name': 'X', 'value': 'x'}]
+
+    gke_state = {
+        'configmaps': {cm_name: {'data': empty_cm_data}},
+        'pusher': {
+            'deployment': {
+                'spec': {
+                    'template': {'spec': {'containers': [{'name': 'pusher', 'env': serving_env}]}}  # envFrom dropped
+                }
+            },
+            'replicasets': [
+                _replicaset(
+                    f'{deployment}-a',
+                    deployment,
+                    2,
+                    serving_env,
+                    'pusher',
+                    envfrom=[{'configMapRef': {'name': cm_name}}],
+                )
+            ],
+        },
+    }
+    (result,) = checker.inspect_gke_drift(
+        env='prod', workloads=('pusher',), gke_state=gke_state, expected_overrides={'pusher': {'X': None}}
+    )
+    assert result.error is None, result.error
+    assert result.template_matches_serving is False
+
+
+def test_json_report_keys_results_by_platform_and_name(checker) -> None:
+    # Thread: --service pusher --gke-workload pusher produced two results both
+    # keyed "pusher" in the JSON services object, silently dropping the Cloud
+    # Run entry. Keys must disambiguate by platform.
+    cloud_run = checker.ServiceEnvDrift(
+        service='pusher', manifest_key_count=1, live_key_count=1, allowlisted_live_only=(), unallowlisted_live_only=()
+    )
+    gke = checker.ServiceEnvDrift(
+        service='pusher',
+        manifest_key_count=2,
+        live_key_count=2,
+        allowlisted_live_only=(),
+        unallowlisted_live_only=(),
+        platform='gke',
+    )
+    report = json.loads(checker.render_json_report(env='prod', project='p', region='r', results=(cloud_run, gke)))
+    assert set(report['services']) == {'cloud_run:pusher', 'gke:pusher'}
+    assert report['services']['cloud_run:pusher']['manifest_key_count'] == 1
+    assert report['services']['gke:pusher']['manifest_key_count'] == 2

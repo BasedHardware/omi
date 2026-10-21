@@ -858,8 +858,11 @@ def read_gke_workload(
 
     def envfrom_entries(container: Mapping[str, Any] | None) -> LiveEnv:
         merged: LiveEnv = {}
-        for name, prefix, _optional in _envfrom_sources(container):
-            data = resolve_configmap(name)
+        for name, prefix, optional in _envfrom_sources(container):
+            # Optionality forwards here too (the Deployment template path): a
+            # missing optional ConfigMap is legal K8s and resolves to empty,
+            # not a workload-wide fetch error.
+            data = resolve_configmap(name, optional=optional)
             if data is None:
                 continue
             for key, digest in _config_map_data_keys(data).items():
@@ -1044,8 +1047,10 @@ def compare_service(
             # envFrom identities belong to the template comparison too: a
             # template rebinding ConfigMap A to ConfigMap B with identical data
             # passes the fingerprint but is exactly the divergence this field
-            # exists to reveal.
-            and (not live.template_envfrom_refs or list(target.envfrom_refs) == list(live.template_envfrom_refs))
+            # exists to reveal. Compared unconditionally — an empty template
+            # identity list against a still-referencing ReplicaSet is itself
+            # divergence the next rollout would apply.
+            and list(target.envfrom_refs) == list(live.template_envfrom_refs)
             for target, _ in live.targets
         )
     primary = live.targets[0][0]
@@ -1353,8 +1358,11 @@ def render_json_report(
         'region': region,
         'drift': any(item.has_drift for item in results),
         'errors': sum(1 for item in results if item.error),
+        # Keyed by platform and name: Cloud Run and GKE results can share a
+        # workload name (e.g. --service pusher --gke-workload pusher), and a
+        # name-only key would silently drop one platform's entry.
         'services': {
-            item.service: {
+            f'{item.platform}:{item.service}': {
                 'platform': item.platform,
                 'status': item.status,
                 'source': item.source,
