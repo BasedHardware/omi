@@ -110,7 +110,7 @@ SHADOW_CONVERGENCE_SECONDS = Histogram(
     'omi_jobstore_shadow_convergence_seconds',
     'A2 job-store shadow: seconds from a non-matching read comparison until Postgres equalled the primary.',
     ['table'],
-    buckets=(0.05, 0.25, 0.5, 1.0, 2.0, 5.0, 10.0),
+    buckets=(0.05, 0.25, 0.5, 1.0, 2.0, 5.0, 10.0, 10.5),  # the last legal observation ends <= 10 s + budget_s
 )
 
 
