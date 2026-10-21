@@ -6,6 +6,15 @@ description: "Sequence diagrams and finalization policy for the /v4/listen WebSo
 
 # Listen + Pusher Pipeline — Sequence Diagrams
 
+At a new recording reservation during a partial batch ramp, the owner-load
+predicate in `config/policy/ramp.py` keeps heavy owners on the legacy route.
+`BATCH_PIPELINE_RAMP_EXCLUDE_HEAVY_OWNERS=off` disables this admission narrowing.
+The check runs at the existing database write boundary, never on audio frames
+or pusher flushes. An existing `batch_live_v1` owner keeps draining through
+finalization and WAL retries even if its current load is heavy. Thresholds,
+telemetry and the separate heavy-owner qualification gate are documented in
+`batch-pipeline-serving.md`.
+
 Soniox transport exceptions log once at the first socket death, with bounded
 `operation`, `exception_class`, `received_close_code`, `sent_close_code`,
 `close_cause`, and `session_age_bucket` fields. `-1` means no close frame was

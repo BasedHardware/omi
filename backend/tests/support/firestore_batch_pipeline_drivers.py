@@ -29,6 +29,22 @@ def entries():
             body_digest='e5ea33125389c09c8ad556fab4a6319142f223e4dfa655095dcd89c64e976a8d',
         ),
         CoveredByEntry(
+            'database.batch_ramp.ramp_admission_policy',
+            covered_by=('database.batch_ramp.read_owner_load',),
+            reason='admission wrapper delegates both metadata queries to the owner-load reader',
+            expect_observed=False,
+            body_digest='af9830f4381f5f9d880199ed21df739af633db7a327d7e723ac4d409585c9a01',
+        ),
+        DriverEntry(
+            'database.batch_ramp.read_owner_load',
+            base={'uid': 'synthetic-owner'},
+            domains={'stage': ['prod', 'dev']},
+            neutrals={
+                'now': (100000.0, 'timestamp operand only'),
+                'incoming_audio_seconds': (0, 'pure aggregation only'),
+            },
+        ),
+        CoveredByEntry(
             'database.batch_pipeline_store.FirestoreTransaction.ready_predecessor',
             covered_by=('database.batch_pipeline_store.ready_predecessor',),
             reason='thin adapter forwards the transaction-bound predecessor query unchanged',
