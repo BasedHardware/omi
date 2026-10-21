@@ -404,6 +404,61 @@ def test_failed_partial_upload_preserves_payload_and_resumes_only_missing_files(
     assert done['state'] == 'completed' and done['files'] == {} and done['audio_token'] is None
 
 
+def test_unfinished_backup_follows_a_destination_folder_change(env):
+    connection(env)
+    settings(env, save_transcript=True)
+    job_id = deliver(env).json()['backup_id']
+    folders = []
+    env.monkeypatch.setattr(PCloudClient, 'ensure_folder', lambda self, path: (folders.append(path) or 1, None))
+
+    def partial(self, folder_ref, filename, content, overwrite=True):
+        if filename == 'summary.md':
+            return BackupUploadResult('1', filename, '/file', 1, 'now'), None
+        return None, 'provider failure'
+
+    env.monkeypatch.setattr(PCloudClient, 'upload_file', partial)
+    worker.run_next_job(env.store)
+    assert env.store.jobs(UID)[0]['uploaded'] == ['summary.md']
+    assert folders and all(path == f'/Omi Conversations/{job_id}' for path in folders)
+
+    settings(env, save_transcript=True, folder_name='Work Notes')
+    folders.clear()
+    calls = success_provider(env)
+    env.monkeypatch.setattr(PCloudClient, 'ensure_folder', lambda self, path: (folders.append(path) or 1, None))
+    assert env.store.retry(UID, job_id)
+    worker.run_next_job(env.store)
+
+    assert folders and all(path == f'/Work Notes/{job_id}' for path in folders)
+    assert sorted(name for name, _ in calls) == ['summary.md', 'transcript.md'], 'the new folder gets the whole backup'
+    assert env.store.jobs(UID)[0]['state'] == 'completed'
+
+
+def test_completed_backup_receipts_survive_expiry(env):
+    connection(env)
+    job_id = deliver(env).json()['backup_id']
+    success_provider(env)
+    worker.run_next_job(env.store)
+    assert env.store.jobs(UID)[0]['uploaded'] == ['summary.md']
+    with env.store.transaction() as conn:
+        conn.execute('UPDATE jobs SET expires=? WHERE id=?', (time.time() - 1, job_id))
+    assert env.store.claim() is None  # runs the expiry scrub
+    done = env.store.jobs(UID)[0]
+    assert done['state'] == 'completed' and done['uploaded'] == ['summary.md']
+
+
+def test_failed_backups_stay_reachable_beyond_the_recent_history(env):
+    failed = env.store.enqueue(UID, 'old-failed', {'generation': 'g', 'files': {}, 'audio_token': None})
+    with env.store.transaction() as conn:
+        conn.execute('UPDATE jobs SET state=? WHERE id=?', ('failed', failed))
+    for index in range(35):
+        newer = env.store.enqueue(UID, f'newer-{index}', {'generation': 'g', 'files': {}, 'audio_token': None})
+        with env.store.transaction() as conn:
+            conn.execute('UPDATE jobs SET state=? WHERE id=?', ('completed', newer))
+    listed = env.store.jobs(UID)
+    assert failed in [job['id'] for job in listed], 'an old failed backup must stay retryable from settings'
+    assert len([job for job in listed if job['state'] == 'completed']) <= 30
+
+
 def test_opt_out_and_relink_fence_queued_jobs(env):
     connection(env)
     settings(env, save_transcript=True)

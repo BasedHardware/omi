@@ -1,0 +1,5 @@
+{
+  "changes": [
+    "Opening an installed app from its detail sheet now always uses a fresh sign-in link, so backup apps like pCloud no longer open to an expired session"
+  ]
+}

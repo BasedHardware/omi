@@ -21,7 +21,12 @@ queued, not uploaded. The settings page distinguishes pending, running, failed,
 completed, canceled and expired work and offers retry. Completed files are
 checkpointed individually; retries overwrite the same destination rather than
 creating numbered copies. Conversation identity, not title/minute, owns the
-remote folder. Summary/transcript files retain the readable conversation title.
+remote folder. An unfinished job follows a destination-folder change and uploads
+every file there; a change during an upload fails the job with a retry prompt
+rather than splitting it across folders. Completed and canceled jobs keep their
+per-file receipts until the row is removed 30 days after expiry; expiry clears
+only the payloads of unfinished jobs. The list shows the 30 most recent jobs plus
+every older failed or pending job, so retry stays reachable. Summary/transcript files retain the readable conversation title.
 `summary.md` carries the conversation's primary summary as every client selects
 it (`contracts/parity/conversation-summary.md`): an app result, else the overview
 or structured sections, so an empty overview never yields an empty backup.

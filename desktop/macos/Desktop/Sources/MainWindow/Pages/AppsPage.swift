@@ -2901,7 +2901,7 @@ struct AppDetailSheet: View {
                     switch primaryAction {
                     case .open:
                       // Open the external integration in browser
-                      openExternalApp()
+                      await openExternalApp()
                     case .install:
                       if app.worksExternally {
                         await handleInstall()
@@ -3185,7 +3185,10 @@ struct AppDetailSheet: View {
     startSetupPolling(completionUrl: completionUrl, uid: uid)
   }
 
-  private func openExternalApp() {
+  /// A transport-backed app's home URL carries a one-use, short-lived launch
+  /// grant, so details are fetched immediately before each open, never reused.
+  private func openExternalApp() async {
+    await loadAppDetails()
     guard let uid = AuthState.shared.userId else { return }
     let integration = appDetails?.externalIntegration
     // Prefer appHomeUrl, then first auth step URL

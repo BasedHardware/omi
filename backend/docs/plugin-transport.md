@@ -12,9 +12,10 @@ The existing Flutter/macOS setup flows already use these fields and append the
 same UID hint, so no new client-specific auth channel or mobile-only state store
 is introduced. The plugin consumes setup nonces atomically and uses an HttpOnly
 session plus CSRF-protected POST forms for mutations. A query UID never authorizes.
-A launch grant is one-use and short-lived, so the Flutter app detail page fetches
-fresh details immediately before every home-page open (auto-open, the settings
-button and post-install) instead of reusing a catalog or earlier response.
+A launch grant is one-use and short-lived, so every client fetches fresh details
+immediately before each home-page open instead of reusing a catalog or earlier
+response: the Flutter app detail page (auto-open, the settings button and
+post-install), the macOS and Windows app sheets, and the web app detail page.
 
 Finalized conversation fanout preserves SSRF target pinning, privacy redaction,
 the existing durable idempotency key and legacy apps. Only a registered app gets

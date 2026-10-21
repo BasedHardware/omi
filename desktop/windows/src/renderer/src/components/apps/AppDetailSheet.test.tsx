@@ -234,7 +234,7 @@ describe('AppDetailSheet open installed (external integrations)', () => {
     renderSheet({ enabled: true })
     const btn = await screen.findByRole('button', { name: /^Open$/ })
     fireEvent.click(btn)
-    expect(openSpy()).toHaveBeenCalledWith('https://home.example.com/app')
+    await waitFor(() => expect(openSpy()).toHaveBeenCalledWith('https://home.example.com/app'))
     // Disable is still reachable via the trash affordance.
     expect(screen.getByLabelText('Disable app')).toBeTruthy()
   })
@@ -252,7 +252,31 @@ describe('AppDetailSheet open installed (external integrations)', () => {
     renderSheet({ enabled: true })
     const btn = await screen.findByRole('button', { name: /^Open$/ })
     fireEvent.click(btn)
-    expect(openSpy()).toHaveBeenCalledWith('https://ex.com/setup?uid=me')
+    await waitFor(() => expect(openSpy()).toHaveBeenCalledWith('https://ex.com/setup?uid=me'))
+  })
+
+  it('fetches a fresh launch grant on each Open instead of reusing the loaded one', async () => {
+    let grant = 0
+    omiGet.mockImplementation((url: string) => {
+      if (url.endsWith('/reviews')) return Promise.resolve({ data: [] })
+      grant += 1
+      return Promise.resolve({
+        data: {
+          ...DETAIL,
+          external_integration: { app_home_url: `https://home.example.com/app?grant=${grant}` }
+        }
+      })
+    })
+    renderSheet({ enabled: true })
+    const btn = await screen.findByRole('button', { name: /^Open$/ })
+    fireEvent.click(btn)
+    await waitFor(() =>
+      expect(openSpy()).toHaveBeenCalledWith('https://home.example.com/app?grant=2')
+    )
+    fireEvent.click(btn)
+    await waitFor(() =>
+      expect(openSpy()).toHaveBeenCalledWith('https://home.example.com/app?grant=3')
+    )
   })
 
   it('with no signed-in uid the auth-step fallback is guarded (no-op)', async () => {

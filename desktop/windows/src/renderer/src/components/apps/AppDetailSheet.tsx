@@ -287,14 +287,27 @@ export function AppDetailSheet({
   // app_home_url, else the first auth step carrying the user's uid. The auth-step
   // fallback needs a signed-in uid; when there is neither a home url nor a resolvable
   // step, do nothing (no dead link).
+  // A transport-backed app's home url carries a one-use, short-lived launch grant,
+  // so the detail is fetched again immediately before each open; on failure the
+  // current fields are used as before.
   const onOpenApp = (): void => {
-    const homeUrl = integration?.app_home_url
-    const target =
-      homeUrl || (currentUid && authSteps[0]?.url ? `${authSteps[0].url}?uid=${currentUid}` : null)
-    if (!target) return
-    void window.omi.openExternalUrl(target).then((ok) => {
+    void (async () => {
+      let fresh = integration
+      try {
+        const res = await omiApi.get<App>(`/v1/apps/${app.id}`)
+        if (mounted.current) setDetail(res.data)
+        fresh = res.data.external_integration ?? fresh
+      } catch {
+        // Keep the current fields.
+      }
+      const steps = fresh?.auth_steps ?? authSteps
+      const homeUrl = fresh?.app_home_url
+      const target =
+        homeUrl || (currentUid && steps[0]?.url ? `${steps[0].url}?uid=${currentUid}` : null)
+      if (!target) return
+      const ok = await window.omi.openExternalUrl(target)
       if (!ok) toast("This app's link is unavailable.", { tone: 'warn' })
-    })
+    })()
   }
 
   // Primary button states: "Setting up…" while polling an external setup, "Installed"

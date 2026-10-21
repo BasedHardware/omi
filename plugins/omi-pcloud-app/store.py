@@ -194,10 +194,14 @@ class Store:
         return identity
 
     def jobs(self, uid: str) -> list[dict]:
+        # The 30 most recent jobs, plus every older one the owner can still act on.
+        # Unfinished jobs are capped at 100 per account, so this stays bounded.
         with self.transaction() as conn:
             rows = conn.execute(
-                'SELECT id,blob,state,expires FROM jobs WHERE uid=? ORDER BY rowid DESC LIMIT 30',
-                (uid,),
+                'SELECT id,blob,state,expires FROM jobs WHERE uid=? AND ('
+                'rowid IN (SELECT rowid FROM jobs WHERE uid=? ORDER BY rowid DESC LIMIT 30) '
+                'OR state IN (?,?)) ORDER BY rowid DESC',
+                (uid, uid, 'failed', 'pending'),
             ).fetchall()
             result = []
             for identity, blob, state, expires in rows:
@@ -223,9 +227,11 @@ class Store:
             conn.execute('DELETE FROM records WHERE expires<=?', (now,))
             conn.execute('DELETE FROM jobs WHERE expires<?', (now - 30 * 86400,))
             # Expiry removes private job payloads, not just their queue visibility.
+            # Completed and canceled jobs hold no payload, only their per-file
+            # receipts, which must stay visible until the row is removed.
             for identity, uid in conn.execute(
-                'SELECT id,uid FROM jobs WHERE expires<=? AND state<>?',
-                (now, 'expired'),
+                'SELECT id,uid FROM jobs WHERE expires<=? AND state NOT IN (?,?,?)',
+                (now, 'expired', 'completed', 'canceled'),
             ).fetchall():
                 conn.execute(
                     'UPDATE jobs SET blob=?,state=?,lease=? WHERE id=?',

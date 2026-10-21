@@ -139,6 +139,25 @@ export function AppDetail({ appId }: AppDetailProps) {
     }
   };
 
+  // A transport-backed app's home URL carries a one-use, short-lived launch grant,
+  // so it is fetched again for each open. The tab opens synchronously so the
+  // browser does not block it, then navigates once the fresh URL arrives.
+  const handleOpenAppHome = async () => {
+    const tab = window.open('', '_blank');
+    let url = app?.external_integration?.app_home_url;
+    try {
+      const fresh = await getApp(appId);
+      setApp(fresh);
+      url = fresh.external_integration?.app_home_url || url;
+    } catch {
+      // Keep the current URL.
+    }
+    if (!tab) return;
+    tab.opener = null;
+    if (url) tab.location.href = url;
+    else tab.close();
+  };
+
   const handleShare = async () => {
     if (!app) return;
 
@@ -324,10 +343,9 @@ export function AppDetail({ appId }: AppDetailProps) {
                 )}
 
                 {app.enabled && app.external_integration?.app_home_url && (
-                  <a
-                    href={app.external_integration.app_home_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
+                  <button
+                    type="button"
+                    onClick={handleOpenAppHome}
                     className={cn(
                       'rounded-xl px-4 py-2.5 font-medium',
                       'border border-bg-quaternary',
@@ -337,7 +355,7 @@ export function AppDetail({ appId }: AppDetailProps) {
                   >
                     <ExternalLink className="h-4 w-4" />
                     Open App
-                  </a>
+                  </button>
                 )}
               </div>
             </div>

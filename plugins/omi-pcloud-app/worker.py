@@ -154,6 +154,8 @@ def run_next_job(store) -> bool:
             )
             if not settings[option]:
                 return
+            if job['path'] != f'/{settings["folder_name"]}/{identity}':
+                raise BackupFailure('The backup folder changed while this backup was running. Retry to save it there.')
             client = PCloudClient(connection['access_token'], connection['location_id'])
             confirm_access(job)
             checkpoint()
@@ -173,6 +175,12 @@ def run_next_job(store) -> bool:
     try:
         with store.account_lock(uid):
             active_connection(store, uid, job)
+            # A backup that has not finished follows the destination the user
+            # chose since it was queued, and lands there complete.
+            destination = f'/{store.settings(uid)["folder_name"]}/{identity}'
+            if job['path'] != destination:
+                job.update(path=destination, uploaded=[])
+                checkpoint()
         for filename, text in job['files'].items():
             if filename not in job['uploaded']:
                 upload(filename, text.encode('utf-8'))
