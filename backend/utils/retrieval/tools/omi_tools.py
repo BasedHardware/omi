@@ -2,6 +2,7 @@
 Tools for answering questions about the Omi/Friend product.
 """
 
+from typing import Any, Dict
 from langchain_core.tools import tool  # type: ignore[reportUnknownVariableType]  # langchain @tool decorator partially typed
 from utils.app_integrations import get_github_docs_content
 import logging
@@ -40,6 +41,9 @@ def get_omi_product_info_tool(query: str) -> str:
         query="How do I update the firmware on my Omi device?"
         Returns documentation about firmware updates and device management
     """
+    if not isinstance(query, str) or not query.strip():
+        return "Error: Query cannot be empty."
+
     # Fetch the product docs. A network or GitHub API failure must not break the chat turn, so fail
     # soft with an "Error: ..." string like the other retrieval tools instead of letting the
     # exception escape into the agent loop.
@@ -62,10 +66,19 @@ def get_omi_product_info_tool(query: str) -> str:
             "information is temporarily unavailable and to try again in a little while."
         )
 
-    # Format context as a comprehensive documentation string
+    # Format context safely as a comprehensive documentation string
     context_str = 'Omi/Friend Product Documentation:\n\n'
-    for section, content in context.items():
-        context_str += f'## {section}\n\n{content}\n\n'
+    if isinstance(context, dict):
+        for section, content in context.items():
+            context_str += f'## {section}\n\n{content or ""}\n\n'
+    elif isinstance(context, str):
+        context_str += f'{context}\n\n'
+    else:
+        logger.warning("get_omi_product_info_tool - unexpected docs format: %s", type(context).__name__)
+        return (
+            "No Omi product documentation is available right now. Tell the user that product "
+            "information is temporarily unavailable and to try again in a little while."
+        )
 
     context_str += (
         '\n\nUse this documentation to answer questions about the Omi/Friend product, its features, setup, and usage.'
