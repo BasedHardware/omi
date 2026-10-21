@@ -15,7 +15,9 @@ and compares it with what Firestore returned. A complete mirror holds the same p
 ``omi_jobstore_shadow_parity_total{table,op,outcome}``:
 - ``op=read``: ``match``; ``mismatch``; ``missing`` (Firestore has the document, Postgres has no copy:
   written before the shadow started, until the A6 backfill, or a lost mirror write); ``extra`` (Postgres
-  has a document Firestore lacks); ``uncomparable`` (a value the job store cannot encode).
+  has a document Firestore lacks); ``uncomparable`` (a value the job store cannot encode); ``superseded`` (the
+  pre-image differed, but the Postgres copy already equals the primary's current state: a newer commit was
+  mirrored first, nothing diverged; outside the parity ratio, see ``_settle_differing``).
 - ``op=write``: ``mirrored``; ``error``; ``timeout``; ``dropped`` (queue full); ``skipped`` (kill switch).
 - ``op=refresh``: the same outcomes, for documents re-copied after a writer outside ``Store.run``.
 
@@ -76,6 +78,7 @@ class ShadowParityOutcome(StrEnum):
     TIMEOUT = 'timeout'
     DROPPED = 'dropped'
     SKIPPED = 'skipped'
+    SUPERSEDED = 'superseded'
 
 
 SHADOW_PARITY_TOTAL = Counter(
@@ -370,8 +373,9 @@ class DualStore:
                     for (table, key), primary_doc in reads.items():
                         shadow_doc = self.shadow.read_doc(conn, table, key)
                         outcome = compare(primary_doc, shadow_doc)
-                        _count(table, 'read', outcome)
-                        if outcome is not ShadowParityOutcome.MATCH:
+                        if outcome is ShadowParityOutcome.MATCH or outcome is ShadowParityOutcome.UNCOMPARABLE:
+                            _count(table, 'read', outcome)
+                        else:  # counted by _settle_differing, once the primary's current state is known
                             differing.append((table, key, outcome, primary_doc, shadow_doc))
                     if writes:
                         self.copy_current(conn, writes, phase)
@@ -382,7 +386,7 @@ class DualStore:
             self._log_failure('write', outcome, exc, phase[0], writes)
             return
         finally:
-            self._log_differing(differing)
+            self._settle_differing(differing)
         for table, _ in writes:
             _count(table, 'write', ShadowParityOutcome.MIRRORED)
 
@@ -400,26 +404,40 @@ class DualStore:
             ','.join(sorted({table for table, _ in keys})) or '-',
         )
 
-    def _log_differing(self, differing: list[tuple[str, str, ShadowParityOutcome, dict, dict]]) -> None:
-        """Rate-limited diagnostics for non-matching reads. Never raises; never logs a raw key or value."""
+    def _settle_differing(self, differing: list[tuple[str, str, ShadowParityOutcome, dict, dict]]) -> None:
+        """Count, and log (rate-limited), the reads whose pre-image differed from the Postgres copy.
+
+        A pre-image is the primary's state when the transaction read it; the Postgres copy is compared later,
+        by which time a newer commit's mirror may already have copied a newer state (``copy_current`` copies
+        the primary's CURRENT state, L12-1). When the copy, as compared, equals the primary's state now, the
+        pre-image was only superseded: Postgres holds what Firestore holds and nothing diverged, so the read
+        counts ``superseded`` (outside the parity ratio) rather than ``mismatch``/``missing``/``extra``.
+        Anything else keeps its outcome; an unreadable primary keeps it too (fail closed). Never raises;
+        never logs a raw key or value.
+        """
+        if not differing:
+            return
         try:
-            allowed = [entry for entry in differing if _diag_allowed()]
-            if not allowed:
-                return
+            now = read_current(self.primary, sorted({(table, key) for table, key, *_ in differing}))
+        except Exception:
+            now = None
+        namespace = getattr(self.shadow, 'namespace', '?')
+        for table, key, outcome, primary_doc, shadow_doc in differing:
             try:
-                now = read_current(self.primary, sorted({(table, key) for table, key, *_ in allowed}))
-            except Exception:
-                now = None
-            namespace = getattr(self.shadow, 'namespace', '?')
-            for table, key, outcome, primary_doc, shadow_doc in allowed:
                 if now is None:
                     current = 'unread'
                 elif compare(now.get((table, key), {}), shadow_doc) is ShadowParityOutcome.MATCH:
                     current = 'shadow_current'
                 else:
                     current = 'shadow_differs'
+                counted = ShadowParityOutcome.SUPERSEDED if current == 'shadow_current' else outcome
+                _count(table, 'read', counted)
+                if not _diag_allowed():
+                    continue
                 logger.warning(
-                    'event=jobstore_shadow_parity outcome=%s namespace=%s table=%s key=%s fields=%s current=%s',
+                    'event=jobstore_shadow_parity outcome=%s pre_image=%s namespace=%s table=%s key=%s fields=%s '
+                    'current=%s',
+                    counted.value,
                     outcome.value,
                     namespace,
                     table,
@@ -427,8 +445,8 @@ class DualStore:
                     differing_fields(primary_doc, shadow_doc),
                     current,
                 )
-        except Exception:
-            logger.warning('event=jobstore_shadow_parity outcome=diag_error', exc_info=True)
+            except Exception:
+                logger.warning('event=jobstore_shadow_parity outcome=diag_error', exc_info=True)
 
     def drain(self, timeout: float = 10.0) -> bool:
         """Wait until every queued mirror has been applied (tests and shutdown). True when drained."""

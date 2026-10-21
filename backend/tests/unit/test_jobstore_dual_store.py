@@ -544,29 +544,49 @@ class TestParityDiagnostics:
         (line,) = self.lines(caplog)
         expected_hash = dual_store.key_hash('batch_pipeline_dev', 'owners', 'uid-SECRET-1')
         assert line == (
-            'event=jobstore_shadow_parity outcome=mismatch namespace=batch_pipeline_dev table=owners '
+            'event=jobstore_shadow_parity outcome=mismatch pre_image=mismatch namespace=batch_pipeline_dev table=owners '
             f'key={expected_hash} fields=lease_until current=shadow_differs'
         )
         assert 'SECRET' not in ' '.join(r.getMessage() for r in caplog.records)
 
-    def test_mirror_lag_reproduces_a_mismatch_marked_shadow_current(self, caplog):
+    def test_mirror_lag_is_superseded_not_a_mismatch(self, caplog):
         """Hypothesis: a hot key written again before the earlier commit's mirror runs. That mirror copies the
-        primary's CURRENT state (L12-1), so the next commit's pre-image is older than Postgres: a mismatch even
-        though Postgres equals Firestore. One process, one mirror thread: no second replica needed."""
+        primary's CURRENT state (L12-1), so the next commit's pre-image is older than Postgres. Counted as a mismatch
+        before this fix although Postgres equals Firestore; one process, one mirror thread, no second replica needed."""
         primary, shadow = SimStore(CustomerData()), FakeShadow()
         store = DualStore(primary, shadow, inline=True)
         views = _held(store)
         store.run(lambda tx: tx.put('control', 'c', {'p0_service': 1.0}))
         store.run(lambda tx: tx.put('control', 'c', {'p0_service': tx.get('control', 'c')['p0_service'] + 1}))
         del store._after_commit
-        before = count('control', 'read', 'mismatch')
+        before = count('control', 'read', 'mismatch'), count('control', 'read', 'superseded')
         caplog.set_level('WARNING', logger='database.jobstore.dual_store')
         for view in views:  # in commit order
             store._after_commit(view)
-        assert count('control', 'read', 'mismatch') == before + 1
+        assert (count('control', 'read', 'mismatch'), count('control', 'read', 'superseded')) == (
+            before[0],
+            before[1] + 1,
+        )
         assert shadow.rows[('control', 'c')] == primary.rows[('control', 'c')]
         (line,) = self.lines(caplog)
-        assert 'table=control' in line and 'fields=p0_service' in line and line.endswith('current=shadow_current')
+        assert (
+            'outcome=superseded pre_image=mismatch' in line and 'table=control' in line and 'fields=p0_service' in line
+        )
+        assert line.endswith('current=shadow_current')
+
+    def test_a_stale_copy_stays_a_mismatch_even_when_this_commit_repairs_it(self):
+        """Superseded is judged on the copy AS COMPARED, never on the copy this commit's own write refreshed."""
+        primary, shadow = SimStore(CustomerData()), FakeShadow()
+        store = DualStore(primary, shadow, inline=True)
+        primary.rows[('queues', 'q')] = {'n': 1}
+        shadow.rows[('queues', 'q')] = {'n': 0}  # a lost mirror write
+        before = count('queues', 'read', 'mismatch'), count('queues', 'read', 'superseded')
+        store.run(lambda tx: tx.put('queues', 'q', {'n': tx.get('queues', 'q')['n'] + 1}))
+        assert (count('queues', 'read', 'mismatch'), count('queues', 'read', 'superseded')) == (
+            before[0] + 1,
+            before[1],
+        )
+        assert shadow.rows[('queues', 'q')] == {'n': 2}
 
     def test_missing_is_logged_and_rate_limited(self, stores, caplog, monkeypatch):
         primary, _, store = stores
