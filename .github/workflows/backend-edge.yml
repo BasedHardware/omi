@@ -3,6 +3,14 @@ name: Backend Edge (Rust)
 # listen-edge crate (plan D, D1). Build, lint and test only; nothing here
 # builds an image or deploys.
 on:
+  # Nightly calls run these same jobs against one immutable main snapshot.
+  workflow_call:
+    inputs:
+      nightly_main_sha:
+        description: Main SHA pinned by the unfiltered nightly caller
+        type: string
+        required: false
+        default: ''
   pull_request:
     paths:
       - "backend/edge/**"
@@ -17,7 +25,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: backend-edge-${{ github.event.pull_request.number || github.ref }}
+  group: backend-edge-${{ github.event.pull_request.number || github.ref }}-${{ inputs.nightly_main_sha != '' && format('nightly-{0}', github.run_id) || 'normal' }}
   cancel-in-progress: true
 
 env:
@@ -37,6 +45,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
+          ref: ${{ inputs.nightly_main_sha || github.sha }}
           persist-credentials: false
       # Pinned toolchain (matches backend/edge/rust-toolchain.toml) so a new
       # stable clippy lint cannot turn this job red without a code change.

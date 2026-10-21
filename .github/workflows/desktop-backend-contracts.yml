@@ -1,6 +1,14 @@
 name: Desktop Backend Contracts
 
 on:
+  # Nightly calls run these same jobs against one immutable main snapshot.
+  workflow_call:
+    inputs:
+      nightly_main_sha:
+        description: Main SHA pinned by the unfiltered nightly caller
+        type: string
+        required: false
+        default: ''
   pull_request:
     paths:
       - ".github/workflows/desktop-backend-contracts.yml"
@@ -34,6 +42,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.nightly_main_sha || github.sha }}
 
       - uses: actions/setup-python@v6
         with:
@@ -60,6 +70,8 @@ jobs:
       GOOGLE_CLOUD_PROJECT: omi-contract-tests
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.nightly_main_sha || github.sha }}
 
       - uses: actions/setup-python@v6
         with:

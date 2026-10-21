@@ -4,6 +4,11 @@
 # Checks that consume PR metadata declare `requires_pr_body: true`; post-merge
 # push runs exclude only that category because no authoritative PR body is available.
 checks:
+  - id: nightly-main-contract-tests
+    command: ["python3", "scripts/ci/test_nightly_main.py"]
+    triggers: [".github/workflows/**", "scripts/ci/nightly_main_report.py", "scripts/ci/test_nightly_main*.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "Nightly coverage must include every path-filtered PR test workflow, pin main across reusable checkouts, retain PR runner budgets, suppress external writes and report test failures with a bisect range"
   - id: batch-policy-boundary
     command: ["python3", "backend/config/policy/guard.py"]
     triggers: ["backend/**/*.py", "config/feature-flags.yaml", ".github/checks-manifest.yaml"]

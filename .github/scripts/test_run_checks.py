@@ -289,7 +289,14 @@ class ManifestContractTests(unittest.TestCase):
         # --skip-pr-body-checks). #11835: the body must be the squash commit
         # message PLUS the live merged PR body, because this repo squashes
         # with the commit list rather than the PR description.
-        self.assertNotIn("--skip-pr-body-checks", workflow)
+        # P18's read-only main health call has no proposed change or PR body.
+        # Only that explicit input may omit metadata; normal main pushes keep it.
+        normal_workflow = re.sub(
+            r"\$\{\{ inputs\.nightly_main_sha != '' && '[^']*--skip-pr-body-checks' \|\| '' \}\}",
+            "",
+            workflow,
+        )
+        self.assertNotIn("--skip-pr-body-checks", normal_workflow)
         self.assertRegex(workflow, r"git log -1 --format=%B HEAD")
         self.assertRegex(workflow, r"pr_metadata\.py")
         self.assertRegex(workflow, r"--from-commit-body-file")
