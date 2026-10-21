@@ -6,6 +6,7 @@ The limits classify new partial-ramp admissions, never accepted obligations.
 
 import math
 import os
+from typing import TypeGuard
 
 MAX_OPEN = 30
 MAX_AUDIO_SECONDS = 6 * 3600
@@ -19,7 +20,7 @@ def exclusion_enabled(percent, flags=None):
     return 0 < percent < 100 and env.get(SWITCH, 'on').strip().lower() != 'off'
 
 
-def nonnegative(value):
+def nonnegative(value: object) -> TypeGuard[int | float]:
     return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value) and value >= 0
 
 
@@ -33,7 +34,8 @@ def audio_span(payload):
 def owner_load(open_rows, pending_rows, now, *, incoming_audio_seconds=0):
     """A bounded snapshot of recent open batch units plus waiting legacy uploads.
 
-    All pending uploads count, regardless of age. Recently admitted completed
+    Pending rows include the normalized sequencer active payload (deduplicated
+    by job id by the reader). All waiting/active uploads count regardless of age. Recently admitted completed
     and quarantined batch units do not count. A saturated read cannot certify
     a light owner. Unknown pending durations cannot certify the audio budget.
     """

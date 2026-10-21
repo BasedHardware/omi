@@ -97,15 +97,39 @@ def test_metadata_reads_are_bounded_projected_and_stage_qualified():
     query.select.return_value = query
     query.limit.return_value = query
     query.stream.return_value = []
+    query.document.return_value.get.return_value.to_dict.return_value = {}
     assert batch_ramp.read_owner_load('synthetic-owner', firestore_client=client, stage='dev', now=100000)['complete']
     assert [call.args[0] for call in client.collection.call_args_list] == [
         'batch_pipeline_dev_jobs',
         'sync_backfill_pending_dev',
+        'sync_backfill_sequencer_dev',
     ]
     assert all(call.args == (ramp.READ_LIMIT,) for call in query.limit.call_args_list)
     assert query.select.call_count == 2
     with pytest.raises(ValueError):
         batch_ramp.read_owner_load('synthetic-owner', firestore_client=client, stage='prod-typo')
+
+
+@pytest.mark.parametrize('waiting', [False, True])
+def test_active_legacy_long_job_remains_heavy_after_dispatch_and_is_not_double_counted(waiting):
+    payload = {'audio_start_seconds': 0, 'audio_end_seconds': 72000}
+    client = Mock()
+    query = client.collection.return_value
+    query.where.return_value = query
+    query.select.return_value = query
+    query.limit.return_value = query
+    query.stream.side_effect = [
+        [],
+        [SimpleNamespace(to_dict=lambda: {'job_id': 'job', 'payload': payload})] if waiting else [],
+    ]
+    query.document.return_value.get.return_value.to_dict.return_value = {
+        'active_job_id': 'job',
+        'active_payload': payload,
+    }
+    load = batch_ramp.read_owner_load('synthetic-owner', firestore_client=client, stage='prod', now=100000)
+    assert load['open_backlog'] == 1
+    assert load['recording_seconds'] == 72000
+    assert ramp.exclusion_reason(load) == 'recording_hours'
 
 
 @pytest.mark.asyncio

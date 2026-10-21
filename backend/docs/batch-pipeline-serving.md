@@ -13,11 +13,13 @@ it. At a new sync upload or recording reservation with `0 < percent < 100`,
 `config/policy/ramp.py` excludes an owner with more than 30 open items or
 more than 21,600 seconds of waiting audio. Explicit canaries follow the same
 rule. Open items are recent (six-hour) unfinished, non-quarantined batch units
-plus waiting `sync_backfill_pending` jobs. Audio includes their known durations
+plus waiting `sync_backfill_pending` jobs and the sequencer's active legacy
+payload, deduplicated by job ID across the dispatch transition. Audio includes their known durations
 and the incoming upload's declared span. This catches both run 24's one 20-hour
 upload and run 25's 42 open units before they enter a typical-user ramp.
 
-The database reader selects metadata only, at most 512 rows per source. A
+The database reader selects metadata only, at most 512 rows per query source
+plus one active-owner metadata document. A
 saturated read, unknown waiting duration or read error keeps new work on legacy
 and emits `omi_batch_ramp_heavy_owner_excluded_total{reason}`; fixed reasons are
 `open_backlog`, `recording_hours`, `load_unavailable`. The counter counts decisions,

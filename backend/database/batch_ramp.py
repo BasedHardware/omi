@@ -35,13 +35,27 @@ def read_owner_load(uid, *, firestore_client=None, now=None, incoming_audio_seco
     pending = list(
         client.collection('sync_backfill_pending' if stage == 'prod' else 'sync_backfill_pending_dev')
         .where('uid', '==', uid)
-        .select(('payload.audio_start_seconds', 'payload.audio_end_seconds'))
+        .select(('job_id', 'payload.audio_start_seconds', 'payload.audio_end_seconds'))
         .limit(READ_LIMIT)
         .stream()
     )
+    pending_rows = [row.to_dict() or {} for row in pending]
+    # claim_next atomically removes the waiting row and installs active_payload.
+    # These separate read RPCs can straddle that transition: deduplicate the
+    # active job if it was also present in the waiting snapshot.
+    active = (
+        client.collection('sync_backfill_sequencer' if stage == 'prod' else 'sync_backfill_sequencer_dev')
+        .document(uid)
+        .get(field_paths=['active_job_id', 'active_payload.audio_start_seconds', 'active_payload.audio_end_seconds'])
+        .to_dict()
+        or {}
+    )
+    active_job = active.get('active_job_id')
+    if active_job and not any(row.get('job_id') == active_job for row in pending_rows):
+        pending_rows.append({'job_id': active_job, 'payload': active.get('active_payload')})
     return owner_load(
         [row.to_dict() or {} for row in jobs],
-        [row.to_dict() or {} for row in pending],
+        pending_rows,
         now,
         incoming_audio_seconds=incoming_audio_seconds,
     )
