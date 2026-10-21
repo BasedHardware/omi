@@ -23,7 +23,9 @@ What is compared
 
 Each serving target's application-container env is compared with the
 expected env (``runtime_env.yaml`` / rendered deploy state for Cloud Run,
-the chart's Helm values for GKE) by key name *and* by a truncated SHA-256 of
+the chart's Helm values for GKE — including deploy-time override inputs via
+``--gke-helm-arg`` / ``--gke-helm-arg-file`` so an intentionally overridden
+rollout is not reported as drift) by key name *and* by a truncated SHA-256 of
 the value or secret reference. Values are never printed; hashes of keys whose
 names look sensitive (UIDs, allowlists, secrets, tokens) are redacted too.
 
@@ -557,9 +559,17 @@ def expected_gke_env_from_helm(
     env: str,
     root: Path = ROOT,
     runner: Callable[..., Any] = subprocess.run,
+    helm_args: Sequence[str] = (),
 ) -> tuple[ExpectedEnv, tuple[str, ...]]:
     """Expected env and envFrom ConfigMap refs from ``helm template`` of the chart
-    with its prod/dev values (exact chart semantics)."""
+    with its prod/dev values (exact chart semantics).
+
+    ``helm_args`` carries the exact deployed override inputs (dispatch
+    ``--set-string env[i].value=...`` tokens and ``-f <private values>``
+    fragments from ``listen_helm_env_overrides.py``'s argv file). Without
+    them, a legitimately overridden rollout compares against chart defaults
+    and shows false value drift.
+    """
     spec = GKE_WORKLOADS[workload]
     deployment = spec.deployment.format(env=env)
     result = runner(
@@ -570,6 +580,7 @@ def expected_gke_env_from_helm(
             str(root / spec.chart),
             '-f',
             str(root / spec.values_file.format(env=env)),
+            *helm_args,
             '--namespace',
             f'{env}-omi-backend',
             *(arg for pin in spec.helm_image_args for arg in ('--set-string', pin)),
@@ -600,6 +611,11 @@ class LiveService:
     source: str = 'serving'
     template_name: str | None = None
     template_env: LiveEnv | None = None
+    # The Deployment template's ordered envFrom identities. The template
+    # comparison checks them alongside the env fingerprint: two ConfigMaps
+    # with identical data but different names are still a rebind the
+    # fingerprint alone cannot see.
+    template_envfrom_refs: tuple[str, ...] = ()
     envfrom_unresolved: tuple[str, ...] = ()  # referenced ConfigMaps whose data could not be read
     # References whose current ConfigMap data cannot be proven to match what the
     # running pods resolved at container start (all live reads; K8s does not
@@ -840,6 +856,10 @@ def read_gke_workload(
         # envFrom keys join the template fingerprint too, so template vs serving
         # stays comparable when both bulk-load the same ConfigMap.
         live.template_env = {**envfrom_entries(container), **template_env}
+        # ... and so do the envFrom identities: expanding only their data would
+        # give template-A and template-B identical fingerprints whenever the two
+        # ConfigMaps currently hold the same entries.
+        live.template_envfrom_refs = _envfrom_ref_identities(_envfrom_sources(container))
     for rs in replicasets:
         if not isinstance(rs, Mapping):
             continue
@@ -912,6 +932,7 @@ def compare_service(
     expected_envfrom_refs: tuple[str, ...] = (),
     expected_envfrom_unresolved: tuple[str, ...] = (),
     expected_envfrom_keys: frozenset[str] = frozenset(),
+    expected_envfrom_keys_by_ref: Mapping[str, frozenset[str]] | None = None,
 ) -> ServiceEnvDrift:
     expected_env: ExpectedEnv = expected or {}
     declared = frozenset(expected_env)
@@ -945,6 +966,13 @@ def compare_service(
     live_only: set[str] = set()
     missing: set[str] = set()
     mismatches: list[ValueMismatch] = []
+    # Expected envFrom keys are tracked per reference (thread: scoping the
+    # missing-key suppression to the degraded source): when only one expected
+    # reference is degraded (unproven or unreadable), only the keys that
+    # reference contributes are excused on a target holding it — a snapshot
+    # that proves ConfigMap A while omitting B must still report keys missing
+    # from the proven A.
+    envfrom_keys_by_ref: Mapping[str, frozenset[str]] = expected_envfrom_keys_by_ref or {}
     for target, env_map in live.targets:
         # envFrom-only keys of unproven sources are excluded per target: the
         # current ConfigMap data may have gained (or lost) keys after these pods
@@ -961,7 +989,17 @@ def compare_service(
         # lacks the reference genuinely lacks those keys; excusing them globally
         # would convert real reference drift into INVENTORY.
         degraded_expected_refs = target.envfrom_degraded_refs & expected_ref_set
-        skip_missing = expected_envfrom_keys if degraded_expected_refs else frozenset()
+        skip_missing = frozenset()
+        if degraded_expected_refs:
+            # Only the keys the degraded references actually contribute are
+            # excused. A degraded reference absent from the per-ref map (an
+            # external ConfigMap whose keys the repository cannot enumerate)
+            # contributes no expected keys, so it excuses nothing: excusing the
+            # whole expected envFrom set here would hide a proven sibling
+            # source's missing keys.
+            skip_missing = frozenset().union(
+                *(envfrom_keys_by_ref.get(ref, frozenset()) for ref in degraded_expected_refs)
+            )
         missing |= declared - set(env_map) - skip_missing
         # Unproven live ConfigMap data only degrades keys whose effective value
         # comes from envFrom. A key this target sets through an explicit env
@@ -978,7 +1016,15 @@ def compare_service(
     template_matches: bool | None = None
     if live.template_env is not None and live.source == 'serving':
         template_fp = env_fingerprint(live.template_env)
-        template_matches = all(target.fingerprint == template_fp for target, _ in live.targets)
+        template_matches = all(
+            target.fingerprint == template_fp
+            # envFrom identities belong to the template comparison too: a
+            # template rebinding ConfigMap A to ConfigMap B with identical data
+            # passes the fingerprint but is exactly the divergence this field
+            # exists to reveal.
+            and (not live.template_envfrom_refs or list(target.envfrom_refs) == list(live.template_envfrom_refs))
+            for target, _ in live.targets
+        )
     primary = live.targets[0][0]
     return ServiceEnvDrift(
         service=service,
@@ -1104,6 +1150,7 @@ def inspect_gke_drift(
     runner: Any = subprocess.run,
     root: Path = ROOT,
     manifest_path: Path = DEFAULT_MANIFEST,
+    helm_args: Sequence[str] = (),
 ) -> tuple[ServiceEnvDrift, ...]:
     cm_name, cm_entries = manifest_config_map(env, manifest_path)
     envfrom_expected = _expected_envfrom_entries(cm_entries) if cm_name else {}
@@ -1117,12 +1164,15 @@ def inspect_gke_drift(
         expected_refs: tuple[str, ...] = ()
         expected_unresolved: tuple[str, ...] = ()
         expected_envfrom_keys: frozenset[str] = frozenset()
+        expected_envfrom_keys_by_ref: dict[str, frozenset[str]] = {}
         try:
             if expected_overrides is not None and workload in expected_overrides:
                 expected = dict(expected_overrides[workload])
                 expected_refs = expected_gke_envfrom_refs(workload, env=env, root=root)
             elif render == 'helm':
-                expected, expected_refs = expected_gke_env_from_helm(workload, env=env, root=root, runner=runner)
+                expected, expected_refs = expected_gke_env_from_helm(
+                    workload, env=env, root=root, runner=runner, helm_args=helm_args
+                )
             else:
                 expected = expected_gke_env_from_values(workload, env=env, root=root)
                 expected_refs = expected_gke_envfrom_refs(workload, env=env, root=root)
@@ -1134,9 +1184,11 @@ def inspect_gke_drift(
                         # The expected keys carry the reference's prefix: a
                         # ``prefix: CFG_`` source yields ``CFG_<key>``, the env
                         # names a pod actually receives.
+                        ref_keys = {f'{source_prefix}{key}' for key in envfrom_expected}
                         for key, digest in envfrom_expected.items():
                             expected.setdefault(f'{source_prefix}{key}', digest)
-                            merged_keys.add(f'{source_prefix}{key}')
+                        merged_keys |= ref_keys
+                        expected_envfrom_keys_by_ref[ref] = frozenset(ref_keys)
                     else:
                         # The chart references a ConfigMap whose expected keys the
                         # repository cannot enumerate; report inventory, not silence.
@@ -1161,6 +1213,7 @@ def inspect_gke_drift(
                     expected_envfrom_refs=expected_refs if expected is not None else (),
                     expected_envfrom_unresolved=expected_unresolved,
                     expected_envfrom_keys=expected_envfrom_keys,
+                    expected_envfrom_keys_by_ref=expected_envfrom_keys_by_ref,
                 )
             )
         except Exception as exc:
@@ -1363,6 +1416,21 @@ def main(argv: Sequence[str] | None = None) -> int:
         help='Expected GKE env source: chart values env list, `helm template`, or helm when on PATH.',
     )
     parser.add_argument(
+        '--gke-helm-arg',
+        action='append',
+        dest='gke_helm_args',
+        help='Extra helm argument for the expected-state render (repeatable), e.g. '
+        '--gke-helm-arg="--set-string" --gke-helm-arg="env[0].value=x" (use the --opt=value form for '
+        'values that start with "-"). Use the exact tokens the deploy passed so an intentionally '
+        'overridden rollout is not reported as drift.',
+    )
+    parser.add_argument(
+        '--gke-helm-arg-file',
+        type=Path,
+        help='File with one helm argument per line (the argv file written by '
+        'listen_helm_env_overrides.py --output-argv-file in the deploy workflow).',
+    )
+    parser.add_argument(
         '--gke-state',
         type=Path,
         help='Offline GKE JSON fixture: {workload: {deployment, replicasets}} plus optional '
@@ -1391,6 +1459,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         # (exit 2) failure, not drift, and must not escape as an uncaught
         # exception or be misclassified as confirmed drift (exit 1).
         allowlist_map = load_allowlist_file(args.allowlist_file) if args.allowlist_file else LIVE_MANAGED_ENV_ALLOWLIST
+        gke_helm_args = list(args.gke_helm_args or [])
+        if args.gke_helm_arg_file is not None:
+            # One token per line — the same format listen_helm_env_overrides.py
+            # writes for the deploy workflow, so the checker can render the
+            # exact deployed chart inputs instead of repository defaults.
+            gke_helm_args.extend(
+                line for line in args.gke_helm_arg_file.read_text(encoding='utf-8').splitlines() if line.strip()
+            )
         # Offline fixture loads belong inside the handled section: a missing or
         # malformed --cloud-run-state / --gke-state is an operational (exit 2)
         # failure, not drift, and must not escape as an uncaught exception.
@@ -1426,6 +1502,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 gke_state=gke_state,
                 allowlist_map=allowlist_map,
                 manifest_path=args.manifest,
+                helm_args=gke_helm_args,
             )
     except Exception as exc:
         # Expected-state render failures (unreadable/malformed manifest or rendered

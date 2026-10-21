@@ -1643,3 +1643,204 @@ def test_field_ref_hash_ignores_server_defaulted_api_version(checker) -> None:
     rendered = {'valueFrom': {'fieldRef': {'fieldPath': 'metadata.namespace'}}}
     served = {'valueFrom': {'fieldRef': {'apiVersion': 'v1', 'fieldPath': 'metadata.namespace'}}}
     assert checker.env_entry_hash(rendered) == checker.env_entry_hash(served)
+
+
+def test_gke_expected_envfrom_keys_suppress_only_the_degraded_source(checker) -> None:
+    # Thread: when a workload has multiple expected envFrom references and only
+    # one is degraded (here: offline snapshot proving ConfigMap A's data while
+    # omitting external ConfigMap B), the missing-key suppression must cover
+    # only the degraded source's keys. Before the fix every expected envFrom
+    # key was skipped, so a required key missing from the *proven* A snapshot
+    # went unreported and --strict stayed 0 despite known drift.
+    cm_name, cm_data = _prod_configmap_fixture(checker)
+    dropped_key = sorted(cm_data)[0]
+    snapshot_data = {key: value for key, value in cm_data.items() if key != dropped_key}
+    cm_b = 'fixture-config-b'
+    deployment = 'prod-omi-pusher'
+    serving_env = [{'name': 'X', 'value': 'x'}]
+    envfrom = [{'configMapRef': {'name': cm_name}}, {'configMapRef': {'name': cm_b}}]
+    rendered = yaml.safe_dump_all(
+        [
+            {
+                'kind': 'Deployment',
+                'metadata': {'name': deployment},
+                'spec': {
+                    'template': {
+                        'spec': {
+                            'containers': [
+                                {
+                                    'name': 'pusher',
+                                    'env': serving_env,
+                                    'envFrom': envfrom,
+                                }
+                            ]
+                        }
+                    }
+                },
+            }
+        ]
+    )
+
+    def runner(argv, **_kwargs):
+        return subprocess.CompletedProcess(argv, 0, stdout=rendered, stderr='')
+
+    # Offline snapshot carries ConfigMap A (with data missing one required key)
+    # but omits ConfigMap B entirely.
+    gke_state = {
+        'configmaps': {cm_name: {'data': snapshot_data}},
+        'pusher': {
+            'deployment': {},
+            'replicasets': [_replicaset(f'{deployment}-a', deployment, 2, serving_env, 'pusher', envfrom=envfrom)],
+        },
+    }
+    (result,) = checker.inspect_gke_drift(
+        env='prod', workloads=('pusher',), render='helm', gke_state=gke_state, runner=runner
+    )
+    assert result.error is None, result.error
+    assert result.envfrom_unresolved == (cm_b,)
+    # The proven source's required key is absent from the serving snapshot:
+    # real drift, not suppressed by the degraded sibling reference.
+    assert result.missing_from_live == (dropped_key,)
+    assert result.status == 'DRIFT'
+    assert result.has_drift
+    assert checker.exit_code((result,), strict=True) == 1
+
+
+def test_gke_template_comparison_includes_envfrom_identities(checker) -> None:
+    # Thread: the Deployment template and a ready ReplicaSet may reference
+    # different ConfigMaps whose current data is identical; expanding only the
+    # data gives them the same fingerprint, so the report said
+    # "Template = serving: yes" and masked the rebind. The ordered envFrom
+    # identities must join the template comparison.
+    cm_a = 'fixture-config-a'
+    cm_b = 'fixture-config-b'
+    deployment = 'prod-omi-pusher'
+    serving_env = [{'name': 'X', 'value': 'x'}]
+    shared_data = {'GOOGLE_CLIENT_ID': 'id'}
+
+    def run(template_envfrom, rs_envfrom):
+        gke_state = {
+            'configmaps': {cm_a: {'data': shared_data}, cm_b: {'data': shared_data}},
+            'pusher': {
+                'deployment': {
+                    'spec': {
+                        'template': {
+                            'spec': {
+                                'containers': [{'name': 'pusher', 'env': serving_env, 'envFrom': template_envfrom}]
+                            }
+                        }
+                    }
+                },
+                'replicasets': [
+                    _replicaset(f'{deployment}-a', deployment, 2, serving_env, 'pusher', envfrom=rs_envfrom)
+                ],
+            },
+        }
+        (result,) = checker.inspect_gke_drift(
+            env='prod', workloads=('pusher',), gke_state=gke_state, expected_overrides={'pusher': {'X': None}}
+        )
+        return result
+
+    ref = lambda name: {'configMapRef': {'name': name}}  # noqa: E731
+    # Same reference: template matches.
+    same = run([ref(cm_a)], [ref(cm_a)])
+    assert same.error is None, same.error
+    assert same.template_matches_serving is True
+    # Rebind A -> B with identical data: fingerprint alone is blind; the
+    # identities must expose the divergence.
+    rebound = run([ref(cm_b)], [ref(cm_a)])
+    assert rebound.error is None, rebound.error
+    assert rebound.template_matches_serving is False
+
+
+def test_gke_helm_render_accepts_deployed_override_args(checker, tmp_path: Path, monkeypatch) -> None:
+    # Thread: the listen deploy workflow appends dispatch --set-string
+    # env[i].value=... tokens (and private -f values) that a repository-default
+    # `helm template` never sees; an intentionally overridden rollout then read
+    # as value drift. The checker must accept the exact deployed tokens and
+    # forward them to the render.
+    deployment = 'prod-omi-pusher'
+    rendered_override = yaml.safe_dump_all(
+        [
+            {
+                'kind': 'Deployment',
+                'metadata': {'name': deployment},
+                'spec': {
+                    'template': {
+                        'spec': {'containers': [{'name': 'pusher', 'env': [{'name': 'X', 'value': 'override'}]}]}
+                    }
+                },
+            }
+        ]
+    )
+    calls: list[list[str]] = []
+
+    def runner(argv, **_kwargs):
+        calls.append(list(argv))
+        return subprocess.CompletedProcess(argv, 0, stdout=rendered_override, stderr='')
+
+    gke_state = {
+        'pusher': {
+            'deployment': {},
+            'replicasets': [
+                _replicaset(f'{deployment}-a', deployment, 2, [{'name': 'X', 'value': 'override'}], 'pusher')
+            ],
+        },
+    }
+    # The argv file format written by listen_helm_env_overrides.py: one token
+    # per line.
+    argv_file = tmp_path / 'overrides.argv'
+    argv_file.write_text('--set-string\nenv[0].value=override\n', encoding='utf-8')
+
+    (result,) = checker.inspect_gke_drift(
+        env='prod',
+        workloads=('pusher',),
+        render='helm',
+        gke_state=gke_state,
+        runner=runner,
+        helm_args=('--set-string', 'env[0].value=override'),
+    )
+    assert result.error is None, result.error
+    # The override tokens reached the render invocation.
+    assert calls[0][calls[0].index('--set-string') + 1] == 'env[0].value=override'
+    # Serving value matches the override-informed expected state: no drift.
+    assert [m.key for m in result.value_mismatches] == []
+    assert result.status == 'OK', result
+
+    # main() plumbing: --gke-helm-arg-file tokens (the argv format
+    # listen_helm_env_overrides.py writes in the deploy workflow) join any
+    # --gke-helm-arg tokens and reach the render.
+    argv_file = tmp_path / 'overrides.argv'
+    argv_file.write_text('--set-string\nenv[0].value=override\n', encoding='utf-8')
+    state_file = tmp_path / 'gke.json'
+    state_file.write_text(json.dumps(gke_state), encoding='utf-8')
+    captured: dict[str, list[str]] = {}
+
+    def helm_spy(workload, *, env, root, runner, helm_args=()):
+        captured['helm_args'] = list(helm_args or ())
+        return ({'X': checker.value_hash('value', 'override')}, ())
+
+    monkeypatch.setattr(checker, 'expected_gke_env_from_helm', helm_spy)
+    rc = checker.main(
+        [
+            '--no-cloud-run',
+            '--gke-workload',
+            'pusher',
+            '--gke-render',
+            'helm',
+            # Values that start with "-" need the --opt=value form.
+            '--gke-helm-arg=-f',
+            f'--gke-helm-arg={tmp_path / "private-values.yaml"}',
+            '--gke-helm-arg-file',
+            str(argv_file),
+            '--gke-state',
+            str(state_file),
+        ]
+    )
+    assert rc == 0
+    assert captured['helm_args'] == [
+        '-f',
+        str(tmp_path / 'private-values.yaml'),
+        '--set-string',
+        'env[0].value=override',
+    ]
