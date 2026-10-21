@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 import math
+import os
 from typing import Any
 
 from database.batch_pipeline_projection import ProjectionBlocked
@@ -64,7 +65,12 @@ def resolve_context(
 
     # These are the authenticated upload names frozen by accept_batch_upload,
     # not optional consent-dependent (and potentially digest-named) archives.
-    filenames = context.get('filenames') or []
+    # Only pre-deploy contexts lacking the field retain the old archive check.
+    filenames = (
+        context.get('filenames') or []
+        if 'filenames' in context
+        else [os.path.basename(path) for path in context.get('raw_capture_paths') or []]
+    )
     if not isinstance(filenames, list) or any(not isinstance(name, str) for name in filenames):
         raise ProjectionBlocked('invalid intake upload filenames')
     requested = lineage_resolution_requested(

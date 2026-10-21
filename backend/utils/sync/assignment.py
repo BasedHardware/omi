@@ -667,7 +667,7 @@ def assign_in_transaction(
     if (
         lineage_binding == 'stamp_fallback'
         and target_id
-        and (chosen.survivors or own_anchor is not None)
+        and target is not None
         and chosen.result.get('sync_live_target')
         and _lineage_span_delta_bucket(True, target_id, chosen.matched.get(target_id), chosen.result) == 'gt_300'
     ):
@@ -675,6 +675,21 @@ def assign_in_transaction(
         # live extent across this gap. Re-run the ordinary unstamped rules,
         # keeping only new speech; landed text and retry/deletion fences stay
         # with their existing owners. Proven interval targets never enter here.
+        if not chosen.kept:
+            # The widened plan may contain landed donors even though all new
+            # lines were deduped. An empty temporal replan can still absorb or
+            # rebase those rows. Acknowledge against the existing retry owner
+            # (otherwise the live target), without committing any of the plan.
+            no_op = decode(own_anchor if own_anchor is not None else target)
+            no_op['id'] = own_id if own_anchor is not None else target_id
+            no_op.setdefault('sync_relevance', 'keep')
+            if no_op['id'] == target_id:
+                no_op['sync_live_target'] = True
+            no_op['_sync_lineage_repeat_only'] = True
+            no_op['_sync_lineage_stamp_gap_refused'] = True
+            if live_stats is not None and live_stats['sync_retry']:
+                no_op['_sync_lineage_completion_pending'] = True
+            return no_op, False, []
         refused_id = target_id
         target_id, target, target_hint = None, None, None
         live_stats = None

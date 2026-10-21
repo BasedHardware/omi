@@ -113,3 +113,47 @@ def test_http_valid_short_uuid_header_survives_canonical_expansion(monkeypatch):
         capture_evidence_claims=claims,
         filenames=names,
     )
+
+
+@pytest.mark.parametrize('field_shape', ['absent', 'empty', 'null'])
+def test_legacy_projection_uses_archive_basename_only_when_filenames_field_is_absent(monkeypatch, field_shape):
+    monkeypatch.setenv('SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST', '')
+    monkeypatch.delenv('SYNC_LINEAGE_RESOLVE_ENABLED', raising=False)
+    from utils.sync import recording_session_target
+
+    header, names = upload(1)
+    item = WorkItem('segment', 'synthetic-owner', 1000, 'gs://synthetic/unit.wav', 10, Priority.FRESH)
+    binding = ProjectionBinding('synthetic-owner', 'job', 'content', ('segment',), source='omi')
+    context = {
+        'owner_id': item.owner_id,
+        'job_id': binding.job_id,
+        'content_id': binding.content_id,
+        'segment_id': item.segment_id,
+        'capture_at': item.capture_at,
+        'source': binding.source,
+        'should_lock': binding.is_locked,
+        'client_device_id': binding.client_device_id,
+        'client_platform': binding.client_platform,
+        'conversation_id': binding.target_conversation_id,
+        'recording_session_id': 'synthetic-recording',
+        'audio_start_seconds': 1000,
+        'audio_end_seconds': 1010,
+        'capture_evidence_claims': recording_lineage.parse_s1_upload_claims(header, names),
+        'raw_capture_paths': ['gs://synthetic/' + names[0]],
+    }
+    if field_shape != 'absent':
+        context['filenames'] = [] if field_shape == 'empty' else None  # Never borrow archive names.
+    planner = Mock(return_value={'segment': 'lineage-target'})
+    fallback = Mock(return_value='whole-batch-target')
+    monkeypatch.setattr(recording_lineage, 'plan_segment_targets', planner)
+    monkeypatch.setattr(recording_session_target, 'resolve_recording_session_sync_target', fallback)
+    frozen = with_context(audio_unit(1000, b'\0' * 320).wav, context)
+    resolved = resolve_context(item, binding, read_context(frozen), None)
+    if field_shape != 'absent':
+        assert resolved.target_id == 'whole-batch-target'
+        planner.assert_not_called()
+        fallback.assert_called_once()
+    else:
+        assert resolved.target_id == 'lineage-target'
+        planner.assert_called_once()
+        fallback.assert_not_called()
