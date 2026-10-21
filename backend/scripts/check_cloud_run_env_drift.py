@@ -46,7 +46,7 @@ import re
 import shutil
 import subprocess
 import sys
-from typing import Any, Callable, Iterable, Mapping, Sequence, cast
+from typing import Any, Callable, Mapping, Sequence, cast
 
 import yaml
 
@@ -65,7 +65,13 @@ DEFAULT_REGION = 'us-central1'
 DEFAULT_SERVICES = ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration')
 HASH_LENGTH = 12
 REDACTED_HASH = 'redacted'
-_SENSITIVE_KEY_RE = re.compile(r'(UID|ALLOWLIST|SECRET|TOKEN|PASSWORD|CREDENTIAL|API_KEY|PRIVATE)')
+# Marks a ConfigMap lookup that returned NotFound under an optional reference;
+# distinct from a real empty mapping so required references still fail.
+_NOT_FOUND_SENTINEL = object()
+# Case-insensitive: env keys are conventionally uppercase, but lowercase and
+# mixed-case names (api_key, dbPassword) are equally credentials whose digests
+# must not be published.
+_SENSITIVE_KEY_RE = re.compile(r'(UID|ALLOWLIST|SECRET|TOKEN|PASSWORD|CREDENTIAL|API_KEY|PRIVATE)', re.IGNORECASE)
 
 # Keys intentionally set outside backend/deploy/runtime_env.yaml (for example,
 # per-revision provenance markers, sidecar ports attached post-deploy, or
@@ -178,6 +184,16 @@ class ServingTarget:
     # envFrom). Their presence in ``env_map`` is evidence of nothing, so they
     # are excluded from live-only drift assertions for this target.
     unproven_envfrom_keys: frozenset[str] = frozenset()
+    # (reference identity -> prefixed keys it contributed), for references whose
+    # data was readable. Used to excuse keys of expected sources the repository
+    # cannot enumerate when the serving target holds the same reference.
+    envfrom_key_contributions: tuple[tuple[str, frozenset[str]], ...] = ()
+    # Explicit env keys bound through ``valueFrom.configMapKeyRef`` (live reads
+    # only). The immutable pod spec proves the binding, but the value the
+    # container resolved at start cannot be re-read: K8s requires a pod restart
+    # to pick up ConfigMap changes, so a matching reference hash is not proof
+    # the data matches. These keys report INVENTORY, never a verified OK.
+    explicit_unproven_keys: frozenset[str] = frozenset()
 
 
 @dataclass(frozen=True)
@@ -201,6 +217,10 @@ class ServiceEnvDrift:
     envfrom_mismatched_refs: tuple[str, ...] = ()  # live vs expected reference drift
     envfrom_unresolved: tuple[str, ...] = ()  # references whose keys could not be compared
     envfrom_unproven: tuple[str, ...] = ()  # live refs whose data may differ from running pods' env
+    # Explicit env keys bound through configMapKeyRef whose value comparison was
+    # skipped on a live read: the spec proves the binding, never the data the
+    # container resolved at start (ConfigMap updates need a pod restart).
+    explicit_unproven_keys: tuple[str, ...] = ()
 
     @property
     def has_drift(self) -> bool:
@@ -217,7 +237,12 @@ class ServiceEnvDrift:
             return 'ERROR'
         if self.has_drift:
             return 'DRIFT'
-        if not self.expected_available or self.envfrom_unresolved or self.envfrom_unproven:
+        if (
+            not self.expected_available
+            or self.envfrom_unresolved
+            or self.envfrom_unproven
+            or self.explicit_unproven_keys
+        ):
             return 'INVENTORY'
         return 'OK'
 
@@ -277,7 +302,13 @@ def display_hash(key: str, digest: str) -> str:
 
 
 def _envfrom_sources(container: Mapping[str, Any] | None) -> tuple[tuple[str, str, bool], ...]:
-    """(name, prefix, optional) for each envFrom ConfigMap source on one container."""
+    """``(name, prefix, optional)`` for each envFrom ConfigMap source on one container.
+
+    ``envFrom.secretRef`` sources are absent from this tuple by design: the
+    checker never reads Secret contents. They are tracked separately (see
+    ``_envfrom_source_descriptors``) as unresolved identities so an unexpected
+    serving Secret cannot silently inject env without changing the comparison.
+    """
     if not isinstance(container, Mapping):
         return ()
     sources: list[tuple[str, str, bool]] = []
@@ -299,16 +330,64 @@ def _envfrom_sources(container: Mapping[str, Any] | None) -> tuple[tuple[str, st
     return tuple(sources)
 
 
+def _envfrom_source_descriptors(container: Mapping[str, Any] | None) -> tuple[tuple[str, bool, str, str, bool], ...]:
+    """``(identity, is_secret, name, prefix, optional)`` for every envFrom source, in spec order.
+
+    ConfigMap identities are the bare name; Secret identities are
+    ``secret:<name>`` so the two namespaces cannot collide. Secret sources are
+    tracked as identities only — their contents are never read — so an
+    unexpected serving Secret bulk-load changes the reference comparison
+    instead of silently injecting env. Spec order is preserved: the K8s API
+    resolves the last source when several export the same key, so interleaved
+    ConfigMap and Secret sources in different orders are different effective
+    environments.
+    """
+    if not isinstance(container, Mapping):
+        return ()
+    descriptors: list[tuple[str, bool, str, str, bool]] = []
+    for source in container.get('envFrom') or []:
+        if not isinstance(source, Mapping):
+            continue
+        prefix = source.get('prefix')
+        prefix_str = prefix if isinstance(prefix, str) else ''
+        ref = source.get('configMapRef')
+        is_secret = False
+        if not (isinstance(ref, Mapping) and isinstance(ref.get('name'), str) and ref['name']):
+            ref = source.get('secretRef')
+            is_secret = True
+        name = ref.get('name') if isinstance(ref, Mapping) else None
+        if not (isinstance(name, str) and name):
+            continue
+        optional = isinstance(ref, Mapping) and ref.get('optional') is True
+        base = f'secret:{name}' if is_secret else name
+        descriptors.append((_envfrom_ref_identity(base, prefix_str, optional), is_secret, name, prefix_str, optional))
+    return tuple(descriptors)
+
+
+def _explicit_configmap_backed_keys(entries: object) -> frozenset[str]:
+    """Explicit ``env`` entry names whose value comes from ``configMapKeyRef``.
+
+    Such an entry's effective value was resolved from the ConfigMap when the
+    container started; the reference identity in the immutable pod spec proves
+    only the binding, never the data. On a live read these keys cannot be
+    value-compared (an updated ConfigMap without a rollout leaves running pods
+    stale while every reference hash still matches).
+    """
+    if not isinstance(entries, list):
+        return frozenset()
+    names: set[str] = set()
+    for entry in entries:
+        if not (isinstance(entry, dict) and isinstance(entry.get('name'), str) and entry['name']):
+            continue
+        value_from = entry.get('valueFrom')
+        if isinstance(value_from, Mapping) and isinstance(value_from.get('configMapKeyRef'), Mapping):
+            names.add(entry['name'])
+    return frozenset(names)
+
+
 def _envfrom_ref_identity(name: str, prefix: str, optional: bool) -> str:
     ident = f'{name}#{prefix}' if prefix else name
     return f'{ident}?optional' if optional else ident
-
-
-def _envfrom_ref_identities(sources: Iterable[tuple[str, str, bool]]) -> tuple[str, ...]:
-    """Comparable reference identities; a prefix is part of the reference because
-    it changes the env names a pod receives (``X_KEY`` is not ``KEY``), and so is
-    ``optional`` (``optional: true`` starts the pod without the ConfigMap)."""
-    return tuple(_envfrom_ref_identity(name, prefix, optional) for name, prefix, optional in sources)
 
 
 def _parse_envfrom_ref_identity(ref: str) -> tuple[str, str]:
@@ -440,23 +519,35 @@ def expected_cloud_run_env(
                 'has a malformed env entry (every entry must be a mapping with a non-empty name)'
             )
         if rendered_service:
-            # The rendered state is the exact deploy contract. A provisional
-            # env_var binding the renderer omitted (unset at deploy time, or a
-            # secret env_var resolving empty) is not part of what was deployed;
-            # inheriting it as a name-only requirement from the raw manifest
-            # would report false drift against exact state.
+            # The rendered state is the exact deploy contract. The renderer
+            # omits an env_var binding only when it is explicitly provisional
+            # and unset at deploy time; a required env_var that is unset fails
+            # the renderer instead of being skipped, so a state file that omits
+            # one is truncated, not exact. Only explicitly provisional
+            # omissions may drop out of the expected set; any other omission is
+            # rejected as an incomplete state instead of being silently
+            # excused as a name-only requirement.
             rendered_names = {
                 entry['name']
                 for entry in rendered_service.get('env', []) or []
                 if isinstance(entry, dict) and isinstance(entry.get('name'), str) and entry['name']
             }
             bindings: dict[str, Any] = {**env_map, **secrets_map}
+            provisional_omitted: set[str] = set()
+            for key in service_expected:
+                if key in rendered_names or not isinstance(bindings.get(key), Mapping):
+                    continue
+                if not bindings[key].get('env_var'):
+                    continue
+                if bindings[key].get('provisional'):
+                    provisional_omitted.add(key)
+                else:
+                    raise ValueError(
+                        f'Rendered state {rendered_state_path} omits required env_var binding '
+                        f'{key!r} for service {service_name!r}; the renderer fails rather than omit it'
+                    )
             service_expected = {
-                key: digest
-                for key, digest in service_expected.items()
-                if key in rendered_names
-                or not isinstance(bindings.get(key), Mapping)
-                or not bindings[key].get('env_var')
+                key: digest for key, digest in service_expected.items() if key not in provisional_omitted
             }
         for entry in rendered_service.get('env', []) or []:
             if isinstance(entry, dict) and isinstance(entry.get('name'), str) and entry['name']:
@@ -500,26 +591,20 @@ def _expected_envfrom_entries(entries: Mapping[str, Any]) -> ExpectedEnv:
 
 
 def expected_gke_envfrom_refs(workload: str, *, env: str, root: Path = ROOT) -> tuple[str, ...]:
-    """envFrom ConfigMap references (prefix and optionality included) the chart declares for this workload."""
+    """envFrom source identities (prefix and optionality included) the chart declares for this workload.
+
+    ``secretRef`` sources appear as ``secret:<name>`` identities in spec order;
+    their contents are never read.
+    """
     spec = GKE_WORKLOADS[workload]
     values = _load_values(root / spec.values_file.format(env=env))
-    sources: list[tuple[str, str, bool]] = []
-    for source in values.get('envFrom') or []:
-        if (
-            isinstance(source, dict)
-            and isinstance(source.get('configMapRef'), dict)
-            and isinstance(source['configMapRef'].get('name'), str)
-            and source['configMapRef']['name']
-        ):
-            ref = source['configMapRef']
-            prefix = source.get('prefix')
-            sources.append((ref['name'], prefix if isinstance(prefix, str) else '', ref.get('optional') is True))
-    if not sources:
+    descriptors = _envfrom_source_descriptors({'envFrom': values.get('envFrom')})
+    if not descriptors:
         name = values.get('runtimeConfigMapName')
         if isinstance(name, str) and name:
-            sources = [(name, '', False)]
-    # Duplicates preserved for the same last-source-wins reason as _envfrom_sources.
-    return _envfrom_ref_identities(tuple(sources))
+            descriptors = ((_envfrom_ref_identity(name, '', False), False, name, '', False),)
+    # Duplicates preserved for the same last-source-wins reason as the serving read.
+    return tuple(identity for identity, _is_secret, _name, _prefix, _optional in descriptors)
 
 
 def _load_values(path: Path) -> dict[str, Any]:
@@ -554,17 +639,25 @@ def expected_gke_env_from_values(workload: str, *, env: str, root: Path = ROOT) 
 
 
 def _redact_helm_override_values(text: str, helm_args: Sequence[str]) -> str:
-    """Replace literal override values (from ``--set*/NAME=value`` tokens) in text.
+    """Replace literal override values (from ``--set*`` tokens) in text.
 
     ``helm`` failure output can echo the offending token; the checker's contract
     is that values never reach a report, so every literal value is replaced
-    before any stderr is stored on an error result.
+    before any stderr is stored on an error result. Both token shapes are
+    handled: ``--set-string NAME=value`` (the bare ``NAME=value`` argv entry)
+    and the inline ``--set-string=NAME=value`` form. In each shape the value is
+    everything after the name's ``=`` — a value may itself contain ``=`` (base64
+    padding, connection strings), so only the name segment is skipped, never a
+    tail of the value.
     """
     for token in helm_args:
-        if token.startswith('-') or '=' not in token:
-            continue
-        value = token.split('=', 1)[1]
-        if value:
+        if not token.startswith('-'):
+            # Bare ``NAME=value`` argv entry (follows a separate --set* flag).
+            _name, eq, value = token.partition('=')
+        else:
+            # Inline ``--set*=NAME=value`` flag; drop the flag prefix first.
+            _flag, eq, value = token.partition('=')[2].partition('=')
+        if eq and value:
             text = text.replace(value, '<redacted>')
     return text
 
@@ -620,8 +713,13 @@ def expected_gke_env_from_helm(
             container = _application_container(
                 pod_spec.get('containers'), scope=f'helm {workload}', name=spec.container
             )
-            env = cast(ExpectedEnv, _env_list_to_live(container.get('env', []), scope=f'helm {workload}'))
-            return env, _envfrom_ref_identities(_envfrom_sources(container))
+            expected_env_map = cast(
+                'ExpectedEnv', _env_list_to_live(container.get('env', []), scope=f'helm {workload}')
+            )
+            return (
+                expected_env_map,
+                tuple(identity for identity, _s, _n, _p, _o in _envfrom_source_descriptors(container)),
+            )
     raise ValueError(f'helm template rendered no Deployment {deployment!r}')
 
 
@@ -833,18 +931,25 @@ def read_gke_workload(
             # no data mapping resolves to an empty key set. An optional reference
             # whose ConfigMap is NotFound is not a fetch failure: K8s permits the
             # pod to run without it, so it resolves to an empty (unproven) set and
-            # the workload reports INVENTORY instead of ERROR.
+            # the workload reports INVENTORY instead of ERROR. The not-found fact
+            # is cached distinctly from a real empty mapping so a later REQUIRED
+            # reference to the same name still fails instead of reading the
+            # optional caller's empty result from the shared cache.
             if ref not in cm_cache:
                 try:
                     cm_doc = _run_json(runner, [*base, 'configmap', ref, '-o', 'json'])
                 except subprocess.CalledProcessError as exc:
                     stderr = getattr(exc, 'stderr', '') or ''
                     if optional and 'NotFound' in stderr:
-                        cm_cache[ref] = {}
+                        cm_cache[ref] = _NOT_FOUND_SENTINEL
                     else:
                         raise
                 else:
                     cm_cache[ref] = cm_doc.get('data') if isinstance(cm_doc.get('data'), Mapping) else {}
+            if cm_cache[ref] is _NOT_FOUND_SENTINEL:
+                if optional:
+                    return {}
+                raise ValueError(f'ConfigMap {ref!r} not found (required by this reference)')
             return cm_cache[ref]
 
         def configmap_is_proven(ref: str) -> bool:
@@ -884,8 +989,11 @@ def read_gke_workload(
         live.template_env = {**envfrom_entries(container), **template_env}
         # ... and so do the envFrom identities: expanding only their data would
         # give template-A and template-B identical fingerprints whenever the two
-        # ConfigMaps currently hold the same entries.
-        live.template_envfrom_refs = _envfrom_ref_identities(_envfrom_sources(container))
+        # ConfigMaps currently hold the same entries. Secret sources contribute
+        # identities only (contents are never read), in spec order.
+        live.template_envfrom_refs = tuple(
+            identity for identity, _is_secret, _name, _prefix, _optional in _envfrom_source_descriptors(container)
+        )
     for rs in replicasets:
         if not isinstance(rs, Mapping):
             continue
@@ -898,27 +1006,47 @@ def read_gke_workload(
         rs_name = str((rs.get('metadata') or {}).get('name') or 'replicaset')
         pod_spec = ((rs.get('spec') or {}).get('template') or {}).get('spec') or {}
         container = _application_container(pod_spec.get('containers'), scope=rs_name, name=spec.container)
-        env_map = _env_list_to_live(container.get('env', []), scope=rs_name)
+        env_list = container.get('env', [])
+        env_map = _env_list_to_live(env_list, scope=rs_name)
         explicit_keys = frozenset(env_map)
+        # Live reads only: an explicit configMapKeyRef binding proves the
+        # reference, not the data the container resolved at start (K8s needs a
+        # pod restart to pick up ConfigMap changes), so those keys stay
+        # value-unproven. An offline snapshot is the captured truth and proves
+        # them.
+        explicit_unproven = (
+            _explicit_configmap_backed_keys(env_list) if offline_gke is None and kube_context else frozenset()
+        )
         # envFrom references are tracked per ReplicaSet (they are part of its
         # immutable spec) so the comparison can catch two serving ReplicaSets
-        # that disagree, instead of only their union.
-        sources = _envfrom_sources(container)
-        target_refs = _envfrom_ref_identities(sources)
+        # that disagree, instead of only their union. Secret sources join as
+        # identity-only entries (contents never read) in spec order.
+        descriptors = _envfrom_source_descriptors(container)
+        target_refs = tuple(identity for identity, _is_secret, _name, _prefix, _optional in descriptors)
         target_unproven_keys: set[str] = set()
         target_degraded_refs: set[str] = set()
-        for ref, (source_name, source_prefix, optional) in zip(target_refs, sources):
+        target_contributions: list[tuple[str, frozenset[str]]] = []
+        for identity, is_secret, source_name, source_prefix, optional in descriptors:
+            if is_secret:
+                # Secrets stay opaque: identity comparison only, keys unresolved.
+                refs_unresolved.add(identity)
+                target_degraded_refs.add(identity)
+                continue
             data = resolve_configmap(source_name, optional=optional)
             if data is None:
-                refs_unresolved.add(ref)
-                target_degraded_refs.add(ref)
-            elif not configmap_is_proven(source_name):
-                refs_unproven.add(ref)
-                target_degraded_refs.add(ref)
+                refs_unresolved.add(identity)
+                target_degraded_refs.add(identity)
+                continue
+            contributed = frozenset(f'{source_prefix}{key}' for key in data)
+            if contributed:
+                target_contributions.append((identity, contributed))
+            if not configmap_is_proven(source_name):
+                refs_unproven.add(identity)
+                target_degraded_refs.add(identity)
                 # The current ConfigMap data may include keys added after these
                 # pods started; only the pod spec is immutable, so every key this
                 # unproven source contributes is excluded from live-only checks.
-                target_unproven_keys |= {f'{source_prefix}{key}' for key in data}
+                target_unproven_keys |= set(contributed)
         # Explicit env entries win over envFrom keys, matching pod runtime semantics.
         env_map = {**envfrom_entries(container), **env_map}
         live.targets.append(
@@ -933,6 +1061,8 @@ def read_gke_workload(
                     envfrom_refs=target_refs,
                     envfrom_degraded_refs=frozenset(target_degraded_refs),
                     unproven_envfrom_keys=frozenset(target_unproven_keys - explicit_keys),
+                    envfrom_key_contributions=tuple(target_contributions),
+                    explicit_unproven_keys=explicit_unproven,
                 ),
                 env_map,
             )
@@ -992,6 +1122,9 @@ def compare_service(
     live_only: set[str] = set()
     missing: set[str] = set()
     mismatches: list[ValueMismatch] = []
+    # Explicit configMapKeyRef keys whose value comparison was skipped per
+    # target (live reads: the binding is proven, the resolved data is not).
+    explicit_unproven: set[str] = set()
     # Expected envFrom keys are tracked per reference (thread: scoping the
     # missing-key suppression to the degraded source): when only one expected
     # reference is degraded (unproven or unreadable), only the keys that
@@ -1003,11 +1136,19 @@ def compare_service(
         # envFrom-only keys of unproven sources are excluded per target: the
         # current ConfigMap data may have gained (or lost) keys after these pods
         # started, so their presence proves nothing about the running workload.
-        live_only |= (
-            (set(env_map) - declared) - target.unproven_envfrom_keys
-            if expected is not None
-            else set(env_map) - declared
-        )
+        target_excused = set(target.unproven_envfrom_keys)
+        if expected is not None:
+            # Keys contributed by an expected reference the repository cannot
+            # enumerate (external ConfigMap) are also excused on targets that
+            # hold that same reference: the identities match, so the serving
+            # bulk-load is exactly what the chart declared. Reporting those
+            # keys as unallowlisted live-only drift would fail --strict for a
+            # correct rollout; they surface as INVENTORY instead.
+            expected_unresolved_refs = set(expected_envfrom_unresolved) - set(envfrom_mismatched)
+            target_excused |= {
+                key for ref, keys in target.envfrom_key_contributions if ref in expected_unresolved_refs for key in keys
+            }
+        live_only |= (set(env_map) - declared) - target_excused if expected is not None else set(env_map) - declared
         if expected is None:
             continue
         # Expected envFrom keys are excused only on targets that hold a degraded
@@ -1030,10 +1171,16 @@ def compare_service(
         # Unproven live ConfigMap data only degrades keys whose effective value
         # comes from envFrom. A key this target sets through an explicit env
         # entry shadows envFrom (K8s precedence) and its spec is immutable, so
-        # the value stays knowable and must not be excused. Key presence is
-        # still checked even when the expected value is unknown (deploy-time
-        # binding): a None hash skips only the value comparison, never the key.
-        for key in sorted((declared & set(env_map)) - target.unproven_envfrom_keys):
+        # the value stays knowable and must not be excused — except a
+        # configMapKeyRef binding: its spec proves the reference, while the
+        # value the container resolved at start can differ from the ConfigMap's
+        # current data without any rollout (K8s requires a restart to refresh
+        # it), so it is skipped like envFrom keys and reported as INVENTORY.
+        # Key presence is still checked even when the expected value is unknown
+        # (deploy-time binding): a None hash skips only the value comparison,
+        # never the key.
+        explicit_unproven |= target.explicit_unproven_keys - target.unproven_envfrom_keys
+        for key in sorted((declared & set(env_map)) - target.unproven_envfrom_keys - target.explicit_unproven_keys):
             want = expected_env[key]
             if want is not None and env_map[key] != want:
                 mismatches.append(
@@ -1073,6 +1220,7 @@ def compare_service(
         envfrom_mismatched_refs=envfrom_mismatched,
         envfrom_unresolved=envfrom_unresolved,
         envfrom_unproven=envfrom_unproven,
+        explicit_unproven_keys=tuple(sorted(explicit_unproven)),
     )
 
 
@@ -1317,6 +1465,12 @@ def render_markdown_report(
                 f'- envFrom ConfigMap keys not compared (live data unproven for running pods; '
                 f'K8s never refreshes envFrom): {refs_str}'
             )
+        if item.explicit_unproven_keys:
+            keys_str = ', '.join(f'`{name}`' for name in item.explicit_unproven_keys)
+            lines.append(
+                f'- Explicit env keys not value-compared (configMapKeyRef binding; live ConfigMap data '
+                f'cannot prove the value running pods resolved): {keys_str}'
+            )
         if item.envfrom_mismatched_refs:
             refs_str = ', '.join(f'`{name}`' for name in item.envfrom_mismatched_refs)
             lines.append(f'- envFrom ConfigMap reference drift (live vs expected): {refs_str}')
@@ -1382,6 +1536,7 @@ def render_json_report(
                 'envfrom_mismatched_refs': list(item.envfrom_mismatched_refs),
                 'envfrom_unresolved': list(item.envfrom_unresolved),
                 'envfrom_unproven': list(item.envfrom_unproven),
+                'explicit_unproven_keys': list(item.explicit_unproven_keys),
                 'value_mismatches': [
                     {
                         'key': m.key,

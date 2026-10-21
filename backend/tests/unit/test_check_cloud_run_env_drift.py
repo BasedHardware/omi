@@ -2028,3 +2028,337 @@ def test_json_report_keys_results_by_platform_and_name(checker) -> None:
     assert set(report['services']) == {'cloud_run:pusher', 'gke:pusher'}
     assert report['services']['cloud_run:pusher']['manifest_key_count'] == 1
     assert report['services']['gke:pusher']['manifest_key_count'] == 2
+
+
+def test_gke_live_explicit_configmap_keyref_values_stay_unproven(checker) -> None:
+    # Thread: an explicit env entry bound through valueFrom.configMapKeyRef
+    # proves only the reference in the immutable pod spec. The value the
+    # container resolved at start cannot be re-read (ConfigMap updates need a
+    # pod restart), so a live read must not value-compare the key: a stale
+    # running value with a matching reference hash would otherwise pass as a
+    # verified OK. The key reports INVENTORY instead.
+    deployment = 'prod-omi-pusher'
+    serving_env = [
+        {'name': 'X', 'value': 'x'},
+        {
+            'name': 'REDIS_DB_HOST',
+            'valueFrom': {'configMapKeyRef': {'name': 'prod-omi-backend-config', 'key': 'REDIS_DB_HOST'}},
+        },
+    ]
+    cm_doc = {'data': {'REDIS_DB_HOST': 'someone-updated-the-configmap-without-a-rollout'}}
+
+    def runner(argv, **_kwargs):
+        if 'replicasets' in argv:
+            return subprocess.CompletedProcess(
+                argv,
+                0,
+                stdout=json.dumps(
+                    {
+                        'items': [
+                            _replicaset(
+                                f'{deployment}-a',
+                                deployment,
+                                2,
+                                serving_env,
+                                'pusher',
+                                envfrom=[{'configMapRef': {'name': 'prod-omi-backend-config'}}],
+                            )
+                        ]
+                    }
+                ),
+                stderr='',
+            )
+        if 'configmap' in argv:
+            return subprocess.CompletedProcess(argv, 0, stdout=json.dumps(cm_doc), stderr='')
+        return subprocess.CompletedProcess(
+            argv,
+            0,
+            stdout=json.dumps(
+                {'spec': {'template': {'spec': {'containers': [{'name': 'pusher', 'env': serving_env}]}}}}
+            ),
+            stderr='',
+        )
+
+    # The expected value deliberately differs from anything the reference could
+    # resolve today; the old code subtracted every explicit key from the
+    # unproven set and asserted this hash, reporting DRIFT/OK from data it
+    # cannot know.
+    overrides = {
+        'pusher': {
+            'X': checker.value_hash('value', 'x'),
+            'REDIS_DB_HOST': checker.value_hash('value', 'db.internal.example'),
+        }
+    }
+    (result,) = checker.inspect_gke_drift(
+        env='prod', workloads=('pusher',), kube_context='gke_ctx', runner=runner, expected_overrides=overrides
+    )
+    assert result.error is None, result.error
+    assert result.value_mismatches == ()
+    assert result.explicit_unproven_keys == ('REDIS_DB_HOST',)
+    assert result.status == 'INVENTORY'
+    assert not result.has_drift
+    assert checker.exit_code((result,), strict=True) == 0
+    # Key presence is still proven: a target lacking the key entirely drifts.
+    assert 'REDIS_DB_HOST' not in result.missing_from_live
+
+
+def test_gke_live_configmap_cache_keeps_optional_miss_distinct_from_required(checker) -> None:
+    # Thread: an optional reference to a missing ConfigMap cached {} under the
+    # name; a later REQUIRED reference to the same name then read the cached
+    # empty mapping and reported INVENTORY/0 instead of the operational
+    # ERROR/2 for an absent required ConfigMap. The NotFound fact must be
+    # cached separately so required callers still fail.
+    deployment = 'prod-omi-pusher'
+    serving_env = [{'name': 'X', 'value': 'x'}]
+    envfrom = [
+        {'configMapRef': {'name': 'fixture-gone-config', 'optional': True}},
+        {'configMapRef': {'name': 'fixture-gone-config'}},
+    ]
+
+    def runner(argv, **_kwargs):
+        if 'replicasets' in argv:
+            return subprocess.CompletedProcess(
+                argv,
+                0,
+                stdout=json.dumps(
+                    {'items': [_replicaset(f'{deployment}-a', deployment, 2, serving_env, 'pusher', envfrom=envfrom)]}
+                ),
+                stderr='',
+            )
+        if 'configmap' in argv:
+            raise subprocess.CalledProcessError(
+                1, argv, output='', stderr='Error from server (NotFound): configmaps "fixture-gone-config" not found'
+            )
+        return subprocess.CompletedProcess(
+            argv,
+            0,
+            stdout=json.dumps(
+                {
+                    'spec': {
+                        'template': {
+                            'spec': {'containers': [{'name': 'pusher', 'env': serving_env, 'envFrom': envfrom}]}
+                        }
+                    }
+                }
+            ),
+            stderr='',
+        )
+
+    (result,) = checker.inspect_gke_drift(
+        env='prod',
+        workloads=('pusher',),
+        kube_context='gke_ctx',
+        runner=runner,
+        expected_overrides={'pusher': {'X': None}},
+    )
+    assert result.status == 'ERROR'
+    assert 'not found (required by this reference)' in (result.error or '')
+    assert checker.exit_code((result,), strict=True) == 2
+
+
+def test_helm_failure_redacts_inline_flag_and_equals_bearing_values(checker) -> None:
+    # Thread: an inline `--set-string=NAME=value` token was skipped solely
+    # because it starts with `-`, so a helm error echoing it disclosed the raw
+    # value. Values containing `=` (base64 padding, connection strings) must
+    # redact in full in both the inline and the bare argv shape.
+    inline_secret = 'pk=abc123=='
+    bare_secret = 'ws://h:1/x=a=b'
+
+    def runner(argv, **_kwargs):
+        raise subprocess.CalledProcessError(
+            1,
+            argv,
+            output='',
+            stderr=f'Error: UPGRADE FAILED: parse error near "env[0]" ({inline_secret}) ({bare_secret})',
+        )
+
+    with pytest.raises(ValueError) as excinfo:
+        checker.expected_gke_env_from_helm(
+            'pusher',
+            env='prod',
+            runner=runner,
+            helm_args=(f'--set-string=env[0].value={inline_secret}', f'env[1].value={bare_secret}'),
+        )
+    message = str(excinfo.value)
+    assert inline_secret not in message
+    assert bare_secret not in message
+    assert 'abc123==' not in message  # no partial tail leak from `=`-bearing values
+    assert 'a=b' not in message
+    assert '<redacted>' in message
+
+
+def test_rendered_state_rejects_omitted_required_env_var_binding(checker, tmp_path: Path) -> None:
+    # Thread: an exact --rendered-state that omits a manifest env_var binding
+    # silently dropped it from the expected set regardless of provisionality,
+    # so a truncated state file could hide a required deploy-time variable and
+    # still report OK. The renderer fails rather than omit a required binding,
+    # so only explicitly provisional omissions may drop out.
+    manifest = {
+        'schema_version': 2,
+        'environments': {
+            'prod': {
+                'compute_project': 'based-hardware',
+                'region': 'us-central1',
+                'cloud_run': {
+                    'services': {
+                        'backend': {
+                            'env': {
+                                'ALWAYS_THERE': {'value': 'a'},
+                                'REQUIRED_THING': {'env_var': 'REQUIRED_THING_FOR_TEST'},
+                            }
+                        }
+                    }
+                },
+            }
+        },
+    }
+    path = tmp_path / 'm.yaml'
+    path.write_text(yaml.safe_dump(manifest), encoding='utf-8')
+    rendered = tmp_path / 'state.json'
+    rendered.write_text(
+        json.dumps({'services': {'backend': {'env': [{'name': 'ALWAYS_THERE', 'value': 'a'}]}}}), encoding='utf-8'
+    )
+    with pytest.raises(ValueError, match="omits required env_var binding 'REQUIRED_THING'"):
+        checker.expected_cloud_run_env(env='prod', manifest_path=path, rendered_state_path=rendered)
+
+
+def test_sensitive_key_detection_is_case_insensitive(checker) -> None:
+    # Thread: the sensitive-name regex was case-sensitive, so lowercase or
+    # mixed-case names (api_key, dbPassword) published a deterministic digest
+    # of the raw value in mismatch reports and display fingerprints.
+    assert checker.display_hash('api_key', 'abcdef123456') == 'redacted'
+    assert checker.display_hash('dbPassword', 'abcdef123456') == 'redacted'
+    assert checker.display_hash('MyServiceToken', 'abcdef123456') == 'redacted'
+    assert checker.display_hash('API_KEY', 'abcdef123456') == 'redacted'
+    assert checker.display_hash('plain_setting', 'abcdef123456') == 'abcdef123456'
+    fp_one = checker.env_fingerprint({'api_key': 'aaaa'}, redacted=True)
+    fp_two = checker.env_fingerprint({'api_key': 'bbbb'}, redacted=True)
+    assert fp_one == fp_two  # redacted fingerprint cannot encode the raw value
+
+
+def test_gke_unresolved_expected_envfrom_keys_are_not_live_only_drift(checker) -> None:
+    # Thread: when the chart references an external ConfigMap the repository
+    # cannot enumerate and the offline snapshot carries that ConfigMap's data,
+    # its keys were classed as unallowlisted live-only drift even though the
+    # expected and serving reference identities match exactly. The bulk-load
+    # is exactly what the chart declared; the workload reports INVENTORY.
+    cm_name, cm_data = _prod_configmap_fixture(checker)
+    cm_b = 'fixture-external-config'
+    deployment = 'prod-omi-pusher'
+    serving_env = [{'name': 'X', 'value': 'x'}]
+    envfrom = [{'configMapRef': {'name': cm_name}}, {'configMapRef': {'name': cm_b}}]
+    rendered = yaml.safe_dump_all(
+        [
+            {
+                'kind': 'Deployment',
+                'metadata': {'name': deployment},
+                'spec': {
+                    'template': {'spec': {'containers': [{'name': 'pusher', 'env': serving_env, 'envFrom': envfrom}]}}
+                },
+            }
+        ]
+    )
+
+    def runner(argv, **_kwargs):
+        return subprocess.CompletedProcess(argv, 0, stdout=rendered, stderr='')
+
+    gke_state = {
+        'configmaps': {cm_name: {'data': cm_data}, cm_b: {'data': {'EXTERNAL_KEY': 'external-value'}}},
+        'pusher': {
+            'deployment': {
+                'spec': {
+                    'template': {'spec': {'containers': [{'name': 'pusher', 'env': serving_env, 'envFrom': envfrom}]}}
+                }
+            },
+            'replicasets': [_replicaset(f'{deployment}-a', deployment, 2, serving_env, 'pusher', envfrom=envfrom)],
+        },
+    }
+    (result,) = checker.inspect_gke_drift(
+        env='prod', workloads=('pusher',), render='helm', gke_state=gke_state, runner=runner
+    )
+    assert result.error is None, result.error
+    assert result.envfrom_unresolved == (cm_b,)
+    assert result.envfrom_mismatched_refs == ()
+    assert result.unallowlisted_live_only == ()
+    assert not result.has_drift
+    assert result.status == 'INVENTORY'
+    assert checker.exit_code((result,), strict=True) == 0
+
+
+def test_gke_envfrom_secret_refs_join_identity_comparison(checker) -> None:
+    # Thread: envFrom.secretRef sources were silently discarded, so an
+    # unexpected serving Secret could bulk-inject environment variables while
+    # the comparison (and --strict) stayed green. Secret identities now join
+    # the reference comparison — contents are never read — and the Deployment
+    # template comparison includes them too.
+    cm_name, cm_data = _prod_configmap_fixture(checker)
+    secret = {'secretRef': {'name': 'prod-omi-backend-secrets'}}
+    deployment = 'prod-omi-pusher'
+    serving_env = [{'name': 'X', 'value': 'x'}]
+
+    def run(template_envfrom, rs_envfrom):
+        expected_envfrom = [{'configMapRef': {'name': cm_name}}, secret]
+        rendered = yaml.safe_dump_all(
+            [
+                {
+                    'kind': 'Deployment',
+                    'metadata': {'name': deployment},
+                    'spec': {
+                        'template': {
+                            'spec': {
+                                'containers': [{'name': 'pusher', 'env': serving_env, 'envFrom': expected_envfrom}]
+                            }
+                        }
+                    },
+                }
+            ]
+        )
+
+        def runner(argv, **_kwargs):
+            return subprocess.CompletedProcess(argv, 0, stdout=rendered, stderr='')
+
+        gke_state = {
+            'configmaps': {cm_name: {'data': cm_data}},
+            'pusher': {
+                'deployment': {
+                    'spec': {
+                        'template': {
+                            'spec': {
+                                'containers': [{'name': 'pusher', 'env': serving_env, 'envFrom': template_envfrom}]
+                            }
+                        }
+                    }
+                },
+                'replicasets': [
+                    _replicaset(f'{deployment}-a', deployment, 2, serving_env, 'pusher', envfrom=rs_envfrom)
+                ],
+            },
+        }
+        (result,) = checker.inspect_gke_drift(
+            env='prod', workloads=('pusher',), render='helm', gke_state=gke_state, runner=runner
+        )
+        return result
+
+    declared_envfrom = [{'configMapRef': {'name': cm_name}}, secret]
+    # Chart-declared Secret present on template and serving: no reference
+    # drift; the Secret stays opaque so the workload is INVENTORY, and the
+    # template comparison (which must include secret identities) still matches.
+    matching = run(declared_envfrom, declared_envfrom)
+    assert matching.error is None, matching.error
+    assert matching.envfrom_mismatched_refs == ()
+    assert 'secret:prod-omi-backend-secrets' in matching.envfrom_unresolved
+    assert matching.template_matches_serving is True
+    assert matching.status == 'INVENTORY'
+    assert checker.exit_code((matching,), strict=True) == 0
+    # An unexpected serving Secret bulk-load is reference drift, not silence.
+    injected = run(declared_envfrom, [*declared_envfrom, {'secretRef': {'name': 'attacker-extra-secret'}}])
+    assert injected.error is None, injected.error
+    assert 'secret:attacker-extra-secret' in injected.envfrom_mismatched_refs
+    assert injected.status == 'DRIFT'
+    assert checker.exit_code((injected,), strict=True) == 1
+    # Spec order is part of the identity list: ConfigMap/Secret interleavings
+    # resolve differently under last-source-wins and must not compare equal.
+    reordered = run(declared_envfrom, [secret, {'configMapRef': {'name': cm_name}}])
+    assert reordered.error is None, reordered.error
+    assert reordered.envfrom_mismatched_refs != ()
+    assert reordered.template_matches_serving is False
