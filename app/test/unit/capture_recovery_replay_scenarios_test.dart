@@ -121,8 +121,8 @@ void main() {
     await world.settle();
     expect(world.uploads.attempts, isEmpty, reason: 'in-memory frames belong to the live session, not the drain');
 
-    // The keepalive reconnects at its 15s cadence: one failed attempt while
-    // offline (rate-limited), then a successful one once the network is back.
+    // Restored connectivity kicks one immediate reconnect; the 15s keepalive
+    // remains the bounded fallback cadence.
     // Frames keep flowing throughout — a real mic does not pause for recovery.
     final createsAfterRestore = world.socketCreates;
     for (var s = 0; s < 16; s++) {
@@ -144,9 +144,9 @@ void main() {
     await captureSeconds(5, sessionId: session2, frameCursor: 4100);
     final reconnectedSocket = world.socket!;
     expect(reconnectedSocket, isNot(same(onlineSocket)));
-    expect(reconnectedSocket.sentBinary.length, 600,
-        reason:
-            'post-reconnect frames stream on the new socket (the final restore-window second plus the recovered 5s)');
+    expect(reconnectedSocket.sentBinary.length, 2000,
+        reason: 'connectivity restore reconnects within a second, not at the next 15s keepalive tick: '
+            'the last 15 restore-window seconds plus the recovered 5s stream on the new socket');
 
     // Session ends: the whole capture (online + offline + recovered windows) lands on disk.
     await world.stopLiveCapture();

@@ -1,5 +1,7 @@
 """Worker lifetime, lease loss and restart recovery without GPU/cloud IO."""
 
+from tests.unit.fixtures.cap_rollout import full_cap_dispatch_rollout  # noqa: F401
+
 import asyncio
 from dataclasses import replace
 import threading
@@ -548,3 +550,60 @@ async def test_external_sampler_owns_metrics_when_inline_sampling_is_off():
     metrics.refresh.assert_not_called()
     await external.sample_metrics()
     assert metrics.refresh.call_args.args[0] is store
+
+
+@pytest.mark.asyncio
+async def test_foreign_results_release_every_lease_instead_of_stranding_it():
+    class Foreign:
+        def process_batch(self, items):
+            return [WorkResult('someone-else', 'gs://synthetic/x')]
+
+    store, queue, pump = setup(Foreign())
+    queue.enqueue(item('second', capture=2), time.time())
+    with pytest.raises(ValueError):
+        await pump.run_once()
+    for segment in ('first', 'second'):
+        job = store.rows['jobs', segment]
+        assert job['state'] == 'retry' and job['token'] == '' and job['attempt'] == 1
+        assert job['available_at'] - time.time() < 10  # Not LEASE_SECONDS.
+        assert ('results', segment) not in store.rows
+
+
+@pytest.mark.asyncio
+async def test_admission_refund_error_releases_the_whole_flight(monkeypatch):
+    monkeypatch.delenv('BATCH_PIPELINE_API_URL', raising=False)
+    store = MemoryStore()
+    queue = Scheduler(store)
+    queue.enqueue(replace(item('gated'), requires_compute_admission=True), time.time())
+    queue.enqueue(item('plain', owner='light'), time.time())
+    worker = Worker()
+    pump = Pump(queue, worker, capacity=lambda: PoolCapacity(time.time(), 8))
+
+    def defer(*args):
+        raise RuntimeError('ambiguous defer')
+
+    monkeypatch.setattr(queue, 'defer', defer)
+    with pytest.raises(RuntimeError):
+        await pump.run_once()
+    assert worker.calls == 0
+    for segment in ('gated', 'plain'):
+        assert store.rows['jobs', segment]['state'] == 'retry'
+
+
+@pytest.mark.asyncio
+async def test_partial_claim_failure_computes_and_commits_the_claimed_leases(monkeypatch):
+    store, queue, pump = setup()
+    queue.enqueue(item('other', owner='light'), time.time())
+    original, calls = queue._pull_one, [0]
+
+    def pull_one(*args, **kwargs):
+        calls[0] += 1
+        if calls[0] == 2:
+            raise RuntimeError('synthetic Aborted')
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(queue, '_pull_one', pull_one)
+    assert await pump.run_once() == 1
+    states = sorted(store.rows['jobs', v]['state'] for v in ('first', 'other'))
+    # The claimed lease ran at once; the unclaimed job never left the queue.
+    assert states == ['committed', 'ready']

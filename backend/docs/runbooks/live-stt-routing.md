@@ -1,4 +1,4 @@
-# Live STT routing and Soniox runway
+# Live STT routing
 
 ## Controls and evidence contract
 
@@ -526,28 +526,6 @@ Investigate any outcome-rate regression against the baseline immediately; use
 the retained sampled latency and outcome safety gates, and routing-on rollback
 for a sustained serving regression. Earlier single-run aborts remain historical;
 the lead accepted pooled same-image/config runs 4b+5b (173 classified outcomes).
-
-## Soniox runway
-
-`SONIOX_MONTHLY_CEILING_USD` sets the monthly alert ceiling; zero disables
-the poller. The production value is configured in the listen chart and
-runtime env. No automatic top-up or hard paid-traffic cutoff occurs. The
-hourly poller prefers Soniox's current-month `/v1/usage/summary` dollar cost.
-The existing backend-listen `SONIOX_API_KEY` needs the Soniox **Usage and
-limits** permission for this read. If the API read fails, the poller estimates
-from Omi-metered Soniox audio seconds times
-`SONIOX_ESTIMATED_USD_PER_HOUR`; that estimate can undercount if Redis was
-unavailable or if Soniox charges for audio outside this listen path. Check
-`omi_soniox_usage_source{source="vendor"}` and the sample timestamp before
-acting on the amount. The 70% and 90% Telegram alerts explicitly say **top
-up Soniox**. Compare the configured ceiling with the real Soniox account
-balance during an incident; the ceiling itself does not fund the account.
-
-```promql
-max(omi_soniox_month_spend_usd{job="backend-listen-metrics"}) / clamp_min(max(omi_soniox_month_ceiling_usd{job="backend-listen-metrics"}), 1)
-max(omi_soniox_usage_source{job="backend-listen-metrics"}) by (source)
-time() - max(omi_soniox_usage_sample_timestamp_seconds{job="backend-listen-metrics"})
-```
 
 ## Operator reset
 

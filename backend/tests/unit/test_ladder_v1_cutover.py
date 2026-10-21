@@ -1,6 +1,8 @@
 """Cutover policy contracts: dark path, retained legacy entitlements, and cap boundaries."""
 
 from datetime import datetime, timedelta, timezone
+from tests.unit.fixtures.cap_rollout import full_cap_dispatch_rollout  # noqa: F401
+
 import inspect
 import json
 from pathlib import Path
@@ -330,6 +332,8 @@ def test_legacy_prices_resolve_api_read_limit_to_none():
 
 @pytest.fixture
 def choice_http(monkeypatch):
+    import os
+
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
     from routers import budget_choice
@@ -339,6 +343,13 @@ def choice_http(monkeypatch):
 
     store = StrictFirestore()
     monkeypatch.setenv('HELD_CONTENT_ENABLED', 'true')
+
+    def cohort_tokens():
+        if os.getenv('HELD_CONTENT_ENABLED', 'false').lower() != 'true':
+            return ''
+        return os.getenv('HELD_CONTENT_COHORT', 'all')
+
+    monkeypatch.setattr(budget_choice.held_content_cohort.runtime_cohort, 'tokens', cohort_tokens)
     monkeypatch.setattr(
         budget_choice,
         'resolve_transcription_allowance',

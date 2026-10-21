@@ -5,6 +5,8 @@ from pathlib import Path
 import subprocess
 import wave
 
+from utils.observability.held_content import record_capture
+
 MAX_OBJECT_BYTES = 128 * 1024
 
 
@@ -56,6 +58,7 @@ def decode(source: str, destination: str, rate: int, frames: int) -> None:
         _ffmpeg(['-i', source, '-ac', '1', '-ar', str(rate), '-f', 'wav', destination])
         with wave.open(destination, 'rb') as audio:
             if frames <= 0 or frames > 60 * rate or audio.getnframes() < frames:
+                record_capture('frame_mismatch')
                 raise ValueError('held Opus source clock mismatch')
             params, pcm = audio.getparams(), audio.readframes(frames)
         with wave.open(destination, 'wb') as audio:

@@ -56,6 +56,10 @@ concurrency:
   cancel-in-progress: false
 
 env:
+  # Abort a git HTTP transfer that stays under 1 KB/s for 60 s, so actions/checkout
+  # retries instead of hanging 7-10 min until the TCP reset (#22890).
+  GIT_HTTP_LOW_SPEED_LIMIT: "1000"
+  GIT_HTTP_LOW_SPEED_TIME: "60"
   SERVICE: ${{ github.event.inputs.service || 'pusher' }}
   REGION: us-central1
 
@@ -138,6 +142,8 @@ jobs:
             echo "Production Pusher requires a numeric successful development qualification run ID." >&2
             exit 1
           fi
+          # The promotion contract fingerprint reads the Pusher slice of runtime_env.yaml.
+          python3 -m pip install -q pyyaml
           QUALIFICATION_DIR="$RUNNER_TEMP/pusher-dev-qualification-$QUALIFICATION_RUN_ID"
           mkdir -p "$QUALIFICATION_DIR"
           gh api "repos/$GITHUB_REPOSITORY/actions/runs/$QUALIFICATION_RUN_ID" > "$QUALIFICATION_DIR/run.json"

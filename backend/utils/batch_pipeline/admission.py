@@ -36,12 +36,16 @@ def authorize(store, leases: list[dict], *, now: float | None = None) -> dict:
                 retries[segment] = 30
                 continue
             job, binding, intake = snapshot
-            if cap_dispatch_enabled() and not sync_allowed(
-                job['owner_id'], float(job.get('duration_seconds', 0)), 'parakeet'
+            if cap_dispatch_enabled(job['owner_id'], 'batch') and not sync_allowed(
+                job['owner_id'], float(job.get('duration_seconds', 0)), 'parakeet', lane='batch'
             ):
                 retries[segment] = 60
                 continue
-            if int(job['priority']) == 0:
+            # The recorded sync lane picks the spend policy, not the GPU
+            # priority: fresh-lane catch-up leases at RECENT after fresh
+            # uploads but keeps the fresh-audio fair-use checks.
+            fresh_lane = intake['lane'] == 'fresh' if intake.get('lane') else int(job['priority']) == 0
+            if fresh_lane:
                 # Known overshoot, intentionally unchanged: these fair-use reads
                 # are check-then-act with no reservation, and the meter advances
                 # only at projection, so in-flight audio is invisible. Each

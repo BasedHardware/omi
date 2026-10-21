@@ -7,6 +7,8 @@ so a long pull never dies on a 60-minute token expiry and no token is written to
 import json, os, ssl, sys, time, urllib.request, urllib.error, hashlib
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import auth_http  # noqa: E402
+
 if os.environ.get("FINOPS_AUTH") == "cloudrun":
     import cloudrun as gcpauth  # noqa: E402
 else:
@@ -40,8 +42,10 @@ def post(path, body, retries=5):
             },
         )
         try:
-            with urllib.request.urlopen(req, context=_CTX, timeout=180) as r:
+            with auth_http.open_authenticated(req, timeout=180, ssl_context=_CTX) as r:
                 return json.loads(r.read().decode())
+        except auth_http.RedirectRefused:
+            raise RuntimeError("firestore redirect refused") from None
         except urllib.error.HTTPError as e:
             body_txt = e.read().decode()[:4000]
             last = (e.code, body_txt)
@@ -65,8 +69,10 @@ def get(path, params="", retries=5):
     for i in range(retries):
         req = urllib.request.Request(url, headers={"Authorization": "Bearer " + token()})
         try:
-            with urllib.request.urlopen(req, context=_CTX, timeout=180) as r:
+            with auth_http.open_authenticated(req, timeout=180, ssl_context=_CTX) as r:
                 return json.loads(r.read().decode())
+        except auth_http.RedirectRefused:
+            raise RuntimeError("firestore redirect refused") from None
         except urllib.error.HTTPError as e:
             body_txt = e.read().decode()[:4000]
             last = (e.code, body_txt)

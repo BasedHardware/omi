@@ -300,6 +300,7 @@ class GeneratedSection {
 
 class GeneratedParticipant {
   final String? email;
+  final String? evidence;
   final bool isAiAgent;
   final String? name;
   final String? organization;
@@ -308,6 +309,7 @@ class GeneratedParticipant {
 
   const GeneratedParticipant({
     this.email,
+    this.evidence,
     this.isAiAgent = false,
     this.name,
     this.organization,
@@ -318,6 +320,7 @@ class GeneratedParticipant {
   factory GeneratedParticipant.fromJson(Map<String, dynamic> json) {
     return GeneratedParticipant(
       email: _readFieldValue<String>(_readField(json, const ["email"]), "email", _readString, requiredField: false, nullable: true),
+      evidence: _readFieldValue<String>(_readField(json, const ["evidence"]), "evidence", _readString, requiredField: false, nullable: true),
       isAiAgent: _required(_readFieldValue<bool>(_readField(json, const ["is_ai_agent"]), "is_ai_agent", _readBool, requiredField: false, nullable: false, defaultValue: false), "is_ai_agent"),
       name: _readFieldValue<String>(_readField(json, const ["name"]), "name", _readString, requiredField: false, nullable: true),
       organization: _readFieldValue<String>(_readField(json, const ["organization"]), "organization", _readString, requiredField: false, nullable: true),
@@ -329,6 +332,7 @@ class GeneratedParticipant {
   Map<String, dynamic> toJson() {
     return {
       'email': email,
+      'evidence': evidence,
       'is_ai_agent': isAiAgent,
       'name': name,
       'organization': organization,

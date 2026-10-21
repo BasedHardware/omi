@@ -15,6 +15,7 @@ import wave
 from uuid import uuid4
 from typing import Any
 from models.conversation_enums import ConversationSource
+from utils.observability.held_content import record_capture
 from utils.observability.stt_cap_dispatch import record_audio
 from utils.stt_cap_dispatch import funded_allowance
 
@@ -71,6 +72,7 @@ def capture_identity(path: str, metadata: dict[str, Any]) -> str:
 
 def describe(path: str, metadata: dict[str, Any]) -> tuple[str, float, dict]:
     metadata = dict(metadata)
+    metadata.setdefault('origin', 'sync')
     geolocation = metadata.get('geolocation')
     if geolocation is not None and hasattr(geolocation, 'model_dump'):
         metadata['geolocation'] = geolocation.model_dump(mode='json')
@@ -350,6 +352,8 @@ def hold_segment(uid: str, path: str, metadata: dict[str, Any], *, receipt: dict
     if not _exists(uid, identity):
         fields = upload_held_audio(uid, path, identity, metadata)
         created = _publish(uid, identity, seconds, fields, hold_started_at(metadata))
+        if not created and not _exists(uid, identity):
+            record_capture('ack_without_authority')
     return _finish(identity, seconds, funded_allowance(uid).reason, receipt, created)
 
 
@@ -360,6 +364,8 @@ async def _hold_capture(uid: str, path: str, metadata: dict, reason: str, receip
     if not await run_blocking(db_executor, _exists, uid, identity):
         fields = await run_blocking(storage_executor, upload_held_audio, uid, path, identity, metadata)
         created = await run_blocking(db_executor, _publish, uid, identity, seconds, fields, hold_started_at(metadata))
+        if not created and not await run_blocking(db_executor, _exists, uid, identity):
+            record_capture('ack_without_authority')
     _finish(identity, seconds, reason, receipt, created)
 
 
@@ -372,8 +378,9 @@ def claim(uid: str, ref: Any, now: float) -> dict[str, Any] | None:
         row = snapshot.to_dict() if snapshot.exists else None
         if (
             not row
-            or row.get('state') in {'completed', 'retained', 'purged', 'staging', 'sealing'}
+            or row.get('state') in {'completed', 'retained', 'purged', 'staging', 'sealing', 'superseded'}
             or row.get('lease_until', 0) > now
+            or row.get('next_attempt_at', 0) > now
         ):
             return None
         token = uuid4().hex
@@ -454,6 +461,7 @@ def read_audio(uid: str, row: dict[str, Any], path: str) -> None:
                         params = current
                         output.setparams((*current, 0, 'NONE', 'not compressed'))
                     elif current != params:
+                        record_capture('frame_mismatch')
                         raise ValueError('live hold part codec mismatch')
                     while pcm := audio.readframes(AUDIO_CHUNK_BYTES // 2):
                         output.writeframesraw(pcm)
@@ -474,11 +482,13 @@ def _read_source_slice(uid: str, row: dict[str, Any], path: str) -> None:
     with wave.open(source, 'rb') as audio, wave.open(path, 'wb') as output:
         first, frames = selection['start'], selection['frames']
         if first < 0 or frames <= 0 or first + frames > audio.getnframes():
+            record_capture('frame_mismatch')
             raise ValueError('held source slice exceeds source')
         output.setparams(audio.getparams())
         audio.setpos(first)
         output.writeframes(audio.readframes(frames))
     if pcm_description(path)[2] != selection['sha256']:
+        record_capture('byte_mismatch')
         Path(path).unlink(missing_ok=True)
         raise ValueError('held source decode changed since frozen plan')
 
@@ -506,7 +516,11 @@ def release(uid: str, ref: Any, token: str) -> None:
                 {
                     'lease_until': 0,
                     'lease_token': '',
-                    'next_attempt_at': RETAINED_NEXT_ATTEMPT_AT if row.get('state') == 'retained' else time.time(),
+                    'next_attempt_at': (
+                        RETAINED_NEXT_ATTEMPT_AT
+                        if row.get('state') == 'retained'
+                        else max(row.get('next_attempt_at', 0), time.time())
+                    ),
                 },
             )
 
@@ -524,7 +538,7 @@ async def hold_capture_if_exhausted(
     **context: Any,
 ) -> bool:
     # Shared by v1 intake and v2 execution, before VAD can discard silence.
-    if not paths or not enabled():
+    if not paths or not enabled(uid, 'sync'):
         return False
     allowance = await run_blocking(db_executor, funded_allowance, uid)
     if allowance.managed:
@@ -540,6 +554,7 @@ async def hold_capture_if_exhausted(
                 **context,
                 'timestamp': get_timestamp_from_path(path),
                 'source': getattr(source, 'value', source),
+                'origin': 'sync',
                 'full_capture': True,
                 'file_name': Path(path).name,
                 'source_frame_map': (source_frame_maps or {}).get(path),
@@ -555,7 +570,12 @@ async def hold_capture_if_exhausted(
 def defer_segment(uid: str, path: str, metadata: dict, response: dict, lock: Any) -> None:
     """Report a durable late hold to both coordinators, never as silence."""
     receipt: dict = {}
-    hold_segment(uid, path, {**metadata, 'file_name': Path(path).name}, receipt=receipt)
+    hold_segment(
+        uid,
+        path,
+        {'timestamp': get_timestamp_from_path(path), **metadata, 'file_name': Path(path).name},
+        receipt=receipt,
+    )
     with lock:
         response.setdefault('_cap_holds', {})[receipt['id']] = receipt
 

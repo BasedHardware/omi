@@ -25,7 +25,7 @@ import yaml
 if __package__ in (None, ''):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from scripts.runtime_image_contracts import docker_stages, load_contracts
+from scripts.runtime_image_contracts import docker_target_instructions, dockerfile_shipped_by_github, load_contracts
 
 ROOT = Path(__file__).resolve().parents[2]
 PENDING = 'backend/logging_rollout_pending.json'
@@ -69,8 +69,8 @@ def launch_target(argv: list[str]) -> str:
     return args[0].split(':')[0]
 
 
-def docker_launch(path: Path) -> tuple[PurePosixPath, str]:
-    instructions = docker_stages(path)[-1]
+def docker_launch(path: Path, stage: str | None = None) -> tuple[PurePosixPath, str]:
+    instructions = docker_target_instructions(path, stage)
     commands: dict[str, list[str]] = {}
     workdir = PurePosixPath('/')
     for line in instructions:
@@ -87,11 +87,13 @@ def docker_launch(path: Path) -> tuple[PurePosixPath, str]:
     return workdir, launch_target(argv)
 
 
-def copied_source(dockerfile: Path, context: Path, workdir: PurePosixPath, runtime_path: PurePosixPath) -> Path | None:
+def copied_source(
+    dockerfile: Path, context: Path, workdir: PurePosixPath, runtime_path: PurePosixPath, stage: str | None = None
+) -> Path | None:
     """Resolve one runtime file through COPY, honoring last-write precedence."""
     found = None
     current = PurePosixPath('/')
-    for line in docker_stages(dockerfile)[-1]:
+    for line in docker_target_instructions(dockerfile, stage):
         op, _, value = line.partition(' ')
         if op.upper() == 'WORKDIR':
             current = PurePosixPath(posixpath.normpath(str(current / value)))
@@ -126,12 +128,12 @@ def copied_source(dockerfile: Path, context: Path, workdir: PurePosixPath, runti
     return found
 
 
-def source_path(dockerfile: Path, context: Path, workdir: PurePosixPath, target: str) -> Path:
+def source_path(dockerfile: Path, context: Path, workdir: PurePosixPath, target: str, stage: str | None = None) -> Path:
     relative = target if target.endswith('.py') else target.replace('.', '/') + '.py'
     runtime = workdir / relative
-    source = copied_source(dockerfile, context, workdir, runtime)
+    source = copied_source(dockerfile, context, workdir, runtime, stage)
     if source is None and not target.endswith('.py'):
-        source = copied_source(dockerfile, context, workdir, workdir / target.replace('.', '/') / '__main__.py')
+        source = copied_source(dockerfile, context, workdir, workdir / target.replace('.', '/') / '__main__.py', stage)
     if source is None:
         raise ValueError(f'{dockerfile.relative_to(ROOT)}: launch target {target} is not copied into image')
     return source
@@ -220,30 +222,54 @@ def dockerfiles(root: Path) -> Iterator[Path]:
 
 def inventory(root: Path = ROOT) -> dict[str, dict[str, int]]:
     contracts = [c for c in load_contracts() if c.source_root.is_relative_to(root / 'backend')]
-    by_docker = {c.dockerfile: c for c in contracts}
+    by_docker: dict[Path, list[Any]] = {}
+    for c in contracts:
+        by_docker.setdefault(c.dockerfile, []).append(c)
     registry = json.loads((root / 'backend/runtime_images.json').read_text())
     bindings: dict[str, str] = registry['logging_chart_images']
+    # Non-Python images (the Rust listen-edge) log through their own runtime; the
+    # registry records how, and this Python launch guard does not apply to them.
+    native = {spec['dockerfile'] for spec in registry.get('native_images', {}).values()}
     by_name = {c.name: c for c in contracts}
     sources: dict[str, dict[str, int]] = {}
 
-    def inspect(dockerfile: Path, context: Path, workdir: PurePosixPath, target: str, binding: str) -> None:
-        source = source_path(dockerfile, context, workdir, target)
+    def inspect(
+        dockerfile: Path, context: Path, workdir: PurePosixPath, target: str, binding: str, stage: str | None = None
+    ) -> None:
+        source = source_path(dockerfile, context, workdir, target, stage)
         key = f'{source.relative_to(root).as_posix()}::{binding}'
         sources[key] = source_violations(source.read_text())
         if not sources[key].get('missing_setup'):
-            shared = copied_source(dockerfile, context, workdir, workdir / 'omi_logging.py')
+            shared = copied_source(dockerfile, context, workdir, workdir / 'omi_logging.py', stage)
             if shared != root / 'backend/omi_logging.py':
                 raise ValueError(f'{dockerfile}: shared omi_logging.py missing or shadowed')
 
     for dockerfile in sorted(set(dockerfiles(root)) | set(by_docker)):
-        if dockerfile.relative_to(root).as_posix() in NON_PRODUCTION:
+        if dockerfile.relative_to(root).as_posix() in NON_PRODUCTION | native:
             continue
-        contract = by_docker.get(dockerfile)
-        context = contract.build_context if contract else root
-        workdir, target = docker_launch(dockerfile)
-        targets = set(contract.entrypoints if contract else ()) | {target}
-        for target in targets:
-            inspect(dockerfile, context, workdir, target, f'docker:{dockerfile.relative_to(root)}:{target}')
+        registered = by_docker.get(dockerfile, [])
+        if (
+            registered
+            and all(getattr(c, 'build_only', False) for c in registered)
+            and not dockerfile_shipped_by_github(dockerfile)
+        ):
+            # Build-only images (runtime_images.json) are built and probed but no
+            # workflow or action references their Dockerfile, so they have no launch
+            # surface yet. Marking a shipped image build_only does not hide it: the
+            # Dockerfile reference keeps it inspected (and check-roles rejects it).
+            continue
+        # A multi-target Dockerfile launches one image per registered build stage.
+        stages: list[str | None] = sorted({c.target for c in registered if getattr(c, 'target', None)})
+        if not registered or any(getattr(c, 'target', None) is None for c in registered):
+            stages.append(None)
+        for stage in stages:
+            stage_contracts = [c for c in registered if getattr(c, 'target', None) == stage]
+            context = stage_contracts[0].build_context if stage_contracts else root
+            workdir, target = docker_launch(dockerfile, stage)
+            targets = {module for c in stage_contracts for module in c.entrypoints} | {target}
+            label = dockerfile.relative_to(root).as_posix() + (f'@{stage}' if stage else '')
+            for target in targets:
+                inspect(dockerfile, context, workdir, target, f'docker:{label}:{target}', stage)
     # Helm overrides add application entrypoints independently of Docker CMD.
     for chart in (root / 'backend/charts').iterdir():
         if chart.name in ('deepgram-self-hosted', 'monitoring') or not chart.is_dir():
@@ -253,13 +279,14 @@ def inventory(root: Path = ROOT) -> dict[str, dict[str, int]]:
                 if chart.name not in bindings or bindings[chart.name] not in by_name:
                     raise ValueError(f'{path}: Python launcher has no registered chart/image binding')
                 contract = by_name[bindings[chart.name]]
-                workdir, _ = docker_launch(contract.dockerfile)
+                workdir, _ = docker_launch(contract.dockerfile, getattr(contract, 'target', None))
                 inspect(
                     contract.dockerfile,
                     contract.build_context,
                     workdir,
                     target,
                     f'helm:{path.relative_to(root)}:{position}:{contract.name}:{target}',
+                    getattr(contract, 'target', None),
                 )
     return dict(sorted(sources.items()))
 

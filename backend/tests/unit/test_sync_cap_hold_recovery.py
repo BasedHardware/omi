@@ -4,6 +4,8 @@ from contextlib import nullcontext
 from types import SimpleNamespace
 from unittest.mock import Mock, AsyncMock
 
+from tests.unit.fixtures.cap_rollout import full_cap_dispatch_rollout  # noqa: F401
+
 import pytest
 
 from utils.sync import cap_hold_recovery as recovery
@@ -13,6 +15,9 @@ from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 @pytest.fixture
 def state(monkeypatch, tmp_path):
     checkpoint, renew = recovery.cap_hold.checkpoint, recovery.cap_hold.renew
+    monkeypatch.setattr(
+        recovery.cap_recovery_pacing, 'reserve', Mock(return_value=recovery.cap_recovery_pacing.Decision('granted'))
+    )
     monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'true')
     monkeypatch.setattr(recovery.cap_hold, 'ensure_summary', lambda uid: {'version': 2, 'seconds': 0, 'count': 0})
 
@@ -400,6 +405,8 @@ async def test_not_ingested_piece_gets_one_successful_redispatch_with_stable_usa
     assert await recovery._recover_row('synthetic', state.snapshot, state.row)
     assert await recovery._recover_row('synthetic', state.snapshot, state.row)
     assert attempts == [1, 2]
+    assert recovery.cap_recovery_pacing.reserve.call_count == 2
+    assert [call.args for call in recovery.cap_recovery_pacing.reserve.call_args_list] == [(20,), (20,)]
     assert state.row['piece_receipts']['1792152000.wav']['state'] == 'transcribed'
     recovery.record_usage.assert_called_once()
     assert recovery.record_usage.call_args.kwargs['idempotency_key'] == 'cap-hold-hold-1792152000.wav'
@@ -486,7 +493,7 @@ async def test_silent_live_capture_settles_without_provider_or_ambiguous_receipt
 
 
 async def test_legacy_wake_only_resumes_an_explicit_backlog_runner(monkeypatch):
-    monkeypatch.setattr(recovery, 'enabled', lambda: True)
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'true')
     runner = AsyncMock()
     monkeypatch.setattr(recovery, '_backlog_runner', runner)
     await recovery.recover('synthetic')
@@ -515,3 +522,156 @@ async def test_owner_budget_stops_before_second_frozen_piece_and_resumes(state, 
     with recovery.cap_work_budget.visit(900):
         assert await recovery._recover_row('synthetic', state.snapshot, state.row)
     assert recovery.process_segment.call_count == 2 and state.row['finalized']
+
+
+@pytest.mark.parametrize('ladder', [False, True])
+@pytest.mark.parametrize(
+    'origin,lanes,selected',
+    [
+        ('live', 'live', True),
+        ('live', 'sync,batch', False),
+        ('sync', 'live', False),
+        ('sync', 'sync', True),
+        ('batch', 'batch', True),
+        ('unknown', 'live,sync,batch', False),
+        (None, 'live,sync,batch', False),
+        ('legacy', 'live', False),
+        ('legacy', 'sync', True),
+    ],
+)
+async def test_recovery_keeps_original_origin_through_real_dispatch(
+    state, monkeypatch, ladder, origin, lanes, selected
+):
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', str(not ladder).lower())
+    monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', str(ladder).lower())
+    monkeypatch.setenv('STT_CAP_DISPATCH_LANES', lanes)
+    meta = {'timestamp': 1792152000, 'source': 'omi', 'sync_lane': 'fresh'}
+    if origin != 'legacy':
+        meta['origin'] = origin
+    recovery.cap_hold.metadata.return_value = meta
+    # The plan/codec/storage contract has separate coverage; retain a frozen
+    # piece here to isolate original-lane dispatch through the real coordinator.
+    state.row['piece_plan'] = {'1792152000.wav': {'seconds': 20}}
+    assert await recovery._recover_row('synthetic', state.snapshot, state.row) is selected
+    if selected:
+        lane = 'sync' if origin == 'legacy' else origin
+        assert recovery.process_segment.call_args.kwargs['cap_dispatch_lane'] == lane
+        recovery.sync_allowed.assert_called_with('synthetic', lane=lane)
+        assert meta.get('origin') == (None if origin == 'legacy' else origin)
+    else:
+        recovery.cap_hold.read_audio.assert_not_called()
+        recovery.process_segment.assert_not_called()
+        recovery.record_usage.assert_not_called()
+
+
+async def test_excluded_owner_does_not_read_hold_metadata_or_claim(state, monkeypatch):
+    monkeypatch.setenv('STT_CAP_DISPATCH_COHORT', 'uid:other')
+    state.snapshot.to_dict = lambda: state.row
+    claim = Mock(side_effect=AssertionError('excluded recovery claim'))
+    monkeypatch.setattr(recovery.cap_hold, 'claim', claim)
+    assert not await recovery.recover_selected('synthetic', state.snapshot)
+    recovery.cap_hold.metadata.assert_not_called()
+    claim.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    'decision',
+    [
+        recovery.cap_recovery_pacing.Decision('deferred', 12),
+        recovery.cap_recovery_pacing.Decision('refused', 60, 'unavailable'),
+    ],
+)
+@pytest.mark.parametrize('retry', [False, True])
+async def test_pacing_denial_persists_retry_across_release_and_reclaim_without_attempt_charge(
+    state, monkeypatch, decision, retry
+):
+    key = ('users', 'synthetic', 'stt_cap_holds', 'hold')
+    prior = {'state': 'dispatched', 'attempt': 1, 'dispatched_at': -1801}
+    client = StrictFirestore(
+        {
+            key: {
+                'state': 'held',
+                'lease_until': 1900,
+                'lease_token': 'owner-token',
+                'seconds': 20,
+                'piece_plan': {'p.wav': {'seconds': 20}},
+                'piece_receipts': {'p.wav': prior} if retry else {},
+            }
+        }
+    )
+    ref = client.document('/'.join(key))
+    monkeypatch.setattr(recovery.cap_hold, 'get_firestore_client', lambda: client)
+    monkeypatch.setattr(recovery.cap_hold, 'external_write_fence', lambda _: nullcontext())
+    monkeypatch.setattr(recovery.cap_hold, 'checkpoint', state.checkpoint)
+    monkeypatch.setattr(recovery.cap_recovery_pacing, 'reserve', Mock(return_value=decision))
+    state.snapshot.reference = ref
+    row = ref.get().to_dict()
+    assert not await recovery._recover_row('synthetic', state.snapshot, row)
+    recovery.cap_hold.release('synthetic', ref, 'owner-token')
+    persisted = ref.get().to_dict()
+    assert persisted['next_attempt_at'] == 100 + decision.retry_after
+    assert persisted['pacing_deferred_since'] == 100
+    assert persisted['piece_receipts'] == ({'p.wav': prior} if retry else {})
+    assert not persisted.get('processed_paths')
+    assert recovery.cap_hold.claim('synthetic', ref, 100 + decision.retry_after - 1) is None
+    assert recovery.cap_hold.claim('synthetic', ref, 100 + decision.retry_after)
+    recovery.process_segment.assert_not_called()
+    recovery.record_usage.assert_not_called()
+
+
+async def test_persisting_deferred_time_failure_cannot_dispatch(state, monkeypatch):
+    monkeypatch.setattr(
+        recovery.cap_recovery_pacing,
+        'reserve',
+        Mock(return_value=recovery.cap_recovery_pacing.Decision('deferred', 10)),
+    )
+    state.row['piece_plan'] = {'p.wav': {'seconds': 20}}
+    recovery.cap_hold.checkpoint.side_effect = RuntimeError('durable store unavailable')
+    with pytest.raises(RuntimeError, match='durable store unavailable'):
+        await recovery._recover_row('synthetic', state.snapshot, state.row)
+    recovery.process_segment.assert_not_called()
+    recovery.record_usage.assert_not_called()
+
+
+async def test_cached_result_and_settlement_do_not_consume_provider_tokens(state):
+    state.row.update(
+        piece_plan={'p.wav': {'seconds': 20}},
+        piece_receipts={
+            'p.wav': {
+                'state': 'dispatched',
+                'attempt': 1,
+                'provider': 'modulate',
+                'model': 'velma-2',
+                'provider_result': 'encrypted-cached-result',
+            }
+        },
+    )
+    assert await recovery._recover_row('synthetic', state.snapshot, state.row)
+    assert await recovery._recover_row('synthetic', state.snapshot, state.row)
+    recovery.cap_recovery_pacing.reserve.assert_not_called()
+    recovery.process_segment.assert_called_once()
+    recovery.record_usage.assert_called_once()
+
+
+async def test_pacing_denial_still_finalizes_previously_completed_siblings(state, monkeypatch):
+    state.row.update(
+        piece_plan={'pending.wav': {'seconds': 20}},
+        processed_paths=['completed.wav'],
+        piece_receipts={
+            'completed.wav': {
+                'state': 'transcribed',
+                'has_content': True,
+                'seconds': 20,
+                'response': {'new_memories': ['completed-conversation']},
+            }
+        },
+    )
+    monkeypatch.setattr(
+        recovery.cap_recovery_pacing,
+        'reserve',
+        Mock(return_value=recovery.cap_recovery_pacing.Decision('deferred', 10)),
+    )
+    assert not await recovery._recover_row('synthetic', state.snapshot, state.row)
+    recovery.finalize_recovered_sync_segment.assert_called_once()
+    assert state.row['finalized_paths'] == ['completed.wav']
+    recovery.process_segment.assert_not_called()

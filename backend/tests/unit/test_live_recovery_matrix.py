@@ -71,6 +71,11 @@ from utils.stt.send_queue import AudioSendQueue, audio_send_deadline
 @pytest.fixture(autouse=True)
 def _stt_failover_recovery_on(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv('STT_FAILOVER_RECOVERY_ENABLED', 'true')
+    # The matrix pins source->successor replay across providers. A serving
+    # source that dies before text would first get its one same-target
+    # retry; that policy has its own tests (test_live_stt_restart_burst_sim,
+    # test_live_replay_provider_pairs::test_serving_soniox_pre_text_*).
+    monkeypatch.setenv('LISTEN_STT_SAME_TARGET_RETRY_ENABLED', 'false')
 
 
 BYTES_PER_SECOND = 16000 * 2

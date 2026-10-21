@@ -1,4 +1,4 @@
-progressDeadlineSeconds: 3000
+progressDeadlineSeconds: 4200
 # Default values for backend-listen.
 # This is a YAML-formatted file.
 # Declare variables to be passed into your templates.
@@ -90,7 +90,19 @@ envFrom:
   - configMapRef:
       name: prod-omi-backend-config
 
+# NAME: "string" env values the prod listen workflow renders from the
+# protected-environment secret LISTEN_PRIVATE_VALUES_YAML, in the same Helm
+# rollout. Never commit values here. A key replaces the env entry of the same
+# name below (e.g. the STT_CAP_DISPATCH_* defaults).
+privateEnv: {}
+
 env:
+  - name: STT_CAP_DISPATCH_ENFORCEMENT
+    value: "false"
+  - name: STT_CAP_DISPATCH_COHORT
+    value: ""
+  - name: STT_CAP_DISPATCH_LANES
+    value: "live"
   - name: DEMAND_PROCESSING_ENABLED
     value: "false"
   - name: DEMAND_PROCESSING_LAZY_ENABLED
@@ -201,7 +213,7 @@ env:
   - name: FIRESTORE_READ_LEDGER
     value: "1"
   - name: FIRESTORE_READ_LEVERS
-    value: '{"action_items_page":100,"backfill_task_reads":0,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":0,"ledger_purge_coalesce":0,"people_scan_dedupe":0,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":0,"subscription_cache":100,"usage_month_cache":0}'
+    value: '{"action_items_page":100,"backfill_task_reads":0,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":0,"ledger_purge_coalesce":0,"people_scan_dedupe":0,"queue_age_sample_budget":0,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":25,"subscription_cache":100,"usage_month_cache":0}'
   - name: FSR_QUEUE_AGE_PUBLISHER
     value: "1"
   - name: FSR_QUEUE_AGE_LEASE_SECONDS
@@ -245,11 +257,7 @@ env:
     value: "true"
   - name: CONVERSATION_SMART_MERGE_FLATTEN_ENABLED
     value: "true"
-  - name: SYNC_ASSIGNMENT_RECOVERY_ENABLED
-    value: "true"
   - name: SYNC_FINALIZE_TARGET_RECOVERY_ENABLED
-    value: "true"
-  - name: LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED
     value: "true"
   - name: CAPTURE_GROUP_CONTAINMENT_MODE
     value: "shadow"
@@ -571,14 +579,8 @@ env:
     value: "30"
   - name: STT_NO_TEXT_RESCUE_ENABLED
     value: "true"
-  - name: SONIOX_MONTHLY_CEILING_USD
-    value: "10000"
-  - name: SONIOX_ESTIMATED_USD_PER_HOUR
-    value: "0.07537"
   - name: STT_MULTI_LANGUAGE_HINTS
     value: "true"
-  - name: SONIOX_CONTEXT_TERMS
-    value: "false"
   - name: STT_LEARNED_LANGUAGE_PROFILE
     value: "true"
   - name: STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT
@@ -629,20 +631,10 @@ env:
     value: "86400"
   - name: TRANSLATION_NEGATIVE_CACHE_TTL
     value: "21600"
-  - name: TRANSLATION_DEMAND_SHADOW_ENABLED
-    value: "false"
   - name: TRANSLATION_DEMAND_GATE_ENABLED
-    value: "true"
-  - name: TRANSLATION_DEMAND_LEASE_V1_ENABLED
-    value: "true"
-  - name: TRANSLATION_ONDEMAND_GEMINI_ENABLED
     value: "true"
   - name: TRANSLATION_ONOPEN_ENABLED
     value: "true"
-  - name: TRANSLATION_ONDEMAND_COHORT_PERCENT
-    value: "100"
-  - name: TRANSLATION_ONDEMAND_UID_ALLOWLIST
-    value: ""
   - name: TRANSLATION_ONDEMAND_MAX_SEGMENTS
     value: "50"
   - name: TRANSLATION_ONDEMAND_MAX_CHARS
@@ -695,10 +687,6 @@ env:
   # existing v1 sessions and resumed v1 conversations are unaffected.
   - name: AUDIO_TIMELINE_V2
     value: "false"
-  - name: AUDIO_TIMELINE_SPANS
-    value: "true"
-  - name: LIVE_SPEAKER_SPAN_RESOLUTION
-    value: "true"
   - name: LIVE_CAPTURE_WINDOW_RETENTION
     value: 'false'
   - name: LIVE_CAPTURE_WINDOW_STRICT_PROJECTION
@@ -714,10 +702,6 @@ env:
   - name: SONIOX_ORDERED_FINALIZE
     value: "false"
   - name: SONIOX_CAPTURE_AXIS_DIAGNOSTICS
-    value: "true"
-  # S1 capture evidence (dedupe of sync uploads against live audio); mobile sends it only from
-  # builds with --dart-define=CAPTURE_EVIDENCE_V1_DARK_WRITE=true.
-  - name: CAPTURE_EVIDENCE_V1_DARK_WRITE
     value: "true"
   # Fair-use system (PR #5748)
   - name: FAIR_USE_ENABLED
@@ -811,7 +795,7 @@ startupProbe:
 # This section is for setting up autoscaling more information can be found here: https://kubernetes.io/docs/concepts/workloads/autoscaling/
 autoscaling:
   enabled: true
-  minReplicas: 30
+  minReplicas: 40
   maxReplicas: 60
   behavior:
     scaleDown:
@@ -834,11 +818,18 @@ autoscaling:
         value: 5
         periodSeconds: 15
       selectPolicy: Max
-  # targetCPUUtilizationPercentage: 70
+  # D0b: CPU is the primary signal. The HPA takes the max across metrics and
+  # ignores ratios within 10% of target, so 55% acts above ~60% mean CPU. On the
+  # 2026-10-19 incident, mean listen CPU peaked at 0.56-0.65 of request while
+  # the hottest pods saturated, so a 60-70% target would never have fired.
+  targetCPUUtilizationPercentage: 55
   # targetMemoryUtilizationPercentage: 70
   # failedResponseCode: 10
-  requestsPerPod: 10
-  activeConnectionsPerPod: 22
+  # Socket guards stay as secondary metrics so a CPU dip cannot strand
+  # sockets on too few pods. Raised 10->16 and 22->35 together (D0b plan) so
+  # they bind only on connection surges, not at ordinary load.
+  requestsPerPod: 16
+  activeConnectionsPerPod: 35
 
 podDisruptionBudget:
   minAvailable: "80%"

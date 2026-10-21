@@ -11,7 +11,295 @@
     "parakeet": "parakeet",
     "vad": "models"
   },
+  "roles": {
+    "api": {
+      "images": {
+        "backend-api": "backend/pylock.runtime.toml"
+      }
+    },
+    "workers": {
+      "images": {
+        "backend-workers": "backend/pylock.runtime.toml"
+      }
+    },
+    "realtime": {
+      "images": {
+        "backend-realtime": "backend/pylock.runtime.toml",
+        "backend-pusher": "backend/pusher/pylock.toml"
+      }
+    },
+    "gateway": {
+      "images": {
+        "backend-gateway": "backend/pylock.runtime.toml"
+      }
+    },
+    "gpu-batch": {
+      "images": {
+        "batch-pipeline-worker": "backend/diarizer/pylock.batch-pipeline.toml",
+        "diarizer": "backend/diarizer/requirements.txt"
+      }
+    },
+    "gpu-live": {
+      "images": {
+        "parakeet": "backend/parakeet/Dockerfile",
+        "models": "backend/modal/requirements.txt",
+        "nllb-translation": "backend/nllb_translation/requirements.txt"
+      }
+    }
+  },
+  "services": {
+    "backend": {
+      "platform": "cloud-run",
+      "role": "api",
+      "image": "backend-api",
+      "current_image": "backend",
+      "current_deploy": [
+        ".github/workflows/gcp_backend_auto_dev.yml",
+        ".github/workflows/gcp_backend.yml"
+      ]
+    },
+    "backend-sync": {
+      "platform": "cloud-run",
+      "role": "workers",
+      "image": "backend-workers",
+      "current_image": "backend",
+      "current_deploy": [
+        ".github/workflows/gcp_backend_auto_dev.yml",
+        ".github/workflows/gcp_backend.yml"
+      ]
+    },
+    "backend-sync-backfill": {
+      "platform": "cloud-run",
+      "role": "workers",
+      "image": "backend-workers",
+      "current_image": "backend",
+      "current_deploy": [
+        ".github/workflows/gcp_backend_auto_dev.yml",
+        ".github/workflows/gcp_backend.yml"
+      ]
+    },
+    "backend-integration": {
+      "platform": "cloud-run",
+      "role": "workers",
+      "image": "backend-workers",
+      "current_image": "backend",
+      "current_deploy": [
+        ".github/workflows/gcp_backend_auto_dev.yml",
+        ".github/workflows/gcp_backend.yml"
+      ]
+    },
+    "messaging-maintenance": {
+      "platform": "cloud-run-job",
+      "deployed_as": "messaging-maintenance-job",
+      "role": "workers",
+      "image": "backend-workers",
+      "current_image": "backend",
+      "current_deploy": [
+        "backend/deploy/messaging/maintenance-job.json",
+        "backend/scripts/messaging_operations.py"
+      ],
+      "image_built_elsewhere": "The Cloud Run job runs the admitted backend image (ADMITTED_BACKEND_IMAGE) that backend deploys built; messaging_operations.py reconciles it. The GKE chart is disabled (values.yaml enabled: false)."
+    },
+    "backend-listen": {
+      "platform": "gke",
+      "role": "realtime",
+      "image": "backend-realtime",
+      "current_image": "backend",
+      "current_deploy": [
+        ".github/workflows/gcp_backend_auto_dev.yml",
+        ".github/workflows/gcp_backend.yml",
+        ".github/workflows/gcp_backend_listen_helm.yml"
+      ]
+    },
+    "pusher": {
+      "platform": "gke",
+      "role": "realtime",
+      "image": "backend-pusher",
+      "current_image": "pusher",
+      "current_deploy": [
+        ".github/workflows/gcp_backend_pusher.yml",
+        ".github/workflows/gcp_backend_pusher_auto_deploy.yml"
+      ]
+    },
+    "llm-gateway": {
+      "platform": "gke",
+      "role": "gateway",
+      "image": "backend-gateway",
+      "current_image": "backend",
+      "current_deploy": [
+        ".github/workflows/gcp_backend_auto_dev.yml",
+        ".github/workflows/gcp_backend.yml",
+        ".github/workflows/gcp_backend_pusher.yml",
+        ".github/workflows/gcp_llm_gateway.yml"
+      ]
+    },
+    "batch-pipeline-worker": {
+      "platform": "gke",
+      "role": "gpu-batch",
+      "image": "batch-pipeline-worker",
+      "current_image": "batch-pipeline-worker",
+      "current_deploy": [
+        ".github/workflows/gcp_diarizer.yml"
+      ]
+    },
+    "diarizer": {
+      "platform": "gke",
+      "role": "gpu-batch",
+      "image": "diarizer",
+      "current_image": "diarizer",
+      "current_deploy": [
+        ".github/workflows/gcp_diarizer.yml"
+      ]
+    },
+    "parakeet": {
+      "platform": "gke",
+      "role": "gpu-live",
+      "image": "parakeet",
+      "current_image": "parakeet",
+      "current_deploy": [
+        ".github/workflows/gcp_parakeet.yml"
+      ]
+    },
+    "vad": {
+      "platform": "gke",
+      "role": "gpu-live",
+      "image": "models",
+      "current_image": "models",
+      "current_deploy": [
+        ".github/workflows/gcp_models.yml"
+      ]
+    },
+    "nllb-translation": {
+      "platform": "gke",
+      "role": "gpu-live",
+      "image": "nllb-translation",
+      "current_image": "nllb-translation",
+      "current_deploy": [
+        ".github/workflows/gcp_nllb_translation.yml"
+      ]
+    }
+  },
+  "native_images": {
+    "listen-edge": {
+      "role": "realtime",
+      "dockerfile": "backend/edge/Dockerfile",
+      "build_context": ".",
+      "probe": "http",
+      "logging": "Rust tracing-subscriber JSON on stdout (backend/edge/src/main.rs); outside the Python logging guard."
+    }
+  },
   "images": [
+    {
+      "name": "backend-api",
+      "dockerfile": "backend/Dockerfile.roles",
+      "target": "api",
+      "deployment_workflows": [
+        ".github/workflows/gcp_backend.yml"
+      ],
+      "build_context": ".",
+      "source_root": "backend",
+      "workdir": "/app",
+      "entrypoints": [
+        "main"
+      ],
+      "image_import_smoke": false,
+      "dependency_probe_smoke": true,
+      "pull_request_smoke": true,
+      "dependency_probe_exclusions": {
+        "omi_plugin_sdk": "models.structured imports the SDK only when a full checkout is present; backend images use its built-in fallback."
+      }
+    },
+    {
+      "name": "backend-workers",
+      "dockerfile": "backend/Dockerfile.roles",
+      "target": "workers",
+      "deployment_workflows": [
+        ".github/workflows/gcp_backend.yml"
+      ],
+      "build_context": ".",
+      "source_root": "backend",
+      "workdir": "/app",
+      "entrypoints": [
+        "main",
+        "utils.messaging.maintenance"
+      ],
+      "image_import_smoke": false,
+      "dependency_probe_smoke": true,
+      "pull_request_smoke": true,
+      "dependency_probe_exclusions": {
+        "omi_plugin_sdk": "models.structured imports the SDK only when a full checkout is present; backend images use its built-in fallback."
+      }
+    },
+    {
+      "name": "backend-realtime",
+      "dockerfile": "backend/Dockerfile.roles",
+      "target": "realtime",
+      "deployment_workflows": [
+        ".github/workflows/gcp_backend.yml"
+      ],
+      "build_context": ".",
+      "source_root": "backend",
+      "workdir": "/app",
+      "entrypoints": [
+        "main"
+      ],
+      "image_import_smoke": false,
+      "dependency_probe_smoke": true,
+      "pull_request_smoke": true,
+      "dependency_probe_exclusions": {
+        "omi_plugin_sdk": "models.structured imports the SDK only when a full checkout is present; backend images use its built-in fallback."
+      }
+    },
+    {
+      "name": "backend-gateway",
+      "dockerfile": "backend/Dockerfile.roles",
+      "target": "gateway",
+      "deployment_workflows": [
+        ".github/workflows/gcp_backend.yml"
+      ],
+      "build_context": ".",
+      "source_root": "backend",
+      "workdir": "/app",
+      "entrypoints": [
+        "llm_gateway.main"
+      ],
+      "image_import_smoke": false,
+      "dependency_probe_smoke": true,
+      "pull_request_smoke": true,
+      "dependency_probe_exclusions": {
+        "omi_plugin_sdk": "models.structured imports the SDK only when a full checkout is present; backend images use its built-in fallback."
+      }
+    },
+    {
+      "name": "backend-pusher",
+      "dockerfile": "backend/Dockerfile.roles",
+      "target": "pusher",
+      "deployment_workflows": [
+        ".github/workflows/gcp_backend.yml"
+      ],
+      "build_context": ".",
+      "source_root": "backend",
+      "workdir": "/app",
+      "entrypoints": [
+        "pusher.main"
+      ],
+      "image_import_smoke": true,
+      "smoke_entrypoints": [
+        "routers.pusher"
+      ],
+      "smoke_prelude": "import tiktoken; tiktoken.encoding_for_model = lambda _: None",
+      "smoke_environment": {
+        "ENCRYPTION_SECRET": "0123456789abcdef0123456789abcdef",
+        "OPENAI_API_KEY": "sk-runtime-image-contract-test"
+      },
+      "dependency_probe_smoke": true,
+      "pull_request_smoke": true,
+      "dependency_probe_exclusions": {
+        "imageio_ffmpeg": "utils.messaging.adapters.decoder imports the FFmpeg wheel inside a function reached only through lazy chat-video imports, and falls back to the system ffmpeg the role Dockerfile's os-base installs with apt.",
+        "omi_plugin_sdk": "models.structured imports the SDK only when a full checkout is present; pusher images use its built-in fallback.",
+        "onnxruntime": "utils.stt.vad guards the local Silero ONNX import; pusher images ship without onnxruntime and stored-audio VAD compaction abstains to original audio there."
+      }
+    },
     {
       "name": "backend",
       "dockerfile": "backend/Dockerfile",
@@ -33,7 +321,8 @@
       "pull_request_smoke": true,
       "dependency_probe_exclusions": {
         "omi_plugin_sdk": "models.structured imports the SDK only when a full checkout is present; backend images use its built-in fallback."
-      }
+      },
+      "outside_role_split": "The shared image every backend service ships today; each service moves to its role image when B2 cuts its deploy over, then this entry is deleted."
     },
     {
       "name": "desktop-backend",
@@ -53,7 +342,8 @@
       "pull_request_smoke": true,
       "dependency_probe_exclusions": {
         "omi_plugin_sdk": "models.structured imports the SDK only when a full checkout is present; backend images use its built-in fallback."
-      }
+      },
+      "outside_role_split": "Desktop product backend with its own release lineage and workflows; not part of the backend role split."
     },
     {
       "name": "pusher",
@@ -80,9 +370,11 @@
       "dependency_probe_smoke": true,
       "pull_request_smoke": true,
       "dependency_probe_exclusions": {
+        "imageio_ffmpeg": "utils.messaging.adapters.decoder imports the FFmpeg wheel inside a function reached only through lazy chat-video imports, and falls back to the system ffmpeg the pusher Dockerfile installs with apt.",
         "omi_plugin_sdk": "models.structured imports the SDK only when a full checkout is present; pusher images use its built-in fallback.",
         "onnxruntime": "utils.stt.vad guards the local Silero ONNX import; pusher images ship without onnxruntime and stored-audio VAD compaction abstains to original audio there."
-      }
+      },
+      "outside_role_split": "Ships pusher today; replaced by the realtime role's backend-pusher target at B2."
     },
     {
       "name": "models",
@@ -127,7 +419,8 @@
       "pull_request_smoke": true,
       "dependency_probe_exclusions": {
         "omi_plugin_sdk": "models.structured imports the SDK only when a full checkout is present; job images use its built-in fallback."
-      }
+      },
+      "outside_role_split": "Scheduled Cloud Run job with its own image; joins the workers role only if it moves onto the workers queue consumer."
     },
     {
       "name": "x-connector-sync-job",
@@ -151,7 +444,8 @@
       "pull_request_smoke": true,
       "dependency_probe_exclusions": {
         "omi_plugin_sdk": "models.structured imports the SDK only when a full checkout is present; job images use its built-in fallback."
-      }
+      },
+      "outside_role_split": "Scheduled Cloud Run job with its own image; outside the role split."
     },
     {
       "name": "frame-request-retention-job",
@@ -174,7 +468,8 @@
       "pull_request_smoke": true,
       "dependency_probe_exclusions": {
         "omi_plugin_sdk": "models.structured imports the SDK only when a full checkout is present; job images use its built-in fallback."
-      }
+      },
+      "outside_role_split": "Scheduled Cloud Run job with its own image; outside the role split."
     },
     {
       "name": "day3-reengagement-email-job",
@@ -198,7 +493,8 @@
       "pull_request_smoke": true,
       "dependency_probe_exclusions": {
         "omi_plugin_sdk": "models.structured imports the SDK only when a full checkout is present; job images use its built-in fallback."
-      }
+      },
+      "outside_role_split": "Scheduled Cloud Run job with its own image; outside the role split."
     },
     {
       "name": "notifications-job",
@@ -222,7 +518,8 @@
       "pull_request_smoke": true,
       "dependency_probe_exclusions": {
         "omi_plugin_sdk": "models.structured imports the SDK only when a full checkout is present; job images use its built-in fallback."
-      }
+      },
+      "outside_role_split": "Scheduled Cloud Run job with its own image; outside the role split."
     },
     {
       "name": "diarizer",
@@ -324,7 +621,8 @@
       ],
       "image_import_smoke": true,
       "dependency_probe_smoke": true,
-      "pull_request_smoke": true
+      "pull_request_smoke": true,
+      "outside_role_split": "Plugins service outside backend/; not part of the backend role split."
     }
   ]
 }

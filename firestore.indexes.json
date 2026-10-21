@@ -137,6 +137,92 @@
       "queryScope": "COLLECTION",
       "fields": [
         {
+          "fieldPath": "owner_key",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "merge_pending",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "state",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "capture_at",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "segment_id",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "batch_pipeline_prod_jobs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "owner_key",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "merge_pending",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "state",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "ready_at",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "batch_pipeline_prod_jobs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "owner_key",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "merge_pending",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "fresh_capture",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "capture_at",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "segment_id",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "batch_pipeline_prod_jobs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
           "fieldPath": "owner_id",
           "order": "ASCENDING"
         },
@@ -294,6 +380,92 @@
         },
         {
           "fieldPath": "merge_pending",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "capture_at",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "segment_id",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "batch_pipeline_dev_jobs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "owner_key",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "merge_pending",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "state",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "capture_at",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "segment_id",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "batch_pipeline_dev_jobs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "owner_key",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "merge_pending",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "state",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "ready_at",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "batch_pipeline_dev_jobs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "owner_key",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "merge_pending",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "fresh_capture",
           "order": "ASCENDING"
         },
         {
@@ -3111,6 +3283,60 @@
         {
           "fieldPath": "__name__",
           "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "stt_cap_holds",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        {
+          "fieldPath": "state",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "seconds",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "stt_cap_holds",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        {
+          "fieldPath": "state",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "listed_at",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "processing_backlog",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        {
+          "fieldPath": "state",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "count",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
         }
       ]
     },

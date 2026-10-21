@@ -36,13 +36,14 @@ from dataclasses import dataclass, field
 from unittest.mock import patch
 
 from config.policy import BatchUnitPolicy, FirstSummaryPolicy, resolve_batch_policy, resolve_stage_policy
+from config.policy.listen import ListenSessionPolicy
 from config.policy.stages import STAGE_TYPES
 from database import batch_pipeline_policy as policy_store
 from config.policy.batch import SNAPSHOT_ENV_KEYS
 from types import SimpleNamespace
 from typing import Any
 
-from config.batch_pipeline import priority_for
+from config.batch_pipeline import priority_for, recovery_dispatch_interval_seconds
 from database import batch_pipeline_intake
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from diarizer.batch_pipeline import PipelineWorker, padded_retry_fits, padded_retry_seconds
@@ -166,6 +167,7 @@ class SimConfig:
     purge_on_fence: bool = True  # production purges synchronously after the tombstone / privacy advance
     flags: dict[str, str] = field(default_factory=dict)
     policy: BatchUnitPolicy | None = None
+    listen_policy: ListenSessionPolicy | None = None
     role_environments: dict[str, dict[str, str]] = field(default_factory=dict)
     stage_roles: dict[str, str] = field(default_factory=dict)
     trace_policy: bool = False
@@ -175,6 +177,8 @@ class SimConfig:
     def __post_init__(self):
         if isinstance(self.policy, dict):
             self.policy = BatchUnitPolicy.from_dict(self.policy)
+        if isinstance(self.listen_policy, dict):
+            self.listen_policy = ListenSessionPolicy.from_dict(self.listen_policy)
 
 
 @dataclass
@@ -426,7 +430,7 @@ class Simulation:
             if owner_id is None and after_id is not None and key <= after_id:
                 continue
             rows.append((key, row['owner_id']))
-            if len(rows) >= max(1, min(limit, 10)):
+            if len(rows) >= max(1, min(limit, 64)):
                 break
         return rows
 
@@ -510,7 +514,8 @@ class Simulation:
         Same lease-ownership and privacy checks and the same lease-bound
         ``compute_admission_token`` seal that the real ``Scheduler.complete``
         enforces. Fair-use restriction and the daily audio ceiling always allow;
-        backfill priorities reserve against a per-UID daily speech budget. Not
+        backfill-lane uploads (by recorded lane, else priority) reserve against a
+        per-UID daily speech budget. Not
         imported for real: its fair-use dependency chain costs ~5 s of imports.
         """
         now = self.clock.now
@@ -537,7 +542,8 @@ class Simulation:
                 retries[segment] = 30
                 continue
             job, intake = snapshot
-            if int(job['priority']) != 0:
+            fresh_lane = intake['lane'] == 'fresh' if intake.get('lane') else int(job['priority']) == 0
+            if not fresh_lane:
                 reservation = self._reserve_backfill_speech(
                     job['owner_id'],
                     job['projection_binding']['content_id'],
@@ -722,6 +728,7 @@ class Simulation:
                     ),
                 )
                 self.store.mutate('jobs', sid, lambda row: row.update(client_status='completed'))
+                self._advance_projection_watermark(sid)
             self.store.mutate(
                 'content',
                 f'{record.spec.owner}/{record.spec.content_id}',
@@ -732,6 +739,14 @@ class Simulation:
                 await self._start_summary(record)
         finally:
             record.projecting = False
+
+    def _advance_projection_watermark(self, segment_id: str) -> None:
+        """MODEL of ProjectionSession.persist: the owner's projection watermark is its furthest projected log row."""
+        entry = self.store.rows[('results', segment_id)]
+        owner = self.store.rows.get(('owners', entry['owner_key']), {})
+        current = self.store.rows.get(('results', owner.get('projection_watermark') or ''), {})
+        if entry['log_sequence'] > current.get('log_sequence', 0):
+            self.store.mutate('owners', entry['owner_key'], lambda row: row.update(projection_watermark=segment_id))
 
     # ---------------------------------------------------------- first summary
     async def _start_summary(self, record: UploadRecord) -> None:
@@ -816,7 +831,21 @@ class Simulation:
                     self.counters[f'serving_error_{type(error).__name__}'] += 1
                 await asyncio.sleep(self.config.serving_interval_seconds)
 
-        self._supervisor = self.revision.spawn('batch_pipeline_serving', supervise())
+        async def dispatch_recovery():
+            # Mirrors start_serving_from_env's recovery dispatch loop.
+            while True:
+                interval = recovery_dispatch_interval_seconds()
+                if interval > 0:
+                    try:
+                        self.serving.dispatch_recovery()
+                    except Exception as error:
+                        self.counters[f'recovery_dispatch_error_{type(error).__name__}'] += 1
+                await asyncio.sleep(interval if interval > 0 else self.config.serving_interval_seconds)
+
+        async def run():
+            await asyncio.gather(supervise(), dispatch_recovery())
+
+        self._supervisor = self.revision.spawn('batch_pipeline_serving', run())
 
     async def _replace_revision(self) -> None:
         await asyncio.sleep(self.config.revision_replacement_at)

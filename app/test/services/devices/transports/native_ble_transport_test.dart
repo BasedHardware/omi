@@ -1,9 +1,11 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/gen/pigeon_communicator.g.dart';
 import 'package:omi/services/bridges/ble_bridge.dart';
+import 'package:omi/services/devices/transports/device_transport.dart';
 import 'package:omi/services/devices/transports/native_ble_transport.dart';
 
 const _deviceId = 'omi-test-device';
@@ -137,5 +139,76 @@ void main() {
 
     expect(await transport.readCharacteristic(disServiceUuid, firmwareRevisionUuid), '3.0.21'.codeUnits);
     expect(readCalls, hasLength(1));
+  });
+
+  group('bounded GATT operations and orphaned audio', () {
+    const audioServiceUuid = '19b10000-e8f2-537e-4f6c-d104768a1214';
+    const audioCharacteristicUuid = '19b10001-e8f2-537e-4f6c-d104768a1214';
+    const codecCharacteristicUuid = '19b10002-e8f2-537e-4f6c-d104768a1214';
+    final services = [
+      BleService(uuid: audioServiceUuid, characteristicUuids: [audioCharacteristicUuid, codecCharacteristicUuid]),
+    ];
+
+    Future<NativeBleTransport> connected() async {
+      setHostApiHandler('manageDevice', (message) async {
+        BleBridge.instance.onDeviceReady(_deviceId, services);
+        return <Object?>[];
+      });
+      setHostApiHandler('getBluetoothState', (message) async => ['on']);
+      setHostApiHandler('subscribeCharacteristic', (message) async => <Object?>[]);
+      final transport = NativeBleTransport(_deviceId);
+      addTearDown(transport.dispose);
+      await transport.connect();
+      return transport;
+    }
+
+    setUp(() => NativeBleTransport.operationTimeout = const Duration(milliseconds: 30));
+    tearDown(() => NativeBleTransport.operationTimeout = const Duration(seconds: 10));
+
+    test('an unanswered read resolves empty instead of hanging its caller', () async {
+      final transport = await connected();
+      final never = Completer<Object?>();
+      setHostApiHandler('readCharacteristic', (message) => never.future);
+      expect(await transport.readCharacteristic(audioServiceUuid, codecCharacteristicUuid), isEmpty);
+    });
+
+    test('an unanswered write fails with a timeout instead of hanging its caller', () async {
+      final transport = await connected();
+      final never = Completer<Object?>();
+      setHostApiHandler('writeCharacteristic', (message) => never.future);
+      await expectLater(
+        transport.writeCharacteristic(audioServiceUuid, codecCharacteristicUuid, [1]),
+        throwsA(isA<TimeoutException>()),
+      );
+    });
+
+    test('audio that arrives after capture cancelled its listener reaches the orphan route', () async {
+      final transport = await connected();
+      final orphans = <List<int>>[];
+      OrphanAudioRoute.sink = (deviceId, packet) {
+        expect(deviceId, _deviceId);
+        orphans.add(packet);
+      };
+      addTearDown(() => OrphanAudioRoute.sink = null);
+      final received = <List<int>>[];
+      final subscription =
+          transport.getCharacteristicStream(audioServiceUuid, audioCharacteristicUuid).listen(received.add);
+      await Future<void>.delayed(Duration.zero);
+      void notify(int value) => BleBridge.instance.onCharacteristicValueUpdated(
+          _deviceId, audioServiceUuid, audioCharacteristicUuid, Uint8List.fromList([value, 0, 0, 9]));
+
+      notify(1);
+      await Future<void>.delayed(Duration.zero);
+      await subscription.cancel();
+      notify(2);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(received, [
+        [1, 0, 0, 9],
+      ]);
+      expect(orphans, [
+        [2, 0, 0, 9],
+      ]);
+    });
   });
 }

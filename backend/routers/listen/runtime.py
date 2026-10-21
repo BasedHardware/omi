@@ -57,6 +57,7 @@ from utils.metrics import BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS
 from utils.notifications import send_credit_limit_notification, send_silent_user_notification
 from utils.onboarding import OnboardingHandler
 from utils.observability.journeys import ClientJourneyAttempt
+from utils.observability.listen_close import CLOSE_FRAME_DRAIN_SECONDS, note_ws_close, record_listen_ws_close
 from utils.observability.listen_loop import ensure_loop_lag_probe
 from utils.observability.routing_cohort import RoutingCohort, current_routing_cohort
 from utils.observability.transcription import (
@@ -89,6 +90,8 @@ from utils.stt.live_metrics import (
     provider_family,
 )
 from config.live_stt_registry import routing_on
+from config.policy.listen import current_listen_policy, routing_mode_raw, listen_value
+from routers.listen.policy import initialize_session_policy
 from config.live_stt_recovery import current_recovery_enabled, recovery_enabled, session_recovery_enabled
 from utils.stt.language_policy import LiveLanguageObservations, LiveLanguageProfile
 from utils.subscription import get_remaining_transcription_seconds, is_trial_paywalled
@@ -396,6 +399,11 @@ class ListenSessionRuntime:
         self._cost_routing_arm: str | None = None
         self._routing_cohort: RoutingCohort | None = None
         if managed_chain_enabled(self):
+            policy = getattr(self.state, 'listen_policy', None)
+            if policy is not None:
+                self._cost_routing_arm = policy.routing_arm
+                self._routing_cohort = RoutingCohort(policy.routing_cohort)
+                return
             try:
                 self._cost_routing_arm = 'on' if routing_on(self.request.uid) else 'control'
             except (ValueError, TypeError):
@@ -405,7 +413,7 @@ class ListenSessionRuntime:
             arm = (
                 'on'
                 if self._cost_routing_arm == 'on'
-                else 'shadow' if os.getenv('STT_ROUTING_MODE', 'off').lower() == 'shadow' else 'off'
+                else 'shadow' if routing_mode_raw().lower() == 'shadow' else 'off'
             )
             self._routing_cohort = RoutingCohort(arm)
 
@@ -442,10 +450,15 @@ class ListenSessionRuntime:
                 recording_id=self.request.client_conversation_id,
             )
             telemetry_call(self, 'demand_telemetry', 'finish')
+            policy = getattr(self.state, 'listen_policy', None)
             record_metric(
                 WINDOW_CANARY_OUTCOME,
                 {
-                    'arm': 'window' if window_allocation(self.request.uid) else 'control',
+                    'arm': (
+                        'window'
+                        if (policy.window_allocated if policy is not None else window_allocation(self.request.uid))
+                        else 'control'
+                    ),
                     'outcome': outcome,
                     'demand_cohort': host_cohort(self),
                 },
@@ -573,6 +586,9 @@ class ListenSessionRuntime:
                 else None
             )
             self.onboarding_admitted = isinstance(self.onboarding_session_id, str)
+        policy = await initialize_session_policy(self)
+        current_listen_policy.set(policy)
+        current_recovery_enabled.set(policy.failover_recovery_enabled)
         self.user_has_credits = base.user_has_credits
         self.language = normalize_language(request.language)
         single_language_mode = should_force_single_language(
@@ -586,7 +602,7 @@ class ListenSessionRuntime:
         if (
             language_profile_in_scope
             and self.multi_lang_enabled
-            and os.getenv('STT_LEARNED_LANGUAGE_PROFILE', 'false').lower() == 'true'
+            and str(listen_value('learned_language_profile', 'STT_LEARNED_LANGUAGE_PROFILE', 'false')).lower() == 'true'
         ):
             try:
                 learned_sessions = await asyncio.wait_for(
@@ -926,11 +942,15 @@ class ListenSessionRuntime:
             if FAIR_USE_ENABLED and speech_ms:
                 await self.persistence.call(record_speech_ms, self.request.uid, speech_ms)
         now = time.time()
+        # STT cap held (untranscribed) receipt spans are metered once, by recovery.
+        # Without a cap admission, or with no held spans, billing is unchanged.
+        admission = getattr(self.receiver, 'cap_admission', None)
         seconds = billable_transcription_seconds(
             self.state.last_usage_record_timestamp,
             self.state.last_audio_received_time,
             now,
             getattr(self.state, 'last_audio_resume_time', None),
+            held_seconds=admission.held_seconds_between if admission is not None else None,
         )
         words = self.state.words_transcribed_since_last_record
         self.state.words_transcribed_since_last_record = 0
@@ -1091,9 +1111,11 @@ class ListenSessionRuntime:
         token = current_recovery_enabled.set(self.recovery_enabled)
         cohort_token = current_routing_cohort.set(None)
         demand_token = current_demand.set(None)
+        policy_token = current_listen_policy.set(None)
         try:
             await self._run()
         finally:
+            current_listen_policy.reset(policy_token)
             current_demand.reset(demand_token)
             current_routing_cohort.reset(cohort_token)
             current_recovery_enabled.reset(token)
@@ -1248,13 +1270,43 @@ class ListenSessionRuntime:
             if error is not None:
                 raise error
 
+    async def _observe_pending_client_close(self) -> None:
+        # A sender's WebSocketDisconnect carries a synthetic 1006 whatever the peer
+        # sent, so read the queued disconnect frame for the client's real code. Data
+        # frames queue ahead of it; the receive loop has left, so they are discarded.
+        websocket = self.request.websocket
+        if (
+            getattr(self.state, 'ws_close_initiator', None) is not None
+            or getattr(self.receiver, '_receiving', False)
+            or websocket.client_state != WebSocketState.CONNECTED
+        ):
+            return
+        deadline = time.monotonic() + CLOSE_FRAME_DRAIN_SECONDS
+        while (remaining := deadline - time.monotonic()) > 0:
+            try:
+                message = await asyncio.wait_for(websocket.receive(), timeout=remaining)
+            except Exception:
+                return
+            if message.get('type') == 'websocket.disconnect':
+                note_ws_close(self.state, 'client', message.get('code', 1000))
+                return
+
+    def _cap_held_at_close(self) -> bool:
+        # Paused at onset (cap_paused) or holding denied audio mid-session (live_hold.paused).
+        receiver = getattr(self, 'receiver', None)
+        hold = getattr(receiver, 'live_hold', None)
+        return getattr(receiver, 'cap_paused', False) is True or getattr(hold, 'paused', False) is True
+
     async def _teardown(self) -> None:
         observation = getattr(self, '_no_audio_observation', None)
         if observation is not None:
             observation.close()
+        teardown_started_at = time.monotonic()
+        held_at_close = self._cap_held_at_close()
         try:
             await self._teardown_components()
         finally:
+            record_listen_ws_close(self.state, held=held_at_close, teardown_started_at=teardown_started_at)
             # Receiver finish/drain can settle an exhausted leg or admit a
             # pending paid onset. Count the complete socket after those seams.
             cohort = getattr(self, '_routing_cohort', None)
@@ -1302,9 +1354,11 @@ class ListenSessionRuntime:
             logger.error('STT finish failed type=%s', type(error).__name__)
         if not owner_persistence_blocked:
             await self._flush_usage(final=True)
+        await self._observe_pending_client_close()
         if self.request.websocket.client_state == WebSocketState.CONNECTED and not self.state.stt_terminal_failure:
             try:
                 await self.request.websocket.close(code=self.state.close_code)
+                note_ws_close(self.state, 'server', self.state.close_code)
             except Exception:
                 pass
         conversation_id = self.state.current_conversation_id

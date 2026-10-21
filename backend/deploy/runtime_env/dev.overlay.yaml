@@ -18,10 +18,6 @@ overlay:
           value: '0'
         AUDIO_ARCHIVE_UID_ALLOWLIST:
           value: vi7SA9ckQCe4ccobWNxlbdcNdC23
-        AUDIO_TIMELINE_SPANS:
-          value: 'false'
-        LIVE_SPEAKER_SPAN_RESOLUTION:
-          value: 'false'
         LIVE_CAPTURE_WINDOW_MERGE_UNION:
           value: 'false'
         LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS:
@@ -39,8 +35,6 @@ overlay:
         STT_ROUTING_MODE:
           value: shadow
         STT_ROUTING_ON_PERCENT:
-          value: '0'
-        SONIOX_MONTHLY_CEILING_USD:
           value: '0'
         PARAKEET_WINDOW_ALLOCATION_PERCENT:
           value: '1'
@@ -66,7 +60,7 @@ overlay:
         DREAM_AGENT_UID_ALLOWLIST:
           value: ''
         BUCKET_SCREEN_FRAMES:
-          value: based-hardware-dev-screen-frames
+          value: based-hardware-prod-screen-frames
         TRANSCRIPTION_SHADOW_ENABLED:
           value: 'false'
           category: rollout
@@ -94,10 +88,6 @@ overlay:
           value: '0'
         AUDIO_ARCHIVE_UID_ALLOWLIST:
           value: vi7SA9ckQCe4ccobWNxlbdcNdC23
-        AUDIO_TIMELINE_SPANS:
-          value: 'false'
-        LIVE_SPEAKER_SPAN_RESOLUTION:
-          value: 'false'
         LIVE_CAPTURE_WINDOW_MERGE_UNION:
           value: 'false'
         LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS:
@@ -114,7 +104,7 @@ overlay:
         DREAM_AGENT_UID_ALLOWLIST:
           value: ''
         BUCKET_SCREEN_FRAMES:
-          value: based-hardware-dev-screen-frames
+          value: based-hardware-prod-screen-frames
         TRANSCRIPTION_SHADOW_ENABLED:
           value: 'true'
           category: rollout
@@ -320,8 +310,6 @@ overlay:
             value: syncing-local-development
           AUDIO_ARCHIVE_PERCENT:
             value: '0'
-          LIVE_SPEAKER_SPAN_RESOLUTION:
-            value: 'false'
           HOSTED_PARAKEET_API_URL:
             value: http://parakeet.omiapi.com
           HOSTED_SPEAKER_EMBEDDING_API_URL:
@@ -332,7 +320,7 @@ overlay:
             value: 'on'
             category: rollout
           BUCKET_SCREEN_FRAMES:
-            value: based-hardware-dev-screen-frames
+            value: based-hardware-prod-screen-frames
           OMI_CUSTOMER_DATA_PROJECT:
             value: based-hardware
           FIREBASE_SIGNER_SERVICE_ACCOUNT:
@@ -383,8 +371,6 @@ overlay:
             value: ''
           AUDIO_ARCHIVE_PERCENT:
             value: '0'
-          LIVE_SPEAKER_SPAN_RESOLUTION:
-            value: 'false'
           SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM:
             value: 'false'
           SYNC_REPROCESS_COALESCE_ENABLED:
@@ -411,7 +397,7 @@ overlay:
             value: 'on'
             category: rollout
           BUCKET_SCREEN_FRAMES:
-            value: based-hardware-dev-screen-frames
+            value: based-hardware-prod-screen-frames
           TRANSCRIPTION_SHADOW_ENABLED:
             value: 'false'
             category: rollout
@@ -465,8 +451,6 @@ overlay:
             value: ''
           AUDIO_ARCHIVE_PERCENT:
             value: '0'
-          LIVE_SPEAKER_SPAN_RESOLUTION:
-            value: 'false'
           SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM:
             value: 'false'
           SYNC_REPROCESS_COALESCE_ENABLED:
@@ -538,8 +522,6 @@ overlay:
             value: ''
           AUDIO_ARCHIVE_PERCENT:
             value: '0'
-          LIVE_SPEAKER_SPAN_RESOLUTION:
-            value: 'false'
           HOSTED_PARAKEET_API_URL:
             value: http://parakeet.omiapi.com
           HOSTED_SPEAKER_EMBEDDING_API_URL:

@@ -11,11 +11,15 @@ This module provides functions for merging multiple conversations into one.
 import config.speaker_match_scores as match_scores
 
 import copy
+import random
+import time
 import uuid
 from contextlib import nullcontext
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple
+
+from google.api_core import exceptions as google_exceptions
 
 import database.conversations as conversations_db
 from database import conversation_tombstones
@@ -26,6 +30,7 @@ from models.conversation import Conversation
 from models.conversation_enums import ConversationStatus
 from models.structured import Structured
 from utils.memory.memory_service import MemoryService
+from utils.metrics import OMI_SYNC_BRIDGE_AUDIO_COPY_TOTAL
 from utils.memory.retraction_scope import (
     canonical_intake_is_fenced,
     historical_source_conversation_ids,
@@ -615,6 +620,7 @@ def _copy_audio_chunks_for_merge(
     new_conversation_id: str,
     *,
     strict: bool = False,
+    skip_existing: bool = False,
 ) -> List[AudioFile]:
     """
     Copy audio chunks from all source conversations to new conversation.
@@ -635,12 +641,20 @@ def _copy_audio_chunks_for_merge(
         uid: User ID
         conversations: List of conversation dictionaries (sorted by started_at)
         new_conversation_id: ID for the new merged conversation
+        skip_existing: Sync bridges re-run for every late append to a donor. Skip a
+            destination that already holds the same bytes, and create/replace only under a
+            generation precondition so concurrent bridges never mutate one object twice.
 
     Returns:
         List of AudioFile objects
     """
     bucket = _get_storage_client().bucket(private_cloud_sync_bucket)
     has_chunks = False
+    existing = (
+        {blob.name: blob for blob in bucket.list_blobs(prefix=f"chunks/{uid}/{new_conversation_id}/")}
+        if skip_existing
+        else None
+    )
 
     for conv in conversations:
         conv_id = conv["id"]
@@ -649,8 +663,10 @@ def _copy_audio_chunks_for_merge(
         # source conversation's original audio chunks (step 9) after this returns, so a swallowed
         # failure — while has_chunks may already be True from an earlier source — would let that
         # deletion destroy audio that was never copied anywhere. Raising instead aborts the merge
-        # into _handle_merge_failure, which runs before any source is deleted.
-        chunks = list_audio_chunks(uid, conv_id)
+        # into _handle_merge_failure, which runs before any source is deleted. For the same reason a
+        # failed raw-archive listing raises rather than returning only the legacy chunks.
+        identity = {'source_identity': True} if skip_existing else {}
+        chunks = list_audio_chunks(uid, conv_id, require_archive=True, **identity)
         for chunk in chunks:
             has_chunks = True
 
@@ -658,8 +674,11 @@ def _copy_audio_chunks_for_merge(
             original_filename = chunk["path"].split("/")[-1]
             new_path = f"chunks/{uid}/{new_conversation_id}/{original_filename}"
             source_blob = bucket.blob(chunk["path"])
-            with owner_storage_write_gate(uid, bucket):
-                bucket.copy_blob(source_blob, bucket, new_path)
+            if existing is None:
+                _copy_chunk_with_backoff(uid, bucket, source_blob, new_path)
+            else:
+                identity = _copied_source_identity(bucket, chunk)
+                _copy_bridge_chunk(uid, bucket, source_blob, new_path, identity, existing.get(new_path))
 
     # Create AudioFile records from copied chunks
     if has_chunks:
@@ -671,6 +690,84 @@ def _copy_audio_chunks_for_merge(
                 raise
 
     return []
+
+
+# GCS sustains about one mutation per second on one object name; a 429 there is
+# the per-object limit, so back off past it rather than failing the whole job.
+_COPY_RATE_LIMIT_ATTEMPTS = 4
+_COPY_RATE_LIMIT_BASE_SECONDS = 1.0
+
+
+def _copy_chunk_with_backoff(
+    uid: str,
+    bucket: Any,
+    source_blob: Any,
+    new_path: str,
+    *,
+    if_generation_match: Optional[int] = None,
+    bridge: bool = False,
+) -> None:
+    """Copy one object, retrying only GCS 429 with bounded equal-jitter backoff."""
+    for attempt in range(1, _COPY_RATE_LIMIT_ATTEMPTS + 1):
+        try:
+            with owner_storage_write_gate(uid, bucket):
+                if if_generation_match is None:
+                    bucket.copy_blob(source_blob, bucket, new_path)
+                else:
+                    # retry=None: the library's conditional policy would otherwise
+                    # retry 429 for up to two minutes, unbounded and uncounted.
+                    bucket.copy_blob(source_blob, bucket, new_path, if_generation_match=if_generation_match, retry=None)
+        except google_exceptions.TooManyRequests:
+            if bridge:
+                OMI_SYNC_BRIDGE_AUDIO_COPY_TOTAL.labels(outcome='rate_limited').inc()
+            if attempt >= _COPY_RATE_LIMIT_ATTEMPTS:
+                raise
+            high = _COPY_RATE_LIMIT_BASE_SECONDS * (2 ** (attempt - 1))
+            time.sleep(high / 2 + random.random() * high / 2)
+            continue
+        if bridge:
+            OMI_SYNC_BRIDGE_AUDIO_COPY_TOTAL.labels(outcome='copied').inc()
+        return
+
+
+def _copied_source_identity(bucket: Any, chunk: Dict) -> Dict:
+    """Checksum and size of the object copy_blob actually reads: private bucket, chunk path.
+
+    A chunk listed from BUCKET_AUDIO_DERIVED carries that bucket's checksum, not the
+    private object's, so stat the private source instead of trusting the listing.
+    """
+    if not chunk.get('bucket'):
+        return {'crc32c': chunk.get('crc32c'), 'size': chunk.get('size')}
+    source = bucket.get_blob(chunk['path'], retry=None)  # a 429 must not wait out the library's 120 s retry
+    return {} if source is None else {'crc32c': source.crc32c, 'size': source.size}
+
+
+def _same_object(blob: Any, identity: Dict) -> bool:
+    crc32c = identity.get('crc32c')
+    return (
+        bool(crc32c) and getattr(blob, 'crc32c', None) == crc32c and getattr(blob, 'size', None) == identity.get('size')
+    )
+
+
+def _copy_bridge_chunk(uid: str, bucket: Any, source_blob: Any, new_path: str, identity: Dict, current: Any) -> None:
+    """Idempotent bridge copy: skip identical bytes, never overwrite a concurrent writer."""
+    if current is not None and _same_object(current, identity):
+        OMI_SYNC_BRIDGE_AUDIO_COPY_TOTAL.labels(outcome='skipped').inc()
+        return
+    try:
+        # Generation 0 means "create only"; otherwise replace exactly the version listed.
+        # A GCS listing always carries a generation; None (test doubles only) keeps
+        # the pre-idempotency unconditional copy.
+        generation = getattr(current, 'generation', None) if current is not None else 0
+        _copy_chunk_with_backoff(uid, bucket, source_blob, new_path, if_generation_match=generation, bridge=True)
+    except google_exceptions.PreconditionFailed:
+        winner = bucket.get_blob(new_path, retry=None)
+        # Archive packs list no checksum; their capture-named object of the same size
+        # is the same pack another bridge copied a moment ago.
+        unverifiable = not identity.get('crc32c') and getattr(winner, 'size', None) == identity.get('size')
+        if winner is None or not (_same_object(winner, identity) or unverifiable):
+            raise
+        OMI_SYNC_BRIDGE_AUDIO_COPY_TOTAL.labels(outcome='raced').inc()
 
 
 def _determine_visibility(conversations: List[Dict]) -> str:
@@ -766,7 +863,7 @@ def retract_sync_bridge_source(uid: str, source_id: str) -> None:
 
 def copy_sync_bridge_audio(uid: str, source_id: str, target_id: str) -> None:
     """Copy retained donor audio strictly; never checkpoint a failed copy."""
-    _copy_audio_chunks_for_merge(uid, [{'id': source_id}], target_id, strict=True)
+    _copy_audio_chunks_for_merge(uid, [{'id': source_id}], target_id, strict=True, skip_existing=True)
 
 
 def delete_conversation_with_sync_sources(uid: str, conversation_id: str, *, merged_into: Optional[str] = None) -> None:

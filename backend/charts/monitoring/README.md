@@ -860,8 +860,7 @@ it never deletes or pauses other rules. It then runs `--mode fleet --alert-set l
 when any of them is absent, paused, or divergent. They are Grafana-managed alerts,
 not PrometheusRule CRDs. Their `component="other"` selector matches the shared
 fallback bucket for `redis_cache`; cache-write children are initialized at zero.
-Soniox runway UIDs remain pending until
-their metrics have a data source. The token is read from a mode-0600 file and
+The token is read from a mode-0600 file and
 neither token material nor contact-point settings are logged. Split-vs-combined
 equality in unit tests is not evidence a rule is live; only the workflow's
 token-backed fleet verification proves that.

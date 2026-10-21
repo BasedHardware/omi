@@ -299,10 +299,15 @@ def reassign_fact_subject(uid: str, fact_id: str, old: Optional[str], new: Optio
             },
         )
 
-    return memory_ledger.append_commit(
-        clean_uid,
-        None,
-        [memory_ledger.reassign_fact_subject(clean_fact_id, clean_old, clean_new)],
-        projection_writer=write_projection,
-        use_current_head=True,
-    )
+    # Moving ``updated_at`` on a live legacy row reorders the retraction scan,
+    # so the write holds the historical source index fence.
+    from database.memory_source_index import fence
+
+    with fence(clean_uid, kg_db.db):
+        return memory_ledger.append_commit(
+            clean_uid,
+            None,
+            [memory_ledger.reassign_fact_subject(clean_fact_id, clean_old, clean_new)],
+            projection_writer=write_projection,
+            use_current_head=True,
+        )

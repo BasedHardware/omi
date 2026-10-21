@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from config.stt_provider_policy import DEEPGRAM_CLOUD_PROVIDER, DEEPGRAM_SELF_HOSTED_PROVIDER
 from utils.stt.send_queue import AudioSendQueue
 from utils.stt.streaming import (
     STTService,
@@ -108,15 +109,23 @@ class TestLanguageRouting(unittest.TestCase):
         self.assertIsNone(lang)
         self.assertIsNone(model)
 
+    @patch.dict(
+        'config.stt_provider_policy.PROVIDER_SERVING_SURFACES',
+        {DEEPGRAM_CLOUD_PROVIDER: frozenset(), DEEPGRAM_SELF_HOSTED_PROVIDER: frozenset()},
+    )
     @patch.dict('os.environ', {'HOSTED_PARAKEET_API_URL': 'https://parakeet.test'})
     @patch('utils.stt.streaming.stt_service_models', ['dg-nova-3'])
-    def test_retired_deepgram_config_uses_non_deepgram_default(self):
+    def test_disabled_deepgram_config_uses_non_deepgram_default(self):
         service, lang, model = get_stt_service_for_language('en', multi_lang_enabled=False)
         self.assertEqual(service, STTService.modulate)
         self.assertEqual(model, 'velma-2')
 
+    @patch.dict(
+        'config.stt_provider_policy.PROVIDER_SERVING_SURFACES',
+        {DEEPGRAM_CLOUD_PROVIDER: frozenset(), DEEPGRAM_SELF_HOSTED_PROVIDER: frozenset()},
+    )
     @patch('utils.stt.streaming.stt_service_models', ['dg-nova-3', 'modulate-velma-2'])
-    def test_retired_deepgram_token_is_ignored_before_modulate(self):
+    def test_disabled_deepgram_token_is_ignored_before_modulate(self):
         service, lang, model = get_stt_service_for_language('en', multi_lang_enabled=False)
         self.assertEqual(service, STTService.modulate)
         self.assertEqual(model, 'velma-2')
@@ -132,6 +141,25 @@ class TestLanguageRouting(unittest.TestCase):
         self.assertEqual(service, STTService.modulate)
         self.assertEqual(lang, 'af')
         self.assertEqual(model, 'velma-2')
+
+
+@pytest.mark.parametrize('models', [['dg-nova-3'], ['dg-nova-3', 'modulate-velma-2']])
+@pytest.mark.parametrize('language', ['en', 'fr'])
+@pytest.mark.parametrize('multi_language', [False, True])
+def test_configured_cloud_deepgram_serves_available_streaming_languages(models, language, multi_language):
+    # Hosted Deepgram was restored for live streaming, not PTT or prerecorded
+    # audio. Preserve both its current enabled behavior and the refusal tests
+    # above when the policy explicitly disables a deployment.
+    with (
+        patch('utils.stt.streaming.stt_service_models', models),
+        patch('utils.stt.streaming.is_dg_self_hosted', False),
+        patch('utils.stt.streaming._deepgram_is_available', return_value=True),
+    ):
+        assert get_stt_service_for_language(language, multi_lang_enabled=multi_language) == (
+            STTService.deepgram,
+            'multi' if multi_language else language,
+            'nova-3',
+        )
 
 
 class TestWAVHeader(unittest.TestCase):
@@ -332,6 +360,19 @@ class TestUtteranceHandling(unittest.TestCase):
             return sock
 
         return self.loop.run_until_complete(create())
+
+    def test_pending_provider_output_tracks_partials_until_a_text_final(self):
+        sock = self._make_socket()
+        self.assertFalse(sock.has_pending_provider_output())
+        sock._handle_partial_utterance({'text': 'hel', 'start_ms': 100})
+        self.assertTrue(sock.has_pending_provider_output())
+        # An empty final leaves the partial buffered for drain: still owed.
+        sock._handle_utterance({'text': '', 'start_ms': 100, 'duration_ms': 300})
+        self.assertTrue(sock.has_pending_provider_output())
+        sock._handle_partial_utterance({'text': 'hello', 'start_ms': 900})
+        sock._handle_utterance({'text': 'hello', 'start_ms': 900, 'duration_ms': 400})
+        self.assertFalse(sock.has_pending_provider_output())
+        self.assertEqual([seg['text'] for seg in self.segments], ['hello'])
 
     def test_utterance_parsing(self):
         sock = self._make_socket()
@@ -556,6 +597,7 @@ class TestRecvLoop(unittest.TestCase):
         self.assertEqual(self.segments, [])
         self.assertTrue(sock.is_connection_dead)
         self.assertIn('closed cleanly', sock.death_reason)
+        self.assertEqual(sock.connection_cause, 'clean_eof')
 
     def test_error_message_marks_dead(self):
         msg = json.dumps({'type': 'error', 'error': 'rate limit'})
@@ -1329,17 +1371,25 @@ class TestPassthroughSkipsRemap(unittest.TestCase):
 
 
 class TestLanguageRoutingExtended(unittest.TestCase):
+    @patch.dict(
+        'config.stt_provider_policy.PROVIDER_SERVING_SURFACES',
+        {DEEPGRAM_CLOUD_PROVIDER: frozenset(), DEEPGRAM_SELF_HOSTED_PROVIDER: frozenset()},
+    )
     @patch.dict('os.environ', {'HOSTED_PARAKEET_API_URL': 'https://parakeet.test'})
     @patch('utils.stt.streaming.stt_service_models', ['dg-nova-3'])
-    def test_retired_config_falls_back_to_the_capable_single_language_provider(self):
+    def test_disabled_config_falls_back_to_the_capable_single_language_provider(self):
         service, lang, model = get_stt_service_for_language('fr', multi_lang_enabled=False)
         self.assertEqual(service, STTService.modulate)
         self.assertEqual(lang, 'fr')
         self.assertEqual(model, 'velma-2')
 
+    @patch.dict(
+        'config.stt_provider_policy.PROVIDER_SERVING_SURFACES',
+        {DEEPGRAM_CLOUD_PROVIDER: frozenset(), DEEPGRAM_SELF_HOSTED_PROVIDER: frozenset()},
+    )
     @patch.dict('os.environ', {'HOSTED_PARAKEET_API_URL': 'https://parakeet.test'})
     @patch('utils.stt.streaming.stt_service_models', ['dg-nova-3'])
-    def test_retired_config_falls_back_to_the_capable_multilingual_provider(self):
+    def test_disabled_config_falls_back_to_the_capable_multilingual_provider(self):
         service, lang, model = get_stt_service_for_language('fr', multi_lang_enabled=True)
         self.assertEqual(service, STTService.modulate)
         self.assertEqual(lang, 'multi')

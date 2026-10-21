@@ -1308,12 +1308,17 @@ async def _passthrough_resolve_geolocation(geolocation):
     return geolocation
 
 
-def _install_sync_observability_stubs():
+def _install_sync_observability_stubs(saved_modules):
     """Stub observability modules + metrics for routers.sync imports.
 
     MagicMock('utils.observability') is not a package, so submodule imports fail
-    unless we install a real ModuleType package with __path__.
+    unless we install a real ModuleType package with an empty __path__. That empty
+    path also hides modules the hand list never named, so every on-disk sibling
+    (including held_content) is stubbed too. Real file-backed children already in
+    sys.modules, such as the retained telemetry imports, stay.
     """
+    from testing.import_isolation import install_package_submodule_stubs
+
     obs_pkg = types.ModuleType('utils.observability')
     obs_pkg.__path__ = []  # type: ignore[attr-defined]
     fallback_mod = types.ModuleType('utils.observability.fallback')
@@ -1325,12 +1330,15 @@ def _install_sync_observability_stubs():
     journeys_mod.record_client_journey_accepted = MagicMock()
     journeys_mod.record_client_journey_terminal = MagicMock()
     sys.modules['utils.observability'] = obs_pkg
-    sys.modules['utils.observability.fallback'] = fallback_mod
-    sys.modules['utils.observability.transcription'] = transcription_mod
-    sys.modules['utils.observability.journeys'] = journeys_mod
-    obs_pkg.fallback = fallback_mod
-    obs_pkg.transcription = transcription_mod
-    obs_pkg.journeys = journeys_mod
+    install_package_submodule_stubs(
+        'utils.observability',
+        saved_modules,
+        overrides={
+            'utils.observability.fallback': fallback_mod,
+            'utils.observability.transcription': transcription_mod,
+            'utils.observability.journeys': journeys_mod,
+        },
+    )
     sys.modules['utils.metrics'] = MagicMock(OMI_SYNC_DISPATCH_ATTEMPTS_TOTAL=MagicMock())
     return fallback_mod
 
@@ -1582,7 +1590,7 @@ class TestAsyncCoordinatorBehavioral:
         )
         sys.modules['utils.sync.content_id'].compute_sync_content_id = MagicMock(return_value='content-1')
 
-        _install_sync_observability_stubs()
+        _install_sync_observability_stubs(saved_modules)
 
         mock_executors = MagicMock()
         mock_executors.critical_executor = MagicMock()
@@ -3617,7 +3625,7 @@ class TestV2EndpointExecution:
         )
         sys.modules['utils.sync.content_id'].compute_sync_content_id = MagicMock(return_value='content-1')
 
-        _install_sync_observability_stubs()
+        _install_sync_observability_stubs(saved_modules)
 
         # Stub utils.executors with real-ish executor mocks
         import contextvars

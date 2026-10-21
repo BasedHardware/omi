@@ -17,13 +17,16 @@ import 'package:omi/utils/l10n_extensions.dart';
 /// conversation says so at the trailing end, which opens [ConversationVisibilitySheet]; a private one
 /// (the default) shows nothing there, and Visibility stays in the ⋯ menu.
 class ConversationDetailTabs extends StatelessWidget {
-  const ConversationDetailTabs({super.key, required this.controller, required this.onTap});
+  const ConversationDetailTabs({super.key, required this.controller, required this.onTap, this.showVisibility = true});
 
   /// Index 0 is Summary, 1 is Transcript.
   final TabController controller;
 
   /// A tab was tapped (not swiped to).
   final ValueChanged<int> onTap;
+
+  /// The saved conversation's "Shared" label; a live episode has no saved conversation to share yet.
+  final bool showVisibility;
 
   @override
   Widget build(BuildContext context) {
@@ -68,7 +71,7 @@ class ConversationDetailTabs extends StatelessWidget {
                 ),
               ),
             ),
-            const _VisibilityLabel(),
+            if (showVisibility) const _VisibilityLabel(),
           ],
         ),
       ),

@@ -16,6 +16,8 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+import auth_http
+
 
 class InvoiceError(RuntimeError):
     """A sanitized provider/shape failure; never contains an HTTP body or credential."""
@@ -33,8 +35,10 @@ def get_json(url: str, key: str, params: dict, scheme: str = "Bearer") -> dict:
         url + "?" + urllib.parse.urlencode(params), headers={"Authorization": scheme + " " + key}
     )
     try:
-        with urllib.request.urlopen(request, timeout=60) as response:
+        with auth_http.open_authenticated(request, timeout=60) as response:
             return json.load(response, parse_float=Decimal)
+    except auth_http.RedirectRefused:
+        raise InvoiceError("STT usage redirect refused") from None
     except urllib.error.HTTPError as error:
         if error.code in (401, 403):
             raise PermissionError("STT usage permission unavailable") from None
@@ -50,7 +54,7 @@ def optional_key(provider: str) -> str | None:
 
         try:
             return cloudrun.secret(provider)
-        except (cloudrun.AuthError, OSError):
+        except (cloudrun.AuthError, OSError, UnicodeError):
             return None
     return os.environ.get(provider.upper() + "_API_KEY", "").strip() or None
 
@@ -95,11 +99,17 @@ def soniox_costs(start: str, end_excl: str, key: str) -> dict[str, str]:
     return {day: str(amount) for day, amount in costs.items()}
 
 
-def deepgram_costs(start: str, end_excl: str, key: str, project: str) -> dict[str, str]:
+def deepgram_costs(start: str, end_excl: str, key: str, project: str) -> dict[str, dict[str, str]]:
     """Daily billing dollars, with an explicit company project; never discover BYOK projects.
 
     Query through the following date and select the exact daily grouping. This
     handles an inclusive end without counting its next-day bucket twice.
+
+    Known STT is streaming/sync nova, base, enhanced, or whisper. Any other
+    positive dollars are unclassified. Counting them as STT would mix TTS and
+    other products into the speech bill; dropping them and still calling the
+    day measured would hide a new STT model. A day with unclassified dollars
+    is incomplete and must not be published as measured.
     """
     costs = {}
     project = urllib.parse.quote(project, safe="")
@@ -113,23 +123,38 @@ def deepgram_costs(start: str, end_excl: str, key: str, project: str) -> dict[st
         )
         if payload["resolution"] != {"units": "day", "amount": 1}:
             raise InvoiceError("Deepgram billing resolution is not daily")
-        amount = Decimal(0)
+        known = Decimal(0)
+        unclassified = Decimal(0)
         for row in payload["results"]:
             group = row["grouping"]
             if group["start"] not in (day, next_day) or group["end"] != group["start"]:
                 raise InvoiceError("Deepgram billing day outside requested UTC window")
             if group["start"] != day:
                 continue
-            mode, _, model = group["line_item"].partition("::")
-            if mode in ("streaming", "sync") and model.startswith(("nova", "base", "enhanced", "whisper")):
-                amount += usd(row["dollars"])
-        costs[day] = str(amount)
+            amount = usd(row["dollars"])
+            if amount == 0:
+                continue
+            mode, separator, model = group["line_item"].partition("::")
+            recognized = (
+                separator == "::"
+                and mode in ("streaming", "sync")
+                and model.startswith(("nova", "base", "enhanced", "whisper"))
+            )
+            if recognized:
+                known += amount
+            else:
+                unclassified += amount
+        costs[day] = {
+            "usd": str(known),
+            "unclassified_usd": str(unclassified),
+            "status": "incomplete" if unclassified > 0 else "measured",
+        }
     return costs
 
 
 def pull(raw: pathlib.Path, start: str, end_excl: str) -> None:
     """Overwrite on every pull, including skip, so reused run dirs cannot leak old costs."""
-    providers, skipped = {}, []
+    providers, skipped, incomplete = {}, [], {}
     for provider in ("soniox", "deepgram"):
         key = optional_key(provider)
         project = os.environ.get("FINOPS_DEEPGRAM_PROJECT_ID", "").strip()
@@ -147,5 +172,14 @@ def pull(raw: pathlib.Path, start: str, end_excl: str) -> None:
             sys.stderr.write("WARNING: %s measured STT skipped: usage API permission unavailable\n" % provider)
             skipped.append(provider)
             continue
+        if provider == "deepgram" and any(row["status"] != "measured" for row in costs.values()):
+            sys.stderr.write("WARNING: %s measured STT skipped: unclassified positive line items\n" % provider)
+            incomplete[provider] = costs
+            continue
+        if provider == "deepgram":
+            costs = {day: row["usd"] for day, row in costs.items()}
         providers[provider] = costs
-    (raw / "stt_vendor_cost_daily.json").write_text(json.dumps({"providers": providers, "skipped": skipped}, indent=1))
+    document = {"providers": providers, "skipped": skipped}
+    if incomplete:
+        document["incomplete"] = incomplete
+    (raw / "stt_vendor_cost_daily.json").write_text(json.dumps(document, indent=1))

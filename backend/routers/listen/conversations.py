@@ -14,6 +14,7 @@ from models.conversation import Conversation
 from models.conversation_enums import ConversationSource, ConversationStatus
 from models.message_event import ConversationEvent, ConversationSessionEvent, LastConversationEvent
 from models.structured import Structured  # type: ignore[reportAttributeAccessIssue]
+from routers.listen.policy import persist_conversation_policy
 from routers.listen.contracts import ConversationCaptureOrigin, persisted_started_seconds
 from utils.byok import get_byok_keys
 from utils.cloud_tasks import is_listen_finalization_dispatch_enabled
@@ -146,6 +147,7 @@ class LiveConversationController:
         self.host.recording_session_id = pointer['recording_session_id']
         self.host.batch_record_capture = capture_snapshot(existing)
         self.host.state.current_conversation_id = binding['conversation_id']
+        await persist_conversation_policy(self.host, binding['conversation_id'])
         self.host.recording_session_ids_by_conversation[binding['conversation_id']] = self.host.recording_session_id
         self._adopt_capture_timeline(binding['conversation_id'], (existing or {}).get('started_at'))
         if self.host.use_custom_stt and not existing.get('uses_custom_stt', False):
@@ -497,6 +499,7 @@ class LiveConversationController:
                     return
                 self.host.batch_record_capture = capture_snapshot(existing)
                 self.host.state.current_conversation_id = conversation_id
+                await persist_conversation_policy(self.host, conversation_id)
                 self._adopt_capture_timeline(conversation_id, existing.get('started_at'))
                 # Persist the custom-STT marker on resume so a conversation that
                 # started under normal STT but continues under custom STT keeps
@@ -596,13 +599,28 @@ class LiveConversationController:
         payload = omit_null_processing_state(conversation.model_dump())
         if carry:
             payload['manual_speaker_assignments'] = carry
+        idempotent_create = bool(
+            self.host.client_conversation_id and conversation_id == self.host.client_conversation_id
+        )
         created = await self.host.persistence.call(
             lifecycle_service.create_in_progress_conversation,
             request.uid,
             payload,
-            idempotent=bool(self.host.client_conversation_id and conversation_id == self.host.client_conversation_id),
+            idempotent=idempotent_create,
         )
-        self.host.batch_record_capture = capture_snapshot(payload) if created else None
+        if created or not idempotent_create:
+            self.host.batch_record_capture = capture_snapshot(payload)
+        else:
+            # An idempotent hit: another writer created this client id between the
+            # probe above and this create. Snapshot the stored row like the resume
+            # paths do; pinning None would hold a batch-owned recording ineligible.
+            stored = await self.host.persistence.call(
+                conversations_db.get_conversation,
+                request.uid,
+                conversation_id,
+                read_site=FirestoreReadSite.LISTEN_CLIENT_ID_PROBE,
+            )
+            self.host.batch_record_capture = capture_snapshot(stored) if stored else None
         if rollover:
             proposed = {'conversation_id': conversation_id, 'recording_session_id': self.host.recording_session_id}
             adopted = await self._continuation(proposed)
@@ -620,6 +638,7 @@ class LiveConversationController:
         if source == ConversationSource.desktop and meeting:
             await self.host.persistence.call(redis_db.set_conversation_meeting_id, conversation_id, meeting['id'])
         self.host.state.current_conversation_id = conversation_id
+        await persist_conversation_policy(self.host, conversation_id)
         # Fresh v2 generation: the origin is pinned by the receiver at the
         # first accepted audio frame associated with this conversation.
         self._adopt_capture_timeline(conversation_id, None)
@@ -659,7 +678,11 @@ class LiveConversationController:
             # existing-conversation behavior instead of dodging it.
             await self.create_new_in_progress_conversation()
             return None
-        existing = await self.host.persistence.call(retrieve_in_progress_conversation, self.host.request.uid)
+        if hasattr(self.host, '_policy_resume_candidate'):
+            existing = self.host._policy_resume_candidate
+            del self.host._policy_resume_candidate
+        else:
+            existing = await self.host.persistence.call(retrieve_in_progress_conversation, self.host.request.uid)
         if not existing:
             await self.create_new_in_progress_conversation()
             return None
@@ -716,6 +739,7 @@ class LiveConversationController:
             existing = current
         self.host.batch_record_capture = capture_snapshot(existing)
         self.host.state.current_conversation_id = existing['id']
+        await persist_conversation_policy(self.host, existing['id'])
         self.host.recording_session_ids_by_conversation[existing['id']] = self.host.recording_session_id
         self._adopt_capture_timeline(existing['id'], existing.get('started_at'))
         self.send_conversation_session(binding, self.host.recording_session_id)

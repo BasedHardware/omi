@@ -21,7 +21,6 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any, Optional, TypeGuard
 
-from config.capture_evidence import capture_evidence_dark_write_enabled
 from config.sync_audio_coverage import sync_wal_audio_coverage_active_for
 from utils.capture_evidence import decoded_frame_map
 from utils.executors import submit_with_context
@@ -441,11 +440,7 @@ def build_sync_source_frame_maps(
 ) -> dict:
     """Anchor each decoded WAL WAV to original frame ordinals when S1 claims exist."""
     source_frame_maps: dict = {}
-    if not (
-        capture_evidence_dark_write_enabled()
-        and isinstance(capture_evidence_claims, Mapping)
-        and capture_evidence_claims
-    ):
+    if not ((isinstance(capture_evidence_claims, Mapping) and capture_evidence_claims)):
         return source_frame_maps
     for wav_path in wav_paths:
         claim = capture_evidence_claims.get(os.path.basename(wav_path).replace('.wav', '.bin'))
@@ -504,11 +499,12 @@ async def apply_sync_wal_audio_coverage(
     """
     source_frame_maps = build_sync_source_frame_maps(capture_evidence_claims, wav_paths, decoded_frames)
     if not (
-        source_frame_maps
-        and sync_wal_audio_coverage_active_for(uid)
-        and capture_evidence_dark_write_enabled()
-        and capture_evidence_claims
-        and recording_session_id
+        (
+            source_frame_maps
+            and sync_wal_audio_coverage_active_for(uid)
+            and capture_evidence_claims
+            and recording_session_id
+        )
     ):
         return wav_paths, source_frame_maps, False
 

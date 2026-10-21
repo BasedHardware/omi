@@ -32,6 +32,10 @@ concurrency:
   cancel-in-progress: false
 
 env:
+  # Abort a git HTTP transfer that stays under 1 KB/s for 60 s, so actions/checkout
+  # retries instead of hanging 7-10 min until the TCP reset (#22890).
+  GIT_HTTP_LOW_SPEED_LIMIT: "1000"
+  GIT_HTTP_LOW_SPEED_TIME: "60"
   SERVICE: desktop-backend
   REGION: us-central1
   FIREBASE_AUTH_PROJECT_ID: based-hardware
@@ -361,6 +365,9 @@ jobs:
             --service-account=desktop-backend-runtime@based-hardware.iam.gserviceaccount.com
             --remove-secrets=PINECONE_API_KEY,PINECONE_HOST,/secrets/firebase/service-account.json
           env_vars: |
+            STT_CAP_DISPATCH_ENFORCEMENT=false
+            STT_CAP_DISPATCH_COHORT=
+            STT_CAP_DISPATCH_LANES=live
             DEMAND_PROCESSING_ENABLED=false
             DEMAND_PROCESSING_LAZY_ENABLED=false
             DEMAND_PROCESSING_TOOL_ENABLED=false

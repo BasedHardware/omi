@@ -27,7 +27,11 @@ from utils.conversations.action_item_refresh import transfer_donor
 from utils.conversations.merge_conversations import copy_sync_bridge_audio, retract_sync_bridge_source
 from utils.metrics import OMI_SYNC_BRIDGE_RETRACTION_TOTAL
 from utils.observability.fallback import record_fallback
-from utils.sync.assignment_errors import SyncAssignmentConflict, SyncAssignmentSuperseded
+from utils.sync.assignment_errors import (
+    SyncAssignmentConflict,
+    SyncAssignmentConflictReason,
+    SyncAssignmentSuperseded,
+)
 from utils.sync.telemetry import bounded_exception_reason, bounded_exception_type
 from utils.sync.fsr_metadata import read_metadata
 
@@ -89,7 +93,7 @@ def finish_sync_bridges(uid: str, conversation_id: str, *, audio_source_id: str 
     visited: set[str] = set()
     while True:
         if conversation_id in visited or len(visited) >= 16:
-            raise SyncAssignmentConflict('sync redirect cycle', subtype='redirect_cycle')
+            raise SyncAssignmentConflict('sync redirect cycle', subtype=SyncAssignmentConflictReason.REDIRECT_CYCLE)
         visited.add(conversation_id)
         row = read_metadata(conversations_db, uid, conversation_id, operation='bridge')
         if not row or (row.get('deleted') and not row.get('sync_merged_into')):
@@ -107,7 +111,10 @@ def finish_sync_bridges(uid: str, conversation_id: str, *, audio_source_id: str 
                 or not source.get('sync_merged_into')
                 or (flatten and source['sync_merged_into'] != conversation_id)
             ):
-                raise SyncAssignmentConflict('sync bridge source missing or not a tombstone', subtype='other')
+                raise SyncAssignmentConflict(
+                    'sync bridge source missing or not a tombstone',
+                    subtype=SyncAssignmentConflictReason.BRIDGE_SOURCE_NOT_TOMBSTONE,
+                )
             revision = source['sync_content_revision']
             needs_cleanup = source.get('sync_bridge_cleaned_revision') != revision
             audio_target = conversation_id if row.get('private_cloud_sync_enabled') else None

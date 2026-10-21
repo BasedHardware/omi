@@ -11,6 +11,7 @@ import 'package:omi/providers/app_provider.dart';
 import 'package:omi/pages/settings/apple_health_detail_page.dart';
 import 'package:omi/pages/settings/chat_apps/chat_apps_page.dart';
 import 'package:omi/pages/settings/integration_selection_card.dart';
+import 'package:omi/pages/settings/task_integrations_page.dart';
 import 'package:omi/providers/integration_provider.dart';
 import 'package:omi/providers/messaging_channels_provider.dart';
 import 'package:omi/services/integrations/apple_health_service.dart';
@@ -477,6 +478,15 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
                         child: Semantics(
                             liveRegion: true, child: Text(context.l10n.connectionErrorDesc, style: OmiType.subhead))),
                   const ChatAppsIntegrationsEntry(),
+                  OmiSettingsGroup(children: [
+                    OmiSettingsRow(
+                      key: const ValueKey('task_integrations_entry'),
+                      leading: const Icon(Icons.checklist_rounded),
+                      title: context.l10n.taskIntegrations,
+                      onTap: () => routeToPage(context, const TaskIntegrationsPage()),
+                    ),
+                  ]),
+                  const SizedBox(height: OmiSpacing.md),
                   ...IntegrationApp.values.map((app) => _buildAppTile(app, isLoading)),
                   Padding(
                     padding: const EdgeInsets.symmetric(vertical: OmiSpacing.xs),

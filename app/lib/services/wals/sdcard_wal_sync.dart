@@ -186,10 +186,12 @@ class SDCardWalSyncImpl implements SDCardWalSync {
       var seconds = ((totalBytes - storageOffset) / codec.getFramesLengthInBytes()) ~/ codec.getFramesPerSecond();
       // Use device-provided recording start timestamp if available (firmware >= 3.0.16), otherwise estimate
       int timerStart;
+      String? clockRun;
       if (_supportsTimestampMarkers() && storageFiles.length >= 3 && storageFiles[2] > 0) {
         timerStart = storageFiles[2];
       } else {
         timerStart = DateTime.now().millisecondsSinceEpoch ~/ 1000 - seconds;
+        clockRun = Wal.newClockRun();
       }
       Logger.debug(
         'SDCardWalSync: totalBytes=$totalBytes storageOffset=$storageOffset frameLengthInBytes=${codec.getFramesLengthInBytes()} fps=${codec.getFramesPerSecond()} calculatedSeconds=$seconds timerStart=$timerStart now=${DateTime.now().millisecondsSinceEpoch ~/ 1000}',
@@ -217,6 +219,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
           deviceModel: deviceModel,
           totalFrames: seconds * codec.getFramesPerSecond(),
           syncedFrameOffset: 0,
+          clockRun: clockRun,
         ),
       );
     }
@@ -268,9 +271,13 @@ class SDCardWalSyncImpl implements SDCardWalSync {
   int _storageFileSeq = 0;
   int _admittedGeneration = -1;
 
+  /// Non-null while the chunks being flushed carry an app-estimated start
+  /// time; see [Wal.clockRun]. A device timestamp marker clears it.
+  String? _activeClockRun;
+
   Future<File> _flushToDisk(Wal wal, List<List<int>> chunk, int timerStart) async {
     final directory = await getApplicationDocumentsDirectory();
-    var fileName = wal.getFileNameByTimeStarts(timerStart);
+    var fileName = wal.getFileNameByTimeStarts(timerStart, clockRun: _activeClockRun);
     if (await File('${directory.path}/$fileName').exists()) {
       final dot = fileName.lastIndexOf('.');
       final stem = dot > 0 ? fileName.substring(0, dot) : fileName;
@@ -458,7 +465,9 @@ class SDCardWalSyncImpl implements SDCardWalSync {
     if (!hasError && bytesData.isNotEmpty) {
       int totalFrames = bytesData.length;
       int accurateDuration = totalFrames ~/ wal.codec.getFramesPerSecond();
+      // This firmware stores no recording time: every chunk's start is an estimate.
       int timerStart = DateTime.now().millisecondsSinceEpoch ~/ 1000 - accurateDuration;
+      _activeClockRun = wal.clockRun ?? Wal.newClockRun();
 
       int bytesLeft = 0;
       int chunkOffset = wal.storageOffset;
@@ -496,6 +505,9 @@ class SDCardWalSyncImpl implements SDCardWalSync {
     int fileNum = wal.fileNum;
     int offset = wal.storageOffset;
     int timerStart = wal.timerStart;
+    // Estimated until the first device timestamp marker, unless the listing
+    // already supplied the device's recording start.
+    _activeClockRun = wal.clockRun;
 
     Logger.debug("_readStorageBytesToFileWithMarkers $offset");
 
@@ -660,6 +672,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
             for (var m in timestampMarkers) {
               if (m.key == nextMarkerIdx) {
                 timerStart = m.value;
+                _activeClockRun = null;
                 break;
               }
             }
@@ -696,23 +709,28 @@ class SDCardWalSyncImpl implements SDCardWalSync {
       List<List<int>> segments = [];
       int segStart = bytesLeft;
       int segEpoch = timerStart;
+      // 1 when the segment starts at a device marker, 0 when it continues the
+      // current (possibly estimated) clock.
+      int segMarked = 0;
       for (var marker in timestampMarkers) {
         if (marker.key > bytesLeft && marker.key < bytesData.length) {
           if (marker.key > segStart) {
-            segments.add([segStart, marker.key, segEpoch]);
+            segments.add([segStart, marker.key, segEpoch, segMarked]);
           }
           segStart = marker.key;
           segEpoch = marker.value;
+          segMarked = 1;
         }
       }
       if (segStart < bytesData.length) {
-        segments.add([segStart, bytesData.length, segEpoch]);
+        segments.add([segStart, bytesData.length, segEpoch, segMarked]);
       }
 
       for (var seg in segments) {
         int sStart = seg[0];
         int sEnd = seg[1];
         int sEpoch = seg[2];
+        if (seg[3] == 1) _activeClockRun = null;
         var chunk = bytesData.sublist(sStart, sEnd);
         var chunkFrames = chunk.length;
         if (chunkFrames > 0) {
@@ -839,6 +857,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
       totalFrames: chunkFrames,
       syncedFrameOffset: 0,
       originalStorage: WalStorage.sdcard,
+      clockRun: _activeClockRun,
     );
 
     try {

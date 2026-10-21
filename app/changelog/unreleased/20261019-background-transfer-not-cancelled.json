@@ -1,4 +1,0 @@
-{
-  "change": "A recording transfer or sync you started is no longer stopped and reported as cancelled while the app is in the background",
-  "platforms": ["ios"]
-}

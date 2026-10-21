@@ -13099,6 +13099,9 @@ class AppLocalizationsHi extends AppLocalizations {
   String get reviewProposalSuggested => 'सुझाया गया';
 
   @override
+  String get reviewQuestionOutOfDate => 'यह सवाल पुराना हो गया है, इसलिए कुछ नहीं बदला।';
+
+  @override
   String get reviewProposalConflict => 'Dream के सुझाव के बाद यह बदल गया, इसलिए कुछ भी लागू नहीं किया गया।';
 
   @override
@@ -14365,6 +14368,107 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get activityAttentionLinkStalledSubtitle => 'Omi पर रिकॉर्डिंग जारी है';
+
+  @override
+  String get episodeNow => 'अभी';
+
+  @override
+  String episodeLiveFor(String duration) {
+    return 'लाइव · $duration';
+  }
+
+  @override
+  String episodeMomentsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count पल',
+      one: '1 पल',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get episodeMoments => 'पल';
+
+  @override
+  String get episodeSoFar => 'अब तक';
+
+  @override
+  String get episodeUpdatedJustNow => 'अभी अपडेट हुआ · पूरे नोट्स अंत में';
+
+  @override
+  String episodeUpdatedMinutesAgo(int minutes) {
+    return '$minutes मिनट पहले अपडेट हुआ · पूरे नोट्स अंत में';
+  }
+
+  @override
+  String get episodeNotesSoon => 'बातचीत के पहले कुछ मिनटों के बाद नोट्स दिखेंगे।';
+
+  @override
+  String get episodeOpenAll => 'सब खोलें';
+
+  @override
+  String get episodeWrapUpNow => 'अभी समाप्त करें';
+
+  @override
+  String get episodeWrapsUpHint => 'आपके आगे बढ़ने पर Omi इसे समाप्त कर देगा';
+
+  @override
+  String episodeTaskCaptured(String text) {
+    return 'कार्य पकड़ा गया: $text';
+  }
+
+  @override
+  String episodeReminderCaptured(String text) {
+    return 'रिमाइंडर पकड़ा गया: $text';
+  }
+
+  @override
+  String episodeTaskSaved(String text) {
+    return 'कार्य सहेजा गया: $text';
+  }
+
+  @override
+  String episodeAddingFromOmi(String duration) {
+    return 'आपके Omi से $duration जोड़ा जा रहा है';
+  }
+
+  @override
+  String get episodeListeningNow => 'अभी सुन रहा है';
+
+  @override
+  String get deviceHeardToday => 'आज सुना';
+
+  @override
+  String get deviceToSync => 'सिंक बाकी';
+
+  @override
+  String get deviceRightNow => 'अभी';
+
+  @override
+  String deviceLiveEpisode(String duration) {
+    return 'लाइव एपिसोड · $duration';
+  }
+
+  @override
+  String get deviceCatchingUp => 'बाकी जोड़ा जा रहा है';
+
+  @override
+  String deviceCatchingUpProgress(int done, int total) {
+    return '$done/$total मिनट';
+  }
+
+  @override
+  String get deviceRecently => 'हाल ही में';
+
+  @override
+  String deviceDisconnectedFor(String duration) {
+    return '$duration तक डिस्कनेक्ट रहा';
+  }
+
+  @override
+  String get deviceControls => 'नियंत्रण';
 
   @override
   String get onboardingChatOnTelegramTitle => 'Chat with Omi on Telegram';

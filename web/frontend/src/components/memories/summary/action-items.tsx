@@ -4,12 +4,14 @@ import {
   participantInitials,
   actionItemFacts,
 } from '@/src/lib/shared-note.mjs';
+import { presentableNoteText } from '@omi/note-shared/note-sources.mjs';
 
 interface ActionsItemsProps {
   items: ActionItemsType[];
+  knownIDs?: string[];
 }
 
-export default function ActionItems({ items }: ActionsItemsProps) {
+export default function ActionItems({ items, knownIDs = [] }: ActionsItemsProps) {
   return (
     <div>
       <h2 className="sn-h3">Action items</h2>
@@ -26,7 +28,9 @@ export default function ActionItems({ items }: ActionsItemsProps) {
                 {item.completed ? 'Completed' : 'Not completed'}
               </span>
               <div className="sn-action-body">
-                <p className="sn-action-text">{item.description}</p>
+                <p className="sn-action-text">
+                  {presentableNoteText(item.description, knownIDs)}
+                </p>
                 <div className="sn-action-meta">
                   {owner && (
                     <span className="sn-owner">
@@ -39,7 +43,11 @@ export default function ActionItems({ items }: ActionsItemsProps) {
                       Owner: {owner}
                     </span>
                   )}
-                  {context && <span className="sn-context">{context}</span>}
+                  {context && (
+                    <span className="sn-context">
+                      {presentableNoteText(context, knownIDs)}
+                    </span>
+                  )}
                   {due ? (
                     <time dateTime={due.iso}>Due {due.label}</time>
                   ) : (

@@ -19,7 +19,9 @@ metadata:
   name: {{ .Release.Name }}
 spec:
   # L4 scale-from-zero, image pull and joint model startup exceeded 600s in dev.
-  progressDeadlineSeconds: 1800
+  # Recreate also waits for old pods to drain (terminationGracePeriodSeconds 1500)
+  # before new ones start, so the deadline covers drain plus startup.
+  progressDeadlineSeconds: 2400
   {{- if not .Values.autoscaling.enabled }}
   replicas: {{ .Values.replicaCount }}
   {{- end }}
@@ -53,6 +55,10 @@ spec:
           ports:
             - {name: http, containerPort: 8080}
           env:
+            - {name: STT_CAP_DISPATCH_ENFORCEMENT, value: {{ .Values.worker.capDispatchEnforcement | quote }}}
+            - {name: STT_CAP_DISPATCH_COHORT, value: {{ .Values.worker.capDispatchCohort | quote }}}
+            - {name: STT_CAP_DISPATCH_LANES, value: {{ .Values.worker.capDispatchLanes | quote }}}
+            - {name: LADDER_V1_BUDGET_ENFORCEMENT_ENABLED, value: {{ .Values.worker.ladderBudgetEnforcement | quote }}}
             - {name: BATCH_PIPELINE_WORKER_RELEASE, value: {{ .Release.Name | quote }}}
             - name: POD_NAMESPACE
               valueFrom:

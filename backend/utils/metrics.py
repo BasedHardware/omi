@@ -510,6 +510,7 @@ JEV_DECISION_LABELS = {
             'capture_same_scene',
             'capture_resummary',
             'conversation_smart_merge',
+            'episode_boundary',
         }
     ),
     'outcome': frozenset(
@@ -946,6 +947,32 @@ OMI_SYNC_BRIDGE_RETRACTION_TOTAL = Counter(
     ['outcome', 'reason'],
 )
 
+# Counted alongside omi_sync_transcription_*_total{outcome="internal_error"}:
+# the bounded internal cause (config.sync_telemetry.SyncFailureReason).
+OMI_SYNC_INTERNAL_FAILURES_TOTAL = Counter(
+    'omi_sync_internal_failures_total',
+    'Sync job/segment failures in persistence or finalize, by bounded internal cause; never STT vendor errors',
+    ['kind', 'lane', 'failure_reason'],
+)
+
+OMI_SYNC_BRIDGE_AUDIO_COPY_TOTAL = Counter(
+    'omi_sync_bridge_audio_copy_total',
+    (
+        'Per-object sync-bridge audio copies. outcome=copied|skipped (destination already held the '
+        'same bytes)|rate_limited (one GCS 429, retried with backoff)|raced (a concurrent copier won)'
+    ),
+    ['outcome'],
+)
+
+OMI_SYNC_FRESH_CONVERSATION_TURN_TOTAL = Counter(
+    'omi_sync_fresh_conversation_turn_total',
+    (
+        'Fresh-lane per-conversation persistence turns. outcome=acquired|waited (acquired after another '
+        'fresh job released it)|timeout|unavailable (both proceed unserialized; the transaction stays correct)'
+    ),
+    ['outcome'],
+)
+
 OMI_LIVE_STT_TERMINAL_FAILURES_TOTAL = Counter(
     'omi_live_stt_terminal_failures_total',
     'Terminal live-STT failures by bounded provider, outcome, client platform, environment, and phase',
@@ -994,6 +1021,14 @@ OMI_VAD_GATE_SESSIONS_TOTAL = Counter(
     'omi_vad_gate_sessions_total',
     'Live VAD gate sessions by mode',
     ['mode'],
+)
+
+# D2 edge shadow mirrors (utils/stt/edge_shadow.py). outcome: completed,
+# queue_full, connect_failed, send_failed, edge_closed.
+OMI_LISTEN_EDGE_SHADOW_SESSIONS_TOTAL = Counter(
+    'omi_listen_edge_shadow_sessions_total',
+    'Listen sessions mirrored to listen-edge by how the mirror ended',
+    ['outcome'],
 )
 
 OMI_LIVE_STT_TERMINAL_TOTAL = Counter(
@@ -1146,7 +1181,7 @@ OMI_SYNC_LINEAGE_RESOLVE_TOTAL = Counter(
         'Sync lineage binding decisions. outcome is a closed set: bound|split_across_generations|stamp_overridden|'
         'stamp_fallback|no_rows|truncated|interval_miss|lookup_failed|disabled|not_allowlisted|s1_refused'
     ),
-    ['outcome'],
+    ['outcome', 'stage', 'claim_count_bucket', 'file_count_bucket'],
 )
 
 # Task identity is emitted by all processing hosts; event=action_item_identity logs cover unscraped hosts.

@@ -45,7 +45,7 @@ from utils.manual_speaker_assignments import (
     remap_absorbed_receipt,
 )
 from ._client import db, delete_collection_recursive, get_firestore_client, run_transactional
-from database.sync_assignment import encode_sync_assignment_plan, run_sync_assignment
+from database.sync_assignment import SyncAssignmentClock, encode_sync_assignment_plan, run_sync_assignment
 from database.sync_live_overlap import find_sync_live_overlap_candidates
 from utils.sync.live_overlap import live_overlap_enabled
 from .audio_timeline import group_chunks_by_coverage
@@ -2379,9 +2379,9 @@ def delete_conversation(uid, conversation_id):
     for sub in conversation_ref.collections():
         delete_collection_recursive(sub, client=db)
     conversation_ref.delete()
-    from config.stt_cap_dispatch import execution_admission_enabled
+    from config.stt_cap_dispatch import any_execution_admission_enabled
 
-    if execution_admission_enabled():
+    if any_execution_admission_enabled(uid):
         processing_backlog.remove(uid, conversation_id)
     # Corrections are a sibling owner collection, not a child of the capture.
     user_ref.collection('transcript_corrections').document(conversation_id).delete()
@@ -4195,16 +4195,23 @@ def assign_sync_conversation(
     validate_plan: Callable[[Any, dict], None] | None = None,
     after_assign: Callable[[Any, tuple], None] | None = None,
     retry_contention: bool = False,
+    timing: bool = False,
+    defer_index: Callable[[str, str, list[str]], None] | None = None,
 ):
-    """Atomically choose, create or append a sync conversation across workers."""
+    """Atomically choose, create or append a sync conversation; ``timing`` logs bounded sub-phases.
+
+    ``defer_index`` takes the post-commit search/people-stats step off this
+    call: it receives the canonical and its donor lineage, and the caller
+    converges each conversation once later (``index_sync_assignment``).
+    """
     from utils.sync.assignment import assign_in_transaction, run_with_size_limit_backstop
 
+    clock = SyncAssignmentClock(logger, enabled=timing)
     client = firestore_client if firestore_client is not None else get_firestore_client()
     user_ref = client.collection('users').document(uid)
 
     live_candidate_ids: tuple[str, ...] = ()
-    if not target_id and incoming.get('client_device_id') and live_overlap_enabled():
-        live_candidate_ids = find_sync_live_overlap_candidates(user_ref, incoming)
+    absorbed: list[str] = []
 
     score_snapshots: dict = {}
 
@@ -4229,47 +4236,80 @@ def assign_sync_conversation(
 
     @firestore.transactional
     def assign(transaction, full_ids=frozenset()):
+        clock.attempt()
         score_snapshots.clear()
         # Optional batch projection hooks share the exact legacy transaction.
         # Guards/plan validation may only read; after_assign may only write.
         if before_assign is not None:
-            before_assign(transaction)
+            with clock.timed('fence'):
+                before_assign(transaction)
 
         def encode(payload):
-            if validate_plan is not None:
-                validate_plan(transaction, payload)
-            return encode_sync_assignment_plan(
-                uid, client, transaction, payload, score_snapshots.get(payload.get('id'))
-            )
+            with clock.timed('encode'):
+                if validate_plan is not None:
+                    validate_plan(transaction, payload)
+                return encode_sync_assignment_plan(
+                    uid, client, transaction, payload, score_snapshots.get(payload.get('id'))
+                )
 
-        planned = assign_in_transaction(
-            transaction,
-            user_ref,
-            incoming,
-            candidate_id=candidate_id,
-            target_id=target_id,
-            decode=decode,
-            encode=encode,
-            invalidate=clear_client_processing,
-            full_ids=full_ids,
-            live_candidate_ids=live_candidate_ids,
-        )
+        with clock.timed('plan'):
+            planned = assign_in_transaction(
+                transaction,
+                user_ref,
+                incoming,
+                candidate_id=candidate_id,
+                target_id=target_id,
+                decode=decode,
+                encode=encode,
+                invalidate=clear_client_processing,
+                full_ids=full_ids,
+                live_candidate_ids=live_candidate_ids,
+                absorbed=absorbed,
+            )
         # The commit runs after this returns; remember which row it would grow.
         attempted['canonical'] = planned[0]['id']
         if after_assign is not None:
-            after_assign(transaction, planned)
+            with clock.timed('persist'):
+                after_assign(transaction, planned)
+        clock.body_done()
         return planned
 
-    result = run_with_size_limit_backstop(
-        lambda full_ids: run_sync_assignment(client, assign, full_ids, retry_contention=retry_contention),
-        lambda: attempted.get('canonical'),
-    )
-    invalidate_people_stats_cache(uid)
-    conversation = result[0]
-    for donor_id in conversation.get('sync_merged_from') or []:
-        _delete_conversation_search_index(uid, str(donor_id))
-    _sync_conversation_search_index(uid, conversation['id'])
+    with clock.call():
+        if not target_id and incoming.get('client_device_id') and live_overlap_enabled():
+            with clock.timed('live_overlap'):
+                live_candidate_ids = find_sync_live_overlap_candidates(user_ref, incoming)
+        with clock.timed('transaction'):
+            result = run_with_size_limit_backstop(
+                lambda full_ids: run_sync_assignment(client, assign, full_ids, retry_contention=retry_contention),
+                lambda: attempted.get('canonical'),
+            )
+        conversation = result[0]
+        if defer_index is not None:
+            # The caller coalesces per conversation, so the full lineage (which
+            # retries a failed or lost donor delete) is paid once per flush.
+            clock.donors = len(absorbed)
+            defer_index(uid, conversation['id'], sorted({*(conversation.get('sync_merged_from') or []), *absorbed}))
+        else:
+            with clock.timed('index'):
+                clock.donors = len(conversation.get('sync_merged_from') or [])
+                index_sync_assignment(uid, [conversation['id']], conversation.get('sync_merged_from') or [])
     return result
+
+
+def index_sync_assignment(uid: str, conversation_ids, donor_ids) -> None:
+    """Fail-open search and people-stats convergence after sync assignment commits.
+
+    Donors are redirect tombstones and are deleted directly. Every other id is
+    converged from its current durable state, so a late or coalesced call
+    cannot index stale content or resurrect a donor.
+    """
+    invalidate_people_stats_cache(uid)
+    donors = list(dict.fromkeys(str(donor_id) for donor_id in donor_ids))
+    for donor_id in donors:
+        _delete_conversation_search_index(uid, donor_id)
+    for conversation_id in dict.fromkeys(conversation_ids):
+        if conversation_id not in donors:
+            _sync_conversation_search_index(uid, conversation_id)
 
 
 def eligible_merge_target(conversation: Optional[dict]) -> bool:
@@ -4302,9 +4342,18 @@ def select_closest_conversation(conversations, start_timestamp: int, end_timesta
 
 @prepare_for_read(decrypt_func=prepare_conversation_for_read)
 @with_photos(get_conversation_photos)
-def get_closest_conversation_to_timestamps(uid: str, start_timestamp: int, end_timestamp: int) -> Optional[dict]:
-    start_threshold = datetime.fromtimestamp(start_timestamp, tz=timezone.utc) - timedelta(minutes=2)
-    end_threshold = datetime.fromtimestamp(end_timestamp, tz=timezone.utc) + timedelta(minutes=2)
+def get_closest_conversation_to_timestamps(
+    uid: str,
+    start_timestamp: int,
+    end_timestamp: int,
+    *,
+    window_seconds: int = 120,
+    eligible: Optional[Callable[[dict], bool]] = None,
+) -> Optional[dict]:
+    # ``window_seconds``/``eligible`` change bounds and post-filter only; the
+    # query shape and its index are identical. Normal sync keeps the ±2 min hint.
+    start_threshold = datetime.fromtimestamp(start_timestamp, tz=timezone.utc) - timedelta(seconds=window_seconds)
+    end_threshold = datetime.fromtimestamp(end_timestamp, tz=timezone.utc) + timedelta(seconds=window_seconds)
 
     conversations_ref = db.collection('users').document(uid).collection(conversations_collection)
     query = (
@@ -4321,6 +4370,8 @@ def get_closest_conversation_to_timestamps(uid: str, start_timestamp: int, end_t
     for conversation in conversations:
         logger.debug("- %s %s %s", conversation['id'], conversation['started_at'], conversation['finished_at'])
 
+    if eligible is not None:
+        conversations = [conversation for conversation in conversations if eligible(conversation)]
     closest_conversation = select_closest_conversation(conversations, start_timestamp, end_timestamp)
     if closest_conversation is None:
         logger.info('get_closest_conversation_to_timestamps: no eligible merge target (deleted rows excluded)')

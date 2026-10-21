@@ -1,5 +1,5 @@
 from database import sync_redrive
-from utils.sync import redrive_policy
+from utils.sync import minimal_redrive, redrive_policy
 from utils.observability.sync_phases import sync_attempt, set_sync_metrics_lane
 import asyncio
 import json
@@ -149,9 +149,8 @@ from utils.subscription import (
 )
 from utils.sync import playback as sync_playback
 from utils.sync.input_limits import BackfillInputLimitExceeded, BackfillStoragePressure, validate_backfill_uploads
-from config.capture_evidence import capture_evidence_dark_write_enabled
 from config.rollout_cohorts import warm_rollout_cohorts
-from utils.capture_evidence import parse_sync_file_claims
+from utils.sync.recording_lineage import parse_s1_upload_claims
 from utils.sync.files import (
     decode_files_to_wav,
     detect_source_from_filenames,
@@ -199,6 +198,7 @@ from utils.sync.backfill import (
 )
 from utils.batch_pipeline.live_upload import RecordUploadRoute, registered_record_response
 from utils.sync.content_id import compute_sync_content_id
+from utils.sync.failure_reason import stamped_failure_kwargs
 from utils.sync.capture_manifest import (
     claim_conversation_manifest,
     issue_capture_manifest,
@@ -676,7 +676,7 @@ async def sync_local_files(
 
         cap_held = False
         cap_admission: dict = {}
-        if cap_dispatch_enabled():
+        if cap_dispatch_enabled(uid, 'sync'):
             cap_held = await hold_capture_if_exhausted(
                 uid,
                 wav_paths,
@@ -853,7 +853,7 @@ async def sync_local_files(
             ]
         )
 
-        cap_holds = response.get('_cap_holds', {}) if cap_dispatch_enabled() else {}
+        cap_holds = response.get('_cap_holds', {}) if cap_dispatch_enabled(uid, 'sync') else {}
         cap_held_seconds = sum(item['seconds'] for item in cap_holds.values())
 
         await run_blocking(sync_executor, _reprocess_merged_conversations, uid, response)
@@ -1020,9 +1020,7 @@ async def sync_local_files_v2(
     geolocation = geolocation_from_private_header(x_omi_conversation_geolocation)
 
     filenames = [f.filename or '' for f in files]
-    capture_claims = (
-        parse_sync_file_claims(x_omi_capture_evidence, filenames) if capture_evidence_dark_write_enabled() else {}
-    )
+    capture_claims = parse_s1_upload_claims(x_omi_capture_evidence, filenames)
     manifest_claims = verify_capture_manifest(
         x_omi_sync_capture_manifest,
         uid,
@@ -2041,6 +2039,11 @@ async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_
             return _budget_deferral_fallback('preamble_timeout', 'degraded')
     if isinstance(payload, dict) and payload.get('kind') == 'sync_reprocess':
         return await enrichment_response(payload)
+    if minimal_redrive.parse_mode(payload) and not minimal_redrive.enabled():
+        # Kill switch, before the sequencer lease and any lock, download or paid
+        # call: the task, staged audio and ledger claim stay retained.
+        logger.warning('event=sync_minimal_redrive outcome=refused reason=disabled')
+        return JSONResponse(status_code=409, content={'status': 'minimal_redrive_disabled'})
     epoch = payload.get('sequencer_epoch') if isinstance(payload, dict) else None
     if uid_sequencer.foreign_delivery(payload):
         return JSONResponse(status_code=200, content={'status': 'foreign_stage'})
@@ -2966,6 +2969,7 @@ async def _run_sync_job_attempt(request: Request, task_retry_count: int, attempt
         set_sync_metrics_lane(sync_lane)
         content_id = payload.get('content_id') if isinstance(payload.get('content_id'), str) else None
         payload_uses_fence = payload.get('ledger_fence_mode') == SyncLedgerFenceMode.ACTIVE.value
+        redrive_mode = minimal_redrive.parse_mode(payload)
         enqueued_at = payload.get('enqueued_at')
         if not isinstance(client_device_id, str):
             client_device_id = None
@@ -3196,6 +3200,7 @@ async def _run_sync_job_attempt(request: Request, task_retry_count: int, attempt
                     recording_session_id=recording_session_id,
                     audio_start_seconds=audio_start_seconds,
                     audio_end_seconds=audio_end_seconds,
+                    **({'redrive_mode': redrive_mode} if redrive_mode else {}),
                 )
         except BackfillStoragePressure:
             raise
@@ -3297,6 +3302,7 @@ async def _run_sync_job_attempt(request: Request, task_retry_count: int, attempt
                     model=sync_model,
                     lane=sync_lane,
                     run_lock_token=lock_token if ledger_fence_active else None,
+                    **stamped_failure_kwargs(e),  # internal cause, not upstream_error
                 )
                 await _delete_staged_blobs_async(blob_paths)
                 if sync_lane == SyncLane.BACKFILL.value:

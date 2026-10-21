@@ -19,9 +19,10 @@ from utils.sync.cap_hold_lifecycle import ACTIVE as _ACTIVE, observe_publication
 
 from google.cloud import firestore
 
-from database._client import get_firestore_client
+from database._client import get_firestore_client, run_transactional
 from database.legal_holds import external_write_fence
 from utils.executors import db_executor, storage_executor, run_blocking
+from utils.observability.held_content import record_capture
 from utils.sync import cap_hold, live_cap_manifest, live_cap_capacity, live_cap_codec, live_cap_staging
 from utils.sync.live_cap_publication import Publication
 
@@ -95,7 +96,7 @@ def reserve(
             tx.create(receipt, {'bytes': size})
 
     with external_write_fence(uid):
-        commit(client.transaction())
+        run_transactional(client, commit, transient=True)
 
 
 class LiveHeldAudio:
@@ -510,10 +511,14 @@ class LiveHeldAudio:
         await self.close()
 
     async def close(self) -> None:
-        await self.flush(force=True)
-        await self.seal()
-        if self.capacity is not None and not self._capacity_uncertain:
-            await run_blocking(db_executor, live_cap_capacity.release, self.capacity)
-            self.capacity = None
-        await self.notice()
-        _ACTIVE.discard(self)
+        try:
+            await self.flush(force=True)
+            await self.seal()
+            if self.capacity is not None and not self._capacity_uncertain:
+                await run_blocking(db_executor, live_cap_capacity.release, self.capacity)
+                self.capacity = None
+            await self.notice()
+            _ACTIVE.discard(self)
+        finally:
+            if self.pending_bytes > 0:
+                record_capture('lost')

@@ -22,6 +22,7 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/models/custom_stt_config.dart';
 import 'package:omi/models/stt_provider.dart';
+import 'package:omi/models/stt_request_credentials.dart';
 import 'package:omi/pages/on_device/on_device_settings_page.dart';
 import 'package:omi/pages/settings/transcription/json_editor_page.dart';
 import 'package:omi/pages/settings/transcription/stt_language.dart';
@@ -403,12 +404,12 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
     Map<String, dynamic>? requestJson;
     Map<String, dynamic>? schemaJson;
 
-    if (_showAdvanced && _currentRequestJson.isNotEmpty) {
+    if (_currentRequestJson.isNotEmpty) {
       try {
         requestJson = jsonDecode(_currentRequestJson);
       } catch (_) {}
     }
-    if (_showAdvanced && _currentSchemaJson.isNotEmpty) {
+    if ((_showAdvanced || _currentProviderConfig?.schemaJson != null) && _currentSchemaJson.isNotEmpty) {
       try {
         schemaJson = jsonDecode(_currentSchemaJson);
       } catch (_) {}
@@ -526,7 +527,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
     }
 
     // Validate On-Device model presence
-    if (_selectedProvider == SttProvider.onDeviceWhisper && !Platform.isIOS) {
+    if (_useCustomStt && _selectedProvider == SttProvider.onDeviceWhisper && !Platform.isIOS) {
       final modelPath = _urlController.text;
       final hasModel = modelPath.isNotEmpty && await File(modelPath).exists();
       if (!hasModel) {
@@ -1134,7 +1135,17 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
           controller: _apiKeyController,
           obscureText: !_showApiKey,
           style: OmiType.subhead,
-          onChanged: (_) => _validateAndSetError(),
+          onChanged: (value) {
+            final previousKey = _configsPerProvider[_selectedProvider]?.apiKey;
+            _requestJsonPerProvider[_selectedProvider] = updateSttRequestApiKey(
+              provider: _selectedProvider,
+              requestJson: _currentRequestJson,
+              previousKey: previousKey,
+              nextKey: value,
+            );
+            _updateCurrentProviderConfig(apiKey: value);
+            _validateAndSetError();
+          },
           decoration: transcriptionInputDecoration(
             hint: context.l10n.enterApiKey,
             suffixIcon: OmiIconButton(

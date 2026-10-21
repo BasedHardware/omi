@@ -202,11 +202,39 @@ class Pump:
                     await run_blocking(sync_executor, self.project_pending)
                 await run_blocking(db_executor, self.scheduler.recover, time.time())
                 ready = await run_blocking(db_executor, self.scheduler.store.due, 'result_ready', time.time(), 100)
-                await self._drain_ready_owners(ready)
+                try:
+                    await self._drain_ready_owners(ready)
+                except Exception as error:
+                    # A fenced head on the page must not stop the held-owner re-offer below.
+                    self._log_held_retry('ready_page', error)
+                # Durable hold markers outlive the in-memory set below (restarts).
+                marked = await run_blocking(db_executor, self.merge.marked_page, 50)
+                for key, owner_id in marked:
+                    try:
+                        if owner_id:
+                            await self.drain_owner(owner_id)
+                        await run_blocking(db_executor, self.merge.release_hold, key, force=not owner_id)
+                    except Exception as error:
+                        self._log_held_retry('marker', error)
+            # Every pump re-offers the owners its merge held for projection
+            # depth; their rows may never surface in the 100-row page above.
+            for owner_id in list(self.merge.held_owners):
+                try:
+                    await self.drain_owner(owner_id)
+                except Exception as error:
+                    self._log_held_retry('held', error)
             self._last_recovery = sampled_at
         if self.inline_metrics and self.metrics and sampled_at - self._last_metrics >= 15:
             await self.sample_metrics()
             self._last_metrics = sampled_at
+
+    @staticmethod
+    def _log_held_retry(scope: str, error: Exception) -> None:
+        logger.warning(
+            'event=batch_merge action=held_reoffer outcome=retry scope=%s exception_type=%s count=1',
+            scope,
+            type(error).__name__,
+        )
 
     async def _flight(self, stop_event: asyncio.Event | None) -> int:
         now = time.time()
@@ -224,11 +252,14 @@ class Pump:
         leases = await run_blocking(db_executor, claim)
         if not leases:
             return 0
+        claimed = leases
         done = asyncio.Event()
         lost: set[str] = set()
         renew = asyncio.create_task(self._renew(leases, done, lost))
         try:
-            required = [v for v in leases if v.item.requires_compute_admission or cap_dispatch_enabled()]
+            required = [
+                v for v in leases if v.item.requires_compute_admission or cap_dispatch_enabled(v.item.owner_id, 'batch')
+            ]
             if required:
                 receipt = {}
                 try:
@@ -260,7 +291,7 @@ class Pump:
                 if not leases:
                     return 0
             dispatch_kwargs = {}
-            if cap_dispatch_enabled():
+            if any(cap_dispatch_enabled(v.item.owner_id, 'batch') for v in leases):
 
                 def authorize_dispatch(segments):
                     selected = [v for v in leases if v.item.segment_id in segments]
@@ -328,9 +359,24 @@ class Pump:
                 raise ValueError('worker returned duplicate or foreign results')
             await self._publish_flight(leases, result_map, lost)
             return len(leases)
+        except FatalGpuError:
+            raise  # Its handler already refunded every lease without an attempt charge.
+        except Exception:
+            # Nothing else will touch these leases before LEASE_SECONDS expiry.
+            # Release is fenced, so published, deferred or re-leased work is untouched.
+            await self._release(claimed)
+            raise
         finally:
             done.set()
             await renew
+
+    async def _release(self, leases: list[LeasedWork]) -> None:
+        for lease in leases:
+            try:
+                await run_blocking(db_executor, self.scheduler.release, lease.item.segment_id, lease.token, time.time())
+            except Exception as error:
+                # Ambiguous release leaves lease expiry as the durable fallback.
+                logger.error('event=batch_flight outcome=lease_release exception_type=%s', type(error).__name__)
 
     @contextlib.asynccontextmanager
     async def _owner_serial(self, owner_id: str):

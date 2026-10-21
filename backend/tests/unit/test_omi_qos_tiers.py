@@ -376,6 +376,8 @@ class TestModelQosProfiles:
             'memory_category',
             'smart_glasses',
             'persona_chat',
+            'sync_redrive_title',
+            'episode_incremental',
         }
         expected_openai = {
             **{feature: (LUNA_MODEL, 'openai') for feature in luna_features},

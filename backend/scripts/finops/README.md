@@ -31,7 +31,7 @@ actually present in the export at pull time, which is the empirical version of t
 |---|---|---|---|
 | GCP billing export | `gcp_billing_export_resource_v1_01B287_9348DC_02D256` | read-only bot | every GCP component; the pools |
 | LLM gateway ledger | Firestore `llm_gateway_attempts` | read-only bot | measured OpenAI cost per user, Gemini/desktop drivers |
-| LLM gateway user-day rollup | Firestore `llm_gateway_user_days` (hashed uid, dual-written at attempt-record time) | read-only bot | will replace the `llm_gateway_attempts` paging in `pull_ledger.py`; fields mirror `ledger_user_daily.csv` |
+| LLM gateway user-day rollup | Firestore `llm_gateway_user_days` (hashed uid, dual-written at attempt-record time; attempts without a uid are not rolled up, so the `anonymous` bucket comes only from `llm_gateway_attempts`) | read-only bot | will replace the `llm_gateway_attempts` paging in `pull_ledger.py` for attributed users; fields mirror `ledger_user_daily.csv` |
 | Users projection | Firestore `users` (field mask) | read-only bot | platform cohort, plan |
 | Transcription seconds | Firestore collection group `hourly_usage` | read-only bot | audio-pipeline driver |
 | VAD-forwarded audio hours | Prometheus via the Grafana proxy on monitor.omi.me | Grafana token | modelled STT vendor volume |
@@ -249,9 +249,20 @@ published response examples, not live account captures.
 
 `raw/stt_vendor_cost_daily.json` records daily decimal USD amounts and skipped
 providers. It is overwritten on every pull, so a missing key cannot reuse an older
-invoice from the same run directory. Missing/unreadable/empty secrets and usage API
-401/403 responses warn and skip only that provider; they do not publish zero cost.
-Other API/shape failures fail the pull to avoid publishing a false invoice.
+invoice from the same run directory. Missing/unreadable/empty secrets (including a
+non-UTF-8 mount) and usage API 401/403 responses warn and skip only that provider;
+they do not publish zero cost. Other API/shape failures fail the pull to avoid
+publishing a false invoice.
+
+Deepgram measured dollars are streaming/sync `nova`, `base`, `enhanced`, and
+`whisper` only. Any other positive line item on that UTC day is `unclassified`.
+The day is stored under `incomplete` with `usd` (known STT) and `unclassified_usd`,
+and that provider is omitted from `providers`, so it is not published as
+`method=measured`. TTS such as `aura` stays out of the STT total; a new or unknown
+positive line item must not disappear inside a measured row. A published measured
+row does not claim `delta_pct`: the dollars are the accepted invoice, and there
+is no separate allocation to compare. Incomplete days are omitted, so they do
+not publish a zero delta either.
 
 The existing assembler and `load_bigquery.py` publish the measured lines to:
 

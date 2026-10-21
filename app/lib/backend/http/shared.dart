@@ -770,6 +770,7 @@ Future<http.MultipartRequest> _buildMultipartRequest({
   required String fileFieldName,
   required String method,
   Future<void>? abortTrigger,
+  Map<String, File> namedFiles = const {},
 }) async {
   // Abortable when a trigger is supplied: an abandoned POST (setup deadline
   // expired) must not keep running server-side, or a user retry submits the
@@ -786,11 +787,24 @@ Future<http.MultipartRequest> _buildMultipartRequest({
     var multipartFile = http.MultipartFile(fileFieldName, stream, length, filename: basename(file.path));
     request.files.add(multipartFile);
   }
+  for (var entry in namedFiles.entries) {
+    var length = await entry.value.length();
+    var stream = http.ByteStream(entry.value.openRead());
+    request.files.add(http.MultipartFile(entry.key, stream, length, filename: basename(entry.value.path)));
+  }
 
   return request;
 }
 
 typedef UploadProgressCallback = void Function(int bytesSent, int totalBytes, double speedKBps);
+
+/// The upload send has a header timeout, but the body read had none: a socket
+/// that dies after the headers would hold the upload lane (and its transfer
+/// pass) forever. Bodies here are small JSON acknowledgements.
+const multipartBodyReadTimeout = Duration(minutes: 2);
+
+Future<http.Response> _readMultipartBody(http.StreamedResponse response) =>
+    http.Response.fromStream(response).timeout(multipartBodyReadTimeout);
 
 Future<http.Response> makeMultipartApiCall({
   required String url,
@@ -800,6 +814,7 @@ Future<http.Response> makeMultipartApiCall({
   String fileFieldName = 'files',
   String method = 'POST',
   UploadProgressCallback? onUploadProgress,
+  Map<String, File> namedFiles = const {},
 }) async {
   try {
     final bool requireAuthCheck = _isRequiredAuthCheck(url);
@@ -817,10 +832,11 @@ Future<http.Response> makeMultipartApiCall({
       fields: fields,
       fileFieldName: fileFieldName,
       method: method,
+      namedFiles: namedFiles,
     );
 
     var streamedResponse = await _sendMultipartWithProgress(request, onUploadProgress);
-    var response = await http.Response.fromStream(streamedResponse);
+    var response = await _readMultipartBody(streamedResponse);
 
     if (requireAuthCheck && response.statusCode == 401) {
       response = await refreshAndReplayAfter401(
@@ -836,9 +852,10 @@ Future<http.Response> makeMultipartApiCall({
             fields: fields,
             fileFieldName: fileFieldName,
             method: method,
+            namedFiles: namedFiles,
           );
           streamedResponse = await _sendMultipartWithProgress(request, onUploadProgress);
-          return http.Response.fromStream(streamedResponse);
+          return _readMultipartBody(streamedResponse);
         },
       );
     }
@@ -892,7 +909,7 @@ Future<http.Response> makeMultipartApiCallUnpooled({
 
     var streamedResponse = await client.send(request).timeout(const Duration(minutes: 10));
     ApiEdgeThrottleTelemetry.instance.observe(request, streamedResponse);
-    var response = await http.Response.fromStream(streamedResponse);
+    var response = await _readMultipartBody(streamedResponse);
 
     if (requireAuthCheck && response.statusCode == 401) {
       response = await refreshAndReplayAfter401(
@@ -912,7 +929,7 @@ Future<http.Response> makeMultipartApiCallUnpooled({
           HttpPoolManager.stampRequestTime(request);
           streamedResponse = await client.send(request).timeout(const Duration(minutes: 10));
           ApiEdgeThrottleTelemetry.instance.observe(request, streamedResponse);
-          return http.Response.fromStream(streamedResponse);
+          return _readMultipartBody(streamedResponse);
         },
       );
     }

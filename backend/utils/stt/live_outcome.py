@@ -7,11 +7,14 @@ There is no health writer in a death getter, send, or transport close.
 
 from __future__ import annotations
 
+from config.policy.listen import routing_mode_raw
+
 import logging
-import os
 from typing import Callable, Any
 
 from config.live_stt_registry import registry, DEFAULT_TARGETS
+from config.live_stt_resilience import drain_death_censor_enabled
+from utils.stt.pod_drain import is_draining
 from utils.stt.live_metrics import (
     COST_SETTLEMENTS,
     COST_IGNORED_DEATHS,
@@ -54,34 +57,47 @@ class LiveLegOutcome:
         self.pending: Any = None
         self.handed_off = False
         self.transport_released = False
+        # Content-free transport cause of an untyped (connection_lost) death.
+        self.connection_cause: str | None = None
+        # False for a same-target retry dial: one blip is one health vote.
+        self.evidence = True
+
+    @staticmethod
+    def _pod_draining() -> bool:
+        # A rolling restart closes every client with 1012 and tears down legs;
+        # those deaths are ours, never a provider-failure vote.
+        return drain_death_censor_enabled() and is_draining()
+
+    def _ineligible(self) -> bool:
+        return self.owner_closing or bool(self.client_has_left and self.client_has_left()) or self._pod_draining()
 
     def observe_death(self) -> None:
         """Freeze whether this provider death was observed while serving was eligible."""
         if self.death_observed:
             return
         self.death_observed = True
-        self.death_eligible = not (self.owner_closing or bool(self.client_has_left and self.client_has_left()))
+        self.death_eligible = not self._ineligible()
 
     def claim(self, reason: str, *, connect: bool = False) -> str:
         """Transfer settlement to the serving decision before closing transport."""
         if not self.claimed and not self.settled:
             self.claimed = True
             bounded_reason = normalize_live_stt_reason(reason)
-            self.excluded_death = (
-                not self.death_eligible
-                if self.death_observed
-                else self.owner_closing or bool(self.client_has_left and self.client_has_left())
-            )
+            self.excluded_death = not self.death_eligible if self.death_observed else self._ineligible()
             self.reason = 'normal_close' if self.excluded_death else bounded_reason
             if self.excluded_death:
                 try:
-                    if os.getenv('STT_ROUTING_MODE', 'off').strip().lower() != 'off' and any(
+                    if routing_mode_raw().strip().lower() != 'off' and any(
                         entry.id == self.target for entry in registry()
                     ):
                         COST_IGNORED_DEATHS.labels(
                             target=self.target,
                             reason=bounded_reason,
-                            boundary='owner_teardown' if self.owner_closing else 'client_gone',
+                            boundary=(
+                                'owner_teardown'
+                                if self.owner_closing
+                                else 'pod_draining' if self._pod_draining() else 'client_gone'
+                            ),
                         ).inc()
                 except Exception:
                     logger.debug('Cost ignored-death diagnostic unavailable; retaining lifecycle fence')
@@ -112,7 +128,7 @@ class LiveLegOutcome:
         try:
             if emit_fallback is not None and not self.excluded_death:
                 emit_fallback()
-            if not self.uid or os.getenv('STT_ROUTING_MODE', 'off') == 'off':
+            if not self.evidence or not self.uid or routing_mode_raw() == 'off':
                 return True
             if not any(entry.id == self.target for entry in registry()):
                 return True

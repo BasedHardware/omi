@@ -501,6 +501,13 @@ def _decode_base64_payload(value: str) -> bytes:
     payload = value
     if "," in payload and payload.lstrip().startswith("data:"):
         payload = payload.split(",", 1)[1]
+    # Drop ASCII whitespace before validating. Line-wrapped base64 is ordinary
+    # output - it is what base64.encodebytes and most MIME encoders produce -
+    # but validate=True rejects every character outside the alphabet, newlines
+    # included, so a correct payload would otherwise be refused as corrupt.
+    # Stripping only whitespace keeps validate=True strict about everything
+    # else, which is what catches a truncated or non-base64 screenshot.
+    payload = "".join(payload.split())
     try:
         return base64.b64decode(payload, validate=True)
     except (binascii.Error, ValueError) as exc:

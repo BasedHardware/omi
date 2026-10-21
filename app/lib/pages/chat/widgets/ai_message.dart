@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:omi/utils/note_citations.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -802,7 +803,7 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
                       children: [
                         Expanded(
                           child: Text(
-                            '${tryDecodeText(data.$2.structured.emoji)} ${data.$2.structured.title}',
+                            '${tryDecodeText(data.$2.structured.emoji)} ${presentableNoteTitle(data.$2.structured.title, const [])}',
                             style: Theme.of(context).textTheme.bodyMedium,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,

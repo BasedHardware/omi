@@ -422,7 +422,13 @@ def submit_android(
         ).execute()
         client.edits().commit(packageName=PACKAGE_NAME, editId=edit_id).execute()
     except Exception as exc:
-        raise PromotionError("Google Play rejected exact-code promotion to production") from exc
+        # Surface Play's own API message (error code + field-level detail) inside
+        # the train log; a bare "rejected" line cost a 2026-10-19 1%->10% ladder
+        # hop its root cause — the train only printed this static string.
+        detail = f": {exc}" if str(exc).strip() else ""
+        raise PromotionError(
+            f"Google Play rejected exact-code promotion to production{detail}"
+        ) from exc
 
 
 def main() -> int:

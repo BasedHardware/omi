@@ -164,7 +164,7 @@ def test_environment_values_render_worker_identity_and_gpu_pool(
     assert account['annotations']['iam.gke.io/gcp-service-account'] == gsa
 
     deployment = manifests['Deployment']
-    assert deployment['spec']['progressDeadlineSeconds'] == 1800
+    assert deployment['spec']['progressDeadlineSeconds'] == 2400
     pod = deployment['spec']['template']['spec']
     # Prod runs a fixed two-worker floor (one L4 node each); dev stays at one.
     assert deployment['spec']['replicas'] == (2 if environment == 'prod' else 1)
@@ -206,7 +206,7 @@ def test_environment_values_render_worker_identity_and_gpu_pool(
     assert 'HorizontalPodAutoscaler' not in manifests
 
 
-@pytest.mark.parametrize('service,timeout', [('batch-pipeline-worker', '1800s'), ('diarizer', '600s')])
+@pytest.mark.parametrize('service,timeout', [('batch-pipeline-worker', '2400s'), ('diarizer', '600s')])
 @pytest.mark.parametrize('rollout_exit', [0, 1])
 def test_rollout_wait_covers_worker_startup_and_still_fails_on_timeout(tmp_path, service, timeout, rollout_exit):
     workflow = yaml.safe_load((CHART.parents[2] / '.github/workflows/gcp_diarizer.yml').read_text())
@@ -242,6 +242,39 @@ def test_rollout_wait_covers_worker_startup_and_still_fails_on_timeout(tmp_path,
         f'deploy/synthetic-{service}',
         f'--timeout={timeout}',
     ]
+
+
+@pytest.mark.parametrize('deployed_digest,expected_exit', [('a' * 64, 0), ('f' * 64, 1)])
+def test_rollout_verify_requires_the_built_digest(tmp_path, deployed_digest, expected_exit):
+    workflow = yaml.safe_load((CHART.parents[2] / '.github/workflows/gcp_diarizer.yml').read_text())
+    deploy = workflow['jobs']['deploy']
+    step = next(step for step in deploy['steps'] if step.get('name') == 'Verify rollout')
+    # 2026-10-20: the job ran 47 min with no verdict; every layer must now be bounded.
+    assert deploy['timeout-minutes'] >= step['timeout-minutes'] > 2400 / 60
+    kubectl = tmp_path / 'kubectl'
+    kubectl.write_text(
+        '#!/bin/sh\ncase "$3" in rollout) exit 0;; get) printf "gcr.io/p/w@sha256:%s" "$DEPLOYED";; esac\n'
+    )
+    kubectl.chmod(0o755)
+    reporter = tmp_path / 'python3'
+    reporter.write_text('#!/bin/sh\nexit 0\n')
+    reporter.chmod(0o755)
+    result = subprocess.run(
+        ['bash', '-e', '-c', step['run']],
+        env={
+            **os.environ,
+            'PATH': f'{tmp_path}:{os.environ["PATH"]}',
+            'SERVICE': 'batch-pipeline-worker',
+            'DEPLOY_NAMESPACE': 'synthetic',
+            'DEPLOY_ENV': 'dev',
+            'TARGET_RELEASE': 'synthetic-batch-pipeline-worker',
+            'EXPECTED_DIGEST': 'sha256:' + 'a' * 64,
+            'DEPLOYED': deployed_digest,
+        },
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == expected_exit, result.stdout + result.stderr
 
 
 def test_production_worker_refuses_missing_or_mismatched_policy_binding():
@@ -315,3 +348,36 @@ def test_gpu_skip_switches_render_overrides():
     env = {v['name']: v.get('value') for v in deployment['spec']['template']['spec']['containers'][0]['env']}
     assert env['BATCH_PIPELINE_DIARIZE_SPEECH_ONLY_ENABLED'] == 'false'
     assert env['BATCH_PIPELINE_SHORT_SPEECH_SINGLE_ENABLED'] == 'true'
+
+
+@pytest.mark.parametrize('environment', ['dev', 'prod'])
+def test_worker_dispatch_rollout_defaults_are_dark_and_live_only(environment):
+    values = CHART / f'{environment}_omi_batch-pipeline-worker_values.yaml'
+    result = render('-f', str(values), '--set-string', 'image.digest=sha256:' + 'd' * 64)
+    assert result.returncode == 0, result.stderr
+    deployment = next(doc for doc in yaml.safe_load_all(result.stdout) if doc and doc['kind'] == 'Deployment')
+    env = {row['name']: row.get('value') for row in deployment['spec']['template']['spec']['containers'][0]['env']}
+    assert env['STT_CAP_DISPATCH_ENFORCEMENT'] == env['LADDER_V1_BUDGET_ENFORCEMENT_ENABLED'] == 'false'
+    assert env['STT_CAP_DISPATCH_COHORT'] == ''
+    assert env['STT_CAP_DISPATCH_LANES'] == 'live'
+
+
+def test_worker_dispatch_scope_can_be_bound_without_changing_other_admission():
+    result = render(
+        *enabled_arguments(),
+        '--set',
+        'worker.capDispatchEnforcement=true',
+        '--set-string',
+        'worker.capDispatchCohort=uid:synthetic',
+        '--set-string',
+        'worker.capDispatchLanes=batch',
+        '--set',
+        'worker.ladderBudgetEnforcement=true',
+    )
+    assert result.returncode == 0, result.stderr
+    deployment = next(doc for doc in yaml.safe_load_all(result.stdout) if doc and doc['kind'] == 'Deployment')
+    env = {row['name']: row.get('value') for row in deployment['spec']['template']['spec']['containers'][0]['env']}
+    assert env['STT_CAP_DISPATCH_ENFORCEMENT'] == env['LADDER_V1_BUDGET_ENFORCEMENT_ENABLED'] == 'true'
+    assert env['STT_CAP_DISPATCH_COHORT'] == 'uid:synthetic'
+    assert env['STT_CAP_DISPATCH_LANES'] == 'batch'
+    assert env['BATCH_PIPELINE_ENABLED'] == 'false'

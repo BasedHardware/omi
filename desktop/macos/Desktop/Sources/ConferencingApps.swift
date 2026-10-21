@@ -1,3 +1,4 @@
+import AppKit
 @preconcurrency import CoreAudio
 import CoreGraphics
 import Foundation
@@ -224,6 +225,10 @@ enum ConferencingApps {
   /// Titles of normal-layer on-screen browser windows (each shows its active tab's title).
   /// Empty without Screen Recording permission.
   private static func onScreenBrowserWindowTitles() -> [String] {
+    onScreenBrowserWindows().map(\.title)
+  }
+
+  private static func onScreenBrowserWindows() -> [CallAudioBrowserWindow] {
     guard
       let windows = CGWindowListCopyWindowInfo(
         [.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]]
@@ -232,10 +237,12 @@ enum ConferencingApps {
     }
     return windows.compactMap { window in
       guard window[kCGWindowLayer as String] as? Int ?? -1 == 0,
-        let owner = window[kCGWindowOwnerName as String] as? String,
-        browserApps.contains(owner)
+        let pid = window[kCGWindowOwnerPID as String] as? Int32,
+        let bundle = NSRunningApplication(processIdentifier: pid)?.bundleIdentifier,
+        isBrowserBundleID(bundle)
       else { return nil }
-      return window[kCGWindowName as String] as? String
+      guard let title = window[kCGWindowName as String] as? String else { return nil }
+      return CallAudioBrowserWindow(bundleID: bundle.lowercased(), title: title)
     }
   }
 
@@ -317,7 +324,8 @@ enum ConferencingApps {
     return CallAudioSnapshot(
       processes: processes,
       defaultInputDeviceID: defaultInputDeviceID(),
-      browserWindowTitles: includeTitles ? onScreenBrowserWindowTitles() : [])
+      browserWindows: includeTitles ? onScreenBrowserWindows() : [],
+      browserTitlesReadable: CGPreflightScreenCaptureAccess())
   }
 
   // MARK: - CoreAudio process API (macOS 14.4+) — microphone-in-use detection
