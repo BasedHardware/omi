@@ -609,6 +609,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
         _frameSynced = [];
         await _flush(generation);
       } while (_frames.isNotEmpty);
+      // Frames delivered after the loop's final emptiness check (i.e., after stop() returns) remain intentionally unpersisted.
     });
   }
 
