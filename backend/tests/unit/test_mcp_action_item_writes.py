@@ -232,6 +232,20 @@ class TestCreateOrchestration:
         out = actions.create_action_item(UID, 'Email Bob')  # vector raises, task still returned
         assert out['id'] == 'a1'
 
+    @patch('utils.mcp_action_items.upsert_action_item_vector')
+    @patch('utils.mcp_action_items.action_items_db')
+    def test_create_idempotent_hit_indexes_saved_renamed_description(self, mock_db, mock_vec):
+        # A task created as 'Email Bob' was later renamed to 'Email Bob the signed contract'.
+        # A retry with 'Email Bob' matches the open task by idempotency key.
+        # It must index the saved, renamed description, not the stale request text (#22843).
+        mock_db.create_action_item.return_value = 'a1'
+        mock_db.get_action_item.return_value = _action_item('a1', desc='Email Bob the signed contract')
+        out = actions.create_action_item(UID, 'Email Bob')
+
+        mock_vec.assert_called_once_with(UID, 'a1', 'Email Bob the signed contract')
+        assert out['id'] == 'a1'
+        assert out['description'] == 'Email Bob the signed contract'
+
     @patch('utils.mcp_action_items.action_items_db')
     def test_create_rejects_blank(self, _mock_db):
         with pytest.raises(ValueError):
