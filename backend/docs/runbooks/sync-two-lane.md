@@ -293,6 +293,18 @@ contending (`omi_sync_fresh_conversation_turn_total{outcome}`). `timeout` and
 `unavailable` proceed unserialized; the assignment transaction stays
 authoritative. Kill switch: `SYNC_FRESH_CONVERSATION_TURN=off`.
 
+Ordinary sync absorbs re-point only the rows they match, while the canonical's
+`sync_merged_from` stays cumulative, so an absorbed row's own ancestors can keep
+redirecting at it (a multi-hop chain inside one lineage). When a chunk later lands
+on a smart-merge survivor and matches that row, the one-hop flatten re-points
+every hop of such a chain at the survivor in the same transaction. The finalize
+bridge accepts a chain that stays inside the survivor's lineage and ends at it.
+A chain that leaves the lineage, cycles, or crosses a non-tombstone still
+conflicts. `event=sync_ancestry_flatten outcome=rejected reason=...` and
+`event=sync_bridge outcome=source_rejected kind=...` name what was left. Kill
+switch: `CONVERSATION_SMART_MERGE_FLATTEN_CHAIN_REPAIR=off` restores the strict
+one-hop check (`ancestry_flatten_rejected` / `bridge_source_not_tombstone`).
+
 ## Run ownership and recovery
 
 ### Epoch-fence rollout modes

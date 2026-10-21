@@ -23,6 +23,7 @@ from enum import Enum
 SMART_MERGE_MODE_ENV = 'CONVERSATION_SMART_MERGE_MODE'
 SMART_MERGE_AUDIT_ENV = 'CONVERSATION_SMART_MERGE_AUDIT_ENABLED'
 SMART_MERGE_FLATTEN_ENV = 'CONVERSATION_SMART_MERGE_FLATTEN_ENABLED'
+SMART_MERGE_FLATTEN_CHAIN_REPAIR_ENV = 'CONVERSATION_SMART_MERGE_FLATTEN_CHAIN_REPAIR'
 _ON = frozenset({'true', 'on', '1', 'yes'})
 
 
@@ -70,6 +71,19 @@ def smart_merge_flatten_enabled() -> bool:
     after the flag is turned off: completing queued work is not new permission.
     """
     raw = os.getenv(SMART_MERGE_FLATTEN_ENV, '').strip().lower()
+    return not raw or raw in _ON
+
+
+def smart_merge_flatten_chain_repair_enabled() -> bool:
+    """Unset or blank is on; only an explicit on-value keeps it on, anything else is off.
+
+    Ordinary sync absorbs re-point only the rows they match, so a canonical's
+    cumulative ``sync_merged_from`` can hold ancestors that still redirect to an
+    intermediate hop inside that same lineage. On, the flatten accepts such a
+    chain and re-points every hop at the survivor; off restores the strict
+    one-hop check, which rejects the whole absorb.
+    """
+    raw = os.getenv(SMART_MERGE_FLATTEN_CHAIN_REPAIR_ENV, '').strip().lower()
     return not raw or raw in _ON
 
 

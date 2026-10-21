@@ -11,9 +11,9 @@ from __future__ import annotations
 
 import logging
 from _thread import LockType
-from typing import NotRequired, TypedDict
+from typing import Callable, NotRequired, TypedDict
 
-from config.conversation_smart_merge import smart_merge_flatten_enabled
+from config.conversation_smart_merge import smart_merge_flatten_chain_repair_enabled, smart_merge_flatten_enabled
 from config.sync_finalize import sync_finalize_target_recovery_enabled
 from database.action_item_refresh import RefreshConversationUnavailable
 from database import conversations as conversations_db
@@ -88,6 +88,39 @@ def _record_refresh_deferred(reason: str, error: BaseException | None = None) ->
     )
 
 
+def _bridge_source_defect(
+    source: dict | None, survivor_id: str, lineage: list[str], load: Callable[[str], dict | None]
+) -> str | None:
+    """Bounded reason a smart survivor's bridge source does not redirect at it, else ``None``.
+
+    Ordinary sync absorbs leave ancestors redirecting at an intermediate hop of
+    the same lineage. With chain repair on, a chain of tombstones that stays in
+    the survivor's ``sync_merged_from`` and ends at the survivor is accepted:
+    every hop's content already belongs to the survivor, and the next flatten
+    re-points the hops. Anything leaving the lineage still conflicts.
+    """
+    if not source or not source.get('deleted') or not source.get('sync_merged_into'):
+        return None
+    target = source['sync_merged_into']
+    if target == survivor_id:
+        return None
+    if target not in lineage:
+        return 'redirect_elsewhere'
+    if not smart_merge_flatten_chain_repair_enabled():
+        return 'chain'
+    members = set(lineage)
+    for _ in range(len(members)):
+        hop = load(target)
+        if not hop or not hop.get('deleted') or not hop.get('sync_merged_into'):
+            return 'chain_broken'
+        target = hop['sync_merged_into']
+        if target == survivor_id:
+            return None
+        if target not in members:
+            return 'chain_broken'
+    return 'chain_broken'
+
+
 def finish_sync_bridges(uid: str, conversation_id: str, *, audio_source_id: str | None = None) -> str:
     recovery = sync_finalize_target_recovery_enabled()
     visited: set[str] = set()
@@ -102,15 +135,23 @@ def finish_sync_bridges(uid: str, conversation_id: str, *, audio_source_id: str 
             conversation_id = row['sync_merged_into']
             continue
         flatten = smart_merge_flatten_enabled() and (row.get('smart_merge') or {}).get('role') == 'survivor'
+        lineage = row.get('sync_merged_from', [])
+        sources: dict[str, dict | None] = {}
+
+        def load(source_id: str) -> dict | None:
+            if source_id not in sources:
+                sources[source_id] = read_metadata(conversations_db, uid, source_id, operation='bridge')
+            return sources[source_id]
+
         redirected = False
-        for source_id in row.get('sync_merged_from', []):
-            source = read_metadata(conversations_db, uid, source_id, operation='bridge')
-            if (
-                not source
-                or not source.get('deleted')
-                or not source.get('sync_merged_into')
-                or (flatten and source['sync_merged_into'] != conversation_id)
-            ):
+        for source_id in lineage:
+            source = load(source_id)
+            kind = _bridge_source_defect(source, conversation_id, lineage, load) if flatten else None
+            if not source or not source.get('deleted') or not source.get('sync_merged_into') or kind:
+                logger.warning(
+                    'event=sync_bridge outcome=source_rejected kind=%s',
+                    kind or ('missing' if not source else 'not_tombstone'),
+                )
                 raise SyncAssignmentConflict(
                     'sync bridge source missing or not a tombstone',
                     subtype=SyncAssignmentConflictReason.BRIDGE_SOURCE_NOT_TOMBSTONE,
