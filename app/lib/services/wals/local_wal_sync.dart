@@ -599,13 +599,17 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
       WidgetsBinding.instance.removeObserver(this);
     } catch (_) {}
 
-    await _drainPendantTail(generation);
-    await _enqueueBuffer(() async => _chunk(generation));
-    await _enqueueBuffer(() => _flush(generation));
-
-    _frames = [];
-    _pendingPhoneOnly = false;
-    _frameSynced = [];
+    await _enqueueBuffer(() async {
+      if (!_isCurrent(generation)) return;
+      do {
+        _sealPendantTail(generation);
+        _chunk(generation);
+        _frames = [];
+        _pendingPhoneOnly = false;
+        _frameSynced = [];
+        await _flush(generation);
+      } while (_frames.isNotEmpty);
+    });
   }
 
   @override

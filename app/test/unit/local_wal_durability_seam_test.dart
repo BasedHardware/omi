@@ -121,6 +121,65 @@ void main() {
     });
   }
 
+  test('packets arriving during a stop flush survive on disk', () async {
+    final entered = Completer<void>();
+    final release = Completer<void>();
+    var holdWrite = false;
+    final sync = LocalWalSyncImpl(
+      _MockListener(),
+      freeDiskBytes: () async => 1 << 40,
+      persistWals: (wals) async {
+        if (holdWrite) {
+          holdWrite = false;
+          entered.complete();
+          await release.future;
+        }
+        expect(await WalFileManager.saveWals(wals), isTrue);
+      },
+    );
+    addTearDown(() async {
+      if (!release.isCompleted) release.complete();
+      await sync.stop();
+    });
+    sync.start();
+    await sync.walReady;
+    await sync.onAudioCodecChanged(BleAudioCodec.opus);
+    sync.setDeviceInfo('devkit-1', 'Omi DevKit');
+    for (var i = 0; i < 50; i++) {
+      sync.onFrameCaptured(frame(i, 0));
+    }
+
+    holdWrite = true;
+    final stopping = sync.stop();
+    await entered.future;
+    // Native BLE keeps delivering orphan packets while the stop WAL fsync is
+    // pending. Hold that exact boundary, rather than racing host file I/O.
+    for (var i = 50; i < 60; i++) {
+      sync.onFrameCaptured(frame(i, 0));
+    }
+    release.complete();
+    await stopping;
+
+    final index = await WalFileManager.loadWals();
+    expect(index.fold<int>(0, (total, wal) => total + wal.totalFrames), 60);
+    expect(index.map((wal) => wal.totalFrames), [50, 10]);
+    expect(sync.testFrames, isEmpty);
+    final payloads = <int>[];
+    for (final wal in index) {
+      final bytes = await File('${tempDir.path}/${wal.filePath}').readAsBytes();
+      final header = ByteData.sublistView(bytes);
+      for (var offset = 0; offset < bytes.length;) {
+        final length = header.getUint32(offset, Endian.little);
+        offset += 4;
+        expect(length, 2);
+        expect(bytes[offset], 0xAA);
+        payloads.add(bytes[offset + 1]);
+        offset += length;
+      }
+    }
+    expect(payloads, orderedEquals(List<int>.generate(60, (i) => i)), reason: 'each packet exactly once on disk');
+  });
+
   test('finalizeCurrentSession produces a fsynced audio file AND a persisted index entry', () async {
     final sync = LocalWalSyncImpl(_MockListener());
     sync.setDeviceInfo('devkit-1', 'Omi DevKit');
