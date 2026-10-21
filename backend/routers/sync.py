@@ -1064,7 +1064,10 @@ async def sync_local_files_v2(
         client_device_context.client_device_id,
         snapshot_out=record_snapshot,
     )
-    legacy_mode = legacy_dark.current_mode()
+    # Off the event loop, a cold process gives its first ramp read a bounded wait, so a
+    # fresh instance cannot admit legacy work on the 'on' default after the ramp went
+    # draining/dark (M3 review; batch intake reads the mode the same way).
+    legacy_mode = await run_blocking(db_executor, legacy_dark.current_mode)
     legacy_allowed = legacy_dark.legacy_admission_allowed(legacy_mode)
     lane_decision = classify_sync_lane(
         filenames,
@@ -1293,6 +1296,15 @@ async def sync_local_files_v2(
             ledger_row = await run_blocking(db_executor, legacy_dark.read_ledger_row, uid, content_id)
             owner_job_present = await run_blocking(db_executor, legacy_dark.legacy_owner_job_present, ledger_row)
             decision = legacy_dark.fence_decision(ledger_row, legacy_mode, owner_job_present=owner_job_present)
+            if record_response is RecordUploadRoute.LEGACY and decision.action is not legacy_dark.FenceAction.ACK:
+                # The conversation's durable legacy_final_pass_v1 owner holds this recording
+                # (h, invariant 4), even with no content-ledger row: acknowledge it as batch
+                # intake does, never a 409 retry loop and never a new legacy job (M3 review).
+                decision = legacy_dark.FenceDecision(
+                    legacy_dark.FenceAction.ACK,
+                    legacy_dark.LegacyDarkReason.LEGACY_ACTIVE,
+                    legacy_dark.LegacyOwnership.ACTIVE,
+                )
             await run_blocking(sync_executor, _cleanup_files, paths)
             await run_blocking(sync_executor, shutil.rmtree, job_dir, True)
             return (

@@ -87,10 +87,28 @@ def maintain(now: float) -> dict[str, int]:
         'rewoken': swept.rewoken,
         'discarded': swept.discarded,
         'sweep_errors': swept.errors,
+        'provider_stt_rewoken': 0,
+        'provider_stt_discarded': 0,
+        'provider_stt_sweep_errors': 0,
         'summary_debt_scanned': 0,
         'summary_debt_admitted': 0,
         'summary_debt_errors': 0,
     }
+    # C8 provider-STT units rely on this sweep when a post-commit wake is lost (contract (b),
+    # invariant 4); it shares the enrichment maintenance schedule (M3 review). Its own failure
+    # never blocks the enrichment half.
+    try:
+        from database.outbox import OutboxKind, outbox_for
+
+        provider = outbox_for(OutboxKind.PROVIDER_STT).sweep(now=now)
+        counts.update(
+            provider_stt_rewoken=provider.rewoken,
+            provider_stt_discarded=provider.discarded,
+            provider_stt_sweep_errors=provider.errors,
+        )
+    except Exception as error:
+        logger.error('event=provider_stt_sweep outcome=error exception_type=%s', type(error).__name__)
+        counts['provider_stt_sweep_errors'] = 1
     try:
         summary = summary_debt_repair.tick(now=now)
     except Exception as error:

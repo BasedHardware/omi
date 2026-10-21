@@ -127,6 +127,15 @@ DRAINING_PRECONDITIONS = {
         "operator minimal-mode redrives (#22503) are finished or moved to the batch redrive path; draining stops "
         'new sequencer registration and legacy-retire C11 deletes the mode (lead ruling 10-20 05:17Z)'
     ),
+    'provider_stt_live': (
+        'C8 provider-STT is live in prod: the provider-stt Cloud Tasks queue exists, PROVIDER_STT_TASKS_* env is '
+        'deployed, and the enrichment maintenance job (which also sweeps the provider-stt outbox) is scheduled; '
+        'otherwise unsupported-language units strand in provider_pending (M3 GLM review, lead 43bd53)'
+    ),
+    'legacy_final_pass_rehomed': (
+        'conversations still owned by legacy_final_pass_v1 with no live legacy job are re-homed to batch, so '
+        'later uploads are not held on device after dark (M3 Luna review, lead ruling b209a5)'
+    ),
 }
 
 
