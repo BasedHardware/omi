@@ -15999,7 +15999,7 @@ export async function get_entity_page_v1_entities__entity_id__page_get(path: { e
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function get_episode_for_conversation_v1_episodes_by_conversation__conversation_id__get(path: { conversation_id: string }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<EpisodeLookupResponse> {
+export async function get_episode_for_conversation_v1_episodes_by_conversation__conversation_id__get(path: { conversation_id: string }, header: { X_Omi_App_Channel?: string | null, authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<EpisodeLookupResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/episodes/by-conversation/${path.conversation_id}`;
   const _search = "";
@@ -16008,6 +16008,7 @@ export async function get_episode_for_conversation_v1_episodes_by_conversation__
     headers: {
       ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
       ...init?.headers,
+      ...(header.X_Omi_App_Channel !== undefined ? { "X-Omi-App-Channel": String(header.X_Omi_App_Channel) } : {}),
       ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
       ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
       ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
@@ -16018,7 +16019,7 @@ export async function get_episode_for_conversation_v1_episodes_by_conversation__
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function get_live_episode_v1_episodes_live_get(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<EpisodeLiveResponse> {
+export async function get_live_episode_v1_episodes_live_get(header: { X_Omi_App_Channel?: string | null, authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<EpisodeLiveResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/episodes/live`;
   const _search = "";
@@ -16027,6 +16028,7 @@ export async function get_live_episode_v1_episodes_live_get(header: { authorizat
     headers: {
       ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
       ...init?.headers,
+      ...(header.X_Omi_App_Channel !== undefined ? { "X-Omi-App-Channel": String(header.X_Omi_App_Channel) } : {}),
       ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
       ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
       ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
@@ -16037,7 +16039,7 @@ export async function get_live_episode_v1_episodes_live_get(header: { authorizat
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function dismiss_episode_item_v1_episodes__episode_id__items__item_id__dismiss_post(path: { episode_id: string, item_id: string }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<Episode> {
+export async function dismiss_episode_item_v1_episodes__episode_id__items__item_id__dismiss_post(path: { episode_id: string, item_id: string }, header: { X_Omi_App_Channel?: string | null, authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<Episode> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/episodes/${path.episode_id}/items/${path.item_id}/dismiss`;
   const _search = "";
@@ -16046,6 +16048,7 @@ export async function dismiss_episode_item_v1_episodes__episode_id__items__item_
     headers: {
       ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
       ...init?.headers,
+      ...(header.X_Omi_App_Channel !== undefined ? { "X-Omi-App-Channel": String(header.X_Omi_App_Channel) } : {}),
       ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
       ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
       ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
@@ -16056,7 +16059,7 @@ export async function dismiss_episode_item_v1_episodes__episode_id__items__item_
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function wrap_up_episode_v1_episodes__episode_id__wrap_up_post(path: { episode_id: string }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: EpisodeWrapUpRequest | null, init?: OmiApiClientInit): Promise<Episode> {
+export async function wrap_up_episode_v1_episodes__episode_id__wrap_up_post(path: { episode_id: string }, header: { X_Omi_App_Channel?: string | null, authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: EpisodeWrapUpRequest | null, init?: OmiApiClientInit): Promise<Episode> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/episodes/${path.episode_id}/wrap-up`;
   const _search = "";
@@ -16066,6 +16069,7 @@ export async function wrap_up_episode_v1_episodes__episode_id__wrap_up_post(path
       ...(body ? { 'Content-Type': 'application/json' } : {}),
       ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
       ...init?.headers,
+      ...(header.X_Omi_App_Channel !== undefined ? { "X-Omi-App-Channel": String(header.X_Omi_App_Channel) } : {}),
       ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
       ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
       ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
