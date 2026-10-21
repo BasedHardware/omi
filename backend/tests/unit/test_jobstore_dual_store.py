@@ -643,3 +643,103 @@ def test_mirror_and_refresh_reread_the_primary_lock_free(monkeypatch):
     store.refresh([('owners', 'o')])
     assert reads == [[('queues', 'q')], [('owners', 'o')]]
     assert shadow.rows == {('queues', 'q'): {'n': 1}, ('owners', 'o'): {'v': 1}}
+
+
+class TestConvergence:
+    """Lead ruling a2d720: a non-matching read is lag if Postgres equals the primary within the window, else divergence."""
+
+    @staticmethod
+    def converged(table, outcome):
+        return dual_store.SHADOW_CONVERGENCE_TOTAL.labels(table=table, outcome=outcome)._value.get()
+
+    @staticmethod
+    def all_tracked():
+        return sum(
+            s.value
+            for m in dual_store.SHADOW_CONVERGENCE_TOTAL.collect()
+            for s in m.samples
+            if s.name.endswith('_total')
+        )
+
+    def test_mirror_lag_converges_and_records_its_lag(self):
+        primary, shadow = SimStore(CustomerData()), FakeShadow()
+        store = DualStore(primary, shadow, inline=True)
+        views = _held(store)
+        store.run(lambda tx: tx.put('control', 'c', {'p0_service': 1.0}))
+        store.run(lambda tx: tx.put('control', 'c', {'p0_service': tx.get('control', 'c')['p0_service'] + 1}))
+        del store._after_commit
+        before = count('control', 'read', 'mismatch'), self.converged('control', 'converged')
+        lag_before = dual_store.SHADOW_CONVERGENCE_SECONDS.labels(table='control')._sum.get()
+        for view in views:
+            store._after_commit(view)
+        # The parity counter still counts the mismatch; convergence classifies it as lag.
+        assert (count('control', 'read', 'mismatch'), self.converged('control', 'converged')) == (
+            before[0] + 1,
+            before[1] + 1,
+        )
+        assert dual_store.SHADOW_CONVERGENCE_SECONDS.labels(table='control')._sum.get() >= lag_before
+
+    def test_a_copy_that_never_catches_up_diverges(self, caplog):
+        primary, shadow = SimStore(CustomerData()), FakeShadow()
+        store = DualStore(primary, shadow, inline=True)
+        primary.rows[('owners', 'o')] = {'v': 2}
+        shadow.rows[('owners', 'o')] = {'v': 1}  # a lost mirror write; this read-only commit does not rewrite it
+        before = self.converged('owners', 'diverged')
+        caplog.set_level('WARNING', logger='database.jobstore.dual_store')
+        store.run(lambda tx: tx.get('owners', 'o'))
+        assert self.converged('owners', 'diverged') == before + 1
+        assert any(
+            'op=converge outcome=diverged' in r.getMessage() and 'fields=v' in r.getMessage() for r in caplog.records
+        )
+
+    def test_threaded_tracker_rechecks_until_the_late_mirror_lands(self):
+        primary, shadow = SimStore(CustomerData()), FakeShadow()
+        store = DualStore(primary, shadow)
+        store.convergence_delays = (0.0, 0.05, 0.1, 2.0)
+        primary.rows[('queues', 'q')] = {'n': 2}
+        shadow.rows[('queues', 'q')] = {'n': 1}  # behind: another process's mirror has not landed yet
+        before = self.converged('queues', 'converged'), self.converged('queues', 'diverged')
+        real_read = shadow.read_doc
+        calls = []
+
+        def read_doc(conn, table, key):  # the late mirror lands after the first convergence check
+            calls.append(key)
+            if len(calls) >= 3:
+                shadow.rows[('queues', 'q')] = {'n': 2}
+            return real_read(conn, table, key)
+
+        shadow.read_doc = read_doc  # type: ignore[method-assign]
+        store.run(lambda tx: tx.get('queues', 'q'))
+        assert store.drain(5) and store.drain_convergence(5)
+        assert (self.converged('queues', 'converged'), self.converged('queues', 'diverged')) == (
+            before[0] + 1,
+            before[1],
+        )
+
+    def test_threaded_tracker_gives_up_after_the_window(self):
+        primary, shadow = SimStore(CustomerData()), FakeShadow()
+        store = DualStore(primary, shadow)
+        store.convergence_delays = (0.0, 0.02, 0.04)
+        primary.rows[('jobs', 'j')] = {'state': 'ready'}  # never mirrored: missing, and it stays missing
+        before = self.converged('jobs', 'diverged')
+        store.run(lambda tx: tx.get('jobs', 'j'))
+        assert store.drain(5) and store.drain_convergence(5)
+        assert self.converged('jobs', 'diverged') == before + 1
+
+    def test_a_full_tracker_drops_and_counts(self, monkeypatch):
+        monkeypatch.setattr(dual_store, 'CONVERGENCE_QUEUE_LIMIT', 0)
+        primary, shadow = SimStore(CustomerData()), FakeShadow()
+        store = DualStore(primary, shadow)
+        primary.rows[('gpus', 'g')] = {'a': 1}
+        before = self.converged('gpus', 'dropped')
+        store.run(lambda tx: tx.get('gpus', 'g'))
+        assert store.drain(5)
+        assert self.converged('gpus', 'dropped') == before + 1
+
+    def test_matching_reads_are_not_tracked(self, stores):
+        primary, shadow, store = stores
+        put(store, 'queues', 'm', {'a': 1})
+        totals = self.all_tracked()
+        store.run(lambda tx: tx.get('queues', 'm'))
+        assert store.drain(5) and store.drain_convergence(5)
+        assert self.all_tracked() == totals
