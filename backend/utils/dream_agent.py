@@ -371,6 +371,7 @@ async def run_session(
                     await active()
         stage = 'model_turn'
         sink = {}
+        counted = False
         try:
             if turn is not None:
                 result = await turn(uid, lane, mount, messages)
@@ -403,6 +404,7 @@ async def run_session(
                 cached_tokens_estimate=cached_estimate,
             )
             report['model_lanes'].append(lane)
+            counted = True
             if lane == dream_harness_transport.MAIN_LANE and result.prompt_tokens:
                 main_history['prompt_tokens'] = result.prompt_tokens
                 main_history['messages'] = len(messages)
@@ -414,6 +416,10 @@ async def run_session(
             stage = 'tools' if lane == dream_harness_transport.MAIN_LANE else 'verify'
             return result
         finally:
+            # A call counts as a model turn once its transport completed, even if the
+            # payload then fails to parse; zero-cost capacity retries never complete.
+            if not counted and turn is None and sink.get('transport_complete'):
+                report['model_lanes'].append(lane)
             if lane == dream_harness_transport.VERIFY_LANE and sink.get('transport_complete'):
                 report['verifier_transport_responses'] = report.get('verifier_transport_responses', 0) + 1
             report['usage_unknown'] |= sink.get('usage_unknown', False)
