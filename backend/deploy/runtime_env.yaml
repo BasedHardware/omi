@@ -2378,7 +2378,7 @@ environments:
             value: https://omi.me
           DREAM_AGENT_ELIGIBILITY: {value: allowlist, category: rollout}
           DREAM_AGENT_UID_ALLOWLIST: {category: rollout, value: vi7SA9ckQCe4ccobWNxlbdcNdC23}
-          DREAM_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
+          DREAM_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
           PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
           PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
           SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
@@ -2574,7 +2574,7 @@ environments:
             value: http://172.16.160.20/diarizer
           DREAM_AGENT_ELIGIBILITY: {value: allowlist, category: rollout}
           DREAM_AGENT_UID_ALLOWLIST: {category: rollout, value: vi7SA9ckQCe4ccobWNxlbdcNdC23}
-          DREAM_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
+          DREAM_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
           PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
           PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
           SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
