@@ -44,7 +44,7 @@ env:
   GIT_HTTP_LOW_SPEED_TIME: "60"
 
 concurrency:
-  group: ${{ github.event.inputs.environment == 'prod' && github.event.inputs.break_glass_lock != 'true' && 'prod-train' || format('config-train-{0}', github.event.inputs.environment) }}
+  group: ${{ github.event.inputs.environment == 'prod' && github.event.inputs.break_glass_lock != 'true' && 'prod-train' || format('deploy-backend-stack-{0}', github.event.inputs.environment) }}
   cancel-in-progress: false
 
 permissions:

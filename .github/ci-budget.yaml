@@ -3102,7 +3102,7 @@
       "runs_on": "ubuntu-latest"
     },
     "sync_ledger_fence_cutover.yml/activate": {
-      "budget_p50_minutes": 5,
+      "budget_p50_minutes": 6,
       "display_name": "activate",
       "expected_runs_class": "non-pr-or-unsampled",
       "expected_runs_per_day": 0,
@@ -3111,7 +3111,7 @@
       "matrix_size": 1,
       "needs": "stage",
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder. B5 (M3 review): break_glass_lock dispatch input added so the prod cutover shares the prod-train lock; manual-only, no PR runs; the one-minute bump records the trigger change.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -3120,7 +3120,7 @@
       "runs_on": "ubuntu-latest"
     },
     "sync_ledger_fence_cutover.yml/stage": {
-      "budget_p50_minutes": 5,
+      "budget_p50_minutes": 6,
       "display_name": "stage",
       "expected_runs_class": "non-pr-or-unsampled",
       "expected_runs_per_day": 0,
@@ -3129,7 +3129,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder. B5 (M3 review): break_glass_lock dispatch input added so the prod cutover shares the prod-train lock; manual-only, no PR runs; the one-minute bump records the trigger change.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -5973,10 +5973,16 @@
     "sync_ledger_fence_cutover.yml": {
       "name": "Sync ledger fence cutover",
       "owner": "CI maintainers",
-      "rationale": "Initial workflow inventory",
+      "rationale": "Initial workflow inventory. 2026-10-21 B5 (M3 review): break_glass_lock input; prod takes the prod-train lock",
       "triggers": {
         "workflow_dispatch": {
           "inputs": {
+            "break_glass_lock": {
+              "default": "false",
+              "description": "Break-glass: skip the shared prod-train lock (still serialized on the backend stack lock)",
+              "required": "false",
+              "type": "boolean"
+            },
             "candidate_image": {
               "description": "Exact immutable backend image digest (gcr.io/...@sha256:<64 hex>)",
               "required": "true",
