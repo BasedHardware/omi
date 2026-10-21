@@ -198,6 +198,7 @@ order and a 12-hour clock on everyone.
 | `timeRange` | 10:17 – 11:19 AM | a span; across days both ends carry the date |
 | `OmiDuration.offset` | 0:05 · 3:38 · 1:02:05 | a position in a recording, time remaining |
 | `OmiDuration.compact` | 8s · 4m 10s · 42m · 1h 5m | a length — the list row and the detail page use the same one |
+| `OmiDuration.live` | 8s · 10m 1s · 1h 5m 1s | an elapsed live length that keeps ticking every second |
 | `OmiDuration.long` | 12 mins 34 secs | screen-reader labels and sentences |
 
 A row inside a day group shows only the time. Group rows by the same date the row displays.
