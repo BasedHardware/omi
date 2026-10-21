@@ -79,6 +79,52 @@ async def test_router_acknowledges_completed_legacy_content_in_dark(monkeypatch)
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize('mode', [DRAINING, DARK])
+async def test_router_acknowledges_a_legacy_final_pass_owner_without_a_ledger_row(monkeypatch, mode):
+    """M3 review: a conversation owned by legacy_final_pass_v1 gets batch intake's ACK (the shipped
+    in-progress 409 that follows the owner), not the admission-refused backstop, and no legacy job."""
+    from unittest.mock import AsyncMock, MagicMock
+
+    from utils.batch_pipeline.live_upload import RecordUploadRoute
+
+    module, saved, jobs, BytesIO = _router()
+    try:
+        monkeypatch.setattr(legacy_dark, 'current_mode', lambda: mode)
+        monkeypatch.setattr(legacy_dark, 'read_ledger_row', lambda uid, content_id: None)
+        module.registered_record_response = AsyncMock(return_value=RecordUploadRoute.LEGACY)
+        module.create_sync_job = MagicMock()
+        response = await _upload(module, BytesIO)
+        assert response.status_code == 409
+        assert json.loads(response.body)['code'] == 'sync_content_in_progress'
+        module.create_sync_job.assert_not_called()
+    finally:
+        _restore(saved)
+
+
+@pytest.mark.asyncio
+async def test_router_reads_the_legacy_mode_off_the_event_loop(monkeypatch):
+    """M3 review: current_mode only waits for a cold first ramp read off the loop, so the
+    router reads it through run_blocking; on the loop a fresh process serves the 'on' default."""
+    module, saved, jobs, BytesIO = _router()
+    offloaded = []
+    passthrough = module.run_blocking
+
+    async def recording_run_blocking(executor, fn, *args, **kwargs):
+        offloaded.append(fn)
+        return await passthrough(executor, fn, *args, **kwargs)
+
+    try:
+        monkeypatch.setattr(legacy_dark, 'current_mode', lambda: DARK)
+        monkeypatch.setattr(legacy_dark, 'read_ledger_row', lambda uid, content_id: None)
+        module.run_blocking = recording_run_blocking
+        response = await _upload(module, BytesIO)
+        assert response.status_code == 409
+        assert legacy_dark.current_mode in offloaded
+    finally:
+        _restore(saved)
+
+
+@pytest.mark.asyncio
 async def test_router_is_unchanged_at_on(monkeypatch):
     module, saved, jobs, BytesIO = _router()
     try:
