@@ -863,6 +863,17 @@ Two matches fail closed.
 
 ### Sweep owner-chain continuation and pending-only assignment page
 
+`BATCH_PIPELINE_PROJECTION_PREDECESSOR_REPLAY_ENABLED` defaults to `true`.
+When a discovered successor lacks a predecessor projection receipt, the sweep
+requests the owner's existing drain, or runs one bounded owner-chain walk when
+the drain is off. The walk starts at the projection watermark, rebuilding the
+missing predecessor before retrying successors in the same pass. This also
+works when the assignment cursor has already passed the head. `false` restores
+the previous blocked-page behavior. Binding, privacy, predecessor, replay and
+multipart fences remain authoritative; a head blocked by one of those fences
+still requires that underlying condition to be resolved. Already committed
+work does not need another GPU run.
+
 `BATCH_PIPELINE_SWEEP_OWNER_CHAIN_ENABLED` defaults to `true` (kill switch:
 `false` restores one attempt per page row). Rows from one owner's ordered chain
 used to advance only while a sweep page held that owner's head. During the
