@@ -1,4 +1,4 @@
-"""The three A2 shadow seams (lead ruling 2026-10-19 14:41Z) stay plain Firestore unless staging opts in.
+"""The four A2 shadow seams (lead ruling 2026-10-19 14:41Z) stay plain Firestore unless staging opts in.
 
 Each seam builds its store as ``shadow_from_env(FirestoreStore(...))``. The AST test pins that shape at the
 exact call sites; the behaviour tests run each module's own bound names: with the mode unset, and with the
@@ -14,6 +14,7 @@ import sys
 import pytest
 
 import diarizer.batch_pipeline_runtime  # noqa: F401  (imported at collection: the timing budget is per test)
+import utils.batch_pipeline.intake  # noqa: F401
 import utils.batch_pipeline.live  # noqa: F401
 import utils.batch_pipeline.serving  # noqa: F401
 from database import batch_pipeline_shadow_hook as hook
@@ -25,6 +26,7 @@ SEAMS = [
     ('diarizer.batch_pipeline_runtime', 'main'),
     ('utils.batch_pipeline.serving', 'serving_for_stage'),
     ('utils.batch_pipeline.live', 'register_recording'),
+    ('utils.batch_pipeline.intake', 'accept_upload'),
 ]
 
 
@@ -103,3 +105,26 @@ def test_seam_failure_keeps_the_plain_primary(monkeypatch):
     monkeypatch.setattr(dual_store, 'shadow_from_env', lambda _p: (_ for _ in ()).throw(RuntimeError('x')))
     primary = FirestoreStore('batch_pipeline_dev')
     assert hook.shadow_from_env(primary) is primary
+
+
+@pytest.mark.parametrize(
+    'module_name, function',
+    [
+        ('utils.batch_pipeline.provider_stt', '_service_stage'),
+        ('utils.batch_pipeline.intake', 'get_durable_job_status'),
+    ],
+)
+def test_secondary_writer_stores_are_the_shadow_seam(module_name, function):
+    """Provider-STT start/settle and the durable-status redrive write batch rows through ``store.run``."""
+    import importlib
+
+    module = importlib.import_module(module_name)
+
+    tree = ast.parse(inspect.getsource(getattr(module, function)))
+    calls = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call) and getattr(node.func, 'id', None) == 'FirestoreStore'
+    ]
+    parents = {child: node for node in ast.walk(tree) for child in ast.iter_child_nodes(node)}
+    assert len(calls) == 1 and getattr(parents[calls[0]].func, 'id', None) == 'shadow_from_env'
