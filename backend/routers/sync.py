@@ -1199,8 +1199,7 @@ async def sync_local_files_v2(
             conversation_id=conversation_id if isinstance(conversation_id, str) else None,
             incoming_audio_seconds=audio_span(
                 {'audio_start_seconds': audio_start_seconds, 'audio_end_seconds': audio_end_seconds}
-            )
-            or 0,
+            ),
         )
         record_response = await registered_record_response(
             uid=uid,

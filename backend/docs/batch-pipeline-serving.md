@@ -1,6 +1,7 @@
 # Batch intake and serving operations
 
-All switches default off. Declaring settings or deploying an empty chart does
+Global batch admission defaults off; quality and isolation kill switches can
+ship on. Declaring settings or deploying an empty chart does
 not select an upload; the lead explicitly enables the global admission flag and
 allowlist/percentage after qualification. Agent A does not deploy or apply indexes.
 
@@ -17,6 +18,9 @@ plus waiting `sync_backfill_pending` jobs and the sequencer's active legacy
 payload, deduplicated by job ID across the dispatch transition. Audio includes their known durations
 and the incoming upload's declared span. This catches both run 24's one 20-hour
 upload and run 25's 42 open units before they enter a typical-user ramp.
+Missing or invalid incoming WAL bounds are unknown audio, never zero. New
+desktop uploads without declared bounds therefore stay on legacy during a
+partial ramp. Existing batch receipt/record owners continue draining.
 
 The database reader selects metadata only, at most 512 rows per query source
 plus one active-owner metadata document. A

@@ -63,18 +63,24 @@ def test_incoming_long_upload_counts_before_admission():
     assert ramp.exclusion_reason(ramp.owner_load([], [], 100000, incoming_audio_seconds=72000)) == 'recording_hours'
 
 
-def test_exclusion_changes_only_new_dispatch_fields_and_emits_metric(monkeypatch):
+@pytest.mark.parametrize(
+    'reason,load',
+    [
+        ('open_backlog', {'open_backlog': 42, 'recording_seconds': 0, 'complete': True}),
+        ('recording_hours', {'open_backlog': 0, 'recording_seconds': 72000, 'complete': True}),
+        ('load_unavailable', None),
+    ],
+)
+def test_exclusion_changes_only_new_dispatch_fields_and_emits_metric(monkeypatch, reason, load):
     monkeypatch.delenv(ramp.SWITCH, raising=False)
     original = replace(policy(), batch_allowlisted=True, retire_percent=5, live_stt_retired=True)
-    before = batch_ramp.EXCLUDED.labels(reason='open_backlog')._value.get()
-    with patch.object(
-        batch_ramp, 'read_owner_load', return_value={'open_backlog': 42, 'recording_seconds': 0, 'complete': True}
-    ):
+    before = batch_ramp.EXCLUDED.labels(reason=reason)._value.get()
+    with patch.object(batch_ramp, 'read_owner_load', return_value=load):
         filtered = batch_ramp.ramp_admission_policy('synthetic-owner', original)
     assert not filtered.batch_enabled and not filtered.batch_allowlisted
     assert not filtered.live_record_enabled and not filtered.live_stt_retired
     assert filtered.live_admission_enabled
-    assert batch_ramp.EXCLUDED.labels(reason='open_backlog')._value.get() == before + 1
+    assert batch_ramp.EXCLUDED.labels(reason=reason)._value.get() == before + 1
     assert original.batch_enabled
 
 
@@ -163,12 +169,21 @@ async def test_excluded_new_upload_uses_legacy_without_artifacts_but_prior_batch
     assert response is not None and response.status_code == 409
 
 
-@pytest.mark.parametrize('existing', ['content', 'conversation'])
-def test_existing_dispatch_does_not_scan_load_or_emit_exclusion(monkeypatch, existing):
+@pytest.mark.parametrize(
+    'existing,data,batch',
+    [
+        ('content', {'dispatch_protocol': 'batch_v1'}, True),
+        ('content', {'dispatch_protocol': 'legacy_v1'}, False),
+        ('conversation', {'record_lane_owner': 'batch_sync_v1'}, True),
+        ('conversation', {'record_lane_owner': 'batch_live_v1'}, True),
+        ('conversation', {'record_lane_owner': 'legacy_final_pass_v1'}, False),
+    ],
+)
+def test_existing_dispatch_does_not_scan_load_or_emit_exclusion(monkeypatch, existing, data, batch):
     monkeypatch.setattr(batch_ramp, 'current_stage', lambda: 'dev')
     client = Mock()
     ref = client.collection.return_value.document.return_value.collection.return_value.document.return_value
-    ref.get.return_value = SimpleNamespace(exists=True, to_dict=lambda: {'record_lane_owner': 'batch_sync_v1'})
+    ref.get.return_value = SimpleNamespace(exists=True, to_dict=lambda: data)
     original = policy()
     with patch.object(
         batch_ramp, 'read_owner_load', side_effect=AssertionError('existing custody must not rescan')
@@ -180,5 +195,10 @@ def test_existing_dispatch_does_not_scan_load_or_emit_exclusion(monkeypatch, exi
             content_id='content' if existing == 'content' else None,
             conversation_id='conversation' if existing == 'conversation' else None,
         )
-    assert result is original
+    if batch:
+        assert result is original
+    else:
+        assert not result.batch_enabled and not result.live_record_enabled
+        assert not result.batch_allowlisted and not result.live_stt_retired
+        assert original.batch_enabled
     read.assert_not_called()

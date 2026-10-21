@@ -72,6 +72,9 @@ def ramp_admission_policy(
     """
     if not policy.batch_enabled or not exclusion_enabled(policy.batch_percent):
         return policy
+    legacy_policy = replace(
+        policy, batch_enabled=False, batch_allowlisted=False, live_record_enabled=False, live_stt_retired=False
+    )
     try:
         client = firestore_client
         if content_id or conversation_id:
@@ -81,23 +84,27 @@ def ramp_admission_policy(
             client = client if client is not None else get_data_plane_firestore_client()
             user = client.collection('users').document(uid)
             ledger = 'sync_content_ledger' if stage == 'prod' else f'sync_content_ledger_{stage}'
-            if (
-                content_id
-                and user.collection(ledger).document(content_id).get(field_paths=['dispatch_protocol']).exists
-            ):
-                return policy
+            if content_id:
+                receipt = user.collection(ledger).document(content_id).get(field_paths=['dispatch_protocol'])
+                if receipt.exists:
+                    return policy if (receipt.to_dict() or {}).get('dispatch_protocol') == 'batch_v1' else legacy_policy
             if conversation_id:
                 row = user.collection('conversations').document(conversation_id).get(field_paths=['record_lane_owner'])
-                if (row.to_dict() or {}).get('record_lane_owner'):
-                    return policy
+                owner = (row.to_dict() or {}).get('record_lane_owner')
+                if owner:
+                    return policy if owner in {'batch_sync_v1', 'batch_live_v1'} else legacy_policy
         load = read_owner_load(uid, firestore_client=client, incoming_audio_seconds=incoming_audio_seconds)
     except Exception:  # bounded admission narrowing; never log account data/errors
         load = None
     reason = exclusion_reason(load)
     if reason is None:
         return policy
-    EXCLUDED.labels(reason=reason).inc()
+    EXCLUDED.labels(
+        reason=(
+            'open_backlog'
+            if reason == 'open_backlog'
+            else 'recording_hours' if reason == 'recording_hours' else 'load_unavailable'
+        )
+    ).inc()
     logger.info('event=batch_ramp_heavy_owner_excluded reason=%s count=1', reason)
-    return replace(
-        policy, batch_enabled=False, batch_allowlisted=False, live_record_enabled=False, live_stt_retired=False
-    )
+    return legacy_policy
