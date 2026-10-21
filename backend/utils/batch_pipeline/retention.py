@@ -229,7 +229,9 @@ def run_retention_transaction(client: Any, operation: Callable[[Any], Any]) -> A
     from database.firestore_transaction_retry import run_with_transaction_contention_retry
 
     return run_with_transaction_contention_retry(
-        client.transaction,
+        # One SDK commit attempt per transaction: the outer helper is the only
+        # commit-contention budget (5 bodies, not 5 x 5).
+        lambda: client.transaction(max_attempts=1),
         lambda transaction: run_transactional(client, operation, initial_transaction=transaction),
         operation_name='batch_retention',
     )

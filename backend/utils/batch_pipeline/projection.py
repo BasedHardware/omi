@@ -96,7 +96,11 @@ def error_type(error: BaseException) -> str:
     """
     from database.firestore_transaction_retry import FirestoreAborted
 
-    if type(error) is ValueError and isinstance(error.__cause__, FirestoreAborted):
+    if (
+        type(error) is ValueError
+        and isinstance(error.__cause__, FirestoreAborted)
+        and str(error).startswith('Failed to commit transaction')
+    ):
         return 'FirestoreContentionExhausted'
     return type(error).__name__
 

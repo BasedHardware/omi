@@ -134,6 +134,44 @@ def test_retention_transaction_never_replays_other_errors(no_sleep, error):
     assert operation.call_count == 1
 
 
+def test_app_valueerror_from_aborted_keeps_its_class():
+    try:
+        try:
+            raise Aborted('contention')
+        except Aborted as inner:
+            raise ValueError('dream_gate_contention') from inner
+    except ValueError as error:
+        assert error_type(error) == 'ValueError'
+
+
+def test_retention_commit_contention_budget_is_five_bodies_not_twenty_five(no_sleep):
+    """Real @firestore.transactional body; every commit aborts."""
+    from google.cloud import firestore
+
+    transactions = []
+
+    def transaction(max_attempts=5):
+        tx = AlwaysAbortedTransaction()
+        tx._max_attempts = max_attempts
+        transactions.append(tx)
+        return tx
+
+    client = Mock()
+    client.transaction.side_effect = transaction
+    bodies = []
+
+    @firestore.transactional
+    def body(tx):
+        bodies.append(tx)
+        return True
+
+    with pytest.raises(firestore_transaction_retry.FirestoreContentionExhausted):
+        retention.run_retention_transaction(client, body)
+    assert len(transactions) == 5
+    assert sum(tx.commits for tx in transactions) == 5
+    assert len(bodies) == 5
+
+
 def test_expire_completed_segment_runs_through_the_bounded_retry(monkeypatch):
     calls = []
 
