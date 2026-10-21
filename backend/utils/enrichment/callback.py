@@ -115,14 +115,17 @@ def enrich_conversation(uid: str, conversation_id: str, language: str):
     ):
         verdict, rule = fragment_rule(segments)
         if verdict == 'discard':
-            persisted = lifecycle_service.discard_by_relevance(
+            outcome = lifecycle_service.rule_discard_outcome(
                 uid,
                 conversation_id,
                 sync_intake_decision(rule),
                 expected_sync_content_revision=conversation_data.get('sync_content_revision'),
             )
-            if persisted:
+            if outcome == 'discarded':
                 record_conversation_relevance(trigger='sync_intake', verdict='discard', decided_by='rule', reason=rule)
+            if outcome in ('discarded', 'already_discarded'):
+                # The read predicate derives `discarded` for review rows, so only
+                # the write's outcome can tell a stored discard from a refused one.
                 context = PROCESS_CONTEXT.get()
                 if context is not None:
                     context['discarded'] = True
