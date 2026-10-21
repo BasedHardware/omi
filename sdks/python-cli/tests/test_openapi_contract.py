@@ -32,6 +32,7 @@ CLI_ROUTES = {
     ('PATCH', '/v1/dev/user/goals/{goal_id}/progress'),
     ('GET', '/v1/dev/user/goals/{goal_id}/history'),
     ('GET', '/v1/dev/user/memories'),
+    ('GET', '/v1/dev/user/memories/vector/search'),
     ('POST', '/v1/dev/user/memories'),
     ('PATCH', '/v1/dev/user/memories/{memory_id}'),
     ('DELETE', '/v1/dev/user/memories/{memory_id}'),
