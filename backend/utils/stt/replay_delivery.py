@@ -10,7 +10,7 @@ from collections import deque
 from dataclasses import dataclass
 from typing import Any, Awaitable, Callable, Iterator, cast
 
-from config.live_stt_replay import ReplayLimits, DEFAULT_REPLAY_LIMITS
+from config.live_stt_replay import ReplayLimits, DEFAULT_REPLAY_LIMITS, replay_prefix_margin_seconds
 from utils.stt.live_metrics import REPLAY_SKIPPED
 from utils.stt.live_reason import (
     LOCAL_DELIVERY_EXPIRED,
@@ -521,7 +521,11 @@ def bounded_snapshot(
             if dropped:
                 REPLAY_SKIPPED.labels(source=source, successor=successor).inc(dropped / (2 * ring.sample_rate))
             birth.prune_before(expired_end)
-    remaining = int(min(REPLAY_PREFIX_SECONDS, wall) * pace * ring.sample_rate) * 2
+    # The pacer delivers at exactly ``pace`` into a wall of the same length, so
+    # audio equal to the wall leaves only the last packet's write-confirm (~30
+    # ms) as slack; hold a margin back so the prefix lands inside the wall.
+    budget = max(0.0, min(REPLAY_PREFIX_SECONDS, wall) - replay_prefix_margin_seconds())
+    remaining = int(budget * pace * ring.sample_rate) * 2
     kept = []
     total = ring.buffered_bytes
     for start, data in reversed(ring.snapshot()):

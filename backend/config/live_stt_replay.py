@@ -58,6 +58,28 @@ def nonwindow_emitted_text_accounting_enabled() -> bool:
     return _default_on(NONWINDOW_EMITTED_TEXT_ACCOUNTING_ENV)
 
 
+REPLAY_PREFIX_MARGIN_ENV = 'LISTEN_REPLAY_PREFIX_MARGIN_SECONDS'
+DEFAULT_REPLAY_PREFIX_MARGIN_SECONDS = 1.0
+MAX_REPLAY_PREFIX_MARGIN_SECONDS = 10.0
+
+
+def replay_prefix_margin_seconds() -> float:
+    """Audio seconds held back from the replay prefix so paced delivery at the
+    endpoint rate finishes inside the prefix wall with slack. ``0`` restores
+    the exact-wall prefix (kill switch); unparsable or out-of-range values use
+    the default."""
+    raw = os.getenv(REPLAY_PREFIX_MARGIN_ENV, '').strip()
+    if not raw:
+        return DEFAULT_REPLAY_PREFIX_MARGIN_SECONDS
+    try:
+        margin = float(raw)
+    except ValueError:
+        return DEFAULT_REPLAY_PREFIX_MARGIN_SECONDS
+    if not math.isfinite(margin) or not 0.0 <= margin <= MAX_REPLAY_PREFIX_MARGIN_SECONDS:
+        return DEFAULT_REPLAY_PREFIX_MARGIN_SECONDS
+    return margin
+
+
 def parse_replay_limits(value: Any) -> ReplayLimits:
     """Validate an optional registry ``replay`` mapping; unknown fields reject."""
     if value is None:

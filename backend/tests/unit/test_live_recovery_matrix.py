@@ -35,7 +35,12 @@ from utils.stt import live_session, streaming as st
 from utils.stt.resilient_stream import ResilientAudio
 import json
 
-from config.live_stt_replay import ReplayLimits, parse_replay_limits
+from config.live_stt_replay import (
+    DEFAULT_REPLAY_PREFIX_MARGIN_SECONDS,
+    REPLAY_PREFIX_MARGIN_ENV,
+    ReplayLimits,
+    parse_replay_limits,
+)
 from routers.listen.runtime import ListenSessionRuntime
 from tests.unit.test_live_cost_router import MemoryRedis
 from tests.unit.test_live_replay_provider_pairs import Transport
@@ -79,7 +84,10 @@ def _stt_failover_recovery_on(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 BYTES_PER_SECOND = 16000 * 2
-PREFIX_SECONDS = 20
+PREFIX_WALL_SECONDS = 20
+# Audio retained for the prefix under shipped defaults: the wall less the
+# margin held back so 1x delivery lands inside it.
+PREFIX_SECONDS = PREFIX_WALL_SECONDS - int(DEFAULT_REPLAY_PREFIX_MARGIN_SECONDS)
 SAMPLE_RATE = 16000
 
 
@@ -88,7 +96,9 @@ def shipped_defaults(monkeypatch):
     """Ordinary qualification always runs the shipped 20s/60s/28s budgets;
     full-span stress opts in explicitly inside the test that needs it."""
 
-    monkeypatch.setattr(replay_delivery, 'REPLAY_PREFIX_SECONDS', 20.0)
+    assert DEFAULT_REPLAY_PREFIX_MARGIN_SECONDS == int(DEFAULT_REPLAY_PREFIX_MARGIN_SECONDS)
+    monkeypatch.delenv(REPLAY_PREFIX_MARGIN_ENV, raising=False)
+    monkeypatch.setattr(replay_delivery, 'REPLAY_PREFIX_SECONDS', float(PREFIX_WALL_SECONDS))
     monkeypatch.setattr(replay_delivery, 'TAIL_RESIDENCE_SECONDS', 28.0)
     monkeypatch.setattr(recovery_state, 'RECOVERY_EPISODE_SECONDS', 60.0)
 
@@ -787,7 +797,7 @@ async def test_directed_recovery_under_burst_closing_transport(monkeypatch, virt
         raw = raws[-1]
         await until(lambda: raw._ws.byte_count == len(kept) + len(tail))
         assert raw._ws.pcm == kept + tail
-        assert REPLAY_SKIPPED.labels(**labels)._value.get() - skipped_before == pytest.approx(115.0)
+        assert REPLAY_SKIPPED.labels(**labels)._value.get() - skipped_before == pytest.approx(135.0 - PREFIX_SECONDS)
         assert not raw.is_connection_dead
         actual.host.request.websocket.close.assert_not_awaited()
         await actual._drain_stt_sockets()
@@ -1160,10 +1170,13 @@ async def test_selected_target_declared_limits_shape_prefix(monkeypatch, virtual
     try:
         assert await actual._failover_stt_socket()
         raw = dialed[-1]
-        expected = captured[-10 * BYTES_PER_SECOND :]
+        # (wall - margin) wall seconds at the declared 0.5x rate.
+        expected = captured[-int(PREFIX_SECONDS * 0.5 * BYTES_PER_SECOND) :]
         await until(lambda: raw._ws.byte_count == len(expected))
         assert raw._ws.pcm == expected
-        assert REPLAY_SKIPPED.labels(**labels)._value.get() - skipped_before == pytest.approx(125.0)
+        assert REPLAY_SKIPPED.labels(**labels)._value.get() - skipped_before == pytest.approx(
+            135.0 - PREFIX_SECONDS * 0.5
+        )
         assert all(len(frame) <= 8192 for frame in raw._ws.sent if isinstance(frame, bytes))
         assert raw._send_queue.high_water <= 1
         assert raw._ws.sent_at[1] - raw._ws.sent_at[0] >= 0.5
