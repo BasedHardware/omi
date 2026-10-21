@@ -220,6 +220,17 @@ AUDIO_SAMPLE_RATE = 16000
 
 _V1_DEPRECATION_HEADERS = {'Deprecation': 'true', 'Link': '</v2/sync-local-files>; rel="successor-version"'}
 
+
+async def _offer_shadow_upload(**kwargs) -> None:
+    # The shadow is best effort: its import or handoff must never fail a legacy upload.
+    try:
+        from utils.batch_pipeline.shadow_intake import offer_upload
+
+        await offer_upload(**kwargs)
+    except Exception as error:
+        logger.info('event=batch_shadow_intake outcome=error exception_type=%s', type(error).__name__)
+
+
 router = APIRouter(route_class=MultipartMaxPartSizeRoute, dependencies=[Depends(sync_stage.require_http_stage)])
 
 
@@ -670,9 +681,7 @@ async def sync_local_files(
                     'device_model': request.headers.get('x-omi-device-model'),
                 },
             )
-            from utils.batch_pipeline.shadow_intake import offer_upload as offer_shadow_upload
-
-            await offer_shadow_upload(
+            await _offer_shadow_upload(
                 uid=uid,
                 content_id=None,
                 paths=paths,
@@ -1353,9 +1362,7 @@ async def sync_local_files_v2(
             pass
 
         # Transfer ownership of raw paths to the background task
-        from utils.batch_pipeline.shadow_intake import offer_upload as offer_shadow_upload
-
-        await offer_shadow_upload(
+        await _offer_shadow_upload(
             uid=uid,
             content_id=content_id,
             paths=paths,
