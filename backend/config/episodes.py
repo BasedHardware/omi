@@ -11,9 +11,19 @@ rather than silently keeping it running. Off makes the episodes API report
 ``enabled: false``: released and current apps then show today's
 per-conversation UI, and no episode state is read, written or computed.
 
-``EPISODES_PERCENT`` (default 0 until the ramp sets it) and ``EPISODES_UID_ALLOWLIST`` exist only
-for the ramp: a stable salted uid bucket below the percentage, or a listed
-uid, is admitted. Invalid percentages admit nobody beyond the allowlist.
+``EPISODES_PERCENT`` (default ``EPISODES_PERCENT_DEFAULT``, 100) and
+``EPISODES_UID_ALLOWLIST`` select the admitted cohort: a stable salted uid
+bucket below the percentage, or a listed uid, is admitted. Invalid percentages
+admit nobody beyond the allowlist.
+
+Admission alone never spends money. Episode work (the per-moment listen update
+and the finalizer's tail and reconciliation) also requires an inferred client
+capability: the user's app called a ``/v1/episodes`` route within
+``CLIENT_SEEN_TTL_SECONDS``, recorded as the Redis marker
+``episodes:client_seen:{uid}`` (``utils/episodes/client_gate.py``). Old mobile
+builds, the desktop app and web never call that API, so their users cost
+nothing. The API itself stays available to every admitted uid, since it is what
+sets the marker. The allowlist bypasses the percentage, not the marker.
 
 Pure module: stdlib only, flags read at the call boundary, never at import.
 """
@@ -30,6 +40,9 @@ EPISODES_UID_ALLOWLIST_ENV = 'EPISODES_UID_ALLOWLIST'
 _COHORT_SALT = 'episodes-v1'
 _ON = frozenset({'true', 'on', '1', 'yes'})
 
+# The admitted share when EPISODES_PERCENT is unset. Read by the rollout train check.
+EPISODES_PERCENT_DEFAULT = 100.0
+
 
 def episodes_enabled() -> bool:
     """Unset or blank is on; only an explicit on-value keeps it on, anything else is off."""
@@ -38,14 +51,25 @@ def episodes_enabled() -> bool:
 
 
 def episodes_enabled_for(uid: str) -> bool:
-    """The kill switch first, then the ramp cohort (allowlist or stable uid bucket)."""
+    """The kill switch first, then the cohort (allowlist or stable uid bucket).
+
+    Admission only: callers that spend money also need ``client_gate.client_seen``.
+    """
     if not uid or not episodes_enabled():
         return False
     allowlist = {item.strip() for item in os.getenv(EPISODES_UID_ALLOWLIST_ENV, '').split(',') if item.strip()}
     if uid in allowlist:
         return True
-    return uid_bucket(uid, _COHORT_SALT) < percentage(EPISODES_PERCENT_ENV, default=0.0)
+    return uid_bucket(uid, _COHORT_SALT) < percentage(EPISODES_PERCENT_ENV, default=EPISODES_PERCENT_DEFAULT)
 
+
+# --------------------------------------------------------------------------- client capability
+
+# A capable app calls /v1/episodes at startup and every 30 s while a live surface
+# is on screen; the marker it leaves lives this long without another call.
+CLIENT_SEEN_TTL_SECONDS = 14 * 24 * 60 * 60
+# The marker is rewritten at most this often per uid, so polling is not a write.
+CLIENT_SEEN_REFRESH_SECONDS = 60 * 60
 
 # --------------------------------------------------------------------------- moments
 

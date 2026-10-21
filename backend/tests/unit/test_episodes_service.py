@@ -13,13 +13,6 @@ from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from utils.episodes import service
 from utils.episodes.service import Collaborators, MomentInput
 
-
-@pytest.fixture(autouse=True)
-def _episodes_cohort_admits_everyone(monkeypatch):
-    # The code default is 0% (allowlist only); these tests exercise admitted users.
-    monkeypatch.setenv('EPISODES_PERCENT', '100')
-
-
 UID = 'uid-episodes'
 T0 = datetime(2026, 10, 20, 10, 0, tzinfo=timezone.utc)
 
@@ -29,6 +22,8 @@ def _enabled(monkeypatch):
     monkeypatch.delenv(config.EPISODES_ENABLED_ENV, raising=False)
     monkeypatch.delenv(config.EPISODES_PERCENT_ENV, raising=False)
     monkeypatch.setenv('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv')
+    # These tests exercise a user whose app shows episodes (test_episodes_client_gate covers the marker).
+    monkeypatch.setattr(service.client_gate, 'client_seen', lambda uid: True)
 
 
 class FakeModel:

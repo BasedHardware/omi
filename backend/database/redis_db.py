@@ -1544,3 +1544,45 @@ def store_screen_frame_adjudication_response(
     key = f'screen_frame:adjudication:{uid}:{purpose}:{attempt_id}'
     payload = _serialize_cache_value({'fingerprint': fingerprint, 'response': response})
     r.set(key, payload, ex=ttl)
+
+
+# ******************************************************
+# ************ EPISODES CLIENT CAPABILITY **************
+# ******************************************************
+
+
+def _episodes_client_seen_key(uid: str) -> str:
+    return f'episodes:client_seen:{uid}'
+
+
+def has_episodes_client_seen(uid: str) -> bool:
+    """True when the user's app called the episodes API within the marker TTL.
+
+    Fails closed: a Redis fault reads as "no capable client", so it stops
+    episode spend rather than starting it.
+    """
+    try:
+        return bool(r.exists(_episodes_client_seen_key(uid)))
+    except Exception as exc:
+        logger.warning('event=episodes_client_seen_read outcome=error exception_type=%s', type(exc).__name__)
+        return False
+
+
+def get_episodes_client_seen_ttl(uid: str) -> Optional[int]:
+    """Seconds left on the marker; None when absent or unreadable."""
+    try:
+        ttl = r.ttl(_episodes_client_seen_key(uid))
+    except Exception as exc:
+        logger.warning('event=episodes_client_seen_ttl outcome=error exception_type=%s', type(exc).__name__)
+        return None
+    return ttl if isinstance(ttl, int) and ttl >= 0 else None
+
+
+def set_episodes_client_seen(uid: str, ttl: int) -> bool:
+    """Writes (or refreshes) the marker. Never raises; False when the write did not land."""
+    try:
+        r.set(_episodes_client_seen_key(uid), '1', ex=ttl)
+        return True
+    except Exception as exc:
+        logger.warning('event=episodes_client_seen_write outcome=error exception_type=%s', type(exc).__name__)
+        return False

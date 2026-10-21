@@ -10,13 +10,6 @@ from config import episodes as config
 from routers import episodes as router_module
 from utils.other import endpoints as auth
 
-
-@pytest.fixture(autouse=True)
-def _episodes_cohort_admits_everyone(monkeypatch):
-    # The code default is 0% (allowlist only); these tests exercise admitted users.
-    monkeypatch.setenv('EPISODES_PERCENT', '100')
-
-
 T0 = datetime(2026, 10, 20, 10, 0, tzinfo=timezone.utc)
 EPISODE = {
     'id': 'e1',
@@ -40,7 +33,9 @@ EPISODE = {
 @pytest.fixture
 def client(monkeypatch):
     monkeypatch.delenv(config.EPISODES_ENABLED_ENV, raising=False)
-    monkeypatch.setenv(config.EPISODES_PERCENT_ENV, "100")
+    monkeypatch.delenv(config.EPISODES_PERCENT_ENV, raising=False)
+    # The capability marker is Redis; test_episodes_client_gate covers it.
+    monkeypatch.setattr(router_module.client_gate, 'note_client_seen', lambda uid: False)
     app = FastAPI()
     app.include_router(router_module.router)
     app.dependency_overrides[auth.get_current_user_uid] = lambda: 'uid-1'
