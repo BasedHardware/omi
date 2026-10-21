@@ -181,9 +181,11 @@ struct FeedbackView: View {
       applicationSupport
       .appendingPathComponent(bundleID, isDirectory: true)
       .appendingPathComponent("Feedback Reports", isDirectory: true)
-    let formatter = DateFormatter()
-    formatter.dateFormat = "yyyyMMdd-HHmmss"
-    let stamp = formatter.string(from: Date())
+    // Machine identifier, not user-facing text: ISO8601 keeps filenames
+    // sortable and locale-independent.
+    let stamp = ISO8601DateFormatter()
+      .string(from: Date())
+      .replacingOccurrences(of: ":", with: "-")
     let target = reportsDir.appendingPathComponent("report-\(stamp).txt")
 
     do {
