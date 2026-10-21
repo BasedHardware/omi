@@ -253,12 +253,13 @@ def test_first_attempt_past_the_per_attempt_deadline_still_summarizes(monkeypatc
         yield model
 
     monkeypatch.setattr(processing, 'isolated_notes_model', isolated_fake)
-    # Per-attempt 0.1s, mount deadline 0.2s: the turn at 0.15s is past one attempt
-    # yet inside the budget the transport owns.
-    monkeypatch.setattr(processing, 'CONVERSATION_STRUCTURE_TIMEOUT_SECONDS', 0.1)
+    # Per-attempt 0.5s, mount deadline 1.5s: the turn at 0.75s is past one attempt
+    # yet inside the budget the transport owns. 0.5s is the real-clock ratchet's
+    # floor (test_real_clock_budget_ratchet); smaller budgets race a loaded runner.
+    monkeypatch.setattr(processing, 'CONVERSATION_STRUCTURE_TIMEOUT_SECONDS', 0.5)
 
     async def _slow_invoke(_payload):
-        await asyncio.sleep(0.15)
+        await asyncio.sleep(0.75)
         return AIMessage(content=_RESPONSE_JSON)
 
     monkeypatch.setattr(processing, 'get_llm', lambda *args, **kwargs: RunnableLambda(_slow_invoke))
