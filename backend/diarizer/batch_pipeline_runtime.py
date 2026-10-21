@@ -31,6 +31,9 @@ from utils.batch_pipeline.errors import FatalGpuError
 from utils.batch_pipeline.leader import PUMP_RECOVERY, LeaderLease
 from utils.batch_pipeline.pump import Pump
 from utils.batch_pipeline.scheduler import Scheduler
+from database.batch_pipeline_shadow import ShadowStore
+from utils.batch_pipeline.shadow_worker import ShadowRunner
+from utils.batch_pipeline.shadow_metrics import COLLECTORS as SHADOW_COLLECTORS
 from utils.executors import shutdown_executors
 from utils.other.local_storage import create_storage_client
 from utils.rollout_cohorts import configure_rollout_runtime
@@ -92,6 +95,8 @@ class SynchronizedWorker:
 
 
 def health_server(state: RuntimeState, registry: CollectorRegistry, port: int) -> ThreadingHTTPServer:
+    for collector in SHADOW_COLLECTORS:
+        registry.register(collector)
     if cap_dispatch_enabled():
         registry.register(AUDIO_SECONDS)
     registry.register(TRANSITIONS)
@@ -179,6 +184,12 @@ async def run_process(store: Any, artifacts: Any, registry: CollectorRegistry, s
         # Startup models off the event loop. Readiness remains closed until the
         # entire BF16 ASR / FP32 segmentation chain and graph policy are ready.
         worker = await asyncio.to_thread(load_worker, artifacts)
+        from utils.batch_pipeline.compute_client import shadow_from_env
+
+        # Lazy client creation keeps a dark rollout independent of API config.
+        def shadow_recover(segment):
+            return shadow_from_env().shadow_recover(segment)
+
         metrics = QueueMetrics(
             registry,
             worker_release=os.environ.get('BATCH_PIPELINE_WORKER_RELEASE', 'unscoped'),
@@ -197,6 +208,7 @@ async def run_process(store: Any, artifacts: Any, registry: CollectorRegistry, s
             # GPU batch hands over after the TTL. Fails open on store errors.
             leader=LeaderLease(store, PUMP_RECOVERY, ttl_seconds=30),
             inline_metrics=False,  # supervise() samples on its own task.
+            shadow=ShadowRunner(ShadowStore(store), shadow_recover),
         )
         await supervise(pump, state, stop_event)
     finally:

@@ -21,6 +21,7 @@ def _belongs(data: dict, conversation_id: str | None) -> bool:
     binding = data.get('projection_binding') or {}
     identities = {
         data.get('conversation_id'),
+        (data.get('item') or {}).get('conversation_id'),
         data.get('source_conversation_id'),
         (data.get('projection_binding') or {}).get('target_conversation_id'),
         *(data.get('conversation_ids') or []),
@@ -136,7 +137,7 @@ def purge_batch_owner(
     deleted = 0
     for namespace in namespaces:
         segments = set()
-        for table in ('jobs', 'results', 'artifacts', 'projections', 'intakes'):
+        for table in ('jobs', 'results', 'artifacts', 'projections', 'intakes', 'shadow_jobs'):
             after = None
             while True:
                 rows = queries.owner_documents(client, namespace, table, key, after=after)

@@ -555,7 +555,7 @@ class PipelineWorker:
                 failed.add(item.segment_id)
                 self.counts['failed'] += 1
                 reason = exc.reason if isinstance(exc, BatchValidationError) else 'unclassified'
-                if reason == 'empty_asr':
+                if reason == 'empty_asr' and not item.shadow:
                     record_correctness('empty_asr_attempt', source='gpu_worker', seconds=item.duration_seconds)
                 if (
                     (
@@ -701,7 +701,7 @@ class PipelineWorker:
                     # Every non-silent unit can be a later unit's predecessor.
                     state['vad_raw'] = spans
                     receipt = None
-                    if self.config.reuse_live and self.live_words:
+                    if not item.shadow and self.config.reuse_live and self.live_words:
                         if sync_live_dedupe_active_for(item.owner_id):
                             receipt = self.live_words(item)
                     if (
@@ -743,7 +743,10 @@ class PipelineWorker:
             for batch in pack_windows(windows, self.config):
                 batch = [w for w in batch if w.segment_id not in failed and w.segment_id not in held]
                 required = {
-                    w.segment_id for w in batch if cap_dispatch_enabled(states[w.segment_id]['item'].owner_id, 'batch')
+                    w.segment_id
+                    for w in batch
+                    if not states[w.segment_id]['item'].shadow
+                    and cap_dispatch_enabled(states[w.segment_id]['item'].owner_id, 'batch')
                 }
                 if required:
                     # Authorization belongs immediately before ASR, after potentially
@@ -756,7 +759,9 @@ class PipelineWorker:
                 try:
                     hypotheses = self.words.transcribe_batch([w.samples for w in batch])
                     for window in batch:
-                        if cap_dispatch_enabled(states[window.segment_id]['item'].owner_id, 'batch'):
+                        if not states[window.segment_id]['item'].shadow and cap_dispatch_enabled(
+                            states[window.segment_id]['item'].owner_id, 'batch'
+                        ):
                             accepted(window.segment_id, window.duration)
                     if len(hypotheses) != len(batch):
                         raise ValueError('provider result cardinality mismatch')
@@ -821,7 +826,7 @@ class PipelineWorker:
                                 )
                             )
                         else:
-                            if cap_dispatch_enabled(item.owner_id, 'batch'):
+                            if not item.shadow and cap_dispatch_enabled(item.owner_id, 'batch'):
                                 recovered = self.recover_words(
                                     state['samples'],
                                     self.config.max_padded_seconds,
@@ -951,7 +956,7 @@ class PipelineWorker:
                     }
                     if silence is not None:
                         payload.update(silence)
-                    if cap_dispatch_enabled(item.owner_id, 'batch'):
+                    if not item.shadow and cap_dispatch_enabled(item.owner_id, 'batch'):
                         payload['cap_dispatch'] = {
                             'omi_funded_accepted_provider_audio_seconds': state.get('cap_provider_audio_seconds', 0),
                             'admission': 'authorized_compute',
@@ -986,6 +991,7 @@ class PipelineWorker:
             wait_futures([entry[2] for entry in pending_persist])
             pending_persist.clear()
         results[:] = [result for result in results if result is not None]
+        shadow_ids = {item.segment_id for item in items if item.shadow}
         # Emit only strings/integers after every item exception handler has exited.
         # Handler error printers must not inherit the private worker exception.
         for (
@@ -1000,6 +1006,8 @@ class PipelineWorker:
             speech,
             recovery_outcome,
         ) in recovery_records:
+            if segment_id in shadow_ids:
+                continue
             try:
                 record_fallback(
                     component='stt_selection',
@@ -1033,6 +1041,8 @@ class PipelineWorker:
             except Exception:
                 pass  # Metrics/logging cannot invalidate a completed inference.
         for segment_id in silence_records:
+            if segment_id in shadow_ids:
+                continue
             try:
                 record_fallback(
                     component='stt_selection', from_mode='batch', to_mode='none', reason='other', outcome='recovered'
@@ -1042,6 +1052,9 @@ class PipelineWorker:
                 pass  # Observability cannot invalidate a persisted result.
         for error_class, failure_stage, segment_id, reason, samples, spans, clips, asr_words, owned in failure_records:
             try:
+                if segment_id in shadow_ids:
+                    logger.info('event=batch_shadow_worker_failure stage=%s reason=%s', failure_stage, reason)
+                    continue
                 logger.error(
                     'event=batch_worker_failed error_class=%s stage=%s segment_id=%s reason=%s '
                     'samples=%d vad_spans=%d windows=%d asr_words=%d owned_words=%d',

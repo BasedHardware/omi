@@ -27,4 +27,16 @@ def create_artifact_store(store: Any, storage_client: Any, bucket: str, master_s
         authorize=partial(batch_artifact_authorize, store),
         key_for_owner=key_for_owner,
         register_artifact=partial(batch_artifact_register, store),
+        shadow_result=partial(shadow_result, store),
+    )
+
+
+def shadow_result(store, item, payload):
+    from database.batch_pipeline_shadow import ShadowStore
+
+    ShadowStore(store).finish(
+        item.segment_id,
+        'recovered' if payload.get('words') else 'empty',
+        speech=float(payload.get('speech_seconds', 0)),
+        vad='worker',
     )

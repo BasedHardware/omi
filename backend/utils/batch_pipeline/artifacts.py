@@ -54,6 +54,7 @@ class ArtifactStore:
         authorize: Callable[[WorkItem], ProtectionContext],
         key_for_owner: Callable[[str], bytes],
         register_artifact: Callable[[WorkItem, str, str, ProtectionContext], None],
+        shadow_result: Callable | None = None,
     ) -> None:
         if not re.fullmatch(r'[a-z0-9][a-z0-9._-]{1,220}[a-z0-9]', bucket):
             raise ValueError('explicit staging bucket required')
@@ -66,6 +67,7 @@ class ArtifactStore:
         self.authorize = authorize
         self.key_for_owner = key_for_owner
         self.register_artifact = register_artifact
+        self.shadow_result = shadow_result
 
     def owner_prefix(self, owner_id: str) -> str:
         return f'batch-pipeline/{self.namespace}/owners/{hashlib.sha256(owner_id.encode()).hexdigest()}/'
@@ -85,6 +87,8 @@ class ArtifactStore:
             'privacy_generation': context.generation,
             'audio_uri': item.audio_uri if kind == 'results' else '',
         }
+        if item.shadow:
+            identity['shadow'] = True
         return json.dumps(identity, sort_keys=True, separators=(',', ':')).encode()
 
     def _unchanged(self, item: WorkItem, context: ProtectionContext) -> None:
@@ -196,10 +200,19 @@ class ArtifactStore:
         return body
 
     def persist_result(self, item: WorkItem, payload: dict[str, Any]) -> str:
+        if item.shadow:
+            # Shadow transcripts/diarization never enter durable storage.
+            if self.shadow_result is None:
+                raise PermissionError('shadow result sink required')
+            self.authorize(item)
+            self.shadow_result(item, payload)
+            return 'shadow:' + item.segment_id
         body = json.dumps(payload, allow_nan=False, separators=(',', ':')).encode()
         return self._write(item, 'results', body, RESULT_LIMIT)
 
     def persist_recovery_result(self, item: WorkItem, payload: dict[str, Any], token: str) -> str:
+        if item.shadow:
+            raise PermissionError('shadow recovery may only record outcomes')
         body = json.dumps(payload, allow_nan=False, separators=(',', ':')).encode()
         return self._write(item, 'results', body, RESULT_LIMIT, result_key=token)
 
