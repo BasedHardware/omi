@@ -213,7 +213,7 @@ def expire_completed_segment(store: Any, uid: str, segment_id: str, now: float) 
         touched.extend([('jobs', segment_id), ('results', segment_id)])
         if intake_ref is not None and intake is not None and intake.exists:
             transaction.update(intake_ref, {'expires_at': expires})
-            touched.append(('intakes', intake_id))
+            touched.append(('intakes', str(intake_id)))
         touched.extend(('artifacts', artifact.id) for artifact in artifacts)
         for artifact in artifacts:
             metadata = artifact.to_dict() or {}
