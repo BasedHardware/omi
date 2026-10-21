@@ -2073,6 +2073,29 @@ reconnect) or lifecycle event re-attempts the durable write. Enforce mode
 still raises, and a random `InvalidArgument` without the retirement marker is
 still a real failed write.
 
+Two follow-ups closed the same shape on the cleanup half of the surface. The
+empty-generation delete `tombstone_and_delete_empty_conversation`
+(`recording_session_empty_delete`) wrapped its body with ONE
+`firestore.transactional` decorator outside the contention budget, so every
+budget attempt replayed the same — often already retired — transaction
+`retry_id`; a commit abort inside the budget resubmitted the dead id and the
+terminal retirement 400 walked out of the budget, which only replays
+`Aborted`. The body is now wrapped fresh on every budget attempt, like the
+open/renewal/event writers. Its lifecycle boundary
+`delete_empty_recording_conversation` — the teardown, rollover-loser and
+continuation-adoption delete — had no transient arm at all, so a burst that
+outlived both retry layers surfaced as a raw traceback through WebSocket
+teardown. It now shares the same classifier: a drained burst keeps the empty
+generation log-only (`recording session cleanup contended; retaining the
+empty generation`, WARNING, no stack trace, no degradation event — nothing
+was written, so the next teardown, rollover or recovery sweep re-attempts the
+delete for free), while a random `InvalidArgument` or `PermissionDenied`
+keeps the failed-write classification
+(`recording session cleanup failed; retaining the empty generation` with its
+traceback and the `omi_fallback_total` degradation event). The boundary
+arm is deliberately mode-independent: cleanup fail-open only ever delays a
+delete of an empty row, so there is no enforce raise to preserve.
+
 Eligible meeting receipts also carry the stable Chat intent ID and, after the
 desktop kernel acknowledges its journal write, the materialization time. The
 durable receipt projection remains on the finalization write path. The disabled

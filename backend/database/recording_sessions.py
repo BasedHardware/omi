@@ -311,7 +311,6 @@ def tombstone_and_delete_empty_conversation(
     )
     session_ref = _session_ref(client, uid, recording_session_id) if recording_session_id else None
 
-    @firestore.transactional
     def _delete_empty(transaction: Any) -> bool:
         snapshot = conversation_ref.get(transaction=transaction)
         if not getattr(snapshot, 'exists', False):
@@ -355,16 +354,27 @@ def tombstone_and_delete_empty_conversation(
         return True
 
     # The same contention story as the session's other writers: the SDK replays
-    # a commit abort on the same (often retired) transaction id and never
+    # a commit abort on the same — often retired — transaction id and never
     # retries an abort raised by the body's read, so a rollover that races a
     # late segment write or the lease renewal surfaced as a permanent rejection
     # instead of a replay. Every rejection here is atomic — the body either
     # reaches a refusal without writing or commits its delete — so replaying on
     # fresh transactions is safe, and ``run_transactional`` restarts an
-    # expired-transaction rejection on a brand-new id.
+    # expired-transaction rejection on a brand-new id. The body is wrapped per
+    # attempt: one ``firestore.transactional`` wrapper pins a single
+    # ``retry_id`` across every budget attempt, so a commit abort inside the
+    # budget replays the very id the read-time abort retired — the exact
+    # pinned-replay shape ``run_transactional`` exists to prevent, on the same
+    # session document whose adjacent writers produced the window's
+    # ``recording session lease renewal failed`` and ``open_recording_session``
+    # tracebacks (prod backend-listen 2026-10-21).
     deleted = run_with_transaction_contention_retry(
         client.transaction,
-        lambda transaction: run_transactional(client, _delete_empty, initial_transaction=transaction),
+        lambda transaction: run_transactional(
+            client,
+            firestore.transactional(_delete_empty),
+            initial_transaction=transaction,
+        ),
         operation_name='recording_session_empty_delete',
     )
     if deleted:

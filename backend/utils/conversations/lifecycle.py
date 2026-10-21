@@ -764,15 +764,54 @@ def delete_empty_recording_conversation(
     uid: str,
     conversation_id: str,
     recording_session_id: str | None,
+    *,
+    firestore_client: Any = None,
 ) -> bool:
-    """Delete only a still-empty listen generation and tombstone it atomically."""
+    """Delete only a still-empty listen generation and tombstone it atomically.
+
+    The cleanup transaction races the same session document the lease renewal
+    and every lifecycle event write, so a burst can outlive both retry layers
+    exactly as it can for them — the adjacent writers produced the window's
+    retired-id tracebacks (prod backend-listen 2026-10-21: the renewal's
+    ``renew_live_recording_session_lease`` ×70/30m with the
+    ``open_recording_session`` sibling ×33/30m). A drained burst keeps the
+    generation: nothing was written, the row stays empty, and the next
+    teardown, rollover or recovery sweep re-attempts the delete — so this is
+    the bounded transient, not the failed write worth a traceback and a
+    ``omi_fallback_total`` degradation event.
+    """
     deleted_conversation: dict[str, Any] = {}
-    deleted = recording_sessions_db.tombstone_and_delete_empty_conversation(
-        uid,
-        conversation_id,
-        recording_session_id,
-        deleted_conversation=deleted_conversation,
-    )
+    try:
+        deleted = recording_sessions_db.tombstone_and_delete_empty_conversation(
+            uid,
+            conversation_id,
+            recording_session_id,
+            deleted_conversation=deleted_conversation,
+            firestore_client=firestore_client,
+        )
+    except Exception as error:
+        if _is_recording_session_transient(error):
+            logger.warning(
+                'recording session cleanup contended; retaining the empty generation uid=%s conversation=%s session=%s',
+                uid,
+                conversation_id,
+                recording_session_id,
+            )
+            return False
+        record_fallback(
+            component='other',
+            from_mode='recording_session',
+            to_mode='legacy_pointer',
+            reason='other',
+            outcome='degraded',
+            log=logger,
+        )
+        logger.exception(
+            'recording session cleanup failed; retaining the empty generation uid=%s conversation=%s',
+            uid,
+            conversation_id,
+        )
+        return False
     if deleted:
         # Remove the search projection before photo/audio cleanup: a later
         # cleanup failure must not leave the deleted conversation indexed.
