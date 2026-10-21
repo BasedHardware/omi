@@ -521,7 +521,7 @@ class TestModulatePrerecorded(unittest.TestCase):
         from utils.stt.pre_recorded import modulate_prerecorded_from_bytes
 
         mock_response = MagicMock()
-        mock_response.json.return_value = {'utterances': []}
+        mock_response.json.return_value = {'text': '', 'duration_ms': 120, 'utterances': []}
         mock_response.raise_for_status = MagicMock()
         mock_client = MagicMock()
         mock_client.__enter__ = MagicMock(return_value=mock_client)
@@ -963,7 +963,7 @@ class TestPrerecordedRequestShape(unittest.TestCase):
         from utils.stt.pre_recorded import modulate_prerecorded_from_bytes
 
         mock_response = MagicMock()
-        mock_response.json.return_value = {'utterances': []}
+        mock_response.json.return_value = {'text': '', 'duration_ms': 120, 'utterances': []}
         mock_response.raise_for_status = MagicMock()
 
         mock_client = MagicMock()
@@ -1014,7 +1014,7 @@ class TestPrerecordedRequestShape(unittest.TestCase):
         from utils.stt.pre_recorded import modulate_prerecorded_from_bytes
 
         mock_response = MagicMock()
-        mock_response.json.return_value = {'utterances': []}
+        mock_response.json.return_value = {'text': '', 'duration_ms': 120, 'utterances': []}
         mock_response.raise_for_status = MagicMock()
 
         mock_client = MagicMock()

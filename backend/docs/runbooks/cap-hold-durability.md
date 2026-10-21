@@ -138,8 +138,15 @@ Held recovery now disables nested URL/provider retries, persists dispatch-starte
 under the exact lease/attempt, and checkpoints an **encrypted** nonempty provider
 result before parsing/ingestion. A restart reuses this result and the original
 provider/model/usage identity, then uses the normal idempotent ingest proof and
-usage key. Empty responses retain existing reconciliation semantics; they are
-not cached as reusable completion or treated as proven silence.
+usage key. An empty response is checkpointed as `provider_empty` with
+`provider_completed_at` and is never cached as a replayable result; because that
+fenced checkpoint proves the vendor finished, recovery settles the piece as a
+transcribed, no-content receipt (`settled_empty`) with no usage and no second
+dispatch, on the same pass or when a later pass resumes the `dispatched` receipt.
+The checkpoint is written only for a reply the adapter validated as the
+provider's success shape with zero words; a 2xx body that is missing or mistypes
+those fields raises inside the adapter, so no completion checkpoint exists and
+the dispatch takes the ambiguous path below rather than settling and purging.
 
 Caching measures the **whole proposed Firestore document** using the installed
 SDK encoded-map Value envelope, including existing encrypted results, plan and
@@ -169,8 +176,9 @@ Without proof, it permits one additional funded application dispatch. Therefore
 one frozen piece can cause **at most two billable STT POST attempts** (one duplicate)
 under these current adapters, excluding vendor-internal billing behavior. Parakeet
 may probe v2 then v1 after 404; the 404 is routing discovery, not completed STT.
-A second uncertain/empty attempt becomes explicitly `failed_reconciliation` and
-retains audio; it is terminal, not a silent successful transcript. This residual
+A second uncertain attempt (no completion checkpoint) becomes explicitly
+`failed_reconciliation` and retains audio; it is terminal, not a silent
+successful transcript. This residual
 operator reconciliation obligation remains visible in the held summary. Do not
 clear markers or purge audio to force progress, and do not promise exactly-once
 vendor spend without a supported provider contract. Provider-result checkpoints
