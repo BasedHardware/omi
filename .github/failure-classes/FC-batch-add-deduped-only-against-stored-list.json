@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "id": "FC-batch-add-deduped-only-against-stored-list",
+  "violated_contract": "Adding a batch of words must dedupe within the batch, not only against the stored list. A repeated entry saves the same word twice, and removing one chip deletes both.",
+  "canonical_prevention": "addVocabularyWords keeps the first occurrence of each new word, drops blanks, and the regression test saves a repeated input and asserts one stored copy.",
+  "canonical_prevention_artifact": [
+    "app/test/providers/user_provider_vocabulary_test.dart"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "app/lib/providers/user_provider.dart"
+  ],
+  "status": "open"
+}

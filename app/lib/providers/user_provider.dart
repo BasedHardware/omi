@@ -378,11 +378,17 @@ class UserProvider with ChangeNotifier {
   Future<bool> addVocabularyWords(List<String> words) async {
     if (words.isEmpty) return false;
     if (!await _loadVocabularyBeforeEdit()) return false;
-    final trimingWords = words.map((w) => w.trim()).where((w) => !_transcriptionVocabulary.contains(w));
-    if (trimingWords.isEmpty) {
+    // A save replaces the whole list, so keep the first copy of each new word:
+    // typing "omi, omi" must not store two chips that a single remove deletes.
+    final newWords = <String>[];
+    for (final word in words.map((w) => w.trim())) {
+      if (word.isEmpty || _transcriptionVocabulary.contains(word) || newWords.contains(word)) continue;
+      newWords.add(word);
+    }
+    if (newWords.isEmpty) {
       return false;
     }
-    final newVocabulary = [..._transcriptionVocabulary, ...trimingWords];
+    final newVocabulary = [..._transcriptionVocabulary, ...newWords];
     return updateTranscriptionVocabulary(newVocabulary);
   }
 

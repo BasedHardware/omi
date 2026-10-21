@@ -99,5 +99,46 @@ void main() {
         ['alpha', 'omi'],
       ]);
     });
+
+    test('saves a repeated word once and drops blank entries', () async {
+      final saved = <List<String>>[];
+      final provider = UserProvider(
+        transcriptionPreferencesFetcher: () async => {
+          'vocabulary': ['alpha']
+        },
+        vocabularySetter: (vocabulary) async {
+          saved.add(vocabulary);
+          return true;
+        },
+      );
+      addTearDown(provider.dispose);
+
+      // The pane splits a typed "omi, omi" into two entries; the saved list
+      // must keep one chip, and a blank entry must not become a word.
+      expect(await provider.addVocabularyWords(['omi', 'omi', '  ', 'beta']), isTrue);
+
+      expect(saved, [
+        ['alpha', 'omi', 'beta'],
+      ]);
+      expect(provider.transcriptionVocabulary, ['alpha', 'omi', 'beta']);
+    });
+
+    test('saves nothing when every added word is already stored', () async {
+      final saved = <List<String>>[];
+      final provider = UserProvider(
+        transcriptionPreferencesFetcher: () async => {
+          'vocabulary': ['alpha']
+        },
+        vocabularySetter: (vocabulary) async {
+          saved.add(vocabulary);
+          return true;
+        },
+      );
+      addTearDown(provider.dispose);
+
+      expect(await provider.addVocabularyWords(['alpha', ' alpha ']), isFalse);
+
+      expect(saved, isEmpty);
+    });
   });
 }
