@@ -3594,6 +3594,8 @@ class CaptureController extends ChangeNotifier
     if (_conversation?.id != nextConversation?.id) {
       suggestionsBySegmentId.clear();
       _manualSpeakerDefaults.clear();
+    } else if (nextConversation != null) {
+      _retainManualLiveLabels(nextConversation.transcriptSegments);
     }
     _conversation = nextConversation;
     if (_conversation != null) {
@@ -4126,6 +4128,7 @@ class CaptureController extends ChangeNotifier
       Logger.debug("Received ${translatedSegments.length} translated segments");
 
       // Update the segments with the translated ones
+      _retainManualLiveLabels(translatedSegments);
       var remainSegments = TranscriptSegment.updateSegments(segments, translatedSegments);
       if (remainSegments.isNotEmpty) {
         Logger.debug("Adding ${remainSegments.length} new translated segments");
@@ -4223,6 +4226,7 @@ class CaptureController extends ChangeNotifier
         if (applyToSpeaker ? segment.speakerId == speakerId : targets.contains(segment.id)) {
           segment.isUser = finalPersonId == 'user';
           segment.personId = segment.isUser ? null : finalPersonId;
+          segment.speakerLabelSource = 'manual';
         }
       }
       _segmentsPhotosVersion++;
@@ -4245,6 +4249,28 @@ class CaptureController extends ChangeNotifier
     } finally {
       taggingSegmentIds = [];
       notifyListeners();
+    }
+  }
+
+  /// The live stream can revise an existing line after a manual tag. Retain the
+  /// tag before merging, including individual-line choices, not only appended lines.
+  void _retainManualLiveLabels(List<TranscriptSegment> incoming) {
+    final manualById = {
+      for (final line in segments)
+        if (line.speakerLabelSource == 'manual') line.id: line
+    };
+    for (final line in incoming) {
+      final previous = manualById[line.id];
+      final assigned = _manualSpeakerDefaults[line.speakerId];
+      if (previous != null) {
+        line.isUser = previous.isUser;
+        line.personId = previous.personId;
+        line.speakerLabelSource = 'manual';
+      } else if (assigned != null && line.speakerLabelSource != 'manual') {
+        line.isUser = assigned == 'user';
+        line.personId = line.isUser ? null : assigned;
+        line.speakerLabelSource = 'manual';
+      }
     }
   }
 
@@ -4281,14 +4307,8 @@ class CaptureController extends ChangeNotifier
       }
     }
 
+    _retainManualLiveLabels(newSegments);
     final remainSegments = TranscriptSegment.updateSegments(segments, newSegments);
-    for (final segment in remainSegments) {
-      final assigned = _manualSpeakerDefaults[segment.speakerId];
-      if (assigned != null && segment.personId == null && !segment.isUser) {
-        segment.isUser = assigned == 'user';
-        segment.personId = segment.isUser ? null : assigned;
-      }
-    }
     segments.addAll(remainSegments);
 
     // Refresh people cache if we see unknown personIds (backend-created persons)

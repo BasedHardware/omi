@@ -13,6 +13,7 @@ import 'package:omi/pages/conversation_capturing/capture_recovery_status.dart';
 import 'package:omi/pages/conversation_detail/widgets/conversation_detail_tabs.dart';
 import 'package:omi/pages/conversations/capture_state_labels.dart';
 import 'package:omi/pages/episodes/episode_presentation.dart';
+import 'package:omi/pages/episodes/live_episode_clock.dart';
 import 'package:omi/pages/episodes/live_transcript_view.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/episode_provider.dart';
@@ -291,7 +292,6 @@ class LiveEpisodePageState extends State<LiveEpisodePage> with SingleTickerProvi
   }) {
     final l10n = context.l10n;
     final dates = OmiDateFormat.of(context);
-    final elapsed = EpisodePresentation.runningLength(EpisodePresentation.elapsed(episode, provider, now), l10n);
     final started = episode?.startedAt ?? now.subtract(EpisodePresentation.elapsed(null, provider, now));
     final title = (episode?.title ?? '').trim().isEmpty ? l10n.episodeListeningNow : episode!.title;
     // Named from the transcript's own speaker resolution, so the header and the lines agree.
@@ -303,7 +303,6 @@ class LiveEpisodePageState extends State<LiveEpisodePage> with SingleTickerProvi
     final namesOthers = people.length > (provider.segments.any((s) => s.isUser) ? 1 : 0);
     final moments = episode?.moments.length ?? 0;
     final meta = OmiType.subhead.copyWith(color: OmiColors.textSecondary);
-    final liveLabel = listening ? l10n.episodeLiveFor(elapsed) : captureStateLabel(l10n, state);
     return Padding(
       padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.xxs, OmiSpacing.md, OmiSpacing.sm),
       child: Column(
@@ -323,12 +322,18 @@ class LiveEpisodePageState extends State<LiveEpisodePage> with SingleTickerProvi
                   children: [
                     OmiLiveDot(live: listening, size: 7),
                     const SizedBox(width: 6),
-                    Text(
-                      liveLabel,
-                      key: const Key('live_episode_status'),
-                      style: meta.copyWith(
-                        color: listening ? OmiColors.success : OmiColors.textSecondary,
-                        fontWeight: FontWeight.w600,
+                    LiveEpisodeClock(
+                      clock: context.read<EpisodeProvider>().now,
+                      builder: (context, time) => Text(
+                        listening
+                            ? l10n.episodeLiveFor(EpisodePresentation.runningLength(
+                                EpisodePresentation.elapsed(episode, provider, time), l10n))
+                            : captureStateLabel(l10n, state),
+                        key: const Key('live_episode_status'),
+                        style: meta.copyWith(
+                          color: listening ? OmiColors.success : OmiColors.textSecondary,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     ),
                   ],
