@@ -1,4 +1,4 @@
-"""
+﻿"""
 Tools for accessing user conversations.
 """
 
@@ -202,6 +202,21 @@ def _bounded_result(result: str, total_found: int, truncated: bool, *, already_b
     return result
 
 
+def _extract_user_context(cfg: Optional[Dict[str, Any]]) -> Tuple[Optional[str], Dict[str, Any]]:
+    """Safely extract user_id and configurable dictionary from config.
+
+    Handles nested configurable dicts, top-level user_id, and uninitialized None configurables.
+    """
+    if not isinstance(cfg, dict):
+        return None, {}
+    raw_configurable = cfg.get('configurable')
+    configurable: Dict[str, Any] = raw_configurable if isinstance(raw_configurable, dict) else {}
+    uid = configurable.get('user_id') or cfg.get('user_id')
+    if isinstance(uid, str) and uid.strip():
+        return uid.strip(), configurable
+    return None, configurable
+
+
 # Citation [k] resolves to conversations_collected[k - 1]. Tool calls in one model turn run on
 # executor threads that share that list, so numbering a record and appending its card is one step.
 _collected_conversations_lock = threading.Lock()
@@ -213,6 +228,7 @@ def _render_addressable_conversations(conversations, *, configurable, admitted_i
     A conversation already collected this turn keeps its citation number instead of gaining a
     duplicate card.
     """
+    configurable = configurable if isinstance(configurable, dict) else {}
     collected = configurable.get('conversations_collected', [])
     blocks = []
     used = 0
@@ -335,13 +351,7 @@ def get_conversations_tool(
         logger.info(f"❌ get_conversations_tool - config is None")
         return "Error: Configuration not available"
 
-    try:
-        configurable: Any = cfg.get('configurable')
-        uid = configurable.get('user_id')
-    except (KeyError, TypeError, AttributeError) as e:
-        logger.error(f"❌ get_conversations_tool - error accessing config: {e}")
-        return "Error: Configuration not available"
-
+    uid, configurable = _extract_user_context(cfg)
     if not uid:
         logger.info(f"❌ get_conversations_tool - no user_id in config")
         return "Error: User ID not found in configuration"
@@ -353,10 +363,16 @@ def get_conversations_tool(
     if scope_err:
         return f"Error: {scope_err}"
 
-    # Cap max_transcript_segments at 1000 to prevent flooding LLM context
-    if max_transcript_segments != -1:
-        max_transcript_segments = min(max_transcript_segments, 1000)
+    try:
+        clean_max_segments = int(max_transcript_segments)
+    except (TypeError, ValueError):
+        clean_max_segments = 0
+
+    if clean_max_segments != -1:
+        max_transcript_segments = max(0, min(clean_max_segments, 1000))
         logger.info(f"📊 max_transcript_segments capped at: {max_transcript_segments}")
+    else:
+        max_transcript_segments = -1
 
     # Parse dates if provided (always in UTC)
     start_dt = None
@@ -382,7 +398,17 @@ def get_conversations_tool(
         except ValueError as e:
             return f"Error: Invalid end_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {end_date} - {str(e)}"
 
-    limit = min(limit, 5000)
+    try:
+        clean_limit = int(limit)
+    except (TypeError, ValueError):
+        clean_limit = 20
+    try:
+        clean_offset = int(offset)
+    except (TypeError, ValueError):
+        clean_offset = 0
+
+    limit = max(1, min(clean_limit, 5000))
+    offset = max(0, clean_offset)
 
     # Parse statuses if provided
     status_list: List[str] = []
@@ -601,33 +627,43 @@ def search_conversations_tool(
         logger.info(f"❌ search_conversations_tool - config is None")
         return "Error: Configuration not available"
 
-    try:
-        configurable: Any = cfg.get('configurable')
-        uid = configurable.get('user_id')
-    except (KeyError, TypeError, AttributeError) as e:
-        logger.error(f"❌ search_conversations_tool - error accessing config: {e}")
-        return "Error: Configuration not available"
-
+    uid, configurable = _extract_user_context(cfg)
     if not uid:
         logger.info(f"❌ search_conversations_tool - no user_id in config")
         return "Error: User ID not found in configuration"
     display_clock = clock_for_turn(configurable, str(uid))
+
+    clean_query = str(query or '').strip()
+    if not clean_query:
+        return "Error: Query is required to search conversations."
+
+    try:
+        clean_limit = int(limit)
+    except (TypeError, ValueError):
+        clean_limit = 5
+    try:
+        clean_max_segments = int(max_transcript_segments)
+    except (TypeError, ValueError):
+        clean_max_segments = 0
+
+    limit = max(1, min(clean_limit, 20))
+    if clean_max_segments != -1:
+        max_transcript_segments = max(0, min(clean_max_segments, 1000))
+        logger.info(f"📊 max_transcript_segments capped at: {max_transcript_segments}")
+    else:
+        max_transcript_segments = -1
+
     logger.info(
         "✅ search_conversations_tool - uid=%s limit=%s",
         uid,
         limit,
     )
-    exact_conversation_id = _parse_exact_search_reference(query)
+    exact_conversation_id = _parse_exact_search_reference(clean_query)
 
     scope = chat_scope_from_config(configurable)
     start_date, end_date, scope_err = apply_chat_scope_dates(scope, start_date, end_date)
     if scope_err:
         return f"Error: {scope_err}"
-
-    # Cap max_transcript_segments at 1000 to prevent flooding LLM context
-    if max_transcript_segments != -1:
-        max_transcript_segments = min(max_transcript_segments, 1000)
-        logger.info(f"📊 max_transcript_segments capped at: {max_transcript_segments}")
 
     # Parse dates to timestamps if provided
     starts_at = None
