@@ -773,7 +773,7 @@ def test_fully_deduped_stamp_gap_keeps_live_and_landed_sync_row_unchanged(monkey
     texts = LIVE[:2]
     row = live_row(started_at=at(0), finished_at=at(100))
     row['transcript_segments'] = [
-        {'start': 60.7 + i * 10, 'end': 70.7 + i * 10, 'text': text, 'speaker_id': 0, 'is_user': True}
+        {'start': 60 + i * 10, 'end': 70 + i * 10, 'text': text, 'speaker_id': 0, 'is_user': True}
         for i, text in enumerate(texts)
     ]
     store = seeded_store([row])
@@ -785,8 +785,8 @@ def test_fully_deduped_stamp_gap_keeps_live_and_landed_sync_row_unchanged(monkey
     incoming.update(started_at=at(150), finished_at=at(170), _sync_lineage_binding='stamp_fallback')
     if retry_anchor:
         incoming['id'] = landed['id']
-    for segment in incoming['transcript_segments']:
-        segment['is_user'] = True
+    for i, segment in enumerate(incoming['transcript_segments']):
+        segment.update(start=i * 10, end=(i + 1) * 10, is_user=True)
     before = deepcopy(store.rows)
     assigned, created, survivors = intake(store, incoming, target_id=LIVE_ID)
     assert survivors == []  # Both exact anchors corroborate the same -90s clock offset.
