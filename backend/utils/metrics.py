@@ -1154,7 +1154,7 @@ OMI_SYNC_LINEAGE_RESOLVE_TOTAL = Counter(
         'Sync lineage binding decisions. outcome is a closed set: bound|split_across_generations|stamp_overridden|'
         'stamp_fallback|no_rows|truncated|interval_miss|lookup_failed|disabled|not_allowlisted|s1_refused'
     ),
-    ['outcome'],
+    ['outcome', 'stage', 'claim_count_bucket', 'file_count_bucket'],
 )
 
 # Task identity is emitted by all processing hosts; event=action_item_identity logs cover unscraped hosts.

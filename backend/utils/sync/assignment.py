@@ -663,6 +663,25 @@ def assign_in_transaction(
     # new conversation from the finite set this transaction can read.
     excluded: frozenset[str] = frozenset()
     chosen = plan(excluded, tuple(range(len(incoming['transcript_segments']))))
+    stamp_gap_refused = False
+    if (
+        lineage_binding == 'stamp_fallback'
+        and target_id
+        and (chosen.survivors or own_anchor is not None)
+        and chosen.result.get('sync_live_target')
+        and _lineage_span_delta_bucket(True, target_id, chosen.matched.get(target_id), chosen.result) == 'gt_300'
+    ):
+        # A literal fallback stamp carries no interval proof. Do not widen a
+        # live extent across this gap. Re-run the ordinary unstamped rules,
+        # keeping only new speech; landed text and retry/deletion fences stay
+        # with their existing owners. Proven interval targets never enter here.
+        refused_id = target_id
+        target_id, target, target_hint = None, None, None
+        live_stats = None
+        stamp_fallback_live = False
+        excluded = frozenset({refused_id})
+        chosen = plan(excluded, chosen.kept)
+        stamp_gap_refused = True
     if (
         live_stats is not None
         and not chosen.survivors
@@ -716,7 +735,7 @@ def assign_in_transaction(
             trigger = 'unavailable'
             break
         excluded, chosen = excluded | drop, rollover
-    if trigger != 'unavailable' and excluded:
+    if trigger is not None and trigger != 'unavailable' and excluded:
         # One event per committed plan, however many full rows it stepped past.
         logger.warning(
             'event=sync_assignment_target outcome=size_rollover trigger=%s created=%s excluded=%d',
@@ -787,6 +806,8 @@ def assign_in_transaction(
         result['_sync_lineage_stamp_append'] = _lineage_span_delta_bucket(
             True, target_id, matched.get(canonical), result
         )
+    if stamp_gap_refused:
+        result['_sync_lineage_stamp_gap_refused'] = True
     if temporal_live:
         logger.info('event=sync_live_overlap outcome=%s', 'merged' if canonical == target_id else 'published')
     return result, created, survivors

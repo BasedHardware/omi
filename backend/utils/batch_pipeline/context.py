@@ -2,7 +2,6 @@
 
 from dataclasses import dataclass
 import math
-import os
 from typing import Any
 
 from database.batch_pipeline_projection import ProjectionBlocked
@@ -63,7 +62,11 @@ def resolve_context(
         ambiguous_binding_pending,
     )
 
-    filenames = [os.path.basename(path) for path in context.get('raw_capture_paths') or []]
+    # These are the authenticated upload names frozen by accept_batch_upload,
+    # not optional consent-dependent (and potentially digest-named) archives.
+    filenames = context.get('filenames') or []
+    if not isinstance(filenames, list) or any(not isinstance(name, str) for name in filenames):
+        raise ProjectionBlocked('invalid intake upload filenames')
     requested = lineage_resolution_requested(
         item.owner_id,
         origin,
@@ -72,6 +75,7 @@ def resolve_context(
         job_id=binding.job_id,
         capture_evidence_claims=context.get('capture_evidence_claims'),
         filenames=filenames,
+        stage='batch_projection',
     )
     reason = None
     if requested:
