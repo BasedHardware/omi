@@ -14,6 +14,7 @@ from _thread import LockType
 from typing import Callable, NotRequired, TypedDict
 
 from config.conversation_smart_merge import smart_merge_flatten_chain_repair_enabled, smart_merge_flatten_enabled
+from config import merge_ancestry
 from config.sync_finalize import sync_finalize_target_recovery_enabled
 from database.action_item_refresh import RefreshConversationUnavailable
 from database import conversations as conversations_db
@@ -108,10 +109,15 @@ def _bridge_source_defect(
         return 'redirect_elsewhere'
     if not smart_merge_flatten_chain_repair_enabled():
         return 'chain'
+    # Same hop shape the flatten planner accepts: a plain sync tombstone. A hop
+    # that is not discarded, has no revision, or carries smart-merge state stays
+    # a conflict, so finalize never cleans up a row the planner would refuse.
+    if not merge_ancestry.plain_chain_hop(source):
+        return 'chain_broken'
     members = set(lineage)
     for _ in range(len(members)):
         hop = load(target)
-        if not hop or not hop.get('deleted') or not hop.get('sync_merged_into'):
+        if not hop or not merge_ancestry.plain_chain_hop(hop):
             return 'chain_broken'
         target = hop['sync_merged_into']
         if target == survivor_id:

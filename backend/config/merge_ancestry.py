@@ -77,6 +77,12 @@ def _plain_tombstone(row: Mapping[str, Any], merged_into: str) -> bool:
     )
 
 
+def plain_chain_hop(row: Mapping[str, Any]) -> bool:
+    """A tombstone that may sit mid-chain: plain, redirecting somewhere, no smart-merge state."""
+    target = row.get('sync_merged_into')
+    return isinstance(target, str) and _plain_tombstone(row, target) and not _smart_state(row)
+
+
 def _declared_cycle(edges: Mapping[str, list[str]]) -> bool:
     visiting: set[str] = set()
     visited: set[str] = set()

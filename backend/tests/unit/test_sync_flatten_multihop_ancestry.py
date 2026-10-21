@@ -188,3 +188,19 @@ def test_bridge_chain_kinds(monkeypatch):
     assert _defect(rows, ['g', 'h'], 'g') == 'chain_broken'  # e is outside the lineage
     monkeypatch.setenv(config.SMART_MERGE_FLATTEN_CHAIN_REPAIR_ENV, 'off')
     assert _defect(rows, ['e', 'g', 'h'], 'g') == 'chain'
+
+
+@pytest.mark.parametrize(
+    'bad',
+    [
+        {'discarded': False},
+        {'sync_content_revision': 0},
+        {'smart_merge': {'role': 'donor', 'survivor_id': 'h'}},
+    ],
+)
+@pytest.mark.parametrize('where', ['source', 'hop'])
+def test_bridge_chain_requires_the_planners_plain_tombstone(bad, where):
+    # Finalize must never retract a chain row the flatten planner would refuse.
+    rows = {'e': _tomb('p'), 'h': _tomb('e'), 'g': _tomb('h')}
+    rows['g' if where == 'source' else 'h'].update(bad)
+    assert _defect(rows, ['e', 'g', 'h'], 'g') == 'chain_broken'
