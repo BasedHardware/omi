@@ -331,9 +331,15 @@ accelerated replay contract, so it also receives the conservative default.
 
 Each replacement target gets a **5s per-target setup budget** (dial plus
 serving check) and a **20s replay prefix wall**, both spent from the session's
-single **60s episode** total rather than restarting per target. Unanswered
-capture exceeding 20s is cut to the newest 20s (135s becomes 20s; 115s skipped),
-with `omi_stt_replay_skipped_seconds_total{source,successor}` recording the loss.
+single **60s episode** total rather than restarting per target. The retained
+prefix is the wall less a **1s margin** (`LISTEN_REPLAY_PREFIX_MARGIN_SECONDS`,
+`0` restores the exact-wall prefix), scaled by the target's declared rate:
+paced delivery at exactly 1x into a wall of the same length left only the last
+packet's write-confirm (~30ms) as slack, and ~1,050 prefixes/day landed past the
+wall as `replay_send_stalled` (2026-10-21, `omi_stt_replay_wall_seconds` 20–25s
+bucket). Unanswered capture exceeding that budget is cut to the newest 19s
+(135s becomes 19s; 116s skipped), with
+`omi_stt_replay_skipped_seconds_total{source,successor}` recording the loss.
 Emitted capture prefixes remain excluded. This is an intentional bounded-loss
 tradeoff; do not describe it as full-ring transcript preservation. Partial
 replay rejection retains the remaining obligation for the next eligible leg.
@@ -342,8 +348,8 @@ Live ingestion does not await the failover lock. A supervisor-owned ordered tail
 holds at most **26s PCM** (832,000 bytes at 16 kHz), behind the replay prefix.
 At 1x live input the lag stays fixed until admitted audio actually pauses;
 silence still forwarded as PCM does not let it catch up. The
-healthy 20ms/packet test bounds delay by 20.532s after setup; allowing the full
-5s setup budget gives **25.532s at 16 kHz** (26.044s at 8 kHz, because a 16KiB
+healthy 20ms/packet test bounds delay by 19.532s after setup; allowing the full
+5s setup budget gives **24.532s at 16 kHz** (25.044s at 8 kHz, because a 16KiB
 packet represents 1.024s). This is audio delivery delay, not a vendor transcript
 latency guarantee. A nonresponsive transport is rejected: the replay helper
 admits at most two packets counting queued plus in-flight audio and waits at most 2s for space; prefix wall
