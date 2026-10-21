@@ -617,7 +617,10 @@ configuration state; it does not prove which private owner is configured.
 For qualification, the deploy lead sets `uid:<test>` through the **private-values
 path**, never a committed manifest, on every API/sync recovery executor. Verify
 all serving revisions and scheduler targets carry the restriction **before**
-activating recovery: staging shares production Firestore and Redis. Keep the
+activating recovery. Staging is data-isolated (`FIRESTORE_DATABASE_ID=staging`
+in `based-hardware-dev`, in-cluster Redis, and the data-plane fence in
+`database/_client.py`), so on staging the restriction is defence in depth; in
+prod it is the guard that keeps other consented owners asleep. Keep the
 shared dispatch document and listen configuration unchanged, and verify the
 test account is already in the effective dispatch cohort. First qualify staging
 (`backend-staging`, `backend-sync-staging`), then one separately authorized prod
