@@ -30,14 +30,17 @@ void main() {
     expect(backgroundLocationRefreshInterval, lessThan(const Duration(minutes: 30)));
   });
 
-  test('the WAL sync wake is sent on every repeat, before the location gate', () {
+  test('the handler cannot backdate the stamp', () {
     final source = File('lib/utils/audio/foreground.dart').readAsStringSync();
+    expect(source, isNot(contains('recordStart')));
+    expect(source, isNot(contains('runBackgroundRepeat')));
+    expect(source, isNot(contains('backgroundLocationRefreshDue')));
+    expect('_locationCadence.onRepeat'.allMatches(source), hasLength(1));
+    expect('_locationCadence.onStart'.allMatches(source), hasLength(1));
     final repeat = source.substring(source.indexOf('void onRepeatEvent'), source.indexOf('Future<void> onDestroy'));
     expect(repeat, contains('_locationCadence.onRepeat'));
     expect(repeat, isNot(contains('lastAttempt:')));
     expect(repeat, isNot(contains('attemptAt')));
-    expect(repeat, isNot(contains('recordStart')));
-    expect(repeat, isNot(contains('runBackgroundRepeat')));
     expect(repeat, isNot(contains('_locationInBackground(')));
     expect(repeat, contains("sendDataToMain({'recordingSyncWake': true})"));
     expect(source, contains('ForegroundTaskEventAction.repeat(60 * 1000 * 5)'));

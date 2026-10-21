@@ -26,8 +26,7 @@ class _ForegroundFirstTaskHandler extends TaskHandler {
   @override
   Future<void> onStart(DateTime timestamp, TaskStarter taskStarter) async {
     Logger.debug("Starting foreground task");
-    _locationCadence.recordStart(DateTime.now());
-    _locationInBackground();
+    await _locationCadence.onStart(refreshLocation: _locationInBackground);
   }
 
   Future _locationInBackground() async {

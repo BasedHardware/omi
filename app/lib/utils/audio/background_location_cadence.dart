@@ -36,8 +36,11 @@ class BackgroundLocationCadence {
 
   DateTime? get attemptAt => _attemptAt;
 
-  void recordStart(DateTime now) {
-    _attemptAt = now;
+  /// Stamps [DateTime.now]. No caller-supplied time, so the handler cannot
+  /// backdate the stamp and force every repeat to look due.
+  Future<void> onStart({required Future<void> Function() refreshLocation}) async {
+    _attemptAt = DateTime.now();
+    await refreshLocation();
   }
 
   Future<void> onRepeat({
