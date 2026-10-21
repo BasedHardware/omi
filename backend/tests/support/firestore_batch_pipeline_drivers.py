@@ -9,6 +9,22 @@ def entries():
     namespaces = ['batch_pipeline_prod', 'batch_pipeline_dev']
     return (
         CoveredByEntry(
+            'database.batch_ramp.ramp_admission_policy',
+            covered_by=('database.batch_ramp.read_owner_load',),
+            reason='admission wrapper delegates both metadata queries to the owner-load reader',
+            expect_observed=False,
+            body_digest='704204df3097a95a63a4294d06bf7181fc4d217e91da187443533b81a8a636fe',
+        ),
+        DriverEntry(
+            'database.batch_ramp.read_owner_load',
+            base={'uid': 'synthetic-owner'},
+            domains={'stage': ['prod', 'dev']},
+            neutrals={
+                'now': (100000.0, 'timestamp operand only'),
+                'incoming_audio_seconds': (0, 'pure aggregation only'),
+            },
+        ),
+        CoveredByEntry(
             'database.batch_pipeline_store.FirestoreTransaction.ready_predecessor',
             covered_by=('database.batch_pipeline_store.ready_predecessor',),
             reason='thin adapter forwards the transaction-bound predecessor query unchanged',

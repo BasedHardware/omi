@@ -1,0 +1,70 @@
+"""Bounded, metadata-only owner-load reads at new admission boundaries."""
+
+from dataclasses import replace
+import logging
+import time
+
+from prometheus_client import Counter
+
+from config.policy.ramp import OPEN_WINDOW_SECONDS, READ_LIMIT, exclusion_enabled, exclusion_reason, owner_load
+from database._client import get_data_plane_firestore_client
+from utils.sync.stage import current_stage
+
+logger = logging.getLogger(__name__)
+EXCLUDED = Counter(
+    'omi_batch_ramp_heavy_owner_excluded_total',
+    'New partial-ramp admission decisions routed to legacy by owner load',
+    ('reason',),
+)
+
+
+def read_owner_load(uid, *, firestore_client=None, now=None, incoming_audio_seconds=0, stage=None):
+    client = firestore_client if firestore_client is not None else get_data_plane_firestore_client()
+    now = time.time() if now is None else now
+    stage = current_stage() if stage is None else stage
+    if stage not in {'prod', 'dev'}:
+        raise ValueError('ramp owner-load reads require an explicit prod/dev data-plane namespace')
+    jobs = list(
+        client.collection(f'batch_pipeline_{stage}_jobs')
+        .where('owner_id', '==', uid)
+        .where('enqueued_at', '>=', now - OPEN_WINDOW_SECONDS)
+        .select(('client_status', 'state', 'enqueued_at', 'duration_seconds'))
+        .limit(READ_LIMIT)
+        .stream()
+    )
+    pending = list(
+        client.collection('sync_backfill_pending' if stage == 'prod' else 'sync_backfill_pending_dev')
+        .where('uid', '==', uid)
+        .select(('payload.audio_start_seconds', 'payload.audio_end_seconds'))
+        .limit(READ_LIMIT)
+        .stream()
+    )
+    return owner_load(
+        [row.to_dict() or {} for row in jobs],
+        [row.to_dict() or {} for row in pending],
+        now,
+        incoming_audio_seconds=incoming_audio_seconds,
+    )
+
+
+def ramp_admission_policy(uid, policy, *, incoming_audio_seconds=0, firestore_client=None):
+    """Filter only a new admission. Callers must honour prior durable owners first.
+
+    Outside a partial ramp or with the kill switch off this does no reads.
+    Read failures keep new work on the existing legacy path. They cannot cancel
+    or reroute previously accepted batch work.
+    """
+    if not policy.batch_enabled or not exclusion_enabled(policy.batch_percent):
+        return policy
+    try:
+        load = read_owner_load(uid, firestore_client=firestore_client, incoming_audio_seconds=incoming_audio_seconds)
+    except Exception:  # bounded admission narrowing; never log account data/errors
+        load = None
+    reason = exclusion_reason(load)
+    if reason is None:
+        return policy
+    EXCLUDED.labels(reason=reason).inc()
+    logger.info('event=batch_ramp_heavy_owner_excluded reason=%s count=1', reason)
+    return replace(
+        policy, batch_enabled=False, batch_allowlisted=False, live_record_enabled=False, live_stt_retired=False
+    )
