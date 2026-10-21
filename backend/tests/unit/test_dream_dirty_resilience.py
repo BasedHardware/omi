@@ -1,4 +1,4 @@
-﻿"""Unit tests for the dream dirty-signal resilience fixes.
+"""Unit tests for the dream dirty-signal resilience fixes.
 
 Verifies:
 - ``after_write`` binds defaults before indexing so omitted default arguments and
@@ -231,3 +231,15 @@ def test_notify_contains_a_store_failure(monkeypatch):
 
     assert boom.call_args_list
     assert fallback.call_args_list
+
+def test_after_write_coerces_numeric_row_ids(mark_dirty):
+    """Numeric primary keys must still enqueue, exactly like ``str(row['id'])`` on main."""
+    from database import dream_dirty
+
+    @dream_dirty.after_write('conversations')
+    def upsert(uid, row):
+        return {'ok': True}
+
+    upsert('uid-1', {'id': 123})
+
+    mark_dirty.assert_called_once_with('uid-1', [('conversations', '123')])
