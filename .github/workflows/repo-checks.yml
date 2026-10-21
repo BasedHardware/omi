@@ -191,7 +191,7 @@ jobs:
             --from-commit-body-file /tmp/main-push-commit-message.txt \
             --output "$PR_BODY_FILE"
           python3 .github/scripts/run_checks.py --lane ci \
-            ${{ inputs.nightly_main_sha != '' && '--changed-files /tmp/nightly-all-files.txt --skip-pr-body-checks' || '' }} \
+            ${{ inputs.nightly_main_sha != '' && '--changed-files /tmp/nightly-all-files.txt --skip-pr-body-checks --keep-going' || '' }} \
             --base "${{ needs.changes.outputs.diff_base }}" \
             --pr-body-file "$PR_BODY_FILE"
 
@@ -275,7 +275,9 @@ jobs:
           fi
 
       - name: Check Python formatting
-        if: needs.changes.outputs.has_python == 'true'
+        # Nightly 39610825548: the dart step failed first and this step never
+        # ran, masking four unformatted files run 1 could not report.
+        if: ${{ !cancelled() && needs.changes.outputs.has_python == 'true' }}
         run: |
           FILES=$(grep 'backend/.*\.py$' /tmp/changed-files.txt | while IFS= read -r f; do [ -f "$f" ] && echo "$f"; done || true)
           if [ -n "$FILES" ]; then
@@ -283,7 +285,9 @@ jobs:
           fi
 
       - name: Check ARB formatting
-        if: needs.changes.outputs.has_arb == 'true'
+        # Same masking hole as the Python step (Luna P2, PR 23064 round 1): a
+        # dart-format failure must not hide ARB findings from the same nightly.
+        if: ${{ !cancelled() && needs.changes.outputs.has_arb == 'true' }}
         run: |
           FILES=$(grep '\.arb$' /tmp/changed-files.txt | while IFS= read -r f; do [ -f "$f" ] && echo "$f"; done || true)
           failed=0

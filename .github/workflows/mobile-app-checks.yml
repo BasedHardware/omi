@@ -720,7 +720,7 @@ jobs:
       - name: Run macOS-scoped iOS manifest checks
         run: |
           python3 .github/scripts/run_checks.py --lane ci --platform macos \
-            ${{ inputs.nightly_main_sha != '' && '--changed-files /tmp/nightly-all-files.txt --skip-pr-body-checks' || '' }} \
+            ${{ inputs.nightly_main_sha != '' && '--changed-files /tmp/nightly-all-files.txt --skip-pr-body-checks --keep-going' || '' }} \
             --exclusive-platform --base "${{ needs.changes.outputs.diff_base }}" \
             --skip-pr-body-checks
 

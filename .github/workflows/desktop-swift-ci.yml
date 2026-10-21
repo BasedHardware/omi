@@ -265,7 +265,7 @@ jobs:
             MANIFEST_ARGS+=(--skip-changelog)
           fi
           python3 .github/scripts/run_checks.py \
-            ${{ inputs.nightly_main_sha != '' && '--changed-files /tmp/nightly-all-files.txt --skip-pr-body-checks' || '' }} \
+            ${{ inputs.nightly_main_sha != '' && '--changed-files /tmp/nightly-all-files.txt --skip-pr-body-checks --keep-going' || '' }} \
             --lane ci \
             --platform macos \
             --exclusive-platform \
