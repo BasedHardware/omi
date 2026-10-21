@@ -2,7 +2,6 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/utils/audio/background_location_cadence.dart';
-import 'package:omi/utils/audio/foreground.dart';
 
 void main() {
   final t0 = DateTime.utc(2026, 10, 21, 12);
