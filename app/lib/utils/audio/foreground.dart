@@ -19,6 +19,24 @@ bool backgroundLocationRefreshDue(DateTime? lastAttempt, DateTime now) =>
     now.isBefore(lastAttempt) ||
     !now.isBefore(lastAttempt.add(backgroundLocationRefreshInterval));
 
+/// The repeat handler's control flow. The sync wake always runs. Location
+/// runs only when [backgroundLocationRefreshDue] is true, and the attempt
+/// stamp is recorded before the refresh so a failed fix is not retried on
+/// the next 5-minute repeat.
+@visibleForTesting
+Future<void> runBackgroundRepeat({
+  required DateTime? lastAttempt,
+  required DateTime now,
+  required void Function() sendSyncWake,
+  required void Function(DateTime attemptAt) recordAttempt,
+  required Future<void> Function() refreshLocation,
+}) async {
+  sendSyncWake();
+  if (!backgroundLocationRefreshDue(lastAttempt, now)) return;
+  recordAttempt(now);
+  await refreshLocation();
+}
+
 @pragma('vm:entry-point')
 void _startForegroundCallback() {
   FlutterForegroundTask.setTaskHandler(_ForegroundFirstTaskHandler());
@@ -104,11 +122,16 @@ class _ForegroundFirstTaskHandler extends TaskHandler {
     Logger.debug("Foreground repeat event triggered");
     // The main isolate owns WAL state. A fresh headless capture engine must
     // never be booted for this opportunistic recovery pass.
-    FlutterForegroundTask.sendDataToMain({'recordingSyncWake': true});
     final now = DateTime.now();
-    if (!backgroundLocationRefreshDue(_locationAttemptAt, now)) return;
-    _locationAttemptAt = now;
-    await _locationInBackground();
+    await runBackgroundRepeat(
+      lastAttempt: _locationAttemptAt,
+      now: now,
+      sendSyncWake: () {
+        FlutterForegroundTask.sendDataToMain({'recordingSyncWake': true});
+      },
+      recordAttempt: (attemptAt) => _locationAttemptAt = attemptAt,
+      refreshLocation: _locationInBackground,
+    );
   }
 
   @override
