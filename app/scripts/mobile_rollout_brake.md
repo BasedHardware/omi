@@ -29,7 +29,8 @@ the superseded code as `halted` beside completed releases only, the new code sit
 on internal or alpha under one newer marketing version, and the fraction does not exceed
 the halted one. It writes one `inProgress` release named with the train's gate receipt
 (`1.0.569 (gate YYYY-MM-DD-HHMM)`) so the ladder can advance it later. Notes copy the
-halted release's What's New and append `BRAKE_NOTES_LINE` to en-US and to every locale
+halted release's What's New and append `BRAKE_NOTES_LINE` (replacing the last line when
+appending would pass Play's 500-character limit) to en-US and to every locale
 holding the identical English text; real translations stay unchanged. Completed releases
 stay untouched. Read status of the halted code first and of the new code afterwards.
 

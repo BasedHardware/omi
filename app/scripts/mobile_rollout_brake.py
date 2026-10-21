@@ -93,10 +93,11 @@ def staged_source_version(sources: dict[str, object], version_code: str) -> str:
 
 
 def stage_notes(halted: dict, fix_line: str) -> list[dict]:
-    """The halted release's What's New, with the English fix line appended.
+    """The halted release's What's New, with the English fix line added.
 
-    The line goes on en-US and on every locale carrying the identical English
-    text (the train copies it to each locale); real translations stay as-is.
+    The line is appended, or replaces the last line when appending would pass
+    Play's limit. It goes on en-US and on every locale carrying the identical
+    English text (the train copies it to each locale); real translations stay as-is.
     """
     notes = copy.deepcopy(halted.get("releaseNotes"))
     if not isinstance(notes, list) or any(not isinstance(entry, dict) for entry in notes):
@@ -105,7 +106,10 @@ def stage_notes(halted: dict, fix_line: str) -> list[dict]:
     if len(english) != 1 or not isinstance(english[0].get("text"), str) or not english[0]["text"].strip():
         raise BrakeError("halted release must carry exactly one non-empty en-US note")
     source = english[0]["text"]
-    updated = f"{source.rstrip()}\n{fix_line}"
+    lines = source.rstrip().split("\n")
+    updated = "\n".join([*lines, fix_line])
+    if len(updated) > PLAY_NOTES_LIMIT and len(lines) > 1:
+        updated = "\n".join([*lines[:-1], fix_line])
     if len(updated) > PLAY_NOTES_LIMIT:
         raise BrakeError(
             f"en-US release notes would exceed Play's {PLAY_NOTES_LIMIT} characters "

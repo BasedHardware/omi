@@ -280,6 +280,19 @@ class BrakeTests(unittest.TestCase):
                 self.assertNotIn("update", [name for name, _ in play.calls])
                 self.assertEqual(play.calls[-1][0], "delete")
 
+    def test_stage_replaces_last_line_only_when_appending_passes_limit(self):
+        play = self.halted_play()
+        head = "- " + "a" * (brake.PLAY_NOTES_LIMIT - 60)
+        long_text = f"{head}\n- Smaller fixes"
+        for entry in play.live["releases"][1]["releaseNotes"]:
+            if entry["language"] != "de-DE":
+                entry["text"] = long_text
+        self.stage(play)
+        notes = {entry["language"]: entry["text"] for entry in play.live["releases"][1]["releaseNotes"]}
+        self.assertEqual(notes["en-US"], f"{head}\n{FIX}")
+        self.assertEqual(notes["fr-FR"], f"{head}\n{FIX}")
+        self.assertEqual(notes["de-DE"], "Schneller.")
+
     def test_stage_fraction_above_halted_fraction_refuses(self):
         play = self.halted_play()
         with self.assertRaisesRegex(brake.BrakeError, "must not exceed"):
