@@ -306,6 +306,22 @@ class ManifestContractTests(unittest.TestCase):
         manifest = load_manifest(MANIFEST_PATH)
         self.assertTrue(any("ci" in check.lanes for check in manifest.checks))
 
+    def test_nightly_invocations_keep_going(self) -> None:
+        """Nightly must run every selected check; PR and local lanes keep fail-fast.
+
+        A workflow edit that drops --keep-going from any of the three nightly
+        run_checks.py calls returns the nightly to one-red-per-run reporting
+        (39586610411 → 39610825548), so the wiring itself is pinned here.
+        """
+        for name in ("repo-checks.yml", "mobile-app-checks.yml", "desktop-swift-ci.yml"):
+            workflow = (WORKFLOWS_DIR / name).read_text(encoding="utf-8")
+            with self.subTest(workflow=name):
+                self.assertIn(
+                    "inputs.nightly_main_sha != '' && "
+                    "'--changed-files /tmp/nightly-all-files.txt --skip-pr-body-checks --keep-going'",
+                    workflow,
+                )
+
     def test_manifest_test_modules_execute_their_cases(self) -> None:
         """A registered test command must not be able to pass without running tests.
 
