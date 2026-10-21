@@ -46,6 +46,9 @@ class WorkflowTests(unittest.TestCase):
                 self.assertIn("  workflow_call:", text)
                 self.assertEqual(len(re.findall(r"uses: actions/checkout@", text)),
                                  text.count("ref: ${{ inputs.nightly_main_sha || github.sha }}"))
+                # Scripts that read GITHUB_SHA see the workflow-file commit, not the checkout.
+                if "preflight_public_build_config.py" in text:
+                    self.assertIn('--ref "${{ inputs.nightly_main_sha || github.sha }}"', text)
                 for name, body in jobs(text).items():
                     if "issues: write" in body or "id-token: write" in body:
                         self.assertRegex(body, r"if: .*inputs\.nightly_main_sha == ''", name)

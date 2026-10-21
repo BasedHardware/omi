@@ -68,4 +68,5 @@ jobs:
         run: |
           python3 .github/scripts/preflight_public_build_config.py \
             --all \
-            --environment "${{ matrix.environment }}"
+            --environment "${{ matrix.environment }}" \
+            --ref "${{ inputs.nightly_main_sha || github.sha }}"

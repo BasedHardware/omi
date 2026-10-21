@@ -26,8 +26,10 @@ ancestor of the tested main SHA (lead ruling 9cb025). This also excludes older
 runs rerun on code newer than this run's pinned source, keeping the bisect range
 ordered. The workflow run's head SHA can name a different
 commit from the tested source. Before the first green nightly, the artifact
-contains `none`. Missing previous receipts fail visibly rather than inventing
-a bisect range. Setup failures without test records name the failed step.
+contains `none`. An expired or malformed previous receipt is skipped for the
+next older verified green; if none verifies, the receipt records `none` rather
+than inventing a bisect range, and the failure names are still written.
+Setup failures without test records name the failed step.
 
 The workspace lead reads the latest workflow run, including branch dispatch,
 through `infra/rollout/bin/nightly_main_read.sh`. It pins the run ID, validates

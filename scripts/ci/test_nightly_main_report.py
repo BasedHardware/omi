@@ -85,6 +85,29 @@ class ReportTests(unittest.TestCase):
             self.assertEqual(REPORT.last_green("BasedHardware/omi", 123, "a" * 40), "b" * 40)
         self.assertEqual(downloads, [120, 119])
 
+    def test_expired_newest_receipt_falls_back_to_an_older_verified_green(self):
+        runs = [dict(id=121, event="schedule"), dict(id=120, event="schedule")]
+
+        def gh(*args, **kwargs):
+            if args[0] == "api":
+                return "ahead"
+            if args[2] == "121":
+                raise REPORT.subprocess.CalledProcessError(1, "gh", stderr="no artifact matches")
+            out = Path(args[args.index("--dir") + 1])
+            (out / "report.json").write_text(json.dumps(dict(run_id=120, failures=[], main_sha="b" * 40)))
+
+        with patch.object(REPORT, "api_pages", return_value=runs), patch.object(REPORT, "gh", side_effect=gh):
+            self.assertEqual(REPORT.last_green("BasedHardware/omi", 123, "a" * 40), "b" * 40)
+
+    def test_unverifiable_baseline_still_writes_the_failure_receipt(self):
+        jobs = [dict(id=1, name="Backend / unit", conclusion="failure", steps=[])]
+        log = "FAILED tests/unit/test_x.py::test_y - AssertionError"
+        with patch.object(REPORT, "gh", return_value=log), \
+                patch.object(REPORT, "last_green", side_effect=ValueError("Cannot verify last-green source ancestry")):
+            receipt = REPORT.collect("BasedHardware/omi", 100, "a" * 40, jobs)
+        self.assertEqual(receipt["failures"], [{"job": "Backend / unit", "test": "tests/unit/test_x.py::test_y"}])
+        self.assertIsNone(receipt["last_green_sha"])
+
     def test_older_run_rerun_on_newer_main_cannot_reverse_the_bisect_range(self):
         runs = [dict(id=120, event="workflow_dispatch")]
 
