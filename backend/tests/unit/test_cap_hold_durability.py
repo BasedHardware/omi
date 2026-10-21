@@ -158,13 +158,17 @@ async def test_sweep_kill_switch_does_not_read_or_dispatch(monkeypatch):
 
 def test_retry_observing_purged_receipt_counts_post_delete_publication(monkeypatch):
     manifest = live.live_cap_manifest
+    writes: list[tuple] = []
 
     class Tx:
         def create(self, *args, **kwargs):
-            raise AssertionError('tombstone published a manifest')
+            raise AssertionError('an existing receipt published a manifest')
 
-        def set(self, *args, **kwargs):
-            raise AssertionError('tombstone updated the summary')
+        def update(self, _ref, patch):
+            writes.append(('update', dict(patch)))
+
+        def set(self, _ref, payload, merge=False):
+            writes.append(('set', sorted(payload)))
 
     receipt = {'state': 'purged'}
     ref = SimpleNamespace(get=lambda transaction=None: SimpleNamespace(exists=True, to_dict=lambda: dict(receipt)))
@@ -173,7 +177,7 @@ def test_retry_observing_purged_receipt_counts_post_delete_publication(monkeypat
     monkeypatch.setattr(manifest, 'external_write_fence', lambda *args, **kwargs: nullcontext())
     monkeypatch.setattr(manifest.cap_hold, 'holds', lambda uid: SimpleNamespace(document=lambda identity: ref))
     monkeypatch.setattr(manifest.cap_hold, 'summary_ref', lambda uid: SimpleNamespace())
-    upload = Mock(side_effect=AssertionError('tombstone uploaded audio'))
+    upload = Mock(side_effect=AssertionError('an existing receipt uploaded audio'))
     monkeypatch.setattr(manifest.cap_hold, 'upload_held_audio', upload)
 
     source = Publication('synthetic')
@@ -181,11 +185,20 @@ def test_retry_observing_purged_receipt_counts_post_delete_publication(monkeypat
     before = held_metrics.ERASURE.labels(outcome='post_delete_publication')._value.get()
     manifest.publish('synthetic', 'unused', source, {'timestamp': 1000}, 60)
     assert held_metrics.ERASURE.labels(outcome='post_delete_publication')._value.get() == before + 1
+    assert writes == []  # The tombstone wins: no manifest and no summary movement.
     upload.assert_not_called()
 
+    # A held receipt that never recorded its increment is repaired once, with
+    # the marker and the summary in the same transaction and no new upload.
     receipt['state'] = 'held'
     manifest.publish('synthetic', 'unused', source, {'timestamp': 1000}, 60)
     assert held_metrics.ERASURE.labels(outcome='post_delete_publication')._value.get() == before + 1
+    assert writes == [('update', {'usage_applied': True}), ('set', ['count', 'seconds'])]
+    upload.assert_not_called()
+
+    receipt['usage_applied'] = True
+    manifest.publish('synthetic', 'unused', source, {'timestamp': 1000}, 60)
+    assert writes == [('update', {'usage_applied': True}), ('set', ['count', 'seconds'])]
     upload.assert_not_called()
 
 

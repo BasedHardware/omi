@@ -378,7 +378,7 @@ def claim(uid: str, ref: Any, now: float) -> dict[str, Any] | None:
         row = snapshot.to_dict() if snapshot.exists else None
         if (
             not row
-            or row.get('state') in {'completed', 'retained', 'purged', 'staging', 'sealing'}
+            or row.get('state') in {'completed', 'retained', 'purged', 'staging', 'sealing', 'superseded'}
             or row.get('lease_until', 0) > now
         ):
             return None

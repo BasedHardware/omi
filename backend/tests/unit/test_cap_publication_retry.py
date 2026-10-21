@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import copy
 from contextlib import nullcontext
+from datetime import datetime, timedelta, timezone
 from threading import Barrier, Lock, RLock, Thread
 from types import SimpleNamespace
 
@@ -24,6 +25,7 @@ from google.api_core.exceptions import (
     ResourceExhausted,
     ServiceUnavailable,
 )
+from google.cloud.firestore_v1 import ReadAfterWriteError
 from google.cloud.firestore_v1.transforms import Increment
 
 from database._client import (
@@ -185,6 +187,11 @@ class _Doc:
         return _Collection(self.client, f'{self.key}/{name}')
 
     def get(self, transaction=None, timeout=None):
+        # The real client raises this before a read reaches the server once the
+        # transaction has queued writes (get_transaction_id), so a transactional
+        # body must finish its reads first.
+        if transaction is not None and transaction.ops:
+            raise ReadAfterWriteError('Attempted read after write in a transaction.')
         if self.key in self.client.fail_get_keys:
             self.client.fail_get_keys.discard(self.key)
             raise ResourceExhausted('429 Quota exceeded.')
@@ -528,6 +535,7 @@ def test_exhausted_retries_keep_the_fragment_staged_for_redrive(delays, store, t
     store.actions = ['expire', 'expire', 'expire']
     before_exhausted = _counter('exhausted')
     before_ok = _counter('retried_ok')
+    before_orphaned = _counter('source_orphaned')
     row = live_cap_staging.append(
         UID,
         str(path),
@@ -542,6 +550,7 @@ def test_exhausted_retries_keep_the_fragment_staged_for_redrive(delays, store, t
     assert store.deletes == []
     assert _counter('exhausted') == before_exhausted + 1
     assert _counter('retried_ok') == before_ok
+    assert _counter('source_orphaned') == before_orphaned  # A staging row names the source.
     assert len(slept) == 2 and sum(slept) < 5
     store.docs[group.identity]['writer_until'] = 0
 
@@ -649,11 +658,14 @@ def test_non_retryable_invalid_argument_is_not_retried(delays, store, tmp_path):
     path = tmp_path / 'fragment.opus'
     path.write_bytes(b'opus')
     before = _counter('exhausted')
+    before_orphaned = _counter('source_orphaned')
     with pytest.raises(InvalidArgument, match='some other 400'):
         _append(store, str(path), read_errors=[InvalidArgument('some other 400')])
     assert len(store.transactions) == 1
     assert delays[0] == []
     assert _counter('exhausted') == before
+    # The read failed before the upload, so there is no source to orphan.
+    assert _counter('source_orphaned') == before_orphaned
     assert 'summary' not in store.docs
 
 
@@ -1014,10 +1026,54 @@ def _plant_fragment_row(store, identity: str, fragment_id: str) -> str:
     return source
 
 
+def _plant_group_row(store, identity: str, fragment_ids: list[str]) -> dict[str, bytes]:
+    """A staging row holding one distinct payload per fragment."""
+    payloads: dict[str, bytes] = {}
+    parts = []
+    for fragment_id in fragment_ids:
+        payload = f'fragment-{fragment_id[:8]}-'.encode() * 4
+        source = f'chunks/{UID}/cap-held/{fragment_id}.opus.enc'
+        store.bucket.put(source, payload, generation=1)
+        payloads[fragment_id] = payload
+        parts.append(
+            {
+                'id': fragment_id,
+                'audio_path': source,
+                'audio_generation': 1,
+                'bytes': len(payload),
+                'frames': 16000,
+            }
+        )
+    store.docs[identity] = {
+        'state': 'staging',
+        'stage_parts': parts,
+        'seconds': float(len(parts)),
+        'writer_until': 0,
+        'metadata': 'encrypted',
+        'sample_rate': 16000,
+        'started_at': 1_700_000_000,
+        'created_at': 1.0,
+        'listed_at': 1_700_000_000,
+        'live_custody_version': 4,
+    }
+    return payloads
+
+
+def _live_destinations(store, identity: str) -> list[str]:
+    prefix = f'chunks/{UID}/cap-held/{identity}.'
+    return sorted(name for name, stored in store.bucket.objects.items() if name.startswith(prefix) and stored.alive)
+
+
+def _assert_claim_expiry(claim: dict) -> None:
+    remaining = claim['expire_at'] - datetime.now(timezone.utc)
+    assert timedelta(days=89) < remaining < timedelta(days=91)
+
+
 def _assert_one_claim(store, fragment_id: str, winner: str, loser: str) -> None:
     claim = f'users/{UID}/stt_cap_fragment_claims/{fragment_id}'
     assert [key for key in store.docs if 'stt_cap_fragment_claims' in key] == [claim]
     assert store.docs[claim]['hold_id'] == winner
+    _assert_claim_expiry(store.docs[claim])
     assert store.docs[winner]['state'] == 'held'
     assert store.docs[loser]['state'] == 'superseded'
     assert store.docs[loser]['seconds'] == 0
@@ -1031,8 +1087,7 @@ def _assert_one_claim(store, fragment_id: str, winner: str, loser: str) -> None:
     with pytest.raises(NotFound):
         store.bucket.blob(source).download_as_bytes()
     assert store.bucket.blob(audio).download_as_bytes() == FRAGMENT_PAYLOAD
-    other = store.bucket.objects.get(f'chunks/{UID}/cap-held/{loser}.opus.enc')
-    assert other is None or not other.alive
+    assert _live_destinations(store, loser) == []
 
 
 @pytest.mark.parametrize('first', ['group', 'late'])
@@ -1101,8 +1156,10 @@ def test_unconfirmed_late_create_keeps_the_source_and_fails(delays, store, tmp_p
     store.fail_get_keys.add(late)
     store.actions = ['throttle', 'throttle', 'throttle']
     source = f'chunks/{UID}/cap-held/{fragment.identity}.opus.enc'
+    before = _counter('source_orphaned')
     with pytest.raises(ResourceExhausted):
         live_cap_staging.append(UID, str(path), group, fragment, _METADATA, 1.0)
+    assert _counter('source_orphaned') == before + 1
     assert source not in store.deletes
     assert store.bucket.blob(source).download_as_bytes() == FRAGMENT_PAYLOAD
     assert [part['id'] for part in store.docs[group.identity]['stage_parts']] == []
@@ -1133,6 +1190,106 @@ def test_concurrent_seals_claim_the_fragment_once(store):
     winner = store.docs[f'users/{UID}/stt_cap_fragment_claims/{fragment_id}']['hold_id']
     loser = late if winner == group else group
     _assert_one_claim(store, fragment_id, winner, loser)
+
+
+def test_fake_rejects_a_transactional_read_after_a_queued_write(store):
+    tx = store.transaction()
+    doc = _Doc(store, 'row')
+    doc.get(transaction=tx)
+    tx.set(doc, {'state': 'staging'})
+    with pytest.raises(ReadAfterWriteError):
+        doc.get(transaction=tx)
+    assert doc.get().to_dict() is None  # A plain read is not transactional.
+
+
+def test_multi_fragment_group_reads_every_claim_before_the_first_write(store):
+    group = Publication(UID).identity
+    fragments = [Publication(UID).identity for _ in range(3)]
+    payloads = _plant_group_row(store, group, fragments)
+    assert live_cap_staging.seal(UID, group) is True
+    assert len(store.transactions) == 2  # freeze, then one commit without a restart
+    row = store.docs[group]
+    assert row['state'] == 'held'
+    assert row['claimed_fragment_ids'] == fragments
+    composed = store.bucket.blob(row['audio_path']).download_as_bytes()
+    assert composed == b''.join(payloads[fragment_id] for fragment_id in fragments)
+    assert [fragment['bytes'] for fragment in row['opus_fragments']] == [len(payloads[f]) for f in fragments]
+    assert sum(fragment['bytes'] for fragment in row['opus_fragments']) == len(composed)
+    assert store.docs['summary']['count'] == 1
+    assert store.docs['summary']['seconds'] == 3
+    assert store.increments.count(('summary', 'count', 1.0)) == 1
+    for fragment_id in fragments:
+        claim = store.docs[f'users/{UID}/stt_cap_fragment_claims/{fragment_id}']
+        assert claim == {'hold_id': group, 'fragment_id': fragment_id, 'expire_at': claim['expire_at']}
+        _assert_claim_expiry(claim)
+        assert f'chunks/{UID}/cap-held/{fragment_id}.opus.enc' in store.deletes
+    assert _live_destinations(store, group) == [row['audio_path']]
+
+
+def test_retry_that_lost_a_fragment_composes_only_its_claimed_set(store):
+    group = Publication(UID).identity
+    x, y = Publication(UID).identity, Publication(UID).identity
+    payloads = _plant_group_row(store, group, [x, y])
+    wide = live_cap_staging._compose_target(store.bucket, UID, group, [x, y]).name
+    # Freeze commits; every seal commit then retires its transaction id after
+    # the X+Y composite is already in the bucket.
+    store.actions = ['ok', 'expire', 'expire', 'expire']
+    assert live_cap_staging.seal(UID, group) is False
+    assert store.docs[group]['state'] == 'sealing'
+    assert store.bucket.blob(wide).download_as_bytes() == payloads[x] + payloads[y]
+    assert [key for key in store.docs if 'stt_cap_fragment_claims' in key] == []
+    # Another row claims Y before this row is retried.
+    late = late_hold_identity(y)
+    store.docs[late] = {
+        **copy.deepcopy(store.docs[group]),
+        'state': 'staging',
+        'stage_parts': [copy.deepcopy(store.docs[group]['stage_parts'][1])],
+        'seconds': 1.0,
+    }
+    store.actions = []
+    assert live_cap_staging.seal(UID, late) is True
+    assert store.bucket.blob(store.docs[late]['audio_path']).download_as_bytes() == payloads[y]
+    # The retry claims X only. It must compose X, not reuse the X+Y object.
+    assert live_cap_staging.seal(UID, group) is True
+    row = store.docs[group]
+    assert row['state'] == 'held'
+    assert row['claimed_fragment_ids'] == [x]
+    assert row['audio_path'] != wide
+    composed = store.bucket.blob(row['audio_path']).download_as_bytes()
+    assert composed == payloads[x]
+    assert [fragment['bytes'] for fragment in row['opus_fragments']] == [len(payloads[x])]
+    assert sum(fragment['bytes'] for fragment in row['opus_fragments']) == len(composed)
+    stale = store.bucket.objects.get(wide)
+    assert stale is None or not stale.alive
+    assert _live_destinations(store, group) == [row['audio_path']]
+    assert store.docs[f'users/{UID}/stt_cap_fragment_claims/{x}']['hold_id'] == group
+    assert store.docs[f'users/{UID}/stt_cap_fragment_claims/{y}']['hold_id'] == late
+    # X and Y are each counted once, by the row that claimed them.
+    assert store.docs['summary']['count'] == 2
+    assert store.docs['summary']['seconds'] == 2
+    assert store.increments.count(('summary', 'count', 1.0)) == 2
+    assert store.increments.count(('summary', 'seconds', 1.0)) == 2
+    assert f'chunks/{UID}/cap-held/{x}.opus.enc' in store.deletes
+    assert f'chunks/{UID}/cap-held/{y}.opus.enc' in store.deletes
+    assert store.bucket.blob(store.docs[late]['audio_path']).download_as_bytes() == payloads[y]
+    assert store.bucket.blob(row['audio_path']).download_as_bytes() == payloads[x]
+
+
+def test_permanent_commit_failure_after_upload_counts_the_orphaned_source(delays, store, tmp_path):
+    path = tmp_path / 'fragment.opus'
+    path.write_bytes(b'opus')
+    group = Publication(UID)
+    fragment = Publication(UID)
+    store.actions = ['permanent']
+    before = _counter('source_orphaned')
+    with pytest.raises(InvalidArgument, match='some other 400'):
+        live_cap_staging.append(UID, str(path), group, fragment, _METADATA, 1.0)
+    assert _counter('source_orphaned') == before + 1
+    source = f'chunks/{UID}/cap-held/{fragment.identity}.opus.enc'
+    assert source not in store.deletes
+    assert store.bucket.blob(source).download_as_bytes() == FRAGMENT_PAYLOAD
+    assert group.identity not in store.docs
+    assert late_hold_identity(fragment.identity) not in store.docs
 
 
 async def test_receive_data_close_code_follows_staging(delays, store, tmp_path):

@@ -4,9 +4,12 @@ Only staging rows may grow. A transaction serializes append, writer expiry and
 seal under both privacy authorities. Published held sources never change.
 """
 
+import hashlib
+import itertools
 import json
 import logging
 import time
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -291,6 +294,10 @@ def append(uid: str, path: str, group: Publication, fragment: Publication, metad
             # Custody is unknown whenever no read showed this fragment. The
             # object stays for a later seal. Deleting it here can remove the
             # source a row we failed to read still names.
+            if fields:
+                # This attempt uploaded a fragment that no row names. Nothing
+                # will seal or clean it, and the socket closes with 1011.
+                record_publication_retry('source_orphaned')
             return UNRECOVERED
 
     return commit_publication(client, commit, recover=recover)
@@ -299,10 +306,42 @@ def append(uid: str, path: str, group: Publication, fragment: Publication, metad
 # One document per fragment. Creating it is the claim: a second seal cannot
 # create the same id, so it cannot compose or count that fragment again.
 _FRAGMENT_CLAIMS = 'stt_cap_fragment_claims'
+# A claim must outlive every window in which a second row could still seal the
+# same fragment. A row leaves staging WRITER_SECONDS after its last append, and
+# the redrive sweep retries a staging or sealing row on every rotation, so the
+# duplicate-row window is minutes to hours, not months. Ninety days covers a
+# redrive outage plus manual repair by orders of magnitude. The field is a
+# timestamp so a Firestore TTL policy on it (enabled separately) can bound the
+# ledger; TTL ignores numeric epochs.
+CLAIM_LEDGER_SECONDS = 90 * 24 * 60 * 60
 
 
 def _fragment_claim_ref(uid: str, fragment_id: str) -> Any:
     return get_firestore_client().collection('users').document(uid).collection(_FRAGMENT_CLAIMS).document(fragment_id)
+
+
+def _fragment_claim(identity: str, fragment_id: str) -> dict:
+    return {
+        'hold_id': identity,
+        'fragment_id': fragment_id,
+        'expire_at': datetime.now(timezone.utc) + timedelta(seconds=CLAIM_LEDGER_SECONDS),
+    }
+
+
+def _claim_set_digest(fragment_ids: list[str]) -> str:
+    return hashlib.sha256('\n'.join(sorted(fragment_ids)).encode()).hexdigest()[:16]
+
+
+def _compose_target(bucket: Any, uid: str, identity: str, fragment_ids: list[str]) -> Any:
+    """The seal destination names its claim set.
+
+    Compose runs before the claim transaction commits. A retry that lost a
+    fragment to another row claims a smaller set; it must not reuse a composite
+    built from the wider set, or the manifest describes fewer bytes than the
+    object holds. The same set on the same row resolves to the same object, so
+    a plain retry still reuses its immutable destination.
+    """
+    return bucket.blob(f'chunks/{uid}/cap-held/{identity}.{_claim_set_digest(fragment_ids)}.opus.enc')
 
 
 def _hold_identity(ref: Any) -> str:
@@ -325,20 +364,29 @@ def _counted_seconds(row: dict, parts: list[dict], claimed: list[dict]) -> float
     return sum(float(part.get('frames') or 0) / rate for part in claimed)
 
 
-def _drop_unpublished_target(bucket: Any, uid: str, identity: str) -> None:
-    """Remove a compose this attempt published before losing the claim.
+def _drop_unpublished_targets(
+    bucket: Any, uid: str, identity: str, part_ids: list[str], claimed_ids: list[str]
+) -> None:
+    """Remove composes this row published before losing fragments to another row.
 
-    This is the seal destination for this row, never the fragment source.
+    Claims are never released, so every destination an earlier attempt of this
+    row composed names a proper superset of what it can still claim, and no
+    committed manifest names it. Only this row's seal destinations are
+    candidates, never a fragment source. At most 2**MAX_FRAGMENTS - 1 names.
     """
-    target = bucket.blob(f'chunks/{uid}/cap-held/{identity}.opus.enc')
-    try:
-        target.reload(timeout=10, retry=None)
-    except NotFound:
-        return
-    try:
-        target.delete(if_generation_match=target.generation, timeout=10, retry=None)
-    except (NotFound, PreconditionFailed):
-        pass
+    claimed = list(dict.fromkeys(claimed_ids))
+    lost = [fragment_id for fragment_id in dict.fromkeys(part_ids) if fragment_id and fragment_id not in claimed]
+    for size in range(1, len(lost) + 1):
+        for extra in itertools.combinations(lost, size):
+            target = _compose_target(bucket, uid, identity, [*claimed, *extra])
+            try:
+                target.reload(timeout=10, retry=None)
+            except NotFound:
+                continue
+            try:
+                target.delete(if_generation_match=target.generation, timeout=10, retry=None)
+            except (NotFound, PreconditionFailed):
+                pass
 
 
 def cleanup(uid: str, ref: Any) -> None:
@@ -420,28 +468,35 @@ def seal(uid: str, identity: str, *, expired_only: bool = False) -> bool:
             parts = row['stage_parts']
             if not 0 < len(parts) <= MAX_FRAGMENTS:
                 raise ValueError('invalid live staging part count')
+            # Firestore rejects a transactional read after the first queued
+            # write, so every claim is read before any claim is created.
+            by_id: dict[str, dict] = {}
+            for part in parts:
+                fragment_id = part.get('id')
+                if fragment_id and fragment_id not in by_id:
+                    by_id[fragment_id] = part
+            holders = {
+                fragment_id: (_fragment_claim_ref(uid, fragment_id).get(transaction=tx).to_dict() or {}).get('hold_id')
+                for fragment_id in by_id
+            }
             # Claim before compose. A fragment another row already claimed is
             # not composed and not counted. The create is the lock: Firestore
             # retries this transaction if the other seal commits first.
             claimed: list[dict] = []
-            seen: set[str] = set()
-            for part in parts:
-                fragment_id = part.get('id')
-                if not fragment_id or fragment_id in seen:
-                    continue
-                seen.add(fragment_id)
-                claim_ref = _fragment_claim_ref(uid, fragment_id)
-                holder = (claim_ref.get(transaction=tx).to_dict() or {}).get('hold_id')
+            for fragment_id, part in by_id.items():
+                holder = holders[fragment_id]
                 if holder and holder != identity:
                     continue
                 if not holder:
-                    tx.create(claim_ref, {'hold_id': identity, 'fragment_id': fragment_id})
+                    tx.create(_fragment_claim_ref(uid, fragment_id), _fragment_claim(identity, fragment_id))
                 claimed.append(part)
+            part_ids = list(by_id)
+            claimed_ids = [part['id'] for part in claimed]
             if not claimed:
                 # This attempt may already have composed, then lost the claim
-                # commit and retried. Drop that unpublished destination. The
-                # fragment source belongs to the row that won the claim.
-                _drop_unpublished_target(bucket, uid, identity)
+                # commit and retried. Drop those unpublished destinations. The
+                # fragment sources belong to the rows that won the claims.
+                _drop_unpublished_targets(bucket, uid, identity, part_ids, [])
                 tx.set(
                     ref,
                     {
@@ -457,9 +512,13 @@ def seal(uid: str, identity: str, *, expired_only: bool = False) -> bool:
                     },
                 )
                 return True
+            if len(claimed) < len(by_id):
+                # An earlier attempt may have composed the wider set this row
+                # could still claim then. That object is unpublished garbage.
+                _drop_unpublished_targets(bucket, uid, identity, part_ids, claimed_ids)
             # Composition copies authenticated encryption frames verbatim. The
             # reader decodes each independent Opus clock before joining PCM.
-            target = bucket.blob(f'chunks/{uid}/cap-held/{identity}.opus.enc')
+            target = _compose_target(bucket, uid, identity, claimed_ids)
             sources = []
             for part in claimed:
                 if not part['audio_path'].startswith(f'chunks/{uid}/cap-held/'):
