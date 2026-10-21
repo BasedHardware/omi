@@ -10,6 +10,12 @@ from utils.conversations.processing_trigger import ProcessingTrigger
 
 
 @pytest.fixture(autouse=True)
+def _episodes_cohort_admits_everyone(monkeypatch):
+    # The code default is 0% (allowlist only); these tests exercise admitted users.
+    monkeypatch.setenv('EPISODES_PERCENT', '100')
+
+
+@pytest.fixture(autouse=True)
 def _enabled(monkeypatch):
     monkeypatch.delenv(config.EPISODES_ENABLED_ENV, raising=False)
     monkeypatch.delenv(config.EPISODES_PERCENT_ENV, raising=False)
