@@ -294,6 +294,20 @@ _FOREGROUND_TIMEOUT_FEATURES = frozenset(
         # prompts on that lane stay on the background deadline — hence a
         # dedicated feature, not an entry for the shared one.
         'chat_metadata_extraction',
+        # Seventh instance of the class, 2026-10-21: external-integration
+        # conversation structuring (`get_llm('external_structure')` behind
+        # get_message_structure / summarize_experience_text) feeds the WHOLE
+        # external text — a full imported message or document — into one
+        # structured call inside _get_structured's foreground try block, where
+        # any failure becomes the caller's 500 ("Conversation processing
+        # failed: TimeoutError", prod pusher x16/30m on 2026-10-20/21). On the
+        # shared background deadline a whole-text structured answer cannot
+        # reliably arrive in 15s, and the timeout discards the user's whole
+        # capture — no title, no summary, no action items. Unlike the sibling
+        # lanes above, external_structure serves ONLY these whole-content
+        # foreground calls, so the feature itself joins the set instead of
+        # needing a new key.
+        'external_structure',
     }
 )
 

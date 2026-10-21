@@ -56,6 +56,13 @@ generated_route_overrides:
   - feature: external_structure
     primary: {provider: openai, model: gpt-6-luna}
     provider_options: {reasoning_effort: low}
+    # Whole external text (imported message / document) in one structured call
+    # inside conversation structuring's foreground try block — see
+    # model_config._FOREGROUND_TIMEOUT_FEATURES, seventh instance of the
+    # foreground-deadline class. The 30s generated-lane request budget is
+    # raised to cover the 60s client deadline so the lane never aborts a
+    # request its caller is still willing to wait for.
+    request_timeout_ms: 90000
   - feature: followup
     primary: {provider: openai, model: gpt-6-luna}
     provider_options: {reasoning_effort: none}
