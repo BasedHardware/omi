@@ -6,6 +6,8 @@ from unittest.mock import Mock
 
 import pytest
 
+from config.policy import BatchUnitPolicy
+
 from utils.stt import batch_language as lid
 from utils.stt import pre_recorded as stt
 
@@ -214,9 +216,81 @@ async def test_cpu_intake_freezes_detection_proof_instead_of_primary_setting(mon
         conversation_id=None,
         client_device_id=None,
         client_platform='ios',
-        policy=SimpleNamespace(batch_enabled=True, live_record_enabled=False),
+        policy=BatchUnitPolicy(batch_enabled=True, live_record_enabled=False),
     )
     assert response.status_code == 503
     assert captured[0]['stt_language'] == frozen
     assert captured[0]['stt_language_evidence'] == 'audio_lid'
     assert captured[0]['stt_language_confidence'] == confidence
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('mode', ['draining', 'dark'])
+@pytest.mark.parametrize(
+    'user_language,single,code,confidence,route,frozen,probed,evidence',
+    [
+        # Unsupported declared language: the C8 provider (Modulate) route, never Parakeet;
+        # #23038 trusts a declared language, so no probe is spent.
+        ('vi', True, 'vi', 0.99, 'provider', 'vi', False, 'declared'),
+        # Unknown language: no legacy escape; the #23038 probe decides, and uncertain
+        # speech is frozen 'und' so the worker guard keeps it off Parakeet.
+        (None, False, 'en', 0.5, 'parakeet', 'und', True, 'audio_lid'),
+    ],
+)
+async def test_legacy_off_keeps_language_probe_and_never_parakeet_for_unsupported(
+    monkeypatch, mode, user_language, single, code, confidence, route, frozen, probed, evidence
+):
+    """Lead cfcaba: with legacy sync draining or dark, main's language guard does not
+    send uploads to legacy; unsupported/unknown speech keeps #23038's bounded probe."""
+    from types import SimpleNamespace
+    from utils.batch_pipeline import intake
+    from utils.batch_pipeline.audio import audio_unit, read_context
+    from utils.batch_pipeline.artifacts import ProtectionContext
+    from utils.sync.legacy_dark import LegacySyncMode
+    from tests.unit.test_batch_pipeline_scheduler import MemoryStore
+
+    client = detector(monkeypatch, code, confidence)
+    captured, routes = [], []
+    real_resolve_route = intake.resolve_route
+
+    def spy_route(language, **kwargs):
+        routes.append(real_resolve_route(language, **kwargs))
+        return routes[-1]
+
+    def authorize(store, seed, snapshots):
+        snapshots['user'] = {'language': user_language, 'transcription_preferences': {'single_language_mode': single}}
+        return ProtectionContext('standard', 0)
+
+    def stage(work, body):
+        captured.append(read_context(body))
+        raise RuntimeError('stop after synthetic staging')
+
+    def units(*args, **kwargs):
+        yield audio_unit(100, b'\x01\x00' * 16000)
+
+    monkeypatch.setattr(intake.legacy_dark, 'current_mode', lambda: LegacySyncMode(mode))
+    monkeypatch.setattr(intake, 'resolve_route', spy_route)
+    monkeypatch.setattr(intake, 'FirestoreStore', lambda _: MemoryStore())
+    monkeypatch.setattr(intake, 'current_stage', lambda: 'dev')
+    monkeypatch.setattr(intake, 'batch_artifact_authorize', authorize)
+    monkeypatch.setattr(intake, 'decode_units', units)
+    monkeypatch.setattr(intake, 'artifacts_for', lambda _: SimpleNamespace(stage_audio=stage))
+    response = await intake.accept_upload(
+        uid='synthetic-owner',
+        job_id='new',
+        content_id='new',
+        paths=[],
+        lane='fresh',
+        recording_age_seconds=0,
+        source='omi',
+        should_lock=False,
+        conversation_id=None,
+        client_device_id=None,
+        client_platform='ios',
+        policy=BatchUnitPolicy(batch_enabled=True, live_record_enabled=False),
+    )
+    assert response is not None and response.status_code == 503  # reached staging, no legacy escape
+    assert [r.stt_route for r in routes] == [route]
+    assert client.post.called == probed  # the bounded language-ID probe runs only for unknown speech
+    assert captured[0]['stt_language'] == frozen
+    assert captured[0]['stt_language_evidence'] == evidence
