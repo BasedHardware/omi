@@ -220,6 +220,17 @@ AUDIO_SAMPLE_RATE = 16000
 
 _V1_DEPRECATION_HEADERS = {'Deprecation': 'true', 'Link': '</v2/sync-local-files>; rel="successor-version"'}
 
+
+async def _offer_shadow_upload(**kwargs) -> None:
+    # The shadow is best effort: its import or handoff must never fail a legacy upload.
+    try:
+        from utils.batch_pipeline.shadow_intake import offer_upload
+
+        await offer_upload(**kwargs)
+    except Exception as error:
+        logger.info('event=batch_shadow_intake outcome=error exception_type=%s', type(error).__name__)
+
+
 router = APIRouter(route_class=MultipartMaxPartSizeRoute, dependencies=[Depends(sync_stage.require_http_stage)])
 
 
@@ -669,6 +680,19 @@ async def sync_local_files(
                     'firmware': request.headers.get('x-omi-firmware-version'),
                     'device_model': request.headers.get('x-omi-device-model'),
                 },
+            )
+            await _offer_shadow_upload(
+                uid=uid,
+                content_id=None,
+                paths=paths,
+                lane=lane_decision.lane.value,
+                age=lane_decision.maximum_age_seconds,
+                conversation_id=conversation_id,
+                source=source.value,
+                device_id=client_device_context.client_device_id,
+                byok=has_byok_keys(),
+                policy=resolve_batch_policy(uid),
+                should_lock=should_lock,
             )
             wav_paths = await run_blocking(sync_executor, decode_files_to_wav, paths)
         except HTTPException as e:
@@ -1338,6 +1362,19 @@ async def sync_local_files_v2(
             pass
 
         # Transfer ownership of raw paths to the background task
+        await _offer_shadow_upload(
+            uid=uid,
+            content_id=content_id,
+            paths=paths,
+            lane=lane_decision.lane.value,
+            age=lane_decision.maximum_age_seconds,
+            conversation_id=conversation_id if isinstance(conversation_id, str) else None,
+            source=source.value,
+            device_id=client_device_context.client_device_id,
+            byok=byok_enabled,
+            policy=batch_policy,
+            should_lock=should_lock,
+        )
         owned_paths = list(paths)
         paths = []  # Prevent finally cleanup of files now owned by bg task
 

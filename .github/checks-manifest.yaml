@@ -4,6 +4,11 @@
 # Checks that consume PR metadata declare `requires_pr_body: true`; post-merge
 # push runs exclude only that category because no authoritative PR body is available.
 checks:
+  - id: nightly-main-contract-tests
+    command: ["python3", "scripts/ci/test_nightly_main.py"]
+    triggers: [".github/workflows/**", "scripts/ci/nightly_main_report.py", "scripts/ci/test_nightly_main*.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "Nightly coverage must include every path-filtered PR test workflow, pin main across reusable checkouts, retain PR runner budgets, suppress external writes and report test failures with a bisect range"
   - id: batch-policy-boundary
     command: ["python3", "backend/config/policy/guard.py"]
     triggers: ["backend/**/*.py", "config/feature-flags.yaml", ".github/checks-manifest.yaml"]
@@ -291,6 +296,11 @@ checks:
     triggers: ["scripts/pre-push", "scripts/pre_push_ci_prediction.py", ".github/scripts/test_pre_push_ci_prediction.py", "desktop/macos/scripts/desktop-flow-lint.py", "desktop/macos/scripts/desktop_flow_contract.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#9440: local CI prediction must select only bounded Flutter generator, desktop-flow, and Windows KG-worker checks for the final PR diff"
+  - id: pre-push-ci-verified-tests
+    command: ["python3", ".github/scripts/test_pre_push_ci_verified.py"]
+    triggers: ["scripts/pre-push", "scripts/pre_push_ci_verified.py", ".github/scripts/test_pre_push_ci_verified.py", ".github/scripts/check-deployment-concurrency.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "Fast-forwarding a branch to a SHA with terminal-green GitHub CI re-ran the full local pre-push suite (~55 min per rollout sync); the skip must hold only for green exact SHAs and fail closed on unknown, red or unreachable GitHub"
   - id: worktree-env-doctor-tests
     command: ["python3", ".github/scripts/test_worktree_env_doctor.py"]
     triggers: ["scripts/worktree_env_doctor.py", ".github/scripts/test_worktree_env_doctor.py", "scripts/pre-push", "backend/scripts/needs-typecheck.sh", ".gitignore", ".github/checks-manifest.yaml"]

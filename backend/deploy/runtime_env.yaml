@@ -756,6 +756,10 @@ environments:
             REPEAT_WORK_LLM_VERSION: {value: 2026-10-16-v1, category: rollout}
             SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
             VAD_CACHE_TTL_SECONDS: {value: '86400', category: rollout}
+            BATCH_PIPELINE_SHADOW_PERCENT: {value: '0', category: rollout}
+            BATCH_PIPELINE_SHADOW_PAID_RECOVERY_PER_HOUR:
+              value: '200'
+              category: ops_kill
             BATCH_PIPELINE_ENABLED: {value: 'false', category: rollout}
             FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED: {value: 'false', category: rollout}
             FIRST_SUMMARY_DEADLINE_PERCENT: {value: '0', category: rollout}
@@ -1010,6 +1014,10 @@ environments:
             REPEAT_WORK_LLM_VERSION: {value: 2026-10-16-v1, category: rollout}
             SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
             VAD_CACHE_TTL_SECONDS: {value: '86400', category: rollout}
+            BATCH_PIPELINE_SHADOW_PERCENT: {value: '0', category: rollout}
+            BATCH_PIPELINE_SHADOW_PAID_RECOVERY_PER_HOUR:
+              value: '200'
+              category: ops_kill
             BATCH_PIPELINE_ENABLED: {value: 'false', category: rollout}
             FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED: {value: 'false', category: rollout}
             FIRST_SUMMARY_DEADLINE_PERCENT: {value: '0', category: rollout}
@@ -1292,6 +1300,10 @@ environments:
             REPEAT_WORK_LLM_VERSION: {value: 2026-10-16-v1, category: rollout}
             SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
             VAD_CACHE_TTL_SECONDS: {value: '86400', category: rollout}
+            BATCH_PIPELINE_SHADOW_PERCENT: {value: '0', category: rollout}
+            BATCH_PIPELINE_SHADOW_PAID_RECOVERY_PER_HOUR:
+              value: '200'
+              category: ops_kill
             BATCH_PIPELINE_ENABLED: {value: 'false', category: rollout}
             FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED: {value: 'false', category: rollout}
             FIRST_SUMMARY_DEADLINE_PERCENT: {value: '0', category: rollout}
@@ -1555,6 +1567,10 @@ environments:
             REPEAT_WORK_REVISION_ENABLED: {value: 'false', category: rollout}
             REPEAT_WORK_LLM_VERSION: {value: 2026-10-16-v1, category: rollout}
             SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_SHADOW_PERCENT: {value: '0', category: rollout}
+            BATCH_PIPELINE_SHADOW_PAID_RECOVERY_PER_HOUR:
+              value: '200'
+              category: ops_kill
             BATCH_PIPELINE_ENABLED: {value: 'false', category: rollout}
             FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED: {value: 'false', category: rollout}
             FIRST_SUMMARY_DEADLINE_PERCENT: {value: '0', category: rollout}
@@ -1571,7 +1587,7 @@ environments:
               value: ''
               category: service_auth
             BATCH_PIPELINE_WORKER_SERVICE_ACCOUNT:
-              value: ''
+              value: batch-pipeline-worker@based-hardware-dev.iam.gserviceaccount.com
               category: service_auth
             BUCKET_BATCH_PIPELINE:
               category: service_discovery
@@ -2083,6 +2099,9 @@ environments:
         PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
         PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
         DREAM_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
+        OMI_VERTEX_RESERVATION_STATES:
+          value: '{"gemini-2.5-flash":"inactive"}'
+          category: ops_kill
         PROACTIVITY_REDIS_HOST:
           config_map:
             name: prod-omi-backend-config
@@ -2378,7 +2397,7 @@ environments:
             value: https://omi.me
           DREAM_AGENT_ELIGIBILITY: {value: allowlist, category: rollout}
           DREAM_AGENT_UID_ALLOWLIST: {category: rollout, value: vi7SA9ckQCe4ccobWNxlbdcNdC23}
-          DREAM_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
+          DREAM_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
           PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
           PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
           SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
@@ -2574,7 +2593,7 @@ environments:
             value: http://172.16.160.20/diarizer
           DREAM_AGENT_ELIGIBILITY: {value: allowlist, category: rollout}
           DREAM_AGENT_UID_ALLOWLIST: {category: rollout, value: vi7SA9ckQCe4ccobWNxlbdcNdC23}
-          DREAM_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
+          DREAM_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
           PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
           PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
           SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
@@ -2899,6 +2918,10 @@ environments:
             REPEAT_WORK_LLM_VERSION: {value: 2026-10-16-v1, category: rollout}
             SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
             VAD_CACHE_TTL_SECONDS: {value: '86400', category: rollout}
+            BATCH_PIPELINE_SHADOW_PERCENT: {value: '0', category: rollout}
+            BATCH_PIPELINE_SHADOW_PAID_RECOVERY_PER_HOUR:
+              value: '200'
+              category: ops_kill
             BATCH_PIPELINE_ENABLED: {value: 'true', category: rollout}
             FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED: {value: 'false', category: rollout}
             FIRST_SUMMARY_DEADLINE_PERCENT: {value: '100', category: rollout}
@@ -3062,8 +3085,8 @@ environments:
             MEMORY_V3_CURSOR_SECRET_VERSION:
               value: prod-v1
               category: memory_rollout
-            DREAM_AGENT_ELIGIBILITY: {value: allowlist, category: rollout}
-            DREAM_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
+            DREAM_AGENT_ELIGIBILITY: {value: paid, category: rollout}
+            DREAM_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
             PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
             PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
             SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
@@ -3079,7 +3102,7 @@ environments:
             BATCH_PIPELINE_LIVE_ADMISSION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED: {value: 'false', category: rollout}
-            BATCH_PIPELINE_SPEECH_EMPTY_MULTILINGUAL_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_SPEECH_EMPTY_MULTILINGUAL_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_RECOVERY_ALL_ADMITTED: {value: 'false', category: rollout}
             BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED: {value: 'true', category: rollout}
@@ -3117,7 +3140,8 @@ environments:
             OMI_MESSAGING_LINK_TARGETS: {value: '{"telegram":{"provider":"telegram","address":"omi_chat_bot","deep_link_template":"https://t.me/{address}?start={proof}"},"imessage":{"provider":"linq","address":"+12062808403"}}',
               category: rollout}
             DREAM_AGENT_ENABLED: {value: 'true', category: rollout}
-            DREAM_AGENT_PASSES_PER_DAY: {value: '6', category: rollout}
+            DREAM_AGENT_PAID_PERCENT: {value: '5', category: rollout}
+            DREAM_AGENT_PASSES_PER_DAY: {value: '48', category: rollout}
             DREAM_AGENT_HUNT_INTERVAL_HOURS: {value: '2', category: rollout}
             DREAM_AGENT_MANUAL_RUNS_PER_DAY: {value: '3', category: rollout}
             DREAM_AGENT_DAILY_USD: {value: '20', category: rollout}
@@ -3242,6 +3266,10 @@ environments:
             REPEAT_WORK_LLM_VERSION: {value: 2026-10-16-v1, category: rollout}
             SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
             VAD_CACHE_TTL_SECONDS: {value: '7200', category: rollout}
+            BATCH_PIPELINE_SHADOW_PERCENT: {value: '0', category: rollout}
+            BATCH_PIPELINE_SHADOW_PAID_RECOVERY_PER_HOUR:
+              value: '200'
+              category: ops_kill
             BATCH_PIPELINE_ENABLED: {value: 'true', category: rollout}
             FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED: {value: 'true', category: rollout}
             FIRST_SUMMARY_DEADLINE_PERCENT: {value: '100', category: rollout}
@@ -3425,8 +3453,8 @@ environments:
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
               category: memory_rollout
-            DREAM_AGENT_ELIGIBILITY: {value: allowlist, category: rollout}
-            DREAM_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
+            DREAM_AGENT_ELIGIBILITY: {value: paid, category: rollout}
+            DREAM_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
             SYNC_PHASE_METRICS_EXPORT_ENABLED:
               value: 'true'
               category: telemetry
@@ -3446,7 +3474,7 @@ environments:
             BATCH_PIPELINE_LIVE_ADMISSION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED: {value: 'false', category: rollout}
-            BATCH_PIPELINE_SPEECH_EMPTY_MULTILINGUAL_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_SPEECH_EMPTY_MULTILINGUAL_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_RECOVERY_ALL_ADMITTED: {value: 'false', category: rollout}
             BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED: {value: 'true', category: rollout}
@@ -3457,7 +3485,7 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
-            SUMMARY_DEBT_REPAIR_ENABLED: {value: 'true', category: rollout}
+            SUMMARY_DEBT_REPAIR_ENABLED: {value: 'false', category: rollout}
             CAPTURE_SHARED_SPEECH_MODE: {value: 'off', category: rollout}
             CAPTURE_SHARED_SPEECH_PERCENT: {value: '0', category: rollout}
             HOSTED_DIARIZATION_API_URL:
@@ -3476,8 +3504,9 @@ environments:
             TRANSCRIPTION_SYNC_FINAL_PASS_HOURLY_REQUESTS: {value: '15000', category: rollout}
             OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
             DREAM_AGENT_ENABLED: {value: 'true', category: rollout}
+            DREAM_AGENT_PAID_PERCENT: {value: '5', category: rollout}
             REVIEW_SURFACE_MODE: {value: 'on', category: rollout}
-            DREAM_AGENT_PASSES_PER_DAY: {value: '6', category: rollout}
+            DREAM_AGENT_PASSES_PER_DAY: {value: '48', category: rollout}
             DREAM_AGENT_HUNT_INTERVAL_HOURS: {value: '2', category: rollout}
             DREAM_AGENT_MANUAL_RUNS_PER_DAY: {value: '3', category: rollout}
             DREAM_AGENT_DAILY_USD: {value: '20', category: rollout}
@@ -3606,6 +3635,10 @@ environments:
             REPEAT_WORK_LLM_VERSION: {value: 2026-10-16-v1, category: rollout}
             SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
             VAD_CACHE_TTL_SECONDS: {value: '7200', category: rollout}
+            BATCH_PIPELINE_SHADOW_PERCENT: {value: '0', category: rollout}
+            BATCH_PIPELINE_SHADOW_PAID_RECOVERY_PER_HOUR:
+              value: '200'
+              category: ops_kill
             BATCH_PIPELINE_ENABLED: {value: 'true', category: rollout}
             FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED: {value: 'true', category: rollout}
             FIRST_SUMMARY_DEADLINE_PERCENT: {value: '100', category: rollout}
@@ -3782,8 +3815,8 @@ environments:
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
               category: memory_rollout
-            DREAM_AGENT_ELIGIBILITY: {value: allowlist, category: rollout}
-            DREAM_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
+            DREAM_AGENT_ELIGIBILITY: {value: paid, category: rollout}
+            DREAM_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
             SYNC_PHASE_METRICS_EXPORT_ENABLED:
               value: 'true'
               category: telemetry
@@ -3797,7 +3830,7 @@ environments:
             BATCH_PIPELINE_LIVE_ADMISSION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED: {value: 'false', category: rollout}
-            BATCH_PIPELINE_SPEECH_EMPTY_MULTILINGUAL_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_SPEECH_EMPTY_MULTILINGUAL_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_RECOVERY_ALL_ADMITTED: {value: 'false', category: rollout}
             BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED: {value: 'true', category: rollout}
@@ -3826,6 +3859,8 @@ environments:
             TRANSCRIPTION_SYNC_FINAL_PASS_HOURLY_REQUESTS: {value: '15000', category: rollout}
             OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
             DREAM_AGENT_ENABLED: {value: 'true', category: rollout}
+            DREAM_AGENT_PAID_PERCENT: {value: '5', category: rollout}
+            DREAM_AGENT_PASSES_PER_DAY: {value: '48', category: rollout}
             MENTOR_PIPELINE: {value: cohort, category: rollout}
             SPEAKER_GROUPING_SHADOW: {value: cohort, category: rollout}
             SPEAKER_GROUPING_SHADOW_PERCENT: {value: '10', category: rollout}
@@ -3946,6 +3981,10 @@ environments:
             REPEAT_WORK_REVISION_ENABLED: {value: 'false', category: rollout}
             REPEAT_WORK_LLM_VERSION: {value: 2026-10-16-v1, category: rollout}
             SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_SHADOW_PERCENT: {value: '0', category: rollout}
+            BATCH_PIPELINE_SHADOW_PAID_RECOVERY_PER_HOUR:
+              value: '200'
+              category: ops_kill
             BATCH_PIPELINE_ENABLED: {value: 'true', category: rollout}
             FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED: {value: 'true', category: rollout}
             FIRST_SUMMARY_DEADLINE_PERCENT: {value: '100', category: rollout}
@@ -3962,7 +4001,7 @@ environments:
               value: ''
               category: service_auth
             BATCH_PIPELINE_WORKER_SERVICE_ACCOUNT:
-              value: ''
+              value: batch-pipeline-worker@based-hardware.iam.gserviceaccount.com
               category: service_auth
             BUCKET_BATCH_PIPELINE:
               category: service_discovery
@@ -4083,8 +4122,8 @@ environments:
               category: storage_retention
             GCP_LOCATION:
               value: us-central1
-            DREAM_AGENT_ELIGIBILITY: {value: allowlist, category: rollout}
-            DREAM_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
+            DREAM_AGENT_ELIGIBILITY: {value: paid, category: rollout}
+            DREAM_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
             PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
             PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
             SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
@@ -4094,7 +4133,7 @@ environments:
             BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_SPEECH_EMPTY_MULTILINGUAL_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED: {value: 'true', category: rollout}
-            BATCH_PIPELINE_RECOVERY_ALL_ADMITTED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_RECOVERY_ALL_ADMITTED: {value: 'true', category: rollout}
             BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_PROJECTION_TIMING_ENABLED: {value: 'true', category: rollout}
@@ -4116,6 +4155,7 @@ environments:
             CAPTURE_SHARED_SPEECH_PERCENT: {value: '0', category: rollout}
             OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
             DREAM_AGENT_ENABLED: {value: 'true', category: rollout}
+            DREAM_AGENT_PAID_PERCENT: {value: '5', category: rollout}
             MENTOR_PIPELINE: {value: cohort, category: rollout}
             SPEAKER_GROUPING_SHADOW: {value: cohort, category: rollout}
             SPEAKER_GROUPING_SHADOW_PERCENT: {value: '10', category: rollout}

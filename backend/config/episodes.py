@@ -11,7 +11,7 @@ rather than silently keeping it running. Off makes the episodes API report
 ``enabled: false``: released and current apps then show today's
 per-conversation UI, and no episode state is read, written or computed.
 
-``EPISODES_PERCENT`` (default 100) and ``EPISODES_UID_ALLOWLIST`` exist only
+``EPISODES_PERCENT`` (default 0 until the ramp sets it) and ``EPISODES_UID_ALLOWLIST`` exist only
 for the ramp: a stable salted uid bucket below the percentage, or a listed
 uid, is admitted. Invalid percentages admit nobody beyond the allowlist.
 
@@ -44,7 +44,7 @@ def episodes_enabled_for(uid: str) -> bool:
     allowlist = {item.strip() for item in os.getenv(EPISODES_UID_ALLOWLIST_ENV, '').split(',') if item.strip()}
     if uid in allowlist:
         return True
-    return uid_bucket(uid, _COHORT_SALT) < percentage(EPISODES_PERCENT_ENV, default=100.0)
+    return uid_bucket(uid, _COHORT_SALT) < percentage(EPISODES_PERCENT_ENV, default=0.0)
 
 
 # --------------------------------------------------------------------------- moments

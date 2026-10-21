@@ -54,6 +54,10 @@ def verify_worker(request: Request) -> int:
     if request.url.path == '/v2/batch-pipeline/recover-quarantine':
         audience = os.getenv('BATCH_PIPELINE_RECOVERY_TASK_AUDIENCE', '').strip()
         invoker = os.getenv('SYNC_TASKS_INVOKER_SA', '').strip()
+    elif request.url.path == '/v2/batch-pipeline/shadow-recover':
+        # Same CPU role/policy as paid record recovery, with the GPU worker's
+        # existing service principal rather than the Cloud Tasks invoker.
+        audience = os.getenv('BATCH_PIPELINE_RECOVERY_TASK_AUDIENCE', '').strip()
     return verify_configured_cloud_tasks_oidc(
         request,
         audience=audience,
@@ -192,6 +196,18 @@ async def redrive_dead(body: RedriveRequest):
     except BatchPrivacyBlocked:
         accepted = False
     return {'accepted': accepted}
+
+
+@router.post('/shadow-recover', include_in_schema=False)
+async def shadow_recover(body: RedriveRequest):
+    from database.batch_pipeline_shadow import ShadowStore
+    from utils.batch_pipeline.intake import artifacts_for
+    from utils.batch_pipeline.shadow_recovery import recover
+
+    store = body.service().store
+    artifacts = await run_blocking(sync_executor, artifacts_for, store)
+    outcome = await run_blocking(sync_executor, recover, ShadowStore(store), artifacts, body.segment_id)
+    return {'status': outcome}
 
 
 @router.post('/gpu-idle', include_in_schema=False)

@@ -410,6 +410,8 @@ class Projector:
         self._persist_read(segment_id, job, entry, binding)
 
     def _persist_read(self, segment_id, job, entry, binding, *, hint=None, claimed=False):
+        if job.get('shadow'):
+            raise ProjectionBlocked('shadow publication forbidden')
         if claimed:
             # The walk holds this owner's claim for its whole step.
             self._assign(segment_id, job, entry, binding, finish=False, hint=hint)
@@ -433,6 +435,8 @@ class Projector:
         return self._project_read(segment_id, *self.store.read(segment_id))
 
     def _project_read(self, segment_id, job, entry, binding, *, hint=None, claimed=False):
+        if job.get('shadow'):
+            raise ProjectionBlocked('shadow publication forbidden')
         policy = ProjectionPolicy.from_dict(job['policy_parts']['projection'])
         if policy.async_projection:
             self._persist_read(segment_id, job, entry, binding, hint=hint, claimed=claimed)
@@ -462,6 +466,8 @@ class Projector:
         return self._finish(segment_id, job, entry, binding)
 
     def _assign(self, segment_id, job, entry, binding, *, finish=True, hint=None):
+        if job.get('shadow'):
+            raise ProjectionBlocked('shadow publication forbidden')
         policy = ProjectionPolicy.from_dict(job['policy_parts']['projection'])
         item = WorkItem(**{key: job[key] for key in WorkItem.__dataclass_fields__ if key in job})
         session = self.store.session(segment_id, binding, self.clock(), policy=policy)
@@ -549,6 +555,8 @@ class Projector:
         return candidate is not None, candidate
 
     def _finish(self, segment_id, job, entry, binding):
+        if job.get('shadow'):
+            raise ProjectionBlocked('shadow publication forbidden')
         policy = ProjectionPolicy.from_dict(job['policy_parts']['projection'])
         item = WorkItem(**{key: job[key] for key in WorkItem.__dataclass_fields__ if key in job})
         entry = self.store.ref('results', segment_id).get().to_dict() or {}

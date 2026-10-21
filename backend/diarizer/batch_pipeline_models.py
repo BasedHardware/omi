@@ -184,7 +184,8 @@ class StagedAudio:
         return decode_pcm16_wav(body)
 
     def stream(self, item):
-        return self._streams.pop(item.segment_id, None)
+        stream = self._streams.pop(item.segment_id, None)
+        return ('shadow:' + stream) if item.shadow and stream else stream
 
     def language(self, item):
         """Intake's resolved STT language ('' unknown); None when intake did not record one."""

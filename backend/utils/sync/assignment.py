@@ -11,7 +11,7 @@ import logging
 import math
 from typing import TYPE_CHECKING, Any, Callable, NamedTuple, Optional, TypeVar
 
-from config.conversation_smart_merge import smart_merge_flatten_enabled
+from config.conversation_smart_merge import smart_merge_flatten_chain_repair_enabled, smart_merge_flatten_enabled
 from config.sync_live_dedupe import sync_live_dedupe_active_for
 from config.sync_safety_wal import sync_safety_wal_enabled
 from database._client import firestore_document_kind, firestore_error_document_path, is_document_size_limit_error
@@ -167,6 +167,12 @@ def _lineage_span_delta_bucket(
     if growth <= 300:
         return '60_300'
     return 'gt_300'
+
+
+def _flatten_rejected(reason: str) -> SyncAssignmentConflict:
+    # ``reason`` is one of merge_ancestry's bounded constants, never row data.
+    logger.warning('event=sync_ancestry_flatten outcome=rejected reason=%s', reason)
+    return SyncAssignmentConflict('sync ancestry flatten rejected', subtype=Reason.ANCESTRY_FLATTEN_REJECTED)
 
 
 def _smart_merge_lineage(row: dict | None) -> bool:
@@ -631,13 +637,17 @@ def assign_in_transaction(
             survivor_row = dict(current or {}, id=canonical)
             reason, union_ids = merge_ancestry.ancestry_union(survivor_row, flatten_donors)
             if reason is not None:
-                raise SyncAssignmentConflict('sync ancestry flatten rejected', subtype=Reason.ANCESTRY_FLATTEN_REJECTED)
+                raise _flatten_rejected(reason)
             ancestor_rows = {aid: load(aid) for aid in union_ids if aid not in flatten_donors}
             reason, union, ancestor_updates = merge_ancestry.flatten_updates(
-                survivor_row, flatten_donors, ancestor_rows, user_managed=_policy_user_managed
+                survivor_row,
+                flatten_donors,
+                ancestor_rows,
+                user_managed=_policy_user_managed,
+                chain_repair=smart_merge_flatten_chain_repair_enabled(),
             )
             if reason is not None:
-                raise SyncAssignmentConflict('sync ancestry flatten rejected', subtype=Reason.ANCESTRY_FLATTEN_REJECTED)
+                raise _flatten_rejected(reason)
             ancestors = set(union)
         else:
             ancestors = {cid for row in records for cid in row.get('sync_merged_from', [])}
