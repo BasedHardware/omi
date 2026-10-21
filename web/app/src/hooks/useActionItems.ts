@@ -506,13 +506,20 @@ export function useActionItems(): UseActionItemsReturn {
       // Optimistic update
       setItems((prev) => prev.filter((i) => !ids.includes(i.id)));
 
-      try {
-        await Promise.all(ids.map((id) => deleteActionItem(id)));
-      } catch (err) {
-        console.error('Failed to bulk delete:', err);
-        // Revert on error
-        setItems((prev) => [...prev, ...deletedItems]);
-        setError(err instanceof Error ? err.message : 'Failed to delete tasks');
+      const results = await Promise.allSettled(ids.map((id) => deleteActionItem(id)));
+      const failedIds = new Set(
+        ids.filter((_, index) => results[index].status === 'rejected'),
+      );
+
+      if (failedIds.size > 0) {
+        console.error(
+          'Failed to bulk delete:',
+          results.filter((r) => r.status === 'rejected'),
+        );
+        // Only restore the tasks whose delete failed; tasks the server
+        // already deleted must stay gone.
+        setItems((prev) => [...prev, ...deletedItems.filter((i) => failedIds.has(i.id))]);
+        setError('Failed to delete some tasks');
       }
     },
     [items],
