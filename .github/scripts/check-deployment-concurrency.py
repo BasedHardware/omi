@@ -113,12 +113,15 @@ LOCK_CONTRACTS = {
         "${{ github.event.inputs.environment == 'prod' && github.event.inputs.break_glass_lock != 'true' && 'prod-train' || format('deploy-gke-parakeet-{0}', github.event.inputs.environment) }}"
     ),
     "config_train.yml": LockContract(
-        "${{ github.event.inputs.environment == 'prod' && github.event.inputs.break_glass_lock != 'true' && 'prod-train' || format('config-train-{0}', github.event.inputs.environment) }}"
+        "${{ github.event.inputs.environment == 'prod' && github.event.inputs.break_glass_lock != 'true' && 'prod-train' || format('deploy-backend-stack-{0}', github.event.inputs.environment) }}"
     ),
     "gcp_personas.yml": LockContract(
         "deploy-cloud-run-omi-web-${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || github.ref == 'refs/heads/development' && 'development' || github.ref == 'refs/heads/main' && 'prod' || format('nondeploy-{0}', github.run_id) }}"
     ),
     "gcp_plugins.yml": LockContract("deploy-cloud-run-plugins-${{ github.event.inputs.environment }}"),
+    "sync_ledger_fence_cutover.yml": LockContract(
+        "${{ github.event.inputs.environment == 'prod' && github.event.inputs.break_glass_lock != 'true' && 'prod-train' || format('deploy-backend-stack-{0}', github.event.inputs.environment) }}"
+    ),
 }
 
 
@@ -149,6 +152,8 @@ WRITER_MARKERS = (
     "gcloud run jobs deploy ",
     "gcloud run jobs update ",
     "backend/scripts/ops_train.py apply",
+    # Pauses queues and prepares/promotes Cloud Run revisions (sync ledger fence cutover).
+    "backend/scripts/sync_ledger_fence_cutover.py activate-",
 )
 PUBLIC_BUILD_DEPLOY_ACTION = "uses: ./.github/actions/deploy-public-build"
 
@@ -731,13 +736,15 @@ def render_expressions(text: str, context: dict[str, str]) -> str:
 # workflow's pre-B5 per-target lock, never to an unserialized group.
 PROD_TRAIN_GROUP = "prod-train"
 PROD_TRAIN_WRITERS = {
-    "config_train.yml": "config-train-prod",
+    # Break-glass config-train shares the backend stack lock: both mutate the same Cloud Run services and queues.
+    "config_train.yml": "deploy-backend-stack-prod",
     "gcp_backend.yml": "deploy-backend-stack-prod",
     "gcp_backend_listen_helm.yml": "deploy-backend-stack-prod",
     "gcp_backend_pusher.yml": "deploy-gke-pusher-prod",
     "gcp_diarizer.yml": "deploy-gke-diarizer-prod",
     "gcp_llm_gateway.yml": "deploy-backend-stack-prod",
     "gcp_parakeet.yml": "deploy-gke-parakeet-prod",
+    "sync_ledger_fence_cutover.yml": "deploy-backend-stack-prod",
 }
 
 
