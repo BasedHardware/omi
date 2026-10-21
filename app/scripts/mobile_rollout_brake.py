@@ -107,7 +107,10 @@ def stage_notes(halted: dict, fix_line: str) -> list[dict]:
     source = english[0]["text"]
     updated = f"{source.rstrip()}\n{fix_line}"
     if len(updated) > PLAY_NOTES_LIMIT:
-        raise BrakeError(f"en-US release notes would exceed Play's {PLAY_NOTES_LIMIT} characters")
+        raise BrakeError(
+            f"en-US release notes would exceed Play's {PLAY_NOTES_LIMIT} characters "
+            f"(current={len(source.rstrip())} line={len(fix_line)})"
+        )
     for entry in notes:
         if entry.get("text") == source:
             entry["text"] = updated
