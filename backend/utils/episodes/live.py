@@ -241,8 +241,8 @@ async def on_realtime_segments(
     try:
         if not episodes_enabled_for(uid):
             return
-        spoken = conversation_id and any(str(s.get('text') or '').strip() for s in segments)
-        if spoken and sessions.first_moment(uid, conversation_id):
+        spoken = any(str(s.get('text') or '').strip() for s in segments)
+        if conversation_id and spoken and sessions.first_moment(uid, conversation_id):
             executors.start_background_task(
                 _attach_if_client_seen(uid, conversation_id, source, datetime.now(timezone.utc)),
                 name='episode_attach',
