@@ -119,8 +119,11 @@ TestFlight versions after 1.0.570 are not proof of a public release.
   (25 checks). Full app run: 7,062 passed, four skipped, one unrelated paywall
   failure (`trial_paywall_free` finder in `trial_paywall_navigation_test.dart`),
   reproduced with the three production sync files restored to unchanged
-  main `a8fdd3889d`. The full suite is not green; no paywall assertion or
-  baseline was weakened to hide it.
+  main `a8fdd3889d`. Repair the stale test to exercise the actual system-back
+  and close dismissal controls during checkout; all four paywall navigation
+  tests now pass with the restore, no-pop and late-completion assertions
+  intact. No paywall production code or analyzer baseline changes. Remote CI
+  must confirm the complete suite on the final commit.
 - [ ] Merge and release the mobile fix after CI/review; this change itself
   needs no backend deployment or firmware release.
 - [ ] Verify this customer's exact app build and diagnostic/job responses,
