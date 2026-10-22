@@ -207,7 +207,13 @@ class ProjectionFollowups:
             canonical = receipt['conversation_id']
             if not binding.record_origin:
                 canonical = await self.step(
-                    policy, 'bridge', postprocess_executor, finish_sync_bridges, binding.owner_id, canonical
+                    policy,
+                    'bridge',
+                    postprocess_executor,
+                    finish_sync_bridges,
+                    binding.owner_id,
+                    canonical,
+                    **({'silent': True} if receipt.get('silent_redrive') else {}),
                 )
             if receipt.get('audio_required') and not binding.native_record:
                 if self.projector.playback is not None:
@@ -235,6 +241,7 @@ class ProjectionFollowups:
                         binding.owner_id,
                         canonical,
                         audio_source_id=canonical,
+                        **({'silent': True} if receipt.get('silent_redrive') else {}),
                     )
             if receipt['enrichment_required']:
                 await self.step(
