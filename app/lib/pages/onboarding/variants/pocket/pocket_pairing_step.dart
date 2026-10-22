@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/providers/onboarding_provider.dart';
 import 'package:omi/services/devices/bluetooth_readiness.dart';
@@ -13,8 +14,9 @@ import 'package:omi/widgets/connection_guide_sheet.dart';
 import 'package:omi/widgets/scanning_ripple.dart';
 
 /// Pairing that starts by itself: no "do you have an Omi" question. The scan runs as the step
-/// opens; a found Omi is connected and the step moves on. Back (or Skip) leaves it for readers
-/// without an Omi at hand.
+/// opens; the first Omi found is connected through the same path as a tap on the pairing page
+/// ([OnboardingProvider.handleTap]), once per device, and the step moves on when it settles. A
+/// failed attempt offers Scan again. Back (or Skip) leaves it for readers without an Omi at hand.
 class PocketPairingStep extends StatefulWidget {
   const PocketPairingStep({super.key, required this.onDone});
 
@@ -30,6 +32,10 @@ class _PocketPairingStepState extends State<PocketPairingStep> {
   bool _done = false;
   bool _showHelp = false;
   Timer? _helpTimer;
+
+  /// The device an attempt was started for; never retried on its own (Scan again clears it).
+  String? _attemptedId;
+  bool _failed = false;
 
   @override
   void initState() {
@@ -47,7 +53,45 @@ class _PocketPairingStepState extends State<PocketPairingStep> {
   @override
   void dispose() {
     _helpTimer?.cancel();
+    if (!_done) _provider?.cancelActiveScan();
     super.dispose();
+  }
+
+  /// Connects the first Omi the scan found, exactly once per device, through the pairing page's
+  /// own path. Runs after the frame so the provider is never mutated during build.
+  void _maybeConnect(OnboardingProvider provider) {
+    if (_done || _failed || provider.isConnected || provider.isClicked) return;
+    BtDevice? candidate;
+    for (final device in provider.deviceList) {
+      if (device.type == DeviceType.omi) {
+        candidate = device;
+        break;
+      }
+    }
+    if (candidate == null || candidate.id == _attemptedId) return;
+    _attemptedId = candidate.id;
+    final device = candidate;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _done) return;
+      unawaited(provider.handleTap(device: device, isFromOnboarding: true, goNext: () => _finish(true)).then((_) {
+        if (!mounted || _done || provider.isConnected) return;
+        // handleTap swallowed a failure: offer a fresh scan instead of searching forever.
+        setState(() {
+          _failed = true;
+          _showHelp = true;
+        });
+      }));
+    });
+  }
+
+  Future<void> _scanAgain() async {
+    OmiHaptics.selection();
+    _provider?.cancelActiveScan();
+    setState(() {
+      _failed = false;
+      _attemptedId = null;
+    });
+    await _scan();
   }
 
   Future<void> _scan() async {
@@ -74,13 +118,9 @@ class _PocketPairingStepState extends State<PocketPairingStep> {
     const imageSize = 150.0;
     return Consumer<OnboardingProvider>(
       builder: (context, provider, _) {
-        if (provider.isConnected && !_done) {
-          // Let "Connected" be seen before moving on.
-          Future<void>.delayed(const Duration(milliseconds: 900), () {
-            if (mounted) _finish(true);
-          });
-        }
+        _maybeConnect(provider);
         final connected = provider.isConnected;
+        final connecting = provider.isClicked && !connected;
         return Scaffold(
           backgroundColor: OmiColors.surface0,
           body: SafeArea(
@@ -102,7 +142,11 @@ class _PocketPairingStepState extends State<PocketPairingStep> {
                       ),
                       const SizedBox(height: OmiSpacing.xs),
                       Text(
-                        connected ? provider.deviceName : l10n.pairingPowerOnSubtitle,
+                        connected
+                            ? provider.deviceName
+                            : _failed
+                                ? l10n.connectionFailed
+                                : l10n.pairingPowerOnSubtitle,
                         style: OmiType.body.copyWith(color: OmiColors.textSecondary),
                         textAlign: TextAlign.center,
                       ),
@@ -128,13 +172,16 @@ class _PocketPairingStepState extends State<PocketPairingStep> {
                   ],
                 ),
                 const SizedBox(height: OmiSpacing.lg),
-                if (!connected)
+                if (!connected && !_failed)
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       const OmiSpinner(size: OmiSpinnerSize.small),
                       const SizedBox(width: OmiSpacing.sm),
-                      Text(l10n.pairingLookingForOmi, style: OmiType.callout.copyWith(color: OmiColors.textSecondary)),
+                      Text(
+                        connecting ? l10n.deviceConnecting : l10n.pairingLookingForOmi,
+                        style: OmiType.callout.copyWith(color: OmiColors.textSecondary),
+                      ),
                     ],
                   ),
                 const Spacer(),
@@ -146,6 +193,13 @@ class _PocketPairingStepState extends State<PocketPairingStep> {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
+                        if (_failed)
+                          OmiButton(
+                            key: const Key('pocket_pairing_scan_again'),
+                            label: l10n.scanAgain,
+                            icon: Icons.refresh,
+                            onPressed: _scanAgain,
+                          ),
                         OmiButton.tertiary(
                           key: const Key('pocket_pairing_how_to_pair'),
                           label: l10n.howToPair,
