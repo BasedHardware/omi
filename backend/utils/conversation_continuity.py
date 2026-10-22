@@ -99,13 +99,21 @@ def continuation_timeout(row: Mapping[str, Any], timeout: float = DEFAULT_GAP_SE
 def resumable_continuation(
     row: Mapping[str, Any], *, source: str, device_id: str | None, now: datetime, timeout: int
 ) -> bool:
-    """Unknown device is a partition, not permission to join another device."""
-    finish = row.get('finished_at')
+    """Unknown device is a partition, not permission to join another device.
+
+    Both timestamps are normalized to UTC before the subtraction: Firestore hands
+    back a naive ``finished_at`` while callers pass an aware ``now``, and the raw
+    ``now - finish`` raised ``TypeError`` for exactly that pair. Normalizing here
+    covers every caller instead of relying on each one to pre-align its inputs.
+    """
+    finish = _utc_datetime(row.get('finished_at'))
+    reference = _utc_datetime(now)
+    if finish is None or reference is None:
+        return False
     return (
         row.get('status') == 'in_progress'
         and not any(row.get(key) for key in ('deleted', 'discarded', 'is_locked'))
         and row.get('source') == source
         and row.get('client_device_id') == device_id
-        and isinstance(finish, datetime)
-        and not gap_splits((now - finish).total_seconds(), continuation_timeout(row, timeout))
+        and not gap_splits((reference - finish).total_seconds(), continuation_timeout(row, timeout))
     )
