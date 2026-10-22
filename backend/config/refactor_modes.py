@@ -113,3 +113,24 @@ def serving_for(
 def shadow_or_serve(name: str, default: Mode = 'shadow') -> bool:
     """Whether the new path runs at all (to log in shadow, or to serve)."""
     return mode(name, default) != 'off'
+
+
+def cohort_configured(name: str, *, environ: Mapping[str, str] | None = None) -> bool:
+    """Whether scheduling may need to discover a serve cohort before knowing its uid.
+
+    Discovery never admits a user: the caller must still use serving_for on every
+    selected row. Malformed/empty cohorts remain dormant like the serving parser.
+    """
+    env = os.environ if environ is None else environ
+    current = mode(name, environ=env)
+    if current != 'shadow':
+        return current == 'serve'
+    percent_env, digests_env = _COHORT_ENVS.get(name, (f'{name}_SERVE_PERCENT', f'{name}_SERVE_UID_SHA256S'))
+    digests = [d.strip().lower() for d in env.get(digests_env, '').split(',')]
+    if any(len(d) == 64 and all(c in '0123456789abcdef' for c in d) for d in digests):
+        return True
+    try:
+        percent = float(env.get(percent_env, '0') or 0)
+        return math.isfinite(percent) and 0 < percent <= 100
+    except ValueError:
+        return False

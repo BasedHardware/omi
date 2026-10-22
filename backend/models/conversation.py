@@ -626,6 +626,12 @@ class Conversation(BaseModel):
     processing_deferred: bool = False
     data_protection_level: Optional[str] = None
     folder_id: Optional[str] = Field(default=None, description="ID of the folder this conversation belongs to")
+    is_call: Optional[bool] = None
+    call_platform: Optional[str] = None
+    calendar_event_id: Optional[str] = None
+    # The coordinates belong only to the owner; remote participants have no inferred place.
+    geolocation_scope: Optional[Literal['owner']] = None
+    other_participants_location: Optional[Literal['remote']] = None
     call_id: Optional[str] = Field(default=None, description="Twilio call SID for phone call conversations")
 
     # Calendar event link - set when conversation overlaps with a Google Calendar event

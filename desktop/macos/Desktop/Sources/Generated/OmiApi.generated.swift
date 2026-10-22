@@ -1691,7 +1691,9 @@ public enum OmiAPI {
     public let audioFiles: [AudioFile]?
     public let audioTimeline: AudioTimelineProvenance?
     public let calendarEvent: CalendarEventLink?
+    public let calendarEventId: String?
     public let callId: String?
+    public let callPlatform: String?
     public let captureCoverage: String?
     public let captureGroup: CaptureGroup?
     public let clientDeviceId: String?
@@ -1706,14 +1708,17 @@ public enum OmiAPI {
     public let finishedAt: String?
     public let folderId: String?
     public let geolocation: Geolocation?
+    public let geolocationScope: String?
     public let id: String
     public let imported: Bool?
+    public let isCall: Bool?
     public let isLocked: Bool?
     public let language: String?
     public let meetingDedupSpeechS: Double?
     public let meetingDurationS: Double?
     public let meetingTreatmentEligible: Bool?
     public let meetingTreatmentReason: String?
+    public let otherParticipantsLocation: String?
     public let photos: [ConversationPhoto]?
     public let pluginsResults: [PluginResult]?
     public let privateCloudSyncEnabled: Bool?
@@ -1746,7 +1751,9 @@ public enum OmiAPI {
       case audioFiles = "audio_files"
       case audioTimeline = "audio_timeline"
       case calendarEvent = "calendar_event"
+      case calendarEventId = "calendar_event_id"
       case callId = "call_id"
+      case callPlatform = "call_platform"
       case captureCoverage = "capture_coverage"
       case captureGroup = "capture_group"
       case clientDeviceId = "client_device_id"
@@ -1761,14 +1768,17 @@ public enum OmiAPI {
       case finishedAt = "finished_at"
       case folderId = "folder_id"
       case geolocation
+      case geolocationScope = "geolocation_scope"
       case id
       case imported
+      case isCall = "is_call"
       case isLocked = "is_locked"
       case language
       case meetingDedupSpeechS = "meeting_dedup_speech_s"
       case meetingDurationS = "meeting_duration_s"
       case meetingTreatmentEligible = "meeting_treatment_eligible"
       case meetingTreatmentReason = "meeting_treatment_reason"
+      case otherParticipantsLocation = "other_participants_location"
       case photos
       case pluginsResults = "plugins_results"
       case privateCloudSyncEnabled = "private_cloud_sync_enabled"
@@ -1803,7 +1813,9 @@ public enum OmiAPI {
       audioFiles = try c.decodeIfPresent([AudioFile].self, forKey: .audioFiles)
       audioTimeline = try c.decodeIfPresent(AudioTimelineProvenance.self, forKey: .audioTimeline)
       calendarEvent = try c.decodeIfPresent(CalendarEventLink.self, forKey: .calendarEvent)
+      calendarEventId = try c.decodeIfPresent(String.self, forKey: .calendarEventId)
       callId = try c.decodeIfPresent(String.self, forKey: .callId)
+      callPlatform = try c.decodeIfPresent(String.self, forKey: .callPlatform)
       captureCoverage = try c.decodeIfPresent(String.self, forKey: .captureCoverage)
       captureGroup = try c.decodeIfPresent(CaptureGroup.self, forKey: .captureGroup)
       clientDeviceId = try c.decodeIfPresent(String.self, forKey: .clientDeviceId)
@@ -1818,14 +1830,17 @@ public enum OmiAPI {
       finishedAt = try c.decodeIfPresent(String.self, forKey: .finishedAt)
       folderId = try c.decodeIfPresent(String.self, forKey: .folderId)
       geolocation = try c.decodeIfPresent(Geolocation.self, forKey: .geolocation)
+      geolocationScope = try c.decodeIfPresent(String.self, forKey: .geolocationScope)
       id = try c.decode(String.self, forKey: .id)
       imported = try c.decodeIfPresent(Bool.self, forKey: .imported)
+      isCall = try c.decodeIfPresent(Bool.self, forKey: .isCall)
       isLocked = try c.decodeIfPresent(Bool.self, forKey: .isLocked)
       language = try c.decodeIfPresent(String.self, forKey: .language)
       meetingDedupSpeechS = try c.decodeIfPresent(Double.self, forKey: .meetingDedupSpeechS)
       meetingDurationS = try c.decodeIfPresent(Double.self, forKey: .meetingDurationS)
       meetingTreatmentEligible = try c.decodeIfPresent(Bool.self, forKey: .meetingTreatmentEligible)
       meetingTreatmentReason = try c.decodeIfPresent(String.self, forKey: .meetingTreatmentReason)
+      otherParticipantsLocation = try c.decodeIfPresent(String.self, forKey: .otherParticipantsLocation)
       photos = try c.decodeIfPresent([ConversationPhoto].self, forKey: .photos)
       pluginsResults = try c.decodeIfPresent([PluginResult].self, forKey: .pluginsResults)
       privateCloudSyncEnabled = try c.decodeIfPresent(Bool.self, forKey: .privateCloudSyncEnabled)
@@ -1853,13 +1868,15 @@ public enum OmiAPI {
       visibility = try c.decodeIfPresent(ConversationVisibility.self, forKey: .visibility)
     }
 
-    public init(appId: String? = nil, appsResults: [AppResult]? = nil, audioFiles: [AudioFile]? = nil, audioTimeline: AudioTimelineProvenance? = nil, calendarEvent: CalendarEventLink? = nil, callId: String? = nil, captureCoverage: String? = nil, captureGroup: CaptureGroup? = nil, clientDeviceId: String? = nil, clientPlatform: String? = nil, clientProcessing: ClientProcessing? = nil, conversationAudio: ConversationAudio? = nil, createdAt: String, dataProtectionLevel: String? = nil, deferred: Bool? = nil, discarded: Bool? = nil, externalData: [String: OmiAnyCodable]? = nil, finishedAt: String? = nil, folderId: String? = nil, geolocation: Geolocation? = nil, id: String, imported: Bool? = nil, isLocked: Bool? = nil, language: String? = nil, meetingDedupSpeechS: Double? = nil, meetingDurationS: Double? = nil, meetingTreatmentEligible: Bool? = nil, meetingTreatmentReason: String? = nil, photos: [ConversationPhoto]? = nil, pluginsResults: [PluginResult]? = nil, privateCloudSyncEnabled: Bool? = nil, processingConversationId: String? = nil, processingDeferred: Bool? = nil, processingMemoryId: String? = nil, processingState: ConversationProcessingState? = nil, screenshotSharingEnabled: Bool? = nil, source: ConversationSource? = nil, speakerResolution: ConversationSpeakers? = nil, starred: Bool? = nil, startedAt: String? = nil, status: ConversationStatus? = nil, structured: Structured, suggestedSummarizationApps: [String]? = nil, summaryRetryable: Bool? = nil, syncContentRevision: Int? = nil, syncRelevance: String? = nil, transcriptSegments: [TranscriptSegment]? = nil, transcriptSegmentsCompressed: Bool? = nil, updatedAt: String? = nil, userCorrections: [[String: OmiAnyCodable]]? = nil, userOverview: String? = nil, usesCustomStt: Bool? = nil, visibility: ConversationVisibility? = nil) {
+    public init(appId: String? = nil, appsResults: [AppResult]? = nil, audioFiles: [AudioFile]? = nil, audioTimeline: AudioTimelineProvenance? = nil, calendarEvent: CalendarEventLink? = nil, calendarEventId: String? = nil, callId: String? = nil, callPlatform: String? = nil, captureCoverage: String? = nil, captureGroup: CaptureGroup? = nil, clientDeviceId: String? = nil, clientPlatform: String? = nil, clientProcessing: ClientProcessing? = nil, conversationAudio: ConversationAudio? = nil, createdAt: String, dataProtectionLevel: String? = nil, deferred: Bool? = nil, discarded: Bool? = nil, externalData: [String: OmiAnyCodable]? = nil, finishedAt: String? = nil, folderId: String? = nil, geolocation: Geolocation? = nil, geolocationScope: String? = nil, id: String, imported: Bool? = nil, isCall: Bool? = nil, isLocked: Bool? = nil, language: String? = nil, meetingDedupSpeechS: Double? = nil, meetingDurationS: Double? = nil, meetingTreatmentEligible: Bool? = nil, meetingTreatmentReason: String? = nil, otherParticipantsLocation: String? = nil, photos: [ConversationPhoto]? = nil, pluginsResults: [PluginResult]? = nil, privateCloudSyncEnabled: Bool? = nil, processingConversationId: String? = nil, processingDeferred: Bool? = nil, processingMemoryId: String? = nil, processingState: ConversationProcessingState? = nil, screenshotSharingEnabled: Bool? = nil, source: ConversationSource? = nil, speakerResolution: ConversationSpeakers? = nil, starred: Bool? = nil, startedAt: String? = nil, status: ConversationStatus? = nil, structured: Structured, suggestedSummarizationApps: [String]? = nil, summaryRetryable: Bool? = nil, syncContentRevision: Int? = nil, syncRelevance: String? = nil, transcriptSegments: [TranscriptSegment]? = nil, transcriptSegmentsCompressed: Bool? = nil, updatedAt: String? = nil, userCorrections: [[String: OmiAnyCodable]]? = nil, userOverview: String? = nil, usesCustomStt: Bool? = nil, visibility: ConversationVisibility? = nil) {
       self.appId = appId
       self.appsResults = appsResults
       self.audioFiles = audioFiles
       self.audioTimeline = audioTimeline
       self.calendarEvent = calendarEvent
+      self.calendarEventId = calendarEventId
       self.callId = callId
+      self.callPlatform = callPlatform
       self.captureCoverage = captureCoverage
       self.captureGroup = captureGroup
       self.clientDeviceId = clientDeviceId
@@ -1874,14 +1891,17 @@ public enum OmiAPI {
       self.finishedAt = finishedAt
       self.folderId = folderId
       self.geolocation = geolocation
+      self.geolocationScope = geolocationScope
       self.id = id
       self.imported = imported
+      self.isCall = isCall
       self.isLocked = isLocked
       self.language = language
       self.meetingDedupSpeechS = meetingDedupSpeechS
       self.meetingDurationS = meetingDurationS
       self.meetingTreatmentEligible = meetingTreatmentEligible
       self.meetingTreatmentReason = meetingTreatmentReason
+      self.otherParticipantsLocation = otherParticipantsLocation
       self.photos = photos
       self.pluginsResults = pluginsResults
       self.privateCloudSyncEnabled = privateCloudSyncEnabled

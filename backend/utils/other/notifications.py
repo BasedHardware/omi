@@ -150,21 +150,28 @@ def generate_daily_summary_on_demand(
     return record, declined
 
 
-def _generate_and_store_daily_summary(
+def _generate_and_store_daily_summary(uid, date_str, start_date_utc, end_date_utc, *, prepare_delivery=None):
+    from utils.other.daily_recap import generate
+
+    return generate(
+        uid,
+        date_str,
+        start_date_utc,
+        end_date_utc,
+        legacy=_legacy_generate_and_store_daily_summary,
+        prepare_delivery=prepare_delivery,
+    )
+
+
+# refactor: superseded by utils.other.daily_recap when CALLS_RECAP_MODE=serve
+def _legacy_generate_and_store_daily_summary(
     uid, date_str, start_date_utc, end_date_utc, *, prepare_delivery: Optional[Callable[[], None]] = None
 ) -> Tuple[Optional[dict], bool, Optional[str]]:
     """Like ``generate_and_store_daily_summary``, plus whether this call persisted a new record
     and, when it declined, which guard declined it.
 
-    **Nothing happens before the lock.** A tick that loses the lock must not read conversations:
-    another worker is already doing exactly that work, and probing anyway doubles the read load
-    on precisely the contended user.
-
-    **A decline before the LLM call releases the lock.** The lock's job is to stop two workers
-    spending tokens on the same day, and a guard that declines has spent none. Holding it for
-    the full 2h TTL instead barred the day: the on-demand button poisoned the very day it was
-    pressed on — press it at 21:30 on a quiet day and the 22:00 cron tick lost the lock and
-    the day never got a recap at all.
+    Lose the lock, do no reads. Decline before the model call, release the lock:
+    holding the 2h TTL after a quiet on-demand attempt would bar the scheduled recap.
     """
     if not generated_compute_allowed(uid, 'daily_summary'):
         return None, False, 'usage_budget_exhausted'
@@ -745,18 +752,17 @@ def _reduce_daily_summary_chunks(
     return users, chunk_errors[0] if chunk_errors else None, every_chunk_read
 
 
-async def _get_users_for_daily_summary(
+async def _get_users_for_daily_summary(timezones, target_hour):
+    from utils.other.daily_recap import select_recipients
+
+    return await select_recipients(timezones, target_hour, _legacy_get_users_for_daily_summary)
+
+
+# refactor: superseded by utils.other.daily_recap when CALLS_RECAP_MODE=serve
+async def _legacy_get_users_for_daily_summary(
     timezones: List[str], target_hour: int
 ) -> Tuple[List[Tuple[str, Any, Any]], Optional[BaseException], bool]:
-    """Read one hour group's users.
-
-    Returns ``(users, query_error, every_chunk_read)``. A dropped chunk is a
-    *partial* read, and a caller that cannot tell the difference finishes the
-    hour, clears the checkpoint, and permanently retires users it never listed.
-    Serving the chunks that did read is still right — the flag only stops the
-    run from calling itself complete.
-
-    """
+    """Return (users, query_error, every_chunk_read); partial reads retain the checkpoint."""
     timezone_chunks = [timezones[i : i + 30] for i in range(0, len(timezones), 30)]
     # return_exceptions: one failing timezone chunk degrades that chunk's users,
     # it does not throw away the chunks that did read successfully.
@@ -892,6 +898,9 @@ def _send_summary_notification(user_data: Tuple[Any, ...]) -> None:
     # trial only gates desktop features, not the recap the mobile app renders.
 
     display_date = _display_date_for_now(user_tz_name, user_data[3] if len(user_data) > 3 else None)
+    from utils.other.daily_recap import scheduled_date
+
+    display_date = scheduled_date(uid, user_tz_name, user_data[3] if len(user_data) > 3 else None, display_date)
     start_date_utc, end_date_utc = local_day_bounds_utc(display_date, user_tz_name)
     date_str = display_date.strftime('%Y-%m-%d')
 

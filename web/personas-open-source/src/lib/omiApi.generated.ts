@@ -1427,7 +1427,9 @@ export interface Conversation {
   audio_files?: Array<AudioFile>;
   audio_timeline?: AudioTimelineProvenance | null;
   calendar_event?: CalendarEventLink | null;
+  calendar_event_id?: string | null;
   call_id?: string | null;
+  call_platform?: string | null;
   capture_coverage?: "unknown" | "incomplete" | "mapped" | null;
   capture_group?: CaptureGroup | null;
   client_device_id?: string | null;
@@ -1442,14 +1444,17 @@ export interface Conversation {
   finished_at: string | null;
   folder_id?: string | null;
   geolocation?: Geolocation | null;
+  geolocation_scope?: "owner" | null;
   id: string;
   imported?: boolean;
+  is_call?: boolean | null;
   is_locked?: boolean;
   language?: string | null;
   meeting_dedup_speech_s?: number | null;
   meeting_duration_s?: number | null;
   meeting_treatment_eligible?: boolean;
   meeting_treatment_reason?: string | null;
+  other_participants_location?: "remote" | null;
   photos?: Array<ConversationPhoto>;
   plugins_results?: Array<PluginResult>;
   private_cloud_sync_enabled?: boolean;
@@ -1627,7 +1632,9 @@ export interface ConversationSearchItem {
   audio_files?: Array<AudioFile>;
   audio_timeline?: AudioTimelineProvenance | null;
   calendar_event?: CalendarEventLink | null;
+  calendar_event_id?: string | null;
   call_id?: string | null;
+  call_platform?: string | null;
   capture_coverage?: "unknown" | "incomplete" | "mapped" | null;
   capture_group?: CaptureGroup | null;
   client_device_id?: string | null;
@@ -1642,8 +1649,10 @@ export interface ConversationSearchItem {
   finished_at: string | null;
   folder_id?: string | null;
   geolocation?: Geolocation | null;
+  geolocation_scope?: "owner" | null;
   id: string;
   imported?: boolean;
+  is_call?: boolean | null;
   is_locked?: boolean;
   language?: string | null;
   match_snippets?: Array<TranscriptMatchSnippet>;
@@ -1651,6 +1660,7 @@ export interface ConversationSearchItem {
   meeting_duration_s?: number | null;
   meeting_treatment_eligible?: boolean;
   meeting_treatment_reason?: string | null;
+  other_participants_location?: "remote" | null;
   photos?: Array<ConversationPhoto>;
   plugins_results?: Array<PluginResult>;
   private_cloud_sync_enabled?: boolean;

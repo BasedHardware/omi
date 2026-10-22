@@ -8955,6 +8955,17 @@
               }
             ]
           },
+          "calendar_event_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Calendar Event Id"
+          },
           "call_id": {
             "anyOf": [
               {
@@ -8966,6 +8977,17 @@
             ],
             "description": "Twilio call SID for phone call conversations",
             "title": "Call Id"
+          },
+          "call_platform": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Call Platform"
           },
           "capture_coverage": {
             "anyOf": [
@@ -9107,6 +9129,18 @@
               }
             ]
           },
+          "geolocation_scope": {
+            "anyOf": [
+              {
+                "const": "owner",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Geolocation Scope"
+          },
           "id": {
             "title": "Id",
             "type": "string"
@@ -9115,6 +9149,17 @@
             "default": false,
             "title": "Imported",
             "type": "boolean"
+          },
+          "is_call": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Call"
           },
           "is_locked": {
             "default": false,
@@ -9169,6 +9214,18 @@
               }
             ],
             "title": "Meeting Treatment Reason"
+          },
+          "other_participants_location": {
+            "anyOf": [
+              {
+                "const": "remote",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Other Participants Location"
           },
           "photos": {
             "default": [],
@@ -10213,6 +10270,17 @@
               }
             ]
           },
+          "calendar_event_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Calendar Event Id"
+          },
           "call_id": {
             "anyOf": [
               {
@@ -10224,6 +10292,17 @@
             ],
             "description": "Twilio call SID for phone call conversations",
             "title": "Call Id"
+          },
+          "call_platform": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Call Platform"
           },
           "capture_coverage": {
             "anyOf": [
@@ -10365,6 +10444,18 @@
               }
             ]
           },
+          "geolocation_scope": {
+            "anyOf": [
+              {
+                "const": "owner",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Geolocation Scope"
+          },
           "id": {
             "title": "Id",
             "type": "string"
@@ -10373,6 +10464,17 @@
             "default": false,
             "title": "Imported",
             "type": "boolean"
+          },
+          "is_call": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Call"
           },
           "is_locked": {
             "default": false,
@@ -10435,6 +10537,18 @@
               }
             ],
             "title": "Meeting Treatment Reason"
+          },
+          "other_participants_location": {
+            "anyOf": [
+              {
+                "const": "remote",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Other Participants Location"
           },
           "photos": {
             "default": [],
