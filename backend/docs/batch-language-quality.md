@@ -98,21 +98,25 @@ vendor replay or production-quality measurement.
 
 ## Self-hosted language gate (P58)
 
-Parakeet serves `POST /v2/language`: MMS-LID-126 (fp16, on the GPU worker queue)
-scores at most the first 30 s of the probe and returns `p_supported`, the summed
-probability of the 25 Parakeet languages, with the top language and a route.
-Parakeet needs `p_supported >= 0.90` for at least 6 s of audio, `>= 0.95` below
-6 s, and never below 1 s. The backend re-derives that rule
+Parakeet serves `POST /v2/language`: Whisper-base's language-token head (fp16,
+on the GPU worker queue; Apache-2.0) scores at most the first 30 s of the probe
+and returns `p_supported`, the summed probability of the 25 Parakeet languages,
+with the top language and a route. MMS-LID scored better offline but is
+CC-BY-NC, so it cannot serve a commercial product. Parakeet needs
+`p_supported >= 0.90` for at least 6 s of audio, `>= 0.97` below 6 s, and never
+below 1 s. The backend re-derives that rule
 (`config/prerecorded_language.self_lid_confidence_floor`) instead of trusting the
 service's `route`, and also requires the top language to be supported. The model
 never sees recognizer text. `PARAKEET_LID_MODEL=off` (the code default; the
-charts select `mms-lid-126`) makes the endpoint return 503.
+charts select `whisper-base`) makes the endpoint return 503.
 
 Offline (FLEURS 15 languages and the owned synthetic corpus; not prod audio)
-MMS-LID-126 sent 0 of 2,349 unsupported clips to Parakeet. The highest
-`p_supported` on an unsupported clip was 0.169 at >=6 s and 0.881 for 3 s crops.
-It scores the staging Arabic 6 s canary that Modulate called `en` 0.9258 as `ar`
-0.996 (`p_supported` 0.0003), and the soak003 Chinese 6 s cases as `zh`.
+the highest `p_supported` Whisper-base gave an unsupported clip was 0.679 at
+>=6 s and 0.941 for a 3 s crop, so no unsupported clip clears these thresholds.
+The cost is leakage: supported speech under 6 s, 8 kHz or noisy goes to the paid
+multilingual vendor more often. It scores the staging Arabic 6 s canary that
+Modulate called `en` 0.9258 as `ar` (`p_supported` < 0.01), and the soak003
+Chinese 6 s cases as `zh`.
 
 Shadow (`STT_PRERECORDED_LANGUAGE_GATE_SHADOW`, default on): every
 unknown-language probe also calls the gate and counts

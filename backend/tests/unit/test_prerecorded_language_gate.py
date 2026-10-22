@@ -42,7 +42,7 @@ def gate_body(language='en', p_supported=0.99, seconds=6.0, top_p=None):
         'language_probability': p_supported if top_p is None else top_p,
         'audio_seconds': seconds,
         'threshold': 0.9,
-        'model': 'mms-lid-126',
+        'model': 'whisper-base',
     }
 
 
@@ -191,9 +191,10 @@ def test_service_route_is_not_trusted_over_the_backend_threshold(monkeypatch):
     'seconds,p_supported,safe',
     [
         (0.9, 0.999, False),
-        (3.0, 0.94, False),
-        (3.0, 0.95, True),
-        (5.99, 0.94, False),
+        (3.0, 0.9405, False),  # highest offline P(supported) on 3 s unsupported speech
+        (3.0, 0.969, False),
+        (3.0, 0.97, True),
+        (5.99, 0.96, False),
         (6.0, 0.9, True),
         (30, 0.89, False),
     ],

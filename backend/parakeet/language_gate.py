@@ -1,10 +1,12 @@
 """Spoken-language gate in front of the Parakeet-25 batch model.
 
 The decision statistic is P(supported): the summed probability of the 25
-languages TDT v3 transcribes. Offline (FLEURS 15 languages and the owned
-synthetic corpus, 2,349 unsupported clips) MMS-LID-126 gave no unsupported clip
-of at least 6 s more than 0.169, and no 3 s crop more than 0.881, so the short
-threshold sits above that. The model never sees recognizer text.
+languages TDT v3 transcribes, from Whisper-base's language-token head (Apache-2.0;
+MMS-LID is CC-BY-NC and cannot serve a commercial product). Offline (FLEURS 15
+languages and the owned synthetic corpus, 909 unsupported clips) Whisper-base
+gave no unsupported clip of at least 6 s more than 0.679 and no 3 s crop more
+than 0.941, so the short threshold sits above that. The model never sees
+recognizer text and never decodes past the language token.
 """
 
 import logging
@@ -23,25 +25,16 @@ MAX_SECONDS = 30.0
 MIN_SECONDS = 1.0
 SHORT_SECONDS = 6.0
 LONG_THRESHOLD = 0.90
-SHORT_THRESHOLD = 0.95
+SHORT_THRESHOLD = 0.97
 
 # TDT v3 (nvidia/parakeet-tdt-0.6b-v3) languages; keep equal to the backend's
 # prerecorded Parakeet set in config/stt_provider_policy.py.
 PARAKEET_LANGUAGES = frozenset('bg hr cs da nl en et fi fr de el hu it lt lv mt pl pt ro ru sk sl es sv uk'.split())
 
-# MMS-LID-126 emits ISO 639-3 labels. Only the codes the gate or its telemetry
-# needs are mapped; everything else stays a bounded "other" downstream.
-_ISO3_TO_ISO1 = {
-    'eng': 'en', 'spa': 'es', 'por': 'pt', 'fra': 'fr', 'deu': 'de', 'rus': 'ru', 'ita': 'it',
-    'nld': 'nl', 'pol': 'pl', 'ukr': 'uk', 'ces': 'cs', 'swe': 'sv', 'ron': 'ro', 'hun': 'hu',
-    'ell': 'el', 'bul': 'bg', 'dan': 'da', 'fin': 'fi', 'slk': 'sk', 'hrv': 'hr', 'slv': 'sl',
-    'lit': 'lt', 'lav': 'lv', 'est': 'et', 'mlt': 'mt',
-    'jpn': 'ja', 'cmn': 'zh', 'yue': 'zh', 'kor': 'ko', 'vie': 'vi', 'tha': 'th', 'hin': 'hi',
-    'arb': 'ar', 'ara': 'ar', 'ind': 'id', 'tur': 'tr', 'zlm': 'ms', 'msa': 'ms', 'urd': 'ur',
-    'ben': 'bn', 'fas': 'fa', 'pes': 'fa',
-}  # fmt: skip
+# Whisper language tokens that differ from ISO 639-1 codes elsewhere in Omi.
+_WHISPER_ALIASES = {'iw': 'he', 'jw': 'jv', 'yue': 'zh'}
 
-MODEL_IDS = {'mms-lid-126': 'facebook/mms-lid-126'}
+MODEL_IDS = {'whisper-base': 'openai/whisper-base'}
 
 
 def configured_model() -> str:
@@ -107,42 +100,49 @@ def to_mono_16k(samples: np.ndarray, sample_rate: int) -> np.ndarray:
     return x
 
 
-class MmsLanguageId:
-    """MMS-LID-126 in fp16 on the worker's device. Call only from the GPU worker thread."""
+class WhisperLanguageId:
+    """Whisper encoder plus one decoder step; softmax over language tokens only. GPU worker thread only."""
 
     def __init__(self, model_key: str, device: str) -> None:
         import torch  # type: ignore[reportMissingImports]  # torch not installed in dev venv
-        from transformers import AutoFeatureExtractor, Wav2Vec2ForSequenceClassification  # type: ignore[reportMissingImports]
+        from transformers import WhisperFeatureExtractor, WhisperForConditionalGeneration, WhisperTokenizer  # type: ignore[reportMissingImports]
+        from transformers.models.whisper.tokenization_whisper import LANGUAGES  # type: ignore[reportMissingImports]
 
         repo = MODEL_IDS[model_key]
         self.model_key = model_key
         self._torch: Any = torch
         self._device = device
         self._dtype: Any = torch.float16 if device.startswith('cuda') else torch.float32
-        self._extractor: Any = AutoFeatureExtractor.from_pretrained(repo)
-        model: Any = Wav2Vec2ForSequenceClassification.from_pretrained(repo, torch_dtype=self._dtype)
+        self._extractor: Any = WhisperFeatureExtractor.from_pretrained(repo)
+        tokenizer: Any = WhisperTokenizer.from_pretrained(repo)
+        model: Any = WhisperForConditionalGeneration.from_pretrained(repo, torch_dtype=self._dtype)
         self._model: Any = model.to(device).eval()
-        id2label: Dict[int, str] = self._model.config.id2label
-        self._labels = [_ISO3_TO_ISO1.get(id2label[i], id2label[i]) for i in range(len(id2label))]
+        codes = sorted(LANGUAGES)
+        self._token_ids = torch.tensor(
+            tokenizer.convert_tokens_to_ids([f'<|{code}|>' for code in codes]), device=device
+        )
+        self._labels = [_WHISPER_ALIASES.get(code, code) for code in codes]
+        self._start = torch.tensor([[tokenizer.convert_tokens_to_ids('<|startoftranscript|>')]], device=device)
 
     def probabilities(self, x16k: np.ndarray) -> Dict[str, float]:
         torch = self._torch
-        inputs: Any = self._extractor(x16k, sampling_rate=SAMPLE_RATE, return_tensors='pt')
-        values = inputs['input_values'].to(self._device, dtype=self._dtype)
+        features: Any = self._extractor(x16k, sampling_rate=SAMPLE_RATE, return_tensors='pt').input_features
         with torch.inference_mode():
-            logits = self._model(input_values=values).logits[0].float()
-        p = torch.softmax(logits, -1).cpu().numpy()
+            logits = self._model(
+                input_features=features.to(self._device, dtype=self._dtype), decoder_input_ids=self._start
+            ).logits[0, -1]
+            p = torch.softmax(logits[self._token_ids].float(), -1).cpu().numpy()
         out: Dict[str, float] = {}
         for i, label in enumerate(self._labels):
             out[label] = out.get(label, 0.0) + float(p[i])
         return out
 
 
-def load(device: str) -> Optional[MmsLanguageId]:
+def load(device: str) -> Optional[WhisperLanguageId]:
     model_key = configured_model()
     if model_key == 'off':
         logger.info('Language gate disabled (PARAKEET_LID_MODEL=off)')
         return None
-    model = MmsLanguageId(model_key, device)
+    model = WhisperLanguageId(model_key, device)
     logger.info('Language gate model loaded (model=%s)', model_key)
     return model

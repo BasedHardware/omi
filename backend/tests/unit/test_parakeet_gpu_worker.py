@@ -1109,10 +1109,10 @@ class TestLanguageGate:
             with pytest.raises(RuntimeError, match="Language gate not ready"):
                 w.submit_language_sync([0.0])
             gate = MagicMock()
-            gate.model_key = "mms-lid-126"
+            gate.model_key = "whisper-base"
             gate.probabilities.side_effect = lambda samples: {"en": 0.99, "thread": threading.current_thread().name}
             w._language_id = gate
-            assert w.language_id_model == "mms-lid-126"
+            assert w.language_id_model == "whisper-base"
             result = w.submit_language_sync([0.0, 0.1])
             assert result["en"] == 0.99
             assert result["thread"] == "gpu-worker"

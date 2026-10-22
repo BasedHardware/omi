@@ -16,7 +16,7 @@ def gate():
 
 
 def test_p_supported_sums_the_parakeet_languages(gate):
-    verdict = gate.decide({"es": 0.5, "pt": 0.45, "gl": 0.05}, 10.0, "mms-lid-126")
+    verdict = gate.decide({"es": 0.5, "pt": 0.45, "gl": 0.05}, 10.0, "whisper-base")
     assert verdict.route == "parakeet"
     assert verdict.language == "es"
     assert verdict.p_supported == pytest.approx(0.95)
@@ -24,7 +24,7 @@ def test_p_supported_sums_the_parakeet_languages(gate):
 
 @pytest.mark.parametrize(
     "seconds,p,route",
-    [(0.99, 1.0, "multilingual"), (3.0, 0.949, "multilingual"), (3.0, 0.95, "parakeet"),
+    [(0.99, 1.0, "multilingual"), (3.0, 0.969, "multilingual"), (3.0, 0.97, "parakeet"),
      (6.0, 0.899, "multilingual"), (6.0, 0.9, "parakeet")],
 )  # fmt: skip
 def test_thresholds_by_duration(gate, seconds, p, route):
@@ -55,9 +55,9 @@ def test_language_set_matches_backend_policy(gate):
 def test_model_is_off_unless_named(gate, monkeypatch):
     monkeypatch.delenv("PARAKEET_LID_MODEL", raising=False)
     assert gate.configured_model() == "off"
-    monkeypatch.setenv("PARAKEET_LID_MODEL", " MMS-LID-126 ")
-    assert gate.configured_model() == "mms-lid-126"
-    monkeypatch.setenv("PARAKEET_LID_MODEL", "whisper-large")
+    monkeypatch.setenv("PARAKEET_LID_MODEL", " Whisper-Base ")
+    assert gate.configured_model() == "whisper-base"
+    monkeypatch.setenv("PARAKEET_LID_MODEL", "mms-lid-126")
     assert gate.configured_model() == "off"
     assert gate.load("cpu") is None
 

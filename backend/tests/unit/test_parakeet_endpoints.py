@@ -969,7 +969,7 @@ def _wav_bytes(seconds: float, sample_rate: int = 16000, channels: int = 1) -> b
 class TestLanguageEndpoint:
     """POST /v2/language: the spoken-language gate in front of Parakeet-25."""
 
-    def _client(self, probabilities=None, model="mms-lid-126", side_effect=None):
+    def _client(self, probabilities=None, model="whisper-base", side_effect=None):
         app, mod, gpu, _ = _make_app_with_mocks()
         gpu.language_id_model = model
         gpu.submit_language_sync = MagicMock(return_value=probabilities or {}, side_effect=side_effect)
@@ -991,7 +991,7 @@ class TestLanguageEndpoint:
         assert body["route"] == "multilingual"
         assert body["language"] == "ar"
         assert body["p_supported"] == pytest.approx(0.0003)
-        assert body["threshold"] == 0.95
+        assert body["threshold"] == 0.97
         assert mod.LID_ROUTES.labels(route="multilingual", bucket="ar")._value.get() == before + 1
 
     def test_supported_speech_routes_parakeet(self):

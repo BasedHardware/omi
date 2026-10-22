@@ -45,10 +45,11 @@ def requires_multilingual(language: str | None) -> bool:
     return language_guard_enabled() and language_class(language) != 'supported'
 
 
-# Self-hosted gate (Parakeet /v2/language, MMS-LID-126). The statistic is
+# Self-hosted gate (Parakeet /v2/language, Whisper-base). The statistic is
 # P(supported) summed over the Parakeet-25 languages, not a vendor's top-1.
+# Offline maxima on unsupported speech: 0.679 at >=6 s, 0.941 for 3 s crops.
 SELF_LID_CONFIDENCE = 0.90
-SELF_LID_SHORT_CONFIDENCE = 0.95
+SELF_LID_SHORT_CONFIDENCE = 0.97
 SELF_LID_SHORT_SECONDS = 6.0
 SELF_LID_MIN_SECONDS = 1.0
 
