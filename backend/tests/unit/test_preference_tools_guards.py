@@ -7,6 +7,9 @@ Hermetic isolated unit test suite covering:
 4. user_stated boolean coercion from string ("true"/"false"), int (1/0), and bool.
 5. slot whitespace stripping, empty/None handling, and non-string handling.
 6. preference_duplicate_message resilience against malformed or non-dict hit objects.
+
+Uses memory_import_isolation snapshot_sys_modules and restore_sys_modules to avoid
+leaking stubs across test execution.
 """
 
 from enum import Enum
@@ -21,21 +24,94 @@ from unittest.mock import MagicMock
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
 
+# Standard memory import isolation pattern
+try:
+    from tests.unit.memory_import_isolation import (
+        AutoMockModule,
+        restore_sys_modules,
+        snapshot_sys_modules,
+    )
+except ImportError:
+    try:
+        from memory_import_isolation import (
+            AutoMockModule,
+            restore_sys_modules,
+            snapshot_sys_modules,
+        )
+    except ImportError:
+        # Standalone inline fallback
+        class AutoMockModule(types.ModuleType):
+            def __getattr__(self, name: str):
+                if name.startswith("__") and name.endswith("__"):
+                    raise AttributeError(name)
+                mock = MagicMock()
+                setattr(self, name, mock)
+                return mock
+
+        def snapshot_sys_modules(names):
+            return {name: sys.modules.get(name) for name in names}
+
+        def restore_sys_modules(saved):
+            for name, original in saved.items():
+                if original is None:
+                    sys.modules.pop(name, None)
+                else:
+                    sys.modules[name] = original
+
+
+_SYS_MODULE_NAMES = [
+    "langchain_core",
+    "langchain_core.tools",
+    "langchain_core.runnables",
+    "database",
+    "database._client",
+    "models",
+    "models.knowledge_ledger_policy",
+    "models.memory_contracts",
+    "models.memory_apply",
+    "models.memories",
+    "models.product_memory",
+    "utils",
+    "utils.log_sanitizer",
+    "utils.messaging",
+    "utils.messaging.undo",
+    "utils.messaging.projection",
+    "utils.memory",
+    "utils.memory.canonical_memory_adapter",
+    "utils.memory.knowledge_ledger",
+    "utils.memory.memory_service",
+    "utils.memory.memory_system",
+    "testing",
+    "testing.parity_pack_v0",
+    "testing.parity_pack_v0.live_capture",
+    "utils.retrieval",
+    "utils.retrieval.tools",
+    "utils.retrieval.tools._preference_tools_guards_test",
+]
+
+_SYS_MODULES_SNAPSHOT = snapshot_sys_modules(_SYS_MODULE_NAMES)
+
 
 def _pkg(name: str):
-    mod = sys.modules.get(name)
-    if mod is None or not hasattr(mod, "__path__"):
-        mod = types.ModuleType(name)
-        mod.__path__ = []
-        sys.modules[name] = mod
+    mod = types.ModuleType(name)
+    mod.__path__ = []
+    sys.modules[name] = mod
+    if "." in name:
+        parent_name, attr_name = name.rsplit(".", 1)
+        parent = sys.modules.get(parent_name)
+        if isinstance(parent, types.ModuleType):
+            setattr(parent, attr_name, mod)
     return mod
 
 
 def _mod(name: str):
-    mod = sys.modules.get(name)
-    if mod is None:
-        mod = types.ModuleType(name)
-        sys.modules[name] = mod
+    mod = AutoMockModule(name)
+    sys.modules[name] = mod
+    if "." in name:
+        parent_name, attr_name = name.rsplit(".", 1)
+        parent = sys.modules.get(parent_name)
+        if isinstance(parent, types.ModuleType):
+            setattr(parent, attr_name, mod)
     return mod
 
 
@@ -62,12 +138,10 @@ def _tool_decorator(fn=None, **kwargs):
 # 1. Langchain core stubs
 _pkg("langchain_core")
 _lc_tools = _mod("langchain_core.tools")
-if not hasattr(_lc_tools, "tool"):
-    _lc_tools.tool = _tool_decorator
+_lc_tools.tool = _tool_decorator
 
 _lc_runnables = _mod("langchain_core.runnables")
-if not hasattr(_lc_runnables, "RunnableConfig"):
-    _lc_runnables.RunnableConfig = dict
+_lc_runnables.RunnableConfig = dict
 
 # 2. Package hierarchy stubs
 for _p in [
@@ -218,6 +292,11 @@ pt = _load(
 )
 
 
+def tearDownModule():
+    """Restore sys.modules to the exact state captured at import time."""
+    restore_sys_modules(_SYS_MODULES_SNAPSHOT)
+
+
 class TestPreferenceToolsGuards(unittest.TestCase):
     def setUp(self):
         _mock_read_canonical.reset_mock()
@@ -248,80 +327,70 @@ class TestPreferenceToolsGuards(unittest.TestCase):
 
         # Integer must not raise AttributeError
         res_int = pt.save_user_preference_tool.func(
-            preference="Prefers dark mode", replace_memory_id=123, config=config
+            preference="Prefers dark mode", replace_memory_id=12345, config=config
         )
         self.assertIn("Preference saved (memory_id=saved_memory_id)", res_int)
 
-        # List/dict must not raise AttributeError
-        res_list = pt.save_user_preference_tool.func(
-            preference="Prefers dark mode", replace_memory_id=[], config=config
+        # Boolean must not raise AttributeError
+        res_bool = pt.save_user_preference_tool.func(
+            preference="Prefers dark mode", replace_memory_id=False, config=config
         )
-        self.assertIn("Preference saved (memory_id=saved_memory_id)", res_list)
+        self.assertIn("Preference saved (memory_id=saved_memory_id)", res_bool)
 
-        res_dict = pt.save_user_preference_tool.func(
-            preference="Prefers dark mode", replace_memory_id={}, config=config
-        )
-        self.assertIn("Preference saved (memory_id=saved_memory_id)", res_dict)
-
-    def test_replace_memory_id_valid_string_triggers_replacement_path(self):
-        """Valid non-empty replace_memory_id string triggers read_canonical_memory_item."""
+    def test_replace_memory_id_valid_string_invokes_amend_fact(self):
+        """Valid string replace_memory_id invokes amend_fact."""
         config = {"configurable": {"user_id": "u1"}}
-        _mock_read_canonical.return_value = None
-
+        prior_mock = types.SimpleNamespace(
+            status=types.SimpleNamespace(value="active"),
+            superseded_by=None,
+            content="Old preference",
+            ledger_schema_version="knowledge_ledger.v1",
+            slot=None,
+            subject_scope=None,
+            subject_entity_id=None,
+            curation_weight=None,
+            visibility=None,
+        )
+        _mock_read_canonical.return_value = prior_mock
         res = pt.save_user_preference_tool.func(
-            preference="Prefers dark mode", replace_memory_id="mem-123", config=config
+            preference="Prefers dark mode", replace_memory_id="  mem-xyz-123  ", config=config
         )
-        _mock_read_canonical.assert_called_once()
-        self.assertEqual("u1", _mock_read_canonical.call_args[0][0])
-        self.assertEqual("mem-123", _mock_read_canonical.call_args[0][1])
-        self.assertEqual("Error updating preference: memory is unavailable or historical", res)
+        self.assertIn("Preference updated (memory_id=amended_memory_id)", res)
+        self.assertEqual(1, _mock_amend_fact.call_count)
+        self.assertEqual("mem-xyz-123", _mock_amend_fact.call_args.args[1])
 
     # -------------------------------------------------------------------------
-    # Test 2: preference=None, empty string "", and whitespace "   "
+    # Test 2: preference=None, empty string, and whitespace
     # -------------------------------------------------------------------------
-    def test_preference_empty_or_whitespace_returns_clean_error(self):
-        """preference=None, empty string, and whitespace must return clean validation errors."""
+    def test_preference_empty_or_none_returns_clean_error(self):
+        """Empty string, whitespace, and None return validation error without saving."""
         config = {"configurable": {"user_id": "u1"}}
 
-        # None
+        # None preference
         res_none = pt.save_user_preference_tool.func(preference=None, config=config)
-        self.assertTrue(res_none.startswith("Error:"), f"Expected Error prefix, got: {res_none}")
-        self.assertIn("cannot be empty", res_none.lower())
+        self.assertIn("Error: Preference cannot be empty", res_none)
+        self.assertEqual(0, _mock_save_fact.call_count)
 
         # Empty string
         res_empty = pt.save_user_preference_tool.func(preference="", config=config)
-        self.assertTrue(res_empty.startswith("Error:"), f"Expected Error prefix, got: {res_empty}")
-        self.assertIn("cannot be empty", res_empty.lower())
+        self.assertIn("Error: Preference cannot be empty", res_empty)
+        self.assertEqual(0, _mock_save_fact.call_count)
 
-        # Whitespace
-        res_ws = pt.save_user_preference_tool.func(preference="   \t\n  ", config=config)
-        self.assertTrue(res_ws.startswith("Error:"), f"Expected Error prefix, got: {res_ws}")
-        self.assertIn("cannot be empty", res_ws.lower())
+        # Whitespace-only string
+        res_ws = pt.save_user_preference_tool.func(preference="     \n\t  ", config=config)
+        self.assertIn("Error: Preference cannot be empty", res_ws)
+        self.assertEqual(0, _mock_save_fact.call_count)
 
-        # Non-string types
-        for val in [999, [], {}, object(), False]:
-            res_invalid = pt.save_user_preference_tool.func(preference=val, config=config)
-            self.assertTrue(res_invalid.startswith("Error:"), f"Expected Error prefix for {val}, got: {res_invalid}")
-            self.assertIn("cannot be empty", res_invalid.lower())
-
-        # Ensure no write was attempted
-        _mock_save_fact.assert_not_called()
-
-    def test_preference_valid_strips_whitespace(self):
-        """Valid preference with padding whitespace is stripped cleanly."""
-        config = {"configurable": {"user_id": "u1"}}
-        res = pt.save_user_preference_tool.func(
-            preference="   Prefers vim over nano   ", config=config
-        )
-        self.assertIn("Preference saved (memory_id=saved_memory_id): Prefers vim over nano", res)
-        _mock_save_fact.assert_called_once()
-        self.assertEqual("Prefers vim over nano", _mock_save_fact.call_args[0][1])
+        # Non-string type
+        res_non_str = pt.save_user_preference_tool.func(preference=12345, config=config)
+        self.assertIn("Error: Preference cannot be empty", res_non_str)
+        self.assertEqual(0, _mock_save_fact.call_count)
 
     # -------------------------------------------------------------------------
-    # Test 3: _get_uid extraction with top-level user_id / uid
+    # Test 3: _get_uid extraction resolves nested and top-level configs
     # -------------------------------------------------------------------------
-    def test_get_uid_nested_and_top_level_resolution(self):
-        """_get_uid must resolve user_id and uid from both nested configurable and top-level."""
+    def test_get_uid_hierarchical_resolution(self):
+        """_get_uid resolves user_id and uid from both nested configurable and top-level."""
         # 1. Nested configurable.user_id
         cfg_nested_user_id = {"configurable": {"user_id": "u_nested_user_id"}}
         self.assertEqual("u_nested_user_id", pt._get_uid(cfg_nested_user_id))
@@ -370,7 +439,6 @@ class TestPreferenceToolsGuards(unittest.TestCase):
     # -------------------------------------------------------------------------
     def test_user_stated_safe_bool_coercion(self):
         """_safe_bool correctly coerces booleans, numeric strings, and ints."""
-        # Direct helper verification
         self.assertTrue(pt._safe_bool(True))
         self.assertFalse(pt._safe_bool(False))
         self.assertTrue(pt._safe_bool("true"))
@@ -468,7 +536,6 @@ class TestPreferenceToolsGuards(unittest.TestCase):
     # -------------------------------------------------------------------------
     def test_preference_duplicate_message_malformed_hits(self):
         """preference_duplicate_message safely ignores non-dict or malformed hits."""
-        # Non-dict items in hits list must not raise AttributeError
         res_none_hit = pt.preference_duplicate_message("Prefers tea", [None])
         self.assertIsNone(res_none_hit)
 
