@@ -31,6 +31,6 @@ _CHECKS = frozenset(
 def observe(check: str, outcome: str) -> None:
     if check not in _CHECKS:
         raise ValueError('unknown media/noise check')
-    outcome = reason_label(ReasonFamily.PARITY, outcome, RefactorShadowOutcome)
-    SHADOW.labels(check=check, outcome=outcome).inc()
+    SHADOW.labels(check=check, outcome=reason_label(ReasonFamily.PARITY, outcome, RefactorShadowOutcome)).inc()
+    outcome = outcome if outcome in {member.value for member in RefactorShadowOutcome} else 'unknown'
     logger.info('event=refactor_shadow lane=V2 check=%s outcome=%s', check, outcome)

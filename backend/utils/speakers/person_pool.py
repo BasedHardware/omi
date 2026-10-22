@@ -12,6 +12,7 @@ from utils.stt.voiceprints import usable_person_voiceprint
 from utils.speakers import policy
 from utils.speakers.refinement import unit
 from utils.observability.fallback import record_fallback
+from utils.observability.reasons import PersonVoiceQualityReason, ReasonFamily, reason_label
 
 MAX_CONTRIBUTIONS = 5
 POOL_KEY = 'person_voice_confirmations'
@@ -24,8 +25,8 @@ class PersonVoiceQualityError(ValueError):
     pass
 
 
-def reject(reason) -> NoReturn:
-    QUALITY.labels(outcome=reason).inc()
+def reject(reason: str) -> NoReturn:
+    QUALITY.labels(outcome=reason_label(ReasonFamily.SPEAKER_EVIDENCE, reason, PersonVoiceQualityReason)).inc()
     logger.info('event=refactor_shadow lane=L2 check=person_sample_quality outcome=disagree')
     raise PersonVoiceQualityError(reason)
 

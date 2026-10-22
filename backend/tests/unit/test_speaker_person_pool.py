@@ -1,5 +1,6 @@
 from utils.speakers.person_pool import MAX_CONTRIBUTIONS, pool_profile, retract_profile
 import numpy as np
+import pytest
 
 
 def profile(conversation, vector):
@@ -9,6 +10,16 @@ def profile(conversation, vector):
         'speech_samples': [f'{conversation}.wav'],
         'speech_sample_transcripts': [''],
     }
+
+
+def test_quality_rejection_labels_are_bounded():
+    from utils.speakers.person_pool import QUALITY, PersonVoiceQualityError, reject
+
+    unknown = QUALITY.labels(outcome='unknown')._value.get()
+    with pytest.raises(PersonVoiceQualityError):
+        reject('unrecognized_synthetic_reason')
+    assert QUALITY.labels(outcome='unknown')._value.get() == unknown + 1
+    assert ('unrecognized_synthetic_reason',) not in QUALITY._metrics
 
 
 def test_pool_is_centroid_retry_idempotent_and_undo_restores_other_voice_evidence():

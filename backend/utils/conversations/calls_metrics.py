@@ -46,8 +46,8 @@ _CHECKS = frozenset(
 
 def observe(check: str, outcome: str, *, size: int | None = None) -> None:
     check = check if check in _CHECKS else 'unknown'
-    outcome = reason_label(ReasonFamily.PARITY, outcome, CallsRefactorOutcome)
-    COMPARISONS.labels(check=check, outcome=outcome).inc()
+    COMPARISONS.labels(check=check, outcome=reason_label(ReasonFamily.PARITY, outcome, CallsRefactorOutcome)).inc()
+    outcome = outcome if outcome in {member.value for member in CallsRefactorOutcome} else 'unknown'
     logger.info(
         'event=refactor_shadow lane=V4 check=%s outcome=%s size=%s', check, outcome, size if size is not None else 0
     )
