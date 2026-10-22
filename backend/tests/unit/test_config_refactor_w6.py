@@ -10,6 +10,17 @@ import sys
 
 import pytest
 
+
+@pytest.mark.parametrize('mode,expected', [('shadow', False), ('serve', True)])
+def test_legacy_messaging_switch_uses_shared_opt_in_only_when_serving(monkeypatch, mode, expected):
+    from config.messaging import channel_policy
+
+    monkeypatch.setenv('CAPTURE_COVERAGE_MODE', mode)
+    monkeypatch.setenv('OMI_MESSAGING_CHANNELS', 'true')
+    monkeypatch.delenv('OMI_MESSAGING_CHANNEL_POLICY', raising=False)
+    assert channel_policy('telegram')['enabled'] is expected
+
+
 from config import refactor_modes
 from config.policy.batch import cohort_bucket
 from config.refactor_switches import default_off, default_on
