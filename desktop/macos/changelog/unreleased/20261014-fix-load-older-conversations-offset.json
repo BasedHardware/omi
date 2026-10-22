@@ -1,0 +1,3 @@
+{
+  "change": "Adjust offset when loaded conversations are deleted or unstarred so Load older does not skip items"
+}
