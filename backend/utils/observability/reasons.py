@@ -41,6 +41,7 @@ class ReasonFamily(StrEnum):
     LEGACY_DARK = 'legacy_dark'
     PARITY = 'parity'
     STAGING_FENCE = 'staging_fence'
+    HELD_CONTENT = 'held_content'
 
 
 REASON_UNKNOWN_TOTAL = Counter(
@@ -94,6 +95,14 @@ class RampReason(StrEnum):
     AT_CEILING = 'at_ceiling'
     DATA_LOSS = 'data_loss'
     PRIVACY = 'privacy'
+
+
+class TransitionTailOutcome(StrEnum):
+    """Disposition of a tiny cap-transition tail after its bounded grace."""
+
+    UNKNOWN = 'unknown'
+    COALESCED = 'coalesced'
+    SEALED = 'sealed'
 
 
 class WorkOutcome(StrEnum):

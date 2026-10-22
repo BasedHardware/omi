@@ -283,3 +283,50 @@ seven-day soft-delete retention of staged fragments can add roughly 7/30 of the
 retained-source storage term (~$0.000034/hour at the ceiling). Noncurrent versions,
 regional settings and actual compression/wear duration must be measured before
 cohort expansion. No production data or bucket settings were read for this model.
+
+
+## Close 1006 code-path investigation (2026-10-22)
+
+This is a local source inspection and protocol-only probe, not a reproduction
+or an attribution of the 2026-10-21 test-account close. No production calls,
+logs or Firestore were read.
+`ListenReceiver.receive_data` records ASGI disconnect before entering its
+teardown, then awaits `LiveHeldAudio.finish_updates` through a shielded,
+supervised task. `close()` takes the publication lock, drains every PCM tail,
+seals the group and releases unused capacity. It no longer repeats the empty
+flush/seal barrier. A server-initiated close in `ListenSession._teardown_components`
+can occur later, after receiver/drain work and usage persistence.
+
+The Docker entrypoint uses uvicorn's automatic WebSocket protocol selection.
+The locked uvicorn 0.30.5 / websockets 12 implementation handles Close control
+frames in `WebSocketCommonProtocol.read_data_frame` and echoes the Close before
+ASGI's `websocket.disconnect`; wsproto's `handle_close` likewise responds before
+queuing the ASGI disconnect. Once the protocol reader reaches a **client Close frame**, it can acknowledge
+without waiting for application tail persistence. However, uvicorn defaults to
+`ws_max_queue=32`; websockets' `transfer_data` pauses its reads while the inbound
+message queue is full. Listen awaits custody inline between receives
+(`receiver.py`'s `_flush_stt_buffer` / `_emit_stt_cap_live_held`). A slow flush can
+therefore delay reaching a queued Close frame, although the event loop is free.
+A local protocol-only probe with the locked packages held the ASGI consumer at
+an async barrier: one PCM message closed 1000 in 2 ms; 100 queued messages
+closed 1006 in 403 ms with the probe client's 200 ms close timeout. This proves
+the queue/backpressure mechanism, not its occurrence in the reported session.
+A transport EOF without a completed handshake can also report 1006. Executor queueing or remote I/O in cap
+publication does not synchronously block the event loop: encoding, encryption,
+upload, summary, capacity, stage append and seal use worker leaves. PCM copies
+and bounded identity hashing still run on the loop. This inspection cannot prove
+that the reported session received a Close frame, or exclude unrelated loop or
+transport delays. Final sealing after ASGI disconnect is already after the
+protocol reply; moving it later would not unblock a reader stalled before
+disconnect. Decoupling ingress from persistence needs a bounded custody queue
+and backpressure policy, so this PR makes no speculative close-order change.
+
+Budget: each pending fragment has at most two 4 s upload waits (including
+executor queue/encode/encrypt/put), with a 1.5 s socket inactivity timeout per
+attempt: **8 s per fragment**, not per close. Pending fragments drain serially;
+summary migration can wait 30 s, lock waits and Firestore publication have
+separate budgets, and staging compose/reload/cleanup RPCs each use 10 s timeouts
+(with publication transaction retries). Receiver STT teardown uses a 28 s
+delivery + 2 s cleanup bound, but final cap custody runs outside that bound.
+There is no aggregate 8 s close deadline. Moving custody to an unowned detached
+task would weaken audio retention; it remains supervised and awaited.

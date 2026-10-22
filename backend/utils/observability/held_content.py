@@ -15,6 +15,8 @@ import time
 
 from prometheus_client import Counter, Gauge, Histogram
 
+from utils.observability.reasons import ReasonFamily, TransitionTailOutcome, reason_label
+
 logger = logging.getLogger(__name__)
 
 CAPTURE_KINDS = ('lost', 'byte_mismatch', 'frame_mismatch', 'ack_without_authority')
@@ -24,6 +26,12 @@ ERASURE_OUTCOMES = ('failure', 'post_delete_publication')
 PUBLICATION_RETRY_OUTCOMES = ('retried_ok', 'exhausted', 'staged_unverified', 'source_orphaned')
 PUBLICATION_RETRY_CAUSES = ('throttle', 'timeout', 'connection', 'other')
 CHOICE_METHODS = ('get', 'put')
+TRANSITION_TAIL_OUTCOMES = (TransitionTailOutcome.COALESCED, TransitionTailOutcome.SEALED)
+TRANSITION_TAIL = Counter(
+    'omi_held_content_transition_tail',
+    'Deferred tiny PCM tails joined by compatible capture or sealed without a neighbour',
+    ['outcome'],
+)
 
 CAPTURE = Counter(
     'omi_held_content_capture',
@@ -103,6 +111,8 @@ COHORT_REFRESH_FAILURES = Counter(
     ['reason'],
 )
 
+for _outcome in TRANSITION_TAIL_OUTCOMES:
+    TRANSITION_TAIL.labels(outcome=reason_label(ReasonFamily.HELD_CONTENT, _outcome, TransitionTailOutcome))
 for _kind in CAPTURE_KINDS:
     CAPTURE.labels(kind=_kind)
 for _outcome in CHOICE_OUTCOMES:
@@ -130,6 +140,11 @@ def _inc(counter, **labels) -> None:
         counter.labels(**labels).inc() if labels else counter.inc()
     except Exception:
         logger.warning('event=held_content_metric outcome=dropped')
+
+
+def record_transition_tail(outcome: str) -> None:
+    if outcome in TRANSITION_TAIL_OUTCOMES:
+        _inc(TRANSITION_TAIL, outcome=reason_label(ReasonFamily.HELD_CONTENT, outcome, TransitionTailOutcome))
 
 
 def record_capture(kind: str) -> None:
