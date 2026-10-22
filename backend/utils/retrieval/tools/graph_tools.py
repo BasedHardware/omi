@@ -40,9 +40,15 @@ def _resolve_uid(config: RunnableConfig | None) -> Optional[str]:
         raw_configurable = cfg.get('configurable')
         if isinstance(raw_configurable, dict):
             configurable: Dict[str, Any] = cast(Dict[str, Any], raw_configurable)
-            return configurable.get('user_id')
+            uid = configurable.get('user_id') or configurable.get('uid')
+            if isinstance(uid, str) and uid.strip():
+                return uid.strip()
+        # Fallback to top-level user_id or uid in cfg
+        top_uid = cfg.get('user_id') or cfg.get('uid')
+        if isinstance(top_uid, str) and top_uid.strip():
+            return top_uid.strip()
         return None
-    except (KeyError, TypeError):
+    except (KeyError, TypeError, AttributeError):
         return None
 
 
@@ -67,15 +73,30 @@ def traverse_knowledge_graph_tool(
     Returns:
         Connected subgraph of relationships with cited long-term memory atoms.
     """
-    logger.info("traverse_knowledge_graph_tool entity=%s hops=%s", entity, hops)
+    logger.info("traverse_knowledge_graph_tool entity=%s hops=%s", sanitize(str(entity)), hops)
 
     uid = _resolve_uid(config)
     if not uid:
         return "Error: User ID not found in configuration"
 
+    # Input guard for entity
+    if entity is None or not isinstance(entity, str) or not entity.strip():
+        return "Error: entity must be a non-empty string."
+
+    clean_entity = entity.strip()
+    if len(clean_entity) > 256:
+        clean_entity = clean_entity[:256]
+
+    # Coerce and clamp hops (1 or 2; values above 2 are capped as documented)
     try:
-        result = traverse_knowledge_graph(uid, entity, hops=hops)
+        hops_val = int(hops) if hops is not None else 1
+    except (ValueError, TypeError):
+        hops_val = 1
+    hops_val = max(1, min(2, hops_val))
+
+    try:
+        result = traverse_knowledge_graph(uid, clean_entity, hops=hops_val)
         return format_traversal_result(result)
     except Exception as exc:
-        logger.exception("traverse_knowledge_graph_tool failed uid=%s: %s", uid, sanitize(str(exc)))
+        logger.exception("traverse_knowledge_graph_tool failed uid=%s: %s", sanitize(str(uid)), sanitize(str(exc)))
         return "Error traversing knowledge graph: Unable to complete traversal."
