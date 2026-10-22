@@ -88,13 +88,9 @@ struct RewindPage: View {
   /// Compute speaker names from the live speaker-person map
   private var speakerNames: [Int: String] {
     guard let appState = appState else { return [:] }
-    var names: [Int: String] = [:]
-    for (speakerId, personId) in appState.liveSpeakerPersonMap {
-      if let person = appState.peopleById[personId] {
-        names[speakerId] = person.name
-      }
+    return RefactorSpeakerPresentation.names(appState.liveSpeakerPersonMap, serving: ClientRefactorFlags.serving) {
+      appState.peopleById[$0]?.name
     }
-    return names
   }
 
   @ViewBuilder
