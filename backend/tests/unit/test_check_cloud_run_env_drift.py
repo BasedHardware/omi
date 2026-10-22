@@ -3112,3 +3112,93 @@ def test_cloud_run_secret_alias_resolves_through_annotation(checker, tmp_path: P
     assert sync.error is None, sync.error
     assert 'TYPESENSE_HOST' not in {m.key for m in sync.value_mismatches}, sync.value_mismatches
     assert sync.status != 'DRIFT', sync
+
+
+def test_cloud_run_secret_alias_project_form_mismatch_degrades_to_inventory(checker, tmp_path: Path) -> None:
+    # The platform normalizes annotation resources to project numbers while
+    # the repository state may carry the project ID. A hash difference on an
+    # alias-resolved key is form-ambiguous — not proven drift — so it must
+    # degrade to INVENTORY (strict exit 0) instead of a value mismatch.
+    manifest = {
+        'schema_version': 2,
+        'environments': {
+            'prod': {
+                'compute_project': 'based-hardware',
+                'region': 'us-central1',
+                'cloud_run': {
+                    'services': {
+                        'backend-sync': {
+                            'env': {},
+                            # Project *ID* form in the repository state.
+                            'secrets': {
+                                'TYPESENSE_HOST': {
+                                    'secret': 'projects/based-hardware/secrets/SHARED_TOKEN',
+                                    'version': 'latest',
+                                }
+                            },
+                        }
+                    }
+                },
+            }
+        },
+    }
+    manifest_path = tmp_path / 'runtime_env_id_form.yaml'
+    manifest_path.write_text(yaml.safe_dump(manifest), encoding='utf-8')
+
+    # Live revision carries the platform-normalized project *number* form.
+    serving_env = [{'name': 'TYPESENSE_HOST', 'valueFrom': {'secretKeyRef': {'name': 'SHARED_TOKEN', 'key': 'latest'}}}]
+    state = _replay_state(serving_env=_sync_env(queue='sync-jobs', repair='true'))
+    state['revisions'][SERVING_REVISION]['spec']['containers'][0]['env'] = serving_env
+    for revision_doc in state['revisions'].values():
+        revision_doc['metadata'] = {
+            'annotations': {checker.SECRET_ALIAS_ANNOTATION: 'TYPESENSE_HOST:projects/123456789/secrets/SHARED_TOKEN'}
+        }
+    state['services']['backend-sync']['spec']['template']['metadata']['annotations'] = {
+        checker.SECRET_ALIAS_ANNOTATION: 'TYPESENSE_HOST:projects/123456789/secrets/SHARED_TOKEN'
+    }
+
+    _, _, (sync,) = checker.inspect_services_drift(
+        env='prod',
+        services=('backend-sync',),
+        manifest_path=manifest_path,
+        cloud_run_state=state,
+    )
+    assert sync.error is None, sync.error
+    assert 'TYPESENSE_HOST' not in {m.key for m in sync.value_mismatches}, sync.value_mismatches
+    assert 'TYPESENSE_HOST' in sync.alias_unproven_keys
+    assert sync.status == 'INVENTORY', sync
+    assert checker.exit_code((sync,), strict=True) == 0
+
+
+def test_gke_unresolved_later_configmap_shadows_earlier_keys(checker) -> None:
+    # [A, B] where the snapshot omits B's data: B is as opaque as a Secret
+    # (its keys are unknown and may override A's by last-source-wins), so A's
+    # shared keys stay value-unproven instead of asserting the snapshot value.
+    cm_name, shared, literal_value, cm_data = _literal_configmap_key(checker)
+    cm_data[shared] = f'{literal_value}-stale-snapshot'
+    deployment = 'prod-omi-pusher'
+    serving_env = [{'name': 'X', 'value': 'x'}]
+    envfrom = [
+        {'configMapRef': {'name': cm_name}},
+        {'configMapRef': {'name': 'fixture-unreadable-config'}},
+    ]
+    gke_state = {
+        # The snapshot resolves A but not B.
+        'configmaps': {cm_name: {'data': cm_data}},
+        'pusher': {
+            'deployment': {},
+            'replicasets': [_replicaset(f'{deployment}-a', deployment, 2, serving_env, 'pusher', envfrom=envfrom)],
+        },
+    }
+    (result,) = checker.inspect_gke_drift(
+        env='prod',
+        workloads=('pusher',),
+        render='helm',
+        gke_state=gke_state,
+        runner=_helm_render_runner(deployment, 'pusher', serving_env, envfrom),
+    )
+    assert result.error is None, result.error
+    assert 'fixture-unreadable-config' in result.envfrom_unresolved
+    assert shared not in {m.key for m in result.value_mismatches}
+    assert result.status == 'INVENTORY', result
+    assert checker.exit_code((result,), strict=True) == 0

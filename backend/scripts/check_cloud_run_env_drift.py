@@ -226,6 +226,13 @@ class ServingTarget:
     # cannot be value-proven from the earlier known source's data, so they
     # degrade to INVENTORY instead of asserting the snapshot value.
     opaque_shadowed_keys: frozenset[str] = frozenset()
+    # Cloud Run keys whose live secret reference was rewritten from the
+    # revision's ``run.googleapis.com/secrets`` annotation. The platform
+    # normalizes those resources to project *numbers* while the repository
+    # state may carry the project *ID*: a hash mismatch on such a key is
+    # form-ambiguous, not proven drift, so it degrades to INVENTORY. A matching
+    # form still proves OK.
+    alias_resolved_keys: frozenset[str] = frozenset()
     # Explicit env keys bound through ``valueFrom.configMapKeyRef`` (live reads
     # only). The immutable pod spec proves the binding, but the value the
     # container resolved at start cannot be re-read: K8s requires a pod restart
@@ -259,6 +266,10 @@ class ServiceEnvDrift:
     # skipped on a live read: the spec proves the binding, never the data the
     # container resolved at start (ConfigMap updates need a pod restart).
     explicit_unproven_keys: tuple[str, ...] = ()
+    # Cloud Run keys whose alias-resolved secret reference is form-ambiguous
+    # (annotation project number vs repository project ID): value comparison
+    # skipped, reported as unchecked (INVENTORY).
+    alias_unproven_keys: tuple[str, ...] = ()
 
     @property
     def has_drift(self) -> bool:
@@ -280,6 +291,7 @@ class ServiceEnvDrift:
             or self.envfrom_unresolved
             or self.envfrom_unproven
             or self.explicit_unproven_keys
+            or self.alias_unproven_keys
         ):
             return 'INVENTORY'
         return 'OK'
@@ -900,7 +912,9 @@ def _template_env(service_doc: Mapping[str, Any], *, service: str) -> tuple[str 
     name = (template.get('metadata') or {}).get('name')
     # Alias resolution matches _revision_env so template and serving
     # fingerprints stay comparable when cross-project secrets are declared.
-    env = _resolve_secret_aliases(container.get('env', []), _secret_alias_map(template.get('metadata')))
+    env, _alias_resolved = _resolve_secret_aliases(
+        container.get('env', []), _secret_alias_map(template.get('metadata'))
+    )
     return (name if isinstance(name, str) else None), _env_list_to_live(env, scope=service)
 
 
@@ -933,17 +947,21 @@ def _secret_alias_map(metadata: Mapping[str, Any] | None) -> dict[str, str]:
     return aliases
 
 
-def _resolve_secret_aliases(entries: object, aliases: Mapping[str, str]) -> list[Any]:
+def _resolve_secret_aliases(entries: object, aliases: Mapping[str, str]) -> tuple[list[Any], frozenset[str]]:
     """Rewrite ``secretKeyRef.name`` aliases to their declared secret resources.
 
     Expected hashes keep a project-qualified reference intact (see
     ``_secret_ref_hash``), so a live alias must resolve through the annotation
     before hashing or a correctly deployed cross-project secret reports a value
     mismatch. Only names the annotation explicitly declares are rewritten.
+    Returns ``(entries, rewritten keys)`` so the comparison can degrade
+    form-ambiguous mismatches on rewritten keys to INVENTORY (the platform
+    normalizes project IDs to numbers in the annotation).
     """
     if not isinstance(entries, list) or not aliases:
-        return entries if isinstance(entries, list) else []
+        return (entries if isinstance(entries, list) else []), frozenset()
     resolved: list[Any] = []
+    rewritten: set[str] = set()
     for entry in entries:
         if isinstance(entry, dict):
             value_from = entry.get('valueFrom')
@@ -951,19 +969,24 @@ def _resolve_secret_aliases(entries: object, aliases: Mapping[str, str]) -> list
             if isinstance(secret, dict):
                 resource = aliases.get(str(secret.get('name', ''))) or aliases.get(str(entry.get('name', '')))
                 if resource:
+                    entry_name = entry.get('name')
                     entry = {
                         **entry,
                         'valueFrom': {'secretKeyRef': {**secret, 'name': resource}},
                     }
+                    if isinstance(entry_name, str) and entry_name:
+                        rewritten.add(entry_name)
         resolved.append(entry)
-    return resolved
+    return resolved, frozenset(rewritten)
 
 
-def _revision_env(revision_doc: Mapping[str, Any], *, revision: str) -> LiveEnv:
+def _revision_env(revision_doc: Mapping[str, Any], *, revision: str) -> tuple[LiveEnv, frozenset[str]]:
     containers = (revision_doc.get('spec') or {}).get('containers')
     container = _application_container(containers, scope=f'Cloud Run revision {revision}')
-    env = _resolve_secret_aliases(container.get('env', []), _secret_alias_map(revision_doc.get('metadata')))
-    return _env_list_to_live(env, scope=f'revision {revision}')
+    env, alias_resolved = _resolve_secret_aliases(
+        container.get('env', []), _secret_alias_map(revision_doc.get('metadata'))
+    )
+    return _env_list_to_live(env, scope=f'revision {revision}'), alias_resolved
 
 
 def read_cloud_run_service(
@@ -1030,7 +1053,7 @@ def read_cloud_run_service(
                     '--format=json',
                 ],
             )
-        env = _revision_env(revision_doc, revision=revision)
+        env, alias_resolved = _revision_env(revision_doc, revision=revision)
         live.targets.append(
             (
                 ServingTarget(
@@ -1039,6 +1062,7 @@ def read_cloud_run_service(
                     key_count=len(env),
                     fingerprint=env_fingerprint(env),
                     display_fingerprint=env_fingerprint(env, redacted=True),
+                    alias_resolved_keys=alias_resolved,
                 ),
                 env,
             )
@@ -1226,6 +1250,11 @@ def read_gke_workload(
             if data is None:
                 refs_unresolved.add(identity)
                 target_degraded_refs.add(identity)
+                # An unreadable later source is as opaque as a Secret: its keys
+                # are unknown, so it may override any earlier known source's
+                # key (K8s last-source-wins). Earlier keys stay value-unproven
+                # until a later known source re-exports them.
+                target_shadowed_keys |= contributed_keys
                 continue
             contributed = frozenset(f'{source_prefix}{key}' for key in data)
             if contributed:
@@ -1325,6 +1354,10 @@ def compare_service(
     live_only: set[str] = set()
     missing: set[str] = set()
     mismatches: list[ValueMismatch] = []
+    # Cloud Run keys whose alias-resolved reference is form-ambiguous (the
+    # annotation's project number vs the repository's project ID): skipped
+    # from value assertions, reported as unchecked (INVENTORY).
+    alias_unproven: set[str] = set()
     # Explicit configMapKeyRef keys whose value comparison was skipped per
     # target (live reads: the binding is proven, the resolved data is not).
     explicit_unproven: set[str] = set()
@@ -1417,8 +1450,19 @@ def compare_service(
         # asserting the earlier ConfigMap source's value would report false
         # drift. The Secret source's own identity already reports INVENTORY.
         value_excluded |= target.opaque_shadowed_keys
+        # Alias-resolved live secret references came from the platform's
+        # annotation, which normalizes project IDs to project numbers; the
+        # repository state may carry the ID form. A hash difference on such a
+        # key is form-ambiguous, not proven drift: skip the value assertion and
+        # report it as unchecked (INVENTORY) instead. A matching form still
+        # compares OK.
+        alias_unproven |= target.alias_resolved_keys & declared - value_excluded
         for key in sorted(
-            (declared & set(env_map)) - target.unproven_envfrom_keys - target.explicit_unproven_keys - value_excluded
+            (declared & set(env_map))
+            - target.unproven_envfrom_keys
+            - target.explicit_unproven_keys
+            - value_excluded
+            - alias_unproven
         ):
             want = expected_env[key]
             if want is not None and env_map[key] != want:
@@ -1497,6 +1541,7 @@ def compare_service(
         envfrom_unresolved=envfrom_unresolved,
         envfrom_unproven=envfrom_unproven,
         explicit_unproven_keys=tuple(sorted(explicit_unproven)),
+        alias_unproven_keys=tuple(sorted(alias_unproven)),
     )
 
 
