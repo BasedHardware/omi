@@ -1612,6 +1612,7 @@ def get_conversations(
         budget_kwargs = {'budget': budget} if budget is not None else {}
 
         next_cursor = None
+        offset_page: Dict[str, Any] = {}
         if not include_transcript and folder_id is None and starred is None:
             try:
                 conversations, next_cursor = conversation_cards_page_core(
@@ -1645,6 +1646,7 @@ def get_conversations(
                 categories=[c.value for c in category_list],
                 folder_id=folder_id,
                 starred=starred,
+                cursor_page=offset_page,
                 **budget_kwargs,
             )
             has_more = len(conversations) > limit
@@ -1652,11 +1654,15 @@ def get_conversations(
         if budget is not None:
             finish_list_budget(response, budget)
             has_more = has_more or budget.truncated
+        next_offset = None
+        if next_cursor is None and conversations:
+            last_id = conversations[-1].get('id')
+            next_offset = offset_page.get('next_offset_by_id', {}).get(last_id, offset + len(conversations))
         pagination_headers(
             response,
             limit=limit,
             has_more=has_more,
-            next_offset=offset + len(conversations) if next_cursor is None and conversations else None,
+            next_offset=next_offset,
             next_cursor=next_cursor,
         )
 
