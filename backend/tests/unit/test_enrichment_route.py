@@ -294,8 +294,11 @@ def test_other_invalid_argument_rejections_still_surface_from_the_outbox(rows):
 @pytest.mark.asyncio
 async def test_legacy_sync_handler_acks_an_oversized_conversation_with_200(rows, monkeypatch):
     from routers import batch_pipeline
+    from utils.batch_pipeline import enrichment
 
     state_rows, _tasks = rows
+    # run_enrichment binds discard_blocked by name; the fixture's custody patch does not reach it.
+    monkeypatch.setattr(enrichment, 'discard_blocked', lambda _document_id: False)
     monkeypatch.setattr(callback, 'enrich_conversation', Mock(side_effect=_oversized_write_rejection()))
 
     async def run(_executor, func, *args):
