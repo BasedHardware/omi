@@ -3,13 +3,14 @@ Tool for creating inline chart visualizations in chat responses.
 """
 
 import contextvars
+import math
 from typing import Any, Dict, List, Optional
 
 from langchain_core.tools import tool  # type: ignore[reportUnknownVariableType]  # langchain @tool decorator partially typed
 
 try:
     from utils.retrieval.agentic import agent_config_context
-except ImportError:
+except (ImportError, Exception):
     agent_config_context = contextvars.ContextVar('agent_config', default=None)
 
 
@@ -25,8 +26,8 @@ def _agent_config() -> Optional[Dict[str, Any]]:
 def create_chart_tool(
     chart_type: str,
     title: str,
-    labels: List[str],
-    values: List[float],
+    labels: Optional[List[Any]] = None,
+    values: Optional[List[Any]] = None,
     dataset_label: str = "Data",
     color: Optional[str] = None,
     x_label: Optional[str] = None,
@@ -56,32 +57,55 @@ def create_chart_tool(
     Returns:
         Confirmation message. The chart data is automatically attached to the response.
     """
-    if len(labels) != len(values):
-        return "Error: labels and values must have the same length."
+    if labels is None or not isinstance(labels, (list, tuple)):
+        return "Error: labels must be a non-empty list of data labels."
 
-    if chart_type not in ('line', 'bar'):
-        return "Error: chart_type must be 'line' or 'bar'."
+    if values is None or not isinstance(values, (list, tuple)):
+        return "Error: values must be a non-empty list of numeric values."
 
     if len(labels) == 0:
         return "Error: at least one data point is required."
 
+    if len(labels) != len(values):
+        return "Error: labels and values must have the same length."
+
+    normalized_type = str(chart_type or "").strip().lower()
+    if normalized_type not in ('line', 'bar'):
+        return "Error: chart_type must be 'line' or 'bar'."
+
+    # Coerce and validate numeric values and sanitize label strings
+    data_points = []
+    for l, v in zip(labels, values):
+        try:
+            num = float(v)
+            if math.isnan(num) or math.isinf(num):
+                return f"Error: non-finite numeric value '{v}' for label '{l}'."
+        except (ValueError, TypeError):
+            return f"Error: invalid numeric value '{v}' for label '{l}'."
+        data_points.append({"label": str(l), "value": num})
+
+    safe_title = str(title or "Chart").strip() or "Chart"
+
     chart_data = {
-        "chart_type": chart_type,
-        "title": title,
+        "chart_type": normalized_type,
+        "title": safe_title,
         "x_label": x_label,
         "y_label": y_label,
         "datasets": [
             {
-                "label": dataset_label,
-                "data_points": [{"label": l, "value": v} for l, v in zip(labels, values)],
+                "label": dataset_label or "Data",
+                "data_points": data_points,
                 "color": color,
             }
         ],
     }
 
     config = _agent_config()
-    if config:
-        configurable = config.get('configurable', {})
+    if isinstance(config, dict):
+        configurable = config.get('configurable')
+        if not isinstance(configurable, dict):
+            configurable = {}
+            config['configurable'] = configurable
         configurable['chart_data'] = chart_data
 
-    return f"Chart created: {title} ({chart_type} chart with {len(labels)} data points). The chart will be displayed inline in the chat."
+    return f"Chart created: {safe_title} ({normalized_type} chart with {len(labels)} data points). The chart will be displayed inline in the chat."
