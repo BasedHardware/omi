@@ -177,7 +177,7 @@ class StagedAudio:
         except Exception:
             context = None
         self._streams[item.segment_id] = capture_stream(item, context)
-        self._languages[item.segment_id] = stt_language(context)
+        self._languages[item.segment_id] = stt_language(context, duration_seconds=item.duration_seconds)
         for pending in (self._streams, self._languages):
             while len(pending) > self.MAX_PENDING:
                 pending.popitem(last=False)
@@ -192,21 +192,22 @@ class StagedAudio:
         return self._languages.pop(item.segment_id, None)
 
 
-def stt_language(context):
+def stt_language(context, *, duration_seconds=None):
     if not isinstance(context, dict) or 'stt_language' not in context:
         return None
     value = context['stt_language']
-    from config.prerecorded_language import language_class
+    from config.prerecorded_language import MIN_AUDIO_LID_CONFIDENCE, audio_lid_confidence_floor, language_class
 
     if language_class(value) == 'supported':
         # Older intake copied the app's primary language even in multilingual
         # mode. Such a hint is not proof that this audio is supported.
         evidence, confidence = context.get('stt_language_evidence'), context.get('stt_language_confidence')
+        minimum = audio_lid_confidence_floor(duration_seconds) if evidence == 'audio_lid' else MIN_AUDIO_LID_CONFIDENCE
         if (
             evidence not in ('declared', 'audio_lid')
             or isinstance(confidence, bool)
             or not isinstance(confidence, (int, float))
-            or not 0.8 <= confidence <= 1
+            or not minimum <= confidence <= 1
         ):
             return None
     return value if isinstance(value, str) else None

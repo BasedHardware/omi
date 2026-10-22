@@ -13,7 +13,8 @@ streaming provider policy.
 
 - Prerecorded `None`, blank, `und`, `unknown` and `multi` run an independent
   audio-language classification before dispatch. A supported code with
-  confidence at least 0.8 retains configured Parakeet preference; unsupported,
+  confidence at least 0.9 for samples shorter than 10 seconds, or 0.8 for longer
+  samples, retains configured Parakeet preference; unsupported,
   malformed, unavailable or low-confidence detection selects Modulate. Provider
   selection without audio proof conservatively returns Modulate. An unavailable
   allowed multilingual provider is a configuration failure. Named supported
@@ -46,7 +47,20 @@ before per-segment accounting; intake rechecks funded dispatch before a probe.
 The key remains on CPU hosts. Native record admission already requires a fully
 supported declared profile and freezes that profile in its reference manifest.
 The detector is sampled evidence: later code switching or a confident wrong
-classification can escape it. A multilingual soak remains necessary.
+classification can escape it. Soak003's six-second synthetic Chinese clips
+were labeled English at confidence 0.804–0.839 across PCM16, PCM8 and Opus.
+Their decoded 16kHz mono format was correct. The short-sample floor rejects those
+observed false permissions without changing declared languages or the longer
+probe threshold. Probe duration comes from actual PCM frames, never the
+provider's duration metadata. The worker applies the same floor to admitted
+audio-LID evidence using its validated unit duration, including after rollback.
+`STT_PRERECORDED_SHORT_LID_GUARD_ENABLED` defaults on; only `false` restores the
+prior 0.8 floor on the runtime where it is applied. CPU selection and worker
+custody read it independently, so a CPU-only override does not disable the
+worker floor. The original language guard and unsupported-language barrier
+remain independent of this narrower kill switch.
+This is a bounded regression fix, not a universal language-ID accuracy claim.
+A multilingual soak remains necessary.
 
 Previously pinned dispatch intents remain pinned: changing their provider after
 an uncertain call would violate at-most-once billing/custody. Operator minimal
