@@ -313,7 +313,8 @@ def test_prod_pusher_retires_self_hosted_deepgram_without_changing_cloud_policy(
     bindings = preflight.direct_pusher_bindings(deployment)
     literals = preflight.literal_pusher_values(deployment)
 
-    assert bindings["DEEPGRAM_API_KEY"] == ("secret", "prod-omi-backend-secrets", "DEEPGRAM_API_KEY")
+    # Deepgram retired 2026-08-27: the cloud credential binding is gone too.
+    assert "DEEPGRAM_API_KEY" not in bindings
     assert literals["SPEAKER_MATCH_SCORES_ENABLED"] == "true"
     assert literals["CONVERSATION_RELEVANCE_JEV_PERCENT"] == "100"
     for retired in (
@@ -329,10 +330,10 @@ def test_prod_pusher_retires_self_hosted_deepgram_without_changing_cloud_policy(
         "MEMORY_OWNER_JEV_SHADOW_DAILY_CAP",
         "DESKTOP_PENDANT_CALL_LINK_MODE",
         "DESKTOP_PENDANT_CALL_LINK_PERCENT",
+        "DEEPGRAM_SELF_HOSTED_ENABLED",
+        "DEEPGRAM_SELF_HOSTED_URL",
     ):
         assert retired not in literals
-    assert literals["DEEPGRAM_SELF_HOSTED_ENABLED"] == "false"
-    assert "DEEPGRAM_SELF_HOSTED_URL" not in literals
     assert literals["STT_SERVICE_MODELS"] == "modulate-velma-2,soniox,parakeet"
 
 

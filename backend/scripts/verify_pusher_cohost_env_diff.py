@@ -149,7 +149,6 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             # Sync HTTP intake is mounted by main.py; pusher mounts no sync router.
             "SYNC_FINALIZE_TARGET_RECOVERY_ENABLED",
             "ACCOUNT_CUTOVER_ENFORCEMENT",
-            "DEEPGRAM_SELF_HOSTED_ENABLED",
             "DESKTOP_UPDATE_POINTERS_MODE",
             "DESKTOP_UPDATE_RECONCILE_SAMPLE_RATE",
             # Legacy mobile HTTP TTS rollback; pusher mounts no TTS router.
@@ -351,7 +350,6 @@ PUSHER_ONLY_ALLOWED: dict[str, frozenset[str]] = {
     # Pusher retains its cloud/BYOK credential; listen has no managed cloud key.
     "prod": frozenset(
         {
-            "DEEPGRAM_API_KEY",
             # Late identity retries are scheduled only by prod pusher audio drain.
             "OWNER_IDENTITY_RETRY_COALESCE_ENABLED",
             "REDIS_DB_HOST",

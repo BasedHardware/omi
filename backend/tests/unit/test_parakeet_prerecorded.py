@@ -119,56 +119,32 @@ class TestFactoryRouting:
         monkeypatch.setenv('STT_PRERECORDED_MODEL', 'dg-nova-3')
         assert pr.get_prerecorded_service('en')[0] == pr.PrerecordedSTTService.PARAKEET
 
-    def test_deepgram_client_is_constructed_lazily_once(self, monkeypatch):
-        client = MagicMock()
-        factory = MagicMock(return_value=client)
-        monkeypatch.setattr(pr, '_deepgram_client', None)
-        monkeypatch.setattr(pr, '_deepgram_options', MagicMock())
-        monkeypatch.setattr(pr, 'DeepgramClient', factory)
-        monkeypatch.setenv('DEEPGRAM_API_KEY', 'test-key')
-
-        assert pr._get_deepgram_client() is client
-        assert pr._get_deepgram_client() is client
-        assert factory.call_count == 1
-
-    def test_deepgram_process_client_reports_missing_key(self, monkeypatch):
-        monkeypatch.setattr(pr, '_deepgram_client', None)
-        monkeypatch.setattr(pr, 'get_byok_key', lambda _provider: None)
+    def test_deepgram_process_client_refuses_retired_provider(self, monkeypatch):
+        """Deepgram retired 2026-08-27: the client boundary fails closed."""
         monkeypatch.delenv('DEEPGRAM_API_KEY', raising=False)
 
         with pytest.raises(pr.PrerecordedSTTConfigurationError) as exc_info:
             pr._deepgram_client_for_request()
 
         assert exc_info.value.provider == pr.PrerecordedSTTService.DEEPGRAM
-        assert exc_info.value.missing_env == 'DEEPGRAM_API_KEY'
+        assert exc_info.value.missing_env == 'DEEPGRAM_RETIRED'
 
-    def test_deepgram_byok_does_not_require_process_key(self, monkeypatch):
-        client = MagicMock()
-        factory = MagicMock(return_value=client)
-        monkeypatch.setattr(pr, '_deepgram_client', None)
-        monkeypatch.setattr(pr, '_deepgram_options', MagicMock())
-        monkeypatch.setattr(pr, 'get_byok_key', lambda _provider: 'user-byok-key')
+    def test_deepgram_byok_cannot_bypass_retirement(self, monkeypatch):
+        """Retirement outranks BYOK: no user key reopens the retired provider."""
+        factory = MagicMock()
         monkeypatch.setattr(pr, 'DeepgramClient', factory)
         monkeypatch.delenv('DEEPGRAM_API_KEY', raising=False)
 
-        assert pr._deepgram_client_for_request() is client
-        assert factory.call_args.args[0] == 'user-byok-key'
+        with pytest.raises(pr.PrerecordedSTTConfigurationError, match='DEEPGRAM_RETIRED'):
+            pr._deepgram_client_for_request()
+        factory.assert_not_called()
 
-    def test_byok_client_leaves_managed_credential_intact(self, monkeypatch):
-        """DeepgramClient.__init__ rewrites the options it is handed, so each
-        client needs its own — a shared object bills the managed client's
-        requests to whichever BYOK key was constructed last."""
-        monkeypatch.setattr(pr, '_deepgram_client', None)
-        monkeypatch.setattr(pr, 'get_byok_key', lambda _provider: None)
+    def test_managed_credential_cannot_bypass_retirement_either(self, monkeypatch):
+        """Deepgram retired 2026-08-27: even a configured managed key refuses."""
         monkeypatch.setenv('DEEPGRAM_API_KEY', 'managed-key')
 
-        managed = pr._deepgram_client_for_request()
-        assert managed._config.api_key == 'managed-key'
-
-        monkeypatch.setattr(pr, 'get_byok_key', lambda _provider: 'user-byok-key')
-        assert pr._deepgram_client_for_request()._config.api_key == 'user-byok-key'
-
-        assert managed._config.api_key == 'managed-key'
+        with pytest.raises(pr.PrerecordedSTTConfigurationError, match='DEEPGRAM_RETIRED'):
+            pr._deepgram_client_for_request()
 
 
 class TestTranscribeBytes:
@@ -567,13 +543,13 @@ class TestStreamingFactoryRouting:
             assert service == STTService.parakeet
             assert model == 'parakeet'
 
-    def test_parakeet_streaming_fallback_for_cjk_uses_deepgram(self):
+    def test_parakeet_streaming_fallback_for_cjk_skips_retired_deepgram(self):
         with patch('utils.stt.streaming.stt_service_models', ['parakeet', 'dg-nova-3']), patch.dict(
             os.environ, {'HOSTED_PARAKEET_API_URL': 'http://fake-parakeet:8080'}
         ):
             service, lang, model = get_stt_service_for_language('ja')
-            assert service == STTService.deepgram
-            assert model == 'nova-3'
+            assert service == STTService.modulate
+            assert model == 'velma-2'
 
     def test_parakeet_fallback_without_url_uses_policy_default(self):
         with patch('utils.stt.streaming.stt_service_models', ['parakeet']), patch.dict(os.environ, {}, clear=False):

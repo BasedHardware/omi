@@ -539,7 +539,7 @@ overlay:
             value: paid
             category: rollout
           DREAM_AGENT_PAID_PERCENT:
-            value: '25'
+            value: '100'
             category: rollout
           DREAM_AGENT_CONCURRENCY:
             value: '8'
@@ -741,6 +741,7 @@ overlay:
         forbidden_env:
         - DEEPGRAM_SELF_HOSTED_ENABLED
         - DEEPGRAM_SELF_HOSTED_URL
+        - DEEPGRAM_API_KEY
         - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
         - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
         - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
@@ -850,7 +851,7 @@ overlay:
             value: paid
             category: rollout
           DREAM_AGENT_PAID_PERCENT:
-            value: '25'
+            value: '100'
             category: rollout
           DREAM_AGENT_CONCURRENCY:
             value: '8'
@@ -1098,6 +1099,7 @@ overlay:
         forbidden_env:
         - DEEPGRAM_SELF_HOSTED_ENABLED
         - DEEPGRAM_SELF_HOSTED_URL
+        - DEEPGRAM_API_KEY
         - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
         - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
         - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
@@ -1196,7 +1198,7 @@ overlay:
             value: paid
             category: rollout
           DREAM_AGENT_PAID_PERCENT:
-            value: '25'
+            value: '100'
             category: rollout
           DREAM_AGENT_CONCURRENCY:
             value: '8'
@@ -1419,6 +1421,7 @@ overlay:
         forbidden_env:
         - DEEPGRAM_SELF_HOSTED_ENABLED
         - DEEPGRAM_SELF_HOSTED_URL
+        - DEEPGRAM_API_KEY
         - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
         - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
         - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
@@ -1479,7 +1482,7 @@ overlay:
             value: paid
             category: rollout
           DREAM_AGENT_PAID_PERCENT:
-            value: '25'
+            value: '100'
             category: rollout
           DREAM_AGENT_CONCURRENCY:
             value: '8'
