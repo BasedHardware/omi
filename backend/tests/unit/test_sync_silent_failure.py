@@ -10,6 +10,7 @@ silent returns or thread crashes, and the endpoint always returned 200.
 """
 
 import os
+import re
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
@@ -403,9 +404,15 @@ class TestAppSideSyncBehavior:
 
     def test_app_keeps_wals_retryable_on_failed_reconcile(self):
         """App keeps uploaded WALs retryable when sync v2 reconciliation fails."""
-        source = self._read_app_file('services/wals/local_wal_sync.dart')
-        if source is None:
+        library = self._read_app_file('services/wals/local_wal_sync.dart')
+        if library is None:
             pytest.skip("App source not available")
+        # The reconcile logic lives in `part` files of this library (e.g. wal_job_reconciliation.dart).
+        parts = [
+            self._read_app_file(f'services/wals/{name}') or ''
+            for name in re.findall(r"^part '([^']+)';", library, flags=re.MULTILINE)
+        ]
+        source = '\n'.join([library, *parts])
 
         assert 'reconcileUploadedWals' in source, "Must reconcile uploaded sync v2 jobs"
         assert 'case SyncJobFetchOutcome.notFound' in source, "Expired jobs must be recoverable"
