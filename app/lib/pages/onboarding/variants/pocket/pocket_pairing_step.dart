@@ -36,6 +36,7 @@ class _PocketPairingStepState extends State<PocketPairingStep> {
   /// The device an attempt was started for; never retried on its own (Scan again clears it).
   String? _attemptedId;
   bool _failed = false;
+  bool _completingConnected = false;
 
   @override
   void initState() {
@@ -62,7 +63,16 @@ class _PocketPairingStepState extends State<PocketPairingStep> {
   /// Connects the first Omi the scan found, exactly once per device, through the pairing page's
   /// own path. Runs after the frame so the provider is never mutated during build.
   void _maybeConnect(OnboardingProvider provider) {
-    if (_done || _failed || provider.isConnected || provider.isClicked) return;
+    if (_done) return;
+    if (provider.isConnected) {
+      // Already connected (an earlier attempt, or the pendant reconnected on its own): complete
+      // pairing once as connected so the walkthrough check still runs.
+      if (_completingConnected) return;
+      _completingConnected = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) => _finish(true));
+      return;
+    }
+    if (_failed || provider.isClicked) return;
     BtDevice? candidate;
     for (final device in provider.deviceList) {
       if (device.type == DeviceType.omi) {
@@ -132,7 +142,7 @@ class _PocketPairingStepState extends State<PocketPairingStep> {
               children: [
                 Align(
                   alignment: Alignment.centerLeft,
-                  child: OmiBackButton(onPressed: () => _finish(false)),
+                  child: OmiBackButton(onPressed: () => _finish(provider.isConnected)),
                 ),
                 const SizedBox(height: OmiSpacing.lg),
                 Padding(
