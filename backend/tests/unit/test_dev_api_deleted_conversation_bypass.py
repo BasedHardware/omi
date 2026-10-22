@@ -117,6 +117,8 @@ class TestDevApiDeletedConversationGuard:
 
         mock_record_deletion = MagicMock()
         monkeypatch.setattr(dev_routes.conversation_tombstones, 'record_deletion', mock_record_deletion)
+        mock_delete_embedding = MagicMock()
+        monkeypatch.setattr(dev_routes, 'delete_owner_prompt_embedding_cache', mock_delete_embedding)
         mock_delete_sources = MagicMock()
         monkeypatch.setattr(
             'utils.conversations.merge_conversations.delete_conversation_with_sync_sources', mock_delete_sources
@@ -125,6 +127,7 @@ class TestDevApiDeletedConversationGuard:
         result = dev_routes.delete_conversation_endpoint(conversation_id='conv-1', uid='test-uid')
         assert result == {"success": True}
         mock_record_deletion.assert_called_once_with('test-uid', 'conv-1')
+        mock_delete_embedding.assert_called_once_with('test-uid', 'conv-1')
         mock_delete_sources.assert_called_once_with('test-uid', 'conv-1')
 
     def test_patch_conversation_rejects_deleted(self, monkeypatch):
