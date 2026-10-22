@@ -49,10 +49,6 @@
       "reason": "Production capture and claim validation were removed with the legacy writer. backend/testing/episode_notes/prompts.py still imports EvidenceItem and render_episode_evidence for synthetic evaluation; runner.py imports restore_episode_claim_ids. Retain these evaluation adapters without restoring production capture."
     },
     {
-      "path": "backend/models/capture_coverage.py",
-      "reason": "Refactor contract (backend/docs/capture_speaker_notes_refactor.md) on the shared base branch; the five refactor lanes wire it in their PRs. Remove this entry once imported."
-    },
-    {
       "path": "backend/models/speaker_evidence.py",
       "reason": "Refactor contract (backend/docs/capture_speaker_notes_refactor.md) on the shared base branch; the five refactor lanes wire it in their PRs. Remove this entry once imported."
     },
@@ -62,10 +58,6 @@
     },
     {
       "path": "backend/utils/capture/__init__.py",
-      "reason": "Refactor contract (backend/docs/capture_speaker_notes_refactor.md) on the shared base branch; the five refactor lanes wire it in their PRs. Remove this entry once imported."
-    },
-    {
-      "path": "backend/config/refactor_modes.py",
       "reason": "Refactor contract (backend/docs/capture_speaker_notes_refactor.md) on the shared base branch; the five refactor lanes wire it in their PRs. Remove this entry once imported."
     }
   ]
