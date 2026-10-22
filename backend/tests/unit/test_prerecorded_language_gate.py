@@ -191,12 +191,13 @@ def test_service_route_is_not_trusted_over_the_backend_threshold(monkeypatch):
     'seconds,p_supported,safe',
     [
         (0.9, 0.999, False),
-        (3.0, 0.9405, False),  # highest offline P(supported) on 3 s unsupported speech
-        (3.0, 0.969, False),
-        (3.0, 0.97, True),
-        (5.99, 0.96, False),
-        (6.0, 0.9, True),
-        (30, 0.89, False),
+        (3.0, 0.9778, False),  # highest offline P(supported) on 3 s unsupported speech
+        (3.0, 0.984, False),
+        (3.0, 0.985, True),
+        (5.99, 0.98, False),
+        (6.0, 0.9218, False),  # highest offline P(supported) on >=6 s unsupported speech
+        (6.0, 0.95, True),
+        (30, 0.949, False),
     ],
 )
 def test_self_gate_threshold_by_measured_seconds(monkeypatch, seconds, p_supported, safe):

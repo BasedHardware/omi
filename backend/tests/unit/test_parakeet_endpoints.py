@@ -991,14 +991,14 @@ class TestLanguageEndpoint:
         assert body["route"] == "multilingual"
         assert body["language"] == "ar"
         assert body["p_supported"] == pytest.approx(0.0003)
-        assert body["threshold"] == 0.97
+        assert body["threshold"] == 0.985
         assert mod.LID_ROUTES.labels(route="multilingual", bucket="ar")._value.get() == before + 1
 
     def test_supported_speech_routes_parakeet(self):
-        client, _, _ = self._client({"en": 0.97, "de": 0.02, "ja": 0.01})
+        client, _, _ = self._client({"en": 0.975, "de": 0.02, "ja": 0.005})
         resp = client.post("/v2/language", files={"file": ("a.wav", _wav_bytes(12), "audio/wav")})
         assert resp.json()["route"] == "parakeet"
-        assert resp.json()["p_supported"] == pytest.approx(0.99)
+        assert resp.json()["p_supported"] == pytest.approx(0.995)
 
     def test_under_one_second_never_reaches_the_model(self):
         client, _, gpu = self._client({"en": 1.0})

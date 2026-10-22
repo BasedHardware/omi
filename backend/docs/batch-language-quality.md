@@ -103,18 +103,20 @@ on the GPU worker queue; Apache-2.0) scores at most the first 30 s of the probe
 and returns `p_supported`, the summed probability of the 25 Parakeet languages,
 with the top language and a route. MMS-LID scored better offline but is
 CC-BY-NC, so it cannot serve a commercial product. Parakeet needs
-`p_supported >= 0.90` for at least 6 s of audio, `>= 0.97` below 6 s, and never
+`p_supported >= 0.95` for at least 6 s of audio, `>= 0.985` below 6 s, and never
 below 1 s. The backend re-derives that rule
 (`config/prerecorded_language.self_lid_confidence_floor`) instead of trusting the
 service's `route`, and also requires the top language to be supported. The model
 never sees recognizer text. `PARAKEET_LID_MODEL=off` (the code default; the
 charts select `whisper-base`) makes the endpoint return 503.
 
-Offline (FLEURS 15 languages and the owned synthetic corpus; not prod audio)
-the highest `p_supported` Whisper-base gave an unsupported clip was 0.679 at
->=6 s and 0.941 for a 3 s crop, so no unsupported clip clears these thresholds.
-The cost is leakage: supported speech under 6 s, 8 kHz or noisy goes to the paid
-multilingual vendor more often. It scores the staging Arabic 6 s canary that
+Offline, through this serving code (FLEURS 15 languages x 60 clips as full,
+6 s, 3 s and 8 kHz copies, plus the owned synthetic corpus; not prod audio), the
+highest `p_supported` Whisper-base gave an unsupported clip was 0.922 at >=6 s
+and 0.978 for a 3 s crop, so 0 of 2,349 unsupported clips clear the thresholds
+(2 did at 0.90/0.97). The cost is leakage of supported speech to the paid
+multilingual vendor: 6/420 full clips, 21/420 6 s crops, 189/420 3 s crops and
+100/420 8 kHz copies. It scores the staging Arabic 6 s canary that
 Modulate called `en` 0.9258 as `ar` (`p_supported` < 0.01), and the soak003
 Chinese 6 s cases as `zh`.
 

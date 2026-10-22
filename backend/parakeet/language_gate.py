@@ -3,9 +3,10 @@
 The decision statistic is P(supported): the summed probability of the 25
 languages TDT v3 transcribes, from Whisper-base's language-token head (Apache-2.0;
 MMS-LID is CC-BY-NC and cannot serve a commercial product). Offline (FLEURS 15
-languages and the owned synthetic corpus, 909 unsupported clips) Whisper-base
-gave no unsupported clip of at least 6 s more than 0.679 and no 3 s crop more
-than 0.941, so the short threshold sits above that. The model never sees
+languages x 60 clips and the owned synthetic corpus, 2,349 unsupported clips)
+Whisper-base's highest P(supported) on unsupported speech was 0.922 at >=6 s
+(Hindi read as Romanian) and 0.978 on a 3 s crop (Indonesian as Italian); the
+thresholds sit above both. The model never sees
 recognizer text and never decodes past the language token.
 """
 
@@ -24,8 +25,8 @@ SAMPLE_RATE = 16000
 MAX_SECONDS = 30.0
 MIN_SECONDS = 1.0
 SHORT_SECONDS = 6.0
-LONG_THRESHOLD = 0.90
-SHORT_THRESHOLD = 0.97
+LONG_THRESHOLD = 0.95
+SHORT_THRESHOLD = 0.985
 
 # TDT v3 (nvidia/parakeet-tdt-0.6b-v3) languages; keep equal to the backend's
 # prerecorded Parakeet set in config/stt_provider_policy.py.

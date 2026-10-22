@@ -16,16 +16,16 @@ def gate():
 
 
 def test_p_supported_sums_the_parakeet_languages(gate):
-    verdict = gate.decide({"es": 0.5, "pt": 0.45, "gl": 0.05}, 10.0, "whisper-base")
+    verdict = gate.decide({"es": 0.5, "pt": 0.46, "gl": 0.04}, 10.0, "whisper-base")
     assert verdict.route == "parakeet"
     assert verdict.language == "es"
-    assert verdict.p_supported == pytest.approx(0.95)
+    assert verdict.p_supported == pytest.approx(0.96)
 
 
 @pytest.mark.parametrize(
     "seconds,p,route",
-    [(0.99, 1.0, "multilingual"), (3.0, 0.969, "multilingual"), (3.0, 0.97, "parakeet"),
-     (6.0, 0.899, "multilingual"), (6.0, 0.9, "parakeet")],
+    [(0.99, 1.0, "multilingual"), (3.0, 0.9778, "multilingual"), (3.0, 0.985, "parakeet"),
+     (6.0, 0.9218, "multilingual"), (6.0, 0.95, "parakeet")],
 )  # fmt: skip
 def test_thresholds_by_duration(gate, seconds, p, route):
     assert gate.decide({"en": p, "ja": 1 - p}, seconds, "m").route == route
