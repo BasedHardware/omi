@@ -1,6 +1,7 @@
 from utils.observability.sync_phases import observe_sync_call, sync_phase_timer
 import logging
 import os
+import random
 import time
 import wave as _wave
 from abc import ABC, abstractmethod
@@ -25,6 +26,7 @@ from config.prerecorded_stt import (
     require_provider_environment,
 )
 from config.prerecorded_language import language_class, language_guard_enabled
+from config.prerecorded_vendor import vendor_fail_fast_enabled
 from config.stt_provider_policy import (
     MODULATE_PROVIDER,
     PARAKEET_PROVIDER,
@@ -44,6 +46,16 @@ from utils.stt.parakeet_request_metrics import observe_parakeet_request
 from utils.stt.brand_terms import normalize_brand_terms
 from utils.stt.speaker_clustering import select_speaker_cluster
 from utils.stt.speaker_embedding import compare_embeddings, extract_embedding_from_bytes
+from utils.stt.vendor_guard import (
+    ENDPOINT_STT,
+    ModulateQuotaError,
+    breaker_allows,
+    is_quota_error,
+    record_breaker_other_failure,
+    record_breaker_quota_error,
+    record_breaker_success,
+    record_vendor_burn,
+)
 
 _DG_TIMEOUT = httpx.Timeout(connect=10.0, read=120.0, write=30.0, pool=10.0)
 _MODULATE_TIMEOUT = httpx.Timeout(connect=10.0, read=300.0, write=30.0, pool=10.0)
@@ -83,6 +95,25 @@ def _verification_timeout(default: httpx.Timeout | float) -> httpx.Timeout | flo
 
 
 _MAX_PRE_RECORDED_SEGMENT_DURATION_SECONDS = 30.0
+
+# Fail-fast retry backoff bounds (sync functions on executor threads).
+MODULATE_FAIL_FAST_RETRY_SLEEP_MIN_SECONDS = 0.25
+MODULATE_FAIL_FAST_RETRY_SLEEP_MAX_SECONDS = 0.75
+
+
+def _wav_duration_seconds(audio_bytes: bytes) -> float:
+    """Cheap WAV-header duration for burn accounting; unparseable audio is 0 seconds."""
+    try:
+        with _wave.open(BytesIO(audio_bytes)) as source:
+            rate = source.getframerate()
+            return source.getnframes() / rate if rate > 0 else 0.0
+    except Exception:
+        return 0.0
+
+
+def _fail_fast_retry_sleep() -> None:
+    time.sleep(random.uniform(MODULATE_FAIL_FAST_RETRY_SLEEP_MIN_SECONDS, MODULATE_FAIL_FAST_RETRY_SLEEP_MAX_SECONDS))
+
 
 logger = logging.getLogger(__name__)
 
@@ -587,6 +618,13 @@ def modulate_prerecorded_from_bytes(
 
     require_provider_environment(PrerecordedSTTService.MODULATE)
     api_key = os.environ['MODULATE_API_KEY']
+    fail_fast = vendor_fail_fast_enabled()
+    if fail_fast and not breaker_allows(ENDPOINT_STT):
+        raise ModulateQuotaError('Modulate transcription failed: vendor circuit breaker open')
+
+    posted = False
+    post_2xx = False
+    burn_seconds = 0.0
 
     try:
         url = 'https://modulate-developer-apis.com/api/velma-2-stt-batch'
@@ -595,8 +633,16 @@ def modulate_prerecorded_from_bytes(
         data = {'speaker_diarization': str(diarize).lower()}
 
         with httpx.Client(timeout=_verification_timeout(300)) as client:
+            burn_seconds = _wav_duration_seconds(audio_bytes)
+            posted = True
             response = client.post(url, headers=headers, files=files, data=data)
         response.raise_for_status()
+        post_2xx = True
+        if fail_fast:
+            record_breaker_success(ENDPOINT_STT)
+        # The POST itself reached the vendor and was accepted; a later shape
+        # validation failure is not a second burned POST.
+        record_vendor_burn(ENDPOINT_STT, 'ok', burn_seconds)
         result = response.json()
 
         # Velma's batch success shape carries utterances (a list, empty for silence)
@@ -672,7 +718,26 @@ def modulate_prerecorded_from_bytes(
         return words
 
     except Exception as e:
+        if posted and not post_2xx:
+            record_vendor_burn(ENDPOINT_STT, 'error', burn_seconds)
         logger.error('Modulate prerecorded error exception_type=%s attempt=%s', type(e).__name__, attempts + 1)
+        if fail_fast:
+            if is_quota_error(e):
+                record_breaker_quota_error(ENDPOINT_STT)
+                # Quota/auth rejections are terminal: the account is out of credits,
+                # retrying only burns more vendor quota. The prefix keeps callers and
+                # tests matching 'Modulate transcription failed' working.
+                raise ModulateQuotaError('Modulate transcription failed: vendor quota error') from e
+            if posted and not post_2xx:
+                record_breaker_other_failure(ENDPOINT_STT)
+            # Transient failures (5xx, timeouts, transport, malformed bodies) get at
+            # most one retry — 2 paid POSTs total — behind a short jittered backoff.
+            if attempts < 1 and _verification_deadline.get() is None and not _held_single_attempt.get():
+                _fail_fast_retry_sleep()
+                return modulate_prerecorded_from_bytes(
+                    audio_bytes, sample_rate, diarize, attempts + 1, return_language, language
+                )
+            raise RuntimeError(f'Modulate transcription failed after {attempts + 1} attempts') from e
         if attempts < 2 and _verification_deadline.get() is None and not _held_single_attempt.get():
             return modulate_prerecorded_from_bytes(
                 audio_bytes, sample_rate, diarize, attempts + 1, return_language, language
@@ -692,6 +757,28 @@ def modulate_prerecorded(
     logger.info(
         'modulate_prerecorded url_len=%s speakers_count=%s attempt=%s', len(audio_url), speakers_count, attempts
     )
+    if vendor_fail_fast_enabled():
+        # Only the download is retried; the paid bytes path runs once per URL call
+        # (its own single transient retry is bounded to 2 Modulate POSTs).
+        for download_attempt in (0, 1):
+            try:
+                with httpx.Client(timeout=_MODULATE_TIMEOUT) as client:
+                    resp = client.get(audio_url)
+                    resp.raise_for_status()
+                    audio_bytes = resp.content
+                break
+            except Exception as e:
+                logger.error(
+                    'Modulate prerecorded (url) download error exception_type=%s attempt=%s',
+                    type(e).__name__,
+                    download_attempt + 1,
+                )
+                if download_attempt == 0 and attempts < 1 and not _held_single_attempt.get():
+                    continue
+                raise RuntimeError(f'Modulate transcription (url) failed after {attempts + 1} attempts') from e
+        return modulate_prerecorded_from_bytes(
+            audio_bytes, diarize=diarize, attempts=attempts, return_language=return_language, language=language
+        )
     try:
         with httpx.Client(timeout=_MODULATE_TIMEOUT) as client:
             resp = client.get(audio_url)
