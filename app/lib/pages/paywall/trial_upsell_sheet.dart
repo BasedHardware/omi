@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import 'package:omi/pages/onboarding/interactive_device_onboarding/widgets/onboarding_step_scaffold.dart';
 import 'package:omi/pages/paywall/paywall_checkout.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/ui/ui.dart';
@@ -87,10 +88,11 @@ class _TrialUpsellBodyState extends State<_TrialUpsellBody> {
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: OmiSpacing.lg),
-          OmiButton(
+          // Same full pill as every other onboarding call to action (sign-in, paywall, walkthrough).
+          OnboardingContinueButton(
             key: const Key('trial_upsell_claim'),
             label: _busy ? l10n.pleaseWait : l10n.trialUpsellClaim(TrialUpsellSheet.trialDays),
-            onPressed: _busy ? null : _claim,
+            onPressed: _busy ? () {} : _claim,
           ),
           const SizedBox(height: OmiSpacing.xs),
           OmiButton.tertiary(

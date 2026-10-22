@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/gen/assets.gen.dart';
+import 'package:omi/pages/onboarding/interactive_device_onboarding/widgets/onboarding_step_scaffold.dart';
 import 'package:omi/providers/onboarding_provider.dart';
 import 'package:omi/services/devices/bluetooth_readiness.dart';
 import 'package:omi/ui/ui.dart';
@@ -208,10 +209,9 @@ class _PocketPairingStepState extends State<PocketPairingStep> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         if (_failed)
-                          OmiButton(
+                          OnboardingContinueButton(
                             key: const Key('pocket_pairing_scan_again'),
                             label: l10n.scanAgain,
-                            icon: Icons.refresh,
                             onPressed: _scanAgain,
                           ),
                         OmiButton.tertiary(
