@@ -564,9 +564,11 @@ class TestDownloadBatchBlobs:
 
         def blob_factory(path):
             b = MagicMock()
-            download_calls.append(path)
             if path == 'chunks/uid/conv/1000.000-1010.000.batch.bin':
-                b.download_as_bytes.return_value = pcm_data
+                b.download_as_bytes.side_effect = lambda **kwargs: (
+                    download_calls.append(path),
+                    pcm_data,
+                )[1]
             else:
                 b.download_as_bytes.side_effect = storage_mod.NotFound('not found')
             return b
@@ -577,6 +579,8 @@ class TestDownloadBatchBlobs:
         result = storage_mod.download_audio_chunks_and_merge('uid', 'conv', [1000.0, 1005.0, 1010.0], fill_gaps=False)
 
         assert result == pcm_data
+        # The default-on READ phase may open a metadata handle before the data
+        # read; the batch payload itself must still be fetched exactly once.
         batch_downloads = [p for p in download_calls if 'batch' in p]
         assert len(batch_downloads) == 1
 

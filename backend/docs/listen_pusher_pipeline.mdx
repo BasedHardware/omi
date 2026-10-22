@@ -5185,19 +5185,24 @@ Long-audio batch qualification uses the same final-pass HTTP client and public
 corpus only; see [the stage C load method and probe commands](diarizer-batch-stagec-load.md).
 Its wall/RTF scenarios remain unqualified until the lead fills the timing table.
 
-### As-captured archive trial
+### As-captured archive
 
-The default-off `AUDIO_ARCHIVE_*` cohort captures original live Opus packets
-before they are transformed for STT/pusher, using the same
-`omi-wal-uint32le-opus-v1` container and shared canonical writer as the mobile
-Standard archive. Live packs are owner/conversation/hour/channel bounded at
-16 MiB; non-Opus PCM uses lossless FLAC. v1/v2 offline intake archives original
-uploaded files before decode and acceptance. Raw metadata records unknown
-legacy provenance explicitly; storage consent never authorizes training.
+Per David's 2026-10-22 ruling (P71), the as-captured archive is a fleet
+default, not a trial: `AUDIO_ARCHIVE_LIVE_ENABLED` and
+`AUDIO_ARCHIVE_READ_ENABLED` default **on** (flag-only kill switches, no
+percent cohort) so the original live Opus packets are captured before they are
+transformed for STT/pusher, using the same `omi-wal-uint32le-opus-v1` container
+and shared canonical writer as the mobile Standard archive. Live packs are
+owner/conversation/hour/channel bounded at 16 MiB; non-Opus PCM uses lossless
+FLAC. v1/v2 offline intake archives original uploaded files before decode and
+acceptance (still behind `AUDIO_ARCHIVE_SYNC_ENABLED`). Raw metadata records
+unknown legacy provenance explicitly; storage consent never authorizes training.
 
 PCM remains available in dual-write. READ prefers complete, checksum-verified
-raw spans; STOP_PCM skips a batch only when committed raw reconstructs every
-PCM range, verified by capture-PCM hash or byte-identical decode. Missing spans,
+raw spans; STOP_PCM (default off, ramps on `AUDIO_ARCHIVE_STOP_PCM_PERCENT`,
+never the shared `AUDIO_ARCHIVE_PERCENT` that COALESCE pins at 100) skips a
+batch only when committed raw reconstructs every PCM range, verified by
+capture-PCM hash or byte-identical decode. Missing spans,
 checksum failures or identity mismatches keep today's
 path. Rollback STOP_PCM first; retain READ for raw-only history until verified
 PCM regeneration. Archive tail flushing runs after STT drain, outside its deadline.
@@ -5205,8 +5210,8 @@ Regional cache routing never relocates canonical capture. Account and conversati
 deletion purge live and noncurrent generations across configured buckets.
 
 The [archive runbook](runbooks/sync-ingest-archive.md) owns flag phases, bucket
-provisioning, C023 estimates, playback/byte/deletion canaries and David's
-≤5%/≥12h ramp. No live deployment or deletion is part of this change.
+provisioning, C023 estimates, playback/byte/deletion canaries and the STOP_PCM
+≤5%/≥12h ramp.
 ### Recent LEGACY offline-sync admission
 
 V2 resolves identity from `X-App-Platform` + `X-Device-Id-Hash`, but grants

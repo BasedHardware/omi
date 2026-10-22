@@ -186,9 +186,9 @@ env:
   - name: BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST
     value: ""
   - name: AUDIO_ARCHIVE_LIVE_ENABLED
-    value: "false"
+    value: "true"
   - name: AUDIO_ARCHIVE_READ_ENABLED
-    value: "false"
+    value: "true"
   - name: AUDIO_ARCHIVE_STOP_PCM_ENABLED
     value: "false"
   - name: AUDIO_ARCHIVE_SYNC_ENABLED
@@ -201,6 +201,8 @@ env:
     value: "false"
   - name: AUDIO_ARCHIVE_PERCENT
     value: "100"
+  - name: AUDIO_ARCHIVE_STOP_PCM_PERCENT
+    value: "0"
   - name: AUDIO_ARCHIVE_UID_ALLOWLIST
     value: ""
   - name: BUCKET_AUDIO_DERIVED
