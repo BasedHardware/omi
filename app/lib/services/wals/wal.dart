@@ -184,6 +184,10 @@ class Wal {
   DeviceType? deviceType;
   Map<String, dynamic>? onDeviceConversation;
 
+  /// Immutable continuation input, retained until conversation receipt is durable.
+  Map<String, dynamic>? onDevicePreparedUpload;
+  String? onDeviceUploadFailure;
+
   /// Recording-time custody evidence. Null identifies pre-fix dev records.
   bool? capturedOnDeviceOnly;
 
@@ -371,6 +375,8 @@ class Wal {
     this.holdForUser = false,
     this.deviceType,
     this.onDeviceConversation,
+    this.onDevicePreparedUpload,
+    this.onDeviceUploadFailure,
     this.capturedOnDeviceOnly,
     this.filePath,
     this.device = "phone",
@@ -416,6 +422,10 @@ class Wal {
       deviceType: DeviceType.values.asNameMap()[json['device_type']],
       onDeviceConversation:
           json['on_device_conversation'] is Map ? Map<String, dynamic>.from(json['on_device_conversation']) : null,
+      onDeviceUploadFailure: json['on_device_upload_failure'] as String?,
+      onDevicePreparedUpload: json['on_device_prepared_upload'] is Map
+          ? Map<String, dynamic>.from(json['on_device_prepared_upload'] as Map)
+          : null,
       capturedOnDeviceOnly: json['captured_on_device_only'] as bool?,
       filePath: json['file_path'],
       seconds: json['seconds'] ?? chunkSizeInSeconds,
@@ -464,6 +474,8 @@ class Wal {
       'hold_for_user': holdForUser,
       if (deviceType != null) 'device_type': deviceType!.name,
       'on_device_conversation': onDeviceConversation,
+      if (onDevicePreparedUpload != null) 'on_device_prepared_upload': onDevicePreparedUpload,
+      if (onDeviceUploadFailure != null) 'on_device_upload_failure': onDeviceUploadFailure,
       if (capturedOnDeviceOnly != null) 'captured_on_device_only': capturedOnDeviceOnly,
       'file_path': filePath,
       'seconds': seconds,

@@ -480,3 +480,22 @@ def test_a_failed_model_call_after_a_split_still_leaves_a_live_episode():
     current = episodes_db.get_current_episode(UID, firestore_client=store)
     assert current is not None and current['id'] != first['id'] and current['conversation_ids'] == ['c2']
     assert current['title'] == ''
+
+
+def test_moment_render_receives_account_and_conversation_and_language_reaches_update(monkeypatch):
+    from dataclasses import replace
+    from unittest.mock import Mock
+
+    render = Mock(wraps=service.incremental.render_moment)
+    update = Mock(wraps=service.incremental.run_incremental_update)
+    monkeypatch.setattr(service.incremental, 'render_moment', render)
+    monkeypatch.setattr(service.incremental, 'run_incremental_update', update)
+    moment = replace(_moment(), language='en')
+    model = FakeModel({'title': 'Fixture', 'moment_heading': 'Fixture', 'bullets': ['Fixture']})
+    result = service.record_moment(
+        UID, moment, _collaborators(model, now=T0 + timedelta(minutes=1), store=StrictFirestore())
+    )
+    assert result == 'applied'
+    assert render.call_args.kwargs == {'uid': UID, 'conversation_id': moment.conversation_id}
+    assert update.call_args.kwargs['conversation_language'] == 'en'
+    assert len(model.calls) == 1

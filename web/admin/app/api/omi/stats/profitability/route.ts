@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireScope } from "@/lib/auth";
 import { withRowLimit } from "@/lib/posthog";
-import { getOptionalStripe } from "@/lib/stripe";
+import { getOptionalStripeRead } from "@/lib/stripe";
 import {
   MRR_STATUSES,
   fetchOmiSubscriptions,
@@ -521,7 +521,7 @@ async function fetchStripeSnapshot(
   days: number,
   userPlatforms: Map<string, UserPlatformInfo>
 ): Promise<StripeSnapshot | null> {
-  const stripe = getOptionalStripe();
+  const stripe = getOptionalStripeRead();
   if (!stripe) return null;
 
   const mrrByPlatform: Record<Platform, number> = {

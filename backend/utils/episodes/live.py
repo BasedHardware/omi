@@ -231,7 +231,7 @@ async def _moment_if_client_seen(uid: str, moment: MomentInput) -> str:
     # orchestration pulls in the model client stack only once a moment actually ends.
     from utils.episodes.service import record_moment
 
-    return await executors.run_blocking(executors.postprocess_executor, record_moment, uid, moment)
+    return await executors.run_blocking(executors.lifecycle_executor(uid), record_moment, uid, moment)
 
 
 async def on_realtime_segments(

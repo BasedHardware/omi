@@ -34,14 +34,62 @@ import atexit
 import contextvars
 import functools
 import logging
+import queue
 import threading
 from concurrent.futures import Future, ThreadPoolExecutor
-from typing import Any, Callable, Coroutine, Dict, List, ParamSpec, TypeVar
+from typing import Any, Callable, Coroutine, Dict, List, ParamSpec, TypeVar, cast
+
+from prometheus_client import REGISTRY, Gauge
+from config.occasion_conversations import LIFECYCLE_V2_MODE_ENV
+from config.refactor_modes import serving_for
 
 logger = logging.getLogger(__name__)
 
 P = ParamSpec("P")
 T = TypeVar("T")
+
+
+# Static task vocabulary: never derive metric labels from arguments or task IDs.
+_TASKS = frozenset(
+    {
+        'record_episode_finalized',
+        'record_moment',
+        'attach_conversation',
+        'process_with_episode_budget',
+        'process_conversation',
+        'extract_memories',
+        '_save_summary_vector_fail_soft',
+        'trigger_realtime_integrations',
+        'finish_absorb',
+        'decide_and_apply',
+    }
+)
+
+
+def _gauge(name: str, description: str) -> Gauge:
+    try:
+        return Gauge(name, description, ['executor', 'task'])
+    except ValueError:
+        existing = getattr(REGISTRY, '_names_to_collectors', {}).get(name)
+        if getattr(existing, '_type', None) != 'gauge' or getattr(existing, '_labelnames', None) != (
+            'executor',
+            'task',
+        ):
+            raise ValueError(f'executor metric {name} already has a different shape')
+        return cast(Gauge, existing)
+
+
+EXECUTOR_ACTIVE = _gauge('omi_executor_task_active', 'Active worker tasks by bounded task kind.')
+EXECUTOR_QUEUED = _gauge('omi_executor_task_queued', 'Queued worker tasks by bounded task kind.')
+
+
+def _task_label(fn, args=()) -> str:
+    while isinstance(fn, functools.partial):
+        args, fn = fn.args, fn.func
+    if getattr(fn, '__name__', '') == 'run' and args:
+        return _task_label(args[0])
+    name = getattr(fn, '__name__', '')
+    return name if name in _TASKS else 'other'
 
 
 class ExecutorSaturatedError(RuntimeError):
@@ -51,12 +99,20 @@ class ExecutorSaturatedError(RuntimeError):
 class MonitoredThreadPoolExecutor(ThreadPoolExecutor):
     """ThreadPoolExecutor with active-task tracking and optional backpressure."""
 
-    def __init__(self, name: str, *, max_queue_size: int | None = None, **kwargs: Any):
+    def __init__(
+        self, name: str, *, max_queue_size: int | None = None, wait_on_saturation: bool = False, **kwargs: Any
+    ):
         super().__init__(**kwargs)
         self.name = name
         self._active_count = 0
         self._active_lock = threading.Lock()
         self.max_queue_size = max_queue_size
+        self._bounded_queue: queue.Queue[Any] | None = queue.Queue() if max_queue_size is not None else None
+        if self._bounded_queue is not None:
+            # A cancelled Future must not leave its payload in SimpleQueue
+            # while its semaphore slot is reused by a later submission.
+            setattr(self, "_work_queue", self._bounded_queue)
+        self.wait_on_saturation = wait_on_saturation
         max_workers = self._max_workers
         self._submission_slots = (
             threading.BoundedSemaphore(max_workers + max_queue_size) if max_queue_size is not None else None
@@ -69,31 +125,60 @@ class MonitoredThreadPoolExecutor(ThreadPoolExecutor):
     def submit(self, fn: Callable[..., T], /, *args: Any, **kwargs: Any) -> Future[T]:
         slots = self._submission_slots
         if slots is not None and not slots.acquire(blocking=False):
-            logger.warning(
-                'executor_saturated executor=%s workers=%s queue_capacity=%s',
-                self.name,
-                self._max_workers,
-                self.max_queue_size,
-            )
+            if not self.wait_on_saturation:
+                logger.warning(
+                    'executor_saturated executor=%s workers=%s queue_capacity=%s',
+                    self.name,
+                    self._max_workers,
+                    self.max_queue_size,
+                )
             raise ExecutorSaturatedError(
                 f'{self.name} executor is saturated ({self._max_workers} workers, {self.max_queue_size} queued)'
             )
+        task = _task_label(fn, args)
+        queued = EXECUTOR_QUEUED.labels(executor=self.name, task=task)
+        queued.inc()
+        started = threading.Event()
         try:
-            future = super().submit(self._tracked, fn, *args, **kwargs)
+            future = super().submit(self._tracked, fn, task, started, *args, **kwargs)
         except BaseException:
+            queued.dec()
             if slots is not None:
                 slots.release()
             raise
+
+        def cancelled(future):
+            if future.cancelled() and not started.is_set():
+                queued.dec()
+                if slots is not None:
+                    # Queue's mutex serializes removal against the worker get.
+                    # A worker that already dequeued it will observe cancellation.
+                    bounded = self._bounded_queue
+                    if bounded is None:
+                        raise RuntimeError('bounded executor has no queue')
+                    with bounded.mutex:
+                        pending = bounded.queue
+                        for item in pending:
+                            if getattr(item, 'future', None) is future:
+                                pending.remove(item)
+                                break
+
+        future.add_done_callback(cancelled)
         if slots is not None:
             future.add_done_callback(lambda _future: slots.release())
         return future
 
-    def _tracked(self, fn: Callable[..., T], *args: Any, **kwargs: Any) -> T:
+    def _tracked(self, fn: Callable[..., T], task: str, started: threading.Event, *args: Any, **kwargs: Any) -> T:
+        started.set()
+        EXECUTOR_QUEUED.labels(executor=self.name, task=task).dec()
+        active = EXECUTOR_ACTIVE.labels(executor=self.name, task=task)
+        active.inc()
         with self._active_lock:
             self._active_count += 1
         try:
             return fn(*args, **kwargs)
         finally:
+            active.dec()
             with self._active_lock:
                 self._active_count -= 1
 
@@ -136,6 +221,34 @@ _ALL_EXECUTORS = [
     cimd_executor,
 ]
 
+# refactor: superseded by bounded lifecycle pools when LIFECYCLE_V2_MODE=serve
+_lifecycle_pools: dict[str, MonitoredThreadPoolExecutor] = {}
+_lifecycle_pools_lock = threading.Lock()
+
+
+def lifecycle_executor(uid: str, *, episode: bool = False) -> MonitoredThreadPoolExecutor:
+    """Isolate episode bookkeeping first; backpressure admitted postprocessing.
+
+    The legacy pool remains unchanged for shadow and off users. Async callers
+    await capacity on these pools; sync submission fails explicitly on saturation.
+    """
+    if not serving_for(LIFECYCLE_V2_MODE_ENV, uid):
+        return postprocess_executor
+    name = 'episode' if episode else 'postprocess_v2'
+    with _lifecycle_pools_lock:
+        if name not in _lifecycle_pools:
+            pool = MonitoredThreadPoolExecutor(
+                name,
+                max_workers=2 if episode else 24,
+                max_queue_size=8 if episode else 96,
+                wait_on_saturation=True,
+                thread_name_prefix=name,
+            )
+            _lifecycle_pools[name] = pool
+            _ALL_EXECUTORS.append(pool)
+        return _lifecycle_pools[name]
+
+
 _context_executor: MonitoredThreadPoolExecutor | None = None
 _context_executor_lock = threading.Lock()
 
@@ -173,7 +286,17 @@ async def run_blocking(executor: ThreadPoolExecutor, fn: Callable[P, T], *args: 
     loop = asyncio.get_running_loop()
     ctx = contextvars.copy_context()
     call = functools.partial(ctx.run, functools.partial(fn, *args, **kwargs))
-    return await loop.run_in_executor(executor, call)
+    while True:
+        try:
+            future = loop.run_in_executor(executor, call)
+            break
+        except ExecutorSaturatedError:
+            if not getattr(executor, 'wait_on_saturation', False):
+                raise
+            # Backpressure stays in the async caller, without occupying another
+            # worker or discarding work. Cancellation before admission is safe.
+            await asyncio.sleep(0.05)
+    return await future
 
 
 def _log_background_failure(name: str, future: "Future[Any]") -> None:

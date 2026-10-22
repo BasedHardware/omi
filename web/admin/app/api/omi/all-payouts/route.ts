@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/firebase/admin";
 import { requireScope } from "@/lib/auth";
 import type Stripe from "stripe";
-import { getStripe } from "@/lib/stripe";
+import { getStripeRead } from "@/lib/stripe";
 export const dynamic = "force-dynamic";
 
 interface PayoutWithAppInfo {
@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
   const authResult = await requireScope(request, "finance:read");
   if (authResult instanceof NextResponse) return authResult;
 
-  const stripe = getStripe();
+  const stripe = getStripeRead();
   const db = getDb();
 
   try {

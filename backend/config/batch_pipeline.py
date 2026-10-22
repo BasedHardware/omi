@@ -1,5 +1,7 @@
 """Default-off batch admission cohort. Existing lane classification stays upstream."""
 
+from config.refactor_switches import default_off as rollout_default_off, default_on as rollout_default_on
+
 from enum import IntEnum
 import math
 import os
@@ -47,7 +49,10 @@ def fresh_gpu_priority_enabled() -> bool:
     The owner's FIFO is per priority, so a backlog sharing FRESH queued that
     owner's fresh uploads behind it. ``false`` is the kill switch.
     """
-    return os.getenv('BATCH_PIPELINE_FRESH_GPU_PRIORITY_ENABLED', 'true').strip().lower() != 'false'
+    return rollout_default_on(
+        'BATCH_PIPELINE_FRESH_GPU_PRIORITY_ENABLED',
+        os.getenv('BATCH_PIPELINE_FRESH_GPU_PRIORITY_ENABLED', 'true').strip().lower() != 'false',
+    )
 
 
 def priority_for(lane: str, recording_age_seconds: float | None) -> Priority:
@@ -139,7 +144,10 @@ def authoritative_labels_enabled() -> bool:
 
 
 def empty_asr_recovery_enabled() -> bool:
-    return os.getenv('BATCH_PIPELINE_EMPTY_ASR_RECOVERY_ENABLED', 'false').lower() == 'true'
+    return rollout_default_off(
+        'BATCH_PIPELINE_EMPTY_ASR_RECOVERY_ENABLED',
+        os.getenv('BATCH_PIPELINE_EMPTY_ASR_RECOVERY_ENABLED', 'false').lower() == 'true',
+    )
 
 
 def require_live_target_enabled() -> bool:
@@ -162,7 +170,10 @@ def recovery_enabled_for(owner_id: str) -> bool:
 
 def empty_asr_disposition_enabled() -> bool:
     """Dark strict-VAD disposition; accepted paid intents are never reset."""
-    return os.getenv('BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED', 'false').strip().lower() == 'true'
+    return rollout_default_off(
+        'BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED',
+        os.getenv('BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED', 'false').strip().lower() == 'true',
+    )
 
 
 def projection_contention_enabled() -> bool:
@@ -185,9 +196,11 @@ def terminal_empty_disposition_enabled() -> bool:
 
 def read_only_metrics_enabled() -> bool:
     """A scrape may stop draining only while the supervised drain is enabled."""
-    return (
-        os.getenv('BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED', 'false').strip().lower() == 'true'
-        and os.getenv('BATCH_PIPELINE_SERVING_ENABLED', 'false').strip().lower() == 'true'
+    return rollout_default_off(
+        'BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED',
+        os.getenv('BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED', 'false').strip().lower() == 'true',
+    ) and rollout_default_off(
+        'BATCH_PIPELINE_SERVING_ENABLED', os.getenv('BATCH_PIPELINE_SERVING_ENABLED', 'false').strip().lower() == 'true'
     )
 
 
@@ -199,7 +212,10 @@ def projection_timing_enabled() -> bool:
 
 def worker_silence_disposition_enabled() -> bool:
     """Dark worker-side use of integration's strict local silence evidence."""
-    return os.getenv('BATCH_PIPELINE_WORKER_SILENCE_DISPOSITION_ENABLED', 'false').strip().lower() == 'true'
+    return rollout_default_off(
+        'BATCH_PIPELINE_WORKER_SILENCE_DISPOSITION_ENABLED',
+        os.getenv('BATCH_PIPELINE_WORKER_SILENCE_DISPOSITION_ENABLED', 'false').strip().lower() == 'true',
+    )
 
 
 LONG_SPEECH_HANDOFF_SECONDS = 5.0
@@ -212,7 +228,10 @@ def long_speech_handoff_enabled() -> bool:
     pass and at least LONG_SPEECH_HANDOFF_SECONDS of worker VAD speech, skips the
     padded Parakeet retry and goes straight to quarantine recovery.
     """
-    return os.getenv('BATCH_PIPELINE_LONG_SPEECH_HANDOFF_ENABLED', 'true').strip().lower() != 'false'
+    return rollout_default_on(
+        'BATCH_PIPELINE_LONG_SPEECH_HANDOFF_ENABLED',
+        os.getenv('BATCH_PIPELINE_LONG_SPEECH_HANDOFF_ENABLED', 'true').strip().lower() != 'false',
+    )
 
 
 def second_multilingual_enabled() -> bool:
@@ -221,12 +240,18 @@ def second_multilingual_enabled() -> bool:
     A long-speech handoff unit whose Modulate recovery came back valid-empty gets
     one Deepgram multilingual call inside the same paid recovery intent.
     """
-    return os.getenv('BATCH_PIPELINE_SECOND_MULTILINGUAL_ENABLED', 'true').strip().lower() != 'false'
+    return rollout_default_on(
+        'BATCH_PIPELINE_SECOND_MULTILINGUAL_ENABLED',
+        os.getenv('BATCH_PIPELINE_SECOND_MULTILINGUAL_ENABLED', 'true').strip().lower() != 'false',
+    )
 
 
 def worker_validation_disposition_enabled() -> bool:
     """Ship-on deterministic validation handoff; false restores bounded GPU retries."""
-    return os.getenv('BATCH_PIPELINE_WORKER_VALIDATION_DISPOSITION_ENABLED', 'true').strip().lower() == 'true'
+    return rollout_default_on(
+        'BATCH_PIPELINE_WORKER_VALIDATION_DISPOSITION_ENABLED',
+        os.getenv('BATCH_PIPELINE_WORKER_VALIDATION_DISPOSITION_ENABLED', 'true').strip().lower() == 'true',
+    )
 
 
 def head_priority_enabled() -> bool:

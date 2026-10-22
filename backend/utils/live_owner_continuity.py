@@ -18,12 +18,13 @@ from database import conversations as conversations_db
 from utils.executors import db_executor, run_blocking
 from utils.manual_speaker_assignments import manual_owner_reserved, manual_rejected_speakers
 from utils.observability.owner_recognition import record_owner_reconnect
+from utils.speakers.policy import CONTINUITY
 from utils.stt.owner_profile import validated_embedding
 from utils.stt.speaker_embedding import compare_embeddings
 
 FRESH_SECONDS = 2.0
 # Stricter than the existing 0.50 cross-provider voice grouping boundary.
-SESSION_DISTANCE = 0.35
+SESSION_DISTANCE = CONTINUITY.distance
 
 
 def profile_digest(vector: Any) -> str:

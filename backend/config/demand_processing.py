@@ -1,14 +1,19 @@
 """Default-off demand scheduling. Read controls at each boundary."""
 
+from config.refactor_switches import default_off as rollout_default_off
+
 import os
+
+from config.policy.batch import cohort_bucket
 
 
 def enabled(uid: str | None = None) -> bool:
-    if os.getenv('DEMAND_PROCESSING_ENABLED', 'false').lower() != 'true':
+    if not rollout_default_off(
+        'DEMAND_PROCESSING_ENABLED', not (os.getenv('DEMAND_PROCESSING_ENABLED', 'false').lower() != 'true'), uid=uid
+    ):
         return False
     if uid is None:
         return True
-    import hashlib
 
     if not uid:
         return False
@@ -17,15 +22,23 @@ def enabled(uid: str | None = None) -> bool:
         percent = max(0, min(100, int(os.getenv('DEMAND_PROCESSING_PERCENT', '0'))))
     except ValueError:
         percent = 0
-    return uid in allowlist or int(hashlib.sha256(uid.encode()).hexdigest()[:8], 16) % 100 < percent
+    return uid in allowlist or cohort_bucket(uid, '', formula='modulo') < percent
 
 
 def lazy_enabled(uid: str | None = None) -> bool:
-    return enabled(uid) and os.getenv('DEMAND_PROCESSING_LAZY_ENABLED', 'false').lower() == 'true'
+    return enabled(uid) and rollout_default_off(
+        'DEMAND_PROCESSING_LAZY_ENABLED',
+        os.getenv('DEMAND_PROCESSING_LAZY_ENABLED', 'false').lower() == 'true',
+        uid=uid,
+    )
 
 
 def tool_enabled(uid: str | None = None) -> bool:
-    return enabled(uid) and os.getenv('DEMAND_PROCESSING_TOOL_ENABLED', 'false').lower() == 'true'
+    return enabled(uid) and rollout_default_off(
+        'DEMAND_PROCESSING_TOOL_ENABLED',
+        os.getenv('DEMAND_PROCESSING_TOOL_ENABLED', 'false').lower() == 'true',
+        uid=uid,
+    )
 
 
 OPEN_LEASE_SECONDS = 90
@@ -44,4 +57,7 @@ OPEN_PROMOTE_LIMIT = 20
 
 
 def surface_reporting_enabled() -> bool:
-    return os.getenv('DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED', 'false').lower() == 'true'
+    return rollout_default_off(
+        'DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED',
+        os.getenv('DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED', 'false').lower() == 'true',
+    )

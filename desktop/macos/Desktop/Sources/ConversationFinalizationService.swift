@@ -253,6 +253,7 @@ actor ConversationFinalizationService {
   }
 
   private func uploadLocalSegments(sessionId: Int64, allowBackendIdOverride: Bool = false) async throws -> Bool {
+    let uploadAuthorization = RuntimeOwnerIdentity.captureAuthorizationSnapshot()
     let uploadGeneration = await RewindDatabase.shared.poolGeneration()
     guard let bundle = try await TranscriptionStorage.shared.getSessionWithSegments(id: sessionId) else {
       throw TranscriptionStorageError.sessionNotFound
@@ -300,8 +301,11 @@ actor ConversationFinalizationService {
       }
     }
 
-    let uploadSegments = Self.compactSegmentsForBackendLimit(merged)
+    let chunked = await ClientRefactorFlags.chunks
+    // refactor: superseded by SegmentContinuationUpload when clients_from_segments_chunks=serve
+    let uploadSegments = chunked ? merged : Self.compactSegmentsForBackendLimit(merged)
     if uploadSegments.count != merged.count {
+      log("event=refactor_shadow lane=L5 check=segment_compaction outcome=disagree")
       log(
         "ConversationFinalization: Compacted local session \(sessionId) from \(merged.count) to \(uploadSegments.count) segments for backend upload"
       )
@@ -317,7 +321,11 @@ actor ConversationFinalizationService {
       transcript_segments: uploadSegments,
       source: bundle.session.source,
       started_at: iso.string(from: bundle.session.startedAt),
-      finished_at: bundle.session.finishedAt.map { iso.string(from: $0) },
+      finished_at: (chunked
+        ? SegmentContinuationUpload.finishedAt(
+          startedAt: bundle.session.startedAt,
+          finishedAt: bundle.session.finishedAt, segmentEnds: uploadSegments.map(\.end))
+        : bundle.session.finishedAt).map { iso.string(from: $0) },
       language: bundle.session.language,
       client_conversation_id: Self.localClientConversationId(session: bundle.session, sessionId: sessionId),
       conversation_role: bundle.session.conversationRole.rawValue,
@@ -325,7 +333,10 @@ actor ConversationFinalizationService {
       client_processing: clientProcessing,
       captureEvidence: nil
     )
-    let response = try await apiClient.createConversationFromSegments(request)
+    let response =
+      chunked
+      ? try await apiClient.createConversationFromSegmentChunks(request, authorization: uploadAuthorization)
+      : try await apiClient.createConversationFromSegments(request)
     if response.status == "deleted" {
       // A terminal deletion ack resolves this exact upload; never hydrate or retry it.
       try await TranscriptionStorage.shared.deleteSession(id: sessionId, expectedGeneration: uploadGeneration)
@@ -504,41 +515,6 @@ actor ConversationFinalizationService {
       }
     }
     return false
-  }
-
-  static func compactSegmentsForBackendLimit(
-    _ segments: [APIClient.UploadSegment],
-    maxSegments: Int = 500
-  ) -> [APIClient.UploadSegment] {
-    guard maxSegments > 0, segments.count > maxSegments else { return segments }
-
-    var compacted: [APIClient.UploadSegment] = []
-    compacted.reserveCapacity(maxSegments)
-    for index in 0..<maxSegments {
-      let startIndex = index * segments.count / maxSegments
-      let endIndex = (index + 1) * segments.count / maxSegments
-      let group = Array(segments[startIndex..<endIndex])
-      guard let first = group.first, let last = group.last else { continue }
-
-      let sameSpeaker = group.allSatisfy { segment in
-        segment.speaker == first.speaker
-          && segment.speaker_id == first.speaker_id
-          && segment.is_user == first.is_user
-          && segment.person_id == first.person_id
-      }
-      compacted.append(
-        APIClient.UploadSegment(
-          text: group.map(\.text).joined(separator: " "),
-          speaker: sameSpeaker ? first.speaker : "MIXED",
-          speaker_id: sameSpeaker ? first.speaker_id : nil,
-          is_user: sameSpeaker ? first.is_user : false,
-          person_id: sameSpeaker ? first.person_id : nil,
-          start: first.start,
-          end: last.end
-        )
-      )
-    }
-    return compacted
   }
 
   private func finalizeCloudSession(

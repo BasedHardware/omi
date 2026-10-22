@@ -148,7 +148,7 @@ export async function GET(request: NextRequest) {
               // Verify the account actually exists on our Stripe platform
               if (stripeAccountId) {
                 try {
-                  const stripe = (await import("@/lib/stripe")).getStripe();
+                  const stripe = (await import("@/lib/stripe")).getStripeRead();
                   const account = await stripe.accounts.retrieve(
                     stripeAccountId
                   );
@@ -274,9 +274,11 @@ export async function POST(request: NextRequest) {
       }
 
       // Verify the account exists and is onboarded on our Stripe platform
-      const stripe = (await import("@/lib/stripe")).getStripe();
+      const stripeLib = await import("@/lib/stripe");
       try {
-        const account = await stripe.accounts.retrieve(stripeAccountId);
+        const account = await stripeLib
+          .getStripeRead()
+          .accounts.retrieve(stripeAccountId);
         if (!account.charges_enabled || !account.details_submitted) {
           return authResult.json(
             { error: "Stripe account exists but onboarding is incomplete" },
@@ -290,12 +292,13 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      // 1. Send Stripe Transfer with idempotency key to prevent duplicate payments
+      // 1. Send Stripe Transfer with idempotency key to prevent duplicate payments.
+      //    The route's only Stripe write: the full key, never the read-only client.
       const todayUtc = new Date().toISOString().slice(0, 10);
       const idempotencyKey = `affiliate_payout_${affiliate_id}_${Math.round(
         amount * 100
       )}_${todayUtc}`;
-      const transfer = await stripe.transfers.create(
+      const transfer = await stripeLib.getStripe().transfers.create(
         {
           amount: Math.round(amount * 100), // cents
           currency: "usd",
