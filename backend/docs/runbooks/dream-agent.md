@@ -114,8 +114,14 @@ metadata is informational and cannot exclude Store users.
 
 An hourly sweep drains a durable `dream_due` queue ordered by due time, which
 combines backlog and staleness. Product writes enqueue immediately. Independent
-discovery scans 20 pages of 499 owners (9,980/hour), initializing missing rows
-transactionally without overwriting dirty work or waiting for model sessions.
+discovery scans 20 pages of 499 owners (9,980/hour), committing each page in
+100-owner transactions so a fully eligible page stays inside the 3 s RPC
+deadlines, without overwriting dirty work or waiting for model sessions. A
+discovery failure (for example a Firestore `DeadlineExceeded`) or its 120 s
+wall budget only degrades that sweep to the already-due queue — one payload-free
+warning plus a `record_fallback` — and never fails the sweep; the cursor
+advances only with a page's final chunk, so failed or budget-stopped pages
+re-scan from their start (chunk commits are idempotent under that replay).
 Future hunts remain queued (24 hours, six for heavy owners); daily-capped owners
 are deferred rather than blocking the queue head. Each drain admits up to 5,000
 owners with concurrency derived from reserved TPM and expected tokens (334 at
