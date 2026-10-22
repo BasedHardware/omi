@@ -827,6 +827,64 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
                 "schedule_id": None,
             }
 
+        # Check if the subscription is currently in a free trial
+        now_ts = int(time.time())
+        trial_end = stripe_sub.get('trial_end')
+        is_trialing = stripe_sub.get('status') == 'trialing' or (bool(trial_end) and trial_end > now_ts)
+
+        if is_trialing:
+            # During an active trial, changing the billing interval (e.g. annual -> monthly)
+            # must not end the trial early or trigger an immediate subscription_update invoice
+            # for the annual price. Creating a SubscriptionSchedule without trial params causes
+            # Stripe to end the trial immediately and charge the full annual amount.
+            # Instead, modify the subscription directly with proration_behavior='none' and preserve
+            # trial_end so the customer stays in the free trial until its original expiration,
+            # at which point Stripe bills the newly chosen interval price.
+            modify_params = {
+                'items': [{'id': current_item_id, 'price': request.price_id}],
+                'proration_behavior': 'none',
+                'metadata': {'uid': uid, 'upgrade_type': f'{current_plan.value}_{target_interval}'},
+            }
+            if trial_end and trial_end > now_ts:
+                modify_params['trial_end'] = trial_end
+            if resolved_promo_id:
+                modify_params['discounts'] = [{'promotion_code': resolved_promo_id}]
+
+            updated_sub = stripe.Subscription.modify(stripe_sub['id'], **modify_params)
+
+            new_subscription = _build_subscription_from_stripe_object(updated_sub.to_dict())
+            if new_subscription:
+                users_db.update_user_subscription(uid, new_subscription.model_dump())
+                set_credits_invalidation_signal(uid)
+                clear_trial_paywall_cache(uid)
+                if is_paid_plan(new_subscription.plan):
+                    conversations_db.unlock_all_conversations(uid)
+                    memories_db.unlock_all_memories(uid)
+                    action_items_db.unlock_all_action_items(uid)
+                    clear_fair_use_on_upgrade(uid)
+
+            logger.info(
+                f"Updated trialing subscription interval for user {uid}: {current_plan.value} -> {target_interval} "
+                f"(trial preserved until {trial_end})"
+            )
+
+            effective_end = trial_end if (trial_end and trial_end > now_ts) else stripe_sub.get('current_period_end', now_ts)
+            remaining_seconds = max(0, effective_end - now_ts)
+            remaining_days = max(0, remaining_seconds // 86400)
+
+            return {
+                "status": "success",
+                "message": (
+                    f"Plan interval updated to {target_interval}! Your free trial continues for "
+                    f"{remaining_days} more days, after which you will be billed the {target_interval} price."
+                ),
+                "subscription": (
+                    new_subscription.model_dump() if new_subscription else current_subscription.model_dump()
+                ),
+                "days_remaining": remaining_days,
+                "schedule_id": None,
+            }
+
         # Same plan, different interval (e.g. monthly→annual): schedule for end of period
         schedule = stripe.SubscriptionSchedule.create(
             from_subscription=stripe_sub['id'],
