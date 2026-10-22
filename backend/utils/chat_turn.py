@@ -743,9 +743,19 @@ class _LeasedReplySink:
     def response(self, stream, *, media_type):
         async def leased():
             source = stream if hasattr(stream, '__aiter__') else iterate_in_threadpool(stream)
-            async for frame in source:
-                yield frame
-            await run_blocking(db_executor, self.store.release, self.uid, 'app', self.token)
+            finished = False
+            try:
+                async for frame in source:
+                    yield frame
+                finished = True
+            finally:
+                if finished:
+                    await run_blocking(db_executor, self.store.release, self.uid, 'app', self.token)
+                else:
+                    # A stopped or failed reply (client Stop, or a new message replacing it) must
+                    # free the turn now, not when the lease goes stale. Submitted rather than
+                    # awaited: this runs while the stream is being cancelled.
+                    db_executor.submit(self.store.release, self.uid, 'app', self.token)
 
         return self.delegate.response(leased(), media_type=media_type)
 

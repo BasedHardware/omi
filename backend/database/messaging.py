@@ -54,6 +54,20 @@ _SETTING_DEFAULTS = {
 }
 
 
+def can_supersede(message):
+    """A plain user message (text or media) may replace a reply still being written.
+
+    Commands, button callbacks, link proofs and album parts never interrupt a turn.
+    """
+    return (
+        message.command is None
+        and not message.callback_id
+        and not message.link_proof
+        and not message.unlink
+        and not message.media_group_id
+    )
+
+
 class MessagingStore:
     def __init__(self, *, firestore_client=None):
         self._client = firestore_client
@@ -311,6 +325,8 @@ class MessagingStore:
                     'created_at': now,
                     'channel': message.channel,
                     'provider': message.provider,
+                    # Content-free: may this row replace a running reply nobody has seen yet?
+                    'supersedes': can_supersede(message),
                 },
             )
             if advances_inbound_head(message, prior):
@@ -657,6 +673,16 @@ class MessagingStore:
 
     def retry(self, path):
         self.db.document(path).update({'status': 'pending', 'album_appendable': firestore.DELETE_FIELD})
+
+    def superseding_pending(self, path):
+        """True when a newer user message is waiting behind the running row at ``path``.
+
+        Uses the same status/created_at query as :meth:`pending` (no new index) and
+        reads only content-free fields.
+        """
+        ref = self.db.document(path)
+        rows = ref.parent.where('status', '==', 'pending').order_by('created_at').limit(10).stream()
+        return any(row.reference.path != path and (row.to_dict() or {}).get('supersedes') for row in rows)
 
     def pending(self, message):
         """Recovery seam: Stage B's dispatcher periodically scans its owned identities."""
