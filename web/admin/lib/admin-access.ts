@@ -3,10 +3,11 @@
  * Next.js, so the server guard, the Team page and tests share one model.
  *
  * A member's access comes from `adminData/{uid}`:
- * - `owner: true` → every scope (set in Firestore only, never through the UI).
+ * - `owner: true` → every scope (set in Firestore only, never through the UI;
+ *   there may be more than one owner).
  * - `accessRole` → that role's scopes, adjusted by `scopeOverrides`.
  * - no `accessRole` → legacy: the full access every admin had before roles
- *   existed, until the owner or a deputy assigns one. `role` ("superadmin",
+ *   existed, until an owner or a deputy assigns one. `role` ("superadmin",
  *   "Admin") is only a display label and never grants anything.
  * - an `accessRole` this code does not know → no scopes (fail closed).
  */
@@ -37,8 +38,9 @@ export const SCOPE_LABELS: Record<Scope, string> = {
   "analytics:share": "Create and revoke TV wall links",
   "finance:read": "Revenue, subscriptions, payouts, affiliates",
   "finance:write": "Affiliate payout actions",
-  "users:read": "User support data (fair use, feedback, notifications)",
-  "users:write": "Change user state (fair-use resets, regenerate)",
+  "users:read": "User support data (fair use, feedback, notification history)",
+  "users:write":
+    "Change user state (fair-use resets, regenerate notifications)",
   "apps:read": "App store listings and review queue",
   "apps:write": "Approve, edit and feature apps",
   "content:read": "Announcements, prompts, CSAT, releases, Chat Lab",
@@ -259,7 +261,11 @@ export const PAGE_SCOPES: { prefix: string; scope: Scope; write?: Scope }[] = [
     scope: "content:read",
     write: "content:write",
   },
-  { prefix: "/dashboard/notifications", scope: "users:read" },
+  {
+    prefix: "/dashboard/notifications",
+    scope: "users:read",
+    write: "users:write",
+  },
   { prefix: "/dashboard/fair-use", scope: "users:read", write: "users:write" },
   { prefix: "/dashboard/feedback", scope: "users:read", write: "users:write" },
   { prefix: "/dashboard", scope: "analytics:read" },

@@ -4,7 +4,11 @@ import {
   DEV_BYPASS_TOKEN,
   DEV_BYPASS_UID,
 } from "@/lib/dev-auth";
-import { verifyFirebaseToken, getDb } from "@/lib/firebase/admin";
+import {
+  verifyFirebaseToken,
+  getDb,
+  isFirebaseTokenError,
+} from "@/lib/firebase/admin";
 import { usesFirebaseIssuer, verifyStatsReader } from "@/lib/stats-reader-auth";
 import {
   STATS_READER_SCOPES,
@@ -97,7 +101,16 @@ async function authenticate(
       email: typeof data.email === "string" ? data.email : null,
       access: accessFor(data),
     };
-  } catch {
+  } catch (error) {
+    if (isFirebaseTokenError(error)) {
+      // The token itself is bad (bad signature, malformed, expired): an
+      // unauthenticated caller, not a server fault. Never logged, so token
+      // probing cannot spam the error log.
+      return NextResponse.json(
+        { error: "Unauthorized: Invalid token" },
+        { status: 401 }
+      );
+    }
     console.error("Error verifying admin");
     return NextResponse.json(
       { error: "Internal server error during auth" },

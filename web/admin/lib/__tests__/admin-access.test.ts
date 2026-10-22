@@ -69,6 +69,7 @@ describe("pageScope", () => {
   it("names the scope a page's edit controls need", () => {
     expect(pageWriteScope("/dashboard/announcements")).toBe("content:write");
     expect(pageWriteScope("/dashboard/reviews")).toBe("apps:write");
+    expect(pageWriteScope("/dashboard/notifications")).toBe("users:write");
     expect(pageWriteScope("/dashboard/subscriptions")).toBeNull();
   });
 });

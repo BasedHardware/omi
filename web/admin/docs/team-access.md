@@ -6,32 +6,32 @@ Detail for the **Permissions** and **Team agents** rules in `web/admin/AGENTS.md
 
 Each admin is an `adminData/{uid}` document. Access comes from three fields:
 
-| Field | Effect |
-| --- | --- |
-| `owner: true` | Every scope. Set in Firestore only; no API or UI writes it. |
-| `accessRole` | One of the roles below. Written by the Team page or an approved proposal. |
-| `scopeOverrides` | `{ grant: Scope[], deny: Scope[] }` applied on top of the role. `team:manage` cannot be granted this way. |
+| Field            | Effect                                                                                                             |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `owner: true`    | Every scope. Set in Firestore only; no API or UI writes it. Any number of admins may be owners (prod carries two). |
+| `accessRole`     | One of the roles below. Written by the Team page or an approved proposal.                                          |
+| `scopeOverrides` | `{ grant: Scope[], deny: Scope[] }` applied on top of the role. `team:manage` cannot be granted this way.          |
 
 `role` ("superadmin", "Admin", …) is a display label only. It is kept in sync
 with `accessRole` when a role is assigned and never grants anything.
 
-A doc with **no `accessRole`** is *legacy*: it keeps the access every admin had
-before roles (every scope except `team:manage`) until the owner or a deputy
+A doc with **no `accessRole`** is _legacy_: it keeps the access every admin had
+before roles (every scope except `team:manage`) until an owner or a deputy
 assigns a role. An `accessRole` this code does not recognise grants nothing
 (fail closed).
 
 ## Roles
 
-| Role (`accessRole`) | Scopes |
-| --- | --- |
-| Owner (`owner: true`) | all |
-| `deputy` — Deputy owner | all, including `team:manage` |
-| `admin` — Admin | all except `team:manage` |
-| `finance` — Finance | `analytics:read`, `finance:read`, `finance:write`, `partners:read` |
-| `support` — Support | `analytics:read`, `users:read`, `users:write`, `apps:read`, `content:read` |
-| `viewer` — Viewer (read-only) | `analytics:read`, `apps:read`, `content:read` |
-| legacy (no `accessRole`) | all except `team:manage` |
-| stats reader (machine) | `analytics:read`, `finance:read`, GET under `/api/omi/stats/` only |
+| Role (`accessRole`)               | Scopes                                                                     |
+| --------------------------------- | -------------------------------------------------------------------------- |
+| Owner (`owner: true`; any number) | all                                                                        |
+| `deputy` — Deputy owner           | all, including `team:manage`                                               |
+| `admin` — Admin                   | all except `team:manage`                                                   |
+| `finance` — Finance               | `analytics:read`, `finance:read`, `finance:write`, `partners:read`         |
+| `support` — Support               | `analytics:read`, `users:read`, `users:write`, `apps:read`, `content:read` |
+| `viewer` — Viewer (read-only)     | `analytics:read`, `apps:read`, `content:read`                              |
+| legacy (no `accessRole`)          | all except `team:manage`                                                   |
+| stats reader (machine)            | `analytics:read`, `finance:read`, GET under `/api/omi/stats/` only         |
 
 Scope meanings are in `SCOPE_LABELS` (`lib/admin-access.ts`). The route → scope
 inventory is `lib/route-scopes.ts`.
@@ -43,8 +43,9 @@ Enforced server-side in `lib/team/roster.ts`, for direct edits and approvals ali
 - `team:invite` adds a person with a role **no broader than the inviter's own**.
   New people default to `viewer` when no role is sent.
 - `team:manage` (owner, deputies) changes roles and removes people.
-- Nobody changes or removes themselves. Nobody changes or removes the owner.
-- Only the owner appoints, changes or removes a deputy.
+- Nobody changes or removes themselves. Nobody changes or removes an
+  owner — not even another owner.
+- Only an owner appoints, changes or removes a deputy.
 - Every add, removal, role change and proposal event writes an `adminAuditLog`
   entry (`at`, `action`, `actor`, `target`, `before`, `after`, and the
   proposal and proposer when one was approved) in the same transaction.
@@ -73,12 +74,12 @@ They read the roster and audit log and **file** proposals. They hold no admin
 scope, cannot call any other admin route, and there is no agent route that
 approves.
 
-| Method and path | Purpose |
-| --- | --- |
-| `GET /api/agent/team` | Roster: uid, email, role, scopes, created, last sign-in |
-| `GET /api/agent/team/audit?limit=100` | Audit log, newest first |
-| `GET /api/agent/team/proposals` | Proposals and their status |
-| `POST /api/agent/team/proposals` | File a proposal |
+| Method and path                       | Purpose                                                 |
+| ------------------------------------- | ------------------------------------------------------- |
+| `GET /api/agent/team`                 | Roster: uid, email, role, scopes, created, last sign-in |
+| `GET /api/agent/team/audit?limit=100` | Audit log, newest first                                 |
+| `GET /api/agent/team/proposals`       | Proposals and their status                              |
+| `POST /api/agent/team/proposals`      | File a proposal                                         |
 
 Proposal bodies (`reason` is required, 1–500 characters):
 
@@ -89,12 +90,12 @@ Proposal bodies (`reason` is required, 1–500 characters):
 ```
 
 Refused: targets that are the agent itself, any `*.gserviceaccount.com` email
-or other allowlisted agent, the owner, unknown uids or roles, a second pending
+or other allowlisted agent, an owner, unknown uids or roles, a second pending
 proposal for the same target (409), and more than 20 pending per agent (429).
 Overlapping requests are serialized by per-agent and per-target lock docs
 (`adminProposalLocks`) read and written in the filing transaction. Proposals
 expire 72 hours after filing; expiry is audited with a `system` actor
-(`proposal-expiry`) and the proposer in `proposedBy`. The owner or a deputy approves or
+(`proposal-expiry`) and the proposer in `proposedBy`. An owner or a deputy approves or
 rejects on the Team page (`POST /api/omi/team-members/proposals/{id}`, Firebase
 session with `team:manage`); approval re-runs the team management rules above,
 so a deputy cannot approve a deputy appointment.
@@ -103,10 +104,10 @@ so a deputy cannot approve a deputy appointment.
 
 Server-only Cloud Run env vars, like the stats reader's (`docs/stats-reader.md`):
 
-| Variable | Value |
-| --- | --- |
-| `ADMIN_TEAM_AGENT_AUDIENCE` | `https://admin.omi.me/api/agent/team` |
-| `ADMIN_TEAM_AGENT_SAS` | comma or whitespace separated service-account emails |
+| Variable                    | Value                                                |
+| --------------------------- | ---------------------------------------------------- |
+| `ADMIN_TEAM_AGENT_AUDIENCE` | `https://admin.omi.me/api/agent/team`                |
+| `ADMIN_TEAM_AGENT_SAS`      | comma or whitespace separated service-account emails |
 
 Both empty (the default) disables the agent API: every call returns 401. Use a
 dedicated service account with no project roles and no keys; grant each agent's

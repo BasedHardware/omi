@@ -16,8 +16,8 @@ function NoAccess({ scope }: { scope: keyof typeof SCOPE_LABELS }) {
         Your role does not include this page
       </h2>
       <p className="mt-2 text-sm text-muted-foreground">
-        It needs <code>{scope}</code> ({SCOPE_LABELS[scope]}). Ask the workspace
-        owner or a deputy to change your role on the Team page.
+        It needs <code>{scope}</code> ({SCOPE_LABELS[scope]}). Ask an owner or a
+        deputy to change your role on the Team page.
       </p>
     </div>
   );

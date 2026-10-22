@@ -11,7 +11,7 @@ export type { AuditEntry, Proposal };
 
 export interface TeamViewer {
   uid: string;
-  /** `adminData/{uid}.owner === true`; only the owner manages deputies. */
+  /** `adminData/{uid}.owner === true` (any number of owners); only owners manage deputies. */
   isOwner: boolean;
   /** team:manage — change roles, remove people, approve proposals. */
   canManage: boolean;

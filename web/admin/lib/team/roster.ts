@@ -118,7 +118,7 @@ function assertNoBroaderThanActor(
     );
   }
   if (role === "deputy" && actor.access.kind !== "owner") {
-    throw new TeamError(403, "Only the workspace owner can appoint deputies.");
+    throw new TeamError(403, "Only an owner can appoint deputies.");
   }
 }
 
@@ -130,10 +130,7 @@ export function assertCanChange(
   verb: "remove" | "change"
 ) {
   if (!hasScope(actor.access, "team:manage")) {
-    throw new TeamError(
-      403,
-      "Only the workspace owner or a deputy can change the team."
-    );
+    throw new TeamError(403, "Only an owner or a deputy can change the team.");
   }
   if (targetUid === actor.uid) {
     throw new TeamError(
@@ -149,11 +146,11 @@ export function assertCanChange(
   if (isOwner(target)) {
     throw new TeamError(
       403,
-      "The workspace owner is set in Firestore and cannot be changed here."
+      "Owners are set in Firestore and cannot be changed here."
     );
   }
   if (isDeputy(target) && actor.access.kind !== "owner") {
-    throw new TeamError(403, "Only the workspace owner can change a deputy.");
+    throw new TeamError(403, "Only an owner can change a deputy.");
   }
 }
 

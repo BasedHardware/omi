@@ -20,7 +20,7 @@ import { ROLES, ROLE_IDS, type RoleId } from "@/lib/admin-access";
 
 interface AddTeamMemberDialogProps {
   children: ReactNode;
-  /** Only the workspace owner may appoint deputies. */
+  /** Only an owner may appoint deputies. */
   isOwner?: boolean;
   onMemberAdded: () => void | Promise<void>;
 }

@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
 }
 
 /**
- * File a proposed roster change. Nothing changes until the owner or a deputy
+ * File a proposed roster change. Nothing changes until an owner or a deputy
  * approves it on the Team page; there is no agent route that approves.
  */
 export async function POST(request: NextRequest) {

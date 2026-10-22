@@ -152,6 +152,34 @@ describe("team agent authentication", () => {
     ).toBe(401);
   });
 
+  it("rejects every agent route when the Authorization header is missing", async () => {
+    const calls: [string, () => Promise<Response>][] = [
+      [
+        "GET /api/agent/team",
+        () => rosterGET(adminRequest(null, "GET", "/api/agent/team")),
+      ],
+      [
+        "GET /api/agent/team/audit",
+        () => auditGET(adminRequest(null, "GET", "/api/agent/team/audit")),
+      ],
+      [
+        "GET /api/agent/team/proposals",
+        () =>
+          proposalsGET(adminRequest(null, "GET", "/api/agent/team/proposals")),
+      ],
+      [
+        "POST /api/agent/team/proposals",
+        () =>
+          proposePOST(
+            adminRequest(null, "POST", "/api/agent/team/proposals", {})
+          ),
+      ],
+    ];
+    for (const [name, call] of calls) {
+      expect((await call()).status, name).toBe(401);
+    }
+  });
+
   it("gets no admin scope: human routes, user data and approval all refuse the agent token", async () => {
     const token = agentToken();
     expect(

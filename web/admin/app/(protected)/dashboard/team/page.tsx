@@ -294,7 +294,7 @@ export default function TeamPage() {
           <CardHeader>
             <CardTitle>Proposed changes</CardTitle>
             <CardDescription>
-              Filed by agents. Nothing changes until the owner or a deputy
+              Filed by agents. Nothing changes until an owner or a deputy
               approves. Unapproved proposals expire.
             </CardDescription>
           </CardHeader>

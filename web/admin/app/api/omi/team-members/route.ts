@@ -40,10 +40,12 @@ const removeTeamMemberSchema = z.object({
 });
 
 /**
- * The workspace owner is the admin whose `adminData/{uid}` doc carries
- * `owner: true`; it is set in Firestore, never through this API. The owner and
- * deputies (team:manage) change roles and remove people; only the owner
- * appoints, changes or removes deputies. Nobody changes or removes themselves.
+ * Owners are the admins whose `adminData/{uid}` docs carry `owner: true`
+ * (there may be more than one); it is set in Firestore, never through this
+ * API. Owners and deputies (team:manage) change roles and remove people; only
+ * an owner appoints, changes or removes deputies. Nobody changes or removes
+ * themselves, and no owner can be changed or removed by anyone — including
+ * another owner.
  */
 export async function GET(request: NextRequest) {
   const authResult = await requireScope(request, "team:read");

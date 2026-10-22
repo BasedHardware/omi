@@ -163,10 +163,7 @@ export async function createProposal(
     const email = typeof data.email === "string" ? data.email : null;
     assertTargetIsAPerson(agentEmail, email);
     if (data.owner === true) {
-      throw new TeamError(
-        403,
-        "The workspace owner cannot be changed by proposal."
-      );
+      throw new TeamError(403, "Owners cannot be changed by proposal.");
     }
     target = { uid: input.uid, email };
     before = snapshot(data);

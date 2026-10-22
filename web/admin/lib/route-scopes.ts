@@ -75,7 +75,7 @@ export const ROUTE_POLICIES: Record<string, RoutePolicy> = {
   "POST /api/omi/feedback/reports/[reportDate]": "users:write",
   "GET /api/omi/feedback/events/[eventId]/context": "users:read",
   "GET /api/omi/notifications/user-notifications": "users:read",
-  "POST /api/omi/notifications/regenerate": "users:read",
+  "POST /api/omi/notifications/regenerate": "users:write",
 
   // Apps
   "GET /api/omi/apps": "apps:read",

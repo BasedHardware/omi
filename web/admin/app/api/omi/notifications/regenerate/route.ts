@@ -385,7 +385,7 @@ async function processItem(
 }
 
 export async function POST(request: NextRequest) {
-  const authResult = await requireScope(request, "users:read");
+  const authResult = await requireScope(request, "users:write");
   if (authResult instanceof NextResponse) return authResult;
 
   try {

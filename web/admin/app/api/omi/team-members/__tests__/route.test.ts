@@ -27,6 +27,7 @@ vi.mock("@/lib/email/invite", () => ({
 
 import { DELETE, GET, PATCH, POST } from "../route";
 import { GET as auditGET } from "../audit/route";
+import { SCOPES } from "@/lib/admin-access";
 
 const OWNER = "nik-uid-0001";
 const SUPERADMIN = "thinh-uid-0002";
@@ -450,6 +451,58 @@ describe("PATCH /api/omi/team-members", () => {
         )
       ).status
     ).toBe(400);
+  });
+});
+
+describe("multiple owners", () => {
+  // Prod carries two owners (Nik and David); `owner: true` is per-doc.
+  const OWNER_2 = "david-uid-0006";
+
+  beforeEach(() => {
+    members().set(OWNER_2, {
+      email: "david@example.com",
+      name: "David",
+      owner: true,
+    });
+  });
+
+  it("gives both owners full access", async () => {
+    for (const uid of [OWNER, OWNER_2]) {
+      const body = await (await GET(as(uid, "GET"))).json();
+      expect(body.viewer).toMatchObject({
+        uid,
+        isOwner: true,
+        canManage: true,
+        canInvite: true,
+        canRemove: true,
+      });
+      expect(body.viewer.scopes).toEqual([...SCOPES]);
+    }
+    // Full access in practice: the second owner manages the team like the first.
+    expect((await DELETE(as(OWNER_2, "DELETE", { uid: ARCHIT }))).status).toBe(
+      200
+    );
+    expect(members().has(ARCHIT)).toBe(false);
+  });
+
+  it("never lets one owner remove or re-role the other", async () => {
+    expect((await DELETE(as(OWNER, "DELETE", { uid: OWNER_2 }))).status).toBe(
+      403
+    );
+    expect((await DELETE(as(OWNER_2, "DELETE", { uid: OWNER }))).status).toBe(
+      403
+    );
+    expect(
+      (await PATCH(as(OWNER, "PATCH", { uid: OWNER_2, accessRole: "viewer" })))
+        .status
+    ).toBe(403);
+    expect(
+      (await PATCH(as(OWNER_2, "PATCH", { uid: OWNER, accessRole: "viewer" })))
+        .status
+    ).toBe(403);
+    expect(members().get(OWNER).owner).toBe(true);
+    expect(members().get(OWNER_2).owner).toBe(true);
+    expect(auditRows()).toEqual([]);
   });
 });
 
