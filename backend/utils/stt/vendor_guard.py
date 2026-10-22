@@ -23,6 +23,9 @@ QUOTA_BODY_MARKER = 'insufficient credits'
 BREAKER_FAILURE_THRESHOLD = 5
 BREAKER_WINDOW_SECONDS = 60.0
 BREAKER_OPEN_SECONDS = 60.0
+# A trial that never reports back (worker killed, unexpected exception path) must not
+# hold the breaker open forever; longer than the 300 s Modulate STT read timeout.
+BREAKER_TRIAL_TIMEOUT_SECONDS = 360.0
 
 BREAKER_OPEN_GAUGE = Gauge(
     'omi_prerecorded_vendor_breaker_open',
@@ -63,13 +66,14 @@ def is_quota_error(exc: BaseException) -> bool:
 
 
 class _EndpointBreaker:
-    __slots__ = ('lock', 'failures', 'opened_at', 'trial_in_flight')
+    __slots__ = ('lock', 'failures', 'opened_at', 'trial_in_flight', 'trial_started_at')
 
     def __init__(self):
         self.lock = threading.Lock()
         self.failures = deque()
         self.opened_at = None
         self.trial_in_flight = False
+        self.trial_started_at = 0.0
 
     def evict(self, now: float) -> None:
         while self.failures and now - self.failures[0] > BREAKER_WINDOW_SECONDS:
@@ -107,9 +111,10 @@ def breaker_allows(endpoint: str) -> bool:
             return True
         if now - state.opened_at < BREAKER_OPEN_SECONDS:
             return False
-        if state.trial_in_flight:
+        if state.trial_in_flight and now - state.trial_started_at < BREAKER_TRIAL_TIMEOUT_SECONDS:
             return False
         state.trial_in_flight = True
+        state.trial_started_at = now
         return True
 
 
@@ -138,6 +143,17 @@ def record_breaker_quota_error(endpoint: str) -> None:
             state.trial_in_flight = False
     if state.opened_at is not None:
         _set_gauge(endpoint, 1)
+
+
+def record_breaker_other_failure(endpoint: str) -> None:
+    """A non-quota failure proves nothing about credits: release a half-open trial, keep the breaker open."""
+    if not vendor_fail_fast_enabled():
+        return
+    state = _breaker_for(endpoint)
+    with state.lock:
+        if state.trial_in_flight:
+            state.trial_in_flight = False
+            state.opened_at = _clock()
 
 
 def record_vendor_burn(endpoint: str, outcome: str, seconds: float) -> None:

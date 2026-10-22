@@ -319,6 +319,35 @@ def test_breaker_allows_exactly_one_half_open_trial(monkeypatch):
     assert vendor_guard.breaker_allows('stt') is True
 
 
+def test_breaker_trial_with_a_5xx_does_not_wedge_the_breaker(monkeypatch):
+    """A non-quota trial failure must release the trial; otherwise the breaker stays open until restart."""
+    now = {'t': 1000.0}
+    monkeypatch.setattr(vendor_guard, '_clock', lambda: now['t'])
+    no_retry_sleep(monkeypatch)
+    client = prime_stt_breaker(monkeypatch)
+    now['t'] += vendor_guard.BREAKER_OPEN_SECONDS + 1
+    client.post.side_effect = lambda *args, **kwargs: stt_reply(503)
+    with pytest.raises(RuntimeError):
+        stt.modulate_prerecorded_from_bytes(wav_bytes())
+    assert client.post.call_count == 6  # the trial; its retry meets the re-opened breaker
+    now['t'] += vendor_guard.BREAKER_OPEN_SECONDS + 1
+    client.post.side_effect = lambda *args, **kwargs: stt_reply(200)
+    assert stt.modulate_prerecorded_from_bytes(wav_bytes()) == []
+    assert breaker_gauge('stt') == 0
+
+
+def test_abandoned_trial_expires(monkeypatch):
+    now = {'t': 1000.0}
+    monkeypatch.setattr(vendor_guard, '_clock', lambda: now['t'])
+    for _ in range(vendor_guard.BREAKER_FAILURE_THRESHOLD):
+        vendor_guard.record_breaker_quota_error('lid')
+    now['t'] += vendor_guard.BREAKER_OPEN_SECONDS + 1
+    assert vendor_guard.breaker_allows('lid') is True
+    assert vendor_guard.breaker_allows('lid') is False
+    now['t'] += vendor_guard.BREAKER_TRIAL_TIMEOUT_SECONDS + 1
+    assert vendor_guard.breaker_allows('lid') is True
+
+
 def test_breaker_is_inert_while_fail_fast_is_off(monkeypatch):
     for _ in range(vendor_guard.BREAKER_FAILURE_THRESHOLD + 2):
         vendor_guard.record_breaker_quota_error('stt')

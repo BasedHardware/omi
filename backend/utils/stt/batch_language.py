@@ -24,6 +24,7 @@ from utils.stt.vendor_guard import (
     ENDPOINT_LID,
     breaker_allows,
     is_quota_error,
+    record_breaker_other_failure,
     record_breaker_quota_error,
     record_breaker_success,
     record_vendor_burn,
@@ -142,6 +143,8 @@ def detect(audio: bytes, *, before_probe=None, **audio_options) -> LanguageDecis
         outcome = _probe_failure_outcome(e)
         if outcome == 'quota':
             record_breaker_quota_error(ENDPOINT_LID)
+        elif sent:
+            record_breaker_other_failure(ENDPOINT_LID)
         return decision
     finally:
         try:

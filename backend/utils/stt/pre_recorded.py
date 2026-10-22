@@ -51,6 +51,7 @@ from utils.stt.vendor_guard import (
     ModulateQuotaError,
     breaker_allows,
     is_quota_error,
+    record_breaker_other_failure,
     record_breaker_quota_error,
     record_breaker_success,
     record_vendor_burn,
@@ -727,6 +728,8 @@ def modulate_prerecorded_from_bytes(
                 # retrying only burns more vendor quota. The prefix keeps callers and
                 # tests matching 'Modulate transcription failed' working.
                 raise ModulateQuotaError('Modulate transcription failed: vendor quota error') from e
+            if posted and not post_2xx:
+                record_breaker_other_failure(ENDPOINT_STT)
             # Transient failures (5xx, timeouts, transport, malformed bodies) get at
             # most one retry — 2 paid POSTs total — behind a short jittered backoff.
             if attempts < 1 and _verification_deadline.get() is None and not _held_single_attempt.get():
