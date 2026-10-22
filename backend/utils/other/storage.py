@@ -1831,6 +1831,8 @@ def enqueue_conversation_audio_merge(
 # ----------------------------------------------------------------------------
 
 CONVERSATION_ARTIFACT_NAME = 'conversation'
+# Bump whenever gap collapse, span projection, or MP3 export settings change.
+CONVERSATION_BUILD_FORMAT = 'dense-gap-collapse-spans-mp3-48k-16khz-v1'
 
 
 def compute_audio_files_fingerprint(
@@ -1854,7 +1856,15 @@ def compute_audio_files_fingerprint(
             for af in audio_files
         ]
         return hashlib.sha256(
-            json.dumps({'files': manifest, 'origin': origin}, sort_keys=True, default=str).encode()
+            json.dumps(
+                {
+                    'format': CONVERSATION_BUILD_FORMAT,
+                    'files': sorted(manifest, key=lambda part: json.dumps(part, sort_keys=True, default=str)),
+                    'origin': origin,
+                },
+                sort_keys=True,
+                default=str,
+            ).encode()
         ).hexdigest()
     parts = []
     for af in audio_files:
@@ -1868,27 +1878,6 @@ def compute_audio_files_fingerprint(
         parts.append(entry)
     parts.sort(key=lambda p: p[0])
     return hashlib.sha1(json.dumps(parts).encode()).hexdigest()[:12]
-
-
-def maybe_invalidate_conversation_playback(
-    uid: str,
-    conversation_id: str,
-    conversation: Optional[Dict[str, Any]],
-    audio_files: List[Dict[str, Any]],
-    caller: str,
-) -> None:
-    """Re-enqueue the conversation artifact build if a stamped artifact went
-    stale (audio_files changed). No stamp -> no-op, so live-conversation batch
-    flushes never churn rebuilds; the first build happens at completion."""
-    if playback_on_demand():
-        return  # Invalidation is detected by /urls; background updates do no build work.
-    stamp = (conversation or {}).get('conversation_audio') or {}
-    stamped = stamp.get('audio_files_fingerprint')
-    if not stamped:
-        return
-    fingerprint = compute_audio_files_fingerprint(audio_files)
-    if fingerprint != stamped:
-        enqueue_conversation_artifact_build(uid, conversation_id, fingerprint, caller)
 
 
 def _conversation_playback_blob(uid: str, conversation_id: str, fingerprint: str | None = None):
@@ -1913,7 +1902,9 @@ def upload_conversation_playback_artifact(
 
 
 def get_conversation_playback_manifest(uid: str, conversation_id: str, fingerprint: str):
-    return cached_manifest(_conversation_playback_blob(uid, conversation_id, fingerprint))
+    blob = _conversation_playback_blob(uid, conversation_id, fingerprint)
+    with owner_storage_write_gate(uid, getattr(blob, 'bucket', None)):
+        return cached_manifest(blob)
 
 
 def _conversation_playback_unavailable_blob(uid: str, conversation_id: str):

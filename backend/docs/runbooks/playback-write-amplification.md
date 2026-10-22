@@ -99,7 +99,10 @@ and archive/coalescing stages dark. Those later changes cannot explain onset.
 
 Source manifest identities and legacy-handle aliases apply regardless of the
 on-demand rollout. New conversation objects use a SHA-256 key covering source
-manifest/layout and timeline origin. The worker checks the immutable MP3 and
+manifest/layout, timeline origin, and `storage.CONVERSATION_BUILD_FORMAT`. The
+file list is canonically sorted before hashing. Bump this constant whenever
+conversation gap collapse, span projection, or export settings change; source
+identity alone cannot invalidate a changed assembly algorithm. The worker checks the immutable MP3 and
 its spans manifest *before* encoding. Spans publish first as a create-only JSON
 sidecar, then MP3, then the conversation stamp. A failed stamp can recover from
 GCS without encoding. Create-only `if_generation_match=0` prevents overwrites
@@ -114,6 +117,52 @@ recognized by rollback readers, so they can also locate the immutable MP3. On-de
 rollout settings are unchanged. Per-file and dense conversation objects are both
 retained for released clients; this PR does not collapse those two formats into
 one incompatible API. No lifecycle rules or workflow files are changed.
+
+## Force regeneration of a bad pinned object
+
+Automatic repair: invalid JSON, empty manifests, and malformed/non-finite span
+fields are cache misses. The worker deletes the observed MP3 and sidecar using
+`if_generation_match` on each snapshot, then rebuilds. It also repairs orphan
+sidecars. A competing replacement is protected by its new generation. This path
+respects the account destructive-operation fence. A legacy MP3 missing a sidecar
+gets one published after a single reconstruction; stamp retries then reuse it
+without encoding again, even without the metadata marker.
+
+A valid-looking manifest cannot detect bad audio bytes. For that incident, a
+separately approved operator can force one exact conversation version to rebuild:
+
+1. Use the approved operator tier and deployed backend environment. Scope the
+   operation to the regional bucket and exact conversation/version; confirm the
+   source chunks remain available. Avoid racing an active audio-merge run lock.
+   This PR's investigation uses only ro-prod and performs none of these writes.
+2. Snapshot generations for exactly
+   `playback/<owner>/<conversation>/conversation-<artifact-fingerprint>.mp3`,
+   that name plus `.manifest.json`, and
+   `playback/<owner>/<conversation>/conversation.unavailable` (if present).
+   Delete each snapshot with a generation precondition, never a recursive prefix:
+
+   ```python
+   # bucket is the explicitly scoped google.cloud.storage Bucket.
+   snapshots = [blob for name in exact_names if (blob := bucket.get_blob(name)) is not None]
+   for blob in snapshots:
+       blob.delete(if_generation_match=blob.generation)
+   ```
+
+   On a precondition failure, stop and re-observe the pair; do not delete the
+   newer generation automatically. Do not delete source chunks or edit the
+   conversation stamp. The unavailable marker must be cleared or readers can
+   continue reporting unavailable.
+3. Request the normal `/v1/sync/audio/{id}/urls` endpoint. Its existence check
+   returns pending and enqueues the rebuild; the successful worker re-stamps the
+   existing doc. A consumed named-task tombstone can still suppress that enqueue.
+   In that case enqueue the current schema-v2 payload with `enqueue_named_task`
+   under a fresh one-off repair name and the audio-merge handler as OIDC audience.
+   Use the current computed fingerprint, `on_demand=true`, and current
+   `requested_at`; preserve the worker/run-lock path. Do not change a fingerprint
+   merely to escape task deduplication or disable the run lock.
+4. Verify a new object generation, a valid sidecar, a completed worker, and a
+   newly resolved URL. Existing clients holding the deleted URL may need their
+   normal refresh/retry action; this procedure does not remove the expiry blockers.
 
 ## Expiry verdict: BLOCKED for the no-user-visible-failure requirement
 
@@ -157,9 +206,15 @@ metadata alone. Compare the new metric and next inventory after a separately
 approved deployment. The supplied 1,255.70 GiB/day is net stock growth, not gross
 bytes written; it should not be conflated with this forward-write estimate.
 
-Local focused verification: **243 tests passed across 12 files**, through
+Initial focused verification: **243 tests passed across 12 files**, through
 `cd backend && BACKEND_PYTEST_WORKERS=4 BACKEND_UNIT_TEST_FILE_LIST=<file-list> nice -n 10 ./test.sh`
 wrapped in the workspace `omi-heavy` runner. Focused tests exercise stable identities with the rollout disabled, changed
 sources, legacy aliases, create-only races, large spans, stamp-failure retry via
 the actual FastAPI HTTP route, deleted conversations, and destructive-operation
 fences. Local and CI receipts belong to the PR; no live user-audio canary ran.
+
+Review follow-up verification: **147 tests passed across 8 affected files**
+through the same four-worker `test.sh` runner. Added guards cover build-format
+bumps, file-order invariance (including equal-start assembly), malformed sidecar
+recovery on the final task attempt, generation-race protection, legacy sidecar
+publication, and v1/v2 supersession through FastAPI HTTP.

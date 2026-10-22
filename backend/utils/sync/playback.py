@@ -600,7 +600,7 @@ def build_conversation_playback_artifact(
     """
     parts = sorted(
         [af for af in audio_files if af.get('id') and af.get('chunk_timestamps')],
-        key=lambda af: min(af['chunk_timestamps']),
+        key=lambda af: (min(af['chunk_timestamps']), str(af['id'])),
     )
     verified = (strict_sources or playback_on_demand()) and any(af.get('source_fingerprint') for af in parts)
     if verified:

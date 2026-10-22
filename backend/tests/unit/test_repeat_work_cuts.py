@@ -106,9 +106,6 @@ def test_background_updates_do_not_build_but_open_and_play_enqueue(monkeypatch):
     storage.precache_conversation_audio('u', 'c', files)
     storage.enqueue_conversation_audio_merge('u', 'c', files, 'process_conversation')
     storage.enqueue_conversation_artifact_build('u', 'c', 'fp', 'sync_finalize')
-    storage.maybe_invalidate_conversation_playback(
-        'u', 'c', {'conversation_audio': {'audio_files_fingerprint': 'old'}}, files, 'pusher'
-    )
     enqueue.assert_not_called()
     storage.enqueue_conversation_audio_merge('u', 'c', files, 'sync_download')
     storage.enqueue_conversation_artifact_build('u', 'c', 'fp', 'sync_urls')
