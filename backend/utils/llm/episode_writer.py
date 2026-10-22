@@ -5,7 +5,7 @@ from datetime import timezone
 from typing import Any
 
 from utils.conversations.episode_compaction import compact_episode_items
-from utils.conversations.episode_selection import deterministic_episode_selection
+from utils.conversations.episode_selection import _datetime, deterministic_episode_selection
 
 
 def bind_episode_effort(model: Any, effort: str) -> Any:
@@ -51,9 +51,9 @@ def episode_input_bytes(messages) -> int:
 
 
 def episode_finish_local_iso(finished_at, user_tz):
-    if finished_at is None:
+    aware = _datetime(finished_at)
+    if aware is None:
         return None
-    aware = finished_at if finished_at.tzinfo else finished_at.replace(tzinfo=timezone.utc)
     return aware.astimezone(user_tz).isoformat()
 
 

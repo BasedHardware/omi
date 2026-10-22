@@ -43,7 +43,9 @@ class EvidenceItem(BaseModel):
 
 def evidence_time(value: Any) -> str | None:
     if isinstance(value, datetime):
-        return (value if value.tzinfo else value.replace(tzinfo=timezone.utc)).isoformat()
+        if value.tzinfo is None or value.tzinfo.utcoffset(value) is None:
+            return value.replace(tzinfo=timezone.utc).isoformat()
+        return value.isoformat()
     return str(value) if value is not None else None
 
 
