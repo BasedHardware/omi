@@ -14596,4 +14596,9 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get deviceControls => 'Mga Kontrol';
+
+  @override
+  String homeBackgroundLine(String items) {
+    return 'Gayundin: $items';
+  }
 }

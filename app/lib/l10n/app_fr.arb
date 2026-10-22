@@ -4441,5 +4441,6 @@
     "deviceCatchingUpProgress": "{done} sur {total} min",
     "deviceRecently": "Récemment",
     "deviceDisconnectedFor": "Déconnecté pendant {duration}",
-    "deviceControls": "Commandes"
+    "deviceControls": "Commandes",
+    "homeBackgroundLine": "Aussi : {items}"
 }

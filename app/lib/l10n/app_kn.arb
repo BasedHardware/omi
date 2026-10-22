@@ -11832,5 +11832,6 @@
     "deviceCatchingUpProgress": "{done}/{total} ನಿಮಿಷ",
     "deviceRecently": "ಇತ್ತೀಚೆಗೆ",
     "deviceDisconnectedFor": "{duration} ಸಂಪರ್ಕ ಕಡಿತ",
-    "deviceControls": "ನಿಯಂತ್ರಣಗಳು"
+    "deviceControls": "ನಿಯಂತ್ರಣಗಳು",
+    "homeBackgroundLine": "ಜೊತೆಗೆ: {items}"
 }

@@ -4441,5 +4441,6 @@
     "deviceCatchingUpProgress": "{done} из {total} мин",
     "deviceRecently": "Недавно",
     "deviceDisconnectedFor": "Отключено на {duration}",
-    "deviceControls": "Управление"
+    "deviceControls": "Управление",
+    "homeBackgroundLine": "Также: {items}"
 }

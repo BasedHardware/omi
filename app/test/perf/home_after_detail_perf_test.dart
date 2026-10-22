@@ -24,6 +24,7 @@ import 'package:omi/models/sync_state.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/page.dart' show ConversationDetailPage;
 import 'package:omi/pages/conversations/conversations_page.dart';
+import 'package:omi/pages/conversations/widgets/background_day_line.dart';
 import 'package:omi/pages/conversations/widgets/conversation_list_item.dart';
 import 'package:omi/pages/episodes/live_episode_row.dart';
 import 'package:omi/providers/app_provider.dart';
@@ -230,14 +231,14 @@ TranscriptSegment _segment(int i) => TranscriptSegment(
       end: i * 8.0 + 7,
     );
 
-ServerConversation _conversation(int i, {int segmentCount = 0}) {
+ServerConversation _conversation(int i, {int segmentCount = 0, String? salience}) {
   final created = _seedNow.subtract(Duration(hours: 3 * i));
   return ServerConversation(
     id: 'conv-$i',
     createdAt: created,
     startedAt: created,
     finishedAt: created.add(const Duration(minutes: 22)),
-    structured: Structured('Conversation $i', 'Overview $i.', emoji: '🧠', category: 'other'),
+    structured: Structured('Conversation $i', 'Overview $i.', emoji: '🧠', category: 'other', salience: salience),
     transcriptSegments: [for (var j = 0; j < segmentCount; j++) _segment(j)],
   );
 }
@@ -260,6 +261,10 @@ Episode _liveEpisode() => Episode(
 /// row), 30 conversations as the list endpoint projects them (two lines each),
 /// and the detail endpoint hydrating an opened one with its full transcript.
 class _Home {
+  _Home({this.background = const {}});
+
+  /// Conversations whose notes call them background (Episodes M3).
+  final Set<int> background;
   DateTime now = _seedNow;
   late final _LiveCapture capture = _LiveCapture();
   late final EpisodeProvider episodes = EpisodeProvider(
@@ -270,7 +275,10 @@ class _Home {
     clock: () => now,
   );
   late final ConversationProvider conversations = ConversationProvider(isSignedIn: () => false)
-    ..conversations = [for (var i = 0; i < 30; i++) _conversation(i, segmentCount: 2)]
+    ..conversations = [
+      for (var i = 0; i < 30; i++)
+        _conversation(i, segmentCount: 2, salience: background.contains(i) ? 'background' : null),
+    ]
     ..groupConversationsByDate()
     ..conversationDetailsFetcherOverride = (id) async => hydrated(int.parse(id.substring('conv-'.length)));
 
@@ -334,12 +342,12 @@ Widget _app(_Home home) {
   );
 }
 
-Future<_Home> _pumpHome(WidgetTester tester) async {
+Future<_Home> _pumpHome(WidgetTester tester, {Set<int> background = const {}}) async {
   tester.view.physicalSize = const Size(800, 1600);
   tester.view.devicePixelRatio = 1.0;
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
-  final home = _Home();
+  final home = _Home(background: background);
   await tester.pumpWidget(_app(home));
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 300));
@@ -421,6 +429,31 @@ void main() {
   tearDown(() {
     AnalyticsManager.resetForTesting();
     VisibilityDetectorController.instance.updateInterval = const Duration(milliseconds: 500);
+  });
+
+  testWidgets('background conversations fold into one line under their day and open on tap', (tester) async {
+    // Today holds conv-0 (12:30), conv-1 (09:30), conv-2 (06:30) and conv-3 (03:30).
+    await _pumpHome(tester, background: {1, 2});
+    expect(find.byType(BackgroundDayLine), findsOneWidget);
+    final line = tester.widget<Text>(find.descendant(of: find.byType(BackgroundDayLine), matching: find.byType(Text)));
+    // Two short transcript lines each, under a minute, so no length.
+    expect(line.data, 'Also: Conversation 1 · Conversation 2');
+    expect(find.byKey(const ValueKey('conv-1')), findsNothing);
+    expect(find.byKey(const ValueKey('conv-0')), findsOneWidget);
+    // The line sits under today's header, below the live episode row.
+    expect(tester.getTopLeft(find.byType(BackgroundDayLine)).dy,
+        greaterThan(tester.getTopLeft(find.byType(LiveEpisodeRow)).dy));
+    expect(tester.getTopLeft(find.byType(BackgroundDayLine)).dy,
+        lessThan(tester.getTopLeft(find.byKey(const ValueKey('conv-0'))).dy));
+
+    await tester.tap(find.byType(BackgroundDayLine));
+    await tester.pump();
+    expect(find.byKey(const ValueKey('conv-1')), findsOneWidget);
+    expect(find.byKey(const ValueKey('conv-2')), findsOneWidget);
+    await tester.tap(find.byType(BackgroundDayLine));
+    await tester.pump();
+    expect(find.byKey(const ValueKey('conv-1')), findsNothing);
+    await _drainAndUnmount(tester);
   });
 
   testWidgets('opening a row hands the scheduler no idle task while Home animates, and still reports the open',

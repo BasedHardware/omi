@@ -14380,4 +14380,9 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get deviceControls => 'פקדים';
+
+  @override
+  String homeBackgroundLine(String items) {
+    return 'גם: $items';
+  }
 }

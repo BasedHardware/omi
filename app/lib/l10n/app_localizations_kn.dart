@@ -14529,4 +14529,9 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get deviceControls => 'ನಿಯಂತ್ರಣಗಳು';
+
+  @override
+  String homeBackgroundLine(String items) {
+    return 'ಜೊತೆಗೆ: $items';
+  }
 }

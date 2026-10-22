@@ -11832,5 +11832,6 @@
     "deviceCatchingUpProgress": "{done} з {total} хв",
     "deviceRecently": "Нядаўна",
     "deviceDisconnectedFor": "Адключаны на {duration}",
-    "deviceControls": "Кіраванне"
+    "deviceControls": "Кіраванне",
+    "homeBackgroundLine": "Таксама: {items}"
 }

@@ -14495,4 +14495,9 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get deviceControls => 'کنٹرولز';
+
+  @override
+  String homeBackgroundLine(String items) {
+    return 'نیز: $items';
+  }
 }

@@ -1145,6 +1145,33 @@ UI grouping, transcript merging, multi-capture chain consolidation, and link
 reconciliation after later user edits/discards remain follow-ups.
 
 
+## Occasion conversations (episodes cohort)
+
+For the episodes beta cohort, the live conversation is the occasion instead of
+being split on silence and stitched back together by smart merge afterwards
+(`backend/config/occasion_conversations.py`, ruling David 2026-10-22).
+
+- **Admission** happens once per session in `runtime._bootstrap`:
+  `client_gate.occasion_mode(uid, source)` requires `OCCASION_CONVERSATIONS_ENABLED`
+  (on unless set off), the episodes cohort, and the per-user client-seen marker,
+  and fails closed on any read error. Desktop sources and multi-channel
+  (phone-call) sessions are never admitted, so their boundaries are unchanged.
+- **Silence window.** An admitted session's `conversation_creation_timeout` is at
+  least `OCCASION_GAP_SECONDS` (15 min, a constant); a longer user setting wins.
+- **Reconnects.** When a new recording id opens a session, `_occasion_attach_target`
+  proposes the user's open conversation instead of a fresh id when it is
+  `in_progress`, not deleted, discarded or locked, from the same device and an
+  attachable source, under the span cap, and resumable under the extended
+  timeout (`event=occasion_attach`). The recording-session transaction then
+  binds the new recording id to it and restamps
+  `external_data.recording_session_id`, which sync lineage accepts.
+- **Span cap.** `lifecycle_loop` turns `continue_current` into
+  `process_and_create_new` once a conversation has spanned
+  `OCCASION_MAX_SPAN_SECONDS` (3 h, smart merge's cap)
+  (`event=occasion_span_rollover`).
+- **Off** restores the 2-minute split and per-recording conversations at the
+  next session; open sessions keep the timeout they started with.
+
 ## Same-occasion folding across a silence split (smart merge)
 
 The two-minute silence split can turn one occasion into several pendant

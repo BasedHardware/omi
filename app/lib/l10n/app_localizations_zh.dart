@@ -14258,4 +14258,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get deviceControls => '控制';
+
+  @override
+  String homeBackgroundLine(String items) {
+    return '另外：$items';
+  }
 }

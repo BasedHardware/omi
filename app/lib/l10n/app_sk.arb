@@ -4406,5 +4406,6 @@
     "deviceCatchingUpProgress": "{done} z {total} min",
     "deviceRecently": "Nedávno",
     "deviceDisconnectedFor": "Odpojené na {duration}",
-    "deviceControls": "Ovládanie"
+    "deviceControls": "Ovládanie",
+    "homeBackgroundLine": "Tiež: {items}"
 }

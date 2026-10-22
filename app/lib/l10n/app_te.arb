@@ -11832,5 +11832,6 @@
     "deviceCatchingUpProgress": "{done}/{total} నిమి.",
     "deviceRecently": "ఇటీవల",
     "deviceDisconnectedFor": "{duration} డిస్‌కనెక్ట్",
-    "deviceControls": "నియంత్రణలు"
+    "deviceControls": "నియంత్రణలు",
+    "homeBackgroundLine": "అలాగే: {items}"
 }

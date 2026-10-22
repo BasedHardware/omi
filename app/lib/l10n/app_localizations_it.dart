@@ -14558,4 +14558,9 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get deviceControls => 'Controlli';
+
+  @override
+  String homeBackgroundLine(String items) {
+    return 'Inoltre: $items';
+  }
 }

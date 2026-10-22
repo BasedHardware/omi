@@ -14486,4 +14486,9 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get deviceControls => 'Kontroller';
+
+  @override
+  String homeBackgroundLine(String items) {
+    return 'Også: $items';
+  }
 }

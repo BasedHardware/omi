@@ -14525,4 +14525,9 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get deviceControls => 'Sterowanie';
+
+  @override
+  String homeBackgroundLine(String items) {
+    return 'Także: $items';
+  }
 }
