@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Literal, Optional
+from typing import Any, Literal, Optional, cast
 from pydantic import BaseModel, Field, ValidationError, field_validator, model_validator
 
 from models.conversation_enums import CategoryEnum
@@ -85,7 +85,9 @@ class NotesOutput(BaseModel):
             title=self.title,
             overview=self.overview,
             emoji=self.emoji,
-            category=self.category,
+            category=cast(
+                Any, self.category
+            ),  # SDK and backend enums share values; Pydantic converts at this boundary.
             sections=[section.to_section() for section in self.sections],
             action_items=[item.to_action_item() for item in self.action_items],
             events=[event.to_event() for event in self.events],
