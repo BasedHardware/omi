@@ -19,7 +19,7 @@ from utils.observability.fallback import record_fallback
 from utils.stt.connect_metrics import CONNECT_FAILURE, CONNECT_SUCCESS, record_stt_provider_connect
 from utils.stt.live_failure import PendingLiveFailover, fallback_metric_reason
 from utils.stt.live_outcome import LiveLegOutcome, record_managed_leg_handoff
-from utils.stt.live_reason import normalize_live_stt_reason
+from utils.stt.live_reason import LIVE_STT_REASONS, normalize_live_stt_reason
 from utils.stt.live_signal import provider_observation
 from utils.observability.demand_cohort import record_metric
 from utils.observability.demand_cohort import demand_cohort
@@ -101,12 +101,34 @@ def failure_reason(error: BaseException) -> str:
     if isinstance(error, DeepgramConnectionRejection) or getattr(error, 'reason', None) == 'auth':
         return 'auth'
     if isinstance(error, ParakeetConnectionError):
-        return error.reason
+        # The window leg's startup latch defaults to a typed token, but a
+        # wrapper that hands back an unlatched value would slip past the
+        # vocabulary here and resurface downstream as the ``other`` metric
+        # bucket (P59).
+        reason = error.reason
+        return reason if reason in LIVE_STT_REASONS else 'provider_5xx'
     if isinstance(error, TimeoutError):
         return 'timeout'
     if getattr(error, 'reason', None) == 'provider_rate_limited':
         return 'provider_429'
     return 'provider_5xx'
+
+
+def dial_failure_reason(error: BaseException) -> str:
+    """Typed reason for a candidate dial that raised, never a metric bucket.
+
+    ``RejectedStream`` carries our own refusal of the dial, so a reason the
+    live vocabulary cannot name (a selection sentinel raised through a nested
+    chain, any unclassified token) is our side of the fence, not the
+    provider's: it types as ``config_incomplete`` — censored for provider
+    evidence, exactly like the ``other`` bucket it replaces. The former
+    ``default='other'`` here latched the fallback metric's bucket token onto
+    leg outcomes, so a Soniox leg death surfaced as ``reason=other`` on every
+    later failover hop (2026-10-22 P59: 0.5 -> 37.5/h on the live-tail
+    catch-up train 72936c9).
+    """
+    raw = error.reason if isinstance(error, RejectedStream) else failure_reason(error)
+    return normalize_live_stt_reason(raw, default='config_incomplete')
 
 
 class RejectedStream(RuntimeError):
@@ -633,9 +655,7 @@ async def connect_configured_chain(
                     failed_targets=failed_targets,
                     _routing_static=True,
                 )
-            reason = normalize_live_stt_reason(
-                error.reason if isinstance(error, RejectedStream) else failure_reason(error), default='other'
-            )
+            reason = dial_failure_reason(error)
             if prior_outcome is not None:
                 PendingLiveFailover(
                     component='stt_selection',
@@ -892,9 +912,7 @@ async def connect_configured_chain(
                     failed_targets=failed_targets,
                     _routing_static=True,
                 )
-            reason = normalize_live_stt_reason(
-                error.reason if isinstance(error, RejectedStream) else failure_reason(error), default='other'
-            )
+            reason = dial_failure_reason(error)
             backoff_lease.finish(
                 refused=reason in ('provider_429', PROVIDER_RATE_LIMITED) or isinstance(error, ConnectionRefusedError)
             )
