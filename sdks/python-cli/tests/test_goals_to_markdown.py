@@ -505,10 +505,6 @@ class TestGoalsToMarkdown(unittest.TestCase):
         self.assertIn("  - [ ] Pending Item", tree)
         self.assertIn("  - [x] Done Item", tree)
 
-
-if __name__ == "__main__":
-    unittest.main()
-
     def test_safe_path_allows_names_that_merely_contain_double_dots(self) -> None:
         """A file name with two dots is not a traversal; only a '..' component is."""
         for ok_path in ("data..goals.md", "my..export/output.md"):
@@ -532,3 +528,7 @@ if __name__ == "__main__":
         self.assertIn(r"\*\*bold\*\* sub", rendered)
         self.assertIn(r"- \[ \] not a real task", rendered)
         self.assertEqual(rendered.count("\n- [ ]"), 0)
+
+
+if __name__ == "__main__":
+    unittest.main()
