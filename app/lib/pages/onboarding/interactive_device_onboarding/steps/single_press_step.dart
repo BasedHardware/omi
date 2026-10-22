@@ -300,7 +300,7 @@ class _SinglePressStepState extends State<SinglePressStep> with TickerProviderSt
   Widget _buildPressPill(String label) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
-      decoration: BoxDecoration(color: OmiColors.textPrimary, borderRadius: BorderRadius.circular(999)),
+      decoration: BoxDecoration(color: OmiColors.textPrimary, borderRadius: OmiRadius.pillAll),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -308,7 +308,7 @@ class _SinglePressStepState extends State<SinglePressStep> with TickerProviderSt
           const SizedBox(width: 10),
           Text(
             label,
-            style: TextStyle(color: OmiColors.surface0, fontSize: 15, fontWeight: FontWeight.w600),
+            style: OmiType.subhead.copyWith(color: OmiColors.surface0, fontWeight: FontWeight.w600),
           ),
         ],
       ),
