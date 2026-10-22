@@ -17,6 +17,7 @@ from models.structured import Structured
 from config.refactor_modes import serving_for, shadow_or_serve
 from utils.llm.meeting_notes_presentation import enforce_static_conversation_note_presentation
 from utils.llm.notes_refactor_metrics import shadow, result
+from utils.observability.fallback import record_fallback
 from utils.llm.notes_lengths import length_ceiling, length_floor
 from utils.llm.shaped_agent import Problem
 
@@ -327,6 +328,14 @@ def finish_notes_contract(
                 return target
         except Exception:
             shadow('output_contract', 'error')
+            if serve:
+                record_fallback(
+                    component='conversation_notes',
+                    from_mode='notes_output_contract',
+                    to_mode='legacy_presentation',
+                    reason='local_heal',
+                    outcome='degraded',
+                )
     # refactor: superseded by notes_output_contract when NOTES_PACKET_V2_MODE=serve
     enforce_static_conversation_note_presentation(
         structured,

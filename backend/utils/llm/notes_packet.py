@@ -19,6 +19,7 @@ from utils.conversations.wake_word import WAKE_WORD_PROMPT_RULES
 from utils.llm.conversation_notes_prompts import conversation_note_density
 from utils.llm.notes_lengths import length_guide
 from utils.llm.notes_refactor_metrics import shadow
+from utils.observability.fallback import record_fallback
 from utils.llm.output_language import resolve_output_language
 from utils.llm.speaker_evidence_prompt import render_speaker_evidence, SPEAKER_RULES
 
@@ -55,6 +56,14 @@ def get_evidence(uid: str | None, conversation_id: str | None) -> SpeakerEvidenc
         return None
     except Exception:
         shadow('speaker_evidence', 'error')
+        if serving_for(FLAG, uid):
+            record_fallback(
+                component='conversation_notes',
+                from_mode='speaker_evidence',
+                to_mode='supported_labels',
+                reason='dependency_unavailable',
+                outcome='degraded',
+            )
         return None
 
 
@@ -119,6 +128,14 @@ def select_notes_packet(
     except Exception:
         # Shadow failures must not affect the serving lane or expose source data.
         shadow('packet', 'error')
+        if serving_for(FLAG, uid):
+            record_fallback(
+                component='conversation_notes',
+                from_mode='notes_packet_v2',
+                to_mode='legacy_packet',
+                reason='local_heal',
+                outcome='degraded',
+            )
         return dict(legacy)
 
 
@@ -142,6 +159,13 @@ def _select_packet(
         except Exception:
             inputs['people'] = []
             shadow('contact_spellings', 'error')
+            record_fallback(
+                component='conversation_notes',
+                from_mode='contact_spellings',
+                to_mode='available_context',
+                reason='dependency_unavailable',
+                outcome='degraded',
+            )
     packet = build_notes_packet(
         prefix=prefix,
         uid=uid,
