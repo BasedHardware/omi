@@ -14,6 +14,14 @@ abstract final class ClientRefactorFlags {
 }
 
 // Named enable keys keep the repository flag inventory mechanically discoverable.
-abstract final class _ClientProjection { static const enabledFlag = 'clients_refactor'; }
-abstract final class _SegmentChunks { static const enabledFlag = 'clients_from_segments_chunks'; }
-abstract final class _CustodyRelease { static const enabledFlag = 'custody_capture_committed_release'; }
+abstract final class _ClientProjection {
+  static const enabledFlag = 'clients_refactor';
+}
+
+abstract final class _SegmentChunks {
+  static const enabledFlag = 'clients_from_segments_chunks';
+}
+
+abstract final class _CustodyRelease {
+  static const enabledFlag = 'custody_capture_committed_release';
+}
