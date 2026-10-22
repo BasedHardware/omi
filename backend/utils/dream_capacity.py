@@ -148,13 +148,18 @@ async def available_model(*, mode='reserved', owner_allowlisted=False):
     try:
         if reservation_state.client() is None:
             return _decision(DREAM_MODEL, 'no_client', waiting=True)
-        states = await reservation_state.refresh(_probe, apply_overrides=False)
-        if states.get(DREAM_MODEL) != State.ACTIVE:
-            return _decision(DREAM_MODEL, 'no_states' if not states else 'no_active_model', waiting=True)
         fresh_seconds = float(os.getenv('DREAM_RESERVATION_FRESH_SECONDS', '900'))
         utilization_limit = float(os.getenv('DREAM_DEDICATED_UTILIZATION_LIMIT', '0.7'))
         if not 0 < fresh_seconds <= 900 or not 0 < utilization_limit <= 1:
             return _decision(DREAM_MODEL, 'invalid_headroom_policy', waiting=True)
+        states = await reservation_state.refresh(
+            _probe if gateway_probe_enabled() else None,
+            apply_overrides=False,
+            probe_model=DREAM_MODEL,
+            fresh_seconds=fresh_seconds,
+        )
+        if states.get(DREAM_MODEL) != State.ACTIVE:
+            return _decision(DREAM_MODEL, 'no_states' if not states else 'no_active_model', waiting=True)
         reason = await reservation_state.dream_headroom(
             DREAM_MODEL, fresh_seconds=fresh_seconds, utilization_limit=utilization_limit
         )
