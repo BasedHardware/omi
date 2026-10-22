@@ -61,13 +61,39 @@ beforeEach(() => {
 /** lib/auth.ts is the guard (and the wall) itself, so it is exempt. */
 const GUARD_FILE = resolve(ROOT, "lib/auth.ts");
 
-/** NextResponse.json construction of a bare error envelope — no scoped data. */
-const ERROR_ENVELOPE = /NextResponse\.json\(\s*\{\s*error\s*[,:}]/g;
+/**
+ * NextResponse.json construction of a bare error envelope — no scoped data.
+ * The first argument's only keys may be `error` (required) plus `code` or
+ * `details`, each value a string literal or a plain message identifier
+ * (`error.message`, `fallback` in lib/team/http.ts). Anything else in the
+ * object — an extra key like `revenue`, shorthand properties, a nested
+ * object, a call — could carry scoped data and is still flagged.
+ */
+const ERROR_ENVELOPE = /NextResponse\.json\(\s*(\{[^{}]*\})/g;
+const STRING = `"(?:[^"\\\\]|\\\\.)*"|'(?:[^'\\\\]|\\\\.)*'|\`[^\`$]*\``;
+const ENVELOPE_PROPERTY = new RegExp(
+  `(?:error|code|details)\\s*:\\s*(?:${STRING}|[A-Za-z$_][\\w$.]*)`,
+  "g"
+);
+
+/** Bare `{ error: <message> }` (optionally `code`/`details`) and nothing else. */
+function isErrorEnvelope(objectSource: string): boolean {
+  const properties = objectSource.match(ENVELOPE_PROPERTY) ?? [];
+  const other = objectSource
+    .replace(ENVELOPE_PROPERTY, "")
+    .replace(/[{},\s]/g, "");
+  return (
+    properties.some((property) => property.trim().startsWith("error")) &&
+    other === ""
+  );
+}
 
 function bypassesGuard(file: string): boolean {
   if (file === GUARD_FILE) return false;
   return readFileSync(file, "utf8")
-    .replace(ERROR_ENVELOPE, "")
+    .replace(ERROR_ENVELOPE, (envelope, objectSource: string) =>
+      isErrorEnvelope(objectSource) ? "" : envelope
+    )
     .includes("NextResponse.json(");
 }
 
@@ -134,6 +160,22 @@ describe("route inventory", () => {
       offenders,
       "respond via <identity>.json so financial fields are redacted"
     ).toEqual([]);
+  });
+
+  it("exempts only bare error envelopes — an extra key like revenue is flagged", () => {
+    expect(
+      bypassesGuard(
+        resolve(
+          ROOT,
+          "lib/__tests__/support/error-envelope-with-data.fixture.ts"
+        )
+      )
+    ).toBe(true);
+    expect(
+      bypassesGuard(
+        resolve(ROOT, "lib/__tests__/support/error-envelope.fixture.ts")
+      )
+    ).toBe(false);
   });
 
   it("keeps the stats reader's capability unchanged: every stats GET is in its scopes", () => {

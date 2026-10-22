@@ -48,7 +48,16 @@ Enforced server-side in `lib/team/roster.ts`, for direct edits and approvals ali
 - Only an owner appoints, changes or removes a deputy.
 - Every mutation re-reads the actor's `adminData` doc inside its own
   transaction and re-authorizes from it, so a demotion or removal landing
-  mid-flight aborts the in-flight change.
+  mid-flight aborts the in-flight change. Invites additionally re-check
+  before provisioning a Firebase Auth account, so a demoted actor
+  provisions nothing.
+- Two invites for one email serialize on a per-email lock doc in
+  `adminProposalLocks`: the loser's transaction re-runs against the
+  winner's committed roster doc and refuses with 409.
+- A rejected invite may leave the unverified, credential-less Firebase
+  Auth account it provisioned. That orphan is harmless — no `adminData`
+  doc means no admin access — and the next invite of the same email
+  reuses it, so Auth provisioning is never rolled back.
 - Every add, removal, role change and proposal event writes an `adminAuditLog`
   entry (`at`, `action`, `actor`, `target`, `before`, `after`, and the
   proposal and proposer when one was approved) in the same transaction.

@@ -4,6 +4,7 @@ import {
   FakeAuth,
   FakeDocRef,
   FakeFirestore,
+  FakeTransaction,
 } from "@/lib/__tests__/support/fake-firestore";
 import {
   adminRequest,
@@ -28,7 +29,7 @@ vi.mock("@/lib/email/invite", () => ({
 
 import { DELETE, GET, PATCH, POST } from "../route";
 import { GET as auditGET } from "../audit/route";
-import { LOCK_COLLECTION } from "@/lib/team/roster";
+import { LOCK_COLLECTION, lockDigest } from "@/lib/team/roster";
 import { SCOPES } from "@/lib/admin-access";
 
 const OWNER = "nik-uid-0001";
@@ -510,13 +511,13 @@ describe("multiple owners", () => {
 
 describe("concurrent invites for the same email", () => {
   /**
-   * The orphan-cleanup race: invite A provisions the Auth account, then
-   * stalls before its transaction; invite B adopts that account and lands
-   * its roster doc; A's transaction then rejects. A must not delete the
-   * account B's roster doc references. (Without the adopted-account check,
-   * A's rollback deleted the uid out from under B's committed doc.)
+   * Invites never roll Auth provisioning back: a rejected invite may leave
+   * an unverified, credential-less account behind (harmless — no adminData
+   * doc means no admin access — and reused by the next invite of that
+   * email), so no code path may delete an account, adopted or not.
    */
   it("never deletes an Auth account a concurrent invite adopted", async () => {
+    const deleteUser = vi.spyOn(state.auth, "deleteUser");
     let releaseA!: () => void;
     const stalled = new Promise<void>((resolve) => (releaseA = resolve));
     let aUid: string | null = null;
@@ -544,18 +545,82 @@ describe("concurrent invites for the same email", () => {
     const responseA = await inviteA;
     expect(responseA.status).toBe(409); // already has admin access
 
-    // The account B adopted survives A's rejected invite.
+    // The account B adopted survives A's rejected invite — no deleteUser
+    // was even attempted.
+    expect(deleteUser).not.toHaveBeenCalled();
     expect(state.auth.users.has(aUid!)).toBe(true);
-    expect(state.auth.deleted).toEqual([]);
     expect(members().get(aUid!).accessRole).toBe("support");
   });
 
-  it("serializes invites per email on a lock doc", async () => {
-    await POST(as(ARCHIT, "POST", { email: "lock@example.com" }));
-    const inviteLocks = state.db
-      .rows(LOCK_COLLECTION)
-      .filter((row: any) => row.id.startsWith("invite-"));
-    expect(inviteLocks).toHaveLength(1);
+  it("serializes overlapping invites per email: one commits, the other retries into 409", async () => {
+    state.auth.add({ uid: "shared-uid", email: "shared@example.com" });
+
+    // Reading the per-email lock inside the transaction is what makes a
+    // concurrent same-email invite conflict and re-run; count those reads so
+    // this test fails if the transaction ever stops reading the lock.
+    const lockReads: string[] = [];
+    const realTxGet = FakeTransaction.prototype.get;
+    FakeTransaction.prototype.get = async function (
+      this: FakeTransaction,
+      target: FakeDocRef | { get: () => Promise<any> }
+    ) {
+      if (
+        target instanceof FakeDocRef &&
+        target.collectionName === LOCK_COLLECTION
+      ) {
+        lockReads.push(target.id);
+      }
+      return realTxGet.call(this, target);
+    };
+
+    // Invite A stalls inside its transaction just after reading the
+    // (missing) roster doc; invite B commits underneath it, then A resumes.
+    let releaseA!: () => void;
+    const stalled = new Promise<void>((resolve) => (releaseA = resolve));
+    let aStalled = false;
+    const realGet = FakeDocRef.prototype.get;
+    let rosterReads = 0;
+    FakeDocRef.prototype.get = async function (this: FakeDocRef) {
+      const result = await realGet.call(this);
+      if (this.collectionName === "adminData" && this.id === "shared-uid") {
+        rosterReads += 1;
+        if (rosterReads === 1) {
+          aStalled = true;
+          await stalled;
+        }
+      }
+      return result;
+    };
+
+    let responseA!: Response;
+    try {
+      const inviteA = POST(as(ARCHIT, "POST", { email: "shared@example.com" }));
+      await vi.waitFor(() => expect(aStalled).toBe(true));
+      const responseB = await POST(
+        as(OWNER, "POST", { email: "shared@example.com" })
+      );
+      expect(responseB.status).toBe(201);
+      releaseA();
+      responseA = await inviteA;
+    } finally {
+      FakeDocRef.prototype.get = realGet;
+      FakeTransaction.prototype.get = realTxGet;
+    }
+    expect(responseA.status).toBe(409);
+
+    // Exactly one grant landed …
+    expect(members().get("shared-uid")).toMatchObject({
+      email: "shared@example.com",
+      addedBy: OWNER,
+    });
+    expect(
+      auditRows().filter((row: any) => row.action === "member.added")
+    ).toHaveLength(1);
+    // … because the losing transaction re-ran against the winner's commit:
+    // every attempt read the per-email lock (A twice — its first attempt
+    // conflicted and retried — and B once).
+    const lockId = `invite-${lockDigest("shared@example.com")}`;
+    expect(lockReads.filter((id) => id === lockId)).toHaveLength(3);
   });
 });
 
@@ -689,20 +754,23 @@ describe("in-flight authority: mutations re-read the actor's doc", () => {
     expect(auditRows()).toEqual([]);
   });
 
-  it("deletes the Auth account it provisioned when the transaction rejects", async () => {
+  it("keeps the Auth account a rejected invite provisioned, and the next invite reuses it", async () => {
     // The demotion lands right after the pre-check's read (read 2), so the
     // pre-check passed with stale authority and a uid was provisioned; the
-    // transaction's re-read (read 3) then sees a viewer and aborts.
+    // transaction's re-read (read 3) then sees a viewer and aborts. The
+    // provisioned account stays: unverified and credential-less, with no
+    // adminData doc it grants nothing, and the next invite of the same
+    // email reuses it.
     const restore = changeActorInsideTransaction(
       ARCHIT,
       { email: "architdraftid@gmail.com", accessRole: "viewer" },
       2
     );
-    let createdUid: string | null = null;
+    let orphanUid: string | null = null;
     const realCreate = state.auth.createUser.bind(state.auth);
     state.auth.createUser = async (input: { email: string }) => {
       const user = await realCreate(input);
-      createdUid = user.uid;
+      orphanUid = user.uid;
       return user;
     };
     try {
@@ -713,32 +781,17 @@ describe("in-flight authority: mutations re-read the actor's doc", () => {
     } finally {
       restore();
     }
-    expect(createdUid).not.toBeNull();
-    expect(state.auth.users.has(createdUid!)).toBe(false);
-    expect(state.auth.deleted).toEqual([createdUid!]);
-    expect(members().has(createdUid!)).toBe(false);
+    expect(orphanUid).not.toBeNull();
+    expect(state.auth.users.has(orphanUid!)).toBe(true);
+    expect(members().has(orphanUid!)).toBe(false);
     expect(auditRows()).toEqual([]);
-  });
 
-  it("keeps a pre-existing Auth account when the transaction rejects", async () => {
-    state.auth.add({ uid: "x", email: "x@example.com" });
-    const restore = changeActorInsideTransaction(
-      ARCHIT,
-      { email: "architdraftid@gmail.com", accessRole: "viewer" },
-      2
-    );
-    try {
-      const response = await POST(
-        as(ARCHIT, "POST", { email: "x@example.com" })
-      );
-      expect(response.status).toBe(403);
-    } finally {
-      restore();
-    }
-    expect(state.auth.users.get("x")).toMatchObject({
-      email: "x@example.com",
-    });
-    expect(state.auth.deleted).toEqual([]);
+    // Re-inviting the email adopts the orphan instead of provisioning again.
+    const again = await POST(as(OWNER, "POST", { email: "fresh@example.com" }));
+    expect(again.status).toBe(201);
+    const body = await again.json();
+    expect(body.provisioned).toBe(false);
+    expect(body.teamMember.id).toBe(orphanUid!);
   });
 
   it("aborts a deputy appointment when the owner is demoted mid-flight", async () => {

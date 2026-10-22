@@ -325,7 +325,7 @@ export interface FakeUser {
 /** Firebase Auth: lookup by email, provisioning and sign-in metadata. */
 export class FakeAuth {
   readonly users = new Map<string, FakeUser>();
-  /** uids this fake deleted, so rollback behavior is observable. */
+  /** uids this fake deleted, so tests can prove no code path deletes accounts. */
   readonly deleted: string[] = [];
   private nextUid = 1;
 

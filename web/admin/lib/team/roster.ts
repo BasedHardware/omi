@@ -249,6 +249,14 @@ export async function addMember(
     // default one-account-per-email setting, so when they later sign in
     // with Google for this address the provider links into this very uid
     // and the admin grant below is already waiting for them.
+    //
+    // A rejected invite (the actor was demoted mid-flight, the person
+    // already had access) can leave this account behind. That orphan is
+    // deliberate and harmless: without an adminData doc it grants no admin
+    // access, and the next invite of the same email reuses it. Deleting it
+    // outside the transaction raced concurrent invites that had adopted
+    // the account, so Auth provisioning is never rolled back
+    // (docs/team-access.md).
     try {
       firebaseUser = await getAdminAuth().createUser({
         email,
@@ -280,79 +288,44 @@ export async function addMember(
     addedBy: actor.uid,
   };
 
-  try {
-    // Invites for one normalized email serialize on this lock doc (like the
-    // proposal locks): a concurrent invite's transaction conflicts and re-runs
-    // against whatever this one committed — including the roster doc that
-    // adopted the Auth account this request may have provisioned.
-    const inviteLock = db
-      .collection(LOCK_COLLECTION)
-      .doc(`invite-${lockDigest(email)}`);
-    await db.runTransaction(async (tx) => {
-      await tx.get(inviteLock);
-      // Re-authorize from the actor's current doc, not the request snapshot.
-      const acting = await currentActor(tx, actor);
-      if (!hasScope(acting.access, "team:invite")) {
-        throw new TeamError(
-          403,
-          "Only an owner, a deputy or an admin can invite."
-        );
-      }
-      assertNoBroaderThanActor(acting, input.accessRole, overrides);
-      if ((await tx.get(memberRef)).exists) {
-        throw new TeamError(409, `${email} already has admin access.`);
-      }
-      await approval?.check(tx);
-      approval?.commit(tx);
-      tx.set(inviteLock, { updatedAt: new Date().toISOString() });
-      tx.set(memberRef, memberDoc);
-      audit(tx, {
-        action: "member.added",
-        actor: humanAuditActor(actor),
-        target: { uid: firebaseUser.uid, email },
-        before: null,
-        after: snapshot(memberDoc),
-        proposalId: approval?.proposalId,
-        proposedBy: approval?.proposedBy,
-        reason: approval?.reason,
-      });
-    });
-  } catch (error) {
-    // The grant did not land — the actor may have been demoted or removed
-    // after the pre-check, or the person already had access. Undo the Auth
-    // account this request created (never one that already existed, and
-    // never one another request's roster doc adopted while this one was in
-    // flight: re-read adminData/{uid} after the transaction — a concurrent
-    // invite may have landed its grant on the account this request
-    // provisioned, and deleting it now would orphan that doc's uid). Best
-    // effort: a delete failure is logged, not swapped for the original error.
-    if (provisioned) {
-      let adopted = true;
-      try {
-        adopted = (await memberRef.get()).exists;
-      } catch (readError) {
-        console.error(
-          `Could not re-check admin access for ${email} after a rejected invite; keeping uid ${firebaseUser.uid}.`,
-          readError
-        );
-      }
-      if (adopted) {
-        console.error(
-          `Keeping the Auth account provisioned for ${email} (uid ${firebaseUser.uid}): a concurrent invite may have granted it admin access; remove the account manually if it is orphaned.`
-        );
-      } else {
-        try {
-          await getAdminAuth().deleteUser(firebaseUser.uid);
-        } catch (cleanupError) {
-          console.error(
-            `Could not remove the Auth account provisioned for ${email} after a rejected invite; remove uid ${firebaseUser.uid} manually.`,
-            cleanupError
-          );
-        }
-      }
+  // Invites for one normalized email serialize on this lock doc (like the
+  // proposal locks): a concurrent invite's transaction conflicts and re-runs
+  // against whatever this one committed — including the roster doc that
+  // adopted the Auth account this request may have provisioned. Rejected
+  // invites deliberately leave any provisioned account in place (see the
+  // provisioning note above); nothing below deletes Auth accounts.
+  const inviteLock = db
+    .collection(LOCK_COLLECTION)
+    .doc(`invite-${lockDigest(email)}`);
+  await db.runTransaction(async (tx) => {
+    await tx.get(inviteLock);
+    // Re-authorize from the actor's current doc, not the request snapshot.
+    const acting = await currentActor(tx, actor);
+    if (!hasScope(acting.access, "team:invite")) {
+      throw new TeamError(
+        403,
+        "Only an owner, a deputy or an admin can invite."
+      );
     }
-    throw error;
-  }
+    assertNoBroaderThanActor(acting, input.accessRole, overrides);
+    if ((await tx.get(memberRef)).exists) {
+      throw new TeamError(409, `${email} already has admin access.`);
+    }
+    await approval?.check(tx);
+    approval?.commit(tx);
+    tx.set(inviteLock, { updatedAt: new Date().toISOString() });
+    tx.set(memberRef, memberDoc);
+    audit(tx, {
+      action: "member.added",
+      actor: humanAuditActor(actor),
+      target: { uid: firebaseUser.uid, email },
+      before: null,
+      after: snapshot(memberDoc),
+      proposalId: approval?.proposalId,
+      proposedBy: approval?.proposedBy,
+      reason: approval?.reason,
+    });
+  });
 
   // The grant has landed. Telling them about it is best effort: a mail
   // failure is reported in the response, never rolled back into an error.
