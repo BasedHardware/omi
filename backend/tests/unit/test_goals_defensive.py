@@ -344,6 +344,15 @@ class TestGoalRouterEndpointDefensive:
 
         assert res == {"advice": "Set a goal to get personalized advice!"}
 
+    def test_get_current_goal_advice_raises_404_on_inactive_goal_race(self):
+        """GET /v1/goals/advice raises HTTPException(404) if goal becomes inactive before advice generation."""
+        with patch.object(goals_router.goals_db, "get_user_goal", return_value={"id": "g1", "title": "Goal"}):
+            with patch.object(goals_router, "get_goal_advice", side_effect=ValueError("Goal not found")):
+                with pytest.raises(HTTPException) as exc_info:
+                    goals_router.get_current_goal_advice(uid="u1")
+                assert exc_info.value.status_code == 404
+                assert exc_info.value.detail == "Goal not found"
+
     def test_suggest_goal_endpoint_returns_valid_response_dict(self):
         """GET /v1/goals/suggest handler returns a dict that validates under GoalSuggestionResponse."""
         valid_dict = {

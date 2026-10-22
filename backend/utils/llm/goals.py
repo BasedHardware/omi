@@ -134,7 +134,6 @@ def _safe_optional_float(val: Any) -> Optional[float]:
 safe_float = _safe_float
 safe_optional_float = _safe_optional_float
 
-_sanitize_goal_suggestion = sanitize_suggestion_dict
 sanitize_goal_suggestion = sanitize_suggestion_dict
 
 
@@ -146,7 +145,7 @@ def suggest_goal(uid: str) -> Dict[str, Any]:
 
         if not memories:
             # Default suggestion when no memories
-            return _sanitize_goal_suggestion({
+            return sanitize_goal_suggestion({
                 'suggested_title': 'Learn something new every day',
                 'suggested_type': 'scale',
                 'suggested_target': 10.0,
@@ -191,12 +190,12 @@ Make the goal specific, measurable, and relevant to their interests."""
         if json_match:
             try:
                 suggestion = json.loads(json_match.group())
-                return _sanitize_goal_suggestion(suggestion)
+                return sanitize_goal_suggestion(suggestion)
             except Exception:
                 pass
 
         # Fallback if parsing fails
-        return _sanitize_goal_suggestion({
+        return sanitize_goal_suggestion({
             'suggested_title': 'Track your daily progress',
             'suggested_type': 'scale',
             'suggested_target': 10.0,
@@ -207,7 +206,7 @@ Make the goal specific, measurable, and relevant to their interests."""
 
     except Exception as e:
         logger.error(f"Error generating goal suggestion: {e}")
-        return _sanitize_goal_suggestion({
+        return sanitize_goal_suggestion({
             'suggested_title': 'Make progress every day',
             'suggested_type': 'scale',
             'suggested_target': 10.0,
