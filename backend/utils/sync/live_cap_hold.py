@@ -141,7 +141,9 @@ async def _publish_audio(
                 standalone=group is None,
             )
         except Exception as error:
-            if live_cap_upload.transient(error) or is_retryable_firestore_transaction_error(error):
+            if live_cap_upload.transient(error) or await run_blocking(
+                db_executor, is_retryable_firestore_transaction_error, error
+            ):
                 raise StagingDeferred('live staging retains process custody') from error
             raise publication_error from error
         return False
@@ -334,7 +336,10 @@ class LiveHeldAudio:
             # scratch/PCM alive. Socket and lifespan close await the same lock.
             raise
         except Exception as error:
-            if final or not (live_cap_upload.transient(error) or is_retryable_firestore_transaction_error(error)):
+            if final or not (
+                live_cap_upload.transient(error)
+                or await run_blocking(db_executor, is_retryable_firestore_transaction_error, error)
+            ):
                 raise
             # Reservation/summary faults also leave every unretired sample in
             # this sink. A full bound or close must still prove durable custody.
