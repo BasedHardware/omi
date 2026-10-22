@@ -30,7 +30,10 @@ def _agent_config() -> Optional[Dict[str, Any]]:
 
 
 def _parse_hour(value: Any) -> Optional[int]:
-    """Safely parse hour value into an integer, rejecting booleans, non-integer floats, and invalid strings."""
+    """Safely parse hour value into an integer, rejecting booleans, non-integer floats, and invalid strings.
+
+    Note: Returns negative ints as-is, relying on the caller's 0-23 range validation.
+    """
     if value is None or isinstance(value, bool):
         return None
     if isinstance(value, int):
@@ -41,7 +44,7 @@ def _parse_hour(value: Any) -> Optional[int]:
         return int(value)
     if isinstance(value, str):
         s = value.strip()
-        if s.isdigit():
+        if s.isascii() and s.isdigit():
             try:
                 return int(s)
             except ValueError:
