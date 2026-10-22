@@ -23820,14 +23820,8 @@ abstract class AppLocalizations {
   /// Paywall primary button; price is a formatted zero price like $0.00
   ///
   /// In en, this message translates to:
-  /// **'Start for {price}'**
+  /// **'Try for {price}'**
   String paywallTrialCta(String price);
-
-  /// Paywall secondary button
-  ///
-  /// In en, this message translates to:
-  /// **'Continue with the free plan'**
-  String get paywallTrialSecondary;
 
   /// Paywall footnote
   ///

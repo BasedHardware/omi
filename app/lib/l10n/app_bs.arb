@@ -11529,7 +11529,6 @@
     "paywallTrialBilledYearly": "Naplaćuje se godišnje",
     "paywallTrialSaveAmount": "Uštedite {amount}",
     "paywallTrialCta": "Započnite za {price}",
-    "paywallTrialSecondary": "Nastavite sa besplatnim planom",
     "paywallTrialCancelNote": "Otkažite bilo kada. Bez naknada, bez kazni.",
     "paywallTrialStarted": "Vaša {days}-dnevna besplatna proba Omi Pro je počela.",
     "paywallCancelAnytime": "Otkažite bilo kada.",

@@ -13214,9 +13214,6 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String get paywallTrialSecondary => '무료 플랜으로 계속하기';
-
-  @override
   String get paywallTrialCancelNote => '언제든지 취소 가능. 수수료나 위약금 없음.';
 
   @override

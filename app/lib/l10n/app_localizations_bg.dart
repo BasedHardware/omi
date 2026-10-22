@@ -13445,9 +13445,6 @@ class AppLocalizationsBg extends AppLocalizations {
   }
 
   @override
-  String get paywallTrialSecondary => 'Продължете с безплатния план';
-
-  @override
   String get paywallTrialCancelNote => 'Анулирайте по всяко време. Без такси, без неустойки.';
 
   @override

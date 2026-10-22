@@ -11529,7 +11529,6 @@
     "paywallTrialBilledYearly": "חיוב שנתי",
     "paywallTrialSaveAmount": "חסוך {amount}",
     "paywallTrialCta": "התחל ב-{price}",
-    "paywallTrialSecondary": "המשך עם התוכנית החינמית",
     "paywallTrialCancelNote": "בטל בכל עת. ללא עמלות, ללא קנסות.",
     "paywallTrialStarted": "התחילה תקופת הניסיון החינמית שלך בת {days} ימים של Omi Pro.",
     "paywallCancelAnytime": "ניתן לבטל בכל עת.",

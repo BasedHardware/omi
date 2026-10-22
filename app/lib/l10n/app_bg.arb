@@ -4106,7 +4106,6 @@
     "paywallTrialBilledYearly": "Таксуване годишно",
     "paywallTrialSaveAmount": "Спестете {amount}",
     "paywallTrialCta": "Започнете за {price}",
-    "paywallTrialSecondary": "Продължете с безплатния план",
     "paywallTrialCancelNote": "Анулирайте по всяко време. Без такси, без неустойки.",
     "paywallTrialStarted": "Вашият {days}-дневен безплатен пробен период на Omi Pro започна.",
     "paywallCancelAnytime": "Отказ по всяко време.",

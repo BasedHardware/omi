@@ -13394,9 +13394,6 @@ class AppLocalizationsBn extends AppLocalizations {
   }
 
   @override
-  String get paywallTrialSecondary => 'বিনামূল্যে প্ল্যান নিয়ে চালিয়ে যান';
-
-  @override
   String get paywallTrialCancelNote => 'যেকোনো সময় বাতিল করুন। কোনো ফি নেই, কোনো জরিমানা নেই।';
 
   @override

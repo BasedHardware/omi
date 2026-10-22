@@ -13500,9 +13500,6 @@ class AppLocalizationsFr extends AppLocalizations {
   }
 
   @override
-  String get paywallTrialSecondary => 'Continuer avec le plan gratuit';
-
-  @override
   String get paywallTrialCancelNote => 'Annulez à tout moment. Sans frais ni pénalités.';
 
   @override

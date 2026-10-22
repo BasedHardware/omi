@@ -4141,7 +4141,6 @@
     "paywallTrialBilledYearly": "Оплата ежегодно",
     "paywallTrialSaveAmount": "Экономия {amount}",
     "paywallTrialCta": "Начать за {price}",
-    "paywallTrialSecondary": "Продолжить с бесплатным планом",
     "paywallTrialCancelNote": "Отменить в любое время. Без комиссий и штрафов.",
     "paywallTrialStarted": "Ваша {days}-дневная бесплатная пробная версия Omi Pro началась.",
     "paywallCancelAnytime": "Отмена в любой момент.",

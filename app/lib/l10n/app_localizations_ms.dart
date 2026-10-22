@@ -13428,9 +13428,6 @@ class AppLocalizationsMs extends AppLocalizations {
   }
 
   @override
-  String get paywallTrialSecondary => 'Teruskan dengan pelan percuma';
-
-  @override
   String get paywallTrialCancelNote => 'Batal bila-bila masa. Tiada yuran, tiada penalti.';
 
   @override
