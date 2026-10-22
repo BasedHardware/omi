@@ -161,18 +161,59 @@ jobs:
             ~/.cache/electron-builder
           key: electron-builder-linux-${{ hashFiles('desktop/windows/pnpm-lock.yaml') }}
           restore-keys: electron-builder-linux-
+      - name: Identify Linux apt package cache
+        id: linux-apt-image
+        run: |
+          echo "image=${ImageOS:?}-${ImageVersion:?}" >> "$GITHUB_OUTPUT"
+          echo "imageos=${ImageOS:?}" >> "$GITHUB_OUTPUT"
+      - name: Restore Linux runtime dependency packages
+        id: linux-apt-debs
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/omi-linux-apt/*.deb
+          key: omi-linux-apt-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.linux-apt-image.outputs.image }}-imagemagick-dejavu-tesseract-xvfb
+          # ImageVersion bumps roll out without warning and would otherwise
+          # force a cold ~35 MB download on the first runs that land on the
+          # new image. The .deb closure tracks the ubuntu distro repos, not
+          # the image patch version, so fall back to the newest saved image
+          # of the same runner OS.
+          restore-keys: |
+            omi-linux-apt-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.linux-apt-image.outputs.imageos }}-
       - name: Install Linux runtime dependencies
         # Bound apt's network calls explicitly: a stalled mirror connection
         # (observed against the azure.archive.ubuntu.com mirror) otherwise
         # hangs with no output and no built-in timeout, burning the full 6h
         # job ceiling instead of failing fast. DEBIAN_FRONTEND=noninteractive
         # avoids any possibility of a debconf prompt blocking on stdin.
+        # Warm runs must stay off the network entirely: apt-get update
+        # fetches indexes even when every .deb is already local, and on a
+        # throttled mirror the downloads alone have eaten the full 5m budget
+        # (runs 39846837408 on PR #23335, 37693118159 on main and 33911765703),
+        # so replay the cached closure with dpkg and let apt repair only if
+        # that replay fails.
         timeout-minutes: 5
         env:
           DEBIAN_FRONTEND: noninteractive
         run: |
-          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15 update
-          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15 install -y imagemagick fonts-dejavu-core tesseract-ocr tesseract-ocr-eng xvfb
+          if compgen -G "$HOME"/.cache/omi-linux-apt/*.deb > /dev/null; then
+            if ! sudo dpkg -i "$HOME"/.cache/omi-linux-apt/*.deb; then
+              sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15 update
+              sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15 -o Dir::Cache::archives="$HOME/.cache/omi-linux-apt" -o APT::Keep-Downloaded-Packages=true install -y -f imagemagick fonts-dejavu-core tesseract-ocr tesseract-ocr-eng xvfb
+            fi
+          else
+            sudo install -d -m 0755 "$HOME/.cache/omi-linux-apt/partial"
+            sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15 update
+            sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15 -o Dir::Cache::archives="$HOME/.cache/omi-linux-apt" -o APT::Keep-Downloaded-Packages=true install -y imagemagick fonts-dejavu-core tesseract-ocr tesseract-ocr-eng xvfb
+          fi
+      # Seed the cache right after a successful install, so a later step's
+      # failure cannot force the next run back onto the network. This job has
+      # no matrix, so there is no concurrent same-key save race to gate.
+      - name: Save Linux runtime dependency packages
+        if: steps.linux-apt-debs.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ~/.cache/omi-linux-apt/*.deb
+          key: omi-linux-apt-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.linux-apt-image.outputs.image }}-imagemagick-dejavu-tesseract-xvfb
       - name: Provision .env
         run: cp .env.example .env
       - name: Install dependencies
