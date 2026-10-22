@@ -105,7 +105,7 @@ sidecar, then MP3, then the conversation stamp. A failed stamp can recover from
 GCS without encoding. Create-only `if_generation_match=0` prevents overwrites
 if duplicate workers outlive the run lock. Obsolete per-file tasks are skipped.
 Pusher no longer starts full-conversation rebuilds on chunk flush. Metrics:
-`omi_playback_writes_total{outcome="cache_hit|generated|skipped"}`, with no IDs.
+`omi_playback_writes_total{outcome="cache_hit|generated|skipped"}`, with no IDs. The backend-sync GMP export filter explicitly retains this counter.
 
 Existing legacy artifact keys remain readable through old stamps. On-demand
 rollout settings are unchanged. Per-file and dense conversation objects are both
@@ -154,7 +154,7 @@ metadata alone. Compare the new metric and next inventory after a separately
 approved deployment. The supplied 1,255.70 GiB/day is net stock growth, not gross
 bytes written; it should not be conflated with this forward-write estimate.
 
-Local focused verification: **204 tests passed across 10 files**, through
+Local focused verification: **205 tests passed across 10 files**, through
 `cd backend && BACKEND_PYTEST_WORKERS=4 BACKEND_UNIT_TEST_FILE_LIST=<file-list> nice -n 10 ./test.sh`
 wrapped in the workspace `omi-heavy` runner. Focused tests exercise stable identities with the rollout disabled, changed
 sources, legacy aliases, create-only races, large spans, stamp-failure retry via

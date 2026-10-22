@@ -158,3 +158,16 @@ def test_timeline_origin_change_invalidates_immutable_playback(monkeypatch):
     assert playback._conversation_audio_urls_entry('synthetic', 'conversation', files, row)['status'] == 'pending'
     lookup.assert_not_called()
     enqueue.assert_called_once()
+
+
+def test_playback_write_metric_survives_sync_export_filter():
+    import re
+    from pathlib import Path
+    import yaml
+
+    config = yaml.safe_load((Path(__file__).parents[2] / 'deploy/cloud_run_gmp_sync.yaml').read_text())
+    keep = next(
+        rule['regex'] for rule in config['spec']['endpoints'][0]['metricRelabeling'] if rule['action'] == 'keep'
+    )
+    assert re.fullmatch(keep, cache.PLAYBACK_WRITES._name + '_total')
+    assert cache.PLAYBACK_WRITES._labelnames == ('outcome',)
