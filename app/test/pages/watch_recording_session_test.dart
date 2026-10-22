@@ -115,7 +115,7 @@ void main() {
 }
 
 // Keep the real directory/receipt scan and account custody. Waveform decoding
-// belongs to the native audio boundary and is exercised in the simulator probe.
+// belongs to the native audio boundary and is outside this widget test's proof.
 class _SavedRecordings extends LocalRecordingsProvider {
   @override
   Future<List<double>?> getWaveform(LocalRecording recording) async => const [];
