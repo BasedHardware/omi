@@ -34847,6 +34847,7 @@
           "empty_unexpected",
           "timeout",
           "upstream_error",
+          "provider_budget_exhausted",
           "config_error",
           "invalid_input"
         ],
