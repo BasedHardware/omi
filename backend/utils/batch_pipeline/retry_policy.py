@@ -4,7 +4,7 @@ import logging
 
 from config.policy import SchedulerPolicy
 from utils.batch_pipeline.correctness_metrics import record as record_correctness
-from utils.sync.retry_hygiene import observe, retry_cap
+from utils.capture.retry_cap import observe, retry_cap
 
 logger = logging.getLogger(__name__)
 
