@@ -6,6 +6,8 @@ from utils.stt import vocabulary as vocab
 from utils.stt import soniox
 from utils.memory.memory_service import MemoryService
 from config import refactor_modes
+from routers.listen import receiver as listen
+from tests.unit.test_soniox_capture_axis_r10 import managed, close
 
 
 def test_sources_are_interleaved_deduplicated_and_frequent():
@@ -137,3 +139,87 @@ def test_shadow_source_work_cannot_delay_the_soniox_dial(monkeypatch):
     assert len(pending) == 1
     for coroutine in pending:
         coroutine.close()
+
+
+def test_vocabulary_identity_is_explicit_and_never_borrowed_from_byok(monkeypatch):
+    from utils import byok
+
+    monkeypatch.setenv(vocab.FLAG, 'serve')
+    monkeypatch.setattr(byok, 'get_byok_uid', lambda: (_ for _ in ()).throw(AssertionError('ambient identity read')))
+    seen = []
+    monkeypatch.setattr(vocab, 'cached_terms', lambda uid: seen.append(uid) or ['ExplicitTerm'])
+
+    async def run():
+        missing = {}
+        await vocab.apply_context(missing)
+        assert missing == {}
+        config = {}
+        await vocab.apply_context(config, 'synthetic-explicit-owner')
+        assert config['context']['terms'] == ['ExplicitTerm']
+
+    asyncio.run(run())
+    assert seen == ['synthetic-explicit-owner']
+
+
+def test_vocabulary_parity_label_reports_found_terms(monkeypatch):
+    from unittest.mock import Mock
+
+    observed = Mock()
+    monkeypatch.setattr(vocab, 'observe', observed)
+    monkeypatch.setattr(vocab, 'cached_terms', lambda *_: ['Spelling'])
+    assert asyncio.run(vocab._load_terms('synthetic-owner')) == ['Spelling']
+    observed.assert_called_once_with('stt_vocab', 'agree', size=1)
+
+
+def test_legacy_soniox_initial_and_reconnect_pass_authenticated_identity(monkeypatch):
+    from unittest.mock import AsyncMock
+    from utils.stt.streaming import STTService
+
+    monkeypatch.setattr(listen, 'managed_chain_enabled', lambda *_: False)
+    monkeypatch.setattr(listen, 'modulate_is_configured_fallback', lambda *_: False)
+    monkeypatch.setattr(listen, 'deepgram_fallback_model', lambda *_: None)
+    opened = AsyncMock(return_value=object())
+    monkeypatch.setattr(listen, 'process_audio_soniox', opened)
+
+    async def fallback(**kwargs):
+        return await kwargs['connect_primary'](), STTService.soniox
+
+    monkeypatch.setattr(listen, 'connect_stt_socket_with_fallback', fallback)
+    host = SimpleNamespace(
+        request=SimpleNamespace(uid='synthetic-authenticated-owner'),
+        vocabulary=[],
+        stt_service=STTService.soniox,
+        stt_language='en',
+        language_profile=None,
+    )
+    receiver = SimpleNamespace(host=host, recovery=None, soniox_idle_budget=None)
+
+    async def run():
+        for same_provider in (False, True):
+            await listen.ListenReceiver._connect_stt_socket(
+                receiver, lambda _: None, 16000, same_provider=same_provider
+            )
+
+    asyncio.run(run())
+    assert opened.await_count == 2
+    assert all(call.kwargs['uid'] == host.request.uid for call in opened.await_args_list)
+
+
+def test_managed_soniox_config_uses_authenticated_identity(monkeypatch):
+    import json
+
+    monkeypatch.setenv(vocab.FLAG, 'serve')
+    seen = []
+    monkeypatch.setattr(vocab, 'cached_terms', lambda uid: seen.append(uid) or ['ManagedTerm'])
+
+    async def run():
+        receiver, _, _, _, leg, wire, _ = await managed(monkeypatch, False)
+        try:
+            assert seen == [receiver.host.request.uid]
+            config = json.loads(wire.sent[0])
+            assert config['context']['terms'] == ['ManagedTerm']
+            assert config['language_hints'] == ['en']
+        finally:
+            await close(leg)
+
+    asyncio.run(run())

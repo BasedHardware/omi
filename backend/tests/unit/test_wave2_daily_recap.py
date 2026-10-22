@@ -242,3 +242,17 @@ def test_mode_rollback_resumes_pending_stub_in_place(producer, monkeypatch):
 def test_mode_rollback_cannot_deliver_a_locked_pending_stub(producer, monkeypatch):
     monkeypatch.setenv(recap.FLAG, 'off')
     test_pending_stub_during_locked_delivery_retry_never_pushes(producer, monkeypatch)
+
+
+@pytest.mark.parametrize('hours_to_day_end', [2, -0.5])
+def test_on_demand_partial_day_bypasses_scheduled_grace(producer, monkeypatch, hours_to_day_end):
+    monkeypatch.setattr(notif, 'require_generated_compute', lambda *_: None)
+    end = datetime.now(timezone.utc) + timedelta(hours=hours_to_day_end)
+    start = end - timedelta(days=1)
+    # The same day is still deferred for a scheduler/backfill attempt.
+    assert notif._generate_and_store_daily_summary('synthetic-owner', '2026-01-01', start, end)[0] is None
+    assert producer.store['day']['status'] == 'pending'
+    producer.model.assert_not_called()
+    record, declined = notif.generate_daily_summary_on_demand('synthetic-owner', '2026-01-01', start, end)
+    assert declined is None and record['status'] == 'generated'
+    producer.model.assert_called_once()

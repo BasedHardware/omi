@@ -17,8 +17,6 @@ from utils.conversations.calls_metrics import observe
 
 FLAG_ENV = 'STT_VOCAB_MODE'
 FLAG = FLAG_ENV
-STT_VOCAB_PERCENT_ENV = 'STT_VOCAB_MODE_SERVE_PERCENT'
-STT_VOCAB_DIGESTS_ENV = 'STT_VOCAB_MODE_SERVE_UID_SHA256S'
 STT_VOCAB_SHADOW_PERCENT_ENV = 'STT_VOCAB_MODE_SHADOW_PERCENT'
 MAX_TERMS = 100
 MAX_CHARS = 2000
@@ -131,7 +129,7 @@ async def _load_terms(uid):
 
         terms = await asyncio.wait_for(run_blocking(db_executor, cached_terms, uid), timeout=2)
         # Even in serve mode only the term count may enter telemetry.
-        observe('stt_vocab', 'disagree' if terms else 'agree', size=len(terms))
+        observe('stt_vocab', 'agree' if terms else 'disagree', size=len(terms))
         return terms
     except Exception:
         observe('stt_vocab', 'error')
@@ -151,10 +149,6 @@ async def _load_terms(uid):
 async def apply_context(config, uid=None):
     if not shadow_or_serve(FLAG):
         return
-    if uid is None:
-        from utils.byok import get_byok_uid
-
-        uid = get_byok_uid()
     if not uid or not shadow_sampled(FLAG, uid, default_percent=1.0):
         return
     if not serving_for(FLAG, uid):

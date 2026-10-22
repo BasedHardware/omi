@@ -81,7 +81,7 @@ def _state(n, uid, date, existing, status, fingerprint=None):
     return result
 
 
-def generate(uid, date_str, start_date_utc, end_date_utc, *, legacy, prepare_delivery=None):
+def generate(uid, date_str, start_date_utc, end_date_utc, *, legacy, prepare_delivery=None, user_initiated=False):
     # Imports stay lazy; tests can inject dependencies at the producer seam.
     from utils.other import notifications as n
 
@@ -101,7 +101,7 @@ def generate(uid, date_str, start_date_utc, end_date_utc, *, legacy, prepare_del
             _state(n, uid, date_str, existing, 'not_generated')
             return None, False, 'usage_budget_exhausted'
         now = datetime.now(timezone.utc)
-        if now < end_date_utc + GRACE:
+        if not user_initiated and now < end_date_utc + GRACE:
             _state(n, uid, date_str, existing, 'pending')
             return None, False, n.DAILY_SUMMARY_DECLINE_NOTHING_TO_SUMMARIZE
         rows = (

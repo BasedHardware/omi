@@ -19,8 +19,6 @@ from utils.conversations.calls_metrics import observe
 
 FLAG_ENV = 'ACTION_ITEMS_V2_MODE'
 FLAG = FLAG_ENV
-ACTION_ITEMS_PERCENT_ENV = 'ACTION_ITEMS_V2_MODE_SERVE_PERCENT'
-ACTION_ITEMS_DIGESTS_ENV = 'ACTION_ITEMS_V2_MODE_SERVE_UID_SHA256S'
 RULES = '''ACTION ITEM EXTRACTION RULES (owner-involved commitments)
 - Extract commitments made by the account owner, requests accepted by the owner,
   and explicit offers/promises by another person to the owner. Keep the actual
@@ -30,7 +28,9 @@ RULES = '''ACTION ITEM EXTRACTION RULES (owner-involved commitments)
   actionable even though the owner is the recipient. Unrelated third-party tasks
   and observations/status statements are not actionable.
 - Omit vague social small talk unless a responsible person or committed time is
-  concrete. A suggestion alone is not a commitment. Never invent an owner or date.
+  concrete, or a named counterpart is paired with a specific place or time
+  (such as "catch up with Matt in NYC"). A suggestion alone is not a commitment.
+  Never invent an owner or date.
 - Preserve exact source_segment_ids and source conversation identity. Unknown voices
   stay unknown; contact lists and calendar rosters do not establish voice identity.
 - Do not promote uncertain remarks to decisions or invent numbers or durations.
@@ -67,8 +67,25 @@ def vague_social(item):
     owner = normalized_name(field(item, 'owner_name'))
     concrete_owner = owner not in UNKNOWN_OWNERS | OWNER_ALIASES and not re.fullmatch(r'(?:speaker|spk)\s*\d+', owner)
     committed = field(item, 'capture_kind') in ('clear_commitment', 'direct_request', 'explicit_command')
+    # A named counterpart plus a concrete place/time grounds the owner's own
+    # commitment too; owner aliases must not make that incident-09 item disappear.
+    context = text + ' ' + str(field(item, 'context') or '')
+    counterpart = re.search(r'\bwith\s+([A-Z][\w\'-]*(?:\s+[A-Z][\w\'-]*){0,2})\b', context)
+    named_counterpart = bool(
+        counterpart
+        and normalized_name(counterpart.group(1)) not in UNKNOWN_OWNERS | OWNER_ALIASES | {'speaker', 'spk'}
+        and not re.fullmatch(r'(?:speaker|spk)\s*\d+', counterpart.group(1), re.I)
+    )
+    specific_place = re.search(r'\b(?:in|at)\s+[A-Z][\w\'-]*(?:\s+[A-Z][\w\'-]*)*\b', context)
+    specific_time = re.search(
+        r'\b(?:today|tomorrow|tonight|next\s+(?:week|weekend|month|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)'
+        r'|(?:on\s+)?(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)'
+        r'|at\s+\d{1,2}(?::\d{2})?\s*(?:am|pm)|\d{4}-\d{2}-\d{2})\b',
+        context,
+        re.I,
+    )
     # A known speaker discussing a hypothetical outing is still small talk.
-    return not (concrete_owner and committed)
+    return not (concrete_owner and committed or named_counterpart and (specific_place or specific_time))
 
 
 def select_items(uid, items, legacy, profile_name):

@@ -191,3 +191,55 @@ def test_call_metadata_cannot_be_written_through_client_create_or_update_models(
     updated = UpdateConversation.model_validate(fields)
     assert not set(fields) & set(created.model_dump())
     assert not set(fields) & set(updated.model_dump())
+
+
+@pytest.mark.parametrize('mode', ['off', 'shadow'])
+def test_v4_never_writes_boundary_inputs_outside_its_serve_cohort(monkeypatch, mode):
+    from config.refactor_modes import uid_digest
+
+    monkeypatch.setenv(calls.FLAG, mode)
+    monkeypatch.setenv(calls.FLAG + '_SERVE_UID_SHA256S', uid_digest('other-cohort'))
+    # A fully serving episode authority must not admit new V4 inputs for this user.
+    monkeypatch.setenv('EPISODE_BOUNDARIES_MODE', 'serve')
+    phone_write, context_write = Mock(), Mock()
+    monkeypatch.setattr(boundary_store, 'record', phone_write)
+    monkeypatch.setattr(boundary_store, 'record_context', context_write)
+    monkeypatch.setattr(boundary_store, 'windows', lambda *_: {})
+    monkeypatch.setattr(boundary_store, 'load', lambda *_: [])
+    conversation = SimpleNamespace(
+        started_at=NOW,
+        finished_at=NOW + timedelta(minutes=30),
+        call_id='synthetic-phone-session',
+        external_data={
+            'calendar_meeting_context': {
+                'calendar_event_id': 'event-1',
+                'start_time': NOW,
+                'duration_minutes': 30,
+                'meeting_link': 'https://meet.google.com/abc-defg-hij',
+            }
+        },
+        is_call=None,
+    )
+    calls.apply_call_metadata('synthetic-owner', conversation)
+    phone_write.assert_not_called()
+    context_write.assert_not_called()
+    assert conversation.is_call is None
+
+
+def test_expired_call_parity_compares_the_retained_projection(monkeypatch):
+    monkeypatch.setenv(calls.FLAG, 'shadow')
+    monkeypatch.setattr(boundary_store, 'windows', lambda *_: {})
+    monkeypatch.setattr(boundary_store, 'load', lambda *_: [])
+    observed = Mock()
+    monkeypatch.setattr(calls, 'observe', observed)
+    conversation = SimpleNamespace(
+        started_at=NOW,
+        finished_at=NOW + timedelta(minutes=30),
+        external_data={},
+        is_call=True,
+        call_platform='google_meet',
+        calendar_event_id='event-1',
+    )
+    calls.apply_call_metadata('synthetic-owner', conversation)
+    observed.assert_called_once_with('call_metadata', 'agree')
+    assert conversation.is_call is True

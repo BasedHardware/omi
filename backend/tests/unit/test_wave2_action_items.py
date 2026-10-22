@@ -117,3 +117,41 @@ def test_agentic_notes_do_not_keep_a_conflicting_owner_only_rule(monkeypatch):
     selected = v2.instructions_for('synthetic-owner', INSTRUCTIONS)
     assert 'emit only explicit commitments the owner made' not in selected
     assert 'commitments by or for the owner' in selected
+
+
+@pytest.mark.parametrize(
+    'description,context,kept',
+    [
+        ('Catch up with Matt in NYC', '', True),
+        ('Catch up with Matt next week', '', True),
+        ('Catch up with Matt', 'Meet in NYC', True),
+        ('Catch up with Matt', '', False),
+        ('Catch up with someone in NYC', '', False),
+        ('Catch up with Speaker 2 in NYC', '', False),
+        ('We should go hiking sometime', '', False),
+        ('Go hiking together', '', False),
+    ],
+)
+def test_incident09_counterpart_and_place_or_time(monkeypatch, description, context, kept):
+    monkeypatch.setenv(v2.FLAG, 'serve')
+    item = {'description': description, 'context': context, 'owner_name': 'me', 'capture_kind': 'clear_commitment'}
+    assert bool(extraction.filter_extracted_items('synthetic-owner', [item])) is kept
+
+
+@pytest.mark.parametrize(
+    'description,owner,context,kept',
+    [
+        ('Provide feedback', 'Aryan', 'Aryan promised feedback to Riley', True),
+        ("Review Riley's CV", 'Jon', 'Jon offered to review the CV for Riley', True),
+        ('Forward customs thread and logistics contact', 'Karsten', "Karsten's own purchase needs customs help", False),
+        ('Check Deepgram', 'Jan', 'Jan offered to check Deepgram for Riley', True),
+        ('Send admin invitation', 'me', '', True),
+        ('Share Drive folder', 'me', '', True),
+    ],
+)
+def test_incident09_owner_involved_offers_keep_promisor(monkeypatch, description, owner, context, kept):
+    monkeypatch.setenv(v2.FLAG, 'serve')
+    item = {'description': description, 'context': context, 'owner_name': owner, 'capture_kind': 'clear_commitment'}
+    selected = extraction.filter_extracted_items('synthetic-owner', [item])
+    assert bool(selected) is kept
+    assert item['owner_name'] == owner

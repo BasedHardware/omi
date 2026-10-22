@@ -899,3 +899,31 @@ def test_build_only_entries_are_validated(contracts_module, tmp_path, override, 
 
     with pytest.raises(contracts_module.ContractError, match=re.escape(expected)):
         contracts_module.load_contracts(_registry_variant(tmp_path, mutate))
+
+
+@pytest.mark.parametrize(
+    'name,excluded_modules',
+    [
+        ('parakeet', {'utils.logging_config', 'utils.speakers.policy'}),
+        ('diarizer', {'omi_logging', 'utils.logging_config', 'utils.stt.diarization_turns'}),
+        ('nllb-translation', {'omi_logging'}),
+    ],
+)
+def test_copied_gpu_shims_do_not_probe_checkout_only_imports(contracts_module, name, excluded_modules):
+    contract = _contract(contracts_module, name)
+    assert excluded_modules <= contract.dependency_probe_exclusions
+    dependencies = contracts_module.third_party_dependency_modules(contract)
+    assert not any(
+        module == shim or module.startswith(shim + '.') for module in dependencies for shim in excluded_modules
+    )
+
+
+def test_gpu_batch_retry_cap_does_not_reach_cloud_tasks(contracts_module):
+    contract = _contract(contracts_module, 'batch-pipeline-worker')
+    closure = contracts_module.first_party_import_closure(contract, contract.entrypoints)
+    assert 'utils.capture.retry_cap' in closure
+    assert 'utils.sync.retry_hygiene' not in closure
+    assert 'utils.cloud_tasks' not in closure
+    assert not any(
+        module.startswith('google.cloud.tasks') for module in contracts_module.third_party_dependency_modules(contract)
+    )

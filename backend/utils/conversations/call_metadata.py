@@ -14,8 +14,6 @@ from utils.conversations.calls_metrics import observe
 
 FLAG_ENV = 'CALLS_RECAP_MODE'
 FLAG = FLAG_ENV
-CALLS_RECAP_PERCENT_ENV = 'CALLS_RECAP_MODE_SERVE_PERCENT'
-CALLS_RECAP_DIGESTS_ENV = 'CALLS_RECAP_MODE_SERVE_UID_SHA256S'
 _PLATFORM_HOSTS = {
     'meet.google.com': 'google_meet',
     'zoom.us': 'zoom',
@@ -115,12 +113,18 @@ def apply_call_metadata(uid, conversation):
         if start is None or end is None:
             return conversation
         external = getattr(conversation, 'external_data', None) or {}
-        boundaries.ingest_context(uid, external.get('calendar_meeting_context'))
+        context = external.get('calendar_meeting_context')
+        serving = serving_for(FLAG, uid)
+        # V4 must not add inputs to the wave-1 authority outside its own cohort.
+        # Shadow projects the same evidence locally without persisting it.
+        if serving:
+            boundaries.ingest_context(uid, context)
         # A persisted phone transport identity is positive boundary evidence too.
         phone = None
         if getattr(conversation, 'call_id', None):
             phone = BoundarySignal(kind='phone_call', started_at=start, ended_at=end, external_id=conversation.call_id)
-            boundary_store.record(uid, [phone])
+            if serving:
+                boundary_store.record(uid, [phone])
         # Ongoing stale signals cannot label unrelated conversations indefinitely.
         windows = boundary_store.windows(uid)
         keys = [
@@ -133,7 +137,14 @@ def apply_call_metadata(uid, conversation):
         signals = boundary_store.load(uid, keys)
         if phone is not None:
             signals.append(phone)
-        fields = call_fields(signals, external.get('calendar_meeting_context'))
+        if not serving and context:
+            if local_context := boundaries.context_signal(context):
+                signals.append(local_context)
+        fields = call_fields(signals, context)
+        # Expired evidence cannot clear a durable call, so compare the retained
+        # projection rather than reporting absence as a metadata disagreement.
+        if fields['is_call'] is None and getattr(conversation, 'is_call', None) is True:
+            fields = {key: getattr(conversation, key, None) for key in fields}
         observe(
             'call_metadata',
             'agree' if all(getattr(conversation, k, None) == v for k, v in fields.items()) else 'disagree',
