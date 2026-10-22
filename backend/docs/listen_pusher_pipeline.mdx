@@ -2259,6 +2259,14 @@ or raw exception text. `blocked_byok` is an explicit recovery state: durable
 offline BYOK is not supported without a separately reviewed credential broker;
 the worker must never silently use Omi keys.
 
+The default-off `finjob_candidate_queries` read lever narrows reconciliation
+candidate reads without changing loop leases or transactional admission. BYOK
+abandonment excludes terminal jobs in Firestore; BYOK reclaim queries only BYOK
+jobs; the content sweep queries `finished_at <=` its existing two-hour cutoff.
+The orphan-processing sweep retains its status-only scan so legacy rows lacking
+`processing_admitted_at` are still discovered and stamped. BYOK activity age
+continues to use its existing precedence, including legacy timestamp fallbacks.
+
 A stale `in_progress` row with content can also be finalized by the always-on
 backend reconciliation sweep (or the opt-in self-heal sweep) as a
 `SERVER_RECOVERY` admission on the same conversation id —
