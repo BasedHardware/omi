@@ -141,61 +141,69 @@ def _trim_pcm_audio(pcm_data: bytes, sample_rate: int, start_sec: float, end_sec
     return np.concatenate(trimmed_samples).astype(np.int16).tobytes()
 
 
+_LATIN_UPPER = (
+    r'[A-ZÀ-ÖØ-ÞĀĂĄĆĈĊČĎĐĒĔĖĘĚĜĞĠĢĤĦĨĪĬĮİĲĴĶĹĻĽĿŁŃŅŇŊŌŎŐŒŔŖŘŚŜŞŠŢŤŦŨŪŬŮŰŲŴŶŸŹŻŽ'
+    r'ƁƂƄƆƇƉ-ƋƎ-ƑƓƔƖ-ƘƜƝƟƠƢƤƦƧƩƬƮƯƱ-ƳƵƷƸƼǄǅǇǈǊǋǍǏǑǓǕǗǙǛǞǠǢǤǦǨǪǬǮǱǲǴǶ-ǸǺǼǾȀȂȄȆȈȊȌȎȐȒȔȖȘȚȜȞȠȢȤȦȨȪȬȮȰȲȺȻȽȾɁɃ-ɆɈɊɌɎ'
+    r'ḀḂḄḆḈḊḌḎḐḒḔḖḘḚḜḞḠḢḤḦḨḪḬḮḰḲḴḶḸḺḼḾṀṂṄṆṈṊṌṎṐṒṔṖṘṚṜṞṠṢṤṦṨṪṬṮṰṲṴṶṸṺṼṾẀẂẄẆẈẊẌẎẐẒẔẞ'
+    r'ẠẢẤẦẨẪẬẮẰẲẴẶẸẺẼẾỀỂỄỆỈỊỌỎỐỒỔỖỘỚỜỞỠỢỤỦỨỪỬỮỰỲỴỶỸỺỼỾ]'
+)
+_LATIN_NAME_PATTERN = fr'{_LATIN_UPPER}[^\W\d_]*'
+
 # Language-specific patterns for speaker identification from text
 # Each pattern should have a capture group for the name.
 # The name is expected to be the last capture group.
 SPEAKER_IDENTIFICATION_PATTERNS = {
     'bg': [  # Bulgarian
-        r"\b(Аз съм|аз съм|Казвам се|казвам се|Името ми е|името ми е)\s+([А-Я][а-я]*)\b",
+        r"\b(Аз съм|аз съм|Казвам се|казвам се|Името ми е|името ми е)\s+([А-ЯЁ][а-яё]*)\b",
     ],
     'ca': [  # Catalan
-        r"\b(Sóc|sóc|Em dic|em dic|El meu nom és|el meu nom és)\s+([A-Z][a-zA-Z]*)\b",
+        fr"\b(Sóc|sóc|Em dic|em dic|El meu nom és|el meu nom és)\s+({_LATIN_NAME_PATTERN})\b",
     ],
     'zh': [  # Chinese
         r"(我的名字是|我叫)\s*([\u4e00-\u9fa5]{2,5}?)(?:[，。！？、,.!?\s]|$)",
         r"(我是)\s*([\u4e00-\u9fa5]{2,4}?)(?:[，。！？、,.!?\s]|$)",
     ],
     'cs': [  # Czech
-        r"\b(Jsem|jsem|Jmenuji se|jmenuji se)\s+([A-Z][a-zA-Z]*)\b",
+        fr"\b(Jsem|jsem|Jmenuji se|jmenuji se)\s+({_LATIN_NAME_PATTERN})\b",
     ],
     'da': [  # Danish
-        r"\b(Jeg er|jeg er|Jeg hedder|jeg hedder|Mit navn er|mit navn er)\s+([A-Z][a-zA-Z]*)\b",
+        fr"\b(Jeg er|jeg er|Jeg hedder|jeg hedder|Mit navn er|mit navn er)\s+({_LATIN_NAME_PATTERN})\b",
     ],
     'de': [  # German
-        r"\b(ich bin|Ich bin|ich heiße|Ich heiße|mein Name ist|Mein Name ist)\s+([A-Z][a-zA-Z]*)\b",
+        fr"\b(ich bin|Ich bin|ich heiße|Ich heiße|mein Name ist|Mein Name ist)\s+({_LATIN_NAME_PATTERN})\b",
     ],
     'el': [  # Greek
         r"\b(Είμαι|είμαι|Με λένε|με λένε|Το όνομά μου είναι|το όνομά μου είναι)\s+([\u0370-\u03ff\u1f00-\u1fff]+)\b",
     ],
     'en': [  # English
-        r"\b(I am|I'm|i am|i'm|My name is|my name is)\s+([A-Z][a-zA-Z]*)\b",
-        r"\b([A-Z][a-zA-Z]*)\s+is my name\b",
+        fr"\b(I am|I'm|i am|i'm|My name is|my name is)\s+({_LATIN_NAME_PATTERN})\b",
+        fr"\b({_LATIN_NAME_PATTERN})\s+is my name\b",
     ],
     'es': [  # Spanish
-        r"\b(soy|Soy|me llamo|Me llamo|mi nombre es|Mi nombre es)\s+([A-Z][a-zA-Z]*)\b",
-        r"\b([A-Z][a-zA-Z]*)\s+es mi nombre\b",
+        fr"\b(soy|Soy|me llamo|Me llamo|mi nombre es|Mi nombre es)\s+({_LATIN_NAME_PATTERN})\b",
+        fr"\b({_LATIN_NAME_PATTERN})\s+es mi nombre\b",
     ],
     'et': [  # Estonian
-        r"\b(Ma olen|ma olen|Minu nimi on|minu nimi on)\s+([A-Z][a-zA-Z]*)\b",
+        fr"\b(Ma olen|ma olen|Minu nimi on|minu nimi on)\s+({_LATIN_NAME_PATTERN})\b",
     ],
     'fi': [  # Finnish
-        r"\b(Olen|olen|Minun nimeni on|minun nimeni on)\s+([A-Z][a-zA-Z]*)\b",
+        fr"\b(Olen|olen|Minun nimeni on|minun nimeni on)\s+({_LATIN_NAME_PATTERN})\b",
     ],
     'fr': [  # French
-        r"\b(je suis|Je suis|je m'appelle|Je m'appelle|mon nom est|Mon nom est)\s+([A-Z][a-zA-Z]*)\b",
+        fr"\b(je suis|Je suis|je m'appelle|Je m'appelle|mon nom est|Mon nom est)\s+({_LATIN_NAME_PATTERN})\b",
     ],
     'hi': [  # Hindi
         r"(मैं हूँ|मेरा नाम है)\s+([\u0900-\u097F]+)",
     ],
     'hu': [  # Hungarian
-        r"\b(Én vagyok|én vagyok|A nevem|a nevem)\s+([A-Z][a-zA-Z]*)\b",
-        r"\b([A-Z][a-zA-Z]*)\s+vagyok\b",
+        fr"\b(Én vagyok|én vagyok|A nevem|a nevem)\s+({_LATIN_NAME_PATTERN})\b",
+        fr"\b({_LATIN_NAME_PATTERN})\s+vagyok\b",
     ],
     'id': [  # Indonesian
-        r"\b(Saya|saya|Nama saya|nama saya)\s+([A-Z][a-zA-Z]*)\b",
+        fr"\b(Saya|saya|Nama saya|nama saya)\s+({_LATIN_NAME_PATTERN})\b",
     ],
     'it': [  # Italian
-        r"\b(Sono|sono|Mi chiamo|mi chiamo|Il mio nome è|il mio nome è)\s+([A-Z][a-zA-Z]*)\b",
+        fr"\b(Sono|sono|Mi chiamo|mi chiamo|Il mio nome è|il mio nome è)\s+({_LATIN_NAME_PATTERN})\b",
     ],
     'ja': [  # Japanese
         r"(私の名前は|わたしのなまえは)\s*([\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]{2,6}?)(?:です|だ|でーす|だよ|と申します|ともうします|と言います|といいます|[、。，．！？!?\s]|$)",
@@ -205,49 +213,49 @@ SPEAKER_IDENTIFICATION_PATTERNS = {
         r"(저는|제\s*이름은)\s*([\uac00-\ud7a3]{2,5}?)(?:입니다|이에요|예요|이라고\s*합니다|라고\s*합니다|이야|야|[.,!?\s]|$)",
     ],
     'lt': [  # Lithuanian
-        r"\b(Aš esu|aš esu|Mano vardas yra|mano vardas yra)\s+([A-Z][a-zA-Z]*)\b",
+        fr"\b(Aš esu|aš esu|Mano vardas yra|mano vardas yra)\s+({_LATIN_NAME_PATTERN})\b",
     ],
     'lv': [  # Latvian
-        r"\b(Es esmu|es esmu|Mans vārds ir|mans vārds ir)\s+([A-Z][a-zA-Z]*)\b",
+        fr"\b(Es esmu|es esmu|Mans vārds ir|mans vārds ir)\s+({_LATIN_NAME_PATTERN})\b",
     ],
     'ms': [  # Malay
-        r"\b(Saya|saya|Nama saya|nama saya)\s+([A-Z][a-zA-Z]*)\b",
+        fr"\b(Saya|saya|Nama saya|nama saya)\s+({_LATIN_NAME_PATTERN})\b",
     ],
     'nl': [  # Dutch / Flemish
-        r"\b(Ik ben|ik ben|Mijn naam is|mijn naam is|Ik heet|ik heet)\s+([A-Z][a-zA-Z]*)\b",
+        fr"\b(Ik ben|ik ben|Mijn naam is|mijn naam is|Ik heet|ik heet)\s+({_LATIN_NAME_PATTERN})\b",
     ],
     'no': [  # Norwegian
-        r"\b(Jeg er|jeg er|Jeg heter|jeg heter|Navnet mitt er|navnet mitt er)\s+([A-Z][a-zA-Z]*)\b",
+        fr"\b(Jeg er|jeg er|Jeg heter|jeg heter|Navnet mitt er|navnet mitt er)\s+({_LATIN_NAME_PATTERN})\b",
     ],
     'pl': [  # Polish
-        r"\b(Jestem|jestem|Nazywam się|nazywam się|Mam na imię|mam na imię)\s+([A-Z][a-zA-Z]*)\b",
+        fr"\b(Jestem|jestem|Nazywam się|nazywam się|Mam na imię|mam na imię)\s+({_LATIN_NAME_PATTERN})\b",
     ],
     'pt': [  # Portuguese
-        r"\b(Eu sou|eu sou|Chamo-me|chamo-me|O meu nome é|o meu nome é)\s+([A-Z][a-zA-Z]*)\b",
+        fr"\b(Eu sou|eu sou|Chamo-me|chamo-me|O meu nome é|o meu nome é)\s+({_LATIN_NAME_PATTERN})\b",
     ],
     'ro': [  # Romanian
-        r"\b(Sunt|sunt|Mă numesc|mă numesc|Numele meu este|numele meu este)\s+([A-Z][a-zA-Z]*)\b",
+        fr"\b(Sunt|sunt|Mă numesc|mă numesc|Numele meu este|numele meu este)\s+({_LATIN_NAME_PATTERN})\b",
     ],
     'ru': [  # Russian
-        r"\b(Я|я|Меня зовут|меня зовут|Моё имя|моё имя)\s+([А-Я][а-я]*)\b",
+        r"\b(Я|я|Меня зовут|меня зовут|Моё имя|моё имя)\s+([А-ЯЁ][а-яё]*)\b",
     ],
     'sk': [  # Slovak
-        r"\b(Som|som|Volám sa|volám sa)\s+([A-Z][a-zA-Z]*)\b",
+        fr"\b(Som|som|Volám sa|volám sa)\s+({_LATIN_NAME_PATTERN})\b",
     ],
     'sv': [  # Swedish
-        r"\b(Jag är|jag är|Jag heter|jag heter|Mitt namn är|mitt namn är)\s+([A-Z][a-zA-Z]*)\b",
+        fr"\b(Jag är|jag är|Jag heter|jag heter|Mitt namn är|mitt namn är)\s+({_LATIN_NAME_PATTERN})\b",
     ],
     'th': [  # Thai
         r"(ผมชื่อ|ฉันชื่อ|ผมคือ|ฉันคือ)\s*([\u0e00-\u0e7f]+)",
     ],
     'tr': [  # Turkish
-        r"\b(Benim adım|benim adım)\s+([A-Z][a-zA-Z]*)\b",
+        fr"\b(Benim adım|benim adım)\s+({_LATIN_NAME_PATTERN})\b",
     ],
     'uk': [  # Ukrainian
         r"\b(Я|я|Мене звати|мене звати|Моє ім'я|моє ім'я)\s+([А-ЯІЇЄҐ][а-яіїєґ]*)\b",
     ],
     'vi': [  # Vietnamese
-        r"\b(Tôi là|tôi là|Tên tôi là|tên tôi là)\s+([A-Z][a-zA-Z]*)\b",
+        fr"\b(Tôi là|tôi là|Tên tôi là|tên tôi là)\s+({_LATIN_NAME_PATTERN})\b",
     ],
 }
 
@@ -308,7 +316,7 @@ COPULAR_SELF_REFERENCE_LEAD_INS = frozenset(
 # Name-first patterns capture the name in group 1, so there is no lead-in to
 # classify. Only Hungarian "<Name> vagyok" is a bare copula; "<Name> is my name"
 # and "<Name> es mi nombre" are explicit introductions.
-_NAME_FIRST_COPULAR_PATTERNS = frozenset({r"\b([A-Z][a-zA-Z]*)\s+vagyok\b"})
+_NAME_FIRST_COPULAR_PATTERNS = frozenset({fr"\b({_LATIN_NAME_PATTERN})\s+vagyok\b"})
 
 # CJK stopwords and grammatical elements to avoid false-positive speaker creation
 # from ordinary conversational sentences (#12900).
