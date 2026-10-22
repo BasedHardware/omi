@@ -17,6 +17,7 @@ import uuid
 
 from google.auth.credentials import AnonymousCredentials
 from google.cloud import firestore
+import httpx
 import pytest
 
 from models.mcp_client import McpCredentialError
@@ -27,6 +28,7 @@ from database import _client, mcp_client_credentials as credentials, redis_db
 from models.app import ChatTool
 from routers import apps as apps_router
 from utils.retrieval.tools import app_tools
+from utils import mcp_token_refresh
 
 pytestmark = pytest.mark.integration
 PROJECT = 'demo-omi-mcp-refresh'
@@ -254,3 +256,94 @@ def test_real_refresh_endpoint_persists_each_rotation_before_discovery(live_conn
             assert saved['external_integration']['mcp_oauth_tokens']['refresh_token'] == f'refresh-{generation}'
             assert saved['external_integration']['keep'] == 'metadata'
             assert saved['chat_tools'][0]['name'] == 'check'
+
+
+@pytest.mark.parametrize('mutation', ['delete', 'reconnect', 'takeover'])
+@pytest.mark.asyncio
+async def test_in_flight_provider_response_cannot_overwrite_a_changed_connection(live_connection, mutation):
+    client, ref, url, tokens, state, begun, release, tool = live_connection
+    item = tool()
+    release.clear()
+    task = asyncio.create_task(item.ainvoke({}))
+    try:
+        async with asyncio.timeout(5):
+            while not begun.is_set():
+                await asyncio.sleep(0.01)
+        if mutation == 'delete':
+            ref.delete()
+        elif mutation == 'reconnect':
+            ref.update(
+                {
+                    'external_integration.mcp_oauth_tokens': {
+                        **tokens,
+                        'access_token': 'reconnected',
+                        'refresh_token': 'reconnected',
+                    }
+                }
+            )
+        else:
+            # Move only the test lease clock, without waiting a production minute.
+            ref.update({'mcp_oauth_refresh.expires_at': 0})
+            assert (
+                credentials.claim_refresh(ref.id, url, tokens, 'access-0', 'successor', firestore_client=client).state
+                == 'claimed'
+            )
+        before = deepcopy(ref.get().to_dict())
+    finally:
+        release.set()
+    result = await asyncio.wait_for(task, 5)
+    assert 'Error' in result
+    assert state['refreshes'] == 1 and state['reads'] == 0
+    after = ref.get().to_dict()
+    if mutation == 'reconnect':
+        # Failed old owners may release their own lease, never the new credentials.
+        assert after['external_integration'] == before['external_integration']
+    else:
+        assert after == before
+
+
+@pytest.mark.asyncio
+async def test_explicit_discovery_and_normal_tools_share_one_in_flight_refresh(live_connection, monkeypatch):
+    _, ref, _, _, state, begun, release, tool = live_connection
+    monkeypatch.setattr(apps_router, 'delete_app_cache_by_id', MagicMock())
+    app = FastAPI()
+    app.include_router(apps_router.router)
+    app.dependency_overrides[apps_router.auth.get_current_user_uid] = lambda: 'synthetic-owner'
+    release.clear()
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://local-test') as client:
+        tasks = [
+            asyncio.create_task(client.post(f'/v1/apps/{ref.id}/mcp/refresh')),
+            asyncio.create_task(tool().ainvoke({})),
+        ]
+        try:
+            async with asyncio.timeout(5):
+                while not begun.is_set():
+                    await asyncio.sleep(0.01)
+            await asyncio.sleep(0.1)
+        finally:
+            release.set()
+        response, result = await asyncio.wait_for(asyncio.gather(*tasks), 5)
+    assert response.status_code == 200, response.text
+    assert response.json() == {'tools_count': 1, 'tool_names': ['check']}
+    assert 'fresh check' in result
+    assert state['refreshes'] == 1 and state['reads'] == 1
+    saved = ref.get().to_dict()
+    assert saved['external_integration']['mcp_oauth_tokens']['refresh_token'] == 'refresh-1'
+    assert saved['chat_tools'][0]['name'] == 'check'
+    assert saved['mcp_oauth_refresh'] is None
+
+
+@pytest.mark.asyncio
+async def test_storage_failure_after_real_issuer_rotation_does_not_execute_the_tool(
+    live_connection, monkeypatch, caplog
+):
+    _, ref, _, tokens, state, _, _, tool = live_connection
+    monkeypatch.setattr(
+        mcp_token_refresh, 'complete_refresh', MagicMock(side_effect=RuntimeError('private-storage-error'))
+    )
+    result = await tool().ainvoke({})
+    assert 'Error' in result and 'private-storage-error' not in result + caplog.text
+    assert state['refreshes'] == 1 and state['reads'] == 0
+    saved = ref.get().to_dict()
+    assert saved['external_integration']['mcp_oauth_tokens'] == tokens
+    assert saved['mcp_oauth_refresh'] is None
