@@ -296,3 +296,18 @@ def test_restore_and_stale_evidence_cannot_leave_old_exclusion(monkeypatch):
     conversation.content_kind = 'media'
     assert adapter.minimum_for_processing('', conversation) is None
     assert conversation.content_kind is None
+
+
+@pytest.mark.parametrize('kind', ['conversation', 'media', 'noise'])
+def test_client_cannot_author_content_classification(kind):
+    from models.conversation import Conversation, CreateConversation, ExternalIntegrationCreateConversation, Structured
+
+    create = CreateConversation(
+        started_at=START, finished_at=START + timedelta(seconds=30), transcript_segments=[], content_kind=kind
+    )
+    external = ExternalIntegrationCreateConversation(text='Synthetic import.', content_kind=kind)
+    assert create.content_kind is None and external.content_kind is None
+    # The server may assign its evidence decision after request validation.
+    create.content_kind = kind
+    stored = Conversation(id='synthetic-capture', created_at=START, structured=Structured(), **create.model_dump())
+    assert stored.content_kind == kind
