@@ -6,6 +6,7 @@ from the device to our backend and stored in Firestore.
 """
 
 from datetime import date, datetime, time, timedelta, timezone
+import math
 from typing import Any, Dict, List, Optional, Tuple, cast
 
 from langchain_core.tools import tool  # type: ignore[reportUnknownVariableType]  # langchain @tool decorator partially typed
@@ -24,6 +25,52 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+def _safe_float(value: Any, default: Optional[float] = None) -> Optional[float]:
+    """Safely coerce value to a finite float, rejecting booleans, non-numeric strings, NaNs, and Infs."""
+    if value is None or isinstance(value, bool):
+        return default
+    if isinstance(value, (int, float)):
+        if math.isnan(value) or math.isinf(value):
+            return default
+        return float(value)
+    if isinstance(value, str):
+        s = value.strip()
+        try:
+            val = float(s)
+            if math.isnan(val) or math.isinf(val):
+                return default
+            return val
+        except ValueError:
+            return default
+    return default
+
+
+def _safe_int(value: Any, default: Optional[int] = None) -> Optional[int]:
+    """Safely coerce value to an integer, rejecting booleans, non-integer floats, and non-numeric strings."""
+    if value is None or isinstance(value, bool):
+        return default
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        if math.isnan(value) or math.isinf(value) or not value.is_integer():
+            return default
+        return int(value)
+    if isinstance(value, str):
+        s = value.strip()
+        if s.isdigit() or (s.startswith('-') and s[1:].isdigit()):
+            try:
+                return int(s)
+            except ValueError:
+                return default
+        try:
+            val = float(s)
+            if not math.isnan(val) and not math.isinf(val) and val.is_integer():
+                return int(val)
+        except ValueError:
+            pass
+    return default
+
+
 def _health_period_context(integration: Dict[str, Any], clock: DisplayClock, period_days: Any) -> str:
     """Describe the HealthKit window relative to its last successful sync."""
     try:
@@ -31,7 +78,7 @@ def _health_period_context(integration: Dict[str, Any], clock: DisplayClock, per
     except (TypeError, ValueError):
         days = 0
 
-    synced_at = to_datetime(integration.get('last_synced'))
+    synced_at = to_datetime(integration.get('last_synced') if isinstance(integration, dict) else None)
     start = synced_at - timedelta(days=days) if synced_at is not None and days > 0 else None
     lines = [f"Covered dates: {format_date(start, clock)} – {format_date(synced_at, clock)}."]
     lines.append(f"Data last synced: {format_instant(synced_at, clock)}.")
@@ -40,8 +87,10 @@ def _health_period_context(integration: Dict[str, Any], clock: DisplayClock, per
     return "\n".join(lines)
 
 
-def _workout_timestamp(workout: Dict[str, Any]) -> float:
+def _workout_timestamp(workout: Any) -> float:
     """Return a sortable epoch value for HealthKit's millisecond startDate."""
+    if not isinstance(workout, dict):
+        return float('-inf')
     value = workout.get('startDate')
     if isinstance(value, (int, float)) and not isinstance(value, bool):
         return float(value)
@@ -72,13 +121,16 @@ def get_apple_health_data(uid: str, data_type: Optional[str] = None) -> Optional
         Health data dict or None if not found
     """
     integration = users_db.get_integration(uid, 'apple_health')
-    if not integration:
+    if not integration or not isinstance(integration, dict):
         return None
 
-    health_data: Dict[str, Any] = integration.get('health_data', {})
+    health_data = integration.get('health_data')
+    if not isinstance(health_data, dict):
+        return None if data_type else {}
 
     if data_type:
-        return health_data.get(data_type)
+        val = health_data.get(data_type)
+        return val if isinstance(val, dict) else None
 
     return health_data
 
@@ -136,17 +188,20 @@ def get_apple_health_steps_tool(
     clock = clock_for_config(config, uid)
 
     try:
-        health_data: Dict[str, Any] = integration.get('health_data', {})
-        steps_data: Dict[str, Any] = health_data.get('steps', {})
+        raw_health = integration.get('health_data')
+        health_data: Dict[str, Any] = raw_health if isinstance(raw_health, dict) else {}
+        raw_steps = health_data.get('steps')
+        steps_data: Dict[str, Any] = raw_steps if isinstance(raw_steps, dict) else {}
         period_days = steps_data.get('period_days', health_data.get('period_days', 7))
-        daily_steps: List[Dict[str, Any]] = steps_data.get('daily', [])
+        raw_daily = steps_data.get('daily')
+        daily_steps: List[Dict[str, Any]] = [d for d in raw_daily if isinstance(d, dict)] if isinstance(raw_daily, list) else []
         context = _health_period_context(integration, clock, period_days)
 
         if not steps_data:
             return "No step data found. Make sure Apple Health is synced from your iPhone.\n" + context
 
-        total_steps = steps_data.get('total', 0)
-        avg_per_day = steps_data.get('average_per_day', 0)
+        total_steps = _safe_int(steps_data.get('total'), 0)
+        avg_per_day = _safe_float(steps_data.get('average_per_day'), 0.0)
         result = f"Apple Health Step Data\n{context}\n\n"
         result += f"Total Steps: {total_steps:,}\n"
         result += f"Average Steps per Day: {avg_per_day:,.0f}\n"
@@ -155,10 +210,10 @@ def get_apple_health_steps_tool(
         if daily_steps:
             result += "\nDaily Breakdown:\n"
             # Sort by date descending (most recent first)
-            sorted_days = sorted(daily_steps, key=lambda x: x.get('date', ''), reverse=True)
+            sorted_days = sorted(daily_steps, key=lambda x: str(x.get('date') or ''), reverse=True)
             for day in sorted_days:
                 date_str = _format_health_date(day.get('date'), clock)
-                steps = day.get('steps', 0)
+                steps = _safe_int(day.get('steps'), 0)
                 result += f"  {date_str}: {steps:,} steps\n"
 
         return result.strip()
@@ -197,28 +252,32 @@ def get_apple_health_sleep_tool(
     clock = clock_for_config(config, uid)
 
     try:
-        health_data: Dict[str, Any] = integration.get('health_data', {})
-        sleep_data: Dict[str, Any] = health_data.get('sleep', {})
+        raw_health = integration.get('health_data')
+        health_data: Dict[str, Any] = raw_health if isinstance(raw_health, dict) else {}
+        raw_sleep = health_data.get('sleep')
+        sleep_data: Dict[str, Any] = raw_sleep if isinstance(raw_sleep, dict) else {}
         context = _health_period_context(integration, clock, health_data.get('period_days', 7))
 
         if not sleep_data:
             return "No sleep data found. Make sure Apple Health is synced from your iPhone.\n" + context
 
-        total_sleep_hours = sleep_data.get('total_sleep_hours', 0)
-        daily_sleep: List[Dict[str, Any]] = sleep_data.get('daily', [])
+        total_sleep_hours = _safe_float(sleep_data.get('total_sleep_hours'), 0.0)
+        raw_daily = sleep_data.get('daily')
+        daily_sleep: List[Dict[str, Any]] = [d for d in raw_daily if isinstance(d, dict)] if isinstance(raw_daily, list) else []
 
+        avg_per_night = (total_sleep_hours / max(len(daily_sleep), 1)) if total_sleep_hours is not None else 0.0
         result = f"Apple Health Sleep Data\n{context}\n\n"
         result += f"Total Sleep: {total_sleep_hours:.1f} hours\n"
-        result += f"Average per Night: {total_sleep_hours / max(len(daily_sleep), 1):.1f} hours\n"
+        result += f"Average per Night: {avg_per_night:.1f} hours\n"
 
         # Include daily breakdown if available
         if daily_sleep:
             result += "\nDaily Breakdown:\n"
             # Sort by date descending (most recent first)
-            sorted_days = sorted(daily_sleep, key=lambda x: x.get('date', ''), reverse=True)
+            sorted_days = sorted(daily_sleep, key=lambda x: str(x.get('date') or ''), reverse=True)
             for day in sorted_days:
                 date_str = _format_health_date(day.get('date'), clock)
-                hours = day.get('sleepHours', 0)
+                hours = _safe_float(day.get('sleepHours'), 0.0)
                 result += f"  {date_str}: {hours:.1f} hours\n"
 
         return result.strip()
@@ -255,8 +314,10 @@ def get_apple_health_heart_rate_tool(
     clock = clock_for_config(config, uid)
 
     try:
-        health_data: Dict[str, Any] = integration.get('health_data', {})
-        heart_data: Dict[str, Any] = health_data.get('heart_rate', {})
+        raw_health = integration.get('health_data')
+        health_data: Dict[str, Any] = raw_health if isinstance(raw_health, dict) else {}
+        raw_heart = health_data.get('heart_rate')
+        heart_data: Dict[str, Any] = raw_heart if isinstance(raw_heart, dict) else {}
         context = _health_period_context(integration, clock, health_data.get('period_days', 7))
 
         if not heart_data:
@@ -265,9 +326,9 @@ def get_apple_health_heart_rate_tool(
                 "and you have heart rate data from Apple Watch.\n" + context
             )
 
-        avg_hr = heart_data.get('average')
-        min_hr = heart_data.get('minimum')
-        max_hr = heart_data.get('maximum')
+        avg_hr = _safe_float(heart_data.get('average'))
+        min_hr = _safe_float(heart_data.get('minimum'))
+        max_hr = _safe_float(heart_data.get('maximum'))
 
         result = f"Apple Health Heart Rate Data\n{context}\n\n"
 
@@ -313,8 +374,10 @@ def get_apple_health_workouts_tool(
     clock = clock_for_config(config, uid)
 
     try:
-        health_data: Dict[str, Any] = integration.get('health_data', {})
-        workouts: List[Dict[str, Any]] = health_data.get('workouts', [])
+        raw_health = integration.get('health_data')
+        health_data: Dict[str, Any] = raw_health if isinstance(raw_health, dict) else {}
+        raw_workouts = health_data.get('workouts')
+        workouts: List[Dict[str, Any]] = [w for w in raw_workouts if isinstance(w, dict)] if isinstance(raw_workouts, list) else []
         context = _health_period_context(integration, clock, health_data.get('period_days', 7))
 
         if not workouts:
@@ -332,12 +395,12 @@ def get_apple_health_workouts_tool(
 
         for i, workout in enumerate(shown_workouts, 1):
             workout_type = workout.get('type', 'Unknown')
-            duration = workout.get('durationMinutes', 0)
-            calories = workout.get('caloriesBurned', 0)
-            distance = workout.get('distanceKm')
+            duration = _safe_float(workout.get('durationMinutes'), 0.0)
+            calories = _safe_float(workout.get('caloriesBurned'))
+            distance = _safe_float(workout.get('distanceKm'))
 
             # Parse start date
-            start_ms = workout.get('startDate', 0)
+            start_ms = _safe_float(workout.get('startDate'))
             date_str = ""
             if start_ms:
                 try:
@@ -350,7 +413,7 @@ def get_apple_health_workouts_tool(
             result += f"   Duration: {duration:.0f} minutes\n"
             if calories:
                 result += f"   Calories: {calories:.0f} kcal\n"
-            if distance:
+            if distance is not None:
                 result += f"   Distance: {distance:.2f} km\n"
             result += "\n"
 
@@ -399,7 +462,8 @@ def get_apple_health_summary_tool(
     clock = clock_for_config(config, uid)
 
     try:
-        health_data: Dict[str, Any] = integration.get('health_data', {})
+        raw_health = integration.get('health_data')
+        health_data: Dict[str, Any] = raw_health if isinstance(raw_health, dict) else {}
 
         if not health_data:
             context = _health_period_context(integration, clock, 7)
@@ -410,69 +474,82 @@ def get_apple_health_summary_tool(
         result = f"Apple Health Summary\n{context}\n\n"
 
         # Steps with daily breakdown
-        steps: Dict[str, Any] = health_data.get('steps', {})
+        raw_steps = health_data.get('steps')
+        steps: Dict[str, Any] = raw_steps if isinstance(raw_steps, dict) else {}
         if steps:
+            total_st = _safe_int(steps.get('total'), 0)
+            avg_st = _safe_float(steps.get('average_per_day'), 0.0)
             result += f"STEPS\n"
-            result += f"  Total: {steps.get('total', 0):,}\n"
-            result += f"  Daily Average: {steps.get('average_per_day', 0):,.0f}\n"
-            daily_steps: List[Dict[str, Any]] = steps.get('daily', [])
+            result += f"  Total: {total_st:,}\n"
+            result += f"  Daily Average: {avg_st:,.0f}\n"
+            raw_daily_steps = steps.get('daily')
+            daily_steps: List[Dict[str, Any]] = [d for d in raw_daily_steps if isinstance(d, dict)] if isinstance(raw_daily_steps, list) else []
             if daily_steps:
                 result += "  Daily:\n"
-                sorted_days = sorted(daily_steps, key=lambda x: x.get('date', ''), reverse=True)
+                sorted_days = sorted(daily_steps, key=lambda x: str(x.get('date') or ''), reverse=True)
                 for day in sorted_days:
-                    result += f"    {_format_health_date(day.get('date'), clock)}: {day.get('steps', 0):,}\n"
+                    result += f"    {_format_health_date(day.get('date'), clock)}: {_safe_int(day.get('steps'), 0):,} steps\n"
             result += "\n"
 
         # Active Energy with daily breakdown
-        active_energy: Dict[str, Any] = health_data.get('active_energy', {})
+        raw_energy = health_data.get('active_energy')
+        active_energy: Dict[str, Any] = raw_energy if isinstance(raw_energy, dict) else {}
         if active_energy:
-            total_cal = active_energy.get('total', 0)
-            avg_cal = active_energy.get('average_per_day', 0)
+            total_cal = _safe_float(active_energy.get('total'), 0.0)
+            avg_cal = _safe_float(active_energy.get('average_per_day'), 0.0)
             result += f"ACTIVE ENERGY\n"
             result += f"  Total: {total_cal:,.0f} kcal\n"
             result += f"  Daily Average: {avg_cal:,.0f} kcal\n"
-            daily_energy: List[Dict[str, Any]] = active_energy.get('daily', [])
+            raw_daily_energy = active_energy.get('daily')
+            daily_energy: List[Dict[str, Any]] = [d for d in raw_daily_energy if isinstance(d, dict)] if isinstance(raw_daily_energy, list) else []
             if daily_energy:
                 result += "  Daily:\n"
-                sorted_days = sorted(daily_energy, key=lambda x: x.get('date', ''), reverse=True)
+                sorted_days = sorted(daily_energy, key=lambda x: str(x.get('date') or ''), reverse=True)
                 for day in sorted_days:
-                    result += f"    {_format_health_date(day.get('date'), clock)}: {day.get('calories', 0):,.0f} kcal\n"
+                    result += f"    {_format_health_date(day.get('date'), clock)}: {_safe_float(day.get('calories'), 0.0):,.0f} kcal\n"
             result += "\n"
 
         # Sleep with daily breakdown
-        sleep: Dict[str, Any] = health_data.get('sleep', {})
+        raw_sleep = health_data.get('sleep')
+        sleep: Dict[str, Any] = raw_sleep if isinstance(raw_sleep, dict) else {}
         if sleep:
             result += f"SLEEP\n"
-            result += f"  Total Hours: {sleep.get('total_sleep_hours', 0):.1f}\n"
-            daily_sleep: List[Dict[str, Any]] = sleep.get('daily', [])
+            result += f"  Total Hours: {_safe_float(sleep.get('total_sleep_hours'), 0.0):.1f}\n"
+            raw_daily_sleep = sleep.get('daily')
+            daily_sleep: List[Dict[str, Any]] = [d for d in raw_daily_sleep if isinstance(d, dict)] if isinstance(raw_daily_sleep, list) else []
             if daily_sleep:
                 result += "  Daily:\n"
-                sorted_days = sorted(daily_sleep, key=lambda x: x.get('date', ''), reverse=True)
+                sorted_days = sorted(daily_sleep, key=lambda x: str(x.get('date') or ''), reverse=True)
                 for day in sorted_days:
-                    result += f"    {_format_health_date(day.get('date'), clock)}: {day.get('sleepHours', 0):.1f} hrs\n"
+                    result += f"    {_format_health_date(day.get('date'), clock)}: {_safe_float(day.get('sleepHours'), 0.0):.1f} hrs\n"
             result += "\n"
 
         # Heart Rate
-        heart_rate: Dict[str, Any] = health_data.get('heart_rate', {})
+        raw_heart = health_data.get('heart_rate')
+        heart_rate: Dict[str, Any] = raw_heart if isinstance(raw_heart, dict) else {}
         if heart_rate:
             result += f"HEART RATE\n"
-            if heart_rate.get('average'):
-                result += f"  Average: {heart_rate.get('average'):.0f} bpm\n"
-            if heart_rate.get('minimum'):
-                result += f"  Min: {heart_rate.get('minimum'):.0f} bpm\n"
-            if heart_rate.get('maximum'):
-                result += f"  Max: {heart_rate.get('maximum'):.0f} bpm\n"
+            avg_hr = _safe_float(heart_rate.get('average'))
+            min_hr = _safe_float(heart_rate.get('minimum'))
+            max_hr = _safe_float(heart_rate.get('maximum'))
+            if avg_hr is not None:
+                result += f"  Average: {avg_hr:.0f} bpm\n"
+            if min_hr is not None:
+                result += f"  Min: {min_hr:.0f} bpm\n"
+            if max_hr is not None:
+                result += f"  Max: {max_hr:.0f} bpm\n"
             result += "\n"
 
         # Workouts
-        workouts: List[Dict[str, Any]] = health_data.get('workouts', [])
+        raw_workouts = health_data.get('workouts')
+        workouts: List[Dict[str, Any]] = [w for w in raw_workouts if isinstance(w, dict)] if isinstance(raw_workouts, list) else []
         if workouts:
             result += f"WORKOUTS\n"
             result += f"  Total Workouts: {len(workouts)}\n"
             # Summarize workout types
             types: Dict[str, int] = {}
             for w in workouts:
-                t = w.get('type', 'Unknown')
+                t = str(w.get('type') or 'Unknown')
                 types[t] = types.get(t, 0) + 1
             for t, count in types.items():
                 result += f"  - {t}: {count}\n"
