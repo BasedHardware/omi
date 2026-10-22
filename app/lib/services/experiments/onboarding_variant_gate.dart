@@ -67,7 +67,7 @@ abstract final class OnboardingVariantGate {
   /// PostHog flag key (project 302298). Registered in `config/feature-flags.yaml`.
   static const enabledFlag = 'onboarding-variant';
 
-  /// Debug-build override: `--dart-define=OMI_ONBOARDING_VARIANT=reid|yinka`
+  /// Debug-build override: `--dart-define=OMI_ONBOARDING_VARIANT=reid|yinka|pocket`
   /// (`reid` also needs `OMI_ONBOARDING_WEBVIEW_URL=https://…`).
   static const _debugVariant = String.fromEnvironment('OMI_ONBOARDING_VARIANT');
   static const _debugUrl = String.fromEnvironment('OMI_ONBOARDING_WEBVIEW_URL');
@@ -76,6 +76,7 @@ abstract final class OnboardingVariantGate {
     if (!kDebugMode) return null;
     return switch (OnboardingVariant.fromWire(_debugVariant)) {
       OnboardingVariant.yinka => OnboardingArm.yinka,
+      OnboardingVariant.pocket => OnboardingArm.pocket,
       OnboardingVariant.reid => parse(variant: 'reid', payload: {'url': _debugUrl}),
       _ => null,
     };
