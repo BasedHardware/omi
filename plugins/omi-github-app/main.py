@@ -26,6 +26,23 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from dotenv import load_dotenv
 
 from simple_storage import SimpleUserStorage
+
+try:
+    from .github_settings_auth import (
+        COOKIE_MAX_AGE_SECONDS,
+        COOKIE_NAME,
+        require_settings_session,
+        session_matches,
+        session_value,
+    )
+except (ImportError, AttributeError):
+    from github_settings_auth import (
+        COOKIE_MAX_AGE_SECONDS,
+        COOKIE_NAME,
+        require_settings_session,
+        session_matches,
+        session_value,
+    )
 from github_client import GitHubClient
 from issue_detector import ai_select_labels
 from models import ChatToolResponse
@@ -1397,6 +1414,24 @@ async def auth_callback(
             status_code=400
         )
 
+
+    if SimpleUserStorage.is_authenticated(uid) and not session_matches(request, uid):
+        return HTMLResponse(
+            content="""
+            <html>
+                <head><meta name="viewport" content="width=device-width, initial-scale=1"></head>
+                <body>
+                    <div class="container">
+                        <div class="error-box" style="margin-top: 40px; padding: 40px 24px;">
+                            <h2 style="font-size: 24px; margin-bottom: 12px;">Already Connected</h2>
+                            <p style="margin-bottom: 0;">This Omi account is already linked. Open the GitHub app settings from Omi to reconnect.</p>
+                        </div>
+                    </div>
+                </body>
+            </html>
+            """,
+            status_code=403,
+        )
     try:
         # Exchange code for access token
         token_data = github_client.exchange_code_for_token(code)
@@ -1425,7 +1460,7 @@ async def auth_callback(
         safe_username = html.escape(str(github_username), quote=True)
         safe_uid = html.escape(quote(str(uid or ""), safe=""), quote=True)
 
-        return HTMLResponse(
+        response = HTMLResponse(
             content=f"""
             <html>
                 <head>
@@ -1467,6 +1502,16 @@ async def auth_callback(
             </html>
             """
         )
+        response.set_cookie(
+            key=COOKIE_NAME,
+            value=session_value(uid),
+            max_age=COOKIE_MAX_AGE_SECONDS,
+            httponly=True,
+            samesite="lax",
+            secure=True,
+            path="/",
+        )
+        return response
 
     except Exception as e:
         import traceback
@@ -1507,10 +1552,12 @@ async def check_setup(uid: str = Query(..., description="User ID from OMI")):
 
 @app.post("/update-repo")
 async def update_repo(
+    request: Request,
     uid: str = Query(...),
     repo: str = Query(...)
 ):
     """Update user's selected repository."""
+    require_settings_session(request, uid)
     try:
         user = SimpleUserStorage.get_user(uid)
         if not user:
@@ -1532,8 +1579,9 @@ async def update_repo(
 
 
 @app.post("/refresh-repos")
-async def refresh_repos(uid: str = Query(...)):
+async def refresh_repos(request: Request, uid: str = Query(...)):
     """Refresh user's repository list from GitHub."""
+    require_settings_session(request, uid)
     try:
         user = SimpleUserStorage.get_user(uid)
         if not user or not user.get("access_token"):
@@ -1559,10 +1607,12 @@ async def refresh_repos(uid: str = Query(...)):
 
 @app.post("/check-repo-access")
 async def check_repo_access(
+    request: Request,
     uid: str = Query(...),
     repo: str = Query(None)
 ):
     """Check authenticated user's permissions for a repository."""
+    require_settings_session(request, uid)
     try:
         user = SimpleUserStorage.get_user(uid)
         if not user or not user.get("access_token"):
@@ -1603,10 +1653,12 @@ async def check_repo_access(
 
 @app.post("/save-agent-provider")
 async def save_agent_provider(
+    request: Request,
     uid: str = Query(...),
     provider: str = Query(...)
 ):
     """Save user's agent provider selection."""
+    require_settings_session(request, uid)
     try:
         provider = provider.lower().strip()
         if provider not in PROVIDERS:
@@ -1627,11 +1679,13 @@ async def save_agent_provider(
 
 @app.post("/save-agent-key")
 async def save_agent_key(
+    request: Request,
     uid: str = Query(...),
     provider: str = Query(...),
     key: str = Query(...)
 ):
     """Save user's API key for an agent provider."""
+    require_settings_session(request, uid)
     try:
         provider = provider.lower().strip()
         if provider not in PROVIDERS:
@@ -1652,10 +1706,12 @@ async def save_agent_key(
 
 @app.post("/delete-agent-key")
 async def delete_agent_key(
+    request: Request,
     uid: str = Query(...),
     provider: str = Query(...)
 ):
     """Delete user's API key for an agent provider."""
+    require_settings_session(request, uid)
     try:
         provider = provider.lower().strip()
         if provider not in PROVIDERS:
@@ -1683,6 +1739,8 @@ async def test_agent(request: Request):
 
         if not uid or not prompt:
             return {"success": False, "error": "User ID and prompt are required"}
+
+        require_settings_session(request, uid)
 
         user = SimpleUserStorage.get_user(uid)
         if not user or not user.get("access_token"):
