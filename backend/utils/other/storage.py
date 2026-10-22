@@ -11,6 +11,7 @@ from contextlib import contextmanager, nullcontext
 from itertools import chain
 from config import audio_archive
 from utils.other.audio_singleflight import coalesce_rebuild
+from utils.other.playback_cache import write_once, cached_manifest
 from config.repeat_work import playback_on_demand
 from utils.other.audio_archive_metrics import ARCHIVE_OBJECTS, ARCHIVE_BYTES, PCM_WRITES_AVOIDED
 from utils.other.raw_audio_read import list_packs, read_pack, verified_pcm_paths, pcm_for_span, invalidate_pack_index
@@ -1740,7 +1741,6 @@ def delete_owner_prompt_embedding_cache(uid: str, conversation_id: str) -> None:
 # ----------------------------------------------------------------------------
 # Playback artifacts: merged MP3 under playback/, expiry via the bucket's
 # 30-day lifecycle rule on the prefix (existence == validity, no metadata).
-# Built off-request by the audio-merge Cloud Tasks handler (routers/sync.py).
 # ----------------------------------------------------------------------------
 
 PLAYBACK_ARTIFACT_PREFIX = 'playback'
@@ -1769,7 +1769,7 @@ def download_playback_artifact(uid: str, conversation_id: str, audio_file_id: st
 def upload_playback_artifact(uid: str, conversation_id: str, audio_file_id: str, mp3_data: bytes) -> None:
     blob = _playback_artifact_blob(uid, conversation_id, audio_file_id)
     with owner_storage_write_gate(uid, getattr(blob, 'bucket', None)):
-        blob.upload_from_string(mp3_data, content_type='audio/mpeg')
+        write_once(blob, mp3_data)
 
 
 def _playback_unavailable_blob(uid: str, conversation_id: str, audio_file_id: str):
@@ -1816,7 +1816,7 @@ def enqueue_conversation_audio_merge(
                     'conversation_id': conversation_id,
                     'audio_file_id': audio_file_id,
                     'timestamps': timestamps,
-                    **({'source_fingerprint': af.get('source_fingerprint')} if playback_on_demand() else {}),
+                    **({'source_fingerprint': af['source_fingerprint']} if af.get('source_fingerprint') else {}),
                     'caller': caller,
                     **({'playback_epoch': playback_epoch} if playback_epoch and not playback_on_demand() else {}),
                     **({'on_demand': True, 'requested_at': time.time()} if playback_on_demand() else {}),
@@ -1827,11 +1827,7 @@ def enqueue_conversation_audio_merge(
 
 
 # ----------------------------------------------------------------------------
-# Conversation-level playback artifact: ONE dense MP3 per conversation
-# (playback/{uid}/{conversation_id}/conversation.mp3) with only captured audio;
-# inter-part gaps collapsed. The spans manifest + audio_files fingerprint are
-# stamped on the conversation doc (conversation_audio). Same 30-day lifecycle.
-# 'conversation' cannot collide with per-part names: audio_file ids are UUIDv4.
+# Conversation playback uses an immutable fingerprint key; legacy keys remain readable.
 # ----------------------------------------------------------------------------
 
 CONVERSATION_ARTIFACT_NAME = 'conversation'
@@ -1909,11 +1905,15 @@ def get_conversation_playback_signed_url(uid: str, conversation_id: str, fingerp
 
 
 def upload_conversation_playback_artifact(
-    uid: str, conversation_id: str, mp3_data: bytes, fingerprint: str | None = None
+    uid: str, conversation_id: str, mp3_data: bytes, fingerprint: str | None = None, *, spans=None
 ) -> None:
     blob = _conversation_playback_blob(uid, conversation_id, fingerprint)
     with owner_storage_write_gate(uid, getattr(blob, 'bucket', None)):
-        blob.upload_from_string(mp3_data, content_type='audio/mpeg')
+        write_once(blob, mp3_data, spans=spans)
+
+
+def get_conversation_playback_manifest(uid: str, conversation_id: str, fingerprint: str):
+    return cached_manifest(_conversation_playback_blob(uid, conversation_id, fingerprint))
 
 
 def _conversation_playback_unavailable_blob(uid: str, conversation_id: str):

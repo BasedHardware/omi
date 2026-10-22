@@ -200,7 +200,13 @@ def _conversation_audio_urls_entry(
             cached_fingerprint, immutable = source_fingerprint, True
     if stamped == cached_fingerprint:
         signed_url = get_conversation_playback_signed_url(
-            uid, conversation_id, **({'fingerprint': cached_fingerprint} if immutable else {})
+            uid,
+            conversation_id,
+            **(
+                {'fingerprint': stamp.get('artifact_fingerprint') or cached_fingerprint}
+                if immutable or stamp.get('artifact_fingerprint')
+                else {}
+            ),
         )
         if signed_url:
             return {

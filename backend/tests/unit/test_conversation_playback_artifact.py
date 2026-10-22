@@ -278,7 +278,7 @@ def test_conversation_merge_handler_structure():
 
     # Upload precedes the doc stamp so a stamped fingerprint implies a servable blob.
     body = source.split('async def _run_conversation_merge_job', 1)[1]
-    upload_pos = body.index('upload_conversation_playback_artifact')
+    upload_pos = body.index('playback_build.ensure_conversation_artifact')
     stamp_pos = body.index("'conversation_audio': {")
     assert upload_pos < stamp_pos
 
